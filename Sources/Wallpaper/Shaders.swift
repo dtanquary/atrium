@@ -318,9 +318,29 @@ float starField(vec2 pts, float cell, float density, float t) {
     """)
 }
 
-/// Deep-space gas clouds in magenta, teal and ember orange, cut by dark dust lanes, drifting very slowly.
+/// Deep-space gas clouds cut by dark dust lanes, drifting very slowly. Every load rolls a new one: its own cloud
+/// structure, scale, palette, star field, and the band the cloud lies along.
 @MainActor func nebula(size: CGSize) -> SKScene {
-    shaderScene(size: size, source: common + """
+    // Background, main gas, secondary gas and hot-core colours, each after a real kind of nebula and what glows in
+    // it: hydrogen-alpha crimson, doubly ionised oxygen teal, hydrogen-beta blue, starlight scattered off dust.
+    let palettes: [[SIMD3<Float>]] = [
+        [[0.08, 0.01, 0.02], [0.85, 0.10, 0.12], [0.20, 0.45, 0.60], [1.0, 0.75, 0.60]],  // emission, like Lagoon: Hα red, OIII core
+        [[0.01, 0.02, 0.08], [0.15, 0.30, 0.80], [0.45, 0.60, 0.95], [0.90, 0.95, 1.0]],  // reflection, like the Pleiades: blue dust
+        [[0.01, 0.04, 0.06], [0.80, 0.15, 0.12], [0.05, 0.55, 0.60], [0.85, 1.0, 0.95]],  // planetary, like Helix: red rim, OIII teal
+        [[0.06, 0.03, 0.01], [0.70, 0.45, 0.15], [0.20, 0.35, 0.75], [1.0, 0.85, 0.60]],  // dusty, like Rho Ophiuchi: amber and blue
+        [[0.02, 0.06, 0.08], [0.75, 0.52, 0.18], [0.05, 0.45, 0.55], [1.0, 0.90, 0.70]],  // Hubble palette, like the Pillars: SII gold, OIII teal
+    ]
+    let palette = palettes.randomElement()!
+    let uniforms = [
+        SKUniform(name: "u_seed", vectorFloat2: [.random(in: 0...100), .random(in: 0...100)]),
+        SKUniform(name: "u_zoom", float: .random(in: 1.2...1.9)),
+        SKUniform(name: "u_band", vectorFloat3: [.random(in: 0.38...0.62), .random(in: -0.6...0.6), .random(in: 0.26...0.4)]),
+        SKUniform(name: "u_base", vectorFloat3: palette[0]),
+        SKUniform(name: "u_dense", vectorFloat3: palette[1]),
+        SKUniform(name: "u_accent", vectorFloat3: palette[2]),
+        SKUniform(name: "u_hot", vectorFloat3: palette[3]),
+    ]
+    return shaderScene(size: size, source: common + """
     // A few bright foreground stars with four-point diffraction spikes.
     float brightStar(vec2 pts, float cell) {
         vec2 id = floor(pts / cell);
@@ -335,26 +355,26 @@ float starField(vec2 pts, float cell, float density, float t) {
     void main() {
         float aspect = u_size.x / u_size.y;
         vec2 p = v_tex_coord * vec2(aspect, 1.0);
-        float t = u_time * 0.004;
+        float t = u_time * 0.005; // one screen height of drift every ~5 minutes
 
         // domain-warped fbm: the warp vector w folds the clouds into filaments
-        vec2 q = p * 1.5 + vec2(t, t * 0.4);
+        vec2 q = p * u_zoom + u_seed + vec2(t, t * 0.4);
         vec2 w = vec2(fbm(q + vec2(0.0, 1.3)), fbm(q + vec2(5.2, 8.1)));
         float gas = fbm(q + 1.8 * w + vec2(t * 0.5, 0.0));
         float dust = noise(q * 2.2 + 2.5 * w + 11.0) * 0.6 + noise(q * 4.7 + 3.0 * w) * 0.4;
 
-        // ponytail: a diagonal band so the cloud always crosses the screen instead of wherever the noise lands
-        float band = exp(-pow((v_tex_coord.y - 0.5 + 0.35 * (v_tex_coord.x - 0.5)) / 0.33, 2.0));
+        // ponytail: a band (height, slope, width from u_band) so the cloud always crosses the screen
+        float band = exp(-pow((v_tex_coord.y - u_band.x + u_band.y * (v_tex_coord.x - 0.5)) / u_band.z, 2.0));
         float g = gas * 0.7 + band * 0.4;
 
-        vec3 c = mix(vec3(0.10, 0.03, 0.22), vec3(0.62, 0.10, 0.42), smoothstep(0.4, 0.8, g));
-        c = mix(c, vec3(0.08, 0.5, 0.68), smoothstep(0.42, 0.62, w.x) * 0.9);
-        c = mix(c, vec3(1.0, 0.55, 0.28), 0.8 * smoothstep(0.45, 0.65, g * w.y * 1.1));
+        vec3 c = mix(u_base, u_dense, smoothstep(0.4, 0.8, g));
+        c = mix(c, u_accent, smoothstep(0.42, 0.62, w.x) * 0.9);
+        c = mix(c, u_hot, 0.8 * smoothstep(0.45, 0.65, g * w.y * 1.1));
         float density = smoothstep(0.25, 0.8, g);
         vec3 neb = 1.0 - exp(-c * density * density * 2.2);                // soft clip keeps bright cores from blowing out
         neb *= 1.0 - 0.85 * smoothstep(0.5, 0.72, dust);                     // dark dust lanes
 
-        vec2 pts = v_tex_coord * u_size;
+        vec2 pts = v_tex_coord * u_size + u_seed * 97.0; // the seed moves the star field too
         vec3 col = vec3(0.004, 0.004, 0.012) + neb + c * 0.07 * band; // faint wash around the cloud
         col += vec3(0.8, 0.85, 1.0) * starField(pts, 7.0, 0.3, u_time) * (1.0 - 0.6 * density);
         col += vec3(1.0, 0.92, 0.85) * brightStar(pts + vec2(u_time * 0.2, 0.0), 180.0);
@@ -362,5 +382,5 @@ float starField(vec2 pts, float cell, float density, float t) {
         col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0;
         gl_FragColor = vec4(col, 1.0);
     }
-    """)
+    """, uniforms: uniforms)
 }
