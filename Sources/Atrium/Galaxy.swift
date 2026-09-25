@@ -185,12 +185,13 @@ final class Galaxy: SKScene {
     }
 
     // A star-forming knot, glowing hydrogen around the young cluster that lights it, in a cell where `keep` allows,
-    // round on screen like discStar; 1 to 4.5 points across, mostly small. Returns (glow, cluster).
+    // round on screen like discStar; 0.8 to 3.2 points across, mostly small, so it stays inside its cell rather
+    // than showing as a clipped half-moon. Returns (glow, cluster).
     vec2 knot(vec2 g, float cell, float keep, mat2 m) {
         vec4 h = hash42(floor(g / cell) + 41.0);
         if (h.x > keep) { return vec2(0.0); }
-        float l = length(m * ((fract(g / cell) - 0.5 - (h.yz - 0.5) * 0.3) * cell)) / (1.0 + 3.5 * pow(h.w, 3.0));
-        return vec2(exp(-l * l * 1.5), exp(-l * l * 8.0)) * (0.3 + 0.7 * h.x / max(keep, 0.0001));
+        float l = length(m * ((fract(g / cell) - 0.5 - (h.yz - 0.5) * 0.3) * cell)) / (0.8 + 2.4 * pow(h.w, 3.0));
+        return vec2(exp(-l * l * 2.0), exp(-l * l * 8.0)) * (0.3 + 0.7 * h.x / max(keep, 0.0001));
     }
 
     // An elliptical companion galaxy: a broad, smooth cloud of old stars with a small bright middle. `o` is (x, y,
@@ -244,6 +245,7 @@ final class Galaxy: SKScene {
         float rt = length(vec2(e.x, e.y / sqrt(u_tilt * u_tilt + 0.0225 * (1.0 - u_tilt * u_tilt))));
         vec3 light = vec3(0.0);
         vec3 absorb = vec3(1.0);
+        vec3 vivid = vec3(0.0); // H II light added after the stretch
         // A steeply tilted galaxy also has a rounder glow around it (below), so it gets a rounder region to draw in.
         float rh = length(vec2(e.x, e.y / mix(u_tilt, 1.0, 0.3)));
         if ((u_tilt < 0.5 ? rh : rt) < 1.6) { // everything fades out by here; beyond it there's only sky
@@ -350,10 +352,12 @@ final class Galaxy: SKScene {
 
             // H II regions: in complexes, strung along the arm's inner edge between the dust lane and the crest,
             // dimmer toward the outskirts
-            float groups = smoothstep(0.4, 0.75, noise(g * 9.0 + u_seed.yx));
-            vec2 k = knot(g, 16.0 * pt / u_tilt, clamp(hii * inArms * groups * 9.0, 0.0, 0.9) * smoothstep(1.2, 0.8, r), m);
-            light += (u_knots * k.x * 2.2 + mix(u_young, vec3(1.0), 0.5) * k.y * 1.5) * sqrt(absorb)
-                   * (0.25 + 0.75 * smoothstep(1.2, 0.3, r));
+            float groups = smoothstep(0.3, 0.7, noise(g * 9.0 + u_seed.yx));
+            vec2 k = knot(g, 16.0 * pt / u_tilt, clamp(hii * inArms * groups * 12.0, 0.0, 0.9) * smoothstep(1.2, 0.8, r), m);
+            // Hubble images keep H-alpha saturated, so part of the pink glow goes on after the stretch.
+            float fade = 0.25 + 0.75 * smoothstep(1.2, 0.3, r);
+            light += (u_knots * k.x * 1.5 + mix(u_young, vec3(1.0), 0.5) * k.y * 1.5) * sqrt(absorb) * fade;
+            vivid = u_knots * k.x * 0.7 * sqrt(absorb) * fade;
 
             // The bulge: a rounder cloud of old stars and a bright nucleus. The disc cuts through its middle, so half
             // its light comes through the dust, more on the near side when the galaxy is tilted.
@@ -374,6 +378,7 @@ final class Galaxy: SKScene {
         float stretched = log(6.0 * lum + sqrt(36.0 * lum * lum + 1.0)) / 3.18; // asinh(6 lum) / asinh(12)
         vec3 photo = min(x * stretched / lum, 1.0);
         col = col * absorb + mix(photo, vec3(stretched), 0.5 * smoothstep(0.55, 1.0, stretched)); // highlights pale
+        col += vivid * u_brightness;
         col += vec3(1.0, 0.92, 0.85) * brightStar(pts, 180.0, u_time); // foreground stars, in our own galaxy
         col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0;
         gl_FragColor = vec4(col, 1.0);
