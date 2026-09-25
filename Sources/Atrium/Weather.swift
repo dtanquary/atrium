@@ -49,6 +49,7 @@ final class WeatherScene: SKScene {
     private let cirrus = SKUniform(name: "u_high", float: 0), cirrusSun = SKUniform(name: "u_highCol", vectorFloat3: .zero)
     private let fog = SKUniform(name: "u_fog", float: 0), snowCover = SKUniform(name: "u_snow", float: 0)
     private let nightUniform = SKUniform(name: "u_night", float: 0), backlit = SKUniform(name: "u_backlit", float: 0)
+    private let mist = SKUniform(name: "u_mist", float: 0)
     private let photoCloudSun = SKUniform(name: "u_cloudSun", vectorFloat3: .zero), photoCloudShade = SKUniform(name: "u_cloudAmb", vectorFloat3: .zero)
     private var sunNow = Sky.Vector(0, 0, 1)
     private let flashAmount = SKUniform(name: "u_flash", float: 0), flashPlace = SKUniform(name: "u_flashPos", vectorFloat3: .zero)
@@ -260,6 +261,13 @@ final class WeatherScene: SKScene {
         // since the air near the ground is in the Earth's shadow while the high sky still glows.
         groundColour.floatValue = Float(smoothstep(0.002, 0.03, brightness) * (1 - 0.7 * smoothstep(-0.03, -0.2, light.sun.z)))
         groundHazeLit.floatValue = Float(0.25 + 0.75 * smoothstep(-0.03, 0.2, light.sun.z))
+        // Valley mist forms on still, clear nights and lingers into the morning until the Sun burns it off; it's
+        // there in fog, and a little after rain.
+        let morning = Calendar.current.component(.hour, from: light.date) < 12
+        let still = conditions.wind < 12 && [.clear, .partlyCloudy].contains(conditions.kind)
+        let dawnMist = still ? smoothstep(-0.1, 0.02, light.sun.z) * (morning ? smoothstep(0.3, 0.1, light.sun.z) : 0) : 0
+        let damp: Double = switch conditions.kind { case .fog: 0.7; case .drizzle, .rain: 0.3; default: 0 }
+        mist.floatValue = Float(max(dawnMist * 0.8, damp))
         let ahead = max(dot(Sky.Vector(light.sun.x, light.sun.y, 0), viewpoint.forward), 0)
         backlit.floatValue = Float(smoothstep(0.3, 0.02, light.sun.z) * smoothstep(-0.25, -0.1, light.sun.z) * ahead * (1 - overcast))
         let moonNight = smoothstep(0.05, -0.1, light.sun.z)
@@ -556,7 +564,8 @@ final class WeatherScene: SKScene {
     // MARK: - Ground
 
     /// Fort Ord's green hills and oak woodland (BLM, public domain), with its sky cut out, and `weather-ground-aux`:
-    /// red is how far away each point is (0 near, 1 at the skyline), green is where there are trees.
+    /// red is how far away each point is, as log distance from 0 (nearest) to 1 (the far mountains, 32 times further),
+    /// estimated offline with Apple's Core ML Depth Anything V2; green is where there are trees and bushes.
     private static let groundPhoto = SKTexture(image: NSImage(contentsOf: resource("weather-ground.heic")) ?? NSImage())
     private static let groundAux = SKTexture(image: NSImage(contentsOf: resource("weather-ground-aux.png")) ?? NSImage())
 
@@ -573,7 +582,8 @@ final class WeatherScene: SKScene {
                                  Float(width / size.width), Float(height / size.height))
         ground.shader = SKShader(source: Self.groundShader, uniforms: [
             SKUniform(name: "u_aux", texture: Self.groundAux), SKUniform(name: "u_frame", vectorFloat4: frame),
-            skyBefore, skyAfter, skyBlend, cameraUniforms.lens, groundLight, groundHaze, groundColour, groundHazeLit, fog, deck, flashAmount, snowCover, backlit,
+            skyBefore, skyAfter, skyBlend, cameraUniforms.lens, groundLight, groundHaze, groundColour, groundHazeLit, fog, deck, flashAmount, snowCover, backlit, mist, clock,
+            SKUniform(name: "u_noise", texture: CloudNoise.texture),
         ])
         addChild(ground)
     }
@@ -582,6 +592,7 @@ final class WeatherScene: SKScene {
     /// toward the sky just above the horizon over it, more with distance. Premultiplied, like SpriteKit's textures.
     private static let groundShader = """
     vec3 decode(vec3 c) { return c * c * 4.0; }
+    vec2 nuv(vec2 p) { return (fract(p) * 256.0 + 0.5) / 257.0; }
 
     void main() {
         vec4 photo = texture2D(u_texture, v_tex_coord);
@@ -593,7 +604,7 @@ final class WeatherScene: SKScene {
             float lum = dot(albedo, vec3(0.3, 0.59, 0.11));
             vec3 snowy = vec3(0.86, 0.89, 0.94) * clamp(pow(lum / 0.42, 0.55), 0.45, 1.08);
             vec3 trees = mix(vec3(lum), albedo, 0.35) * 0.62 + vec3(0.8, 0.83, 0.88) * smoothstep(0.3, 0.6, lum) * 0.35;
-            float open = 1.0 - smoothstep(0.25, 0.75, aux.g);
+            float open = 1.0 - smoothstep(0.3, 0.7, aux.g);
             albedo = mix(albedo, mix(trees, snowy, open), u_snow * (0.55 + 0.45 * open));
         }
         vec3 land = albedo * albedo * (u_light + vec3(0.75, 0.8, 1.0) * u_flash * 0.15);
@@ -608,12 +619,20 @@ final class WeatherScene: SKScene {
         haze = mix(vec3(dot(haze, vec3(0.2126, 0.7152, 0.0722))) * vec3(0.7, 0.85, 1.25), haze, u_hazeLit); // bluer as the glow leaves the low air
         float under = min(u_deck.a * 2.0, 0.95); // the low air under a storm is dark even where the far sky is clear
         haze = mix(min(haze, vec3(mix(40.0, 1.5, under))), vec3(dot(min(haze, vec3(1.5)), vec3(0.3, 0.5, 0.2))) * 0.08 + u_deck.rgb * 0.9, under);
-        float far = aux.r / (1.0 - 0.9 * aux.r);
+        float far = (pow(32.0, aux.r) - 1.0) / 3.1; // 0 up close to 10 at the far mountains
         float through = exp(-u_haze * far);
         land = land * through + haze * (1.0 - through);
         // Fog swallows the far hills first.
         vec3 fogCol = mix(haze, vec3(dot(haze, vec3(0.3, 0.5, 0.2))), 0.7) * 0.95;
         land = mix(land, fogCol, (1.0 - exp(-far * u_fog * 0.45)) * 0.97);
+        // Mist lying in the valley floor, in drifting patches, stopping at the near slopes and below the ridges.
+        if (u_mist > 0.0) {
+            float band = exp(-pow((aux.r - 0.42) / 0.09, 2.0));
+            vec2 mp = vec2(screen.x * 1.1 + u_clock * 0.0008, screen.y * 2.2);
+            float patches = texture2D(u_noise, nuv(mp)).r * 0.7 + texture2D(u_noise, nuv(mp * 1.9 + 0.37)).a * 0.3;
+            float mist = band * smoothstep(0.25, 0.75, patches) * u_mist;
+            land = mix(land, mix(fogCol, haze, 0.5) * 1.05, clamp(mist, 0.0, 0.75));
+        }
         gl_FragColor = vec4(sqrt(1.0 - exp(-land)), 1.0) * photo.a;
     }
     """
