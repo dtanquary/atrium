@@ -307,8 +307,17 @@ final class Galaxy: SKScene {
             // thin filaments everywhere down to the nucleus, and for barred kinds, lanes along the bar's leading edges.
             vec2 fr = fbmRidge(qn * 6.0 + u_seed * 1.3 + 3.0);
             float dt = fr.x;
-            float lane = pow(0.5 + 0.5 * cos(ph + 0.45 + (dt - 0.5) * 2.5), 14.0 * mix(1.0, 0.7, steep)) * smoothstep(0.25, 0.8, lumps + dt - 0.5)
-                       * mix(0.45, 1.0, smoothstep(0.3, 0.7, noise(qn * 40.0 + u_seed))); // thicker and thinner along its length
+            float along = noise(qn * 40.0 + u_seed);
+            float lp = ph + 0.45 + (dt - 0.5) * 2.5;
+            float lane = pow(0.5 + 0.5 * cos(lp), 14.0 * mix(1.0, 0.7, steep)) * smoothstep(0.25, 0.8, lumps + dt - 0.5)
+                       * mix(0.45, 1.0, smoothstep(0.3, 0.7, along)); // thicker and thinner along its length
+            // Inside that faint band, the photos' lanes have narrow dark cores, 3–8 px wide, set by distance in the
+            // disc rather than by phase, and broken into pieces along the lane (unbroken, they read as ink cracks).
+            // They're widened on steep tilts, which would otherwise squash them to hairlines.
+            float perp = r / arms / sqrt(1.0 + u_shape.y * u_shape.y); // disc radii across the arm per radian of phase
+            float lw = (0.004 + 0.006 * lumps) * (1.0 + 1.5 * steep);
+            float l1 = (lp - 6.2832 * floor(lp / 6.2832 + 0.5)) * perp / lw;
+            float core = exp(-l1 * l1) * smoothstep(0.3, 0.7, along) * smoothstep(0.25, 0.8, lumps + dt - 0.5);
             float tp = 1.0 / u_shape.y;              // tan(pitch)
             float kf = (1.0 - tp * 0.7) / (tp + 0.7); // cot(pitch + 35°)
             float fu = 18.0 * (aq - (u_shape.y - kf) * lr) / 6.2832 + (dt - 0.5) * 0.8;
@@ -320,7 +329,7 @@ final class Galaxy: SKScene {
             float barY = (g.y - sign(g.x) * bar * (0.1 + 0.15 * ax * ax)) / (0.02 + 0.02 * dt);
             float barLane = step(0.001, bar) * exp(-barY * barY) * smoothstep(0.1, 0.35, ax) * smoothstep(1.1, 0.8, ax) * smoothstep(0.3, 0.6, dt + 0.2);
             float barZone = mix(1.0, smoothstep(bar * 0.7, bar * 1.1, r), step(0.001, bar)); // only its own lanes
-            float dust = (lane * 1.3 * (1.0 - 0.7 * floc) + feather * 0.7 * (1.0 - ragged)) * smoothstep(r0 * 0.5, r0 * 0.95, r)
+            float dust = ((lane * 0.7 + core * 0.8) * (1.0 - 0.7 * floc) + feather * 0.7 * (1.0 - ragged)) * smoothstep(r0 * 0.5, r0 * 0.95, r)
                        + barLane * 0.9 + web * (0.25 + 0.9 * crest) * smoothstep(0.015, 0.06, r) * barZone;
             dust *= smoothstep(1.3, 0.5, r) * u_arms.y * u_dust * los;
             // Dust sits in a thin layer in the midplane: it reddens what's behind it, while a third of the old disc's

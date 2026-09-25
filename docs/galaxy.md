@@ -30,6 +30,7 @@ Everything is maths per pixel, per frame, in four coordinate frames:
    - young stars: `young·inArms·clump·disc`
 6. **Dust:** `fbmRidge(qn)` gives fbm `dt` and a ridged multifractal from the same five noise samples. There are four parts:
    - `lane`: narrow (exponent 14), on the arm's inner edge, broken where `lumps + dt` is low, and thicker and thinner along its length (`mix(0.45, 1, …noise(qn·40))`). Breaking it outright left chunky dashes, and flakes on Andromeda.
+   - `core`: narrow dark cores inside the lane, 3–8 px wide, set by distance across the arm in the disc (`perp`) rather than by phase, widened 2.5× on steep tilts, and broken along the lane by the same `along` noise. The wide band is lighter (×0.7) and the cores ×0.8. Unbroken or at full strength (×1.3) they read as ink cracks or claw marks. This was one of the research suggestions Dave took on trial; revert its own commit if it's not liked.
    - `feather`: 18 spurs leaving the arms at a pitch 35° steeper, about half of them kept, only on the upstream side of each arm
    - `web`: the ridges, thin connected filaments everywhere down to the nucleus, stronger on the arms (threshold 0.25, since the 45° swirl thins them)
    - `barLane`: for barred kinds, curved lanes along the bar's leading edges, as in NGC 1300. Inside the bar, the web is faded out (`barZone`) so only these lanes cross it.
