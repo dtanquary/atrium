@@ -228,20 +228,22 @@ float starField(vec2 pts, float cell, float density, float t) {
     """)
 }
 
+/// Nebula colours: background, main gas, secondary gas and hot core, each after a real kind of nebula and what
+/// glows in it: hydrogen-alpha crimson, doubly ionised oxygen teal, hydrogen-beta blue, starlight off dust.
+let nebulaPalettes: [(name: String, colours: [SIMD3<Float>])] = [
+    ("Emission", [[0.08, 0.01, 0.02], [0.85, 0.10, 0.12], [0.20, 0.45, 0.60], [1.0, 0.75, 0.60]]),   // like Lagoon: Hα red, OIII core
+    ("Reflection", [[0.01, 0.02, 0.08], [0.15, 0.30, 0.80], [0.45, 0.60, 0.95], [0.90, 0.95, 1.0]]), // like the Pleiades: blue dust
+    ("Planetary", [[0.01, 0.04, 0.06], [0.80, 0.15, 0.12], [0.05, 0.55, 0.60], [0.85, 1.0, 0.95]]),  // like Helix: red rim, OIII teal
+    ("Dusty", [[0.06, 0.03, 0.01], [0.70, 0.45, 0.15], [0.20, 0.35, 0.75], [1.0, 0.85, 0.60]]),      // like Rho Ophiuchi: amber, blue
+    ("Hubble", [[0.02, 0.06, 0.08], [0.75, 0.52, 0.18], [0.05, 0.45, 0.55], [1.0, 0.90, 0.70]]),     // like the Pillars: SII gold, OIII teal
+]
+
 /// Deep-space gas clouds cut by dark dust lanes, drifting very slowly. Every load rolls a new one: its own cloud
-/// structure, scale, palette, star field, and the band the cloud lies along. Left running, it dissolves into a
-/// freshly rolled one every few minutes.
+/// structure, scale, palette (unless one is pinned in Settings), star field, and the band the cloud lies along.
+/// Left running, it dissolves into a freshly rolled one every few minutes.
 @MainActor func nebula(size: CGSize) -> SKScene {
-    // Background, main gas, secondary gas and hot-core colours, each after a real kind of nebula and what glows in
-    // it: hydrogen-alpha crimson, doubly ionised oxygen teal, hydrogen-beta blue, starlight scattered off dust.
-    let palettes: [[SIMD3<Float>]] = [
-        [[0.08, 0.01, 0.02], [0.85, 0.10, 0.12], [0.20, 0.45, 0.60], [1.0, 0.75, 0.60]],  // emission, like Lagoon: Hα red, OIII core
-        [[0.01, 0.02, 0.08], [0.15, 0.30, 0.80], [0.45, 0.60, 0.95], [0.90, 0.95, 1.0]],  // reflection, like the Pleiades: blue dust
-        [[0.01, 0.04, 0.06], [0.80, 0.15, 0.12], [0.05, 0.55, 0.60], [0.85, 1.0, 0.95]],  // planetary, like Helix: red rim, OIII teal
-        [[0.06, 0.03, 0.01], [0.70, 0.45, 0.15], [0.20, 0.35, 0.75], [1.0, 0.85, 0.60]],  // dusty, like Rho Ophiuchi: amber and blue
-        [[0.02, 0.06, 0.08], [0.75, 0.52, 0.18], [0.05, 0.45, 0.55], [1.0, 0.90, 0.70]],  // Hubble palette, like the Pillars: SII gold, OIII teal
-    ]
-    let palette = palettes.randomElement()!
+    let palette = (nebulaPalettes.first { $0.name == UserDefaults.standard.string(forKey: "nebula.palette") }
+        ?? nebulaPalettes.randomElement()!).colours
     let uniforms = [
         SKUniform(name: "u_seed", vectorFloat2: [.random(in: 0...100), .random(in: 0...100)]),
         SKUniform(name: "u_zoom", float: .random(in: 1.2...1.9)),

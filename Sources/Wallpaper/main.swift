@@ -68,6 +68,13 @@ var current = UserDefaults.standard.string(forKey: "scene") ?? scenes[0].name
     }
 }
 
+/// Puts a wallpaper on the desktop and remembers it.
+@MainActor func show(_ name: String) {
+    current = name
+    UserDefaults.standard.set(name, forKey: "scene")
+    switchScene()
+}
+
 /// Crossfades every display to the chosen scene in its existing window.
 @MainActor func switchScene() {
     for window in windows {
@@ -82,10 +89,12 @@ var current = UserDefaults.standard.string(forKey: "scene") ?? scenes[0].name
 
     private lazy var settings: NSWindow = {
         let hosting = NSHostingController(rootView: SettingsView())
-        hosting.sizingOptions = [] // a grouped Form scrolls, so it has no height of its own to size the window by
+        hosting.sizingOptions = [] // grouped Forms scroll, so they have no height of their own to size the window by
         let window = NSWindow(contentViewController: hosting)
-        window.setContentSize(NSSize(width: 460, height: 600))
-        window.title = "Wallpaper Settings"
+        window.setContentSize(NSSize(width: 820, height: 640))
+        window.styleMask.insert(.fullSizeContentView) // sidebar runs up under the title bar, like System Settings
+        window.titlebarAppearsTransparent = true
+        window.title = "Wallpapers"
         window.level = .floating // stays above other windows while you watch the wallpaper change
         window.isReleasedWhenClosed = false
         return window
@@ -115,9 +124,7 @@ var current = UserDefaults.standard.string(forKey: "scene") ?? scenes[0].name
     }
 
     @objc func pick(_ sender: NSMenuItem) {
-        current = sender.title
-        UserDefaults.standard.set(current, forKey: "scene")
-        switchScene()
+        show(sender.title)
     }
 
     @objc func openSettings() {

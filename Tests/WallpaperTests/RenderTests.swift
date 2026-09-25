@@ -31,9 +31,10 @@ import UniformTypeIdentifiers
     descriptor.usage = [.renderTarget, .shaderRead]
     descriptor.storageMode = .shared
 
-    for (name, make) in scenes where env["SNAPSHOT_SCENE"].map({ $0 == name }) ?? true {
+    for wallpaper in scenes where env["SNAPSHOT_SCENE"].map({ $0 == wallpaper.name }) ?? true {
+        let name = wallpaper.name
         let renderer = SKRenderer(device: device)
-        renderer.scene = make(size)
+        renderer.scene = wallpaper.make(size)
         let texture = try #require(device.makeTexture(descriptor: descriptor))
         let pass = MTLRenderPassDescriptor()
         pass.colorAttachments[0].texture = texture

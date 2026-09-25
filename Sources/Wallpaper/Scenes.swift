@@ -1,22 +1,51 @@
 import SpriteKit
+import SwiftUI
 
-/// Every wallpaper in the menu, in menu order. `make` builds one scene for a display of the given size.
-@MainActor let scenes: [(name: String, make: @MainActor (CGSize) -> SKScene)] = [
-    ("Fish Tank", { FishTank(size: $0) }),
-    ("Flowing Gradient", flowingGradient),
-    ("Lava Lamp", lavaLamp),
-    ("Rain on Glass", rainOnGlass),
-    ("Aurora", aurora),
-    ("Nebula", nebula),
-    ("Night Sky", nightSky),
-    ("Earth from Orbit", earthFromOrbit),
-    ("Weather", weather),
-    ("Pixel City", pixelCity),
-    ("Fireflies", fireflies),
-    ("Murmuration", murmuration),
-    ("Campfire", campfire),
-    ("Zen Garden", zenGarden),
-    ("Game of Life", gameOfLife),
+/// A wallpaper: its entry in the menu and the Settings window, and how to build it for one display. Settings
+/// are plain data, so giving a wallpaper sliders, switches or palettes only means filling in `knobs` or `palettes`.
+struct Wallpaper {
+    let name: String
+    let icon: String // SF Symbol
+    let tint: Color
+    let blurb: String
+    let make: @MainActor (CGSize) -> SKScene
+    var knobs: [Knob] = []
+    var palettes: PaletteChoice?
+}
+
+/// Every wallpaper, in menu order.
+@MainActor let scenes: [Wallpaper] = [
+    Wallpaper(name: "Fish Tank", icon: "fish.fill", tint: .teal, blurb: "Schools of tropical fish in a sunlit tank.",
+              make: { FishTank(size: $0) }),
+    Wallpaper(name: "Flowing Gradient", icon: "swirl.circle.righthalf.filled", tint: .indigo,
+              blurb: "Soft pools of color with silk ribbons that follow the Sun.", make: flowingGradient,
+              knobs: FlowingGradient.knobs),
+    Wallpaper(name: "Lava Lamp", icon: "lamp.table.fill", tint: .orange, blurb: "Glowing wax rising and falling.",
+              make: lavaLamp, knobs: LavaLamp.knobs,
+              palettes: PaletteChoice(key: "lava.palette", options: LavaLamp.palettes.map { ($0.name, [$0.dark[3], $0.dark[1]], [$0.light[3], $0.light[1]]) })),
+    Wallpaper(name: "Rain on Glass", icon: "cloud.rain.fill", tint: .gray, blurb: "Drops sliding down a window at night.",
+              make: rainOnGlass),
+    Wallpaper(name: "Aurora", icon: "wind", tint: .green, blurb: "Northern lights over snowy peaks.", make: aurora),
+    Wallpaper(name: "Nebula", icon: "sparkles", tint: .purple, blurb: "A new deep-space cloud every few minutes.",
+              make: nebula,
+              palettes: PaletteChoice(key: "nebula.palette", options: nebulaPalettes.map { ($0.name, Array($0.colours[1...]), Array($0.colours[1...])) })),
+    Wallpaper(name: "Night Sky", icon: "moon.stars.fill", tint: .blue, blurb: "The real sky above you, right now.",
+              make: nightSky),
+    Wallpaper(name: "Earth from Orbit", icon: "globe.americas.fill", tint: .cyan, blurb: "Day and night sweeping over the globe.",
+              make: earthFromOrbit),
+    Wallpaper(name: "Weather", icon: "cloud.sun.fill", tint: .blue, blurb: "Hills under your live local weather.",
+              make: weather),
+    Wallpaper(name: "Pixel City", icon: "building.2.fill", tint: .pink, blurb: "A pixel-art skyline on your clock.",
+              make: pixelCity),
+    Wallpaper(name: "Fireflies", icon: "sparkle", tint: .yellow, blurb: "Fireflies in a foggy forest at dusk.",
+              make: fireflies),
+    Wallpaper(name: "Murmuration", icon: "bird.fill", tint: .brown, blurb: "Starlings swirling over a sunset.",
+              make: murmuration),
+    Wallpaper(name: "Campfire", icon: "flame.fill", tint: .red, blurb: "A crackling fire under the stars.", make: campfire),
+    Wallpaper(name: "Zen Garden", icon: "leaf.fill", tint: .mint, blurb: "Raked sand, redrawn stroke by stroke.",
+              make: zenGarden),
+    Wallpaper(name: "Game of Life", icon: "square.grid.3x3.fill", tint: .orange, blurb: "Conway's cells that never die out.",
+              make: gameOfLife),
 ]
 
 /// A scene that is one full-screen GPU shader. Besides SpriteKit's `u_time` and `v_tex_coord`, the shader

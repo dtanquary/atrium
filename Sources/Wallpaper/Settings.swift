@@ -1,55 +1,224 @@
 import SwiftUI
 
-/// One live setting: a slider in the Settings window, stored in UserDefaults under `key`. Scenes read `value` and
-/// listen for `UserDefaults.didChangeNotification` to pick up changes while the slider moves.
+/// One live setting of a wallpaper, stored in UserDefaults under `key`: a slider, or a switch when `format` is
+/// `.toggle` (stored as 0 or 1). Scenes read `value` and listen for `UserDefaults.didChangeNotification` to follow
+/// changes while the control moves; shader scenes usually feed each knob into a uniform of the same name.
 struct Knob {
+    enum Format { case number, clock, minutes, toggle }
+
     let key: String, label: String, range: ClosedRange<Double>, standard: Double
+    /// The Settings section it's grouped under.
+    var section = "Settings"
+    var format = Format.number
+    /// Only shown while this toggle knob is on.
+    var shownWhen: String?
 
     var value: Double { UserDefaults.standard.object(forKey: key) as? Double ?? standard }
 }
 
-/// Sliders for the scenes that have settings.
+/// Named colour palettes a wallpaper can be pinned to, stored by name under `key`; empty rolls one at random.
+/// Each option carries a few swatch colours for its dark and light looks.
+struct PaletteChoice {
+    let key: String
+    let options: [(name: String, dark: [SIMD3<Float>], light: [SIMD3<Float>])]
+
+    var chosen: String? { UserDefaults.standard.string(forKey: key).flatMap { $0.isEmpty ? nil : $0 } }
+}
+
+/// The Settings window, laid out like System Settings: wallpapers down the side, each with its own page.
 struct SettingsView: View {
-    @AppStorage("gradient.previewTime") private var previewTime = false
+    @AppStorage("scene") private var current = scenes[0].name
+    @State private var selection: String?
+
+    var body: some View {
+        NavigationSplitView {
+            List(scenes, id: \.name, selection: $selection) { wallpaper in
+                HStack {
+                    IconTile(wallpaper: wallpaper, size: 22)
+                    Text(wallpaper.name)
+                    Spacer()
+                    if wallpaper.name == current {
+                        Image(systemName: "checkmark").font(.caption.bold()).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .navigationSplitViewColumnWidth(min: 210, ideal: 230)
+        } detail: {
+            if let wallpaper = scenes.first(where: { $0.name == selection ?? current }) {
+                WallpaperPage(wallpaper: wallpaper).id(wallpaper.name)
+            }
+        }
+        .onAppear { selection = selection ?? current }
+    }
+}
+
+/// An SF Symbol on a rounded, tinted square, like the icons in iOS Settings.
+struct IconTile: View {
+    let wallpaper: Wallpaper
+    let size: CGFloat
+
+    var body: some View {
+        Image(systemName: wallpaper.icon)
+            .font(.system(size: size * 0.52, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: size, height: size)
+            .background(wallpaper.tint.gradient, in: .rect(cornerRadius: size * 0.26))
+    }
+}
+
+/// One wallpaper's settings: a header to put it on the desktop, its palettes, then its knobs by section.
+struct WallpaperPage: View {
+    let wallpaper: Wallpaper
+    @AppStorage("scene") private var current = scenes[0].name
+
+    private var sections: [String] {
+        wallpaper.knobs.map(\.section).reduce(into: []) { if !$0.contains($1) && $1 != "Colors" { $0.append($1) } }
+    }
 
     var body: some View {
         Form {
-            Section("Flowing Gradient") {
-                ForEach(FlowingGradient.knobs, id: \.key) { KnobSlider(knob: $0) }
-                Toggle("Preview a time of day", isOn: $previewTime)
-                if previewTime {
-                    KnobSlider(knob: FlowingGradient.previewHour) { String(format: "%d:%02d", Int($0) % 24, Int($0 * 60) % 60) }
-                }
-                Button("Reset Flowing Gradient") {
-                    for knob in FlowingGradient.knobs + [FlowingGradient.previewHour] {
-                        UserDefaults.standard.removeObject(forKey: knob.key)
+            Section {
+                HStack(spacing: 14) {
+                    IconTile(wallpaper: wallpaper, size: 48)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(wallpaper.name).font(.title2.bold())
+                        Text(wallpaper.blurb).foregroundStyle(.secondary)
                     }
-                    previewTime = false
+                    Spacer()
+                    if wallpaper.name == current {
+                        Label("On Desktop", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                    } else {
+                        Button("Show on Desktop") { show(wallpaper.name) }.buttonStyle(.borderedProminent)
+                    }
+                }
+                .padding(.vertical, 6)
+            }
+            if let palettes = wallpaper.palettes {
+                Section("Colors") {
+                    PalettePicker(choice: palettes) { rebuildIfShowing() }
+                    RandomOnly(key: palettes.key) {
+                        ForEach(wallpaper.knobs.filter { $0.section == "Colors" }, id: \.key) { KnobRow(knob: $0) }
+                    }
+                }
+            }
+            ForEach(sections, id: \.self) { section in
+                Section(section) {
+                    ForEach(wallpaper.knobs.filter { $0.section == section }, id: \.key) { KnobRow(knob: $0) }
+                }
+            }
+            if wallpaper.knobs.isEmpty && wallpaper.palettes == nil {
+                Section { Text("No settings for this wallpaper yet.").foregroundStyle(.secondary) }
+            } else {
+                Section {
+                    Button("Reset to Defaults", role: .destructive) {
+                        for key in wallpaper.knobs.map(\.key) + [wallpaper.palettes?.key].compactMap({ $0 }) {
+                            UserDefaults.standard.removeObject(forKey: key)
+                        }
+                        rebuildIfShowing()
+                    }
                 }
             }
         }
         .formStyle(.grouped)
-        .frame(minWidth: 400, minHeight: 300)
+        .navigationTitle(wallpaper.name)
+    }
+
+    /// Palettes are picked when a scene is built, so a new pick rebuilds it if it's on the desktop.
+    private func rebuildIfShowing() {
+        if wallpaper.name == current { switchScene() }
     }
 }
 
-struct KnobSlider: View {
+/// A knob's control, hidden while the toggle it depends on is off.
+struct KnobRow: View {
     let knob: Knob
-    let format: (Double) -> String
     @AppStorage private var value: Double
+    @AppStorage private var gate: Double
 
-    init(knob: Knob, format: @escaping (Double) -> String = { String(format: "%.2f", $0) }) {
+    init(knob: Knob) {
         self.knob = knob
-        self.format = format
         _value = AppStorage(wrappedValue: knob.standard, knob.key)
+        _gate = AppStorage(wrappedValue: 1, knob.shownWhen ?? knob.key) // an empty key crashes KVO; unused when ungated
     }
 
     var body: some View {
-        LabeledContent(knob.label) {
-            HStack {
-                Slider(value: $value, in: knob.range)
-                Text(format(value)).monospacedDigit().frame(width: 44, alignment: .trailing)
+        if knob.shownWhen == nil || gate > 0.5 {
+            if knob.format == .toggle {
+                Toggle(knob.label, isOn: Binding(get: { value > 0.5 }, set: { value = $0 ? 1 : 0 }))
+            } else {
+                LabeledContent(knob.label) {
+                    HStack {
+                        Slider(value: $value, in: knob.range)
+                        Text(formatted).monospacedDigit().foregroundStyle(.secondary).frame(width: 52, alignment: .trailing)
+                    }
+                }
             }
         }
+    }
+
+    private var formatted: String {
+        switch knob.format {
+        case .clock: String(format: "%d:%02d", Int(value) % 24, Int(value * 60) % 60)
+        case .minutes: value < 0.5 ? "Off" : "\(Int(value.rounded())) min"
+        default: String(format: "%.2f", value)
+        }
+    }
+}
+
+/// Shows its content only while the palette stored under `key` is Random, e.g. how often colours change.
+struct RandomOnly<Content: View>: View {
+    @AppStorage private var chosen: String
+    @ViewBuilder let content: Content
+
+    init(key: String, @ViewBuilder content: () -> Content) {
+        _chosen = AppStorage(wrappedValue: "", key)
+        self.content = content()
+    }
+
+    var body: some View {
+        if chosen.isEmpty { content }
+    }
+}
+
+/// Palette swatches in a grid, with Random first.
+struct PalettePicker: View {
+    let choice: PaletteChoice
+    let picked: () -> Void
+    @AppStorage private var selected: String
+    @Environment(\.colorScheme) private var scheme
+
+    init(choice: PaletteChoice, picked: @escaping () -> Void) {
+        self.choice = choice
+        self.picked = picked
+        _selected = AppStorage(wrappedValue: "", choice.key)
+    }
+
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 76), spacing: 14)], spacing: 14) {
+            swatch("Random", colours: choice.options.compactMap { (scheme == .dark ? $0.dark : $0.light).last }, symbol: "shuffle")
+            ForEach(choice.options, id: \.name) { option in
+                swatch(option.name, colours: scheme == .dark ? option.dark : option.light)
+            }
+        }
+        .padding(.vertical, 6)
+    }
+
+    private func swatch(_ name: String, colours: [SIMD3<Float>], symbol: String? = nil) -> some View {
+        let isSelected = (name == "Random" ? "" : name) == selected
+        return Button {
+            selected = name == "Random" ? "" : name
+            picked()
+        } label: {
+            VStack(spacing: 6) {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(LinearGradient(colors: colours.map { Color(red: Double($0.x), green: Double($0.y), blue: Double($0.z)) },
+                                         startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .frame(height: 46)
+                    .overlay { if let symbol { Image(systemName: symbol).font(.title3.bold()).foregroundStyle(.white) } }
+                    .overlay { RoundedRectangle(cornerRadius: 15).strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 2.5).padding(-4) }
+                Text(name).font(.caption).foregroundStyle(isSelected ? .primary : .secondary).lineLimit(1)
+            }
+        }
+        .buttonStyle(.plain)
     }
 }

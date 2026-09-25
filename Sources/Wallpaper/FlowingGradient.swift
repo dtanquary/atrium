@@ -8,19 +8,25 @@ import simd
 /// mood follows the real Sun: warmer around sunrise and sunset, deeper and cooler at night, a touch brighter at
 /// noon. Every knob is live in the Settings window.
 final class FlowingGradient: SKScene {
-    /// Sliders in the Settings window. Each drives the shader uniform named `u_` plus the last part of its key.
+    /// Its Settings. Each drives the shader uniform named `u_` plus the last part of its key.
     nonisolated static let knobs = [
-        Knob(key: "gradient.brightness", label: "Brightness", range: 0.2...1.2, standard: 0.6),
-        Knob(key: "gradient.speed", label: "Flow speed", range: 0...3, standard: 1),
-        Knob(key: "gradient.poolSize", label: "Pool size", range: 0.5...1.8, standard: 1),
-        Knob(key: "gradient.ribbons", label: "Silk ribbons", range: 0...1, standard: 0.5),
-        Knob(key: "gradient.ribbonWidth", label: "Ribbon width", range: 0.3...2.5, standard: 1),
-        Knob(key: "gradient.grain", label: "Film grain", range: 0...1, standard: 0.35),
-        Knob(key: "gradient.grainSize", label: "Grain size", range: 1...4, standard: 1.5),
-        Knob(key: "gradient.followDay", label: "Follow the day", range: 0...1, standard: 0.7),
+        Knob(key: "gradient.brightness", label: "Brightness", range: 0.2...1.2, standard: 0.6, section: "Look"),
+        Knob(key: "gradient.speed", label: "Flow speed", range: 0...3, standard: 1, section: "Look"),
+        Knob(key: "gradient.poolSize", label: "Pool size", range: 0.5...1.8, standard: 1, section: "Look"),
+        Knob(key: "gradient.ribbonsOn", label: "Show ribbons", range: 0...1, standard: 1, section: "Silk Ribbons",
+             format: .toggle),
+        Knob(key: "gradient.ribbons", label: "Strength", range: 0...1, standard: 0.5, section: "Silk Ribbons",
+             shownWhen: "gradient.ribbonsOn"),
+        Knob(key: "gradient.ribbonWidth", label: "Width", range: 0.3...2.5, standard: 1, section: "Silk Ribbons",
+             shownWhen: "gradient.ribbonsOn"),
+        Knob(key: "gradient.grain", label: "Amount", range: 0...1, standard: 0.35, section: "Film Grain"),
+        Knob(key: "gradient.grainSize", label: "Size", range: 1...4, standard: 1.5, section: "Film Grain"),
+        Knob(key: "gradient.followDay", label: "Follow the day", range: 0...1, standard: 0.7, section: "Time of Day"),
+        Knob(key: "gradient.previewTime", label: "Preview a time of day", range: 0...1, standard: 0, section: "Time of Day",
+             format: .toggle),
+        Knob(key: "gradient.previewHour", label: "Time", range: 0...24, standard: 19, section: "Time of Day",
+             format: .clock, shownWhen: "gradient.previewTime"),
     ]
-    /// Shows this hour today instead of now, while `gradient.previewTime` is on.
-    nonisolated static let previewHour = Knob(key: "gradient.previewHour", label: "Time of day", range: 0...24, standard: 19)
 
     private let knobUniforms: [String: SKUniform]
     private let phase = SKUniform(name: "u_phase", float: 0)
@@ -67,8 +73,8 @@ final class FlowingGradient: SKScene {
         flowSpeed = Self.knobs[1].value
 
         var date = Date()
-        if UserDefaults.standard.bool(forKey: "gradient.previewTime") {
-            date = Calendar.current.startOfDay(for: date).addingTimeInterval(Self.previewHour.value * 3600)
+        if Self.knobs[9].value > 0.5 { // previewing a time of day
+            date = Calendar.current.startOfDay(for: date).addingTimeInterval(Self.knobs[10].value * 3600)
         }
         let here = Location.shared.coordinate, jd = Sky.julianDate(date)
         let sun = Sky.horizonMatrix(jd: jd, latitude: here.latitude, longitude: here.longitude) * Sky.sun(jd)
@@ -131,7 +137,7 @@ final class FlowingGradient: SKScene {
         // Silk ribbons: light folding through the colour, tinted by whatever lies beneath them.
         float silk = ribbon(q, t * 1.3, 0.62, 0.16, 1.6, 0.0, u_ribbonWidth)
                    + 0.8 * ribbon(q, t * 1.1, 0.36, 0.13, 2.1, 2.4, u_ribbonWidth);
-        light += u_ribbons * silk * (light * 2.5 + vec3(0.05, 0.06, 0.12));
+        light += u_ribbonsOn * u_ribbons * silk * (light * 2.5 + vec3(0.05, 0.06, 0.12));
 
         float exposure = u_brightness * (1.0 - 0.35 * night) * (1.0 + 0.25 * noon);
         vec3 col = 1.0 - exp(-light * exposure);

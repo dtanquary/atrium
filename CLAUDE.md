@@ -7,7 +7,11 @@ A menu bar app that plays animated wallpapers on macOS 27. Swift package plus Sp
 - Each wallpaper is an `SKScene` shown in a `WallpaperView` (an `SKView`). It runs at 30 fps on mains power and 15 fps on battery, and freezes on its current frame in Low Power Mode. The view pauses whenever its window is fully covered.
 - Switching scenes crossfades inside the existing windows. Display changes only touch the displays that actually changed, so the system wallpaper never flashes through.
 - The menu bar icon (✨📺) picks the scene, saved in `UserDefaults` under `scene`. It also opens Settings, toggles Open at Login (`SMAppService`) and quits the app.
-- **Settings** (`Settings.swift`) is a floating SwiftUI window of live sliders. Each slider is a `Knob`, stored in UserDefaults. A scene lists its knobs, reads `knob.value`, and observes `UserDefaults.didChangeNotification` to update its shader uniforms while the slider moves (see `FlowingGradient`). To tune, read the values back with `defaults read com.dtanquary.wallpaper`.
+- **Settings** (`Settings.swift`) is a floating window laid out like System Settings: a sidebar of wallpapers, and a page for each one. A wallpaper's settings are plain data on its `Wallpaper` entry in Scenes.swift:
+  - `knobs`: sliders, or switches with `format: .toggle`, grouped by `section`. A knob can depend on a switch with `shownWhen`.
+  - `palettes`: a `PaletteChoice` of named swatches. The pick is stored by name, and an empty value means Random.
+
+  Knobs are stored in UserDefaults. Live scenes read `knob.value` and observe `UserDefaults.didChangeNotification` to feed their shader uniforms (see `FlowingGradient` and `LavaLamp`). A new palette pick rebuilds the scene if it's on the desktop. To tune, read the values back with `defaults read com.dtanquary.wallpaper`.
 - Known seams: the lock screen, and the tint of the menu bar and windows, still come from the system wallpaper.
 
 ## Layout
