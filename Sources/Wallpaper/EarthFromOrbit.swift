@@ -10,6 +10,7 @@ final class EarthFromOrbit: SKScene {
     private let sunUniform = SKUniform(name: "u_sun", vectorFloat3: [1, 0, 0])
     private let basisUniform = SKUniform(name: "u_basis", matrixFloat3x3: matrix_identity_float3x3)
     private let iss = SKSpriteNode()
+    private let issLabel = SKLabelNode(fontNamed: "HelveticaNeue")
     private let orbit = SKShapeNode()
     /// Earth-fixed axes of the view: east, north, and toward us.
     private var basis = matrix_identity_double3x3
@@ -37,14 +38,14 @@ final class EarthFromOrbit: SKScene {
         iss.size = CGSize(width: 14, height: 14)
         iss.zPosition = 3
         iss.isHidden = true
-        let label = SKLabelNode(fontNamed: "HelveticaNeue")
-        label.text = "ISS"
-        label.fontSize = 11
-        label.fontColor = NSColor(white: 1, alpha: 0.7)
-        label.horizontalAlignmentMode = .left
-        label.verticalAlignmentMode = .center
-        label.position = CGPoint(x: 10, y: 0)
-        iss.addChild(label)
+        // The label is a sibling, not a child, so the marker's pulse doesn't scale or fade it.
+        issLabel.text = "ISS"
+        issLabel.fontSize = 11
+        issLabel.fontColor = NSColor(white: 1, alpha: 0.5)
+        issLabel.horizontalAlignmentMode = .left
+        issLabel.verticalAlignmentMode = .center
+        issLabel.zPosition = 3
+        addChild(issLabel)
         let ping = SKAction.group([.scale(to: 2.2, duration: 1.6), .fadeAlpha(to: 0.2, duration: 1.6)])
         iss.run(.repeatForever(.sequence([ping, .group([.scale(to: 1, duration: 0), .fadeAlpha(to: 1, duration: 0)])])))
         addChild(iss)
@@ -61,12 +62,15 @@ final class EarthFromOrbit: SKScene {
     override func update(_ currentTime: TimeInterval) {
         guard let now = ISS.shared.position(), let later = ISS.shared.position(at: Date(timeIntervalSinceNow: 20)) else {
             iss.isHidden = true
+            issLabel.isHidden = true
             orbit.path = nil
             return
         }
         let here = station(now), ahead = station(later)
         iss.isHidden = !visible(here)
         iss.position = screen(here)
+        issLabel.isHidden = iss.isHidden
+        issLabel.position = CGPoint(x: iss.position.x + 10, y: iss.position.y)
         guard currentTime - orbitDrawn > 5 || orbit.path == nil else { return } // the ring barely moves
         orbitDrawn = currentTime
 
