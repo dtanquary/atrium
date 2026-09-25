@@ -60,3 +60,7 @@ SNAPSHOT_DEFAULTS="gradient.ribbons=1,gradient.previewTime=1" swift test   # sna
 - **Commit early and often.** One logical change per commit, made as soon as it builds and `swift test` passes. Don't bundle unrelated work together.
 - **Redeploy as work lands.** After each working change, run `./build.sh` and relaunch (`pkill -x Atrium; open build/Atrium.app`) so Dave can try it from the menu bar. Tell him what to test.
 - Messages: a plain-English imperative subject that says what changed and why, e.g. "Pause rendering while the wallpaper is covered".
+- **Versioning:** semantic versioning, set by `VERSION=` at the top of `build.sh` (it goes into Info.plist and shows in Settings → About). Bump it in the same commit as the change that earns it:
+  - until 1.0: a new or cut wallpaper, or a feature users will notice, bumps the minor version (0.2.0 → 0.3.0); fixes and tuning bump the patch (0.3.0 → 0.3.1). A run of tuning commits on one wallpaper can share one patch bump.
+  - from 1.0.0, the first stable public release: breaking changes (a removed setting, a raised minimum macOS) bump the major version.
+  - only official releases get a git tag (`v1.0.0`) and a GitHub release. Dave decides when to cut one.
