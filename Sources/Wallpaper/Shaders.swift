@@ -47,64 +47,6 @@ float starField(vec2 pts, float cell, float density, float t) {
 
 """
 
-/// The inside of a lava lamp: wax blobs rise off a molten pool, stretch, merge and sink, lit from below.
-@MainActor func lavaLamp(size: CGSize) -> SKScene {
-    shaderScene(size: size, source: shaderCommon + """
-    // Metaball field and its gradient in one pass: every blob adds r²/d², wax is wherever the sum passes 1.
-    // Returns (f, df/dx, df/dy).
-    vec3 field(vec2 p, float t, float aspect) {
-        vec3 f = vec3(0.0);
-        for (int i = 0; i < 9; i++) {
-            float fi = float(i);
-            float h1 = hash11(fi + 0.13);
-            float h2 = hash11(fi + 0.57);
-            float h3 = hash11(fi + 0.91);
-            float r = 0.05 + 0.06 * h1;
-            // each blob rises off the bottom pool, lingers near the top and sinks again
-            float cycle = t * (0.05 + 0.05 * h2) + h3 * 6.2831;
-            float y = 0.5 - 0.62 * cos(cycle);
-            float x = aspect * (0.1 + 0.8 * fract(h2 * 7.3)) + 0.06 * sin(cycle * 1.7 + fi);
-            float s2 = pow(1.0 + 0.5 * abs(sin(cycle)), 2.0);            // stretch tall while moving
-            vec2 d = p - vec2(x, y);
-            float q = d.x * d.x + d.y * d.y / s2;
-            float v = r * r / q;
-            f += vec3(v, -2.0 * v / q * d.x, -2.0 * v / q * d.y / s2);
-        }
-        // molten pool along the bottom
-        float pool = max(p.y + 0.02 - 0.025 * sin(p.x * 5.0 + t * 0.2) - 0.02 * sin(p.x * 11.0 - t * 0.3), 0.001);
-        float v = 0.0035 / (pool * pool);
-        return f + vec3(v, 0.0, -2.0 * v / pool);
-    }
-
-    void main() {
-        float aspect = u_size.x / u_size.y;
-        vec2 p = v_tex_coord * vec2(aspect, 1.0);
-        vec3 f = field(p, u_time, aspect);
-
-        // liquid: deep plum, glowing warm toward the bulb at the bottom
-        vec3 col = mix(vec3(0.30, 0.03, 0.10), vec3(0.05, 0.01, 0.06), smoothstep(0.0, 1.0, v_tex_coord.y));
-        col += vec3(0.9, 0.25, 0.05) * 0.35 * smoothstep(0.35, 1.0, f.x);  // wax glow scattering in the liquid
-
-        // 1/f is ~(d/r)² near a lone blob, so sqrt(1 - 1/f) is the height of a sphere: shade the wax as one.
-        float g = 1.0 / f.x;
-        float z = sqrt(max(1.0 - g, 0.0));
-        vec3 n = normalize(vec3(-f.yz * g * g * 0.04 / max(z, 0.08), 1.0));
-        float light = 0.6 + 0.4 * dot(n, normalize(vec3(-0.4, 0.5, 0.8)));
-        vec3 wax = mix(vec3(0.7, 0.07, 0.04), vec3(1.0, 0.5, 0.1), z) * light;  // thin rim deep red, thick core orange
-        wax += vec3(1.0, 0.85, 0.6) * pow(max(dot(n, normalize(vec3(-0.3, 0.4, 1.0))), 0.0), 30.0) * 0.3;
-        wax *= 1.25 - 0.5 * v_tex_coord.y;                                // lit from the bulb below
-        col = mix(col, wax, smoothstep(0.96, 1.04, f.x));
-
-        // curved glass: darker at the sides, two soft vertical reflections
-        float x = v_tex_coord.x;
-        col *= 0.55 + 0.45 * sin(3.14159 * x);
-        col += vec3(1.0, 0.8, 0.9) * (0.05 * exp(-pow((x - 0.18) / 0.025, 2.0)) + 0.025 * exp(-pow((x - 0.86) / 0.04, 2.0)));
-        col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0;
-        gl_FragColor = vec4(col, 1.0);
-    }
-    """)
-}
-
 /// A night city out of focus behind a rainy window: beads of water and drops sliding down,
 /// each drop a little lens showing the lights sharper.
 @MainActor func rainOnGlass(size: CGSize) -> SKScene {
