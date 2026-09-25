@@ -20,7 +20,6 @@ One file per wallpaper, recording what the code can't: how each scene works, why
 | Fireflies | [fireflies.md](fireflies.md) | `Fireflies.swift` | SpriteKit | none yet | none | 0.49 / 0.41 |
 | Murmuration | [murmuration.md](murmuration.md) | `Murmuration.swift` | SpriteKit (3D boids) | none yet | none | 1.09 / 0.24 |
 | Campfire | [campfire.md](campfire.md) | `Campfire.swift` | SpriteKit emitters | none yet | none | 0.45 / 0.28 |
-| Zen Garden | [zen-garden.md](zen-garden.md) | `ZenGarden.swift` | shader | none yet | none | 0.43 / 0.57 |
 | Game of Life | [game-of-life.md](game-of-life.md) | `GameOfLife.swift` | mutable texture | none yet | none | 0.47 / 0.52 |
 
 \*Release build, 2x Retina at 1512×982 points, measured 2026-09-24 with `swift test -c release -Xswiftc -enable-testing`. The budget is about 2 ms each for CPU and GPU. Debug builds are pessimistic on CPU (Murmuration runs about 16–19 ms in debug).
@@ -36,4 +35,6 @@ One file per wallpaper, recording what the code can't: how each scene works, why
 - **Tunable:** options go in the Settings window as data (knobs, switches, palettes), so he can tweak until it looks right.
 - **Easy on the battery:** 15 fps on battery, frozen in Low Power Mode, paused when covered.
 - **Workflow:** commit early and often; redeploy after each working change and tell him what to test.
+- **Cut:** Zen Garden, on 2026-09-25: "so bright and sharp and not relaxing, opposite of zen." Calm means soft and dim as well as slow. Its code and doc were deleted; they're in git history before the cut.
+- **Photoreal wins:** Galaxy only clicked once it was compared side by side with Hubble photos: colours sampled from them, soft edges, a bright disc rather than shapes on black, and an asinh stretch. Cartoony looks (he named the Fish Tank) are next in line for the same treatment.
 - **Next:** iterate through each wallpaper to improve it, cut the weak ones and add new ones.

@@ -76,7 +76,6 @@ To rebuild after pulling changes: `./build.sh && pkill -x Atrium; open build/Atr
 | Fireflies | Fireflies drifting through a foggy forest at dusk |
 | Murmuration | A flock of thousands of starlings over a sunset |
 | Campfire | A crackling fire under the stars |
-| Zen Garden | Raked sand, redrawn stroke by stroke |
 | Game of Life | Conway's cells with fading trails, reseeding so it never dies out |
 
 The docs in [`docs/`](docs/README.md) cover each one in depth: how it works, its settings, cost and ideas for next steps.

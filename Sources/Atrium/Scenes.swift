@@ -51,8 +51,6 @@ struct Wallpaper {
     Wallpaper(name: "Murmuration", icon: "bird.fill", tint: .brown, blurb: "Starlings swirling over a sunset.",
               make: murmuration),
     Wallpaper(name: "Campfire", icon: "flame.fill", tint: .red, blurb: "A crackling fire under the stars.", make: campfire),
-    Wallpaper(name: "Zen Garden", icon: "leaf.fill", tint: .mint, blurb: "Raked sand, redrawn stroke by stroke.",
-              make: zenGarden),
     Wallpaper(name: "Game of Life", icon: "square.grid.3x3.fill", tint: .orange, blurb: "Conway's cells that never die out.",
               make: gameOfLife),
 ]

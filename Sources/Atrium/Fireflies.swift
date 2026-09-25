@@ -108,7 +108,7 @@ final class Fireflies: SKScene {
     }
 }
 
-// MARK: - Shared by the nature scenes (Fireflies, Campfire, Murmuration, Zen Garden, Game of Life)
+// MARK: - Shared by the nature scenes (Fireflies, Campfire, Murmuration, Game of Life)
 
 /// Seconds since the previous frame, clamped so a paused or restarted clock (wake from sleep, a new time base) can't
 /// produce a huge or negative jump.
