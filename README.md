@@ -65,7 +65,7 @@ To rebuild after pulling changes: `./build.sh && pkill -x Atrium; open build/Atr
 | Fish Tank | Five painted species schooling in a sunlit tank, with caustics, swaying plants and bubbles |
 | Flowing Gradient | Soft pools of colour with silk ribbons that follow the Sun; six palettes and a watercolour Light Mode |
 | Lava Lamp | Wax that rises on pinching necks, slumps and sinks; seven jewel-tone palettes, with Light and Dark looks |
-| Rain on Glass | Drops sliding down a window over blurred city lights |
+| Rain on Glass | Drops sliding down a window over blurred city lights, at night or on an overcast day, in seven palettes |
 | Aurora | Northern lights over snowy peaks |
 | Nebula | A unique deep-space cloud on every load, in real nebula colours, dissolving into a new one every few minutes |
 | Live Sky | The real sky above you: stars, planets, the Moon's phase, the Milky Way and the ISS. Deep blue by day. |

@@ -9,7 +9,7 @@ One file per wallpaper, recording what the code can't: how each scene works, why
 | Fish Tank | [fish-tank.md](fish-tank.md) | `FishTank.swift`, `FishTankArt.swift` | SpriteKit and shaders | none yet | none | 0.51 / 1.55 |
 | Flowing Gradient | [flowing-gradient.md](flowing-gradient.md) | `FlowingGradient.swift` | shader | knobs, 6 palettes | Sun position | 0.47 / 0.55 |
 | Lava Lamp | [lava-lamp.md](lava-lamp.md) | `LavaLamp.swift` | shader | knobs, 7 palettes | none | 0.45 / 1.86 |
-| Rain on Glass | [rain-on-glass.md](rain-on-glass.md) | `Shaders.swift` | shader | none yet | none | 0.45 / 1.40 |
+| Rain on Glass | [rain-on-glass.md](rain-on-glass.md) | `Shaders.swift` | shader | 7 palettes, day look | none | 0.45 / 1.40 |
 | Aurora | [aurora.md](aurora.md) | `Shaders.swift` | shader | none yet | none | 0.42 / 1.87 |
 | Nebula | [nebula.md](nebula.md) | `Shaders.swift` | shader | 5 palettes | none | 0.45 / 1.52 |
 | Live Sky | [live-sky.md](live-sky.md) | `LiveSky.swift`, `SkyMath.swift` | SpriteKit and shaders | switches, preview | location, ISS | 0.64 / 0.90 |
