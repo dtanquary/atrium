@@ -10,6 +10,7 @@ import UniformTypeIdentifiers
 ///     swift test                                                  # all scenes → $TMPDIR/wallpaper-snapshots
 ///     SNAPSHOT_SCENE="Night Sky" SNAPSHOT_SECONDS=20 swift test   # one scene, further into its animation
 ///     SNAPSHOT_DEFAULTS="gradient.ribbons=1,gradient.previewTime=1" swift test  # with Settings values
+///     SNAPSHOT_APPEARANCE=light swift test                                      # in Light Mode
 ///
 /// Only sceneDidLoad/init content shows up here: SKRenderer never calls didMove(to:).
 @MainActor @Test func everySceneRenders() throws {
@@ -17,6 +18,7 @@ import UniformTypeIdentifiers
     let dir = URL(fileURLWithPath: env["SNAPSHOT_DIR"] ?? NSTemporaryDirectory() + "wallpaper-snapshots")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     let seconds = Double(env["SNAPSHOT_SECONDS"] ?? "") ?? 4
+    if let look = env["SNAPSHOT_APPEARANCE"] { NSApplication.shared.appearance = NSAppearance(named: look == "light" ? .aqua : .darkAqua) }
     let settings = (env["SNAPSHOT_DEFAULTS"] ?? "").split(separator: ",").map { $0.split(separator: "=") }
     for pair in settings where pair.count == 2 { UserDefaults.standard.set(Double(pair[1]), forKey: String(pair[0])) }
     defer { for pair in settings { UserDefaults.standard.removeObject(forKey: String(pair[0])) } }

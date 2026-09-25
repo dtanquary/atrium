@@ -31,6 +31,12 @@ import SpriteKit
     return scene
 }
 
+/// Whether macOS is in Dark Mode. Scenes with light and dark looks read it when they're built; the app rebuilds
+/// the current scene when the appearance changes.
+@MainActor var systemIsDark: Bool {
+    NSApplication.shared.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+}
+
 /// Draws a texture with Core Graphics at 2x so it stays sharp on Retina. Origin is bottom-left, like SpriteKit.
 /// The texture's pixel size is double `size`, so give sprites their size explicitly.
 func paint(_ size: CGSize, _ draw: (CGContext) -> Void) -> SKTexture {

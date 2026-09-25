@@ -152,4 +152,9 @@ if let source = IOPSNotificationCreateRunLoopSource({ _ in
 }, nil)?.takeRetainedValue() {
     CFRunLoopAddSource(CFRunLoopGetMain(), source, .defaultMode)
 }
+// Rebuild the scene in the other look when macOS switches between Light and Dark Mode.
+// ponytail: rebuilds every scene, even ones with a single look; it only happens a couple of times a day
+let appearance = app.observe(\.effectiveAppearance) { _, _ in
+    MainActor.assumeIsolated { switchScene() }
+}
 app.run()

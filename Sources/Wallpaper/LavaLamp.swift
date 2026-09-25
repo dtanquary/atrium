@@ -6,8 +6,9 @@ import SpriteKit
 /// eases to another pairing every few minutes while the wax keeps moving.
 @MainActor func lavaLamp(size: CGSize) -> SKScene {
     // Wax (thin and deep, thick and hot) and liquid (dark, bulb-lit): luminous jewel-tone wax in deep liquids,
-    // drawn from Flowing Gradient's palette so the two feel like a family.
-    let palettes: [[SIMD3<Float>]] = [
+    // drawn from Flowing Gradient's palette so the two feel like a family. Light Mode gets the same hues in
+    // pale liquids.
+    let dark: [[SIMD3<Float>]] = [
         [[0.55, 0.15, 0.20], [1.00, 0.58, 0.48], [0.03, 0.02, 0.08], [0.24, 0.12, 0.55]], // coral in indigo
         [[0.10, 0.25, 0.60], [0.55, 0.80, 1.00], [0.01, 0.02, 0.06], [0.07, 0.12, 0.42]], // soft blue in navy
         [[0.45, 0.06, 0.35], [1.00, 0.45, 0.80], [0.03, 0.01, 0.07], [0.30, 0.15, 0.62]], // magenta in violet
@@ -16,6 +17,16 @@ import SpriteKit
         [[0.30, 0.20, 0.65], [0.82, 0.72, 1.00], [0.01, 0.01, 0.05], [0.12, 0.10, 0.38]], // lavender in midnight
         [[0.55, 0.20, 0.30], [1.00, 0.66, 0.64], [0.01, 0.04, 0.06], [0.03, 0.28, 0.36]], // rose in deep teal
     ]
+    let light: [[SIMD3<Float>]] = [
+        [[0.85, 0.35, 0.35], [1.00, 0.62, 0.52], [0.62, 0.60, 0.80], [0.92, 0.90, 1.00]], // coral in pale lavender
+        [[0.20, 0.42, 0.85], [0.55, 0.78, 1.00], [0.60, 0.70, 0.85], [0.90, 0.95, 1.00]], // soft blue in sky
+        [[0.70, 0.15, 0.50], [0.98, 0.50, 0.78], [0.75, 0.62, 0.78], [0.98, 0.90, 0.96]], // magenta in blush
+        [[0.05, 0.48, 0.52], [0.40, 0.85, 0.82], [0.60, 0.72, 0.78], [0.90, 0.97, 0.98]], // teal in mist
+        [[0.90, 0.48, 0.25], [1.00, 0.75, 0.50], [0.80, 0.70, 0.65], [1.00, 0.96, 0.90]], // peach in cream
+        [[0.45, 0.35, 0.85], [0.72, 0.62, 1.00], [0.66, 0.66, 0.86], [0.94, 0.94, 1.00]], // lavender in periwinkle
+        [[0.80, 0.35, 0.45], [1.00, 0.66, 0.66], [0.60, 0.76, 0.74], [0.90, 0.98, 0.96]], // rose in seafoam
+    ]
+    let palettes = systemIsDark ? dark : light
     let colours = zip(["u_waxDeep", "u_waxHot", "u_liquidDeep", "u_liquidLit"], palettes.randomElement()!)
         .map { SKUniform(name: $0, vectorFloat3: $1) }
     let seed = SKUniform(name: "u_seed", float: .random(in: 0...100))
