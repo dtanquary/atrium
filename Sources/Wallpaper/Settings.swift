@@ -17,12 +17,12 @@ struct Knob {
 }
 
 /// Named colour palettes a wallpaper can be pinned to, stored by name under `key`; empty rolls one at random.
-/// Each option carries a few swatch colours for its dark and light looks.
+/// Each option carries a few swatch colours for its dark and light looks. `standard` is the pick before the user
+/// makes one.
 struct PaletteChoice {
     let key: String
     let options: [(name: String, dark: [SIMD3<Float>], light: [SIMD3<Float>])]
-
-    var chosen: String? { UserDefaults.standard.string(forKey: key).flatMap { $0.isEmpty ? nil : $0 } }
+    var standard = ""
 }
 
 /// The Settings window, laid out like System Settings: wallpapers down the side, each with its own page.
@@ -96,7 +96,7 @@ struct WallpaperPage: View {
             if let palettes = wallpaper.palettes {
                 Section("Colors") {
                     PalettePicker(choice: palettes) { rebuildIfShowing() }
-                    RandomOnly(key: palettes.key) {
+                    RandomOnly(choice: palettes) {
                         ForEach(wallpaper.knobs.filter { $0.section == "Colors" }, id: \.key) { KnobRow(knob: $0) }
                     }
                 }
@@ -170,8 +170,8 @@ struct RandomOnly<Content: View>: View {
     @AppStorage private var chosen: String
     @ViewBuilder let content: Content
 
-    init(key: String, @ViewBuilder content: () -> Content) {
-        _chosen = AppStorage(wrappedValue: "", key)
+    init(choice: PaletteChoice, @ViewBuilder content: () -> Content) {
+        _chosen = AppStorage(wrappedValue: choice.standard, choice.key)
         self.content = content()
     }
 
@@ -190,7 +190,7 @@ struct PalettePicker: View {
     init(choice: PaletteChoice, picked: @escaping () -> Void) {
         self.choice = choice
         self.picked = picked
-        _selected = AppStorage(wrappedValue: "", choice.key)
+        _selected = AppStorage(wrappedValue: choice.standard, choice.key)
     }
 
     var body: some View {

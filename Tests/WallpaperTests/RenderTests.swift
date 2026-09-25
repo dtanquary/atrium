@@ -20,7 +20,9 @@ import UniformTypeIdentifiers
     let seconds = Double(env["SNAPSHOT_SECONDS"] ?? "") ?? 4
     if let look = env["SNAPSHOT_APPEARANCE"] { NSApplication.shared.appearance = NSAppearance(named: look == "light" ? .aqua : .darkAqua) }
     let settings = (env["SNAPSHOT_DEFAULTS"] ?? "").split(separator: ",").map { $0.split(separator: "=") }
-    for pair in settings where pair.count == 2 { UserDefaults.standard.set(Double(pair[1]), forKey: String(pair[0])) }
+    for pair in settings where pair.count == 2 {
+        UserDefaults.standard.set(Double(pair[1]).map { $0 as Any } ?? String(pair[1]), forKey: String(pair[0])) // numbers or names
+    }
     defer { for pair in settings { UserDefaults.standard.removeObject(forKey: String(pair[0])) } }
 
     let device = try #require(MTLCreateSystemDefaultDevice())
