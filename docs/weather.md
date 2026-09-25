@@ -20,10 +20,10 @@ Green California hills and oak woodland, from a real photo, under whatever the w
 - **`build()`** throws everything away and rebuilds it for the current conditions: the sky, the ground, rain or snow, and lightning. It only runs when the weather changes, and then `redraw()` crossfades over 4 s from a snapshot of how the scene looked (`SKView.texture(from:)`). Day and night need no rebuild: the sky bakes every minute and eases between bakes.
   - **Sky:** a physical atmosphere, after Hillaire's "A Scalable and Production Ready Sky and Atmosphere Rendering Technique" (EGSR 2020): Rayleigh, Mie and ozone, single scattering plus his multiple-scattering approximation, lit by the real Sun and Moon where you are. Twilight, the Earth's shadow and the Belt of Venus come out of the physics; Preetham and Hosek–Wilkie can't do a Sun below the horizon.
     - `Atmosphere.shared` builds two lookup tables once (sunlight through the air, and multiple scattering), about 50 ms in a release build.
-    - `SkyLight.bake` marches it for a 128×96 texture over the screen from 0.06 below the horizon to the top, about 20 ms, stored as sqrt(v/4) so values up to 4 near the Sun fit 8 bits. It also returns the colours of sunlight and skylight, all times an exposure.
+    - `SkyLight.bake` marches it for a 128×96 texture over the screen from 0.06 below the horizon to the top, about 4 ms in release across all cores, stored as sqrt(v/4) so values up to 4 near the Sun fit 8 bits. It also returns the colours of sunlight and skylight, all times an exposure.
     - **Exposure** is partial: 0.7·mean^−0.88·0.05^−0.12 of the mean sky luminance, so the picture darkens with the light but far less than the light does (brightness ∝ light^0.12). A 2e−7 floor stands in for airglow and starlight.
     - **Every minute** the scene bakes again off the main thread and crossfades into it over the next minute (`u_before`, `u_after`, `u_blend`), so twilight never steps. The first bake at build is synchronous.
-    - **The view** (`SkyCamera`) is level, 64° across, with a shifted lens so the horizon is a straight line at 0.4 of the height. It faces **today's sunset** (`sunsetAzimuth`, from the Sun's declination and your latitude; due west where the Sun doesn't set), so sunsets happen in front, and dawn lights the view from behind with the Belt of Venus over it.
+    - **The view** (`SkyCamera`) is level, 64° across, with a shifted lens so the horizon is a straight line at 0.45 of the height, just under the photo's lowest skyline. It faces **today's sunset** (`sunsetAzimuth`, from the Sun's declination and your latitude; due west where the Sun doesn't set), so sunsets happen in front, and dawn lights the view from behind with the Belt of Venus over it.
     - **The shader** decodes the sky, adds the rest, then tone-maps like film: `sqrt(1 − exp(−col))`, and dithers. By night (the Sun 3° to 11° below) it first moves 60% toward a blue-shifted grey, the Purkinje shift, so moonlit clouds are silver rather than the beige of moonlight through the air.
   - **Stars:** two `starField` layers, faded in from a Sun 4° to 14° below the horizon, dimmed 60% by a bright Moon, thinned where the sky is brighter, and hidden unless it's clear or partly cloudy.
   - **Sun:** a limb-darkened disc 0.28° across with a soft glow, in the colour of sunlight through the air (reddening as it sets), shown down to 1° below the horizon.
@@ -47,12 +47,12 @@ Green California hills and oak woodland, from a real photo, under whatever the w
     - **Light** (`photoCloudShaderSource`): the photo's brightness, from its 2nd to 98th percentile, maps from skylight to sunlight (`u_cloudAmb`, `u_cloudSun`), shadier toward the base. Raising that to a power made the puffs blotchy, so it stays linear. Near the Sun (`a_back`) the body darkens a little and the thin edges glow. Far clouds fade into the sky behind them (`a_far`, 1 − e^(−d/45 km)), and the night shift applies. The faint veil of sky the cut leaves (alpha under 0.2) is clipped, since it glowed as a rectangle at sunset.
   - **Clouds:** one flat layer in the sky shader, seen through the camera, so it shrinks and flattens toward the horizon (after the research prototype's "FLAT" variant). `Conditions.clouds` sets its cover, base and thickness in km, and how flat a sheet it is (`deck`: 0 heaped cumulus, 1 featureless), after the cloud each kind comes from: stratocumulus (overcast), stratus (drizzle), nimbostratus (rain, snow), cumulonimbus (storm), and a thin bright layer at 0.3 km for fog.
     - **Shape:** `cloudShape` from two lookups of `CloudNoise` (baked once: 257² tileable value-noise fbm, Worley billows, fine fbm and a warp channel). Baked noise costs about a fifth of computed fbm. It drifts with the wind (`u_wind`, km/s, across the view and a little away) and evolves slowly.
-    - **Light:** three looks at the density (here, a little further along the ray for top edges, and toward the Sun for shadow), then: grey bases about as bright as the sky beside them, white sunlit tops, dark sides with bright rims toward the Sun (Henyey–Greenstein forward scattering). A deck is opaque (or the Sun's glow shows through as an orange column), and darker the thicker it is (`exp(−0.5·(thickness − 1))`), down to a storm's slate. Its underside is lumpy: rolls of thicker cloud between thinner, brighter gaps.
+    - **Light:** three looks at the density (here, a little further along the ray for top edges, and toward the Sun for shadow), then: grey bases about as bright as the sky beside them, white sunlit tops, dark sides with bright rims toward the Sun (Henyey–Greenstein forward scattering). A deck is opaque (or the Sun's glow shows through as an orange column), and darker the thicker it is (`exp(−0.6·(thickness − 1))`), down to a storm's slate. By day a deck is brighter overhead than at the horizon (the CIE overcast sky, `0.75 + 1.2·z`) and faintly blue. Its underside is lumpy: rolls of thicker cloud between thinner, brighter gaps.
     - **The horizon under a deck** (`u_deck`: the underside's colour, and how much it replaces the clear sky's): distant cloud fades into it, and so do the ground's haze and fog. Using the clear sky's horizon there made fog whiter than the grey sky above it, and turned a stormy sunset's hills pink.
     - **Skyglow:** at night low cloud glows faintly orange-grey, like the lights of towns beneath it, so a rainy night isn't black.
     - **Cirrus** at 8 km: fine streaks along the wind, lit pink after sunset down here, on clear and partly cloudy days, from `cloud_cover_high`.
     - On clear and partly cloudy days the layer has no cover; the cumulus are photos.
-  - **Fog** (`u_fog`: 0.75 for fog, 0.25 drizzle, 0.1–0.25 rain and storm, 0.15–0.35 snow): grey-white whatever the sky's colour, since it's optically thick. On the ground it swallows the far hills first (`1 − exp(−distance·u_fog)`); in the sky it rises from the horizon, over the whole sky in real fog.
+  - **Fog** (`u_fog`: 0.75 for fog, 0.25 drizzle, 0.1–0.25 rain and storm, 0.15–0.35 snow): grey-white whatever the sky's colour, since it's optically thick. On the ground it swallows the far hills first (`1 − exp(−0.45·distance·u_fog)`); in the sky it rises from the horizon, over the whole sky in real fog.
   - **Rain and snow:** one full-screen shader over everything (`addPrecipitation`). Rain is four depths of streaks sheared by the wind, the far layers fine and dense, the near ones long, soft and sparse. Snow is five depths of flakes swaying down, the near ones up to 6 pt and out of focus, each kept inside its cell so it's never clipped square. Both take the light around them, so like real rain they show against the hills but hardly against the sky. They run on `u_clock`, which wraps hourly, since `u_time` grows with uptime and at 700 pt/s a float that large loses the streaks.
   - **Lightning** (storm), after the research into real flashes: every 15–45 s for code 95, 8–25 s for 96 and 99, from an SKAction so it pauses while hidden. Never a full-screen white flash.
     - **Strokes:** one to four return strokes at 0, 60, 130 and 220 ms (±10 ms), peaks 1, 0.7, 0.9 and 0.5, each decaying in 30 ms, plus a 0.08 glow of continuing current for 0.35 s (NOAA JetStream). At 30 fps each stroke lasts a frame or two, which reads right. `update(_:)` feeds the brightness to `u_flash`.
@@ -99,8 +99,8 @@ What changed from it:
 - `report` holds the latest live weather and `conditions` what's drawn; `redraw()` rebuilds only when the two differ, so any other change to UserDefaults costs nothing.
 
 ## Tuning constants
-- **Clouds:** `Conditions.clouds`, per kind. Drift is `wind/3600·0.6` km/s.
-- **Rain:** lean `min(wind/50, 1)·0.35`; layers fall at 700–1750 pt/s.
+- **Clouds:** `Conditions.clouds`, per kind. The deck drifts at `wind/3600·0.6` km/s, the photo cumulus at `wind/3600·1.3`.
+- **Rain:** lean `across·min(wind m/s ÷ 7, 1)`; layers fall at 700–1750 pt/s.
 - **Snow:** layers fall at 18–74 pt/s, drifting with the wind.
 - **Ground:** covers the bottom 56% of the screen; horizon at 0.45; lit by `sunlit / 8`, compressed `^−0.38`.
 - **Exposure:** `0.7·mean^−0.88·0.05^−0.12`, halved at night.
@@ -119,11 +119,14 @@ What changed from it:
 ## Dave's feedback and decisions
 - **The real time of day.** "If the weather one is supposed to be showing my real time weather then it should also be using my real time time of day." It showed a daytime partly cloudy sky at night. That led to finding the decoding bug, and to moving day and night onto the real Sun.
 - **After the fix** he said it was "looking much better now".
+- **The high-fidelity pass** (2026-09-25): "Give it the same level of treatment we gave galaxy, nebula, and fish tank. Do in depth research, gather assets and resources needed to make that scene visually look a lot nicer without too much impact to performance." Three research agents ran: rendering techniques (prototyping a physical sky, procedural ridges and clouds), reference photos and colours, and photo assets. Where they disagreed (procedural ridges against a photo ground) the renders settled it: the photo read as a photograph by day, and graded as backlit it held up at sunset too, so the physical sky and the photo ground were combined.
 
 ## Ideas / next steps
 - An optional temperature readout with a °F/°C setting, which Dave was offered.
-- Seasonal ground colour and leaves.
-- Rain puddles and splashes.
+- Seasonal ground colour: Fort Ord's grass is golden from June to November while the oaks stay green; the tree mask could drive it by month and hemisphere.
+- A rainbow when it's showering with the Sun low behind the view (the research has the geometry: 42° around the antisolar point, red outside, a fainter reversed bow at 51°).
+- Cloud shadows drifting over the hills, and far rain shafts under showers.
+- Backlit photo clouds near the Sun; the cutter couldn't separate them from the glare.
 
 ## Checking it
 - `SNAPSHOT_SCENE="Weather" swift test` renders the offline default: partly cloudy, at this moment where you are.
