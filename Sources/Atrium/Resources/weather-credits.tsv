@@ -1,3 +1,5 @@
 # Images in the Weather wallpaper. Public domain, CC0 or CC BY; CC BY requires this attribution.
 # file	subject	author	licence	source
 weather-moon.png	The Moon's near side, from LRO's colour map (CGI Moon Kit)	NASA Scientific Visualization Studio (Ernie Wright)	Public domain	https://svs.gsfc.nasa.gov/4720
+weather-ground.heic	Fort Ord National Monument, California: green hills and oak woodland on an overcast May morning (sky cut out, stray low cloud removed)	Bureau of Land Management California	Public domain	https://commons.wikimedia.org/wiki/File:Fort_Ord_National_Monument_(52977782605).jpg
+weather-ground-aux.png	Distance (red) and trees (green) for the ground photo, derived from it	Atrium	Public domain	(derived from weather-ground.heic)

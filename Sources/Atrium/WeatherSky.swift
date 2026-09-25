@@ -171,7 +171,9 @@ struct SkyLight: Sendable {
             mean += luminance(air.march(h0: camera.height, dir: camera.ray((Double(i) + 0.5) / 6, v), lights: lights, steps: 16).light)
         } }
         mean = mean / 24 + 2e-7
-        let exposure = 0.7 * pow(mean, -0.88) * pow(0.05, -0.12)
+        // and at night, a little further than that, so it looks like night rather than a long exposure
+        let night = min(max((-0.03 - sun.z) / 0.17, 0), 1)
+        let exposure = 0.7 * pow(mean, -0.88) * pow(0.05, -0.12) * (1 - 0.5 * night)
 
         let (w, h) = (width, height), bottom = camera.horizon - 0.06
         var pixels = [UInt8](repeating: 255, count: w * h * 4)

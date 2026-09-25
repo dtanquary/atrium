@@ -40,6 +40,8 @@ final class WeatherScene: SKScene {
     private let sunDirection = SKUniform(name: "u_sun", vectorFloat3: [0, 0, 1]), sunDisc = SKUniform(name: "u_disc", vectorFloat3: .zero)
     private let moonPlace = SKUniform(name: "u_moon", vectorFloat4: [0, 0, 0, 0]), moonLight = SKUniform(name: "u_moonLight", vectorFloat3: [0, 0, 1])
     private let moonColour = SKUniform(name: "u_moonCol", vectorFloat3: .zero), starsUniform = SKUniform(name: "u_stars", float: 0)
+    private let groundLight = SKUniform(name: "u_light", vectorFloat3: [1, 1, 1]), groundHaze = SKUniform(name: "u_haze", float: 0.05)
+    private let groundColour = SKUniform(name: "u_colour", float: 1), groundHazeLit = SKUniform(name: "u_hazeLit", float: 1)
     private static let moonTexture = SKTexture(imageNamed: resource("weather-moon.png").path)
 
     /// Pass `conditions` to pin the scene to one state (snapshots); leave it nil to follow the live weather.
@@ -47,7 +49,7 @@ final class WeatherScene: SKScene {
         report = conditions ?? Conditions(isDay: WeatherScene.sunIsUp())
         self.conditions = report
         live = conditions == nil
-        viewpoint = SkyCamera(aspect: size.width / size.height, horizon: 0.4, facing: 1.5 * .pi)
+        viewpoint = SkyCamera(aspect: size.width / size.height, horizon: 0.45, facing: 1.5 * .pi)
         super.init(size: size)
         self.conditions = wanted
         build()
@@ -145,9 +147,7 @@ final class WeatherScene: SKScene {
 
         addClouds(kind, palette: palette)
 
-        let hills = landscape(palette, snowy: kind == .snow)
-        hills.zPosition = 5
-        addChild(hills)
+        addGround()
 
         switch kind {
         case .fog: addFog(palette, density: 1)
@@ -208,6 +208,28 @@ final class WeatherScene: SKScene {
         starsUniform.floatValue = Float(dark * (1 - 0.6 * moonUp) * visible)
         sunDisc.vectorFloat3Value = light.sun.z > -0.02 ? SIMD3<Float>(light.sunColour) : .zero
         let night = smoothstep(0.05, -0.1, light.sun.z)
+        // The ground photo was taken under an even overcast, so it's lit here as if its colours were that light's:
+        // skylight, plus the Sun (or Moon) on the slopes that face it. Facing a low Sun we see the shaded sides of
+        // the hills, so it adds little there; behind us, it lights them fully. Just after it rises, only some
+        // slopes catch it.
+        func direct(_ d: Sky.Vector) -> Double {
+            let front = -dot(Sky.Vector(d.x, d.y, 0), viewpoint.forward)
+            let facing = min(max(0.55 * d.z + 0.35 * front * (1 - d.z * d.z).squareRoot() + 0.15, 0), 1)
+            return facing * (0.4 + 0.6 * smoothstep(0, 0.15, d.z))
+        }
+        let moonDirect = Atmosphere.shared.sunlight(viewpoint.height, light.moon.z) * light.moonPower * light.exposure
+        var sunlit = light.ambient + light.sunColour * direct(light.sun) + moonDirect * direct(light.moon)
+        // Under a deck of cloud the light is grey, even, and about half the day's.
+        let overcast = conditions.cloudiness, global: Sky.Vector = light.ambient + light.sunColour * max(light.sun.z, 0)
+        let grey = Sky.Vector(repeating: global.sum() / 3 * 0.5)
+        sunlit = sunlit * (1 - overcast) + grey * overcast
+        // The eye adapts to the land as well as the sky: facing a sunset the hills go dark, but not black.
+        let lit = sunlit / 7, brightness = (lit * Sky.Vector(0.2126, 0.7152, 0.0722)).sum()
+        groundLight.vectorFloat3Value = SIMD3<Float>(lit * pow(max(brightness, 1e-5), -0.45) * (1 - 0.6 * smoothstep(-0.03, -0.2, light.sun.z)))
+        // At night the eye sees less colour (the Purkinje shift), and the haze isn't lit from low down any more,
+        // since the air near the ground is in the Earth's shadow while the high sky still glows.
+        groundColour.floatValue = Float(smoothstep(0.002, 0.03, brightness) * (1 - 0.7 * smoothstep(-0.03, -0.2, light.sun.z)))
+        groundHazeLit.floatValue = Float(0.3 + 0.7 * smoothstep(-0.08, 0, light.sun.z))
         moonColour.vectorFloat3Value = SIMD3<Float>(Atmosphere.shared.sunlight(viewpoint.height, light.moon.z) * (0.5 + 1.5 * night))
     }
 
@@ -271,6 +293,53 @@ final class WeatherScene: SKScene {
         }
         col = sqrt(1.0 - exp(-col)); // film-like roll-off, then roughly sRGB
         gl_FragColor = vec4(col + (hash21(pts * 2.0) - 0.5) / 128.0, 1.0);
+    }
+    """
+
+    // MARK: - Ground
+
+    /// Fort Ord's green hills and oak woodland (BLM, public domain), with its sky cut out, and `weather-ground-aux`:
+    /// red is how far away each point is (0 near, 1 at the skyline), green is where there are trees.
+    private static let groundPhoto = SKTexture(image: NSImage(contentsOf: resource("weather-ground.heic")) ?? NSImage())
+    private static let groundAux = SKTexture(image: NSImage(contentsOf: resource("weather-ground-aux.png")) ?? NSImage())
+
+    /// The photo across the bottom of the screen, its top at 0.56 of the height, cropped at the bottom on wide
+    /// screens rather than squeezing the sky. Relit for the light and weather, and hazed with distance.
+    private func addGround() {
+        let photo = Self.groundPhoto.size(), aspect = photo.width / max(photo.height, 1)
+        let width = max(size.width, size.height * 0.56 * aspect), height = width / aspect
+        let ground = SKSpriteNode(texture: Self.groundPhoto, size: CGSize(width: width, height: height))
+        ground.anchorPoint = CGPoint(x: 0.5, y: 1)
+        ground.position = CGPoint(x: size.width / 2, y: size.height * 0.56)
+        ground.zPosition = 5
+        let frame = SIMD4<Float>(Float((size.width - width) / 2 / size.width), Float((size.height * 0.56 - height) / size.height),
+                                 Float(width / size.width), Float(height / size.height))
+        ground.shader = SKShader(source: Self.groundShader, uniforms: [
+            SKUniform(name: "u_aux", texture: Self.groundAux), SKUniform(name: "u_frame", vectorFloat4: frame),
+            skyBefore, skyAfter, skyBlend, cameraUniforms.lens, groundLight, groundHaze, groundColour, groundHazeLit,
+        ])
+        addChild(ground)
+    }
+
+    /// Lights the photo's colours as linear light, fades them toward grey-blue in dim light, then hazes each point
+    /// toward the sky just above the horizon over it, more with distance. Premultiplied, like SpriteKit's textures.
+    private static let groundShader = """
+    vec3 decode(vec3 c) { return c * c * 4.0; }
+
+    void main() {
+        vec4 photo = texture2D(u_texture, v_tex_coord);
+        vec3 aux = texture2D(u_aux, v_tex_coord).rgb;
+        vec3 albedo = photo.rgb / max(photo.a, 0.004);
+        vec3 land = albedo * albedo * u_light;
+        float lum = dot(land, vec3(0.2126, 0.7152, 0.0722));
+        land = mix(vec3(lum) * vec3(0.75, 0.88, 1.2), land, u_colour); // the Purkinje shift: moonlit fields look blue-grey
+        vec2 screen = u_frame.xy + v_tex_coord * u_frame.zw;
+        vec2 above = vec2(screen.x, (u_cam.z + 0.03 - u_cam.w) / (1.0 - u_cam.w));
+        vec3 haze = mix(decode(texture2D(u_before, above).rgb), decode(texture2D(u_after, above).rgb), u_blend) * u_hazeLit;
+        float far = aux.r / (1.0 - 0.9 * aux.r);
+        float through = exp(-u_haze * far);
+        land = land * through + haze * (1.0 - through);
+        gl_FragColor = vec4(sqrt(1.0 - exp(-land)), 1.0) * photo.a;
     }
     """
 
@@ -415,77 +484,6 @@ final class WeatherScene: SKScene {
 
     // MARK: - Painting
 
-    /// Three ranges of hills, hazier with distance, dotted with pines and round trees. Painted once per build.
-    private func landscape(_ p: Palette, snowy: Bool) -> SKSpriteNode {
-        let area = CGSize(width: size.width, height: size.height * 0.46)
-        var rng = Seeded(state: 11) // the same hills and trees every time
-        let texture = paint(area) { ctx in
-            let ranges: [(base: CGFloat, freq: CGFloat, phase: CGFloat, colour: RGB, trees: Int, treeHeight: CGFloat)] = [
-                (0.78, 1.3, 0.8, p.far, 0, 0),
-                (0.52, 2.1, 2.4, p.mid, Int(area.width / 55), size.height * 0.05),
-                (0.24, 1.6, 4.1, p.near, Int(area.width / 160), size.height * 0.11),
-            ]
-            for range in ranges {
-                func ridge(_ x: CGFloat) -> CGFloat {
-                    let t = x / area.width * .pi * 2 * range.freq
-                    return area.height * (range.base + 0.1 * sin(t + range.phase) + 0.04 * sin(t * 2.7 + range.phase * 1.7))
-                }
-                let hill = CGMutablePath()
-                hill.move(to: .zero)
-                for x in stride(from: 0, through: area.width + 8, by: 8) { hill.addLine(to: CGPoint(x: x, y: ridge(x))) }
-                hill.addLine(to: CGPoint(x: area.width + 8, y: 0))
-                hill.closeSubpath()
-                ctx.saveGState()
-                ctx.addPath(hill)
-                ctx.clip()
-                let shade = CGGradient(colorsSpace: nil, colors: [(range.colour * 1.08).cg(), (range.colour * 0.82).cg()] as CFArray, locations: nil)!
-                ctx.drawLinearGradient(shade, start: CGPoint(x: 0, y: area.height * (range.base + 0.14)), end: CGPoint(x: 0, y: 0), options: [])
-                ctx.restoreGState()
-
-                let treeColour = range.colour == p.mid ? mix(p.tree, p.mid, 0.35) : p.tree // distant trees fade into their hill
-                for _ in 0..<range.trees {
-                    let x = CGFloat.random(in: 0...area.width, using: &rng)
-                    let y = ridge(x) - .random(in: 0...area.height * 0.08, using: &rng)
-                    let height = range.treeHeight * .random(in: 0.6...1.2, using: &rng)
-                    if Bool.random(using: &rng) || snowy {
-                        pine(ctx, x: x, y: y, height: height, colour: treeColour, snow: snowy ? p.near : nil)
-                    } else {
-                        roundTree(ctx, x: x, y: y, height: height, colour: treeColour)
-                    }
-                }
-            }
-        }
-        let node = SKSpriteNode(texture: texture, size: area)
-        node.anchorPoint = .zero
-        return node
-    }
-
-    private func pine(_ ctx: CGContext, x: CGFloat, y: CGFloat, height: CGFloat, colour: RGB, snow: RGB?) {
-        ctx.setFillColor((colour * 0.6 + RGB(0.08, 0.04, 0)).cg())
-        ctx.fill(CGRect(x: x - height * 0.035, y: y - height * 0.05, width: height * 0.07, height: height * 0.22))
-        for tier in 0..<3 {
-            let base = y + height * (0.14 + 0.24 * CGFloat(tier)), half = height * (0.28 - 0.06 * CGFloat(tier))
-            let apex = CGPoint(x: x, y: base + height * 0.42)
-            ctx.setFillColor(colour.cg())
-            ctx.addLines(between: [CGPoint(x: x - half, y: base), CGPoint(x: x + half, y: base), apex])
-            ctx.fillPath()
-            if let snow {
-                ctx.setFillColor(snow.cg())
-                ctx.addLines(between: [CGPoint(x: x - half * 0.45, y: base + height * 0.23), CGPoint(x: x + half * 0.45, y: base + height * 0.23), apex])
-                ctx.fillPath()
-            }
-        }
-    }
-
-    private func roundTree(_ ctx: CGContext, x: CGFloat, y: CGFloat, height: CGFloat, colour: RGB) {
-        ctx.setFillColor((colour * 0.6 + RGB(0.1, 0.05, 0)).cg())
-        ctx.fill(CGRect(x: x - height * 0.04, y: y - height * 0.05, width: height * 0.08, height: height * 0.45))
-        for (dx, dy, r) in [(-0.14, 0.52, 0.2), (0.14, 0.55, 0.19), (0, 0.72, 0.24)] as [(CGFloat, CGFloat, CGFloat)] {
-            ctx.setFillColor((colour * (dy > 0.6 ? 1.1 : 1)).cg()) // the crown catches more light
-            ctx.fillEllipse(in: CGRect(x: x + dx * height - r * height, y: y + dy * height - r * height, width: r * height * 2, height: r * height * 2))
-        }
-    }
-
     /// A puffy cloud: overlapping ellipses, lit on top and shaded underneath, with soft edges.
     private func cloudTexture(light: RGB, shade: RGB) -> SKTexture {
         paint(CGSize(width: 340, height: 140)) { ctx in
@@ -534,6 +532,15 @@ private extension WeatherScene.Conditions {
         case 71...77, 85, 86: .snow
         case 95...99: .storm
         default: .partlyCloudy
+        }
+    }
+
+    /// How much the cloud evens out the light, 0 (clear) to 1 (a full deck).
+    var cloudiness: Double {
+        switch kind {
+        case .clear: 0
+        case .partlyCloudy: cloudCover / 100 * 0.4
+        default: 1
         }
     }
 
@@ -596,17 +603,4 @@ private extension SIMD3<Double> {
     func cg(_ alpha: CGFloat = 1) -> CGColor { CGColor(srgbRed: Swift.min(x, 1), green: Swift.min(y, 1), blue: Swift.min(z, 1), alpha: alpha) }
     func withAlpha(_ alpha: CGFloat) -> CGColor { cg(alpha) }
     var ns: NSColor { NSColor(srgbRed: Swift.min(x, 1), green: Swift.min(y, 1), blue: Swift.min(z, 1), alpha: 1) }
-}
-
-/// Seeded random numbers (SplitMix64), so the hills and trees don't reshuffle every time the weather changes.
-private struct Seeded: RandomNumberGenerator {
-    var state: UInt64
-
-    mutating func next() -> UInt64 {
-        state &+= 0x9E37_79B9_7F4A_7C15
-        var z = state
-        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
-        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
-        return z ^ (z >> 31)
-    }
 }

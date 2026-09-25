@@ -1,10 +1,10 @@
 # Weather
 
-Three ranges of rolling hills with pines and round trees, under whatever the weather is doing where the viewer is right now: clear, partly cloudy, overcast, fog, drizzle, rain, snow or a thunderstorm, by day or by night.
+Green California hills and oak woodland, from a real photo, under whatever the weather is doing where the viewer is right now: clear, partly cloudy, overcast, fog, drizzle, rain, snow or a thunderstorm, by day or by night.
 
 - **Files:** `Sources/Atrium/Weather.swift` holds the scene, the WMO code → `Kind` mapping, `Palette`, and a seeded random number generator. `WeatherSky.swift` holds the physical sky: `Atmosphere`, `SkyCamera` and `SkyLight`. `Resources/weather-*` are its images, credited in `weather-credits.tsv`. It also uses `SkyMath.swift` (for whether the Sun is up) and `Location.swift`; see [live-sky.md](live-sky.md). There's a test in `Tests/AtriumTests/WeatherTests.swift`.
 - **Entry:** `weather(size:)` builds `final class WeatherScene: SKScene`, whose `init(size:conditions:)` is the test seam. Its entry in Scenes.swift is "Weather", icon `cloud.sun.fill`, tint `.blue`, with `WeatherScene.knobs`.
-- **Kind:** SpriteKit nodes and Core Graphics textures: a gradient sky, painted clouds and hills, and emitters for rain and snow.
+- **Kind:** a physical sky baked on the CPU into a small texture, a photo of the ground relit by a shader, painted clouds, and emitters for rain and snow.
 
 ## How it works
 - **`Conditions`** holds `code` (the WMO weather code), `isDay`, `cloudCover` (%) and `wind` (km/h). `kind` maps the code:
@@ -29,7 +29,13 @@ Three ranges of rolling hills with pines and round trees, under whatever the wea
   - **Sun:** a limb-darkened disc 0.28° across with a soft glow, in the colour of sunlight through the air (reddening as it sets), shown down to 1° below the horizon.
   - **Moon:** NASA's LRO near side (`weather-moon.png`, from the CGI Moon Kit), 15 pt in radius (about 2.5× true), at its real place, lit from the real Sun with 1.5% earthshine, and turned so its north points to the celestial pole, as in Live Sky. It's tinted by moonlight through the air, and paler by day. `track()` moves the Sun and Moon every second, since a minute's step would be about the Sun's radius. The Moon also lights the sky as a second light at 2.5e−6·lit³ of the Sun.
   - **Clouds:** painted cumulus (overlapping ellipses, flat base, shaded underside), in three variants per build. When it's grey (overcast, drizzle, rain, snow, storm) there's a full deck of 16 big clouds; otherwise `cloudCover/10` wisps. Bigger clouds sit in front and drift faster.
-  - **Hills:** `landscape()` paints three ranges into one texture, hazier with distance, with pines and round trees. It uses `Seeded(state: 11)`, so the hills and trees are the same on every rebuild. In snow the trees are all pines with snowy tips.
+  - **Ground:** a photo of Fort Ord National Monument (BLM California, public domain, 7379 px wide, shot on an overcast May morning, so there are no hard shadows to fight the real Sun) with the sky cut out, as `weather-ground.heic` (4096×1485 with alpha, 1.4 MB). `weather-ground-aux.png` (1024×371) holds its distance in red (0 at the bottom, 1 at the skyline) and its trees in green. Both are decoded once, statically.
+    - It covers the bottom 56% of the screen, cropped at the bottom on wider screens so the sky keeps its share. The horizon is at 0.45, just under the lowest point of the skyline.
+    - **Light:** the shader treats the photo's colours (squared, roughly linear) as lit by the overcast it was taken in, and multiplies by `u_light`: skylight plus the Sun's (or the Moon's) direct light on the slopes that face it. `direct()` is `0.55·z + 0.35·front·cos + 0.15`, where `front` is 1 with the light behind the viewer. Facing a low Sun we see the hills' shaded sides, so there's little; just after sunrise only some slopes catch it (×0.4). Under a deck of cloud the light is grey, even and half the day's (`cloudiness`).
+    - **Adapting:** the land's own light is compressed by its brightness (`^−0.45`), as an eye adapts. Physically correct numbers left the hills almost black facing a sunset, so even half a percent of haze from the glow swamped them.
+    - **Night:** it dims by 60% more from a Sun 2° to 11° below the horizon, and fades toward grey-blue (the Purkinje shift) by moonlight. The exposure also dims 50% at night, so a moonlit night looks like night rather than a long exposure; tonight's full Moon lit it like a dull day before that.
+    - **Haze:** each point fades toward the sky 0.03 above the horizon over its column, by `1 − exp(−u_haze·d/(1 − 0.9d))`. After sunset the haze dims to 30%, since the air near the ground is in the Earth's shadow while the high sky still glows; without that, the whole land glowed orange at dusk.
+    - The photo's own low clouds above the ridge were cleared from the cut (anything over 4 px above the skyline).
   - **Fog:** a vertical haze gradient, plus 5 drifting banks of mist at full density. Rain and snow get a thinner haze.
   - **Rain:** an `SKEmitterNode` of 2×26 streaks. The lean is `min(wind/50, 1)·0.45` rad, and the rate goes 90 (drizzle), then 200–500 (rain), then 550 (storm). `advanceSimulationTime` makes it already raining when it appears.
   - **Snow:** an emitter with `xAcceleration` from the wind and a sway `particleAction`.
