@@ -3,7 +3,8 @@ import SpriteKit
 @MainActor func weather(size: CGSize) -> SKScene { WeatherScene(size: size) }
 
 /// Rolling hills under whatever the weather is doing outside right now, from Open-Meteo every 15 minutes:
-/// sun or moon and stars, drifting clouds, drizzle, rain, snow, fog or a thunderstorm, by day or by night.
+/// sun or moon and stars, drifting clouds, drizzle, rain, snow, fog or a thunderstorm. Day or night follows the
+/// real Sun where you are, checked every minute, so it's right offline too.
 final class WeatherScene: SKScene {
     /// The current weather as Open-Meteo reports it.
     struct Conditions: Equatable {
@@ -20,7 +21,7 @@ final class WeatherScene: SKScene {
 
     /// Pass `conditions` to pin the scene to one state (snapshots); leave it nil to follow the live weather.
     init(size: CGSize, conditions: Conditions? = nil) {
-        self.conditions = conditions ?? Conditions()
+        self.conditions = conditions ?? Conditions(isDay: WeatherScene.sunIsUp())
         live = conditions == nil
         super.init(size: size)
         build()
@@ -34,6 +35,34 @@ final class WeatherScene: SKScene {
         run(.sequence([.wait(forDuration: 2), // give a remembered location fix a moment to land
                        .repeatForever(.sequence([.run { [weak self] in self?.refresh() }, .wait(forDuration: 900)]))]),
             withKey: "poll")
+        run(.repeatForever(.sequence([.wait(forDuration: 60), .run { [weak self] in
+            guard let self, conditions.isDay != WeatherScene.sunIsUp() else { return }
+            conditions.isDay.toggle()
+            build()
+        }])))
+    }
+
+    /// Whether the Sun is above the horizon where you are right now (its top edge, allowing for refraction).
+    static func sunIsUp() -> Bool {
+        let here = Location.shared.coordinate, jd = Sky.julianDate(Date())
+        let sun = Sky.horizonMatrix(jd: jd, latitude: here.latitude, longitude: here.longitude) * Sky.sun(jd)
+        return sun.z > sin(-0.833 * .pi / 180)
+    }
+
+    /// Conditions from an Open-Meteo `current` reply, with day or night from the Sun rather than the reply.
+    static func conditions(from reply: Data) -> Conditions? {
+        struct Forecast: Decodable {
+            struct Current: Decodable {
+                let weatherCode: Int, cloudCover: Double, windSpeed: Double
+                // Spelled out: .convertFromSnakeCase turns wind_speed_10m into windSpeed10M.
+                enum CodingKeys: String, CodingKey {
+                    case weatherCode = "weather_code", cloudCover = "cloud_cover", windSpeed = "wind_speed_10m"
+                }
+            }
+            let current: Current
+        }
+        guard let now = try? JSONDecoder().decode(Forecast.self, from: reply).current else { return nil }
+        return Conditions(code: now.weatherCode, isDay: sunIsUp(), cloudCover: now.cloudCover, wind: now.windSpeed)
     }
 
     /// Fetches the current weather and redraws the scene if it changed. Offline, it keeps showing what it has.
@@ -42,18 +71,11 @@ final class WeatherScene: SKScene {
         var url = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
         url.queryItems = [URLQueryItem(name: "latitude", value: String(spot.latitude)),
                           URLQueryItem(name: "longitude", value: String(spot.longitude)),
-                          URLQueryItem(name: "current", value: "weather_code,is_day,cloud_cover,wind_speed_10m")]
+                          URLQueryItem(name: "current", value: "weather_code,cloud_cover,wind_speed_10m")]
         Task { [weak self] in
-            struct Forecast: Decodable {
-                struct Current: Decodable { let weatherCode: Int, isDay: Int, cloudCover: Double, windSpeed10m: Double }
-                let current: Current
-            }
-            let decoder = JSONDecoder()
-            decoder.keyDecodingStrategy = .convertFromSnakeCase
             guard let (data, _) = try? await URLSession.shared.data(from: url.url!),
-                  let now = try? decoder.decode(Forecast.self, from: data).current else { return }
-            let latest = Conditions(code: now.weatherCode, isDay: now.isDay == 1, cloudCover: now.cloudCover, wind: now.windSpeed10m)
-            guard let self, latest != self.conditions else { return }
+                  let latest = WeatherScene.conditions(from: data),
+                  let self, latest != self.conditions else { return }
             self.conditions = latest
             self.build()
         }
