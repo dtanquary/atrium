@@ -44,6 +44,7 @@ SNAPSHOT_SCENE="Aurora" SNAPSHOT_DIR=/some/dir SNAPSHOT_SECONDS=20 swift test
 - Minimal code, no dependencies, native frameworks first. Mark deliberate shortcuts with `ponytail:` comments that say where the shortcut stops being good enough.
 - Match the code around you: doc comments on types and functions, sparse comments inside them.
 
-## Git
+## Git and deploying
 - **Commit early and often.** One logical change per commit, made as soon as it builds and `swift test` passes. Don't bundle unrelated work together.
+- **Redeploy as work lands.** After each working change, run `./build.sh` and relaunch (`pkill -x Wallpaper; open build/Wallpaper.app`) so Dave can try it from the menu bar. Tell him what to test.
 - Messages: a plain-English imperative subject that says what changed and why, e.g. "Pause rendering while the wallpaper is covered".
