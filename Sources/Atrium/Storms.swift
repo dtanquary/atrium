@@ -10,11 +10,14 @@ import CoreLocation
     /// Grid points with a thunderstorm now (weather codes 95, 96 and 99).
     private(set) var cells: [Cell] = []
     private var lastPoll = Date.distantPast
+    /// Seconds since the last poll.
+    var age: TimeInterval { Date().timeIntervalSince(lastPoll) }
 
-    /// Refreshes at most hourly: storms only drift a few pixels an hour at the globe's scale. Open-Meteo counts each
-    /// of the 165 points as a call, which keeps well inside its free 10,000 a day.
+    /// Fetches the storms now, but at most every 10 minutes however many displays ask. Earth from Orbit calls this
+    /// when a new cloud map lands, about every three hours, so the flashes match the clouds; Open-Meteo counts each of
+    /// the 165 points as a call, so that's about 1,300 of its free 10,000 a day.
     func poll(around here: CLLocationCoordinate2D) {
-        guard Date().timeIntervalSince(lastPoll) > 3600 else { return }
+        guard age > 600 else { return }
         lastPoll = Date()
         let points = stride(from: -20.0, through: 20, by: 4).flatMap { dlat in
             stride(from: -28.0, through: 28, by: 4).map { dlon in
