@@ -11,6 +11,10 @@ final class NightSky: SKScene {
         Knob(key: "sky.constellations", label: "Constellation lines", range: 0...1, standard: 1, section: "Show",
              format: .toggle),
         Knob(key: "sky.planetLabels", label: "Planet labels", range: 0...1, standard: 1, section: "Show", format: .toggle),
+        Knob(key: "sky.previewTime", label: "Preview a time of day", range: 0...1, standard: 0, section: "Preview",
+             format: .toggle),
+        Knob(key: "sky.previewHour", label: "Time", range: 0...24, standard: 13, section: "Preview", format: .clock,
+             shownWhen: "sky.previewTime"),
     ]
 
     private var stars: [(node: SKSpriteNode, position: Sky.Vector)] = []
@@ -76,10 +80,17 @@ final class NightSky: SKScene {
         place(iss, at: look)
     }
 
-    /// Shows or hides the constellation lines and planet labels as Settings says.
+    /// Shows or hides the constellation lines and planet labels as Settings says, and redraws for a preview time.
     @objc private func applySettings() {
         constellations.isHidden = Self.knobs[0].value < 0.5
         for planet in planets { planet.node.children.forEach { $0.isHidden = Self.knobs[1].value < 0.5 } } // their labels
+        refresh()
+    }
+
+    /// Now, or today at the preview hour while previewing a time of day.
+    private var skyDate: Date {
+        guard Self.knobs[2].value > 0.5 else { return Date() }
+        return Calendar.current.startOfDay(for: Date()).addingTimeInterval(Self.knobs[3].value * 3600)
     }
 
     // MARK: Projection
@@ -119,7 +130,7 @@ final class NightSky: SKScene {
     /// Recomputes every position for the current time and place.
     private func refresh() {
         let here = Location.shared.coordinate
-        let jd = Sky.julianDate(Date())
+        let jd = Sky.julianDate(skyDate)
         toHorizon = Sky.horizonMatrix(jd: jd, latitude: here.latitude, longitude: here.longitude)
 
         // Daylight: the sky turns deep blue and everything fainter than `limit` fades out.
