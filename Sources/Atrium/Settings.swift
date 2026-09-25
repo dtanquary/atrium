@@ -88,12 +88,14 @@ struct AboutPage: View {
 
     private let name = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "Atrium"
     private let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
-    /// The reef tank's photographers, as CC BY asks: "subject: author, licence" for each cut-out.
-    private let reefCredits: [String] = ((try? String(contentsOf: resource("reef-credits.tsv"), encoding: .utf8)) ?? "")
-        .split(separator: "\n").filter { !$0.hasPrefix("#") }.map { line in
-            let field = line.split(separator: "\t").map(String.init)
-            return field.count > 3 ? "\(field[1]): \(field[2]), \(field[3])" : String(line)
-        }
+    /// The photographers, as CC BY asks: "subject: author, licence" for each image in a credits file.
+    private func credits(_ file: String) -> [String] {
+        ((try? String(contentsOf: resource(file), encoding: .utf8)) ?? "")
+            .split(separator: "\n").filter { !$0.hasPrefix("#") }.map { line in
+                let field = line.split(separator: "\t").map(String.init)
+                return field.count > 3 ? "\(field[1]): \(field[2]), \(field[3])" : String(line)
+            }
+    }
 
     var body: some View {
         Form {
@@ -121,10 +123,11 @@ struct AboutPage: View {
                 LabeledContent("Earth imagery") { Text("NASA Blue Marble and Black Marble") }
                 LabeledContent("Clouds") { Link("Live Cloud Maps; contains modified EUMETSAT data", destination: URL(string: "https://clouds.matteason.co.uk")!) }
                 LabeledContent("Planet positions") { Text("NASA JPL") }
-                LabeledContent("Moon") { Text("NASA SVS CGI Moon Kit") }
-                LabeledContent("Weather's hills") { Text("Fort Ord, photographed by the Bureau of Land Management") }
+                DisclosureGroup("Weather's hills, clouds and Moon, from the BLM, NASA, Poly Haven and Wikimedia Commons") {
+                    ForEach(credits("weather-credits.tsv"), id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
+                }
                 DisclosureGroup("Reef photos, from iNaturalist, Wikimedia Commons and NOAA") {
-                    ForEach(reefCredits, id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
+                    ForEach(credits("reef-credits.tsv"), id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
                 }
             }
         }

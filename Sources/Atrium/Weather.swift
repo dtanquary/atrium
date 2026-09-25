@@ -49,6 +49,8 @@ final class WeatherScene: SKScene {
     private let cirrus = SKUniform(name: "u_high", float: 0), cirrusSun = SKUniform(name: "u_highCol", vectorFloat3: .zero)
     private let fog = SKUniform(name: "u_fog", float: 0), snowCover = SKUniform(name: "u_snow", float: 0)
     private let nightUniform = SKUniform(name: "u_night", float: 0), backlit = SKUniform(name: "u_backlit", float: 0)
+    private let photoCloudSun = SKUniform(name: "u_cloudSun", vectorFloat3: .zero), photoCloudShade = SKUniform(name: "u_cloudAmb", vectorFloat3: .zero)
+    private var sunNow = Sky.Vector(0, 0, 1)
     private let flashAmount = SKUniform(name: "u_flash", float: 0), flashPlace = SKUniform(name: "u_flashPos", vectorFloat3: .zero)
     /// Under a deck: its underside's colour, and how much the horizon takes it on instead of the clear sky's.
     private let deck = SKUniform(name: "u_deck", vectorFloat4: .zero)
@@ -159,6 +161,7 @@ final class WeatherScene: SKScene {
         removeAllChildren()
         removeAction(forKey: "lightning")
         addSky()
+        addPhotoClouds()
         addGround()
         addPrecipitation()
         if conditions.kind == .storm { addLightning() }
@@ -217,6 +220,8 @@ final class WeatherScene: SKScene {
         starsUniform.floatValue = Float(dark * (1 - 0.6 * moonUp) * visible)
         sunDisc.vectorFloat3Value = light.sun.z > -0.02 ? SIMD3<Float>(light.sunColour) : .zero
         cloudSun.vectorFloat3Value = SIMD3<Float>(light.sunAtCloud)
+        photoCloudSun.vectorFloat3Value = SIMD3<Float>(light.sunAtCloud * 0.18)
+        photoCloudShade.vectorFloat3Value = SIMD3<Float>(light.ambient * 0.5 + light.sunAtCloud * max(light.sun.z, 0) * 0.03)
         // Rain shows the light around it; snow is white in whatever light there is. Tone-mapped like the shaders.
         func display(_ v: Sky.Vector) -> SIMD3<Float> { SIMD3<Float>((Sky.Vector(1, 1, 1) - exp(-v)).squareRoot()) }
         let around = light.ambient * 0.5 + light.sunColour * max(light.sun.z, 0) * 0.04
@@ -268,6 +273,7 @@ final class WeatherScene: SKScene {
         let toHorizon = Sky.horizonMatrix(jd: jd, latitude: here.latitude, longitude: here.longitude)
         let sun = normalize(toHorizon * Sky.sun(jd)), moon = normalize(toHorizon * Sky.moon(jd))
         sunDirection.vectorFloat3Value = SIMD3<Float>(sun.z > -0.14 ? sun : moon) // what lights the clouds
+        sunNow = sun
         guard let at = viewpoint.screen(moon), moon.z > -0.01 else { moonPlace.vectorFloat4Value = [0, 0, 0, 0]; return }
         // Light it from the real Sun, and turn it so its north points to the celestial pole, as in Live Sky.
         func angle(toward target: Sky.Vector) -> Double {
@@ -419,6 +425,131 @@ final class WeatherScene: SKScene {
         col = mix(col, vec3(dot(col, vec3(0.2126, 0.7152, 0.0722))) * vec3(0.62, 0.85, 1.45), u_night);
         col = sqrt(1.0 - exp(-col)); // film-like roll-off, then roughly sRGB
         gl_FragColor = vec4(col + (hash21(pts * 2.0) - 0.5) / 128.0, 1.0);
+    }
+    """
+
+    // MARK: - Photo clouds
+
+    /// Real cumulus cut out of photos (Resources/weather-cloud-*.heic, credited in weather-credits.tsv): each one's
+    /// width in km, and the range of its brightness in the photo (2nd and 98th percentiles of its sRGB luminance) so
+    /// the shader can relight it, darkest to skylight and brightest to sunlight. Procedural cumulus looked like smears.
+    private static let photoClouds: [(name: String, km: Double, lum: SIMD2<Float>, tower: Bool)] = [
+        ("cu-humilis-1", 1.2, [0.63, 0.86], false), ("cu-humilis-2", 1.0, [0.74, 0.88], false),
+        ("cu-humilis-3", 1.4, [0.75, 0.87], false), ("cu-humilis-5", 3.0, [0.66, 0.89], false),
+        ("cu-mediocris-1", 2.4, [0.65, 0.87], false), ("cu-mediocris-2", 2.2, [0.64, 0.86], false),
+        ("cu-mediocris-3", 1.8, [0.76, 0.88], false), ("cu-flat-1", 3.5, [0.50, 0.83], false),
+        ("cu-flat-2", 3.2, [0.76, 0.89], false), ("cu-lit-big-1", 3.5, [0.65, 0.85], false),
+        ("cu-sidelit-1", 2.4, [0.62, 0.87], false),
+        ("cu-congestus-2", 4.5, [0.62, 0.86], true), ("cu-congestus-3", 4.5, [0.65, 0.90], true),
+        ("cu-congestus-4", 5.0, [0.65, 0.91], true),
+    ]
+    private static var cloudTextures: [String: SKTexture] = [:]
+
+    private static func cloudTexture(_ name: String) -> SKTexture {
+        if let texture = cloudTextures[name] { return texture }
+        let texture = SKTexture(image: NSImage(contentsOf: resource("weather-cloud-\(name).heic")) ?? NSImage())
+        texture.usesMipmaps = true // drawn far smaller than the photo when far away
+        cloudTextures[name] = texture
+        return texture
+    }
+
+    /// The clouds on screen: where each is, in km across the view and away from it, and its base height.
+    private var photoCloudsShown: [(node: SKSpriteNode, across: Double, away: Double, base: Double, km: Double)] = []
+    private lazy var photoCloudShader: SKShader = {
+        let shader = SKShader(source: Self.photoCloudShaderSource, uniforms: [
+            photoCloudSun, photoCloudShade, skyBefore, skyAfter, skyBlend, cameraUniforms.lens, nightUniform,
+        ])
+        shader.attributes = [SKAttribute(name: "a_lum", type: .vectorFloat2), SKAttribute(name: "a_far", type: .float),
+                             SKAttribute(name: "a_back", type: .float), SKAttribute(name: "a_screen", type: .vectorFloat4)]
+        return shader
+    }()
+
+    /// Fair-weather cumulus, a few on a mainly clear day and more when it's partly cloudy, now and then a tower.
+    private func addPhotoClouds() {
+        photoCloudsShown = []
+        let cover = conditions.cloudCover / 100
+        let count = conditions.kind == .partlyCloudy ? 3 + Int(cover * 7) : conditions.kind == .clear && cover > 0.08 ? 1 + Int(cover * 4) : 0
+        var towers = 0
+        for _ in 0..<count {
+            let tower = towers == 0 && Double.random(in: 0...1) < 0.15
+            if tower { towers += 1 }
+            let pick = Self.photoClouds.filter { $0.tower == tower }.randomElement()!
+            let node = SKSpriteNode(texture: Self.cloudTexture(pick.name))
+            node.anchorPoint = CGPoint(x: 0.5, y: 0.06)
+            node.shader = photoCloudShader
+            node.setValue(SKAttributeValue(vectorFloat2: pick.lum), forAttribute: "a_lum")
+            node.xScale = Bool.random() ? 1 : -1
+            addChild(node)
+            // Towers stand far off, where the ridge hides the bottom of their photo.
+            let away = tower ? Double.random(in: 26...40) : 6 + 34 * pow(Double.random(in: 0...1), 1.4)
+            let across = Double.random(in: -1.15...1.15) * viewpoint.tanH * away
+            photoCloudsShown.append((node, across, away, tower ? 0.9 : 1.3 + Double.random(in: 0...0.3), pick.km * Double.random(in: 0.85...1.2)))
+        }
+        driftClouds(0)
+    }
+
+    /// Moves the clouds with the wind and places them in perspective. One that drifts out of view fades in again on
+    /// the upwind side.
+    private func driftClouds(_ dt: Double) {
+        guard !photoCloudsShown.isEmpty else { return }
+        let speed = conditions.wind / 3600 * 1.3 // km/s; the wind at cloud height is a little stronger
+        let toward = conditions.windToward
+        let across = simd_dot(toward, SIMD2(viewpoint.right.x, viewpoint.right.y)) * speed
+        let away = simd_dot(toward, SIMD2(viewpoint.forward.x, viewpoint.forward.y)) * speed
+        let (w, h) = (Double(size.width), Double(size.height))
+        for i in photoCloudsShown.indices {
+            var cloud = photoCloudsShown[i]
+            cloud.across += across * dt
+            cloud.away += away * dt
+            if abs(cloud.across / cloud.away) > viewpoint.tanH * 1.35 || cloud.away < 5 || cloud.away > 42 {
+                cloud.away = cloud.base < 1 ? Double.random(in: 26...40) : 6 + 34 * pow(Double.random(in: 0...1), 1.4)
+                cloud.across = abs(across) > abs(away) * 0.3
+                    ? (across > 0 ? -1 : 1) * viewpoint.tanH * 1.3 * cloud.away
+                    : Double.random(in: -1...1) * viewpoint.tanH * cloud.away
+                cloud.node.alpha = 0
+                cloud.node.run(.fadeIn(withDuration: 30))
+            }
+            let x = 0.5 + cloud.across / cloud.away / (2 * viewpoint.tanH)
+            let y = viewpoint.horizon + (cloud.base - viewpoint.height) / cloud.away / (2 * viewpoint.tanV)
+            let width = w * cloud.km / cloud.away / (2 * viewpoint.tanH)
+            let texture = cloud.node.texture?.size() ?? CGSize(width: 2, height: 1)
+            cloud.node.size = CGSize(width: width, height: width * texture.height / max(texture.width, 1))
+            cloud.node.position = CGPoint(x: x * w, y: y * h)
+            cloud.node.zPosition = 1 + CGFloat(1 - cloud.away / 45) // nearer in front, all behind the hills
+            let frame = cloud.node.frame
+            cloud.node.setValue(SKAttributeValue(vectorFloat4: [Float(frame.minX / w), Float(frame.minY / h), Float(frame.width / w), Float(frame.height / h)]),
+                                forAttribute: "a_screen")
+            cloud.node.setValue(SKAttributeValue(float: Float(1 - exp(-cloud.away / 45))), forAttribute: "a_far")
+            let dir = normalize(viewpoint.right * cloud.across + viewpoint.forward * cloud.away + Sky.Vector(0, 0, cloud.base + 0.6 - viewpoint.height))
+            cloud.node.setValue(SKAttributeValue(float: Float(smoothstep(0.8, 0.97, dot(dir, sunNow)))), forAttribute: "a_back")
+            photoCloudsShown[i] = cloud
+        }
+    }
+
+    /// Relights a photo cloud: its tones mapped from skylight (dark) to sunlight (bright), shadier toward the base.
+    /// Near the Sun we see its shaded side, with light through its thin edges. Far ones fade into the sky behind.
+    private static let photoCloudShaderSource = """
+    vec3 decode(vec3 c) { return c * c * 4.0; }
+
+    void main() {
+        vec4 c = texture2D(u_texture, v_tex_coord);
+        vec3 rgb = c.rgb / max(c.a, 0.001);
+        float a = c.a * smoothstep(0.03, 0.2, c.a); // the cut leaves a faint veil of sky that glows at sunset
+        float lum = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
+        float t = clamp((lum - a_lum.x) / max(a_lum.y - a_lum.x, 0.02), 0.0, 1.0);
+        float v = 1.0 - v_tex_coord.y;
+        t = (0.3 + 0.7 * t) * (1.0 - 0.5 * v * v);
+        t = mix(t, t * t * 0.9, a_back * 0.6);
+        vec3 col = mix(u_cloudAmb * (1.0 - 0.2 * a_back), u_cloudSun, t);
+        col += u_cloudSun * a_back * 2.0 * smoothstep(0.15, 0.35, a) * (1.0 - a); // light through the thin edges
+        vec2 screen = a_screen.xy + v_tex_coord * a_screen.zw;
+        vec2 st = vec2(screen.x, max(screen.y - u_cam.w, 0.0) / (1.0 - u_cam.w));
+        vec3 sky = mix(decode(texture2D(u_before, st).rgb), decode(texture2D(u_after, st).rgb), u_blend);
+        col = mix(col, sky, a_far);
+        col = mix(col, vec3(dot(col, vec3(0.2126, 0.7152, 0.0722))) * vec3(0.62, 0.85, 1.45), u_night);
+        col = sqrt(1.0 - exp(-col));
+        a *= 1.0 - 0.35 * a_far;
+        gl_FragColor = vec4(col * a, a);
     }
     """
 
@@ -644,6 +775,7 @@ final class WeatherScene: SKScene {
         if sinceTrack >= 1 { sinceTrack = 0; track() }
         if sinceBake >= 60 && !baking { sinceBake = 0; bakeSky() }
         clock.floatValue = (clock.floatValue + Float(dt)).truncatingRemainder(dividingBy: 3600)
+        driftClouds(Double(dt))
         if let (start, strokes, bolt) = flash {
             let brightness = flashBrightness(currentTime - start, strokes)
             flashAmount.floatValue = Float(brightness)
@@ -679,8 +811,7 @@ private extension WeatherScene.Conditions {
         let share = Float(cloudCover / 100)
         let cirrus = Float(min(highCloud / 100, 1) * 0.7)
         switch kind {
-        case .clear: return (share * 0.5, 1.4, 0.8, 0, cirrus)
-        case .partlyCloudy: return (0.15 + share * 0.5, 1.4, 1, 0.1, cirrus)
+        case .clear, .partlyCloudy: return (0, 1.4, 1, 0, cirrus) // the cumulus are photos; see addPhotoClouds
         case .overcast: return (0.97, 1.0, 1.3, 0.75, 0)
         case .fog: return (1, 0.3, 0.6, 1, 0)
         case .drizzle: return (1, 0.5, 1.25, 0.95, 0)
