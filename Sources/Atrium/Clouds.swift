@@ -15,6 +15,8 @@ import SpriteKit
     private(set) var texture: SKTexture?
     /// Goes up each time a map loads, so scenes know to fade to it.
     private(set) var version = 0
+    /// A small copy of the map for looking up cloud on the CPU, 512×256, top row at 90° N.
+    private var small: [UInt8] = []
 
     /// Shows the cached map, if there is one and none is showing yet.
     func loadCache() {
@@ -48,12 +50,29 @@ import SpriteKit
     }
 
     /// Lets the map go while clouds are switched off; `loadCache()` brings it back.
-    func release() { texture = nil }
+    func release() {
+        texture = nil
+        small = []
+    }
+
+    /// How cloudy the map is at a place, 0...1; nil without a map.
+    func cover(latitude: Double, longitude: Double) -> Double? {
+        guard !small.isEmpty else { return nil }
+        let x = Int((longitude + 180) / 360 * 512) & 511
+        let y = min(max(Int((90 - latitude) / 180 * 256), 0), 255)
+        return Double(small[y * 512 + x]) / 255
+    }
 
     private func show(_ image: NSImage) {
         let map = SKTexture(image: image)
         map.usesMipmaps = true
         texture = map
         version += 1
+        if let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil),
+           let context = CGContext(data: nil, width: 512, height: 256, bitsPerComponent: 8, bytesPerRow: 512,
+                                   space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue) {
+            context.draw(cg, in: CGRect(x: 0, y: 0, width: 512, height: 256))
+            small = Array(UnsafeBufferPointer(start: context.data!.assumingMemoryBound(to: UInt8.self), count: 512 * 256))
+        }
     }
 }

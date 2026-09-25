@@ -4,11 +4,15 @@ import simd
 @MainActor func earthFromOrbit(size: CGSize) -> SKScene { EarthFromOrbit(size: size) }
 
 /// The whole Earth seen from high above you, like a geostationary satellite: the real day/night line sweeping
-/// across it, today's clouds, city lights on the night side, sun glint on the oceans, and the ISS with its orbit.
+/// across it, today's clouds, lightning in the storms around you, city lights on the night side, sun glint on the
+/// oceans, and the ISS with its orbit.
 final class EarthFromOrbit: SKScene {
     nonisolated static let knobs = [
         Knob(key: "earth.iss", label: "ISS tracking", range: 0...1, standard: 1, section: "Show", format: .toggle),
         Knob(key: "earth.clouds", label: "Live clouds", range: 0...1, standard: 1, section: "Show", format: .toggle),
+        Knob(key: "earth.lightning", label: "Lightning in storms near you", range: 0...1, standard: 1, section: "Show", format: .toggle),
+        Knob(key: "earth.previewStorm", label: "Preview a storm overhead", range: 0...1, standard: 0, section: "Show",
+             format: .toggle, shownWhen: "earth.lightning"),
     ]
 
     private let globe = SKSpriteNode()
@@ -22,6 +26,14 @@ final class EarthFromOrbit: SKScene {
     private var cloudsOn = false
     private var cloudVersion = 0
     private var cloudFadeStart: TimeInterval?
+    private static let flash = paint(CGSize(width: 32, height: 32)) { ctx in // bright core, soft glow through the cloud
+        let colours = [CGColor(gray: 1, alpha: 1), CGColor(gray: 1, alpha: 0.35), CGColor(gray: 1, alpha: 0)] as CFArray
+        ctx.drawRadialGradient(CGGradient(colorsSpace: nil, colors: colours, locations: [0, 0.12, 1])!,
+                               startCenter: CGPoint(x: 16, y: 16), startRadius: 0,
+                               endCenter: CGPoint(x: 16, y: 16), endRadius: 16, options: [])
+    }
+    private var nextFlash: TimeInterval = 0
+    private var sunDirection = Sky.Vector(1, 0, 0)
     private let iss = SKSpriteNode()
     private let issLabel = SKLabelNode(fontNamed: "HelveticaNeue")
     private let orbit = SKShapeNode()
@@ -77,10 +89,13 @@ final class EarthFromOrbit: SKScene {
         Location.shared.start()
         run(.repeatForever(.sequence([.run { if Self.knobs[0].value > 0.5 { ISS.shared.poll() } }, .wait(forDuration: 60)])))
         run(.repeatForever(.sequence([.run { if Self.knobs[1].value > 0.5 { Clouds.shared.poll() } }, .wait(forDuration: 900)])))
+        run(.repeatForever(.sequence([.run { if Self.knobs[2].value > 0.5 { Storms.shared.poll(around: Location.shared.coordinate) } },
+                                      .wait(forDuration: 900)])))
     }
 
     override func update(_ currentTime: TimeInterval) {
         updateClouds(currentTime)
+        updateLightning(currentTime)
         guard Self.knobs[0].value > 0.5, // ISS tracking on
               let now = ISS.shared.position(), let later = ISS.shared.position(at: Date(timeIntervalSinceNow: 20)) else {
             iss.isHidden = true
@@ -145,6 +160,48 @@ final class EarthFromOrbit: SKScene {
         cloudFadeStart = currentTime
     }
 
+    /// Flashes in the storms around you, about one every 5 s per storm cell (at most one a second): a stroke or three
+    /// lighting the cloud tops from inside, bright on the night side and faint by day.
+    private func updateLightning(_ currentTime: TimeInterval) {
+        guard Self.knobs[2].value > 0.5, currentTime > nextFlash else { return }
+        let here = Location.shared.coordinate
+        let cells = Storms.shared.cells + (Self.knobs[3].value > 0.5 ? Storms.preview(around: here) : [])
+        guard let cell = cells.randomElement() else {
+            nextFlash = currentTime + 5
+            return
+        }
+        nextFlash = currentTime - log(Double.random(in: 0.001...1)) * 5 / Double(min(cells.count, 5))
+
+        // lightning lives in the thickest cloud, so try a few spots around the cell and take the cloudiest
+        let spread = 1.2, stretch = 1 / max(cos(cell.latitude * .pi / 180), 0.2)
+        let spots = (0..<6).map { _ in
+            (latitude: cell.latitude + .random(in: -spread...spread), longitude: cell.longitude + .random(in: -spread...spread) * stretch)
+        }
+        let spot = spots.max { (Clouds.shared.cover(latitude: $0.latitude, longitude: $0.longitude) ?? 0)
+            < (Clouds.shared.cover(latitude: $1.latitude, longitude: $1.longitude) ?? 0) }!
+        let point = Sky.direction(spot.longitude, spot.latitude)
+        guard (basis.transpose * point).z > 0.05 else { return }
+        let dark = min(max((0.1 - simd_dot(point, sunDirection)) / 0.2, 0), 1)
+        let strength = CGFloat(0.3 + 0.7 * dark)
+
+        let bolt = SKSpriteNode(texture: Self.flash)
+        let size = CGFloat.random(in: 14...34)
+        bolt.size = CGSize(width: size, height: size)
+        bolt.color = NSColor(red: 0.8, green: 0.87, blue: 1, alpha: 1)
+        bolt.colorBlendFactor = 1
+        bolt.blendMode = .add
+        bolt.alpha = 0
+        bolt.zPosition = 1.5
+        bolt.position = screen(point)
+        var strokes: [SKAction] = []
+        for _ in 0..<Int.random(in: 1...3) {
+            strokes += [.fadeAlpha(to: strength * .random(in: 0.6...1), duration: 0.03),
+                        .fadeAlpha(to: strength * 0.15, duration: .random(in: 0.06...0.15))]
+        }
+        addChild(bolt)
+        bolt.run(.sequence(strokes + [.fadeOut(withDuration: 0.3), .removeFromParent()]))
+    }
+
     /// Earth-fixed position of the ISS, in Earth radii.
     private func station(_ fix: (latitude: Double, longitude: Double, altitude: Double, sunlit: Bool)) -> Sky.Vector {
         Sky.direction(fix.longitude, fix.latitude) * (1 + fix.altitude / 6371)
@@ -174,7 +231,8 @@ final class EarthFromOrbit: SKScene {
         // The subsolar point: the Sun's declination, and its right ascension less Greenwich sidereal time.
         let jd = Sky.julianDate(Date())
         let sun = Sky.raDec(Sky.sun(jd))
-        sunUniform.vectorFloat3Value = SIMD3<Float>(Sky.direction(sun.ra - Sky.siderealTime(jd), sun.dec))
+        sunDirection = Sky.direction(sun.ra - Sky.siderealTime(jd), sun.dec)
+        sunUniform.vectorFloat3Value = SIMD3<Float>(sunDirection)
     }
 
     private func addGlobe() {

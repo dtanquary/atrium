@@ -56,7 +56,7 @@ To rebuild after pulling changes: `./build.sh && pkill -x Atrium; open build/Atr
 ### Permissions and network
 
 - **Location** (optional). Live Sky, Earth from Orbit, Weather and Flowing Gradient's time-of-day mood use your location, and the app asks once. If you decline, it guesses from your time zone.
-- **Network.** Weather fetches from [Open-Meteo](https://open-meteo.com) every 15 minutes. Live Sky and Earth from Orbit fetch the ISS position from [wheretheiss.at](https://wheretheiss.at) at most once a minute. Earth from Orbit fetches a global cloud map from [Live Cloud Maps](https://clouds.matteason.co.uk) only once its cached copy is over 3 hours old (1.5 MB when it has changed), and not at all with Live clouds off. None of them needs an API key.
+- **Network.** Weather fetches from [Open-Meteo](https://open-meteo.com) every 15 minutes. Live Sky and Earth from Orbit fetch the ISS position from [wheretheiss.at](https://wheretheiss.at) at most once a minute. Earth from Orbit fetches a global cloud map from [Live Cloud Maps](https://clouds.matteason.co.uk) only once its cached copy is over 3 hours old (1.5 MB when it has changed), and not at all with Live clouds off. For lightning, it asks Open-Meteo for thunderstorms on a grid around you, at most hourly. None of them needs an API key.
 
 ## The wallpapers
 
@@ -69,7 +69,7 @@ To rebuild after pulling changes: `./build.sh && pkill -x Atrium; open build/Atr
 | Aurora | Northern lights over snowy peaks, shading through real aurora colours |
 | Nebula | A unique deep-space cloud on every load, in real nebula colours, dissolving into a new one every few minutes |
 | Live Sky | The real sky above you: stars, planets, the Moon's phase, the Milky Way and the ISS. Deep blue by day. |
-| Earth from Orbit | The globe above your location with the live day/night line, today's real clouds, city lights and the ISS |
+| Earth from Orbit | The globe above your location with the live day/night line, today's real clouds, lightning in storms near you, city lights and the ISS |
 | Weather | Hills under your live local weather: rain, snow, fog, storms, day and night |
 | Pixel City | A pixel-art skyline that follows your clock, with traffic and windows lighting up through the evening |
 | Fireflies | Fireflies drifting through a foggy forest at dusk |

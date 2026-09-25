@@ -1,11 +1,12 @@
 # Earth from Orbit
 
-The whole Earth seen from high above the viewer's own location, like a geostationary satellite parked overhead, set against a still starfield. It shows the real line between day and night, today's real clouds, city lights on the night side, sun glint on the oceans, a lit edge of atmosphere, and the ISS at its live position with its orbit ring.
+The whole Earth seen from high above the viewer's own location, like a geostationary satellite parked overhead, set against a still starfield. It shows the real line between day and night, today's real clouds, lightning in the storms around the viewer, city lights on the night side, sun glint on the oceans, a lit edge of atmosphere, and the ISS at its live position with its orbit ring.
 
 - **Files:**
   - `Sources/Atrium/EarthFromOrbit.swift`: the scene.
   - `Sources/Atrium/ISS.swift`: `ISS.shared`, the live position, shared with [Live Sky](live-sky.md).
   - `Sources/Atrium/Clouds.swift`: `Clouds.shared`, the live global cloud map.
+  - `Sources/Atrium/Storms.swift`: `Storms.shared`, where thunderstorms are around the viewer.
   - `Sources/Atrium/Resources/earth-day.jpg` (486 KB) and `earth-night.jpg` (263 KB), both about 2048×1024.
   - Astronomy comes from `SkyMath.swift` and location from `Location.swift`; see [live-sky.md](live-sky.md).
 - **Entry:** `earthFromOrbit(size:)` builds `final class EarthFromOrbit: SKScene`. Its entry in Scenes.swift is "Earth from Orbit", icon `globe.americas.fill`, tint `.cyan`, `knobs: EarthFromOrbit.knobs`.
@@ -50,6 +51,19 @@ The whole Earth seen from high above the viewer's own location, like a geostatio
 - **Memory:** about 43 MB of GPU memory for a 4096 map with mipmaps; two maps only during a fade. `ponytail:` the map stays in memory after you switch to another wallpaper with clouds on. Release it in `willMove(from:)` if that matters; multiple displays then need care, since another display may still be showing it.
 - **Failures** are silent (`try?`): the last map stays up.
 
+## Lightning (Storms.swift and `updateLightning`)
+- **Where storms are:** `Storms.poll(around:)` asks Open-Meteo for `current=weather_code` at 165 points in one request: a grid 4° apart, ±20° of latitude and ±28° of longitude around the viewer (latitudes clamped to ±85°, longitudes wrapped). The reply is a JSON array, one object per point. Points with code 95, 96 or 99 (thunderstorm, with hail for 96/99) become `cells`. These are model storms, not observed strikes.
+- **Polling:** the scene asks every 15 minutes while the switch is on; `poll` goes to the network at most hourly. Open-Meteo counts each point as a call, so that's 165 an hour (about 4,000 a day, only while Earth from Orbit is on screen), inside the free 10,000 a day. Failures are silent and keep the last cells.
+- **Coverage ceiling:** at 4° (about 440 km) spacing, the grid catches big storm systems but misses isolated cells between points. `ponytail:` a finer grid costs calls quadratically. Better: use the cloud map's brightest (coldest-topped) pixels to fill in storm areas between flagged points.
+- **Flashes** (`updateLightning`, every frame):
+  - A Poisson process: about one flash every 5 s per cell, at most one a second (capped at 5 cells), each at a random cell.
+  - It tries six random spots within ±1.2° of the cell (longitude stretched by 1/cos latitude) and keeps the cloudiest, using `Clouds.cover(latitude:longitude:)`, a 512×256 CPU copy of the cloud map made in `Clouds.show`. So flashes land in thick cloud when the map has it there.
+  - Each flash is an additive sprite, 14–34 pt, blue-white (0.8, 0.87, 1). The texture is a bright core with a soft glow, like lightning lighting a cloud from inside. It runs 1–3 strokes (0.03 s up, 0.06–0.15 s down to 15%), then a 0.3 s fade, then removes itself.
+  - Strength is 1 on the night side and 0.3 by day (`dark` from the Sun direction, across ±0.1 of the terminator), since lightning is hard to see on sunlit cloud.
+  - It's hidden if the spot is on the far side (`z < 0.05` in view space); cells ±20° around the viewer never are.
+- **Preview a storm overhead** (`earth.previewStorm`): adds `Storms.preview(around:)`, five made-up cells within about a degree of the viewer, to the real ones. Dave asked for a way to "fake a storm directly over my location to test".
+- `ponytail:` **a flash is a sprite, not light in the cloud.** It doesn't reveal cloud texture. The upgrade is flash positions as shader uniforms that brighten `cloud` locally.
+
 ## Time, live data and appearance
 - **Time:** always real time (`Date()`). There's no preview seam.
 - **Location:** `Location.start()` is called in `didMove`. The view centres on the saved fix, or on the time-zone fallback; see [live-sky.md](live-sky.md).
@@ -65,9 +79,11 @@ The whole Earth seen from high above the viewer's own location, like a geostatio
 | key | label | range | default | drives |
 |---|---|---|---|---|
 | `earth.iss` | ISS tracking | toggle | on | Off hides the marker, label and orbit ring, and skips polling (`update` and the poll action both check it) |
+| `earth.lightning` | Lightning in storms near you | toggle | on | Off stops flashes and storm polling |
+| `earth.previewStorm` | Preview a storm overhead | toggle | off | Adds a fake storm complex over the viewer; shown only while lightning is on |
 | `earth.clouds` | Live clouds | toggle | on | Off fades the clouds out, frees the map and stops polling; on fades them back in from the cache, then polls only if the cache is stale |
 
-Both are read live through `Self.knobs[i].value` every frame, with no notification observer needed.
+All are read live through `Self.knobs[i].value` every frame (in `knobs` order: ISS 0, clouds 1, lightning 2, preview 3), with no notification observer needed.
 
 ## Tuning constants
 - **Globe:** radius 0.43 h, centre (0.58 w, 0.48 h), margin 1.12.
@@ -95,7 +111,8 @@ Both are read live through `Self.knobs[i].value` every frame, with no notificati
 - **Real clouds** (2026-09-24): he asked how hard "semi global cloud data" for "somewhat realistic cloud coverage" would be, and chose clouds first, with lightning to follow. He asked for the Live clouds switch, with no polling while it's off, loading from the cache first when it's turned back on, and "long long polling, this is not critical data". His verdict on the result: "it looks great".
 
 ## Ideas / next steps
-- **Lightning** (Dave's next ask): short bursts inside clouds where storms are, in the region around him. The plan is an Open-Meteo multi-point request (a ~10×10 grid around the viewer, `weather_code` 95/96/99 and `lightning_potential`) every 30 minutes, flashing randomly inside the storm cells on the night side (and faintly by day). That's forecast storms, not observed strikes. NOAA GOES GLM is observed, public domain and Americas-only, but ships as NetCDF every 20 s. Blitzortung's terms restrict reuse.
+- **Observed lightning** instead of forecast storms: NOAA GOES GLM is public domain but Americas-only, and ships as NetCDF every 20 s. Blitzortung's terms restrict reuse.
+- **Lightning that lights the cloud** in the shader (see the ponytail note under Lightning).
 - Cloud drift between the 3-hourly maps.
 - The Moon, and the terminator's twilight band.
 - A time-lapse or preview setting.
@@ -106,6 +123,7 @@ Both are read live through `Self.knobs[i].value` every frame, with no notificati
 ## Checking it
 - `SNAPSHOT_SCENE="Earth from Orbit" swift test` renders the current terminator at the fallback location. There's no ISS, because `didMove` never runs in the harness.
 - `SNAPSHOT_DEFAULTS="earth.iss=0" …` or `"earth.clouds=0"` checks a switch.
+- **Lightning:** `SNAPSHOT_SECONDS=0.034 SNAPSHOT_DEFAULTS="earth.previewStorm=1"` catches the first preview flash (it fires on the first update and is fully up one frame later). Later frames usually fall between flashes.
 - Clouds render from the cache file. To seed it: `curl -o ~/Library/Caches/com.dtanquary.atrium/clouds.jpg https://clouds.matteason.co.uk/images/4096x2048/clouds.jpg`.
 - To see daylight over the Americas at night, temporarily change `Sky.julianDate(Date())` in `refresh()` to `Date(timeIntervalSinceNow: 12 * 3600)`, and revert it before committing.
 - To see the ISS offline, you'd need a temporary test that fills `ISS.shared` and renders. That was done once while building it, then deleted.
