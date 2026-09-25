@@ -3,13 +3,17 @@ import simd
 
 @MainActor func nightSky(size: CGSize) -> SKScene { NightSky(size: size) }
 
-/// The real sky above you right now, facing the equator, with the atmosphere switched off so it's always
-/// night: stars, Milky Way, constellations, planets, the Moon in its true phase, the ISS, and the odd meteor.
+/// The real sky above you right now, facing the equator: stars, Milky Way, constellations, planets, the Moon in
+/// its true phase, the ISS, and the odd meteor. It stays a night sky but reacts to the Sun: deep blue by day with
+/// only the brightest stars and planets, the Sun drawn when it's in view, and sunrise and sunset glow on time.
 final class NightSky: SKScene {
     private var stars: [(node: SKSpriteNode, position: Sky.Vector)] = []
     private var constellationLines: [[Sky.Vector]] = []
     private let constellations = SKShapeNode()
-    private var planets: [(planet: Sky.Planet, node: SKSpriteNode)] = []
+    private let starLayers = (0..<16).map { _ in SKNode() } // by half magnitude, so daylight can fade the faint ones
+    private var planets: [(planet: Sky.Planet, node: SKSpriteNode, magnitude: Double)] = []
+    private let sun = SKSpriteNode()
+    private let sunGlow = SKSpriteNode()
     private let moon = SKSpriteNode(color: .white, size: CGSize(width: 46, height: 46))
     private let moonGlow = SKSpriteNode()
     private let moonLight = SKUniform(name: "u_light", vectorFloat3: [0, 0, 1])
@@ -18,6 +22,9 @@ final class NightSky: SKScene {
     private let moonBadgeDetail = SKLabelNode(fontNamed: "HelveticaNeue")
     private let iss = SKSpriteNode()
     private let galacticUniform = SKUniform(name: "u_galactic", matrixFloat3x3: matrix_identity_float3x3)
+    private let dayUniform = SKUniform(name: "u_day", float: 0)
+    private let twilightUniform = SKUniform(name: "u_twilight", float: 0)
+    private let sunUniform = SKUniform(name: "u_sun", vectorFloat3: [0, 0, 1])
 
     private var horizonY: CGFloat { size.height * 0.12 }
     /// Points per unit of stereographic plane, for a ~120° field of view across the screen.
@@ -33,8 +40,10 @@ final class NightSky: SKScene {
         constellations.strokeColor = NSColor(red: 0.55, green: 0.7, blue: 1, alpha: 0.1)
         constellations.lineWidth = 1
         constellations.zPosition = 1
+        starLayers.forEach(addChild)
         addStars()
         addPlanets()
+        addSun()
         addMoon()
         iss.texture = glow
         iss.size = CGSize(width: 12, height: 12)
@@ -101,8 +110,29 @@ final class NightSky: SKScene {
         let jd = Sky.julianDate(Date())
         toHorizon = Sky.horizonMatrix(jd: jd, latitude: here.latitude, longitude: here.longitude)
 
+        // Daylight: the sky turns deep blue and everything fainter than `limit` fades out.
+        let sunH = toHorizon * Sky.sun(jd)
+        let sunAltitude = asin(sunH.z) * 180 / .pi
+        let day = simd_smoothstep(-14, 4, sunAltitude)
+        let limit = 6 - 4.5 * day // faintest magnitude still showing
+        let visibility = { (magnitude: Double) in CGFloat(min(1, max(0, limit - magnitude))) }
+        for (i, layer) in starLayers.enumerated() { layer.alpha = visibility(Double(i) / 2 - 1.75) }
         for star in stars { place(star.node, at: toHorizon * star.position) }
-        for (planet, node) in planets { place(node, at: toHorizon * Sky.planet(planet, jd)) }
+        for (planet, node, magnitude) in planets {
+            place(node, at: toHorizon * Sky.planet(planet, jd))
+            node.alpha = visibility(magnitude)
+        }
+        constellations.alpha = CGFloat(1 - day)
+
+        // Sunrise and sunset glow peaks with the Sun just below the horizon.
+        dayUniform.floatValue = Float(day)
+        twilightUniform.floatValue = Float(simd_smoothstep(-16, -4, sunAltitude) * (1 - simd_smoothstep(4, 14, sunAltitude)))
+        sunUniform.vectorFloat3Value = facingSouth ? [Float(-sunH.x), Float(sunH.z), Float(-sunH.y)]
+                                                   : [Float(sunH.x), Float(sunH.z), Float(sunH.y)]
+        place(sun, at: sunH)
+        sunGlow.position = sun.position
+        sunGlow.isHidden = sun.isHidden
+        sun.colorBlendFactor = CGFloat(1 - simd_smoothstep(0, 12, sunAltitude)) // redder near the horizon
 
         let path = CGMutablePath()
         for strip in constellationLines {
@@ -123,14 +153,14 @@ final class NightSky: SKScene {
         // measured from the Moon's north, so the same shader serves the sky disc and the upright badge.
         let (moonH, poleH) = (toHorizon * Sky.moon(jd), toHorizon * Sky.Vector(0, 0, 1))
         let north = skyAngle(from: moonH, toward: poleH)
-        let toSun = skyAngle(from: moonH, toward: toHorizon * Sky.sun(jd)) - north + .pi / 2
+        let toSun = skyAngle(from: moonH, toward: sunH) - north + .pi / 2
         let (lit, waxing) = Sky.moonPhase(jd)
         let phase = acos(2 * lit - 1) // Sun–Moon–Earth angle
         moonLight.vectorFloat3Value = [Float(sin(phase) * cos(toSun)), Float(sin(phase) * sin(toSun)), Float(cos(phase))]
         place(moon, at: moonH)
         moonGlow.position = moon.position
         moonGlow.isHidden = moon.isHidden
-        moonGlow.alpha = 0.5 * lit
+        moonGlow.alpha = 0.5 * lit * (1 - 0.7 * day)
         if !moon.isHidden { moon.zRotation = screenAngle(from: moonH, toward: poleH) - .pi / 2 }
 
         // The badge shows the Moon as you'd see it facing it, head upright, even when it's out of view.
@@ -200,7 +230,7 @@ final class NightSky: SKScene {
                 let back = SKAction.fadeAlpha(to: star.alpha, duration: .random(in: 0.15...0.5))
                 star.run(.repeatForever(.sequence([dim, back, .wait(forDuration: 0.5, withRange: 1.5)])))
             }
-            addChild(star)
+            starLayers[min(15, max(0, Int((f[2] + 2) * 2)))].addChild(star)
             stars.append((star, Sky.direction(f[0], f[1])))
         }
         constellationLines = rows("constellations.txt").map { line in
@@ -212,23 +242,48 @@ final class NightSky: SKScene {
     }
 
     private func addPlanets() {
-        let looks: [Sky.Planet: (CGFloat, NSColor)] = [
-            .mercury: (7, NSColor(red: 1, green: 0.93, blue: 0.85, alpha: 1)),
-            .venus: (13, NSColor(red: 1, green: 0.98, blue: 0.9, alpha: 1)),
-            .mars: (9, NSColor(red: 1, green: 0.62, blue: 0.45, alpha: 1)),
-            .jupiter: (12, NSColor(red: 1, green: 0.95, blue: 0.86, alpha: 1)),
-            .saturn: (9, NSColor(red: 1, green: 0.9, blue: 0.7, alpha: 1)),
+        // Diameter, colour, and a typical magnitude for fading them by day.
+        // ponytail: fixed magnitudes; real ones swing with distance and phase (Mars most, ~-2.9 to +1.8)
+        let looks: [Sky.Planet: (CGFloat, NSColor, Double)] = [
+            .mercury: (7, NSColor(red: 1, green: 0.93, blue: 0.85, alpha: 1), 0),
+            .venus: (13, NSColor(red: 1, green: 0.98, blue: 0.9, alpha: 1), -4.2),
+            .mars: (9, NSColor(red: 1, green: 0.62, blue: 0.45, alpha: 1), 0.5),
+            .jupiter: (12, NSColor(red: 1, green: 0.95, blue: 0.86, alpha: 1), -2.2),
+            .saturn: (9, NSColor(red: 1, green: 0.9, blue: 0.7, alpha: 1), 0.7),
         ]
         for planet in Sky.Planet.allCases {
-            let (diameter, colour) = looks[planet]!
+            let (diameter, colour, magnitude) = looks[planet]!
             let node = SKSpriteNode(texture: glow, size: CGSize(width: diameter, height: diameter))
             node.color = colour
             node.colorBlendFactor = 1
             node.zPosition = 3
             node.addChild(label(planet.rawValue, alpha: 0.4))
             addChild(node)
-            planets.append((planet, node))
+            planets.append((planet, node, magnitude))
         }
+    }
+
+    /// The Sun: a bright disc in a wide warm glow, drawn only when it's up and in view.
+    private func addSun() {
+        sunGlow.texture = glow
+        sunGlow.size = CGSize(width: 360, height: 360)
+        sunGlow.color = NSColor(red: 1, green: 0.85, blue: 0.6, alpha: 1)
+        sunGlow.colorBlendFactor = 1
+        sunGlow.alpha = 0.6
+        sunGlow.zPosition = 3
+        addChild(sunGlow)
+
+        sun.texture = paint(CGSize(width: 48, height: 48)) { ctx in
+            let colours = [CGColor(red: 1, green: 1, blue: 0.96, alpha: 1), CGColor(red: 1, green: 0.95, blue: 0.82, alpha: 1),
+                           CGColor(red: 1, green: 0.9, blue: 0.7, alpha: 0)] as CFArray
+            ctx.drawRadialGradient(CGGradient(colorsSpace: nil, colors: colours, locations: [0, 0.75, 1])!,
+                                   startCenter: CGPoint(x: 24, y: 24), startRadius: 0,
+                                   endCenter: CGPoint(x: 24, y: 24), endRadius: 24, options: [])
+        }
+        sun.size = CGSize(width: 48, height: 48)
+        sun.color = NSColor(red: 1, green: 0.5, blue: 0.2, alpha: 1) // blended in as it nears the horizon
+        sun.zPosition = 4
+        addChild(sun)
     }
 
     private func addMoon() {
@@ -290,7 +345,8 @@ final class NightSky: SKScene {
         }
     }
 
-    /// Dark sky, brighter toward the horizon, with the Milky Way painted where it really is.
+    /// Dark sky, brighter toward the horizon, with the Milky Way painted where it really is. By day it's deep blue
+    /// and the Milky Way fades; around sunrise and sunset a warm band glows low toward the Sun.
     private func addSkyBackground() {
         let sky = SKSpriteNode(color: .black, size: size)
         sky.anchorPoint = .zero
@@ -309,7 +365,10 @@ final class NightSky: SKScene {
                 vec2 p = (v_tex_coord * u_size - vec2(0.5 * u_size.x, u_horizon)) / u_scale;
                 float r2 = dot(p, p);
                 vec3 d = vec3(4.0 * p, 4.0 - r2) / (4.0 + r2); // back onto the sphere: (right, up, forward)
-                vec3 colour = mix(vec3(0.05, 0.065, 0.12), vec3(0.006, 0.01, 0.028), smoothstep(-0.05, 0.7, d.y));
+                float height = smoothstep(-0.05, 0.7, d.y);
+                vec3 night = mix(vec3(0.05, 0.065, 0.12), vec3(0.006, 0.01, 0.028), height);
+                vec3 day = mix(vec3(0.15, 0.29, 0.52), vec3(0.03, 0.1, 0.3), height);
+                vec3 colour = mix(night, day, u_day);
 
                 vec3 g = u_galactic * d;
                 float b = asin(clamp(g.z, -1.0, 1.0));
@@ -318,7 +377,13 @@ final class NightSky: SKScene {
                 float bulge = exp(-l * l / 0.2 - b * b / 0.05);
                 float clouds = 0.5 * noise(g * 7.0) + 0.3 * noise(g * 17.0) + 0.2 * noise(g * 43.0);
                 float lane = 1.0 - 0.75 * exp(-(b - 0.015) * (b - 0.015) / 0.0012) * smoothstep(1.6, 0.3, abs(l));
-                colour += vec3(0.6, 0.62, 0.72) * 0.14 * (disc + bulge) * clouds * clouds * 1.6 * lane;
+                colour += vec3(0.6, 0.62, 0.72) * 0.14 * (disc + bulge) * clouds * clouds * 1.6 * lane * (1.0 - u_day);
+
+                // Sunrise and sunset: a warm band low in the sky, strongest toward the Sun's azimuth.
+                float sunward = exp((dot(normalize(d.xz), normalize(u_sun.xz + vec2(0.0, 0.0001))) - 1.0) * 2.5);
+                float low = exp(-max(d.y, 0.0) * 6.0);
+                colour += u_twilight * low * (vec3(0.14, 0.07, 0.15) + vec3(0.95, 0.4, 0.1) * sunward);
+                colour += u_day * 0.15 * pow(max(dot(d, u_sun), 0.0), 6.0) * vec3(0.7, 0.8, 1.0); // bright around the Sun
 
                 colour += (hash(vec3(v_tex_coord * u_size, 1.0)) - 0.5) / 255.0; // dither away banding
                 gl_FragColor = vec4(colour, 1.0);
@@ -327,7 +392,7 @@ final class NightSky: SKScene {
                 SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]),
                 SKUniform(name: "u_horizon", float: Float(horizonY)),
                 SKUniform(name: "u_scale", float: Float(scale)),
-                galacticUniform,
+                galacticUniform, dayUniform, twilightUniform, sunUniform,
             ])
         addChild(sky)
     }
