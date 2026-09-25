@@ -230,7 +230,7 @@ final class Galaxy: SKScene {
         // Behind it all, seen through the disc: stars in two layers of different sizes and angles, bunched into
         // loose clusters and thinner patches, and far-off galaxies.
         float crowd = 0.25 + 1.5 * smoothstep(0.2, 0.8, noise(pts / 160.0));
-        vec3 col = vec3(0.004, 0.004, 0.012)
+        vec3 col = vec3(0.031, 0.035, 0.043) // a Hubble frame's sky sits at 4-27/255, not black
                  + starLayer(pts, 5.0, mat2(1.0, 0.0, 0.0, 1.0), 0.16 * crowd, u_time)
                  + starLayer(pts, 17.0, mat2(0.76, 0.64, -0.64, 0.76), 0.3 * crowd, u_time)
                  + vec3(1.0, 0.9, 0.8) * farGalaxy(pts, 110.0);
@@ -395,10 +395,10 @@ final class Galaxy: SKScene {
         vec3 photo = min(x * stretched / lum, 1.0);
         col = col * absorb + mix(photo, vec3(stretched), 0.5 * smoothstep(0.55, 1.0, stretched)); // highlights pale
         col += vivid * u_brightness;
-        // Photos carry grain wherever there's light, stronger where it's brighter (shot noise); the empty sky
-        // stays clean black. It's fixed to the screen, like a sensor's, while the galaxy turns beneath it.
+        // Photos carry grain everywhere, stronger where it's brighter (shot noise), and faint in the sky. It's
+        // fixed to the screen, like a sensor's, while the galaxy turns beneath it.
         vec4 grain = hash42(floor(v_tex_coord * u_size * 2.0));
-        col += (grain.x + grain.y - 1.0) * 0.02 * sqrt(stretched);
+        col += (grain.x + grain.y - 1.0) * (0.008 + 0.02 * sqrt(stretched));
         col += vec3(1.0, 0.92, 0.85) * brightStar(pts, 180.0, u_time); // foreground stars, in our own galaxy
         col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0;
         gl_FragColor = vec4(col, 1.0);
