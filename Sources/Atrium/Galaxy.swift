@@ -12,8 +12,10 @@ final class Galaxy: SKScene {
                                            section: "Motion")
     nonisolated static let cycleMinutes = Knob(key: "galaxy.cycleMinutes", label: "New galaxy every", range: 0...30,
                                                standard: 10, section: "Colors", format: .minutes)
+    /// Its own Brightness is the exposure before the stretch, so it takes only the rest of the shared grade.
     nonisolated static let knobs = [
         Knob(key: "galaxy.brightness", label: "Brightness", range: 0.4...1.8, standard: 1, section: "Look"),
+    ] + gradeKnobs("galaxy").filter { $0.key != "galaxy.brightness" } + [
         Knob(key: "galaxy.dust", label: "Dust", range: 0...2, standard: 1, section: "Look"),
         rotation, cycleMinutes,
     ]
@@ -413,6 +415,7 @@ final class Galaxy: SKScene {
         vec4 grain = hash42(floor(v_tex_coord * u_size * 2.0));
         col += (grain.x + grain.y - 1.0) * (0.008 + 0.02 * sqrt(stretched));
         col += vec3(1.0, 0.92, 0.85) * brightStar(pts, 180.0, u_time); // foreground stars, in our own galaxy
+        col = grade(col, 0.3, u_hue, u_saturation, u_contrast, 1.0);
         col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0;
         gl_FragColor = vec4(col, 1.0);
     }

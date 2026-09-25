@@ -16,7 +16,7 @@ final class LavaLamp: SKScene {
         Knob(key: "lava.opacity", label: "Wax opacity", range: 0.4...1, standard: 0.72, section: "Light"),
         Knob(key: "lava.cycleMinutes", label: "Change colors every", range: 0...30, standard: 8, section: "Colors",
              format: .minutes),
-    ]
+    ] + gradeKnobs("lava")
 
     /// Wax (thin and deep, thick and hot) and liquid (dark, bulb-lit): luminous jewel-tone wax in deep liquids,
     /// drawn from Flowing Gradient's palette so the two feel like a family, and the same hues in pale liquids for
@@ -60,6 +60,7 @@ final class LavaLamp: SKScene {
         sprite.shader = SKShader(source: shaderCommon + Self.source, uniforms: [
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]),
             SKUniform(name: "u_seed", float: .random(in: 0...100)), phase,
+            SKUniform(name: "u_pivot", float: systemIsDark ? 0.3 : 0.7), // the grade's contrast pivot
         ] + colours + Array(knobUniforms.values))
         addChild(sprite)
 
@@ -183,6 +184,7 @@ final class LavaLamp: SKScene {
         // Curved glass: darker toward the sides, with two soft vertical window reflections.
         col *= 0.62 + 0.38 * sin(3.14159 * x);
         col += vec3(0.035 * exp(-pow((x - 0.16) / 0.02, 2.0)) + 0.02 * exp(-pow((x - 0.87) / 0.035, 2.0)));
+        col = grade(col, u_pivot, u_hue, u_saturation, u_contrast, u_brightness);
         col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0;
         gl_FragColor = vec4(col, 1.0);
     }

@@ -46,8 +46,12 @@ Full-screen view inside a lava lamp. Glowing jewel-tone wax heats in a molten po
 | lava.bulb | Bulb | 0.3–1.5 | 1 | strength of the bulb's light cone |
 | lava.opacity | Wax opacity | 0.4–1 | 0.72 | opacity of thin wax edges |
 | lava.cycleMinutes | Change colors every | 0–30 | 8 (0 = off) | cycle interval, shown only while Random |
+| lava.brightness | Brightness | 0.4–1.5 | 1 | the shared grade (`gradeKnobs("lava")`) |
+| lava.contrast | Contrast | 0.5–1.5 | 1 | 〃 |
+| lava.saturation | Saturation | 0–2 | 1 | 〃 |
+| lava.hue | Hue shift | −180–180° | 0 | 〃 |
 
-Sections: Colors (swatches plus the cycle interval), Motion, Light.
+Sections: Colors (swatches plus the cycle interval), Motion, Light, Look. The Look sliders go through `grade()` from `shaderCommon`, just before the dither (see `docs/nebula.md`). Its contrast pivot, `u_pivot`, is set when the scene is built: 0.3 for the dark liquids and 0.7 for Light Mode's pale ones, the same split as Rain on Glass. The grade comes after the colour cycle, so a hue shift follows the pairings as they change.
 
 **Palettes** (`LavaLamp.palettes`): jewel-tone wax drawn from Flowing Gradient's family so the two feel related. Light Mode keeps the same hues in pale liquids.
 

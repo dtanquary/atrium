@@ -78,11 +78,16 @@ Everything is maths per pixel, per frame, in four coordinate frames:
 | key | label | range | default | drives |
 |---|---|---|---|---|
 | galaxy.brightness | Brightness | 0.4–1.8 | 1 | exposure |
+| galaxy.contrast | Contrast | 0.5–1.5 | 1 | the shared grade, pivot 0.3 |
+| galaxy.saturation | Saturation | 0–2 | 1 | 〃 |
+| galaxy.hue | Hue shift | −180–180° | 0 | 〃 |
 | galaxy.dust | Dust | 0–2 | 1 | multiplies every kind's dust |
 | galaxy.rotation | Rotation speed | 0–4 | 1 | turn rate (CPU side); 0 holds it still |
 | galaxy.cycleMinutes | New galaxy every | 0–30 min | 10 | shown under Colors, only when Random; 0 is off |
 
 Sections: Look, Motion, and Colors (the kind picker).
+
+Contrast, saturation and hue come from `gradeKnobs("galaxy")`, and `grade()` from `shaderCommon` applies them just before the dither (see `docs/nebula.md`). Galaxy leaves out the shared brightness and passes 1 in its place: its own Brightness is the exposure before the asinh stretch, which is better than a plain multiply because the core keeps its colour instead of clipping.
 
 **Kinds** (`Galaxy.kinds`), each after a real galaxy and its Hubble and ground-based portraits:
 
