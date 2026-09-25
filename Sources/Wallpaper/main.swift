@@ -18,27 +18,48 @@ final class WallpaperView: SKView {
 var windows: [NSWindow] = []
 var current = UserDefaults.standard.string(forKey: "scene") ?? scenes[0].name
 
-/// One borderless window per display, parked at desktop level: above the system wallpaper,
-/// below desktop icons, on every Space, and invisible to clicks.
-@MainActor func showWallpapers() {
-    let make = (scenes.first { $0.name == current } ?? scenes[0]).make
-    let old = windows
-    // ponytail: rebuilt from scratch on any display change, which restarts the scene
-    windows = NSScreen.screens.map { screen in
-        let window = NSWindow(contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false)
-        window.level = NSWindow.Level(Int(CGWindowLevelForKey(.desktopWindow)))
-        window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
-        window.ignoresMouseEvents = true
-        window.isReleasedWhenClosed = false
+@MainActor func currentScene(size: CGSize) -> SKScene {
+    (scenes.first { $0.name == current } ?? scenes[0]).make(size)
+}
 
-        let view = WallpaperView()
-        view.preferredFramesPerSecond = 30 // ponytail: plenty for ambient motion; raise if it looks steppy
-        view.presentScene(make(screen.frame.size))
-        window.contentView = view
-        window.orderFront(nil)
-        return window
+/// A borderless window for one display, parked at desktop level: above the system wallpaper,
+/// below desktop icons, on every Space, and invisible to clicks.
+@MainActor func wallpaperWindow(for screen: NSScreen) -> NSWindow {
+    let window = NSWindow(contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false)
+    window.level = NSWindow.Level(Int(CGWindowLevelForKey(.desktopWindow)))
+    window.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
+    window.ignoresMouseEvents = true
+    window.isReleasedWhenClosed = false
+
+    let view = WallpaperView()
+    view.preferredFramesPerSecond = 30 // ponytail: plenty for ambient motion; raise if it looks steppy
+    view.presentScene(currentScene(size: screen.frame.size))
+    window.contentView = view
+    window.orderFront(nil)
+    return window
+}
+
+/// Keeps one wallpaper window per display. Windows whose display hasn't changed are left alone so their scene
+/// keeps running; macOS posts screen-change notifications for more than just plugging displays in.
+@MainActor func syncWindows() {
+    let screens = NSScreen.screens
+    let kept = windows.filter { window in screens.contains { $0.frame == window.frame } }
+    let added = screens.filter { screen in !kept.contains { $0.frame == screen.frame } }.map(wallpaperWindow)
+    let gone = windows.filter { !kept.contains($0) }
+    windows = kept + added
+    guard !gone.isEmpty else { return }
+    Task { // let the new windows draw a frame first, so the system wallpaper never flashes through
+        try? await Task.sleep(for: .seconds(0.5))
+        gone.forEach { $0.close() }
     }
-    old.forEach { $0.close() } // after the new ones are up, so the system wallpaper never flashes through
+}
+
+/// Crossfades every display to the chosen scene in its existing window.
+@MainActor func switchScene() {
+    for window in windows {
+        let view = window.contentView as? SKView
+        view?.presentScene(currentScene(size: window.frame.size), transition: .crossFade(withDuration: 0.8))
+    }
 }
 
 /// The menu bar icon: pick a wallpaper, toggle Open at Login, quit.
@@ -70,7 +91,7 @@ var current = UserDefaults.standard.string(forKey: "scene") ?? scenes[0].name
     @objc func pick(_ sender: NSMenuItem) {
         current = sender.title
         UserDefaults.standard.set(current, forKey: "scene")
-        showWallpapers()
+        switchScene()
     }
 
     @objc func toggleLogin() {
@@ -88,9 +109,9 @@ let app = NSApplication.shared
 app.setActivationPolicy(.accessory) // menu bar only, no Dock icon
 let menu = StatusMenu()
 
-showWallpapers()
+syncWindows()
 NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                        object: nil, queue: .main) { _ in
-    MainActor.assumeIsolated { showWallpapers() }
+    MainActor.assumeIsolated { syncWindows() }
 }
 app.run()
