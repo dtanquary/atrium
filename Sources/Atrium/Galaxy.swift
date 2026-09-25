@@ -323,7 +323,7 @@ final class Galaxy: SKScene {
             dust *= smoothstep(1.3, 0.5, r) * u_arms.y * u_dust * los;
             // Dust sits in a thin layer in the midplane: it reddens what's behind it, while a third of the old disc's
             // stars lie in front, so lanes redden rather than go black.
-            absorb = exp(-dust * vec3(0.5, 0.75, 1.0));
+            absorb = exp(-dust * vec3(0.65, 0.8, 1.0)); // rust, as the photos' lanes measure
             vec3 screen = mix(absorb, vec3(1.0), 0.3);
 
             // the bar: a flat-ended bar of old stars in the disc
@@ -335,7 +335,7 @@ final class Galaxy: SKScene {
             // older, yellower stars toward the middle; bluer in the arms and the outskirts. A tilted disc looks
             // brighter, since each line of sight passes through more of it.
             vec3 old = mix(u_core, u_disc, smoothstep(0.05, 0.7, r));
-            vec3 tint = mix(old, u_young, clamp(arm * 0.7 + 0.35 * smoothstep(0.4, 1.1, r), 0.0, 1.0));
+            vec3 tint = mix(old, u_young, clamp(arm * 0.7 + 0.6 * smoothstep(0.4, 1.1, r), 0.0, 1.0)); // teal outskirts
             float boost = sqrt(los);
             // the thick disc's glow: rounder and broader than the thin disc, so a steep galaxy sits in a soft haze
             float haze = exp(-rh / 0.45) * smoothstep(1.6, 1.0, rh) * steep;

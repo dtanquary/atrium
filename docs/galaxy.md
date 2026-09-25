@@ -24,7 +24,7 @@ Everything is maths per pixel, per frame, in four coordinate frames:
 5. **Light, from a bright disc the arms brighten.** In Hubble images the space between the arms isn't dark: the whole disc is a smooth glow, cream toward the middle and blue-grey outward. The arms are only two to three times brighter than the disc around them. Drawing arms on a dark disc is what made the first version look crisp and CG.
    - disc: `exp(-rt/0.4)`, fading out between 0.9 and 1.6 with no edge. `rt` gives the disc a thickness of 0.15, so steep tilts fade to a soft ellipse instead of a sharp one, and it's also what the branch at 1.6 tests.
    - arm: `crest·inArms·(0.5 + 0.9·clump)`. `inArms` fades the arms in past `r0`. `clump` is two octaves of noise in unswirled `g`, so the arms read as star clouds rather than brush strokes.
-   - light: `tint·disc·(0.6 + 1.5·arm)·1.4·√los`. `tint` shades from bulge cream to disc white outward, and toward the young-star blue in the arms and the outskirts. `los = min(1/cos i, 4.5)` is the path through the disc, so tilted discs look brighter.
+   - light: `tint·disc·(0.6 + 1.5·arm)·1.4·√los`. `tint` shades from bulge cream to disc white outward, and toward the young-star blue in the arms and the outskirts (`0.6·smoothstep(0.4, 1.1, r)`, which gives the photo's teal-grey at 0.7–0.8 of the radius). `los = min(1/cos i, 4.5)` is the path through the disc, so tilted discs look brighter.
    - bar: `exp(-(x/L)⁴ - (y/0.2L)²)` in `g`, so it's flat-ended and turns with the disc
    - young stars: `young·inArms·clump·disc`
 6. **Dust:** `fbmRidge(qn)` gives fbm `dt` and a ridged multifractal from the same five noise samples. There are four parts:
@@ -33,7 +33,7 @@ Everything is maths per pixel, per frame, in four coordinate frames:
    - `web`: the ridges, thin connected filaments everywhere down to the nucleus, stronger on the arms
    - `barLane`: for barred kinds, curved lanes along the bar's leading edges, as in NGC 1300. Inside the bar, the web is faded out (`barZone`) so only these lanes cross it.
 
-   The total is scaled by `los`, so tilted galaxies (M31) show stronger lanes. Dust sits in a thin midplane layer, so a third of the old disc's light is in front of it (`screen = mix(absorb, 1, 0.3)`) and lanes redden rather than go black. The arms, young stars and resolved stars get the full `absorb = exp(-dust·(0.5, 0.75, 1.0))`, which is reddish brown because blue is lost first. H II regions get `sqrt(absorb)`.
+   The total is scaled by `los`, so tilted galaxies (M31) show stronger lanes. Dust sits in a thin midplane layer, so a third of the old disc's light is in front of it (`screen = mix(absorb, 1, 0.3)`) and lanes redden rather than go black. The arms, young stars and resolved stars get the full `absorb = exp(-dust·(0.65, 0.8, 1.0))`, which is rust because blue is lost first. At (0.5, 0.75, 1.0) deep lanes transmitted a blue/red ratio of 0.76, which read orange; the photo's is 0.87. H II regions get `sqrt(absorb)`.
 7. **Resolved stars (`discStar`):** one candidate per cell of `g`. There are two layers:
    - 2.2 pt cells for a fine grain of stars that follows the light (kept up to 85% on the arms, `disc·0.6` elsewhere), each as bright as the disc around it and brighter on the arms (`min(disc·(1.5 + 3·arm), 0.3)`)
    - every star is a 1.5 px pinpoint (`exp(-d²·(4.5 - 2.5·mag))`, with `mag = h^2.5`), like the photo's 1.3 px. Each can sit anywhere within ±0.4 of its cell; at ±0.2 they showed as a faint grid (FFT peak 456 against the photo's 14–25).
