@@ -92,7 +92,7 @@ Both are read live through `Self.knobs[i].value` every frame, with no notificati
 - **Static label.** "Don't blink and scale / fade the ISS text, just have it be a fixed semi faded text next to the ISS … let everything else … be the animated parts." That's why the label is a separate node at 50% alpha. The marker dot still pulses; he didn't ask for that to change.
 - **The ISS tracking switch** was his request.
 - **Centred on his location,** which he tested and liked.
-- **Real clouds** (2026-09-24): he asked how hard "semi global cloud data" for "somewhat realistic cloud coverage" would be, and chose clouds first, with lightning to follow.
+- **Real clouds** (2026-09-24): he asked how hard "semi global cloud data" for "somewhat realistic cloud coverage" would be, and chose clouds first, with lightning to follow. He asked for the Live clouds switch, with no polling while it's off, loading from the cache first when it's turned back on, and "long long polling, this is not critical data". His verdict on the result: "it looks great".
 
 ## Ideas / next steps
 - **Lightning** (Dave's next ask): short bursts inside clouds where storms are, in the region around him. The plan is an Open-Meteo multi-point request (a ~10×10 grid around the viewer, `weather_code` 95/96/99 and `lightning_potential`) every 30 minutes, flashing randomly inside the storm cells on the night side (and faintly by day). That's forecast storms, not observed strikes. NOAA GOES GLM is observed, public domain and Americas-only, but ships as NetCDF every 20 s. Blitzortung's terms restrict reuse.
