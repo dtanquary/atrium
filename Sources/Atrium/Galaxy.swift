@@ -172,14 +172,16 @@ final class Galaxy: SKScene {
         return 0.12 * exp(-l * l) + 0.04 * exp(-l * 1.5);
     }
 
-    // One star per cell of the turning disc, kept with probability `keep`, drawn as a round point on screen: `m`
-    // takes a step in the disc to screen points. Returns (brightness, a random number for its colour).
+    // One star per cell of the turning disc, kept with probability `keep`, drawn as a round point on screen about
+    // 1.5 px across, like the photos' resolved stars: `m` takes a step in the disc to screen points. It can sit
+    // almost anywhere in its cell, so the stars never line up into a grid. Returns (brightness, a random number
+    // for its colour).
     vec2 discStar(vec2 g, float cell, float seed, float keep, mat2 m) {
         vec4 h = hash42(floor(g / cell) + seed);
         if (h.x > keep) { return vec2(0.0); }
-        float d = length(m * ((fract(g / cell) - 0.5 - (h.yz - 0.5) * 0.4) * cell));
-        float mag = pow(h.w, 4.0);
-        return vec2(exp(-d * d * (1.6 - mag)) * (0.3 + 1.6 * mag), h.x / max(keep, 0.0001)); // h.x is uniform below keep
+        float d = length(m * ((fract(g / cell) - 0.5 - (h.yz - 0.5) * 0.8) * cell));
+        float mag = pow(h.w, 2.5);
+        return vec2(exp(-d * d * (4.5 - 2.5 * mag)) * (0.3 + 1.6 * mag), h.x / max(keep, 0.0001)); // h.x is uniform below keep
     }
 
     // A star-forming knot, glowing hydrogen around the young cluster that lights it, in a cell where `keep` allows,
@@ -344,7 +346,7 @@ final class Galaxy: SKScene {
             mat2 m = mat2(1.0, 0.0, 0.0, u_tilt) * mat2(cos(u_phase), sin(u_phase), -sin(u_phase), cos(u_phase)) / pt;
             vec2 s1 = discStar(g, 2.2 * pt / u_tilt, 3.0, clamp(crest * inArms * 4.0 * smoothstep(1.4, 0.9, r) + disc * 0.6, 0.0, 0.85), m);
             vec2 s2 = discStar(g, 11.0 * pt / u_tilt, 11.0, clamp(young * inArms * clump * 2.0, 0.0, 0.3), m);
-            light += (mix(old, u_young, smoothstep(0.05, 0.4, crest)) * s1.x * min(disc * 1.5, 0.12) + u_young * s2.x * 0.5) * absorb;
+            light += (mix(old, u_young, smoothstep(0.05, 0.4, crest)) * s1.x * min(disc * (1.5 + 3.0 * arm), 0.3) + u_young * s2.x * 0.5) * absorb;
 
             // H II regions: in complexes, strung along the arm's inner edge between the dust lane and the crest,
             // dimmer toward the outskirts

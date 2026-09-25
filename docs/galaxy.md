@@ -35,7 +35,8 @@ Everything is maths per pixel, per frame, in four coordinate frames:
 
    The total is scaled by `los`, so tilted galaxies (M31) show stronger lanes. Dust sits in a thin midplane layer, so a third of the old disc's light is in front of it (`screen = mix(absorb, 1, 0.3)`) and lanes redden rather than go black. The arms, young stars and resolved stars get the full `absorb = exp(-dust·(0.5, 0.75, 1.0))`, which is reddish brown because blue is lost first. H II regions get `sqrt(absorb)`.
 7. **Resolved stars (`discStar`):** one candidate per cell of `g`. There are two layers:
-   - 2.2 pt cells for a fine grain of stars that follows the light (kept up to 85% on the arms, `disc·0.6` elsewhere), each as bright as the disc around it (`min(disc·1.5, 0.12)`), so it reads as texture rather than salt
+   - 2.2 pt cells for a fine grain of stars that follows the light (kept up to 85% on the arms, `disc·0.6` elsewhere), each as bright as the disc around it and brighter on the arms (`min(disc·(1.5 + 3·arm), 0.3)`)
+   - every star is a 1.5 px pinpoint (`exp(-d²·(4.5 - 2.5·mag))`, with `mag = h^2.5`), like the photo's 1.3 px. Each can sit anywhere within ±0.4 of its cell; at ±0.2 they showed as a faint grid (FFT peak 456 against the photo's 14–25).
    - 11 pt cells for bright blue giants just past the crests
 
    `m` maps a step in the disc to screen points, so every star is a round pinpoint at any tilt. Cells are sized `/u_tilt` so they never get squashed below the star's size.
