@@ -319,7 +319,8 @@ float starField(vec2 pts, float cell, float density, float t) {
 }
 
 /// Deep-space gas clouds cut by dark dust lanes, drifting very slowly. Every load rolls a new one: its own cloud
-/// structure, scale, palette, star field, and the band the cloud lies along.
+/// structure, scale, palette, star field, and the band the cloud lies along. Left running, it dissolves into a
+/// freshly rolled one every few minutes.
 @MainActor func nebula(size: CGSize) -> SKScene {
     // Background, main gas, secondary gas and hot-core colours, each after a real kind of nebula and what glows in
     // it: hydrogen-alpha crimson, doubly ionised oxygen teal, hydrogen-beta blue, starlight scattered off dust.
@@ -340,16 +341,17 @@ float starField(vec2 pts, float cell, float density, float t) {
         SKUniform(name: "u_accent", vectorFloat3: palette[2]),
         SKUniform(name: "u_hot", vectorFloat3: palette[3]),
     ]
-    return shaderScene(size: size, source: common + """
-    // A few bright foreground stars with four-point diffraction spikes.
-    float brightStar(vec2 pts, float cell) {
+    let scene = shaderScene(size: size, source: common + """
+    // A few bright foreground stars with four-point diffraction spikes; about half shimmer very gently and slowly.
+    float brightStar(vec2 pts, float cell, float t) {
         vec2 id = floor(pts / cell);
         float h = hash21(id + 31.0);
         if (h > 0.18) { return 0.0; }
         vec2 d = (fract(pts / cell) - 0.5 - (vec2(hash21(id + 2.2), hash21(id + 5.5)) - 0.5) * 0.6) * cell;
         float core = exp(-dot(d, d) * 0.15);
         float spikes = exp(-abs(d.x) * 1.2) * exp(-abs(d.y) * 0.06) + exp(-abs(d.y) * 1.2) * exp(-abs(d.x) * 0.06);
-        return (core + 0.35 * spikes + 0.12 * exp(-length(d) * 0.08)) * (0.5 + 2.5 * h);
+        float shimmer = h < 0.09 ? 0.93 + 0.07 * sin(t * (0.6 + 5.0 * h) + h * 90.0) : 1.0;
+        return (core + 0.35 * spikes + 0.12 * exp(-length(d) * 0.08)) * (0.5 + 2.5 * h) * shimmer;
     }
 
     void main() {
@@ -377,10 +379,20 @@ float starField(vec2 pts, float cell, float density, float t) {
         vec2 pts = v_tex_coord * u_size + u_seed * 97.0; // the seed moves the star field too
         vec3 col = vec3(0.004, 0.004, 0.012) + neb + c * 0.07 * band; // faint wash around the cloud
         col += vec3(0.8, 0.85, 1.0) * starField(pts, 7.0, 0.3, u_time) * (1.0 - 0.6 * density);
-        col += vec3(1.0, 0.92, 0.85) * brightStar(pts + vec2(u_time * 0.2, 0.0), 180.0);
+        col += vec3(1.0, 0.92, 0.85) * brightStar(pts + vec2(u_time * 0.2, 0.0), 180.0, u_time);
 
         col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0;
         gl_FragColor = vec4(col, 1.0);
     }
     """, uniforms: uniforms)
+
+    // Hand over to a new nebula with a long dissolve, both still drifting, so there's never a cut.
+    // ponytail: the dissolve renders both nebulas, about double the GPU cost while it lasts
+    scene.run(.sequence([.wait(forDuration: 8 * 60), .run { [weak scene] in
+        let fade = SKTransition.crossFade(withDuration: 90)
+        fade.pausesIncomingScene = false
+        fade.pausesOutgoingScene = false
+        scene?.view?.presentScene(nebula(size: size), transition: fade)
+    }]))
+    return scene
 }
