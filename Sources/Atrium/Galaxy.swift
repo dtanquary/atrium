@@ -121,38 +121,53 @@ final class Galaxy: SKScene {
         return vec2(c * v.x - s * v.y, s * v.x + c * v.y);
     }
 
+    // One layer of background stars on a grid turned by `a`, so layers of different sizes never line up into a
+    // lattice, kept where `keep` allows. Mostly faint: only the big, sparse layers hold bright stars, with a soft halo.
+    // Colours run from orange dwarfs through white to blue giants.
+    vec3 starLayer(vec2 pts, float cell, mat2 a, float keep, float t) {
+        vec2 q = a * pts / cell;
+        vec4 h = hash42(floor(q));
+        if (h.x > keep) { return vec3(0.0); }
+        vec4 k = hash42(floor(q) + 57.0);
+        vec2 d = (fract(q) - 0.5 - (h.yz - 0.5) * 0.7) * cell;
+        float mag = pow(h.w, 6.0) * min(cell / 17.0, 1.0);
+        float r = 0.4 + 1.1 * mag;
+        float glow = exp(-dot(d, d) / (r * r)) + 0.3 * mag * exp(-length(d) / (0.06 * cell));
+        float twinkle = 0.88 + 0.12 * sin(t * (0.6 + 2.0 * k.x) + k.y * 40.0);
+        vec3 tint = mix(mix(vec3(0.72, 0.82, 1.0), vec3(1.0, 0.97, 0.94), smoothstep(0.0, 0.3, k.z)),
+                        vec3(1.0, 0.72, 0.5), smoothstep(0.55, 1.0, k.z));
+        return tint * glow * (0.12 + 2.0 * mag) * twinkle;
+    }
+
     // A faint, far-off galaxy: a tiny tilted smudge in about one cell in eight.
     float farGalaxy(vec2 pts, float cell) {
         vec2 id = floor(pts / cell);
-        float h = hash21(id + 71.0);
-        if (h > 0.12) { return 0.0; }
-        vec2 d = turn((fract(pts / cell) - 0.5 - (vec2(hash21(id + 2.7), hash21(id + 6.1)) - 0.5) * 0.6) * cell, h * 52.0);
-        d.y /= 0.2 + 0.8 * hash21(id + 9.3);
-        float l = length(d) / (1.0 + 2.5 * hash21(id + 4.4));
+        vec4 h = hash42(id + 71.0);
+        if (h.x > 0.12) { return 0.0; }
+        vec4 k = hash42(id + 13.0);
+        vec2 d = turn((fract(pts / cell) - 0.5 - (h.yz - 0.5) * 0.6) * cell, k.x * 6.28);
+        d.y /= 0.2 + 0.8 * k.y;
+        float l = length(d) / (1.0 + 2.5 * h.w);
         return 0.12 * exp(-l * l) + 0.04 * exp(-l * 1.5);
     }
 
     // One star per cell of the turning disc, kept with probability `keep`, drawn as a round point on screen: `m`
     // takes a step in the disc to screen points. Returns (brightness, a random number for its colour).
     vec2 discStar(vec2 g, float cell, float seed, float keep, mat2 m) {
-        vec2 id = floor(g / cell);
-        float h = hash21(id + seed);
-        if (h > keep) { return vec2(0.0); }
-        vec2 off = (vec2(hash21(id + seed + 1.3), hash21(id + seed + 2.9)) - 0.5) * 0.4;
-        float d = length(m * ((fract(g / cell) - 0.5 - off) * cell));
-        float mag = pow(hash21(id + seed + 5.1), 4.0);
-        return vec2(exp(-d * d * (1.6 - mag)) * (0.3 + 1.6 * mag), hash21(id + seed + 7.7));
+        vec4 h = hash42(floor(g / cell) + seed);
+        if (h.x > keep) { return vec2(0.0); }
+        float d = length(m * ((fract(g / cell) - 0.5 - (h.yz - 0.5) * 0.4) * cell));
+        float mag = pow(h.w, 4.0);
+        return vec2(exp(-d * d * (1.6 - mag)) * (0.3 + 1.6 * mag), h.x / max(keep, 0.0001)); // h.x is uniform below keep
     }
 
     // A star-forming knot, glowing hydrogen around the young cluster that lights it, in a cell where `keep` allows,
     // round on screen like discStar; 1.2 to 4.5 points across, mostly small. Returns (glow, cluster).
     vec2 knot(vec2 g, float cell, float keep, mat2 m) {
-        vec2 id = floor(g / cell);
-        float h = hash21(id + 41.0);
-        if (h > keep) { return vec2(0.0); }
-        vec2 off = (vec2(hash21(id + 1.1), hash21(id + 2.3)) - 0.5) * 0.3;
-        float l = length(m * ((fract(g / cell) - 0.5 - off) * cell)) / (1.2 + 3.3 * pow(hash21(id + 3.7), 3.0));
-        return vec2(exp(-l * l), exp(-l * l * 6.0)) * (0.3 + 0.7 * hash21(id + 5.9));
+        vec4 h = hash42(floor(g / cell) + 41.0);
+        if (h.x > keep) { return vec2(0.0); }
+        float l = length(m * ((fract(g / cell) - 0.5 - (h.yz - 0.5) * 0.3) * cell)) / (1.2 + 3.3 * pow(h.w, 3.0));
+        return vec2(exp(-l * l), exp(-l * l * 6.0)) * (0.3 + 0.7 * h.x / max(keep, 0.0001));
     }
 
     void main() {
@@ -160,8 +175,12 @@ final class Galaxy: SKScene {
         vec2 p = v_tex_coord * vec2(aspect, 1.0);
         vec2 pts = v_tex_coord * u_size + u_seed * 97.0; // the seed moves the star field too
 
-        // behind it all: faint twinkling stars and far-off galaxies, seen through the disc
-        vec3 col = vec3(0.004, 0.004, 0.012) + vec3(0.8, 0.85, 1.0) * starField(pts, 7.0, 0.3, u_time)
+        // Behind it all, seen through the disc: stars in two layers of different sizes and angles, bunched into
+        // loose clusters and thinner patches, and far-off galaxies.
+        float crowd = 0.25 + 1.5 * smoothstep(0.2, 0.8, noise(pts / 160.0));
+        vec3 col = vec3(0.004, 0.004, 0.012)
+                 + starLayer(pts, 5.0, mat2(1.0, 0.0, 0.0, 1.0), 0.16 * crowd, u_time)
+                 + starLayer(pts, 17.0, mat2(0.76, 0.64, -0.64, 0.76), 0.3 * crowd, u_time)
                  + vec3(1.0, 0.9, 0.8) * farGalaxy(pts, 110.0);
 
         // Screen to galaxy: e runs along the major axis, and undoing the tilt gives d in the disc's plane (mirrored
@@ -170,7 +189,7 @@ final class Galaxy: SKScene {
         vec2 e = vec2(u_pa.x * c.x + u_pa.y * c.y, u_pa.x * c.y - u_pa.y * c.x);
         vec2 d = vec2(e.x, e.y * u_spin / u_tilt);
         float r = length(d);
-        if (r < 2.5) { // out in empty space there's nothing more to draw
+        if (r < 1.6) { // everything fades out by here; beyond it there's only sky
             vec2 g = turn(d, -u_phase);
             float arms = u_shape.x;
             float bar = u_shape.z;
@@ -234,7 +253,7 @@ final class Galaxy: SKScene {
             float rb = length(vec2(e.x, e.y / mix(u_tilt, 1.0, 0.6))) / bulgeR;
             float bulge = 4.0 * exp(-3.67 * sqrt(rb)) + 2.0 * exp(-rb * rb * 60.0);
             float behind = clamp(0.5 - 0.5 * e.y / bulgeR * sqrt(1.0 - u_tilt * u_tilt), 0.0, 1.0);
-            light += u_core * bulge * (1.0 - behind + behind * absorb) + u_core * 0.06 * exp(-r * 2.0); // and a faint halo
+            light += u_core * bulge * (1.0 - behind + behind * absorb) + u_core * 0.06 * exp(-r * 2.0) * smoothstep(1.6, 1.1, r); // and a faint halo
 
             col = col * absorb + 1.0 - exp(-light * u_brightness * 1.2);
         }

@@ -2,7 +2,7 @@
 
 A spiral galaxy turning slowly in deep space. Every load rolls a new one after a real galaxy (Whirlpool, Pinwheel, Andromeda, the Milky Way, NGC 1300 or Triangulum), with its own tilt, orientation, direction of spin and star field. Its arms are made of blue star clouds, with dark dust lanes along their inner edges and pink star-forming knots just past them, around a golden bulge. The disc's own stars sparkle as it turns. Left running, it dissolves into a freshly rolled galaxy every 10 minutes. Built as Nebula's companion, to the same bar.
 
-- **Files:** `Sources/Atrium/Galaxy.swift` holds the knobs, the `kinds` table, the cycling and the shader source. `hash21`, `noise`, `fbm`, `starField` and `brightStar` come from `shaderCommon` in Shaders.swift. `brightStar` moved there from Nebula so both scenes share it.
+- **Files:** `Sources/Atrium/Galaxy.swift` holds the knobs, the `kinds` table, the cycling and the shader source. `hash42`, `noise`, `fbm` and `brightStar` come from `shaderCommon` in Shaders.swift. `brightStar` moved there from Nebula so both scenes share it.
 - **Entry:** `galaxy(size:)` returns `final class Galaxy: SKScene`. Its registry entry in Scenes.swift sits after Nebula and has:
   - icon `hurricane`, tint `.indigo`
   - `knobs: Galaxy.knobs`
@@ -29,7 +29,12 @@ Everything is maths per pixel, per frame, in four coordinate frames:
 7. **Resolved stars (`discStar`):** one candidate per cell of `g`, kept by how crowded the arm is there. There are two layers: 4 pt cells for a sprinkle, and 11 pt cells for bright blue giants just past the crests. `m` maps a step in the disc to screen points, so every star is a round pinpoint at any tilt. Cells are sized `/u_tilt` so they never get squashed below the star's size.
 8. **Knots (`knot`):** 22 pt cells, kept just downstream of the crests and only where a slow noise (`groups`) allows, so they come in clusters. Each is 1.2–4.5 pt: pink hydrogen glow (`u_knots`) around a blue-white cluster core. They're round on screen, like the stars.
 9. **Bulge:** a Sérsic n=2 profile (`4·exp(-3.67√rb)`) plus a nucleus, measured in `e` with an axis ratio of `mix(cos i, 1, 0.6)` (bulges are rounder than discs). The disc cuts through its middle. `behind` is the share of bulge light behind the dust: half face-on, more on the near side of a tilted galaxy. That gives the Andromeda-style dust silhouette across the bulge.
-10. **Composite:** `col = sky·absorb + 1 - exp(-light·brightness·1.2)`, a soft clip so the core glows without blowing out. The sky behind is the Nebula star field (`starField`, 7 pt cells) plus `farGalaxy`, faint tilted smudges in about 12% of 110 pt cells. `brightStar` foreground stars go on top, untouched by the galaxy's dust, since they're in our own. Then a `/128` dither.
+10. **Composite:** `col = sky·absorb + 1 - exp(-light·brightness·1.2)`, a soft clip so the core glows without blowing out. The sky behind is described in the next step. `brightStar` foreground stars go on top, untouched by the galaxy's dust, since they're in our own galaxy. Then a `/128` dither.
+11. **Background sky:** `starLayer` is drawn twice:
+    - 5 pt cells on a square grid, up to 16% kept: faint stars only
+    - 17 pt cells on a grid turned 40°, up to 30% kept: the only layer bright enough for a soft halo
+
+    The two grids never line up, so there's no lattice to spot. Both are thinned and thickened by `crowd` (one noise at 160 pt, from 0.25× to 1.75×), which gives loose clusters and emptier patches. Each star's brightness is `pow(h, 6)`, so most are faint. Its colour runs from blue giants through white to orange dwarfs, and it twinkles ±12% at its own rate. `farGalaxy` adds faint tilted smudges in about 12% of 110 pt cells.
 
 **Each load rolls a random:**
 - kind, unless one is pinned
@@ -79,11 +84,12 @@ Colours per kind: bulge (gold), old disc (warm white), young stars (blue) and kn
 - Cycle every 10 minutes, dissolve 90 s.
 
 ## Performance
-CPU 0.39 ms and GPU 1.67 ms per frame (release, 2x), near Nebula. The GPU cost is mostly two 5-octave fbm calls (warp and dust), five single noise calls, five cell lookups and a `log`/`atan` per pixel. Pixels beyond 2.5 galaxy radii skip all of it. During the 90 s dissolve both galaxies render, so it roughly doubles (`ponytail:` in `handOver`).
+CPU 0.5 ms and GPU 1.05–1.7 ms per frame (release, 2x), depending on how much of the screen the roll covers (tilted Andromeda is cheapest). Inside the galaxy the cost is mostly two 5-octave fbm calls (warp and dust), five single noise calls, three cell lookups and a `log`/`atan` per pixel. Pixels beyond 1.6 galaxy radii skip all of it and draw only sky; the halo fades out by then, so there's no edge. The cutoff was 2.5, which spent most of the budget on empty space. The layered sky costs about 0.3 ms. During the 90 s dissolve both galaxies render, so it roughly doubles (`ponytail:` in `handOver`).
 
 ## Gotchas and shortcuts
 - **`u_texture` is taken:** SpriteKit already defines it as the sprite's texture, so a uniform with that name fails to compile ("redefinition of parameter"). The kind's raggedness and dust ride in `u_arms` instead.
 - **Stars and knots in a turning, tilted disc:** hashed cells live in `g` so they turn with it, but distances are measured on screen through `m`. Otherwise tilt squashes the stars into dashes.
+- **`hash21` repeats:** for whole-number cells it tiles every 50 cells across and 100 up. At 7 pt star cells that's every 350 pt, about four times across the screen, and Dave spotted the pattern in the empty sky. Every cell lookup here (sky, disc stars, knots, far galaxies) uses `hash42` instead, which also gives four random numbers per call.
 - **Value noise is grid-aligned:** the clump noise's second octave is rotated, and its contrast kept soft. Hard thresholds on it came out as blocky, stencil-cut shapes.
 - **Arm direction:** the arms trail the rotation. The pattern turns anticlockwise in `d`, and `+ln(r)/tan(pitch)` in the swirl makes arms turn clockwise going outward. Both flip together with `u_spin`. This was checked by rendering one fixed roll at two moments.
 - Knob lookups go through the named statics `Galaxy.rotation` and `Galaxy.cycleMinutes`, not array indices (the trap Flowing Gradient's doc warns about).
@@ -96,7 +102,8 @@ CPU 0.39 ms and GPU 1.67 ms per frame (release, 2x), near Nebula. The GPU cost i
   - dust: heavy black ribbons became thin, broken lanes on the inner edges
   - the disc: a snowfall of stars became a glowing disc with sparse sparkles
   - knots: evenly spaced beads became clusters
-- Awaiting his first look on the desktop.
+- "A great start, but we need to improve it." First: "The background stars are too uniform, I can see patterns in the stars." The cause was `hash21` tiling. Fixed with `hash42` for every star field (Nebula's and Aurora's too), and the layered, clustered, coloured sky above.
+- He asked for research into how 3D tools build galaxies, and for better reference photos, to lift each kind's look.
 
 ## Ideas / next steps
 - Differential rotation via two blended phases, if rigid turning ever looks wrong up close.

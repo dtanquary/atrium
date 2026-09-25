@@ -14,6 +14,15 @@ float hash21(vec2 p) {
     return fract(p.x * p.y);
 }
 
+// Four random numbers for a cell, from Dave Hoskins' "Hash without Sine" (MIT licence, shadertoy.com/view/4djSRW).
+// hash21 repeats every 50 whole-number cells across and 100 up, which tiles a star field into a visible pattern;
+// this one doesn't repeat for thousands of cells.
+vec4 hash42(vec2 p) {
+    vec4 p4 = fract(vec4(p.xyxy) * vec4(0.1031, 0.1030, 0.0973, 0.1099));
+    p4 += dot(p4, p4.wzxy + 33.33);
+    return fract((p4.xxyz + p4.yzzw) * p4.zywx);
+}
+
 float noise(vec2 p) {
     vec2 i = floor(p);
     vec2 f = fract(p);
@@ -35,11 +44,11 @@ float fbm(vec2 p) {
 
 // One star per `cell`-point grid square, kept with probability `density`; most faint, a few bright, all twinkling.
 float starField(vec2 pts, float cell, float density, float t) {
-    vec2 id = floor(pts / cell);
-    float h = hash21(id);
+    vec4 r = hash42(floor(pts / cell));
+    float h = r.x;
     if (h > density) { return 0.0; }
-    vec2 off = (vec2(hash21(id + 1.9), hash21(id + 4.3)) - 0.5) * 0.7;
-    float mag = pow(hash21(id + 7.7), 5.0);
+    vec2 off = (r.yz - 0.5) * 0.7;
+    float mag = pow(r.w, 5.0);
     float d = length(fract(pts / cell) - 0.5 - off) * cell;
     float twinkle = 0.8 + 0.2 * sin(t * (1.0 + 3.0 * h) + h * 50.0);
     return (smoothstep(0.6 + 1.2 * mag, 0.0, d) + 0.3 * mag * exp(-d * 0.4)) * (0.3 + 0.9 * mag) * twinkle;
@@ -47,10 +56,10 @@ float starField(vec2 pts, float cell, float density, float t) {
 
 // A few bright foreground stars with four-point diffraction spikes; about half shimmer very gently and slowly.
 float brightStar(vec2 pts, float cell, float t) {
-    vec2 id = floor(pts / cell);
-    float h = hash21(id + 31.0);
+    vec4 r = hash42(floor(pts / cell) + 31.0);
+    float h = r.x;
     if (h > 0.18) { return 0.0; }
-    vec2 d = (fract(pts / cell) - 0.5 - (vec2(hash21(id + 2.2), hash21(id + 5.5)) - 0.5) * 0.6) * cell;
+    vec2 d = (fract(pts / cell) - 0.5 - (r.yz - 0.5) * 0.6) * cell;
     float core = exp(-dot(d, d) * 0.15);
     float spikes = exp(-abs(d.x) * 1.2) * exp(-abs(d.y) * 0.06) + exp(-abs(d.y) * 1.2) * exp(-abs(d.x) * 0.06);
     float shimmer = h < 0.09 ? 0.93 + 0.07 * sin(t * (0.6 + 5.0 * h) + h * 90.0) : 1.0;

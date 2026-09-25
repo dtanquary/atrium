@@ -2,7 +2,7 @@
 
 A deep-space gas cloud, cut by dark dust lanes, over a twinkling star field, drifting and folding very slowly. Every load rolls a unique nebula in colours modelled on real objects, and left running it dissolves into a freshly rolled one every 8 minutes. **Dave's favourite wallpaper.**
 
-- **Files:** `Sources/Atrium/Shaders.swift`: the `nebulaPalettes` (file scope) and `nebula(size:)`, which includes its shader source. `hash21`, `noise`, `fbm`, `starField` and `brightStar` come from `shaderCommon` in the same file (`brightStar` moved there to be shared with Galaxy).
+- **Files:** `Sources/Atrium/Shaders.swift`: the `nebulaPalettes` (file scope) and `nebula(size:)`, which includes its shader source. `hash21`, `hash42`, `noise`, `fbm`, `starField` and `brightStar` come from `shaderCommon` in the same file (`brightStar` moved there to be shared with Galaxy).
 - **Entry:** `@MainActor func nebula(size:) -> SKScene`. It builds a plain scene through `shaderScene(size:source:uniforms:)` (Scenes.swift). Its registry entry has icon `sparkles`, tint `.purple`, and palettes `PaletteChoice(key: "nebula.palette", ...)`, whose swatches are colours 1–3 of each palette. The standard is "", meaning Random.
 - **Kind:** a full-screen SKShader, fully procedural, with no image files.
 
@@ -19,7 +19,7 @@ Everything is maths per pixel, per frame:
    - a soft clip, `1 - exp(-c·density²·2.2)`, keeps bright cores from blowing out
    - plus a faint wash around the band
 6. **Stars:**
-   - `starField` puts one candidate star per 7 pt cell and keeps 30% of them, each twinkling ±20% at its own rate, dimmed behind dense gas
+   - `starField` puts one candidate star per 7 pt cell and keeps 30% of them, each twinkling ±20% at its own rate, dimmed behind dense gas. Its random numbers come from `hash42`: `hash21` repeated every 50 cells, tiling the stars every 350 pt (Dave spotted it in Galaxy's emptier sky).
    - `brightStar` adds a few foreground stars with four-point diffraction spikes (18% of 180 pt cells). About half of them (h < 0.09) shimmer very gently: ±7% over 6–10 s. They drift sideways at 0.2 pt/s.
    - both star layers are offset by `u_seed·97`, so each nebula has its own star field
 7. **Dither:** `/128` against banding.

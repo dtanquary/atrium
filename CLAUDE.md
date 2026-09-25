@@ -47,6 +47,7 @@ SNAPSHOT_DEFAULTS="gradient.ribbons=1,gradient.previewTime=1" swift test   # sna
 - Globals in `main.swift` are set up by top-level code and aren't safe to use from tests. Put shared state in other files.
 - Swift 6 strict concurrency: AppKit and CoreLocation delegate callbacks are `nonisolated` and use `MainActor.assumeIsolated`.
 - Don't change a node's `speed` every frame while `SKAction.animate(withWarps:)` runs on it. SpriteKit gets steadily slower (from 1 ms to 10 ms a frame within a minute). Pick precomputed warp frames yourself in `update(_:)` instead.
+- `hash21` repeats every 50 whole-number cells across and 100 up, so anything scattered one per cell (stars, sparkles) visibly tiles. Use `hash42` for cell lookups; it also returns four random numbers at once. `u_texture` is SpriteKit's own uniform, so don't name one that.
 - In SKShader, uniforms are only visible inside `main()`, so pass them to helper functions as parameters, and there's no global `const`.
 - `paint(_:_:)` draws at 2x, so the texture's pixel size is double. Give sprites an explicit size.
 - Data must be public domain or permissively licensed. Cite the source in a comment or in the data file's header.
