@@ -6,6 +6,16 @@ import SpriteKit
 /// sun or moon and stars, drifting clouds, drizzle, rain, snow, fog or a thunderstorm. Day or night follows the
 /// real Sun where you are, checked every minute, so it's right offline too.
 final class WeatherScene: SKScene {
+    nonisolated static let knobs = [
+        Knob(key: "weather.preview", label: "Preview the weather", range: 0...1, standard: 0, section: "Preview",
+             format: .toggle),
+        Knob(key: "weather.previewKind", label: "Weather", range: 0...7, standard: 5, section: "Preview",
+             format: .choice(["Clear", "Partly cloudy", "Overcast", "Fog", "Drizzle", "Rain", "Snow", "Thunderstorm"]),
+             shownWhen: "weather.preview"),
+        Knob(key: "weather.previewHour", label: "Time", range: 0...24, standard: 13, section: "Preview", format: .clock,
+             shownWhen: "weather.preview"),
+    ]
+
     /// The current weather as Open-Meteo reports it.
     struct Conditions: Equatable {
         var code = 2          // WMO weather code
@@ -14,17 +24,23 @@ final class WeatherScene: SKScene {
         var wind = 10.0       // km/h
     }
 
-    private var conditions: Conditions
+    private var report: Conditions     // the latest live weather, or the pinned test state
+    private var conditions: Conditions // what's on screen: `report`, or the Settings preview
     private let live: Bool
     private var drifting: [(node: SKNode, speed: CGFloat)] = [] // clouds and fog banks, wrapped around in update
     private var lastUpdate: TimeInterval?
 
     /// Pass `conditions` to pin the scene to one state (snapshots); leave it nil to follow the live weather.
     init(size: CGSize, conditions: Conditions? = nil) {
-        self.conditions = conditions ?? Conditions(isDay: WeatherScene.sunIsUp())
+        report = conditions ?? Conditions(isDay: WeatherScene.sunIsUp())
+        self.conditions = report
         live = conditions == nil
         super.init(size: size)
+        self.conditions = wanted
         build()
+        if live {
+            NotificationCenter.default.addObserver(self, selector: #selector(redraw), name: UserDefaults.didChangeNotification, object: nil)
+        }
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -36,15 +52,31 @@ final class WeatherScene: SKScene {
                        .repeatForever(.sequence([.run { [weak self] in self?.refresh() }, .wait(forDuration: 900)]))]),
             withKey: "poll")
         run(.repeatForever(.sequence([.wait(forDuration: 60), .run { [weak self] in
-            guard let self, conditions.isDay != WeatherScene.sunIsUp() else { return }
-            conditions.isDay.toggle()
-            build()
+            guard let self else { return }
+            report.isDay = WeatherScene.sunIsUp()
+            redraw()
         }])))
     }
 
-    /// Whether the Sun is above the horizon where you are right now (its top edge, allowing for refraction).
-    static func sunIsUp() -> Bool {
-        let here = Location.shared.coordinate, jd = Sky.julianDate(Date())
+    /// The live weather, or while previewing, the kind and time of day picked in Settings.
+    private var wanted: Conditions {
+        guard live, Self.knobs[0].value > 0.5 else { return report }
+        let kind = min(max(Int(Self.knobs[1].value), 0), 7)
+        let hour = Calendar.current.startOfDay(for: Date()).addingTimeInterval(Self.knobs[2].value * 3600)
+        return Conditions(code: [0, 2, 3, 45, 53, 63, 73, 95][kind], isDay: Self.sunIsUp(at: hour),
+                          cloudCover: [5, 45, 100, 100, 100, 100, 100, 100][kind], wind: 15)
+    }
+
+    /// Rebuilds the scene if what it should show has changed.
+    @objc private func redraw() {
+        guard wanted != conditions else { return }
+        conditions = wanted
+        build()
+    }
+
+    /// Whether the Sun is above the horizon where you are (its top edge, allowing for refraction).
+    static func sunIsUp(at date: Date = Date()) -> Bool {
+        let here = Location.shared.coordinate, jd = Sky.julianDate(date)
         let sun = Sky.horizonMatrix(jd: jd, latitude: here.latitude, longitude: here.longitude) * Sky.sun(jd)
         return sun.z > sin(-0.833 * .pi / 180)
     }
@@ -75,9 +107,9 @@ final class WeatherScene: SKScene {
         Task { [weak self] in
             guard let (data, _) = try? await URLSession.shared.data(from: url.url!),
                   let latest = WeatherScene.conditions(from: data),
-                  let self, latest != self.conditions else { return }
-            self.conditions = latest
-            self.build()
+                  let self else { return }
+            self.report = latest
+            self.redraw()
         }
     }
 

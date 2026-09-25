@@ -43,7 +43,7 @@ struct Wallpaper {
     Wallpaper(name: "Earth from Orbit", icon: "globe.americas.fill", tint: .cyan, blurb: "Day and night sweeping over the globe.",
               make: earthFromOrbit, knobs: EarthFromOrbit.knobs),
     Wallpaper(name: "Weather", icon: "cloud.sun.fill", tint: .blue, blurb: "Hills under your live local weather.",
-              make: weather),
+              make: weather, knobs: WeatherScene.knobs),
     Wallpaper(name: "Pixel City", icon: "building.2.fill", tint: .pink, blurb: "A pixel-art skyline on your clock.",
               make: pixelCity),
     Wallpaper(name: "Fireflies", icon: "sparkle", tint: .yellow, blurb: "Fireflies in a foggy forest at dusk.",

@@ -8,7 +8,7 @@ Atrium is a menu bar app that plays animated wallpapers on macOS 27. Swift packa
 - Switching scenes crossfades inside the existing windows. Display changes only touch the displays that actually changed, so the system wallpaper never flashes through.
 - The menu bar icon (✨📺) picks the scene, saved in `UserDefaults` under `scene`. It also opens Settings, toggles Open at Login (`SMAppService`) and quits the app.
 - **Settings** (`Settings.swift`) is a floating window laid out like System Settings: a sidebar of wallpapers, and a page for each one. A wallpaper's settings are plain data on its `Wallpaper` entry in Scenes.swift:
-  - `knobs`: sliders, or switches with `format: .toggle`, grouped by `section`. A knob can depend on a switch with `shownWhen`.
+  - `knobs`: sliders, switches with `format: .toggle`, or menus with `format: .choice([names])` (stored as the index), grouped by `section`. A knob can depend on a switch with `shownWhen`.
   - `palettes`: a `PaletteChoice` of named swatches. The pick is stored by name, and an empty value means Random.
 
   Knobs are stored in UserDefaults. Live scenes read `knob.value` and observe `UserDefaults.didChangeNotification` to feed their shader uniforms (see `FlowingGradient` and `LavaLamp`). A plain shader scene can instead pass `knobs:` to `shaderScene`, and each knob becomes a live uniform. `gradeKnobs(prefix)` plus `grade()` in the shader add the shared brightness, contrast, saturation and hue sliders (see Nebula). A new palette pick rebuilds the scene if it's on the desktop. To tune, read the values back with `defaults read com.dtanquary.atrium`.

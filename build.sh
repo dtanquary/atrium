@@ -1,7 +1,7 @@
 #!/bin/sh
 # Builds build/Atrium.app, a menu-bar-only app. Run it with: open build/Atrium.app
 set -e
-VERSION=0.6.3 # semantic versioning; see "Versioning" in CLAUDE.md
+VERSION=0.7.0 # semantic versioning; see "Versioning" in CLAUDE.md
 cd "$(dirname "$0")"
 
 swift build -c release

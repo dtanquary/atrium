@@ -3,7 +3,7 @@
 Three ranges of rolling hills with pines and round trees, under whatever the weather is doing where the viewer is right now: clear, partly cloudy, overcast, fog, drizzle, rain, snow or a thunderstorm, by day or by night.
 
 - **Files:** `Sources/Atrium/Weather.swift`. It holds the scene, the WMO code → `Kind` mapping, `Palette`, and a seeded random number generator. It also uses `SkyMath.swift` (for whether the Sun is up) and `Location.swift`; see [live-sky.md](live-sky.md). There's a test in `Tests/AtriumTests/WeatherTests.swift`.
-- **Entry:** `weather(size:)` builds `final class WeatherScene: SKScene`, whose `init(size:conditions:)` is the test seam. Its entry in Scenes.swift is "Weather", icon `cloud.sun.fill`, tint `.blue`, with no settings.
+- **Entry:** `weather(size:)` builds `final class WeatherScene: SKScene`, whose `init(size:conditions:)` is the test seam. Its entry in Scenes.swift is "Weather", icon `cloud.sun.fill`, tint `.blue`, with `WeatherScene.knobs`.
 - **Kind:** SpriteKit nodes and Core Graphics textures: a gradient sky, painted clouds and hills, and emitters for rain and snow.
 
 ## How it works
@@ -41,7 +41,8 @@ Three ranges of rolling hills with pines and round trees, under whatever the wea
 - **Appearance:** it ignores Light/Dark Mode. The night palette follows the Sun instead: moonlit blues, and for cloudy nights a low, dim ceiling.
 
 ## Settings
-None yet.
+- **Preview** (`weather.preview`, `weather.previewKind`, `weather.previewHour`): a switch, a menu of the eight kinds (Clear, Partly cloudy, Overcast, Fog, Drizzle, Rain, Snow, Thunderstorm) and a time of day. While it's on, the scene draws that instead of the live weather, with day or night from the Sun at that time today. Each kind stands in as one code (0, 2, 3, 45, 53, 63, 73, 95) with 15 km/h of wind. The scene keeps polling underneath, so switching it off goes straight back to the live weather.
+- `report` holds the latest live weather and `conditions` what's drawn; `redraw()` rebuilds only when the two differ, so any other change to UserDefaults costs nothing.
 
 ## Tuning constants
 - **Clouds:** 340×140 pt base size; scale 1.3–2.1 in a full deck, 0.8–1.5 otherwise; drift speed `(4 + 0.5·wind)·scale`.
@@ -76,6 +77,6 @@ None yet.
 
 ## Checking it
 - `SNAPSHOT_SCENE="Weather" swift test` renders the offline default: partly cloudy, day or night from the fallback location.
-- **Every state:** temporarily point `weather(size:)` at `WeatherScene(size: $0, conditions: .init(code: 95, isDay: false, cloudCover: 100, wind: 30))`. Useful codes are 0 clear, 3 overcast, 45 fog, 61/63/65 rain, 73 snow and 95 storm. Render, look, and revert. `SNAPSHOT_DEFAULTS` can't set conditions.
+- **Every state:** `SNAPSHOT_DEFAULTS="weather.preview=1,weather.previewKind=6,weather.previewHour=22" SNAPSHOT_SCENE=Weather swift test` renders a snowy night. The kind is an index: 0 clear, 1 partly cloudy, 2 overcast, 3 fog, 4 drizzle, 5 rain, 6 snow, 7 storm. For exact codes, cloud cover or wind, pass `conditions:` to `WeatherScene(size:conditions:)` from a test.
 - `swift test --filter parsesOpenMeteo`.
 - **Live check:** `curl "https://api.open-meteo.com/v1/forecast?latitude=40.0&longitude=-90.0&current=weather_code,cloud_cover,wind_speed_10m"`.
