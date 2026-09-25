@@ -32,19 +32,33 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(scenes, id: \.name, selection: $selection) { wallpaper in
-                HStack {
-                    IconTile(wallpaper: wallpaper, size: 22)
-                    Text(wallpaper.name)
-                    Spacer()
-                    if wallpaper.name == current {
-                        Image(systemName: "checkmark").font(.caption.bold()).foregroundStyle(.secondary)
+            List(selection: $selection) {
+                Section("Wallpapers") {
+                    ForEach(scenes, id: \.name) { wallpaper in
+                        HStack {
+                            IconTile(icon: wallpaper.icon, tint: wallpaper.tint, size: 22)
+                            Text(wallpaper.name)
+                            Spacer()
+                            if wallpaper.name == current {
+                                Image(systemName: "checkmark").font(.caption.bold()).foregroundStyle(.secondary)
+                            }
+                        }
+                        .tag(wallpaper.name)
                     }
+                }
+                Section {
+                    HStack {
+                        IconTile(icon: "info", tint: .gray, size: 22)
+                        Text("About")
+                    }
+                    .tag(AboutPage.tag)
                 }
             }
             .navigationSplitViewColumnWidth(min: 210, ideal: 230)
         } detail: {
-            if let wallpaper = scenes.first(where: { $0.name == selection ?? current }) {
+            if selection == AboutPage.tag {
+                AboutPage()
+            } else if let wallpaper = scenes.first(where: { $0.name == selection ?? current }) {
                 WallpaperPage(wallpaper: wallpaper).id(wallpaper.name)
             }
         }
@@ -54,15 +68,55 @@ struct SettingsView: View {
 
 /// An SF Symbol on a rounded, tinted square, like the icons in iOS Settings.
 struct IconTile: View {
-    let wallpaper: Wallpaper
+    let icon: String
+    let tint: Color
     let size: CGFloat
 
     var body: some View {
-        Image(systemName: wallpaper.icon)
+        Image(systemName: icon)
             .font(.system(size: size * 0.52, weight: .semibold))
             .foregroundStyle(.white)
             .frame(width: size, height: size)
-            .background(wallpaper.tint.gradient, in: .rect(cornerRadius: size * 0.26))
+            .background(tint.gradient, in: .rect(cornerRadius: size * 0.26))
+    }
+}
+
+/// Name, version, maker, licence and the credits the data sources ask for.
+// ponytail: a stub; add the GitHub link once the public repo exists
+struct AboutPage: View {
+    static let tag = "About" // sidebar selection; can't clash with a wallpaper name
+
+    private let name = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "Wallpaper"
+    private let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
+
+    var body: some View {
+        Form {
+            Section {
+                HStack(spacing: 14) {
+                    IconTile(icon: "sparkles.tv", tint: .indigo, size: 48)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(name).font(.title2.bold())
+                        Text("Version \(version)").foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 6)
+                Text("Living, animated wallpapers for macOS. Open source, and built to be built yourself.")
+            }
+            Section("Made by") {
+                LabeledContent("Dave Tanquary") { Link("dtanquary.com", destination: URL(string: "https://dtanquary.com")!) }
+                LabeledContent("License") { Text("MIT") }
+            }
+            Section("Data and Credits") {
+                LabeledContent("Weather") { Link("Open-Meteo.com (CC BY 4.0)", destination: URL(string: "https://open-meteo.com")!) }
+                LabeledContent("ISS position") { Link("wheretheiss.at", destination: URL(string: "https://wheretheiss.at")!) }
+                LabeledContent("Stars") { Text("Yale Bright Star Catalogue") }
+                LabeledContent("Constellations") { Link("d3-celestial (BSD 3-Clause)", destination: URL(string: "https://github.com/ofrohn/d3-celestial")!) }
+                LabeledContent("Earth imagery") { Text("NASA Blue Marble and Black Marble") }
+                LabeledContent("Planet positions") { Text("NASA JPL") }
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle("About")
     }
 }
 
@@ -79,7 +133,7 @@ struct WallpaperPage: View {
         Form {
             Section {
                 HStack(spacing: 14) {
-                    IconTile(wallpaper: wallpaper, size: 48)
+                    IconTile(icon: wallpaper.icon, tint: wallpaper.tint, size: 48)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(wallpaper.name).font(.title2.bold())
                         Text(wallpaper.blurb).foregroundStyle(.secondary)

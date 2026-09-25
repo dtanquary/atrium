@@ -19,6 +19,7 @@ cat > "$APP/Contents/Info.plist" <<'EOF'
     <key>CFBundleExecutable</key><string>Wallpaper</string>
     <key>CFBundleIdentifier</key><string>com.dtanquary.wallpaper</string>
     <key>CFBundleName</key><string>Wallpaper</string>
+    <key>CFBundleShortVersionString</key><string>0.1.0</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>LSUIElement</key><true/>
     <key>NSLocationUsageDescription</key><string>The Live Sky, Earth and Weather wallpapers show the sky and weather where you are.</string>
