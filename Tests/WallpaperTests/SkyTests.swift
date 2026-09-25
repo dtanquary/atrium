@@ -21,6 +21,15 @@ func matchesHorizons(body: String, ra: Double, dec: Double) {
     #expect(error < 1, "\(body) is \(error)° off: got \(Sky.raDec(v))")
 }
 
+/// Moon's lit fraction and waxing/waning against Horizons' Illu% and S-O-T /T (trails the Sun) or /L (leads it).
+@Test(arguments: [(newYear2026, 0.9139877, true), (newYear2026 + 9, 0.5653140, false)])
+func moonPhaseMatchesHorizons(jd: Double, lit: Double, waxing: Bool) {
+    let phase = Sky.moonPhase(jd)
+    #expect(abs(phase.lit - lit) < 0.02, "lit \(phase.lit), expected \(lit)")
+    #expect(phase.waxing == waxing)
+    #expect(Sky.moonPhaseName(lit: phase.lit, waxing: phase.waxing) == (waxing ? "Waxing Gibbous" : "Waning Gibbous"))
+}
+
 @Test func polarisSitsAtTheObserversLatitude() {
     let polaris = Sky.direction(37.954, 89.264)
     for latitude in [-10.0, 20, 40, 65] {

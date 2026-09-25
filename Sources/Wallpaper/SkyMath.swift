@@ -123,4 +123,19 @@ enum Sky {
         // The series is referred to the equinox of date; step back to J2000 by general precession.
         return equatorial(fromEcliptic: direction(longitude - 1.397 * t, latitude))
     }
+
+    /// How much of the Moon's disc is lit (0...1), and whether it's waxing (east of the Sun along the ecliptic).
+    static func moonPhase(_ jd: Double) -> (lit: Double, waxing: Bool) {
+        let (moon, sun) = (moon(jd), sun(jd))
+        return ((1 - dot(moon, sun)) / 2, dot(cross(sun, moon), equatorial(fromEcliptic: [0, 0, 1])) > 0)
+    }
+
+    static func moonPhaseName(lit: Double, waxing: Bool) -> String {
+        switch lit {
+        case ..<0.02: "New Moon"
+        case 0.98...: "Full Moon"
+        case 0.45...0.55: waxing ? "First Quarter" : "Last Quarter"
+        default: (waxing ? "Waxing " : "Waning ") + (lit < 0.5 ? "Crescent" : "Gibbous")
+        }
+    }
 }
