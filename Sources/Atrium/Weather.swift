@@ -45,6 +45,7 @@ final class WeatherScene: SKScene {
     private let cloudSun = SKUniform(name: "u_sunCol", vectorFloat3: .zero), cloudAmbient = SKUniform(name: "u_amb", vectorFloat3: .zero)
     private let cirrus = SKUniform(name: "u_high", float: 0), cirrusSun = SKUniform(name: "u_highCol", vectorFloat3: .zero)
     private let fog = SKUniform(name: "u_fog", float: 0)
+    private let flashAmount = SKUniform(name: "u_flash", float: 0), flashPlace = SKUniform(name: "u_flashPos", vectorFloat3: .zero)
     /// Under a deck: its underside's colour, and how much the horizon takes it on instead of the clear sky's.
     private let deck = SKUniform(name: "u_deck", vectorFloat4: .zero)
     /// Seconds, wrapping hourly: u_time grows with uptime, and at rain's speeds a float that large loses the streaks.
@@ -174,7 +175,7 @@ final class WeatherScene: SKScene {
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]), skyBefore, skyAfter, skyBlend,
             cameraUniforms.lens, cameraUniforms.forward, cameraUniforms.right, sunDirection, sunDisc, moonPlace, moonLight,
             moonColour, starsUniform, SKUniform(name: "u_moonTex", texture: Self.moonTexture),
-            SKUniform(name: "u_noise", texture: CloudNoise.texture), cloudLayer, cloudWind, cloudSun, cloudAmbient, cirrus, cirrusSun, fog, deck,
+            SKUniform(name: "u_noise", texture: CloudNoise.texture), cloudLayer, cloudWind, cloudSun, cloudAmbient, cirrus, cirrusSun, fog, deck, flashAmount, flashPlace,
         ])
         fog.floatValue = conditions.fog
         let clouds = conditions.clouds
@@ -331,6 +332,7 @@ final class WeatherScene: SKScene {
         // Lit from three looks at the density: here, a little further along the ray (less cloud there means this is
         // a cloud's top edge on screen) and toward the Sun (cloud between here and the light).
         float T = 1.0;
+        float flashTex = 1.0; // lightning lights the cloud's lumps unevenly
         vec3 cl = vec3(0.0);
         vec2 st0 = vec2(uv.x, (u_cam.z + 0.01 - u_cam.w) / (1.0 - u_cam.w));
         vec3 haze = mix(decode(texture2D(u_before, st0).rgb), decode(texture2D(u_after, st0).rgb), u_blend);
@@ -365,6 +367,7 @@ final class WeatherScene: SKScene {
             // A deck's underside is lumpy: rolls of thicker, darker cloud between thinner, brighter gaps. Thicker
             // decks are darker overall, down to a storm's slate.
             float lumps = na1.r * 0.55 + nb1.b * 0.3 + na1.g * 0.15;
+            flashTex = 0.15 + 1.7 * smoothstep(0.3, 0.8, na1.g * 0.5 + nb1.r * 0.5);
             base *= mix(1.0, 0.55 + 0.9 * lumps, u_cloud.w) * exp(-0.5 * (u_cloud.z - 1.0));
             vec3 lit = u_sunCol * 0.3 * shadow;
             float litFrac = clamp(top * high * face * 1.5 + (1.0 - high) * face, 0.0, 1.0);
@@ -387,6 +390,14 @@ final class WeatherScene: SKScene {
             T *= 1.0 - ci;
         }
         col = col * T + cl + sunLight * T;
+
+        // Lightning inside the cloud: brightest in medium-thick cloud around the strike, a faint lift everywhere.
+        if (u_flash > 0.0) {
+            vec2 off = (uv - u_flashPos.xy) * vec2(u_size.x / u_size.y, 1.0);
+            float glow = u_flash * exp(-dot(off, off) / u_flashPos.z) * flashTex;
+            float cloudA = 1.0 - T;
+            col += vec3(0.75, 0.8, 1.0) * (glow * (0.3 + cloudA * (1.0 - 0.5 * cloudA)) * 2.5 + u_flash * 0.05);
+        }
 
         // Fog: optically thick, so it's grey-white whatever the sky's colour, and it swallows the low sky first.
         if (u_fog > 0.0) {
@@ -418,7 +429,7 @@ final class WeatherScene: SKScene {
                                  Float(width / size.width), Float(height / size.height))
         ground.shader = SKShader(source: Self.groundShader, uniforms: [
             SKUniform(name: "u_aux", texture: Self.groundAux), SKUniform(name: "u_frame", vectorFloat4: frame),
-            skyBefore, skyAfter, skyBlend, cameraUniforms.lens, groundLight, groundHaze, groundColour, groundHazeLit, fog, deck,
+            skyBefore, skyAfter, skyBlend, cameraUniforms.lens, groundLight, groundHaze, groundColour, groundHazeLit, fog, deck, flashAmount,
         ])
         addChild(ground)
     }
@@ -432,7 +443,7 @@ final class WeatherScene: SKScene {
         vec4 photo = texture2D(u_texture, v_tex_coord);
         vec3 aux = texture2D(u_aux, v_tex_coord).rgb;
         vec3 albedo = photo.rgb / max(photo.a, 0.004);
-        vec3 land = albedo * albedo * u_light;
+        vec3 land = albedo * albedo * (u_light + vec3(0.75, 0.8, 1.0) * u_flash * 0.15);
         float lum = dot(land, vec3(0.2126, 0.7152, 0.0722));
         land = mix(vec3(lum) * vec3(0.75, 0.88, 1.2), land, u_colour); // the Purkinje shift: moonlit fields look blue-grey
         vec2 screen = u_frame.xy + v_tex_coord * u_frame.zw;
@@ -515,34 +526,82 @@ final class WeatherScene: SKScene {
     }
     """
 
-    /// Every several seconds: a jagged bolt behind the hills and a double flicker across the whole sky.
+    // MARK: - Lightning
+
+    /// Now and then a flash inside the storm: one to four return strokes 40–80 ms apart that light the cloud from
+    /// within around where it strikes (NOAA JetStream). Three in ten also show a branching bolt below the cloud; some
+    /// are far off, lighting the horizon. Every 15–45 s, or 8–25 s in a heavy storm.
     private func addLightning() {
-        let flash = SKSpriteNode(color: NSColor(red: 0.85, green: 0.88, blue: 1, alpha: 1), size: size)
-        flash.anchorPoint = .zero
-        flash.alpha = 0
-        flash.zPosition = 9
-        addChild(flash)
-        let strike = SKAction.run { [weak self, weak flash] in
-            guard let self, let flash else { return }
-            let bolt = CGMutablePath()
-            var point = CGPoint(x: .random(in: self.size.width * 0.15...self.size.width * 0.85), y: self.size.height * 0.78)
-            bolt.move(to: point)
-            while point.y > self.size.height * 0.25 {
-                point = CGPoint(x: point.x + .random(in: -40...40), y: point.y - .random(in: 20...55))
-                bolt.addLine(to: point)
-            }
-            let node = SKShapeNode(path: bolt)
-            node.strokeColor = NSColor(red: 0.92, green: 0.9, blue: 1, alpha: 1)
-            node.lineWidth = 2.5
-            node.glowWidth = 5
-            node.zPosition = 4
-            self.addChild(node)
-            node.run(.sequence([.wait(forDuration: 0.12), .fadeOut(withDuration: 0.3), .removeFromParent()]))
-            flash.run(.sequence([.fadeAlpha(to: 0.5, duration: 0.04), .fadeAlpha(to: 0.08, duration: 0.08),
-                                 .fadeAlpha(to: 0.35, duration: 0.04), .fadeOut(withDuration: 0.5)]))
+        let (least, most) = conditions.code == 95 ? (15.0, 45.0) : (8.0, 25.0)
+        let strike = SKAction.run { [weak self] in self?.strike() }
+        let pause = SKAction.wait(forDuration: (least + most) / 2, withRange: most - least)
+        run(.sequence([.wait(forDuration: 3), .repeatForever(.sequence([strike, pause]))]), withKey: "lightning")
+    }
+
+    private var flash: (start: TimeInterval, strokes: [(at: Double, peak: Double)], bolt: SKSpriteNode?)?
+
+    private func strike() {
+        guard let start = lastUpdate else { return }
+        let strokes = [(0.0, 1.0), (0.06, 0.7), (0.13, 0.9), (0.22, 0.5)].prefix(.random(in: 1...4))
+            .map { (at: $0.0 + .random(in: -0.01...0.01), peak: $0.1) }
+        let far = Double.random(in: 0...1) < 0.25
+        let x = CGFloat.random(in: 0.1...0.9)
+        flashPlace.vectorFloat3Value = [Float(x), Float(viewpoint.horizon + (far ? 0.02 : .random(in: 0.12...0.3))), far ? 0.08 : 0.02]
+        var bolt: SKSpriteNode?
+        if !far && Double.random(in: 0...1) < 0.3 {
+            let height = size.height * CGFloat.random(in: 0.14...0.3)
+            let node = SKSpriteNode(texture: Self.boltTexture(height: height), size: CGSize(width: height * 0.6, height: height))
+            node.anchorPoint = CGPoint(x: 0.5, y: 0)
+            node.position = CGPoint(x: x * size.width, y: size.height * (viewpoint.horizon - 0.03))
+            node.zPosition = 4 // between the sky and the hills, which hide its foot
+            node.blendMode = .add
+            node.alpha = 0
+            addChild(node)
+            bolt = node
         }
-        run(.sequence([.wait(forDuration: 2.5), .repeatForever(.sequence([strike, .wait(forDuration: 9, withRange: 10)]))]),
-            withKey: "lightning")
+        flash?.bolt?.removeFromParent()
+        flash = (start, strokes, bolt)
+    }
+
+    /// Brightness of the flash `s` seconds in: each stroke decays in about 30 ms, with a glow of continuing current.
+    private func flashBrightness(_ s: Double, _ strokes: [(at: Double, peak: Double)]) -> Double {
+        strokes.reduce(s < 0.35 ? 0.08 : 0) { sum, stroke in s >= stroke.at ? sum + stroke.peak * exp(-(s - stroke.at) / 0.03) : sum }
+    }
+
+    /// A bolt by midpoint displacement with branches (after Reed & Wyvill 1994): a violet glow, a paler halo and a
+    /// white core, fading out at the top where it leaves the cloud.
+    private static func boltTexture(height: CGFloat) -> SKTexture {
+        let size = CGSize(width: height * 0.6, height: height)
+        var segments: [(CGPoint, CGPoint, CGFloat)] = [] // from, to, brightness
+        func split(_ a: CGPoint, _ b: CGPoint, _ level: Int, _ brightness: CGFloat) {
+            guard level > 0 else { segments.append((a, b, brightness)); return }
+            let length = hypot(b.x - a.x, b.y - a.y)
+            let mid = CGPoint(x: (a.x + b.x) / 2 + .random(in: -0.3...0.3) * length, y: (a.y + b.y) / 2 + .random(in: -0.1...0.1) * length)
+            split(a, mid, level - 1, brightness)
+            split(mid, b, level - 1, brightness)
+            if Double.random(in: 0...1) < 0.35 * pow(0.6, Double(7 - level)) && brightness > 0.3 { // a fork, dimmer and shorter
+                let angle = atan2(b.y - a.y, b.x - a.x) + (Bool.random() ? 1 : -1) * .random(in: 0.35...0.7)
+                let reach = length * .random(in: 0.5...1.2)
+                split(mid, CGPoint(x: mid.x + cos(angle) * reach, y: mid.y + sin(angle) * reach), max(level - 2, 1), brightness * 0.4)
+            }
+        }
+        split(CGPoint(x: size.width * .random(in: 0.35...0.65), y: size.height), CGPoint(x: size.width * .random(in: 0.3...0.7), y: 0), 7, 1)
+        return paint(size) { ctx in
+            ctx.setLineCap(.round)
+            for (width, alpha, colour) in [(14.0, 0.06, (0.6, 0.65, 1.0)), (5.0, 0.22, (0.75, 0.78, 1.0)), (1.4, 1.0, (0.97, 0.96, 1.0))] {
+                for (a, b, brightness) in segments {
+                    ctx.setStrokeColor(red: colour.0, green: colour.1, blue: colour.2, alpha: alpha * brightness)
+                    ctx.setLineWidth(width * (0.5 + 0.5 * brightness))
+                    ctx.move(to: a)
+                    ctx.addLine(to: b)
+                    ctx.strokePath()
+                }
+            }
+            // fade the top into the cloud it comes from
+            ctx.setBlendMode(.destinationOut)
+            let fade = CGGradient(colorsSpace: nil, colors: [CGColor(gray: 0, alpha: 1), CGColor(gray: 0, alpha: 0)] as CFArray, locations: nil)!
+            ctx.drawLinearGradient(fade, start: CGPoint(x: 0, y: size.height), end: CGPoint(x: 0, y: size.height * 0.75), options: [])
+        }
     }
 
     // MARK: - Motion
@@ -556,6 +615,12 @@ final class WeatherScene: SKScene {
         if sinceTrack >= 1 { sinceTrack = 0; track() }
         if sinceBake >= 60 && !baking { sinceBake = 0; bakeSky() }
         clock.floatValue = (clock.floatValue + Float(dt)).truncatingRemainder(dividingBy: 3600)
+        if let (start, strokes, bolt) = flash {
+            let brightness = flashBrightness(currentTime - start, strokes)
+            flashAmount.floatValue = Float(brightness)
+            bolt?.alpha = CGFloat(min(brightness * 1.5, 1))
+            if currentTime - start > 0.8 { bolt?.removeFromParent(); flash = nil; flashAmount.floatValue = 0 }
+        }
     }
 }
 
