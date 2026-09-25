@@ -242,7 +242,9 @@ final class Galaxy: SKScene {
         float rt = length(vec2(e.x, e.y / sqrt(u_tilt * u_tilt + 0.0225 * (1.0 - u_tilt * u_tilt))));
         vec3 light = vec3(0.0);
         vec3 absorb = vec3(1.0);
-        if (rt < 1.6) { // everything fades out by here; beyond it there's only sky
+        // A steeply tilted galaxy also has a rounder glow around it (below), so it gets a rounder region to draw in.
+        float rh = length(vec2(e.x, e.y / mix(u_tilt, 1.0, 0.3)));
+        if ((u_tilt < 0.5 ? rh : rt) < 1.6) { // everything fades out by here; beyond it there's only sky
             vec2 g = turn(d, -u_phase);
             float arms = u_shape.x;
             float bar = u_shape.z;
@@ -250,6 +252,10 @@ final class Galaxy: SKScene {
             float ragged = u_arms.x;
             float r0 = max(bar, bulgeR * 1.6); // the arms start at the bar's ends, or the bulge's edge
             float los = min(1.0 / u_tilt, 4.5); // light's path through the disc grows with tilt
+            // Tilted past about 60°, the disc's squashed so hard that arm edges and dust lanes turn razor-thin on
+            // screen, where the real one (M31) is a soft glow: its disc is thick and its arms smear together.
+            // `steep` softens arms, lanes and filaments and adds a thick-disc glow, for such kinds only.
+            float steep = smoothstep(0.5, 0.25, u_tilt);
 
             // Swirled space: turning each radius by its log winds straight rays into logarithmic spirals, so the arms
             // are rays here and noise sampled here is sheared along them into streaks and lanes. The dust noise gets
@@ -266,9 +272,10 @@ final class Galaxy: SKScene {
             // Every other arm is a minor one for kinds like the Milky Way.
             float armN = mod(floor(ph / 6.2832 + 0.5), arms);
             float armAmp = (0.6 + 0.4 * hash21(vec2(armN, u_seed.x))) * mix(1.0, u_arms.z, mod(armN, 2.0));
-            float crest = pow(0.5 + 0.5 * cos(ph), 4.0 - 2.0 * ragged) * armAmp;
-            float young = pow(0.5 + 0.5 * cos(ph - 0.35), 8.0) * armAmp;
-            float hii = pow(0.5 + 0.5 * cos(ph + 0.2), 10.0) * armAmp;
+            float soft = mix(1.0, 0.4, steep);
+            float crest = pow(0.5 + 0.5 * cos(ph), (4.0 - 2.0 * ragged) * soft) * armAmp;
+            float young = pow(0.5 + 0.5 * cos(ph - 0.35), 8.0 * soft) * armAmp;
+            float hii = pow(0.5 + 0.5 * cos(ph + 0.2), 10.0 * soft) * armAmp;
             // Ragged arms break up. Flocculent kinds (M33) go further, to a patchwork of short arm segments: noise in
             // swirled space is already sheared into spiral streaks, so its peaks make them, and young stars and H II
             // regions follow the patches instead of whole arms.
@@ -287,7 +294,7 @@ final class Galaxy: SKScene {
 
             // Light comes from a smooth exponential disc that the arms brighten two to three times over, as in Hubble
             // images, not from arms on a dark disc. That soft, bright disc with no edge is what reads as a photograph.
-            float inArms = smoothstep(r0 * 0.8, r0 * 1.5, r);
+            float inArms = smoothstep(r0 * 0.8, r0 * 1.5, r) * mix(1.0, smoothstep(1.25, 0.9, r), steep); // no bright rim
             float disc = exp(-rt / 0.4) * smoothstep(1.6, 0.9, rt);
             float arm = crest * inArms * (0.5 + 0.9 * clump);
 
@@ -295,14 +302,14 @@ final class Galaxy: SKScene {
             // thin filaments everywhere down to the nucleus, and for barred kinds, lanes along the bar's leading edges.
             vec2 fr = fbmRidge(qn * 6.0 + u_seed * 1.3 + 3.0);
             float dt = fr.x;
-            float lane = pow(0.5 + 0.5 * cos(ph + 0.45 + (dt - 0.5) * 2.5), 14.0) * smoothstep(0.25, 0.8, lumps + dt - 0.5);
+            float lane = pow(0.5 + 0.5 * cos(ph + 0.45 + (dt - 0.5) * 2.5), 14.0 * mix(1.0, 0.7, steep)) * smoothstep(0.25, 0.8, lumps + dt - 0.5);
             float tp = 1.0 / u_shape.y;              // tan(pitch)
             float kf = (1.0 - tp * 0.7) / (tp + 0.7); // cot(pitch + 35°)
             float fu = 18.0 * (aq - (u_shape.y - kf) * lr) / 6.2832 + (dt - 0.5) * 0.8;
             float phw = ph - 6.2832 * floor(ph / 6.2832 + 0.5);
             float feather = pow(0.5 + 0.5 * cos(6.2832 * fu), 8.0) * step(0.45, hash21(vec2(mod(floor(fu + 0.5), 18.0), u_seed.y)))
                           * smoothstep(-1.8, -0.3, phw) * smoothstep(0.7, 0.4, phw) * smoothstep(0.3, 0.55, dt);
-            float web = smoothstep(0.3, 0.75, fr.y);
+            float web = smoothstep(0.3, 0.75, fr.y) * mix(1.0, 0.4, steep);
             float ax = abs(g.x) / max(bar, 0.001);
             float barY = (g.y - sign(g.x) * bar * (0.1 + 0.15 * ax * ax)) / (0.02 + 0.02 * dt);
             float barLane = step(0.001, bar) * exp(-barY * barY) * smoothstep(0.1, 0.35, ax) * smoothstep(1.1, 0.8, ax) * smoothstep(0.3, 0.6, dt + 0.2);
@@ -326,8 +333,10 @@ final class Galaxy: SKScene {
             vec3 old = mix(u_core, u_disc, smoothstep(0.05, 0.7, r));
             vec3 tint = mix(old, u_young, clamp(arm * 0.7 + 0.35 * smoothstep(0.4, 1.1, r), 0.0, 1.0));
             float boost = sqrt(los);
-            light = (tint * disc * 0.84 + u_core * barLight * 0.9) * boost * screen
-                       + (tint * disc * 2.1 * arm + u_young * young * inArms * clump * disc * 1.2) * boost * absorb;
+            // the thick disc's glow: rounder and broader than the thin disc, so a steep galaxy sits in a soft haze
+            float haze = exp(-rh / 0.45) * smoothstep(1.6, 1.0, rh) * steep;
+            light = (tint * (disc * 0.84 + haze * 0.12) + u_core * barLight * 0.9) * boost * screen
+                  + (tint * disc * 2.1 * arm + u_young * young * inArms * clump * disc * 1.2) * boost * absorb;
 
             // Resolved stars twinkling in the disc as it turns, drawn as pinpoints on screen: a fine grain of stars
             // that follows the light, and blue giants just past the crests.
