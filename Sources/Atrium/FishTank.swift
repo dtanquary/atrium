@@ -379,11 +379,16 @@ final class FishTank: SKScene {
     /// `anemone` puts the clownfish's home on one shoulder.
     private func cluster(at base: CGPoint, scale: CGFloat, fog: CGFloat, blur: CGFloat, z: CGFloat, anemone hasAnemone: Bool) {
         let side: CGFloat = base.x < size.width / 2 ? 1 : -1 // shoulders lean toward the open middle
-        guard let rock = place("reef-rock-1", width: .random(in: 440...520) * scale, at: base, z: z, fog: fog, blur: blur, sway: 0)
+        // Rock pieces: the live rock and the wide, low pile make bases, the tall porous piece stacks on top, and
+        // the pale Porites boulder only suits the soft cluster at the back. No island repeats a piece.
+        let back = z == Z.backReef
+        let bottom = back ? ["reef-rock-4", "reef-rock-6"].randomElement()! : ["reef-rock-1", "reef-rock-4"].randomElement()!
+        let stacked = ["reef-rock-3", "reef-rock-1", "reef-rock-4"].filter { $0 != bottom }.randomElement()!
+        guard let rock = place(bottom, width: .random(in: 440...520) * scale, at: base, z: z, fog: fog, blur: blur, sway: 0)
         else { return }
         let w = rock.width, h = rock.height
         let upper = CGPoint(x: base.x + side * w * .random(in: 0.08...0.2), y: base.y + h * 0.62)
-        let small = place("reef-rock-1", width: w / unit * .random(in: 0.5...0.62), at: upper, z: z + 0.01, fog: fog, blur: blur, sway: 0)
+        let small = place(stacked, width: w / unit * .random(in: 0.45...0.58), at: upper, z: z + 0.01, fog: fog, blur: blur, sway: 0)
         let top = upper.y + (small?.height ?? 0) * 0.8
         place(["reef-acropora-1", "reef-acropora-2", "reef-acropora-3"].randomElement()!, width: 320 * scale,
               at: CGPoint(x: upper.x - side * w * 0.05, y: top - 24 * scale * unit), z: z + 0.02, fog: fog, blur: blur, sway: 0)
@@ -400,7 +405,7 @@ final class FishTank: SKScene {
         }
         place(["reef-zoanthid-1", "reef-zoanthid-2"].randomElement()!, width: 110 * scale,
               at: CGPoint(x: base.x - side * w * 0.05, y: base.y + h * 0.22), z: z + 0.05, fog: fog, blur: blur, sway: 0)
-        place(["reef-brain-1", "reef-brain-2", "reef-brain-3"].randomElement()!, width: 170 * scale,
+        place(["reef-brain-1", "reef-brain-2", "reef-brain-3", "reef-porites-1"].randomElement()!, width: 170 * scale,
               at: CGPoint(x: base.x - side * w * 0.22, y: base.y - 20 * scale * unit), z: z + 0.06, fog: fog, blur: blur, sway: 0)
         if z == Z.reef { rockSpots.append(CGPoint(x: base.x + side * w * 0.55, y: base.y + h * 0.3)) }
     }

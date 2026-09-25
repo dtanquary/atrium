@@ -14,7 +14,7 @@ Soft corals sway in the current, caustics ripple over the sand, and the mirror o
     - the `Species` enum: each fish's photos, size, speed, tail beat, spacing and haunt
     - `TankArt.photo`, which loads a cut-out at its on-screen size with an optional depth-of-field blur
     - the warp builders `swimWarps` and `swayWarps`
-  - `Sources/Atrium/Resources/reef-*.heic`: 39 photo cut-outs, HEIC with alpha, 2.2 MB in all.
+  - `Sources/Atrium/Resources/reef-*.heic`: 43 photo cut-outs, HEIC with alpha, 2.5 MB in all.
   - `Sources/Atrium/Resources/reef-credits.tsv`: each cut-out's subject, author, licence and source. Settings → About lists them, as CC BY requires.
 - **Entry:** `final class FishTank: SKScene`, registered as `{ FishTank(size: $0) }` in Scenes.swift (icon `fish.fill`, tint `.teal`).
 - **Kind:** photo cut-outs on SpriteKit sprites, graded by one shared shader, over two full-screen shaders for the water and the sand.
@@ -32,13 +32,13 @@ Layers, back to front, from the `Z` enum:
 3. **The reef** (`addReef`). Which cut-outs go where, their flips, and which island has the anemone all change with each load. It has four parts:
    - **back cluster:** about 55% scale, near the back edge of the sand, faded 35% toward the back panel and blurred 1.4 pt, like a camera's depth of field
    - **two islands** (`cluster`), at 14–24% and 76–86% across, leaving open sand between. Each one has:
-     - a big rock
-     - a smaller copy stacked on it toward the middle, flipped and offset so each silhouette differs
+     - a base rock: the live rock (`rock-1`) or the wide, low pile (`rock-4`); the back cluster uses the pile or the pale Porites boulder (`rock-6`)
+     - a different piece stacked on it toward the middle (often the tall, porous `rock-3`), so no island repeats a piece
      - a branching Acropora on top
      - a toadstool leather coral on one shoulder
      - the anemone, or else a torch, hammer or candy cane coral, on the other shoulder
      - zoanthids on its face
-     - a brain coral at its foot
+     - a brain coral or a Porites head at its foot
    - **swaying:** the soft corals (toadstool, anemone, torch) sway with `swayWarps` at 0.03–0.05 strength and a 5–8 s period
    - **front corner:** one brain or zoanthid colony up against the glass in a front corner, sharp and big
 4. **Fish** (`addSchools`): nine schools, 38 fish in all:
@@ -122,7 +122,7 @@ CPU 0.7 ms and GPU 1.45–1.5 ms per frame (release, 2x), in both looks. The GPU
   - The originals and the tools (`cut.swift`, `process.py`) were in the research agent's scratch folder and aren't in the repo.
 - **Warp speed bug:** changing a node's `speed` every frame while `SKAction.animate(withWarps:)` runs on it makes SpriteKit steadily slower (1 ms up to 10 ms a frame within a minute). That's why fish step through warp frames by hand in `pose`. The coral sway uses warp actions only because its speed never changes. This is also noted in CLAUDE.md.
 - `ponytail:` O(n²) boids within a school, fine up to a few dozen fish per school. Use a spatial grid, like Murmuration, if schools grow.
-- Only one live rock photo is clean, so both islands and the back cluster reuse it, flipped and scaled. A second or third rock would help if one turns up.
+- **Rock:** no permissively licensed photo of coralline-covered live rock exists besides `rock-1`, so `rock-3`, `rock-4` and `rock-6` are bare dry reef rock and a bleached Porites head. `coralline.py` (in the research scratch folder, not the repo) removed each photo's colour cast and painted muted pink, purple and green coralline patches onto them, in colours sampled from `rock-1`. The credits note the change, as CC BY asks. A first pass at full strength read as camouflage paint; the patches are now 70% toward the grey stone and cover about a third of it. There's still no tall pillar or arch.
 - The shaders use `u_time`, which doesn't advance in the render test, so caustics look frozen in snapshots. Fish and corals do move.
 
 ## Dave's feedback and decisions
@@ -141,7 +141,6 @@ CPU 0.7 ms and GPU 1.45–1.5 ms per frame (release, 2x), in both looks. The GPU
   This rebuild is the result, with daylight in Light Mode and actinic blue in Dark Mode.
 
 ## Ideas / next steps
-- More rock photos, so the islands aren't all one rock.
 - Rare visitors: a cleaner shrimp on the rock, a snail on the glass.
 - Settings: fish count, which species appear, the lighting look.
 
