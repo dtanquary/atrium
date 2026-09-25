@@ -2,6 +2,7 @@ import AppKit
 import IOKit.ps
 import ServiceManagement
 import SpriteKit
+import SwiftUI
 
 /// Pauses rendering while its window is fully covered, so a hidden wallpaper costs nothing, or while frozen.
 final class WallpaperView: SKView {
@@ -75,9 +76,17 @@ var current = UserDefaults.standard.string(forKey: "scene") ?? scenes[0].name
     }
 }
 
-/// The menu bar icon: pick a wallpaper, toggle Open at Login, quit.
+/// The menu bar icon: pick a wallpaper, open Settings, toggle Open at Login, quit.
 @MainActor final class StatusMenu: NSObject, NSMenuDelegate {
     let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+
+    private lazy var settings: NSWindow = {
+        let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView()))
+        window.title = "Wallpaper Settings"
+        window.level = .floating // stays above other windows while you watch the wallpaper change
+        window.isReleasedWhenClosed = false
+        return window
+    }()
 
     override init() {
         super.init()
@@ -94,6 +103,7 @@ var current = UserDefaults.standard.string(forKey: "scene") ?? scenes[0].name
             entry.state = scene.name == current ? .on : .off
         }
         menu.addItem(.separator())
+        menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",").target = self
         let login = menu.addItem(withTitle: "Open at Login", action: #selector(toggleLogin), keyEquivalent: "")
         login.target = self
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
@@ -105,6 +115,11 @@ var current = UserDefaults.standard.string(forKey: "scene") ?? scenes[0].name
         current = sender.title
         UserDefaults.standard.set(current, forKey: "scene")
         switchScene()
+    }
+
+    @objc func openSettings() {
+        NSApp.activate()
+        settings.makeKeyAndOrderFront(nil)
     }
 
     @objc func toggleLogin() {

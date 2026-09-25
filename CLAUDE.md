@@ -6,7 +6,8 @@ A menu bar app that plays animated wallpapers on macOS 27. Swift package plus Sp
 - macOS has no public API for third-party live wallpapers. Instead, each display gets a borderless `NSWindow` at `CGWindowLevelForKey(.desktopWindow)`. That puts it above the system wallpaper and below the desktop icons, on every Space, and it ignores the mouse. Only public AppKit APIs are used: no private frameworks, no changes to system files, no SIP changes. Keep it that way.
 - Each wallpaper is an `SKScene` shown in a `WallpaperView` (an `SKView`). It runs at 30 fps on mains power and 15 fps on battery, and freezes on its current frame in Low Power Mode. The view pauses whenever its window is fully covered.
 - Switching scenes crossfades inside the existing windows. Display changes only touch the displays that actually changed, so the system wallpaper never flashes through.
-- The menu bar icon (✨📺) picks the scene, saved in `UserDefaults` under `scene`. It also toggles Open at Login (`SMAppService`) and quits the app.
+- The menu bar icon (✨📺) picks the scene, saved in `UserDefaults` under `scene`. It also opens Settings, toggles Open at Login (`SMAppService`) and quits the app.
+- **Settings** (`Settings.swift`) is a floating SwiftUI window of live sliders. Each slider is a `Knob`, stored in UserDefaults. A scene lists its knobs, reads `knob.value`, and observes `UserDefaults.didChangeNotification` to update its shader uniforms while the slider moves (see `FlowingGradient`). To tune, read the values back with `defaults read com.dtanquary.wallpaper`.
 - Known seams: the lock screen, and the tint of the menu bar and windows, still come from the system wallpaper.
 
 ## Layout
@@ -24,6 +25,7 @@ pkill -x Wallpaper; open build/Wallpaper.app
 defaults write com.dtanquary.wallpaper scene "Night Sky"   # pick a scene without the menu
 swift test                    # renders every scene to $TMPDIR/wallpaper-snapshots and prints the cost per frame
 SNAPSHOT_SCENE="Aurora" SNAPSHOT_DIR=/some/dir SNAPSHOT_SECONDS=20 swift test
+SNAPSHOT_DEFAULTS="gradient.ribbons=1,gradient.previewTime=1" swift test   # snapshot with Settings values
 ```
 
 ## Adding a scene
