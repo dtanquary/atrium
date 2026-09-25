@@ -43,7 +43,7 @@ SNAPSHOT_DEFAULTS="gradient.ribbons=1,gradient.previewTime=1" swift test   # sna
 7. Look at the snapshot PNG before calling it done.
 
 ## Gotchas
-- SKShader is GLSL-like and gets translated to Metal. There's no `inout`. `u_time` follows the wall clock, so `SNAPSHOT_SECONDS` doesn't move shader animation forward (SKActions do move forward).
+- SKShader is GLSL-like and gets translated to Metal. There's no `inout`, no early `return` from `main()` (it won't compile), and no `sampler2D` parameters (keep texture reads in `main()`). `u_time` follows the wall clock, so `SNAPSHOT_SECONDS` doesn't move shader animation forward (SKActions do move forward).
 - Globals in `main.swift` are set up by top-level code and aren't safe to use from tests. Put shared state in other files.
 - Swift 6 strict concurrency: AppKit and CoreLocation delegate callbacks are `nonisolated` and use `MainActor.assumeIsolated`.
 - Don't change a node's `speed` every frame while `SKAction.animate(withWarps:)` runs on it. SpriteKit gets steadily slower (from 1 ms to 10 ms a frame within a minute). Pick precomputed warp frames yourself in `update(_:)` instead.

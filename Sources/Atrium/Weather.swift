@@ -48,6 +48,7 @@ final class WeatherScene: SKScene {
     private let cloudSun = SKUniform(name: "u_sunCol", vectorFloat3: .zero), cloudAmbient = SKUniform(name: "u_amb", vectorFloat3: .zero)
     private let cirrus = SKUniform(name: "u_high", float: 0), cirrusSun = SKUniform(name: "u_highCol", vectorFloat3: .zero)
     private let fog = SKUniform(name: "u_fog", float: 0), snowCover = SKUniform(name: "u_snow", float: 0)
+    private let nightUniform = SKUniform(name: "u_night", float: 0)
     private let flashAmount = SKUniform(name: "u_flash", float: 0), flashPlace = SKUniform(name: "u_flashPos", vectorFloat3: .zero)
     /// Under a deck: its underside's colour, and how much the horizon takes it on instead of the clear sky's.
     private let deck = SKUniform(name: "u_deck", vectorFloat4: .zero)
@@ -178,7 +179,7 @@ final class WeatherScene: SKScene {
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]), skyBefore, skyAfter, skyBlend,
             cameraUniforms.lens, cameraUniforms.forward, cameraUniforms.right, sunDirection, sunDisc, moonPlace, moonLight,
             moonColour, starsUniform, SKUniform(name: "u_moonTex", texture: Self.moonTexture),
-            SKUniform(name: "u_noise", texture: CloudNoise.texture), cloudLayer, cloudWind, cloudSun, cloudAmbient, cirrus, cirrusSun, fog, deck, flashAmount, flashPlace,
+            SKUniform(name: "u_noise", texture: CloudNoise.texture), cloudLayer, cloudWind, cloudSun, cloudAmbient, cirrus, cirrusSun, fog, deck, flashAmount, flashPlace, nightUniform,
         ])
         fog.floatValue = conditions.fog
         let clouds = conditions.clouds
@@ -253,6 +254,7 @@ final class WeatherScene: SKScene {
         groundColour.floatValue = Float(smoothstep(0.002, 0.03, brightness) * (1 - 0.7 * smoothstep(-0.03, -0.2, light.sun.z)))
         groundHazeLit.floatValue = Float(0.3 + 0.7 * smoothstep(-0.08, 0, light.sun.z))
         let moonNight = smoothstep(0.05, -0.1, light.sun.z)
+        nightUniform.floatValue = Float(smoothstep(-0.05, -0.2, light.sun.z) * 0.6)
         moonColour.vectorFloat3Value = SIMD3<Float>(Atmosphere.shared.sunlight(viewpoint.height, light.moon.z) * (0.5 + 1.5 * moonNight))
     }
 
@@ -407,6 +409,8 @@ final class WeatherScene: SKScene {
             vec3 fogCol = mix(haze, vec3(dot(haze, vec3(0.3, 0.5, 0.2))), 0.7) * 0.95;
             col = mix(col, fogCol, clamp(u_fog * 1.6, 0.0, 0.97) * smoothstep(u_cam.z + 1.2 * u_fog, u_cam.z - 0.05, uv.y));
         }
+        // By night the eye sees little colour, and what it sees shifts blue (the Purkinje shift): moonlit cloud is silver.
+        col = mix(col, vec3(dot(col, vec3(0.2126, 0.7152, 0.0722))) * vec3(0.8, 0.9, 1.15), u_night);
         col = sqrt(1.0 - exp(-col)); // film-like roll-off, then roughly sRGB
         gl_FragColor = vec4(col + (hash21(pts * 2.0) - 0.5) / 128.0, 1.0);
     }
