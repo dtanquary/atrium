@@ -35,11 +35,13 @@ import UniformTypeIdentifiers
         pass.colorAttachments[0].storeAction = .store
 
         // Run every frame at 30 fps so actions and emitters advance normally; time the last 30.
-        let frames = Int(seconds * 30)
+        // SKRenderer's first update runs on the system clock, so frame times must start after it or every later
+        // update counts as the past and update(_:) barely runs.
+        let frames = Int(seconds * 30), clock = ProcessInfo.processInfo.systemUptime + 1
         var cpu = 0.0, gpu = 0.0
         for frame in 0...frames {
             let start = CFAbsoluteTimeGetCurrent()
-            renderer.update(atTime: Double(frame) / 30)
+            renderer.update(atTime: clock + Double(frame) / 30)
             let buffer = try #require(queue.makeCommandBuffer())
             renderer.render(withViewport: CGRect(x: 0, y: 0, width: w, height: h), commandBuffer: buffer, renderPassDescriptor: pass)
             buffer.commit()
