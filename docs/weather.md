@@ -127,6 +127,8 @@ What changed from it:
 - A rainbow when it's showering with the Sun low behind the view (the research has the geometry: 42° around the antisolar point, red outside, a fainter reversed bow at 51°).
 - Cloud shadows drifting over the hills, and far rain shafts under showers.
 - Backlit photo clouds near the Sun; the cutter couldn't separate them from the glare.
+- Ask Open-Meteo for `direct_radiation` and `diffuse_radiation`: their ratio says how sunlit the hills really are under broken cloud, instead of guessing from cover. `cloud_cover_low` and `_mid` could split the deck from altocumulus.
+- Rime fog (code 48) frosts the trees pale blue-grey (#9296a8); fog lit by a low Sun is warm (#e8d8c8), and valley fog has a flat, sharp top.
 
 ## Checking it
 - `SNAPSHOT_SCENE="Weather" swift test` renders the offline default: partly cloudy, at this moment where you are.
