@@ -4,6 +4,16 @@ Living, animated desktop wallpapers for macOS: a sunlit fish tank, drifting nebu
 
 There are no prebuilt downloads. Clone it, build it and run it yourself; it takes about a minute.
 
+![Nebula: a unique deep-space cloud on every load, here in the Hubble palette](docs/images/nebula-hubble.jpg)
+
+| | |
+|---|---|
+| ![Live Sky](docs/images/live-sky.jpg) **Live Sky**: tonight's real sky over your location, with the Moon in its true phase, Saturn and the Milky Way | ![Earth from Orbit](docs/images/earth-from-orbit.jpg) **Earth from Orbit**: city lights on the night side, with the live ISS |
+| ![Flowing Gradient](docs/images/flowing-gradient.jpg) **Flowing Gradient**: soft pools of colour with silk ribbons | ![Lava Lamp](docs/images/lava-lamp.jpg) **Lava Lamp**: glowing wax on pinching necks |
+| ![Nebula, Reflection palette](docs/images/nebula-reflection.jpg) **Nebula**: the Reflection palette | ![Nebula, Planetary palette](docs/images/nebula-planetary.jpg) **Nebula**: the Planetary palette |
+
+*Screenshots are the wallpaper window alone, captured live. Everything moves: the nebulae drift and fold, the sky turns, and the ISS crosses the globe.*
+
 ## How it works
 
 macOS has no public API for third-party live wallpapers. This app gives each display a borderless window at the desktop window level (`CGWindowLevelForKey(.desktopWindow)`). That puts it above the system wallpaper and below your desktop icons, on every Space, and it lets clicks pass straight through to the desktop.
