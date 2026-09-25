@@ -20,7 +20,7 @@ Everything is maths per pixel, per frame, in four coordinate frames:
    - `hii`, at ph + 0.2, is where new stars light hydrogen pink, right beside the dust, as in the photos
    - `young`, just downstream (ph − 0.35), is where the young blue stars run
 
-   Each arm gets its own strength, `armAmp` from 0.6 to 1 (hashed from the arm's index), so the pattern is lopsided like real ones. Flocculent kinds multiply `crest` by a noise mask, so their arms break into segments.
+   Each arm gets its own strength, `armAmp` from 0.6 to 1 (hashed from the arm's index), so the pattern is lopsided like real ones. Every other arm is scaled by the kind's `minor` strength, which gives the Milky Way two major arms off the bar's ends and two minor ones between. Ragged kinds multiply `crest` by a noise mask, so their arms break up. Flocculent kinds go further (weighted by `ragged²`, and skipped below 0.1 to save the cost): noise in swirled space is already sheared into spiral streaks, so its peaks make a patchwork of short arm segments, as in M33, and the young stars and H II regions follow the patches.
 5. **Light, from a bright disc the arms brighten.** In Hubble images the space between the arms isn't dark: the whole disc is a smooth glow, cream toward the middle and blue-grey outward. The arms are only two to three times brighter than the disc around them. Drawing arms on a dark disc is what made the first version look crisp and CG.
    - disc: `exp(-rt/0.4)`, fading out between 0.9 and 1.6 with no edge. `rt` gives the disc a thickness of 0.15, so steep tilts fade to a soft ellipse instead of a sharp one, and it's also what the branch at 1.6 tests.
    - arm: `crest·inArms·(0.5 + 0.9·clump)`. `inArms` fades the arms in past `r0`. `clump` is two octaves of noise in unswirled `g`, so the arms read as star clouds rather than brush strokes.
@@ -31,7 +31,7 @@ Everything is maths per pixel, per frame, in four coordinate frames:
    - `lane`: narrow (exponent 14), on the arm's inner edge, broken where `lumps + dt` is low
    - `feather`: 18 spurs leaving the arms at a pitch 35° steeper, about half of them kept, only on the upstream side of each arm
    - `web`: the ridges, thin connected filaments everywhere down to the nucleus, stronger on the arms
-   - `barLane`: for barred kinds, curved lanes along the bar's leading edges, as in NGC 1300
+   - `barLane`: for barred kinds, curved lanes along the bar's leading edges, as in NGC 1300. Inside the bar, the web is faded out (`barZone`) so only these lanes cross it.
 
    The total is scaled by `los`, so tilted galaxies (M31) show stronger lanes. Dust sits in a thin midplane layer, so a third of the old disc's light is in front of it (`screen = mix(absorb, 1, 0.3)`) and lanes redden rather than go black. The arms, young stars and resolved stars get the full `absorb = exp(-dust·(0.5, 0.75, 1.0))`, which is reddish brown because blue is lost first. H II regions get `sqrt(absorb)`.
 7. **Resolved stars (`discStar`):** one candidate per cell of `g`. There are two layers:
@@ -41,8 +41,9 @@ Everything is maths per pixel, per frame, in four coordinate frames:
    `m` maps a step in the disc to screen points, so every star is a round pinpoint at any tilt. Cells are sized `/u_tilt` so they never get squashed below the star's size.
 8. **H II regions (`knot`):** 16 pt cells, kept along `hii` on the arm's inner edge, only where a slow noise (`groups`) allows, and only inside r ≈ 1.2, so they come in chains and complexes. Each is 1–4.5 pt: pink hydrogen glow (`u_knots`, ×2.2) around a blue-white cluster core, dimmer toward the outskirts. They're round on screen, like the stars.
 9. **Bulge:** a Sérsic n=2 profile (`3·exp(-3.67√rb)`) plus a nucleus, measured in `e` with an axis ratio of `mix(cos i, 1, 0.6)` (bulges are rounder than discs). The disc cuts through its middle. `behind` is the share of bulge light behind the dust: half face-on, more on the near side of a tilted galaxy. That gives the Andromeda-style dust silhouette across the bulge.
-10. **Composite: a Hubble-style stretch.** Brightness gets `asinh(6·lum)/asinh(12)`, the log-like curve used to process Hubble and ESO images. It lifts the faint outer disc so the galaxy fades gradually instead of stopping, and holds the core. It's applied to brightness and not per channel, so colours keep their saturation; the brightest parts pale toward white, as on a real sensor. `col = sky·absorb + stretched light`. The sky behind is described in the next step. `brightStar` foreground stars go on top, untouched by the galaxy's dust, since they're in our own galaxy. Then a `/128` dither.
-11. **Background sky:** `starLayer` is drawn twice:
+10. **Companions:** some kinds have the companion galaxies from their photos, from the `companions` table: M51's NGC 5195 off the end of an arm, and M31's compact M32 just off the disc and the larger, fainter, elongated M110 further out. Each is a smooth cloud of old stars (`exp(-2.5·rc)` plus a small bright middle) placed along and across the major axis, so it keeps its place beside the disc but doesn't turn with it. They sit behind the disc's dust, and they're skipped entirely for kinds without one. Their light joins the disc's before the stretch, which now runs for every pixel, so companions beyond the disc get the same curve.
+11. **Composite: a Hubble-style stretch.** Brightness gets `asinh(6·lum)/asinh(12)`, the log-like curve used to process Hubble and ESO images. It lifts the faint outer disc so the galaxy fades gradually instead of stopping, and holds the core. It's applied to brightness and not per channel, so colours keep their saturation; the brightest parts pale toward white, as on a real sensor. `col = sky·absorb + stretched light`. The sky behind is described in the next step. `brightStar` foreground stars go on top, untouched by the galaxy's dust, since they're in our own galaxy. Then a `/128` dither.
+12. **Background sky:** `starLayer` is drawn twice:
     - 5 pt cells on a square grid, up to 16% kept: faint stars only
     - 17 pt cells on a grid turned 40°, up to 30% kept: the only layer bright enough for a soft halo
 
@@ -77,10 +78,10 @@ Sections: Look, Motion, and Colors (the kind picker).
 
 | Kind | After | Arms | Pitch | Bar | Bulge | Ragged | Dust | Tilt | Look |
 |---|---|---|---|---|---|---|---|---|---|
-| Whirlpool | M51 | 2 | 19° | none | 0.05 | 0.2 | 1.3 | 15–25° | grand design, strung with H II |
+| Whirlpool | M51 | 2 | 19° | none | 0.05 | 0.2 | 1.3 | 15–25° | grand design, strung with H II; companion NGC 5195 |
 | Pinwheel | M101 | 4 | 27° | none | 0.03 | 0.55 | 0.8 | 10–25° | face-on, many open, lopsided arms |
-| Andromeda | M31 | 2 | 8° | none | 0.13 | 0.5 | 1.2 | 72–77° | cream bulge, dusty arms, mauve outskirts |
-| Milky Way | ours | 2 | 13° | 0.28 | 0.09 | 0.3 | 1.2 | 0–35° | short bar, two main arms |
+| Andromeda | M31 | 2 | 8° | none | 0.13 | 0.5 | 1.2 | 72–77° | cream bulge, dusty arms, mauve outskirts; companions M32 and M110 |
+| Milky Way | ours | 4 (2 minor at 0.45) | 13° | 0.28 | 0.09 | 0.3 | 1.2 | 0–35° | short bar, two major arms off its ends, two minor between |
 | Great Barred | NGC 1300 | 2 | 17° | 0.45 | 0.05 | 0.1 | 1.0 | 40–50° | long bar with dust lanes, open arms off its ends |
 | Triangulum | M33 | 2 | 30° | none | 0.015 | 0.9 | 0.6 | 50–56° | a flocculent patchwork, rich in H II |
 
@@ -96,7 +97,7 @@ Colours per kind: bulge (cream), old disc (warm grey), young stars (cyan-grey bl
 - Cycle every 10 minutes, dissolve 90 s.
 
 ## Performance
-CPU 0.5 ms and GPU 1.0–1.9 ms per frame (release, 2x), depending on how much of the screen the roll covers: tilted Andromeda is cheapest, and a large Whirlpool is at the budget. Inside the galaxy the cost is mostly two 5-octave fbm calls (warp, and dust with its ridges from the same samples), five single noise calls, three cell lookups and a `log`/`atan` per pixel. The 2.2 pt star grain is the densest lookup. Pixels beyond 1.6 galaxy radii skip all of it and draw only sky; the halo fades out by then, so there's no edge. The cutoff was 2.5, which spent most of the budget on empty space. The layered sky costs about 0.3 ms. During the 90 s dissolve both galaxies render, so it roughly doubles (`ponytail:` in `handOver`).
+CPU 0.5 ms and GPU 1.0–2.0 ms per frame (release, 2x), depending on how much of the screen the roll covers: tilted Andromeda is cheapest. The largest Whirlpool roll (radius 0.44, centred) measured 1.9–2.06 ms on a fixed roll, right at the budget. Thinning the 2.2 pt star grain made no measurable difference, but skipping the patchwork noise for grand-design kinds saved about 0.15 ms. Inside the galaxy the cost is mostly two 5-octave fbm calls (warp, and dust with its ridges from the same samples), five single noise calls, three cell lookups and a `log`/`atan` per pixel. The 2.2 pt star grain is the densest lookup. Pixels beyond 1.6 galaxy radii skip all of it and draw only sky; the halo fades out by then, so there's no edge. The cutoff was 2.5, which spent most of the budget on empty space. The layered sky costs about 0.3 ms. During the 90 s dissolve both galaxies render, so it roughly doubles (`ponytail:` in `handOver`).
 
 ## Gotchas and shortcuts
 - **`u_texture` is taken:** SpriteKit already defines it as the sprite's texture, so a uniform with that name fails to compile ("redefinition of parameter"). The kind's raggedness and dust ride in `u_arms` instead.
@@ -115,12 +116,11 @@ CPU 0.5 ms and GPU 1.0–1.9 ms per frame (release, 2x), depending on how much o
   - the disc: a snowfall of stars became a glowing disc with sparse sparkles
   - knots: evenly spaced beads became clusters
 - "A great start, but we need to improve it." First: "The background stars are too uniform, I can see patterns in the stars." The cause was `hash21` tiling. Fixed with `hash42` for every star field (Nebula's and Aurora's too), and the layered, clustered, coloured sky above.
-- He asked for research into how 3D tools build galaxies, and for better reference photos, to lift each kind's look. A research agent sampled colours from the photos, compared renders with them, and prototyped the fixes merged here: photo-sampled colours; translucent, tilt-aware dust with feathers, a filament web and bar lanes; H II regions on the arms' inner edges; lopsided arms; a thick disc for steep tilts; and a finer star grain.
+- He asked for research into how 3D tools build galaxies, and for better reference photos, to lift each kind's look. Then: "Apply the rest of the research", which added the Milky Way's minor arms, M33's patchwork, a clear bar zone for NGC 1300, and the companions. A research agent sampled colours from the photos, compared renders with them, and prototyped the fixes merged here: photo-sampled colours; translucent, tilt-aware dust with feathers, a filament web and bar lanes; H II regions on the arms' inner edges; lopsided arms; a thick disc for steep tilts; and a finer star grain.
 - "They look too crisp at the edges and just don't quite resemble the pictures we see from Hubble. Very close, just something is off." Compared with ESA/Hubble's M51 (heic0506a), the main gap was the dark disc: the light model became a bright exponential disc the arms brighten. The rest followed from the photo: an asinh stretch in place of `1 - exp(-x)`, narrower reddish-brown lanes, a finer star speckle, smaller knots in chains, and a paler core.
 
 ## Ideas / next steps
 - Differential rotation via two blended phases, if rigid turning ever looks wrong up close.
-- Companion galaxies: M51's NGC 5195 at the tip of an arm, or M31's M32 and M110.
 - Edge-on kinds (Sombrero, NGC 891) need a thick disc and a vertical dust lane, not this thin-disc projection.
 - A slow drift or zoom within one galaxy, like Nebula's band idea.
 - A Tilt knob, if Dave wants to force face-on views.

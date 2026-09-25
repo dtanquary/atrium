@@ -18,25 +18,35 @@ final class Galaxy: SKScene {
         rotation, cycleMinutes,
     ]
 
-    /// Kinds of spiral, each after a real galaxy: how many arms, their pitch angle in degrees, the bar's length and
+    /// Kinds of spiral, each after a real galaxy: how many arms and how strong every other one is (below 1 for minor
+    /// arms between the major ones), their pitch angle in degrees, the bar's length and
     /// the bulge's size (in disc radii, 0 for no bar), how ragged the arms are (0 grand design, 1 flocculent), dust,
     /// the tilt range in degrees from face-on (around the real one), and colours: bulge, old disc stars, young arm
     /// stars, and the hydrogen-alpha pink of H II regions. The colours were sampled from ESA/Hubble, ESO and NASA
     /// portraits (M51 heic0506a, M101 heic0602a, M31, NGC 1300 heic0501a, M33 eso1424a) as the stretch shows them.
-    nonisolated static let kinds: [(name: String, arms: Float, pitch: Float, bar: Float, bulge: Float, ragged: Float,
-                                    dust: Float, tilt: ClosedRange<Float>, colours: [SIMD3<Float>])] = [
-        ("Whirlpool", 2, 19, 0, 0.05, 0.2, 1.3, 15...25,        // M51 (i ≈ 20°): the classic grand design, strung with H II
+    nonisolated static let kinds: [(name: String, arms: Float, minor: Float, pitch: Float, bar: Float, bulge: Float,
+                                    ragged: Float, dust: Float, tilt: ClosedRange<Float>, colours: [SIMD3<Float>])] = [
+        ("Whirlpool", 2, 1, 19, 0, 0.05, 0.2, 1.3, 15...25,        // M51 (i ≈ 20°): the classic grand design, strung with H II
          [[1.0, 0.91, 0.80], [0.94, 0.90, 0.87], [0.72, 0.86, 1.0], [1.0, 0.42, 0.50]]),
-        ("Pinwheel", 4, 27, 0, 0.03, 0.55, 0.8, 10...25,        // M101 (i ≈ 18°): face-on, many open, lopsided arms
+        ("Pinwheel", 4, 1, 27, 0, 0.03, 0.55, 0.8, 10...25,        // M101 (i ≈ 18°): face-on, many open, lopsided arms
          [[1.0, 0.93, 0.86], [0.95, 0.93, 0.93], [0.70, 0.82, 1.0], [1.0, 0.50, 0.60]]),
-        ("Andromeda", 2, 8, 0, 0.13, 0.5, 1.2, 72...77,         // M31 (i ≈ 77°): cream bulge, dusty arms, mauve outskirts
+        ("Andromeda", 2, 1, 8, 0, 0.13, 0.5, 1.2, 72...77,         // M31 (i ≈ 77°): cream bulge, dusty arms, mauve outskirts
          [[1.0, 0.90, 0.78], [0.86, 0.78, 0.86], [0.74, 0.76, 1.0], [1.0, 0.50, 0.70]]),
-        ("Milky Way", 2, 13, 0.28, 0.09, 0.3, 1.2, 0...35,      // ours, from outside: a short bar and two main arms
+        ("Milky Way", 4, 0.45, 13, 0.28, 0.09, 0.3, 1.2, 0...35, // ours, from outside: a short bar, two major arms off
+                                                                  // its ends (Scutum-Centaurus, Perseus), two minor between
          [[1.0, 0.90, 0.76], [0.92, 0.88, 0.84], [0.72, 0.84, 1.0], [1.0, 0.45, 0.55]]),
-        ("Great Barred", 2, 17, 0.45, 0.05, 0.1, 1.0, 40...50,  // NGC 1300 (i ≈ 50°): a long bar with open arms off its ends
+        ("Great Barred", 2, 1, 17, 0.45, 0.05, 0.1, 1.0, 40...50,  // NGC 1300 (i ≈ 50°): a long bar with open arms off its ends
          [[1.0, 0.90, 0.84], [0.93, 0.90, 0.97], [0.72, 0.84, 1.0], [1.0, 0.50, 0.60]]),
-        ("Triangulum", 2, 30, 0, 0.015, 0.9, 0.6, 50...56,      // M33 (i ≈ 55°): a flocculent patchwork, rich in H II
+        ("Triangulum", 2, 1, 30, 0, 0.015, 0.9, 0.6, 50...56,      // M33 (i ≈ 55°): a flocculent patchwork, rich in H II
          [[1.0, 0.96, 0.90], [0.88, 0.90, 1.0], [0.74, 0.86, 1.0], [1.0, 0.50, 0.56]]),
+    ]
+
+    /// Companion galaxies seen beside some kinds, as in their photos: position along and across the major axis in
+    /// galaxy radii, radius, brightness, and how round (1) or flattened it looks. M51 has NGC 5195 off the end of an
+    /// arm, partly behind it; M31 has compact M32 just off its disc and the larger, fainter M110 further out.
+    nonisolated static let companions: [String: [(at: SIMD2<Float>, radius: Float, brightness: Float, round: Float)]] = [
+        "Whirlpool": [([1.15, 0.4], 0.12, 1.1, 0.85)],
+        "Andromeda": [([0.12, -0.5], 0.025, 1.5, 0.8), ([-0.3, 0.85], 0.1, 0.25, 0.5)],
     ]
 
     private let knobUniforms: [String: SKUniform]
@@ -67,11 +77,11 @@ final class Galaxy: SKScene {
             SKUniform(name: "u_tilt", float: tilt),
             SKUniform(name: "u_spin", float: Bool.random() ? 1 : -1),
             SKUniform(name: "u_shape", vectorFloat4: [kind.arms, 1 / tan(kind.pitch * .pi / 180), kind.bar, kind.bulge]),
-            SKUniform(name: "u_arms", vectorFloat2: [kind.ragged, kind.dust]),
+            SKUniform(name: "u_arms", vectorFloat3: [kind.ragged, kind.dust, kind.minor]),
             SKUniform(name: "u_core", vectorFloat3: kind.colours[0]), SKUniform(name: "u_disc", vectorFloat3: kind.colours[1]),
             SKUniform(name: "u_young", vectorFloat3: kind.colours[2]), SKUniform(name: "u_knots", vectorFloat3: kind.colours[3]),
             phase,
-        ] + Array(knobUniforms.values))
+        ] + companionUniforms(kind.name) + Array(knobUniforms.values))
         addChild(sprite)
 
         applySettings()
@@ -80,6 +90,16 @@ final class Galaxy: SKScene {
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
+
+    /// Two companion slots for the shader, (x, y, radius, brightness) and roundness; an empty slot has no brightness.
+    private func companionUniforms(_ kind: String) -> [SKUniform] {
+        let found = Self.companions[kind] ?? []
+        return (0..<2).flatMap { (i: Int) -> [SKUniform] in
+            let c = i < found.count ? found[i] : (at: SIMD2<Float>(0, 0), radius: Float(1), brightness: Float(0), round: Float(1))
+            return [SKUniform(name: "u_comp\(i)", vectorFloat4: [c.at.x, c.at.y, c.radius, c.brightness]),
+                    SKUniform(name: "u_round\(i)", float: c.round)]
+        }
+    }
 
     override func update(_ currentTime: TimeInterval) {
         defer { lastUpdate = currentTime }
@@ -171,6 +191,14 @@ final class Galaxy: SKScene {
         return vec2(exp(-l * l * 1.5), exp(-l * l * 8.0)) * (0.3 + 0.7 * h.x / max(keep, 0.0001));
     }
 
+    // An elliptical companion galaxy: a broad, smooth cloud of old stars with a small bright middle. `o` is (x, y,
+    // radius, brightness) along and across the major axis, in galaxy radii; `round` flattens it across.
+    float companion(vec2 e, vec4 o, float round) {
+        vec2 v = e - o.xy;
+        float rc = length(vec2(v.x, v.y / round)) / max(o.z, 0.001);
+        return o.w * (exp(-2.5 * rc) + 0.6 * exp(-rc * rc * 30.0));
+    }
+
     // fbm and a ridged multifractal from the same five noise samples, octaves turned so the value-noise grid never
     // lines up. Returns (fbm, ridges): the ridges are thin, connected filaments, 0 to about 1.
     vec2 fbmRidge(vec2 p) {
@@ -212,6 +240,8 @@ final class Galaxy: SKScene {
         float r = length(d);
         // the disc has a little thickness, so steep tilts fade to a soft ellipse instead of a sharp one
         float rt = length(vec2(e.x, e.y / sqrt(u_tilt * u_tilt + 0.0225 * (1.0 - u_tilt * u_tilt))));
+        vec3 light = vec3(0.0);
+        vec3 absorb = vec3(1.0);
         if (rt < 1.6) { // everything fades out by here; beyond it there's only sky
             vec2 g = turn(d, -u_phase);
             float arms = u_shape.x;
@@ -233,10 +263,24 @@ final class Galaxy: SKScene {
             // Each arm has its own strength, so the pattern is lopsided like real ones. Stars stream through the arms
             // the way the disc turns: gas piles up into dust on the arm's inner edge, new stars light hydrogen pink
             // right beside it, and the young blue stars run just past the crest.
-            float armAmp = 0.6 + 0.4 * hash21(vec2(mod(floor(ph / 6.2832 + 0.5), arms), u_seed.x));
+            // Every other arm is a minor one for kinds like the Milky Way.
+            float armN = mod(floor(ph / 6.2832 + 0.5), arms);
+            float armAmp = (0.6 + 0.4 * hash21(vec2(armN, u_seed.x))) * mix(1.0, u_arms.z, mod(armN, 2.0));
             float crest = pow(0.5 + 0.5 * cos(ph), 4.0 - 2.0 * ragged) * armAmp;
             float young = pow(0.5 + 0.5 * cos(ph - 0.35), 8.0) * armAmp;
-            crest *= mix(1.0, smoothstep(0.3, 0.7, noise(q * 5.0 + u_seed.yx)), ragged); // flocculent arms break up
+            float hii = pow(0.5 + 0.5 * cos(ph + 0.2), 10.0) * armAmp;
+            // Ragged arms break up. Flocculent kinds (M33) go further, to a patchwork of short arm segments: noise in
+            // swirled space is already sheared into spiral streaks, so its peaks make them, and young stars and H II
+            // regions follow the patches instead of whole arms.
+            float n5 = noise(q * 5.0 + u_seed.yx);
+            float floc = ragged * ragged;
+            crest *= mix(1.0, smoothstep(0.3, 0.7, n5), ragged);
+            if (floc > 0.1) { // only ragged kinds pay for the patchwork
+                float patches = smoothstep(0.45, 0.8, n5 * 0.6 + noise(q * 11.0 - u_seed) * 0.4) * armAmp;
+                crest = mix(crest, max(crest * 0.35, patches), floc);
+                young = mix(young, patches, floc);
+                hii = mix(hii, patches, floc);
+            }
             // star clouds: lumpy in the disc itself, not swirled, so the arms read as clusters rather than brush strokes
             float lumps = noise(g * 16.0 + u_seed) * 0.5 + noise(mat2(0.8, 0.6, -0.6, 0.8) * g * 47.0 - u_seed) * 0.5;
             float clump = smoothstep(0.2, 0.9, lumps);
@@ -262,12 +306,13 @@ final class Galaxy: SKScene {
             float ax = abs(g.x) / max(bar, 0.001);
             float barY = (g.y - sign(g.x) * bar * (0.1 + 0.15 * ax * ax)) / (0.02 + 0.02 * dt);
             float barLane = step(0.001, bar) * exp(-barY * barY) * smoothstep(0.1, 0.35, ax) * smoothstep(1.1, 0.8, ax) * smoothstep(0.3, 0.6, dt + 0.2);
-            float dust = (lane * 1.3 + feather * 0.7 * (1.0 - ragged)) * smoothstep(r0 * 0.3, r0 * 0.9, r) + barLane * 0.9
-                       + web * (0.25 + 0.9 * crest) * smoothstep(0.015, 0.06, r);
+            float barZone = mix(1.0, smoothstep(bar * 0.7, bar * 1.1, r), step(0.001, bar)); // only its own lanes
+            float dust = (lane * 1.3 * (1.0 - 0.7 * floc) + feather * 0.7 * (1.0 - ragged)) * smoothstep(r0 * 0.5, r0 * 0.95, r)
+                       + barLane * 0.9 + web * (0.25 + 0.9 * crest) * smoothstep(0.015, 0.06, r) * barZone;
             dust *= smoothstep(1.3, 0.5, r) * u_arms.y * u_dust * los;
             // Dust sits in a thin layer in the midplane: it reddens what's behind it, while a third of the old disc's
             // stars lie in front, so lanes redden rather than go black.
-            vec3 absorb = exp(-dust * vec3(0.5, 0.75, 1.0));
+            absorb = exp(-dust * vec3(0.5, 0.75, 1.0));
             vec3 screen = mix(absorb, vec3(1.0), 0.3);
 
             // the bar: a flat-ended bar of old stars in the disc
@@ -281,7 +326,7 @@ final class Galaxy: SKScene {
             vec3 old = mix(u_core, u_disc, smoothstep(0.05, 0.7, r));
             vec3 tint = mix(old, u_young, clamp(arm * 0.7 + 0.35 * smoothstep(0.4, 1.1, r), 0.0, 1.0));
             float boost = sqrt(los);
-            vec3 light = (tint * disc * 0.84 + u_core * barLight * 0.9) * boost * screen
+            light = (tint * disc * 0.84 + u_core * barLight * 0.9) * boost * screen
                        + (tint * disc * 2.1 * arm + u_young * young * inArms * clump * disc * 1.2) * boost * absorb;
 
             // Resolved stars twinkling in the disc as it turns, drawn as pinpoints on screen: a fine grain of stars
@@ -294,7 +339,6 @@ final class Galaxy: SKScene {
 
             // H II regions: in complexes, strung along the arm's inner edge between the dust lane and the crest,
             // dimmer toward the outskirts
-            float hii = pow(0.5 + 0.5 * cos(ph + 0.2), 10.0) * armAmp;
             float groups = smoothstep(0.4, 0.75, noise(g * 9.0 + u_seed.yx));
             vec2 k = knot(g, 16.0 * pt / u_tilt, clamp(hii * inArms * groups * 9.0, 0.0, 0.9) * smoothstep(1.2, 0.8, r), m);
             light += (u_knots * k.x * 2.2 + mix(u_young, vec3(1.0), 0.5) * k.y * 1.5) * sqrt(absorb)
@@ -306,15 +350,19 @@ final class Galaxy: SKScene {
             float bulge = 3.0 * exp(-3.67 * sqrt(rb)) + 1.5 * exp(-rb * rb * 60.0);
             float behind = clamp(0.5 - 0.5 * e.y / bulgeR * sqrt(1.0 - u_tilt * u_tilt), 0.0, 1.0);
             light += u_core * bulge * (1.0 - behind + behind * absorb);
-
-            // Hubble-style stretch: asinh on brightness lifts the faint outer disc and holds the core without
-            // bleaching its colour; the brightest parts pale toward white, as on a real sensor.
-            vec3 x = light * u_brightness;
-            float lum = dot(x, vec3(0.3, 0.5, 0.2)) + 0.0001;
-            float stretched = log(6.0 * lum + sqrt(36.0 * lum * lum + 1.0)) / 3.18; // asinh(6 lum) / asinh(12)
-            vec3 photo = min(x * stretched / lum, 1.0);
-            col = col * absorb + mix(photo, vec3(stretched), 0.5 * smoothstep(0.55, 1.0, stretched)); // highlights pale
         }
+        // companions, behind the disc's dust where they overlap it (most kinds have none)
+        if (u_comp0.w > 0.0) {
+            light += u_core * (companion(e, u_comp0, u_round0) + companion(e, u_comp1, u_round1)) * absorb;
+        }
+
+        // Hubble-style stretch: asinh on brightness lifts the faint outer disc and holds the core without bleaching
+        // its colour; the brightest parts pale toward white, as on a real sensor.
+        vec3 x = light * u_brightness;
+        float lum = dot(x, vec3(0.3, 0.5, 0.2)) + 0.0001;
+        float stretched = log(6.0 * lum + sqrt(36.0 * lum * lum + 1.0)) / 3.18; // asinh(6 lum) / asinh(12)
+        vec3 photo = min(x * stretched / lum, 1.0);
+        col = col * absorb + mix(photo, vec3(stretched), 0.5 * smoothstep(0.55, 1.0, stretched)); // highlights pale
         col += vec3(1.0, 0.92, 0.85) * brightStar(pts, 180.0, u_time); // foreground stars, in our own galaxy
         col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0;
         gl_FragColor = vec4(col, 1.0);
