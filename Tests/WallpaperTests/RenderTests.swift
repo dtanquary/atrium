@@ -8,7 +8,7 @@ import UniformTypeIdentifiers
 /// Fails if a scene comes out as one flat colour (e.g. a shader that didn't compile).
 ///
 ///     swift test                                                  # all scenes → $TMPDIR/wallpaper-snapshots
-///     SNAPSHOT_SCENE="Night Sky" SNAPSHOT_SECONDS=20 swift test   # one scene, further into its animation
+///     SNAPSHOT_SCENE="Live Sky" SNAPSHOT_SECONDS=20 swift test   # one scene, further into its animation
 ///     SNAPSHOT_DEFAULTS="gradient.ribbons=1,gradient.previewTime=1" swift test  # with Settings values
 ///     SNAPSHOT_APPEARANCE=light swift test                                      # in Light Mode
 ///

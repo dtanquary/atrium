@@ -1,12 +1,12 @@
 import SpriteKit
 import simd
 
-@MainActor func nightSky(size: CGSize) -> SKScene { NightSky(size: size) }
+@MainActor func liveSky(size: CGSize) -> SKScene { LiveSky(size: size) }
 
 /// The real sky above you right now, facing the equator: stars, Milky Way, constellations, planets, the Moon in
 /// its true phase, the ISS, and the odd meteor. It stays a night sky but reacts to the Sun: deep blue by day with
 /// only the brightest stars and planets, the Sun drawn when it's in view, and sunrise and sunset glow on time.
-final class NightSky: SKScene {
+final class LiveSky: SKScene {
     nonisolated static let knobs = [
         Knob(key: "sky.constellations", label: "Constellation lines", range: 0...1, standard: 1, section: "Show",
              format: .toggle),

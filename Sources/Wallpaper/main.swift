@@ -30,6 +30,8 @@ final class WallpaperView: SKView {
 }
 
 var windows: [NSWindow] = []
+// ponytail: carries over a selection saved before Night Sky became Live Sky; drop after a while
+if UserDefaults.standard.string(forKey: "scene") == "Night Sky" { UserDefaults.standard.set("Live Sky", forKey: "scene") }
 var current = UserDefaults.standard.string(forKey: "scene") ?? scenes[0].name
 
 @MainActor func currentScene(size: CGSize) -> SKScene {

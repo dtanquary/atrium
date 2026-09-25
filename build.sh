@@ -21,8 +21,8 @@ cat > "$APP/Contents/Info.plist" <<'EOF'
     <key>CFBundleName</key><string>Wallpaper</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>LSUIElement</key><true/>
-    <key>NSLocationUsageDescription</key><string>The Night Sky, Earth and Weather wallpapers show the sky and weather where you are.</string>
-    <key>NSLocationWhenInUseUsageDescription</key><string>The Night Sky, Earth and Weather wallpapers show the sky and weather where you are.</string>
+    <key>NSLocationUsageDescription</key><string>The Live Sky, Earth and Weather wallpapers show the sky and weather where you are.</string>
+    <key>NSLocationWhenInUseUsageDescription</key><string>The Live Sky, Earth and Weather wallpapers show the sky and weather where you are.</string>
 </dict>
 </plist>
 EOF

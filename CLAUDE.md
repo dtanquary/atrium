@@ -18,7 +18,7 @@ A menu bar app that plays animated wallpapers on macOS 27. Swift package plus Sp
 - `Sources/Wallpaper/main.swift`: the app host (one window per display, the menu, handling display changes).
 - `Scenes.swift`: the scene registry, in menu order, plus shared helpers `shaderScene`, `paint` and `resource`.
 - `Location.swift`: `Location.shared`, using CoreLocation with a fallback guessed from the time zone. The last fix is saved in UserDefaults.
-- One file per scene. `Shaders.swift` holds the full-screen shader scenes. `SkyMath.swift` and `ISS.swift` are shared by Night Sky and Earth from Orbit.
+- One file per scene. `Shaders.swift` holds the full-screen shader scenes. `SkyMath.swift` and `ISS.swift` are shared by Live Sky and Earth from Orbit.
 - `Sources/Wallpaper/Resources/`: data files (star catalogue, constellation lines, Earth textures). They're excluded from the target. `build.sh` copies them into the .app, and `resource(_:)` finds them there or in the source tree. Don't use `Bundle.module`.
 - `Tests/WallpaperTests/`: `RenderTests` renders every scene offscreen, and `SkyTests` checks the astronomy against JPL Horizons.
 
@@ -26,7 +26,7 @@ A menu bar app that plays animated wallpapers on macOS 27. Swift package plus Sp
 ```sh
 ./build.sh                    # release build → build/Wallpaper.app (ad-hoc signed, menu bar only)
 pkill -x Wallpaper; open build/Wallpaper.app
-defaults write com.dtanquary.wallpaper scene "Night Sky"   # pick a scene without the menu
+defaults write com.dtanquary.wallpaper scene "Live Sky"   # pick a scene without the menu
 swift test                    # renders every scene to $TMPDIR/wallpaper-snapshots and prints the cost per frame
 SNAPSHOT_SCENE="Aurora" SNAPSHOT_DIR=/some/dir SNAPSHOT_SECONDS=20 swift test
 SNAPSHOT_DEFAULTS="gradient.ribbons=1,gradient.previewTime=1" swift test   # snapshot with Settings values
