@@ -20,7 +20,8 @@ A menu bar app that plays animated wallpapers on macOS 27. Swift package plus Sp
 - `Location.swift`: `Location.shared`, using CoreLocation with a fallback guessed from the time zone. The last fix is saved in UserDefaults.
 - One file per scene. `Shaders.swift` holds the full-screen shader scenes. `SkyMath.swift` and `ISS.swift` are shared by Live Sky and Earth from Orbit.
 - `Sources/Wallpaper/Resources/`: data files (star catalogue, constellation lines, Earth textures). They're excluded from the target. `build.sh` copies them into the .app, and `resource(_:)` finds them there or in the source tree. Don't use `Bundle.module`.
-- `Tests/WallpaperTests/`: `RenderTests` renders every scene offscreen, and `SkyTests` checks the astronomy against JPL Horizons.
+- `Tests/WallpaperTests/`: `RenderTests` renders every scene offscreen, `SkyTests` checks the astronomy against JPL Horizons, and `WeatherTests` parses a real Open-Meteo reply.
+- `docs/`: one file per wallpaper (e.g. `docs/nebula.md`) covering how it works, its settings, cost, shortcuts, Dave's feedback and next ideas. `docs/README.md` indexes them and records Dave's overall direction. **Read the wallpaper's doc before changing it, and update the doc in the same commit.**
 
 ## Commands
 ```sh
