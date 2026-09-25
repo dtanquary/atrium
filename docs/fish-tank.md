@@ -14,7 +14,7 @@ Soft corals sway in the current, caustics ripple over the sand, and the mirror o
     - the `Species` enum: each fish's photos, size, speed, tail beat, spacing and haunt
     - `TankArt.photo`, which loads a cut-out at its on-screen size with an optional depth-of-field blur
     - the warp builders `swimWarps` and `swayWarps`
-  - `Sources/Atrium/Resources/reef-*.heic`: 43 photo cut-outs, HEIC with alpha, 2.5 MB in all.
+  - `Sources/Atrium/Resources/reef-*.heic`: 42 photo cut-outs, HEIC with alpha, 2.5 MB in all.
   - `Sources/Atrium/Resources/reef-credits.tsv`: each cut-out's subject, author, licence and source. Settings → About lists them, as CC BY requires.
 - **Entry:** `final class FishTank: SKScene`, registered as `{ FishTank(size: $0) }` in Scenes.swift (icon `fish.fill`, tint `.teal`).
 - **Kind:** photo cut-outs on SpriteKit sprites, graded by one shared shader, over two full-screen shaders for the water and the sand.
@@ -26,19 +26,20 @@ Layers, back to front, from the `Z` enum:
    - a saturated royal-blue back panel, brighter high up (`high` and `low`)
    - the lamp's pool of light, brightest mid-tank (`0.75 + 0.35·lamp`)
    - faint LED shimmer (caustics) and rays from the lamp array, fading downward
-   - the underside of the surface along the top: a mirror band streaked by drifting noise (a regular wave read as a zigzag), a bright waterline, and the dark lid above
+   - the underside of the surface along the top, a mirror: it reflects the lit water, so it's the same blue as `high` but about 1.2× brighter, crossed by thin, crisp ripple highlights (the caustic network squashed flat, `pts / (90, 9)`), with a soft line where it meets the water, a bright waterline, and the dark lid above. It starts at 94% of the height. A grey, blurry, noise-streaked band there read as muddy; Dave called it out.
    - dither
 2. **Sand** (`addSand`), all in its shader: white aragonite, warm white up front (`sandNear`) and going blue with distance (`sandFar`), with fine grain from `hash42`. Two caustic layers multiply the sand they land on rather than adding white, the way real light brightens it. They're bigger at the front and squashed by perspective (`pts.y * 2.6`), and the back edge melts into the back panel.
 3. **The reef** (`addReef`). Which cut-outs go where, their flips, and which island has the anemone all change with each load. It has four parts:
    - **back cluster:** about 55% scale, near the back edge of the sand, faded 35% toward the back panel and blurred 1.4 pt, like a camera's depth of field
    - **two islands** (`cluster`), at 14–24% and 76–86% across, leaving open sand between. Each one has:
      - a base rock: the live rock (`rock-1`) or the wide, low pile (`rock-4`); the back cluster uses the pile or the pale Porites boulder (`rock-6`)
-     - a different piece stacked on it toward the middle (often the tall, porous `rock-3`), so no island repeats a piece
-     - a branching Acropora on top
+     - a different piece stacked on it toward the middle (often the tall, porous `rock-3`), so no island repeats a piece. It settles into the rock below as far as it needs to (never below 30% of the base's height), so the island tops out at 0.36 × screen height above its base.
+     - a branching Acropora crowning the stacked rock's highest point
      - a toadstool leather coral on one shoulder
      - the anemone, or else a torch, hammer or candy cane coral, on the other shoulder
      - zoanthids on its face
      - a brain coral or a Porites head at its foot
+   - **sitting on the rock:** corals and the stacked rock are set on the rocks' real top edge. `TankArt.skyline` reads each rock's silhouette from its alpha: the highest solid pixel in each of 48 columns. `perch(x)` puts a coral on the highest rock surface at x, sunk 12 pt into it, or moves toward the island's middle until there is rock under it. Placing by fractions of the rock's bounding box let corals float over the irregular rocks; Dave spotted one.
    - **swaying:** the soft corals (toadstool, anemone, torch) sway with `swayWarps` at 0.03–0.05 strength and a 5–8 s period
    - **front corner:** one brain or zoanthid colony up against the glass in a front corner, sharp and big
 4. **Fish** (`addSchools`): nine schools, 38 fish in all:
@@ -104,7 +105,7 @@ None yet.
 - **Scene scaling:** `unit` is height/982, clamped to 0.8–1.8, so a bigger screen gets a bigger tank rather than smaller fish. `fishUnit` is `unit × 1.2`. `sandHeight` is 0.22 × height.
 - **Reef sizes** at `unit` 1: rock 440–520 pt wide, Acropora 320, toadstool 220, anemone 240, torch and hammer 210, zoanthids 110, brain 170. The front-corner colony is 230.
 - **`Lighting`** (FishTank.swift), for `day` and `actinic`:
-  - back panel `high` and `low`, `mirror`, `shimmer`
+  - back panel `high` and `low` (the surface mirror is `high` brightened), `shimmer`
   - sand `sandNear` and `sandFar`
   - photo `grade`: day (0.94, 0.98, 1.06), actinic (0.45, 0.52, 1.05)
   - `fluoro`: day 0.15, actinic 1.5
@@ -116,13 +117,14 @@ CPU 0.7 ms and GPU 1.45–1.5 ms per frame (release, 2x), in both looks. The GPU
 
 ## Gotchas and shortcuts
 - **Assets:** the cut-outs come from public domain, CC0 and CC BY photos (iNaturalist, Wikimedia Commons, NOAA). They were cut out with Vision's foreground mask, cleaned to their largest connected piece, resized (fish 480 px, corals 760, rock 900 at most) and saved as HEIC with alpha (about 8× smaller than PNG).
+  - `acropora-3`, a single staghorn branch lying diagonally, was dropped: its base sat at a corner of the image, not the bottom middle, so it floated wherever it landed.
   - `reef-rock-1`'s right edge had been cut straight by the photo frame. It was redrawn as a rounded edge that mirrors the rock's natural left profile, darkened toward the edge.
   - `rock-2` (a coralline nodule that read as a pink ball) was dropped.
   - `gramma-3` was left out: its Smithsonian "no known copyright restrictions" isn't formally public domain.
   - The originals and the tools (`cut.swift`, `process.py`) were in the research agent's scratch folder and aren't in the repo.
 - **Warp speed bug:** changing a node's `speed` every frame while `SKAction.animate(withWarps:)` runs on it makes SpriteKit steadily slower (1 ms up to 10 ms a frame within a minute). That's why fish step through warp frames by hand in `pose`. The coral sway uses warp actions only because its speed never changes. This is also noted in CLAUDE.md.
 - `ponytail:` O(n²) boids within a school, fine up to a few dozen fish per school. Use a spatial grid, like Murmuration, if schools grow.
-- **Rock:** no permissively licensed photo of coralline-covered live rock exists besides `rock-1`, so `rock-3`, `rock-4` and `rock-6` are bare dry reef rock and a bleached Porites head. `coralline.py` (in the research scratch folder, not the repo) removed each photo's colour cast and painted muted pink, purple and green coralline patches onto them, in colours sampled from `rock-1`. The credits note the change, as CC BY asks. A first pass at full strength read as camouflage paint; the patches are now 70% toward the grey stone and cover about a third of it. There's still no tall pillar or arch.
+- **Rock:** no permissively licensed photo of coralline-covered live rock exists besides `rock-1`, so `rock-3`, `rock-4` and `rock-6` are bare dry reef rock and a bleached Porites head. `coralline.py` (in the research scratch folder, not the repo) removed each photo's colour cast and painted muted pink, purple and green coralline patches onto them, in colours sampled from `rock-1`. The credits note the change, as CC BY asks. A first pass at full strength read as camouflage paint; the patches are now 70% toward the grey stone and cover about a third of it. `rock-3` and `rock-4` are toned to 0.78 and 0.88 of the live rock's mid-grey, since at full brightness they looked bleached beside it. There's still no tall pillar or arch.
 - The shaders use `u_time`, which doesn't advance in the render test, so caustics look frozen in snapshots. Fish and corals do move.
 
 ## Dave's feedback and decisions
@@ -139,6 +141,7 @@ CPU 0.7 ms and GPU 1.45–1.5 ms per frame (release, 2x), in both looks. The GPU
   - **bright and lush** lighting
 
   This rebuild is the result, with daylight in Light Mode and actinic blue in Dark Mode.
+- On the rebuild: "looking much better", but a reef stick floated attached to nothing in the top left, and the top of the tank looked muddy. The stick was the staghorn fragment; the fix was setting corals on the rocks' real silhouettes. The top became a bright mirror of the water with crisp ripple lines.
 
 ## Ideas / next steps
 - Rare visitors: a cleaner shrimp on the rock, a snail on the glass.

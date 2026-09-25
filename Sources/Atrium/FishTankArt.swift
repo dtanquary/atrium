@@ -97,6 +97,22 @@ enum TankArt {
         return (texture, size)
     }
 
+    /// The top edge of a cut-out: for each of `samples` columns from left to right, the height of its highest solid
+    /// pixel as a fraction of the image's height (0 where the column is empty). For setting things on a rock.
+    static func skyline(_ name: String, samples: Int = 48) -> [CGFloat] {
+        guard let image = NSImage(contentsOf: resource(name + ".heic"))?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        else { return [] }
+        let rows = max(8, samples * image.height / max(image.width, 1))
+        var alpha = [UInt8](repeating: 0, count: samples * rows)
+        guard let ctx = CGContext(data: &alpha, width: samples, height: rows, bitsPerComponent: 8, bytesPerRow: samples,
+                                  space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.alphaOnly.rawValue)
+        else { return [] }
+        ctx.draw(image, in: CGRect(x: 0, y: 0, width: samples, height: rows))
+        return (0..<samples).map { x in // the bitmap's first row is the image's top
+            (0..<rows).first { alpha[$0 * samples + x] > 128 }.map { CGFloat(rows - $0) / CGFloat(rows) } ?? 0
+        }
+    }
+
     private static let imaging = CIContext()
 
     private static func blurred(_ image: CGImage, sigma: CGFloat) -> CGImage? {
