@@ -1,6 +1,6 @@
-# Animated macOS Wallpapers
+# Atrium
 
-A menu bar app that plays animated wallpapers on macOS 27. Swift package plus SpriteKit: no Xcode project, no dependencies.
+Atrium is a menu bar app that plays animated wallpapers on macOS 27. Swift package plus SpriteKit: no Xcode project, no dependencies.
 
 ## How it works
 - macOS has no public API for third-party live wallpapers. Instead, each display gets a borderless `NSWindow` at `CGWindowLevelForKey(.desktopWindow)`. That puts it above the system wallpaper and below the desktop icons, on every Space, and it ignores the mouse. Only public AppKit APIs are used: no private frameworks, no changes to system files, no SIP changes. Keep it that way.
@@ -11,24 +11,24 @@ A menu bar app that plays animated wallpapers on macOS 27. Swift package plus Sp
   - `knobs`: sliders, or switches with `format: .toggle`, grouped by `section`. A knob can depend on a switch with `shownWhen`.
   - `palettes`: a `PaletteChoice` of named swatches. The pick is stored by name, and an empty value means Random.
 
-  Knobs are stored in UserDefaults. Live scenes read `knob.value` and observe `UserDefaults.didChangeNotification` to feed their shader uniforms (see `FlowingGradient` and `LavaLamp`). A new palette pick rebuilds the scene if it's on the desktop. To tune, read the values back with `defaults read com.dtanquary.wallpaper`.
+  Knobs are stored in UserDefaults. Live scenes read `knob.value` and observe `UserDefaults.didChangeNotification` to feed their shader uniforms (see `FlowingGradient` and `LavaLamp`). A new palette pick rebuilds the scene if it's on the desktop. To tune, read the values back with `defaults read com.dtanquary.atrium`.
 - Known seams: the lock screen, and the tint of the menu bar and windows, still come from the system wallpaper.
 
 ## Layout
-- `Sources/Wallpaper/main.swift`: the app host (one window per display, the menu, handling display changes).
+- `Sources/Atrium/main.swift`: the app host (one window per display, the menu, handling display changes).
 - `Scenes.swift`: the scene registry, in menu order, plus shared helpers `shaderScene`, `paint` and `resource`.
 - `Location.swift`: `Location.shared`, using CoreLocation with a fallback guessed from the time zone. The last fix is saved in UserDefaults.
 - One file per scene. `Shaders.swift` holds the full-screen shader scenes. `SkyMath.swift` and `ISS.swift` are shared by Live Sky and Earth from Orbit.
-- `Sources/Wallpaper/Resources/`: data files (star catalogue, constellation lines, Earth textures). They're excluded from the target. `build.sh` copies them into the .app, and `resource(_:)` finds them there or in the source tree. Don't use `Bundle.module`.
-- `Tests/WallpaperTests/`: `RenderTests` renders every scene offscreen, `SkyTests` checks the astronomy against JPL Horizons, and `WeatherTests` parses a real Open-Meteo reply.
+- `Sources/Atrium/Resources/`: data files (star catalogue, constellation lines, Earth textures). They're excluded from the target. `build.sh` copies them into the .app, and `resource(_:)` finds them there or in the source tree. Don't use `Bundle.module`.
+- `Tests/AtriumTests/`: `RenderTests` renders every scene offscreen, `SkyTests` checks the astronomy against JPL Horizons, and `WeatherTests` parses a real Open-Meteo reply.
 - `docs/`: one file per wallpaper (e.g. `docs/nebula.md`) covering how it works, its settings, cost, shortcuts, Dave's feedback and next ideas. `docs/README.md` indexes them and records Dave's overall direction. **Read the wallpaper's doc before changing it, and update the doc in the same commit.**
 
 ## Commands
 ```sh
-./build.sh                    # release build → build/Wallpaper.app (ad-hoc signed, menu bar only)
-pkill -x Wallpaper; open build/Wallpaper.app
-defaults write com.dtanquary.wallpaper scene "Live Sky"   # pick a scene without the menu
-swift test                    # renders every scene to $TMPDIR/wallpaper-snapshots and prints the cost per frame
+./build.sh                    # release build → build/Atrium.app (ad-hoc signed, menu bar only)
+pkill -x Atrium; open build/Atrium.app
+defaults write com.dtanquary.atrium scene "Live Sky"   # pick a scene without the menu
+swift test                    # renders every scene to $TMPDIR/atrium-snapshots and prints the cost per frame
 SNAPSHOT_SCENE="Aurora" SNAPSHOT_DIR=/some/dir SNAPSHOT_SECONDS=20 swift test
 SNAPSHOT_DEFAULTS="gradient.ribbons=1,gradient.previewTime=1" swift test   # snapshot with Settings values
 ```
@@ -57,5 +57,5 @@ SNAPSHOT_DEFAULTS="gradient.ribbons=1,gradient.previewTime=1" swift test   # sna
 
 ## Git and deploying
 - **Commit early and often.** One logical change per commit, made as soon as it builds and `swift test` passes. Don't bundle unrelated work together.
-- **Redeploy as work lands.** After each working change, run `./build.sh` and relaunch (`pkill -x Wallpaper; open build/Wallpaper.app`) so Dave can try it from the menu bar. Tell him what to test.
+- **Redeploy as work lands.** After each working change, run `./build.sh` and relaunch (`pkill -x Atrium; open build/Atrium.app`) so Dave can try it from the menu bar. Tell him what to test.
 - Messages: a plain-English imperative subject that says what changed and why, e.g. "Pause rendering while the wallpaper is covered".

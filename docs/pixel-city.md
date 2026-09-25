@@ -2,7 +2,7 @@
 
 A pixel-art skyline that follows the real Sun and clock. The sky moves through dawn, day, dusk and night, with the Sun and Moon in their real places and stars after dark. Windows light up and go dark through the evening, cars and buses run in both lanes (with headlights at night), a beacon blinks on the tallest tower, and the odd plane crosses.
 
-- **Files:** `Sources/Wallpaper/PixelCity.swift`, which holds everything: the scene, the `Pixels` canvas, sprite art as strings, `SeededRandom`, and its own low-precision `skyPosition()` for the Sun. It reads `Location.swift` ([live-sky.md](live-sky.md)).
+- **Files:** `Sources/Atrium/PixelCity.swift`, which holds everything: the scene, the `Pixels` canvas, sprite art as strings, `SeededRandom`, and its own low-precision `skyPosition()` for the Sun. It reads `Location.swift` ([live-sky.md](live-sky.md)).
 - **Entry:** `pixelCity(size:)` builds `final class PixelCity: SKScene`, whose `init(size:at:)` is the test seam (a fixed `Date`). Its entry in Scenes.swift is "Pixel City", icon `building.2.fill`, tint `.pink`, with no settings.
 - **Kind:** SpriteKit on a low-resolution canvas. One backdrop texture is repainted every 30 s, and sprites for the moving things all sit under a `canvas` node scaled up by the pixel size. Every texture uses `.nearest` filtering, so it stays crisp.
 

@@ -3,7 +3,7 @@
 A starling murmuration at sunset: thousands of tiny dark birds swirling as one shape-shifting cloud over a low treeline and reeds, thickening and thinning as the flock folds in depth. An unseen falcon dives through every 26 seconds and the flock bursts apart around it.
 
 - **Files:**
-  - `Sources/Wallpaper/Murmuration.swift`: the `Murmuration` scene
+  - `Sources/Atrium/Murmuration.swift`: the `Murmuration` scene
   - `Fireflies.swift`: the shared helpers it uses (`backdrop`, `treeline`, `grassFringe`, `radialGlow`, `frameTime`, `rgb`)
 - **Entry:** `@MainActor func murmuration(size:)`, which returns `final class Murmuration: SKScene`. Registry entry: icon `bird.fill`, tint `.brown`.
 - **Kind:** SpriteKit sprites, with a 3D boids simulation on the CPU every frame.

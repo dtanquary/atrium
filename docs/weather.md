@@ -2,7 +2,7 @@
 
 Three ranges of rolling hills with pines and round trees, under whatever the weather is doing where the viewer is right now: clear, partly cloudy, overcast, fog, drizzle, rain, snow or a thunderstorm, by day or by night.
 
-- **Files:** `Sources/Wallpaper/Weather.swift`. It holds the scene, the WMO code → `Kind` mapping, `Palette`, and a seeded random number generator. It also uses `SkyMath.swift` (for whether the Sun is up) and `Location.swift`; see [live-sky.md](live-sky.md). There's a test in `Tests/WallpaperTests/WeatherTests.swift`.
+- **Files:** `Sources/Atrium/Weather.swift`. It holds the scene, the WMO code → `Kind` mapping, `Palette`, and a seeded random number generator. It also uses `SkyMath.swift` (for whether the Sun is up) and `Location.swift`; see [live-sky.md](live-sky.md). There's a test in `Tests/AtriumTests/WeatherTests.swift`.
 - **Entry:** `weather(size:)` builds `final class WeatherScene: SKScene`, whose `init(size:conditions:)` is the test seam. Its entry in Scenes.swift is "Weather", icon `cloud.sun.fill`, tint `.blue`, with no settings.
 - **Kind:** SpriteKit nodes and Core Graphics textures: a gradient sky, painted clouds and hills, and emitters for rain and snow.
 

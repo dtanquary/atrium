@@ -3,7 +3,7 @@
 A campfire in a forest clearing at night: flickering flames over a teepee of logs and glowing coals inside a stone ring, embers floating up, faint smoke, a fallen log to sit on, and a warm light on the ground under a starry sky framed by tall pines.
 
 - **Files:**
-  - `Sources/Wallpaper/Campfire.swift`: the `Campfire` scene
+  - `Sources/Atrium/Campfire.swift`: the `Campfire` scene
   - `Fireflies.swift`: the shared helpers it uses (`backdrop`, `treeline`, `verticalGradient`, `radialGlow`, `softDot`, `pine`, `frameTime`, `rgb`)
 - **Entry:** `@MainActor func campfire(size:)`, which returns `final class Campfire: SKScene`. Registry entry: icon `flame.fill`, tint `.red`.
 - **Kind:** SpriteKit. Painted Core Graphics props plus four `SKEmitterNode`s; the flicker is set in `update(_:)`.

@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 import simd
-@testable import Wallpaper
+@testable import Atrium
 
 private let newYear2026 = 2461041.5 // 2026-01-01 00:00 UTC
 

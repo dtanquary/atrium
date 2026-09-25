@@ -2,7 +2,7 @@
 
 Seven big, soft pools of colour drift and melt into each other with no visible edges. Two silk ribbons of light fold through them, under a fine film grain. The mood follows the real Sun. In Dark Mode the pools glow like coloured light; in Light Mode they're watercolour washes on pale paper. Dave's second-favourite wallpaper.
 
-- **Files:** `Sources/Wallpaper/FlowingGradient.swift` holds everything: knobs, palettes, `pastel`, and the shader source. The noise helpers come from `shaderCommon` in Shaders.swift.
+- **Files:** `Sources/Atrium/FlowingGradient.swift` holds everything: knobs, palettes, `pastel`, and the shader source. The noise helpers come from `shaderCommon` in Shaders.swift.
 - **Entry:** `flowingGradient(size:)` returns `final class FlowingGradient: SKScene`. Its registry entry in Scenes.swift has icon `swirl.circle.righthalf.filled`, tint `.indigo`, `knobs: FlowingGradient.knobs`, and palettes `PaletteChoice(key: "gradient.palette", options: FlowingGradient.paletteOptions, standard: "Midnight")`.
 - **Kind:** a full-screen SKShader on one sprite, with a subclass so it can hold live uniforms.
 
@@ -99,7 +99,7 @@ CPU 0.47 ms and GPU 0.55 ms per frame (release, 2x), one of the cheapest scenes.
 - Breathing: a slow brightness swell over about 60 s.
 - Cursor parallax: layers shift slightly with the mouse (clicks still pass through). Optional, since Dave chose ambient-only early on.
 - A Nebula-style unique roll: randomised drift paths per load, or a slow palette cycle.
-- Once Dave settles on slider values, read them with `defaults read com.dtanquary.wallpaper` and bake them in as the new defaults.
+- Once Dave settles on slider values, read them with `defaults read com.dtanquary.atrium` and bake them in as the new defaults.
 
 ## Checking it
 ```sh

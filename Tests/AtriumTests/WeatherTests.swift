@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-@testable import Wallpaper
+@testable import Atrium
 
 /// A real Open-Meteo reply parses. A snake-case decoding strategy once turned wind_speed_10m into windSpeed10M,
 /// which silently dropped every live update and left the scene on its default.

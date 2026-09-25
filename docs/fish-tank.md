@@ -3,8 +3,8 @@
 A planted tank seen through the glass. Five species of shaded fish school at different depths among swaying plants, rocks, driftwood and an anemone. Caustics ripple over the sand, sun shafts sway down from a shimmering surface, and an airstone sends up bubbles.
 
 - **Files:**
-  - `Sources/Wallpaper/FishTank.swift` holds the scene: layers, schooling, the water, sand and caustics shaders, bubbles, marine snow and the vignette.
-  - `Sources/Wallpaper/FishTankArt.swift` holds the `Species` enum (per-species numbers) and `TankArt`, which paints the fish, plants, rocks, driftwood, sand, far rocks and bubbles with Core Graphics. It also holds the warp-frame builders `swimWarps` and `swayWarps`.
+  - `Sources/Atrium/FishTank.swift` holds the scene: layers, schooling, the water, sand and caustics shaders, bubbles, marine snow and the vignette.
+  - `Sources/Atrium/FishTankArt.swift` holds the `Species` enum (per-species numbers) and `TankArt`, which paints the fish, plants, rocks, driftwood, sand, far rocks and bubbles with Core Graphics. It also holds the warp-frame builders `swimWarps` and `swayWarps`.
 - **Entry:** `final class FishTank: SKScene`, registered as `{ FishTank(size: $0) }` in Scenes.swift (icon `fish.fill`, tint `.teal`).
 - **Kind:** hybrid. SpriteKit sprites painted in code, plus two SKShaders: the full-screen water and the sand.
 - **Shared helpers:** `frameTime`, `rgb`, `mixRGB` and `softDot` live in Fireflies.swift as module-level functions. Moving or renaming them breaks this scene.

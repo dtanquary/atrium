@@ -2,7 +2,7 @@
 
 Full-screen view inside a lava lamp. Glowing jewel-tone wax heats in a molten pool at the bottom, rises as stretched teardrops that pinch off on thin necks, slumps wide at the top and sinks back. The liquid is lit from below by a bulb. It follows Light/Dark Mode.
 
-- **Files:** `Sources/Wallpaper/LavaLamp.swift` holds the knobs, palettes, colour cycling and shader source. Noise and `hash11` come from `shaderCommon` in Shaders.swift.
+- **Files:** `Sources/Atrium/LavaLamp.swift` holds the knobs, palettes, colour cycling and shader source. Noise and `hash11` come from `shaderCommon` in Shaders.swift.
 - **Entry:** `lavaLamp(size:)` returns `final class LavaLamp: SKScene`. Its registry entry in Scenes.swift has icon `lamp.table.fill`, tint `.orange`, `knobs: LavaLamp.knobs`, and palettes `PaletteChoice(key: "lava.palette", ...)`. The swatches are liquid-lit to wax-hot, `[3]` and `[1]`. The standard is "", meaning Random.
 - **Kind:** a full-screen SKShader (metaballs), in a subclass with live uniforms.
 

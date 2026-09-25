@@ -2,7 +2,7 @@
 
 Green curtains of northern lights, fading up into violet with fine vertical rays, folding slowly over a jagged mountain range and snowy foreground drifts under twinkling stars.
 
-- **Files:** `Sources/Wallpaper/Shaders.swift`. `aurora(size:)` holds the whole shader. It uses the `shaderCommon` helpers `noise`, `hash21` and `starField(pts, cell, density, t)`.
+- **Files:** `Sources/Atrium/Shaders.swift`. `aurora(size:)` holds the whole shader. It uses the `shaderCommon` helpers `noise`, `hash21` and `starField(pts, cell, density, t)`.
 - **Entry:** `@MainActor func aurora(size:)`, which returns `shaderScene(size:source:)`. Registry entry: icon `wind`, tint `.green`.
 - **Kind:** a single full-screen SKShader driven by `u_time`. There is no Swift-side state.
 

@@ -3,12 +3,12 @@
 The real sky above the viewer right now, looking toward the equator: about 2,900 stars, the Milky Way, constellation lines, the five naked-eye planets, the Moon in its true phase and tilt, the ISS when it's overhead and sunlit, and an occasional meteor, above a treeline. It stays a night sky, but it reacts to the Sun: deep blue by day with only the brightest objects, the Sun drawn when it's in view, and sunrise and sunset glow at their real times.
 
 - **Files:**
-  - `Sources/Wallpaper/LiveSky.swift`: the scene.
-  - `Sources/Wallpaper/SkyMath.swift`: `enum Sky`, the positional astronomy. Shared with Earth from Orbit, Weather and Flowing Gradient.
-  - `Sources/Wallpaper/Location.swift`: `Location.shared`, the viewer's position. Shared with every live scene.
-  - `Sources/Wallpaper/ISS.swift`: see [earth-from-orbit.md](earth-from-orbit.md).
-  - `Sources/Wallpaper/Resources/stars.txt` and `constellations.txt`.
-  - `Tests/WallpaperTests/SkyTests.swift`.
+  - `Sources/Atrium/LiveSky.swift`: the scene.
+  - `Sources/Atrium/SkyMath.swift`: `enum Sky`, the positional astronomy. Shared with Earth from Orbit, Weather and Flowing Gradient.
+  - `Sources/Atrium/Location.swift`: `Location.shared`, the viewer's position. Shared with every live scene.
+  - `Sources/Atrium/ISS.swift`: see [earth-from-orbit.md](earth-from-orbit.md).
+  - `Sources/Atrium/Resources/stars.txt` and `constellations.txt`.
+  - `Tests/AtriumTests/SkyTests.swift`.
 - **Entry:** `liveSky(size:)` builds `final class LiveSky: SKScene`. Its entry in Scenes.swift is "Live Sky", icon `moon.stars.fill`, tint `.blue`, `knobs: LiveSky.knobs`.
 - **Kind:** hybrid. The background and the Moon are SKShaders; stars, planets, the Sun, the ISS, labels and meteors are sprites; the ground is a Core Graphics texture.
 

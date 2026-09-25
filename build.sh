@@ -1,24 +1,24 @@
 #!/bin/sh
-# Builds build/Wallpaper.app, a menu-bar-only app. Run it with: open build/Wallpaper.app
+# Builds build/Atrium.app, a menu-bar-only app. Run it with: open build/Atrium.app
 set -e
 cd "$(dirname "$0")"
 
 swift build -c release
 
-APP=build/Wallpaper.app
+APP=build/Atrium.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp .build/release/Wallpaper "$APP/Contents/MacOS/"
-cp -R Sources/Wallpaper/Resources/ "$APP/Contents/Resources/"
+cp .build/release/Atrium "$APP/Contents/MacOS/"
+cp -R Sources/Atrium/Resources/ "$APP/Contents/Resources/"
 rm -f "$APP/Contents/Resources/.gitkeep"
 cat > "$APP/Contents/Info.plist" <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleExecutable</key><string>Wallpaper</string>
-    <key>CFBundleIdentifier</key><string>com.dtanquary.wallpaper</string>
-    <key>CFBundleName</key><string>Wallpaper</string>
+    <key>CFBundleExecutable</key><string>Atrium</string>
+    <key>CFBundleIdentifier</key><string>com.dtanquary.atrium</string>
+    <key>CFBundleName</key><string>Atrium</string>
     <key>CFBundleShortVersionString</key><string>0.1.0</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>LSUIElement</key><true/>

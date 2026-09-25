@@ -2,7 +2,7 @@
 
 Conway's Game of Life on a board that wraps at the edges, drawn as soft rounded cells glowing in pastel colours that drift across the screen and slowly shift. Births bloom in, deaths leave a fading trail, and when the board stalls, fresh patches of random cells are dropped in, so it never dies out.
 
-- **Files:** `Sources/Wallpaper/GameOfLife.swift` holds the `GameOfLife` scene and its `cellShader`. `frameTime` comes from Fireflies.swift.
+- **Files:** `Sources/Atrium/GameOfLife.swift` holds the `GameOfLife` scene and its `cellShader`. `frameTime` comes from Fireflies.swift.
 - **Entry:** `@MainActor func gameOfLife(size:)`, which returns `final class GameOfLife: SKScene`. Registry entry: icon `square.grid.3x3.fill`, tint `.orange`.
 - **Kind:** a simulation on the CPU, feeding an `SKMutableTexture` with one texel per cell and nearest filtering. A shader on one full-screen sprite draws the cell shapes and colour.
 

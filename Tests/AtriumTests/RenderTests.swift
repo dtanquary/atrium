@@ -2,12 +2,12 @@ import Metal
 import SpriteKit
 import Testing
 import UniformTypeIdentifiers
-@testable import Wallpaper
+@testable import Atrium
 
 /// Renders every wallpaper offscreen at Retina size, saves a PNG to look at, and prints what a frame costs.
 /// Fails if a scene comes out as one flat colour (e.g. a shader that didn't compile).
 ///
-///     swift test                                                  # all scenes → $TMPDIR/wallpaper-snapshots
+///     swift test                                                  # all scenes → $TMPDIR/atrium-snapshots
 ///     SNAPSHOT_SCENE="Live Sky" SNAPSHOT_SECONDS=20 swift test   # one scene, further into its animation
 ///     SNAPSHOT_DEFAULTS="gradient.ribbons=1,gradient.previewTime=1" swift test  # with Settings values
 ///     SNAPSHOT_APPEARANCE=light swift test                                      # in Light Mode
@@ -15,7 +15,7 @@ import UniformTypeIdentifiers
 /// Only sceneDidLoad/init content shows up here: SKRenderer never calls didMove(to:).
 @MainActor @Test func everySceneRenders() throws {
     let env = ProcessInfo.processInfo.environment
-    let dir = URL(fileURLWithPath: env["SNAPSHOT_DIR"] ?? NSTemporaryDirectory() + "wallpaper-snapshots")
+    let dir = URL(fileURLWithPath: env["SNAPSHOT_DIR"] ?? NSTemporaryDirectory() + "atrium-snapshots")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     let seconds = Double(env["SNAPSHOT_SECONDS"] ?? "") ?? 4
     if let look = env["SNAPSHOT_APPEARANCE"] { NSApplication.shared.appearance = NSAppearance(named: look == "light" ? .aqua : .darkAqua) }

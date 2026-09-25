@@ -30,7 +30,11 @@ final class WallpaperView: SKView {
 }
 
 var windows: [NSWindow] = []
-// ponytail: carries over a selection saved before Night Sky became Live Sky; drop after a while
+// ponytail: one-off moves of settings saved before the app became Atrium and Night Sky became Live Sky; drop after a while
+if UserDefaults.standard.object(forKey: "scene") == nil,
+   let old = UserDefaults.standard.persistentDomain(forName: "com.dtanquary.wallpaper") {
+    for (key, value) in old { UserDefaults.standard.set(value, forKey: key) }
+}
 if UserDefaults.standard.string(forKey: "scene") == "Night Sky" { UserDefaults.standard.set("Live Sky", forKey: "scene") }
 var current = UserDefaults.standard.string(forKey: "scene") ?? scenes[0].name
 
@@ -96,7 +100,7 @@ var current = UserDefaults.standard.string(forKey: "scene") ?? scenes[0].name
         window.setContentSize(NSSize(width: 820, height: 640))
         window.styleMask.insert(.fullSizeContentView) // sidebar runs up under the title bar, like System Settings
         window.titlebarAppearsTransparent = true
-        window.title = "Wallpapers"
+        window.title = "Atrium"
         window.level = .floating // stays above other windows while you watch the wallpaper change
         window.isReleasedWhenClosed = false
         return window
@@ -104,7 +108,7 @@ var current = UserDefaults.standard.string(forKey: "scene") ?? scenes[0].name
 
     override init() {
         super.init()
-        item.button?.image = NSImage(systemSymbolName: "sparkles.tv", accessibilityDescription: "Animated wallpaper")
+        item.button?.image = NSImage(systemSymbolName: "sparkles.tv", accessibilityDescription: "Atrium")
         item.menu = NSMenu()
         item.menu?.delegate = self
     }

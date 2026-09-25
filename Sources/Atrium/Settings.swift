@@ -86,7 +86,7 @@ struct IconTile: View {
 struct AboutPage: View {
     static let tag = "About" // sidebar selection; can't clash with a wallpaper name
 
-    private let name = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "Wallpaper"
+    private let name = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "Atrium"
     private let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
 
     var body: some View {

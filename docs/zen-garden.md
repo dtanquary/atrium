@@ -2,7 +2,7 @@
 
 A karesansui (Japanese dry garden) seen from above: pale raked sand with grooves lit by a low sun, concentric rings around five mossy stones, and a wooden rake that slowly works across the garden stroke by stroke, leaving a new pattern behind it.
 
-- **Files:** `Sources/Wallpaper/ZenGarden.swift`.
+- **Files:** `Sources/Atrium/ZenGarden.swift`.
   - `ZenGarden`: the scene, the rake motion, and the painted stones and rake.
   - `sandShader`: the sand shader, as its own GLSL with its own `hash` and `noise`, not `shaderCommon`.
   - `frameTime` comes from Fireflies.swift.

@@ -1,4 +1,4 @@
-# Animated Wallpapers for macOS
+# Atrium
 
 Living, animated desktop wallpapers for macOS: a sunlit fish tank, drifting nebulae, a lava lamp, the real sky above you right now, Earth from orbit with the live ISS, your local weather, and more. It's a small menu bar app written in Swift and SpriteKit, with no dependencies.
 
@@ -28,9 +28,9 @@ Known limits: the lock screen, and the tint of the menu bar and windows, still c
 
 ```sh
 git clone <this repo's URL>
-cd <repo folder>
-./build.sh                 # release build → build/Wallpaper.app
-open build/Wallpaper.app
+cd atrium
+./build.sh                 # release build → build/Atrium.app
+open build/Atrium.app
 ```
 
 `build.sh` runs `swift build -c release`, wraps the binary in a menu-bar-only `.app` (no Dock icon), copies in the data files, and signs it ad hoc for your own Mac. Move the app into `/Applications` if you like.
@@ -41,7 +41,7 @@ Once it's running, use the ✨📺 icon in the menu bar to:
 - Turn on **Open at Login**. macOS may ask you to approve it in System Settings → General → Login Items.
 - **Quit**.
 
-To rebuild after pulling changes: `./build.sh && pkill -x Wallpaper; open build/Wallpaper.app`
+To rebuild after pulling changes: `./build.sh && pkill -x Atrium; open build/Atrium.app`
 
 ### Permissions and network
 
@@ -80,9 +80,9 @@ SNAPSHOT_DEFAULTS="gradient.palette=Sunset" SNAPSHOT_APPEARANCE=light swift test
 ```
 
 - **Tests.** The render test fails if a scene comes out as one flat colour, for example a shader that didn't compile. The astronomy is checked against JPL Horizons, and the weather parser against a real Open-Meteo reply.
-- **Adding a wallpaper:** create a file that returns an `SKScene` and add a `Wallpaper` entry in `Sources/Wallpaper/Scenes.swift`. Its settings are plain data on that entry. [`CLAUDE.md`](CLAUDE.md) covers the scene contract, the ~2 ms per-frame budget, and SpriteKit and shader pitfalls.
+- **Adding a wallpaper:** create a file that returns an `SKScene` and add a `Wallpaper` entry in `Sources/Atrium/Scenes.swift`. Its settings are plain data on that entry. [`CLAUDE.md`](CLAUDE.md) covers the scene contract, the ~2 ms per-frame budget, and SpriteKit and shader pitfalls.
 - **Layout:**
-  - `Sources/Wallpaper/main.swift`: the app host (windows, menu, power and appearance handling)
+  - `Sources/Atrium/main.swift`: the app host (windows, menu, power and appearance handling)
   - `Scenes.swift`: the wallpaper list and shared helpers
   - `Settings.swift`: the Settings window
   - one file per wallpaper
@@ -93,7 +93,7 @@ SNAPSHOT_DEFAULTS="gradient.palette=Sunset" SNAPSHOT_APPEARANCE=light swift test
 - Weather data by [Open-Meteo.com](https://open-meteo.com), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 - ISS positions from the [Where the ISS at?](https://wheretheiss.at) API.
 - Stars from the Yale Bright Star Catalogue, 5th edition (Hoffleit & Warren, CDS V/50), public domain.
-- Constellation lines from [d3-celestial](https://github.com/ofrohn/d3-celestial) by Olaf Frohn, BSD 3-Clause. Its notice is kept in `Sources/Wallpaper/Resources/constellations.txt`.
+- Constellation lines from [d3-celestial](https://github.com/ofrohn/d3-celestial) by Olaf Frohn, BSD 3-Clause. Its notice is kept in `Sources/Atrium/Resources/constellations.txt`.
 - Earth imagery from NASA's Blue Marble and Black Marble, public domain.
 - Planet positions from JPL's [Approximate Positions of the Planets](https://ssd.jpl.nasa.gov/planets/approx_pos.html).
 

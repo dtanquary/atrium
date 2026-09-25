@@ -3,9 +3,9 @@
 The whole Earth seen from high above the viewer's own location, like a geostationary satellite parked overhead, set against a still starfield. It shows the real line between day and night, city lights on the night side, sun glint on the oceans, a lit edge of atmosphere, and the ISS at its live position with its orbit ring.
 
 - **Files:**
-  - `Sources/Wallpaper/EarthFromOrbit.swift`: the scene.
-  - `Sources/Wallpaper/ISS.swift`: `ISS.shared`, the live position, shared with [Live Sky](live-sky.md).
-  - `Sources/Wallpaper/Resources/earth-day.jpg` (486 KB) and `earth-night.jpg` (263 KB), both about 2048×1024.
+  - `Sources/Atrium/EarthFromOrbit.swift`: the scene.
+  - `Sources/Atrium/ISS.swift`: `ISS.shared`, the live position, shared with [Live Sky](live-sky.md).
+  - `Sources/Atrium/Resources/earth-day.jpg` (486 KB) and `earth-night.jpg` (263 KB), both about 2048×1024.
   - Astronomy comes from `SkyMath.swift` and location from `Location.swift`; see [live-sky.md](live-sky.md).
 - **Entry:** `earthFromOrbit(size:)` builds `final class EarthFromOrbit: SKScene`. Its entry in Scenes.swift is "Earth from Orbit", icon `globe.americas.fill`, tint `.cyan`, `knobs: EarthFromOrbit.knobs`.
 - **Kind:** hybrid. The globe is one sprite with an SKShader sampling two textures; the stars, ISS marker, label and orbit ring are nodes.

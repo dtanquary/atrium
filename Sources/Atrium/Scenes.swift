@@ -78,7 +78,7 @@ func paint(_ size: CGSize, _ draw: (CGContext) -> Void) -> SKTexture {
     return SKTexture(cgImage: context.makeImage()!)
 }
 
-/// A file from Sources/Wallpaper/Resources: inside the .app when built with build.sh, else straight from the source tree.
+/// A file from Sources/Atrium/Resources: inside the .app when built with build.sh, else straight from the source tree.
 func resource(_ name: String) -> URL {
     Bundle.main.url(forResource: name, withExtension: nil)
         ?? URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Resources/\(name)")

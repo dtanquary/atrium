@@ -2,7 +2,7 @@
 
 A forest at dusk: four treelines receding into violet fog under a fading pink-to-indigo sky with a few stars. About a hundred fireflies drift slowly in the gaps between the nearer treelines, flashing softly on their own rhythms.
 
-- **Files:** `Sources/Wallpaper/Fireflies.swift`.
+- **Files:** `Sources/Atrium/Fireflies.swift`.
   - The `Fireflies` scene.
   - **The helpers shared by all five nature scenes**, below `// MARK: - Shared by the nature scenes`:
     - `frameTime(_:_:)`: the clamped frame delta
