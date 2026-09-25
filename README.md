@@ -1,6 +1,6 @@
 # Atrium
 
-Living, animated desktop wallpapers for macOS: a sunlit fish tank, drifting nebulae, a lava lamp, the real sky above you right now, Earth from orbit with the live ISS, your local weather, and more. It's a small menu bar app written in Swift and SpriteKit, with no dependencies.
+Living, animated desktop wallpapers for macOS: a sunlit fish tank, drifting nebulae, a turning spiral galaxy, a lava lamp, the real sky above you right now, Earth from orbit with the live ISS, your local weather, and more. It's a small menu bar app written in Swift and SpriteKit, with no dependencies.
 
 There are no prebuilt downloads. Clone it, build it and run it yourself; it takes about a minute.
 
@@ -68,6 +68,7 @@ To rebuild after pulling changes: `./build.sh && pkill -x Atrium; open build/Atr
 | Rain on Glass | Drops sliding down a window over blurred city lights, at night or on an overcast day, in seven palettes |
 | Aurora | Northern lights over snowy peaks, shading through real aurora colours |
 | Nebula | A unique deep-space cloud on every load, in real nebula colours, dissolving into a new one every few minutes |
+| Galaxy | A spiral galaxy turning slowly, after a real one (Whirlpool, Andromeda, the Milky Way and more), with dust lanes, star clusters and pink star-forming knots |
 | Live Sky | The real sky above you: stars, planets, the Moon's phase, the Milky Way and the ISS. Deep blue by day. |
 | Earth from Orbit | The globe above your location with the live day/night line, today's real clouds, lightning in storms near you, city lights and the ISS |
 | Weather | Hills under your live local weather: rain, snow, fog, storms, day and night |
