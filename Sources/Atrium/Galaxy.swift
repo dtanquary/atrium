@@ -300,7 +300,7 @@ final class Galaxy: SKScene {
             // Light comes from a smooth exponential disc that the arms brighten two to three times over, as in Hubble
             // images, not from arms on a dark disc. That soft, bright disc with no edge is what reads as a photograph.
             float inArms = smoothstep(r0 * 0.8, r0 * 1.5, r) * mix(1.0, smoothstep(1.25, 0.9, r), steep); // no bright rim
-            float disc = exp(-rt / 0.4) * smoothstep(1.6, 0.9, rt);
+            float disc = exp(-rt / 0.4) * smoothstep(1.4, 0.85, rt); // photos drop off faster from about 3/4 of the way out
             float arm = crest * inArms * (0.5 + 0.9 * clump);
 
             // Dust: narrow broken lanes on the arms' inner edges, feathers leaving them at a pitch 35° steeper, a web of
