@@ -4,8 +4,8 @@ import SpriteKit
 // Shaders work in `p = v_tex_coord * vec2(aspect, 1)`: y runs 0...1 up the screen and x keeps the same scale,
 // so shapes stay round on any display. `pts` is the same point in screen points, for pixel-sized detail.
 
-/// Hashes, value noise, fbm and a star field shared by the shaders below.
-private let common = """
+/// Hashes, value noise, fbm and a star field shared by the shader scenes.
+let shaderCommon = """
 float hash11(float x) { return fract(sin(x * 127.1) * 43758.5453); }
 
 float hash21(vec2 p) {
@@ -47,47 +47,9 @@ float starField(vec2 pts, float cell, float density, float t) {
 
 """
 
-/// Big, slowly drifting pools of navy, indigo, violet, soft blue, teal, magenta and a little dusky coral that
-/// melt into one another with no visible edges. The quiet default.
-@MainActor func flowingGradient(size: CGSize) -> SKScene {
-    shaderScene(size: size, source: common + """
-    // A soft gaussian glow centred on c.
-    float pool(vec2 p, vec2 c, float r) { float d = length(p - c) / r; return exp(-d * d); }
-
-    // Each pool drifts on its own slow Lissajous path, roaming a little past the screen edges.
-    vec2 drift(float t, float a, float b, float phase, float aspect) {
-        return vec2(aspect * (0.5 + 0.6 * sin(t * a + phase)), 0.5 + 0.6 * cos(t * b + phase * 1.7));
-    }
-
-    void main() {
-        float aspect = u_size.x / u_size.y;
-        vec2 p = v_tex_coord * vec2(aspect, 1.0);
-        float t = u_time * 0.04;
-        // bend the plane with slow, broad noise so pools smear into each other instead of sliding as circles
-        p += 0.5 * (vec2(noise(p * 0.9 + t), noise(p * 0.9 - t + 5.2)) - 0.5);
-
-        // The pools add up like coloured light, so overlaps glow into new hues with no edge where one meets
-        // another, and a soft exposure curve keeps bright overlaps from clipping while the gaps stay dark.
-        vec3 light = vec3(0.02, 0.025, 0.09);
-        light += vec3(0.07, 0.12, 0.42) * pool(p, drift(t, 0.45, 0.55, 1.2, aspect), 0.85); // navy
-        light += vec3(0.24, 0.12, 0.60) * pool(p, drift(t, 0.70, 0.50, 0.0, aspect), 0.70); // indigo
-        light += vec3(0.02, 0.48, 0.55) * pool(p, drift(t, 0.50, 0.80, 2.1, aspect), 0.62); // teal
-        light += vec3(0.40, 0.70, 1.20) * pool(p, drift(t, 0.60, 0.40, 4.0, aspect), 0.50); // soft blue
-        light += vec3(0.62, 0.12, 0.55) * pool(p, drift(t, 0.35, 0.65, 5.3, aspect), 0.50); // magenta
-        light += vec3(0.36, 0.18, 0.78) * pool(p, drift(t, 0.55, 0.30, 3.1, aspect), 0.60); // violet
-        light += vec3(0.70, 0.30, 0.30) * pool(p, drift(t, 0.28, 0.47, 0.7, aspect), 0.42); // dusky coral
-        vec3 col = 1.0 - exp(-light * 0.6);
-
-        col *= 1.0 - 0.45 * length(v_tex_coord - 0.5);            // vignette
-        col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0;  // dither away 8-bit banding
-        gl_FragColor = vec4(col, 1.0);
-    }
-    """)
-}
-
 /// The inside of a lava lamp: wax blobs rise off a molten pool, stretch, merge and sink, lit from below.
 @MainActor func lavaLamp(size: CGSize) -> SKScene {
-    shaderScene(size: size, source: common + """
+    shaderScene(size: size, source: shaderCommon + """
     // Metaball field and its gradient in one pass: every blob adds r²/d², wax is wherever the sum passes 1.
     // Returns (f, df/dx, df/dy).
     vec3 field(vec2 p, float t, float aspect) {
@@ -146,7 +108,7 @@ float starField(vec2 pts, float cell, float density, float t) {
 /// A night city out of focus behind a rainy window: beads of water and drops sliding down,
 /// each drop a little lens showing the lights sharper.
 @MainActor func rainOnGlass(size: CGSize) -> SKScene {
-    shaderScene(size: size, source: common + """
+    shaderScene(size: size, source: shaderCommon + """
     // One layer of bokeh lights, one per grid cell. blur 1 = out of focus (big soft discs), 0 = sharp points.
     vec3 bokeh(vec2 p, float cell, float blur, float seed) {
         vec2 id = floor(p / cell);
@@ -260,7 +222,7 @@ float starField(vec2 pts, float cell, float density, float t) {
 
 /// Green-to-violet curtains of aurora, fine vertical rays drifting through them, over a snowy ridge under stars.
 @MainActor func aurora(size: CGSize) -> SKScene {
-    shaderScene(size: size, source: common + """
+    shaderScene(size: size, source: shaderCommon + """
     // Ridged noise: sharp mountain peaks.
     float peaks(float x, float seed) {
         float v = 0.0;
@@ -347,7 +309,7 @@ float starField(vec2 pts, float cell, float density, float t) {
         SKUniform(name: "u_accent", vectorFloat3: palette[2]),
         SKUniform(name: "u_hot", vectorFloat3: palette[3]),
     ]
-    let scene = shaderScene(size: size, source: common + """
+    let scene = shaderScene(size: size, source: shaderCommon + """
     // A few bright foreground stars with four-point diffraction spikes; about half shimmer very gently and slowly.
     float brightStar(vec2 pts, float cell, float t) {
         vec2 id = floor(pts / cell);
