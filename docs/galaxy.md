@@ -119,6 +119,8 @@ CPU 0.5 ms and GPU 1.0–2.0 ms per frame (release, 2x), depending on how much o
 - He asked for research into how 3D tools build galaxies, and for better reference photos, to lift each kind's look. Then: "Apply the rest of the research", which added the Milky Way's minor arms, M33's patchwork, a clear bar zone for NGC 1300, and the companions. A research agent sampled colours from the photos, compared renders with them, and prototyped the fixes merged here: photo-sampled colours; translucent, tilt-aware dust with feathers, a filament web and bar lanes; H II regions on the arms' inner edges; lopsided arms; a thick disc for steep tilts; and a finer star grain.
 - "They look too crisp at the edges and just don't quite resemble the pictures we see from Hubble. Very close, just something is off." Compared with ESA/Hubble's M51 (heic0506a), the main gap was the dark disc: the light model became a bright exponential disc the arms brighten. The rest followed from the photo: an asinh stretch in place of `1 - exp(-x)`, narrower reddish-brown lanes, a finer star speckle, smaller knots in chains, and a paler core.
 
+- His verdict after the research pass (2026-09-25): "amazing work on the galaxies, so good… it's incredible." What got it there: side-by-side comparisons with Hubble and ESO photos, colours sampled from them, and fixing the specific differences rather than guessing.
+
 ## Ideas / next steps
 - Differential rotation via two blended phases, if rigid turning ever looks wrong up close.
 - Edge-on kinds (Sombrero, NGC 891) need a thick disc and a vertical dust lane, not this thin-disc projection.
