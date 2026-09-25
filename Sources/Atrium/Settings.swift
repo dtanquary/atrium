@@ -81,8 +81,7 @@ struct IconTile: View {
     }
 }
 
-/// Name, version, maker, licence and the credits the data sources ask for.
-// ponytail: a stub; add the GitHub link once the public repo exists
+/// Name, version, maker, source, licence and the credits the data sources ask for.
 struct AboutPage: View {
     static let tag = "About" // sidebar selection; can't clash with a wallpaper name
 
@@ -104,6 +103,7 @@ struct AboutPage: View {
             }
             Section("Made by") {
                 LabeledContent("Dave Tanquary") { Link("dtanquary.com", destination: URL(string: "https://dtanquary.com")!) }
+                LabeledContent("Source") { Link("github.com/dtanquary/atrium", destination: URL(string: "https://github.com/dtanquary/atrium")!) }
                 LabeledContent("License") { Text("MIT") }
             }
             Section("Data and Credits") {

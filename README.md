@@ -27,7 +27,7 @@ Known limits: the lock screen, and the tint of the menu bar and windows, still c
 ## Build and run
 
 ```sh
-git clone <this repo's URL>
+git clone https://github.com/dtanquary/atrium.git
 cd atrium
 ./build.sh                 # release build → build/Atrium.app
 open build/Atrium.app
