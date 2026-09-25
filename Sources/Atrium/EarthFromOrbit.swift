@@ -4,15 +4,23 @@ import simd
 @MainActor func earthFromOrbit(size: CGSize) -> SKScene { EarthFromOrbit(size: size) }
 
 /// The whole Earth seen from high above you, like a geostationary satellite: the real day/night line sweeping
-/// across it, city lights on the night side, sun glint on the oceans, and the ISS with its orbit.
+/// across it, today's clouds, city lights on the night side, sun glint on the oceans, and the ISS with its orbit.
 final class EarthFromOrbit: SKScene {
     nonisolated static let knobs = [
         Knob(key: "earth.iss", label: "ISS tracking", range: 0...1, standard: 1, section: "Show", format: .toggle),
+        Knob(key: "earth.clouds", label: "Live clouds", range: 0...1, standard: 1, section: "Show", format: .toggle),
     ]
 
     private let globe = SKSpriteNode()
     private let sunUniform = SKUniform(name: "u_sun", vectorFloat3: [1, 0, 0])
     private let basisUniform = SKUniform(name: "u_basis", matrixFloat3x3: matrix_identity_float3x3)
+    // The cloud map, and the one before it while a new one fades in. No map yet is a blank texture: no clouds.
+    private let cloudsUniform = SKUniform(name: "u_clouds", texture: Clouds.shared.texture ?? paint(CGSize(width: 1, height: 1)) { _ in })
+    private lazy var cloudsBeforeUniform = SKUniform(name: "u_cloudsBefore", texture: cloudsUniform.textureValue)
+    private let cloudFadeUniform = SKUniform(name: "u_cloudFade", float: 1)
+    private let cloudsOnUniform = SKUniform(name: "u_cloudsOn", float: 1)
+    private var cloudVersion = Clouds.shared.version
+    private var cloudFadeStart: TimeInterval?
     private let iss = SKSpriteNode()
     private let issLabel = SKLabelNode(fontNamed: "HelveticaNeue")
     private let orbit = SKShapeNode()
@@ -61,9 +69,11 @@ final class EarthFromOrbit: SKScene {
     override func didMove(to view: SKView) {
         Location.shared.start()
         run(.repeatForever(.sequence([.run { if Self.knobs[0].value > 0.5 { ISS.shared.poll() } }, .wait(forDuration: 60)])))
+        run(.repeatForever(.sequence([.run { if Self.knobs[1].value > 0.5 { Clouds.shared.poll() } }, .wait(forDuration: 300)])))
     }
 
     override func update(_ currentTime: TimeInterval) {
+        updateClouds(currentTime)
         guard Self.knobs[0].value > 0.5, // ISS tracking on
               let now = ISS.shared.position(), let later = ISS.shared.position(at: Date(timeIntervalSinceNow: 20)) else {
             iss.isHidden = true
@@ -94,6 +104,23 @@ final class EarthFromOrbit: SKScene {
             }
         }
         orbit.path = path
+    }
+
+    /// Fades to a new cloud map over a minute when one lands, and follows the Live clouds switch.
+    private func updateClouds(_ currentTime: TimeInterval) {
+        cloudsOnUniform.floatValue = Self.knobs[1].value > 0.5 ? 1 : 0
+        if cloudVersion != Clouds.shared.version, let map = Clouds.shared.texture {
+            cloudVersion = Clouds.shared.version
+            cloudsBeforeUniform.textureValue = cloudsUniform.textureValue
+            cloudsUniform.textureValue = map
+            cloudFadeStart = currentTime
+        }
+        guard let start = cloudFadeStart else { return }
+        cloudFadeUniform.floatValue = Float(min((currentTime - start) / 60, 1))
+        if currentTime - start > 60 {
+            cloudFadeStart = nil
+            cloudsBeforeUniform.textureValue = cloudsUniform.textureValue // lets the old map go
+        }
     }
 
     /// Earth-fixed position of the ISS, in Earth radii.
@@ -139,6 +166,7 @@ final class EarthFromOrbit: SKScene {
         globe.position = centre
         globe.zPosition = 1
         // Earth textures: NASA Blue Marble, September 2004 (day) and Black Marble 2016 (night lights), both public domain.
+        // Clouds come live from Clouds.shared.
         globe.shader = SKShader(source: """
             void main() {
                 vec2 p = (v_tex_coord * 2.0 - 1.0) * u_margin;
@@ -148,13 +176,18 @@ final class EarthFromOrbit: SKScene {
                 vec3 day = texture2D(u_texture, uv).rgb;
                 vec3 night = texture2D(u_night, uv).rgb;
 
+                // the map reads thin haze and cold ground as faint grey, so only real cloud decks go opaque
+                float cloud = mix(texture2D(u_cloudsBefore, uv).r, texture2D(u_clouds, uv).r, u_cloudFade);
+                cloud = smoothstep(0.42, 0.95, cloud) * u_cloudsOn;
+
                 float sun = dot(w, u_sun);
                 float daylight = smoothstep(-0.12, 0.1, sun) * (0.25 + 0.95 * max(sun, 0.0));
-                vec3 colour = day * (daylight + 0.03); // a little earthshine keeps the night side's shape
+                // a little earthshine keeps the night side's shape, and shows the clouds there faintly
+                vec3 colour = mix(day, vec3(0.8, 0.82, 0.86), cloud * 0.95) * (daylight + 0.03);
                 vec3 lights = night * night * vec3(1.0, 0.82, 0.55) * 2.2;
-                colour += lights * (1.0 - smoothstep(-0.2, 0.02, sun));
+                colour += lights * (1.0 - smoothstep(-0.2, 0.02, sun)) * (1.0 - 0.8 * cloud); // cloud dims, not hides
 
-                float ocean = smoothstep(0.02, 0.12, day.b - day.r);
+                float ocean = smoothstep(0.02, 0.12, day.b - day.r) * (1.0 - cloud);
                 vec3 towardUs = u_basis * vec3(0.0, 0.0, 1.0);
                 colour += vec3(1.0, 0.95, 0.85) * ocean * pow(max(dot(w, normalize(u_sun + towardUs)), 0.0), 90.0) * 0.6;
 
@@ -172,6 +205,10 @@ final class EarthFromOrbit: SKScene {
                 SKUniform(name: "u_margin", float: Float(margin)),
                 sunUniform,
                 basisUniform,
+                cloudsUniform,
+                cloudsBeforeUniform,
+                cloudFadeUniform,
+                cloudsOnUniform,
             ])
         addChild(globe)
     }

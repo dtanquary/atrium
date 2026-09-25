@@ -20,7 +20,7 @@ macOS has no public API for third-party live wallpapers. This app gives each dis
 
 It uses public AppKit and SpriteKit APIs only. It uses no private frameworks, makes no changes to system files, needs no SIP changes and doesn't inject code.
 
-Each wallpaper is a SpriteKit scene. Many are full-screen Metal shaders written as `SKShader`s, and everything is drawn in code: there are no image or video files, apart from two NASA Earth textures and a star catalogue.
+Each wallpaper is a SpriteKit scene. Many are full-screen Metal shaders written as `SKShader`s, and everything is drawn in code: there are no image or video files, apart from two NASA Earth textures, a star catalogue, and the live cloud map Earth from Orbit downloads.
 
 It's kind to your battery:
 - 30 fps on mains power, 15 fps on battery.
@@ -56,7 +56,7 @@ To rebuild after pulling changes: `./build.sh && pkill -x Atrium; open build/Atr
 ### Permissions and network
 
 - **Location** (optional). Live Sky, Earth from Orbit, Weather and Flowing Gradient's time-of-day mood use your location, and the app asks once. If you decline, it guesses from your time zone.
-- **Network.** Weather fetches from [Open-Meteo](https://open-meteo.com) every 15 minutes. Live Sky and Earth from Orbit fetch the ISS position from [wheretheiss.at](https://wheretheiss.at) at most once a minute. Neither needs an API key.
+- **Network.** Weather fetches from [Open-Meteo](https://open-meteo.com) every 15 minutes. Live Sky and Earth from Orbit fetch the ISS position from [wheretheiss.at](https://wheretheiss.at) at most once a minute. Earth from Orbit checks [Live Cloud Maps](https://clouds.matteason.co.uk) for a new global cloud map every 25 minutes (1.5 MB when it has changed, about every 3 hours). None of them needs an API key.
 
 ## The wallpapers
 
@@ -69,7 +69,7 @@ To rebuild after pulling changes: `./build.sh && pkill -x Atrium; open build/Atr
 | Aurora | Northern lights over snowy peaks, shading through real aurora colours |
 | Nebula | A unique deep-space cloud on every load, in real nebula colours, dissolving into a new one every few minutes |
 | Live Sky | The real sky above you: stars, planets, the Moon's phase, the Milky Way and the ISS. Deep blue by day. |
-| Earth from Orbit | The globe above your location with the live day/night line, city lights and the ISS |
+| Earth from Orbit | The globe above your location with the live day/night line, today's real clouds, city lights and the ISS |
 | Weather | Hills under your live local weather: rain, snow, fog, storms, day and night |
 | Pixel City | A pixel-art skyline that follows your clock, with traffic and windows lighting up through the evening |
 | Fireflies | Fireflies drifting through a foggy forest at dusk |
@@ -105,6 +105,7 @@ SNAPSHOT_DEFAULTS="gradient.palette=Sunset" SNAPSHOT_APPEARANCE=light swift test
 - Stars from the Yale Bright Star Catalogue, 5th edition (Hoffleit & Warren, CDS V/50), public domain.
 - Constellation lines from [d3-celestial](https://github.com/ofrohn/d3-celestial) by Olaf Frohn, BSD 3-Clause. Its notice is kept in `Sources/Atrium/Resources/constellations.txt`.
 - Earth imagery from NASA's Blue Marble and Black Marble, public domain.
+- Clouds from [Live Cloud Maps](https://github.com/matteason/live-cloud-maps) by Matt Eason, CC0. Contains modified EUMETSAT data.
 - Planet positions from JPL's [Approximate Positions of the Planets](https://ssd.jpl.nasa.gov/planets/approx_pos.html).
 
 ## License

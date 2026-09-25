@@ -1,10 +1,11 @@
 # Earth from Orbit
 
-The whole Earth seen from high above the viewer's own location, like a geostationary satellite parked overhead, set against a still starfield. It shows the real line between day and night, city lights on the night side, sun glint on the oceans, a lit edge of atmosphere, and the ISS at its live position with its orbit ring.
+The whole Earth seen from high above the viewer's own location, like a geostationary satellite parked overhead, set against a still starfield. It shows the real line between day and night, today's real clouds, city lights on the night side, sun glint on the oceans, a lit edge of atmosphere, and the ISS at its live position with its orbit ring.
 
 - **Files:**
   - `Sources/Atrium/EarthFromOrbit.swift`: the scene.
   - `Sources/Atrium/ISS.swift`: `ISS.shared`, the live position, shared with [Live Sky](live-sky.md).
+  - `Sources/Atrium/Clouds.swift`: `Clouds.shared`, the live global cloud map.
   - `Sources/Atrium/Resources/earth-day.jpg` (486 KB) and `earth-night.jpg` (263 KB), both about 2048×1024.
   - Astronomy comes from `SkyMath.swift` and location from `Location.swift`; see [live-sky.md](live-sky.md).
 - **Entry:** `earthFromOrbit(size:)` builds `final class EarthFromOrbit: SKScene`. Its entry in Scenes.swift is "Earth from Orbit", icon `globe.americas.fill`, tint `.cyan`, `knobs: EarthFromOrbit.knobs`.
@@ -14,10 +15,11 @@ The whole Earth seen from high above the viewer's own location, like a geostatio
 - **View frame.** `basis` has three Earth-fixed axes: east, north, and the up vector at the viewer's latitude and longitude. The globe is always seen from straight above the viewer. `refresh()` rebuilds it every 30 s from `Location.shared`. The globe sits at (0.58 w, 0.48 h) with radius 0.43 h; the sprite is 12% bigger (`margin`) to leave room for the atmosphere halo.
 - **Globe shader:**
   - Each pixel becomes a point on the sphere, turned Earth-fixed through `u_basis`, then latitude/longitude texture coordinates.
-  - It samples the day map (`u_texture`) and the night-lights map (`u_night`).
+  - It samples the day map (`u_texture`), the night-lights map (`u_night`), and the cloud map (see Clouds below).
   - **Daylight** = `smoothstep(−0.12, 0.1, sun·n) · (0.25 + 0.95·max(sun·n, 0))`, plus 0.03 of earthshine so the night side keeps its shape.
   - **City lights:** night², tinted warm ×2.2, faded in past the terminator.
-  - **Sun glint:** a Blinn-style highlight (power 90) only where the day map reads as ocean (blue > red).
+  - **Clouds:** `cloud = smoothstep(0.42, 0.95, map) · u_cloudsOn`. The ground mixes toward cloud grey (0.8, 0.82, 0.86) by `cloud × 0.95` before lighting, so clouds are lit by the same daylight and earthshine: bright by day, faint grey on the night side. They dim city lights by `1 − 0.8·cloud` (lights glow through thin cloud) and block sun glint.
+  - **Sun glint:** a Blinn-style highlight (power 90) only where the day map reads as ocean (blue > red) and there's no cloud.
   - **Atmosphere:** an edge tint of (0.35, 0.6, 1)·daylight, plus a halo outside the disc that's brighter on the sunward rim.
 - **Sun.** `u_sun` points at the subsolar point: `Sky.direction(sunRA − GMST, sunDec)`, updated every 30 s. The terminator moves in real time.
 - **Stars:** about w·h/2500 still sprites. They don't twinkle, since there's no atmosphere up here. Brightness is `random³`.
@@ -34,6 +36,15 @@ The whole Earth seen from high above the viewer's own location, like a geostatio
 - **Interpolation:** `position(at:)` interpolates linearly between the two surrounding fixes, wrapping longitude with `remainder(…, 360)`. `sunlit` comes from the nearer fix. It returns nil without fresh data, and the marker hides.
 - **Failures** are silent (`try?`). If one poll fails, the track runs out after 90 s and the ISS disappears until the next successful poll.
 
+## Clouds.swift
+- **Source:** [Live Cloud Maps](https://github.com/matteason/live-cloud-maps) by Matt Eason: `https://clouds.matteason.co.uk/images/4096x2048/clouds.jpg`. It's an equirectangular greyscale map, the same projection as `earth-day.jpg`, redrawn every 3 hours from EUMETSAT satellite data. It's CC0; EUMETSAT's terms ask for the credit "Contains modified EUMETSAT data", which is in About and the README. It also comes at 8192, 2048 and 1024 wide.
+- **What the map shows:** it's infrared-based, so cold ground and thin haze read as mid-grey. The whole map averages bright (42% of pixels are above 224/255), and the high Arctic is often solid. The `smoothstep(0.42, 0.95, …)` in the shader keeps only the real cloud decks opaque. At 0.3 the far north turned into a flat grey haze.
+- **Polling:** `poll()` runs at most every 25 minutes. The scene asks every 5 minutes from an SKAction in `didMove`, only while Live clouds is on. Requests send the saved `ETag` (UserDefaults `clouds.etag`) as `If-None-Match`, so an unchanged map is a 304 and a new one is 1.5 MB, about 8 times a day.
+- **Cache:** `~/Library/Caches/com.dtanquary.atrium/clouds.jpg`, loaded in `init`, so clouds show at launch, offline, and in the render harness. If the file is missing (Caches can be purged), the ETag isn't sent.
+- **One texture for all displays:** `Clouds.shared.texture` (mipmapped). `version` goes up with each new map. `EarthFromOrbit.updateClouds` sees the change, moves the current map to `u_cloudsBefore`, and fades `u_cloudFade` 0→1 over 60 s. When the fade finishes, `u_cloudsBefore` is set to the new map so the old one is freed. Before the first map ever arrives, both uniforms hold a blank 1×1 texture, so there are no clouds.
+- **Memory:** about 43 MB of GPU memory for a 4096 map with mipmaps; two maps only during a fade.
+- **Failures** are silent (`try?`): the last map stays up.
+
 ## Time, live data and appearance
 - **Time:** always real time (`Date()`). There's no preview seam.
 - **Location:** `Location.start()` is called in `didMove`. The view centres on the saved fix, or on the time-zone fallback; see [live-sky.md](live-sky.md).
@@ -49,8 +60,9 @@ The whole Earth seen from high above the viewer's own location, like a geostatio
 | key | label | range | default | drives |
 |---|---|---|---|---|
 | `earth.iss` | ISS tracking | toggle | on | Off hides the marker, label and orbit ring, and skips polling (`update` and the poll action both check it) |
+| `earth.clouds` | Live clouds | toggle | on | Off sets `u_cloudsOn` to 0 and skips polling |
 
-It's read live through `Self.knobs[0].value` every frame, with no notification observer needed.
+Both are read live through `Self.knobs[i].value` every frame, with no notification observer needed.
 
 ## Tuning constants
 - **Globe:** radius 0.43 h, centre (0.58 w, 0.48 h), margin 1.12.
@@ -60,23 +72,26 @@ It's read live through `Self.knobs[0].value` every frame, with no notification o
 - **Stars:** density one per 2,500 pt².
 
 ## Performance
-- About 0.49 ms CPU and 0.18 ms GPU per frame (release build, 2x, 1512×982).
+- About 0.49 ms CPU and 0.18 ms GPU per frame (release build, 2x, 1512×982) before clouds. With clouds it measured 0.45 ms CPU and 0.31 ms GPU: two more 4K texture samples per globe pixel.
 - The globe shader only covers the globe's sprite. The orbit path rebuilds at most every 5 s.
 - Plenty of headroom.
 
 ## Gotchas and shortcuts
 - `ponytail:` **the orbit ring** comes from two fixes in Earth-fixed axes, so it ignores Earth's spin: about a 3° tilt error.
 - **The ISS label** must not be a child of the pulsing marker, or it scales and fades with it.
-- **No clouds on the globe.** A NASA cloud layer would be the next step for realism.
+- **Clouds are a still snapshot** between 3-hourly maps, with no drift. A slow advection (warping the lookup along the jet streams) or a flow between two maps would make them move.
+- `ponytail:` **no cloud shadows or thickness.** At this scale, shadows are a pixel or two. Add a shadow offset away from the Sun if the globe gets zoomed in.
 - **The stars** are random on each load, not a real star field.
 
 ## Dave's feedback and decisions
 - **Static label.** "Don't blink and scale / fade the ISS text, just have it be a fixed semi faded text next to the ISS … let everything else … be the animated parts." That's why the label is a separate node at 50% alpha. The marker dot still pulses; he didn't ask for that to change.
 - **The ISS tracking switch** was his request.
 - **Centred on his location,** which he tested and liked.
+- **Real clouds** (2026-09-24): he asked how hard "semi global cloud data" for "somewhat realistic cloud coverage" would be, and chose clouds first, with lightning to follow.
 
 ## Ideas / next steps
-- A cloud layer (NASA cloud composites), maybe drifting.
+- **Lightning** (Dave's next ask): short bursts inside clouds where storms are, in the region around him. The plan is an Open-Meteo multi-point request (a ~10×10 grid around the viewer, `weather_code` 95/96/99 and `lightning_potential`) every 30 minutes, flashing randomly inside the storm cells on the night side (and faintly by day). That's forecast storms, not observed strikes. NOAA GOES GLM is observed, public domain and Americas-only, but ships as NetCDF every 20 s. Blitzortung's terms restrict reuse.
+- Cloud drift between the 3-hourly maps.
 - The Moon, and the terminator's twilight band.
 - A time-lapse or preview setting.
 - Settings for zoom and framing.
@@ -85,5 +100,7 @@ It's read live through `Self.knobs[0].value` every frame, with no notification o
 
 ## Checking it
 - `SNAPSHOT_SCENE="Earth from Orbit" swift test` renders the current terminator at the fallback location. There's no ISS, because `didMove` never runs in the harness.
-- `SNAPSHOT_DEFAULTS="earth.iss=0" …` checks the switch.
+- `SNAPSHOT_DEFAULTS="earth.iss=0" …` or `"earth.clouds=0"` checks a switch.
+- Clouds render from the cache file. To seed it: `curl -o ~/Library/Caches/com.dtanquary.atrium/clouds.jpg https://clouds.matteason.co.uk/images/4096x2048/clouds.jpg`.
+- To see daylight over the Americas at night, temporarily change `Sky.julianDate(Date())` in `refresh()` to `Date(timeIntervalSinceNow: 12 * 3600)`, and revert it before committing.
 - To see the ISS offline, you'd need a temporary test that fills `ISS.shared` and renders. That was done once while building it, then deleted.

@@ -112,6 +112,7 @@ struct AboutPage: View {
                 LabeledContent("Stars") { Text("Yale Bright Star Catalogue") }
                 LabeledContent("Constellations") { Link("d3-celestial (BSD 3-Clause)", destination: URL(string: "https://github.com/ofrohn/d3-celestial")!) }
                 LabeledContent("Earth imagery") { Text("NASA Blue Marble and Black Marble") }
+                LabeledContent("Clouds") { Link("Live Cloud Maps; contains modified EUMETSAT data", destination: URL(string: "https://clouds.matteason.co.uk")!) }
                 LabeledContent("Planet positions") { Text("NASA JPL") }
             }
         }
