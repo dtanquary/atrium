@@ -27,7 +27,6 @@ final class WeatherScene: SKScene {
     private var report: Conditions     // the latest live weather, or the pinned test state
     private var conditions: Conditions // what's on screen: `report`, or the Settings preview
     private let live: Bool
-    private var drifting: [(node: SKNode, speed: CGFloat)] = [] // clouds and fog banks, wrapped around in update
     private var lastUpdate: TimeInterval?
     private var viewpoint: SkyCamera
     private var sinceTrack = 0.0, sinceBake = 0.0, baking = false
@@ -42,6 +41,16 @@ final class WeatherScene: SKScene {
     private let moonColour = SKUniform(name: "u_moonCol", vectorFloat3: .zero), starsUniform = SKUniform(name: "u_stars", float: 0)
     private let groundLight = SKUniform(name: "u_light", vectorFloat3: [1, 1, 1]), groundHaze = SKUniform(name: "u_haze", float: 0.05)
     private let groundColour = SKUniform(name: "u_colour", float: 1), groundHazeLit = SKUniform(name: "u_hazeLit", float: 1)
+    private let cloudLayer = SKUniform(name: "u_cloud", vectorFloat4: .zero), cloudWind = SKUniform(name: "u_wind", vectorFloat2: .zero)
+    private let cloudSun = SKUniform(name: "u_sunCol", vectorFloat3: .zero), cloudAmbient = SKUniform(name: "u_amb", vectorFloat3: .zero)
+    private let cirrus = SKUniform(name: "u_high", float: 0), cirrusSun = SKUniform(name: "u_highCol", vectorFloat3: .zero)
+    private let fog = SKUniform(name: "u_fog", float: 0)
+    /// Under a deck: its underside's colour, and how much the horizon takes it on instead of the clear sky's.
+    private let deck = SKUniform(name: "u_deck", vectorFloat4: .zero)
+    /// Seconds, wrapping hourly: u_time grows with uptime, and at rain's speeds a float that large loses the streaks.
+    private let clock = SKUniform(name: "u_clock", float: 0)
+    private let precipitation = SKUniform(name: "u_precip", vectorFloat4: .zero)
+    private let rainColour = SKUniform(name: "u_rainCol", vectorFloat3: .zero), snowColour = SKUniform(name: "u_snowCol", vectorFloat3: .zero)
     private static let moonTexture = SKTexture(imageNamed: resource("weather-moon.png").path)
 
     /// Pass `conditions` to pin the scene to one state (snapshots); leave it nil to follow the live weather.
@@ -140,28 +149,14 @@ final class WeatherScene: SKScene {
     private func build() {
         removeAllChildren()
         removeAction(forKey: "lightning")
-        drifting = []
         let kind = conditions.kind, day = conditions.isDay
-        let palette = Palette(kind, day: day)
         addSky()
 
-        addClouds(kind, palette: palette)
 
         addGround()
 
-        switch kind {
-        case .fog: addFog(palette, density: 1)
-        case .drizzle, .rain, .storm: addFog(palette, density: 0.25)
-        case .snow: addFog(palette, density: 0.3)
-        default: break
-        }
-        switch kind {
-        case .drizzle: addRain(palette, rate: 90, speed: 520, scale: 0.6)
-        case .rain: addRain(palette, rate: 200 + 300 * conditions.intensity, speed: 900, scale: 1)
-        case .storm: addRain(palette, rate: 550, speed: 1000, scale: 1.1); addLightning()
-        case .snow: addSnow(rate: 50 + 110 * conditions.intensity)
-        default: break
-        }
+        addPrecipitation()
+        if kind == .storm { addLightning() }
     }
 
     // MARK: - Sky
@@ -179,7 +174,16 @@ final class WeatherScene: SKScene {
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]), skyBefore, skyAfter, skyBlend,
             cameraUniforms.lens, cameraUniforms.forward, cameraUniforms.right, sunDirection, sunDisc, moonPlace, moonLight,
             moonColour, starsUniform, SKUniform(name: "u_moonTex", texture: Self.moonTexture),
+            SKUniform(name: "u_noise", texture: CloudNoise.texture), cloudLayer, cloudWind, cloudSun, cloudAmbient, cirrus, cirrusSun, fog, deck,
         ])
+        fog.floatValue = conditions.fog
+        let clouds = conditions.clouds
+        cloudLayer.vectorFloat4Value = SIMD4<Float>(clouds.cover, clouds.base, clouds.thickness, clouds.deck)
+        cirrus.floatValue = clouds.cirrus
+        // km/s across the view, left to right, and a little away. ponytail: wind_direction_10m would set it for real
+        let wind = Float(conditions.wind / 3600 * 0.6)
+        cloudWind.vectorFloat2Value = SIMD2<Float>(Float(viewpoint.right.x), Float(viewpoint.right.y)) * wind
+            + SIMD2<Float>(Float(viewpoint.forward.x), Float(viewpoint.forward.y)) * wind * 0.3
         addChild(sky)
         show(SkyLight.bake(camera: viewpoint, date: now, latitude: here.latitude, longitude: here.longitude), fade: false)
         track()
@@ -207,7 +211,21 @@ final class WeatherScene: SKScene {
         let dark = smoothstep(-0.07, -0.25, light.sun.z)
         starsUniform.floatValue = Float(dark * (1 - 0.6 * moonUp) * visible)
         sunDisc.vectorFloat3Value = light.sun.z > -0.02 ? SIMD3<Float>(light.sunColour) : .zero
-        let night = smoothstep(0.05, -0.1, light.sun.z)
+        cloudSun.vectorFloat3Value = SIMD3<Float>(light.sunAtCloud)
+        // Rain shows the light around it; snow is white in whatever light there is. Tone-mapped like the shaders.
+        func display(_ v: Sky.Vector) -> SIMD3<Float> { SIMD3<Float>((Sky.Vector(1, 1, 1) - exp(-v)).squareRoot()) }
+        let around = light.ambient * 0.5 + light.sunColour * max(light.sun.z, 0) * 0.04
+        rainColour.vectorFloat3Value = display(around * 0.8)
+        snowColour.vectorFloat3Value = display(around * 1.6 + Sky.Vector(repeating: 0.002))
+        // Low cloud at night glows faintly orange-grey with the lights of towns beneath it.
+        let clouds = conditions.clouds, night = smoothstep(-0.02, -0.15, light.sun.z)
+        let skyglow = Sky.Vector(0.4, 0.32, 0.24) * night * Double(clouds.deck) * Double(clouds.cover)
+        cloudAmbient.vectorFloat3Value = SIMD3<Float>(light.ambient + skyglow)
+        let underside = (light.sunAtCloud * max(light.sun.z, 0) * 0.07 + (light.ambient + skyglow) * 0.22) * exp(-0.5 * (Double(clouds.thickness) - 1))
+        let underDeck: Float = conditions.kind == .fog ? 0.3 : clouds.cover > 0.9 ? 0.92 : clouds.deck * clouds.cover
+        deck.vectorFloat4Value = SIMD4<Float>(SIMD3<Float>(underside), underDeck)
+        let high = light.sun.z > -0.14 ? light.sun : light.moon, highPower = light.sun.z > -0.14 ? 1 : light.moonPower
+        cirrusSun.vectorFloat3Value = SIMD3<Float>(Atmosphere.shared.sunlight(8, high.z) * highPower * light.exposure)
         // The ground photo was taken under an even overcast, so it's lit here as if its colours were that light's:
         // skylight, plus the Sun (or Moon) on the slopes that face it. Facing a low Sun we see the shaded sides of
         // the hills, so it adds little there; behind us, it lights them fully. Just after it rises, only some
@@ -221,7 +239,7 @@ final class WeatherScene: SKScene {
         var sunlit = light.ambient + light.sunColour * direct(light.sun) + moonDirect * direct(light.moon)
         // Under a deck of cloud the light is grey, even, and about half the day's.
         let overcast = conditions.cloudiness, global: Sky.Vector = light.ambient + light.sunColour * max(light.sun.z, 0)
-        let grey = Sky.Vector(repeating: global.sum() / 3 * 0.5)
+        let grey = Sky.Vector(repeating: global.sum() / 3 * 0.5 * exp(-0.4 * (Double(clouds.thickness) - 1))) + skyglow * 0.15
         sunlit = sunlit * (1 - overcast) + grey * overcast
         // The eye adapts to the land as well as the sky: facing a sunset the hills go dark, but not black.
         let lit = sunlit / 7, brightness = (lit * Sky.Vector(0.2126, 0.7152, 0.0722)).sum()
@@ -230,7 +248,8 @@ final class WeatherScene: SKScene {
         // since the air near the ground is in the Earth's shadow while the high sky still glows.
         groundColour.floatValue = Float(smoothstep(0.002, 0.03, brightness) * (1 - 0.7 * smoothstep(-0.03, -0.2, light.sun.z)))
         groundHazeLit.floatValue = Float(0.3 + 0.7 * smoothstep(-0.08, 0, light.sun.z))
-        moonColour.vectorFloat3Value = SIMD3<Float>(Atmosphere.shared.sunlight(viewpoint.height, light.moon.z) * (0.5 + 1.5 * night))
+        let moonNight = smoothstep(0.05, -0.1, light.sun.z)
+        moonColour.vectorFloat3Value = SIMD3<Float>(Atmosphere.shared.sunlight(viewpoint.height, light.moon.z) * (0.5 + 1.5 * moonNight))
     }
 
     /// Moves the Sun and Moon to where they are now; they'd hop visibly if they only moved with each minute's bake.
@@ -238,7 +257,7 @@ final class WeatherScene: SKScene {
         let here = Location.shared.coordinate, jd = Sky.julianDate(now)
         let toHorizon = Sky.horizonMatrix(jd: jd, latitude: here.latitude, longitude: here.longitude)
         let sun = normalize(toHorizon * Sky.sun(jd)), moon = normalize(toHorizon * Sky.moon(jd))
-        sunDirection.vectorFloat3Value = SIMD3<Float>(sun)
+        sunDirection.vectorFloat3Value = SIMD3<Float>(sun.z > -0.14 ? sun : moon) // what lights the clouds
         guard let at = viewpoint.screen(moon), moon.z > -0.01 else { moonPlace.vectorFloat4Value = [0, 0, 0, 0]; return }
         // Light it from the real Sun, and turn it so its north points to the celestial pole, as in Live Sky.
         func angle(toward target: Sky.Vector) -> Double {
@@ -265,6 +284,21 @@ final class WeatherScene: SKScene {
     private static let skyShader = """
     vec3 decode(vec3 c) { return c * c * 4.0; }
 
+    // Where to sample the baked tileable noise (CloudNoise) for point p. SKShader can't pass a sampler to a function,
+    // so the fetches stay in main().
+    vec2 nuv(vec2 p) { return (fract(p) * 256.0 + 0.5) / 257.0; }
+
+    // Cloud density, 0…1, from two fetches: billows and fbm for the big shapes, and fine fbm drifting a little
+    // differently so the clouds slowly change shape. `lod` fades detail with distance; `deck` 1 is a flat sheet.
+    float cloudShape(vec4 a, vec4 b, float cover, float deck, float lod) {
+        float shape = mix(a.g * 0.6 + a.r * 0.4, a.r * 0.5 + 0.35, deck);
+        float d = shape + (b.b - 0.5) * 0.35 * (1.0 - lod) + (b.r - 0.5) * 0.12;
+        return smoothstep(1.0 - cover, 1.0 - cover + mix(0.18, 0.5, deck), d);
+    }
+
+    // Henyey–Greenstein: how much light a cloud scatters forward, toward us when we face the Sun.
+    float hg(float c, float g) { return (1.0 - g * g) / pow(1.0 + g * g - 2.0 * g * c, 1.5) * 0.0796; }
+
     void main() {
         vec2 uv = v_tex_coord;
         vec2 pts = uv * u_size;
@@ -277,10 +311,11 @@ final class WeatherScene: SKScene {
             float s = starField(pts, 9.0, 0.35, u_time) + 0.6 * starField(pts + 300.0, 5.0, 0.25, u_time);
             col += vec3(0.9, 0.93, 1.0) * s * u_stars * 0.6 * clamp(1.0 - dot(col, vec3(0.3, 0.5, 0.2)) * 3.0, 0.0, 1.0);
         }
-        // The Sun: a limb-darkened disc and a soft photographic glow.
-        float ang = acos(clamp(dot(rd, u_sun), -1.0, 1.0));
+        // The Sun: a limb-darkened disc and a soft photographic glow, hidden by cloud below.
+        float c = dot(rd, u_sun);
+        float ang = acos(clamp(c, -1.0, 1.0));
         float disc = smoothstep(0.0050, 0.0044, ang);
-        col += u_disc * (disc * 60.0 * (0.6 + 0.4 * sqrt(max(1.0 - ang * ang / 0.000022, 0.0))) + 0.25 * exp(-ang * 40.0) + 0.02 * exp(-ang * 8.0));
+        vec3 sunLight = u_disc * (disc * 60.0 * (0.6 + 0.4 * sqrt(max(1.0 - ang * ang / 0.000022, 0.0))) + 0.25 * exp(-ang * 40.0) + 0.02 * exp(-ang * 8.0));
         // The Moon: NASA's photo of the near side, lit from the real Sun, with a little earthshine on the dark part.
         vec2 m = (pts - u_moon.xy) / max(u_moon.z, 0.001);
         if (u_moon.z > 0.0 && dot(m, m) < 1.0) {
@@ -290,6 +325,73 @@ final class WeatherScene: SKScene {
             vec3 n = vec3(m, sqrt(max(1.0 - dot(m, m), 0.0)));
             float lit = smoothstep(-0.03, 0.06, dot(n, u_moonLight));
             col += surface.rgb * surface.rgb * u_moonCol * (lit + 0.015) * surface.a;
+        }
+
+        // Clouds: a flat layer at u_cloud.y km, seen in perspective, so they shrink and flatten toward the horizon.
+        // Lit from three looks at the density: here, a little further along the ray (less cloud there means this is
+        // a cloud's top edge on screen) and toward the Sun (cloud between here and the light).
+        float T = 1.0;
+        vec3 cl = vec3(0.0);
+        vec2 st0 = vec2(uv.x, (u_cam.z + 0.01 - u_cam.w) / (1.0 - u_cam.w));
+        vec3 haze = mix(decode(texture2D(u_before, st0).rgb), decode(texture2D(u_after, st0).rgb), u_blend);
+        haze = mix(min(haze, vec3(mix(40.0, 1.5, u_deck.a))), vec3(dot(min(haze, vec3(1.5)), vec3(0.3, 0.5, 0.2))) * 0.08 + u_deck.rgb * 0.9, u_deck.a); // as it looks under the deck
+        if (rd.z > 0.0 && u_cloud.x > 0.0) {
+            float tBase = u_cloud.y / rd.z;
+            vec2 wind = u_wind * u_time;
+            float lod = clamp(log2(tBase / 6.0) * 0.4, 0.0, 1.0);
+            vec2 P = rd.xy * tBase + wind;
+            vec2 toSun = u_sun.xy / max(length(u_sun.xy), 0.0001);
+            vec4 na1 = texture2D(u_noise, nuv(P * 0.045));
+            vec4 nb1 = texture2D(u_noise, nuv(P * 0.19 + na1.a * 0.3 + u_time * 0.00002));
+            float d = cloudShape(na1, nb1, u_cloud.x, u_cloud.w, lod);
+            vec2 Pu = P + normalize(rd.xy) * 0.35 * tBase / 6.0;
+            vec4 na2 = texture2D(u_noise, nuv(Pu * 0.045));
+            vec4 nb2 = texture2D(u_noise, nuv(Pu * 0.19 + na2.a * 0.3 + u_time * 0.00002));
+            float du = cloudShape(na2, nb2, u_cloud.x, u_cloud.w, lod);
+            vec2 Ps = P + toSun * 0.5;
+            vec4 na3 = texture2D(u_noise, nuv(Ps * 0.045));
+            vec4 nb3 = texture2D(u_noise, nuv(Ps * 0.19 + na3.a * 0.3 + u_time * 0.00002));
+            float ds = cloudShape(na3, nb3, u_cloud.x, u_cloud.w, lod);
+            // A deck is opaque, or the Sun's glow behind it shows through; heaped cloud has soft, thin edges.
+            float a = (1.0 - exp(-d * mix(6.0, 14.0, u_cloud.w) * u_cloud.z)) * smoothstep(0.0, 0.03, rd.z);
+            float thin = exp(-d * 3.0 * u_cloud.z);                      // light getting through
+            float top = clamp((d - du) * 3.0 + 0.35, 0.0, 1.0);         // a cloud's top edge on screen
+            float high = smoothstep(0.0, 0.35, u_sun.z);                 // the Sun above the clouds' sides
+            float shadow = exp(-ds * 2.5 * u_cloud.z);                   // cloud between here and the Sun
+            // Seen from below, bases are grey: sunlight diffused through the cloud plus skylight, about as bright as
+            // the blue beside them. Faces lit by the Sun are white; toward the Sun we see dark sides with bright rims.
+            float face = 0.55 - 0.45 * c;
+            vec3 base = u_sunCol * max(u_sun.z, 0.0) * mix(mix(0.04, 0.07, u_cloud.w), 0.16, thin) + u_amb * 0.22;
+            // A deck's underside is lumpy: rolls of thicker, darker cloud between thinner, brighter gaps. Thicker
+            // decks are darker overall, down to a storm's slate.
+            float lumps = na1.r * 0.55 + nb1.b * 0.3 + na1.g * 0.15;
+            base *= mix(1.0, 0.55 + 0.9 * lumps, u_cloud.w) * exp(-0.5 * (u_cloud.z - 1.0));
+            vec3 lit = u_sunCol * 0.3 * shadow;
+            float litFrac = clamp(top * high * face * 1.5 + (1.0 - high) * face, 0.0, 1.0);
+            cl = (mix(base, lit, litFrac) * (1.0 - 0.3 * u_cloud.w * d) + u_sunCol * shadow * thin * hg(c, 0.75) * 1.2) * a;
+            T = 1.0 - a;
+            // Distant cloud fades into the horizon haze, as a real sky ends in a pale band, not a cut-out edge. Under
+            // a deck that band is the deck's own grey (u_deck), only a little brighter toward the Sun.
+            float far = 1.0 - exp(-tBase / mix(45.0, 25.0, u_cloud.w));
+            cl = mix(cl, haze * (1.0 - T), far);
+        }
+        // High cirrus at 8 km: fine streaks along the wind, still lit pink after sunset down here.
+        if (rd.z > 0.0 && u_high > 0.0) {
+            vec2 H = rd.xy * (8.0 / rd.z) + u_wind * u_time * 2.0;
+            vec2 hs = vec2(H.x * 0.8 + H.y * 0.6, H.y * 0.8 - H.x * 0.6) * vec2(0.012, 0.09);
+            vec4 h1 = texture2D(u_noise, nuv(hs));
+            vec4 h2 = texture2D(u_noise, nuv(hs * vec2(3.1, 2.3) + h1.a * 0.2));
+            float ci = smoothstep(1.0 - u_high, 1.2 - u_high, h1.r * 0.7 + h2.b * 0.3) * (0.3 + 0.7 * h2.r);
+            ci *= smoothstep(0.02, 0.12, rd.z) * 0.55;
+            cl = cl + T * ci * (u_highCol * (0.7 + 6.0 * hg(c, 0.8)) + u_amb * 0.35);
+            T *= 1.0 - ci;
+        }
+        col = col * T + cl + sunLight * T;
+
+        // Fog: optically thick, so it's grey-white whatever the sky's colour, and it swallows the low sky first.
+        if (u_fog > 0.0) {
+            vec3 fogCol = mix(haze, vec3(dot(haze, vec3(0.3, 0.5, 0.2))), 0.7) * 0.95;
+            col = mix(col, fogCol, clamp(u_fog * 1.3, 0.0, 0.97) * smoothstep(u_cam.z + 1.2 * u_fog, u_cam.z - 0.05, uv.y));
         }
         col = sqrt(1.0 - exp(-col)); // film-like roll-off, then roughly sRGB
         gl_FragColor = vec4(col + (hash21(pts * 2.0) - 0.5) / 128.0, 1.0);
@@ -316,7 +418,7 @@ final class WeatherScene: SKScene {
                                  Float(width / size.width), Float(height / size.height))
         ground.shader = SKShader(source: Self.groundShader, uniforms: [
             SKUniform(name: "u_aux", texture: Self.groundAux), SKUniform(name: "u_frame", vectorFloat4: frame),
-            skyBefore, skyAfter, skyBlend, cameraUniforms.lens, groundLight, groundHaze, groundColour, groundHazeLit,
+            skyBefore, skyAfter, skyBlend, cameraUniforms.lens, groundLight, groundHaze, groundColour, groundHazeLit, fog, deck,
         ])
         addChild(ground)
     }
@@ -336,104 +438,82 @@ final class WeatherScene: SKScene {
         vec2 screen = u_frame.xy + v_tex_coord * u_frame.zw;
         vec2 above = vec2(screen.x, (u_cam.z + 0.03 - u_cam.w) / (1.0 - u_cam.w));
         vec3 haze = mix(decode(texture2D(u_before, above).rgb), decode(texture2D(u_after, above).rgb), u_blend) * u_hazeLit;
+        haze = mix(min(haze, vec3(mix(40.0, 1.5, u_deck.a))), vec3(dot(min(haze, vec3(1.5)), vec3(0.3, 0.5, 0.2))) * 0.08 + u_deck.rgb * 0.9, u_deck.a); // as it looks under the deck
         float far = aux.r / (1.0 - 0.9 * aux.r);
         float through = exp(-u_haze * far);
         land = land * through + haze * (1.0 - through);
+        // Fog swallows the far hills first.
+        vec3 fogCol = mix(haze, vec3(dot(haze, vec3(0.3, 0.5, 0.2))), 0.7) * 0.95;
+        land = mix(land, fogCol, (1.0 - exp(-far * u_fog)) * 0.97);
         gl_FragColor = vec4(sqrt(1.0 - exp(-land)), 1.0) * photo.a;
     }
     """
 
-    /// Wisps on a fair day, a full deck when it's grey; bigger clouds sit closer and drift faster in the wind.
-    private func addClouds(_ kind: Kind, palette: Palette) {
-        let deck = [.overcast, .drizzle, .rain, .snow, .storm].contains(kind)
-        let count = kind == .fog ? 0 : deck ? 16 : Int(conditions.cloudCover / 100 * 10)
-        let looks = (0..<3).map { _ in cloudTexture(light: palette.cloudLight, shade: palette.cloudShade) }
-        for _ in 0..<count {
-            let scale = deck ? CGFloat.random(in: 1.3...2.1) : .random(in: 0.8...1.5)
-            let cloud = SKSpriteNode(texture: looks.randomElement()!, size: CGSize(width: 340 * scale, height: 140 * scale))
-            cloud.position = CGPoint(x: .random(in: 0...size.width),
-                                     y: deck ? .random(in: size.height * 0.66...size.height * 1.02) : .random(in: size.height * 0.6...size.height * 0.92))
-            cloud.alpha = deck ? .random(in: 0.85...1) : 0.95
-            cloud.zPosition = 3 + scale / 10 // bigger (closer) clouds in front
-            addChild(cloud)
-            drifting.append((cloud, (4 + CGFloat(conditions.wind) * 0.5) * scale * .random(in: 0.8...1.2)))
-        }
+    // MARK: - Rain and snow
+
+    /// Rain or snow in layers of depth, drawn by one shader over everything. Drops and flakes take the colour of the
+    /// light around them, so like real rain they show against the hills but hardly against the sky.
+    private func addPrecipitation() {
+        let amount = conditions.precipitation
+        guard amount.rain > 0 || amount.snow > 0 else { return }
+        let lean = Float(min(conditions.wind / 50, 1) * 0.35) // ponytail: always leaning right, like the wind
+        precipitation.vectorFloat4Value = [Float(amount.rain), Float(amount.snow), lean, Float(conditions.wind / 10)]
+        let sheet = SKSpriteNode(color: .black, size: size)
+        sheet.anchorPoint = .zero
+        sheet.zPosition = 8
+        sheet.shader = SKShader(source: shaderCommon + Self.precipitationShader, uniforms: [
+            SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]), clock, precipitation, rainColour, snowColour,
+        ])
+        addChild(sheet)
     }
 
-    /// A haze that thickens toward the far hills, plus slow banks of mist drifting through.
-    private func addFog(_ palette: Palette, density: CGFloat) {
-        let haze = SKSpriteNode(texture: gradient([palette.fog.withAlpha(0.35 * density), palette.fog.withAlpha(0.8 * density),
-                                                   palette.fog.withAlpha(0.55 * density), palette.fog.withAlpha(0.15 * density)]), size: size)
-        haze.anchorPoint = .zero
-        haze.zPosition = 6
-        addChild(haze)
-        guard density >= 1 else { return }
-        let bank = paint(CGSize(width: 200, height: 60)) { ctx in
-            ctx.scaleBy(x: 1, y: 0.3) // squash a round puff into a long bank
-            let puff = CGGradient(colorsSpace: nil, colors: [palette.fog.cg(0.7), palette.fog.cg(0)] as CFArray, locations: nil)!
-            ctx.drawRadialGradient(puff, startCenter: CGPoint(x: 100, y: 100), startRadius: 0, endCenter: CGPoint(x: 100, y: 100), endRadius: 100, options: [])
+    private static let precipitationShader = """
+    void main() {
+        vec2 pts = v_tex_coord * u_size;
+        float t = u_clock;
+        // Rain: four depths of streaks, sheared by the wind; far layers fine and dense, near ones long, soft and sparse.
+        float rain = 0.0;
+        if (u_precip.x > 0.0) {
+            for (int i = 0; i < 4; i++) {
+                float fi = float(i);
+                float cell = 7.0 + fi * 9.0;
+                vec2 p = pts + vec2(pts.y * u_precip.z, 0.0);
+                p.y += t * (700.0 + fi * 350.0);
+                vec2 g = vec2(cell, cell * (5.0 + fi * 2.0));
+                vec2 id = floor(p / g);
+                vec4 h = hash42(id + fi * 17.0);
+                vec2 f = p / g - id;
+                float w = (0.6 + fi * 0.5) / cell;
+                float x = abs(f.x - 0.15 - 0.7 * h.x) / w;
+                float y = f.y - h.y * 0.5;
+                rain += step(h.z, u_precip.x * (0.55 - fi * 0.1)) * exp(-x * x) * smoothstep(0.0, 0.15, y) * smoothstep(0.5, 0.2, y) * (0.1 + 0.03 * fi);
+            }
         }
-        for i in 0..<5 {
-            let mist = SKSpriteNode(texture: bank, size: CGSize(width: size.width * 0.9, height: size.height * 0.22))
-            mist.position = CGPoint(x: .random(in: 0...size.width), y: size.height * (0.08 + 0.08 * CGFloat(i)))
-            mist.zPosition = 6
-            addChild(mist)
-            drifting.append((mist, .random(in: 5...12)))
+        // Snow: five depths of flakes swaying down, the near ones big, soft and out of focus. Each stays inside its
+        // cell, or it's clipped into a square.
+        float snow = 0.0;
+        if (u_precip.y > 0.0) {
+            for (int i = 0; i < 5; i++) {
+                float fi = float(i);
+                float cell = 14.0 + fi * 16.0;
+                vec2 p = pts + vec2(-t * u_precip.w * (2.0 + fi), t * (18.0 + fi * 14.0));
+                vec2 id = floor(p / cell);
+                vec4 h = hash42(id + fi * 31.0);
+                float r = 0.8 + fi * fi * 0.35;
+                float blur = 0.3 + fi * 0.12;
+                float room = max(0.5 - r * (1.0 + blur) / cell - 0.08, 0.0);
+                vec2 f = (fract(p / cell) - 0.5 - (h.xy - 0.5) * 2.0 * room * vec2(0.6, 1.0)) * cell;
+                f.x += sin(t * (0.6 + h.z) + h.w * 6.28) * cell * room * 0.4;
+                float d = length(f) / r;
+                snow += step(h.w, u_precip.y * (0.7 - fi * 0.1)) * smoothstep(1.0 + blur, 1.0 - blur, d) * (0.8 - fi * 0.12);
+            }
         }
+        float a = clamp(rain, 0.0, 1.0);
+        float b = clamp(snow, 0.0, 1.0);
+        vec3 col = u_rainCol * a * (1.0 - b) + u_snowCol * b;
+        gl_FragColor = vec4(col, a * (1.0 - b) + b);
     }
-
-    /// Streaks falling at an angle that leans further with the wind.
-    private func addRain(_ palette: Palette, rate: CGFloat, speed: CGFloat, scale: CGFloat) {
-        let lean = min(CGFloat(conditions.wind) / 50, 1) * 0.45
-        let rain = SKEmitterNode()
-        rain.particleTexture = paint(CGSize(width: 2, height: 26)) { ctx in
-            let streak = CGGradient(colorsSpace: nil, colors: [CGColor(gray: 1, alpha: 0), CGColor(gray: 1, alpha: 1)] as CFArray, locations: nil)!
-            ctx.drawLinearGradient(streak, start: CGPoint(x: 1, y: 26), end: CGPoint(x: 1, y: 0), options: [])
-        }
-        rain.particleSize = CGSize(width: 2, height: 26)
-        rain.particleBirthRate = rate
-        rain.particleSpeed = speed
-        rain.particleSpeedRange = speed * 0.2
-        rain.emissionAngle = -.pi / 2 + lean
-        rain.particleRotation = lean
-        rain.particleLifetime = size.height * 1.15 / (speed * cos(lean))
-        rain.particleScale = scale
-        rain.particleScaleRange = 0.3
-        rain.particleAlpha = conditions.isDay ? 0.45 : 0.3
-        rain.particleColor = palette.rain.ns
-        rain.particleColorBlendFactor = 1
-        rain.position = CGPoint(x: size.width / 2 - tan(lean) * size.height / 2, y: size.height + 20)
-        rain.particlePositionRange = CGVector(dx: size.width + tan(lean) * size.height, dy: 0)
-        rain.zPosition = 8
-        rain.advanceSimulationTime(TimeInterval(rain.particleLifetime)) // already raining when it appears
-        addChild(rain)
-    }
-
-    private func addSnow(rate: CGFloat) {
-        let snow = SKEmitterNode()
-        snow.particleTexture = paint(CGSize(width: 12, height: 12)) { ctx in
-            let flake = CGGradient(colorsSpace: nil, colors: [CGColor(gray: 1, alpha: 1), CGColor(gray: 1, alpha: 0)] as CFArray, locations: [0.35, 1])!
-            ctx.drawRadialGradient(flake, startCenter: CGPoint(x: 6, y: 6), startRadius: 0, endCenter: CGPoint(x: 6, y: 6), endRadius: 6, options: [])
-        }
-        snow.particleSize = CGSize(width: 12, height: 12)
-        snow.particleBirthRate = rate
-        snow.particleSpeed = 55
-        snow.particleSpeedRange = 30
-        snow.emissionAngle = -.pi / 2
-        snow.xAcceleration = CGFloat(conditions.wind) * 0.6
-        snow.particleLifetime = size.height / 35
-        snow.particleScale = 0.6
-        snow.particleScaleRange = 0.5
-        snow.particleAlpha = conditions.isDay ? 0.95 : 0.7
-        snow.position = CGPoint(x: size.width / 2 - CGFloat(conditions.wind) * 8, y: size.height + 10)
-        snow.particlePositionRange = CGVector(dx: size.width * 1.4, dy: 0)
-        let sway = SKAction.moveBy(x: 14, y: 0, duration: 1.4)
-        sway.timingMode = .easeInEaseOut
-        snow.particleAction = .repeatForever(.sequence([sway, sway.reversed()]))
-        snow.zPosition = 8
-        snow.advanceSimulationTime(TimeInterval(snow.particleLifetime))
-        addChild(snow)
-    }
+    """
 
     /// Every several seconds: a jagged bolt behind the hills and a double flicker across the whole sky.
     private func addLightning() {
@@ -475,49 +555,12 @@ final class WeatherScene: SKScene {
         sinceBake += dt
         if sinceTrack >= 1 { sinceTrack = 0; track() }
         if sinceBake >= 60 && !baking { sinceBake = 0; bakeSky() }
-        for (node, speed) in drifting {
-            node.position.x += speed * dt
-            let half = node.frame.width / 2
-            if node.position.x - half > size.width { node.position.x = -half } // ponytail: wind always blows left to right
-        }
-    }
-
-    // MARK: - Painting
-
-    /// A puffy cloud: overlapping ellipses, lit on top and shaded underneath, with soft edges.
-    private func cloudTexture(light: RGB, shade: RGB) -> SKTexture {
-        paint(CGSize(width: 340, height: 140)) { ctx in
-            ctx.beginTransparencyLayer(auxiliaryInfo: nil)
-            ctx.setShadow(offset: .zero, blur: 10, color: light.cg(0.8))
-            ctx.setFillColor(light.cg())
-            ctx.addPath(CGPath(roundedRect: CGRect(x: 30, y: 20, width: 280, height: 34), cornerWidth: 17, cornerHeight: 17, transform: nil))
-            ctx.fillPath() // flat base
-            ctx.saveGState()
-            ctx.clip(to: CGRect(x: 0, y: 20, width: 340, height: 120)) // cumulus have flat bottoms
-            for i in 0..<9 { // a dome of puffs, biggest in the middle
-                let r = (14 + 30 * sin(.pi * CGFloat(i) / 8)) * .random(in: 0.75...1.05)
-                let x = 48 + CGFloat(i) * 30 + .random(in: -8...8)
-                ctx.fillEllipse(in: CGRect(x: x - r, y: 22 + r * 0.9 - r, width: r * 2, height: r * 2))
-            }
-            ctx.restoreGState()
-            ctx.setShadow(offset: .zero, blur: 0)
-            ctx.setBlendMode(.sourceAtop)
-            let underside = CGGradient(colorsSpace: nil, colors: [shade.cg(), shade.cg(0)] as CFArray, locations: nil)!
-            ctx.drawLinearGradient(underside, start: CGPoint(x: 0, y: 20), end: CGPoint(x: 0, y: 70), options: [])
-            ctx.endTransparencyLayer()
-        }
-    }
-
-    /// A vertical gradient texture from bottom to top, stretched over whatever sprite uses it.
-    private func gradient(_ colours: [CGColor]) -> SKTexture {
-        paint(CGSize(width: 4, height: 256)) { ctx in
-            let g = CGGradient(colorsSpace: nil, colors: colours as CFArray, locations: nil)!
-            ctx.drawLinearGradient(g, start: .zero, end: CGPoint(x: 0, y: 256), options: [])
-        }
+        clock.floatValue = (clock.floatValue + Float(dt)).truncatingRemainder(dividingBy: 3600)
     }
 }
 
-// MARK: - Weather kinds and colours
+// MARK: - Weather kinds
+
 
 private enum Kind { case clear, partlyCloudy, overcast, fog, drizzle, rain, snow, storm }
 
@@ -532,6 +575,45 @@ private extension WeatherScene.Conditions {
         case 71...77, 85, 86: .snow
         case 95...99: .storm
         default: .partlyCloudy
+        }
+    }
+
+    /// The cloud layer: how much of the sky it covers, its base and thickness in km, how flat a sheet it is (0 heaped
+    /// cumulus, 1 a featureless deck), and high cirrus. After the cloud each kind of weather comes from: fair-weather
+    /// cumulus, stratocumulus when overcast, stratus for drizzle, nimbostratus for rain and snow, cumulonimbus in storms.
+    var clouds: (cover: Float, base: Float, thickness: Float, deck: Float, cirrus: Float) {
+        let share = Float(cloudCover / 100)
+        switch kind {
+        case .clear: return (share * 0.5, 1.4, 0.8, 0, 0.25)
+        case .partlyCloudy: return (0.15 + share * 0.5, 1.4, 1, 0.1, 0.3)
+        case .overcast: return (0.97, 1.0, 1.3, 0.75, 0)
+        case .fog: return (1, 0.3, 0.6, 1, 0)
+        case .drizzle: return (1, 0.5, 1.6, 0.95, 0)
+        case .rain: return (1, 0.8, 2.2, 0.9, 0)
+        case .snow: return (1, 0.9, 1.8, 0.95, 0)
+        case .storm: return (1, 1.0, 3.2, 0.6, 0)
+        }
+    }
+
+    /// How hard it's raining and snowing, 0…1 each.
+    var precipitation: (rain: Double, snow: Double) {
+        switch kind {
+        case .drizzle: (0.3 * intensity + 0.1, 0)
+        case .rain: (0.35 + 0.6 * intensity, 0)
+        case .storm: (1, 0)
+        case .snow: (0, 0.3 + 0.7 * intensity)
+        default: (0, 0)
+        }
+    }
+
+    /// How thick the fog or mist is, 0…1.
+    var fog: Float {
+        switch kind {
+        case .fog: 0.75
+        case .drizzle: 0.25
+        case .rain, .storm: Float(0.1 + 0.15 * intensity)
+        case .snow: Float(0.15 + 0.2 * intensity)
+        default: 0
         }
     }
 
@@ -550,57 +632,7 @@ private extension WeatherScene.Conditions {
     }
 }
 
-/// Colours for one kind of weather. At night everything dims toward moonlit blue.
-private struct Palette {
-    var skyTop, skyBottom, far, mid, near, tree, cloudLight, cloudShade, fog, rain: RGB
-
-    init(_ kind: Kind, day: Bool) {
-        switch kind {
-        case .clear, .partlyCloudy:
-            (skyTop, skyBottom, far, mid, near, tree) = (rgb(74, 144, 226), rgb(182, 216, 242), rgb(140, 174, 182), rgb(106, 152, 98), rgb(74, 126, 66), rgb(38, 86, 52))
-            (cloudLight, cloudShade) = (rgb(255, 255, 255), rgb(206, 216, 232))
-        case .overcast:
-            (skyTop, skyBottom, far, mid, near, tree) = (rgb(146, 154, 166), rgb(196, 200, 206), rgb(150, 160, 162), rgb(112, 138, 104), rgb(86, 114, 78), rgb(52, 80, 58))
-            (cloudLight, cloudShade) = (rgb(212, 216, 222), rgb(156, 162, 174))
-        case .fog:
-            (skyTop, skyBottom, far, mid, near, tree) = (rgb(190, 194, 198), rgb(214, 216, 218), rgb(186, 190, 192), rgb(148, 162, 150), rgb(104, 126, 98), rgb(70, 92, 72))
-            (cloudLight, cloudShade) = (rgb(222, 224, 226), rgb(196, 200, 204))
-        case .drizzle, .rain:
-            (skyTop, skyBottom, far, mid, near, tree) = (rgb(104, 114, 130), rgb(156, 164, 176), rgb(124, 136, 140), rgb(84, 112, 82), rgb(60, 94, 56), rgb(38, 68, 44))
-            (cloudLight, cloudShade) = (rgb(150, 156, 168), rgb(98, 104, 118))
-        case .snow:
-            (skyTop, skyBottom, far, mid, near, tree) = (rgb(172, 182, 198), rgb(220, 224, 232), rgb(206, 214, 228), rgb(222, 228, 238), rgb(238, 242, 248), rgb(50, 78, 68))
-            (cloudLight, cloudShade) = (rgb(218, 222, 230), rgb(176, 182, 196))
-        case .storm:
-            (skyTop, skyBottom, far, mid, near, tree) = (rgb(48, 54, 70), rgb(98, 104, 118), rgb(82, 94, 100), rgb(56, 78, 58), rgb(42, 62, 42), rgb(26, 46, 32))
-            (cloudLight, cloudShade) = (rgb(94, 100, 116), rgb(52, 56, 70))
-        }
-        fog = mix(skyBottom, RGB(repeating: 1), 0.3)
-        rain = rgb(206, 214, 228)
-        guard !day else { return }
-        let moonlit = RGB(0.22, 0.26, 0.42), tint = rgb(2, 3, 8)
-        (far, mid, near, tree) = (far * moonlit + tint, mid * moonlit + tint, near * moonlit + tint, tree * moonlit + tint)
-        (cloudLight, cloudShade) = (cloudLight * RGB(0.3, 0.33, 0.46), cloudShade * RGB(0.26, 0.28, 0.4))
-        (fog, rain) = (fog * RGB(0.3, 0.34, 0.46), rain * 0.5)
-        if kind == .clear || kind == .partlyCloudy {
-            (skyTop, skyBottom) = (rgb(8, 12, 32), rgb(30, 44, 84))
-        } else {
-            (skyTop, skyBottom) = (skyTop * RGB(0.2, 0.22, 0.3), skyBottom * RGB(0.26, 0.28, 0.36)) // a low, dim ceiling
-        }
-    }
-}
-
-private typealias RGB = SIMD3<Double>
-
-private func rgb(_ r: Int, _ g: Int, _ b: Int) -> RGB { RGB(Double(r), Double(g), Double(b)) / 255 }
-private func mix(_ a: RGB, _ b: RGB, _ t: Double) -> RGB { a + (b - a) * t }
 private func smoothstep(_ edge0: Double, _ edge1: Double, _ x: Double) -> Double {
     let t = min(max((x - edge0) / (edge1 - edge0), 0), 1)
     return t * t * (3 - 2 * t)
-}
-
-private extension SIMD3<Double> {
-    func cg(_ alpha: CGFloat = 1) -> CGColor { CGColor(srgbRed: Swift.min(x, 1), green: Swift.min(y, 1), blue: Swift.min(z, 1), alpha: alpha) }
-    func withAlpha(_ alpha: CGFloat) -> CGColor { cg(alpha) }
-    var ns: NSColor { NSColor(srgbRed: Swift.min(x, 1), green: Swift.min(y, 1), blue: Swift.min(z, 1), alpha: 1) }
 }

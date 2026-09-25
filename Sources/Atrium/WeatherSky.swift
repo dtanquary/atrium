@@ -203,3 +203,57 @@ struct SkyLight: Sendable {
         return texture
     }
 }
+
+/// Tileable noise for the clouds, baked once: 256² with one wrapped row and column (257²), so bilinear filtering never
+/// meets a seam. Red is a 4-octave value-noise fbm, green three octaves of inverted Worley (billows), blue a fine fbm,
+/// alpha another fbm for warping. Two lookups cost about a fifth of one computed fbm.
+@MainActor enum CloudNoise {
+    static let texture: SKTexture = {
+        let n = 256, m = n + 1
+        func hash(_ x: Int, _ y: Int, _ s: Int) -> Double {
+            var h = UInt32(truncatingIfNeeded: x &* 374761393 &+ y &* 668265263 &+ s &* 2246822519)
+            h = (h ^ (h >> 13)) &* 1274126177
+            return Double(h ^ (h >> 16)) / Double(UInt32.max)
+        }
+        func value(_ x: Double, _ y: Double, _ period: Int, _ s: Int) -> Double {
+            let (xi, yi) = (Int(floor(x)), Int(floor(y)))
+            var (fx, fy) = (x - floor(x), y - floor(y))
+            fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy)
+            func h(_ i: Int, _ j: Int) -> Double { hash((i % period + period) % period, (j % period + period) % period, s) }
+            return (h(xi, yi) * (1 - fx) + h(xi + 1, yi) * fx) * (1 - fy) + (h(xi, yi + 1) * (1 - fx) + h(xi + 1, yi + 1) * fx) * fy
+        }
+        func fbm(_ u: Double, _ v: Double, _ first: Int, _ s: Int) -> Double {
+            var sum = 0.0, a = 0.5, p = first
+            for o in 0..<4 { sum += a * value(u * Double(p), v * Double(p), p, s + o); a *= 0.5; p *= 2 }
+            return sum / 0.9375
+        }
+        func worley(_ u: Double, _ v: Double, _ period: Int) -> Double {
+            let (x, y) = (u * Double(period), v * Double(period))
+            var best = 9.0
+            for j in -1...1 { for i in -1...1 {
+                let (ci, cj) = (Int(floor(x)) + i, Int(floor(y)) + j)
+                let (wi, wj) = ((ci % period + period) % period, (cj % period + period) % period)
+                let px = Double(ci) + hash(wi, wj, 91), py = Double(cj) + hash(wi, wj, 92)
+                best = min(best, (px - x) * (px - x) + (py - y) * (py - y))
+            } }
+            return 1 - min(best.squareRoot(), 1)
+        }
+        var bytes = [UInt8](repeating: 0, count: m * m * 4)
+        bytes.withUnsafeMutableBufferPointer { buffer in
+            let buffer = buffer
+            DispatchQueue.concurrentPerform(iterations: m) { y in
+                for x in 0..<m {
+                    let (u, v) = (Double(x % n) / Double(n), Double(y % n) / Double(n))
+                    let billows = 0.5 * worley(u, v, 12) + 0.3 * worley(u, v, 24) + 0.2 * worley(u, v, 48)
+                    let i = (y * m + x) * 4
+                    for (c, value) in [fbm(u, v, 4, 1), billows, fbm(u, v, 16, 20), fbm(u, v, 8, 40)].enumerated() {
+                        buffer[i + c] = UInt8(value * 255)
+                    }
+                }
+            }
+        }
+        let texture = SKTexture(data: Data(bytes), size: CGSize(width: m, height: m))
+        texture.filteringMode = .linear
+        return texture
+    }()
+}

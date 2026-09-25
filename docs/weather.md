@@ -4,7 +4,7 @@ Green California hills and oak woodland, from a real photo, under whatever the w
 
 - **Files:** `Sources/Atrium/Weather.swift` holds the scene, the WMO code → `Kind` mapping, `Palette`, and a seeded random number generator. `WeatherSky.swift` holds the physical sky: `Atmosphere`, `SkyCamera` and `SkyLight`. `Resources/weather-*` are its images, credited in `weather-credits.tsv`. It also uses `SkyMath.swift` (for whether the Sun is up) and `Location.swift`; see [live-sky.md](live-sky.md). There's a test in `Tests/AtriumTests/WeatherTests.swift`.
 - **Entry:** `weather(size:)` builds `final class WeatherScene: SKScene`, whose `init(size:conditions:)` is the test seam. Its entry in Scenes.swift is "Weather", icon `cloud.sun.fill`, tint `.blue`, with `WeatherScene.knobs`.
-- **Kind:** a physical sky baked on the CPU into a small texture, a photo of the ground relit by a shader, painted clouds, and emitters for rain and snow.
+- **Kind:** a physical sky baked on the CPU into a small texture, then three shaders: the sky with its clouds, the ground photo relit, and rain or snow.
 
 ## How it works
 - **`Conditions`** holds `code` (the WMO weather code), `isDay`, `cloudCover` (%) and `wind` (km/h). `kind` maps the code:
@@ -28,19 +28,16 @@ Green California hills and oak woodland, from a real photo, under whatever the w
   - **Stars:** two `starField` layers, faded in from a Sun 4° to 14° below the horizon, dimmed 60% by a bright Moon, thinned where the sky is brighter, and hidden unless it's clear or partly cloudy.
   - **Sun:** a limb-darkened disc 0.28° across with a soft glow, in the colour of sunlight through the air (reddening as it sets), shown down to 1° below the horizon.
   - **Moon:** NASA's LRO near side (`weather-moon.png`, from the CGI Moon Kit), 15 pt in radius (about 2.5× true), at its real place, lit from the real Sun with 1.5% earthshine, and turned so its north points to the celestial pole, as in Live Sky. It's tinted by moonlight through the air, and paler by day. `track()` moves the Sun and Moon every second, since a minute's step would be about the Sun's radius. The Moon also lights the sky as a second light at 2.5e−6·lit³ of the Sun.
-  - **Clouds:** painted cumulus (overlapping ellipses, flat base, shaded underside), in three variants per build. When it's grey (overcast, drizzle, rain, snow, storm) there's a full deck of 16 big clouds; otherwise `cloudCover/10` wisps. Bigger clouds sit in front and drift faster.
-  - **Ground:** a photo of Fort Ord National Monument (BLM California, public domain, 7379 px wide, shot on an overcast May morning, so there are no hard shadows to fight the real Sun) with the sky cut out, as `weather-ground.heic` (4096×1485 with alpha, 1.4 MB). `weather-ground-aux.png` (1024×371) holds its distance in red (0 at the bottom, 1 at the skyline) and its trees in green. Both are decoded once, statically.
-    - It covers the bottom 56% of the screen, cropped at the bottom on wider screens so the sky keeps its share. The horizon is at 0.45, just under the lowest point of the skyline.
-    - **Light:** the shader treats the photo's colours (squared, roughly linear) as lit by the overcast it was taken in, and multiplies by `u_light`: skylight plus the Sun's (or the Moon's) direct light on the slopes that face it. `direct()` is `0.55·z + 0.35·front·cos + 0.15`, where `front` is 1 with the light behind the viewer. Facing a low Sun we see the hills' shaded sides, so there's little; just after sunrise only some slopes catch it (×0.4). Under a deck of cloud the light is grey, even and half the day's (`cloudiness`).
-    - **Adapting:** the land's own light is compressed by its brightness (`^−0.45`), as an eye adapts. Physically correct numbers left the hills almost black facing a sunset, so even half a percent of haze from the glow swamped them.
-    - **Night:** it dims by 60% more from a Sun 2° to 11° below the horizon, and fades toward grey-blue (the Purkinje shift) by moonlight. The exposure also dims 50% at night, so a moonlit night looks like night rather than a long exposure; tonight's full Moon lit it like a dull day before that.
-    - **Haze:** each point fades toward the sky 0.03 above the horizon over its column, by `1 − exp(−u_haze·d/(1 − 0.9d))`. After sunset the haze dims to 30%, since the air near the ground is in the Earth's shadow while the high sky still glows; without that, the whole land glowed orange at dusk.
-    - The photo's own low clouds above the ridge were cleared from the cut (anything over 4 px above the skyline).
-  - **Fog:** a vertical haze gradient, plus 5 drifting banks of mist at full density. Rain and snow get a thinner haze.
-  - **Rain:** an `SKEmitterNode` of 2×26 streaks. The lean is `min(wind/50, 1)·0.45` rad, and the rate goes 90 (drizzle), then 200–500 (rain), then 550 (storm). `advanceSimulationTime` makes it already raining when it appears.
-  - **Snow:** an emitter with `xAcceleration` from the wind and a sway `particleAction`.
-  - **Lightning** (storm): a jagged `SKShapeNode` bolt behind the hills plus a double flash across the screen, every 4–14 s (`wait 9 ± 5`).
-- **Motion:** in `update(_:)`, clouds and mist banks drift right at their own speed and wrap around. `dt` is clamped to 0–0.1 s; the render harness produced huge negative values before its fix.
+  - **Clouds:** one flat layer in the sky shader, seen through the camera, so it shrinks and flattens toward the horizon (after the research prototype's "FLAT" variant). `Conditions.clouds` sets its cover, base and thickness in km, and how flat a sheet it is (`deck`: 0 heaped cumulus, 1 featureless), after the cloud each kind comes from: fair-weather cumulus (partly cloudy), stratocumulus (overcast), stratus (drizzle), nimbostratus (rain, snow), cumulonimbus (storm), and a thin bright layer at 0.3 km for fog.
+    - **Shape:** `cloudShape` from two lookups of `CloudNoise` (baked once: 257² tileable value-noise fbm, Worley billows, fine fbm and a warp channel). Baked noise costs about a fifth of computed fbm. It drifts with the wind (`u_wind`, km/s, across the view and a little away) and evolves slowly.
+    - **Light:** three looks at the density (here, a little further along the ray for top edges, and toward the Sun for shadow), then: grey bases about as bright as the sky beside them, white sunlit tops, dark sides with bright rims toward the Sun (Henyey–Greenstein forward scattering). A deck is opaque (or the Sun's glow shows through as an orange column), and darker the thicker it is (`exp(−0.5·(thickness − 1))`), down to a storm's slate. Its underside is lumpy: rolls of thicker cloud between thinner, brighter gaps.
+    - **The horizon under a deck** (`u_deck`: the underside's colour, and how much it replaces the clear sky's): distant cloud fades into it, and so do the ground's haze and fog. Using the clear sky's horizon there made fog whiter than the grey sky above it, and turned a stormy sunset's hills pink.
+    - **Skyglow:** at night low cloud glows faintly orange-grey, like the lights of towns beneath it, so a rainy night isn't black.
+    - **Cirrus** at 8 km: fine streaks along the wind, lit pink after sunset down here, on clear and partly cloudy days.
+  - **Fog** (`u_fog`: 0.75 for fog, 0.25 drizzle, 0.1–0.25 rain and storm, 0.15–0.35 snow): grey-white whatever the sky's colour, since it's optically thick. On the ground it swallows the far hills first (`1 − exp(−distance·u_fog)`); in the sky it rises from the horizon, over the whole sky in real fog.
+  - **Rain and snow:** one full-screen shader over everything (`addPrecipitation`). Rain is four depths of streaks sheared by the wind, the far layers fine and dense, the near ones long, soft and sparse. Snow is five depths of flakes swaying down, the near ones up to 6 pt and out of focus, each kept inside its cell so it's never clipped square. Both take the light around them, so like real rain they show against the hills but hardly against the sky. They run on `u_clock`, which wraps hourly, since `u_time` grows with uptime and at 700 pt/s a float that large loses the streaks.
+  - **Lightning** (storm): still the old jagged `SKShapeNode` bolt and double flash, every 4–14 s.
+- **Motion:** `update(_:)` eases the sky crossfade, moves the Sun and Moon each second, starts a sky bake each minute, and advances `u_clock`. `dt` is clamped to 0–0.1 s; the render harness produced huge negative values before its fix.
 
 ## Time, live data and appearance
 - **Weather source:** Open-Meteo (`https://api.open-meteo.com/v1/forecast?latitude=…&longitude=…&current=weather_code,cloud_cover,wind_speed_10m`). It's free and needs no key, and is for non-commercial use.
@@ -57,10 +54,9 @@ Green California hills and oak woodland, from a real photo, under whatever the w
 - `report` holds the latest live weather and `conditions` what's drawn; `redraw()` rebuilds only when the two differ, so any other change to UserDefaults costs nothing.
 
 ## Tuning constants
-- **Clouds:** 340×140 pt base size; scale 1.3–2.1 in a full deck, 0.8–1.5 otherwise; drift speed `(4 + 0.5·wind)·scale`.
-- **Rain:** lean `wind/50·0.45` rad; alpha 0.45 by day, 0.3 at night; speeds 520, 900 and 1000.
-- **Snow:** speed 55 ± 30; scale 0.6 ± 0.5; sway 14 pt over 1.4 s.
-- **Fog:** 5 banks at 5–12 pt/s.
+- **Clouds:** `Conditions.clouds`, per kind. Drift is `wind/3600·0.6` km/s.
+- **Rain:** lean `min(wind/50, 1)·0.35`; layers fall at 700–1750 pt/s.
+- **Snow:** layers fall at 18–74 pt/s, drifting with the wind.
 - **Lightning:** flashes at alpha 0.5, then 0.08, then 0.35, then fade.
 - **Hills:** the landscape texture covers the bottom 46% of the screen; the tree count scales with width (`w/55` in the middle range, `w/160` in front).
 
