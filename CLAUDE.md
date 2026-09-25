@@ -38,6 +38,8 @@ SNAPSHOT_SCENE="Aurora" SNAPSHOT_DIR=/some/dir SNAPSHOT_SECONDS=20 swift test
 - SKShader is GLSL-like and gets translated to Metal. There's no `inout`. `u_time` follows the wall clock, so `SNAPSHOT_SECONDS` doesn't move shader animation forward (SKActions do move forward).
 - Globals in `main.swift` are set up by top-level code and aren't safe to use from tests. Put shared state in other files.
 - Swift 6 strict concurrency: AppKit and CoreLocation delegate callbacks are `nonisolated` and use `MainActor.assumeIsolated`.
+- Don't change a node's `speed` every frame while `SKAction.animate(withWarps:)` runs on it. SpriteKit gets steadily slower (from 1 ms to 10 ms a frame within a minute). Pick precomputed warp frames yourself in `update(_:)` instead.
+- In SKShader, uniforms are only visible inside `main()`, so pass them to helper functions as parameters, and there's no global `const`.
 - `paint(_:_:)` draws at 2x, so the texture's pixel size is double. Give sprites an explicit size.
 - Data must be public domain or permissively licensed. Cite the source in a comment or in the data file's header.
 
