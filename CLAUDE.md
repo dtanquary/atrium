@@ -33,8 +33,9 @@ SNAPSHOT_DEFAULTS="gradient.ribbons=1,gradient.previewTime=1" swift test   # sna
 2. Build everything visible in `init` or `sceneDidLoad`. The render test uses `SKRenderer`, which never calls `didMove(to:)`.
 3. Start live services (`Location.shared.start()`, network polling) in `didMove(to:)`.
 4. Drive periodic work with SKActions or `update(_:)`, not Timers, so it stops while the wallpaper is hidden.
-5. Stay within budget: about 2 ms of CPU and 2 ms of GPU per frame at 2x Retina, as the render test prints it. Scenes run all day.
-6. Look at the snapshot PNG before calling it done.
+5. For separate Light and Dark Mode looks, read `systemIsDark` when the scene is built. The app rebuilds the current scene with a crossfade when macOS switches appearance. Check both looks with `SNAPSHOT_APPEARANCE=light|dark`.
+6. Stay within budget: about 2 ms of CPU and 2 ms of GPU per frame at 2x Retina, as the render test prints it. Scenes run all day.
+7. Look at the snapshot PNG before calling it done.
 
 ## Gotchas
 - SKShader is GLSL-like and gets translated to Metal. There's no `inout`. `u_time` follows the wall clock, so `SNAPSHOT_SECONDS` doesn't move shader animation forward (SKActions do move forward).
