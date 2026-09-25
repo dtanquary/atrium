@@ -109,6 +109,7 @@ All are read live through `Self.knobs[i].value` every frame (in `knobs` order: I
 - **The ISS tracking switch** was his request.
 - **Centred on his location,** which he tested and liked.
 - **Real clouds** (2026-09-24): he asked how hard "semi global cloud data" for "somewhat realistic cloud coverage" would be, and chose clouds first, with lightning to follow. He asked for the Live clouds switch, with no polling while it's off, loading from the cache first when it's turned back on, and "long long polling, this is not critical data". His verdict on the result: "it looks great".
+- **Lightning** (2026-09-24): he asked for bursts "where we believe storms to be in the region around me", and for a fake storm over his location to test with, which became the Preview switch. His verdict: "its great".
 
 ## Ideas / next steps
 - **Observed lightning** instead of forecast storms: NOAA GOES GLM is public domain but Americas-only, and ships as NetCDF every 20 s. Blitzortung's terms restrict reuse.
