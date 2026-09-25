@@ -202,6 +202,13 @@ final class Galaxy: SKScene {
         return o.w * (exp(-2.5 * rc) + 0.6 * exp(-rc * rc * 30.0));
     }
 
+    // shaderCommon's fbm cut to its first three octaves, the same ones, for bending the arms: the two finest only
+    // added sub-pixel wiggles, for two noise lookups a pixel. Their average (0.047) is added back so arms don't shift.
+    float fbm3(vec2 p) {
+        vec2 p1 = p * 2.03 + vec2(1.7, 9.2);
+        return 0.5 * noise(p) + 0.25 * noise(p1) + 0.125 * noise(p1 * 2.03 + vec2(1.7, 9.2)) + 0.047;
+    }
+
     // fbm and a ridged multifractal from the same five noise samples, octaves turned so the value-noise grid never
     // lines up. Returns (fbm, ridges): the ridges are thin, connected filaments, 0 to about 1.
     vec2 fbmRidge(vec2 p) {
@@ -268,7 +275,7 @@ final class Galaxy: SKScene {
             float lr = log(max(r, r0 * 0.35) / r0);
             vec2 q = turn(g, lr * u_shape.y);
             vec2 qn = turn(g, lr * min(u_shape.y, 1.0));
-            float warp = fbm(q * 2.2 + u_seed) - 0.5;
+            float warp = fbm3(q * 2.2 + u_seed) - 0.5;
             float aq = atan(q.y, q.x);
             float ph = arms * aq + warp * (2.0 + 5.0 * ragged);
             // Each arm has its own strength, so the pattern is lopsided like real ones. Stars stream through the arms
@@ -307,9 +314,10 @@ final class Galaxy: SKScene {
             // thin filaments everywhere down to the nucleus, and for barred kinds, lanes along the bar's leading edges.
             vec2 fr = fbmRidge(qn * 6.0 + u_seed * 1.3 + 3.0);
             float dt = fr.x;
-            float along = noise(qn * 40.0 + u_seed);
             float lp = ph + 0.45 + (dt - 0.5) * 2.5;
-            float lane = pow(0.5 + 0.5 * cos(lp), 14.0 * mix(1.0, 0.7, steep)) * smoothstep(0.25, 0.8, lumps + dt - 0.5)
+            float lc = 0.5 + 0.5 * cos(lp);
+            float along = lc > 0.6 ? noise(qn * 40.0 + u_seed) : 0.5; // only matters near a lane
+            float lane = pow(lc, 14.0 * mix(1.0, 0.7, steep)) * smoothstep(0.25, 0.8, lumps + dt - 0.5)
                        * mix(0.45, 1.0, smoothstep(0.3, 0.7, along)); // thicker and thinner along its length
             // Inside that faint band, the photos' lanes have narrow dark cores, 3–8 px wide, set by distance in the
             // disc rather than by phase, and broken into pieces along the lane (unbroken, they read as ink cracks).
@@ -351,8 +359,8 @@ final class Galaxy: SKScene {
             // the thick disc's glow: rounder and broader than the thin disc, so a steep galaxy sits in a soft haze
             float haze = exp(-rh / 0.45) * smoothstep(1.6, 1.0, rh) * steep;
             // Photos have fine texture everywhere, about ±25% at 1–10 px, where a smooth disc reads as airbrushed.
-            float tex = 0.7 + 0.6 * (0.45 * lumps + 0.35 * noise(mat2(0.6, -0.8, 0.8, 0.6) * g * 110.0 + u_seed.yx)
-                                     + 0.2 * noise(mat2(-0.28, 0.96, -0.96, -0.28) * g * 260.0 - u_seed));
+            // (A third octave at 3 px was dropped for cost: the grain below covers that scale.)
+            float tex = 0.7 + 0.6 * (0.55 * lumps + 0.45 * noise(mat2(0.6, -0.8, 0.8, 0.6) * g * 110.0 + u_seed.yx));
             light = (tint * (disc * 0.84 * tex + haze * 0.12) + u_core * barLight * 0.9) * boost * screen
                   + (tint * disc * 3.5 * arm * tex + u_young * young * inArms * clump * disc * 1.2) * boost * absorb;
 
@@ -361,13 +369,18 @@ final class Galaxy: SKScene {
             float pt = 1.0 / (u_radius * u_size.y);
             mat2 m = mat2(1.0, 0.0, 0.0, u_tilt) * mat2(cos(u_phase), sin(u_phase), -sin(u_phase), cos(u_phase)) / pt;
             vec2 s1 = discStar(g, 2.2 * pt / u_tilt, 3.0, clamp(crest * inArms * 4.0 * smoothstep(1.4, 0.9, r) + disc * 0.6, 0.0, 0.85), m);
-            vec2 s2 = discStar(g, 11.0 * pt / u_tilt, 11.0, clamp(young * inArms * clump * 2.0, 0.0, 0.3) * smoothstep(1.4, 1.0, r), m);
+            float giants = clamp(young * inArms * clump * 2.0, 0.0, 0.3) * smoothstep(1.4, 1.0, r);
+            vec2 s2 = giants > 0.002 ? discStar(g, 11.0 * pt / u_tilt, 11.0, giants, m) : vec2(0.0); // only near the arms
             light += (mix(old, u_young, smoothstep(0.05, 0.4, crest)) * s1.x * min(disc * (1.5 + 3.0 * arm), 0.3) + u_young * s2.x * 0.5) * absorb;
 
             // H II regions: in complexes, strung along the arm's inner edge between the dust lane and the crest,
             // dimmer toward the outskirts
-            float groups = smoothstep(0.3, 0.7, noise(g * 9.0 + u_seed.yx));
-            vec2 k = knot(g, 16.0 * pt / u_tilt, clamp(hii * inArms * groups * 12.0, 0.0, 0.9) * smoothstep(1.2, 0.8, r), m);
+            vec2 k = vec2(0.0);
+            float strung = hii * inArms * smoothstep(1.2, 0.8, r);
+            if (strung > 0.002) { // they only sit in a narrow band along each arm, so skip the lookups elsewhere
+                float groups = smoothstep(0.3, 0.7, noise(g * 9.0 + u_seed.yx));
+                k = knot(g, 16.0 * pt / u_tilt, clamp(strung * groups * 12.0, 0.0, 0.9), m);
+            }
             // Hubble images keep H-alpha saturated, so part of the pink glow goes on after the stretch.
             float fade = 0.25 + 0.75 * smoothstep(1.2, 0.3, r);
             light += (u_knots * k.x * 1.5 + mix(u_young, vec3(1.0), 0.5) * k.y * 1.5) * sqrt(absorb) * fade;

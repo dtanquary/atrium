@@ -107,7 +107,20 @@ Colours per kind: bulge (cream), old disc (warm grey), young stars (cyan-grey bl
 - Cycle every 10 minutes, dissolve 90 s.
 
 ## Performance
-CPU 0.5 ms and GPU 1.0–2.0 ms per frame (release, 2x), depending on how much of the screen the roll covers: tilted Andromeda is cheapest. The largest Whirlpool roll (radius 0.44, centred) measured 1.9–2.06 ms on a fixed roll, right at the budget. Thinning the 2.2 pt star grain made no measurable difference, but skipping the patchwork noise for grand-design kinds saved about 0.15 ms. Inside the galaxy the cost is mostly two 5-octave fbm calls (warp, and dust with its ridges from the same samples), five single noise calls, three cell lookups and a `log`/`atan` per pixel. The 2.2 pt star grain is the densest lookup. Pixels beyond 1.6 galaxy radii skip all of it and draw only sky; the halo fades out by then, so there's no edge. The cutoff was 2.5, which spent most of the budget on empty space. The layered sky costs about 0.3 ms. During the 90 s dissolve both galaxies render, so it roughly doubles (`ponytail:` in `handOver`).
+CPU about 0.5 ms. GPU on the largest possible roll (radius 0.44, centred, release, 2x): Whirlpool 2.06 ms, Pinwheel 2.12, Milky Way about 2.1, Great Barred about 2.0, Triangulum about 1.9 and Andromeda 1.54. Typical rolls are smaller and come in under 2 ms.
+
+Inside the galaxy the cost is:
+- `fbm3` for the arm warp (3 noise lookups)
+- `fbmRidge` for the dust and its web (5)
+- about five single noise lookups (lumps, texture, the ragged mask, the lane variation)
+- the star grain and giant-star cell lookups, and a `log`/`atan` per pixel
+
+After the research pass took the worst case to 2.5 ms, these savings brought it back:
+- the arm warp dropped its two finest octaves, which only added sub-pixel wiggles (the same first three octaves are kept, so the arms don't move)
+- the texture dropped its 3 px octave, which the grain covers
+- the H II lookups, the giant stars and the lane variation noise run only near the arms or lanes where they can appear
+
+Thinning the star grain made no measurable difference. Pixels beyond 1.6 galaxy radii skip the disc work entirely (steep kinds use the rounder `rh`). During the 90 s dissolve both galaxies render, so it roughly doubles (`ponytail:` in `handOver`).
 
 ## Gotchas and shortcuts
 - **`u_texture` is taken:** SpriteKit already defines it as the sprite's texture, so a uniform with that name fails to compile ("redefinition of parameter"). The kind's raggedness and dust ride in `u_arms` instead.
