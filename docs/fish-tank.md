@@ -59,7 +59,12 @@ Layers, back to front, from the `Z` enum:
 5. **Marine snow:** slow, faint specks across the whole tank (`softDot`).
 6. **Vignette:** a radial darkening sprite on top.
 
-**Grading** (`photoShader`, shared by every cut-out): the photos were shot under white light, so `c.rgb × grade` tints them to the tank's light. Light Mode's grade is a slight blue-white; Dark Mode's is actinic blue. Then `mix(…, haze·alpha, a_fog)` fades things further back by a per-sprite `a_fog` attribute. The textures are premultiplied, hence `haze·alpha`.
+**Lighting the cut-outs** (`photoShader`, shared by every fish and coral). Each sprite passes `a_frame`: the scene position of its texture's (0, 0) corner, then its signed width and height. From that, the shader knows where each pixel sits in the tank. Corals set it once; fish update it every frame in `pose`. The shader then:
+- tints the white-light photos to the tank's light with `grade`: a slight blue-white by day, actinic blue at night
+- gives things lower in the tank a little less light (`0.82 + 0.28·height`)
+- plays the lamp's ripples over upper surfaces. Two crossing, wandering sine waves (`pow(|sin·sin|, 3)`) stand in for caustics: the Voronoi caustics on every overlapping coral layer took the tank from 1.35 to about 2.2 ms, and the waves read the same on small, moving shapes.
+- **fluorescence:** adds `colour × saturation × a_glow × fluoro`. Under actinic blue (`fluoro` 1.5), coral pigments glow in their own colours while grey rock just goes blue, as in real reef photos at night. Daylight gets a touch (0.15). `a_glow` is 1 for corals, 0.1 for rock and 0.08 for fish; at 0.25 the yellow tangs glowed.
+- fades things further back toward the back panel by `a_fog`: `mix(…, haze·alpha, a_fog)`, since the textures are premultiplied
 
 **Schooling (`swim`)** uses boids within each species, with O(n²) per school:
 - separation inside `gap` (body length × `Species.spacing`: 1.3 for chromis, 1.9 for the rest)
@@ -99,12 +104,13 @@ None yet.
 - **`Lighting`** (FishTank.swift), for `day` and `actinic`:
   - back panel `high` and `low`, `mirror`, `shimmer`
   - sand `sandNear` and `sandFar`
-  - photo `grade`: day (0.94, 0.98, 1.06), actinic (0.5, 0.58, 1.1)
+  - photo `grade`: day (0.94, 0.98, 1.06), actinic (0.45, 0.52, 1.05)
+  - `fluoro`: day 0.15, actinic 1.5
   - `haze`
 - **Snow:** birth rate 5, lifetime 40 s.
 
 ## Performance
-CPU 0.7 ms and GPU 1.35 ms per frame (debug build, 2x), about the same in both looks and a little cheaper than the painted tank (1.55 ms). The GPU cost is mostly the two full-screen shaders (the water's caustics and noise, and the sand's two caustic layers), plus about 60 sprites. CPU is the boids, 38 fish at O(n²) per school. The cut-outs are decoded and resized once at launch.
+CPU 0.7 ms and GPU 1.45–1.5 ms per frame (release, 2x), in both looks. The GPU cost is mostly the two full-screen shaders (the water's caustics and noise, and the sand's two caustic layers), plus about 60 lit sprites, many overlapping in the reef. CPU is the boids, 38 fish at O(n²) per school. The cut-outs are decoded and resized once at launch.
 
 ## Gotchas and shortcuts
 - **Assets:** the cut-outs come from public domain, CC0 and CC BY photos (iNaturalist, Wikimedia Commons, NOAA). They were cut out with Vision's foreground mask, cleaned to their largest connected piece, resized (fish 480 px, corals 760, rock 900 at most) and saved as HEIC with alpha (about 8× smaller than PNG).
@@ -133,9 +139,7 @@ CPU 0.7 ms and GPU 1.35 ms per frame (debug build, 2x), about the same in both l
   This rebuild is the result, with daylight in Light Mode and actinic blue in Dark Mode.
 
 ## Ideas / next steps
-- Caustic shimmer on the fish and the tops of the corals, stronger near the lamp.
 - More rock photos, so the islands aren't all one rock.
-- Coral fluorescence under the actinic look (greens and oranges glowing), rather than a flat blue grade.
 - "Burst and coast" swimming for the chromis: a few tail beats, then a glide.
 - Rare visitors: a cleaner shrimp on the rock, a snail on the glass.
 - Settings: fish count, which species appear, the lighting look.

@@ -125,6 +125,7 @@ final class FishTank: SKScene {
         fish.node.position = CGPoint(x: fish.position.x, y: fish.position.y)
         fish.node.xScale = CGFloat(fish.facing) * school.depth * fishUnit
         fish.node.zRotation = CGFloat(fish.facing >= 0 ? fish.tilt : -fish.tilt)
+        framed(fish.node)
 
         // The tail beats faster when swimming faster. Stepping through precomputed frames here, rather than an
         // SKAction whose speed changes every frame, which SpriteKit gets steadily slower at.
@@ -166,7 +167,7 @@ final class FishTank: SKScene {
                 node.setScale(depth * fishUnit)
                 node.zPosition = depth < 0.7 ? Z.farFish : depth < 1 ? Z.midFish : Z.nearFish
                 node.subdivisionLevels = 1
-                graded(node, fog: max(0, 0.9 - depth) * 0.5)
+                graded(node, fog: max(0, 0.9 - depth) * 0.5, glow: 0.08)
                 addChild(node)
                 let spread = Double(species.length * depth * fishUnit) * 2.5
                 school.members.append(swimmers.count)
@@ -187,12 +188,14 @@ final class FishTank: SKScene {
     /// white light, to the tank's light; `haze` is what things fade toward further back.
     private struct Lighting {
         let high, low, mirror, shimmer, sandNear, sandFar, grade, haze: SIMD3<Float>
+        /// How strongly saturated pigments fluoresce: a touch under daylight LEDs, a lot under actinic blue.
+        let fluoro: Float
         static let day = Lighting(high: [0.05, 0.38, 0.90], low: [0.01, 0.12, 0.46], mirror: [0.50, 0.60, 0.74],
                                   shimmer: [0.85, 0.95, 1.0], sandNear: [0.88, 0.84, 0.78], sandFar: [0.33, 0.45, 0.72],
-                                  grade: [0.94, 0.98, 1.06], haze: [0.03, 0.26, 0.7])
+                                  grade: [0.94, 0.98, 1.06], haze: [0.03, 0.26, 0.7], fluoro: 0.15)
         static let actinic = Lighting(high: [0.12, 0.14, 0.66], low: [0.02, 0.02, 0.2], mirror: [0.3, 0.3, 0.6],
                                       shimmer: [0.6, 0.65, 1.0], sandNear: [0.5, 0.5, 0.9], sandFar: [0.16, 0.18, 0.52],
-                                      grade: [0.5, 0.58, 1.1], haze: [0.07, 0.08, 0.4])
+                                      grade: [0.45, 0.52, 1.05], haze: [0.07, 0.08, 0.4], fluoro: 1.5)
     }
     private let light = systemIsDark ? Lighting.actinic : Lighting.day
 
@@ -300,22 +303,52 @@ final class FishTank: SKScene {
 
     // MARK: - The reef
 
-    /// Grades every photo cut-out to the tank's light, and fades things further back toward the back panel by their
-    /// `a_fog` attribute. One shader shared by every fish and coral.
+    /// Lights every photo cut-out as if it were in the tank. One shader shared by every fish and coral:
+    /// - `u_grade` tints the white-light photos to the tank's light
+    /// - things lower in the tank get a little less light, and the lamp's ripples dance over upper surfaces
+    /// - under actinic blue, saturated pigments fluoresce in their own colours (`a_glow` for how much), while plain
+    ///   stone just goes blue
+    /// - `a_fog` fades things further back toward the back panel
+    ///
+    /// `a_frame` says where the sprite is in the tank: the scene position of texture corner (0, 0), then the sprite's
+    /// width (negative when flipped) and height, in points. Fish update it every frame.
     private lazy var photoShader: SKShader = {
         let shader = SKShader(source: """
             void main() {
                 vec4 c = texture2D(u_texture, v_tex_coord);
-                gl_FragColor = vec4(mix(c.rgb * u_grade, u_haze * c.a, a_fog), c.a);
+                vec2 pts = a_frame.xy + v_tex_coord * a_frame.zw;
+                float high = clamp(pts.y / u_height, 0.0, 1.0);
+                // two crossing, wandering waves: a cheap stand-in for caustics, plenty on small moving shapes
+                float t = u_time;
+                float ripple = pow(abs(sin(pts.x * 0.045 + 1.7 * sin(pts.y * 0.03 + t * 0.5) + t * 0.6)
+                                     * sin(pts.y * 0.05 - 1.3 * sin(pts.x * 0.035 - t * 0.4) + t * 0.45)), 3.0)
+                             * (0.3 + 0.7 * smoothstep(0.35, 1.0, v_tex_coord.y));
+                vec3 lit = c.rgb * u_grade * (0.82 + 0.28 * high) * (1.0 + ripple * 0.45 * (0.4 + 0.6 * high));
+                float saturation = max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b));
+                lit += c.rgb * saturation * a_glow * u_fluoro;
+                gl_FragColor = vec4(mix(lit, u_haze * c.a, a_fog), c.a);
             }
-            """, uniforms: [SKUniform(name: "u_grade", vectorFloat3: light.grade), SKUniform(name: "u_haze", vectorFloat3: light.haze)])
-        shader.attributes = [SKAttribute(name: "a_fog", type: .float)]
+            """, uniforms: [
+                SKUniform(name: "u_grade", vectorFloat3: light.grade), SKUniform(name: "u_haze", vectorFloat3: light.haze),
+                SKUniform(name: "u_fluoro", float: light.fluoro), SKUniform(name: "u_height", float: Float(size.height)),
+            ])
+        shader.attributes = [SKAttribute(name: "a_fog", type: .float), SKAttribute(name: "a_glow", type: .float),
+                             SKAttribute(name: "a_frame", type: .vectorFloat4)]
         return shader
     }()
 
-    private func graded(_ node: SKSpriteNode, fog: CGFloat) {
+    private func graded(_ node: SKSpriteNode, fog: CGFloat, glow: CGFloat) {
         node.shader = photoShader
         node.setValue(SKAttributeValue(float: Float(fog)), forAttribute: "a_fog")
+        node.setValue(SKAttributeValue(float: Float(glow)), forAttribute: "a_glow")
+        framed(node)
+    }
+
+    /// Tells the shader where the sprite is in the tank (see `photoShader`).
+    private func framed(_ node: SKSpriteNode) {
+        let w = node.size.width * node.xScale, h = node.size.height * node.yScale
+        let corner = SIMD2<Float>(Float(node.position.x - node.anchorPoint.x * w), Float(node.position.y - node.anchorPoint.y * h))
+        node.setValue(SKAttributeValue(vectorFloat4: [corner.x, corner.y, Float(w), Float(h)]), forAttribute: "a_frame")
     }
 
     /// Two islands of rock and coral, the way reefkeepers aquascape, with open sand between them for the fish to
@@ -381,7 +414,7 @@ final class FishTank: SKScene {
         sprite.position = base
         if Bool.random() { sprite.xScale = -1 }
         sprite.zPosition = z
-        graded(sprite, fog: fog)
+        graded(sprite, fog: fog, glow: name.hasPrefix("reef-rock") ? 0.1 : 1)
         if sway > 0 {
             sprite.subdivisionLevels = 1
             sprite.warpGeometry = SKWarpGeometryGrid(columns: 1, rows: 8)
