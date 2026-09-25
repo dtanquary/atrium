@@ -135,6 +135,7 @@ var current = UserDefaults.standard.string(forKey: "scene") ?? scenes[0].name
 
     @objc func openSettings() {
         NSApp.activate()
+        if !settings.isVisible { settings.center() } // open centred, but leave it be if it's already up
         settings.makeKeyAndOrderFront(nil)
     }
 
