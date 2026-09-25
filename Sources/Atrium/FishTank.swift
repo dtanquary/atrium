@@ -172,13 +172,26 @@ final class FishTank: SKScene {
 
     // MARK: - Water, light and sand
 
-    /// Deep-to-shallow blue, sun shafts fanning down from above the surface and swaying, faint caustic light on the
-    /// far wall, and the underside of the surface shimmering along the top.
+    /// A reef tank's light: in Light Mode, daylight white-blue LEDs over a royal-blue back panel; in Dark Mode, the
+    /// actinic blue of a reef tank's evening. Both come from ESA-style sampling of real reef tank photos (the CAS
+    /// Steinhart coral tank and a public-aquarium reef tank on Wikimedia Commons).
+    private struct Lighting {
+        let high, low, mirror, shimmer, sandNear, sandFar: SIMD3<Float>
+        static let day = Lighting(high: [0.05, 0.38, 0.90], low: [0.01, 0.12, 0.46], mirror: [0.50, 0.60, 0.74],
+                                  shimmer: [0.85, 0.95, 1.0], sandNear: [0.88, 0.84, 0.78], sandFar: [0.33, 0.45, 0.72])
+        static let actinic = Lighting(high: [0.12, 0.14, 0.66], low: [0.02, 0.02, 0.2], mirror: [0.3, 0.3, 0.6],
+                                      shimmer: [0.6, 0.65, 1.0], sandNear: [0.5, 0.5, 0.9], sandFar: [0.16, 0.18, 0.52])
+    }
+    private let light = systemIsDark ? Lighting.actinic : Lighting.day
+
+    /// The back panel and water: saturated blue, brightest high up under the lamps and falling off toward the ends
+    /// and low down, faint LED shimmer on the back wall, faint rays from the lamp array, and the underside of the
+    /// surface along the top, a mirror band reflecting the tank with a bright waterline.
     private func addWater() {
         let water = SKSpriteNode(color: .black, size: size)
         water.anchorPoint = .zero
         water.zPosition = Z.water
-        water.shader = SKShader(source: Self.caustics + """
+        water.shader = SKShader(source: shaderCommon + Self.caustics + """
             float hash1(float n) { return fract(sin(n * 127.1) * 43758.5453); }
             float noise1(float x) {
                 float i = floor(x);
@@ -189,28 +202,34 @@ final class FishTank: SKScene {
                 vec2 uv = v_tex_coord;
                 vec2 pts = uv * u_size;
                 float t = u_time;
-                vec3 c = mix(vec3(0.012, 0.075, 0.15), vec3(0.03, 0.24, 0.36), smoothstep(0.0, 0.55, uv.y));
-                c = mix(c, vec3(0.08, 0.46, 0.58), smoothstep(0.5, 1.0, uv.y));
+                vec3 c = mix(u_low, u_high, smoothstep(0.05, 0.9, uv.y));
+                float lamp = exp(-pow((uv.x - 0.5) / 0.6, 2.0)); // the lamp's pool of light, brightest mid-tank
+                c *= 0.75 + 0.35 * lamp;
 
-                // Shafts: bands in the angle from a point high above the surface, drifting and flickering.
-                float a = (pts.x - u_size.x * 0.38) / (u_size.y * 1.7 - pts.y);
-                float shafts = noise1(a * 7.0 + sin(t * 0.06) * 0.8 + t * 0.02) * noise1(a * 19.0 - t * 0.04 + 7.0);
-                shafts = smoothstep(0.22, 0.72, shafts) * (0.8 + 0.2 * sin(t * 0.8 + a * 30.0));
-                c += vec3(0.45, 0.78, 0.86) * shafts * 0.13 * smoothstep(0.05, 1.0, uv.y);
+                // LED shimmer on the back wall, and faint rays from the lamp array, fading downward
+                float high = smoothstep(0.2, 1.0, uv.y);
+                c += u_shimmer * caustic(pts / 160.0, t * 0.6) * 0.025 * high;
+                float rays = noise1(pts.x / 45.0 + sin(t * 0.1) * 1.5) * noise1(pts.x / 14.0 - t * 0.05 + 3.0);
+                c += u_shimmer * smoothstep(0.3, 0.8, rays) * 0.05 * high * lamp;
 
-                c += vec3(0.4, 0.75, 0.85) * caustic(pts / 170.0, t * 0.5) * 0.022 * smoothstep(0.25, 1.0, uv.y);
-
-                // The surface seen from below: a bright band, ripples crossing it.
-                float band = smoothstep(0.9, 0.985, uv.y);
-                float ripple = sin(pts.x * 0.034 + pts.y * 0.22 + t * 0.9 + 2.0 * sin(pts.x * 0.009 - t * 0.3))
-                             * sin(pts.x * 0.021 - pts.y * 0.14 - t * 0.55);
-                c = mix(c, vec3(0.28, 0.7, 0.78), band * 0.5);
-                c += vec3(0.75, 0.95, 1.0) * pow(max(ripple, 0.0), 3.0) * band * 0.5;
+                // The surface from below: a mirror band that reflects the tank, streaked by ripples, with the bright
+                // waterline above it.
+                float band = smoothstep(0.915, 0.935, uv.y);
+                // (irregular patches stretched along the surface, drifting, rather than a regular wave)
+                vec2 m = vec2(pts.x * 0.012 + t * 0.03, pts.y * 0.09 - t * 0.2);
+                float streak = noise(m) * 0.6 + noise(m * vec2(3.1, 1.7) + 5.0) * 0.4;
+                c = mix(c, mix(u_mirror * 0.7, u_mirror * 1.3, smoothstep(0.2, 0.9, streak)), band * 0.85);
+                c += u_shimmer * 0.5 * exp(-pow((uv.y - 0.975) * u_size.y / 3.0, 2.0)); // waterline
+                c = mix(c, u_low * 0.4, smoothstep(0.978, 0.99, uv.y));                  // the lid above
 
                 c += (fract(sin(dot(pts, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) / 255.0; // dither
                 gl_FragColor = vec4(c, 1.0);
             }
-            """, uniforms: [SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)])])
+            """, uniforms: [
+                SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]),
+                SKUniform(name: "u_high", vectorFloat3: light.high), SKUniform(name: "u_low", vectorFloat3: light.low),
+                SKUniform(name: "u_mirror", vectorFloat3: light.mirror), SKUniform(name: "u_shimmer", vectorFloat3: light.shimmer),
+            ])
         addChild(water)
     }
 
@@ -238,23 +257,32 @@ final class FishTank: SKScene {
 
         """
 
-    /// The sand floor with caustics rippling across it: bigger up front, squashed by perspective, fading with haze.
+    /// White aragonite sand: warm white up front under the lamp, going blue with distance, with fine grain and the
+    /// lamp's shimmer rippling across it. The caustics multiply the sand they land on rather than adding white, so
+    /// they brighten it the way real light does. Bigger up front, squashed by perspective.
     private func addSand() {
         let floorSize = CGSize(width: size.width, height: sandHeight)
-        let sand = SKSpriteNode(texture: TankArt.sand(floorSize), size: floorSize)
+        let sand = SKSpriteNode(color: .black, size: floorSize)
         sand.anchorPoint = .zero
         sand.zPosition = Z.sand
-        sand.shader = SKShader(source: Self.caustics + """
+        sand.shader = SKShader(source: shaderCommon + Self.caustics + """
             void main() {
-                vec4 s = texture2D(u_texture, v_tex_coord);
                 vec2 pts = v_tex_coord * u_size;
                 float back = v_tex_coord.y;
+                vec3 s = mix(u_sandNear, u_sandFar, smoothstep(0.0, 1.0, back));
+                vec4 h = hash42(floor(pts * 2.0));
+                s *= 0.88 + 0.14 * noise(pts * vec2(0.18, 0.5)) + 0.1 * (h.x - 0.5); // grain and ripples in the sand
                 vec2 p = vec2(pts.x, pts.y * 2.6) / mix(140.0, 60.0, back);
                 float light = caustic(p, u_time * 0.7) * 0.75 + caustic(p * 1.7 + 3.7, u_time * 0.95) * 0.3;
-                s.rgb += vec3(0.85, 1.0, 0.92) * light * 0.3 * (1.0 - 0.7 * back) * s.a;
-                gl_FragColor = s;
+                s *= 1.0 + light * 1.1 * (1.0 - 0.6 * back);
+                s = mix(s, u_low, smoothstep(0.75, 1.0, back) * 0.5); // melting into the back panel
+                gl_FragColor = vec4(s, 1.0);
             }
-            """, uniforms: [SKUniform(name: "u_size", vectorFloat2: [Float(floorSize.width), Float(floorSize.height)])])
+            """, uniforms: [
+                SKUniform(name: "u_size", vectorFloat2: [Float(floorSize.width), Float(floorSize.height)]),
+                SKUniform(name: "u_sandNear", vectorFloat3: light.sandNear), SKUniform(name: "u_sandFar", vectorFloat3: light.sandFar),
+                SKUniform(name: "u_low", vectorFloat3: light.low),
+            ])
         addChild(sand)
     }
 

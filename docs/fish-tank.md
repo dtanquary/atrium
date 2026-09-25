@@ -11,13 +11,13 @@ A planted tank seen through the glass. Five species of shaded fish school at dif
 
 ## How it works
 Layers, back to front, from the `Z` enum:
-1. **Water** (`addWater`), a full-screen SKShader:
-   - a deep-to-shallow blue gradient
-   - sun shafts, which are noise bands in the angle from a point high above the surface, swaying and flickering
-   - faint caustics on the back wall
-   - a bright band at the surface with crossing ripples
+1. **Water** (`addWater`), a full-screen SKShader, lit like a reef tank. Its colours were sampled from real reef tank photos: the CAS Steinhart coral tank and a public-aquarium reef tank on Wikimedia Commons. `Lighting.day` is used in Light Mode (daylight white-blue LEDs) and `Lighting.actinic` in Dark Mode (a reef tank's evening blue). The layers:
+   - a saturated royal-blue back panel, brighter high up (`high` and `low`)
+   - the lamp's pool of light, brightest mid-tank (`0.75 + 0.35·lamp`)
+   - faint LED shimmer (caustics) and rays from the lamp array, fading downward
+   - the underside of the surface along the top: a mirror band reflecting the tank, streaked by drifting noise (a regular wave read as a zigzag), a bright waterline, and the dark lid above
    - dither
-2. **Sand** (`addSand`): a painted texture, with a shader adding two caustic layers. They're bigger at the front, squashed by perspective (`pts.y * 2.6`), and fade toward the back.
+2. **Sand** (`addSand`), all in its shader: white aragonite, warm white up front (`sandNear`) and going blue with distance (`sandFar`), with fine grain from `hash42`. Two caustic layers multiply the sand they land on rather than adding white, the way real light brightens it. They're bigger at the front and squashed by perspective (`pts.y * 2.6`), and the back edge melts into the back panel.
 3. **Far rocks:** a fogged silhouette strip at the back edge of the sand.
 4. **Plants in three rows**, from a pool of a few painted variants per row reused with flips and scales to keep texture memory down:
    - back row: fog 0.5
@@ -66,7 +66,7 @@ Everything is pre-simulated for 150 steps in `sceneDidLoad`, so schools have alr
 - the tail beat steps through 20 precomputed warp frames (`swimWarps`: an 8×1 grid with a wave from head to tail, `0.075·(1-u)²`). The beat rate scales with speed.
 
 ## Time, live data and appearance
-Motion is driven by `update(_:)` (boids and frame stepping) and `u_time` (the water and sand shaders). No network or location. No Light/Dark handling: it's a sunlit tank either way.
+Motion is driven by `update(_:)` (boids and frame stepping) and `u_time` (the water and sand shaders). No network or location. Light Mode is a daylight reef tank and Dark Mode its actinic evening look, read from `systemIsDark` when the scene is built.
 
 ## Settings
 None yet.
@@ -85,6 +85,7 @@ None yet.
   `finReach` is 0.62 for angelfish and 0.2 for yellow tang.
 - **Scene scaling:** `unit` is height/982, clamped to 0.8–1.8, so a bigger screen gets a bigger tank rather than smaller fish. `fishUnit` is `unit × 1.2`, drawing fish a little larger than life so they read from across the room. `sandHeight` is 0.22 × height.
 - **Fog colour:** `TankArt.fogColour` = rgb(0.035, 0.27, 0.39).
+- **Reef light:** `Lighting.day` and `Lighting.actinic` in FishTank.swift (back panel high/low, mirror, shimmer, sand near/far).
 - **Bubbles:** birth rate 8, speed 110 ± 40. **Snow:** birth rate 5, lifetime 40 s.
 
 ## Performance
@@ -97,6 +98,7 @@ CPU 0.51 ms and GPU 1.55 ms per frame (release, 2x). The GPU cost is mostly the 
 - Plants and rocks are placed randomly on each load, so every tank is a little different.
 
 ## Dave's feedback and decisions
+- 2026-09-25: "everything looks way too cartoony." After a research pass comparing it with real tank photos, he chose a realistic **reef** tank, **photo cut-out** fish and corals (or whatever is best quality), and **bright and lush** lighting. He also asked to be challenged on past calls: the earlier "drawn in code over image sprites" decision was reversed because photo cut-outs were clearly more realistic. The rebuild is in progress; the water, light and sand came first.
 - The first version (flat `SKShapeNode` fish, stroked seaweed) was the proof of concept. Dave called it "the primitive fish tank" and asked how to raise the fidelity.
 - He chose the drawn-in-code route over image sprites or RealityKit 3D, and picked items 1–5 of the fidelity list: fish that look alive, schooling, light, depth and plants/props. Rare events and a time-of-day tint were explicitly deferred.
 - He asked for the catalogue of other wallpapers to be built before the fidelity pass. This rebuild came after that.
