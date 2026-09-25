@@ -14,8 +14,10 @@ There are no prebuilt downloads. Clone it, build it and run it yourself; it take
 | ![Galaxy, Whirlpool](docs/images/galaxy-whirlpool.jpg) **Galaxy**: the Whirlpool (M51) and its companion, in colours sampled from Hubble's portrait | ![Galaxy, Andromeda](docs/images/galaxy-andromeda.jpg) **Galaxy**: Andromeda, steeply tilted, with M32 and M110 beside it |
 | ![Fish Tank by day](docs/images/fish-tank-day.jpg) **Fish Tank**: a bright reef of real fish and corals, cut out of photos | ![Fish Tank at night](docs/images/fish-tank-actinic.jpg) **Fish Tank**: the reef under actinic blue in Dark Mode, its corals fluorescing |
 | ![Galaxy, Great Barred](docs/images/galaxy-barred.jpg) **Galaxy**: NGC 1300, the Great Barred Spiral, with dust lanes along its bar | ![Nebula, Oxygen palette](docs/images/nebula-oxygen.jpg) **Nebula**: the Oxygen palette |
+| ![Weather, fair](docs/images/weather-fair.jpg) **Weather**: a fair morning over real California hills, with real clouds drifting on the wind | ![Weather, sunset](docs/images/weather-sunset.jpg) **Weather**: sunset from a physical sky, the hills gone to silhouettes |
+| ![Weather, fog](docs/images/weather-fog.jpg) **Weather**: fog, with mist lying in the valley | ![Weather, snow](docs/images/weather-snow.jpg) **Weather**: snow falling, and lying on the hills |
 
-*Screenshots show the wallpaper alone, with no desktop icons, menu bar or Dock. Everything moves: the nebulae drift and fold, the galaxies turn, the fish school around the reef, the sky turns, and the ISS crosses the globe. Galaxy, Nebula and the reef are rebuilt differently on every load.*
+*Screenshots show the wallpaper alone, with no desktop icons, menu bar or Dock. Everything moves: the nebulae drift and fold, the galaxies turn, the fish school around the reef, the sky turns, clouds drift and rain falls, and the ISS crosses the globe. Galaxy, Nebula and the reef are rebuilt differently on every load.*
 
 ## How it works
 
@@ -23,7 +25,7 @@ macOS has no public API for third-party live wallpapers. This app gives each dis
 
 It uses public AppKit and SpriteKit APIs only. It uses no private frameworks, makes no changes to system files, needs no SIP changes and doesn't inject code.
 
-Each wallpaper is a SpriteKit scene. Many are full-screen Metal shaders written as `SKShader`s, and almost everything is drawn in code. The only image files are two NASA Earth textures, a star catalogue, the live cloud map Earth from Orbit downloads, the Fish Tank's fish and corals, cut out of permissively licensed photos, and Weather's hills and Moon.
+Each wallpaper is a SpriteKit scene. Many are full-screen Metal shaders written as `SKShader`s, and almost everything is drawn in code. The only image files are two NASA Earth textures, a star catalogue, the live cloud map Earth from Orbit downloads, the Fish Tank's fish and corals and Weather's hills and clouds, all cut out of permissively licensed photos, and Weather's Moon.
 
 It's kind to your battery:
 - 30 fps on mains power, 15 fps on battery.
@@ -74,7 +76,7 @@ To rebuild after pulling changes: `./build.sh && pkill -x Atrium; open build/Atr
 | Galaxy | A spiral galaxy turning slowly, after a real one (Whirlpool, Andromeda, the Milky Way and more), with dust lanes, star clusters and pink star-forming knots |
 | Live Sky | The real sky above you: stars, planets, the Moon's phase, the Milky Way and the ISS. Deep blue by day. |
 | Earth from Orbit | The globe above your location with the live day/night line, today's real clouds, lightning in storms near you, city lights and the ISS |
-| Weather | Hills under your live local weather: rain, snow, fog, storms, day and night |
+| Weather | Real hills under your live local weather, beneath a physical sky with the real Sun and Moon: sunrise and twilight, real clouds on the real wind, rain, snow lying on the ground, valley mist and lightning |
 | Pixel City | A pixel-art skyline that follows your clock, with traffic and windows lighting up through the evening |
 | Fireflies | Fireflies drifting through a foggy forest at dusk |
 | Murmuration | A flock of thousands of starlings over a sunset |
@@ -110,7 +112,7 @@ SNAPSHOT_DEFAULTS="gradient.palette=Sunset" SNAPSHOT_APPEARANCE=light swift test
 - Earth imagery from NASA's Blue Marble and Black Marble, public domain.
 - Clouds from [Live Cloud Maps](https://github.com/matteason/live-cloud-maps) by Matt Eason, CC0. Contains modified EUMETSAT data.
 - Planet positions from JPL's [Approximate Positions of the Planets](https://ssd.jpl.nasa.gov/planets/approx_pos.html).
-- The Weather wallpaper's hills are a public domain photo of Fort Ord National Monument by the Bureau of Land Management, and its Moon is from NASA's CGI Moon Kit. See [`Sources/Atrium/Resources/weather-credits.tsv`](Sources/Atrium/Resources/weather-credits.tsv).
+- The Weather wallpaper's hills are a public domain photo of Fort Ord National Monument by the Bureau of Land Management, its clouds are cut out of CC0 photos from Poly Haven and Wikimedia Commons, and its Moon is from NASA's CGI Moon Kit. See [`Sources/Atrium/Resources/weather-credits.tsv`](Sources/Atrium/Resources/weather-credits.tsv) and Settings → About.
 - Reef fish, corals and rock in the Fish Tank are cut out of public domain, CC0 and CC BY photos from iNaturalist, Wikimedia Commons and NOAA. Each photographer and licence is listed in [`Sources/Atrium/Resources/reef-credits.tsv`](Sources/Atrium/Resources/reef-credits.tsv) and in Settings → About.
 
 ## License

@@ -15,7 +15,7 @@ One file per wallpaper, recording what the code can't: how each scene works, why
 | Galaxy | [galaxy.md](galaxy.md) | `Galaxy.swift` | shader | knobs, 6 real galaxies | none | 0.5 / 1.5–2.1 |
 | Live Sky | [live-sky.md](live-sky.md) | `LiveSky.swift`, `SkyMath.swift` | SpriteKit and shaders | switches, preview | location, ISS | 0.64 / 0.90 |
 | Earth from Orbit | [earth-from-orbit.md](earth-from-orbit.md) | `EarthFromOrbit.swift`, `ISS.swift`, `Clouds.swift`, `Storms.swift` | shader | ISS, clouds, lightning switches | location, ISS, clouds, storms | 0.45 / 0.31 |
-| Weather | [weather.md](weather.md) | `Weather.swift` | SpriteKit | preview | location, Open-Meteo | 0.42 / 0.18 |
+| Weather | [weather.md](weather.md) | `Weather.swift`, `WeatherSky.swift`, `Resources/weather-*` | physical sky, photo ground and clouds, shaders | preview | location, Open-Meteo | 0.55 / 0.45–1.2 |
 | Pixel City | [pixel-city.md](pixel-city.md) | `PixelCity.swift` | SpriteKit (pixel canvas) | none yet | location, clock | 0.43 / 0.18 |
 | Fireflies | [fireflies.md](fireflies.md) | `Fireflies.swift` | SpriteKit | none yet | none | 0.49 / 0.41 |
 | Murmuration | [murmuration.md](murmuration.md) | `Murmuration.swift` | SpriteKit (3D boids) | none yet | none | 1.09 / 0.24 |
@@ -26,7 +26,7 @@ One file per wallpaper, recording what the code can't: how each scene works, why
 
 ## Screenshots
 
-The README's screenshots live in `docs/images` as 1600-pixel JPEGs of the wallpaper alone. The first seven were captured live from the wallpaper window. Galaxy, Fish Tank and Nebula Oxygen (2026-09-25) were rendered offscreen by the snapshot test at 2x Retina, which is the same pixels without switching the desktop or touching settings. For example: `SNAPSHOT_DEFAULTS="galaxy.kind=Whirlpool" SNAPSHOT_SCENE=Galaxy swift test -c release -Xswiftc -enable-testing`, with `SNAPSHOT_APPEARANCE=light|dark` for the two looks. Each was picked from three or four random rolls. Add or refresh one whenever a wallpaper's look changes.
+The README's screenshots live in `docs/images` as 1600-pixel JPEGs of the wallpaper alone. The first seven were captured live from the wallpaper window. Galaxy, Fish Tank, Nebula Oxygen and Weather (2026-09-25) were rendered offscreen by the snapshot test at 2x Retina, which is the same pixels without switching the desktop or touching settings. For example: `SNAPSHOT_DEFAULTS="galaxy.kind=Whirlpool" SNAPSHOT_SCENE=Galaxy swift test -c release -Xswiftc -enable-testing`, with `SNAPSHOT_APPEARANCE=light|dark` for the two looks. Each was picked from three or four random rolls. Add or refresh one whenever a wallpaper's look changes.
 
 ## Dave's direction so far
 
@@ -40,5 +40,5 @@ The README's screenshots live in `docs/images` as 1600-pixel JPEGs of the wallpa
 - **Easy on the battery:** 15 fps on battery, frozen in Low Power Mode, paused when covered.
 - **Workflow:** commit early and often; redeploy after each working change and tell him what to test.
 - **Cut:** Zen Garden, on 2026-09-25: "so bright and sharp and not relaxing, opposite of zen." Calm means soft and dim as well as slow. Its code and doc were deleted; they're in git history before the cut.
-- **Photoreal wins:** Galaxy only clicked once it was compared side by side with Hubble photos: colours sampled from them, soft edges, a bright disc rather than shapes on black, and an asinh stretch. Cartoony looks (he named the Fish Tank) are next in line for the same treatment.
+- **Photoreal wins:** Galaxy only clicked once it was compared side by side with Hubble photos: colours sampled from them, soft edges, a bright disc rather than shapes on black, and an asinh stretch. The Fish Tank and Weather got the same treatment: research agents, real photo cut-outs where they beat procedural (fish, corals, hills, cumulus), physics where it beats photos (Weather's sky), and renders compared with reference photos.
 - **Next:** iterate through each wallpaper to improve it, cut the weak ones and add new ones.
