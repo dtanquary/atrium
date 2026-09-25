@@ -384,6 +384,10 @@ final class Galaxy: SKScene {
         vec3 photo = min(x * stretched / lum, 1.0);
         col = col * absorb + mix(photo, vec3(stretched), 0.5 * smoothstep(0.55, 1.0, stretched)); // highlights pale
         col += vivid * u_brightness;
+        // Photos carry grain wherever there's light, stronger where it's brighter (shot noise); the empty sky
+        // stays clean black. It's fixed to the screen, like a sensor's, while the galaxy turns beneath it.
+        vec4 grain = hash42(floor(v_tex_coord * u_size * 2.0));
+        col += (grain.x + grain.y - 1.0) * 0.02 * sqrt(stretched);
         col += vec3(1.0, 0.92, 0.85) * brightStar(pts, 180.0, u_time); // foreground stars, in our own galaxy
         col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0;
         gl_FragColor = vec4(col, 1.0);
