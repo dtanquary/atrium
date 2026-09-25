@@ -2,19 +2,19 @@ import SpriteKit
 
 /// The inside of a lava lamp, full screen. Wax heats in a molten pool at the bottom, rises as stretched teardrops
 /// that pinch off on thin necks, slumps wide as it cools near the top, and sinks back. It glows from within, lit
-/// by the bulb below. Each load rolls a classic lamp colour pairing and its own blobs. Left running, the lamp
+/// by the bulb below. Each load rolls a jewel-tone colour pairing and its own blobs. Left running, the lamp
 /// eases to another pairing every few minutes while the wax keeps moving.
 @MainActor func lavaLamp(size: CGSize) -> SKScene {
-    // Wax (thin and deep, thick and hot) and liquid (dark, bulb-lit), after real lamp pairings.
+    // Wax (thin and deep, thick and hot) and liquid (dark, bulb-lit): luminous jewel-tone wax in deep liquids,
+    // drawn from Flowing Gradient's palette so the two feel like a family.
     let palettes: [[SIMD3<Float>]] = [
-        [[0.55, 0.08, 0.02], [1.00, 0.55, 0.12], [0.05, 0.005, 0.02], [0.40, 0.04, 0.08]], // orange in red
-        [[0.45, 0.02, 0.03], [0.95, 0.22, 0.12], [0.10, 0.05, 0.00], [0.62, 0.40, 0.06]],  // red in yellow, the 1963 original
-        [[0.05, 0.10, 0.45], [0.35, 0.65, 1.00], [0.03, 0.01, 0.06], [0.30, 0.08, 0.45]],  // blue in violet
-        [[0.05, 0.35, 0.08], [0.55, 1.00, 0.35], [0.00, 0.02, 0.06], [0.05, 0.18, 0.50]],  // green in blue
-        [[0.55, 0.06, 0.28], [1.00, 0.50, 0.75], [0.04, 0.01, 0.06], [0.30, 0.06, 0.42]],  // pink in purple
-        [[0.55, 0.62, 0.70], [1.00, 0.98, 0.94], [0.00, 0.02, 0.07], [0.05, 0.25, 0.60]],  // white in blue
-        [[0.25, 0.05, 0.40], [0.72, 0.40, 0.95], [0.05, 0.04, 0.03], [0.55, 0.45, 0.30]],  // purple in clear
-        [[0.60, 0.40, 0.00], [1.00, 0.90, 0.35], [0.03, 0.00, 0.05], [0.35, 0.05, 0.40]],  // yellow in purple
+        [[0.55, 0.15, 0.20], [1.00, 0.58, 0.48], [0.03, 0.02, 0.08], [0.24, 0.12, 0.55]], // coral in indigo
+        [[0.10, 0.25, 0.60], [0.55, 0.80, 1.00], [0.01, 0.02, 0.06], [0.07, 0.12, 0.42]], // soft blue in navy
+        [[0.45, 0.06, 0.35], [1.00, 0.45, 0.80], [0.03, 0.01, 0.07], [0.30, 0.15, 0.62]], // magenta in violet
+        [[0.02, 0.30, 0.35], [0.45, 0.95, 0.92], [0.01, 0.02, 0.06], [0.10, 0.14, 0.45]], // teal in deep blue
+        [[0.60, 0.25, 0.12], [1.00, 0.74, 0.48], [0.04, 0.01, 0.05], [0.36, 0.10, 0.40]], // peach in plum
+        [[0.30, 0.20, 0.65], [0.82, 0.72, 1.00], [0.01, 0.01, 0.05], [0.12, 0.10, 0.38]], // lavender in midnight
+        [[0.55, 0.20, 0.30], [1.00, 0.66, 0.64], [0.01, 0.04, 0.06], [0.03, 0.28, 0.36]], // rose in deep teal
     ]
     let colours = zip(["u_waxDeep", "u_waxHot", "u_liquidDeep", "u_liquidLit"], palettes.randomElement()!)
         .map { SKUniform(name: $0, vectorFloat3: $1) }
