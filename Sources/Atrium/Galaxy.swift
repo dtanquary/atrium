@@ -263,10 +263,11 @@ final class Galaxy: SKScene {
 
             // Swirled space: turning each radius by its log winds straight rays into logarithmic spirals, so the arms
             // are rays here and noise sampled here is sheared along them into streaks and lanes. The dust noise gets
-            // a swirl wound no tighter than a 25° pitch, so tightly wound kinds don't close their dust into rings.
+            // a swirl wound no tighter than a 45° pitch, so its texture is stretched no more than about 2:1, as in the
+            // photos, instead of into brushed streaks (8:1 at M51's 19°, 47:1 at M31's 8°).
             float lr = log(max(r, r0 * 0.35) / r0);
             vec2 q = turn(g, lr * u_shape.y);
-            vec2 qn = turn(g, lr * min(u_shape.y, 2.14));
+            vec2 qn = turn(g, lr * min(u_shape.y, 1.0));
             float warp = fbm(q * 2.2 + u_seed) - 0.5;
             float aq = atan(q.y, q.x);
             float ph = arms * aq + warp * (2.0 + 5.0 * ragged);
@@ -306,14 +307,15 @@ final class Galaxy: SKScene {
             // thin filaments everywhere down to the nucleus, and for barred kinds, lanes along the bar's leading edges.
             vec2 fr = fbmRidge(qn * 6.0 + u_seed * 1.3 + 3.0);
             float dt = fr.x;
-            float lane = pow(0.5 + 0.5 * cos(ph + 0.45 + (dt - 0.5) * 2.5), 14.0 * mix(1.0, 0.7, steep)) * smoothstep(0.25, 0.8, lumps + dt - 0.5);
+            float lane = pow(0.5 + 0.5 * cos(ph + 0.45 + (dt - 0.5) * 2.5), 14.0 * mix(1.0, 0.7, steep)) * smoothstep(0.25, 0.8, lumps + dt - 0.5)
+                       * mix(0.45, 1.0, smoothstep(0.3, 0.7, noise(qn * 40.0 + u_seed))); // thicker and thinner along its length
             float tp = 1.0 / u_shape.y;              // tan(pitch)
             float kf = (1.0 - tp * 0.7) / (tp + 0.7); // cot(pitch + 35°)
             float fu = 18.0 * (aq - (u_shape.y - kf) * lr) / 6.2832 + (dt - 0.5) * 0.8;
             float phw = ph - 6.2832 * floor(ph / 6.2832 + 0.5);
             float feather = pow(0.5 + 0.5 * cos(6.2832 * fu), 8.0) * step(0.45, hash21(vec2(mod(floor(fu + 0.5), 18.0), u_seed.y)))
                           * smoothstep(-1.8, -0.3, phw) * smoothstep(0.7, 0.4, phw) * smoothstep(0.3, 0.55, dt);
-            float web = smoothstep(0.3, 0.75, fr.y) * mix(1.0, 0.4, steep);
+            float web = smoothstep(0.25, 0.7, fr.y) * mix(1.0, 0.4, steep); // the 45° swirl thins it, so a lower threshold
             float ax = abs(g.x) / max(bar, 0.001);
             float barY = (g.y - sign(g.x) * bar * (0.1 + 0.15 * ax * ax)) / (0.02 + 0.02 * dt);
             float barLane = step(0.001, bar) * exp(-barY * barY) * smoothstep(0.1, 0.35, ax) * smoothstep(1.1, 0.8, ax) * smoothstep(0.3, 0.6, dt + 0.2);
@@ -339,8 +341,11 @@ final class Galaxy: SKScene {
             float boost = sqrt(los);
             // the thick disc's glow: rounder and broader than the thin disc, so a steep galaxy sits in a soft haze
             float haze = exp(-rh / 0.45) * smoothstep(1.6, 1.0, rh) * steep;
-            light = (tint * (disc * 0.84 + haze * 0.12) + u_core * barLight * 0.9) * boost * screen
-                  + (tint * disc * 2.1 * arm + u_young * young * inArms * clump * disc * 1.2) * boost * absorb;
+            // Photos have fine texture everywhere, about ±25% at 1–10 px, where a smooth disc reads as airbrushed.
+            float tex = 0.7 + 0.6 * (0.45 * lumps + 0.35 * noise(mat2(0.6, -0.8, 0.8, 0.6) * g * 110.0 + u_seed.yx)
+                                     + 0.2 * noise(mat2(-0.28, 0.96, -0.96, -0.28) * g * 260.0 - u_seed));
+            light = (tint * (disc * 0.84 * tex + haze * 0.12) + u_core * barLight * 0.9) * boost * screen
+                  + (tint * disc * 2.5 * arm * tex + u_young * young * inArms * clump * disc * 1.2) * boost * absorb;
 
             // Resolved stars twinkling in the disc as it turns, drawn as pinpoints on screen: a fine grain of stars
             // that follows the light, and blue giants just past the crests.
