@@ -354,14 +354,14 @@ final class Galaxy: SKScene {
             float tex = 0.7 + 0.6 * (0.45 * lumps + 0.35 * noise(mat2(0.6, -0.8, 0.8, 0.6) * g * 110.0 + u_seed.yx)
                                      + 0.2 * noise(mat2(-0.28, 0.96, -0.96, -0.28) * g * 260.0 - u_seed));
             light = (tint * (disc * 0.84 * tex + haze * 0.12) + u_core * barLight * 0.9) * boost * screen
-                  + (tint * disc * 2.5 * arm * tex + u_young * young * inArms * clump * disc * 1.2) * boost * absorb;
+                  + (tint * disc * 3.5 * arm * tex + u_young * young * inArms * clump * disc * 1.2) * boost * absorb;
 
             // Resolved stars twinkling in the disc as it turns, drawn as pinpoints on screen: a fine grain of stars
             // that follows the light, and blue giants just past the crests.
             float pt = 1.0 / (u_radius * u_size.y);
             mat2 m = mat2(1.0, 0.0, 0.0, u_tilt) * mat2(cos(u_phase), sin(u_phase), -sin(u_phase), cos(u_phase)) / pt;
             vec2 s1 = discStar(g, 2.2 * pt / u_tilt, 3.0, clamp(crest * inArms * 4.0 * smoothstep(1.4, 0.9, r) + disc * 0.6, 0.0, 0.85), m);
-            vec2 s2 = discStar(g, 11.0 * pt / u_tilt, 11.0, clamp(young * inArms * clump * 2.0, 0.0, 0.3), m);
+            vec2 s2 = discStar(g, 11.0 * pt / u_tilt, 11.0, clamp(young * inArms * clump * 2.0, 0.0, 0.3) * smoothstep(1.4, 1.0, r), m);
             light += (mix(old, u_young, smoothstep(0.05, 0.4, crest)) * s1.x * min(disc * (1.5 + 3.0 * arm), 0.3) + u_young * s2.x * 0.5) * absorb;
 
             // H II regions: in complexes, strung along the arm's inner edge between the dust lane and the crest,
@@ -372,24 +372,26 @@ final class Galaxy: SKScene {
             float fade = 0.25 + 0.75 * smoothstep(1.2, 0.3, r);
             light += (u_knots * k.x * 1.5 + mix(u_young, vec3(1.0), 0.5) * k.y * 1.5) * sqrt(absorb) * fade;
             vivid = u_knots * k.x * 0.7 * sqrt(absorb) * fade;
-
-            // The bulge: a rounder cloud of old stars and a bright nucleus. The disc cuts through its middle, so half
-            // its light comes through the dust, more on the near side when the galaxy is tilted.
-            float rb = length(vec2(e.x, e.y / mix(u_tilt, 1.0, 0.6))) / bulgeR;
-            float bulge = 3.0 * exp(-3.67 * sqrt(rb)) + 1.5 * exp(-rb * rb * 60.0);
-            float behind = clamp(0.5 - 0.5 * e.y / bulgeR * sqrt(1.0 - u_tilt * u_tilt), 0.0, 1.0);
-            light += u_core * bulge * (1.0 - behind + behind * absorb);
         }
+        // The bulge: a rounder cloud of old stars and a bright nucleus, broad and bright enough for the stretch below
+        // (fitted to M51's profile). The disc cuts through its middle, so half its light comes through the dust, more
+        // on the near side when the galaxy is tilted. It's outside the branch so its faint outskirts never meet its edge.
+        float bulgeW = u_shape.w * 1.7; // its light spreads wider than the size the arms start from
+        float rb = length(vec2(e.x, e.y / mix(u_tilt, 1.0, 0.6))) / bulgeW;
+        float bulge = 20.0 * exp(-3.67 * sqrt(rb)) + 1.5 * exp(-rb * rb * 60.0);
+        float behind = clamp(0.5 - 0.5 * e.y / bulgeW * sqrt(1.0 - u_tilt * u_tilt), 0.0, 1.0);
+        light += u_core * bulge * (1.0 - behind + behind * absorb);
         // companions, behind the disc's dust where they overlap it (most kinds have none)
         if (u_comp0.w > 0.0) {
             light += u_core * (companion(e, u_comp0, u_round0) + companion(e, u_comp1, u_round1)) * absorb;
         }
 
         // Hubble-style stretch: asinh on brightness lifts the faint outer disc and holds the core without bleaching
-        // its colour; the brightest parts pale toward white, as on a real sensor.
+        // its colour; the brightest parts pale toward white, as on a real sensor. K = 20 fits M51's radial profile
+        // within 5% from 0.1 to 0.7 of its radius (K = 6 was off by 15%).
         vec3 x = light * u_brightness;
         float lum = dot(x, vec3(0.3, 0.5, 0.2)) + 0.0001;
-        float stretched = log(6.0 * lum + sqrt(36.0 * lum * lum + 1.0)) / 3.18; // asinh(6 lum) / asinh(12)
+        float stretched = log(20.0 * lum + sqrt(400.0 * lum * lum + 1.0)) / 6.17; // asinh(20 lum) / asinh(240)
         vec3 photo = min(x * stretched / lum, 1.0);
         col = col * absorb + mix(photo, vec3(stretched), 0.5 * smoothstep(0.55, 1.0, stretched)); // highlights pale
         col += vivid * u_brightness;
