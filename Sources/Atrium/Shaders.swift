@@ -4,7 +4,7 @@ import SpriteKit
 // Shaders work in `p = v_tex_coord * vec2(aspect, 1)`: y runs 0...1 up the screen and x keeps the same scale,
 // so shapes stay round on any display. `pts` is the same point in screen points, for pixel-sized detail.
 
-/// Hashes, value noise, fbm and a star field shared by the shader scenes.
+/// Hashes, value noise, fbm and star fields shared by the shader scenes.
 let shaderCommon = """
 float hash11(float x) { return fract(sin(x * 127.1) * 43758.5453); }
 
@@ -43,6 +43,18 @@ float starField(vec2 pts, float cell, float density, float t) {
     float d = length(fract(pts / cell) - 0.5 - off) * cell;
     float twinkle = 0.8 + 0.2 * sin(t * (1.0 + 3.0 * h) + h * 50.0);
     return (smoothstep(0.6 + 1.2 * mag, 0.0, d) + 0.3 * mag * exp(-d * 0.4)) * (0.3 + 0.9 * mag) * twinkle;
+}
+
+// A few bright foreground stars with four-point diffraction spikes; about half shimmer very gently and slowly.
+float brightStar(vec2 pts, float cell, float t) {
+    vec2 id = floor(pts / cell);
+    float h = hash21(id + 31.0);
+    if (h > 0.18) { return 0.0; }
+    vec2 d = (fract(pts / cell) - 0.5 - (vec2(hash21(id + 2.2), hash21(id + 5.5)) - 0.5) * 0.6) * cell;
+    float core = exp(-dot(d, d) * 0.15);
+    float spikes = exp(-abs(d.x) * 1.2) * exp(-abs(d.y) * 0.06) + exp(-abs(d.y) * 1.2) * exp(-abs(d.x) * 0.06);
+    float shimmer = h < 0.09 ? 0.93 + 0.07 * sin(t * (0.6 + 5.0 * h) + h * 90.0) : 1.0;
+    return (core + 0.35 * spikes + 0.12 * exp(-length(d) * 0.08)) * (0.5 + 2.5 * h) * shimmer;
 }
 
 """
@@ -316,18 +328,6 @@ let nebulaPalettes: [(name: String, colours: [SIMD3<Float>])] = [
         SKUniform(name: "u_hot", vectorFloat3: palette[3]),
     ]
     let scene = shaderScene(size: size, source: shaderCommon + """
-    // A few bright foreground stars with four-point diffraction spikes; about half shimmer very gently and slowly.
-    float brightStar(vec2 pts, float cell, float t) {
-        vec2 id = floor(pts / cell);
-        float h = hash21(id + 31.0);
-        if (h > 0.18) { return 0.0; }
-        vec2 d = (fract(pts / cell) - 0.5 - (vec2(hash21(id + 2.2), hash21(id + 5.5)) - 0.5) * 0.6) * cell;
-        float core = exp(-dot(d, d) * 0.15);
-        float spikes = exp(-abs(d.x) * 1.2) * exp(-abs(d.y) * 0.06) + exp(-abs(d.y) * 1.2) * exp(-abs(d.x) * 0.06);
-        float shimmer = h < 0.09 ? 0.93 + 0.07 * sin(t * (0.6 + 5.0 * h) + h * 90.0) : 1.0;
-        return (core + 0.35 * spikes + 0.12 * exp(-length(d) * 0.08)) * (0.5 + 2.5 * h) * shimmer;
-    }
-
     void main() {
         float aspect = u_size.x / u_size.y;
         vec2 p = v_tex_coord * vec2(aspect, 1.0);

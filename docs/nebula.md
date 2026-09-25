@@ -2,7 +2,7 @@
 
 A deep-space gas cloud, cut by dark dust lanes, over a twinkling star field, drifting and folding very slowly. Every load rolls a unique nebula in colours modelled on real objects, and left running it dissolves into a freshly rolled one every 8 minutes. **Dave's favourite wallpaper.**
 
-- **Files:** `Sources/Atrium/Shaders.swift`: the `nebulaPalettes` (file scope) and `nebula(size:)`, which includes its shader source and `brightStar`. `hash21`, `noise`, `fbm` and `starField` come from `shaderCommon` in the same file.
+- **Files:** `Sources/Atrium/Shaders.swift`: the `nebulaPalettes` (file scope) and `nebula(size:)`, which includes its shader source. `hash21`, `noise`, `fbm`, `starField` and `brightStar` come from `shaderCommon` in the same file (`brightStar` moved there to be shared with Galaxy).
 - **Entry:** `@MainActor func nebula(size:) -> SKScene`. It builds a plain scene through `shaderScene(size:source:uniforms:)` (Scenes.swift). Its registry entry has icon `sparkles`, tint `.purple`, and palettes `PaletteChoice(key: "nebula.palette", ...)`, whose swatches are colours 1–3 of each palette. The standard is "", meaning Random.
 - **Kind:** a full-screen SKShader, fully procedural, with no image files.
 
