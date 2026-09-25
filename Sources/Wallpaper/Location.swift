@@ -15,7 +15,8 @@ import CoreLocation
                                                 longitude: defaults.double(forKey: "longitude"))
         } else {
             // ponytail: guess from the time zone until CoreLocation answers; latitude can be ~15° off
-            coordinate = CLLocationCoordinate2D(latitude: 40, longitude: Double(TimeZone.current.secondsFromGMT()) / 240)
+            let standardOffset = TimeZone.current.secondsFromGMT() - Int(TimeZone.current.daylightSavingTimeOffset())
+            coordinate = CLLocationCoordinate2D(latitude: 40, longitude: Double(standardOffset) / 240)
         }
         super.init()
         manager.delegate = self
