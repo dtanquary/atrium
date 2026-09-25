@@ -121,6 +121,7 @@ struct AboutPage: View {
                 LabeledContent("Earth imagery") { Text("NASA Blue Marble and Black Marble") }
                 LabeledContent("Clouds") { Link("Live Cloud Maps; contains modified EUMETSAT data", destination: URL(string: "https://clouds.matteason.co.uk")!) }
                 LabeledContent("Planet positions") { Text("NASA JPL") }
+                LabeledContent("Moon") { Text("NASA SVS CGI Moon Kit") }
                 DisclosureGroup("Reef photos, from iNaturalist, Wikimedia Commons and NOAA") {
                     ForEach(reefCredits, id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
                 }

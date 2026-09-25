@@ -2,7 +2,7 @@
 
 Three ranges of rolling hills with pines and round trees, under whatever the weather is doing where the viewer is right now: clear, partly cloudy, overcast, fog, drizzle, rain, snow or a thunderstorm, by day or by night.
 
-- **Files:** `Sources/Atrium/Weather.swift`. It holds the scene, the WMO code → `Kind` mapping, `Palette`, and a seeded random number generator. It also uses `SkyMath.swift` (for whether the Sun is up) and `Location.swift`; see [live-sky.md](live-sky.md). There's a test in `Tests/AtriumTests/WeatherTests.swift`.
+- **Files:** `Sources/Atrium/Weather.swift` holds the scene, the WMO code → `Kind` mapping, `Palette`, and a seeded random number generator. `WeatherSky.swift` holds the physical sky: `Atmosphere`, `SkyCamera` and `SkyLight`. `Resources/weather-*` are its images, credited in `weather-credits.tsv`. It also uses `SkyMath.swift` (for whether the Sun is up) and `Location.swift`; see [live-sky.md](live-sky.md). There's a test in `Tests/AtriumTests/WeatherTests.swift`.
 - **Entry:** `weather(size:)` builds `final class WeatherScene: SKScene`, whose `init(size:conditions:)` is the test seam. Its entry in Scenes.swift is "Weather", icon `cloud.sun.fill`, tint `.blue`, with `WeatherScene.knobs`.
 - **Kind:** SpriteKit nodes and Core Graphics textures: a gradient sky, painted clouds and hills, and emitters for rain and snow.
 
@@ -18,10 +18,16 @@ Three ranges of rolling hills with pines and round trees, under whatever the wea
 
   `intensity` (0.35, 0.65 or 1) comes from the light, moderate and heavy variants of each code.
 - **`build()`** throws everything away and rebuilds it for the current conditions. Nothing crossfades.
-  - **Sky:** a two-stop vertical gradient from the `Palette`.
-  - **Stars:** at night when it's clear (220) or partly cloudy (130); one in eight twinkles.
-  - **Sun:** by day, a painted disc with a glow at a fixed spot (0.78 w, 0.8 h), faded to 25% behind cloud or fog.
-  - **Moon:** at night, at a fixed spot (0.22 w, 0.8 h). Its phase comes from a mean synodic month (`moonTexture()`), lit on the right while waxing.
+  - **Sky:** a physical atmosphere, after Hillaire's "A Scalable and Production Ready Sky and Atmosphere Rendering Technique" (EGSR 2020): Rayleigh, Mie and ozone, single scattering plus his multiple-scattering approximation, lit by the real Sun and Moon where you are. Twilight, the Earth's shadow and the Belt of Venus come out of the physics; Preetham and Hosek–Wilkie can't do a Sun below the horizon.
+    - `Atmosphere.shared` builds two lookup tables once (sunlight through the air, and multiple scattering), about 50 ms in a release build.
+    - `SkyLight.bake` marches it for a 128×96 texture over the screen from 0.06 below the horizon to the top, about 20 ms, stored as sqrt(v/4) so values up to 4 near the Sun fit 8 bits. It also returns the colours of sunlight and skylight, all times an exposure.
+    - **Exposure** is partial: 0.7·mean^−0.88·0.05^−0.12 of the mean sky luminance, so the picture darkens with the light but far less than the light does (brightness ∝ light^0.12). A 2e−7 floor stands in for airglow and starlight.
+    - **Every minute** the scene bakes again off the main thread and crossfades into it over the next minute (`u_before`, `u_after`, `u_blend`), so twilight never steps. The first bake at build is synchronous.
+    - **The view** (`SkyCamera`) is level, 64° across, with a shifted lens so the horizon is a straight line at 0.4 of the height. It faces **today's sunset** (`sunsetAzimuth`, from the Sun's declination and your latitude; due west where the Sun doesn't set), so sunsets happen in front, and dawn lights the view from behind with the Belt of Venus over it.
+    - **The shader** decodes the sky, adds the rest, then tone-maps like film: `sqrt(1 − exp(−col))`, and dithers.
+  - **Stars:** two `starField` layers, faded in from a Sun 4° to 14° below the horizon, dimmed 60% by a bright Moon, thinned where the sky is brighter, and hidden unless it's clear or partly cloudy.
+  - **Sun:** a limb-darkened disc 0.28° across with a soft glow, in the colour of sunlight through the air (reddening as it sets), shown down to 1° below the horizon.
+  - **Moon:** NASA's LRO near side (`weather-moon.png`, from the CGI Moon Kit), 15 pt in radius (about 2.5× true), at its real place, lit from the real Sun with 1.5% earthshine, and turned so its north points to the celestial pole, as in Live Sky. It's tinted by moonlight through the air, and paler by day. `track()` moves the Sun and Moon every second, since a minute's step would be about the Sun's radius. The Moon also lights the sky as a second light at 2.5e−6·lit³ of the Sun.
   - **Clouds:** painted cumulus (overlapping ellipses, flat base, shaded underside), in three variants per build. When it's grey (overcast, drizzle, rain, snow, storm) there's a full deck of 16 big clouds; otherwise `cloudCover/10` wisps. Bigger clouds sit in front and drift faster.
   - **Hills:** `landscape()` paints three ranges into one texture, hazier with distance, with pines and round trees. It uses `Seeded(state: 11)`, so the hills and trees are the same on every rebuild. In snow the trees are all pines with snowy tips.
   - **Fog:** a vertical haze gradient, plus 5 drifting banks of mist at full density. Rain and snow get a thinner haze.
@@ -60,7 +66,6 @@ Three ranges of rolling hills with pines and round trees, under whatever the wea
 - **The decoding bug that hid everything.** `.convertFromSnakeCase` turns `wind_speed_10m` into `windSpeed10M`, so every reply failed to decode silently. The scene sat on its default of a partly cloudy day, even at night. The fix is explicit `CodingKeys`, and `parsesOpenMeteo()` in WeatherTests parses a real reply to keep it fixed.
 - **`is_day` isn't requested any more.** Day or night comes from `sunIsUp()`.
 - `ponytail:` **the wind always blows left to right.** `wind_direction_10m` would fix that.
-- **Fixed positions.** The Sun and Moon sit at fixed screen spots, not their real sky positions. The Moon's phase is a mean-month approximation, not `Sky.moonPhase`, and it isn't mirrored for the southern hemisphere.
 - **No crossfade.** A weather change or a sunrise/sunset flip replaces the scene's content instantly.
 
 ## Dave's feedback and decisions

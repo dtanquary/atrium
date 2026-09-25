@@ -29,12 +29,25 @@ final class WeatherScene: SKScene {
     private let live: Bool
     private var drifting: [(node: SKNode, speed: CGFloat)] = [] // clouds and fog banks, wrapped around in update
     private var lastUpdate: TimeInterval?
+    private var viewpoint: SkyCamera
+    private var sinceTrack = 0.0, sinceBake = 0.0, baking = false
+
+    // The sky shader's inputs; see `skyShader`.
+    private let skyBefore = SKUniform(name: "u_before", texture: nil), skyAfter = SKUniform(name: "u_after", texture: nil)
+    private let skyBlend = SKUniform(name: "u_blend", float: 1)
+    private let cameraUniforms = (lens: SKUniform(name: "u_cam", vectorFloat4: .zero), forward: SKUniform(name: "u_fwd", vectorFloat3: .zero),
+                                  right: SKUniform(name: "u_right", vectorFloat3: .zero))
+    private let sunDirection = SKUniform(name: "u_sun", vectorFloat3: [0, 0, 1]), sunDisc = SKUniform(name: "u_disc", vectorFloat3: .zero)
+    private let moonPlace = SKUniform(name: "u_moon", vectorFloat4: [0, 0, 0, 0]), moonLight = SKUniform(name: "u_moonLight", vectorFloat3: [0, 0, 1])
+    private let moonColour = SKUniform(name: "u_moonCol", vectorFloat3: .zero), starsUniform = SKUniform(name: "u_stars", float: 0)
+    private static let moonTexture = SKTexture(imageNamed: resource("weather-moon.png").path)
 
     /// Pass `conditions` to pin the scene to one state (snapshots); leave it nil to follow the live weather.
     init(size: CGSize, conditions: Conditions? = nil) {
         report = conditions ?? Conditions(isDay: WeatherScene.sunIsUp())
         self.conditions = report
         live = conditions == nil
+        viewpoint = SkyCamera(aspect: size.width / size.height, horizon: 0.4, facing: 1.5 * .pi)
         super.init(size: size)
         self.conditions = wanted
         build()
@@ -72,6 +85,12 @@ final class WeatherScene: SKScene {
         guard wanted != conditions else { return }
         conditions = wanted
         build()
+    }
+
+    /// Now, or today at the preview hour while previewing.
+    private var now: Date {
+        guard live, Self.knobs[0].value > 0.5 else { return Date() }
+        return Calendar.current.startOfDay(for: Date()).addingTimeInterval(Self.knobs[2].value * 3600)
     }
 
     /// Whether the Sun is above the horizon where you are (its top edge, allowing for refraction).
@@ -122,27 +141,7 @@ final class WeatherScene: SKScene {
         drifting = []
         let kind = conditions.kind, day = conditions.isDay
         let palette = Palette(kind, day: day)
-
-        let sky = SKSpriteNode(texture: gradient([palette.skyBottom.cg(), palette.skyTop.cg()]), size: size)
-        sky.anchorPoint = .zero
-        addChild(sky)
-
-        let clearSky = kind == .clear || kind == .partlyCloudy
-        if !day && clearSky { addStars(kind == .clear ? 220 : 130) }
-        if day && [.clear, .partlyCloudy, .overcast, .fog].contains(kind) {
-            let sun = SKSpriteNode(texture: sunTexture, size: CGSize(width: 420, height: 420))
-            sun.position = CGPoint(x: size.width * 0.78, y: size.height * 0.8)
-            sun.alpha = clearSky ? 1 : 0.25 // a pale disc behind cloud or fog
-            sun.zPosition = 2
-            addChild(sun)
-        }
-        if !day && [.clear, .partlyCloudy, .overcast].contains(kind) {
-            let moon = SKSpriteNode(texture: moonTexture(), size: CGSize(width: 300, height: 300))
-            moon.position = CGPoint(x: size.width * 0.22, y: size.height * 0.8)
-            moon.alpha = clearSky ? 1 : 0.15
-            moon.zPosition = 2
-            addChild(moon)
-        }
+        addSky()
 
         addClouds(kind, palette: palette)
 
@@ -165,24 +164,115 @@ final class WeatherScene: SKScene {
         }
     }
 
-    private func addStars(_ count: Int) {
-        let texture = paint(CGSize(width: 6, height: 6)) { ctx in
-            let glow = CGGradient(colorsSpace: nil, colors: [CGColor(gray: 1, alpha: 1), CGColor(gray: 1, alpha: 0)] as CFArray, locations: nil)!
-            ctx.drawRadialGradient(glow, startCenter: CGPoint(x: 3, y: 3), startRadius: 0, endCenter: CGPoint(x: 3, y: 3), endRadius: 3, options: [])
-        }
-        for i in 0..<count {
-            let star = SKSpriteNode(texture: texture, size: CGSize(width: 6, height: 6))
-            star.setScale(.random(in: 0.35...1))
-            star.position = CGPoint(x: .random(in: 0...size.width), y: .random(in: size.height * 0.4...size.height))
-            star.alpha = .random(in: 0.3...1)
-            star.zPosition = 1
-            if i % 8 == 0 {
-                let twinkle = SKAction.fadeAlpha(to: 0.2, duration: .random(in: 0.8...2.5))
-                star.run(.repeatForever(.sequence([twinkle, twinkle.reversed(), .fadeAlpha(to: star.alpha, duration: 1)])))
+    // MARK: - Sky
+
+    /// The physical sky (see WeatherSky.swift), facing today's sunset: stars, and the real Sun and Moon.
+    private func addSky() {
+        let here = Location.shared.coordinate
+        viewpoint.facing = Self.sunsetAzimuth(now, latitude: here.latitude)
+        cameraUniforms.lens.vectorFloat4Value = [Float(viewpoint.tanH), Float(viewpoint.tanV), Float(viewpoint.horizon), Float(viewpoint.horizon - 0.06)]
+        cameraUniforms.forward.vectorFloat3Value = SIMD3<Float>(viewpoint.forward)
+        cameraUniforms.right.vectorFloat3Value = SIMD3<Float>(viewpoint.right)
+        let sky = SKSpriteNode(color: .black, size: size)
+        sky.anchorPoint = .zero
+        sky.shader = SKShader(source: shaderCommon + Self.skyShader, uniforms: [
+            SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]), skyBefore, skyAfter, skyBlend,
+            cameraUniforms.lens, cameraUniforms.forward, cameraUniforms.right, sunDirection, sunDisc, moonPlace, moonLight,
+            moonColour, starsUniform, SKUniform(name: "u_moonTex", texture: Self.moonTexture),
+        ])
+        addChild(sky)
+        show(SkyLight.bake(camera: viewpoint, date: now, latitude: here.latitude, longitude: here.longitude), fade: false)
+        track()
+    }
+
+    /// Bakes the sky for now off the main thread, then fades to it.
+    private func bakeSky() {
+        baking = true
+        let (camera, date, here) = (viewpoint, now, Location.shared.coordinate)
+        Task.detached(priority: .utility) {
+            let light = SkyLight.bake(camera: camera, date: date, latitude: here.latitude, longitude: here.longitude)
+            await MainActor.run { [weak self] in
+                self?.show(light, fade: true)
+                self?.baking = false
             }
-            addChild(star)
         }
     }
+
+    private func show(_ light: SkyLight, fade: Bool) {
+        skyBefore.textureValue = fade ? skyAfter.textureValue : light.texture
+        skyAfter.textureValue = light.texture
+        skyBlend.floatValue = fade ? 0 : 1
+        let visible: Double = conditions.kind == .clear || conditions.kind == .partlyCloudy ? 1 : 0
+        let moonUp: Double = light.moon.z > 0 ? min(light.moonPower / 2.5e-6, 1) : 0
+        let dark = smoothstep(-0.07, -0.25, light.sun.z)
+        starsUniform.floatValue = Float(dark * (1 - 0.6 * moonUp) * visible)
+        sunDisc.vectorFloat3Value = light.sun.z > -0.02 ? SIMD3<Float>(light.sunColour) : .zero
+        let night = smoothstep(0.05, -0.1, light.sun.z)
+        moonColour.vectorFloat3Value = SIMD3<Float>(Atmosphere.shared.sunlight(viewpoint.height, light.moon.z) * (0.5 + 1.5 * night))
+    }
+
+    /// Moves the Sun and Moon to where they are now; they'd hop visibly if they only moved with each minute's bake.
+    private func track() {
+        let here = Location.shared.coordinate, jd = Sky.julianDate(now)
+        let toHorizon = Sky.horizonMatrix(jd: jd, latitude: here.latitude, longitude: here.longitude)
+        let sun = normalize(toHorizon * Sky.sun(jd)), moon = normalize(toHorizon * Sky.moon(jd))
+        sunDirection.vectorFloat3Value = SIMD3<Float>(sun)
+        guard let at = viewpoint.screen(moon), moon.z > -0.01 else { moonPlace.vectorFloat4Value = [0, 0, 0, 0]; return }
+        // Light it from the real Sun, and turn it so its north points to the celestial pole, as in Live Sky.
+        func angle(toward target: Sky.Vector) -> Double {
+            let step = normalize(moon + (target - moon * dot(moon, target)) * 0.02)
+            guard let next = viewpoint.screen(step) else { return 0 }
+            return atan2((next.y - at.y) * size.height, (next.x - at.x) * size.width)
+        }
+        let north = angle(toward: normalize(toHorizon * Sky.Vector(0, 0, 1))), toSun = angle(toward: sun)
+        let phase = acos(2 * Sky.moonPhase(jd).lit - 1) // the Sun–Moon–Earth angle
+        moonLight.vectorFloat3Value = [Float(sin(phase) * cos(toSun)), Float(sin(phase) * sin(toSun)), Float(cos(phase))]
+        moonPlace.vectorFloat4Value = [Float(at.x * size.width), Float(at.y * size.height), 15, Float(north - .pi / 2)]
+    }
+
+    /// Where the Sun sets today, in radians clockwise from north, so sunsets happen in view; due west where it
+    /// doesn't set or doesn't rise.
+    static func sunsetAzimuth(_ date: Date, latitude: Double) -> Double {
+        let declination = asin(Sky.sun(Sky.julianDate(date)).z)
+        let cosine = sin(declination) / cos(latitude * .pi / 180)
+        return abs(cosine) < 1 ? 2 * .pi - acos(cosine) : 1.5 * .pi
+    }
+
+    /// The sky from its baked texture, crossfading into each new bake, with stars, the Sun and the Moon on top.
+    /// Light is linear until the end, then tone-mapped like film.
+    private static let skyShader = """
+    vec3 decode(vec3 c) { return c * c * 4.0; }
+
+    void main() {
+        vec2 uv = v_tex_coord;
+        vec2 pts = uv * u_size;
+        vec3 rd = normalize(u_right * ((uv.x * 2.0 - 1.0) * u_cam.x) + u_fwd + vec3(0.0, 0.0, (uv.y - u_cam.z) * 2.0 * u_cam.y));
+        vec2 st = vec2(uv.x, max(uv.y - u_cam.w, 0.0) / (1.0 - u_cam.w));
+        vec3 col = mix(decode(texture2D(u_before, st).rgb), decode(texture2D(u_after, st).rgb), u_blend);
+
+        // Stars where the sky is dark enough, thinning toward the brighter horizon.
+        if (u_stars > 0.0) {
+            float s = starField(pts, 9.0, 0.35, u_time) + 0.6 * starField(pts + 300.0, 5.0, 0.25, u_time);
+            col += vec3(0.9, 0.93, 1.0) * s * u_stars * 0.6 * clamp(1.0 - dot(col, vec3(0.3, 0.5, 0.2)) * 3.0, 0.0, 1.0);
+        }
+        // The Sun: a limb-darkened disc and a soft photographic glow.
+        float ang = acos(clamp(dot(rd, u_sun), -1.0, 1.0));
+        float disc = smoothstep(0.0050, 0.0044, ang);
+        col += u_disc * (disc * 60.0 * (0.6 + 0.4 * sqrt(max(1.0 - ang * ang / 0.000022, 0.0))) + 0.25 * exp(-ang * 40.0) + 0.02 * exp(-ang * 8.0));
+        // The Moon: NASA's photo of the near side, lit from the real Sun, with a little earthshine on the dark part.
+        vec2 m = (pts - u_moon.xy) / max(u_moon.z, 0.001);
+        if (u_moon.z > 0.0 && dot(m, m) < 1.0) {
+            float cs = cos(u_moon.w);
+            float sn = sin(u_moon.w);
+            vec4 surface = texture2D(u_moonTex, vec2(cs * m.x + sn * m.y, cs * m.y - sn * m.x) * 0.5 + 0.5);
+            vec3 n = vec3(m, sqrt(max(1.0 - dot(m, m), 0.0)));
+            float lit = smoothstep(-0.03, 0.06, dot(n, u_moonLight));
+            col += surface.rgb * surface.rgb * u_moonCol * (lit + 0.015) * surface.a;
+        }
+        col = sqrt(1.0 - exp(-col)); // film-like roll-off, then roughly sRGB
+        gl_FragColor = vec4(col + (hash21(pts * 2.0) - 0.5) / 128.0, 1.0);
+    }
+    """
 
     /// Wisps on a fair day, a full deck when it's grey; bigger clouds sit closer and drift faster in the wind.
     private func addClouds(_ kind: Kind, palette: Palette) {
@@ -311,6 +401,11 @@ final class WeatherScene: SKScene {
     override func update(_ currentTime: TimeInterval) {
         let dt = CGFloat(min(max(currentTime - (lastUpdate ?? currentTime), 0), 0.1))
         lastUpdate = currentTime
+        skyBlend.floatValue = min(skyBlend.floatValue + Float(dt) / 60, 1) // into the latest sky over a minute
+        sinceTrack += dt
+        sinceBake += dt
+        if sinceTrack >= 1 { sinceTrack = 0; track() }
+        if sinceBake >= 60 && !baking { sinceBake = 0; bakeSky() }
         for (node, speed) in drifting {
             node.position.x += speed * dt
             let half = node.frame.width / 2
@@ -415,37 +510,6 @@ final class WeatherScene: SKScene {
         }
     }
 
-    private var sunTexture: SKTexture {
-        paint(CGSize(width: 420, height: 420)) { ctx in
-            let centre = CGPoint(x: 210, y: 210)
-            let glow = CGGradient(colorsSpace: nil, colors: [CGColor(red: 1, green: 0.97, blue: 0.85, alpha: 0.55), CGColor(red: 1, green: 0.95, blue: 0.8, alpha: 0)] as CFArray, locations: nil)!
-            ctx.drawRadialGradient(glow, startCenter: centre, startRadius: 40, endCenter: centre, endRadius: 210, options: [])
-            ctx.setFillColor(CGColor(red: 1, green: 0.97, blue: 0.88, alpha: 1))
-            ctx.fillEllipse(in: CGRect(x: 168, y: 168, width: 84, height: 84))
-        }
-    }
-
-    /// Tonight's moon, lit on the right while waxing and the left while waning, with a soft glow.
-    private func moonTexture() -> SKTexture {
-        let age = ((Date().timeIntervalSince1970 - 947_182_440) / 86_400).truncatingRemainder(dividingBy: 29.530588853)
-        let phase = age / 29.530588853 // 0 new, 0.5 full
-        return paint(CGSize(width: 300, height: 300)) { ctx in
-            let centre = CGPoint(x: 150, y: 150), r: CGFloat = 32
-            let brightness = 0.25 + 0.5 * (1 - cos(2 * .pi * phase)) / 2
-            let glow = CGGradient(colorsSpace: nil, colors: [CGColor(red: 0.8, green: 0.85, blue: 1, alpha: brightness), CGColor(red: 0.8, green: 0.85, blue: 1, alpha: 0)] as CFArray, locations: nil)!
-            ctx.drawRadialGradient(glow, startCenter: centre, startRadius: r, endCenter: centre, endRadius: 150, options: [])
-            ctx.setFillColor(CGColor(red: 0.2, green: 0.23, blue: 0.32, alpha: 0.5)) // earthshine on the dark part
-            ctx.fillEllipse(in: CGRect(x: centre.x - r, y: centre.y - r, width: r * 2, height: r * 2))
-            // Lit limb down one side, terminator (a half-ellipse) back up the other.
-            let side: CGFloat = phase < 0.5 ? 1 : -1, k = CGFloat(cos(2 * .pi * phase))
-            let limb = stride(from: CGFloat.pi / 2, through: -.pi / 2, by: -.pi / 32).map { CGPoint(x: centre.x + side * r * cos($0), y: centre.y + r * sin($0)) }
-            let terminator = stride(from: -CGFloat.pi / 2, through: .pi / 2, by: .pi / 32).map { CGPoint(x: centre.x + side * r * k * cos($0), y: centre.y + r * sin($0)) }
-            ctx.setFillColor(CGColor(red: 0.96, green: 0.95, blue: 0.9, alpha: 1))
-            ctx.addLines(between: limb + terminator)
-            ctx.fillPath()
-        }
-    }
-
     /// A vertical gradient texture from bottom to top, stretched over whatever sprite uses it.
     private func gradient(_ colours: [CGColor]) -> SKTexture {
         paint(CGSize(width: 4, height: 256)) { ctx in
@@ -523,6 +587,10 @@ private typealias RGB = SIMD3<Double>
 
 private func rgb(_ r: Int, _ g: Int, _ b: Int) -> RGB { RGB(Double(r), Double(g), Double(b)) / 255 }
 private func mix(_ a: RGB, _ b: RGB, _ t: Double) -> RGB { a + (b - a) * t }
+private func smoothstep(_ edge0: Double, _ edge1: Double, _ x: Double) -> Double {
+    let t = min(max((x - edge0) / (edge1 - edge0), 0), 1)
+    return t * t * (3 - 2 * t)
+}
 
 private extension SIMD3<Double> {
     func cg(_ alpha: CGFloat = 1) -> CGColor { CGColor(srgbRed: Swift.min(x, 1), green: Swift.min(y, 1), blue: Swift.min(z, 1), alpha: alpha) }
