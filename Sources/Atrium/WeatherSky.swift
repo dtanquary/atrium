@@ -142,6 +142,7 @@ struct SkyLight: Sendable {
     /// fit in 8 bits with fine steps in the dark.
     var pixels: [UInt8]
     var bottom: Double
+    var date: Date                   // the moment it shows
     var sun: V3, moon: V3            // directions
     var sunColour: V3                // sunlight at the ground, times exposure
     var sunAtCloud: V3               // sunlight (or moonlight at night) up at the clouds
@@ -190,7 +191,7 @@ struct SkyLight: Sendable {
         }
         let zenith = air.march(h0: camera.height, dir: normalize(V3(0, 0, 1) + camera.forward * 0.3), lights: lights, steps: 24).light
         let lightDir = sun.z > -0.14 ? sun : moon, power = sun.z > -0.14 ? 1 : moonPower
-        return SkyLight(pixels: pixels, bottom: bottom, sun: sun, moon: moon,
+        return SkyLight(pixels: pixels, bottom: bottom, date: date, sun: sun, moon: moon,
                         sunColour: air.sunlight(camera.height, sun.z) * exposure,
                         sunAtCloud: air.sunlight(2, lightDir.z) * power * exposure,
                         ambient: zenith * .pi * 0.8 * exposure, moonPower: moonPower, exposure: exposure,

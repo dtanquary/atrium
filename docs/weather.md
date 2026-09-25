@@ -2,12 +2,12 @@
 
 Green California hills and oak woodland, from a real photo, under whatever the weather is doing where the viewer is right now: clear, partly cloudy, overcast, fog, drizzle, rain, snow or a thunderstorm, by day or by night.
 
-- **Files:** `Sources/Atrium/Weather.swift` holds the scene, the WMO code → `Kind` mapping, `Palette`, and a seeded random number generator. `WeatherSky.swift` holds the physical sky: `Atmosphere`, `SkyCamera` and `SkyLight`. `Resources/weather-*` are its images, credited in `weather-credits.tsv`. It also uses `SkyMath.swift` (for whether the Sun is up) and `Location.swift`; see [live-sky.md](live-sky.md). There's a test in `Tests/AtriumTests/WeatherTests.swift`.
+- **Files:** `Sources/Atrium/Weather.swift` holds the scene, its shaders, and the WMO code → `Kind` mapping with each kind's clouds, rain, snow and fog. `WeatherSky.swift` holds the physical sky (`Atmosphere`, `SkyCamera`, `SkyLight`) and `CloudNoise`. `Resources/weather-*` are its images, credited in `weather-credits.tsv`. It also uses `SkyMath.swift` (the Sun and Moon) and `Location.swift`; see [live-sky.md](live-sky.md). There's a test in `Tests/AtriumTests/WeatherTests.swift`.
 - **Entry:** `weather(size:)` builds `final class WeatherScene: SKScene`, whose `init(size:conditions:)` is the test seam. Its entry in Scenes.swift is "Weather", icon `cloud.sun.fill`, tint `.blue`, with `WeatherScene.knobs`.
 - **Kind:** a physical sky baked on the CPU into a small texture, then three shaders: the sky with its clouds, the ground photo relit, and rain or snow.
 
 ## How it works
-- **`Conditions`** holds `code` (the WMO weather code), `isDay`, `cloudCover` (%) and `wind` (km/h). `kind` maps the code:
+- **`Conditions`** holds `code` (the WMO weather code), `cloudCover` (%), `wind` (km/h), `windFrom` (°), `highCloud` (%), `snowDepth` (m) and `visibility` (m). `kind` maps the code:
   - 0–1 clear, 3 overcast
   - 45 and 48 fog
   - 51–57 drizzle
@@ -17,7 +17,7 @@ Green California hills and oak woodland, from a real photo, under whatever the w
   - anything else partly cloudy
 
   `intensity` (0.35, 0.65 or 1) comes from the light, moderate and heavy variants of each code.
-- **`build()`** throws everything away and rebuilds it for the current conditions. Nothing crossfades.
+- **`build()`** throws everything away and rebuilds it for the current conditions: the sky, the ground, rain or snow, and lightning. It only runs when the weather changes, and then `redraw()` crossfades over 4 s from a snapshot of how the scene looked (`SKView.texture(from:)`). Day and night need no rebuild: the sky bakes every minute and eases between bakes.
   - **Sky:** a physical atmosphere, after Hillaire's "A Scalable and Production Ready Sky and Atmosphere Rendering Technique" (EGSR 2020): Rayleigh, Mie and ozone, single scattering plus his multiple-scattering approximation, lit by the real Sun and Moon where you are. Twilight, the Earth's shadow and the Belt of Venus come out of the physics; Preetham and Hosek–Wilkie can't do a Sun below the horizon.
     - `Atmosphere.shared` builds two lookup tables once (sunlight through the air, and multiple scattering), about 50 ms in a release build.
     - `SkyLight.bake` marches it for a 128×96 texture over the screen from 0.06 below the horizon to the top, about 20 ms, stored as sqrt(v/4) so values up to 4 near the Sun fit 8 bits. It also returns the colours of sunlight and skylight, all times an exposure.
@@ -50,46 +50,46 @@ Green California hills and oak woodland, from a real photo, under whatever the w
   - `cloud_cover_high` sets the cirrus; `visibility` sets how thick fog is (0.9 at 100 m, 0.4 at 1 km).
   - The extras are optional in the decoder, since not every weather model has them.
   - It's polled 2 s after `didMove`, to give a remembered location fix a moment to land, then every 15 min, from an SKAction keyed "poll". Polling stops while the wallpaper is hidden.
-  - A new build only happens if the conditions actually changed.
+  - A new build only happens if the conditions actually changed, and it crossfades.
 - **Parsing:** `WeatherScene.conditions(from:)` uses explicit `CodingKeys`. It returns nil on any decode failure, and the scene keeps showing what it has.
-- **Day or night** comes from the real Sun, not the API. `sunIsUp()` checks whether the Sun is above −0.833° (its top edge, allowing for refraction) at `Location.shared` with `Sky.sun`. It's checked at init, on every fetch, and every 60 s by its own action, which rebuilds on a flip. So it's right before the first fetch, offline, and within a minute of sunrise or sunset.
-- **Offline default:** `Conditions()` is code 2 (partly cloudy) with `isDay` from the Sun.
+- **Day and night** come from the real Sun and Moon where you are, through the physical sky, so they're right before the first fetch and offline. `is_day` isn't requested.
+- **Offline default:** `Conditions()` is code 2 (partly cloudy), 40% cover, a 10 km/h west wind.
 - **Location:** `Location.shared.start()` is called in `didMove`; see [live-sky.md](live-sky.md) for the fallback.
-- **Appearance:** it ignores Light/Dark Mode. The night palette follows the Sun instead: moonlit blues, and for cloudy nights a low, dim ceiling.
+- **Appearance:** it ignores Light/Dark Mode. Night follows the Sun instead: moonlit and dim, or under cloud a low ceiling faintly lit by towns.
 
 ## Settings
-- **Preview** (`weather.preview`, `weather.previewKind`, `weather.previewHour`): a switch, a menu of the eight kinds (Clear, Partly cloudy, Overcast, Fog, Drizzle, Rain, Snow, Thunderstorm) and a time of day. While it's on, the scene draws that instead of the live weather, with day or night from the Sun at that time today. Each kind stands in as one code (0, 2, 3, 45, 53, 63, 73, 95) with 15 km/h of wind. The scene keeps polling underneath, so switching it off goes straight back to the live weather.
+- **Preview** (`weather.preview`, `weather.previewKind`, `weather.previewHour`): a switch, a menu of the eight kinds (Clear, Partly cloudy, Overcast, Fog, Drizzle, Rain, Snow, Thunderstorm) and a time of day. While it's on, the scene draws that instead of the live weather, with the sky, Sun and Moon at that time today (moving the time bakes the sky again at once). Each kind stands in as one code (0, 2, 3, 45, 53, 63, 73, 95) with a 15 km/h wind from 250°, 12 cm of snow on the ground for Snow, and 400 m visibility for Fog. The scene keeps polling underneath, so switching it off goes straight back to the live weather.
 - `report` holds the latest live weather and `conditions` what's drawn; `redraw()` rebuilds only when the two differ, so any other change to UserDefaults costs nothing.
 
 ## Tuning constants
 - **Clouds:** `Conditions.clouds`, per kind. Drift is `wind/3600·0.6` km/s.
 - **Rain:** lean `min(wind/50, 1)·0.35`; layers fall at 700–1750 pt/s.
 - **Snow:** layers fall at 18–74 pt/s, drifting with the wind.
-- **Lightning:** flashes at alpha 0.5, then 0.08, then 0.35, then fade.
-- **Hills:** the landscape texture covers the bottom 46% of the screen; the tree count scales with width (`w/55` in the middle range, `w/160` in front).
+- **Ground:** covers the bottom 56% of the screen; horizon at 0.45; lit by `sunlit / 7`, compressed `^−0.45`.
+- **Exposure:** `0.7·mean^−0.88·0.05^−0.12`, halved at night.
 
 ## Performance
-- About 0.42 ms CPU and 0.18 ms GPU per frame (release build, 2x, 1512×982). Emitters and a few dozen sprites; nothing heavy per frame.
-- A rebuild repaints the landscape, about a 3024×900 px texture, roughly 10 MB. That's cheap enough when the weather changes or at sunrise and sunset.
+- Release build, 2x, 1512×982, measured 2026-09-25: about 0.5 ms CPU in every state. GPU 0.45–0.7 ms for clear, cloudy, fog and twilight, 0.85 ms for rain and storms, 1.2–1.3 ms for snow (five flake layers; the first cut would be making the nearest layers an emitter).
+- The sky bake is 4 ms a minute, off the main thread. The first build also makes the atmosphere tables and cloud noise and decodes the photo, about 200 ms once per launch; later builds take about 4 ms.
+- Memory: the ground photo is 24 MB as a texture (4096×1485), the rest is small.
 
 ## Gotchas and shortcuts
 - **The decoding bug that hid everything.** `.convertFromSnakeCase` turns `wind_speed_10m` into `windSpeed10M`, so every reply failed to decode silently. The scene sat on its default of a partly cloudy day, even at night. The fix is explicit `CodingKeys`, and `parsesOpenMeteo()` in WeatherTests parses a real reply to keep it fixed.
-- **`is_day` isn't requested any more.** Day or night comes from `sunIsUp()`.
-- **No crossfade.** A weather change or a sunrise/sunset flip replaces the scene's content instantly.
+- **SKShader can't return early from `main()`**: the Metal translation needs a value on every path, so it fails to compile. Use if/else.
+- **`u_time` grows with uptime**, so fast motion (rain at 700+ pt/s) loses precision in a float; rain and snow run on `u_clock`, which wraps hourly and so reshuffles them once an hour.
+- **Physically right isn't always right on screen.** Facing a sunset the hills came out almost black, and a full Moon made night look like a dull day. Both needed the eye's adaptation added back (ground compression, night dimming).
 
 ## Dave's feedback and decisions
 - **The real time of day.** "If the weather one is supposed to be showing my real time weather then it should also be using my real time time of day." It showed a daytime partly cloudy sky at night. That led to finding the decoding bug, and to moving day and night onto the real Sun.
 - **After the fix** he said it was "looking much better now".
 
 ## Ideas / next steps
-- Use `Sky.sun`, `Sky.moon` and `Sky.moonPhase` to place and light the Sun and Moon properly.
-- Sunrise and sunset colours in between day and night, with a crossfade between states.
 - An optional temperature readout with a °F/°C setting, which Dave was offered.
 - Seasonal ground colour and leaves.
 - Rain puddles and splashes.
 
 ## Checking it
-- `SNAPSHOT_SCENE="Weather" swift test` renders the offline default: partly cloudy, day or night from the fallback location.
+- `SNAPSHOT_SCENE="Weather" swift test` renders the offline default: partly cloudy, at this moment where you are.
 - **Every state:** `SNAPSHOT_DEFAULTS="weather.preview=1,weather.previewKind=6,weather.previewHour=22" SNAPSHOT_SCENE=Weather swift test` renders a snowy night. The kind is an index: 0 clear, 1 partly cloudy, 2 overcast, 3 fog, 4 drizzle, 5 rain, 6 snow, 7 storm. For exact codes, cloud cover or wind, pass `conditions:` to `WeatherScene(size:conditions:)` from a test.
 - `swift test --filter parsesOpenMeteo`.
-- **Live check:** `curl "https://api.open-meteo.com/v1/forecast?latitude=40.0&longitude=-90.0&current=weather_code,cloud_cover,wind_speed_10m"`.
+- **Live check:** `curl "https://api.open-meteo.com/v1/forecast?latitude=40.0&longitude=-90.0&current=weather_code,cloud_cover,cloud_cover_high,wind_speed_10m,wind_direction_10m,snow_depth,visibility"`.

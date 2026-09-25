@@ -19,7 +19,6 @@ final class WeatherScene: SKScene {
     /// The current weather as Open-Meteo reports it.
     struct Conditions: Equatable {
         var code = 2          // WMO weather code
-        var isDay = true
         var cloudCover = 40.0 // percent
         var wind = 10.0       // km/h
         var windFrom = 270.0  // degrees clockwise from north
@@ -33,7 +32,7 @@ final class WeatherScene: SKScene {
     private let live: Bool
     private var lastUpdate: TimeInterval?
     private var viewpoint: SkyCamera
-    private var sinceTrack = 0.0, sinceBake = 0.0, baking = false
+    private var sinceTrack = 0.0, sinceBake = 0.0, baking = false, skyDate = Date.distantPast
 
     // The sky shader's inputs; see `skyShader`.
     private let skyBefore = SKUniform(name: "u_before", texture: nil), skyAfter = SKUniform(name: "u_after", texture: nil)
@@ -60,7 +59,7 @@ final class WeatherScene: SKScene {
 
     /// Pass `conditions` to pin the scene to one state (snapshots); leave it nil to follow the live weather.
     init(size: CGSize, conditions: Conditions? = nil) {
-        report = conditions ?? Conditions(isDay: WeatherScene.sunIsUp())
+        report = conditions ?? Conditions()
         self.conditions = report
         live = conditions == nil
         viewpoint = SkyCamera(aspect: size.width / size.height, horizon: 0.45, facing: 1.5 * .pi)
@@ -80,28 +79,34 @@ final class WeatherScene: SKScene {
         run(.sequence([.wait(forDuration: 2), // give a remembered location fix a moment to land
                        .repeatForever(.sequence([.run { [weak self] in self?.refresh() }, .wait(forDuration: 900)]))]),
             withKey: "poll")
-        run(.repeatForever(.sequence([.wait(forDuration: 60), .run { [weak self] in
-            guard let self else { return }
-            report.isDay = WeatherScene.sunIsUp()
-            redraw()
-        }])))
     }
 
     /// The live weather, or while previewing, the kind and time of day picked in Settings.
     private var wanted: Conditions {
         guard live, Self.knobs[0].value > 0.5 else { return report }
         let kind = min(max(Int(Self.knobs[1].value), 0), 7)
-        let hour = Calendar.current.startOfDay(for: Date()).addingTimeInterval(Self.knobs[2].value * 3600)
-        return Conditions(code: [0, 2, 3, 45, 53, 63, 73, 95][kind], isDay: Self.sunIsUp(at: hour),
-                          cloudCover: [5, 45, 100, 100, 100, 100, 100, 100][kind], wind: 15, windFrom: 250,
+        return Conditions(code: [0, 2, 3, 45, 53, 63, 73, 95][kind], cloudCover: [5, 45, 100, 100, 100, 100, 100, 100][kind], wind: 15, windFrom: 250,
                           highCloud: [30, 20, 0, 0, 0, 0, 0, 0][kind], snowDepth: kind == 6 ? 0.12 : 0, visibility: kind == 3 ? 400 : 30000)
     }
 
-    /// Rebuilds the scene if what it should show has changed.
+    /// Rebuilds the scene if the weather it should show has changed, crossfading from how it looked, or bakes the sky
+    /// again at once if a preview moved the time of day.
     @objc private func redraw() {
-        guard wanted != conditions else { return }
-        conditions = wanted
-        build()
+        if wanted != conditions {
+            let before = view?.texture(from: self)
+            conditions = wanted
+            build()
+            guard let before else { return }
+            let fade = SKSpriteNode(texture: before, size: size)
+            fade.anchorPoint = .zero
+            fade.zPosition = 100
+            addChild(fade)
+            fade.run(.sequence([.fadeOut(withDuration: 4), .removeFromParent()]))
+        } else if abs(now.timeIntervalSince(skyDate)) > 120 {
+            let here = Location.shared.coordinate
+            show(SkyLight.bake(camera: viewpoint, date: now, latitude: here.latitude, longitude: here.longitude), fade: false)
+            track()
+        }
     }
 
     /// Now, or today at the preview hour while previewing.
@@ -110,14 +115,7 @@ final class WeatherScene: SKScene {
         return Calendar.current.startOfDay(for: Date()).addingTimeInterval(Self.knobs[2].value * 3600)
     }
 
-    /// Whether the Sun is above the horizon where you are (its top edge, allowing for refraction).
-    static func sunIsUp(at date: Date = Date()) -> Bool {
-        let here = Location.shared.coordinate, jd = Sky.julianDate(date)
-        let sun = Sky.horizonMatrix(jd: jd, latitude: here.latitude, longitude: here.longitude) * Sky.sun(jd)
-        return sun.z > sin(-0.833 * .pi / 180)
-    }
-
-    /// Conditions from an Open-Meteo `current` reply, with day or night from the Sun rather than the reply.
+    /// Conditions from an Open-Meteo `current` reply.
     static func conditions(from reply: Data) -> Conditions? {
         struct Forecast: Decodable {
             struct Current: Decodable {
@@ -132,7 +130,7 @@ final class WeatherScene: SKScene {
             let current: Current
         }
         guard let now = try? JSONDecoder().decode(Forecast.self, from: reply).current else { return nil }
-        return Conditions(code: now.weatherCode, isDay: sunIsUp(), cloudCover: now.cloudCover, wind: now.windSpeed,
+        return Conditions(code: now.weatherCode, cloudCover: now.cloudCover, wind: now.windSpeed,
                           windFrom: now.windFrom ?? 270, highCloud: now.highCloud ?? 0, snowDepth: now.snowDepth ?? 0,
                           visibility: now.visibility ?? 30000)
     }
@@ -159,14 +157,10 @@ final class WeatherScene: SKScene {
     private func build() {
         removeAllChildren()
         removeAction(forKey: "lightning")
-        let kind = conditions.kind, day = conditions.isDay
         addSky()
-
-
         addGround()
-
         addPrecipitation()
-        if kind == .storm { addLightning() }
+        if conditions.kind == .storm { addLightning() }
     }
 
     // MARK: - Sky
@@ -212,6 +206,7 @@ final class WeatherScene: SKScene {
     }
 
     private func show(_ light: SkyLight, fade: Bool) {
+        skyDate = light.date
         skyBefore.textureValue = fade ? skyAfter.textureValue : light.texture
         skyAfter.textureValue = light.texture
         skyBlend.floatValue = fade ? 0 : 1
