@@ -175,24 +175,30 @@ final class Galaxy: SKScene {
     }
 
     // One star per cell of the turning disc, kept with probability `keep`, drawn as a round point on screen about
-    // 1.5 px across, like the photos' resolved stars: `m` takes a step in the disc to screen points. It can sit
-    // almost anywhere in its cell, so the stars never line up into a grid. Returns (brightness, a random number
-    // for its colour).
-    vec2 discStar(vec2 g, float cell, float seed, float keep, mat2 m) {
-        vec4 h = hash42(floor(g / cell) + seed);
+    // 1.5 px across, like the photos' resolved stars: `m` takes a step in the disc to screen points. `turn` turns the
+    // grid, so layers with different cells and angles never line up. A star can sit anywhere in 95% of its cell:
+    // jitter over the whole cell cancels the grid's own spacing out of the pattern (at 80% it kept a visible lattice
+    // in dense arms). Returns (brightness, a random number for its colour).
+    vec2 discStar(vec2 g, float cell, mat2 turn, float seed, float keep, mat2 m) {
+        vec2 q = turn * g / cell;
+        vec4 h = hash42(floor(q) + seed);
         if (h.x > keep) { return vec2(0.0); }
-        float d = length(m * ((fract(g / cell) - 0.5 - (h.yz - 0.5) * 0.8) * cell));
+        vec2 local = (fract(q) - 0.5 - (h.yz - 0.5) * 0.95) * cell;
+        float d = length(m * (local * turn)); // local * turn turns it back into the disc's frame
         float mag = pow(h.w, 2.5);
         return vec2(exp(-d * d * (4.5 - 2.5 * mag)) * (0.3 + 1.6 * mag), h.x / max(keep, 0.0001)); // h.x is uniform below keep
     }
 
     // A star-forming knot, glowing hydrogen around the young cluster that lights it, in a cell where `keep` allows,
-    // round on screen like discStar; 0.8 to 3.2 points across, mostly small, so it stays inside its cell rather
-    // than showing as a clipped half-moon. Returns (glow, cluster).
-    vec2 knot(vec2 g, float cell, float keep, mat2 m) {
+    // round on screen like discStar; 0.8 to 3.2 points across, mostly small. Small knots can sit almost anywhere in
+    // their cell, big ones nearer its middle so they aren't clipped into half-moons; a fixed ±15% made the chains
+    // along the arms evenly spaced. `cellPts` is the cell's narrowest width on screen. Returns (glow, cluster).
+    vec2 knot(vec2 g, float cell, float cellPts, float keep, mat2 m) {
         vec4 h = hash42(floor(g / cell) + 41.0);
         if (h.x > keep) { return vec2(0.0); }
-        float l = length(m * ((fract(g / cell) - 0.5 - (h.yz - 0.5) * 0.3) * cell)) / (0.8 + 2.4 * pow(h.w, 3.0));
+        float size = 0.8 + 2.4 * pow(h.w, 3.0);
+        float jitter = clamp(0.95 - 3.0 * size / cellPts, 0.3, 0.9);
+        float l = length(m * ((fract(g / cell) - 0.5 - (h.yz - 0.5) * jitter) * cell)) / size;
         return vec2(exp(-l * l * 2.0), exp(-l * l * 8.0)) * (0.3 + 0.7 * h.x / max(keep, 0.0001));
     }
 
@@ -370,9 +376,14 @@ final class Galaxy: SKScene {
             // that follows the light, and blue giants just past the crests.
             float pt = 1.0 / (u_radius * u_size.y);
             mat2 m = mat2(1.0, 0.0, 0.0, u_tilt) * mat2(cos(u_phase), sin(u_phase), -sin(u_phase), cos(u_phase)) / pt;
-            vec2 s1 = discStar(g, 2.2 * pt / u_tilt, 3.0, clamp(crest * inArms * 4.0 * smoothstep(1.4, 0.9, r) + disc * 0.6, 0.0, 0.85), m);
+            // The grain comes from two layers, on grids of different sizes turned 37° apart like the background sky's,
+            // bunched into clusters along the arms by the lumpy star-cloud noise, as real stars form in associations.
+            float crowd = clamp(crest * inArms * 4.0 * smoothstep(1.4, 0.9, r) + disc * 0.6, 0.0, 1.0) * (0.45 + 1.1 * clump);
+            vec2 s1 = discStar(g, 2.8 * pt / u_tilt, mat2(1.0, 0.0, 0.0, 1.0), 3.0, min(crowd * 0.75, 0.8), m);
+            vec2 s1b = discStar(g, 3.9 * pt / u_tilt, mat2(0.8, 0.6, -0.6, 0.8), 17.0, min(crowd * 0.9, 0.9), m);
+            if (s1b.x > s1.x) { s1 = s1b; }
             float giants = clamp(young * inArms * clump * 2.0, 0.0, 0.3) * smoothstep(1.4, 1.0, r);
-            vec2 s2 = giants > 0.002 ? discStar(g, 11.0 * pt / u_tilt, 11.0, giants, m) : vec2(0.0); // only near the arms
+            vec2 s2 = giants > 0.002 ? discStar(g, 11.0 * pt / u_tilt, mat2(0.5, -0.87, 0.87, 0.5), 11.0, giants, m) : vec2(0.0); // only near the arms
             light += (mix(old, u_young, smoothstep(0.05, 0.4, crest)) * s1.x * min(disc * (1.5 + 3.0 * arm), 0.3) + u_young * s2.x * 0.5) * absorb;
 
             // H II regions: in complexes, strung along the arm's inner edge between the dust lane and the crest,
@@ -381,7 +392,7 @@ final class Galaxy: SKScene {
             float strung = hii * inArms * smoothstep(1.2, 0.8, r);
             if (strung > 0.002) { // they only sit in a narrow band along each arm, so skip the lookups elsewhere
                 float groups = smoothstep(0.3, 0.7, noise(g * 9.0 + u_seed.yx));
-                k = knot(g, 16.0 * pt / u_tilt, clamp(strung * groups * 12.0, 0.0, 0.9), m);
+                k = knot(g, 16.0 * pt / u_tilt, 16.0, clamp(strung * groups * 12.0, 0.0, 0.9), m);
             }
             // Hubble images keep H-alpha saturated, so part of the pink glow goes on after the stretch.
             float fade = 0.25 + 0.75 * smoothstep(1.2, 0.3, r);
