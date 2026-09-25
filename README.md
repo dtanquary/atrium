@@ -62,7 +62,7 @@ To rebuild after pulling changes: `./build.sh && pkill -x Atrium; open build/Atr
 
 | Wallpaper | What it is |
 |---|---|
-| Fish Tank | Five painted species schooling in a sunlit tank, with caustics, swaying plants and bubbles |
+| Fish Tank | A bright reef tank of real fish and corals, cut out of photos: a chromis school, tangs, clownfish in their anemone, and soft corals swaying |
 | Flowing Gradient | Soft pools of colour with silk ribbons that follow the Sun; six palettes and a watercolour Light Mode |
 | Lava Lamp | Wax that rises on pinching necks, slumps and sinks; seven jewel-tone palettes, with Light and Dark looks |
 | Rain on Glass | Drops sliding down a window over blurred city lights, at night or on an overcast day, in seven palettes |

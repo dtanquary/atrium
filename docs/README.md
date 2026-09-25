@@ -6,7 +6,7 @@ One file per wallpaper, recording what the code can't: how each scene works, why
 
 | Wallpaper | Doc | Source | Kind | Settings | Live data | CPU / GPU ms* |
 |---|---|---|---|---|---|---|
-| Fish Tank | [fish-tank.md](fish-tank.md) | `FishTank.swift`, `FishTankArt.swift` | SpriteKit and shaders | none yet | none | 0.51 / 1.55 |
+| Fish Tank | [fish-tank.md](fish-tank.md) | `FishTank.swift`, `FishTankArt.swift`, `Resources/reef-*` | photo cut-outs and shaders | none yet | none | 0.7 / 1.35 |
 | Flowing Gradient | [flowing-gradient.md](flowing-gradient.md) | `FlowingGradient.swift` | shader | knobs, 6 palettes | Sun position | 0.47 / 0.55 |
 | Lava Lamp | [lava-lamp.md](lava-lamp.md) | `LavaLamp.swift` | shader | knobs, 7 palettes | none | 0.45 / 1.86 |
 | Rain on Glass | [rain-on-glass.md](rain-on-glass.md) | `Shaders.swift` | shader | knobs, 7 palettes, day look | none | 0.45 / 1.40 |

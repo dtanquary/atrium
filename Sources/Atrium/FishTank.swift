@@ -1,9 +1,10 @@
 import SpriteKit
 import simd
 
-/// A planted reef tank seen through the glass: shaded fish schooling at three depths, plants swaying from their
-/// roots, rocks and driftwood, caustics rippling over the sand, light rays and a shimmering surface, an aerator
-/// and drifting marine snow. Everything is painted in code at launch (see FishTankArt.swift).
+/// A reef tank seen through the glass, bright under its lamps: real fish, cut out of photos, schooling at three
+/// depths around two islands of rock and coral, clownfish at home in their anemone, soft corals swaying in the
+/// current, caustics rippling over white sand, and the mirror of the surface along the top. The photos are credited
+/// in Resources/reef-credits.tsv; everything else is drawn in shaders.
 final class FishTank: SKScene {
     /// One fish. It swims in the flat plane of its school's depth.
     private struct Swimmer {
@@ -28,15 +29,15 @@ final class FishTank: SKScene {
     }
 
     private enum Z {
-        static let water: CGFloat = 0, sand: CGFloat = 1, farRocks: CGFloat = 2, farPlants: CGFloat = 3, farFish: CGFloat = 4
-        static let midPlants: CGFloat = 5, midFish: CGFloat = 6, bubbles: CGFloat = 7, nearFish: CGFloat = 8
-        static let frontPlants: CGFloat = 9, vignette: CGFloat = 10
+        static let water: CGFloat = 0, sand: CGFloat = 1, backReef: CGFloat = 2, farFish: CGFloat = 3, reef: CGFloat = 4
+        static let midFish: CGFloat = 5, frontReef: CGFloat = 6, nearFish: CGFloat = 7, snow: CGFloat = 8, vignette: CGFloat = 9
     }
 
     private var swimmers: [Swimmer] = []
     private var schools: [School] = []
     private var lastUpdate: TimeInterval?
     private var anemone = CGPoint.zero
+    private var rockSpots: [CGPoint] = [] // where the shy species hang about, low by each island
 
     /// Scales the art with the display, so a bigger screen gets a bigger tank rather than smaller fish.
     private var unit: CGFloat { min(max(size.height / 982, 0.8), 1.8) }
@@ -48,9 +49,8 @@ final class FishTank: SKScene {
         backgroundColor = .black
         addWater()
         addSand()
-        addHardscapeAndPlants()
+        addReef()
         addSchools()
-        addBubbles()
         addMarineSnow()
         addVignette()
         for _ in 0..<150 { swim(1.0 / 30) } // let the schools gather before the first frame
@@ -138,26 +138,35 @@ final class FishTank: SKScene {
     }
 
     private func addSchools() {
-        // Species, school size, depth. Two far schools add depth; the tetras are the showpiece school.
+        // Species, school size, depth: a big school of chromis split over two depths, a few tangs, the clownfish
+        // pair at their anemone, and the small, shy species low by the rock.
         let plan: [(Species, Int, CGFloat)] = [
-            (.neonTetra, 14, 0.55), (.blueTang, 2, 0.6), (.yellowTang, 4, 0.75), (.neonTetra, 26, 0.85),
-            (.angelfish, 2, 0.88), (.clownfish, 2, 0.95), (.blueTang, 3, 1.1),
+            (.chromis, 14, 0.62), (.yellowTang, 3, 0.8), (.chromis, 12, 0.9), (.blueTang, 2, 0.95), (.clownfish, 2, 0.95),
+            (.royalGramma, 1, 0.92), (.firefish, 2, 0.9), (.flameAngel, 1, 0.97), (.yellowTang, 1, 1.1),
         ]
         for (species, count, depth) in plan {
-            let (texture, textureSize) = TankArt.fish(species, fog: max(0, (1 - depth) * 0.7))
+            let blur = max(0, 0.9 - depth) * 4 // the back school is a little out of focus
+            let looks = species.photos.compactMap { TankArt.photo($0, width: species.length, blur: blur) }
+            guard let first = looks.first else { continue }
             let (floor, ceiling) = bounds(depth)
             var school = School(species: species, depth: depth, cruise: .random(in: species.cruise) * Double(depth * unit),
-                                beat: TankArt.swimWarps(species, textureHeight: textureSize.height))
-            if species == .clownfish {
-                school.home = SIMD2(Double(anemone.x), Double(anemone.y + size.height * 0.08))
+                                beat: TankArt.swimWarps(species, textureHeight: first.size.height))
+            switch species.haunt {
+            case .anemone: school.home = SIMD2(Double(anemone.x), Double(anemone.y + 40 * unit))
+            case .rock:
+                let spot = rockSpots.randomElement() ?? CGPoint(x: size.width / 2, y: sandHeight)
+                school.home = SIMD2(Double(spot.x), Double(spot.y))
+            case .open: break
             }
             let centre = school.home ?? SIMD2(Double.random(in: 0.15...0.85) * Double(size.width), .random(in: floor...ceiling))
             let heading = Bool.random() ? 1.0 : -1.0
             for _ in 0..<count {
-                let node = SKSpriteNode(texture: texture, size: textureSize)
+                let look = looks.randomElement()!
+                let node = SKSpriteNode(texture: look.texture, size: look.size)
                 node.setScale(depth * fishUnit)
                 node.zPosition = depth < 0.7 ? Z.farFish : depth < 1 ? Z.midFish : Z.nearFish
                 node.subdivisionLevels = 1
+                graded(node, fog: max(0, 0.9 - depth) * 0.5)
                 addChild(node)
                 let spread = Double(species.length * depth * fishUnit) * 2.5
                 school.members.append(swimmers.count)
@@ -173,14 +182,17 @@ final class FishTank: SKScene {
     // MARK: - Water, light and sand
 
     /// A reef tank's light: in Light Mode, daylight white-blue LEDs over a royal-blue back panel; in Dark Mode, the
-    /// actinic blue of a reef tank's evening. Both come from ESA-style sampling of real reef tank photos (the CAS
-    /// Steinhart coral tank and a public-aquarium reef tank on Wikimedia Commons).
+    /// actinic blue of a reef tank's evening. The colours were sampled from real reef tank photos (the CAS Steinhart
+    /// coral tank and a public-aquarium reef tank on Wikimedia Commons). `grade` tints the photo cut-outs, shot in
+    /// white light, to the tank's light; `haze` is what things fade toward further back.
     private struct Lighting {
-        let high, low, mirror, shimmer, sandNear, sandFar: SIMD3<Float>
+        let high, low, mirror, shimmer, sandNear, sandFar, grade, haze: SIMD3<Float>
         static let day = Lighting(high: [0.05, 0.38, 0.90], low: [0.01, 0.12, 0.46], mirror: [0.50, 0.60, 0.74],
-                                  shimmer: [0.85, 0.95, 1.0], sandNear: [0.88, 0.84, 0.78], sandFar: [0.33, 0.45, 0.72])
+                                  shimmer: [0.85, 0.95, 1.0], sandNear: [0.88, 0.84, 0.78], sandFar: [0.33, 0.45, 0.72],
+                                  grade: [0.94, 0.98, 1.06], haze: [0.03, 0.26, 0.7])
         static let actinic = Lighting(high: [0.12, 0.14, 0.66], low: [0.02, 0.02, 0.2], mirror: [0.3, 0.3, 0.6],
-                                      shimmer: [0.6, 0.65, 1.0], sandNear: [0.5, 0.5, 0.9], sandFar: [0.16, 0.18, 0.52])
+                                      shimmer: [0.6, 0.65, 1.0], sandNear: [0.5, 0.5, 0.9], sandFar: [0.16, 0.18, 0.52],
+                                      grade: [0.5, 0.58, 1.1], haze: [0.07, 0.08, 0.4])
     }
     private let light = systemIsDark ? Lighting.actinic : Lighting.day
 
@@ -286,121 +298,102 @@ final class FishTank: SKScene {
         addChild(sand)
     }
 
-    // MARK: - Hardscape and plants
+    // MARK: - The reef
 
-    private func addHardscapeAndPlants() {
-        let far = SKSpriteNode(texture: TankArt.farRocks(CGSize(width: size.width, height: size.height * 0.15)),
-                               size: CGSize(width: size.width, height: size.height * 0.15))
-        far.anchorPoint = .zero
-        far.position = CGPoint(x: 0, y: sandHeight * 0.86)
-        far.zPosition = Z.farRocks
-        addChild(far)
-
-        // A few painted variants per row, reused with flips and sizes, keep texture memory down.
-        func pool(_ kinds: [TankArt.Plant], height: CGFloat, fog: CGFloat) -> [(TankArt.Plant, SKTexture, CGSize)] {
-            kinds.map { kind in
-                let (texture, size) = TankArt.plant(kind, height: kind == .anemone ? height * 0.35 : height, fog: fog)
-                return (kind, texture, size)
+    /// Grades every photo cut-out to the tank's light, and fades things further back toward the back panel by their
+    /// `a_fog` attribute. One shader shared by every fish and coral.
+    private lazy var photoShader: SKShader = {
+        let shader = SKShader(source: """
+            void main() {
+                vec4 c = texture2D(u_texture, v_tex_coord);
+                gl_FragColor = vec4(mix(c.rgb * u_grade, u_haze * c.a, a_fog), c.a);
             }
-        }
-        let back = pool([.kelp, .grass, .redKelp, .grass], height: size.height * 0.3, fog: 0.5)
-        let middle = pool([.kelp, .grass, .stems, .redKelp, .kelp, .stems], height: size.height * 0.42, fog: 0.12)
-        let front = pool([.kelp, .grass, .redKelp], height: size.height * 0.62, fog: 0)
+            """, uniforms: [SKUniform(name: "u_grade", vectorFloat3: light.grade), SKUniform(name: "u_haze", vectorFloat3: light.haze)])
+        shader.attributes = [SKAttribute(name: "a_fog", type: .float)]
+        return shader
+    }()
 
-        var x = CGFloat.random(in: 0...80)
-        while x < size.width { // back row along the far edge of the sand
-            plant(back.randomElement()!, at: CGPoint(x: x, y: sandHeight * .random(in: 0.8...0.9)), scale: .random(in: 0.7...1.1), z: Z.farPlants)
-            x += .random(in: 90...190) * unit
-        }
-        anemone = CGPoint(x: size.width * 0.3, y: sandHeight * 0.48)
-        x = .random(in: 0...120)
-        while x < size.width { // middle row, leaving room around the anemone
-            if abs(x - anemone.x) > 110 * unit {
-                plant(middle.randomElement()!, at: CGPoint(x: x, y: sandHeight * .random(in: 0.5...0.75)), scale: .random(in: 0.75...1.1), z: Z.midPlants)
-            }
-            x += .random(in: 150...290) * unit
-        }
-        plant(pool([.anemone], height: size.height * 0.36, fog: 0.05)[0], at: anemone, scale: 1, z: Z.midPlants)
-
-        // Stones in front of the middle row, and a branch of driftwood.
-        let wood = CGSize(width: size.width * 0.3, height: size.height * 0.17)
-        let branch = SKSpriteNode(texture: TankArt.driftwood(wood, fog: 0.1), size: wood)
-        branch.anchorPoint = CGPoint(x: 0.5, y: 0)
-        branch.position = CGPoint(x: size.width * 0.56, y: sandHeight * 0.22)
-        branch.zPosition = Z.midPlants
-        addChild(branch)
-        for fraction in [0.1, 0.44, 0.72, 0.93] { // clusters: a big stone with a smaller one or two nestled beside it
-            let spot = CGPoint(x: size.width * fraction + .random(in: -40...40), y: sandHeight * .random(in: 0.35...0.55))
-            for (i, scale) in [1, CGFloat.random(in: 0.35...0.55), .random(in: 0.25...0.4)].prefix(.random(in: 2...3)).enumerated() {
-                let stone = CGSize(width: .random(in: 130...200) * unit * scale, height: .random(in: 70...105) * unit * scale)
-                let rock = SKSpriteNode(texture: TankArt.rock(stone, fog: 0.12), size: stone)
-                rock.anchorPoint = CGPoint(x: 0.5, y: 0.08)
-                let side: CGFloat = i == 1 ? 1 : -1
-                rock.position = CGPoint(x: spot.x + (i == 0 ? 0 : side * .random(in: 60...95) * unit), y: spot.y - CGFloat(i) * 8 * unit)
-                rock.zPosition = Z.midPlants
-                addChild(rock)
-            }
-        }
-
-        // Tall plants right up against the glass at both edges, for fish to slip behind.
-        for edge in [CGFloat.random(in: 0.01...0.07), .random(in: 0.12...0.16), .random(in: 0.9...0.98)] {
-            plant(front.randomElement()!, at: CGPoint(x: size.width * edge, y: -size.height * 0.02), scale: .random(in: 0.85...1.1), z: Z.frontPlants)
-        }
+    private func graded(_ node: SKSpriteNode, fog: CGFloat) {
+        node.shader = photoShader
+        node.setValue(SKAttributeValue(float: Float(fog)), forAttribute: "a_fog")
     }
 
-    /// Plants one clump, swaying from its base with its own period and starting point.
-    private func plant(_ art: (TankArt.Plant, SKTexture, CGSize), at base: CGPoint, scale: CGFloat, z: CGFloat) {
-        let (kind, texture, size) = art
-        let sprite = SKSpriteNode(texture: texture, size: size)
-        sprite.anchorPoint = CGPoint(x: 0.5, y: 0)
+    /// Two islands of rock and coral, the way reefkeepers aquascape, with open sand between them for the fish to
+    /// cross, and a soft, low cluster further back. Which cut-outs go where changes with each load.
+    private func addReef() {
+        cluster(at: CGPoint(x: size.width * .random(in: 0.42...0.58), y: sandHeight * 0.92), scale: 0.55, fog: 0.35,
+                blur: 1.4, z: Z.backReef, anemone: false)
+        let anemoneLeft = Bool.random()
+        cluster(at: CGPoint(x: size.width * .random(in: 0.14...0.24), y: sandHeight * 0.55), scale: 1, fog: 0, blur: 0,
+                z: Z.reef, anemone: anemoneLeft)
+        cluster(at: CGPoint(x: size.width * .random(in: 0.76...0.86), y: sandHeight * 0.6), scale: 0.9, fog: 0.05, blur: 0,
+                z: Z.reef, anemone: !anemoneLeft)
+        // a colony right up against the glass in a front corner
+        let corner = Bool.random() ? CGFloat.random(in: 0.02...0.08) : .random(in: 0.92...0.98)
+        coral(["reef-brain-1", "reef-brain-2", "reef-brain-3", "reef-zoanthid-2"].randomElement()!, width: 230,
+              at: CGPoint(x: size.width * corner, y: -12 * unit), z: Z.frontReef, sway: 0)
+    }
+
+    /// One island: a big rock with a smaller one stacked on it toward the open middle, a branching Acropora on top,
+    /// soft corals on its shoulders swaying in the current, zoanthids on its face and a brain coral at its foot.
+    /// `anemone` puts the clownfish's home on one shoulder.
+    private func cluster(at base: CGPoint, scale: CGFloat, fog: CGFloat, blur: CGFloat, z: CGFloat, anemone hasAnemone: Bool) {
+        let side: CGFloat = base.x < size.width / 2 ? 1 : -1 // shoulders lean toward the open middle
+        guard let rock = place("reef-rock-1", width: .random(in: 440...520) * scale, at: base, z: z, fog: fog, blur: blur, sway: 0)
+        else { return }
+        let w = rock.width, h = rock.height
+        let upper = CGPoint(x: base.x + side * w * .random(in: 0.08...0.2), y: base.y + h * 0.62)
+        let small = place("reef-rock-1", width: w / unit * .random(in: 0.5...0.62), at: upper, z: z + 0.01, fog: fog, blur: blur, sway: 0)
+        let top = upper.y + (small?.height ?? 0) * 0.8
+        place(["reef-acropora-1", "reef-acropora-2", "reef-acropora-3"].randomElement()!, width: 320 * scale,
+              at: CGPoint(x: upper.x - side * w * 0.05, y: top - 24 * scale * unit), z: z + 0.02, fog: fog, blur: blur, sway: 0)
+        place(["reef-toadstool-1", "reef-toadstool-2", "reef-toadstool-3"].randomElement()!, width: 220 * scale,
+              at: CGPoint(x: base.x - side * w * 0.3, y: base.y + h * 0.72), z: z + 0.03, fog: fog, blur: blur, sway: 0.03)
+        if hasAnemone {
+            let spot = CGPoint(x: base.x + side * w * 0.38, y: base.y + h * 0.58)
+            place(["reef-anemone-1", "reef-anemone-2", "reef-anemone-3"].randomElement()!, width: 240 * scale,
+                  at: spot, z: z + 0.04, fog: fog, blur: blur, sway: 0.05)
+            self.anemone = spot
+        } else {
+            place(["reef-torch-1", "reef-torch-2", "reef-euphyllia-1", "reef-candycane-1"].randomElement()!, width: 210 * scale,
+                  at: CGPoint(x: base.x + side * w * 0.4, y: base.y + h * 0.55), z: z + 0.04, fog: fog, blur: blur, sway: 0.04)
+        }
+        place(["reef-zoanthid-1", "reef-zoanthid-2"].randomElement()!, width: 110 * scale,
+              at: CGPoint(x: base.x - side * w * 0.05, y: base.y + h * 0.22), z: z + 0.05, fog: fog, blur: blur, sway: 0)
+        place(["reef-brain-1", "reef-brain-2", "reef-brain-3"].randomElement()!, width: 170 * scale,
+              at: CGPoint(x: base.x - side * w * 0.22, y: base.y - 20 * scale * unit), z: z + 0.06, fog: fog, blur: blur, sway: 0)
+        if z == Z.reef { rockSpots.append(CGPoint(x: base.x + side * w * 0.55, y: base.y + h * 0.3)) }
+    }
+
+    /// A coral right up against the glass: sharp, and big.
+    private func coral(_ name: String, width: CGFloat, at base: CGPoint, z: CGFloat, sway: CGFloat) {
+        place(name, width: width, at: base, z: z, fog: 0, blur: 0, sway: sway)
+    }
+
+    /// Places one cut-out standing on `base`, graded to the tank's light, swaying from its foot by `sway` if it's
+    /// soft. Returns its size on screen.
+    @discardableResult
+    private func place(_ name: String, width: CGFloat, at base: CGPoint, z: CGFloat, fog: CGFloat, blur: CGFloat,
+                       sway: CGFloat) -> CGSize? {
+        guard let (texture, textureSize) = TankArt.photo(name, width: width * unit, blur: blur) else { return nil }
+        let sprite = SKSpriteNode(texture: texture, size: textureSize)
+        sprite.anchorPoint = CGPoint(x: 0.5, y: 0.04)
         sprite.position = base
-        sprite.setScale(scale * unit)
-        if Bool.random() { sprite.xScale *= -1 }
+        if Bool.random() { sprite.xScale = -1 }
         sprite.zPosition = z
-        sprite.subdivisionLevels = 1
-        sprite.warpGeometry = SKWarpGeometryGrid(columns: 1, rows: 8)
-        let sway = TankArt.swayWarps(width: size.width, height: size.height, strength: kind == .anemone ? 0.05 : 0.07,
-                                     period: .random(in: 4.5...7.5))
-        sprite.run(.sequence([.wait(forDuration: .random(in: 0...4)), sway]))
+        graded(sprite, fog: fog)
+        if sway > 0 {
+            sprite.subdivisionLevels = 1
+            sprite.warpGeometry = SKWarpGeometryGrid(columns: 1, rows: 8)
+            let action = TankArt.swayWarps(width: textureSize.width, height: textureSize.height, strength: sway,
+                                           period: .random(in: 5...8))
+            sprite.run(.sequence([.wait(forDuration: .random(in: 0...4)), action]))
+        }
         addChild(sprite)
+        return textureSize
     }
 
-    // MARK: - Bubbles, snow and the edges
-
-    /// An airstone sending up a stream of wobbling bubbles that swell as they rise and pop at the surface.
-    private func addBubbles() {
-        let base = CGPoint(x: size.width * 0.8, y: sandHeight * 0.42)
-        let stoneSize = CGSize(width: 38 * unit, height: 18 * unit)
-        let stone = SKSpriteNode(texture: TankArt.rock(stoneSize, fog: 0.05), size: stoneSize)
-        stone.anchorPoint = CGPoint(x: 0.5, y: 0.2)
-        stone.position = base
-        stone.zPosition = Z.midPlants
-        addChild(stone)
-
-        let bubbles = SKEmitterNode()
-        bubbles.particleTexture = TankArt.bubble()
-        bubbles.particleSize = CGSize(width: 16, height: 16)
-        bubbles.position = CGPoint(x: base.x, y: base.y + 10 * unit)
-        bubbles.particlePositionRange = CGVector(dx: 12 * unit, dy: 0)
-        bubbles.particleBirthRate = 8
-        bubbles.emissionAngle = .pi / 2
-        bubbles.emissionAngleRange = 0.15
-        bubbles.particleSpeed = 110
-        bubbles.particleSpeedRange = 40
-        bubbles.yAcceleration = 25 // buoyancy: they speed up as they rise
-        let rise = Double(size.height * 0.93 - base.y) // reach the surface band: solve rise = 110t + 12.5t²
-        bubbles.particleLifetime = CGFloat((-110 + sqrt(110 * 110 + 50 * rise)) / 25)
-        bubbles.particleScale = 0.4 * unit
-        bubbles.particleScaleRange = 0.35 * unit
-        bubbles.particleScaleSpeed = 0.05
-        bubbles.particleAlphaSequence = SKKeyframeSequence(keyframeValues: [0, 0.95, 0.95, 0], times: [0, 0.04, 0.94, 1])
-        let wobble = SKAction.moveBy(x: 5 * unit, y: 0, duration: 0.3)
-        wobble.timingMode = .easeInEaseOut
-        bubbles.particleAction = .repeatForever(.sequence([wobble, wobble.reversed()]))
-        bubbles.zPosition = Z.bubbles
-        bubbles.advanceSimulationTime(TimeInterval(bubbles.particleLifetime))
-        addChild(bubbles)
-    }
+    // MARK: - Snow and the edges
 
     /// Specks of organic matter drifting slowly through the whole tank.
     private func addMarineSnow() {
@@ -419,7 +412,7 @@ final class FishTank: SKScene {
         snow.particleScale = 0.3
         snow.particleScaleRange = 0.25
         snow.particleAlphaSequence = SKKeyframeSequence(keyframeValues: [0, 0.35, 0.35, 0], times: [0, 0.15, 0.85, 1])
-        snow.zPosition = Z.bubbles
+        snow.zPosition = Z.snow
         snow.advanceSimulationTime(40)
         addChild(snow)
     }

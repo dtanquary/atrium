@@ -15,7 +15,7 @@ struct Wallpaper {
 
 /// Every wallpaper, in menu order.
 @MainActor let scenes: [Wallpaper] = [
-    Wallpaper(name: "Fish Tank", icon: "fish.fill", tint: .teal, blurb: "Schools of tropical fish in a sunlit tank.",
+    Wallpaper(name: "Fish Tank", icon: "fish.fill", tint: .teal, blurb: "A bright reef tank of real fish and corals.",
               make: { FishTank(size: $0) }),
     Wallpaper(name: "Flowing Gradient", icon: "swirl.circle.righthalf.filled", tint: .indigo,
               blurb: "Soft pools of color with silk ribbons that follow the Sun.", make: flowingGradient,

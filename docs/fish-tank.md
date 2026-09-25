@@ -1,72 +1,82 @@
 # Fish Tank
 
-A planted tank seen through the glass. Five species of shaded fish school at different depths among swaying plants, rocks, driftwood and an anemone. Caustics ripple over the sand, sun shafts sway down from a shimmering surface, and an airstone sends up bubbles.
+A bright reef tank seen through the glass, the way reefkeepers build them. Two islands of live rock and coral stand on white aragonite sand with open water between them, and a soft cluster sits further back. Real fish, cut out of photos, school at three depths:
+- a big school of blue-green chromis
+- yellow and blue tangs
+- a clownfish pair at home in their anemone
+- a royal gramma, firefish and a flame angelfish hovering low by the rock
+
+Soft corals sway in the current, caustics ripple over the sand, and the mirror of the surface runs along the top. It's daylight in Light Mode and a reef tank's actinic evening blue in Dark Mode.
 
 - **Files:**
-  - `Sources/Atrium/FishTank.swift` holds the scene: layers, schooling, the water, sand and caustics shaders, bubbles, marine snow and the vignette.
-  - `Sources/Atrium/FishTankArt.swift` holds the `Species` enum (per-species numbers) and `TankArt`, which paints the fish, plants, rocks, driftwood, sand, far rocks and bubbles with Core Graphics. It also holds the warp-frame builders `swimWarps` and `swayWarps`.
+  - `Sources/Atrium/FishTank.swift` holds the scene: the light, water and sand shaders, the reef layout, the grading shader, schooling, marine snow and the vignette.
+  - `Sources/Atrium/FishTankArt.swift` holds:
+    - the `Species` enum: each fish's photos, size, speed, tail beat, spacing and haunt
+    - `TankArt.photo`, which loads a cut-out at its on-screen size with an optional depth-of-field blur
+    - the warp builders `swimWarps` and `swayWarps`
+  - `Sources/Atrium/Resources/reef-*.heic`: 39 photo cut-outs, HEIC with alpha, 2.2 MB in all.
+  - `Sources/Atrium/Resources/reef-credits.tsv`: each cut-out's subject, author, licence and source. Settings → About lists them, as CC BY requires.
 - **Entry:** `final class FishTank: SKScene`, registered as `{ FishTank(size: $0) }` in Scenes.swift (icon `fish.fill`, tint `.teal`).
-- **Kind:** hybrid. SpriteKit sprites painted in code, plus two SKShaders: the full-screen water and the sand.
-- **Shared helpers:** `frameTime`, `rgb`, `mixRGB` and `softDot` live in Fireflies.swift as module-level functions. Moving or renaming them breaks this scene.
+- **Kind:** photo cut-outs on SpriteKit sprites, graded by one shared shader, over two full-screen shaders for the water and the sand.
+- **Shared helpers:** `frameTime` and `softDot` come from Fireflies.swift, and `shaderCommon`, `paint` and `resource` from Shaders.swift and Scenes.swift.
 
 ## How it works
 Layers, back to front, from the `Z` enum:
-1. **Water** (`addWater`), a full-screen SKShader, lit like a reef tank. Its colours were sampled from real reef tank photos: the CAS Steinhart coral tank and a public-aquarium reef tank on Wikimedia Commons. `Lighting.day` is used in Light Mode (daylight white-blue LEDs) and `Lighting.actinic` in Dark Mode (a reef tank's evening blue). The layers:
+1. **Water** (`addWater`), a full-screen SKShader, lit like a reef tank. Its colours were sampled from real reef tank photos: the CAS Steinhart coral tank and a public-aquarium reef tank on Wikimedia Commons. `Lighting.day` is used in Light Mode (daylight white-blue LEDs) and `Lighting.actinic` in Dark Mode. The layers:
    - a saturated royal-blue back panel, brighter high up (`high` and `low`)
    - the lamp's pool of light, brightest mid-tank (`0.75 + 0.35·lamp`)
    - faint LED shimmer (caustics) and rays from the lamp array, fading downward
-   - the underside of the surface along the top: a mirror band reflecting the tank, streaked by drifting noise (a regular wave read as a zigzag), a bright waterline, and the dark lid above
+   - the underside of the surface along the top: a mirror band streaked by drifting noise (a regular wave read as a zigzag), a bright waterline, and the dark lid above
    - dither
 2. **Sand** (`addSand`), all in its shader: white aragonite, warm white up front (`sandNear`) and going blue with distance (`sandFar`), with fine grain from `hash42`. Two caustic layers multiply the sand they land on rather than adding white, the way real light brightens it. They're bigger at the front and squashed by perspective (`pts.y * 2.6`), and the back edge melts into the back panel.
-3. **Far rocks:** a fogged silhouette strip at the back edge of the sand.
-4. **Plants in three rows**, from a pool of a few painted variants per row reused with flips and scales to keep texture memory down:
-   - back row: fog 0.5
-   - middle row: fog 0.12, leaving room around the anemone
-   - front row: tall plants against the glass at both edges that fish swim behind
+3. **The reef** (`addReef`). Which cut-outs go where, their flips, and which island has the anemone all change with each load. It has four parts:
+   - **back cluster:** about 55% scale, near the back edge of the sand, faded 35% toward the back panel and blurred 1.4 pt, like a camera's depth of field
+   - **two islands** (`cluster`), at 14–24% and 76–86% across, leaving open sand between. Each one has:
+     - a big rock
+     - a smaller copy stacked on it toward the middle, flipped and offset so each silhouette differs
+     - a branching Acropora on top
+     - a toadstool leather coral on one shoulder
+     - the anemone, or else a torch, hammer or candy cane coral, on the other shoulder
+     - zoanthids on its face
+     - a brain coral at its foot
+   - **swaying:** the soft corals (toadstool, anemone, torch) sway with `swayWarps` at 0.03–0.05 strength and a 5–8 s period
+   - **front corner:** one brain or zoanthid colony up against the glass in a front corner, sharp and big
+4. **Fish** (`addSchools`): nine schools, 38 fish in all:
 
-   Plants sway with a 1×8 warp grid (`TankArt.swayWarps`): the bend grows from base to tip and the tip lags. Each clump has its own period (4.5–7.5 s) and start delay.
-5. **Hardscape:** four stone clusters (a big stone plus one or two smaller), a driftwood branch at x≈0.56, and the anemone at (0.3 w, 0.48 × sand height).
-6. **Fish:** seven schools (`addSchools` plan), 53 fish in total:
+   | Species | Count | Depth | Haunt |
+   |---|---|---|---|
+   | chromis (far) | 14 | 0.62 | open |
+   | yellow tang | 3 | 0.8 | open |
+   | chromis | 12 | 0.9 | open |
+   | blue tang | 2 | 0.95 | open |
+   | clownfish | 2 | 0.95 | their anemone |
+   | royal gramma | 1 | 0.92 | low by a rock |
+   | firefish | 2 | 0.9 | low by a rock |
+   | flame angelfish | 1 | 0.97 | low by a rock |
+   | yellow tang (near) | 1 | 1.1 | open |
 
-   | Species | Count | Depth |
-   |---|---|---|
-   | neon tetra (far) | 14 | 0.55 |
-   | blue tang | 2 | 0.6 |
-   | yellow tang | 4 | 0.75 |
-   | neon tetra (showpiece) | 26 | 0.85 |
-   | angelfish | 2 | 0.88 |
-   | clownfish | 2 | 0.95 |
-   | blue tang (near) | 3 | 1.1 |
+   Each fish is drawn from one of its species' photos, picked at random, so a school isn't a row of clones. Depth sets scale, speed and z-layer (far < 0.7, mid < 1, near). The far school gets a slight blur, `(0.9 - depth)·4` pt, and fades toward the back panel, `(0.9 - depth)·0.5`. Real tank water barely tints anything over half a metre, so both stay light.
+5. **Marine snow:** slow, faint specks across the whole tank (`softDot`).
+6. **Vignette:** a radial darkening sprite on top.
 
-   Depth sets scale, speed, z-layer (far < 0.7, mid < 1, near) and fog (`(1 - depth) * 0.7`, painted into the texture).
-7. **Bubbles:** an `SKEmitterNode` over an airstone at x = 0.8 w. It has buoyancy (`yAcceleration` 25), a lifetime solved so the bubbles reach the surface band, a `particleAction` wobble, and they swell slightly as they rise.
-8. **Marine snow:** slow, faint specks across the whole tank (`softDot`).
-9. **Vignette:** a radial darkening sprite on top.
-
-**Fish art (`TankArt.fish`)** is painted once per school, facing right: a bezier body shaded from a dark back to a pale belly, species markings clipped to the body, translucent fins with rays, a gill line, a pectoral fin, and an eye with a catchlight. The markings:
-- clownfish: three white bands edged in black
-- blue tang: black "palette" marking and a yellow tail
-- yellow tang: white scalpel spine
-- neon tetra: blue stripe with a glow, red rear
-- angelfish: black vertical bars and long trailing fins
+**Grading** (`photoShader`, shared by every cut-out): the photos were shot under white light, so `c.rgb × grade` tints them to the tank's light. Light Mode's grade is a slight blue-white; Dark Mode's is actinic blue. Then `mix(…, haze·alpha, a_fog)` fades things further back by a per-sprite `a_fog` attribute. The textures are premultiplied, hence `haze·alpha`.
 
 **Schooling (`swim`)** uses boids within each species, with O(n²) per school:
-- separation inside `gap` (body length × `Species.spacing`: 1.4 for tetras, 1.9 for the rest)
+- separation inside `gap` (body length × `Species.spacing`: 1.3 for chromis, 1.9 for the rest)
 - alignment and cohesion within `sight` = 6 body lengths
 - a random-walk wander angle
-- clownfish pulled toward `home` above the anemone
-- soft walls just past the screen edges (so turns mostly happen off-screen), and a floor and ceiling from `bounds(depth)`. Far schools can't go as low because the sand is nearer the eye there.
-- vertical speed damped (`1 - 1.4·dt`) and total speed clamped to 0.45–1.35 × cruise
+- a pull toward `home` for species with a haunt: clownfish above the anemone, and the shy species low by a rock (`rockSpots`, one per island)
+- soft walls just past the screen edges (so turns mostly happen off-screen), and a floor and ceiling from `bounds(depth)`
 
 Everything is pre-simulated for 150 steps in `sceneDidLoad`, so schools have already formed on the first frame.
 
 **Pose (`pose`):**
 - facing eases through zero at 2.5 per second, so the fish visibly turns instead of flipping
 - tilt follows pitch, clamped to ±0.3
-- the tail beat steps through 20 precomputed warp frames (`swimWarps`: an 8×1 grid with a wave from head to tail, `0.075·(1-u)²`). The beat rate scales with speed.
+- the tail beat steps through 20 precomputed warp frames (`swimWarps`: an 8×1 grid with a wave from head to tail, `0.075·(1-u)²`). The beat rate scales with speed. The warps work on the photos unchanged.
 
 ## Time, live data and appearance
-Motion is driven by `update(_:)` (boids and frame stepping) and `u_time` (the water and sand shaders). No network or location. Light Mode is a daylight reef tank and Dark Mode its actinic evening look, read from `systemIsDark` when the scene is built.
+Motion comes from `update(_:)` (boids and frame stepping), the coral sway actions, and `u_time` (the water and sand shaders). There's no network or location use. Light Mode is a daylight reef tank and Dark Mode its actinic evening look, read from `systemIsDark` when the scene is built.
 
 ## Settings
 None yet.
@@ -74,47 +84,65 @@ None yet.
 ## Tuning constants
 - **`Species` (FishTankArt.swift):**
 
-  | Species | length (pt) | bodyHeight | cruise (pt/s) | beat (s) |
+  | Species | length (pt) | cruise (pt/s) | beat (s) | photos |
   |---|---|---|---|---|
-  | clownfish | 62 | 0.40 | 24–32 | 0.42 |
-  | blue tang | 84 | 0.50 | 42–54 | 0.62 |
-  | yellow tang | 64 | 0.72 | 34–44 | 0.55 |
-  | neon tetra | 27 | 0.28 | 44–58 | 0.30 |
-  | angelfish | 70 | 0.74 | 18–26 | 0.95 |
+  | chromis | 46 | 40–54 | 0.3 | 3 |
+  | yellow tang | 88 | 30–40 | 0.55 | 4 |
+  | blue tang | 100 | 36–48 | 0.6 | 3 |
+  | clownfish | 54 | 20–28 | 0.4 | 3 |
+  | royal gramma | 44 | 12–18 | 0.45 | 1 |
+  | firefish | 50 | 10–16 | 0.35 | 3 |
+  | flame angelfish | 58 | 18–26 | 0.45 | 3 |
 
-  `finReach` is 0.62 for angelfish and 0.2 for yellow tang.
-- **Scene scaling:** `unit` is height/982, clamped to 0.8–1.8, so a bigger screen gets a bigger tank rather than smaller fish. `fishUnit` is `unit × 1.2`, drawing fish a little larger than life so they read from across the room. `sandHeight` is 0.22 × height.
-- **Fog colour:** `TankArt.fogColour` = rgb(0.035, 0.27, 0.39).
-- **Reef light:** `Lighting.day` and `Lighting.actinic` in FishTank.swift (back panel high/low, mirror, shimmer, sand near/far).
-- **Bubbles:** birth rate 8, speed 110 ± 40. **Snow:** birth rate 5, lifetime 40 s.
+- **Scene scaling:** `unit` is height/982, clamped to 0.8–1.8, so a bigger screen gets a bigger tank rather than smaller fish. `fishUnit` is `unit × 1.2`. `sandHeight` is 0.22 × height.
+- **Reef sizes** at `unit` 1: rock 440–520 pt wide, Acropora 320, toadstool 220, anemone 240, torch and hammer 210, zoanthids 110, brain 170. The front-corner colony is 230.
+- **`Lighting`** (FishTank.swift), for `day` and `actinic`:
+  - back panel `high` and `low`, `mirror`, `shimmer`
+  - sand `sandNear` and `sandFar`
+  - photo `grade`: day (0.94, 0.98, 1.06), actinic (0.5, 0.58, 1.1)
+  - `haze`
+- **Snow:** birth rate 5, lifetime 40 s.
 
 ## Performance
-CPU 0.51 ms and GPU 1.55 ms per frame (release, 2x). The GPU cost is mostly the full-screen water shader (a 3×3 Voronoi loop for the caustics, plus noise) and the sand shader (two caustic calls), with about 70 warped sprites on top. CPU is the boids, 53 fish at O(n²) per school. There's headroom for maybe twice the fish before CPU matters.
+CPU 0.7 ms and GPU 1.35 ms per frame (debug build, 2x), about the same in both looks and a little cheaper than the painted tank (1.55 ms). The GPU cost is mostly the two full-screen shaders (the water's caustics and noise, and the sand's two caustic layers), plus about 60 sprites. CPU is the boids, 38 fish at O(n²) per school. The cut-outs are decoded and resized once at launch.
 
 ## Gotchas and shortcuts
-- **Warp speed bug:** changing a node's `speed` every frame while `SKAction.animate(withWarps:)` runs on it makes SpriteKit steadily slower (1 ms up to 10 ms a frame within a minute). That's why fish step through warp frames by hand in `pose`. Plants use warp actions only because their speed never changes. This is also noted in CLAUDE.md.
+- **Assets:** the cut-outs come from public domain, CC0 and CC BY photos (iNaturalist, Wikimedia Commons, NOAA). They were cut out with Vision's foreground mask, cleaned to their largest connected piece, resized (fish 480 px, corals 760, rock 900 at most) and saved as HEIC with alpha (about 8× smaller than PNG).
+  - `reef-rock-1`'s right edge had been cut straight by the photo frame. It was redrawn as a rounded edge that mirrors the rock's natural left profile, darkened toward the edge.
+  - `rock-2` (a coralline nodule that read as a pink ball) was dropped.
+  - `gramma-3` was left out: its Smithsonian "no known copyright restrictions" isn't formally public domain.
+  - The originals and the tools (`cut.swift`, `process.py`) were in the research agent's scratch folder and aren't in the repo.
+- **Warp speed bug:** changing a node's `speed` every frame while `SKAction.animate(withWarps:)` runs on it makes SpriteKit steadily slower (1 ms up to 10 ms a frame within a minute). That's why fish step through warp frames by hand in `pose`. The coral sway uses warp actions only because its speed never changes. This is also noted in CLAUDE.md.
 - `ponytail:` O(n²) boids within a school, fine up to a few dozen fish per school. Use a spatial grid, like Murmuration, if schools grow.
-- The shaders use `u_time`, which doesn't advance in the render test, so caustics and shafts look frozen in snapshots. Fish and plants do move (driven by `update` and SKActions).
-- Plants and rocks are placed randomly on each load, so every tank is a little different.
+- Only one live rock photo is clean, so both islands and the back cluster reuse it, flipped and scaled. A second or third rock would help if one turns up.
+- The shaders use `u_time`, which doesn't advance in the render test, so caustics look frozen in snapshots. Fish and corals do move.
 
 ## Dave's feedback and decisions
-- 2026-09-25: "everything looks way too cartoony." After a research pass comparing it with real tank photos, he chose a realistic **reef** tank, **photo cut-out** fish and corals (or whatever is best quality), and **bright and lush** lighting. He also asked to be challenged on past calls: the earlier "drawn in code over image sprites" decision was reversed because photo cut-outs were clearly more realistic. The rebuild is in progress; the water, light and sand came first.
 - The first version (flat `SKShapeNode` fish, stroked seaweed) was the proof of concept. Dave called it "the primitive fish tank" and asked how to raise the fidelity.
-- He chose the drawn-in-code route over image sprites or RealityKit 3D, and picked items 1–5 of the fidelity list: fish that look alive, schooling, light, depth and plants/props. Rare events and a time-of-day tint were explicitly deferred.
-- He asked for the catalogue of other wallpapers to be built before the fidelity pass. This rebuild came after that.
-- No complaints about the rebuild so far ("everything looks good").
+- He then chose a drawn-in-code route over image sprites or RealityKit 3D, which became a planted tank of fish, plants and props painted with Core Graphics.
+- 2026-09-25: "everything looks way too cartoony." A research agent compared renders with real tank photos and found three causes:
+  - the scene mixed reef fish with freshwater plants under ocean lighting
+  - it was drawn like vector art
+  - it used ocean depth cues where a real tank has none
+
+  It prototyped fixes, and photo cut-out fish were by far the biggest jump in realism. Dave said not to treat his earlier "drawn in code" call as written in stone, and chose:
+  - a realistic **reef** tank
+  - **photo cut-out** fish and corals ("or whatever is best quality")
+  - **bright and lush** lighting
+
+  This rebuild is the result, with daylight in Light Mode and actinic blue in Dark Mode.
 
 ## Ideas / next steps
-- Rare visitors: a crab crossing the sand, a jellyfish drifting up, a big fish passing far in the back.
-- Caustics on fish and rocks, not just the sand and back wall.
-- A time-of-day tint that follows the real Sun (as Flowing Gradient does).
-- Settings to add: fish count, which species appear, bubbles on or off.
-- The back rocks are plain silhouettes. Broadleaf-style plants could add variety.
-- Schools never interact with each other.
+- Caustic shimmer on the fish and the tops of the corals, stronger near the lamp.
+- More rock photos, so the islands aren't all one rock.
+- Coral fluorescence under the actinic look (greens and oranges glowing), rather than a flat blue grade.
+- "Burst and coast" swimming for the chromis: a few tail beats, then a glide.
+- Rare visitors: a cleaner shrimp on the rock, a snail on the glass.
+- Settings: fish count, which species appear, the lighting look.
 
 ## Checking it
 ```sh
-SNAPSHOT_SCENE="Fish Tank" SNAPSHOT_SECONDS=20 swift test          # schools form within seconds; 60 s to check motion stays natural
-swift test -c release -Xswiftc -enable-testing                      # release CPU numbers (debug is pessimistic)
+SNAPSHOT_SCENE="Fish Tank" SNAPSHOT_SECONDS=8 swift test                        # Light Mode
+SNAPSHOT_APPEARANCE=dark SNAPSHOT_SCENE="Fish Tank" SNAPSHOT_SECONDS=8 swift test # actinic
 ```
-Caustics and shafts are driven by `u_time`, which ignores `SNAPSHOT_SECONDS`. To see them at another moment, temporarily add an offset to `u_time` in the two shaders.
+Each load rolls a different reef. Caustics are driven by `u_time`, which ignores `SNAPSHOT_SECONDS`.
