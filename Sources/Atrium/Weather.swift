@@ -443,14 +443,11 @@ final class WeatherScene: SKScene {
     /// the shader can relight it, darkest to skylight and brightest to sunlight. Procedural cumulus looked like smears.
     private static let photoClouds: [(name: String, km: Double, lum: SIMD2<Float>, tower: Bool)] = [
         ("cu-humilis-1", 1.2, [0.63, 0.86], false), ("cu-humilis-2", 1.0, [0.74, 0.88], false),
-        ("cu-humilis-3", 1.4, [0.75, 0.87], false), ("cu-humilis-5", 3.0, [0.66, 0.89], false),
-        ("cu-mediocris-1", 2.4, [0.65, 0.87], false), ("cu-mediocris-2", 2.2, [0.64, 0.86], false),
-        ("cu-mediocris-3", 1.8, [0.76, 0.88], false), ("cu-flat-1", 3.5, [0.50, 0.83], false),
-        ("cu-flat-2", 3.2, [0.76, 0.89], false), ("cu-lit-big-1", 3.5, [0.65, 0.85], false),
-        ("cu-sidelit-1", 2.4, [0.62, 0.87], false),
-        ("cu-congestus-2", 4.5, [0.62, 0.86], true), ("cu-congestus-3", 4.5, [0.65, 0.90], true),
-        ("cu-congestus-4", 5.0, [0.65, 0.91], true),
-    ]
+        ("cu-humilis-3", 1.4, [0.75, 0.87], false), ("cu-mediocris-1", 2.4, [0.65, 0.87], false),
+        ("cu-mediocris-2", 2.2, [0.64, 0.86], false), ("cu-mediocris-3", 1.8, [0.76, 0.88], false),
+        ("cu-flat-1", 3.5, [0.50, 0.83], false), ("cu-sidelit-1", 2.4, [0.62, 0.87], false),
+        ("cu-congestus-3", 4.5, [0.65, 0.90], true),
+    ] // ponytail: nine clouds and one tower; five more were cut but ran into their photos' frames, which showed
     private static var cloudTextures: [String: SKTexture] = [:]
 
     private static func cloudTexture(_ name: String) -> SKTexture {
