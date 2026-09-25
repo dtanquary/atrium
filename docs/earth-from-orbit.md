@@ -18,7 +18,7 @@ The whole Earth seen from high above the viewer's own location, like a geostatio
   - It samples the day map (`u_texture`), the night-lights map (`u_night`), and the cloud map (see Clouds below).
   - **Daylight** = `smoothstep(−0.12, 0.1, sun·n) · (0.25 + 0.95·max(sun·n, 0))`, plus 0.03 of earthshine so the night side keeps its shape.
   - **City lights:** night², tinted warm ×2.2, faded in past the terminator.
-  - **Clouds:** `cloud = smoothstep(0.42, 0.95, map) · u_cloudsOn`. The ground mixes toward cloud grey (0.8, 0.82, 0.86) by `cloud × 0.95` before lighting, so clouds are lit by the same daylight and earthshine: bright by day, faint grey on the night side. They dim city lights by `1 − 0.8·cloud` (lights glow through thin cloud) and block sun glint.
+  - **Clouds:** `cloud = smoothstep(0.42, 0.95, map)`, crossfaded from `u_cloudsBefore` to `u_clouds` by `u_cloudFade`. The ground mixes toward cloud grey (0.8, 0.82, 0.86) by `cloud × 0.95` before lighting, so clouds are lit by the same daylight and earthshine: bright by day, faint grey on the night side. They dim city lights by `1 − 0.8·cloud` (lights glow through thin cloud) and block sun glint.
   - **Sun glint:** a Blinn-style highlight (power 90) only where the day map reads as ocean (blue > red) and there's no cloud.
   - **Atmosphere:** an edge tint of (0.35, 0.6, 1)·daylight, plus a halo outside the disc that's brighter on the sunward rim.
 - **Sun.** `u_sun` points at the subsolar point: `Sky.direction(sunRA − GMST, sunDec)`, updated every 30 s. The terminator moves in real time.
@@ -39,10 +39,15 @@ The whole Earth seen from high above the viewer's own location, like a geostatio
 ## Clouds.swift
 - **Source:** [Live Cloud Maps](https://github.com/matteason/live-cloud-maps) by Matt Eason: `https://clouds.matteason.co.uk/images/4096x2048/clouds.jpg`. It's an equirectangular greyscale map, the same projection as `earth-day.jpg`, redrawn every 3 hours from EUMETSAT satellite data. It's CC0; EUMETSAT's terms ask for the credit "Contains modified EUMETSAT data", which is in About and the README. It also comes at 8192, 2048 and 1024 wide.
 - **What the map shows:** it's infrared-based, so cold ground and thin haze read as mid-grey. The whole map averages bright (42% of pixels are above 224/255), and the high Arctic is often solid. The `smoothstep(0.42, 0.95, …)` in the shader keeps only the real cloud decks opaque. At 0.3 the far north turned into a flat grey haze.
-- **Polling:** `poll()` runs at most every 25 minutes. The scene asks every 5 minutes from an SKAction in `didMove`, only while Live clouds is on. Requests send the saved `ETag` (UserDefaults `clouds.etag`) as `If-None-Match`, so an unchanged map is a 304 and a new one is 1.5 MB, about 8 times a day.
-- **Cache:** `~/Library/Caches/com.dtanquary.atrium/clouds.jpg`, loaded in `init`, so clouds show at launch, offline, and in the render harness. If the file is missing (Caches can be purged), the ETag isn't sent.
-- **One texture for all displays:** `Clouds.shared.texture` (mipmapped). `version` goes up with each new map. `EarthFromOrbit.updateClouds` sees the change, moves the current map to `u_cloudsBefore`, and fades `u_cloudFade` 0→1 over 60 s. When the fade finishes, `u_cloudsBefore` is set to the new map so the old one is freed. Before the first map ever arrives, both uniforms hold a blank 1×1 texture, so there are no clouds.
-- **Memory:** about 43 MB of GPU memory for a 4096 map with mipmaps; two maps only during a fade.
+- **Polling (deliberately lazy; Dave: "long long polling, this is not critical data"):** the scene calls `poll()` every 15 minutes from an SKAction in `didMove`, only while Live clouds is on. `poll()` is a local check: it goes to the network only when the cache file is over 3 hours old (the source's cadence) and at most once an hour, however many displays ask. Requests send the saved `ETag` (UserDefaults `clouds.etag`) as `If-None-Match`. A 304 touches the file's date, restarting the 3 hours; a 200 (1.5 MB) replaces it. In practice that's one request every ~3 hours.
+- **Cache:** `~/Library/Caches/com.dtanquary.atrium/clouds.jpg`. `loadCache()` loads it only if no map is in memory. If the file is missing (Caches can be purged), its age counts as infinite and no ETag is sent.
+- **The switch** (`updateClouds`, every frame):
+  - **At scene build:** if Live clouds is on, the cached map goes straight into `u_clouds`, with no fade. The render harness sees it this way too.
+  - **Switched off:** fades to a blank 1×1 texture over 60 s and calls `Clouds.release()`, so the 4K map is freed once the fade ends. Polling stops.
+  - **Switched on:** `loadCache()` first, which bumps `version`, so the map fades in from the cache, then `poll()`, which only fetches if the cache is stale.
+  - A download that finishes while clouds are off is saved to disk but not loaded.
+- **One texture for all displays:** `Clouds.shared.texture` (mipmapped). `version` goes up with each loaded map, and the scene fades to it (`fadeClouds`). When a fade finishes, `u_cloudsBefore` is set to the current map, so the old one is freed.
+- **Memory:** about 43 MB of GPU memory for a 4096 map with mipmaps; two maps only during a fade. `ponytail:` the map stays in memory after you switch to another wallpaper with clouds on. Release it in `willMove(from:)` if that matters; multiple displays then need care, since another display may still be showing it.
 - **Failures** are silent (`try?`): the last map stays up.
 
 ## Time, live data and appearance
@@ -60,7 +65,7 @@ The whole Earth seen from high above the viewer's own location, like a geostatio
 | key | label | range | default | drives |
 |---|---|---|---|---|
 | `earth.iss` | ISS tracking | toggle | on | Off hides the marker, label and orbit ring, and skips polling (`update` and the poll action both check it) |
-| `earth.clouds` | Live clouds | toggle | on | Off sets `u_cloudsOn` to 0 and skips polling |
+| `earth.clouds` | Live clouds | toggle | on | Off fades the clouds out, frees the map and stops polling; on fades them back in from the cache, then polls only if the cache is stale |
 
 Both are read live through `Self.knobs[i].value` every frame, with no notification observer needed.
 
@@ -72,7 +77,7 @@ Both are read live through `Self.knobs[i].value` every frame, with no notificati
 - **Stars:** density one per 2,500 pt².
 
 ## Performance
-- About 0.49 ms CPU and 0.18 ms GPU per frame (release build, 2x, 1512×982) before clouds. With clouds it measured 0.45 ms CPU and 0.31 ms GPU: two more 4K texture samples per globe pixel.
+- About 0.49 ms CPU and 0.18 ms GPU per frame (release build, 2x, 1512×982) before clouds. With clouds it measured 0.45 ms CPU and 0.3–0.6 ms GPU: two more 4K texture samples per globe pixel. With clouds off it's back to 0.15 ms (blank 1×1 textures).
 - The globe shader only covers the globe's sprite. The orbit path rebuilds at most every 5 s.
 - Plenty of headroom.
 

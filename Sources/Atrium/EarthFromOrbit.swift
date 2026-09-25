@@ -14,12 +14,13 @@ final class EarthFromOrbit: SKScene {
     private let globe = SKSpriteNode()
     private let sunUniform = SKUniform(name: "u_sun", vectorFloat3: [1, 0, 0])
     private let basisUniform = SKUniform(name: "u_basis", matrixFloat3x3: matrix_identity_float3x3)
-    // The cloud map, and the one before it while a new one fades in. No map yet is a blank texture: no clouds.
-    private let cloudsUniform = SKUniform(name: "u_clouds", texture: Clouds.shared.texture ?? paint(CGSize(width: 1, height: 1)) { _ in })
-    private lazy var cloudsBeforeUniform = SKUniform(name: "u_cloudsBefore", texture: cloudsUniform.textureValue)
+    // The cloud map, and the one before it while fading to a new one; a blank texture is no clouds.
+    private static let noClouds = paint(CGSize(width: 1, height: 1)) { _ in }
+    private let cloudsUniform = SKUniform(name: "u_clouds", texture: noClouds)
+    private let cloudsBeforeUniform = SKUniform(name: "u_cloudsBefore", texture: noClouds)
     private let cloudFadeUniform = SKUniform(name: "u_cloudFade", float: 1)
-    private let cloudsOnUniform = SKUniform(name: "u_cloudsOn", float: 1)
-    private var cloudVersion = Clouds.shared.version
+    private var cloudsOn = false
+    private var cloudVersion = 0
     private var cloudFadeStart: TimeInterval?
     private let iss = SKSpriteNode()
     private let issLabel = SKLabelNode(fontNamed: "HelveticaNeue")
@@ -36,6 +37,12 @@ final class EarthFromOrbit: SKScene {
         backgroundColor = .black
         addStars()
         addGlobe()
+        if Self.knobs[1].value > 0.5 { // clouds from the cache straight away, no fade
+            cloudsOn = true
+            Clouds.shared.loadCache()
+            cloudsUniform.textureValue = Clouds.shared.texture ?? Self.noClouds
+            cloudVersion = Clouds.shared.version
+        }
 
         orbit.strokeColor = NSColor(red: 0.6, green: 0.8, blue: 1, alpha: 0.25)
         orbit.lineWidth = 1
@@ -69,7 +76,7 @@ final class EarthFromOrbit: SKScene {
     override func didMove(to view: SKView) {
         Location.shared.start()
         run(.repeatForever(.sequence([.run { if Self.knobs[0].value > 0.5 { ISS.shared.poll() } }, .wait(forDuration: 60)])))
-        run(.repeatForever(.sequence([.run { if Self.knobs[1].value > 0.5 { Clouds.shared.poll() } }, .wait(forDuration: 300)])))
+        run(.repeatForever(.sequence([.run { if Self.knobs[1].value > 0.5 { Clouds.shared.poll() } }, .wait(forDuration: 900)])))
     }
 
     override func update(_ currentTime: TimeInterval) {
@@ -106,14 +113,23 @@ final class EarthFromOrbit: SKScene {
         orbit.path = path
     }
 
-    /// Fades to a new cloud map over a minute when one lands, and follows the Live clouds switch.
+    /// Follows the Live clouds switch, and fades between maps over a minute: to a new one when it lands, in from the
+    /// cache when clouds are switched on, and out when they're switched off, letting the map go.
     private func updateClouds(_ currentTime: TimeInterval) {
-        cloudsOnUniform.floatValue = Self.knobs[1].value > 0.5 ? 1 : 0
-        if cloudVersion != Clouds.shared.version, let map = Clouds.shared.texture {
+        let on = Self.knobs[1].value > 0.5
+        if on != cloudsOn {
+            cloudsOn = on
+            if on {
+                Clouds.shared.loadCache()
+                Clouds.shared.poll()
+            } else {
+                fadeClouds(to: Self.noClouds, currentTime)
+                Clouds.shared.release()
+            }
+        }
+        if on, cloudVersion != Clouds.shared.version, let map = Clouds.shared.texture {
             cloudVersion = Clouds.shared.version
-            cloudsBeforeUniform.textureValue = cloudsUniform.textureValue
-            cloudsUniform.textureValue = map
-            cloudFadeStart = currentTime
+            fadeClouds(to: map, currentTime)
         }
         guard let start = cloudFadeStart else { return }
         cloudFadeUniform.floatValue = Float(min((currentTime - start) / 60, 1))
@@ -121,6 +137,12 @@ final class EarthFromOrbit: SKScene {
             cloudFadeStart = nil
             cloudsBeforeUniform.textureValue = cloudsUniform.textureValue // lets the old map go
         }
+    }
+
+    private func fadeClouds(to map: SKTexture, _ currentTime: TimeInterval) {
+        cloudsBeforeUniform.textureValue = cloudsUniform.textureValue
+        cloudsUniform.textureValue = map
+        cloudFadeStart = currentTime
     }
 
     /// Earth-fixed position of the ISS, in Earth radii.
@@ -178,7 +200,7 @@ final class EarthFromOrbit: SKScene {
 
                 // the map reads thin haze and cold ground as faint grey, so only real cloud decks go opaque
                 float cloud = mix(texture2D(u_cloudsBefore, uv).r, texture2D(u_clouds, uv).r, u_cloudFade);
-                cloud = smoothstep(0.42, 0.95, cloud) * u_cloudsOn;
+                cloud = smoothstep(0.42, 0.95, cloud);
 
                 float sun = dot(w, u_sun);
                 float daylight = smoothstep(-0.12, 0.1, sun) * (0.25 + 0.95 * max(sun, 0.0));
@@ -208,7 +230,6 @@ final class EarthFromOrbit: SKScene {
                 cloudsUniform,
                 cloudsBeforeUniform,
                 cloudFadeUniform,
-                cloudsOnUniform,
             ])
         addChild(globe)
     }

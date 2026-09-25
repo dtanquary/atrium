@@ -3,42 +3,52 @@ import SpriteKit
 
 /// Today's clouds over the whole Earth, from Live Cloud Maps (clouds.matteason.co.uk: CC0, contains modified EUMETSAT
 /// data): an equirectangular greyscale map, redrawn there every three hours from satellite images. The last map is
-/// cached on disk, so clouds show at launch and offline.
+/// cached on disk, so clouds show at once, offline, and when they're switched back on.
 @MainActor final class Clouds {
     static let shared = Clouds()
 
     private let url = URL(string: "https://clouds.matteason.co.uk/images/4096x2048/clouds.jpg")!
     private let file = URL.cachesDirectory.appending(path: "com.dtanquary.atrium/clouds.jpg")
-    private var lastPoll = Date.distantPast
+    private var lastCheck = Date.distantPast
 
-    /// The latest map, shared by every display; nil before the first download.
+    /// The latest map, shared by every display; nil before one loads, or while clouds are off.
     private(set) var texture: SKTexture?
-    /// Goes up each time a new map lands, so scenes know to fade to it.
+    /// Goes up each time a map loads, so scenes know to fade to it.
     private(set) var version = 0
 
-    private init() {
-        if let image = NSImage(contentsOf: file) { show(image) }
+    /// Shows the cached map, if there is one and none is showing yet.
+    func loadCache() {
+        guard texture == nil, let image = NSImage(contentsOf: file) else { return }
+        show(image)
     }
 
-    /// Checks for a new map, at most every 25 minutes however many displays ask. The ETag makes an unchanged map
-    /// a tiny 304 reply rather than another 1.5 MB download.
+    /// Checks for a new map, but only once the cached one is over three hours old (the source's own cadence), and
+    /// at most hourly however many displays ask; this isn't data worth hurrying. The ETag turns an unchanged map
+    /// into a tiny 304 reply, which restarts the three hours.
     func poll() {
-        guard Date().timeIntervalSince(lastPoll) > 25 * 60 else { return }
-        lastPoll = Date()
+        let saved = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+        guard Date().timeIntervalSince(saved) > 3 * 3600, Date().timeIntervalSince(lastCheck) > 3600 else { return }
+        lastCheck = Date()
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
-        if texture != nil, let tag = UserDefaults.standard.string(forKey: "clouds.etag") {
+        if saved != .distantPast, let tag = UserDefaults.standard.string(forKey: "clouds.etag") {
             request.setValue(tag, forHTTPHeaderField: "If-None-Match")
         }
         Task {
             guard let (data, response) = try? await URLSession.shared.data(for: request),
-                  let http = response as? HTTPURLResponse, http.statusCode == 200,
-                  let image = NSImage(data: data) else { return }
+                  let http = response as? HTTPURLResponse else { return }
+            if http.statusCode == 304 {
+                try? FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: file.path)
+            }
+            guard http.statusCode == 200, let image = NSImage(data: data) else { return }
             try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? data.write(to: file)
             UserDefaults.standard.set(http.value(forHTTPHeaderField: "ETag"), forKey: "clouds.etag")
-            show(image)
+            if EarthFromOrbit.knobs[1].value > 0.5 { show(image) } // switched off meanwhile: just keep the file
         }
     }
+
+    /// Lets the map go while clouds are switched off; `loadCache()` brings it back.
+    func release() { texture = nil }
 
     private func show(_ image: NSImage) {
         let map = SKTexture(image: image)

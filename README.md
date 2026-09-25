@@ -56,7 +56,7 @@ To rebuild after pulling changes: `./build.sh && pkill -x Atrium; open build/Atr
 ### Permissions and network
 
 - **Location** (optional). Live Sky, Earth from Orbit, Weather and Flowing Gradient's time-of-day mood use your location, and the app asks once. If you decline, it guesses from your time zone.
-- **Network.** Weather fetches from [Open-Meteo](https://open-meteo.com) every 15 minutes. Live Sky and Earth from Orbit fetch the ISS position from [wheretheiss.at](https://wheretheiss.at) at most once a minute. Earth from Orbit checks [Live Cloud Maps](https://clouds.matteason.co.uk) for a new global cloud map every 25 minutes (1.5 MB when it has changed, about every 3 hours). None of them needs an API key.
+- **Network.** Weather fetches from [Open-Meteo](https://open-meteo.com) every 15 minutes. Live Sky and Earth from Orbit fetch the ISS position from [wheretheiss.at](https://wheretheiss.at) at most once a minute. Earth from Orbit fetches a global cloud map from [Live Cloud Maps](https://clouds.matteason.co.uk) only once its cached copy is over 3 hours old (1.5 MB when it has changed), and not at all with Live clouds off. None of them needs an API key.
 
 ## The wallpapers
 
