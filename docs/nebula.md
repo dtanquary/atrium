@@ -3,7 +3,7 @@
 A deep-space gas cloud, cut by dark dust lanes, over a twinkling star field, drifting and folding very slowly. Every load rolls a unique nebula in colours modelled on real objects, and left running it dissolves into a freshly rolled one every 8 minutes. **Dave's favourite wallpaper.**
 
 - **Files:** `Sources/Atrium/Shaders.swift`: the `nebulaPalettes` (file scope) and `nebula(size:)`, which includes its shader source. `hash21`, `hash42`, `noise`, `fbm`, `starField` and `brightStar` come from `shaderCommon` in the same file (`brightStar` moved there to be shared with Galaxy).
-- **Entry:** `@MainActor func nebula(size:) -> SKScene`. It builds a plain scene through `shaderScene(size:source:uniforms:)` (Scenes.swift). Its registry entry has icon `sparkles`, tint `.purple`, and palettes `PaletteChoice(key: "nebula.palette", ...)`, whose swatches are colours 1–3 of each palette. The standard is "", meaning Random.
+- **Entry:** `@MainActor func nebula(size:) -> SKScene`. It builds a plain scene through `shaderScene(size:source:uniforms:knobs:)` (Scenes.swift), which turns each of `nebulaKnobs` into a live uniform. Its registry entry has icon `sparkles`, tint `.purple`, and palettes `PaletteChoice(key: "nebula.palette", ...)`, whose swatches are colours 1–3 of each palette. The standard is "", meaning Random.
 - **Kind:** a full-screen SKShader, fully procedural, with no image files.
 
 ## How it works
@@ -22,7 +22,13 @@ Everything is maths per pixel, per frame:
    - `starField` puts one candidate star per 7 pt cell and keeps 30% of them, each twinkling ±20% at its own rate, dimmed behind dense gas. Its random numbers come from `hash42`: `hash21` repeated every 50 cells, tiling the stars every 350 pt (Dave spotted it in Galaxy's emptier sky).
    - `brightStar` adds a few foreground stars with four-point diffraction spikes (18% of 180 pt cells). About half of them (h < 0.09) shimmer very gently: ±7% over 6–10 s. They drift sideways at 0.2 pt/s.
    - both star layers are offset by `u_seed·97`, so each nebula has its own star field
-7. **Dither:** `/128` against banding.
+7. **Grade** (the Settings sliders), over the whole picture in this order:
+   - hue: a rotation of the RGB vector around the grey axis (Rodrigues), by `u_hue` degrees
+   - saturation: a mix from Rec. 709 luma to the colour, clamped at 0
+   - contrast: `0.3·(col/0.3)^u_contrast`, a power curve through 0.3, so black space stays black instead of lifting to grey the way a linear contrast around a pivot would
+   - brightness: a plain multiply
+   At their defaults all four are exactly the identity.
+8. **Dither:** `/128` against banding.
 
 **Each load rolls a random:**
 - `u_seed` (0–100 in x and y), a new region of the endless noise field
@@ -37,7 +43,19 @@ Everything is maths per pixel, per frame:
 - No location or network use. No Light Mode look; it's inherently dark.
 
 ## Settings
-Only the palette pin, `nebula.palette` (default Random). Palettes (`nebulaPalettes`: background, main gas, secondary gas, hot core), each after a real kind of nebula and what glows in it:
+- **Colors:** the palette pin, `nebula.palette` (default Random). Picking one rolls a fresh nebula.
+- **Look**, live without a new roll (`ShaderScene` observes `UserDefaults.didChangeNotification`):
+
+| Key | Label | Range | Default |
+|---|---|---|---|
+| `nebula.brightness` | Brightness | 0.4–1.5 | 1 |
+| `nebula.contrast` | Contrast | 0.5–1.5 | 1 |
+| `nebula.saturation` | Saturation | 0–2 | 1 |
+| `nebula.hue` | Hue shift | −180–180° | 0 |
+
+At 1.8, brightness and contrast blew the cores out to white, so both stop at 1.5.
+
+Palettes (`nebulaPalettes`: background, main gas, secondary gas, hot core), each after a real kind of nebula and what glows in it:
 
 | Name | Modelled on | Colours |
 |---|---|---|
@@ -46,6 +64,8 @@ Only the palette pin, `nebula.palette` (default Random). Palettes (`nebulaPalett
 | Planetary | Helix | red hydrogen/nitrogen rim, oxygen teal (dense = red, accent = teal, so teal dominates) |
 | Dusty | Rho Ophiuchi | amber dust with blue reflection |
 | Hubble | Pillars of Creation | SII gold and OIII teal (the Hubble false-colour palette) |
+| Dark Cloud | Shark Nebula (LDN 1235) | a dark nebula: dim brown dust lit only by the Milky Way, slate-grey reflection. The quiet one. |
+| Oxygen | NGC 3242 (Ghost of Jupiter) | OIII-rich planetary: oxygen's true green-cyan and hydrogen-beta blue, the colour bright nebulae look through a telescope |
 
 ## Tuning constants
 - Drift `0.005` (`float t = u_time * 0.005`).
@@ -54,7 +74,7 @@ Only the palette pin, `nebula.palette` (default Random). Palettes (`nebulaPalett
 - Shimmer: amplitude 0.07, rate `0.6 + 5h`.
 
 ## Performance
-CPU 0.45 ms and GPU 1.52 ms per frame (release, 2x). The GPU cost is mostly the three fbm calls (5 octaves each) plus two noise octaves for dust. During the 90 s dissolve both scenes render, so it roughly doubles (`ponytail:` noted in code). That's acceptable once every 8 minutes.
+CPU 0.45 ms and GPU 1.52 ms per frame (release, 2x). The GPU cost is mostly the three fbm calls (5 octaves each) plus two noise octaves for dust. During the 90 s dissolve both scenes render, so it roughly doubles (`ponytail:` noted in code). That's acceptable once every 8 minutes. The Settings grade is a handful of arithmetic per pixel and doesn't show in the measurement.
 
 ## Gotchas and shortcuts
 - `u_time` doesn't advance in the render test, and every roll is random. To compare palettes, pin one with `SNAPSHOT_DEFAULTS="nebula.palette=Hubble"`. To see another moment, temporarily add an offset to `u_time`.
@@ -69,9 +89,10 @@ CPU 0.45 ms and GPU 1.52 ms per frame (release, 2x). The GPU cost is mostly the 
 - "If I leave it on forever, will it stay the same nebula? If not, let's add seamless cycling." That added the 8-minute self-replacing dissolve.
 - "A very very very subtle twinkle on some of the larger background stars": the ±7% shimmer on about half of the spiked stars. The small field stars already twinkled.
 - He asked for a palette picker in Settings.
+- He asked for colour, contrast, brightness and saturation controls, and for "1 or 2 more colour presets if there are any more natural colour combinations we see in real life that are missing". The Look sliders came from that. So did Dark Cloud and Oxygen: the set had no dark nebula and no green. A Crab-style Supernova (orange filaments on blue synchrotron) was tried and dropped because it read too close to Dusty.
 
 ## Ideas / next steps
-- Settings: drift speed (it would need an integrated phase like Flowing Gradient, instead of `u_time`), the cycle interval, and shimmer strength.
+- More Settings: drift speed (it would need an integrated phase like Flowing Gradient, instead of `u_time`), the cycle interval, and shimmer strength.
 - Let the band slowly rotate or move so the composition evolves within one nebula.
 - Occasional events: a brightening star, or a faint comet streak.
 
@@ -79,5 +100,6 @@ CPU 0.45 ms and GPU 1.52 ms per frame (release, 2x). The GPU cost is mostly the 
 ```sh
 SNAPSHOT_SCENE=Nebula swift test                                        # a random roll
 SNAPSHOT_DEFAULTS="nebula.palette=Planetary" SNAPSHOT_SCENE=Nebula swift test
+SNAPSHOT_DEFAULTS="nebula.palette=Hubble,nebula.contrast=1.5,nebula.hue=120" SNAPSHOT_SCENE=Nebula swift test
 ```
 `SNAPSHOT_SECONDS` won't move the gas (the shader uses `u_time`). To preview drift, temporarily change `float t = u_time * 0.005;` to add an offset from an environment variable, and remove it after. To test cycling fast, temporarily shorten the `8 * 60` wait and the 90 s dissolve, then run the app binary directly and check that it survives several handovers.

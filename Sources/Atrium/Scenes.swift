@@ -32,7 +32,7 @@ struct Wallpaper {
     Wallpaper(name: "Aurora", icon: "wind", tint: .green, blurb: "Northern lights over snowy peaks.", make: aurora,
               palettes: PaletteChoice(key: "aurora.palette", options: auroraPalettes.map { ($0.name, $0.colours.reversed(), $0.colours.reversed()) })),
     Wallpaper(name: "Nebula", icon: "sparkles", tint: .purple, blurb: "A new deep-space cloud every few minutes.",
-              make: nebula,
+              make: nebula, knobs: nebulaKnobs,
               palettes: PaletteChoice(key: "nebula.palette", options: nebulaPalettes.map { ($0.name, Array($0.colours[1...]), Array($0.colours[1...])) })),
     Wallpaper(name: "Galaxy", icon: "hurricane", tint: .indigo, blurb: "A spiral galaxy, after a real one, slowly turning.",
               make: galaxy, knobs: Galaxy.knobs,
@@ -56,15 +56,26 @@ struct Wallpaper {
 ]
 
 /// A scene that is one full-screen GPU shader. Besides SpriteKit's `u_time` and `v_tex_coord`, the shader
-/// gets `u_size`, the scene size in points, for aspect-correct math.
-@MainActor func shaderScene(size: CGSize, source: String, uniforms: [SKUniform] = []) -> SKScene {
-    let scene = SKScene(size: size)
+/// gets `u_size`, the scene size in points, for aspect-correct math, and a float for each knob, named `u_` plus
+/// the last part of its key, that follows Settings live.
+@MainActor func shaderScene(size: CGSize, source: String, uniforms: [SKUniform] = [], knobs: [Knob] = []) -> SKScene {
+    let scene = ShaderScene(size: size)
+    scene.knobs = knobs.map { ($0, SKUniform(name: "u_" + $0.key.split(separator: ".").last!, float: Float($0.value))) }
     let sprite = SKSpriteNode(color: .black, size: size)
     sprite.anchorPoint = .zero
     let sizeUniform = SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)])
-    sprite.shader = SKShader(source: source, uniforms: [sizeUniform] + uniforms)
+    sprite.shader = SKShader(source: source, uniforms: [sizeUniform] + uniforms + scene.knobs.map(\.uniform))
     scene.addChild(sprite)
+    NotificationCenter.default.addObserver(scene, selector: #selector(ShaderScene.applyKnobs),
+                                           name: UserDefaults.didChangeNotification, object: nil)
     return scene
+}
+
+/// A `shaderScene`, which keeps its knob uniforms in step with Settings.
+final class ShaderScene: SKScene {
+    var knobs: [(knob: Knob, uniform: SKUniform)] = []
+
+    @objc func applyKnobs() { for (knob, uniform) in knobs { uniform.floatValue = Float(knob.value) } }
 }
 
 /// Whether macOS is in Dark Mode. Scenes with light and dark looks read it when they're built; the app rebuilds

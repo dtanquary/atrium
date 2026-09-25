@@ -319,6 +319,16 @@ let nebulaPalettes: [(name: String, colours: [SIMD3<Float>])] = [
     ("Planetary", [[0.01, 0.04, 0.06], [0.80, 0.15, 0.12], [0.05, 0.55, 0.60], [0.85, 1.0, 0.95]]),  // like Helix: red rim, OIII teal
     ("Dusty", [[0.06, 0.03, 0.01], [0.70, 0.45, 0.15], [0.20, 0.35, 0.75], [1.0, 0.85, 0.60]]),      // like Rho Ophiuchi: amber, blue
     ("Hubble", [[0.02, 0.06, 0.08], [0.75, 0.52, 0.18], [0.05, 0.45, 0.55], [1.0, 0.90, 0.70]]),     // like the Pillars: SII gold, OIII teal
+    ("Dark Cloud", [[0.015, 0.012, 0.01], [0.40, 0.27, 0.16], [0.22, 0.25, 0.30], [0.75, 0.66, 0.52]]), // like the Shark: dim dust
+    ("Oxygen", [[0.0, 0.03, 0.03], [0.10, 0.70, 0.50], [0.15, 0.45, 0.75], [0.85, 1.0, 0.92]]),       // like NGC 3242: OIII green, Hβ blue
+]
+
+/// Nebula's Settings: a colour grade over the whole picture.
+let nebulaKnobs = [
+    Knob(key: "nebula.brightness", label: "Brightness", range: 0.4...1.5, standard: 1, section: "Look"),
+    Knob(key: "nebula.contrast", label: "Contrast", range: 0.5...1.5, standard: 1, section: "Look"),
+    Knob(key: "nebula.saturation", label: "Saturation", range: 0...2, standard: 1, section: "Look"),
+    Knob(key: "nebula.hue", label: "Hue shift", range: -180...180, standard: 0, section: "Look"),
 ]
 
 /// Deep-space gas clouds cut by dark dust lanes, drifting very slowly. Every load rolls a new one: its own cloud
@@ -364,10 +374,18 @@ let nebulaPalettes: [(name: String, colours: [SIMD3<Float>])] = [
         col += vec3(0.8, 0.85, 1.0) * starField(pts, 7.0, 0.3, u_time) * (1.0 - 0.6 * density);
         col += vec3(1.0, 0.92, 0.85) * brightStar(pts + vec2(u_time * 0.2, 0.0), 180.0, u_time);
 
+        // Settings: hue turns the colour around the grey axis, and contrast is a curve through 0.3 that keeps
+        // black space black
+        float hue = u_hue * 0.01745;
+        vec3 grey = vec3(0.57735);
+        col = col * cos(hue) + cross(grey, col) * sin(hue) + grey * dot(grey, col) * (1.0 - cos(hue));
+        col = max(mix(vec3(dot(col, vec3(0.2126, 0.7152, 0.0722))), col, u_saturation), 0.0);
+        col = 0.3 * pow(col / 0.3, vec3(u_contrast)) * u_brightness;
+
         col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0;
         gl_FragColor = vec4(col, 1.0);
     }
-    """, uniforms: uniforms)
+    """, uniforms: uniforms, knobs: nebulaKnobs)
 
     // Hand over to a new nebula with a long dissolve, both still drifting, so there's never a cut.
     // ponytail: the dissolve renders both nebulas, about double the GPU cost while it lasts
