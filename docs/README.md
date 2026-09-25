@@ -24,6 +24,10 @@ One file per wallpaper, recording what the code can't: how each scene works, why
 
 \*Release build, 2x Retina at 1512×982 points, measured 2026-09-24 with `swift test -c release -Xswiftc -enable-testing`. The budget is about 2 ms each for CPU and GPU. Debug builds are pessimistic on CPU (Murmuration runs about 16–19 ms in debug).
 
+## Screenshots
+
+The README's screenshots live in `docs/images` as 1600-pixel JPEGs of the wallpaper alone. The first seven were captured live from the wallpaper window. Galaxy, Fish Tank and Nebula Oxygen (2026-09-25) were rendered offscreen by the snapshot test at 2x Retina, which is the same pixels without switching the desktop or touching settings. For example: `SNAPSHOT_DEFAULTS="galaxy.kind=Whirlpool" SNAPSHOT_SCENE=Galaxy swift test -c release -Xswiftc -enable-testing`, with `SNAPSHOT_APPEARANCE=light|dark` for the two looks. Each was picked from three or four random rolls. Add or refresh one whenever a wallpaper's look changes.
+
 ## Dave's direction so far
 
 - **Favourites:** Nebula first, then Flowing Gradient. They set the bar for the rest.

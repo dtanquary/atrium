@@ -1,6 +1,6 @@
 # Atrium
 
-Living, animated desktop wallpapers for macOS: a sunlit fish tank, drifting nebulae, a turning spiral galaxy, a lava lamp, the real sky above you right now, Earth from orbit with the live ISS, your local weather, and more. It's a small menu bar app written in Swift and SpriteKit, with no dependencies.
+Living, animated desktop wallpapers for macOS: a reef tank of real fish and corals, drifting nebulae, a turning spiral galaxy, a lava lamp, the real sky above you right now, Earth from orbit with the live ISS, your local weather, and more. It's a small menu bar app written in Swift and SpriteKit, with no dependencies.
 
 There are no prebuilt downloads. Clone it, build it and run it yourself; it takes about a minute.
 
@@ -11,8 +11,11 @@ There are no prebuilt downloads. Clone it, build it and run it yourself; it take
 | ![Live Sky](docs/images/live-sky.jpg) **Live Sky**: tonight's real sky over your location, with the Moon in its true phase, Saturn and the Milky Way | ![Earth from Orbit](docs/images/earth-from-orbit.jpg) **Earth from Orbit**: city lights on the night side, with the live ISS |
 | ![Flowing Gradient](docs/images/flowing-gradient.jpg) **Flowing Gradient**: soft pools of colour with silk ribbons | ![Lava Lamp](docs/images/lava-lamp.jpg) **Lava Lamp**: glowing wax on pinching necks |
 | ![Nebula, Reflection palette](docs/images/nebula-reflection.jpg) **Nebula**: the Reflection palette | ![Nebula, Planetary palette](docs/images/nebula-planetary.jpg) **Nebula**: the Planetary palette |
+| ![Galaxy, Whirlpool](docs/images/galaxy-whirlpool.jpg) **Galaxy**: the Whirlpool (M51) and its companion, in colours sampled from Hubble's portrait | ![Galaxy, Andromeda](docs/images/galaxy-andromeda.jpg) **Galaxy**: Andromeda, steeply tilted, with M32 and M110 beside it |
+| ![Fish Tank by day](docs/images/fish-tank-day.jpg) **Fish Tank**: a bright reef of real fish and corals, cut out of photos | ![Fish Tank at night](docs/images/fish-tank-actinic.jpg) **Fish Tank**: the reef under actinic blue in Dark Mode, its corals fluorescing |
+| ![Galaxy, Great Barred](docs/images/galaxy-barred.jpg) **Galaxy**: NGC 1300, the Great Barred Spiral, with dust lanes along its bar | ![Nebula, Oxygen palette](docs/images/nebula-oxygen.jpg) **Nebula**: the Oxygen palette |
 
-*Screenshots are the wallpaper window alone, captured live. Everything moves: the nebulae drift and fold, the sky turns, and the ISS crosses the globe.*
+*Screenshots show the wallpaper alone, with no desktop icons, menu bar or Dock. Everything moves: the nebulae drift and fold, the galaxies turn, the fish school around the reef, the sky turns, and the ISS crosses the globe. Galaxy, Nebula and the reef are rebuilt differently on every load.*
 
 ## How it works
 
@@ -20,7 +23,7 @@ macOS has no public API for third-party live wallpapers. This app gives each dis
 
 It uses public AppKit and SpriteKit APIs only. It uses no private frameworks, makes no changes to system files, needs no SIP changes and doesn't inject code.
 
-Each wallpaper is a SpriteKit scene. Many are full-screen Metal shaders written as `SKShader`s, and everything is drawn in code: there are no image or video files, apart from two NASA Earth textures, a star catalogue, and the live cloud map Earth from Orbit downloads.
+Each wallpaper is a SpriteKit scene. Many are full-screen Metal shaders written as `SKShader`s, and almost everything is drawn in code. The only image files are two NASA Earth textures, a star catalogue, the live cloud map Earth from Orbit downloads, and the Fish Tank's fish and corals, cut out of permissively licensed photos.
 
 It's kind to your battery:
 - 30 fps on mains power, 15 fps on battery.
@@ -107,6 +110,7 @@ SNAPSHOT_DEFAULTS="gradient.palette=Sunset" SNAPSHOT_APPEARANCE=light swift test
 - Earth imagery from NASA's Blue Marble and Black Marble, public domain.
 - Clouds from [Live Cloud Maps](https://github.com/matteason/live-cloud-maps) by Matt Eason, CC0. Contains modified EUMETSAT data.
 - Planet positions from JPL's [Approximate Positions of the Planets](https://ssd.jpl.nasa.gov/planets/approx_pos.html).
+- Reef fish, corals and rock in the Fish Tank are cut out of public domain, CC0 and CC BY photos from iNaturalist, Wikimedia Commons and NOAA. Each photographer and licence is listed in [`Sources/Atrium/Resources/reef-credits.tsv`](Sources/Atrium/Resources/reef-credits.tsv) and in Settings → About.
 
 ## License
 
