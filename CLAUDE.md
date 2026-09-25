@@ -4,7 +4,8 @@ A menu bar app that plays animated wallpapers on macOS 27. Swift package plus Sp
 
 ## How it works
 - macOS has no public API for third-party live wallpapers. Instead, each display gets a borderless `NSWindow` at `CGWindowLevelForKey(.desktopWindow)`. That puts it above the system wallpaper and below the desktop icons, on every Space, and it ignores the mouse. Only public AppKit APIs are used: no private frameworks, no changes to system files, no SIP changes. Keep it that way.
-- Each wallpaper is an `SKScene` shown in a `WallpaperView` (an `SKView`) at 30 fps. The view pauses whenever its window is fully covered.
+- Each wallpaper is an `SKScene` shown in a `WallpaperView` (an `SKView`). It runs at 30 fps on mains power and 15 fps on battery, and freezes on its current frame in Low Power Mode. The view pauses whenever its window is fully covered.
+- Switching scenes crossfades inside the existing windows. Display changes only touch the displays that actually changed, so the system wallpaper never flashes through.
 - The menu bar icon (✨📺) picks the scene, saved in `UserDefaults` under `scene`. It also toggles Open at Login (`SMAppService`) and quits the app.
 - Known seams: the lock screen, and the tint of the menu bar and windows, still come from the system wallpaper.
 

@@ -1,17 +1,30 @@
 import AppKit
+import IOKit.ps
 import ServiceManagement
 import SpriteKit
 
-/// Pauses rendering while its window is fully covered, so a hidden wallpaper costs nothing.
+/// Pauses rendering while its window is fully covered, so a hidden wallpaper costs nothing, or while frozen.
 final class WallpaperView: SKView {
+    /// Holds the current frame still, e.g. in Low Power Mode.
+    var frozen = false { didSet { updatePaused() } }
+
     override func viewDidMoveToWindow() {
         guard let window else { return }
-        NotificationCenter.default.addObserver(self, selector: #selector(occlusionChanged),
+        NotificationCenter.default.addObserver(self, selector: #selector(updatePaused),
                                                name: NSWindow.didChangeOcclusionStateNotification, object: window)
     }
 
-    @objc func occlusionChanged() {
-        isPaused = window?.occlusionState.contains(.visible) != true
+    @objc func updatePaused() {
+        isPaused = frozen || window?.occlusionState.contains(.visible) != true
+    }
+}
+
+/// Still in Low Power Mode, 15 fps on battery, 30 fps on mains power.
+@MainActor func applyPowerState(to views: [WallpaperView]) {
+    let source = IOPSGetProvidingPowerSourceType(IOPSCopyPowerSourcesInfo().takeRetainedValue()).takeUnretainedValue()
+    for view in views {
+        view.preferredFramesPerSecond = source as String == kIOPMBatteryPowerKey ? 15 : 30
+        view.frozen = ProcessInfo.processInfo.isLowPowerModeEnabled
     }
 }
 
@@ -32,7 +45,7 @@ var current = UserDefaults.standard.string(forKey: "scene") ?? scenes[0].name
     window.isReleasedWhenClosed = false
 
     let view = WallpaperView()
-    view.preferredFramesPerSecond = 30 // ponytail: plenty for ambient motion; raise if it looks steppy
+    applyPowerState(to: [view])
     view.presentScene(currentScene(size: screen.frame.size))
     window.contentView = view
     window.orderFront(nil)
@@ -113,5 +126,15 @@ syncWindows()
 NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                        object: nil, queue: .main) { _ in
     MainActor.assumeIsolated { syncWindows() }
+}
+
+// Follow Low Power Mode and plugging in or unplugging as they happen.
+NotificationCenter.default.addObserver(forName: .NSProcessInfoPowerStateDidChange, object: nil, queue: .main) { _ in
+    MainActor.assumeIsolated { applyPowerState(to: windows.compactMap { $0.contentView as? WallpaperView }) }
+}
+if let source = IOPSNotificationCreateRunLoopSource({ _ in
+    MainActor.assumeIsolated { applyPowerState(to: windows.compactMap { $0.contentView as? WallpaperView }) }
+}, nil)?.takeRetainedValue() {
+    CFRunLoopAddSource(CFRunLoopGetMain(), source, .defaultMode)
 }
 app.run()
