@@ -3,7 +3,7 @@
 Curtains of northern lights shading through real aurora colours from the lower edge to the crown, with fine vertical rays, folding slowly over a jagged mountain range and snowy foreground drifts under twinkling stars.
 
 - **Files:** `Sources/Atrium/Shaders.swift`. `aurora(size:)` holds the whole shader. It uses the `shaderCommon` helpers `noise`, `hash21` and `starField(pts, cell, density, t)`.
-- **Entry:** `@MainActor func aurora(size:)`, which returns `shaderScene(size:source:)`. Registry entry: icon `wind`, tint `.green`.
+- **Entry:** `@MainActor func aurora(size:)`, which returns `shaderScene(size:source:uniforms:knobs:)`. Registry entry: icon `wind`, tint `.green`.
 - **Kind:** a single full-screen SKShader driven by `u_time`. The only Swift-side state is the palette (`auroraPalettes` in Shaders.swift), pinned or rolled when the scene is built.
 
 ## How it works
@@ -43,12 +43,22 @@ All motion comes from `u_time`, so a speed knob needs an integrated `u_phase` (t
 
 The swatches run crown to fringe, top-left to bottom-right, as the sky does.
 
+- **Look**, the shared grade sliders (`gradeKnobs("aurora")` in Shaders.swift, applied by `grade()` from `shaderCommon` just before the dither). They're live and don't rebuild the scene:
+
+| Key | Label | Range | Default |
+|---|---|---|---|
+| `aurora.brightness` | Brightness | 0.4–1.5 | 1 |
+| `aurora.contrast` | Contrast | 0.5–1.5 | 1 |
+| `aurora.saturation` | Saturation | 0–2 | 1 |
+| `aurora.hue` | Hue shift | −180–180° | 0 |
+
+The contrast pivot is 0.3, as in Nebula, so the night sky stays black. See `docs/nebula.md` for how the grade works.
+
 Suggested knobs, not built yet:
 
 | Key | Label | Range | Default | Drives |
 |---|---|---|---|---|
 | `aurora.speed` | Speed | 0–3 | 1 | integrated phase |
-| `aurora.brightness` | Brightness | 0.3–1.5 | 1 | the soft-clip exposure (0.9 today) |
 | `aurora.stars` | Stars | 0–1 | 1 | star-field strength |
 
 

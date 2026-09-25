@@ -3,7 +3,7 @@
 Looking through a fogged, rain-spattered window at a city, at night in Dark Mode and on an overcast day in Light Mode: out-of-focus lights and a crawling band of traffic behind the glass. Small beads form and evaporate, and larger drops slide down in lurches, wiping clear trails. Each drop acts as a small lens showing a sharper, flipped view of the lights.
 
 - **Files:** `Sources/Atrium/Shaders.swift`. `rainOnGlass(size:)` holds the whole shader. It uses the `shaderCommon` helpers from the same file: `hash11`, `hash21`, `noise` and `fbm`.
-- **Entry:** `@MainActor func rainOnGlass(size:)`, which returns `shaderScene(size:source:)` from Scenes.swift. Registry entry: icon `cloud.rain.fill`, tint `.gray`.
+- **Entry:** `@MainActor func rainOnGlass(size:)`, which returns `shaderScene(size:source:uniforms:knobs:)` from Scenes.swift. Registry entry: icon `cloud.rain.fill`, tint `.gray`.
 - **Kind:** a single full-screen SKShader, animated by `u_time` alone. The only Swift-side state is the palette, picked when the scene is built (`rainPalettes` in Shaders.swift).
 
 ## How it works
@@ -47,6 +47,17 @@ It doesn't follow the real time or weather.
 | Graphite | whites and silvers only |
 
 Each swatch shows the night glow and the two most common lights (Dark Mode), or the day sky and those lights (Light Mode).
+
+- **Look**, the shared grade sliders (`gradeKnobs("rain")` in Shaders.swift, applied by `grade()` from `shaderCommon` just before the dither). They're live and don't rebuild the scene:
+
+| Key | Label | Range | Default |
+|---|---|---|---|
+| `rain.brightness` | Brightness | 0.4–1.5 | 1 |
+| `rain.contrast` | Contrast | 0.5–1.5 | 1 |
+| `rain.saturation` | Saturation | 0–2 | 1 |
+| `rain.hue` | Hue shift | −180–180° | 0 |
+
+The contrast pivot follows the look: 0.3 at night, 0.7 for the bright overcast day. With 0.3 by day, raising the contrast only blew the sky out to white. At 0.7, more contrast whitens the sky and makes the lights pop, and less contrast flattens it all to grey. See `docs/nebula.md` for how the grade works.
 
 Suggested knobs, not built yet:
 

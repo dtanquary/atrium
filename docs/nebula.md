@@ -3,7 +3,7 @@
 A deep-space gas cloud, cut by dark dust lanes, over a twinkling star field, drifting and folding very slowly. Every load rolls a unique nebula in colours modelled on real objects, and left running it dissolves into a freshly rolled one every 8 minutes. **Dave's favourite wallpaper.**
 
 - **Files:** `Sources/Atrium/Shaders.swift`: the `nebulaPalettes` (file scope) and `nebula(size:)`, which includes its shader source. `hash21`, `hash42`, `noise`, `fbm`, `starField` and `brightStar` come from `shaderCommon` in the same file (`brightStar` moved there to be shared with Galaxy).
-- **Entry:** `@MainActor func nebula(size:) -> SKScene`. It builds a plain scene through `shaderScene(size:source:uniforms:knobs:)` (Scenes.swift), which turns each of `nebulaKnobs` into a live uniform. Its registry entry has icon `sparkles`, tint `.purple`, and palettes `PaletteChoice(key: "nebula.palette", ...)`, whose swatches are colours 1–3 of each palette. The standard is "", meaning Random.
+- **Entry:** `@MainActor func nebula(size:) -> SKScene`. It builds a plain scene through `shaderScene(size:source:uniforms:knobs:)` (Scenes.swift), which turns each of its knobs, `gradeKnobs("nebula")`, into a live uniform. Its registry entry has icon `sparkles`, tint `.purple`, and palettes `PaletteChoice(key: "nebula.palette", ...)`, whose swatches are colours 1–3 of each palette. The standard is "", meaning Random.
 - **Kind:** a full-screen SKShader, fully procedural, with no image files.
 
 ## How it works
@@ -22,10 +22,10 @@ Everything is maths per pixel, per frame:
    - `starField` puts one candidate star per 7 pt cell and keeps 30% of them, each twinkling ±20% at its own rate, dimmed behind dense gas. Its random numbers come from `hash42`: `hash21` repeated every 50 cells, tiling the stars every 350 pt (Dave spotted it in Galaxy's emptier sky).
    - `brightStar` adds a few foreground stars with four-point diffraction spikes (18% of 180 pt cells). About half of them (h < 0.09) shimmer very gently: ±7% over 6–10 s. They drift sideways at 0.2 pt/s.
    - both star layers are offset by `u_seed·97`, so each nebula has its own star field
-7. **Grade** (the Settings sliders), over the whole picture in this order:
+7. **Grade** (the Settings sliders): `grade()` in `shaderCommon`, shared with Aurora and Rain on Glass, over the whole picture in this order:
    - hue: a rotation of the RGB vector around the grey axis (Rodrigues), by `u_hue` degrees
    - saturation: a mix from Rec. 709 luma to the colour, clamped at 0
-   - contrast: `0.3·(col/0.3)^u_contrast`, a power curve through 0.3, so black space stays black instead of lifting to grey the way a linear contrast around a pivot would
+   - contrast: `pivot·(col/pivot)^u_contrast`, a power curve through the scene's typical level (0.3 here), so black space stays black instead of lifting to grey the way a linear contrast would
    - brightness: a plain multiply
    At their defaults all four are exactly the identity.
 8. **Dither:** `/128` against banding.

@@ -66,7 +66,28 @@ float brightStar(vec2 pts, float cell, float t) {
     return (core + 0.35 * spikes + 0.12 * exp(-length(d) * 0.08)) * (0.5 + 2.5 * h) * shimmer;
 }
 
+// The Look sliders from `gradeKnobs`, over a finished colour. Hue turns it around the grey axis (in degrees) and
+// contrast is a power curve through `pivot`, the scene's typical level, so black stays black. At the defaults it's
+// exactly the identity.
+vec3 grade(vec3 col, float pivot, float hue, float saturation, float contrast, float brightness) {
+    float a = hue * 0.01745;
+    vec3 grey = vec3(0.57735);
+    col = col * cos(a) + cross(grey, col) * sin(a) + grey * dot(grey, col) * (1.0 - cos(a));
+    col = max(mix(vec3(dot(col, vec3(0.2126, 0.7152, 0.0722))), col, saturation), 0.0);
+    return pivot * pow(col / pivot, vec3(contrast)) * brightness;
+}
+
 """
+
+/// The Look sliders for a plain shader scene, keyed under `prefix`. Pass their uniforms to `grade` in the shader.
+func gradeKnobs(_ prefix: String) -> [Knob] {
+    [
+        Knob(key: prefix + ".brightness", label: "Brightness", range: 0.4...1.5, standard: 1, section: "Look"),
+        Knob(key: prefix + ".contrast", label: "Contrast", range: 0.5...1.5, standard: 1, section: "Look"),
+        Knob(key: prefix + ".saturation", label: "Saturation", range: 0...2, standard: 1, section: "Look"),
+        Knob(key: prefix + ".hue", label: "Hue shift", range: -180...180, standard: 0, section: "Look"),
+    ]
+}
 
 /// Rain on Glass colours: the sky behind the glass (top, then the glow low down) at night and by day, and five light
 /// tints from most to least common. Every palette follows the system: lit up at night in Dark Mode, an overcast
@@ -210,6 +231,7 @@ let rainPalettes: [(name: String, night: [SIMD3<Float>], day: [SIMD3<Float>], li
             col = mix(col, through, drop.z);
         }
 
+        col = grade(col, mix(0.3, 0.7, u_day), u_hue, u_saturation, u_contrast, u_brightness);
         col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0;
         gl_FragColor = vec4(col, 1.0);
     }
@@ -218,7 +240,7 @@ let rainPalettes: [(name: String, night: [SIMD3<Float>], day: [SIMD3<Float>], li
         SKUniform(name: "u_l0", vectorFloat3: l[0]), SKUniform(name: "u_l1", vectorFloat3: l[1]),
         SKUniform(name: "u_l2", vectorFloat3: l[2]), SKUniform(name: "u_l3", vectorFloat3: l[3]),
         SKUniform(name: "u_l4", vectorFloat3: l[4]), SKUniform(name: "u_day", float: systemIsDark ? 0 : 1),
-    ])
+    ], knobs: gradeKnobs("rain"))
 }
 
 /// Aurora colours, bottom to top: lower fringe, body, upper, crown. All real emissions and their mixes: 557.7 nm oxygen
@@ -302,13 +324,14 @@ let auroraPalettes: [(name: String, colours: [SIMD3<Float>])] = [
         snow += u_body * 0.07 + 0.35 * starField(uv * u_size + 3.0, 7.0, 0.08, t * 3.0);
         col = mix(col, snow, smoothstep(near + 0.0015, near - 0.0015, uv.y));
 
+        col = grade(col, 0.3, u_hue, u_saturation, u_contrast, u_brightness);
         col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0;
         gl_FragColor = vec4(col, 1.0);
     }
     """, uniforms: [
         SKUniform(name: "u_fringe", vectorFloat3: c[0]), SKUniform(name: "u_body", vectorFloat3: c[1]),
         SKUniform(name: "u_upper", vectorFloat3: c[2]), SKUniform(name: "u_crown", vectorFloat3: c[3]),
-    ])
+    ], knobs: gradeKnobs("aurora"))
 }
 
 /// Nebula colours: background, main gas, secondary gas and hot core, each after a real kind of nebula and what
@@ -321,14 +344,6 @@ let nebulaPalettes: [(name: String, colours: [SIMD3<Float>])] = [
     ("Hubble", [[0.02, 0.06, 0.08], [0.75, 0.52, 0.18], [0.05, 0.45, 0.55], [1.0, 0.90, 0.70]]),     // like the Pillars: SII gold, OIII teal
     ("Dark Cloud", [[0.015, 0.012, 0.01], [0.40, 0.27, 0.16], [0.22, 0.25, 0.30], [0.75, 0.66, 0.52]]), // like the Shark: dim dust
     ("Oxygen", [[0.0, 0.03, 0.03], [0.10, 0.70, 0.50], [0.15, 0.45, 0.75], [0.85, 1.0, 0.92]]),       // like NGC 3242: OIII green, Hβ blue
-]
-
-/// Nebula's Settings: a colour grade over the whole picture.
-let nebulaKnobs = [
-    Knob(key: "nebula.brightness", label: "Brightness", range: 0.4...1.5, standard: 1, section: "Look"),
-    Knob(key: "nebula.contrast", label: "Contrast", range: 0.5...1.5, standard: 1, section: "Look"),
-    Knob(key: "nebula.saturation", label: "Saturation", range: 0...2, standard: 1, section: "Look"),
-    Knob(key: "nebula.hue", label: "Hue shift", range: -180...180, standard: 0, section: "Look"),
 ]
 
 /// Deep-space gas clouds cut by dark dust lanes, drifting very slowly. Every load rolls a new one: its own cloud
@@ -374,18 +389,11 @@ let nebulaKnobs = [
         col += vec3(0.8, 0.85, 1.0) * starField(pts, 7.0, 0.3, u_time) * (1.0 - 0.6 * density);
         col += vec3(1.0, 0.92, 0.85) * brightStar(pts + vec2(u_time * 0.2, 0.0), 180.0, u_time);
 
-        // Settings: hue turns the colour around the grey axis, and contrast is a curve through 0.3 that keeps
-        // black space black
-        float hue = u_hue * 0.01745;
-        vec3 grey = vec3(0.57735);
-        col = col * cos(hue) + cross(grey, col) * sin(hue) + grey * dot(grey, col) * (1.0 - cos(hue));
-        col = max(mix(vec3(dot(col, vec3(0.2126, 0.7152, 0.0722))), col, u_saturation), 0.0);
-        col = 0.3 * pow(col / 0.3, vec3(u_contrast)) * u_brightness;
-
+        col = grade(col, 0.3, u_hue, u_saturation, u_contrast, u_brightness);
         col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0;
         gl_FragColor = vec4(col, 1.0);
     }
-    """, uniforms: uniforms, knobs: nebulaKnobs)
+    """, uniforms: uniforms, knobs: gradeKnobs("nebula"))
 
     // Hand over to a new nebula with a long dissolve, both still drifting, so there's never a cut.
     // ponytail: the dissolve renders both nebulas, about double the GPU cost while it lasts
