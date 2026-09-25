@@ -162,11 +162,11 @@ final class Galaxy: SKScene {
     }
 
     // A star-forming knot, glowing hydrogen around the young cluster that lights it, in a cell where `keep` allows,
-    // round on screen like discStar; 1.2 to 4.5 points across, mostly small. Returns (glow, cluster).
+    // round on screen like discStar; 0.8 to 3.2 points across, mostly small. Returns (glow, cluster).
     vec2 knot(vec2 g, float cell, float keep, mat2 m) {
         vec4 h = hash42(floor(g / cell) + 41.0);
         if (h.x > keep) { return vec2(0.0); }
-        float l = length(m * ((fract(g / cell) - 0.5 - (h.yz - 0.5) * 0.3) * cell)) / (1.2 + 3.3 * pow(h.w, 3.0));
+        float l = length(m * ((fract(g / cell) - 0.5 - (h.yz - 0.5) * 0.3) * cell)) / (0.8 + 2.4 * pow(h.w, 3.0));
         return vec2(exp(-l * l), exp(-l * l * 6.0)) * (0.3 + 0.7 * h.x / max(keep, 0.0001));
     }
 
@@ -211,17 +211,20 @@ final class Galaxy: SKScene {
             float lumps = noise(g * 16.0 + u_seed) * 0.6 + noise(mat2(0.8, 0.6, -0.6, 0.8) * g * 41.0 - u_seed) * 0.4;
             float clump = smoothstep(0.2, 0.9, lumps);
 
-            float disc = exp(-r / 0.38) * smoothstep(1.5, 0.7, r);
-            float zone = smoothstep(r0 * 0.8, r0 * 1.4, r) * exp(-r * 1.4) * smoothstep(1.35, 0.85, r);
+            // Light comes from a smooth exponential disc that the arms brighten two to three times over, as in Hubble
+            // images, not from arms on a dark disc. That soft, bright disc with no edge is what reads as a photograph.
+            float inArms = smoothstep(r0 * 0.8, r0 * 1.5, r);
+            float disc = exp(-r / 0.4) * smoothstep(1.6, 0.9, r);
+            float arm = crest * inArms * (0.5 + 0.9 * clump);
 
-            // Dust: sharp broken lanes along the arms' inner edges, and thin threads (ridges of the swirled noise)
-            // feathering through the disc, reddening what's behind.
+            // Dust: soft broken lanes along the arms' inner edges, and thin feathers (ridges of the swirled noise)
+            // across the disc, reddish brown as dust makes what's behind it.
             float dt = fbm(q * 6.0 + u_seed * 1.3 + 3.0);
-            float lane = pow(0.5 + 0.5 * cos(ph + 0.45 + (dt - 0.5) * 2.5), 18.0) * smoothstep(0.25, 0.8, lumps + dt - 0.5);
-            float threads = pow(1.0 - abs(2.0 * dt - 1.0), 6.0);
-            float dust = (lane * 1.6 + threads * (0.05 + 0.8 * crest))
-                       * smoothstep(r0 * 0.3, r0 * 0.9, r) * smoothstep(1.25, 0.5, r) * u_arms.y * u_dust;
-            vec3 absorb = exp(-dust * vec3(0.6, 0.8, 1.05));
+            float lane = pow(0.5 + 0.5 * cos(ph + 0.45 + (dt - 0.5) * 2.5), 16.0) * smoothstep(0.2, 0.7, lumps + dt - 0.45);
+            float threads = pow(1.0 - abs(2.0 * dt - 1.0), 5.0);
+            float dust = (lane * 1.5 + threads * (0.08 + 0.8 * crest))
+                       * smoothstep(r0 * 0.3, r0 * 0.9, r) * smoothstep(1.3, 0.5, r) * u_arms.y * u_dust;
+            vec3 absorb = exp(-dust * vec3(0.55, 0.8, 1.1));
 
             // the bar: a flat-ended bar of old stars in the disc
             float bx = g.x / max(bar, 0.001);
@@ -229,33 +232,41 @@ final class Galaxy: SKScene {
             bx *= bx;
             float barLight = step(0.001, bar) * exp(-bx * bx - by * by);
 
-            vec3 old = mix(u_core, u_disc, smoothstep(0.05, 0.6, r)); // older, yellower stars toward the middle
-            vec3 light = old * disc * 0.8 + u_core * barLight * 0.9
-                       + mix(u_disc, u_young, 0.8) * crest * zone * (0.45 + 1.3 * clump)
-                       + u_young * young * zone * clump * 0.8;
+            // older, yellower stars toward the middle; bluer in the arms and the outskirts
+            vec3 old = mix(u_core, u_disc, smoothstep(0.05, 0.7, r));
+            vec3 tint = mix(old, u_young, clamp(arm * 0.7 + 0.35 * smoothstep(0.4, 1.1, r), 0.0, 1.0));
+            vec3 light = tint * disc * (0.6 + 1.5 * arm) * 1.4 + u_core * barLight * 0.9
+                       + u_young * young * inArms * clump * disc * 1.2;
 
-            // Resolved stars twinkling in the disc as it turns, drawn as pinpoints on screen: blue giants along the
-            // arms, a sprinkle of older stars between them.
+            // Resolved stars twinkling in the disc as it turns, drawn as pinpoints on screen: a fine speckle over the
+            // arms as bright as the disc around it, and blue giants just past the crests.
             float pt = 1.0 / (u_radius * u_size.y);
             mat2 m = mat2(1.0, 0.0, 0.0, u_tilt) * mat2(cos(u_phase), sin(u_phase), -sin(u_phase), cos(u_phase)) / pt;
-            vec2 s1 = discStar(g, 4.0 * pt / u_tilt, 3.0, clamp(crest * zone * clump * 3.0 + disc * 0.08, 0.0, 0.5), m);
-            vec2 s2 = discStar(g, 11.0 * pt / u_tilt, 11.0, clamp(young * zone * clump * 3.0, 0.0, 0.4), m);
-            light += mix(old, u_young, step(0.3, s1.y) * smoothstep(0.1, 0.5, crest)) * s1.x * 0.3 + u_young * s2.x * 0.8;
+            vec2 s1 = discStar(g, 3.0 * pt / u_tilt, 3.0, clamp(arm, 0.0, 0.5) * inArms, m);
+            vec2 s2 = discStar(g, 11.0 * pt / u_tilt, 11.0, clamp(young * inArms * clump * 3.0, 0.0, 0.4), m);
+            light += mix(tint, vec3(0.85, 0.9, 1.0), step(0.4, s1.y)) * s1.x * (disc * 0.8 + 0.02)
+                   + u_young * s2.x * (disc * 3.0 + 0.1);
             light *= absorb;
 
-            // knots come in groups along the arms, just past the crest
-            float groups = smoothstep(0.45, 0.8, noise(g * 7.0 + u_seed.yx));
-            vec2 k = knot(g, 22.0 * pt / u_tilt, clamp(young * zone * groups * 6.0, 0.0, 0.8), m);
-            light += (u_knots * k.x + mix(u_young, vec3(1.0), 0.5) * k.y) * sqrt(absorb);
+            // knots come in chains along the arms, just past the crest, all the way out
+            float groups = smoothstep(0.35, 0.75, noise(g * 7.0 + u_seed.yx));
+            vec2 k = knot(g, 16.0 * pt / u_tilt, clamp(young * inArms * groups * 6.0, 0.0, 0.8) * smoothstep(1.2, 0.8, r), m);
+            light += (u_knots * k.x * 1.3 + mix(u_young, vec3(1.0), 0.5) * k.y) * sqrt(absorb) * (0.25 + 0.75 * smoothstep(1.2, 0.3, r));
 
             // The bulge: a rounder cloud of old stars and a bright nucleus. The disc cuts through its middle, so half
             // its light comes through the dust, more on the near side when the galaxy is tilted.
             float rb = length(vec2(e.x, e.y / mix(u_tilt, 1.0, 0.6))) / bulgeR;
-            float bulge = 4.0 * exp(-3.67 * sqrt(rb)) + 2.0 * exp(-rb * rb * 60.0);
+            float bulge = 3.0 * exp(-3.67 * sqrt(rb)) + 1.5 * exp(-rb * rb * 60.0);
             float behind = clamp(0.5 - 0.5 * e.y / bulgeR * sqrt(1.0 - u_tilt * u_tilt), 0.0, 1.0);
-            light += u_core * bulge * (1.0 - behind + behind * absorb) + u_core * 0.06 * exp(-r * 2.0) * smoothstep(1.6, 1.1, r); // and a faint halo
+            light += u_core * bulge * (1.0 - behind + behind * absorb);
 
-            col = col * absorb + 1.0 - exp(-light * u_brightness * 1.2);
+            // Hubble-style stretch: asinh on brightness lifts the faint outer disc and holds the core without
+            // bleaching its colour; the brightest parts pale toward white, as on a real sensor.
+            vec3 x = light * u_brightness;
+            float lum = dot(x, vec3(0.3, 0.5, 0.2)) + 0.0001;
+            float stretched = log(6.0 * lum + sqrt(36.0 * lum * lum + 1.0)) / 3.18; // asinh(6 lum) / asinh(12)
+            vec3 photo = min(x * stretched / lum, 1.0);
+            col = col * absorb + mix(photo, vec3(stretched), 0.5 * smoothstep(0.55, 1.0, stretched)); // highlights pale
         }
         col += vec3(1.0, 0.92, 0.85) * brightStar(pts, 180.0, u_time); // foreground stars, in our own galaxy
         col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0;

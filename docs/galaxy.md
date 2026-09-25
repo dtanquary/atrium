@@ -20,16 +20,21 @@ Everything is maths per pixel, per frame, in four coordinate frames:
    - `lane`, just upstream (ph + 0.45, wobbled by the dust noise), is where gas piles up into dust on the arm's inner edge
 
    Flocculent kinds multiply `crest` by a noise mask, so their arms break into segments.
-5. **Light, added up like Flowing Gradient's pools:**
-   - disc: `exp(-r/0.38)`, shading from bulge gold to disc white outward (`old`)
+5. **Light, from a bright disc the arms brighten.** In Hubble images the space between the arms isn't dark: the whole disc is a smooth glow, cream toward the middle and blue-grey outward. The arms are only two to three times brighter than the disc around them. Drawing arms on a dark disc is what made the first version look crisp and CG.
+   - disc: `exp(-r/0.4)`, fading out between 0.9 and 1.6 with no edge
+   - arm: `crest·inArms·(0.5 + 0.9·clump)`. `inArms` fades the arms in past `r0`. `clump` is two octaves of noise in unswirled `g`, so the arms read as star clouds rather than brush strokes.
+   - light: `tint·disc·(0.6 + 1.5·arm)·1.4`. `tint` shades from bulge gold to disc white outward, and toward the young-star blue in the arms and the outskirts.
    - bar: `exp(-(x/L)⁴ - (y/0.2L)²)` in `g`, so it's flat-ended and turns with the disc
-   - arms: `crest·zone·(0.45 + 1.3·clump)`. `clump` is two octaves of noise in unswirled `g`, so the arms read as star clouds rather than brush strokes. `zone` fades the arms in past `r0` and out by r ≈ 1.3.
-   - young stars: `young·zone·clump`
-6. **Dust:** `dt` is fbm in `q`. `dust = lane·1.6 + threads·(0.05 + 0.8·crest)`, where `threads` are thin ridges of `dt`. The lanes break up where `lumps + dt` is low. `absorb = exp(-dust·(0.6, 0.8, 1.05))` reddens: blue is lost first, as in real dust. It dims the disc, its stars and the sky behind; knots get `sqrt(absorb)`.
-7. **Resolved stars (`discStar`):** one candidate per cell of `g`, kept by how crowded the arm is there. There are two layers: 4 pt cells for a sprinkle, and 11 pt cells for bright blue giants just past the crests. `m` maps a step in the disc to screen points, so every star is a round pinpoint at any tilt. Cells are sized `/u_tilt` so they never get squashed below the star's size.
-8. **Knots (`knot`):** 22 pt cells, kept just downstream of the crests and only where a slow noise (`groups`) allows, so they come in clusters. Each is 1.2–4.5 pt: pink hydrogen glow (`u_knots`) around a blue-white cluster core. They're round on screen, like the stars.
-9. **Bulge:** a Sérsic n=2 profile (`4·exp(-3.67√rb)`) plus a nucleus, measured in `e` with an axis ratio of `mix(cos i, 1, 0.6)` (bulges are rounder than discs). The disc cuts through its middle. `behind` is the share of bulge light behind the dust: half face-on, more on the near side of a tilted galaxy. That gives the Andromeda-style dust silhouette across the bulge.
-10. **Composite:** `col = sky·absorb + 1 - exp(-light·brightness·1.2)`, a soft clip so the core glows without blowing out. The sky behind is described in the next step. `brightStar` foreground stars go on top, untouched by the galaxy's dust, since they're in our own galaxy. Then a `/128` dither.
+   - young stars: `young·inArms·clump·disc`
+6. **Dust:** `dt` is fbm in `q`. `dust = lane·1.5 + threads·(0.08 + 0.8·crest)`. The lane is narrow (exponent 16), and `threads` are thin ridges of `dt` feathering across the arms. The lanes break up where `lumps + dt` is low. `absorb = exp(-dust·(0.55, 0.8, 1.1))` turns what's behind reddish brown, since blue is lost first, as in real dust. It dims the disc, its stars and the sky behind; knots get `sqrt(absorb)`.
+7. **Resolved stars (`discStar`):** one candidate per cell of `g`. There are two layers:
+   - 3 pt cells for a fine speckle over the arms, as bright as the disc around them (`disc·0.8`), so they read as texture rather than salt
+   - 11 pt cells for bright blue giants just past the crests
+
+   `m` maps a step in the disc to screen points, so every star is a round pinpoint at any tilt. Cells are sized `/u_tilt` so they never get squashed below the star's size.
+8. **Knots (`knot`):** 16 pt cells, kept just downstream of the crests, only where a slow noise (`groups`) allows, and only inside r ≈ 1.2, so they come in chains. Each is 0.8–3.2 pt: pink hydrogen glow (`u_knots`) around a blue-white cluster core, dimmer toward the outskirts. They're round on screen, like the stars.
+9. **Bulge:** a Sérsic n=2 profile (`3·exp(-3.67√rb)`) plus a nucleus, measured in `e` with an axis ratio of `mix(cos i, 1, 0.6)` (bulges are rounder than discs). The disc cuts through its middle. `behind` is the share of bulge light behind the dust: half face-on, more on the near side of a tilted galaxy. That gives the Andromeda-style dust silhouette across the bulge.
+10. **Composite: a Hubble-style stretch.** Brightness gets `asinh(6·lum)/asinh(12)`, the log-like curve used to process Hubble and ESO images. It lifts the faint outer disc so the galaxy fades gradually instead of stopping, and holds the core. It's applied to brightness and not per channel, so colours keep their saturation; the brightest parts pale toward white, as on a real sensor. `col = sky·absorb + stretched light`. The sky behind is described in the next step. `brightStar` foreground stars go on top, untouched by the galaxy's dust, since they're in our own galaxy. Then a `/128` dither.
 11. **Background sky:** `starLayer` is drawn twice:
     - 5 pt cells on a square grid, up to 16% kept: faint stars only
     - 17 pt cells on a grid turned 40°, up to 30% kept: the only layer bright enough for a soft halo
@@ -77,10 +82,10 @@ Colours per kind: bulge (gold), old disc (warm white), young stars (blue) and kn
 ## Tuning constants
 - Rotation `2π/720` rad/s at speed 1.
 - Arms: warp `2 + 5·ragged`; crest exponent `4 - 2·ragged`; young at ph − 0.4 (exponent 8); lane at ph + 0.45 (exponent 18).
-- Disc scale length 0.38; the arm zone is `exp(-1.4r)` and fades out between 0.85 and 1.35.
-- Dust: lanes ×1.6, threads `0.05 + 0.8·crest`, reddening (0.6, 0.8, 1.05).
-- Stars: 4 pt cells kept up to 50% (×0.3 brightness) and 11 pt giants up to 40% (×0.8). Knots: 22 pt cells, up to 80% where grouped.
-- Bulge `4·exp(-3.67√rb) + 2·exp(-60rb²)`, and exposure ×1.2.
+- Disc scale length 0.4, fading out between 0.9 and 1.6; the arms brighten it `0.6 + 1.5·arm`.
+- Dust: lane exponent 16, lanes ×1.5, threads `0.08 + 0.8·crest`, reddening (0.55, 0.8, 1.1).
+- Stars: 3 pt cells kept up to 50% of the arm (×`disc·0.8`), and 11 pt giants up to 40% (×`disc·3`). Knots: 16 pt cells, up to 80% where grouped, inside r ≈ 1.2.
+- Bulge `3·exp(-3.67√rb) + 1.5·exp(-60rb²)`. Stretch `asinh(6·lum)/asinh(12)`, with highlights paling above 0.55.
 - Cycle every 10 minutes, dissolve 90 s.
 
 ## Performance
@@ -104,6 +109,7 @@ CPU 0.5 ms and GPU 1.05–1.7 ms per frame (release, 2x), depending on how much 
   - knots: evenly spaced beads became clusters
 - "A great start, but we need to improve it." First: "The background stars are too uniform, I can see patterns in the stars." The cause was `hash21` tiling. Fixed with `hash42` for every star field (Nebula's and Aurora's too), and the layered, clustered, coloured sky above.
 - He asked for research into how 3D tools build galaxies, and for better reference photos, to lift each kind's look.
+- "They look too crisp at the edges and just don't quite resemble the pictures we see from Hubble. Very close, just something is off." Compared with ESA/Hubble's M51 (heic0506a), the main gap was the dark disc: the light model became a bright exponential disc the arms brighten. The rest followed from the photo: an asinh stretch in place of `1 - exp(-x)`, narrower reddish-brown lanes, a finer star speckle, smaller knots in chains, and a paler core.
 
 ## Ideas / next steps
 - Differential rotation via two blended phases, if rigid turning ever looks wrong up close.
