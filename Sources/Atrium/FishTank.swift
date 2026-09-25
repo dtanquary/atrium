@@ -16,6 +16,8 @@ final class FishTank: SKScene {
         var tilt = 0.0
         var stroke = Double.random(in: 0..<1) // how far through a tail beat, in beats
         var frame = -1
+        var pulse = Double.random(in: 0..<1)  // how far through a burst-and-coast cycle, for species that swim so
+        var coasting = false
     }
 
     /// Fish of one species at one depth, which school together.
@@ -103,6 +105,11 @@ final class FishTank: SKScene {
                 steer.y -= max(0, p.y - (ceiling - 60)) / 60 * push * 0.6
 
                 var velocity = v + steer * dt
+                if let burst = school.species.burst { // thrust while beating, drag while gliding
+                    swimmers[i].pulse += dt / burst.cycle
+                    swimmers[i].coasting = swimmers[i].pulse.truncatingRemainder(dividingBy: 1) >= burst.share
+                    velocity += velocity / max(length(velocity), 0.001) * school.cruise * (swimmers[i].coasting ? -0.9 : 1.8) * dt
+                }
                 velocity.y *= 1 - 1.4 * dt // fish mostly swim level
                 let speed = length(velocity)
                 velocity *= min(max(speed, school.cruise * 0.45), school.cruise * 1.35) / max(speed, 0.001)
@@ -129,7 +136,7 @@ final class FishTank: SKScene {
 
         // The tail beats faster when swimming faster. Stepping through precomputed frames here, rather than an
         // SKAction whose speed changes every frame, which SpriteKit gets steadily slower at.
-        fish.stroke += dt / school.species.beat * (0.55 + 0.8 * length(v) / cruise)
+        fish.stroke += dt / school.species.beat * (0.55 + 0.8 * length(v) / cruise) * (fish.coasting ? 0.15 : 1) // tail still in a glide
         let frame = Int(fish.stroke * Double(school.beat.count)) % school.beat.count
         if frame != fish.frame {
             fish.frame = frame

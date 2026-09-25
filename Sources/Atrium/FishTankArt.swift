@@ -57,6 +57,16 @@ enum Species: CaseIterable {
         }
     }
 
+    /// Burst and coast: a few quick tail beats, then a glide, as small reef fish swim. The cycle in seconds and the
+    /// share of it spent beating. Nil swims steadily.
+    var burst: (cycle: Double, share: Double)? {
+        switch self {
+        case .chromis: (1.3, 0.45)
+        case .firefish: (2.4, 0.25) // hovers, then darts
+        default: nil
+        }
+    }
+
     /// Gap each fish keeps from its schoolmates, in body lengths.
     var spacing: Double { self == .chromis ? 1.3 : 1.9 }
 

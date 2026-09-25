@@ -73,6 +73,8 @@ Layers, back to front, from the `Z` enum:
 - a pull toward `home` for species with a haunt: clownfish above the anemone, and the shy species low by a rock (`rockSpots`, one per island)
 - soft walls just past the screen edges (so turns mostly happen off-screen), and a floor and ceiling from `bounds(depth)`
 
+- **burst and coast** for species with a `burst` (chromis 1.3 s at 45% beating; firefish 2.4 s at 25%, hovering then darting): a few quick tail beats, then a glide. Each fish runs its own cycle, so a school doesn't pulse in unison. It gets thrust of 1.8 × cruise per second while beating and drag of 0.9 while gliding, within the usual speed clamp, and its tail runs at 15% speed during a glide.
+
 Everything is pre-simulated for 150 steps in `sceneDidLoad`, so schools have already formed on the first frame.
 
 **Pose (`pose`):**
@@ -91,12 +93,12 @@ None yet.
 
   | Species | length (pt) | cruise (pt/s) | beat (s) | photos |
   |---|---|---|---|---|
-  | chromis | 46 | 40–54 | 0.3 | 3 |
+  | chromis (burst 1.3 s, 45%) | 46 | 40–54 | 0.3 | 3 |
   | yellow tang | 88 | 30–40 | 0.55 | 4 |
   | blue tang | 100 | 36–48 | 0.6 | 3 |
   | clownfish | 54 | 20–28 | 0.4 | 3 |
   | royal gramma | 44 | 12–18 | 0.45 | 1 |
-  | firefish | 50 | 10–16 | 0.35 | 3 |
+  | firefish (burst 2.4 s, 25%) | 50 | 10–16 | 0.35 | 3 |
   | flame angelfish | 58 | 18–26 | 0.45 | 3 |
 
 - **Scene scaling:** `unit` is height/982, clamped to 0.8–1.8, so a bigger screen gets a bigger tank rather than smaller fish. `fishUnit` is `unit × 1.2`. `sandHeight` is 0.22 × height.
@@ -140,7 +142,6 @@ CPU 0.7 ms and GPU 1.45–1.5 ms per frame (release, 2x), in both looks. The GPU
 
 ## Ideas / next steps
 - More rock photos, so the islands aren't all one rock.
-- "Burst and coast" swimming for the chromis: a few tail beats, then a glide.
 - Rare visitors: a cleaner shrimp on the rock, a snail on the glass.
 - Settings: fish count, which species appear, the lighting look.
 
