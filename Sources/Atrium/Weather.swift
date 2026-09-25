@@ -48,7 +48,7 @@ final class WeatherScene: SKScene {
     private let cloudSun = SKUniform(name: "u_sunCol", vectorFloat3: .zero), cloudAmbient = SKUniform(name: "u_amb", vectorFloat3: .zero)
     private let cirrus = SKUniform(name: "u_high", float: 0), cirrusSun = SKUniform(name: "u_highCol", vectorFloat3: .zero)
     private let fog = SKUniform(name: "u_fog", float: 0), snowCover = SKUniform(name: "u_snow", float: 0)
-    private let nightUniform = SKUniform(name: "u_night", float: 0)
+    private let nightUniform = SKUniform(name: "u_night", float: 0), backlit = SKUniform(name: "u_backlit", float: 0)
     private let flashAmount = SKUniform(name: "u_flash", float: 0), flashPlace = SKUniform(name: "u_flashPos", vectorFloat3: .zero)
     /// Under a deck: its underside's colour, and how much the horizon takes it on instead of the clear sky's.
     private let deck = SKUniform(name: "u_deck", vectorFloat4: .zero)
@@ -226,8 +226,10 @@ final class WeatherScene: SKScene {
         let clouds = conditions.clouds, night = smoothstep(-0.02, -0.15, light.sun.z)
         let skyglow = Sky.Vector(0.4, 0.32, 0.24) * night * Double(clouds.deck) * Double(clouds.cover)
         cloudAmbient.vectorFloat3Value = SIMD3<Float>(light.ambient + skyglow)
-        let underside = (light.sunAtCloud * max(light.sun.z, 0) * 0.07 + (light.ambient + skyglow) * 0.22) * exp(-0.5 * (Double(clouds.thickness) - 1))
-        let underDeck: Float = conditions.kind == .fog ? 0.3 : clouds.cover > 0.9 ? 0.92 : clouds.deck * clouds.cover
+        let underside = (light.sunAtCloud * max(light.sun.z, 0) * 0.12 + (light.ambient + skyglow) * 0.22) * exp(-0.6 * (Double(clouds.thickness) - 1))
+            * Sky.Vector(0.92, 0.97, 1.08) * 0.78 // as it looks near the horizon
+        // A storm's dark base ends in a bright band on the horizon where the sky beyond it is clear.
+        let underDeck: Float = conditions.kind == .fog ? 0.3 : conditions.kind == .storm ? 0.45 : clouds.cover > 0.9 ? 0.92 : clouds.deck * clouds.cover
         deck.vectorFloat4Value = SIMD4<Float>(SIMD3<Float>(underside), underDeck)
         let high = light.sun.z > -0.14 ? light.sun : light.moon, highPower = light.sun.z > -0.14 ? 1 : light.moonPower
         cirrusSun.vectorFloat3Value = SIMD3<Float>(Atmosphere.shared.sunlight(8, high.z) * highPower * light.exposure)
@@ -247,12 +249,14 @@ final class WeatherScene: SKScene {
         let grey = Sky.Vector(repeating: global.sum() / 3 * 0.5 * exp(-0.4 * (Double(clouds.thickness) - 1))) + skyglow * 0.4
         sunlit = sunlit * (1 - overcast) + grey * overcast
         // The eye adapts to the land as well as the sky: facing a sunset the hills go dark, but not black.
-        let lit = sunlit / 7, brightness = (lit * Sky.Vector(0.2126, 0.7152, 0.0722)).sum()
-        groundLight.vectorFloat3Value = SIMD3<Float>(lit * pow(max(brightness, 1e-5), -0.45) * (1 - 0.6 * smoothstep(-0.03, -0.2, light.sun.z)))
+        let lit = sunlit / 8, brightness = (lit * Sky.Vector(0.2126, 0.7152, 0.0722)).sum()
+        groundLight.vectorFloat3Value = SIMD3<Float>(lit * pow(max(brightness, 1e-5), -0.38) * (1 - 0.6 * smoothstep(-0.03, -0.2, light.sun.z)))
         // At night the eye sees less colour (the Purkinje shift), and the haze isn't lit from low down any more,
         // since the air near the ground is in the Earth's shadow while the high sky still glows.
         groundColour.floatValue = Float(smoothstep(0.002, 0.03, brightness) * (1 - 0.7 * smoothstep(-0.03, -0.2, light.sun.z)))
-        groundHazeLit.floatValue = Float(0.3 + 0.7 * smoothstep(-0.08, 0, light.sun.z))
+        groundHazeLit.floatValue = Float(0.25 + 0.75 * smoothstep(-0.03, 0.2, light.sun.z))
+        let ahead = max(dot(Sky.Vector(light.sun.x, light.sun.y, 0), viewpoint.forward), 0)
+        backlit.floatValue = Float(smoothstep(0.3, 0.02, light.sun.z) * smoothstep(-0.25, -0.1, light.sun.z) * ahead * (1 - overcast))
         let moonNight = smoothstep(0.05, -0.1, light.sun.z)
         nightUniform.floatValue = Float(smoothstep(-0.05, -0.2, light.sun.z) * 0.6)
         moonColour.vectorFloat3Value = SIMD3<Float>(Atmosphere.shared.sunlight(viewpoint.height, light.moon.z) * (0.5 + 1.5 * moonNight))
@@ -368,12 +372,14 @@ final class WeatherScene: SKScene {
             // Seen from below, bases are grey: sunlight diffused through the cloud plus skylight, about as bright as
             // the blue beside them. Faces lit by the Sun are white; toward the Sun we see dark sides with bright rims.
             float face = 0.55 - 0.45 * c;
-            vec3 base = u_sunCol * max(u_sun.z, 0.0) * mix(mix(0.04, 0.07, u_cloud.w), 0.16, thin) + u_amb * 0.22;
+            vec3 base = u_sunCol * max(u_sun.z, 0.0) * mix(mix(0.04, 0.12, u_cloud.w), 0.16, thin) + u_amb * 0.22;
+            // An overcast sky is brighter overhead than at the horizon (the CIE overcast sky), and faintly blue.
+            base *= mix(vec3(1.0), vec3(0.92, 0.97, 1.08) * (0.75 + 1.2 * rd.z), u_cloud.w);
             // A deck's underside is lumpy: rolls of thicker, darker cloud between thinner, brighter gaps. Thicker
             // decks are darker overall, down to a storm's slate.
             float lumps = na1.r * 0.55 + nb1.b * 0.3 + na1.g * 0.15;
             flashTex = 0.15 + 1.7 * smoothstep(0.3, 0.8, na1.g * 0.5 + nb1.r * 0.5);
-            base *= mix(1.0, 0.55 + 0.9 * lumps, u_cloud.w) * exp(-0.5 * (u_cloud.z - 1.0));
+            base *= mix(1.0, 0.55 + 0.9 * lumps, u_cloud.w) * exp(-0.6 * (u_cloud.z - 1.0));
             vec3 lit = u_sunCol * 0.3 * shadow;
             float litFrac = clamp(top * high * face * 1.5 + (1.0 - high) * face, 0.0, 1.0);
             cl = (mix(base, lit, litFrac) * (1.0 - 0.3 * u_cloud.w * d) + u_sunCol * shadow * thin * hg(c, 0.75) * 1.2) * a;
@@ -401,7 +407,7 @@ final class WeatherScene: SKScene {
             vec2 off = (uv - u_flashPos.xy) * vec2(u_size.x / u_size.y, 1.0);
             float glow = u_flash * exp(-dot(off, off) / u_flashPos.z) * flashTex;
             float cloudA = 1.0 - T;
-            col += vec3(0.75, 0.8, 1.0) * (glow * (0.3 + cloudA * (1.0 - 0.5 * cloudA)) * 2.5 + u_flash * 0.05);
+            col += vec3(0.85, 0.76, 0.86) * (glow * (0.3 + cloudA * (1.0 - 0.5 * cloudA)) * 2.5 + u_flash * 0.05); // mauve in photos
         }
 
         // Fog: optically thick, so it's grey-white whatever the sky's colour, and it swallows the low sky first.
@@ -410,7 +416,7 @@ final class WeatherScene: SKScene {
             col = mix(col, fogCol, clamp(u_fog * 1.6, 0.0, 0.97) * smoothstep(u_cam.z + 1.2 * u_fog, u_cam.z - 0.05, uv.y));
         }
         // By night the eye sees little colour, and what it sees shifts blue (the Purkinje shift): moonlit cloud is silver.
-        col = mix(col, vec3(dot(col, vec3(0.2126, 0.7152, 0.0722))) * vec3(0.8, 0.9, 1.15), u_night);
+        col = mix(col, vec3(dot(col, vec3(0.2126, 0.7152, 0.0722))) * vec3(0.62, 0.85, 1.45), u_night);
         col = sqrt(1.0 - exp(-col)); // film-like roll-off, then roughly sRGB
         gl_FragColor = vec4(col + (hash21(pts * 2.0) - 0.5) / 128.0, 1.0);
     }
@@ -436,7 +442,7 @@ final class WeatherScene: SKScene {
                                  Float(width / size.width), Float(height / size.height))
         ground.shader = SKShader(source: Self.groundShader, uniforms: [
             SKUniform(name: "u_aux", texture: Self.groundAux), SKUniform(name: "u_frame", vectorFloat4: frame),
-            skyBefore, skyAfter, skyBlend, cameraUniforms.lens, groundLight, groundHaze, groundColour, groundHazeLit, fog, deck, flashAmount, snowCover,
+            skyBefore, skyAfter, skyBlend, cameraUniforms.lens, groundLight, groundHaze, groundColour, groundHazeLit, fog, deck, flashAmount, snowCover, backlit,
         ])
         addChild(ground)
     }
@@ -460,18 +466,23 @@ final class WeatherScene: SKScene {
             albedo = mix(albedo, mix(trees, snowy, open), u_snow * (0.55 + 0.45 * open));
         }
         vec3 land = albedo * albedo * (u_light + vec3(0.75, 0.8, 1.0) * u_flash * 0.15);
+        // The photo's far ridges are pale with its own haze. Against a low Sun or a twilight glow they should be
+        // dark layered silhouettes, so darken them with distance.
+        land *= 1.0 - u_backlit * 0.5 * smoothstep(0.2, 0.9, aux.r);
         float lum = dot(land, vec3(0.2126, 0.7152, 0.0722));
-        land = mix(vec3(lum) * vec3(0.75, 0.88, 1.2), land, u_colour); // the Purkinje shift: moonlit fields look blue-grey
+        land = mix(vec3(lum) * vec3(0.62, 0.85, 1.45), land, u_colour); // the Purkinje shift: moonlit fields look blue-grey
         vec2 screen = u_frame.xy + v_tex_coord * u_frame.zw;
         vec2 above = vec2(screen.x, (u_cam.z + 0.03 - u_cam.w) / (1.0 - u_cam.w));
         vec3 haze = mix(decode(texture2D(u_before, above).rgb), decode(texture2D(u_after, above).rgb), u_blend) * u_hazeLit;
-        haze = mix(min(haze, vec3(mix(40.0, 1.5, u_deck.a))), vec3(dot(min(haze, vec3(1.5)), vec3(0.3, 0.5, 0.2))) * 0.08 + u_deck.rgb * 0.9, u_deck.a); // as it looks under the deck
+        haze = mix(vec3(dot(haze, vec3(0.2126, 0.7152, 0.0722))) * vec3(0.7, 0.85, 1.25), haze, u_hazeLit); // bluer as the glow leaves the low air
+        float under = min(u_deck.a * 2.0, 0.95); // the low air under a storm is dark even where the far sky is clear
+        haze = mix(min(haze, vec3(mix(40.0, 1.5, under))), vec3(dot(min(haze, vec3(1.5)), vec3(0.3, 0.5, 0.2))) * 0.08 + u_deck.rgb * 0.9, under);
         float far = aux.r / (1.0 - 0.9 * aux.r);
         float through = exp(-u_haze * far);
         land = land * through + haze * (1.0 - through);
         // Fog swallows the far hills first.
         vec3 fogCol = mix(haze, vec3(dot(haze, vec3(0.3, 0.5, 0.2))), 0.7) * 0.95;
-        land = mix(land, fogCol, (1.0 - exp(-far * u_fog)) * 0.97);
+        land = mix(land, fogCol, (1.0 - exp(-far * u_fog * 0.45)) * 0.97);
         gl_FragColor = vec4(sqrt(1.0 - exp(-land)), 1.0) * photo.a;
     }
     """
@@ -484,7 +495,8 @@ final class WeatherScene: SKScene {
         let amount = conditions.precipitation
         guard amount.rain > 0 || amount.snow > 0 else { return }
         let across = simd_dot(conditions.windToward, SIMD2(viewpoint.right.x, viewpoint.right.y)) // + blowing to the right
-        precipitation.vectorFloat4Value = [Float(amount.rain), Float(amount.snow), Float(across * min(conditions.wind / 50, 1) * 0.35),
+        // Rain slants at atan(wind / fall speed), about 7 m/s for raindrops: 30° in a 15 km/h wind blowing across.
+        precipitation.vectorFloat4Value = [Float(amount.rain), Float(amount.snow), Float(across * min(conditions.wind / 3.6 / 7, 1)),
                                            Float(across * conditions.wind / 10)]
         let sheet = SKSpriteNode(color: .black, size: size)
         sheet.anchorPoint = .zero
@@ -671,9 +683,9 @@ private extension WeatherScene.Conditions {
         case .partlyCloudy: return (0.15 + share * 0.5, 1.4, 1, 0.1, cirrus)
         case .overcast: return (0.97, 1.0, 1.3, 0.75, 0)
         case .fog: return (1, 0.3, 0.6, 1, 0)
-        case .drizzle: return (1, 0.5, 1.6, 0.95, 0)
+        case .drizzle: return (1, 0.5, 1.25, 0.95, 0)
         case .rain: return (1, 0.8, 2.2, 0.9, 0)
-        case .snow: return (1, 0.9, 1.8, 0.95, 0)
+        case .snow: return (1, 0.9, 1.3, 0.95, 0)
         case .storm: return (1, 1.0, 3.2, 0.6, 0)
         }
     }

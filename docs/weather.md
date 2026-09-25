@@ -57,6 +57,25 @@ Green California hills and oak woodland, from a real photo, under whatever the w
 - **Location:** `Location.shared.start()` is called in `didMove`; see [live-sky.md](live-sky.md) for the fallback.
 - **Appearance:** it ignores Light/Dark Mode. Night follows the Sun instead: moonlit and dim, or under cloud a low ceiling faintly lit by towns.
 
+## Checked against real photos
+A research agent sampled 94 reference photos (Wikimedia Commons) across 18 states, averaging patches in linear light (its folder: `scratchpad/weather/reference/`, with `curated.json`). The renders were sampled in the same places and compared, 2026-09-25:
+
+| State | Sky top, mine / photos | Notes |
+|---|---|---|
+| Clear noon | (107,148,195) / (111,147,198) | a near match straight out of the physics |
+| Overcast | (176,177,184) / (194,199,205) | was (153,153,158) and flat: brightened by day, faintly blue, brighter overhead than at the horizon (the CIE overcast sky) |
+| Drizzle | (183,183,190) / (195,201,209) | was (141,140,145); a thinner deck |
+| Rain | (144,146,152) / (137,147,161) | |
+| Storm | (115,118,124) / (94–107,107–124) | darker than rain, with a lighter horizon beyond it |
+| Moonlit night | (25,32,43) / (20,32,58) | was grey; bluer by the Purkinje shift |
+
+What changed from it:
+- **Sunset and dusk:** real far ridges are dark mauve silhouettes (93,75,78), not glowing. The low air is lit by weak, reddened sunlight, so the ground's haze dims with the Sun's height (`u_hazeLit`) and turns bluer after sunset, and when the land is backlit (`u_backlit`) the photo's pale far ridges darken with distance.
+- **Rain slants at atan(wind ÷ fall speed)**, about 7 m/s for raindrops: 30° in a 15 km/h wind blowing across. It was 5–10°.
+- **Lightning-lit cloud** is mauve in photos (#b3a0a8), not blue-white.
+- **Under a storm** the sky's horizon keeps some of the clear sky beyond it, but the ground's haze takes the storm's grey (`under`).
+- The reference's greens and cloud colours were for the old painted palette; the photo ground and the physical sky replaced both.
+
 ## Settings
 - **Preview** (`weather.preview`, `weather.previewKind`, `weather.previewHour`): a switch, a menu of the eight kinds (Clear, Partly cloudy, Overcast, Fog, Drizzle, Rain, Snow, Thunderstorm) and a time of day. While it's on, the scene draws that instead of the live weather, with the sky, Sun and Moon at that time today (moving the time bakes the sky again at once). Each kind stands in as one code (0, 2, 3, 45, 53, 63, 73, 95) with a 15 km/h wind from 250°, 12 cm of snow on the ground for Snow, and 400 m visibility for Fog. The scene keeps polling underneath, so switching it off goes straight back to the live weather.
 - `report` holds the latest live weather and `conditions` what's drawn; `redraw()` rebuilds only when the two differ, so any other change to UserDefaults costs nothing.
