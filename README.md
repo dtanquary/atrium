@@ -66,7 +66,7 @@ To rebuild after pulling changes: `./build.sh && pkill -x Atrium; open build/Atr
 | Flowing Gradient | Soft pools of colour with silk ribbons that follow the Sun; six palettes and a watercolour Light Mode |
 | Lava Lamp | Wax that rises on pinching necks, slumps and sinks; seven jewel-tone palettes, with Light and Dark looks |
 | Rain on Glass | Drops sliding down a window over blurred city lights, at night or on an overcast day, in seven palettes |
-| Aurora | Northern lights over snowy peaks |
+| Aurora | Northern lights over snowy peaks, shading through real aurora colours |
 | Nebula | A unique deep-space cloud on every load, in real nebula colours, dissolving into a new one every few minutes |
 | Live Sky | The real sky above you: stars, planets, the Moon's phase, the Milky Way and the ISS. Deep blue by day. |
 | Earth from Orbit | The globe above your location with the live day/night line, city lights and the ISS |

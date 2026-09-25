@@ -1,10 +1,10 @@
 # Aurora
 
-Green curtains of northern lights, fading up into violet with fine vertical rays, folding slowly over a jagged mountain range and snowy foreground drifts under twinkling stars.
+Curtains of northern lights shading through real aurora colours from the lower edge to the crown, with fine vertical rays, folding slowly over a jagged mountain range and snowy foreground drifts under twinkling stars.
 
 - **Files:** `Sources/Atrium/Shaders.swift`. `aurora(size:)` holds the whole shader. It uses the `shaderCommon` helpers `noise`, `hash21` and `starField(pts, cell, density, t)`.
 - **Entry:** `@MainActor func aurora(size:)`, which returns `shaderScene(size:source:)`. Registry entry: icon `wind`, tint `.green`.
-- **Kind:** a single full-screen SKShader driven by `u_time`. There is no Swift-side state.
+- **Kind:** a single full-screen SKShader driven by `u_time`. The only Swift-side state is the palette (`auroraPalettes` in Shaders.swift), pinned or rolled when the scene is built.
 
 ## How it works
 It works in `uv = v_tex_coord` (0–1) and `p = uv * vec2(aspect, 1)`.
@@ -18,16 +18,32 @@ It works in `uv = v_tex_coord` (0–1) and `p = uv * vec2(aspect, 1)`.
      - a faint glow below the edge
    - **Rays:** noise at 45× horizontal frequency, sheared along the folds (`+ fold * 3`) and drifting at 0.15, shaped by `0.25 + 1.4·rays²`.
    - **Patches:** a slow noise mask (`smoothstep(0.25, 0.7, …)`) so brightness comes and goes along each curtain.
-   - **Colour:** green (0.2, 1, 0.5) for the body and rim, violet (0.6, 0.25, 1) for the tail.
+   - **Colour:** a gradient by height above the edge, `ch = h + (0.5 − patch noise) × 0.09`, running from `u_fringe` to `u_body` (−0.01…0.012), then `u_upper` (0.03…0.14), then `u_crown` (0.12…0.3). The patch-noise term reuses the patch noise already computed (so it costs nothing extra) and moves the colour bands up and down along the curtain, so no curtain is a single colour. The fringe transition is kept thin: at 0.03 wide, Storm's pink edge read as a thick stripe.
+   - The intensity profile is `((body + rim·0.7 + tail) · rays + below)`, the same shape as before, all tinted by that gradient.
 3. **Soft clip.** `1 − exp(−aurora × 0.9)`, so overlapping curtains don't blow out. It fades above `uv.y` 0.6–1.05.
 4. **Far range.** Ridged 4-octave noise (`peaks`) makes sharp summits at 0.08–0.40 of the height. Snow near the summits catches a green-tinted light, mottled by noise gullies. It's a hard silhouette with a 0.0015 anti-aliased edge.
-5. **Foreground snow.** Rolling drifts at 0.04–0.125 of the height, lit green, with a sparkle from a second `starField` (cell 7, density 0.08, 3× faster twinkle). Then dither.
+5. **Foreground snow.** Rolling drifts at 0.04–0.125 of the height, lit by `u_body` (as are the summits), with a sparkle from a second `starField` (cell 7, density 0.08, 3× faster twinkle). Then dither.
 
 ## Time and appearance
-All motion comes from `u_time`, so a speed knob needs an integrated `u_phase` (the `LavaLamp` pattern). There is no Light Mode look, and it doesn't vary between loads: every load is the same aurora at the same time offset.
+All motion comes from `u_time`, so a speed knob needs an integrated `u_phase` (the `LavaLamp` pattern). There is no Light Mode look. The palette is Random by default, so each load rolls a new one, but the layout is the same every time.
 
 ## Settings
-None yet. Suggested:
+**Colors:** `aurora.palette`, Random by default. Each palette in `auroraPalettes` has four colours from bottom to top: fringe, body, upper and crown. They're all real emissions or mixes of them, the colours Dave listed after looking it up: green, red, pink, purple, blue, yellow and white.
+
+| Palette | Fringe → body → upper → crown | Real basis |
+|---|---|---|
+| Green | green → green → green → violet | 557.7 nm oxygen; the original look |
+| Storm | pink → green → yellow-green → red | strong display: nitrogen pink edge, 630 nm oxygen red crown |
+| Red | green → red → red → deep red | seen from mid-latitudes, where only the high red part rises above the horizon |
+| Pink | pink → pink → lilac → violet | nitrogen-rich lower border |
+| Purple | magenta → purple → blue-violet → red-violet | nitrogen blue mixing with oxygen red |
+| Blue | teal → blue → blue → violet | sunlit nitrogen at the top of a twilight display |
+| Yellow | green → yellow-green → gold → red | green and red overlapping |
+| White | pale greens and blues | a faint display, too dim for colour vision |
+
+The swatches run crown to fringe, top-left to bottom-right, as the sky does.
+
+Suggested knobs, not built yet:
 
 | Key | Label | Range | Default | Drives |
 |---|---|---|---|---|
@@ -35,13 +51,6 @@ None yet. Suggested:
 | `aurora.brightness` | Brightness | 0.3–1.5 | 1 | the soft-clip exposure (0.9 today) |
 | `aurora.stars` | Stars | 0–1 | 1 | star-field strength |
 
-`aurora.palette`, following real emission lines:
-- **Green:** 557.7 nm atomic oxygen, today's look and the default
-- **Red crown:** 630 nm oxygen high up, seen in strong storms
-- **Blue-violet fringe:** 427.8 nm nitrogen
-- **Pink lower edge:** strong displays
-
-Each palette is a body, rim and tail colour, passed as uniforms.
 
 ## Tuning constants
 - Fold speeds: 0.04 and 0.03. Edge noise drift: 0.01. Ray drift: 0.15. Patch drift: 0.008.
@@ -49,7 +58,7 @@ Each palette is a body, rim and tail colour, passed as uniforms.
 - Peaks: `0.08 + 0.32 × peaks(p.x × 2.2)`.
 
 ## Performance
-Measured at CPU 0.42 ms and GPU 1.87 ms per frame (release build, 2x). It's the most expensive GPU scene, at the top of the budget. The cost comes from about 25 noise evaluations per pixel: three curtains of 4–5 noise calls each, two star fields, four-octave peaks and the snow noise. If anything is added, cut first: the second ray-noise octave, the snow sparkle field, or run the curtains at half resolution.
+Measured at CPU 0.42 ms and GPU 1.85–1.91 ms per frame (the colour gradient added nothing measurable) (release build, 2x). It's the most expensive GPU scene, at the top of the budget. The cost comes from about 25 noise evaluations per pixel: three curtains of 4–5 noise calls each, two star fields, four-octave peaks and the snow noise. If anything is added, cut first: the second ray-noise octave, the snow sparkle field, or run the curtains at half resolution.
 
 ## Gotchas and shortcuts
 - The mountains are a flat silhouette with mottled snow, with no per-face lighting (the shaders agent flagged this).
@@ -58,14 +67,14 @@ Measured at CPU 0.42 ms and GPU 1.87 ms per frame (release build, 2x). It's the 
 
 ## Dave's feedback and decisions
 - It was one of the four scenes Dave picked for the picker's first round (with Flowing Gradient, Rain on Glass and Night Sky, later renamed Live Sky), then built by the shaders agent.
-- He hasn't commented on it since, and it hasn't had a fidelity pass.
+- 2026-09-24, Dave asked for other aurora colours, but "keep it in the realm of what real colors they can be … green, red, pink, purple, blue, yellow, and white". He also asked for "some gradients to it … so you get more than one color in an aurora". Hence four-colour height gradients built from real emissions, and Random as the default.
 - The parent agent judged it to read well at launch.
 
 ## Ideas / next steps
-- **Real-colour palettes** (above), rolled on each load like Nebula, with a slow crossfade to a new aurora every few minutes.
+- **Cycling:** a slow crossfade to a freshly rolled palette and layout every few minutes, like Nebula's self-replacing scene. Roll the fold phases and edge heights per load too.
 - **Substorms:** brightness surges and faster ray motion every few minutes, then calm.
 - **Terrain:** lit mountain faces, or a still lake mirroring the curtains.
 - **Night only:** follow the real Sun (dimmer or absent by day), as Flowing Gradient's mood does.
 
 ## Checking it
-`SNAPSHOT_SCENE="Aurora" SNAPSHOT_DIR=/tmp/aurora swift test`. `SNAPSHOT_SECONDS` doesn't move shader time. For other moments, temporarily offset `t` in a scratch copy, as the shaders agent did for its +60 s and +300 s checks.
+`SNAPSHOT_SCENE="Aurora" SNAPSHOT_DEFAULTS="aurora.palette=Storm" SNAPSHOT_DIR=/tmp/aurora swift test`. `SNAPSHOT_SECONDS` doesn't move shader time. For other moments, temporarily offset `t` in a scratch copy, as the shaders agent did for its +60 s and +300 s checks.
