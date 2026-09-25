@@ -27,7 +27,6 @@ func moonPhaseMatchesHorizons(jd: Double, lit: Double, waxing: Bool) {
     let phase = Sky.moonPhase(jd)
     #expect(abs(phase.lit - lit) < 0.02, "lit \(phase.lit), expected \(lit)")
     #expect(phase.waxing == waxing)
-    #expect(Sky.moonPhaseName(lit: phase.lit, waxing: phase.waxing) == (waxing ? "Waxing Gibbous" : "Waning Gibbous"))
 }
 
 @Test func polarisSitsAtTheObserversLatitude() {

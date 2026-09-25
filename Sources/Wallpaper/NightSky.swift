@@ -17,9 +17,6 @@ final class NightSky: SKScene {
     private let moon = SKSpriteNode(color: .white, size: CGSize(width: 46, height: 46))
     private let moonGlow = SKSpriteNode()
     private let moonLight = SKUniform(name: "u_light", vectorFloat3: [0, 0, 1])
-    private let moonBadge = SKSpriteNode(color: .white, size: CGSize(width: 28, height: 28))
-    private let moonBadgeName = SKLabelNode(fontNamed: "HelveticaNeue")
-    private let moonBadgeDetail = SKLabelNode(fontNamed: "HelveticaNeue")
     private let iss = SKSpriteNode()
     private let galacticUniform = SKUniform(name: "u_galactic", matrixFloat3x3: matrix_identity_float3x3)
     private let dayUniform = SKUniform(name: "u_day", float: 0)
@@ -150,11 +147,11 @@ final class NightSky: SKScene {
         constellations.path = path
 
         // Moon: turn the disc so its north points to the celestial pole, then light it from the Sun. The light is
-        // measured from the Moon's north, so the same shader serves the sky disc and the upright badge.
+        // measured from the Moon's north, so it holds however the disc is turned.
         let (moonH, poleH) = (toHorizon * Sky.moon(jd), toHorizon * Sky.Vector(0, 0, 1))
         let north = skyAngle(from: moonH, toward: poleH)
         let toSun = skyAngle(from: moonH, toward: sunH) - north + .pi / 2
-        let (lit, waxing) = Sky.moonPhase(jd)
+        let lit = Sky.moonPhase(jd).lit
         let phase = acos(2 * lit - 1) // Sun–Moon–Earth angle
         moonLight.vectorFloat3Value = [Float(sin(phase) * cos(toSun)), Float(sin(phase) * sin(toSun)), Float(cos(phase))]
         place(moon, at: moonH)
@@ -163,10 +160,6 @@ final class NightSky: SKScene {
         moonGlow.alpha = 0.5 * lit * (1 - 0.7 * day)
         if !moon.isHidden { moon.zRotation = screenAngle(from: moonH, toward: poleH) - .pi / 2 }
 
-        // The badge shows the Moon as you'd see it facing it, head upright, even when it's out of view.
-        moonBadge.zRotation = north - .pi / 2
-        moonBadgeName.text = Sky.moonPhaseName(lit: lit, waxing: waxing)
-        moonBadgeDetail.text = "\(Int((lit * 100).rounded()))% lit" + (moonH.z < 0 ? " · below the horizon" : "")
 
         // The Milky Way shader maps screen → sky → galactic: plane (right, up, forward) → horizon → equatorial → galactic.
         let basis = facingSouth
@@ -328,21 +321,6 @@ final class NightSky: SKScene {
             """, uniforms: [moonLight])
         moon.zPosition = 4
         addChild(moon)
-
-        // Bottom-left badge: the same disc, plus the phase in words.
-        moonBadge.shader = moon.shader
-        moonBadge.position = CGPoint(x: 36, y: horizonY * 0.42)
-        moonBadge.zPosition = 7
-        addChild(moonBadge)
-        for (text, y, alpha) in [(moonBadgeName, 7.0, 0.55), (moonBadgeDetail, -8.0, 0.35)] {
-            text.fontSize = 11
-            text.fontColor = NSColor(white: 1, alpha: alpha)
-            text.horizontalAlignmentMode = .left
-            text.verticalAlignmentMode = .center
-            text.position = CGPoint(x: 58, y: moonBadge.position.y + y)
-            text.zPosition = 7
-            addChild(text)
-        }
     }
 
     /// Dark sky, brighter toward the horizon, with the Milky Way painted where it really is. By day it's deep blue

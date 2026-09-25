@@ -129,13 +129,4 @@ enum Sky {
         let (moon, sun) = (moon(jd), sun(jd))
         return ((1 - dot(moon, sun)) / 2, dot(cross(sun, moon), equatorial(fromEcliptic: [0, 0, 1])) > 0)
     }
-
-    static func moonPhaseName(lit: Double, waxing: Bool) -> String {
-        switch lit {
-        case ..<0.02: "New Moon"
-        case 0.98...: "Full Moon"
-        case 0.45...0.55: waxing ? "First Quarter" : "Last Quarter"
-        default: (waxing ? "Waxing " : "Waning ") + (lit < 0.5 ? "Crescent" : "Gibbous")
-        }
-    }
 }
