@@ -81,7 +81,10 @@ var current = UserDefaults.standard.string(forKey: "scene") ?? scenes[0].name
     let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
     private lazy var settings: NSWindow = {
-        let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView()))
+        let hosting = NSHostingController(rootView: SettingsView())
+        hosting.sizingOptions = [] // a grouped Form scrolls, so it has no height of its own to size the window by
+        let window = NSWindow(contentViewController: hosting)
+        window.setContentSize(NSSize(width: 460, height: 600))
         window.title = "Wallpaper Settings"
         window.level = .floating // stays above other windows while you watch the wallpaper change
         window.isReleasedWhenClosed = false
