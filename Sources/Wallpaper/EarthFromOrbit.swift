@@ -6,6 +6,10 @@ import simd
 /// The whole Earth seen from high above you, like a geostationary satellite: the real day/night line sweeping
 /// across it, city lights on the night side, sun glint on the oceans, and the ISS with its orbit.
 final class EarthFromOrbit: SKScene {
+    nonisolated static let knobs = [
+        Knob(key: "earth.iss", label: "ISS tracking", range: 0...1, standard: 1, section: "Show", format: .toggle),
+    ]
+
     private let globe = SKSpriteNode()
     private let sunUniform = SKUniform(name: "u_sun", vectorFloat3: [1, 0, 0])
     private let basisUniform = SKUniform(name: "u_basis", matrixFloat3x3: matrix_identity_float3x3)
@@ -56,11 +60,12 @@ final class EarthFromOrbit: SKScene {
 
     override func didMove(to view: SKView) {
         Location.shared.start()
-        run(.repeatForever(.sequence([.run { ISS.shared.poll() }, .wait(forDuration: 60)])))
+        run(.repeatForever(.sequence([.run { if Self.knobs[0].value > 0.5 { ISS.shared.poll() } }, .wait(forDuration: 60)])))
     }
 
     override func update(_ currentTime: TimeInterval) {
-        guard let now = ISS.shared.position(), let later = ISS.shared.position(at: Date(timeIntervalSinceNow: 20)) else {
+        guard Self.knobs[0].value > 0.5, // ISS tracking on
+              let now = ISS.shared.position(), let later = ISS.shared.position(at: Date(timeIntervalSinceNow: 20)) else {
             iss.isHidden = true
             issLabel.isHidden = true
             orbit.path = nil

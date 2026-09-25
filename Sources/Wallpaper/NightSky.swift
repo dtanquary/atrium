@@ -7,6 +7,12 @@ import simd
 /// its true phase, the ISS, and the odd meteor. It stays a night sky but reacts to the Sun: deep blue by day with
 /// only the brightest stars and planets, the Sun drawn when it's in view, and sunrise and sunset glow on time.
 final class NightSky: SKScene {
+    nonisolated static let knobs = [
+        Knob(key: "sky.constellations", label: "Constellation lines", range: 0...1, standard: 1, section: "Show",
+             format: .toggle),
+        Knob(key: "sky.planetLabels", label: "Planet labels", range: 0...1, standard: 1, section: "Show", format: .toggle),
+    ]
+
     private var stars: [(node: SKSpriteNode, position: Sky.Vector)] = []
     private var constellationLines: [[Sky.Vector]] = []
     private let constellations = SKShapeNode()
@@ -51,6 +57,9 @@ final class NightSky: SKScene {
 
         refresh()
         run(.repeatForever(.sequence([.wait(forDuration: 5), .run { [weak self] in self?.refresh() }])))
+        applySettings()
+        NotificationCenter.default.addObserver(self, selector: #selector(applySettings),
+                                               name: UserDefaults.didChangeNotification, object: nil)
         run(.repeatForever(.sequence([.wait(forDuration: 45, withRange: 60), .run { [weak self] in self?.meteor() }])))
     }
 
@@ -65,6 +74,12 @@ final class NightSky: SKScene {
         let look = Sky.lookDirection(latitude: here.latitude, longitude: here.longitude,
                                      toLatitude: station.latitude, longitude: station.longitude, altitude: station.altitude)
         place(iss, at: look)
+    }
+
+    /// Shows or hides the constellation lines and planet labels as Settings says.
+    @objc private func applySettings() {
+        constellations.isHidden = Self.knobs[0].value < 0.5
+        for planet in planets { planet.node.children.forEach { $0.isHidden = Self.knobs[1].value < 0.5 } } // their labels
     }
 
     // MARK: Projection
