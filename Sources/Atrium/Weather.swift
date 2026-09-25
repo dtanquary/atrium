@@ -22,6 +22,10 @@ final class WeatherScene: SKScene {
         var isDay = true
         var cloudCover = 40.0 // percent
         var wind = 10.0       // km/h
+        var windFrom = 270.0  // degrees clockwise from north
+        var highCloud = 0.0   // percent: cirrus
+        var snowDepth = 0.0   // m of snow on the ground
+        var visibility = 30000.0 // m
     }
 
     private var report: Conditions     // the latest live weather, or the pinned test state
@@ -44,7 +48,7 @@ final class WeatherScene: SKScene {
     private let cloudLayer = SKUniform(name: "u_cloud", vectorFloat4: .zero), cloudWind = SKUniform(name: "u_wind", vectorFloat2: .zero)
     private let cloudSun = SKUniform(name: "u_sunCol", vectorFloat3: .zero), cloudAmbient = SKUniform(name: "u_amb", vectorFloat3: .zero)
     private let cirrus = SKUniform(name: "u_high", float: 0), cirrusSun = SKUniform(name: "u_highCol", vectorFloat3: .zero)
-    private let fog = SKUniform(name: "u_fog", float: 0)
+    private let fog = SKUniform(name: "u_fog", float: 0), snowCover = SKUniform(name: "u_snow", float: 0)
     private let flashAmount = SKUniform(name: "u_flash", float: 0), flashPlace = SKUniform(name: "u_flashPos", vectorFloat3: .zero)
     /// Under a deck: its underside's colour, and how much the horizon takes it on instead of the clear sky's.
     private let deck = SKUniform(name: "u_deck", vectorFloat4: .zero)
@@ -89,7 +93,8 @@ final class WeatherScene: SKScene {
         let kind = min(max(Int(Self.knobs[1].value), 0), 7)
         let hour = Calendar.current.startOfDay(for: Date()).addingTimeInterval(Self.knobs[2].value * 3600)
         return Conditions(code: [0, 2, 3, 45, 53, 63, 73, 95][kind], isDay: Self.sunIsUp(at: hour),
-                          cloudCover: [5, 45, 100, 100, 100, 100, 100, 100][kind], wind: 15)
+                          cloudCover: [5, 45, 100, 100, 100, 100, 100, 100][kind], wind: 15, windFrom: 250,
+                          highCloud: [30, 20, 0, 0, 0, 0, 0, 0][kind], snowDepth: kind == 6 ? 0.12 : 0, visibility: kind == 3 ? 400 : 30000)
     }
 
     /// Rebuilds the scene if what it should show has changed.
@@ -117,15 +122,19 @@ final class WeatherScene: SKScene {
         struct Forecast: Decodable {
             struct Current: Decodable {
                 let weatherCode: Int, cloudCover: Double, windSpeed: Double
+                let windFrom: Double?, highCloud: Double?, snowDepth: Double?, visibility: Double? // not every model has them
                 // Spelled out: .convertFromSnakeCase turns wind_speed_10m into windSpeed10M.
                 enum CodingKeys: String, CodingKey {
                     case weatherCode = "weather_code", cloudCover = "cloud_cover", windSpeed = "wind_speed_10m"
+                    case windFrom = "wind_direction_10m", highCloud = "cloud_cover_high", snowDepth = "snow_depth", visibility
                 }
             }
             let current: Current
         }
         guard let now = try? JSONDecoder().decode(Forecast.self, from: reply).current else { return nil }
-        return Conditions(code: now.weatherCode, isDay: sunIsUp(), cloudCover: now.cloudCover, wind: now.windSpeed)
+        return Conditions(code: now.weatherCode, isDay: sunIsUp(), cloudCover: now.cloudCover, wind: now.windSpeed,
+                          windFrom: now.windFrom ?? 270, highCloud: now.highCloud ?? 0, snowDepth: now.snowDepth ?? 0,
+                          visibility: now.visibility ?? 30000)
     }
 
     /// Fetches the current weather and redraws the scene if it changed. Offline, it keeps showing what it has.
@@ -134,7 +143,7 @@ final class WeatherScene: SKScene {
         var url = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
         url.queryItems = [URLQueryItem(name: "latitude", value: String(spot.latitude)),
                           URLQueryItem(name: "longitude", value: String(spot.longitude)),
-                          URLQueryItem(name: "current", value: "weather_code,cloud_cover,wind_speed_10m")]
+                          URLQueryItem(name: "current", value: "weather_code,cloud_cover,cloud_cover_high,wind_speed_10m,wind_direction_10m,snow_depth,visibility")]
         Task { [weak self] in
             guard let (data, _) = try? await URLSession.shared.data(from: url.url!),
                   let latest = WeatherScene.conditions(from: data),
@@ -181,10 +190,9 @@ final class WeatherScene: SKScene {
         let clouds = conditions.clouds
         cloudLayer.vectorFloat4Value = SIMD4<Float>(clouds.cover, clouds.base, clouds.thickness, clouds.deck)
         cirrus.floatValue = clouds.cirrus
-        // km/s across the view, left to right, and a little away. ponytail: wind_direction_10m would set it for real
-        let wind = Float(conditions.wind / 3600 * 0.6)
-        cloudWind.vectorFloat2Value = SIMD2<Float>(Float(viewpoint.right.x), Float(viewpoint.right.y)) * wind
-            + SIMD2<Float>(Float(viewpoint.forward.x), Float(viewpoint.forward.y)) * wind * 0.3
+        snowCover.floatValue = Float(conditions.snowCover)
+        // km/s, the way the wind blows (toward, not from)
+        cloudWind.vectorFloat2Value = SIMD2<Float>(conditions.windToward) * Float(conditions.wind / 3600 * 0.6)
         addChild(sky)
         show(SkyLight.bake(camera: viewpoint, date: now, latitude: here.latitude, longitude: here.longitude), fade: false)
         track()
@@ -240,7 +248,7 @@ final class WeatherScene: SKScene {
         var sunlit = light.ambient + light.sunColour * direct(light.sun) + moonDirect * direct(light.moon)
         // Under a deck of cloud the light is grey, even, and about half the day's.
         let overcast = conditions.cloudiness, global: Sky.Vector = light.ambient + light.sunColour * max(light.sun.z, 0)
-        let grey = Sky.Vector(repeating: global.sum() / 3 * 0.5 * exp(-0.4 * (Double(clouds.thickness) - 1))) + skyglow * 0.15
+        let grey = Sky.Vector(repeating: global.sum() / 3 * 0.5 * exp(-0.4 * (Double(clouds.thickness) - 1))) + skyglow * 0.4
         sunlit = sunlit * (1 - overcast) + grey * overcast
         // The eye adapts to the land as well as the sky: facing a sunset the hills go dark, but not black.
         let lit = sunlit / 7, brightness = (lit * Sky.Vector(0.2126, 0.7152, 0.0722)).sum()
@@ -402,7 +410,7 @@ final class WeatherScene: SKScene {
         // Fog: optically thick, so it's grey-white whatever the sky's colour, and it swallows the low sky first.
         if (u_fog > 0.0) {
             vec3 fogCol = mix(haze, vec3(dot(haze, vec3(0.3, 0.5, 0.2))), 0.7) * 0.95;
-            col = mix(col, fogCol, clamp(u_fog * 1.3, 0.0, 0.97) * smoothstep(u_cam.z + 1.2 * u_fog, u_cam.z - 0.05, uv.y));
+            col = mix(col, fogCol, clamp(u_fog * 1.6, 0.0, 0.97) * smoothstep(u_cam.z + 1.2 * u_fog, u_cam.z - 0.05, uv.y));
         }
         col = sqrt(1.0 - exp(-col)); // film-like roll-off, then roughly sRGB
         gl_FragColor = vec4(col + (hash21(pts * 2.0) - 0.5) / 128.0, 1.0);
@@ -429,7 +437,7 @@ final class WeatherScene: SKScene {
                                  Float(width / size.width), Float(height / size.height))
         ground.shader = SKShader(source: Self.groundShader, uniforms: [
             SKUniform(name: "u_aux", texture: Self.groundAux), SKUniform(name: "u_frame", vectorFloat4: frame),
-            skyBefore, skyAfter, skyBlend, cameraUniforms.lens, groundLight, groundHaze, groundColour, groundHazeLit, fog, deck, flashAmount,
+            skyBefore, skyAfter, skyBlend, cameraUniforms.lens, groundLight, groundHaze, groundColour, groundHazeLit, fog, deck, flashAmount, snowCover,
         ])
         addChild(ground)
     }
@@ -443,6 +451,15 @@ final class WeatherScene: SKScene {
         vec4 photo = texture2D(u_texture, v_tex_coord);
         vec3 aux = texture2D(u_aux, v_tex_coord).rgb;
         vec3 albedo = photo.rgb / max(photo.a, 0.004);
+        // Snow on the ground: the open grass goes white, shaded by the photo's own light and shade so the hills keep
+        // their form; the trees darken, lose colour and catch snow on their brighter parts.
+        if (u_snow > 0.0) {
+            float lum = dot(albedo, vec3(0.3, 0.59, 0.11));
+            vec3 snowy = vec3(0.86, 0.89, 0.94) * clamp(pow(lum / 0.42, 0.55), 0.45, 1.08);
+            vec3 trees = mix(vec3(lum), albedo, 0.35) * 0.62 + vec3(0.8, 0.83, 0.88) * smoothstep(0.3, 0.6, lum) * 0.35;
+            float open = 1.0 - smoothstep(0.25, 0.75, aux.g);
+            albedo = mix(albedo, mix(trees, snowy, open), u_snow * (0.55 + 0.45 * open));
+        }
         vec3 land = albedo * albedo * (u_light + vec3(0.75, 0.8, 1.0) * u_flash * 0.15);
         float lum = dot(land, vec3(0.2126, 0.7152, 0.0722));
         land = mix(vec3(lum) * vec3(0.75, 0.88, 1.2), land, u_colour); // the Purkinje shift: moonlit fields look blue-grey
@@ -467,8 +484,9 @@ final class WeatherScene: SKScene {
     private func addPrecipitation() {
         let amount = conditions.precipitation
         guard amount.rain > 0 || amount.snow > 0 else { return }
-        let lean = Float(min(conditions.wind / 50, 1) * 0.35) // ponytail: always leaning right, like the wind
-        precipitation.vectorFloat4Value = [Float(amount.rain), Float(amount.snow), lean, Float(conditions.wind / 10)]
+        let across = simd_dot(conditions.windToward, SIMD2(viewpoint.right.x, viewpoint.right.y)) // + blowing to the right
+        precipitation.vectorFloat4Value = [Float(amount.rain), Float(amount.snow), Float(across * min(conditions.wind / 50, 1) * 0.35),
+                                           Float(across * conditions.wind / 10)]
         let sheet = SKSpriteNode(color: .black, size: size)
         sheet.anchorPoint = .zero
         sheet.zPosition = 8
@@ -648,9 +666,10 @@ private extension WeatherScene.Conditions {
     /// cumulus, stratocumulus when overcast, stratus for drizzle, nimbostratus for rain and snow, cumulonimbus in storms.
     var clouds: (cover: Float, base: Float, thickness: Float, deck: Float, cirrus: Float) {
         let share = Float(cloudCover / 100)
+        let cirrus = Float(min(highCloud / 100, 1) * 0.7)
         switch kind {
-        case .clear: return (share * 0.5, 1.4, 0.8, 0, 0.25)
-        case .partlyCloudy: return (0.15 + share * 0.5, 1.4, 1, 0.1, 0.3)
+        case .clear: return (share * 0.5, 1.4, 0.8, 0, cirrus)
+        case .partlyCloudy: return (0.15 + share * 0.5, 1.4, 1, 0.1, cirrus)
         case .overcast: return (0.97, 1.0, 1.3, 0.75, 0)
         case .fog: return (1, 0.3, 0.6, 1, 0)
         case .drizzle: return (1, 0.5, 1.6, 0.95, 0)
@@ -659,6 +678,15 @@ private extension WeatherScene.Conditions {
         case .storm: return (1, 1.0, 3.2, 0.6, 0)
         }
     }
+
+    /// The way the wind blows, as a unit vector (east, north).
+    var windToward: SIMD2<Double> {
+        let toward = (windFrom + 180) * .pi / 180
+        return [sin(toward), cos(toward)]
+    }
+
+    /// Snow lying on the ground, 0…1: a dusting at 1 cm, fully white by 5 cm.
+    var snowCover: Double { min(max(snowDepth / 0.05, 0), 1) }
 
     /// How hard it's raining and snowing, 0…1 each.
     var precipitation: (rain: Double, snow: Double) {
@@ -674,7 +702,7 @@ private extension WeatherScene.Conditions {
     /// How thick the fog or mist is, 0…1.
     var fog: Float {
         switch kind {
-        case .fog: 0.75
+        case .fog: Float(min(max(1.6 - 0.4 * log10(max(visibility, 50)), 0.35), 0.9)) // 0.9 at 100 m, 0.4 at 1 km
         case .drizzle: 0.25
         case .rain, .storm: Float(0.1 + 0.15 * intensity)
         case .snow: Float(0.15 + 0.2 * intensity)

@@ -44,7 +44,11 @@ Green California hills and oak woodland, from a real photo, under whatever the w
 - **Motion:** `update(_:)` eases the sky crossfade, moves the Sun and Moon each second, starts a sky bake each minute, and advances `u_clock`. `dt` is clamped to 0–0.1 s; the render harness produced huge negative values before its fix.
 
 ## Time, live data and appearance
-- **Weather source:** Open-Meteo (`https://api.open-meteo.com/v1/forecast?latitude=…&longitude=…&current=weather_code,cloud_cover,wind_speed_10m`). It's free and needs no key, and is for non-commercial use.
+- **Weather source:** Open-Meteo (`https://api.open-meteo.com/v1/forecast?latitude=…&longitude=…&current=weather_code,cloud_cover,cloud_cover_high,wind_speed_10m,wind_direction_10m,snow_depth,visibility`). It's free and needs no key, and is for non-commercial use.
+  - `wind_direction_10m` (where it blows from) sets which way clouds drift and rain and snow lean (`windToward`).
+  - `snow_depth` lays snow on the ground (`snowCover`: a dusting at 1 cm, white by 5 cm), whether or not it's snowing now. The open grass turns white, shaded by the photo's own light and shade so the hills keep their form; the oaks (the aux texture's green) darken, lose colour and catch snow on their brighter parts.
+  - `cloud_cover_high` sets the cirrus; `visibility` sets how thick fog is (0.9 at 100 m, 0.4 at 1 km).
+  - The extras are optional in the decoder, since not every weather model has them.
   - It's polled 2 s after `didMove`, to give a remembered location fix a moment to land, then every 15 min, from an SKAction keyed "poll". Polling stops while the wallpaper is hidden.
   - A new build only happens if the conditions actually changed.
 - **Parsing:** `WeatherScene.conditions(from:)` uses explicit `CodingKeys`. It returns nil on any decode failure, and the scene keeps showing what it has.
@@ -71,7 +75,6 @@ Green California hills and oak woodland, from a real photo, under whatever the w
 ## Gotchas and shortcuts
 - **The decoding bug that hid everything.** `.convertFromSnakeCase` turns `wind_speed_10m` into `windSpeed10M`, so every reply failed to decode silently. The scene sat on its default of a partly cloudy day, even at night. The fix is explicit `CodingKeys`, and `parsesOpenMeteo()` in WeatherTests parses a real reply to keep it fixed.
 - **`is_day` isn't requested any more.** Day or night comes from `sunIsUp()`.
-- `ponytail:` **the wind always blows left to right.** `wind_direction_10m` would fix that.
 - **No crossfade.** A weather change or a sunrise/sunset flip replaces the scene's content instantly.
 
 ## Dave's feedback and decisions
@@ -81,7 +84,6 @@ Green California hills and oak woodland, from a real photo, under whatever the w
 ## Ideas / next steps
 - Use `Sky.sun`, `Sky.moon` and `Sky.moonPhase` to place and light the Sun and Moon properly.
 - Sunrise and sunset colours in between day and night, with a crossfade between states.
-- Wind direction.
 - An optional temperature readout with a °F/°C setting, which Dave was offered.
 - Seasonal ground colour and leaves.
 - Rain puddles and splashes.
