@@ -272,7 +272,7 @@ private func smoothstep(_ a: CGFloat, _ b: CGFloat, _ x: CGFloat) -> CGFloat {
     return t * t * (3 - 2 * t)
 }
 
-// MARK: - Shared by the nature scenes (Fireflies, Campfire, Murmuration, Game of Life)
+// MARK: - Shared by the nature scenes (Fireflies, Campfire, Murmuration, Game of Life, Fish Tank)
 
 /// Seconds since the previous frame, clamped so a paused or restarted clock (wake from sleep, a new time base) can't
 /// produce a huge or negative jump.
@@ -285,36 +285,6 @@ func frameTime(_ now: TimeInterval, _ last: inout TimeInterval?) -> TimeInterval
 func rgb(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat, _ a: CGFloat = 1) -> CGColor {
     CGColor(srgbRed: r, green: g, blue: b, alpha: a)
 }
-
-func mixRGB(_ a: CGColor, _ b: CGColor, _ t: CGFloat) -> CGColor {
-    let x = a.components!, y = b.components!
-    return rgb(x[0] + (y[0] - x[0]) * t, x[1] + (y[1] - x[1]) * t, x[2] + (y[2] - x[2]) * t, x[3] + (y[3] - x[3]) * t)
-}
-
-/// A thin gradient texture, bottom (0) to top (1), for stretching over a sprite of any size.
-func verticalGradient(_ stops: [(CGFloat, CGColor)]) -> SKTexture {
-    paint(CGSize(width: 4, height: 256)) { ctx in
-        let gradient = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB), colors: stops.map(\.1) as CFArray,
-                                  locations: stops.map(\.0))!
-        ctx.drawLinearGradient(gradient, start: .zero, end: CGPoint(x: 0, y: 256), options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
-    }
-}
-
-/// A full-screen sky gradient, dithered so dark skies don't band.
-@MainActor func backdrop(_ size: CGSize, _ stops: [(CGFloat, CGColor)]) -> SKSpriteNode {
-    let sky = SKSpriteNode(texture: verticalGradient(stops), size: size)
-    sky.anchorPoint = .zero
-    sky.shader = ditherShader
-    return sky
-}
-
-@MainActor private let ditherShader = SKShader(source: """
-    void main() {
-        vec4 c = texture2D(u_texture, v_tex_coord);
-        float n = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
-        gl_FragColor = vec4(c.rgb + (n - 0.5) / 128.0, c.a);
-    }
-    """)
 
 /// A round glow fading out from the centre, for light sources drawn with additive blending.
 func radialGlow(diameter: CGFloat, stops: [(CGFloat, CGColor)]) -> SKTexture {
@@ -329,93 +299,4 @@ func radialGlow(diameter: CGFloat, stops: [(CGFloat, CGColor)]) -> SKTexture {
 /// A small white dot with a soft edge: stars, embers, birds.
 func softDot() -> SKTexture {
     radialGlow(diameter: 8, stops: [(0, rgb(1, 1, 1)), (0.45, rgb(1, 1, 1, 0.9)), (1, rgb(1, 1, 1, 0))])
-}
-
-/// A full-width strip of tree silhouettes on rolling ground, solid down to the bottom of the screen.
-/// `resolution` below 1 paints a smaller texture and stretches it, which softens distant layers and saves memory.
-@MainActor func treeline(width: CGFloat, base: CGFloat, hills: CGFloat, trees: ClosedRange<CGFloat>, spacing: ClosedRange<CGFloat>,
-                         color: CGColor, pineChance: Double, clearing: ClosedRange<CGFloat>? = nil,
-                         resolution: CGFloat = 1) -> SKSpriteNode {
-    let height = base + hills + trees.upperBound * 1.05
-    let phase = CGFloat.random(in: 0...100), wavelength = CGFloat.random(in: 260...420)
-    let ground = { (x: CGFloat) in base + hills * (sin(x / wavelength + phase) + 0.5 * sin(x / wavelength * 2.7 + phase * 1.3)) / 1.5 }
-    let texture = paint(CGSize(width: width * resolution, height: height * resolution)) { ctx in
-        ctx.scaleBy(x: resolution, y: resolution)
-        ctx.setFillColor(color)
-        ctx.move(to: .zero)
-        for x in stride(from: 0, through: width + 20, by: 20) { ctx.addLine(to: CGPoint(x: x, y: ground(x))) }
-        ctx.addLine(to: CGPoint(x: width + 20, y: 0))
-        ctx.fillPath()
-        var x = CGFloat.random(in: -30...0)
-        while x < width + 30 {
-            let h = CGFloat.random(in: trees)
-            if clearing?.contains(x) == true {
-                // leave it open
-            } else if Double.random(in: 0..<1) < pineChance {
-                pine(ctx, x: x, base: ground(x), height: h)
-            } else {
-                broadleaf(ctx, x: x, base: ground(x), height: h)
-            }
-            x += CGFloat.random(in: spacing)
-        }
-    }
-    let sprite = SKSpriteNode(texture: texture, size: CGSize(width: width, height: height))
-    sprite.anchorPoint = .zero
-    return sprite
-}
-
-/// A conifer: short trunk and stacked, drooping tiers that narrow toward a spire.
-func pine(_ ctx: CGContext, x: CGFloat, base: CGFloat, height: CGFloat) {
-    ctx.fill(CGRect(x: x - height * 0.018, y: base - 4, width: height * 0.036, height: height * 0.3))
-    let tiers = 8
-    for i in 0..<tiers {
-        let t = CGFloat(i) / CGFloat(tiers)
-        let y = base + height * (0.1 + 0.78 * t)
-        let half = height * 0.2 * (1 - t * 0.88) * .random(in: 0.85...1.15)
-        let rise = height * 0.2
-        ctx.move(to: CGPoint(x: x - half, y: y - rise * 0.12))
-        ctx.addQuadCurve(to: CGPoint(x: x, y: y + rise), control: CGPoint(x: x - half * 0.35, y: y + rise * 0.2))
-        ctx.addQuadCurve(to: CGPoint(x: x + half, y: y - rise * 0.12), control: CGPoint(x: x + half * 0.35, y: y + rise * 0.2))
-        ctx.closePath()
-    }
-    ctx.fillPath()
-}
-
-/// A leafy tree: trunk, a couple of limbs, and a ragged canopy built from many small overlapping clumps.
-func broadleaf(_ ctx: CGContext, x: CGFloat, base: CGFloat, height: CGFloat) {
-    let trunk = height * 0.022
-    ctx.fill(CGRect(x: x - trunk, y: base - 4, width: trunk * 2, height: height * 0.6))
-    let r = height * 0.17, cy = base + height * 0.68
-    for side in [-1.0, 1.0] {
-        ctx.move(to: CGPoint(x: x, y: base + height * 0.35))
-        ctx.addLine(to: CGPoint(x: x + side * r * 0.9, y: cy - r * 0.2))
-        ctx.addLine(to: CGPoint(x: x + side * r * 0.9 + trunk * 0.8, y: cy - r * 0.2))
-        ctx.addLine(to: CGPoint(x: x + trunk * 0.5, y: base + height * 0.3))
-        ctx.fillPath()
-    }
-    for _ in 0..<40 {
-        let angle = CGFloat.random(in: 0...(2 * .pi)), reach = sqrt(CGFloat.random(in: 0...1))
-        let cx = x + cos(angle) * reach * r * 1.3, cy = cy + sin(angle) * reach * r * 0.95
-        let rr = r * .random(in: 0.12...0.3)
-        ctx.fillEllipse(in: CGRect(x: cx - rr, y: cy - rr, width: rr * 2, height: rr * 2))
-    }
-}
-
-/// Blades of grass along the bottom edge, as a silhouette strip.
-@MainActor func grassFringe(width: CGFloat, height: CGFloat, color: CGColor) -> SKSpriteNode {
-    let texture = paint(CGSize(width: width, height: height)) { ctx in
-        ctx.setFillColor(color)
-        ctx.fill(CGRect(x: 0, y: 0, width: width, height: height * 0.18))
-        for _ in 0..<Int(width / 2.5) {
-            let x = CGFloat.random(in: 0...width), tall = height * .random(in: 0.2...1) * .random(in: 0.4...1)
-            let lean = CGFloat.random(in: -0.35...0.35) * tall, w = CGFloat.random(in: 1.2...3)
-            ctx.move(to: CGPoint(x: x - w, y: 0))
-            ctx.addQuadCurve(to: CGPoint(x: x + lean, y: tall), control: CGPoint(x: x, y: tall * 0.6))
-            ctx.addQuadCurve(to: CGPoint(x: x + w, y: 0), control: CGPoint(x: x + w * 0.5, y: tall * 0.5))
-            ctx.fillPath()
-        }
-    }
-    let sprite = SKSpriteNode(texture: texture, size: CGSize(width: width, height: height))
-    sprite.anchorPoint = .zero
-    return sprite
 }

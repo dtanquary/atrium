@@ -53,7 +53,8 @@ struct Wallpaper {
               make: fireflies, knobs: Fireflies.knobs),
     Wallpaper(name: "Murmuration", icon: "bird.fill", tint: .brown, blurb: "Starlings swirling over a sunset.",
               make: murmuration, knobs: murmurationKnobs),
-    Wallpaper(name: "Campfire", icon: "flame.fill", tint: .red, blurb: "A crackling fire under the stars.", make: campfire),
+    Wallpaper(name: "Campfire", icon: "flame.fill", tint: .red, blurb: "A campfire in a forest clearing, under the real stars.",
+              make: campfire, knobs: Campfire.knobs),
     Wallpaper(name: "Game of Life", icon: "square.grid.3x3.fill", tint: .orange, blurb: "Conway's cells that never die out.",
               make: gameOfLife),
 ]

@@ -2,278 +2,263 @@ import SpriteKit
 
 @MainActor func campfire(size: CGSize) -> SKScene { Campfire(size: size) }
 
-/// A campfire in a clearing at night: flames, embers and smoke from emitters, a stone ring and logs,
-/// and a warm light on the ground and trees that flickers with the fire.
+/// A campfire at night in a real forest clearing (a photo relit by the fire), under the real stars. The flames are
+/// either a small fluid simulation or a procedural shader (a Settings choice while we compare), both coloured by
+/// blackbody light through a camera's response. Their light, measured from the flames themselves, falls on the
+/// stones, the charred wood, the ground and the nearest trees with the right distance, angle and shadows, and it
+/// flickers as they do.
 final class Campfire: SKScene {
-    private var groundLight: SKSpriteNode!
-    private var halo: SKSpriteNode!
-    private var flames: [SKEmitterNode] = []
-    private var time: TimeInterval = 0
-    private var lastTime: TimeInterval?
+    nonisolated static let knobs = [
+        Knob(key: "campfire.flames", label: "Flames", range: 0...1, standard: 0, format: .choice(["Simulated", "Procedural"])),
+    ]
+    private var flames: Flames!
+    private let sparks: Sparks
+    private let light = SKUniform(name: "u_light", vectorFloat4: [0, 0.35, 4.5, 1])
+    private let clock = SKUniform(name: "u_clock", float: 0)
+    private var glow: CGFloat = 1, lastTime: TimeInterval?
+    private let lens: FireCamera
+
+    override init(size: CGSize) {
+        lens = FireCamera(screen: size)
+        sparks = Sparks(scale: lens.scale(at: FireCamera.fire))
+        super.init(size: size)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
 
     override func sceneDidLoad() {
-        let w = size.width, h = size.height
-        let fire = CGPoint(x: w * 0.5, y: h * 0.2)
+        backgroundColor = .black
+        addSky()
+        addGround()
+        let bed = coalBed(scale: lens.scale(at: FireCamera.fire), width: 0.95, depth: 0.95 * 0.36, clock: clock,
+                          ash: SKUniform(name: "u_ash", vectorFloat3: [0.05, 0.03, 0.02]))
+        bed.position = lens.project(FireCamera.fire + [0, 0.02, 0])
+        bed.zPosition = 1
+        addChild(bed)
+        makeFlames()
+        sparks.position = lens.project(FireCamera.fire + [0, 0.1, 0])
+        sparks.zPosition = 4
+        addChild(sparks)
+        NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged), name: UserDefaults.didChangeNotification, object: nil)
+    }
 
-        addChild(backdrop(size, [(0.3, rgb(0.08, 0.075, 0.14)), (0.6, rgb(0.03, 0.035, 0.09)), (1, rgb(0.01, 0.012, 0.04))]))
-        addStars()
+    override func didMove(to view: SKView) { Location.shared.start() }   // for the stars overhead
 
-        let woods = treeline(width: w, base: h * 0.4, hills: h * 0.015, trees: h * 0.06...h * 0.15, spacing: 9...22,
-                             color: rgb(0.025, 0.025, 0.045), pineChance: 0.8, resolution: 0.5)
-        woods.zPosition = 2
-        addChild(woods)
-        let ground = SKSpriteNode(texture: verticalGradient([(0, rgb(0.03, 0.022, 0.02)), (0.75, rgb(0.025, 0.022, 0.035)), (1, rgb(0.025, 0.025, 0.045, 0))]),
-                                  size: CGSize(width: w, height: h * 0.42))
-        ground.anchorPoint = .zero
-        ground.zPosition = 2.5
-        addChild(ground)
+    /// The flames, simulated or procedural as Settings says, standing in the middle of the ring.
+    private func makeFlames() {
+        flames?.removeFromParent()
+        let simulated = Self.knobs[0].value < 0.5
+        flames = Flames(scale: lens.scale(at: FireCamera.fire) * 1.25, simulated: simulated, exposure: simulated ? 14 : 10)
+        flames.position = lens.project(FireCamera.fire + [0, simulated ? 0.1 : 0.03, 0])
+        flames.zPosition = 2
+        addChild(flames)
+    }
 
-        // Big pines framing the clearing, in front of the woods but still caught by the firelight.
-        for (x0, heights) in [(CGFloat(0), [0.82, 0.62, 0.5]), (w * 0.72, [0.55, 0.86, 0.66])] {
-            let side = paint(CGSize(width: w * 0.28, height: h * 0.95)) { ctx in
-                ctx.setFillColor(rgb(0.015, 0.014, 0.025))
-                for (i, tall) in heights.enumerated() {
-                    pine(ctx, x: w * 0.28 * (0.12 + 0.36 * CGFloat(i)) + .random(in: -20...20), base: h * 0.26 + CGFloat(i % 2) * 14,
-                         height: h * tall)
-                }
-            }
-            let trees = SKSpriteNode(texture: side, size: CGSize(width: w * 0.28, height: h * 0.95))
-            trees.anchorPoint = .zero
-            trees.position = CGPoint(x: x0, y: 0)
-            trees.zPosition = 3
-            addChild(trees)
-        }
-
-        groundLight = SKSpriteNode(texture: radialGlow(diameter: 128, stops: [
-            (0, rgb(1, 0.55, 0.22, 0.55)), (0.35, rgb(0.9, 0.35, 0.1, 0.22)), (1, rgb(0.6, 0.2, 0.05, 0)),
-        ]), size: CGSize(width: w * 0.95, height: h * 0.5))
-        groundLight.position = fire
-        groundLight.blendMode = .add
-        groundLight.zPosition = 4
-        addChild(groundLight)
-
-        addStones(around: fire, front: false, z: 5)
-        addLogs(at: fire)
-        addFlames(at: fire)
-        addStones(around: fire, front: true, z: 8)
-        addBench(at: CGPoint(x: w * 0.27, y: h * 0.12))
-        addEmbersAndSmoke(at: fire)
-
-        halo = SKSpriteNode(texture: radialGlow(diameter: 128, stops: [
-            (0, rgb(1, 0.7, 0.35, 0.45)), (0.3, rgb(1, 0.45, 0.15, 0.15)), (1, rgb(1, 0.3, 0.1, 0)),
-        ]), size: CGSize(width: 520, height: 520))
-        halo.position = CGPoint(x: fire.x, y: fire.y + 70)
-        halo.blendMode = .add
-        halo.zPosition = 12
-        addChild(halo)
-        flicker()
+    @objc private func settingsChanged() {
+        if (Self.knobs[0].value < 0.5) != flames.isSimulated { makeFlames() }
     }
 
     override func update(_ currentTime: TimeInterval) {
-        time += frameTime(currentTime, &lastTime)
-        flicker()
+        let dt = frameTime(currentTime, &lastTime)
+        flames.advance(dt)
+        sparks.advance(dt)
+        clock.floatValue += Float(dt)
+        // the light it casts: a steady fifth from the embers, the rest following the flames a little smoothed, from
+        // where the flames are brightest
+        glow += (flames.light - glow) * min(1, dt / 0.15)
+        let c = flames.centre
+        light.vectorFloat4Value = [Float(FireCamera.fire.x + c.x), Float(0.1 + c.y), Float(FireCamera.fire.z), Float(0.2 + 0.8 * glow)]
     }
 
-    /// Irregular brightness from a few unrelated sine waves, so the light never visibly loops.
-    private func flicker() {
-        let t = CGFloat(time)
-        let f = 0.86 + 0.07 * sin(7.3 * t) + 0.05 * sin(12.9 * t + 1) + 0.03 * sin(23.1 * t + 2)
-        groundLight.alpha = f
-        groundLight.xScale = 0.97 + 0.03 * f
-        halo.alpha = f
-        for flame in flames { flame.xAcceleration = 35 * sin(1.7 * t) + 20 * sin(4.3 * t + 2) } // the flames lean and sway
+    // MARK: Sky
+
+    private func addSky() {
+        let sky = SKSpriteNode(color: .black, size: size)
+        sky.anchorPoint = .zero
+        sky.zPosition = -1000
+        sky.shader = SKShader(source: shaderCommon + """
+        void main() {
+            float h = v_tex_coord.y;
+            // moonless: airglow and far towns low down, deep blue-black overhead; a faint tail of stars too dim to
+            // be in the catalogue, clumped as real star fields are
+            vec3 sky = mix(vec3(0.010, 0.012, 0.021), vec3(0.0022, 0.0030, 0.0065), smoothstep(0.35, 1.0, h));
+            vec2 pts = v_tex_coord * u_size;
+            float clump = 0.4 + 1.2 * noise(pts / 300.0 + 7.0);
+            sky += vec3(0.8, 0.85, 1.0) * starField(pts, 6.0, 0.35 * clump, u_time) * 0.012;
+            vec3 col = 1.0 - exp(-sky * 1.0);
+            col = mix(col * 12.92, 1.055 * pow(col, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, col));
+            gl_FragColor = vec4(col + (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 255.0, 1.0);
+        }
+        """, uniforms: [SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)])])
+        addChild(sky)
+        let stars = StarField(camera: lens)
+        stars.zPosition = -900
+        addChild(stars)
     }
 
-    private func addStars() {
-        let dot = softDot()
-        for i in 0..<Int(size.width / 6) {
-            let star = SKSpriteNode(texture: dot, size: CGSize(width: 3, height: 3))
-            star.setScale(.random(in: 0.5...1.3))
-            star.alpha = .random(in: 0.15...0.85)
-            star.position = CGPoint(x: .random(in: 0...size.width), y: .random(in: size.height * 0.42...size.height))
-            star.zPosition = 1
-            if i % 9 == 0 {
-                let dim = SKAction.fadeAlpha(to: 0.15, duration: .random(in: 0.8...2.5))
-                let bright = SKAction.fadeAlpha(to: star.alpha, duration: .random(in: 0.8...2.5))
-                star.run(.repeatForever(.sequence([dim, bright])))
+    // MARK: Ground
+
+    /// The photo, relit, in two slices: everything behind the flames, then the stones and sticks in front of them
+    /// (a sprite over just the fire bed; its texture coordinates are still the whole photo's).
+    private func addGround() {
+        let bed = CampfirePhoto.bedRect
+        for front in [false, true] {
+            let texture = front ? SKTexture(rect: bed, in: CampfirePhoto.albedo) : CampfirePhoto.albedo
+            let ground = SKSpriteNode(texture: texture, size: front ? CGSize(width: lens.photoSize.width * bed.width, height: lens.photoSize.height * bed.height) : lens.photoSize)
+            ground.anchorPoint = .zero
+            ground.position = CGPoint(x: size.width / 2 - lens.photoSize.width / 2 + (front ? lens.photoSize.width * bed.minX : 0),
+                                      y: front ? lens.photoSize.height * bed.minY : 0)
+            ground.zPosition = front ? 3 : 0
+            ground.shader = SKShader(source: shaderCommon + Self.groundSource, uniforms: [
+                SKUniform(name: "u_aux", texture: CampfirePhoto.aux), SKUniform(name: "u_bed", texture: CampfirePhoto.bed),
+                SKUniform(name: "u_bedRect", vectorFloat4: [Float(bed.minX), Float(bed.minY), Float(bed.maxX), Float(bed.maxY)]),
+                SKUniform(name: "u_front", float: front ? 1 : 0), light, clock,
+            ])
+            addChild(ground)
+        }
+    }
+
+    /// Albedo is 2·tex^2.2 (sRGB at half scale); the aux map has log distance (1–400 m) in R and the world normal's
+    /// x and y in G and B, which place each pixel in metres. It's lit by a point of firelight (1900 K through the
+    /// camera's 3200 K balance, 1/r²), whose lower part the upright stones hide from the ground outside the ring,
+    /// plus faint starlight. Wood inside the ring is charred black, and glows in its cracks near the embers.
+    static let groundSource = """
+    void main() {
+        vec4 photo = texture2D(u_texture, v_tex_coord);
+        vec3 aux = texture2D(u_aux, v_tex_coord).rgb;
+        float t = pow(400.0, aux.r);
+        bool inBed = v_tex_coord.x > u_bedRect.x && v_tex_coord.x < u_bedRect.z && v_tex_coord.y > u_bedRect.y && v_tex_coord.y < u_bedRect.w;
+        vec4 out = vec4(0.0);
+        if ((inBed && t < 4.45) == (u_front > 0.5)) {
+            vec3 alb = 2.0 * pow(photo.rgb / max(photo.a, 0.004), vec3(2.2));
+            vec3 n = vec3(aux.g * 2.0 - 1.0, aux.b * 2.0 - 1.0, 0.0);
+            n.z = -sqrt(max(0.0, 1.0 - n.x * n.x - n.y * n.y));
+            // the ray through this pixel, from a camera 1.6 m up, pitched up 3°, 84° across 4096 px
+            vec3 c = normalize(vec3((v_tex_coord - 0.5) * vec2(4096.0, 2660.0), 2274.5));
+            vec3 d = vec3(c.x, c.y * 0.99863 + c.z * 0.05234, -c.y * 0.05234 + c.z * 0.99863);
+            vec3 p = vec3(0.0, 1.6, 0.0) + d * t;
+            vec3 toFire = u_light.xyz - p;
+            float r2 = dot(toFire, toFire) + 0.16;                             // the flames are a broad source, not a point
+            float facing = max((dot(n, normalize(toFire)) + 0.1) / 1.1, 0.0);
+            // the ring's stones (0.39 m high at 0.72 m) hide the flames below this height from here
+            // (the photo's own ground is always outside the ring, even where the depth estimate strays inside it)
+            vec2 bed = inBed ? texture2D(u_bed, (v_tex_coord - u_bedRect.xy) / (u_bedRect.zw - u_bedRect.xy)).rg : vec2(0.0);
+            float out_ = mix(max(length(p.xz - u_light.xz), 0.8), length(p.xz - u_light.xz), step(0.5, bed.g));
+            float hidden = out_ > 0.76 ? p.y + (0.39 - p.y) * out_ / (out_ - 0.72) : 0.0;
+            float seen = 0.2 + 0.8 * smoothstep(0.0, 1.0, (1.15 - hidden) / 1.05);   // the tall flames, and bounce off the far stones
+            float wood = bed.r;
+            alb = mix(alb, alb * 0.2 + 0.004, wood);                          // charred
+            vec3 col = alb * (vec3(1.0, 0.41, 0.09) * 2.6 * u_light.w * facing * seen / r2 + vec3(0.0020, 0.0026, 0.0042));
+            // embers in the charred wood near the bottom of the fire
+            if (wood > 0.01) {
+                vec2 q = p.xz * 60.0 + vec2(p.y * 40.0, 0.0);
+                float cracks = smoothstep(0.35, 0.5, noise(q)) * smoothstep(0.55, 0.4, noise(q * 1.7 + 3.0));
+                float heat = smoothstep(0.35, 0.05, p.y) * (0.7 + 0.3 * sin(u_clock * 1.3 + noise(q * 0.3) * 20.0));
+                float kelvin = 820.0 + 200.0 * heat;
+                vec3 bb = vec3(exp(-22800.0 * (1.0 / kelvin - 1.0 / 1300.0)), 0.165 * exp(-26600.0 * (1.0 / kelvin - 1.0 / 1300.0)), 0.0);
+                col += wood * cracks * heat * bb * 1.2;
             }
-            addChild(star)
+            col = 1.0 - exp(-col * 1.4);
+            col = mix(col * 12.92, 1.055 * pow(col, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, col));
+            col += (hash21(v_tex_coord * 4096.0) - 0.5) / 255.0;
+            out = vec4(col, 1.0) * photo.a;
         }
+        gl_FragColor = out;
+    }
+    """
+}
+
+/// The camera the backdrop was baked for, fitted to the screen: 1.6 m up, pitched up 3°, 84° across the photo's
+/// 4096 pixels. World metres: x right, y up, z forward. The photo fills the screen from the bottom, cropping the top
+/// or the sides.
+struct FireCamera {
+    static let fire = SIMD3<Double>(0, 0, 4.5)                              // middle of the stone ring, on the ground
+    static let pixels = CGSize(width: 4096, height: 2660), focalPixels = 2274.5, pitch = 3 * Double.pi / 180, height = 1.6
+    let photoSize: CGSize, focal: Double, centre: CGPoint
+
+    init(screen: CGSize) {
+        let s = max(screen.width / Self.pixels.width, screen.height / Self.pixels.height)
+        photoSize = CGSize(width: Self.pixels.width * s, height: Self.pixels.height * s)
+        focal = Self.focalPixels * Double(s)
+        centre = CGPoint(x: screen.width / 2, y: photoSize.height / 2)
     }
 
-    /// Half of the stone ring: the back half sits behind the flames, the front half in front of them.
-    private func addStones(around fire: CGPoint, front: Bool, z: CGFloat) {
-        let box = CGSize(width: 260, height: 80)
-        let texture = paint(box) { ctx in
-            let count = 14
-            for i in 0..<count {
-                let angle = CGFloat(i) / CGFloat(count) * 2 * .pi + 0.1
-                guard (sin(angle) < 0) == front else { continue }
-                let c = CGPoint(x: box.width / 2 + 100 * cos(angle), y: box.height / 2 + 22 * sin(angle))
-                let rect = CGRect(x: c.x - .random(in: 16...22), y: c.y - 11, width: .random(in: 32...44), height: .random(in: 20...27))
-                ctx.saveGState()
-                ctx.addEllipse(in: rect)
-                ctx.clip()
-                // Back stones face the fire (lit low); front stones only catch it on their top edge.
-                let colors = front ? [rgb(0.06, 0.05, 0.05), rgb(0.42, 0.3, 0.22)] : [rgb(0.62, 0.42, 0.28), rgb(0.14, 0.11, 0.1)]
-                let gradient = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB), colors: colors as CFArray, locations: [0, 1])!
-                ctx.drawLinearGradient(gradient, start: CGPoint(x: 0, y: rect.minY), end: CGPoint(x: 0, y: rect.maxY), options: [])
-                ctx.restoreGState()
+    /// Where a world point lands on screen.
+    func project(_ p: SIMD3<Double>) -> CGPoint {
+        let y = p.y - Self.height
+        let yc = y * cos(Self.pitch) - p.z * sin(Self.pitch), zc = y * sin(Self.pitch) + p.z * cos(Self.pitch)
+        return CGPoint(x: centre.x + focal * p.x / zc, y: centre.y + focal * yc / zc)
+    }
+
+    /// Points per metre for something upright at a world point.
+    func scale(at p: SIMD3<Double>) -> CGFloat { CGFloat(focal / (p.z * cos(Self.pitch))) }
+}
+
+/// The baked backdrop: "Hochsal Forest" (Poly Haven, CC0) with a scanned stone fire pit and dry branches (Poly
+/// Haven, CC0) rendered into the same view. See docs/campfire.md for the bake.
+@MainActor enum CampfirePhoto {
+    static let albedo = SKTexture(image: NSImage(contentsOf: resource("campfire-ground.heic")) ?? NSImage())
+    static let aux = SKTexture(image: NSImage(contentsOf: resource("campfire-ground-aux.png")) ?? NSImage())
+    static let bed = SKTexture(image: NSImage(contentsOf: resource("campfire-bed.png")) ?? NSImage())
+    /// The bed mask's place in the photo (R wood, G the pit and wood), in texture coordinates (origin bottom-left).
+    static let bedRect = CGRect(x: 1640.0 / 4096, y: 1 - 2372.0 / 2660, width: 812.0 / 4096, height: 632.0 / 2660)
+}
+
+/// The real stars over the viewer right now (Live Sky's catalogue), seen through the campfire's camera turned to
+/// face the equator. Faint stars are small
+/// dim points and bright ones slightly larger, tinted by their colour, and all dim toward the horizon through
+/// more air. Positions are refreshed every 10 s (the sky turns about 0.04° in that time).
+final class StarField: SKNode {
+    private var sprites: [SKSpriteNode] = []
+    private let camera: FireCamera, limit: Double
+
+    init(camera: FireCamera, limit: Double = 5.5) {
+        self.camera = camera; self.limit = limit
+        super.init()
+        refresh()
+        run(.repeatForever(.sequence([.wait(forDuration: 10), .run { [weak self] in self?.refresh() }])))
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    private static let dot = paint(CGSize(width: 8, height: 8)) { ctx in
+        let g = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
+                           colors: [rgb(1, 1, 1), rgb(1, 1, 1, 0.5), rgb(1, 1, 1, 0)] as CFArray, locations: [0, 0.3, 1])!
+        ctx.drawRadialGradient(g, startCenter: CGPoint(x: 4, y: 4), startRadius: 0, endCenter: CGPoint(x: 4, y: 4), endRadius: 4, options: [])
+    }
+
+    private func refresh() {
+        let here = Location.shared.coordinate
+        let toHorizon = Sky.horizonMatrix(jd: Sky.julianDate(Date()), latitude: here.latitude, longitude: here.longitude)
+        let south = here.latitude >= 0
+        var n = 0
+        for star in LiveSky.catalogue where star.magnitude <= limit {
+            let h = toHorizon * star.direction
+            let forward = south ? -h.y : h.y, right = south ? -h.x : h.x
+            guard h.z > 0.02, forward > 0.1 else { continue }
+            let p = camera.project([right * 1000, FireCamera.height + h.z * 1000, forward * 1000])
+            guard p.x > -4, p.x < camera.centre.x * 2 + 4, p.y > 0, p.y < camera.photoSize.height + 4 else { continue }
+            if n == sprites.count {
+                let s = SKSpriteNode(texture: Self.dot)
+                s.colorBlendFactor = 1
+                s.blendMode = .add
+                addChild(s)
+                sprites.append(s)
             }
+            let s = sprites[n]
+            n += 1
+            // flux relative to a 2nd-magnitude star, square-rooted for the eye; through 1/sin(altitude) airmasses at
+            // 0.25 magnitudes each
+            let extinction = pow(10, -0.1 * (1 / max(h.z, 0.05) - 1))
+            let flux = pow(10, -0.4 * (star.magnitude - 2)) * extinction
+            let d = max(1.3, min(5, 1.3 + 1.2 * log10(1 + flux * 3)))
+            s.size = CGSize(width: d, height: d)
+            s.position = p
+            let c = LiveSky.starColour(star.bv).usingColorSpace(.sRGB)!
+            s.color = NSColor(red: 0.5 + 0.5 * c.redComponent, green: 0.5 + 0.5 * c.greenComponent, blue: 0.5 + 0.5 * c.blueComponent, alpha: 1)
+            s.alpha = min(1, 0.12 + 0.55 * sqrt(flux))
+            s.isHidden = false
         }
-        let stones = SKSpriteNode(texture: texture, size: box)
-        stones.position = CGPoint(x: fire.x, y: fire.y - 6)
-        stones.zPosition = z
-        addChild(stones)
-    }
-
-    /// Logs leaning into a teepee over a bed of glowing coals.
-    private func addLogs(at fire: CGPoint) {
-        let box = CGSize(width: 220, height: 150)
-        let texture = paint(box) { ctx in
-            let base = CGPoint(x: box.width / 2, y: 22)
-            let coals = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
-                                   colors: [rgb(1, 0.55, 0.15), rgb(0.7, 0.15, 0.02, 0.8), rgb(0.3, 0.05, 0, 0)] as CFArray, locations: [0, 0.5, 1])!
-            ctx.saveGState()
-            ctx.scaleBy(x: 1, y: 0.3)
-            ctx.drawRadialGradient(coals, startCenter: CGPoint(x: base.x, y: base.y / 0.3), startRadius: 0,
-                                   endCenter: CGPoint(x: base.x, y: base.y / 0.3), endRadius: 80, options: [])
-            ctx.restoreGState()
-
-            ctx.setLineCap(.round)
-            for (dx, top) in [(-70.0, 105.0), (64, 112), (-30, 128), (28, 122)] as [(CGFloat, CGFloat)] {
-                let foot = CGPoint(x: base.x + dx, y: base.y - 6), tip = CGPoint(x: base.x + dx * 0.08, y: top)
-                ctx.setStrokeColor(rgb(0.13, 0.07, 0.04))
-                ctx.setLineWidth(22)
-                ctx.strokeLineSegments(between: [foot, tip])
-                ctx.setStrokeColor(rgb(0.8, 0.34, 0.08, 0.85)) // the side facing the flames
-                ctx.setLineWidth(6)
-                ctx.strokeLineSegments(between: [CGPoint(x: foot.x - dx * 0.06, y: foot.y + 4), CGPoint(x: tip.x - dx * 0.02, y: tip.y - 8)])
-            }
-        }
-        let logs = SKSpriteNode(texture: texture, size: box)
-        logs.anchorPoint = CGPoint(x: 0.5, y: 0)
-        logs.position = CGPoint(x: fire.x, y: fire.y - 22)
-        logs.zPosition = 6
-        addChild(logs)
-    }
-
-    /// Two layers of flame: a wide orange body and a narrow white-hot core.
-    private func addFlames(at fire: CGPoint) {
-        // A soft teardrop, taller than wide, so each particle reads as a tongue of flame.
-        let tongue = paint(CGSize(width: 32, height: 64)) { ctx in
-            ctx.scaleBy(x: 1, y: 2)
-            let gradient = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
-                                      colors: [rgb(1, 1, 1), rgb(1, 1, 1, 0.45), rgb(1, 1, 1, 0)] as CFArray, locations: [0, 0.4, 1])!
-            ctx.drawRadialGradient(gradient, startCenter: CGPoint(x: 16, y: 13), startRadius: 0, endCenter: CGPoint(x: 16, y: 16),
-                                   endRadius: 16, options: [])
-        }
-        for core in [false, true] {
-            let flames = SKEmitterNode()
-            flames.particleTexture = tongue
-            flames.particleSize = CGSize(width: 40, height: 80)
-            flames.particleBirthRate = core ? 55 : 130
-            flames.particleLifetime = core ? 0.55 : 0.95
-            flames.particleLifetimeRange = 0.4
-            flames.particlePositionRange = CGVector(dx: core ? 36 : 76, dy: 8)
-            flames.emissionAngle = .pi / 2
-            flames.emissionAngleRange = 0.2
-            flames.particleSpeed = core ? 95 : 140
-            flames.particleSpeedRange = 40
-            flames.yAcceleration = 110
-            flames.particleScale = core ? 0.6 : 1
-            flames.particleScaleRange = 0.35
-            flames.particleScaleSpeed = -0.85
-            flames.particleAlpha = core ? 0.6 : 0.65
-            flames.particleAlphaSpeed = -0.7
-            flames.particleColorBlendFactor = 1
-            flames.particleColorSequence = SKKeyframeSequence(
-                keyframeValues: core
-                    ? [NSColor(red: 1, green: 0.98, blue: 0.85, alpha: 1), NSColor(red: 1, green: 0.8, blue: 0.3, alpha: 1), NSColor(red: 1, green: 0.45, blue: 0.1, alpha: 1)]
-                    : [NSColor(red: 1, green: 0.8, blue: 0.35, alpha: 1), NSColor(red: 1, green: 0.42, blue: 0.08, alpha: 1),
-                       NSColor(red: 0.75, green: 0.12, blue: 0.02, alpha: 1), NSColor(red: 0.2, green: 0.02, blue: 0, alpha: 1)],
-                times: core ? [0, 0.5, 1] : [0, 0.3, 0.65, 1])
-            flames.particleBlendMode = .add
-            flames.position = CGPoint(x: fire.x, y: fire.y + 4)
-            flames.zPosition = 7
-            flames.advanceSimulationTime(2)
-            addChild(flames)
-            self.flames.append(flames)
-        }
-    }
-
-    private func addEmbersAndSmoke(at fire: CGPoint) {
-        let embers = SKEmitterNode()
-        embers.particleTexture = softDot()
-        embers.particleSize = CGSize(width: 4, height: 4)
-        embers.particleBirthRate = 7
-        embers.particleLifetime = 4
-        embers.particleLifetimeRange = 2
-        embers.particlePositionRange = CGVector(dx: 50, dy: 10)
-        embers.emissionAngle = .pi / 2
-        embers.emissionAngleRange = 0.6
-        embers.particleSpeed = 110
-        embers.particleSpeedRange = 50
-        embers.yAcceleration = -12
-        embers.particleScaleRange = 0.5
-        embers.particleColor = NSColor(red: 1, green: 0.6, blue: 0.2, alpha: 1)
-        embers.particleColorBlendFactor = 1
-        embers.particleAlphaSequence = SKKeyframeSequence(keyframeValues: [1, 0.9, 0], times: [0, 0.6, 1])
-        embers.particleBlendMode = .add
-        let drift = SKAction.moveBy(x: 14, y: 0, duration: 0.7)
-        drift.timingMode = .easeInEaseOut
-        embers.particleAction = .repeatForever(.sequence([drift, drift.reversed()]))
-        embers.position = CGPoint(x: fire.x, y: fire.y + 20)
-        embers.zPosition = 10
-        embers.advanceSimulationTime(6)
-        addChild(embers)
-
-        let smoke = SKEmitterNode()
-        smoke.particleTexture = radialGlow(diameter: 64, stops: [(0, rgb(1, 1, 1, 0.8)), (1, rgb(1, 1, 1, 0))])
-        smoke.particleSize = CGSize(width: 70, height: 70)
-        smoke.particleBirthRate = 5
-        smoke.particleLifetime = 9
-        smoke.particlePositionRange = CGVector(dx: 30, dy: 10)
-        smoke.emissionAngle = .pi / 2
-        smoke.emissionAngleRange = 0.2
-        smoke.particleSpeed = 38
-        smoke.particleSpeedRange = 10
-        smoke.xAcceleration = 4
-        smoke.particleScale = 1
-        smoke.particleScaleSpeed = 0.45
-        smoke.particleColor = NSColor(red: 0.5, green: 0.45, blue: 0.45, alpha: 1)
-        smoke.particleColorBlendFactor = 1
-        smoke.particleAlphaSequence = SKKeyframeSequence(keyframeValues: [0, 0.09, 0], times: [0, 0.15, 1])
-        smoke.position = CGPoint(x: fire.x, y: fire.y + 110)
-        smoke.zPosition = 11
-        smoke.advanceSimulationTime(9)
-        addChild(smoke)
-    }
-
-    /// A fallen log to sit on, lit along the side that faces the fire.
-    private func addBench(at spot: CGPoint) {
-        let box = CGSize(width: 300, height: 50)
-        let texture = paint(box) { ctx in
-            let body = CGPath(roundedRect: CGRect(x: 6, y: 6, width: box.width - 12, height: 34), cornerWidth: 17, cornerHeight: 17, transform: nil)
-            ctx.addPath(body)
-            ctx.clip()
-            let gradient = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
-                                      colors: [rgb(0.04, 0.025, 0.02), rgb(0.12, 0.07, 0.04), rgb(0.34, 0.17, 0.08)] as CFArray,
-                                      locations: [0, 0.6, 1])!
-            ctx.drawLinearGradient(gradient, start: CGPoint(x: 0, y: 6), end: CGPoint(x: 0, y: 40),
-                                   options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
-            ctx.resetClip()
-            // Cut end facing us, with growth rings.
-            ctx.setFillColor(rgb(0.2, 0.12, 0.07))
-            ctx.fillEllipse(in: CGRect(x: 2, y: 6, width: 22, height: 34))
-            ctx.setStrokeColor(rgb(0.1, 0.06, 0.03))
-            ctx.setLineWidth(1.5)
-            for inset in [5.0, 10.0] { ctx.strokeEllipse(in: CGRect(x: 2 + inset * 0.6, y: 6 + inset, width: 22 - inset * 1.2, height: 34 - inset * 2)) }
-        }
-        let bench = SKSpriteNode(texture: texture, size: box)
-        bench.position = spot
-        bench.zRotation = -0.05
-        bench.zPosition = 9
-        addChild(bench)
+        for s in sprites[n...] { s.isHidden = true }
     }
 }

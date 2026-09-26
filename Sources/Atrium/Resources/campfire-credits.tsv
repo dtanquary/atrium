@@ -1,0 +1,5 @@
+# Images in the Campfire wallpaper. Public domain, CC0 or CC BY; CC BY requires this attribution.
+# file	subject	author	licence
+campfire-ground.heic	"Hochsal Forest": an overcast forest clearing, reprojected from the 16k panorama (sky cut out, overcast light flattened to albedo; https://polyhaven.com/a/hochsal_forest), with "Stone Fire Pit" (https://polyhaven.com/a/stone_fire_pit) and "Dry Branches Medium 01" (https://polyhaven.com/a/dry_branches_medium_01) rendered into the same view	Adrian Kubasa; Sebastian Platen; Rico Cilliers (Poly Haven)	CC0
+campfire-ground-aux.png	Log distance (red, estimated with Apple's Core ML Depth Anything V2 Small, Apache-2.0, fitted to the ground plane; the fire pit's from its model) and world normals (green, blue), derived from the above	Atrium	Public domain
+campfire-bed.png	Where the wood (red) and the fire pit (green) are, from the models	Atrium	Public domain

@@ -218,7 +218,7 @@ final class LiveSky: SKScene {
     }
 
     /// Screen colour for a B−V colour index: blue-white hot stars through to orange cool ones.
-    private func starColour(_ bv: Double) -> NSColor {
+    nonisolated static func starColour(_ bv: Double) -> NSColor {
         let stops: [(Double, SIMD3<Double>)] = [(-0.3, [0.66, 0.74, 1]), (0, [0.82, 0.87, 1]), (0.4, [1, 0.98, 0.95]),
                                                 (0.8, [1, 0.92, 0.8]), (1.2, [1, 0.84, 0.66]), (2, [1, 0.72, 0.5])]
         let i = stops.lastIndex { $0.0 <= bv } ?? 0
@@ -228,31 +228,36 @@ final class LiveSky: SKScene {
     }
 
     /// Lines of numbers from a Resources text file, skipping # comments.
-    private func rows(_ file: String) -> [String] {
+    nonisolated private static func rows(_ file: String) -> [String] {
         ((try? String(contentsOf: resource(file), encoding: .utf8)) ?? "")
             .split(separator: "\n").filter { !$0.hasPrefix("#") }.map(String.init)
     }
 
+    /// The Yale Bright Star Catalogue to V 5.5: direction (J2000), V magnitude and B−V colour index. Campfire's sky
+    /// uses it too.
+    nonisolated static let catalogue: [(direction: Sky.Vector, magnitude: Double, bv: Double)] = rows("stars.txt").compactMap { row in
+        let f = row.split(separator: " ").compactMap { Double($0) }
+        return f.count == 4 ? (Sky.direction(f[0], f[1]), f[2], f[3]) : nil
+    }
+
     private func addStars() {
-        for row in rows("stars.txt") {
-            let f = row.split(separator: " ").compactMap { Double($0) }
-            guard f.count == 4 else { continue }
+        for (direction, magnitude, bv) in Self.catalogue {
             let star = SKSpriteNode(texture: glow)
-            let diameter = max(2.2, 11 - 1.55 * f[2])
+            let diameter = max(2.2, 11 - 1.55 * magnitude)
             star.size = CGSize(width: diameter, height: diameter)
-            star.color = starColour(f[3])
+            star.color = Self.starColour(bv)
             star.colorBlendFactor = 1
-            star.alpha = min(1, max(0.35, 1.2 - 0.14 * f[2]))
+            star.alpha = min(1, max(0.35, 1.2 - 0.14 * magnitude))
             star.zPosition = 2
-            if f[2] < 2 { // bright stars twinkle
+            if magnitude < 2 { // bright stars twinkle
                 let dim = SKAction.fadeAlpha(to: star.alpha * 0.6, duration: .random(in: 0.15...0.5))
                 let back = SKAction.fadeAlpha(to: star.alpha, duration: .random(in: 0.15...0.5))
                 star.run(.repeatForever(.sequence([dim, back, .wait(forDuration: 0.5, withRange: 1.5)])))
             }
-            starLayers[min(15, max(0, Int((f[2] + 2) * 2)))].addChild(star)
-            stars.append((star, Sky.direction(f[0], f[1])))
+            starLayers[min(15, max(0, Int((magnitude + 2) * 2)))].addChild(star)
+            stars.append((star, direction))
         }
-        constellationLines = rows("constellations.txt").map { line in
+        constellationLines = Self.rows("constellations.txt").map { line in
             line.split(separator: " ").compactMap { pair in
                 let radec = pair.split(separator: ",").compactMap { Double($0) }
                 return radec.count == 2 ? Sky.direction(radec[0], radec[1]) : nil

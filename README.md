@@ -80,7 +80,7 @@ To rebuild after pulling changes: `./build.sh && pkill -x Atrium; open build/Atr
 | Pixel City | A pixel-art skyline that follows your clock, with traffic and windows lighting up through the evening |
 | Fireflies | Fireflies drifting through a foggy forest at dusk |
 | Murmuration | Tens of thousands of starlings wheeling over Brighton's West Pier or a marsh pond at sunset, flying like the real thing (a published flight model), mirrored in the water, and scattering from a falcon |
-| Campfire | A crackling fire under the stars |
+| Campfire | A campfire in a stone ring in a real forest clearing at night, its flames simulated and coloured like a photo, lighting the stones, ground and nearby trees as it flickers, under the real stars |
 | Game of Life | Conway's cells with fading trails, reseeding so it never dies out |
 
 The docs in [`docs/`](docs/README.md) cover each one in depth: how it works, its settings, cost and ideas for next steps.
@@ -116,6 +116,7 @@ SNAPSHOT_DEFAULTS="gradient.palette=Sunset" SNAPSHOT_APPEARANCE=light swift test
 - The Aurora wallpaper's mountains are a public domain National Park Service photo of the Tetons in winter by A. Falgoust ([source](https://commons.wikimedia.org/wiki/File:Teton_Point_Turnout_in_Winter_(52098766554).jpg)).
 - The Murmuration wallpaper's grounds are "Tide bears the last glow - Brighton, UK" by sagesolar, CC BY 4.0 ([source](https://commons.wikimedia.org/wiki/File:Tide_bears_the_last_glow_-_Brighton,_UK.jpg)), with its sky cut away and its sea relit, and a public domain U.S. Fish and Wildlife Service photo of a tundra pond ([source](https://commons.wikimedia.org/wiki/File:Sunset_over_a_tundra_pond_(53708107535).jpg)).
 - The Fireflies wallpaper's meadow is "Field at dusk" by Tristan Ferne, CC BY 2.0 ([source](https://www.flickr.com/photos/89056504@N00/7357684410)), with its sky cut away and relit for blue hour. See [`Sources/Atrium/Resources/fireflies-credits.tsv`](Sources/Atrium/Resources/fireflies-credits.tsv).
+- The Campfire wallpaper's clearing is the CC0 panorama "Hochsal Forest" by Adrian Kubasa ([source](https://polyhaven.com/a/hochsal_forest)), relit by the fire, with CC0 scans of a stone fire pit by Sebastian Platen and dry branches by Rico Cilliers from Poly Haven. See [`Sources/Atrium/Resources/campfire-credits.tsv`](Sources/Atrium/Resources/campfire-credits.tsv).
 - Reef fish, corals and rock in the Fish Tank are cut out of public domain, CC0 and CC BY photos from iNaturalist, Wikimedia Commons and NOAA. Each photographer and licence is listed in [`Sources/Atrium/Resources/reef-credits.tsv`](Sources/Atrium/Resources/reef-credits.tsv) and in Settings → About.
 
 ## License
