@@ -24,6 +24,7 @@ private let classicColours: [String: [SIMD3<Float>]] = [
 ]
 
 let auroraKnobs = [
+    Knob(key: "aurora.speed", label: "Speed", range: 0...6, standard: 1, section: "Motion", format: .times),
     Knob(key: "aurora.classic", label: "Show the old curtains", range: 0...1, standard: 0, section: "Compare", format: .toggle),
 ] + gradeKnobs("aurora")
 
@@ -242,11 +243,13 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
         SKUniform(name: "u_aurora", vectorFloat3: tint * 0.016),
     ]))
     // the curtains' clock, in scene time so it stops while the wallpaper is hidden; their light is re-measured each second
+    // 1× is a real display's pace: folds drifting 0.35-0.6 km/s along the arc, rays 0.5 km/s
+    let speed = (scene as! ShaderScene).knobs.first { $0.knob.key == "aurora.speed" }!.uniform
     var last: CGFloat = 0, since: Float = 0
     scene.run(.repeatForever(.customAction(withDuration: 60) { _, elapsed in
         let dt = Float(elapsed >= last ? elapsed - last : elapsed)
         last = elapsed
-        sky.phase += dt
+        sky.phase += dt * speed.floatValue
         phase.floatValue = sky.phase
         since += dt
         if since >= 1 { since = 0; light() }

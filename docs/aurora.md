@@ -50,6 +50,7 @@ The curtains move on `u_phase`, seconds of scene time advanced by a repeating `c
 
 The swatches run crown to fringe, top-left to bottom-right, as the sky does. On 2026-09-25 the greens (Green, Storm, Red's fringe) moved from a teal `(0.2, 1, 0.5)` to the yellow-green real photos measure, `(0.58, 1, 0.5)`, paler so the peak's saturation lands near 0.45.
 
+- **Motion:** `aurora.speed`, "Speed", 0–6×, default 1× (Dave: "default to a natural realistic speed"): scales `u_phase`, so 1× is a real display's pace (folds 0.35–0.6 km/s, rays 0.5 km/s), 0 freezes the curtains and 6× is a lively one. Stars keep twinkling. Shown as "1.0×" (`.times` now shows a decimal below 10).
 - **Compare:** `aurora.classic`, "Show the old curtains", off by default: the previous screen-space curtains and colours, live, to compare against. It goes once Dave picks.
 - **Look**, the shared grade sliders (`gradeKnobs("aurora")` in Shaders.swift, applied by `grade()` from `shaderCommon` just before the dither). They're live and don't rebuild the scene:
 
@@ -66,7 +67,6 @@ Suggested knobs, not built yet:
 
 | Key | Label | Range | Default | Drives |
 |---|---|---|---|---|
-| `aurora.speed` | Speed | 0–3 | 1 | scales `u_phase` |
 | `aurora.activity` | Activity | Quiet / Moderate / Active / Storm / Live | Moderate | curtain count, brightness, folds, lower-edge height; Live from NOAA's hemispheric power |
 | `aurora.substorms` | Substorms | on/off | on | a 20–30 min quiet → surge → recovery cycle |
 
