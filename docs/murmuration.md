@@ -3,10 +3,10 @@
 A starling murmuration seen from the shore at sunset: tens of thousands of birds wheeling as one over Brighton's ruined West Pier or a flat marsh pond, folding into dark bands and opening into pale sheets, mirrored in the water when they swoop low, and scattering in dark ripples when a falcon dives through.
 
 - **Files:**
-  - `Sources/Atrium/Murmuration.swift`: the scene, the flock, the ground shader and the old version (`ClassicMurmuration`, for the Compare switch).
+  - `Sources/Atrium/Murmuration.swift`: the scene, the flock and the ground shader.
   - `Resources/murmuration-pier.heic` and `murmuration-marsh.heic`: the ground photos with their skies cut away (HEIC with alpha, 4096 wide).
   - `Resources/murmuration-pier-aux.png` and `murmuration-marsh-aux.png`: their water maps (half size): red is water, green is the water's reflectance ÷ 2.
-  - It uses Weather's physical sky (`Atmosphere`, `SkyCamera`, `SkyLight` in `WeatherSky.swift`) and `SkyMath.swift` for the Sun. The old version uses the helpers in `Fireflies.swift`.
+  - It uses Weather's physical sky (`Atmosphere`, `SkyCamera`, `SkyLight` and `CloudNoise` in `WeatherSky.swift`), `SkyMath.swift` for the Sun, and `frameTime` and `rgb` from `Fireflies.swift`.
 - **Entry:** `@MainActor func murmuration(size:)` returns `final class Murmuration: SKScene`. Registry entry: icon `bird.fill`, tint `.brown`, `knobs: murmurationKnobs`.
 - **Kind:** a CPU flock simulation in metres drawn as SpriteKit sprites, over two shaders (the sky, and the ground with its water).
 
@@ -41,7 +41,8 @@ Everything was tuned against two research passes, saved in the session scratchpa
 | `murmuration.evening` | Light | Random, Golden hour, Sunset, Afterglow, Blue hour | Random | rebuilds the scene |
 | `murmuration.ground` | Ground | Brighton West Pier, Marsh pond | West Pier | rebuilds the scene |
 | `murmuration.falcon` | Falcon attacks | switch | on | read by the flock as it flies |
-| `murmuration.classic` | Show the old murmuration | switch | off | Compare: the old painted sunset and flat flock, until Dave picks |
+
+The knobs are referred to by name (`lightKnob`, `groundKnob`, `falconKnob`), not by their index in `murmurationKnobs`: when Ground was added, the falcon check kept reading index 1 and for a while the falcon only came over the marsh pond.
 
 For repeatable snapshots, `MURMURATION_SEED=3` seeds the flock.
 
@@ -70,6 +71,7 @@ For repeatable snapshots, `MURMURATION_SEED=3` seeds the flock.
 - 2026-09-26: "I love the bird swarming stuff, but what else can we do to make that one 'feel' better and look better." This pass: physical sky, real flight model, photo grounds.
 - He was shown three grounds (West Pier, marsh pond, reed bed) and asked for both the pier and the pond, as a setting, and asked whether the birds could be reflected in the water. They are.
 - After seeing it: "its near perfect, we just need some very very subtle animation to make the water look not static ... i like both locations keep both." Hence the slow ripples.
+- The old painted-sunset version (four-dot clusters in screen points) was kept behind a Compare switch until Dave said to remove it on 2026-09-26; it's in git history before then.
 
 ## Ideas / next steps
 - **An evening's arc:** feeder flocks streaming in and merging, the light deepening from golden hour to blue hour over the display's real length (about 26 minutes), then the flock pouring down in a funnel into the reeds or under the pier, and a new evening fading in. Or follow the real sunset where you are.
