@@ -50,6 +50,7 @@ SNAPSHOT_DEFAULTS="gradient.ribbons=1,gradient.previewTime=1" swift test   # sna
 - Don't change a node's `speed` every frame while `SKAction.animate(withWarps:)` runs on it. SpriteKit gets steadily slower (from 1 ms to 10 ms a frame within a minute). Pick precomputed warp frames yourself in `update(_:)` instead.
 - `hash21` repeats every 50 whole-number cells across and 100 up, so anything scattered one per cell (stars, sparkles) visibly tiles. Use `hash42` for cell lookups; it also returns four random numbers at once. `u_texture` is SpriteKit's own uniform, so don't name one that.
 - In SKShader, uniforms are only visible inside `main()`, so pass them to helper functions as parameters, and there's no global `const`.
+- A shader can take about 30 uniforms (Metal's buffer indices run 0–30, and SpriteKit adds its own). Past that it fails to compile at runtime ("'buffer' attribute parameter is out of bounds") and draws nothing; `swift build` won't catch it. Pass `shaderScene` only the knobs its shader reads, and write fixed values into the source.
 - `paint(_:_:)` draws at 2x, so the texture's pixel size is double. Give sprites an explicit size.
 - Data must be public domain or permissively licensed. Cite the source in a comment or in the data file's header.
 
