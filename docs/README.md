@@ -18,7 +18,7 @@ One file per wallpaper, recording what the code can't: how each scene works, why
 | Weather | [weather.md](weather.md) | `Weather.swift`, `WeatherSky.swift`, `Resources/weather-*` | physical sky, photo ground and clouds, shaders | weather lock, time preview | location, Open-Meteo | 0.55 / 0.45–1.2 |
 | Pixel City | [pixel-city.md](pixel-city.md) | `PixelCity.swift` | SpriteKit (pixel canvas) | none yet | location, clock | 0.43 / 0.18 |
 | Fireflies | [fireflies.md](fireflies.md) | `Fireflies.swift`, `Resources/fireflies-*` | photo ground, shaders, SpriteKit | density, fog, speed | none | 0.57 / 0.91 |
-| Murmuration | [murmuration.md](murmuration.md) | `Murmuration.swift` | SpriteKit (3D boids) | none yet | none | 1.09 / 0.24 |
+| Murmuration | [murmuration.md](murmuration.md) | `Murmuration.swift`, `Resources/murmuration-*` | StarDisplay flock in metres, physical sky, photo ground with reflecting water | light, ground, falcon | none | 1.25–1.8 / 0.45–0.8 |
 | Campfire | [campfire.md](campfire.md) | `Campfire.swift` | SpriteKit emitters | none yet | none | 0.45 / 0.28 |
 | Game of Life | [game-of-life.md](game-of-life.md) | `GameOfLife.swift` | mutable texture | none yet | none | 0.47 / 0.52 |
 

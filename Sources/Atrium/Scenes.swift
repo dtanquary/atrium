@@ -52,7 +52,7 @@ struct Wallpaper {
     Wallpaper(name: "Fireflies", icon: "sparkle", tint: .yellow, blurb: "A meadow at blue hour, twinkling with fireflies.",
               make: fireflies, knobs: Fireflies.knobs),
     Wallpaper(name: "Murmuration", icon: "bird.fill", tint: .brown, blurb: "Starlings swirling over a sunset.",
-              make: murmuration),
+              make: murmuration, knobs: murmurationKnobs),
     Wallpaper(name: "Campfire", icon: "flame.fill", tint: .red, blurb: "A crackling fire under the stars.", make: campfire),
     Wallpaper(name: "Game of Life", icon: "square.grid.3x3.fill", tint: .orange, blurb: "Conway's cells that never die out.",
               make: gameOfLife),

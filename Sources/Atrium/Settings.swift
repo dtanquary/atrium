@@ -124,6 +124,8 @@ struct AboutPage: View {
                 LabeledContent("Clouds") { Link("Live Cloud Maps; contains modified EUMETSAT data", destination: URL(string: "https://clouds.matteason.co.uk")!) }
                 LabeledContent("Planet positions") { Text("NASA JPL") }
                 LabeledContent("Aurora's mountains") { Link("The Tetons, NPS photo by A. Falgoust (public domain)", destination: URL(string: "https://commons.wikimedia.org/wiki/File:Teton_Point_Turnout_in_Winter_(52098766554).jpg")!) }
+                LabeledContent("Murmuration's pier") { Link("\"Tide bears the last glow\" by sagesolar (CC BY 4.0)", destination: URL(string: "https://commons.wikimedia.org/wiki/File:Tide_bears_the_last_glow_-_Brighton,_UK.jpg")!) }
+                LabeledContent("Murmuration's marsh") { Link("A tundra pond, USFWS photo (public domain)", destination: URL(string: "https://commons.wikimedia.org/wiki/File:Sunset_over_a_tundra_pond_(53708107535).jpg")!) }
                 DisclosureGroup("Weather's hills, clouds and Moon, from the BLM, NASA, Poly Haven and Wikimedia Commons") {
                     ForEach(credits("weather-credits.tsv"), id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
                 }
