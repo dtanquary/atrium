@@ -21,7 +21,7 @@ final class Fireflies: SKScene {
     // The view: the eye 1.2 m above the grass, the horizon at 46% of the height, a focal length of 1.2 heights.
     private let eye: CGFloat = 1.2, horizon: CGFloat = 0.46, focal: CGFloat = 1.2
     // The meadow runs from just below the screen back to the treeline, in metres. Grass is painted in bands.
-    private let nearest: CGFloat = 2.5, treeline: CGFloat = 60, grassBands: [CGFloat] = [2.5, 3.4, 4.8, 7, 12]
+    private let nearest: CGFloat = 2.5, treeline: CGFloat = 60, grassBands: [CGFloat] = [2.5, 3.4, 4.6, 6.2]
     private let flash: CGFloat = 1.4, pool = 1200 // twice the standard count, for the density knob
 
     private var flies: [Fly] = []
@@ -30,11 +30,12 @@ final class Fireflies: SKScene {
 
     override func sceneDidLoad() {
         let sizeUniform = SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)])
-        // Sampled from the painting: olive field, an indigo band at the horizon, slate teal at the top.
+        // Measured down the painting: olive grass, the darkest ground, a violet-indigo band, slate teal at the top.
+        func hex(_ v: Int) -> CGColor { rgb(CGFloat(v >> 16) / 255, CGFloat(v >> 8 & 255) / 255, CGFloat(v & 255) / 255) }
         let sky = SKSpriteNode(texture: verticalGradient([
-            (0, rgb(0.23, 0.22, 0.125)), (0.25, rgb(0.21, 0.21, 0.14)), (0.33, rgb(0.165, 0.155, 0.13)),
-            (0.44, rgb(0.16, 0.165, 0.15)), (0.55, rgb(0.15, 0.148, 0.19)), (0.64, rgb(0.15, 0.157, 0.20)),
-            (0.72, rgb(0.17, 0.20, 0.23)), (0.82, rgb(0.20, 0.26, 0.28)), (0.91, rgb(0.25, 0.34, 0.37)), (1, rgb(0.31, 0.40, 0.44)),
+            (0, hex(0x3f3e26)), (0.1, hex(0x3b3b20)), (0.2, hex(0x383a21)), (0.25, hex(0x3a3a28)), (0.28, hex(0x312f25)),
+            (0.37, hex(0x2d2c29)), (0.44, hex(0x2f302b)), (0.47, hex(0x2e2f2f)), (0.53, hex(0x2b2a33)), (0.62, hex(0x292935)),
+            (0.72, hex(0x2f3a40)), (0.78, hex(0x344448)), (0.845, hex(0x3f5258)), (0.91, hex(0x445b64)), (1, hex(0x526973)),
         ]), size: size)
         sky.anchorPoint = .zero
         sky.zPosition = -1000
@@ -72,10 +73,11 @@ final class Fireflies: SKScene {
                 rest(&flies[i])
                 continue
             }
-            // A slow flash while it swoops, a little dip then a climb, as Photinus does: quick to come, held, then fading.
+            // A slow flash while it swoops, a little dip then a climb, as Photinus does: held, with quick fades, since
+            // paint caught half faded reads as a khaki blot.
             let fly = flies[i], s = u * flash
             fly.node.position = project(fly.x + fly.vx * s, fly.y + 0.1 * (1.6 * u * u - 0.6 * u), fly.d + fly.vd * s)
-            fly.node.alpha = smoothstep(0, 0.12, u) * (1 - smoothstep(0.7, 1, u))
+            fly.node.alpha = smoothstep(0, 0.08, u) * (1 - smoothstep(0.85, 1, u))
             fly.node.isHidden = false
         }
     }
@@ -86,15 +88,19 @@ final class Fireflies: SKScene {
         return CGPoint(x: size.width / 2 + f * x / d, y: size.height * horizon + f * (y - eye) / d)
     }
 
-    /// Puts a firefly somewhere new, flying low over the grass and heading any way. Half are spread evenly down the
-    /// screen, as in the painting; half evenly over the meadow's area, which crowds them toward the treeline.
+    /// Puts a firefly somewhere new, heading any way. Where it lands on screen follows the painting: thickest just
+    /// over the grass tops, thinning up into the dark band, none in the upper sky. It's then placed in the meadow at
+    /// the distance that puts it there: below eye height over the field, or above it against the sky.
     private func spawn(_ fly: inout Fly) {
-        let f = size.height * focal, spread = size.height * CGFloat.random(in: 0.015...horizon + 0.1)
-        fly.d = Bool.random() ? min(f * eye / spread, treeline)
-                              : sqrt(nearest * nearest + .random(in: 0...1) * (treeline * treeline - nearest * nearest))
-        let reach = size.width / 2 / (size.height * focal) * fly.d * 1.1
+        let f = size.height * focal, level = size.height * horizon
+        let counts: [CGFloat] = [16, 56, 59, 42, 28, 18, 5] // dots in each tenth of the height, from the bottom
+        var pick = CGFloat.random(in: 0..<counts.reduce(0, +)), tenth = 0
+        while pick >= counts[tenth] { pick -= counts[tenth]; tenth += 1 }
+        let target = (CGFloat(tenth) + .random(in: 0...1)) * 0.1 * size.height
+        fly.y = target < level ? .random(in: 0.1...eye - 0.15) : .random(in: eye + 0.2...eye + 1.5)
+        fly.d = min(max(f * abs(fly.y - eye) / max(abs(target - level), 2), nearest), treeline)
+        let reach = size.width / 2 / f * fly.d * 1.1
         fly.x = .random(in: -reach...reach)
-        fly.y = 0.1 + 2 * pow(.random(in: 0...1), 2)
         let heading = CGFloat.random(in: 0...(2 * .pi)), speed = CGFloat.random(in: 0.04...0.12)
         fly.vx = cos(heading) * speed
         fly.vd = sin(heading) * speed
@@ -116,43 +122,56 @@ final class Fireflies: SKScene {
         }
     }
 
-    /// Sizes a firefly's dab of paint for its distance, and gives some a watery wash or a pale burst around them,
-    /// more often the nearer and bigger they are, as in the painting.
+    /// Dresses a firefly as one of the painting's marks. Dabs are sized as measured there (a median of 1% of the
+    /// height across, with a long tail of big ones), only a little bigger nearer. Big ones are often torn into a
+    /// dry-brush burst with spatter, or sit in a pale stain. Far ones are dim. Now and then there's a stain with no
+    /// dab in it, a firefly out of focus.
     private func dress(_ fly: Fly) {
-        let r = min(max(24 / fly.d, 2.2), 8)
-        let haloed = CGFloat.random(in: 0...1) < 0.1 + 0.4 * (r - 1.6) / 5.4
-        let kind: CGFloat = haloed ? (Bool.random() ? 1 : 2) : 0
-        let extent = r * (haloed ? 4.4 : 2.7) + 1
+        let spread = (CGFloat.random(in: -1...1) + .random(in: -1...1) + .random(in: -1...1)) * 0.45
+        var r = size.height * 0.005 * exp(spread) * min(max(pow(8 / fly.d, 0.3), 0.75), 1.3)
+        let big = r > size.height * 0.005, roll = CGFloat.random(in: 0...1)
+        let kind: CGFloat
+        if roll < 0.04 {
+            kind = 5 // a ghost stain
+            r = size.height * .random(in: 0.0075...0.028)
+        } else if fly.d > 25 {
+            kind = 4 // dim and far
+            r = .random(in: 1...1.6)
+        } else {
+            kind = (CGFloat.random(in: 0...1) < (big ? 0.2 : 0.03) ? 1 : 0) + (CGFloat.random(in: 0...1) < (big ? 0.35 : 0.05) ? 2 : 0)
+        }
+        let extent = r * (kind == 5 ? 1.3 : [1.1, 4.4, 2.2, 4.4, 1.1][Int(kind)]) + 1
         fly.node.size = CGSize(width: extent * 2, height: extent * 2)
         fly.node.zPosition = 100 - fly.d
         fly.node.setValue(SKAttributeValue(vectorFloat3: [Float(r), Float(extent), Float(kind + .random(in: 0..<0.99))]), forAttribute: "a_fly")
     }
 
-    /// Grass blades rooted between two distances, as gouache strokes: the body, then a paler stroke up toward the tip.
-    /// Further blades are smaller and sink toward the field's colour.
+    /// Grass rooted between two distances, as the painting's strokes: near-vertical tapered dabs of olive or (one in
+    /// six) bluish sage, in clumps of three to eight, mostly leaning a touch right. There's no highlight at the tips;
+    /// the light comes from dry-brush skips along each stroke (`bristleSource`). Further clumps sink toward the ground.
     private func grass(from a: CGFloat, to b: CGFloat) -> SKSpriteNode {
         let f = size.height * focal, ground = size.height * horizon, tallest: CGFloat = 0.4
         let height = min(ground + f * (tallest - eye) / b + 4, size.height)
-        let greens = [rgb(0.25, 0.36, 0.31), rgb(0.33, 0.45, 0.39), rgb(0.20, 0.29, 0.23), rgb(0.36, 0.44, 0.33), rgb(0.17, 0.23, 0.18)]
-        let field = rgb(0.21, 0.21, 0.13), tip = rgb(0.50, 0.62, 0.55)
+        func hex(_ v: Int) -> CGColor { rgb(CGFloat(v >> 16) / 255, CGFloat(v >> 8 & 255) / 255, CGFloat(v & 255) / 255) }
+        let sages = [hex(0x56614e), hex(0x56614e), hex(0x5e6955), hex(0x6d7c69), hex(0x829480), hex(0x5c6f5f)], soil = hex(0x3a3b25)
         let texture = paint(CGSize(width: size.width / 2, height: height / 2)) { ctx in
             ctx.scaleBy(x: 0.5, y: 0.5) // half resolution softens the strokes
-            ctx.setLineCap(.round)
-            for _ in 0..<max(Int(25 * size.width / f * (b * b - a * a) / 2), 250) {
-                let d = sqrt(a * a + .random(in: 0...1) * (b * b - a * a)), haze = (d - grassBands[0]) / 8
-                let x = CGFloat.random(in: -10...size.width + 10), root = ground - f * eye / d
-                let tall = f * .random(in: 0.12...tallest) / d, wide = f * .random(in: 0.006...0.013) / d
-                let lean = CGFloat.random(in: -0.4...0.4) * tall
-                ctx.setFillColor(mixRGB(greens.randomElement()!, field, haze).copy(alpha: .random(in: 0.75...0.95))!)
-                ctx.move(to: CGPoint(x: x - wide, y: root))
-                ctx.addQuadCurve(to: CGPoint(x: x + lean, y: root + tall), control: CGPoint(x: x + lean * 0.2, y: root + tall * 0.6))
-                ctx.addQuadCurve(to: CGPoint(x: x + wide, y: root), control: CGPoint(x: x + lean * 0.2 + wide * 0.5, y: root + tall * 0.5))
-                ctx.fillPath()
-                ctx.setStrokeColor(mixRGB(tip, field, haze).copy(alpha: .random(in: 0.3...0.6))!)
-                ctx.setLineWidth(wide * 0.6)
-                ctx.move(to: CGPoint(x: x + lean * 0.1, y: root + tall * 0.45))
-                ctx.addQuadCurve(to: CGPoint(x: x + lean * 0.93, y: root + tall * 0.93), control: CGPoint(x: x + lean * 0.4, y: root + tall * 0.75))
-                ctx.strokePath()
+            for _ in 0..<Int(22 * size.width / f * (b * b - a * a) / 2) {
+                let d = sqrt(a * a + .random(in: 0...1) * (b * b - a * a)), haze = (d - a) / (b - a) * 0.25 + (a - grassBands[0]) / 6
+                let clump = CGFloat.random(in: -10...size.width + 10), sway = CGFloat.random(in: -0.12...0.2)
+                let paint = mixRGB(CGFloat.random(in: 0...1) < 0.16 ? hex(0x5c6f5f) : sages.randomElement()!, soil, min(haze, 0.8))
+                for _ in 0..<Int.random(in: 3...8) {
+                    // Roots buried at random depths, so the bases don't line up along the band.
+                    let tall = f * .random(in: 0.18...tallest) / d, wide = f * .random(in: 0.006...0.011) / d
+                    let x = clump + f * .random(in: -0.04...0.04) / d, root = ground - f * eye / d - tall * .random(in: 0...0.35)
+                    let lean = tall * (sway + .random(in: -0.1...0.1))
+                    ctx.setFillColor(paint.copy(alpha: .random(in: 0.8...0.95))!)
+                    // A flick of the brush: pointed at both ends, widest a third of the way up.
+                    ctx.move(to: CGPoint(x: x, y: root))
+                    ctx.addQuadCurve(to: CGPoint(x: x + lean, y: root + tall), control: CGPoint(x: x + lean * 0.3 - wide * 2, y: root + tall * 0.35))
+                    ctx.addQuadCurve(to: CGPoint(x: x, y: root), control: CGPoint(x: x + lean * 0.3 + wide * 2, y: root + tall * 0.3))
+                    ctx.fillPath()
+                }
             }
         }
         let sprite = SKSpriteNode(texture: texture, size: CGSize(width: size.width, height: height))
@@ -187,37 +206,46 @@ final class Fireflies: SKScene {
     }
     """
 
-    /// Linen under the paint, multiplied over everything at 2x, so 0.5 leaves a colour as it is: fine uneven threads
-    /// both ways, and gouache drying a little patchy.
+    /// The canvas, multiplied over everything at 2x, so 0.5 leaves a colour as it is. As measured in the painting:
+    /// mostly a fine speckle at about a point, a faint weave of threads about 5 pt apart, and paint mottled over
+    /// 10–40 pt.
     private static let canvasSource = """
     void main() {
         vec2 pts = v_tex_coord * u_size;
-        float warp = sin(pts.x * 2.4 + noise(pts * 0.3) * 2.0), weft = sin(pts.y * 2.4 + noise(pts.yx * 0.3 + 9.0) * 2.0);
-        float grain = 0.5 + 0.05 * warp * weft + 0.04 * (noise(pts * 1.3) - 0.5);
-        grain *= 1.0 + 0.06 * (fbm(pts * 0.006) - 0.5);
-        gl_FragColor = vec4(vec3(grain), 1.0);
+        float speck = hash42(floor(pts)).x - 0.5;
+        float weave = sin(pts.x * 1.26) * sin(pts.y * 1.09);
+        float mottle = noise(pts * 0.04) + 0.5 * noise(pts * 0.1) - 0.75;
+        gl_FragColor = vec4(vec3(0.5 * (1.0 + 0.2 * speck + 0.025 * weave + 0.06 * mottle)), 1.0);
     }
     """
 
-    /// A firefly as a dab of cream paint, round but not quite, faded by the node's alpha. `a_fly` is its radius and
-    /// the sprite's half-width in points, then its kind (0 plain, 1 a watery wash with pigment pooled at a ragged
-    /// rim, 2 a pale dry-brush burst) plus a seed in the fraction.
+    /// A firefly as one of the painting's marks, faded by the node's alpha. `a_fly` is its radius and the sprite's
+    /// half-width in points, then its kind plus a seed in the fraction. Kinds 0–3 are a flat cream dab with a hard
+    /// edge, plus 1 if it sits in a stain and 2 if it's torn into a dry-brush burst with spatter; 4 is a dim far dab,
+    /// and 5 a stain alone. A stain is a flat, pale grey-teal wash about 2.6 times the dab's size, a little off
+    /// centre, with a ragged edge and grainy pigment.
     private static let flySource = """
     void main() {
         float r0 = a_fly.x, kind = floor(a_fly.z), seed = fract(a_fly.z) * 64.0;
+        float ghost = step(4.5, kind), dim = step(3.5, kind) * (1.0 - ghost);
+        float stained = max(mod(kind, 2.0) * (1.0 - dim), ghost), torn = step(2.0, mod(kind, 4.0)) * (1.0 - dim);
         vec2 q = (v_tex_coord - 0.5) * 2.0 * a_fly.y;
         float r = length(q);
         vec2 dir = q / max(r, 0.001);
-        float edge = r0 * (0.92 + 0.16 * noise(dir * 1.5 + seed));
-        float dab = smoothstep(edge + 0.5 + 0.2 * r0, edge - 0.3 * r0, r);
-        vec3 paint = mix(vec3(1.0, 0.94, 0.62), vec3(1.0, 0.98, 0.84), 0.6 * smoothstep(r0, 0.0, r));
-        float rim = r0 * 3.4 * (0.8 + 0.4 * noise(dir * 2.0 + seed + 7.0) + 0.1 * noise(dir * 6.0 + seed));
-        float wash = smoothstep(rim, rim - 1.5, r) * (0.5 + 0.5 * smoothstep(rim * 0.4, rim, r));
-        float rays = smoothstep(0.35, 0.8, noise(dir * 5.0 + seed)) * smoothstep(r0 * 2.8, r0, r);
-        vec4 halo = vec4(1.0, 0.94, 0.7, 1.0) * 0.16 * smoothstep(r0 * 2.6, r0 * 0.8, r)
-                  + vec4(0.42, 0.52, 0.52, 1.0) * 0.35 * wash * step(0.5, kind) * step(kind, 1.5)
-                  + vec4(0.9, 0.9, 0.75, 1.0) * 0.45 * rays * step(1.5, kind);
-        gl_FragColor = (halo * (1.0 - dab) + vec4(paint, 1.0) * dab) * v_color_mix.a;
+        float edge = r0 * (0.9 + torn * 0.7 * pow(noise(dir * 5.0 + seed), 2.5));
+        float dab = smoothstep(edge + 0.5, edge - 0.5, r) * (1.0 - ghost);
+        vec4 h = hash42(floor(q / 1.6) + seed * 7.0);
+        float spatter = torn * step(0.88, h.x) * step(r0 * 1.1, r) * step(r, r0 * 2.1)
+                      * step(length(fract(q / 1.6) - 0.5 - (h.yz - 0.5) * 0.4) * 1.6, 0.35 + 0.5 * h.w);
+        vec2 s = q - (vec2(hash11(seed), hash11(seed + 3.0)) - 0.5) * 0.5 * r0 * (1.0 - ghost);
+        float rs = length(s);
+        vec2 ds = s / max(rs, 0.001);
+        float reach = mix(r0 * 2.6, r0, ghost) * (0.85 + 0.3 * noise(ds * 2.0 + seed) + 0.12 * noise(ds * 7.0 + seed));
+        float stain = smoothstep(reach, reach * 0.8, rs) * (1.0 + 0.15 * smoothstep(reach * 0.5, 0.0, rs))
+                    * (0.8 + 0.4 * hash42(floor(q * 0.7) + seed).x) * stained;
+        vec4 wash = vec4(0.353, 0.416, 0.416, 1.0) * 0.3 * stain;
+        vec4 paint = vec4(mix(vec3(0.996, 0.941, 0.612), vec3(0.612, 0.576, 0.424), dim), 1.0) * max(dab, spatter);
+        gl_FragColor = (wash * (1.0 - paint.a) + paint) * v_color_mix.a;
     }
     """
 }
