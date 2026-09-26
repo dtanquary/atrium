@@ -20,8 +20,8 @@ private let evenings: [(name: String, sun: Double, balance: SIMD3<Float>)] = [
 /// - A marsh pond: "Sunset over a tundra pond" by USFWS Alaska, public domain,
 ///   https://commons.wikimedia.org/wiki/File:Sunset_over_a_tundra_pond_(53708107535).jpg
 private let grounds: [(name: String, file: String, horizon: Float, sky: Float, rough: Float, waves: SIMD3<Float>)] = [
-    ("Brighton West Pier", "murmuration-pier", 780.0 / 1533, 0.1252, 0.12, [0.012, 0.5, 0.12]),
-    ("Marsh pond", "murmuration-marsh", 15.0 / 706, 0.2635, 0.005, [0.025, 1, 0.05]),
+    ("Brighton West Pier", "murmuration-pier", 780.0 / 1533, 0.1252, 0.12, [0.03, 2.5, 0.22]),
+    ("Marsh pond", "murmuration-marsh", 15.0 / 706, 0.2635, 0.005, [0.05, 3.5, 0.12]),
 ]
 
 private let lightKnob = Knob(key: "murmuration.evening", label: "Light", range: 0...4, standard: 0, section: "Scene",
@@ -109,8 +109,12 @@ final class Murmuration: SKScene {
         float t = u_time * u_waves.y;
         vec4 n1 = texture2D(u_noise, nuv(w * vec2(0.07, 0.11) + vec2(t * 0.004, t * 0.013)));
         vec4 n2 = texture2D(u_noise, nuv(w * vec2(0.13, 0.19) + vec2(-t * 0.009, t * 0.007)));
-        vec2 slope = vec2(n1.r - n2.b, n1.b + n2.r - 1.0) * smoothstep(150.0, 40.0, dist);
+        vec2 slope = vec2(n1.r - n2.b, n1.b + n2.r - 1.0) * smoothstep(400.0, 60.0, dist);
         vec2 shift = slope * dip * u_waves.x;
+        // Fine wavelets, stretched across the view as wind ripples are, drifting toward us; only on the nearer water,
+        // where a pixel still spans less than one of them.
+        vec4 n3 = texture2D(u_noise, nuv(w * vec2(0.3, 0.9) + vec2(t * 0.02, t * 0.12)));
+        float wavelets = (n3.g - 0.5) * smoothstep(45.0, 12.0, dist);
         vec4 photo = texture2D(u_texture, v_tex_coord);
         vec3 aux = texture2D(u_aux, v_tex_coord).rgb;
         float ripples = texture2D(u_aux, v_tex_coord + vec2(shift.x, shift.y / u_frame)).g;
@@ -130,7 +134,7 @@ final class Murmuration: SKScene {
         vec2 b = vec2(uv.x + shift.x, (uv.y - shift.y) / u_cam.z);
         float s = u_rough * 0.5;
         float birds = 0.4 * texture2D(u_birds, b).r + 0.3 * texture2D(u_birds, b + vec2(0.0, s)).r + 0.3 * texture2D(u_birds, b - vec2(0.0, s)).r;
-        vec3 water = reflected * u_balance * ripples * 2.0 * (1.0 - birds * 0.9) * (1.0 + slope.y * u_waves.z);
+        vec3 water = reflected * u_balance * ripples * 2.0 * (1.0 - birds * 0.9) * (1.0 + (slope.y + wavelets) * u_waves.z);
         vec3 col = sqrt(1.0 - exp(-mix(land, water, aux.r)));
         gl_FragColor = vec4(col + (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0, 1.0) * photo.a;
     }
