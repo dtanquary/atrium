@@ -6,10 +6,10 @@ A bright reef tank seen through the glass, the way reefkeepers build them. Two i
 - a clownfish pair at home in their anemone
 - a royal gramma, firefish and a flame angelfish hovering low by the rock
 
-Soft corals sway in the current, caustics ripple over the sand, and the mirror of the surface runs along the top. It's daylight in Light Mode and a reef tank's actinic evening blue in Dark Mode.
+Soft corals sway in the current, caustics ripple over the sand, and the mirror of the surface runs along the top. Fish cast soft shadows on the sand and on the fish below them, and each fish is lit from where it swims and how it turns. It's daylight in Light Mode and a reef tank's actinic evening blue in Dark Mode.
 
 - **Files:**
-  - `Sources/Atrium/FishTank.swift` holds the scene: the light, water and sand shaders, the reef layout, the grading shader, schooling, marine snow and the vignette.
+  - `Sources/Atrium/FishTank.swift` holds the scene: the light, water and sand shaders, the reef layout, the grading shader, schooling, fish lighting and shadows, marine snow and the vignette.
   - `Sources/Atrium/FishTankArt.swift` holds:
     - the `Species` enum: each fish's photos, size, speed, tail beat, spacing and haunt
     - `TankArt.photo`, which loads a cut-out at its on-screen size with an optional depth-of-field blur
@@ -29,6 +29,7 @@ Layers, back to front, from the `Z` enum:
    - the underside of the surface along the top, a mirror: it reflects the lit water, so it's the same blue as `high` but about 1.2× brighter, crossed by thin, crisp ripple highlights (the caustic network squashed flat, `pts / (90, 9)`), with a soft line where it meets the water, a bright waterline, and the dark lid above. It starts at 94% of the height. A grey, blurry, noise-streaked band there read as muddy; Dave called it out.
    - dither
 2. **Sand** (`addSand`), all in its shader: white aragonite, warm white up front (`sandNear`) and going blue with distance (`sandFar`), with fine grain from `hash42`. Two caustic layers multiply the sand they land on rather than adding white, the way real light brightens it. They're bigger at the front and squashed by perspective (`pts.y * 2.6`), and the back edge melts into the back panel.
+   - **fish shadows** (`Z.shadows`, just above the sand): one soft, dark-blue ellipse per fish, moved in `illuminate`. See *Fish lighting and shadows* below.
 3. **The reef** (`addReef`). Which cut-outs go where, their flips, and which island has the anemone all change with each load. It has four parts:
    - **back cluster:** about 55% scale, near the back edge of the sand, faded 35% toward the back panel and blurred 1.4 pt, like a camera's depth of field
    - **two islands** (`cluster`), at 14–24% and 76–86% across, leaving open sand between. Each one has:
@@ -66,6 +67,14 @@ Layers, back to front, from the `Z` enum:
 - plays the lamp's ripples over upper surfaces. Two crossing, wandering sine waves (`pow(|sin·sin|, 3)`) stand in for caustics: the Voronoi caustics on every overlapping coral layer took the tank from 1.35 to about 2.2 ms, and the waves read the same on small, moving shapes.
 - **fluorescence:** adds `colour × saturation × a_glow × fluoro`. Under actinic blue (`fluoro` 1.5), coral pigments glow in their own colours while grey rock just goes blue, as in real reef photos at night. Daylight gets a touch (0.15). `a_glow` is 1 for corals, 0.1 for rock and 0.08 for fish; at 0.25 the yellow tangs glowed.
 - fades things further back toward the back panel by `a_fog`: `mix(…, haze·alpha, a_fog)`, since the textures are premultiplied
+
+**Fish lighting and shadows.** The lamp is overhead, so each fish gets, from `illuminate` (every frame, in `pose`) and `castShadows` (every frame, after `swim`):
+- **light from where it swims** (`a_fish.y`): `(0.85 + 0.2·lamp) × (0.8 + 0.3·height)`, with `lamp` the same pool of light as the water's (brightest mid-tank) and `height` how far up it is between its floor and ceiling. This is on top of the shared `0.82 + 0.28·height` every cut-out gets.
+- **top light across the body:** the back is brighter than the belly, `0.8 + 0.4·up` in texture space, so the cut-outs read as lit from above.
+- **sand bounce** (`a_fish.w`): white sand close below lights the belly, `0.3·exp(-height above sand / 60 pt)`.
+- **banking in a turn:** each turn picks at random whether the fish rolls its flank up toward the lamp or away from it (`bank`). Toward, the flank flashes (`a_fish.z`, up to 0.3 of the light's colour added, peaking half-way through the turn); away, it dims by up to 25%. This is the flash of a school catching the light.
+- **its shadow on the sand:** where the sand meets the fish's plane (`sandLine`), an ellipse its length wide that grows (`1 + 1.5·height/screen`) and fades (`0.55 / spread²`) the higher it swims, and fades out toward the back of the sand. As the fish turns, it narrows and deepens, since from above a turning fish points into the tank. Each fish's depth is its school's ±0.05, only for shadows: with one shared plane, a school's shadows all fell on one line and read as a dark streak.
+- **shadows from fish above** (`a_shadow`): of the fish above it within 0.06 depth and horizontally close, the strongest one darkens a vertical band of it, `0.35 × closeness in depth × exp(-drop / 3 lengths)`, with the band's edge softer the further above it is. It also stops the lamp's ripples in the band. One shadow per fish is plenty to read.
 
 **Schooling (`swim`)** uses boids within each species, with O(n²) per school:
 - separation inside `gap` (body length × `Species.spacing`: 1.3 for chromis, 1.9 for the rest)
@@ -113,7 +122,7 @@ None yet.
 - **Snow:** birth rate 5, lifetime 40 s.
 
 ## Performance
-CPU 0.7 ms and GPU 1.45–1.5 ms per frame (release, 2x), in both looks. The GPU cost is mostly the two full-screen shaders (the water's caustics and noise, and the sand's two caustic layers), plus about 60 lit sprites, many overlapping in the reef. CPU is the boids, 38 fish at O(n²) per school. The cut-outs are decoded and resized once at launch.
+CPU 0.8–0.9 ms and GPU 1.3–1.5 ms per frame (release, 2x), in both looks. The GPU cost is mostly the two full-screen shaders (the water's caustics and noise, and the sand's two caustic layers), plus about 60 lit sprites, many overlapping in the reef, and 38 small shadow sprites. CPU is the boids, 38 fish at O(n²) per school, and the fish-on-fish shadows, O(n²) over all 38. Shadows and fish lighting added about 0.1 ms to each. The cut-outs are decoded and resized once at launch.
 
 ## Gotchas and shortcuts
 - **Assets:** the cut-outs come from public domain, CC0 and CC BY photos (iNaturalist, Wikimedia Commons, NOAA). They were cut out with Vision's foreground mask, cleaned to their largest connected piece, resized (fish 480 px, corals 760, rock 900 at most) and saved as HEIC with alpha (about 8× smaller than PNG).
@@ -123,7 +132,8 @@ CPU 0.7 ms and GPU 1.45–1.5 ms per frame (release, 2x), in both looks. The GPU
   - `gramma-3` was left out: its Smithsonian "no known copyright restrictions" isn't formally public domain.
   - The originals and the tools (`cut.swift`, `process.py`) were in the research agent's scratch folder and aren't in the repo.
 - **Warp speed bug:** changing a node's `speed` every frame while `SKAction.animate(withWarps:)` runs on it makes SpriteKit steadily slower (1 ms up to 10 ms a frame within a minute). That's why fish step through warp frames by hand in `pose`. The coral sway uses warp actions only because its speed never changes. This is also noted in CLAUDE.md.
-- `ponytail:` O(n²) boids within a school, fine up to a few dozen fish per school. Use a spatial grid, like Murmuration, if schools grow.
+- `ponytail:` O(n²) boids within a school, fine up to a few dozen fish per school. Use a spatial grid, like Murmuration, if schools grow. `castShadows` is O(n²) over every fish, likewise.
+- **Shadows only fall on sand and fish.** A fish over the rock casts its shadow on the sand behind it, hidden by the rock, not on the rock or corals. Shading a coral's top where a fish passes over would need its surface, which only `TankArt.skyline` knows.
 - **Rock:** no permissively licensed photo of coralline-covered live rock exists besides `rock-1`, so `rock-3`, `rock-4` and `rock-6` are bare dry reef rock and a bleached Porites head. `coralline.py` (in the research scratch folder, not the repo) removed each photo's colour cast and painted muted pink, purple and green coralline patches onto them, in colours sampled from `rock-1`. The credits note the change, as CC BY asks. A first pass at full strength read as camouflage paint; the patches are now 70% toward the grey stone and cover about a third of it. `rock-3` and `rock-4` are toned to 0.78 and 0.88 of the live rock's mid-grey, since at full brightness they looked bleached beside it. There's still no tall pillar or arch.
 - The shaders use `u_time`, which doesn't advance in the render test, so caustics look frozen in snapshots. Fish and corals do move.
 
@@ -142,9 +152,11 @@ CPU 0.7 ms and GPU 1.45–1.5 ms per frame (release, 2x), in both looks. The GPU
 
   This rebuild is the result, with daylight in Light Mode and actinic blue in Dark Mode.
 - On the rebuild: "looking much better", but a reef stick floated attached to nothing in the top left, and the top of the tank looked muddy. The stick was the staghorn fragment; the fix was setting corals on the rocks' real silhouettes. The top became a bright mirror of the water with crisp ripple lines.
+- 2026-09-26: "shouldn't the fish be casting shadows on to the ground and on to each other? can we also adjust the lighting on each fish based on their movement and position from the top?" Added shadows on the sand and from fish above, light from where each fish swims, top light across the body, sand bounce, and a flash or dimming as a fish banks in a turn.
 
 ## Ideas / next steps
 - Rare visitors: a cleaner shrimp on the rock, a snail on the glass.
+- A glint on each tail beat, for shiny fish like chromis. Left out for now: 38 fish flickering at 3 beats a second may read as busy.
 - Settings: fish count, which species appear, the lighting look.
 
 ## Checking it

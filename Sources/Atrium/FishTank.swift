@@ -9,6 +9,9 @@ final class FishTank: SKScene {
     /// One fish. It swims in the flat plane of its school's depth.
     private struct Swimmer {
         let node: SKSpriteNode
+        let shadow: SKSpriteNode // on the sand below
+        let depth: Double        // its school's, give or take: a school has some thickness, for shadows
+        let length: Double       // nose to tail, in points
         var position: SIMD2<Double>
         var velocity: SIMD2<Double>
         var facing: Double
@@ -18,6 +21,7 @@ final class FishTank: SKScene {
         var frame = -1
         var pulse = Double.random(in: 0..<1)  // how far through a burst-and-coast cycle, for species that swim so
         var coasting = false
+        var bank = 1.0 // which way it rolls in a turn: 1 tips its flank up toward the lamp, -1 away
     }
 
     /// Fish of one species at one depth, which school together.
@@ -31,7 +35,7 @@ final class FishTank: SKScene {
     }
 
     private enum Z {
-        static let water: CGFloat = 0, sand: CGFloat = 1, backReef: CGFloat = 2, farFish: CGFloat = 3, reef: CGFloat = 4
+        static let water: CGFloat = 0, sand: CGFloat = 1, shadows: CGFloat = 1.5, backReef: CGFloat = 2, farFish: CGFloat = 3, reef: CGFloat = 4
         static let midFish: CGFloat = 5, frontReef: CGFloat = 6, nearFish: CGFloat = 7, snow: CGFloat = 8, vignette: CGFloat = 9
     }
 
@@ -60,6 +64,7 @@ final class FishTank: SKScene {
 
     override func update(_ currentTime: TimeInterval) {
         swim(frameTime(currentTime, &lastUpdate))
+        castShadows()
     }
 
     // MARK: - Swimming
@@ -67,8 +72,12 @@ final class FishTank: SKScene {
     /// The floor and ceiling a school keeps between: fish further back can't come as low, since the sand is nearer
     /// the eye there.
     private func bounds(_ depth: CGFloat) -> (floor: Double, ceiling: Double) {
-        let forward = Double(min(max((depth - 0.55) / 0.5, 0), 1))
-        return (Double(sandHeight) * (1 - 0.65 * forward) + Double(30 * unit), Double(size.height * 0.9 - 30 * unit))
+        (sandLine(depth) + Double(30 * unit), Double(size.height * 0.9 - 30 * unit))
+    }
+
+    /// Where the sand meets the plane a school swims in: further back, it's higher up the screen.
+    private func sandLine(_ depth: CGFloat) -> Double {
+        Double(sandHeight) * (1 - 0.65 * Double(min(max((depth - 0.55) / 0.5, 0), 1)))
     }
 
     /// Steers every fish: keep clear of schoolmates, match their heading, drift toward their middle, wander a
@@ -126,6 +135,7 @@ final class FishTank: SKScene {
         var fish = swimmers[i]
         let v = fish.velocity, cruise = school.cruise
         let target = v.x > cruise * 0.15 ? 1.0 : v.x < -cruise * 0.15 ? -1.0 : (fish.facing >= 0 ? 1 : -1)
+        if fish.facing == -target { fish.bank = Bool.random() ? 1 : -1 } // a new turn: bank toward the lamp or away
         fish.facing += max(-dt * 2.5, min(dt * 2.5, target - fish.facing))
         let pitch = max(-0.3, min(0.3, atan2(v.y, max(abs(v.x), cruise * 0.5))))
         fish.tilt += (pitch - fish.tilt) * min(1, dt * 3)
@@ -133,6 +143,7 @@ final class FishTank: SKScene {
         fish.node.xScale = CGFloat(fish.facing) * school.depth * fishUnit
         fish.node.zRotation = CGFloat(fish.facing >= 0 ? fish.tilt : -fish.tilt)
         framed(fish.node)
+        illuminate(fish, in: school)
 
         // The tail beats faster when swimming faster. Stepping through precomputed frames here, rather than an
         // SKAction whose speed changes every frame, which SpriteKit gets steadily slower at.
@@ -145,6 +156,46 @@ final class FishTank: SKScene {
         swimmers[i] = fish
     }
 
+    /// Lights a fish from where it swims and how it moves (see `photoShader`): brighter near the surface and under
+    /// the middle of the lamp, its belly lit by the white sand when it swims low, and its flank flashing as it banks
+    /// toward the lamp in a turn, or dimming as it banks away. Its shadow on the sand grows softer and fainter the
+    /// higher it swims, and turns with it.
+    private func illuminate(_ fish: Swimmer, in school: School) {
+        let (floor, ceiling) = bounds(school.depth), sand = sandLine(CGFloat(fish.depth)), p = fish.position
+        let lamp = exp(-pow((p.x / Double(size.width) - 0.5) / 0.6, 2)) // the lamp's pool, as in the water
+        let high = min(max((p.y - floor) / (ceiling - floor), 0), 1)
+        let turning = sin(.pi * (1 - abs(fish.facing))) * fish.bank
+        let level = (0.85 + 0.2 * lamp) * (0.8 + 0.3 * high) * (1 + 0.25 * min(0, turning))
+        let bounce = 0.3 * exp(-(p.y - sand) / Double(60 * unit))
+        fish.node.setValue(SKAttributeValue(vectorFloat4: [1, Float(level), Float(0.3 * max(0, turning)), Float(bounce)]),
+                           forAttribute: "a_fish")
+
+        let above = max(0, p.y - sand), spread = 1 + 1.5 * above / Double(size.height), side = abs(fish.facing)
+        let back = sand / Double(sandHeight) // fading out where the sand melts into the back panel
+        fish.shadow.position = CGPoint(x: p.x, y: sand)
+        fish.shadow.size = CGSize(width: fish.length * (0.25 + 0.75 * side) * spread, height: fish.length * (0.2 + 0.2 * (1 - side)) * spread)
+        fish.shadow.alpha = 0.55 / (spread * spread) * (1 - min(max((back - 0.6) / 0.4, 0), 1))
+    }
+
+    /// Shades each fish under the strongest shadow from a fish above it in about the same plane: a band across its
+    /// body, softer and fainter the further above the other fish is. One shadow per fish is plenty to read.
+    private func castShadows() {
+        for a in swimmers {
+            var best = SIMD4<Float>(0, 0, 1, 0) // centre x, half width, softness, strength
+            // ponytail: O(n²) over every fish, fine for a few dozen
+            for b in swimmers where b.position.y > a.position.y && abs(b.depth - a.depth) < 0.06
+                && abs(b.position.x - a.position.x) < (a.length + b.length) * 0.6 {
+                let drop = b.position.y - a.position.y
+                let strength = 0.35 * (1 - abs(b.depth - a.depth) / 0.06) * exp(-drop / (b.length * 3))
+                if strength > Double(best.w) {
+                    best = SIMD4(Float(b.position.x), Float(b.length * 0.4 * (0.25 + 0.75 * abs(b.facing))),
+                                 Float(b.length * 0.15 + drop * 0.25), Float(strength))
+                }
+            }
+            a.node.setValue(SKAttributeValue(vectorFloat4: best), forAttribute: "a_shadow")
+        }
+    }
+
     private func addSchools() {
         // Species, school size, depth: a big school of chromis split over two depths, a few tangs, the clownfish
         // pair at their anemone, and the small, shy species low by the rock.
@@ -152,6 +203,9 @@ final class FishTank: SKScene {
             (.chromis, 14, 0.62), (.yellowTang, 3, 0.8), (.chromis, 12, 0.9), (.blueTang, 2, 0.95), (.clownfish, 2, 0.95),
             (.royalGramma, 1, 0.92), (.firefish, 2, 0.9), (.flameAngel, 1, 0.97), (.yellowTang, 1, 1.1),
         ]
+        let shadowTexture = radialGlow(diameter: 32, stops: [(0, rgb(0, 0, 0)), (0.4, rgb(0, 0, 0, 0.7)), (1, rgb(0, 0, 0, 0))])
+        let shade = light.low * 0.5 // shadows on the sand are lit only by the blue of the water around them
+        let shadowColor = NSColor(red: CGFloat(shade.x), green: CGFloat(shade.y), blue: CGFloat(shade.z), alpha: 1)
         for (species, count, depth) in plan {
             let blur = max(0, 0.9 - depth) * 4 // the back school is a little out of focus
             let looks = species.photos.compactMap { TankArt.photo($0, width: species.length, blur: blur) }
@@ -176,9 +230,14 @@ final class FishTank: SKScene {
                 node.subdivisionLevels = 1
                 graded(node, fog: max(0, 0.9 - depth) * 0.5, glow: 0.08)
                 addChild(node)
+                let shadow = SKSpriteNode(texture: shadowTexture, color: shadowColor, size: CGSize(width: 1, height: 1))
+                shadow.colorBlendFactor = 1
+                shadow.zPosition = Z.shadows
+                addChild(shadow)
                 let spread = Double(species.length * depth * fishUnit) * 2.5
                 school.members.append(swimmers.count)
-                swimmers.append(Swimmer(node: node,
+                swimmers.append(Swimmer(node: node, shadow: shadow, depth: Double(depth) + .random(in: -0.05...0.05),
+                                        length: Double(species.length * depth * fishUnit),
                                         position: centre + SIMD2(.random(in: -spread...spread), .random(in: -spread...spread) * 0.5),
                                         velocity: SIMD2(heading * school.cruise, .random(in: -0.1...0.1) * school.cruise),
                                         facing: heading))
@@ -320,6 +379,9 @@ final class FishTank: SKScene {
     /// - under actinic blue, saturated pigments fluoresce in their own colours (`a_glow` for how much), while plain
     ///   stone just goes blue
     /// - `a_fog` fades things further back toward the back panel
+    /// - fish only, set every frame: `a_fish` is (1, light level, flank flash, sand bounce), from `illuminate(_:in:)`,
+    ///   lighting the back more than the belly as the lamp is overhead; `a_shadow` is a band cast by a fish above,
+    ///   (centre x, half width, softness, strength), from `castShadows`
     ///
     /// `a_frame` says where the sprite is in the tank: the scene position of texture corner (0, 0), then the sprite's
     /// width (negative when flipped) and height, in points. Fish update it every frame.
@@ -329,12 +391,16 @@ final class FishTank: SKScene {
                 vec4 c = texture2D(u_texture, v_tex_coord);
                 vec2 pts = a_frame.xy + v_tex_coord * a_frame.zw;
                 float high = clamp(pts.y / u_height, 0.0, 1.0);
+                float shade = a_shadow.w * (1.0 - smoothstep(a_shadow.y - a_shadow.z, a_shadow.y + a_shadow.z, abs(pts.x - a_shadow.x)));
                 // two crossing, wandering waves: a cheap stand-in for caustics, plenty on small moving shapes
                 float t = u_time;
                 float ripple = pow(abs(sin(pts.x * 0.045 + 1.7 * sin(pts.y * 0.03 + t * 0.5) + t * 0.6)
                                      * sin(pts.y * 0.05 - 1.3 * sin(pts.x * 0.035 - t * 0.4) + t * 0.45)), 3.0)
-                             * (0.3 + 0.7 * smoothstep(0.35, 1.0, v_tex_coord.y));
+                             * (0.3 + 0.7 * smoothstep(0.35, 1.0, v_tex_coord.y)) * (1.0 - shade);
                 vec3 lit = c.rgb * u_grade * (0.82 + 0.28 * high) * (1.0 + ripple * 0.45 * (0.4 + 0.6 * high));
+                float up = v_tex_coord.y;
+                lit *= mix(1.0, a_fish.y * (0.8 + 0.4 * up) + a_fish.w * (1.0 - up), a_fish.x) * (1.0 - shade);
+                lit += u_grade * c.a * a_fish.z * (0.3 + 0.7 * up) * (1.0 - shade);
                 float saturation = max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b));
                 lit += c.rgb * saturation * a_glow * u_fluoro;
                 gl_FragColor = vec4(mix(lit, u_haze * c.a, a_fog), c.a);
@@ -344,7 +410,8 @@ final class FishTank: SKScene {
                 SKUniform(name: "u_fluoro", float: light.fluoro), SKUniform(name: "u_height", float: Float(size.height)),
             ])
         shader.attributes = [SKAttribute(name: "a_fog", type: .float), SKAttribute(name: "a_glow", type: .float),
-                             SKAttribute(name: "a_frame", type: .vectorFloat4)]
+                             SKAttribute(name: "a_frame", type: .vectorFloat4), SKAttribute(name: "a_fish", type: .vectorFloat4),
+                             SKAttribute(name: "a_shadow", type: .vectorFloat4)]
         return shader
     }()
 
@@ -352,6 +419,8 @@ final class FishTank: SKScene {
         node.shader = photoShader
         node.setValue(SKAttributeValue(float: Float(fog)), forAttribute: "a_fog")
         node.setValue(SKAttributeValue(float: Float(glow)), forAttribute: "a_glow")
+        node.setValue(SKAttributeValue(vectorFloat4: .zero), forAttribute: "a_fish")
+        node.setValue(SKAttributeValue(vectorFloat4: [0, 0, 1, 0]), forAttribute: "a_shadow")
         framed(node)
     }
 
