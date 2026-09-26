@@ -1,6 +1,10 @@
 import SpriteKit
 
-@MainActor func pixelCity(size: CGSize) -> SKScene { PixelCity(size: size) }
+/// `PIXELCITY_HOUR=21` shows today at that hour instead of now, for screenshots.
+@MainActor func pixelCity(size: CGSize) -> SKScene {
+    let hour = ProcessInfo.processInfo.environment["PIXELCITY_HOUR"].flatMap(Double.init)
+    return PixelCity(size: size, at: hour.map { Calendar.current.startOfDay(for: Date()).addingTimeInterval($0 * 3600) })
+}
 
 /// A pixel-art skyline that follows the real sun and clock: dawn, day, dusk and night skies, windows lighting
 /// up and going dark through the evening, traffic on the street, a blinking antenna and the odd plane.

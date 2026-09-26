@@ -77,5 +77,5 @@ None yet.
 
 ## Checking it
 - `SNAPSHOT_SCENE="Pixel City" swift test` renders the current time at the fallback location.
-- **Particular times:** temporarily change `pixelCity(size:)` to `PixelCity(size: $0, at: <date>)`, render, and revert. The agent checked 12:30, 17:52 (dusk), 18:40, 23:30, 05:48 (dawn), 06:45 and 07:15.
+- **Particular times:** `PIXELCITY_HOUR=19.2 SNAPSHOT_SCENE="Pixel City" swift test` renders today at that hour. The agent checked 12:30, 17:52 (dusk), 18:40, 23:30, 05:48 (dawn), 06:45 and 07:15.
 - **Traffic and planes:** use `SNAPSHOT_SECONDS=30` or more, now that the harness runs `update(_:)` properly.
