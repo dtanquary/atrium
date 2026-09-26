@@ -13,6 +13,7 @@ import Testing
     #expect(conditions.windFrom == 73)
     #expect(conditions.highCloud == 3)
     #expect(conditions.visibility == 33200)
+    #expect(conditions.summary == "Clear (WMO 1) · 49% cloud · wind 12 km/h from ENE") // what Settings shows
     // Some weather models leave out the extras; the reply still counts.
     let bare = #"{"current":{"weather_code":3,"cloud_cover":100,"wind_speed_10m":5}}"#
     #expect(WeatherScene.conditions(from: Data(bare.utf8))?.snowDepth == 0)

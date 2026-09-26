@@ -1,3 +1,4 @@
+import CoreLocation
 import SpriteKit
 
 @MainActor func weather(size: CGSize) -> SKScene { WeatherScene(size: size) }
@@ -135,6 +136,11 @@ final class WeatherScene: SKScene {
         return Calendar.current.startOfDay(for: Date()).addingTimeInterval(Self.knobs[3].value * 3600)
     }
 
+    /// Where the weather is for, as 42.18°N 88.41°W.
+    private static func place(_ spot: CLLocationCoordinate2D) -> String {
+        String(format: "%.2f°%@ %.2f°%@", abs(spot.latitude), spot.latitude >= 0 ? "N" : "S", abs(spot.longitude), spot.longitude >= 0 ? "E" : "W")
+    }
+
     /// Conditions from an Open-Meteo `current` reply.
     static func conditions(from reply: Data) -> Conditions? {
         struct Forecast: Decodable {
@@ -163,9 +169,16 @@ final class WeatherScene: SKScene {
                           URLQueryItem(name: "longitude", value: String(spot.longitude)),
                           URLQueryItem(name: "current", value: "weather_code,cloud_cover,cloud_cover_high,wind_speed_10m,wind_direction_10m,snow_depth,visibility")]
         Task { [weak self] in
+            let time = Date().formatted(date: .omitted, time: .shortened)
             guard let (data, _) = try? await URLSession.shared.data(from: url.url!),
-                  let latest = WeatherScene.conditions(from: data),
-                  let self else { return }
+                  let latest = WeatherScene.conditions(from: data) else {
+                let last = UserDefaults.standard.string(forKey: "weather.status") ?? ""
+                UserDefaults.standard.set("Couldn't reach Open-Meteo at \(time). " + last.replacingOccurrences(of: #"^Couldn't reach.*?\. "#, with: "", options: .regularExpression),
+                                          forKey: "weather.status")
+                return
+            }
+            UserDefaults.standard.set("Live: \(latest.summary) · \(Self.place(spot)) · updated \(time)", forKey: "weather.status")
+            guard let self else { return }
             self.report = latest
             self.redraw()
         }
@@ -930,7 +943,34 @@ final class WeatherScene: SKScene {
 // MARK: - Weather kinds
 
 
-private enum Kind { case clear, partlyCloudy, overcast, fog, drizzle, rain, snow, storm }
+private enum Kind {
+    case clear, partlyCloudy, overcast, fog, drizzle, rain, snow, storm
+
+    var name: String {
+        switch self {
+        case .clear: "Clear"
+        case .partlyCloudy: "Partly cloudy"
+        case .overcast: "Overcast"
+        case .fog: "Fog"
+        case .drizzle: "Drizzle"
+        case .rain: "Rain"
+        case .snow: "Snow"
+        case .storm: "Thunderstorm"
+        }
+    }
+}
+
+extension WeatherScene.Conditions {
+    /// The report in a line, for Settings: "Partly cloudy (WMO 2) · 49% cloud · wind 12 km/h from ENE".
+    var summary: String {
+        let points = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
+        var parts = ["\(kind.name) (WMO \(code))", "\(Int(cloudCover.rounded()))% cloud",
+                     "wind \(Int(wind.rounded())) km/h from \(points[Int((windFrom / 22.5).rounded()) % 16])"]
+        if snowDepth > 0.005 { parts.append("\(Int((snowDepth * 100).rounded())) cm of snow") }
+        if visibility < 10000 { parts.append(String(format: "%.1f km visibility", visibility / 1000)) }
+        return parts.joined(separator: " · ")
+    }
+}
 
 private extension WeatherScene.Conditions {
     var kind: Kind {
@@ -962,6 +1002,7 @@ private extension WeatherScene.Conditions {
         case .storm: return (1, 1.0, 3.2, 0.6, 0)
         }
     }
+
 
     /// The way the wind blows, as a unit vector (east, north).
     var windToward: SIMD2<Double> {

@@ -11,6 +11,9 @@ struct Wallpaper {
     let make: @MainActor (CGSize) -> SKScene
     var knobs: [Knob] = []
     var palettes: PaletteChoice?
+    /// A line the scene keeps up to date in UserDefaults under `key` (what the live weather last said, say), shown
+    /// under its knob `below` while that knob is 0.
+    var status: (key: String, below: String)?
 }
 
 /// Every wallpaper, in menu order.
@@ -43,7 +46,7 @@ struct Wallpaper {
     Wallpaper(name: "Earth from Orbit", icon: "globe.americas.fill", tint: .cyan, blurb: "Day and night sweeping over the globe.",
               make: earthFromOrbit, knobs: EarthFromOrbit.knobs),
     Wallpaper(name: "Weather", icon: "cloud.sun.fill", tint: .blue, blurb: "Real hills under your live local weather.",
-              make: weather, knobs: WeatherScene.knobs),
+              make: weather, knobs: WeatherScene.knobs, status: (key: "weather.status", below: "weather.lock")),
     Wallpaper(name: "Pixel City", icon: "building.2.fill", tint: .pink, blurb: "A pixel-art skyline on your clock.",
               make: pixelCity),
     Wallpaper(name: "Fireflies", icon: "sparkle", tint: .yellow, blurb: "Fireflies in a foggy forest at dusk.",

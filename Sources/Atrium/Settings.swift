@@ -173,7 +173,10 @@ struct WallpaperPage: View {
             }
             ForEach(sections, id: \.self) { section in
                 Section(section) {
-                    ForEach(wallpaper.knobs.filter { $0.section == section }, id: \.key) { KnobRow(knob: $0) }
+                    ForEach(wallpaper.knobs.filter { $0.section == section }, id: \.key) { knob in
+                        KnobRow(knob: knob)
+                        if let status = wallpaper.status, status.below == knob.key { StatusRow(key: status.key, gate: status.below) }
+                    }
                 }
             }
             if wallpaper.knobs.isEmpty && wallpaper.palettes == nil {
@@ -196,6 +199,21 @@ struct WallpaperPage: View {
     /// Palettes are picked when a scene is built, so a new pick rebuilds it if it's on the desktop.
     private func rebuildIfShowing() {
         if wallpaper.name == current { switchScene() }
+    }
+}
+
+/// A scene's own status line from UserDefaults, shown while the knob `gate` is 0 and there's something to say.
+struct StatusRow: View {
+    @AppStorage private var text: String
+    @AppStorage private var gate: Double
+
+    init(key: String, gate: String) {
+        _text = AppStorage(wrappedValue: "", key)
+        _gate = AppStorage(wrappedValue: 0, gate)
+    }
+
+    var body: some View {
+        if gate < 0.5 && !text.isEmpty { Text(text).font(.callout).foregroundStyle(.secondary).textSelection(.enabled) }
     }
 }
 
