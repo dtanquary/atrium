@@ -58,6 +58,8 @@ final class WeatherScene: SKScene {
     private let fog = SKUniform(name: "u_fog", float: 0), snowCover = SKUniform(name: "u_snow", float: 0)
     private let nightUniform = SKUniform(name: "u_night", float: 0), backlit = SKUniform(name: "u_backlit", float: 0)
     private let mist = SKUniform(name: "u_mist", float: 0)
+    /// Cloud time for the billowing, 0…1 around one period of the noise it scrolls, so it wraps seamlessly.
+    private let billow = SKUniform(name: "u_billow", float: 0)
     /// The shadows of the four nearest cumulus on the ground: each one's centre and radii in km (across the view and
     /// away from it), how much there is of each cloud, and how dark a shadow is in each colour.
     private let shadows = (0..<4).map { SKUniform(name: "u_shadow\($0)", vectorFloat4: .zero) }
@@ -488,7 +490,7 @@ final class WeatherScene: SKScene {
     }
 
     /// A cloud photo repacked for its shader, which only needs its brightness to relight it: red and blue are its
-    /// luminance, green its thickness (its alpha blurred by about 3% of its width), alpha as it was. Forming and
+    /// luminance, green its thickness (its alpha blurred by σ ≈ 3% of its width), alpha as it was. Forming and
     /// dissolving by thickness grows a cloud from a core and thins it from the edges; by raw alpha it broke into
     /// scraps and holes, since the photos have thin patches inside.
     private static func packedCloud(_ name: String) -> CGImage? {
@@ -501,7 +503,7 @@ final class WeatherScene: SKScene {
         context.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
         let pixels = data.bindMemory(to: UInt8.self, capacity: w * h * 4)
         var thickness = (0..<w * h).map { Float(pixels[$0 * 4 + 3]) / 255 }
-        for _ in 0..<2 { boxBlur(&thickness, w, h, radius: max(1, w * 15 / 1000)) } // two passes are close to a gaussian
+        for _ in 0..<2 { boxBlur(&thickness, w, h, radius: max(1, w * 37 / 1000)) } // two passes ≈ a gaussian of σ 3%
         for i in 0..<w * h {
             let (r, g, b) = (Float(pixels[i * 4]), Float(pixels[i * 4 + 1]), Float(pixels[i * 4 + 2]))
             let luminance = UInt8(min(0.2126 * r + 0.7152 * g + 0.0722 * b, 255)) // premultiplied, like its alpha
@@ -543,11 +545,12 @@ final class WeatherScene: SKScene {
     private var photoCloudsShown: [DriftingCloud] = []
     private lazy var photoCloudShader: SKShader = {
         let shader = SKShader(source: Self.photoCloudShaderSource, uniforms: [
-            photoCloudSun, photoCloudShade, skyBefore, skyAfter, skyBlend, cameraUniforms.lens, nightUniform,
+            photoCloudSun, photoCloudShade, skyBefore, skyAfter, skyBlend, cameraUniforms.lens, nightUniform, billow,
+            SKUniform(name: "u_noise", texture: CloudNoise.texture),
         ])
         shader.attributes = [SKAttribute(name: "a_lum", type: .vectorFloat2), SKAttribute(name: "a_far", type: .float),
                              SKAttribute(name: "a_back", type: .float), SKAttribute(name: "a_screen", type: .vectorFloat4),
-                             SKAttribute(name: "a_life", type: .float)]
+                             SKAttribute(name: "a_cloud", type: .vectorFloat4)]
         return shader
     }()
 
@@ -555,8 +558,12 @@ final class WeatherScene: SKScene {
     /// of them far than near. Much further and the ridge hides them.
     private static var cloudDistance: Double { 3.5 + 30 * pow(.random(in: 0...1), 1.8) }
 
-    /// A fair-weather cumulus lives 15–30 minutes, sped up with the drift, but never less than three.
-    private var cloudLifetime: Double { max(180, .random(in: 900...1800) / cloudSpeed) }
+    /// How long a cumulus lives, sped up with the drift but never under three minutes: 10–20 minutes for a small one,
+    /// 20–30 for a medium one, 30–45 for a tower.
+    private func cloudLifetime(km: Double) -> Double {
+        let minutes: ClosedRange<Double> = km < 1.5 ? 10...20 : km < 4 ? 20...30 : 30...45
+        return max(180, .random(in: minutes) * 60 / cloudSpeed)
+    }
 
     /// Fair-weather cumulus, a few on a mainly clear day and more when it's partly cloudy, now and then a tower. They
     /// start part-way through their lives, so they don't all form at once.
@@ -571,14 +578,15 @@ final class WeatherScene: SKScene {
             if tower { towers += 1 }
             let pick = Self.photoClouds.filter { $0.tower == tower }.randomElement()!
             let node = SKSpriteNode(texture: Self.cloudTexture(pick.name))
-            node.anchorPoint = CGPoint(x: 0.5, y: 0.06)
+            node.anchorPoint = CGPoint(x: 0.5, y: 0.077) // the photo's base, in a node 4% bigger so puffs can swell
             node.shader = photoCloudShader
+            node.userData = ["seed": SIMD2<Float>(.random(in: 0...1), .random(in: 0...1))]
             node.setValue(SKAttributeValue(vectorFloat2: pick.lum), forAttribute: "a_lum")
             node.xScale = Bool.random() ? 1 : -1
             addChild(node)
             // Towers stand far off, where the ridge hides the bottom of their photo.
             let away = tower ? Double.random(in: 26...40) : Self.cloudDistance
-            let life = cloudLifetime
+            let life = cloudLifetime(km: pick.km)
             photoCloudsShown.append(DriftingCloud(node: node, across: .random(in: -1.15...1.15) * viewpoint.tanH * away, away: away,
                                                   base: tower ? 0.9 : 1.3 + .random(in: 0...0.3), km: pick.km * .random(in: 0.85...1.2),
                                                   age: .random(in: 0.15...0.75) * life, life: life))
@@ -613,17 +621,18 @@ final class WeatherScene: SKScene {
                 cloud.node.setValue(SKAttributeValue(vectorFloat2: pick.lum), forAttribute: "a_lum")
                 cloud.node.xScale = Bool.random() ? 1 : -1
                 cloud.km = pick.km * .random(in: 0.85...1.2)
-                cloud.life = cloudLifetime
+                cloud.life = cloudLifetime(km: pick.km)
                 cloud.age = gone ? 0.15 * cloud.life : 0 // drifting in, it's already a cloud; otherwise it forms
             }
             let f = cloud.age / cloud.life
             let living = smoothstep(0, 0.15, f) * (1 - smoothstep(0.8, 1, f))
-            let km = cloud.km * (0.9 + 0.12 * smoothstep(0, 0.6, f)) // it grows as it forms
+            let km = cloud.km * (0.85 + 0.2 * smoothstep(0, 0.7, f)) // it swells about its base as it forms
             let x = 0.5 + cloud.across / cloud.away / (2 * viewpoint.tanH)
             let y = viewpoint.horizon + (cloud.base - viewpoint.height) / cloud.away / (2 * viewpoint.tanV)
             let width = w * km / cloud.away / (2 * viewpoint.tanH)
             let texture = cloud.node.texture?.size() ?? CGSize(width: 2, height: 1)
-            cloud.node.size = CGSize(width: width, height: width * texture.height / max(texture.width, 1))
+            let aspect = texture.height / max(texture.width, 1)
+            cloud.node.size = CGSize(width: width * 1.04, height: width * aspect * 1.04)
             cloud.node.position = CGPoint(x: x * w, y: y * h)
             cloud.node.zPosition = 1 + CGFloat(1 - cloud.away / 45) // nearer in front, all behind the hills
             let frame = cloud.node.frame
@@ -632,7 +641,8 @@ final class WeatherScene: SKScene {
             cloud.node.setValue(SKAttributeValue(float: Float(1 - exp(-cloud.away / 45))), forAttribute: "a_far")
             let dir = normalize(viewpoint.right * cloud.across + viewpoint.forward * cloud.away + Sky.Vector(0, 0, cloud.base + 0.6 - viewpoint.height))
             cloud.node.setValue(SKAttributeValue(float: Float(smoothstep(0.8, 0.97, dot(dir, sunNow)))), forAttribute: "a_back")
-            cloud.node.setValue(SKAttributeValue(float: Float(living)), forAttribute: "a_life")
+            let seed = cloud.node.userData?["seed"] as? SIMD2<Float> ?? .zero
+            cloud.node.setValue(SKAttributeValue(vectorFloat4: [seed.x, seed.y, Float(aspect), Float(1.1 * (1 - living))]), forAttribute: "a_cloud")
             photoCloudsShown[i] = cloud
         }
         castShadows(dt, drift: SIMD2(across, away))
@@ -646,7 +656,7 @@ final class WeatherScene: SKScene {
 
     /// A new overhead cloud's shadow, somewhere on the ground in view, or drifting in from the upwind side.
     private func overheadCloud(upwind: SIMD2<Double>?) -> (across: Double, away: Double, km: Double, age: Double, life: Double) {
-        let away = 0.05 + 2.4 * pow(.random(in: 0...1), 1.5), km = Double.random(in: 1...2.4), life = cloudLifetime
+        let away = 0.05 + 2.4 * pow(.random(in: 0...1), 1.5), km = Double.random(in: 1...2.4), life = cloudLifetime(km: km)
         let edge = viewpoint.tanH * away + km * 0.5
         guard let upwind else { return (.random(in: -edge...edge), away, km, .random(in: 0.15...0.75) * life, life) }
         return (upwind.x > 0 ? -edge : edge, away, km, 0.15 * life, life)
@@ -665,7 +675,7 @@ final class WeatherScene: SKScene {
         for (slot, i) in nearest.enumerated() {
             let cloud = photoCloudsShown[i], f = cloud.age / cloud.life
             let centre = SIMD2(cloud.across, cloud.away) - offset * (cloud.base + 0.3) // the cloud's middle, above the ground
-            let km = cloud.km * (0.9 + 0.12 * smoothstep(0, 0.6, f))
+            let km = cloud.km * (0.85 + 0.2 * smoothstep(0, 0.7, f))
             shadows[slot].vectorFloat4Value = SIMD4<Float>(Float(centre.x), Float(centre.y), Float(km * 0.45), Float(km * 0.35))
             life[slot] = Float(living(f) * sunUp)
         }
@@ -688,18 +698,29 @@ final class WeatherScene: SKScene {
     /// Near the Sun we see its shaded side, with light through its thin edges. Far ones fade into the sky behind.
     private static let photoCloudShaderSource = """
     vec3 decode(vec3 c) { return c * c * 4.0; }
+    vec2 nuv(vec2 p) { return (fract(p) * 256.0 + 0.5) / 257.0; }
 
     void main() {
-        vec4 c = texture2D(u_texture, v_tex_coord);
+        // Billowing (after the billowing research): two lookups of the cloud noise scrolling different ways and
+        // summed, so the swell churns in place rather than sliding. The base stays flat and the tops move most, by at
+        // most 0.85% of the width; much more and the displacement folds into double contours. The node is 4% bigger
+        // than the photo so puffs can swell past its tight margin.
+        vec2 uv = (v_tex_coord - 0.5) * 1.04 + 0.5;
+        vec2 q = vec2(uv.x, uv.y * a_cloud.z) * 1.6 + a_cloud.xy;
+        vec4 n1 = texture2D(u_noise, nuv(q + vec2(u_billow, 0.0)));
+        vec4 n2 = texture2D(u_noise, nuv(q * 1.37 + vec2(0.5, 0.21 - u_billow)));
+        vec2 d = vec2(n1.r + n2.a - 1.0, n1.a + n2.r - 1.0) * 0.010 * smoothstep(0.08, 0.6, uv.y);
+        uv -= vec2(d.x, d.y / a_cloud.z);
+        vec4 c = texture2D(u_texture, uv) * step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
         vec3 packed = c.rgb / max(c.a, 0.001); // red: luminance, green: thickness (see packedCloud)
         // The cut leaves a faint veil of sky that glows at sunset, so the thinnest alpha is clipped. As a cloud forms
-        // or dissolves, a clip on its thickness rises: the edges go first and the thick core last, as real cumulus
-        // evaporate.
-        float fade = 1.0 - a_life;
-        float a = c.a * smoothstep(0.03, 0.2, c.a) * smoothstep(fade * 0.95 - 0.08, fade * 0.95 + 0.08, packed.g) * min(a_life * 4.0, 1.0);
+        // or dissolves, a clip on its thickness (a_cloud.w) rises: the edges and the base go first and the thick core
+        // last, raggedly, as real cumulus evaporate.
+        float h = packed.g - 0.25 * (n2.b - 0.5) - 0.15 * (1.0 - smoothstep(0.05, 0.5, uv.y));
+        float a = c.a * smoothstep(0.03, 0.2, c.a) * smoothstep(a_cloud.w - 0.1, a_cloud.w + 0.25, h);
         float lum = packed.r;
         float t = clamp((lum - a_lum.x) / max(a_lum.y - a_lum.x, 0.02), 0.0, 1.0);
-        float v = 1.0 - v_tex_coord.y;
+        float v = 1.0 - uv.y;
         t = (0.3 + 0.7 * t) * (1.0 - 0.5 * v * v);
         t = mix(t, t * t * 0.9, a_back * 0.6);
         vec3 col = mix(u_cloudAmb * (1.0 - 0.2 * a_back), u_cloudSun, t);
@@ -736,7 +757,7 @@ final class WeatherScene: SKScene {
                                  Float(width / size.width), Float(height / size.height))
         ground.shader = SKShader(source: Self.groundShader, uniforms: [
             SKUniform(name: "u_aux", texture: Self.groundAux), SKUniform(name: "u_frame", vectorFloat4: frame),
-            skyBefore, skyAfter, skyBlend, cameraUniforms.lens, groundLight, groundHaze, groundColour, groundHazeLit, fog, deck, flashAmount, snowCover, backlit, mist, clock, shadowLife, shadowShade,
+            skyBefore, skyAfter, skyBlend, cameraUniforms.lens, groundLight, groundHaze, groundColour, groundHazeLit, fog, deck, flashAmount, snowCover, backlit, mist, clock, shadowLife, shadowShade, billow,
             SKUniform(name: "u_noise", texture: CloudNoise.texture),
         ] + shadows)
         addChild(ground)
@@ -774,14 +795,19 @@ final class WeatherScene: SKScene {
         // dark layered silhouettes, so darken them with distance.
         land *= 1.0 - u_backlit * 0.5 * smoothstep(0.2, 0.9, aux.r);
         // Shadows of the nearest clouds, cast along the sunlight onto the hills below them: lumpy ellipses about each
-        // cloud's size, where this pixel's ground lies (km across the view and away, from the depth map).
+        // cloud's size, where this pixel's ground lies (km across the view and away, from the depth map). Their lumps
+        // churn on the clouds' billowing clock, so shadows and clouds keep in step.
         if (u_shadowLife.x + u_shadowLife.y + u_shadowLife.z + u_shadowLife.w > 0.0) {
             float away = (pow(32.0, aux.r) - 1.0) / 3.1;
             vec2 g = vec2((screen.x * 2.0 - 1.0) * u_cam.x * away, away);
-            float n0 = texture2D(u_noise, nuv((g - u_shadow0.xy) * 0.9 + 0.13)).g;
-            float n1 = texture2D(u_noise, nuv((g - u_shadow1.xy) * 0.9 + 0.41)).g;
-            float n2 = texture2D(u_noise, nuv((g - u_shadow2.xy) * 0.9 + 0.67)).g;
-            float n3 = texture2D(u_noise, nuv((g - u_shadow3.xy) * 0.9 + 0.89)).g;
+            float n0 = 0.5 * (texture2D(u_noise, nuv((g - u_shadow0.xy) * 0.9 + vec2(0.13 + u_billow, 0.0))).g
+                             + texture2D(u_noise, nuv((g - u_shadow0.xy) * 1.23 + vec2(0.5, 0.13 - u_billow))).g);
+            float n1 = 0.5 * (texture2D(u_noise, nuv((g - u_shadow1.xy) * 0.9 + vec2(0.41 + u_billow, 0.0))).g
+                             + texture2D(u_noise, nuv((g - u_shadow1.xy) * 1.23 + vec2(0.5, 0.41 - u_billow))).g);
+            float n2 = 0.5 * (texture2D(u_noise, nuv((g - u_shadow2.xy) * 0.9 + vec2(0.67 + u_billow, 0.0))).g
+                             + texture2D(u_noise, nuv((g - u_shadow2.xy) * 1.23 + vec2(0.5, 0.67 - u_billow))).g);
+            float n3 = 0.5 * (texture2D(u_noise, nuv((g - u_shadow3.xy) * 0.9 + vec2(0.89 + u_billow, 0.0))).g
+                             + texture2D(u_noise, nuv((g - u_shadow3.xy) * 1.23 + vec2(0.5, 0.89 - u_billow))).g);
             float shade = max(max(footprint(g, u_shadow0, n0) * u_shadowLife.x, footprint(g, u_shadow1, n1) * u_shadowLife.y),
                               max(footprint(g, u_shadow2, n2) * u_shadowLife.z, footprint(g, u_shadow3, n3) * u_shadowLife.w));
             land *= mix(vec3(1.0), u_shade, shade);
@@ -977,6 +1003,7 @@ final class WeatherScene: SKScene {
         cirrusDrift -= cirrusDrift.rounded(.down)
         cloudDrift.vectorFloat2Value = SIMD2<Float>(deckDrift)
         cirrusShift.vectorFloat2Value = SIMD2<Float>(cirrusDrift)
+        billow.floatValue = (billow.floatValue + Float(Double(dt) * cloudSpeed / 200)).truncatingRemainder(dividingBy: 1)
         driftClouds(Double(dt))
         if let (start, strokes, bolt) = flash {
             let brightness = flashBrightness(currentTime - start, strokes)
