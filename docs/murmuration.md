@@ -71,6 +71,7 @@ For repeatable snapshots, `MURMURATION_SEED=3` seeds the flock.
 - 2026-09-26: "I love the bird swarming stuff, but what else can we do to make that one 'feel' better and look better." This pass: physical sky, real flight model, photo grounds.
 - He was shown three grounds (West Pier, marsh pond, reed bed) and asked for both the pier and the pond, as a setting, and asked whether the birds could be reflected in the water. They are.
 - After seeing it: "its near perfect, we just need some very very subtle animation to make the water look not static ... i like both locations keep both." Hence the slow ripples.
+- With the ripples strengthened: "i see the ripples now, looks good." Keep them at these levels.
 - The old painted-sunset version (four-dot clusters in screen points) was kept behind a Compare switch until Dave said to remove it on 2026-09-26; it's in git history before then.
 
 ## Ideas / next steps
