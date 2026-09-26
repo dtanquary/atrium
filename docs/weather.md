@@ -95,7 +95,8 @@ What changed from it:
 - The reference's greens and cloud colours were for the old painted palette; the photo ground and the physical sky replaced both.
 
 ## Settings
-- **Preview** (`weather.preview`, `weather.previewKind`, `weather.previewHour`): a switch, a menu of the eight kinds (Clear, Partly cloudy, Overcast, Fog, Drizzle, Rain, Snow, Thunderstorm) and a time of day. While it's on, the scene draws that instead of the live weather, with the sky, Sun and Moon at that time today (moving the time bakes the sky again at once). Each kind stands in as one code (0, 2, 3, 45, 53, 63, 73, 95) with a 15 km/h wind from 250°, 12 cm of snow on the ground for Snow, and 400 m visibility for Fog. The scene keeps polling underneath, so switching it off goes straight back to the live weather.
+- **Weather** (`weather.lock`): "Live where you are" (the default), or one of the eight kinds to lock it to: Clear, Partly cloudy, Overcast, Fog, Drizzle, Rain, Snow, Thunderstorm. A locked kind still follows the real time of day, Sun and Moon. Each stands in as one code (0, 2, 3, 45, 53, 63, 73, 95) with a 15 km/h wind from 250°, 12 cm of snow on the ground for Snow, and 400 m visibility for Fog. The scene keeps polling underneath, so going back to Live shows the latest report at once. Dave asked for it on 2026-09-25: "add some options to settings to lock to various weather conditions in addition to using local".
+- **Preview a time of day** (`weather.previewTime`, `weather.previewHour`): a switch and a time, as in Live Sky. The sky, Sun and Moon show that time today, live or locked; moving the time bakes the sky again at once. The two used to be one "Preview" switch that set both.
 - `report` holds the latest live weather and `conditions` what's drawn; `redraw()` rebuilds only when the two differ, so any other change to UserDefaults costs nothing.
 
 ## Tuning constants
@@ -132,6 +133,6 @@ What changed from it:
 
 ## Checking it
 - `SNAPSHOT_SCENE="Weather" swift test` renders the offline default: partly cloudy, at this moment where you are.
-- **Every state:** `SNAPSHOT_DEFAULTS="weather.preview=1,weather.previewKind=6,weather.previewHour=22" SNAPSHOT_SCENE=Weather swift test` renders a snowy night. The kind is an index: 0 clear, 1 partly cloudy, 2 overcast, 3 fog, 4 drizzle, 5 rain, 6 snow, 7 storm. For exact codes, cloud cover or wind, pass `conditions:` to `WeatherScene(size:conditions:)` from a test.
+- **Every state:** `SNAPSHOT_DEFAULTS="weather.lock=7,weather.previewTime=1,weather.previewHour=22" SNAPSHOT_SCENE=Weather swift test` renders a snowy night. The lock is an index: 0 live, 1 clear, 2 partly cloudy, 3 overcast, 4 fog, 5 drizzle, 6 rain, 7 snow, 8 storm. For exact codes, cloud cover or wind, pass `conditions:` to `WeatherScene(size:conditions:)` from a test.
 - `swift test --filter parsesOpenMeteo`.
 - **Live check:** `curl "https://api.open-meteo.com/v1/forecast?latitude=40.0&longitude=-90.0&current=weather_code,cloud_cover,cloud_cover_high,wind_speed_10m,wind_direction_10m,snow_depth,visibility"`.

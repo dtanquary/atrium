@@ -7,13 +7,13 @@ import SpriteKit
 /// real Sun where you are, checked every minute, so it's right offline too.
 final class WeatherScene: SKScene {
     nonisolated static let knobs = [
-        Knob(key: "weather.preview", label: "Preview the weather", range: 0...1, standard: 0, section: "Preview",
+        Knob(key: "weather.lock", label: "Weather", range: 0...8, standard: 0, section: "Weather",
+             format: .choice(["Live where you are", "Clear", "Partly cloudy", "Overcast", "Fog", "Drizzle", "Rain", "Snow",
+                              "Thunderstorm"])),
+        Knob(key: "weather.previewTime", label: "Preview a time of day", range: 0...1, standard: 0, section: "Preview",
              format: .toggle),
-        Knob(key: "weather.previewKind", label: "Weather", range: 0...7, standard: 5, section: "Preview",
-             format: .choice(["Clear", "Partly cloudy", "Overcast", "Fog", "Drizzle", "Rain", "Snow", "Thunderstorm"]),
-             shownWhen: "weather.preview"),
         Knob(key: "weather.previewHour", label: "Time", range: 0...24, standard: 13, section: "Preview", format: .clock,
-             shownWhen: "weather.preview"),
+             shownWhen: "weather.previewTime"),
     ]
 
     /// The current weather as Open-Meteo reports it.
@@ -85,10 +85,10 @@ final class WeatherScene: SKScene {
             withKey: "poll")
     }
 
-    /// The live weather, or while previewing, the kind and time of day picked in Settings.
+    /// The live weather, or the kind it's locked to in Settings.
     private var wanted: Conditions {
         guard live, Self.knobs[0].value > 0.5 else { return report }
-        let kind = min(max(Int(Self.knobs[1].value), 0), 7)
+        let kind = min(max(Int(Self.knobs[0].value) - 1, 0), 7)
         return Conditions(code: [0, 2, 3, 45, 53, 63, 73, 95][kind], cloudCover: [5, 45, 100, 100, 100, 100, 100, 100][kind], wind: 15, windFrom: 250,
                           highCloud: [30, 20, 0, 0, 0, 0, 0, 0][kind], snowDepth: kind == 6 ? 0.12 : 0, visibility: kind == 3 ? 400 : 30000)
     }
@@ -115,7 +115,7 @@ final class WeatherScene: SKScene {
 
     /// Now, or today at the preview hour while previewing.
     private var now: Date {
-        guard live, Self.knobs[0].value > 0.5 else { return Date() }
+        guard live, Self.knobs[1].value > 0.5 else { return Date() }
         return Calendar.current.startOfDay(for: Date()).addingTimeInterval(Self.knobs[2].value * 3600)
     }
 

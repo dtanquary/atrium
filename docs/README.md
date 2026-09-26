@@ -15,7 +15,7 @@ One file per wallpaper, recording what the code can't: how each scene works, why
 | Galaxy | [galaxy.md](galaxy.md) | `Galaxy.swift` | shader | knobs, 6 real galaxies | none | 0.5 / 1.5–2.1 |
 | Live Sky | [live-sky.md](live-sky.md) | `LiveSky.swift`, `SkyMath.swift` | SpriteKit and shaders | switches, preview | location, ISS | 0.64 / 0.90 |
 | Earth from Orbit | [earth-from-orbit.md](earth-from-orbit.md) | `EarthFromOrbit.swift`, `ISS.swift`, `Clouds.swift`, `Storms.swift` | shader | ISS, clouds, lightning switches | location, ISS, clouds, storms | 0.45 / 0.31 |
-| Weather | [weather.md](weather.md) | `Weather.swift`, `WeatherSky.swift`, `Resources/weather-*` | physical sky, photo ground and clouds, shaders | preview | location, Open-Meteo | 0.55 / 0.45–1.2 |
+| Weather | [weather.md](weather.md) | `Weather.swift`, `WeatherSky.swift`, `Resources/weather-*` | physical sky, photo ground and clouds, shaders | weather lock, time preview | location, Open-Meteo | 0.55 / 0.45–1.2 |
 | Pixel City | [pixel-city.md](pixel-city.md) | `PixelCity.swift` | SpriteKit (pixel canvas) | none yet | location, clock | 0.43 / 0.18 |
 | Fireflies | [fireflies.md](fireflies.md) | `Fireflies.swift` | SpriteKit | none yet | none | 0.49 / 0.41 |
 | Murmuration | [murmuration.md](murmuration.md) | `Murmuration.swift` | SpriteKit (3D boids) | none yet | none | 1.09 / 0.24 |
