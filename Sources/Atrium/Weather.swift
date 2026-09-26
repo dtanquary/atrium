@@ -467,22 +467,37 @@ final class WeatherScene: SKScene {
         return texture
     }
 
-    /// The clouds on screen: where each is, in km across the view and away from it, and its base height.
-    private var photoCloudsShown: [(node: SKSpriteNode, across: Double, away: Double, base: Double, km: Double)] = []
+    /// A cloud on screen: where it is, in km across the view and away from it, its base height and width in km, and
+    /// how far through its life it is.
+    private struct DriftingCloud {
+        let node: SKSpriteNode
+        var across, away, base, km: Double
+        var age: Double, life: Double
+    }
+    private var photoCloudsShown: [DriftingCloud] = []
     private lazy var photoCloudShader: SKShader = {
         let shader = SKShader(source: Self.photoCloudShaderSource, uniforms: [
             photoCloudSun, photoCloudShade, skyBefore, skyAfter, skyBlend, cameraUniforms.lens, nightUniform,
         ])
         shader.attributes = [SKAttribute(name: "a_lum", type: .vectorFloat2), SKAttribute(name: "a_far", type: .float),
-                             SKAttribute(name: "a_back", type: .float), SKAttribute(name: "a_screen", type: .vectorFloat4)]
+                             SKAttribute(name: "a_back", type: .float), SKAttribute(name: "a_screen", type: .vectorFloat4),
+                             SKAttribute(name: "a_life", type: .float)]
         return shader
     }()
 
-    /// Fair-weather cumulus, a few on a mainly clear day and more when it's partly cloudy, now and then a tower.
+    /// How far off a new cumulus is, in km: from 3.5 (high on the screen and big) to 34 (small, on the horizon), more
+    /// of them far than near. Much further and the ridge hides them.
+    private static var cloudDistance: Double { 3.5 + 30 * pow(.random(in: 0...1), 1.8) }
+
+    /// A fair-weather cumulus lives 15–30 minutes, sped up with the drift, but never less than three.
+    private var cloudLifetime: Double { max(180, .random(in: 900...1800) / cloudSpeed) }
+
+    /// Fair-weather cumulus, a few on a mainly clear day and more when it's partly cloudy, now and then a tower. They
+    /// start part-way through their lives, so they don't all form at once.
     private func addPhotoClouds() {
         photoCloudsShown = []
         let cover = conditions.cloudCover / 100
-        let count = conditions.kind == .partlyCloudy ? 3 + Int(cover * 7) : conditions.kind == .clear && cover > 0.08 ? 1 + Int(cover * 4) : 0
+        let count = conditions.kind == .partlyCloudy ? 6 + Int(cover * 14) : conditions.kind == .clear && cover > 0.08 ? 1 + Int(cover * 6) : 0
         var towers = 0
         for _ in 0..<count {
             let tower = towers == 0 && Double.random(in: 0...1) < 0.15
@@ -495,15 +510,18 @@ final class WeatherScene: SKScene {
             node.xScale = Bool.random() ? 1 : -1
             addChild(node)
             // Towers stand far off, where the ridge hides the bottom of their photo.
-            let away = tower ? Double.random(in: 26...40) : 6 + 34 * pow(Double.random(in: 0...1), 1.4)
-            let across = Double.random(in: -1.15...1.15) * viewpoint.tanH * away
-            photoCloudsShown.append((node, across, away, tower ? 0.9 : 1.3 + Double.random(in: 0...0.3), pick.km * Double.random(in: 0.85...1.2)))
+            let away = tower ? Double.random(in: 26...40) : Self.cloudDistance
+            let life = cloudLifetime
+            photoCloudsShown.append(DriftingCloud(node: node, across: .random(in: -1.15...1.15) * viewpoint.tanH * away, away: away,
+                                                  base: tower ? 0.9 : 1.3 + .random(in: 0...0.3), km: pick.km * .random(in: 0.85...1.2),
+                                                  age: .random(in: 0.15...0.75) * life, life: life))
         }
         driftClouds(0)
     }
 
-    /// Moves the clouds with the wind and places them in perspective. One that drifts out of view fades in again on
-    /// the upwind side.
+    /// Moves the clouds with the wind and places them in perspective. Each forms, grows a little and dissolves over
+    /// its life, then forms again somewhere else in view as another cloud; one that drifts out of view comes back in,
+    /// already formed, on the upwind side.
     private func driftClouds(_ dt: Double) {
         guard !photoCloudsShown.isEmpty else { return }
         let speed = conditions.wind / 3600 * 1.3 * cloudSpeed // km/s; the wind at cloud height is a little stronger
@@ -515,17 +533,28 @@ final class WeatherScene: SKScene {
             var cloud = photoCloudsShown[i]
             cloud.across += across * dt
             cloud.away += away * dt
-            if abs(cloud.across / cloud.away) > viewpoint.tanH * 1.35 || cloud.away < 5 || cloud.away > 42 {
-                cloud.away = cloud.base < 1 ? Double.random(in: 26...40) : 6 + 34 * pow(Double.random(in: 0...1), 1.4)
-                cloud.across = abs(across) > abs(away) * 0.3
+            cloud.age += dt
+            let tower = cloud.base < 1
+            let gone = abs(cloud.across / cloud.away) > viewpoint.tanH * 1.35 || cloud.away < 3 || cloud.away > 42
+            if gone || cloud.age >= cloud.life {
+                cloud.away = tower ? .random(in: 26...40) : Self.cloudDistance
+                cloud.across = gone && abs(across) > abs(away) * 0.3
                     ? (across > 0 ? -1 : 1) * viewpoint.tanH * 1.3 * cloud.away
-                    : Double.random(in: -1...1) * viewpoint.tanH * cloud.away
-                cloud.node.alpha = 0
-                cloud.node.run(.fadeIn(withDuration: 30))
+                    : .random(in: -1.1...1.1) * viewpoint.tanH * cloud.away
+                let pick = Self.photoClouds.filter { $0.tower == tower }.randomElement()!
+                cloud.node.texture = Self.cloudTexture(pick.name)
+                cloud.node.setValue(SKAttributeValue(vectorFloat2: pick.lum), forAttribute: "a_lum")
+                cloud.node.xScale = Bool.random() ? 1 : -1
+                cloud.km = pick.km * .random(in: 0.85...1.2)
+                cloud.life = cloudLifetime
+                cloud.age = gone ? 0.15 * cloud.life : 0 // drifting in, it's already a cloud; otherwise it forms
             }
+            let f = cloud.age / cloud.life
+            let living = smoothstep(0, 0.15, f) * (1 - smoothstep(0.8, 1, f))
+            let km = cloud.km * (0.9 + 0.12 * smoothstep(0, 0.6, f)) // it grows as it forms
             let x = 0.5 + cloud.across / cloud.away / (2 * viewpoint.tanH)
             let y = viewpoint.horizon + (cloud.base - viewpoint.height) / cloud.away / (2 * viewpoint.tanV)
-            let width = w * cloud.km / cloud.away / (2 * viewpoint.tanH)
+            let width = w * km / cloud.away / (2 * viewpoint.tanH)
             let texture = cloud.node.texture?.size() ?? CGSize(width: 2, height: 1)
             cloud.node.size = CGSize(width: width, height: width * texture.height / max(texture.width, 1))
             cloud.node.position = CGPoint(x: x * w, y: y * h)
@@ -536,6 +565,7 @@ final class WeatherScene: SKScene {
             cloud.node.setValue(SKAttributeValue(float: Float(1 - exp(-cloud.away / 45))), forAttribute: "a_far")
             let dir = normalize(viewpoint.right * cloud.across + viewpoint.forward * cloud.away + Sky.Vector(0, 0, cloud.base + 0.6 - viewpoint.height))
             cloud.node.setValue(SKAttributeValue(float: Float(smoothstep(0.8, 0.97, dot(dir, sunNow)))), forAttribute: "a_back")
+            cloud.node.setValue(SKAttributeValue(float: Float(living)), forAttribute: "a_life")
             photoCloudsShown[i] = cloud
         }
     }
@@ -548,7 +578,10 @@ final class WeatherScene: SKScene {
     void main() {
         vec4 c = texture2D(u_texture, v_tex_coord);
         vec3 rgb = c.rgb / max(c.a, 0.001);
-        float a = c.a * smoothstep(0.03, 0.2, c.a); // the cut leaves a faint veil of sky that glows at sunset
+        // The cut leaves a faint veil of sky that glows at sunset, so the thinnest alpha is clipped. As a cloud forms
+        // or dissolves the clip rises: thin wisps go first and the dense core last, as real cumulus evaporate.
+        float fade = 1.0 - a_life;
+        float a = c.a * smoothstep(0.03 + fade * 0.8, 0.2 + fade * 0.8, c.a) * min(a_life * 4.0, 1.0);
         float lum = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
         float t = clamp((lum - a_lum.x) / max(a_lum.y - a_lum.x, 0.02), 0.0, 1.0);
         float v = 1.0 - v_tex_coord.y;
