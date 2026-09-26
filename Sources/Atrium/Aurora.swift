@@ -17,6 +17,9 @@ let auroraPalettes: [(name: String, colours: [SIMD3<Float>])] = [
 
 let auroraKnobs = [
     Knob(key: "aurora.speed", label: "Speed", range: 0...6, standard: 1, section: "Motion", format: .times),
+    Knob(key: "aurora.rearrange", label: "Slowly rearrange the curtains", range: 0...1, standard: 1, section: "Motion", format: .toggle),
+    Knob(key: "aurora.rearrangeMinutes", label: "Every", range: 1...30, standard: 4, section: "Motion", format: .minutes,
+         shownWhen: "aurora.rearrange"),
     Knob(key: "aurora.fade", label: "Fade to a new color automatically", range: 0...1, standard: 0, section: "Colors", format: .toggle),
     Knob(key: "aurora.fadeMinutes", label: "Every", range: 1...60, standard: 10, section: "Colors", format: .minutes,
          shownWhen: "aurora.fade"),
@@ -120,17 +123,7 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
     var shown = pick.name
     show(AuroraColours(shown))
     let (arc, bytes, slope) = auroraArc(&rng)
-    // Up to four curtains, each along a line on the ground `dist` km away whose normal points `angle` from north: one
-    // main arc, often a second and sometimes a third, all far enough off that their lower edges clear the summits.
-    var dist = SIMD4<Float>(), angle = dist, lum = dist, low = dist, thick = dist
-    let main = Float.random(in: -0.35...0.35, using: &rng)
-    for i in 0..<4 {
-        dist[i] = i == 0 ? .random(in: 220...330, using: &rng) : .random(in: 180...380, using: &rng)
-        angle[i] = main + .random(in: -0.25...0.25, using: &rng)
-        lum[i] = i == 0 ? 1 : (Float.random(in: 0...1, using: &rng) < [0, 0.45, 0.2, 0][i] ? .random(in: 0.3...0.7, using: &rng) : 0)
-        low[i] = .random(in: 98...110, using: &rng)
-        thick[i] = .random(in: 3...12, using: &rng)
-    }
+    let sky = AuroraCurtains(arc: bytes, slope: slope, rng: rng)
     let scene = shaderScene(size: size, source: shaderCommon + """
     vec2 arcAt(float x) { return vec2((fract(x) * 4096.0 + 0.5) / 4097.0, 0.5); }
 
@@ -153,7 +146,6 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
         vec3 light = vec3(0.0);
         for (int i = 0; i < 4; i++) {
             if (u_lum[i] > 0.0) {
-                float fi = float(i);
                 float cp = cos(u_angle[i]);
                 float sp = sin(u_angle[i]);
                 float co = hd.y * cp + hd.x * sp;                 // cos of our heading from the curtain's normal
@@ -161,8 +153,8 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
                 // the sheet leans 11 degrees toward us along the field, so higher up we meet it nearer
                 float den = max(co + 0.2 * cp * tanEl, 0.02);
                 float l = (u_dist[i] + 20.0 * cp) / den * sn;      // km along the curtain
-                vec4 f1 = texture2D(u_arc, arcAt(l / 3000.0 + fi * 0.27 + u_phase * 0.0002));
-                vec4 f2 = texture2D(u_arc, arcAt(l / 500.0 + fi * 0.61 - u_phase * 0.0007));
+                vec4 f1 = texture2D(u_arc, arcAt(l / 3000.0 + u_offset[i] + u_phase * 0.0002));
+                vec4 f2 = texture2D(u_arc, arcAt(l / 500.0 + u_offset[i] * 2.3 - u_phase * 0.0007));
                 float fold = (f1.r - 0.5) * 90.0 + (f2.r - 0.5) * 14.0;
                 float m = u_slope * ((f1.g - 0.5) * 90.0 / 3000.0 + (f2.g - 0.5) * 14.0 / 500.0);
                 float num = u_dist[i] + fold + 20.0 * cp;
@@ -170,14 +162,14 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
                 float h = s * tanEl + s * s / 12742.0;             // the height we see, over a round Earth
                 float seen = smoothstep(0.02, 0.08, den) * smoothstep(0.0, 5.0, num);
                 // rays: read at each ray's foot, so they lean together up the field lines
-                float rx = (s * sn - 0.2 * (h - 100.0) * sp) / 20000.0 + fi * 0.13 + u_phase * 0.000025;
+                float rx = (s * sn - 0.2 * (h - 100.0) * sp) / 20000.0 + u_offset[i] * 0.5 + u_phase * 0.000025;
                 vec4 r = texture2D(u_arc, arcAt(rx));
                 r.ba = mix(r.ba, vec2(0.3, 0.5), smoothstep(1.0, 4.0, fwidth(rx) * 4096.0));   // finer than a pixel
                 // seen from below, the line of sight crosses the slab over a range of heights, which blurs it
                 float pfh = min(sqrt(1.0 + m * m) / sqrt((co - m * sn) * (co - m * sn) + 0.04), 3.0);
                 float sh = u_thick[i] * tanEl * pfh;
                 r.ba = mix(r.ba, vec2(0.3, 0.5), smoothstep(4.0, 25.0, sh));
-                float patches = 0.4 + 0.6 * smoothstep(0.2, 0.75, texture2D(u_arc, arcAt(l / 2500.0 + fi * 0.37 + u_phase * 0.00002)).r);
+                float patches = 0.4 + 0.6 * smoothstep(0.2, 0.75, texture2D(u_arc, arcAt(l / 2500.0 + u_offset[i] * 1.4 + u_phase * 0.00002)).r);
                 float dh = h - u_low[i];
                 // the emission rises over a few km at the lower edge and fades with height, smoothly: any step or
                 // corner at the edge draws a hairline along it
@@ -209,11 +201,7 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
     }
     """, uniforms: [
         SKUniform(name: "u_arc", texture: arc), SKUniform(name: "u_slope", float: slope),
-        SKUniform(name: "u_dist", vectorFloat4: dist), SKUniform(name: "u_angle", vectorFloat4: angle),
-        SKUniform(name: "u_lum", vectorFloat4: lum), SKUniform(name: "u_low", vectorFloat4: low),
-        SKUniform(name: "u_thick", vectorFloat4: thick),
-    ] + colours + [crown], knobs: gradeKnobs("aurora"))
-    let sky = AuroraLight(arc: bytes, slope: slope, dist: dist, angle: angle, lum: lum)
+    ] + sky.uniforms + colours + [crown], knobs: gradeKnobs("aurora"))
     let phase = SKUniform(name: "u_phase", float: 0), poolA = SKUniform(name: "u_poolA", vectorFloat4: .zero)
     let poolB = SKUniform(name: "u_poolB", vectorFloat4: .zero), glow = SKUniform(name: "u_glow", vectorFloat3: .zero)
     (scene.children.first as? SKSpriteNode)?.shader?.addUniform(phase)
@@ -229,15 +217,23 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
     // the curtains' clock, in scene time so it stops while the wallpaper is hidden; their light is re-measured each second
     // 1× is a real display's pace: folds drifting 0.35-0.6 km/s along the arc, rays 0.5 km/s
     // With Random picked and fading on, every few minutes the curtains (and their light on the snow) ease to
-    // another palette over 90 s.
+    // another palette over 90 s. With rearranging on, every few minutes (of phase, so it follows Speed) one curtain
+    // is replaced.
     let setting = { (key: String) in Float(auroraKnobs.first { $0.key == key }!.value) }
     var last: CGFloat = 0, since: Float = 0, waited: Float = 0, speed = setting("aurora.speed")
+    var rearranging = setting("aurora.rearrange") > 0.5, untilNext: Float = 0
     var from = AuroraColours(shown), to = from, k: Float = 1
     scene.run(.repeatForever(.customAction(withDuration: 60) { _, elapsed in
         let dt = Float(elapsed >= last ? elapsed - last : elapsed)
         last = elapsed
         sky.phase += dt * speed
         phase.floatValue = sky.phase
+        sky.ease(dt * speed)
+        untilNext = rearranging ? untilNext + dt * speed : 0
+        if untilNext >= setting("aurora.rearrangeMinutes").rounded() * 60 {
+            untilNext = 0
+            sky.rearrange()
+        }
         if k < 1 {
             k = min(k + dt / 90, 1)
             show(from.mixed(to, k * k * (3 - 2 * k)))
@@ -247,6 +243,7 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
         let random = (UserDefaults.standard.string(forKey: "aurora.palette") ?? "").isEmpty
         waited = random && setting("aurora.fade") > 0.5 ? waited + since : 0
         speed = setting("aurora.speed")
+        rearranging = setting("aurora.rearrange") > 0.5
         since = 0
         light()
         if k >= 1, waited >= setting("aurora.fadeMinutes").rounded() * 60 {
@@ -257,15 +254,64 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
     return scene
 }
 
-/// Where the curtains are and how bright, as the shader draws them, kept on the CPU so the ground can be lit by
-/// them: `pool()` is the light from the arc above each of 8 strips across the screen, from the curtains' brightness,
-/// folds and patches along their lower edges (their rays and heights barely matter to the land).
-@MainActor private final class AuroraLight {
-    let arc: [UInt8], slope: Float, dist: SIMD4<Float>, angle: SIMD4<Float>, lum: SIMD4<Float>
+/// The curtains: where each is and how bright, kept on the CPU as the shader draws them, so they can be replaced
+/// slowly and so the ground can be lit by them. Up to four, each along a line on the ground `dist` km away whose
+/// normal points `angle` from north, with its lower edge `low` km up, its slab `thick` km deep, and its own stretch
+/// of the arc texture (`offset`). There's one main arc, often a second and sometimes a third, all far enough off that
+/// their lower edges clear the summits.
+@MainActor private final class AuroraCurtains {
+    let arc: [UInt8], slope: Float
+    var dist = SIMD4<Float>(), angle = SIMD4<Float>(), low = SIMD4<Float>(), thick = SIMD4<Float>(), offset = SIMD4<Float>()
+    /// How bright each is now, and what it's easing to.
+    var lum = SIMD4<Float>(), target = SIMD4<Float>()
     var phase: Float = 0
+    /// The way the display runs; new curtains lie near it, and it wanders a little with each one.
+    private var heading: Float
+    private var rng: SplitMix
+    let uniforms = ["u_dist", "u_angle", "u_lum", "u_low", "u_thick", "u_offset"].map { SKUniform(name: $0, vectorFloat4: .zero) }
 
-    init(arc: [UInt8], slope: Float, dist: SIMD4<Float>, angle: SIMD4<Float>, lum: SIMD4<Float>) {
-        (self.arc, self.slope, self.dist, self.angle, self.lum) = (arc, slope, dist, angle, lum)
+    init(arc: [UInt8], slope: Float, rng: SplitMix) {
+        (self.arc, self.slope, self.rng) = (arc, slope, rng)
+        heading = .random(in: -0.35...0.35, using: &self.rng)
+        spawn(0)
+        if Float.random(in: 0...1, using: &self.rng) < 0.45 { spawn(1) }
+        if Float.random(in: 0...1, using: &self.rng) < 0.2 { spawn(2) }
+        lum = target
+        sync()
+    }
+
+    /// A new curtain in slot `i`: the main arc (bright, 220-330 km) unless another bright one stays, else a fainter
+    /// one at 180-380 km.
+    private func spawn(_ i: Int) {
+        let main = !(0..<4).contains { $0 != i && target[$0] >= 0.8 }
+        dist[i] = main ? .random(in: 220...330, using: &rng) : .random(in: 180...380, using: &rng)
+        angle[i] = heading + .random(in: -0.25...0.25, using: &rng)
+        target[i] = main ? 1 : .random(in: 0.3...0.7, using: &rng)
+        low[i] = .random(in: 98...110, using: &rng)
+        thick[i] = .random(in: 3...12, using: &rng)
+        offset[i] = .random(in: 0...1, using: &rng)
+    }
+
+    /// Retires one curtain and, unless the sky is to hold fewer, brings in a new one elsewhere: they cross-fade
+    /// (`ease`), so the sky is never empty and never cuts.
+    func rearrange() {
+        let on = (0..<4).filter { target[$0] > 0 }, free = (0..<4).filter { target[$0] == 0 && lum[$0] == 0 }
+        guard let out = on.randomElement(using: &rng) else { return }
+        heading = min(max(heading + .random(in: -0.15...0.15, using: &rng), -0.4), 0.4)
+        target[out] = 0
+        let want = [1, 1, 2, 2, 3].randomElement(using: &rng)!
+        if on.count - 1 < want, let slot = free.randomElement(using: &rng) { spawn(slot) }
+    }
+
+    /// Moves each curtain's brightness toward its target, at most 1/90 per second of phase.
+    func ease(_ dt: Float) {
+        guard lum != target else { return }
+        lum += simd_clamp(target - lum, SIMD4(repeating: -dt / 90), SIMD4(repeating: dt / 90))
+        sync()
+    }
+
+    private func sync() {
+        for (uniform, value) in zip(uniforms, [dist, angle, lum, low, thick, offset]) { uniform.vectorFloat4Value = value }
     }
 
     /// The arc texture at `x` (wrapping), as the shader's `texture2D(u_arc, arcAt(x))` reads it, to the nearest texel.
@@ -274,19 +320,21 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
         return SIMD4(Float(arc[i]), Float(arc[i + 1]), Float(arc[i + 2]), Float(arc[i + 3])) / 255
     }
 
+    /// The light from the arc above each of 8 strips across the screen: the curtains' brightness, folds and patches
+    /// along their lower edges (their rays and heights barely matter to the land).
     func pool() -> [Float] {
         (0..<8).map { k in
             let hx = (Float(k) + 0.5) / 8 * 2 * auroraLens - auroraLens, norm = (hx * hx + 1).squareRoot()
             let hd = SIMD2(hx / norm, 1 / norm)
             var b: Float = 0
             for i in 0..<4 where lum[i] > 0 {
-                let fi = Float(i), cp = cos(angle[i]), sp = sin(angle[i])
+                let cp = cos(angle[i]), sp = sin(angle[i])
                 let co = hd.y * cp + hd.x * sp, sn = hd.x * cp - hd.y * sp
                 let den = max(co + 0.06 * cp, 0.02), l = (dist[i] + 20 * cp) / den * sn
-                let f1 = at(l / 3000 + fi * 0.27 + phase * 0.0002), f2 = at(l / 500 + fi * 0.61 - phase * 0.0007)
+                let f1 = at(l / 3000 + offset[i] + phase * 0.0002), f2 = at(l / 500 + offset[i] * 2.3 - phase * 0.0007)
                 let m = slope * ((f1.y - 0.5) * 90 / 3000 + (f2.y - 0.5) * 14 / 500)
                 let pfh = min((1 + m * m).squareRoot() / ((co - m * sn) * (co - m * sn) + 0.04).squareRoot(), 3)
-                let patch = at(l / 2500 + fi * 0.37 + phase * 0.00002).x
+                let patch = at(l / 2500 + offset[i] * 1.4 + phase * 0.00002).x
                 let patches = 0.4 + 0.6 * simd_smoothstep(0.2, 0.75, patch)
                 b += lum[i] * pfh * patches * simd_smoothstep(0.02, 0.08, den)
             }
@@ -307,7 +355,7 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
 }
 
 /// The snowy range and the flats in front of it, as seen on a real long exposure: lit by starlight and by the aurora
-/// above each part of it (`u_poolA`/`u_poolB`, from `AuroraLight`), bluer and greyer as the eye sees in the dark,
+/// above each part of it (`u_poolA`/`u_poolB`, from `AuroraCurtains`), bluer and greyer as the eye sees in the dark,
 /// hazing into the glow above the skyline with distance, and glinting where near snow catches the light.
 @MainActor private func auroraGround(size: CGSize, grade: [SKUniform]) -> SKNode {
     let photo = AuroraGround.photo.size(), aspect = photo.width / max(photo.height, 1)
