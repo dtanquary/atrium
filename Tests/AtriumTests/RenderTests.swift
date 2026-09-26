@@ -11,6 +11,7 @@ import UniformTypeIdentifiers
 ///     SNAPSHOT_SCENE="Live Sky" SNAPSHOT_SECONDS=20 swift test   # one scene, further into its animation
 ///     SNAPSHOT_DEFAULTS="gradient.ribbons=1,gradient.previewTime=1" swift test  # with Settings values
 ///     SNAPSHOT_APPEARANCE=light swift test                                      # in Light Mode
+///     SNAPSHOT_SCENE="Fish Tank" SNAPSHOT_MOVIE=6 swift test    # then 6 s of frames at 15 fps, for a GIF
 ///
 /// Only sceneDidLoad/init content shows up here: SKRenderer never calls didMove(to:).
 @MainActor @Test func everySceneRenders() throws {
@@ -47,36 +48,54 @@ import UniformTypeIdentifiers
         // SKRenderer's first update runs on the system clock, so frame times must start after it or every later
         // update counts as the past and update(_:) barely runs.
         let frames = Int(seconds * 30), clock = ProcessInfo.processInfo.systemUptime + 1
+        let movie = Int((Double(env["SNAPSHOT_MOVIE"] ?? "") ?? 0) * 30)
+        let writes = DispatchGroup()
         var cpu = 0.0, gpu = 0.0
-        for frame in 0...frames {
+        for frame in 0...frames + movie {
+            // Movie frames run in real time, so shaders (whose u_time is the wall clock) keep pace with the scene.
+            while frame > frames, ProcessInfo.processInfo.systemUptime < clock + Double(frame) / 30 { Thread.sleep(forTimeInterval: 0.002) }
             let start = CFAbsoluteTimeGetCurrent()
             renderer.update(atTime: clock + Double(frame) / 30)
             let buffer = try #require(queue.makeCommandBuffer())
             renderer.render(withViewport: CGRect(x: 0, y: 0, width: w, height: h), commandBuffer: buffer, renderPassDescriptor: pass)
             buffer.commit()
             buffer.waitUntilCompleted()
-            if frame > frames - 30 {
+            if frame > frames, frame % 2 == 0 {
+                let pixels = read(texture, w, h), url = dir.appendingPathComponent(String(format: "%@-%03d.png", name, (frame - frames) / 2))
+                DispatchQueue.global().async(group: writes) { save(pixels, w, h, to: url) }
+            }
+            if frame > frames - 30, frame <= frames {
                 let gpuTime = buffer.gpuEndTime - buffer.gpuStartTime
                 gpu += gpuTime
                 cpu += CFAbsoluteTimeGetCurrent() - start - gpuTime
             }
         }
 
-        var pixels = [UInt32](repeating: 0, count: w * h)
-        texture.getBytes(&pixels, bytesPerRow: w * 4, from: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0)
+        writes.wait()
+        let pixels = read(texture, w, h)
         let colours = Set(stride(from: 0, to: pixels.count, by: 997).map { pixels[$0] })
         #expect(colours.count > 20, "\(name) rendered as a flat image")
 
-        let image = CGImage(width: w, height: h, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: w * 4,
-                            space: CGColorSpace(name: CGColorSpace.sRGB)!,
-                            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue),
-                            provider: CGDataProvider(data: Data(bytes: pixels, count: w * h * 4) as CFData)!,
-                            decode: nil, shouldInterpolate: false, intent: .defaultIntent)!
         let url = dir.appendingPathComponent("\(name).png")
-        let destination = try #require(CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil))
-        CGImageDestinationAddImage(destination, image, nil)
-        CGImageDestinationFinalize(destination)
+        save(pixels, w, h, to: url)
 
         print(String(format: "%@: cpu≈%.2f ms, gpu %.2f ms per frame → %@", name, cpu / 30 * 1000, gpu / 30 * 1000, url.path))
     }
+}
+
+private func read(_ texture: MTLTexture, _ w: Int, _ h: Int) -> [UInt32] {
+    var pixels = [UInt32](repeating: 0, count: w * h)
+    texture.getBytes(&pixels, bytesPerRow: w * 4, from: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0)
+    return pixels
+}
+
+private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
+    let image = CGImage(width: w, height: h, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: w * 4,
+                        space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                        bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue),
+                        provider: CGDataProvider(data: Data(bytes: pixels, count: w * h * 4) as CFData)!,
+                        decode: nil, shouldInterpolate: false, intent: .defaultIntent)!
+    let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil)!
+    CGImageDestinationAddImage(destination, image, nil)
+    CGImageDestinationFinalize(destination)
 }
