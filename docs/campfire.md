@@ -1,13 +1,13 @@
 # Campfire
 
-A campfire in a ring of upright stones, in a real forest clearing at night under the real stars. The flames are simulated (or procedural, to compare) and coloured the way a camera records fire. Their light, measured from the flames themselves, falls on the stones, the charred sticks, the ground and the nearest trunks with the right distance, angle and shadows, and flickers as they do. Sparks rise in streaks and embers glow in the bed.
+A campfire in a ring of upright stones, in a real forest clearing at night under the real stars. The flames are a small fluid simulation, drawn as crisp tongues and torn wisps and coloured the way a camera records fire. Their light, measured from the flames themselves, falls on the stones, the charred sticks, the ground and the nearest trunks with the right distance, angle and shadows, and flickers as they do. Sparks rise in streaks, embers glow in the bed, and a faint warm haze, glow and heat shimmer hang over the flames.
 
 - **Files:**
   - `Sources/Atrium/Campfire.swift`: the `Campfire` scene, the relighting shader, `FireCamera`, `CampfirePhoto` and `StarField`
-  - `Sources/Atrium/CampfireFlames.swift`: `Flames` (both engines), `FlameSim`, `Sparks`, `coalBed` and `firePhoto`
+  - `Sources/Atrium/CampfireFlames.swift`: `Flames`, `FlameSim`, `Sparks`, `coalBed` and `firePhoto`
   - `Resources/campfire-ground.heic`, `campfire-ground-aux.png`, `campfire-bed.png`, credited in `campfire-credits.tsv`
   - Live Sky's catalogue, `LiveSky.catalogue` and `LiveSky.starColour`, for the stars
-- **Entry:** `campfire(size:)`, registry entry `knobs: Campfire.knobs`, icon `flame.fill`, tint `.red`.
+- **Entry:** `campfire(size:)`, icon `flame.fill`, tint `.red`.
 - **Kind:** photo ground relit in a shader, a CPU fluid simulation drawn by a shader, SpriteKit sprites.
 
 ## The backdrop and its bake
@@ -28,38 +28,27 @@ Back to front:
 2. **Real stars** (z −900): `StarField` places every catalogue star brighter than V 5.5 that is above the horizon and in view, for the viewer's location and time, facing the equator. It refreshes every 10 s. Size and alpha follow flux; they're tinted by B−V (half-desaturated) and dimmed near the horizon by 0.25 magnitudes per airmass. The photo's tree crowns and twigs cover them, since the photo's alpha is the sky matte.
 3. **Ground, back slice** (z 0): the whole photo relit (below).
 4. **Coal bed** (z 1): `coalBed`: Voronoi blocks ~2 cm across, with cracks 120 K hotter than the faces, each block breathing ±40 K on its own rhythm. It's hottest in the middle (~1050 K), with ash where it's cooler, through the camera colour.
-5. **Flames** (z 2), additive, standing at the pit's middle (below).
-6. **Ground, front slice** (z 3): the same shader on a sprite over just the fire bed, drawing the stones and sticks nearer than 4.45 m over the flames. Its texture coordinates are still the whole photo's (`SKTexture(rect:in:)`).
-7. **Sparks** (z 4).
+5. **Flames** (z 2), additive, standing at the pit's middle (below), with the smoke haze (z 2.5) over them.
+6. **Ground, front slice** (z 3): the same shader on a sprite over just the fire bed, drawing the stones and sticks nearer than 4.25 m over the flames (sticks nearer the middle stay behind them, as flames wrap round real logs). Its texture coordinates are still the whole photo's (`SKTexture(rect:in:)`).
+7. **Sparks** (z 4), then the glow (z 5).
 
-**Relighting (`groundSource`).** Albedo is `2·tex^2.2`. The aux map puts each pixel in world metres (x right, y up, z forward) from the camera ray and its distance. Firelight is a point at the flames' centre (moving with them). It's 1900 K through the camera's 3200 K balance, linear (1, 0.41, 0.09), × 2.6 × the flames' current light, over `r² + 0.16` (the flames are a broad source, so nothing right beside them blows out), times wrapped Lambert on the normal. The stones hide the flames' lower part from anything outside the ring: from a point at horizontal distance `d` and height `y`, flames below `y + (0.39 − y)·d/(d − 0.72)` are hidden, and the lit share is `0.2 + 0.8·smoothstep` over a 1.05 m tall source (the floor is bounce off the far stones). The photo's own ground always counts as outside the ring (the bed mask's G), even where the depth estimate strays inside it; otherwise the ground behind the pit's front gap glowed. Wood is charred to 20% of its albedo and glows in its cracks (noise, 820–1020 K) in the lowest 0.35 m. Faint starlight (0.0020, 0.0026, 0.0042) lights everything, and the tone curve is `1 − exp(−1.4·x)` per channel.
+**Relighting (`groundSource`).** Albedo is `2·tex^2.2`. The aux map puts each pixel in world metres (x right, y up, z forward) from the camera ray and its distance. Firelight is a point at the flames' centre (moving with them). It's 1900 K through the camera's 3200 K balance, linear (1, 0.41, 0.09), × 2.6 × the flames' current light, over `r² + 0.16` (the flames are a broad source, so nothing right beside them blows out), times wrapped Lambert on the normal, plus 7% that reaches every face (bounce off the lit ground and the far stones, so the front stones aren't black). The stones hide the flames' lower part from anything outside the ring: from a point at horizontal distance `d` and height `y`, flames below `y + (0.39 − y)·d/(d − 0.72)` are hidden, and the lit share is `0.2 + 0.8·smoothstep` over a 1.05 m tall source (the floor is bounce off the far stones). The photo's own ground always counts as outside the ring (the bed mask's G), even where the depth estimate strays inside it; otherwise the ground behind the pit's front gap glowed. Wood is charred to 20% of its albedo and glows in its cracks (noise, 820–1020 K) in the lowest 0.35 m. Faint starlight (0.0020, 0.0026, 0.0042) lights everything, and the tone curve is `1 − exp(−1.4·x)` per channel. In the back slice, a column of hot air over the fire (0.3–2.2 m up, about 0.35 m either side) wobbles the view by about a pixel: heat shimmer, which shows on the firelit sapling behind.
 
 ## The flames
-Both engines paint temperature and soot, never colour, and put them through the same camera. It's blackbody light white-balanced to 3200 K (R = exp(−22800·(1/T − 1/1300)), G = 0.165·exp(−26600·(…)), B ≈ 0), times `1 − exp(−τ)`. Then exposure, 1–2% crosstalk into all channels, and a per-channel `1 − exp(−s)`: red clips first, then green, and crosstalk lifts blue. That is why thick, hot flame comes out pale yellow-white, with orange and red at the thin, cooler edges, as in photos.
+They paint temperature and soot, never colour, and put them through a camera. It's blackbody light white-balanced to 3200 K (R = exp(−22800·(1/T − 1/1300)), G = 0.165·exp(−26600·(…)), B ≈ 0), times `1 − exp(−τ)`. Then exposure 10, 1% crosstalk into all channels, and a per-channel `1 − exp(−s)`: red clips first, then green, and crosstalk lifts blue. That is why thick, hot flame comes out pale yellow-white, with orange and red at the thin, cooler edges, as in photos.
 
-**Simulated** (`campfire.flames` = Simulated, the default):
 - **Sim:** two independent sheets of `FlameSim`, as a real fire is many flame sheets at different depths. Each is stable fluids (Stam 1999) on a 64 × 128 grid over 1 × 2 m, open on every side (the box starts inside the pile, so air also comes up from below; a closed floor made the flames run sideways along it).
   - **Physics:** buoyancy 9.8 × T, vorticity confinement ε 28, fuel burning at 1.2/s into heat, cooling at 5/s. The edges are sponged so the far air stays still; without the sponge the whole box drifted and blew up. Velocities are clamped.
   - **Solver:** red-black SOR (ω 1.8, 12 iterations, warm-started), semi-Lagrangian advection, and raw buffers with a ghost border.
   - **Fuel:** 32 patches in a 0.7 m pile. Each lets gas out in its own gusts (smooth random, six a second), and the whole bed puffs together at ~2 Hz (the base vortex, Cetegen and Ahmed 1993). Tuned against the real clips: area RMS 11% (real 8.6–10.6%), height RMS 13–15% (real 11–16%), half-times 100–133 ms (real ~100 ms), median height 0.6 m on a 0.7 m pile. The slow sine breathing it replaced flickered five times too slowly.
-- **Draw:** the sheets' temperature and fuel go to an `SKMutableTexture` each step (bytes packed on the main thread). The shader:
-  - warps the lookup by a rising noise of about a cell
-  - adds a vertically stretched noise below a cell to the fuel, for flame-sheet detail
-  - sharpens the soot edge to a couple of pixels (`smoothstep(0.1, 0.16)`), with T mapped to 720–1540 K and exposure 14
-  - shows only the bottom 1.3 m of the box, faded at its edges, drawn 1.25× life size
+- **Draw:** the sheets' temperature and fuel go to an `SKMutableTexture` each step (bytes packed on the main thread). The shader is a hybrid: the simulation says where flame is and how hot, and the research agent's procedural recipe draws what's inside.
+  - **Envelope:** where fuel is hot enough for soot to glow (`smoothstep(0.25, 0.55)` of T), read through a slight warp so the 1.6 cm cells don't show. So the flames lean, puff and pinch off as the simulation does.
+  - **Tongues:** 5 octaves of 3D noise, 12/H across by 2.4/H up, read at the time the rising gas takes to reach that height (`u = U√(z/zc)` to 0.4 H, then U = 1.9 H/s), so features speed up and stretch as real ones do. Each octave evolves 1.6× faster than the last, not 2×, which would make fine detail boil. Presence is `F = E − 0.5 + 1.45·n·reach`, with a 2–3 px soot edge (`smoothstep(−0.02, 0.02, F)`).
+  - **Thickness and colour:** soot thickness has vertical streaks, and T is 930–1500 K from the simulation, cooler at thin edges, plus noise. It's averaged over a 1/60 s shutter (two samples) and skipped where the box is empty.
+  - **Sprite:** it shows the bottom 1.3 m of the box, faded at its edges, drawn 1.25× life size.
 - **Light:** `light` (≈1 on average) and `centre` are measured each step from hot fuel, weighted as blackbody light is. The scene lights the ground with `0.2 + 0.8 ×` that light, smoothed over 0.15 s: the embers are a steady floor, and near ground in the clips smooths like that.
 
-**Procedural** (the other choice): the research agent's shader.
-- **Motion:** noise rises at the measured, accelerating speed of flame gas (`u = U√(z/zc)` up to 0.4 H, then 1.9 H/s); octaves evolve 1.6× faster each, not 2×, so fine detail doesn't boil.
-- **Shape:**
-  - four roots at gaps in the logs
-  - intermittency `1/(1 + exp((z/L − 1)/0.18))` with L drifting ±15%
-  - a puff travelling up at 2.4 Hz
-  - soot thickness with vertical streaks
-  - T from 1390 K falling with height
-  - faint blue at the roots
-- **Rendering:** three motion-blur samples, H = 0.75 m (×1.25 in the scene).
-- **Light:** its light is worked out in Swift from the same height and puff formulas.
+**Smoke and glow.** A faint warm haze rises about 1 m/s from the tips to 1.5 m, in a cone widening 0.12 m per metre. It's noise lit from below by the firelight (1/r²), coloured about 2:1.2:1, which matches the few sRGB levels the footage shows at night. Two additive halos follow the light, a tight one (1.3 m, 10%) and a wide one (3.2 m, 4.5%), for lit air and lens flare. They're kept weak, since heavy glow is a tell of game fire.
 
 **Sparks.** A pool of 48 streak sprites, never an emitter (emitters can't turn particles along their motion).
 - **Birth:** about three a second, plus a pop every 5–20 s that throws 20–40 over about 0.2 s.
@@ -68,17 +57,13 @@ Both engines paint temperature and soot, never colour, and put them through the 
 - **Life:** as in the footage (sparks above small fires e-fold within 0.4–0.5 flame heights), they live 0.25–1.2 s (log-normal). They hardly cool (120 K) before half of them wink out.
 
 ## Settings
-- `campfire.flames`, "Flames": Simulated or Procedural. It's there to compare them live, then lock in the winner and remove the other.
+None. The flames are one engine now (see decisions).
 
 ## Time and appearance
 Always night, with no Light Mode look. The sim, sparks, embers and firelight run on scene time. The stars are the real sky for the viewer's location right now (never daylight). Each load rolls new fuel patches, and the sparks are random.
 
 ## Performance
-Release build, 2x, 2026-09-26:
-- **Simulated:** CPU 1.07 ms (two 64×128 sheets, one step each a frame, ~0.55 ms), GPU 0.65 ms.
-- **Procedural:** CPU 0.49 ms, GPU 0.66 ms.
-
-At 15 fps on battery the sim still steps at 30 Hz of scene time (two steps a frame), so the CPU per second is the same. Memory: the ground texture is 4096 × 2660 RGBA, about 44 MB decoded.
+CPU 1.11 ms and GPU 0.84 ms per frame (release build, 2x, 2026-09-26). The simulation (two 64×128 sheets, one step each a frame) is ~0.55 ms of the CPU. Most of the GPU goes on the flames' noise, which is skipped where the box is empty. At 15 fps on battery the sim still steps at 30 Hz of scene time (two steps a frame), so the CPU per second is the same. Memory: the ground texture is 4096 × 2660 RGBA, about 44 MB decoded.
 
 ## Gotchas and shortcuts
 - **Offscreen tests:** `SK3DNode` (live SceneKit inside SpriteKit) blanks the whole `SKRenderer` render, so the scene would fail the render test. The pit and sticks are baked instead, and relit in 2D.
@@ -103,15 +88,15 @@ The research notes are in the session scratchpad (`notes/campfire-science.md` an
 - Research agents covered fire physics and camera rendering, measurements from real footage, and backdrop photos.
 - **Backdrop:** Hochsal Forest was chosen for its soft, even light and open sky. Niederwihl Forest was the runner-up, a deeper forest with little sky.
 - **Stars:** from Live Sky's catalogue, which is "our existing night sky star logic".
-- **Flames:** both engines are behind a Settings choice, for Dave to compare in motion.
+- **Flames:** the first build (0.20.0) had two engines behind a Settings choice. One was the simulation drawn softly; the other was the research agent's procedural shader, bright and crisp but smooth and patterned in motion.
+- Dave, asked to compare: "do whatever you think would look best". I lined up consecutive frames of both against real footage (the Claytor Lake clip). Real fire has a bright clipped body, many sharp pointed tongues and torn fragments, all gone within a frame or two. So I locked in a hybrid: the simulation for where the fire is and its motion, and the procedural recipe for the tongues and the crisp edge. The Settings choice and the procedural engine were removed. Smoke haze, glow, heat shimmer and bounce light were added at the same time.
 
 ## Ideas / next steps
-- Lock in a flame engine, then tune its size and exposure.
-- A faint warm haze of smoke 0.3–1.5 H above the flames, following the flicker (footage: +5 to +30 sRGB in red).
-- Heat shimmer: the sky and trees just above the flames wobbling 1–3 px.
+- Real footage of a real fire (Dave filming 2–5 minutes on a tripod at night) would be the ceiling for realism; it could come in as a choice to compare.
+- The stars above the fire could shimmer too (they're sprites, so the sky shader's shimmer doesn't reach them).
 - A Moon in its real phase, lighting the clearing a little.
 - A log to sit on, lit on its side toward the fire.
 - Logs slowly burning down over the evening.
 
 ## Checking it
-`SNAPSHOT_SCENE=Campfire SNAPSHOT_SECONDS=4 swift test`, plus `SNAPSHOT_DEFAULTS="campfire.flames=1"` for the procedural flames. The sim, sparks and embers advance with `SNAPSHOT_SECONDS`, but the procedural flames and stars' twinkle use a scene clock or `u_time`. For cost, use `swift test -c release -Xswiftc -enable-testing`.
+`SNAPSHOT_SCENE=Campfire SNAPSHOT_SECONDS=4 swift test`. The sim, flames, sparks, embers and firelight all run on scene time, so they advance with `SNAPSHOT_SECONDS`; the faint star tail twinkles on `u_time`. For cost, use `swift test -c release -Xswiftc -enable-testing`.

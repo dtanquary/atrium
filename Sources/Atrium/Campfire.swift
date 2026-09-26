@@ -3,24 +3,23 @@ import SpriteKit
 @MainActor func campfire(size: CGSize) -> SKScene { Campfire(size: size) }
 
 /// A campfire at night in a real forest clearing (a photo relit by the fire), under the real stars. The flames are
-/// either a small fluid simulation or a procedural shader (a Settings choice while we compare), both coloured by
-/// blackbody light through a camera's response. Their light, measured from the flames themselves, falls on the
-/// stones, the charred wood, the ground and the nearest trees with the right distance, angle and shadows, and it
-/// flickers as they do.
+/// a small fluid simulation drawn with rising noise, coloured by blackbody light through a camera's response. Their
+/// light, measured from the flames themselves, falls on the stones, the charred wood, the ground and the nearest
+/// trees with the right distance, angle and shadows, and flickers as they do. A faint glow, warm smoke and heat
+/// shimmer hang above them.
 final class Campfire: SKScene {
-    nonisolated static let knobs = [
-        Knob(key: "campfire.flames", label: "Flames", range: 0...1, standard: 0, format: .choice(["Simulated", "Procedural"])),
-    ]
-    private var flames: Flames!
+    private let flames: Flames
     private let sparks: Sparks
     private let light = SKUniform(name: "u_light", vectorFloat4: [0, 0.35, 4.5, 1])
     private let clock = SKUniform(name: "u_clock", float: 0)
     private var glow: CGFloat = 1, lastTime: TimeInterval?
     private let lens: FireCamera
+    private var halos: [SKSpriteNode] = []
 
     override init(size: CGSize) {
         lens = FireCamera(screen: size)
         sparks = Sparks(scale: lens.scale(at: FireCamera.fire))
+        flames = Flames(scale: lens.scale(at: FireCamera.fire) * 1.25)
         super.init(size: size)
     }
 
@@ -35,28 +34,16 @@ final class Campfire: SKScene {
         bed.position = lens.project(FireCamera.fire + [0, 0.02, 0])
         bed.zPosition = 1
         addChild(bed)
-        makeFlames()
+        flames.position = lens.project(FireCamera.fire + [0, 0.1, 0])
+        flames.zPosition = 2
+        addChild(flames)
         sparks.position = lens.project(FireCamera.fire + [0, 0.1, 0])
         sparks.zPosition = 4
         addChild(sparks)
-        NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged), name: UserDefaults.didChangeNotification, object: nil)
+        addSmokeAndGlow()
     }
 
     override func didMove(to view: SKView) { Location.shared.start() }   // for the stars overhead
-
-    /// The flames, simulated or procedural as Settings says, standing in the middle of the ring.
-    private func makeFlames() {
-        flames?.removeFromParent()
-        let simulated = Self.knobs[0].value < 0.5
-        flames = Flames(scale: lens.scale(at: FireCamera.fire) * 1.25, simulated: simulated, exposure: simulated ? 14 : 10)
-        flames.position = lens.project(FireCamera.fire + [0, simulated ? 0.1 : 0.03, 0])
-        flames.zPosition = 2
-        addChild(flames)
-    }
-
-    @objc private func settingsChanged() {
-        if (Self.knobs[0].value < 0.5) != flames.isSimulated { makeFlames() }
-    }
 
     override func update(_ currentTime: TimeInterval) {
         let dt = frameTime(currentTime, &lastTime)
@@ -68,6 +55,47 @@ final class Campfire: SKScene {
         glow += (flames.light - glow) * min(1, dt / 0.15)
         let c = flames.centre
         light.vectorFloat4Value = [Float(FireCamera.fire.x + c.x), Float(0.1 + c.y), Float(FireCamera.fire.z), Float(0.2 + 0.8 * glow)]
+        for halo in halos { halo.alpha = (halo.userData?["strength"] as? CGFloat ?? 0) * (0.2 + 0.8 * glow) }
+    }
+
+    /// Warm smoke lit from below just over the flames, and the camera's glow round them (lit air and lens flare: a
+    /// tight halo and a wide one). All faint, following the firelight: heavy glow is a tell of game fire.
+    private func addSmokeAndGlow() {
+        let scale = lens.scale(at: FireCamera.fire), base = lens.project(FireCamera.fire + [0, 0.1, 0])
+        let smoke = SKSpriteNode(color: .black, size: CGSize(width: 1.6 * scale, height: 1.9 * scale))
+        smoke.anchorPoint = CGPoint(x: 0.5, y: 0)
+        smoke.position = base
+        smoke.zPosition = 2.5
+        smoke.blendMode = .add
+        smoke.shader = SKShader(source: shaderCommon + """
+        void main() {
+            // metres: x across, h up from the flames' base; the haze starts at the tips (~0.5 m), rises ~1 m/s in a
+            // cone widening 0.12 m per metre, and is gone by 1.5 m
+            float x = (v_tex_coord.x - 0.5) * 1.6;
+            float h = v_tex_coord.y * 1.9;
+            float width = 0.22 + 0.12 * h;
+            vec2 q = vec2(x / width * 1.5, h * 2.2 - u_clock * 1.1);
+            float puffs = noise(q + vec2(noise(q * 0.7 + 3.0) * 1.5, 0.0)) * 0.7 + noise(q * 2.3 + 11.0) * 0.3;
+            float haze = exp(-x * x / (width * width)) * smoothstep(0.35, 0.7, h) * smoothstep(1.6, 0.9, h) * puffs;
+            float lit = u_light.w * 0.9 / (0.3 + h * h);                    // firelight from below, 1/r²
+            vec3 col = vec3(1.0, 0.6, 0.5) * haze * lit * 0.022;
+            gl_FragColor = vec4(col, 1.0);
+        }
+        """, uniforms: [light, clock])
+        addChild(smoke)
+        for (diameter, strength) in [(1.3, 0.1), (3.2, 0.045)] as [(CGFloat, CGFloat)] {
+            let halo = SKSpriteNode(texture: radialGlow(diameter: 64, stops: [(0, rgb(1, 1, 1)), (0.35, rgb(1, 1, 1, 0.4)), (1, rgb(1, 1, 1, 0))]),
+                                    size: CGSize(width: diameter * scale, height: diameter * scale * 0.85))
+            halo.position = CGPoint(x: base.x, y: base.y + 0.3 * scale)
+            halo.zPosition = 5
+            halo.blendMode = .add
+            halo.color = NSColor(red: 1, green: 0.58, blue: 0.28, alpha: 1)
+            halo.colorBlendFactor = 1
+            halo.alpha = strength
+            halo.userData = ["strength": strength]
+            halos.append(halo)
+            addChild(halo)
+        }
     }
 
     // MARK: Sky
@@ -102,6 +130,11 @@ final class Campfire: SKScene {
     /// (a sprite over just the fire bed; its texture coordinates are still the whole photo's).
     private func addGround() {
         let bed = CampfirePhoto.bedRect
+        // heat shimmer: where the fire's base is in the photo's texture coordinates, and texture units per metre there
+        let base = lens.project(FireCamera.fire + [0, 0.1, 0]), perMetre = lens.scale(at: FireCamera.fire)
+        let left = size.width / 2 - lens.photoSize.width / 2
+        let shimmer = SKUniform(name: "u_shimmer", vectorFloat4: [Float((base.x - left) / lens.photoSize.width), Float(base.y / lens.photoSize.height),
+                                                                  Float(perMetre / lens.photoSize.width), Float(perMetre / lens.photoSize.height)])
         for front in [false, true] {
             let texture = front ? SKTexture(rect: bed, in: CampfirePhoto.albedo) : CampfirePhoto.albedo
             let ground = SKSpriteNode(texture: texture, size: front ? CGSize(width: lens.photoSize.width * bed.width, height: lens.photoSize.height * bed.height) : lens.photoSize)
@@ -112,7 +145,7 @@ final class Campfire: SKScene {
             ground.shader = SKShader(source: shaderCommon + Self.groundSource, uniforms: [
                 SKUniform(name: "u_aux", texture: CampfirePhoto.aux), SKUniform(name: "u_bed", texture: CampfirePhoto.bed),
                 SKUniform(name: "u_bedRect", vectorFloat4: [Float(bed.minX), Float(bed.minY), Float(bed.maxX), Float(bed.maxY)]),
-                SKUniform(name: "u_front", float: front ? 1 : 0), light, clock,
+                SKUniform(name: "u_front", float: front ? 1 : 0), light, clock, shimmer,
             ])
             addChild(ground)
         }
@@ -124,12 +157,20 @@ final class Campfire: SKScene {
     /// plus faint starlight. Wood inside the ring is charred black, and glows in its cracks near the embers.
     static let groundSource = """
     void main() {
-        vec4 photo = texture2D(u_texture, v_tex_coord);
-        vec3 aux = texture2D(u_aux, v_tex_coord).rgb;
+        // heat shimmer: behind the column of hot air over the fire, the view wobbles by a pixel or so
+        vec2 uv = v_tex_coord;
+        if (u_front < 0.5) {
+            float hx = (uv.x - u_shimmer.x) / u_shimmer.z, hy = (uv.y - u_shimmer.y) / u_shimmer.w;   // metres
+            float column = exp(-hx * hx / 0.12) * smoothstep(0.3, 0.6, hy) * smoothstep(2.2, 1.0, hy);
+            vec2 q = vec2(hx * 9.0, hy * 5.0 - u_clock * 7.0);
+            uv += column * vec2(noise(q) - 0.5, noise(q + 5.3) - 0.5) * 0.0011;
+        }
+        vec4 photo = texture2D(u_texture, uv);
+        vec3 aux = texture2D(u_aux, uv).rgb;
         float t = pow(400.0, aux.r);
         bool inBed = v_tex_coord.x > u_bedRect.x && v_tex_coord.x < u_bedRect.z && v_tex_coord.y > u_bedRect.y && v_tex_coord.y < u_bedRect.w;
         vec4 out = vec4(0.0);
-        if ((inBed && t < 4.45) == (u_front > 0.5)) {
+        if ((inBed && t < 4.25) == (u_front > 0.5)) {
             vec3 alb = 2.0 * pow(photo.rgb / max(photo.a, 0.004), vec3(2.2));
             vec3 n = vec3(aux.g * 2.0 - 1.0, aux.b * 2.0 - 1.0, 0.0);
             n.z = -sqrt(max(0.0, 1.0 - n.x * n.x - n.y * n.y));
@@ -148,7 +189,8 @@ final class Campfire: SKScene {
             float seen = 0.2 + 0.8 * smoothstep(0.0, 1.0, (1.15 - hidden) / 1.05);   // the tall flames, and bounce off the far stones
             float wood = bed.r;
             alb = mix(alb, alb * 0.2 + 0.004, wood);                          // charred
-            vec3 col = alb * (vec3(1.0, 0.41, 0.09) * 2.6 * u_light.w * facing * seen / r2 + vec3(0.0020, 0.0026, 0.0042));
+            // plus light bounced off the lit ground and the far stones, which reaches faces turned away too
+            vec3 col = alb * (vec3(1.0, 0.41, 0.09) * 2.6 * u_light.w * (facing * seen + 0.07) / r2 + vec3(0.0020, 0.0026, 0.0042));
             // embers in the charred wood near the bottom of the fire
             if (wood > 0.01) {
                 vec2 q = p.xz * 60.0 + vec2(p.y * 40.0, 0.0);

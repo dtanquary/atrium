@@ -1,55 +1,37 @@
 import SpriteKit
 
-/// Real-looking flames, in one of two ways to compare: `simulated` runs two sheets of a small fluid simulation
-/// (`FlameSim`), as a real fire is many flame sheets at different depths, and a shader adds sub-cell detail; otherwise
-/// a procedural shader builds the flames from noise shaped by measured flame physics. Either way the flames'
-/// temperature and soot go through a camera's response, so the colour comes from exposure and clipping as in a photo.
-/// The node's position is the base of the flames. `light` and `centre` say how bright the flames are just now
-/// (about 1 on average) and where their light comes from, in metres from the base, for lighting the scene.
+/// Real-looking flames. Two sheets of a small fluid simulation (`FlameSim`; a real fire is many flame sheets at
+/// different depths) say where flame is and how hot, so the fire leans, puffs and pinches off as a real one does; a
+/// shader draws the tongues and torn wisps inside that envelope with noise that rises at the measured, accelerating
+/// speed of flame gas, and puts soot and temperature through a camera's response, so the colour comes from exposure
+/// and clipping as in a photo. The node's position is the base of the flames. `light` and `centre` say how bright
+/// the flames are just now (about 1 on average) and where their light comes from, in metres from the base.
 final class Flames: SKSpriteNode {
     static let cells = (x: 64, y: 128), metres: Float = 1   // the simulated box is 1 m wide and 2 m tall
-    private var sheets: [FlameSim] = []
+    private let sheets = [FlameSim(nx: cells.x, ny: cells.y, width: metres), FlameSim(nx: cells.x, ny: cells.y, width: metres)]
     private let field = SKMutableTexture(size: CGSize(width: cells.x, height: cells.y))
     private let clock = SKUniform(name: "u_clock", float: 0)
     private var owed: Double = 0, average: Float = 1
     private(set) var light: CGFloat = 1, centre = SIMD2<Double>(0, 0.3)
-    var isSimulated: Bool { !sheets.isEmpty }
 
-    /// `scale` is points per metre at the fire.
-    init(scale: CGFloat, simulated: Bool, exposure: Float = 10) {
-        let h: CGFloat = 0.75                                        // the procedural flames' tallest tips, in metres
-        super.init(texture: nil, color: .black,
-                   size: simulated ? CGSize(width: scale, height: 1.3 * scale) : CGSize(width: 1.2 * h * scale, height: 1.4 * h * scale))
-        anchorPoint = CGPoint(x: 0.5, y: simulated ? 0.15 / 1.3 : 0.05 / 1.4)
+    /// `scale` is points per metre at the fire. The sprite shows the bottom 1.3 m of the simulated box.
+    init(scale: CGFloat, exposure: Float = 10) {
+        super.init(texture: nil, color: .black, size: CGSize(width: scale, height: 1.3 * scale))
+        anchorPoint = CGPoint(x: 0.5, y: 0.15 / 1.3)
         blendMode = .add
-        if simulated {
-            sheets = [FlameSim(nx: Self.cells.x, ny: Self.cells.y, width: Self.metres), FlameSim(nx: Self.cells.x, ny: Self.cells.y, width: Self.metres)]
-            field.filteringMode = .linear
-            shader = SKShader(source: shaderCommon + Self.simulatedSource, uniforms: [
-                SKUniform(name: "u_field", texture: field), clock, SKUniform(name: "u_exposure", float: exposure),
-            ])
-            for _ in 0..<90 { for sheet in sheets { sheet.step(1 / 30) } }   // already burning
-            average = measure().total
-            upload()
-        } else {
-            shader = SKShader(source: Self.proceduralSource, uniforms: [clock, SKUniform(name: "u_exposure", float: exposure)])
-        }
-        advance(0)
+        field.filteringMode = .linear
+        shader = SKShader(source: Self.source, uniforms: [
+            SKUniform(name: "u_field", texture: field), clock, SKUniform(name: "u_exposure", float: exposure),
+        ])
+        for _ in 0..<90 { for sheet in sheets { sheet.step(1 / 30) } }   // already burning
+        average = measure().total
+        upload()
     }
 
     required init?(coder: NSCoder) { fatalError() }
 
     /// Runs the flames on for `dt` seconds of scene time; the simulation in fixed steps of 1/30 s.
     func advance(_ dt: Double) {
-        guard !sheets.isEmpty else {
-            clock.floatValue += Float(dt)
-            // the procedural flames' height (L) and the puff at their base, as the shader has them
-            let t = Double(clock.floatValue)
-            let height = 1 + 0.12 * sin(2 * .pi * 0.21 * t) + 0.08 * sin(2 * .pi * 0.53 * t + 1)
-            light = CGFloat(pow(height, 1.5) * (1 + 0.08 * sin(2 * .pi * 2.4 * t + 2 * sin(t * 0.7))))
-            centre = [0.03 * sin(t * 1.3), 0.28 * height]
-            return
-        }
         owed = min(owed + dt, 2 / 30)
         guard owed >= 1 / 30 else { return }
         while owed >= 1 / 30 {
@@ -64,7 +46,7 @@ final class Flames: SKSpriteNode {
         upload()
     }
 
-    /// Roughly the light the simulated flames give: fuel that's hot, weighted as the shader colours it, and where
+    /// Roughly the light the flames give: fuel that's hot, weighted as the shader colours it, and where
     /// its middle is.
     private func measure() -> (total: Float, centre: CGPoint) {
         var total: Float = 0, sx: Float = 0, sy: Float = 0
@@ -97,110 +79,74 @@ final class Flames: SKSpriteNode {
         field.modifyPixelData { data, length in packed.withUnsafeBytes { data?.copyMemory(from: $0.baseAddress!, byteCount: min(length, $0.count)) } }
     }
 
-    /// Per sheet: a rising noise warps the lookup by about a cell (the detail the grid is too coarse for), the soot
-    /// edge is sharpened to a pixel or two, and temperature (720–1540 K) and soot depth give blackbody light, as seen
-    /// by a camera white-balanced to 3200 K. The camera clips each channel on its own (red first, then green, then a
-    /// little crosstalk lifts blue), which is what turns hot and thick flame pale yellow-white.
-    static let simulatedSource = """
-    void main() {
-        vec2 grid = vec2(64.0, 128.0);
-        vec2 cell = v_tex_coord * vec2(64.0, 128.0 * 0.65);             // the sprite shows the bottom 1.3 m
-        float rise = u_clock * 1.5 * 64.0;                 // cells: the visible flame rises ~1.5 m/s
-        float calm = clamp(cell.y / 20.0, 0.3, 1.0);       // steadier near the logs
-        vec3 light = vec3(0.0);
-        for (int i = 0; i < 2; i++) {
-            float s = float(i) * 37.0;
-            vec2 warp = vec2(noise(vec2(cell.x / 1.6 + s, (cell.y - rise) / 1.6)) - 0.5
-                             + 0.4 * (noise(vec2(cell.x / 0.6 + s, (cell.y - rise * 1.3) / 0.6)) - 0.5),
-                             0.5 * (noise(vec2(cell.x / 1.6 + s + 9.0, (cell.y - rise) / 1.6)) - 0.5)) * 1.4 * calm;
-            vec4 f = texture2D(u_field, (cell + warp) / grid);
-            float temp = (i == 0 ? f.r : f.b) * 1.2;
-            float fuel = i == 0 ? f.g : f.a;
-            // flame sheets finer than a cell: stretched noise rising with the flame moves the soot edge
-            float sheets = 0.65 * noise(vec2(cell.x / 0.45 + s, (cell.y - rise) / 1.6))
-                         + 0.35 * noise(vec2(cell.x / 0.225 + s, (cell.y - rise * 1.2) / 0.8)) - 0.5;
-            float edge = fuel + 0.3 * sheets * clamp(cell.y / 12.0, 0.3, 1.0);
-            float soot = smoothstep(0.1, 0.16, edge) * 0.95 + 0.05 * min(3.0 * fuel, 1.0);
-            float kelvin = 720.0 + 820.0 * temp;
-            vec3 bb = vec3(exp(-22800.0 * (1.0 / kelvin - 1.0 / 1300.0)), 0.165 * exp(-26600.0 * (1.0 / kelvin - 1.0 / 1300.0)), 0.0);
-            light += (1.0 - exp(-4.0 * soot)) * bb;
-        }
-        // fade out toward the edges of the sprite, which crops the 2 m box to its bottom 1.3 m
-        light *= smoothstep(1.0, 0.75, v_tex_coord.y) * smoothstep(0.0, 0.12, v_tex_coord.x) * smoothstep(1.0, 0.88, v_tex_coord.x);
-        vec3 s = light * u_exposure / 1.414;
-        s += 0.02 * (s.r + s.g + s.b);
-        vec3 c = 1.0 - exp(-s);
-        c = mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
-        gl_FragColor = vec4(c, 1.0);
-    }
-    """
-}
-
-extension Flames {
-    /// The procedural flames (research agent's port of its numpy model, after McCaffrey 1979 and Zukoski's
-    /// intermittency): noise rising at the measured, accelerating speed of flame gas, tongues rooted at gaps in the
-    /// logs, a travelling puff at 2.4 Hz, the top half coming and going, soot and temperature through the camera.
-    /// Units: H, the tallest the tips reach.
-    static let proceduralSource = """
-    // Procedural campfire flame, port of flame2d.py. Units: H = visible max tip height. v_tex_coord spans the sprite.
+    /// Flame is where the simulation has hot fuel, cut into tongues and wisps by 5 octaves of noise (12/H across by
+    /// 2.4/H up) read at the rising gas's travel time, with a 2–3 px soot edge (after the research agent's procedural
+    /// recipe: McCaffrey 1979, Zukoski's intermittency). Temperature (930–1500 K from the simulation, cooler at thin
+    /// edges) and soot depth give blackbody light as seen by a camera white-balanced to 3200 K, averaged over a 1/60 s
+    /// shutter. The camera clips each channel on its own (red first, then green, then a little crosstalk lifts blue),
+    /// which is what turns hot and thick flame pale yellow-white.
+    static let source = """
     float h13(vec3 p) { p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
     float vnoise(vec3 p) {
         vec3 i = floor(p); vec3 f = fract(p); f = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
-        float a = mix(mix(h13(i), h13(i + vec3(1,0,0)), f.x), mix(h13(i + vec3(0,1,0)), h13(i + vec3(1,1,0)), f.x), f.y);
-        float b = mix(mix(h13(i + vec3(0,0,1)), h13(i + vec3(1,0,1)), f.x), mix(h13(i + vec3(0,1,1)), h13(i + vec3(1,1,1)), f.x), f.y);
+        float a = mix(mix(h13(i), h13(i + vec3(1.0, 0.0, 0.0)), f.x), mix(h13(i + vec3(0.0, 1.0, 0.0)), h13(i + vec3(1.0, 1.0, 0.0)), f.x), f.y);
+        float b = mix(mix(h13(i + vec3(0.0, 0.0, 1.0)), h13(i + vec3(1.0, 0.0, 1.0)), f.x), mix(h13(i + vec3(0.0, 1.0, 1.0)), h13(i + vec3(1.0, 1.0, 1.0)), f.x), f.y);
         return mix(a, b, f.z) * 2.0 - 1.0;
     }
-    // Octave k evolves 1.6^k faster (eddy turnover ~ size^(2/3)), not 2^k, so fine detail doesn't boil.
-    float fbm5(vec3 p) { float s = 0.0; float a = 0.5; vec3 q = p;
-        for (int i = 0; i < 5; i++) { s += a * vnoise(q + float(i) * 17.3); a *= 0.5; q = vec3(q.xy * 2.0, q.z * 1.6); }
-        return s; }
-    float fbm3(vec3 p) { float s = 0.0; float a = 0.5; vec3 q = p;
-        for (int i = 0; i < 3; i++) { s += a * vnoise(q + float(i) * 17.3); a *= 0.5; q = vec3(q.xy * 2.0, q.z * 1.6); }
-        return s; }
-    float root(float xw, float xr, float wr, float q, float m, float z) {
-        float d = (xw - xr * (1.0 - 0.7 * m)) / (wr * (1.0 + 0.4 * z)); return q * exp(-0.5 * d * d); }
-    float rootw(float xw, float xr, float wr, float q, float m, float z) {
-        float d = (xw - xr * (1.0 - 0.7 * m)) / (2.2 * wr * (1.0 + 0.6 * z)); return q * exp(-0.5 * d * d); }
-
+    // each octave evolves 1.6× faster than the last (eddies turn over as size^(2/3)); 2× would make fine detail boil
+    float fbm(vec3 p, int octaves) {
+        float s = 0.0; float a = 0.5; vec3 q = p;
+        for (int i = 0; i < 5; i++) {
+            if (i < octaves) { s += a * vnoise(q + float(i) * 17.3); }
+            a *= 0.5; q = vec3(q.xy * 2.0, q.z * 1.6);
+        }
+        return s;
+    }
     void main() {
-        float x = (v_tex_coord.x - 0.5) * 1.2;          // -0.6..0.6 H
-        float z = v_tex_coord.y * 1.4 - 0.05;          // -0.05..1.35 H
-        float zp = max(z, 0.0);
+        // metres in the 1 m × 2 m box (the sprite shows its bottom 1.3 m); fuel leaves the logs 0.15 m up.
+        // Units of H, the tallest the tips reach (~0.75 m): x across, z up from the flames' base.
+        float by = v_tex_coord.y * 1.3;
+        float x = (v_tex_coord.x - 0.5) / 0.75;
+        float z = max(by - 0.15, 0.0) / 0.75;
+        // flame gas accelerates up from the fuel (u = U·sqrt(z/zc)), then rises at U: the noise is read at the time
+        // the gas takes to reach this height, so its features speed up and stretch as real ones do
         float U = 1.9; float zc = 0.4; float z0 = 0.02;
-        float rise = zp < zc ? (2.0 * zc / U) * (sqrt((zp + z0) / zc) - sqrt(z0 / zc))
-                             : (2.0 * zc / U) * (sqrt((zc + z0) / zc) - sqrt(z0 / zc)) + (zp - zc) / U;
-        vec3 rad = vec3(0.0);
-        for (int k = 0; k < 3; k++) {                  // motion blur over a 1/60 s shutter
-            float t = u_clock - float(k) * (1.0 / 120.0);
+        float rise = z < zc ? (2.0 * zc / U) * (sqrt((z + z0) / zc) - sqrt(z0 / zc))
+                            : (2.0 * zc / U) * (sqrt((zc + z0) / zc) - sqrt(z0 / zc)) + (z - zc) / U;
+        vec3 light = vec3(0.0);
+        vec4 here = texture2D(u_field, vec2(v_tex_coord.x, by / 2.0));
+        // most of the sprite is empty air: skip the noise there
+        for (int k = 0; k < 2 && max(here.g, here.a) > 0.004; k++) {   // motion blur over a 1/60 s shutter
+            float t = u_clock - float(k) / 120.0;
             float zeta = U * (rise - t);
             float evo = 1.6 * t;
-            float xw = x + (0.03 + 0.12 * zp) * fbm3(vec3(x * 3.0 + 5.0, zeta * 2.0, evo));
-            float m = pow(clamp(zp / 0.55, 0.0, 1.0), 1.5);
-            float E = root(xw, -0.20, 0.07, 0.8, m, zp) + root(xw, -0.07, 0.09, 1.0, m, zp)
-                    + root(xw, 0.07, 0.08, 0.95, m, zp) + root(xw, 0.19, 0.06, 0.7, m, zp);
-            float Ew = min(1.0, rootw(xw, -0.20, 0.07, 0.8, m, zp) + rootw(xw, -0.07, 0.09, 1.0, m, zp)
-                    + rootw(xw, 0.07, 0.08, 0.95, m, zp) + rootw(xw, 0.19, 0.06, 0.7, m, zp));
-            E = 1.0 - exp(-1.3 * E);
-            float L = 0.8 * (1.0 + 0.12 * sin(6.2832 * 0.21 * t) + 0.08 * sin(6.2832 * 0.53 * t + 1.0));
-            float V = 1.0 / (1.0 + exp((z / L - 1.0) / 0.18));
-            float puff = 0.14 * sin(6.2832 * zeta / 0.79 + 4.8 * vnoise(vec3(0.5, zeta * 0.4, t * 0.3)));
-            float n = fbm5(vec3(xw * 12.0, zeta * 2.4, evo));
-            float F = E * V * (1.0 + puff) - 0.55 + 1.6 * n * Ew;
+            float xw = x + (0.02 + 0.06 * z) * fbm(vec3(x * 3.0 + 5.0, zeta * 2.0, evo), 3);
+            // the simulation gives where flame is and how hot: its envelope moves, leans, puffs and pinches off
+            // (read through a slight warp, so the 1.6 cm cells don't show through the sharp edges)
+            vec2 cell = vec2(0.5 + xw * 0.75, by / 2.0) * vec2(64.0, 128.0);
+            cell += vec2(vnoise(vec3(cell * 0.6, evo)), vnoise(vec3(cell * 0.6 + 7.0, evo))) * 0.8;
+            vec4 f = texture2D(u_field, cell / vec2(64.0, 128.0));
+            float fuel = max(f.g, f.a) * smoothstep(0.25, 0.55, max(f.r, f.b) * 1.2);   // soot glows only where hot
+            float temp = max(f.r, f.b) * 1.2;
+            float E = smoothstep(0.04, 0.4, fuel);
+            float reach = smoothstep(0.02, 0.12, fuel);
+            // and the noise the tongues and torn wisps inside it: 5 octaves, 12/H across by 2.4/H up
+            float n = fbm(vec3(xw * 12.0, zeta * 2.4, evo), 5);
+            float F = E - 0.5 + 1.45 * n * reach;
             float S = smoothstep(-0.02, 0.02, F);
             float streak = 0.55 + 0.9 * clamp(0.5 + 0.7 * vnoise(vec3(xw * 45.0 + 3.0, zeta * 3.0, evo * 2.0)), 0.0, 1.0);
-            float tau = streak * 2.0 * S * (0.15 + 0.85 * pow(clamp(F / 0.45, 0.0, 1.0), 1.5)) * (0.4 + 0.6 * E) * clamp(z / 0.05, 0.0, 1.0);
-            float T = 1390.0 - 260.0 * pow(zp, 1.2) - 90.0 * (1.0 - clamp(F / 0.3, 0.0, 1.0))
-                    + 90.0 * fbm3(vec3(xw * 11.0 + 9.0, zeta * 5.0, evo * 1.5));
-            vec3 bb = vec3(exp(-22800.0 * (1.0 / T - 1.0 / 1300.0)), 0.165 * exp(-26600.0 * (1.0 / T - 1.0 / 1300.0)), 0.0);
-            rad += (1.0 - exp(-tau)) * bb;
-            float blue = 0.03 * clamp(1.0 - z / 0.06, 0.0, 1.0) * smoothstep(-0.02, 0.02, z) * clamp(E * 1.3 - 0.3, 0.0, 1.0) * S;
-            rad += blue * vec3(0.12, 0.22, 1.0);
+            float tau = streak * 2.0 * S * (0.15 + 0.85 * pow(clamp(F / 0.45, 0.0, 1.0), 1.5)) * (0.4 + 0.6 * E);
+            float kelvin = 930.0 + 470.0 * temp - 90.0 * (1.0 - clamp(F / 0.3, 0.0, 1.0))
+                         + 90.0 * fbm(vec3(xw * 11.0 + 9.0, zeta * 5.0, evo * 1.5), 2);
+            vec3 bb = vec3(exp(-22800.0 * (1.0 / kelvin - 1.0 / 1300.0)), 0.165 * exp(-26600.0 * (1.0 / kelvin - 1.0 / 1300.0)), 0.0);
+            light += (1.0 - exp(-tau)) * bb;
         }
-        vec3 s = u_exposure * rad / 3.0;
-        s += 0.01 * (s.r + s.g + s.b);                  // sensor crosstalk
-        vec3 c = 1.0 - exp(-s);                         // per-channel clip
+        light *= smoothstep(1.0, 0.8, v_tex_coord.y) * smoothstep(0.0, 0.1, v_tex_coord.x) * smoothstep(1.0, 0.9, v_tex_coord.x);
+        vec3 s = light * u_exposure / 2.0;
+        s += 0.01 * (s.r + s.g + s.b);
+        vec3 c = 1.0 - exp(-s);
         c = mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c));
-        gl_FragColor = vec4(c, 1.0);                    // additive blend: alpha unused
+        gl_FragColor = vec4(c, 1.0);
     }
     """
 }

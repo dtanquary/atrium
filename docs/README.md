@@ -19,7 +19,7 @@ One file per wallpaper, recording what the code can't: how each scene works, why
 | Pixel City | [pixel-city.md](pixel-city.md) | `PixelCity.swift` | SpriteKit (pixel canvas) | none yet | location, clock | 0.43 / 0.18 |
 | Fireflies | [fireflies.md](fireflies.md) | `Fireflies.swift`, `Resources/fireflies-*` | photo ground, shaders, SpriteKit | density, fog, speed, wind | none | 0.54 / 0.52 |
 | Murmuration | [murmuration.md](murmuration.md) | `Murmuration.swift`, `Resources/murmuration-*` | StarDisplay flock in metres, physical sky, photo ground with reflecting water | light (or a whole evening), ground, falcon | none | 1.25–1.8 / 0.45–0.8 |
-| Campfire | [campfire.md](campfire.md) | `Campfire.swift`, `CampfireFlames.swift`, `Resources/campfire-*` | photo ground relit by the fire, fluid-sim flames, shaders | flames (simulated or procedural) | location (real stars) | 1.07 / 0.65 |
+| Campfire | [campfire.md](campfire.md) | `Campfire.swift`, `CampfireFlames.swift`, `Resources/campfire-*` | photo ground relit by the fire, fluid-sim flames, shaders | none | location (real stars) | 1.11 / 0.84 |
 | Game of Life | [game-of-life.md](game-of-life.md) | `GameOfLife.swift` | mutable texture | none yet | none | 0.47 / 0.52 |
 
 \*Release build, 2x Retina at 1512×982 points, measured 2026-09-24 with `swift test -c release -Xswiftc -enable-testing`. The budget is about 2 ms each for CPU and GPU. Debug builds are pessimistic on CPU (Murmuration runs about 16–19 ms in debug).
