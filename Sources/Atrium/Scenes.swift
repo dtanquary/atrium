@@ -32,7 +32,7 @@ struct Wallpaper {
               palettes: PaletteChoice(key: "rain.palette", options: rainPalettes.map { ($0.name, [$0.night[1], $0.lights[0], $0.lights[1]],
                                                                                        [$0.day[0], $0.lights[0], $0.lights[1]]) },
                                       standard: "City")),
-    Wallpaper(name: "Aurora", icon: "wind", tint: .green, blurb: "Northern lights over snowy peaks.", make: aurora, knobs: gradeKnobs("aurora"),
+    Wallpaper(name: "Aurora", icon: "wind", tint: .green, blurb: "Northern lights over snowy peaks.", make: aurora, knobs: auroraKnobs,
               palettes: PaletteChoice(key: "aurora.palette", options: auroraPalettes.map { ($0.name, $0.colours.reversed(), $0.colours.reversed()) })),
     Wallpaper(name: "Nebula", icon: "sparkles", tint: .purple, blurb: "A new deep-space cloud every few minutes.",
               make: nebula, knobs: nebulaKnobs,
