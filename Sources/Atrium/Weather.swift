@@ -96,7 +96,11 @@ final class WeatherScene: SKScene {
     private var wanted: Conditions {
         guard live, Self.knobs[0].value > 0.5 else { return report }
         let kind = min(max(Int(Self.knobs[0].value) - 1, 0), 7)
-        return Conditions(code: [0, 2, 3, 45, 53, 63, 73, 95][kind], cloudCover: [5, 45, 100, 100, 100, 100, 100, 100][kind], wind: 15, windFrom: 250,
+        // Across the view from left to right and a little away, so the clouds visibly travel; toward the viewer
+        // they only grow, which barely reads as motion.
+        let facing = Self.sunsetAzimuth(now, latitude: Location.shared.coordinate.latitude) * 180 / .pi
+        return Conditions(code: [0, 2, 3, 45, 53, 63, 73, 95][kind], cloudCover: [5, 45, 100, 100, 100, 100, 100, 100][kind], wind: 15,
+                          windFrom: (facing + 250).truncatingRemainder(dividingBy: 360),
                           highCloud: [30, 20, 0, 0, 0, 0, 0, 0][kind], snowDepth: kind == 6 ? 0.12 : 0, visibility: kind == 3 ? 400 : 30000)
     }
 
