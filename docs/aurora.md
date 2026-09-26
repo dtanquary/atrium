@@ -1,10 +1,10 @@
 # Aurora
 
-Curtains of northern lights shading through real aurora colours from the lower edge to the crown, with fine vertical rays, folding slowly over a jagged mountain range and snowy foreground drifts under twinkling stars.
+Curtains of northern lights shading through real aurora colours from the lower edge to the crown, with fine vertical rays, folding slowly under twinkling stars over a real snowy range: a photo of the Tetons in winter, relit as a long exposure by the aurora's own light.
 
-- **Files:** `Sources/Atrium/Shaders.swift`. `aurora(size:)` holds the whole shader. It uses the `shaderCommon` helpers `noise`, `hash21` and `starField(pts, cell, density, t)`.
-- **Entry:** `@MainActor func aurora(size:)`, which returns `shaderScene(size:source:uniforms:knobs:)`. Registry entry: icon `wind`, tint `.green`.
-- **Kind:** a single full-screen SKShader driven by `u_time`. The only Swift-side state is the palette (`auroraPalettes` in Shaders.swift), pinned or rolled when the scene is built.
+- **Files:** `Sources/Atrium/Aurora.swift` (the palettes, the sky shader and the ground), plus `Resources/aurora-ground.heic` and `Resources/aurora-ground-aux.png`. The shaders use the `shaderCommon` helpers `noise`, `hash21`, `starField(pts, cell, density, t)` and `grade`.
+- **Entry:** `@MainActor func aurora(size:)`, which builds `shaderScene(size:source:uniforms:knobs:)` for the sky and adds the ground sprite from `auroraGround`. Registry entry: icon `wind`, tint `.green`.
+- **Kind:** a full-screen SKShader for the sky, driven by `u_time`, under a photo sprite with its own shader for the ground. The only Swift-side state is the palette (`auroraPalettes`), pinned or rolled when the scene is built.
 
 ## How it works
 It works in `uv = v_tex_coord` (0–1) and `p = uv * vec2(aspect, 1)`.
@@ -21,8 +21,11 @@ It works in `uv = v_tex_coord` (0–1) and `p = uv * vec2(aspect, 1)`.
    - **Colour:** a gradient by height above the edge, `ch = h + (0.5 − patch noise) × 0.09`, running from `u_fringe` to `u_body` (−0.01…0.012), then `u_upper` (0.03…0.14), then `u_crown` (0.12…0.3). The patch-noise term reuses the patch noise already computed (so it costs nothing extra) and moves the colour bands up and down along the curtain, so no curtain is a single colour. The fringe transition is kept thin: at 0.03 wide, Storm's pink edge read as a thick stripe.
    - The intensity profile is `((body + rim·0.7 + tail) · rays + below)`, the same shape as before, all tinted by that gradient.
 3. **Soft clip.** `1 − exp(−aurora × 0.9)`, so overlapping curtains don't blow out. It fades above `uv.y` 0.6–1.05.
-4. **Far range.** Ridged 4-octave noise (`peaks`) makes sharp summits at 0.08–0.40 of the height. Snow near the summits catches a green-tinted light, mottled by noise gullies. It's a hard silhouette with a 0.0015 anti-aliased edge.
-5. **Foreground snow.** Rolling drifts at 0.04–0.125 of the height, lit by `u_body` (as are the summits), with a sparkle from a second `starField` (cell 7, density 0.08, 3× faster twinkle). Then dither.
+4. **Ground.** A photo of the Tetons from Teton Point in winter (NPS photo by A. Falgoust, public domain, 6000×4000, a soft day under thin high cloud): snow flats, a dark band of spruce, then the jagged range. It's drawn as its own sprite over the sky, full width, with its highest summit at 0.42 of the screen height (the skyline runs 0.30–0.42) and its bottom cropped by the screen.
+   - **Baked offline** (the research agent's `bake.py`, in the scratchpad): sky cut out with a soft, decontaminated edge; the photo's own haze removed by its depth; its daylight flattened (divided by blurred brightness^0.2); white-balanced so the median snow is 0.85 and desaturated to 30%. What's left is roughly albedo, stored sRGB at half scale (snow ≈ 0.42) so nothing clips, as `aurora-ground.heic` (4096×1390 with alpha, 1.3 MB). `aurora-ground-aux.png` (1024×348) holds log distance in red (Depth Anything V2 via Core ML, as for Weather) and open snow in green.
+   - **Relit in the shader:** `2·tex^2.2` is the albedo, times `u_light`: 60% starlight blue and 40% the palette's own light (0.2 fringe, 0.6 body, 0.2 upper, squared to roughly linear), each at unit brightness so only the hue mixes, times 0.035. That puts lit snow at about 0.15 of the curtains' peak, as measured in real long exposures (0.02–0.47, typically 0.1–0.2). A 30% Purkinje mix toward grey-blue `(0.78, 0.92, 1.2)`, then haze toward the horizon glow (`u_glow`, the sky's low colour plus a little body colour) by `1 − exp(−0.06·km)`, with km = `(32^R − 1)/3.1`.
+   - **Glistening:** `starField(pts, 3, 0.15, t·3)`, masked to open snow within the nearest part of the depth (`G · smoothstep(0.6, 0.1, R)`), in pale blue-white at 0.3. They never fall on trees, rock or the far slopes.
+   - Then the same grade and dither as the sky, premultiplied by the photo's alpha.
 
 ## Time and appearance
 All motion comes from `u_time`, so a speed knob needs an integrated `u_phase` (the `LavaLamp` pattern). There is no Light Mode look. The palette is Random by default, so each load rolls a new one, but the layout is the same every time.
@@ -68,10 +71,11 @@ Suggested knobs, not built yet:
 - Peaks: `0.08 + 0.32 × peaks(p.x × 2.2)`.
 
 ## Performance
-Measured at CPU 0.42 ms and GPU 1.85–1.91 ms per frame (the colour gradient added nothing measurable) (release build, 2x). It's the most expensive GPU scene, at the top of the budget. The cost comes from about 25 noise evaluations per pixel: three curtains of 4–5 noise calls each, two star fields, four-octave peaks and the snow noise. If anything is added, cut first: the second ray-noise octave, the snow sparkle field, or run the curtains at half resolution.
+With the photo ground: CPU 0.6 ms and GPU 1.6 ms per frame (release build, 2x, 2026-09-25), down from 2.0–2.2 ms with the procedural peaks and drifts. The sky's cost is about 15 noise evaluations per pixel (three curtains of 4–5 noise calls, and the star field); the ground is two texture reads and a star field over the bottom 40%. Memory: the ground texture is 4096×1390 RGBA, about 23 MB decoded, loaded once and kept (like Weather's). If anything is added, cut first: the second ray-noise octave, or run the curtains at half resolution.
 
 ## Gotchas and shortcuts
-- The mountains are a flat silhouette with mottled snow, with no per-face lighting (the shaders agent flagged this).
+- The ground's light is one flat colour per palette. It doesn't follow where the curtains are or how bright they are right now.
+- The Tetons are Wyoming, not Norway: they won on looks (see below).
 - `u_time` doesn't advance in the render harness.
 - Adding a fourth curtain costs roughly 0.4 ms of GPU.
 
@@ -79,11 +83,14 @@ Measured at CPU 0.42 ms and GPU 1.85–1.91 ms per frame (the colour gradient ad
 - It was one of the four scenes Dave picked for the picker's first round (with Flowing Gradient, Rain on Glass and Night Sky, later renamed Live Sky), then built by the shaders agent.
 - 2026-09-24, Dave asked for other aurora colours, but "keep it in the realm of what real colors they can be … green, red, pink, purple, blue, yellow, and white". He also asked for "some gradients to it … so you get more than one color in an aurora". Hence four-colour height gradients built from real emissions, and Random as the default.
 - The parent agent judged it to read well at launch.
+- 2026-09-25, Dave asked for a photoreal ground, "glistening snow hills and norwegian mountain background", with the same approach as Weather. Three research agents: landscape photos, measurements of 63 real aurora-over-mountain photos, and aurora rendering techniques (for the next pass). Of ten licensed candidates, three were cut and relit (night composites in the scratchpad): the Tetons (NPS, PD), south of Tromsø on Kvaløya (Lars Tiede, CC BY 2.0: the most on-brief, snow hills with birches, but hazy and murky once relit) and Raftsund in Lofoten (Clemensfranz, CC BY 2.5: striking peaks but no snow in front). A real night photo lost: dark, noisy, and its lake has the aurora's reflection baked in. Dave picked the Tetons.
 
 ## Ideas / next steps
 - **Cycling:** a slow crossfade to a freshly rolled palette and layout every few minutes, like Nebula's self-replacing scene. Roll the fold phases and edge heights per load too.
 - **Substorms:** brightness surges and faster ray motion every few minutes, then calm.
-- **Terrain:** lit mountain faces, or a still lake mirroring the curtains.
+- **Next pass, the aurora itself** (research notes in the scratchpad, `aurora/notes/`): curtains as sheets at their real height in perspective (arcs dipping to the horizon, rays converging on the magnetic zenith, folds brightening edge-on), about 1.2 ms in a prototype; a brighter grey-teal night sky (real photos' sky is about 10× ours); paler yellow-green aurora; wider, softer, sparser rays; a pale pink hem for Storm; clumpier, coloured stars.
+- **Settings:** Activity (Quiet to Storm, or Live from NOAA's hemispheric power feed, as seen from northern Norway), Substorms, Speed.
+- **Ground:** light that follows the curtains; a still lake mirroring the live sky; a Norwegian alternative (Raftsund) if the Tetons ever grate.
 - **Night only:** follow the real Sun (dimmer or absent by day), as Flowing Gradient's mood does.
 
 ## Checking it
