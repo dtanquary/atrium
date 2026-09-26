@@ -15,20 +15,11 @@ let auroraPalettes: [(name: String, colours: [SIMD3<Float>])] = [
     ("White", [[0.85, 1.0, 0.92], [0.8, 0.95, 0.9], [0.75, 0.85, 0.95], [0.65, 0.7, 0.95]]), // a faint display
 ]
 
-/// The Green, Storm and Red colours before the photoreal pass, for the Compare switch.
-/// ponytail: delete with the switch once Dave picks.
-private let classicColours: [String: [SIMD3<Float>]] = [
-    "Green": [[0.25, 1.0, 0.55], [0.2, 1.0, 0.5], [0.2, 0.85, 0.55], [0.6, 0.25, 1.0]],
-    "Storm": [[1.0, 0.3, 0.6], [0.2, 1.0, 0.5], [0.7, 0.8, 0.35], [1.0, 0.15, 0.2]],
-    "Red": [[0.3, 0.95, 0.5], [1.0, 0.35, 0.3], [1.0, 0.15, 0.2], [0.75, 0.1, 0.3]],
-]
-
 let auroraKnobs = [
     Knob(key: "aurora.speed", label: "Speed", range: 0...6, standard: 1, section: "Motion", format: .times),
     Knob(key: "aurora.fade", label: "Fade to a new color automatically", range: 0...1, standard: 0, section: "Colors", format: .toggle),
     Knob(key: "aurora.fadeMinutes", label: "Every", range: 1...60, standard: 10, section: "Colors", format: .minutes,
          shownWhen: "aurora.fade"),
-    Knob(key: "aurora.classic", label: "Show the old curtains", range: 0...1, standard: 0, section: "Compare", format: .toggle),
 ] + gradeKnobs("aurora")
 
 /// A palette as the sky shader lights it: its four colours made linear, and how bright its crown is (Storm's and
@@ -114,7 +105,6 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
 @MainActor func aurora(size: CGSize) -> SKScene {
     var rng = SplitMix(state: UInt64(ProcessInfo.processInfo.environment["AURORA_SEED"] ?? "") ?? .random(in: 0...UInt64.max))
     let pick = auroraPalettes.first { $0.name == UserDefaults.standard.string(forKey: "aurora.palette") } ?? auroraPalettes.randomElement(using: &rng)!
-    let old = classicColours[pick.name] ?? pick.colours
     let colours = ["u_fringe", "u_body", "u_upper", "u_crown"].map { SKUniform(name: $0, vectorFloat3: .zero) }
     let crown = SKUniform(name: "u_red", float: 0), onLand = SKUniform(name: "u_aurora", vectorFloat3: .zero)
     // The aurora's light on the land: starlight and airglow everywhere, plus the curtains' own colour, strongest on
@@ -149,111 +139,80 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
         vec2 uv = v_tex_coord;
         vec2 p = uv * vec2(aspect, 1.0);
         float t = u_time;
-        vec3 col = vec3(0.0);
-        if (u_classic > 0.5) {
-            col = mix(vec3(0.02, 0.05, 0.08), vec3(0.004, 0.008, 0.03), smoothstep(0.1, 1.0, uv.y));
-            col += vec3(0.85, 0.9, 1.0) * starField(uv * u_size, 11.0, 0.3, t);
-            vec3 aurora = vec3(0.0);
-            for (int i = 0; i < 3; i++) {
-                float fi = float(i);
-                float x = p.x * (0.6 + 0.25 * fi) + fi * 3.1;
-                float fold = sin(x * 2.4 + t * 0.04 + fi * 1.7) + 0.6 * sin(x * 5.3 - t * 0.03 + fi);
-                float edge = 0.5 + 0.1 * fi + 0.045 * fold + 0.08 * (noise(vec2(x * 0.7 + t * 0.01, fi * 4.0)) - 0.5);
-                float h = uv.y - edge;
-                float rim = exp(-abs(h) * 70.0);
-                float body = smoothstep(-0.004, 0.004, h) * exp(-max(h, 0.0) * 9.0);
-                float tail = smoothstep(0.02, 0.1, h) * exp(-max(h, 0.0) * 4.0) * 0.4;
-                float below = exp(min(h, 0.0) * 30.0) * 0.15;
-                float rx = x * 45.0 + fold * 3.0 + t * 0.15;
-                float rays = noise(vec2(rx, fi * 5.0 + t * 0.05)) * 0.7 + noise(vec2(rx * 2.3, fi * 9.0)) * 0.3;
-                rays = 0.25 + 1.4 * rays * rays;
-                float pn = noise(vec2(x * 0.6 - t * 0.008, fi * 3.0 + 1.0));
-                float patches = smoothstep(0.25, 0.7, pn);
-                float ch = h + (0.5 - pn) * 0.09;
-                vec3 hue = mix(u_old0, u_old1, smoothstep(-0.01, 0.012, ch));
-                hue = mix(hue, u_old2, smoothstep(0.03, 0.14, ch));
-                hue = mix(hue, u_old3, smoothstep(0.12, 0.3, ch));
-                aurora += hue * ((body + rim * 0.7 + tail) * rays + below) * patches * (1.0 - 0.25 * fi);
-            }
-            col += (1.0 - exp(-aurora * 0.9)) * smoothstep(1.12, 0.72, uv.y);
-        } else {
-            // a level camera facing north, its eye level where the photo's is
-            vec3 dir = vec3((uv.x - 0.5) * 2.0 * \(auroraLens), max(uv.y - \(auroraHorizon), 0.001) * 2.0 * \(auroraLens) / aspect, 1.0);
-            float hor = length(dir.xz);
-            vec2 hd = dir.xz / hor;
-            float tanEl = dir.y / hor;
-            float el = atan(tanEl);
-            // air mass (Kasten and Young): low light is dimmed, reddened and softened by haze
-            float X = 1.0 / (sin(el) + 0.50572 * pow(el * 57.2958 + 6.07995, -1.6364));
-            vec3 ext = exp(-0.921 * X * vec3(0.10, 0.15, 0.25));
-            float ax = clamp((X - 1.0) / 20.0, 0.0, 1.0);
+        // a level camera facing north, its eye level where the photo's is
+        vec3 dir = vec3((uv.x - 0.5) * 2.0 * \(auroraLens), max(uv.y - \(auroraHorizon), 0.001) * 2.0 * \(auroraLens) / aspect, 1.0);
+        float hor = length(dir.xz);
+        vec2 hd = dir.xz / hor;
+        float tanEl = dir.y / hor;
+        float el = atan(tanEl);
+        // air mass (Kasten and Young): low light is dimmed, reddened and softened by haze
+        float X = 1.0 / (sin(el) + 0.50572 * pow(el * 57.2958 + 6.07995, -1.6364));
+        vec3 ext = exp(-0.921 * X * vec3(0.10, 0.15, 0.25));
+        float ax = clamp((X - 1.0) / 20.0, 0.0, 1.0);
 
-            vec3 light = vec3(0.0);
-            for (int i = 0; i < 4; i++) {
-                if (u_lum[i] > 0.0) {
-                    float fi = float(i);
-                    float cp = cos(u_angle[i]);
-                    float sp = sin(u_angle[i]);
-                    float co = hd.y * cp + hd.x * sp;                 // cos of our heading from the curtain's normal
-                    float sn = hd.x * cp - hd.y * sp;
-                    // the sheet leans 11 degrees toward us along the field, so higher up we meet it nearer
-                    float den = max(co + 0.2 * cp * tanEl, 0.02);
-                    float l = (u_dist[i] + 20.0 * cp) / den * sn;      // km along the curtain
-                    vec4 f1 = texture2D(u_arc, arcAt(l / 3000.0 + fi * 0.27 + u_phase * 0.0002));
-                    vec4 f2 = texture2D(u_arc, arcAt(l / 500.0 + fi * 0.61 - u_phase * 0.0007));
-                    float fold = (f1.r - 0.5) * 90.0 + (f2.r - 0.5) * 14.0;
-                    float m = u_slope * ((f1.g - 0.5) * 90.0 / 3000.0 + (f2.g - 0.5) * 14.0 / 500.0);
-                    float num = u_dist[i] + fold + 20.0 * cp;
-                    float s = max(num, 0.0) / den;
-                    float h = s * tanEl + s * s / 12742.0;             // the height we see, over a round Earth
-                    float seen = smoothstep(0.02, 0.08, den) * smoothstep(0.0, 5.0, num);
-                    // rays: read at each ray's foot, so they lean together up the field lines
-                    float rx = (s * sn - 0.2 * (h - 100.0) * sp) / 20000.0 + fi * 0.13 + u_phase * 0.000025;
-                    vec4 r = texture2D(u_arc, arcAt(rx));
-                    r.ba = mix(r.ba, vec2(0.3, 0.5), smoothstep(1.0, 4.0, fwidth(rx) * 4096.0));   // finer than a pixel
-                    // seen from below, the line of sight crosses the slab over a range of heights, which blurs it
-                    float pfh = min(sqrt(1.0 + m * m) / sqrt((co - m * sn) * (co - m * sn) + 0.04), 3.0);
-                    float sh = u_thick[i] * tanEl * pfh;
-                    r.ba = mix(r.ba, vec2(0.3, 0.5), smoothstep(4.0, 25.0, sh));
-                    float patches = 0.4 + 0.6 * smoothstep(0.2, 0.75, texture2D(u_arc, arcAt(l / 2500.0 + fi * 0.37 + u_phase * 0.00002)).r);
-                    float dh = h - u_low[i];
-                    // the emission rises over a few km at the lower edge and fades with height, smoothly: any step or
-                    // corner at the edge draws a hairline along it
-                    float green = (dh < 0.0 ? exp(-dh * dh / (30.0 + 2.0 * sh * sh + 400.0 * ax))
-                                            : exp((4.0 - sqrt(dh * dh + 16.0)) / (10.0 + 25.0 * r.a * r.a)))
-                                  * (0.85 + 0.3 * r.b);
-                    float red = exp(-(h - 240.0) * (h - 240.0) / 3600.0);
-                    float glow = (0.015 + 0.1 * ax) * exp(-abs(dh) / (15.0 + 100.0 * ax));   // scattered around the edge
-                    float path = pfh * min(length(dir) / hor, 3.0) * patches * u_lum[i] * seen;
-                    // the thin fringe under the edge only tints what it covers: seen through a deep slab it averages away
-                    vec3 hue = mix(u_body, u_fringe, (1.0 - smoothstep(-4.0, 3.0, dh)) * 4.0 / (4.0 + sh));
-                    hue = mix(hue, u_upper, smoothstep(20.0, 70.0, dh));
-                    // the crown: oxygen red (or the palette's top colour) high up, too slow to show rays
-                    light += (hue * (green + glow) + u_crown * u_red * red) * path;
-                }
+        vec3 light = vec3(0.0);
+        for (int i = 0; i < 4; i++) {
+            if (u_lum[i] > 0.0) {
+                float fi = float(i);
+                float cp = cos(u_angle[i]);
+                float sp = sin(u_angle[i]);
+                float co = hd.y * cp + hd.x * sp;                 // cos of our heading from the curtain's normal
+                float sn = hd.x * cp - hd.y * sp;
+                // the sheet leans 11 degrees toward us along the field, so higher up we meet it nearer
+                float den = max(co + 0.2 * cp * tanEl, 0.02);
+                float l = (u_dist[i] + 20.0 * cp) / den * sn;      // km along the curtain
+                vec4 f1 = texture2D(u_arc, arcAt(l / 3000.0 + fi * 0.27 + u_phase * 0.0002));
+                vec4 f2 = texture2D(u_arc, arcAt(l / 500.0 + fi * 0.61 - u_phase * 0.0007));
+                float fold = (f1.r - 0.5) * 90.0 + (f2.r - 0.5) * 14.0;
+                float m = u_slope * ((f1.g - 0.5) * 90.0 / 3000.0 + (f2.g - 0.5) * 14.0 / 500.0);
+                float num = u_dist[i] + fold + 20.0 * cp;
+                float s = max(num, 0.0) / den;
+                float h = s * tanEl + s * s / 12742.0;             // the height we see, over a round Earth
+                float seen = smoothstep(0.02, 0.08, den) * smoothstep(0.0, 5.0, num);
+                // rays: read at each ray's foot, so they lean together up the field lines
+                float rx = (s * sn - 0.2 * (h - 100.0) * sp) / 20000.0 + fi * 0.13 + u_phase * 0.000025;
+                vec4 r = texture2D(u_arc, arcAt(rx));
+                r.ba = mix(r.ba, vec2(0.3, 0.5), smoothstep(1.0, 4.0, fwidth(rx) * 4096.0));   // finer than a pixel
+                // seen from below, the line of sight crosses the slab over a range of heights, which blurs it
+                float pfh = min(sqrt(1.0 + m * m) / sqrt((co - m * sn) * (co - m * sn) + 0.04), 3.0);
+                float sh = u_thick[i] * tanEl * pfh;
+                r.ba = mix(r.ba, vec2(0.3, 0.5), smoothstep(4.0, 25.0, sh));
+                float patches = 0.4 + 0.6 * smoothstep(0.2, 0.75, texture2D(u_arc, arcAt(l / 2500.0 + fi * 0.37 + u_phase * 0.00002)).r);
+                float dh = h - u_low[i];
+                // the emission rises over a few km at the lower edge and fades with height, smoothly: any step or
+                // corner at the edge draws a hairline along it
+                float green = (dh < 0.0 ? exp(-dh * dh / (30.0 + 2.0 * sh * sh + 400.0 * ax))
+                                        : exp((4.0 - sqrt(dh * dh + 16.0)) / (10.0 + 25.0 * r.a * r.a)))
+                              * (0.85 + 0.3 * r.b);
+                float red = exp(-(h - 240.0) * (h - 240.0) / 3600.0);
+                float glow = (0.015 + 0.1 * ax) * exp(-abs(dh) / (15.0 + 100.0 * ax));   // scattered around the edge
+                float path = pfh * min(length(dir) / hor, 3.0) * patches * u_lum[i] * seen;
+                // the thin fringe under the edge only tints what it covers: seen through a deep slab it averages away
+                vec3 hue = mix(u_body, u_fringe, (1.0 - smoothstep(-4.0, 3.0, dh)) * 4.0 / (4.0 + sh));
+                hue = mix(hue, u_upper, smoothstep(20.0, 70.0, dh));
+                // the crown: oxygen red (or the palette's top colour) high up, too slow to show rays
+                light += (hue * (green + glow) + u_crown * u_red * red) * path;
             }
-            // airglow, grey-teal and brighter toward the horizon, then stars: a faint tail and a few bright ones,
-            // clumped as real star fields are, each from orange to blue-white; all through the tone curve of a photo
-            vec3 sky = mix(vec3(0.016, 0.022, 0.025), vec3(0.0052, 0.007, 0.0116), 1.0 - exp(-el * 5.0));
-            vec2 pts = uv * u_size;
-            float clump = 0.35 + 1.3 * noise(p * 3.5 + 17.0);
-            float star = starField(pts, 11.0, 0.3 * clump, t) * 0.2 + starField(pts + 5.0, 6.0, 0.35 * clump, t) * 0.05;
-            vec3 tint = mix(vec3(1.0, 0.75, 0.5), vec3(0.8, 0.88, 1.0), hash21(floor(pts / 11.0) + 3.0));
-            col = 1.0 - exp(-(sky + (star * tint + light * 0.7) * ext));
-            col = pow(col, vec3(1.0 / 2.2));
         }
+        // airglow, grey-teal and brighter toward the horizon, then stars: a faint tail and a few bright ones,
+        // clumped as real star fields are, each from orange to blue-white; all through the tone curve of a photo
+        vec3 sky = mix(vec3(0.016, 0.022, 0.025), vec3(0.0052, 0.007, 0.0116), 1.0 - exp(-el * 5.0));
+        vec2 pts = uv * u_size;
+        float clump = 0.35 + 1.3 * noise(p * 3.5 + 17.0);
+        float star = starField(pts, 11.0, 0.3 * clump, t) * 0.2 + starField(pts + 5.0, 6.0, 0.35 * clump, t) * 0.05;
+        vec3 tint = mix(vec3(1.0, 0.75, 0.5), vec3(0.8, 0.88, 1.0), hash21(floor(pts / 11.0) + 3.0));
+        vec3 col = 1.0 - exp(-(sky + (star * tint + light * 0.7) * ext));
+        col = pow(col, vec3(1.0 / 2.2));
         col = grade(col, 0.3, u_hue, u_saturation, u_contrast, u_brightness);
         col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0;
         gl_FragColor = vec4(col, 1.0);
     }
     """, uniforms: [
-        SKUniform(name: "u_old0", vectorFloat3: old[0]), SKUniform(name: "u_old1", vectorFloat3: old[1]),
-        SKUniform(name: "u_old2", vectorFloat3: old[2]), SKUniform(name: "u_old3", vectorFloat3: old[3]),
         SKUniform(name: "u_arc", texture: arc), SKUniform(name: "u_slope", float: slope),
         SKUniform(name: "u_dist", vectorFloat4: dist), SKUniform(name: "u_angle", vectorFloat4: angle),
         SKUniform(name: "u_lum", vectorFloat4: lum), SKUniform(name: "u_low", vectorFloat4: low),
         SKUniform(name: "u_thick", vectorFloat4: thick),
-    ] + colours + [crown], knobs: auroraKnobs.filter { $0.section != "Motion" && $0.section != "Colors" })
+    ] + colours + [crown], knobs: gradeKnobs("aurora"))
     let sky = AuroraLight(arc: bytes, slope: slope, dist: dist, angle: angle, lum: lum)
     let phase = SKUniform(name: "u_phase", float: 0), poolA = SKUniform(name: "u_poolA", vectorFloat4: .zero)
     let poolB = SKUniform(name: "u_poolB", vectorFloat4: .zero), glow = SKUniform(name: "u_glow", vectorFloat3: .zero)
