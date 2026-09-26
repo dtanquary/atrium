@@ -36,7 +36,7 @@ let auroraPalettes: [(name: String, colours: [SIMD3<Float>])] = [
             float fi = float(i);
             float x = p.x * (0.6 + 0.25 * fi) + fi * 3.1;
             float fold = sin(x * 2.4 + t * 0.04 + fi * 1.7) + 0.6 * sin(x * 5.3 - t * 0.03 + fi);
-            float edge = 0.4 + 0.1 * fi + 0.06 * fold + 0.14 * (noise(vec2(x * 0.7 + t * 0.01, fi * 4.0)) - 0.5);
+            float edge = 0.5 + 0.1 * fi + 0.045 * fold + 0.08 * (noise(vec2(x * 0.7 + t * 0.01, fi * 4.0)) - 0.5);
             float h = uv.y - edge;
             float rim = exp(-abs(h) * 70.0);
             float body = smoothstep(-0.004, 0.004, h) * exp(-max(h, 0.0) * 9.0);
@@ -54,7 +54,7 @@ let auroraPalettes: [(name: String, colours: [SIMD3<Float>])] = [
             hue = mix(hue, u_crown, smoothstep(0.12, 0.3, ch));
             aurora += hue * ((body + rim * 0.7 + tail) * rays + below) * patches * (1.0 - 0.25 * fi);
         }
-        col += (1.0 - exp(-aurora * 0.9)) * smoothstep(1.05, 0.6, uv.y);   // soft clip where curtains overlap
+        col += (1.0 - exp(-aurora * 0.9)) * smoothstep(1.12, 0.72, uv.y);   // soft clip where curtains overlap
 
         col = grade(col, 0.3, u_hue, u_saturation, u_contrast, u_brightness);
         col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0;
@@ -76,7 +76,7 @@ let auroraPalettes: [(name: String, colours: [SIMD3<Float>])] = [
     static let photo = SKTexture(image: NSImage(contentsOf: resource("aurora-ground.heic")) ?? NSImage())
     static let aux = SKTexture(image: NSImage(contentsOf: resource("aurora-ground-aux.png")) ?? NSImage())
     /// Where the highest summit sits: down from the top of the photo as a fraction of its height, and up the screen.
-    static let summit = 60.0 / 1390, peak = 0.42
+    static let summit = 60.0 / 1390, peak = 0.38
 }
 
 /// The snowy range and the flats in front of it, as seen on a real long exposure: lit by a diffuse light that's
