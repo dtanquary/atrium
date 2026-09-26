@@ -4,20 +4,118 @@ Living, animated desktop wallpapers for macOS: a reef tank of real fish and cora
 
 There are no prebuilt downloads. Clone it, build it and run it yourself; it takes about a minute.
 
-![Nebula: a unique deep-space cloud on every load, here in the Hubble palette](docs/images/nebula-hubble.jpg)
+## The wallpapers
 
-| | |
+Screenshots show the wallpaper alone, with no desktop icons, menu bar or Dock. Everything moves: the fish school, the nebulae drift and fold, the galaxies turn, the sky turns and the starlings wheel. Galaxy, Nebula and the reef are rebuilt differently on every load. The docs in [`docs/`](docs/README.md) cover each wallpaper in depth: how it works, its settings, cost and ideas for next steps.
+
+### Fish Tank
+A bright reef tank of real fish and corals, cut out of photos: a chromis school, tangs, clownfish in their anemone, and soft corals swaying.
+
+![Fish Tank in motion: fish schooling over the reef under actinic blue, with light rippling across the sand](docs/images/fish-tank.gif)
+
+| ![Fish Tank by day](docs/images/fish-tank-day.jpg) | ![Fish Tank at night](docs/images/fish-tank-actinic.jpg) |
 |---|---|
-| ![Live Sky](docs/images/live-sky.jpg) **Live Sky**: tonight's real sky over your location, with the Moon in its true phase, Saturn and the Milky Way | ![Earth from Orbit](docs/images/earth-from-orbit.jpg) **Earth from Orbit**: city lights on the night side, with the live ISS |
-| ![Flowing Gradient](docs/images/flowing-gradient.jpg) **Flowing Gradient**: soft pools of colour with silk ribbons | ![Lava Lamp](docs/images/lava-lamp.jpg) **Lava Lamp**: glowing wax on pinching necks |
-| ![Nebula, Reflection palette](docs/images/nebula-reflection.jpg) **Nebula**: the Reflection palette | ![Nebula, Planetary palette](docs/images/nebula-planetary.jpg) **Nebula**: the Planetary palette |
-| ![Galaxy, Whirlpool](docs/images/galaxy-whirlpool.jpg) **Galaxy**: the Whirlpool (M51) and its companion, in colours sampled from Hubble's portrait | ![Galaxy, Andromeda](docs/images/galaxy-andromeda.jpg) **Galaxy**: Andromeda, steeply tilted, with M32 and M110 beside it |
-| ![Fish Tank by day](docs/images/fish-tank-day.jpg) **Fish Tank**: a bright reef of real fish and corals, cut out of photos | ![Fish Tank at night](docs/images/fish-tank-actinic.jpg) **Fish Tank**: the reef under actinic blue in Dark Mode, its corals fluorescing |
-| ![Galaxy, Great Barred](docs/images/galaxy-barred.jpg) **Galaxy**: NGC 1300, the Great Barred Spiral, with dust lanes along its bar | ![Nebula, Oxygen palette](docs/images/nebula-oxygen.jpg) **Nebula**: the Oxygen palette |
-| ![Weather, fair](docs/images/weather-fair.jpg) **Weather**: a fair morning over real California hills, with real clouds drifting on the wind | ![Weather, sunset](docs/images/weather-sunset.jpg) **Weather**: sunset from a physical sky, the hills gone to silhouettes |
-| ![Weather, fog](docs/images/weather-fog.jpg) **Weather**: fog, with mist lying in the valley | ![Weather, snow](docs/images/weather-snow.jpg) **Weather**: snow falling, and lying on the hills |
+| By day, in Light Mode | Under actinic blue in Dark Mode, its corals fluorescing |
 
-*Screenshots show the wallpaper alone, with no desktop icons, menu bar or Dock. Everything moves: the nebulae drift and fold, the galaxies turn, the fish school around the reef, the sky turns, clouds drift and rain falls, and the ISS crosses the globe. Galaxy, Nebula and the reef are rebuilt differently on every load.*
+### Flowing Gradient
+Soft pools of colour with silk ribbons that follow the Sun, in six palettes.
+
+| ![Flowing Gradient in Dark Mode](docs/images/flowing-gradient.jpg) | ![Flowing Gradient in Light Mode](docs/images/flowing-gradient-light.jpg) |
+|---|---|
+| In Dark Mode | The watercolour Light Mode |
+
+### Lava Lamp
+Wax that rises on pinching necks, slumps and sinks, in seven jewel-tone palettes with Light and Dark looks.
+
+| ![Lava Lamp in Dark Mode](docs/images/lava-lamp.jpg) | ![Lava Lamp in Light Mode, Teal palette](docs/images/lava-lamp-light.jpg) |
+|---|---|
+| Glowing wax in Dark Mode | Teal, in Light Mode |
+
+### Rain on Glass
+Drops sliding down a window over blurred city lights, in seven palettes.
+
+| ![Rain on Glass at night](docs/images/rain-on-glass-night.jpg) | ![Rain on Glass by day](docs/images/rain-on-glass-day.jpg) |
+|---|---|
+| City lights at night, in Dark Mode | An overcast day in Light Mode, in the Sunset palette |
+
+### Aurora
+Northern lights over the snowy Tetons, shading through real aurora colours.
+
+| ![Aurora in green](docs/images/aurora-green.jpg) | ![Aurora in purple](docs/images/aurora-purple.jpg) |
+|---|---|
+| The classic green | The Purple palette |
+
+### Nebula
+A unique deep-space cloud on every load, in real nebula colours, dissolving into a new one every few minutes.
+
+| ![Nebula, Hubble palette](docs/images/nebula-hubble.jpg) | ![Nebula, Reflection palette](docs/images/nebula-reflection.jpg) |
+|---|---|
+| The Hubble palette | The Reflection palette |
+| ![Nebula, Planetary palette](docs/images/nebula-planetary.jpg) | ![Nebula, Oxygen palette](docs/images/nebula-oxygen.jpg) |
+| The Planetary palette | The Oxygen palette |
+
+### Galaxy
+A spiral galaxy turning slowly, after a real one, with dust lanes, star clusters and pink star-forming knots.
+
+| ![Galaxy, Whirlpool](docs/images/galaxy-whirlpool.jpg) | ![Galaxy, Andromeda](docs/images/galaxy-andromeda.jpg) |
+|---|---|
+| The Whirlpool (M51) and its companion, in colours sampled from Hubble's portrait | Andromeda, steeply tilted, with M32 and M110 beside it |
+| ![Galaxy, Great Barred](docs/images/galaxy-barred.jpg) | ![Galaxy, Milky Way](docs/images/galaxy-milky-way.jpg) |
+| NGC 1300, the Great Barred Spiral, with dust lanes along its bar | The Milky Way, seen face-on |
+
+### Live Sky
+The real sky above you: stars, planets, the Moon's phase, the Milky Way and the ISS. Deep blue by day.
+
+| ![Live Sky at night](docs/images/live-sky.jpg) | ![Live Sky at dusk](docs/images/live-sky-dusk.jpg) |
+|---|---|
+| Tonight's sky, with the Moon in its true phase, Saturn and the Milky Way | Dusk, from Preview a time of day in Settings |
+
+### Earth from Orbit
+The globe above your location with the live day/night line, today's real clouds, lightning in storms near you, city lights and the ISS.
+
+| ![Earth from Orbit at night](docs/images/earth-from-orbit.jpg) | ![Earth from Orbit by day](docs/images/earth-from-orbit-day.jpg) |
+|---|---|
+| City lights on the night side, with the live ISS | The day side, under today's real clouds |
+
+### Weather
+Real hills under your live local weather, beneath a physical sky with the real Sun and Moon: sunrise and twilight, real clouds on the real wind, rain, snow lying on the ground, valley mist and lightning.
+
+| ![Weather, fair](docs/images/weather-fair.jpg) | ![Weather, sunset](docs/images/weather-sunset.jpg) |
+|---|---|
+| A fair morning, with real clouds drifting on the wind | Sunset from a physical sky, the hills gone to silhouettes |
+| ![Weather, fog](docs/images/weather-fog.jpg) | ![Weather, snow](docs/images/weather-snow.jpg) |
+| Fog, with mist lying in the valley | Snow falling, and lying on the hills |
+
+### Pixel City
+A pixel-art skyline that follows your clock, with traffic and windows lighting up through the evening.
+
+| ![Pixel City at dusk](docs/images/pixel-city-dusk.jpg) | ![Pixel City at night](docs/images/pixel-city-night.jpg) |
+|---|---|
+| Dusk, the windows coming on | Late at night, under the Moon |
+
+### Fireflies
+Fireflies drifting over a misty meadow at blue hour.
+
+![Fireflies over a misty meadow at blue hour](docs/images/fireflies.jpg)
+
+### Murmuration
+Tens of thousands of starlings wheeling over Brighton's West Pier or a marsh pond, flying like the real thing (a published flight model), mirrored in the water and scattering from a falcon. By default a whole evening plays out, from golden hour to the roost.
+
+![Murmuration in motion: a flock of starlings folding over Brighton's West Pier at sunset](docs/images/murmuration.gif)
+
+| ![Murmuration over the marsh pond](docs/images/murmuration-marsh.jpg) | ![Murmuration over the West Pier at blue hour](docs/images/murmuration-blue-hour.jpg) |
+|---|---|
+| The marsh pond in the afterglow | The West Pier at blue hour |
+
+### Campfire
+A campfire in a stone ring in a real forest clearing at night, its flames simulated, lighting the stones, ground and nearby trees as it flickers, under the real stars.
+
+![Campfire in a forest clearing at night](docs/images/campfire.jpg)
+
+### Game of Life
+Conway's cells with fading trails, reseeding so it never dies out.
+
+![Game of Life](docs/images/game-of-life.jpg)
 
 ## How it works
 
@@ -62,28 +160,6 @@ To rebuild after pulling changes: `./build.sh && pkill -x Atrium; open build/Atr
 
 - **Location** (optional). Live Sky, Earth from Orbit, Weather and Flowing Gradient's time-of-day mood use your location, and the app asks once. If you decline, it guesses from your time zone.
 - **Network.** Weather fetches from [Open-Meteo](https://open-meteo.com) every 15 minutes. Live Sky and Earth from Orbit fetch the ISS position from [wheretheiss.at](https://wheretheiss.at) at most once a minute. Earth from Orbit fetches a global cloud map from [Live Cloud Maps](https://clouds.matteason.co.uk) only once its cached copy is over 3 hours old (1.5 MB when it has changed), and not at all with Live clouds off. For lightning, it asks Open-Meteo for thunderstorms on a grid around you each time the cloud map updates, about every 3 hours. None of them needs an API key.
-
-## The wallpapers
-
-| Wallpaper | What it is |
-|---|---|
-| Fish Tank | A bright reef tank of real fish and corals, cut out of photos: a chromis school, tangs, clownfish in their anemone, and soft corals swaying |
-| Flowing Gradient | Soft pools of colour with silk ribbons that follow the Sun; six palettes and a watercolour Light Mode |
-| Lava Lamp | Wax that rises on pinching necks, slumps and sinks; seven jewel-tone palettes, with Light and Dark looks |
-| Rain on Glass | Drops sliding down a window over blurred city lights, at night or on an overcast day, in seven palettes |
-| Aurora | Northern lights over snowy peaks, shading through real aurora colours |
-| Nebula | A unique deep-space cloud on every load, in real nebula colours, dissolving into a new one every few minutes |
-| Galaxy | A spiral galaxy turning slowly, after a real one (Whirlpool, Andromeda, the Milky Way and more), with dust lanes, star clusters and pink star-forming knots |
-| Live Sky | The real sky above you: stars, planets, the Moon's phase, the Milky Way and the ISS. Deep blue by day. |
-| Earth from Orbit | The globe above your location with the live day/night line, today's real clouds, lightning in storms near you, city lights and the ISS |
-| Weather | Real hills under your live local weather, beneath a physical sky with the real Sun and Moon: sunrise and twilight, real clouds on the real wind, rain, snow lying on the ground, valley mist and lightning |
-| Pixel City | A pixel-art skyline that follows your clock, with traffic and windows lighting up through the evening |
-| Fireflies | Fireflies drifting through a foggy forest at dusk |
-| Murmuration | Tens of thousands of starlings wheeling over Brighton's West Pier or a marsh pond at sunset, flying like the real thing (a published flight model), mirrored in the water, and scattering from a falcon |
-| Campfire | A campfire in a stone ring in a real forest clearing at night, its flames simulated and coloured like a photo, lighting the stones, ground and nearby trees as it flickers, under the real stars |
-| Game of Life | Conway's cells with fading trails, reseeding so it never dies out |
-
-The docs in [`docs/`](docs/README.md) cover each one in depth: how it works, its settings, cost and ideas for next steps.
 
 ## Development
 
