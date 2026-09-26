@@ -481,10 +481,56 @@ final class WeatherScene: SKScene {
 
     private static func cloudTexture(_ name: String) -> SKTexture {
         if let texture = cloudTextures[name] { return texture }
-        let texture = SKTexture(image: NSImage(contentsOf: resource("weather-cloud-\(name).heic")) ?? NSImage())
+        let texture = packedCloud(name).map { SKTexture(cgImage: $0) } ?? SKTexture()
         texture.usesMipmaps = true // drawn far smaller than the photo when far away
         cloudTextures[name] = texture
         return texture
+    }
+
+    /// A cloud photo repacked for its shader, which only needs its brightness to relight it: red and blue are its
+    /// luminance, green its thickness (its alpha blurred by about 3% of its width), alpha as it was. Forming and
+    /// dissolving by thickness grows a cloud from a core and thins it from the edges; by raw alpha it broke into
+    /// scraps and holes, since the photos have thin patches inside.
+    private static func packedCloud(_ name: String) -> CGImage? {
+        guard let image = NSImage(contentsOf: resource("weather-cloud-\(name).heic"))?.cgImage(forProposedRect: nil, context: nil, hints: nil),
+              let context = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: image.width * 4,
+                                      space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+              let data = context.data
+        else { return nil }
+        let (w, h) = (image.width, image.height)
+        context.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+        let pixels = data.bindMemory(to: UInt8.self, capacity: w * h * 4)
+        var thickness = (0..<w * h).map { Float(pixels[$0 * 4 + 3]) / 255 }
+        for _ in 0..<2 { boxBlur(&thickness, w, h, radius: max(1, w * 15 / 1000)) } // two passes are close to a gaussian
+        for i in 0..<w * h {
+            let (r, g, b) = (Float(pixels[i * 4]), Float(pixels[i * 4 + 1]), Float(pixels[i * 4 + 2]))
+            let luminance = UInt8(min(0.2126 * r + 0.7152 * g + 0.0722 * b, 255)) // premultiplied, like its alpha
+            pixels[i * 4] = luminance
+            pixels[i * 4 + 1] = UInt8(min(thickness[i], 1) * Float(pixels[i * 4 + 3]))
+            pixels[i * 4 + 2] = luminance
+        }
+        return context.makeImage()
+    }
+
+    /// Blurs a single-channel image in place by averaging over a (2r+1)² box, one row then one column at a time.
+    private static func boxBlur(_ values: inout [Float], _ w: Int, _ h: Int, radius r: Int) {
+        var across = values
+        let span = Float(2 * r + 1)
+        for y in 0..<h {
+            let row = y * w
+            var sum = (-r...r).reduce(Float(0)) { $0 + values[row + min(max($1, 0), w - 1)] }
+            for x in 0..<w {
+                across[row + x] = sum / span
+                sum += values[row + min(x + r + 1, w - 1)] - values[row + max(x - r, 0)]
+            }
+        }
+        for x in 0..<w {
+            var sum = (-r...r).reduce(Float(0)) { $0 + across[min(max($1, 0), h - 1) * w + x] }
+            for y in 0..<h {
+                values[y * w + x] = sum / span
+                sum += across[min(y + r + 1, h - 1) * w + x] - across[max(y - r, 0) * w + x]
+            }
+        }
     }
 
     /// A cloud on screen: where it is, in km across the view and away from it, its base height and width in km, and
@@ -645,12 +691,13 @@ final class WeatherScene: SKScene {
 
     void main() {
         vec4 c = texture2D(u_texture, v_tex_coord);
-        vec3 rgb = c.rgb / max(c.a, 0.001);
+        vec3 packed = c.rgb / max(c.a, 0.001); // red: luminance, green: thickness (see packedCloud)
         // The cut leaves a faint veil of sky that glows at sunset, so the thinnest alpha is clipped. As a cloud forms
-        // or dissolves the clip rises: thin wisps go first and the dense core last, as real cumulus evaporate.
+        // or dissolves, a clip on its thickness rises: the edges go first and the thick core last, as real cumulus
+        // evaporate.
         float fade = 1.0 - a_life;
-        float a = c.a * smoothstep(0.03 + fade * 0.8, 0.2 + fade * 0.8, c.a) * min(a_life * 4.0, 1.0);
-        float lum = dot(rgb, vec3(0.2126, 0.7152, 0.0722));
+        float a = c.a * smoothstep(0.03, 0.2, c.a) * smoothstep(fade * 0.95 - 0.08, fade * 0.95 + 0.08, packed.g) * min(a_life * 4.0, 1.0);
+        float lum = packed.r;
         float t = clamp((lum - a_lum.x) / max(a_lum.y - a_lum.x, 0.02), 0.0, 1.0);
         float v = 1.0 - v_tex_coord.y;
         t = (0.3 + 0.7 * t) * (1.0 - 0.5 * v * v);
