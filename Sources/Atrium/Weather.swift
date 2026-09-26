@@ -10,6 +10,7 @@ final class WeatherScene: SKScene {
         Knob(key: "weather.lock", label: "Weather", range: 0...8, standard: 0, section: "Weather",
              format: .choice(["Live where you are", "Clear", "Partly cloudy", "Overcast", "Fog", "Drizzle", "Rain", "Snow",
                               "Thunderstorm"])),
+        Knob(key: "weather.cloudSpeed", label: "Cloud speed", range: 1...15, standard: 6, section: "Weather", format: .times),
         Knob(key: "weather.previewTime", label: "Preview a time of day", range: 0...1, standard: 0, section: "Preview",
              format: .toggle),
         Knob(key: "weather.previewHour", label: "Time", range: 0...24, standard: 13, section: "Preview", format: .clock,
@@ -33,6 +34,11 @@ final class WeatherScene: SKScene {
     private var lastUpdate: TimeInterval?
     private var viewpoint: SkyCamera
     private var sinceTrack = 0.0, sinceBake = 0.0, baking = false, skyDate = Date.distantPast
+    /// How much faster than the real wind the clouds drift: they'd look still at real speed. From Settings.
+    private var cloudSpeed = WeatherScene.knobs[1].value
+    /// How far the cloud deck (km) and the cirrus (in their noise's own units) have drifted, wrapped where the noise
+    /// repeats so the floats keep their precision.
+    private var deckDrift = SIMD2<Double>.zero, cirrusDrift = SIMD2<Double>.zero
 
     // The sky shader's inputs; see `skyShader`.
     private let skyBefore = SKUniform(name: "u_before", texture: nil), skyAfter = SKUniform(name: "u_after", texture: nil)
@@ -44,7 +50,8 @@ final class WeatherScene: SKScene {
     private let moonColour = SKUniform(name: "u_moonCol", vectorFloat3: .zero), starsUniform = SKUniform(name: "u_stars", float: 0)
     private let groundLight = SKUniform(name: "u_light", vectorFloat3: [1, 1, 1]), groundHaze = SKUniform(name: "u_haze", float: 0.05)
     private let groundColour = SKUniform(name: "u_colour", float: 1), groundHazeLit = SKUniform(name: "u_hazeLit", float: 1)
-    private let cloudLayer = SKUniform(name: "u_cloud", vectorFloat4: .zero), cloudWind = SKUniform(name: "u_wind", vectorFloat2: .zero)
+    private let cloudLayer = SKUniform(name: "u_cloud", vectorFloat4: .zero), cloudDrift = SKUniform(name: "u_drift", vectorFloat2: .zero)
+    private let cirrusShift = SKUniform(name: "u_cirrusDrift", vectorFloat2: .zero)
     private let cloudSun = SKUniform(name: "u_sunCol", vectorFloat3: .zero), cloudAmbient = SKUniform(name: "u_amb", vectorFloat3: .zero)
     private let cirrus = SKUniform(name: "u_high", float: 0), cirrusSun = SKUniform(name: "u_highCol", vectorFloat3: .zero)
     private let fog = SKUniform(name: "u_fog", float: 0), snowCover = SKUniform(name: "u_snow", float: 0)
@@ -96,6 +103,7 @@ final class WeatherScene: SKScene {
     /// Rebuilds the scene if the weather it should show has changed, crossfading from how it looked, or bakes the sky
     /// again at once if a preview moved the time of day.
     @objc private func redraw() {
+        cloudSpeed = Self.knobs[1].value
         if wanted != conditions {
             let before = view?.texture(from: self)
             conditions = wanted
@@ -115,8 +123,8 @@ final class WeatherScene: SKScene {
 
     /// Now, or today at the preview hour while previewing.
     private var now: Date {
-        guard live, Self.knobs[1].value > 0.5 else { return Date() }
-        return Calendar.current.startOfDay(for: Date()).addingTimeInterval(Self.knobs[2].value * 3600)
+        guard live, Self.knobs[2].value > 0.5 else { return Date() }
+        return Calendar.current.startOfDay(for: Date()).addingTimeInterval(Self.knobs[3].value * 3600)
     }
 
     /// Conditions from an Open-Meteo `current` reply.
@@ -183,15 +191,13 @@ final class WeatherScene: SKScene {
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]), skyBefore, skyAfter, skyBlend,
             cameraUniforms.lens, cameraUniforms.forward, cameraUniforms.right, sunDirection, sunDisc, moonPlace, moonLight,
             moonColour, starsUniform, SKUniform(name: "u_moonTex", texture: Self.moonTexture),
-            SKUniform(name: "u_noise", texture: CloudNoise.texture), cloudLayer, cloudWind, cloudSun, cloudAmbient, cirrus, cirrusSun, fog, deck, flashAmount, flashPlace, nightUniform,
+            SKUniform(name: "u_noise", texture: CloudNoise.texture), cloudLayer, cloudDrift, cirrusShift, cloudSun, cloudAmbient, cirrus, cirrusSun, fog, deck, flashAmount, flashPlace, nightUniform,
         ])
         fog.floatValue = conditions.fog
         let clouds = conditions.clouds
         cloudLayer.vectorFloat4Value = SIMD4<Float>(clouds.cover, clouds.base, clouds.thickness, clouds.deck)
         cirrus.floatValue = clouds.cirrus
         snowCover.floatValue = Float(conditions.snowCover)
-        // km/s, the way the wind blows (toward, not from)
-        cloudWind.vectorFloat2Value = SIMD2<Float>(conditions.windToward) * Float(conditions.wind / 3600 * 0.6)
         addChild(sky)
         show(SkyLight.bake(camera: viewpoint, date: now, latitude: here.latitude, longitude: here.longitude), fade: false)
         track()
@@ -362,9 +368,8 @@ final class WeatherScene: SKScene {
         haze = mix(min(haze, vec3(mix(40.0, 1.5, u_deck.a))), vec3(dot(min(haze, vec3(1.5)), vec3(0.3, 0.5, 0.2))) * 0.08 + u_deck.rgb * 0.9, u_deck.a); // as it looks under the deck
         if (rd.z > 0.0 && u_cloud.x > 0.0) {
             float tBase = u_cloud.y / rd.z;
-            vec2 wind = u_wind * u_time;
             float lod = clamp(log2(tBase / 6.0) * 0.4, 0.0, 1.0);
-            vec2 P = rd.xy * tBase + wind;
+            vec2 P = rd.xy * tBase + u_drift;
             vec2 toSun = u_sun.xy / max(length(u_sun.xy), 0.0001);
             vec4 na1 = texture2D(u_noise, nuv(P * 0.045));
             vec4 nb1 = texture2D(u_noise, nuv(P * 0.19 + na1.a * 0.3 + u_time * 0.00002));
@@ -405,8 +410,8 @@ final class WeatherScene: SKScene {
         }
         // High cirrus at 8 km: fine streaks along the wind, still lit pink after sunset down here.
         if (rd.z > 0.0 && u_high > 0.0) {
-            vec2 H = rd.xy * (8.0 / rd.z) + u_wind * u_time * 2.0;
-            vec2 hs = vec2(H.x * 0.8 + H.y * 0.6, H.y * 0.8 - H.x * 0.6) * vec2(0.012, 0.09);
+            vec2 H = rd.xy * (8.0 / rd.z);
+            vec2 hs = vec2(H.x * 0.8 + H.y * 0.6, H.y * 0.8 - H.x * 0.6) * vec2(0.012, 0.09) + u_cirrusDrift;
             vec4 h1 = texture2D(u_noise, nuv(hs));
             vec4 h2 = texture2D(u_noise, nuv(hs * vec2(3.1, 2.3) + h1.a * 0.2));
             float ci = smoothstep(1.0 - u_high, 1.2 - u_high, h1.r * 0.7 + h2.b * 0.3) * (0.3 + 0.7 * h2.r);
@@ -497,7 +502,7 @@ final class WeatherScene: SKScene {
     /// the upwind side.
     private func driftClouds(_ dt: Double) {
         guard !photoCloudsShown.isEmpty else { return }
-        let speed = conditions.wind / 3600 * 1.3 // km/s; the wind at cloud height is a little stronger
+        let speed = conditions.wind / 3600 * 1.3 * cloudSpeed // km/s; the wind at cloud height is a little stronger
         let toward = conditions.windToward
         let across = simd_dot(toward, SIMD2(viewpoint.right.x, viewpoint.right.y)) * speed
         let away = simd_dot(toward, SIMD2(viewpoint.forward.x, viewpoint.forward.y)) * speed
@@ -791,6 +796,15 @@ final class WeatherScene: SKScene {
         if sinceTrack >= 1 { sinceTrack = 0; track() }
         if sinceBake >= 60 && !baking { sinceBake = 0; bakeSky() }
         clock.floatValue = (clock.floatValue + Float(dt)).truncatingRemainder(dividingBy: 3600)
+        // The deck drifts with the wind; its noise repeats every 200 km. Cirrus, higher up, drifts twice as fast.
+        let wind = conditions.windToward * (conditions.wind / 3600 * 0.6 * cloudSpeed * Double(dt))
+        deckDrift += wind
+        deckDrift -= 200 * (deckDrift / 200).rounded(.down)
+        let high = SIMD2(wind.x * 0.8 + wind.y * 0.6, wind.y * 0.8 - wind.x * 0.6) * SIMD2(0.012, 0.09) * 2
+        cirrusDrift += high
+        cirrusDrift -= cirrusDrift.rounded(.down)
+        cloudDrift.vectorFloat2Value = SIMD2<Float>(deckDrift)
+        cirrusShift.vectorFloat2Value = SIMD2<Float>(cirrusDrift)
         driftClouds(Double(dt))
         if let (start, strokes, bolt) = flash {
             let brightness = flashBrightness(currentTime - start, strokes)

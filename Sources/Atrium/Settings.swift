@@ -4,8 +4,8 @@ import SwiftUI
 /// `.toggle` (stored as 0 or 1). Scenes read `value` and listen for `UserDefaults.didChangeNotification` to follow
 /// changes while the control moves; shader scenes usually feed each knob into a uniform of the same name.
 struct Knob {
-    /// `choice` is a menu of named steps, stored as the index of the pick.
-    enum Format: Equatable { case number, clock, minutes, toggle, choice([String]) }
+    /// `choice` is a menu of named steps, stored as the index of the pick; `times` is a multiplier like "6×".
+    enum Format: Equatable { case number, clock, minutes, toggle, times, choice([String]) }
 
     let key: String, label: String, range: ClosedRange<Double>, standard: Double
     /// The Settings section it's grouped under.
@@ -234,6 +234,7 @@ struct KnobRow: View {
         switch knob.format {
         case .clock: String(format: "%d:%02d", Int(value) % 24, Int(value * 60) % 60)
         case .minutes: value < 0.5 ? "Off" : "\(Int(value.rounded())) min"
+        case .times: "\(Int(value.rounded()))×"
         default: String(format: "%.2f", value)
         }
     }
