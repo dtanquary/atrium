@@ -3,7 +3,7 @@
 A deep-space gas cloud, cut by dark dust lanes, over a twinkling star field, drifting and folding very slowly. Every load rolls a unique nebula in colours modelled on real objects, and left running it dissolves into a freshly rolled one every 8 minutes. **Dave's favourite wallpaper.**
 
 - **Files:** `Sources/Atrium/Shaders.swift`: the `nebulaPalettes` (file scope) and `nebula(size:)`, which includes its shader source. `hash21`, `hash42`, `noise`, `fbm`, `starField` and `brightStar` come from `shaderCommon` in the same file (`brightStar` moved there to be shared with Galaxy).
-- **Entry:** `@MainActor func nebula(size:) -> SKScene`. It builds a plain scene through `shaderScene(size:source:uniforms:knobs:)` (Scenes.swift), which turns each of its knobs, `gradeKnobs("nebula")`, into a live uniform. Its registry entry has icon `sparkles`, tint `.purple`, and palettes `PaletteChoice(key: "nebula.palette", ...)`, whose swatches are colours 1–3 of each palette. The standard is "", meaning Random.
+- **Entry:** `@MainActor func nebula(size:) -> SKScene`. It builds a plain scene through `shaderScene(size:source:uniforms:knobs:)` (Scenes.swift), which turns each of its knobs, `nebulaKnobs`, into a live uniform. Its registry entry has icon `sparkles`, tint `.purple`, and palettes `PaletteChoice(key: "nebula.palette", ...)`, whose swatches are colours 1–3 of each palette. The standard is "", meaning Random.
 - **Kind:** a full-screen SKShader, fully procedural, with no image files.
 
 ## How it works
@@ -38,12 +38,16 @@ Everything is maths per pixel, per frame:
 
 ## Time, live data and appearance
 - **Drift:** `t = u_time × 0.005`, one screen-height every ~5 minutes. It started at 0.004; Dave asked for "a very small amount" faster. The gas also drifts at 0.5t relative to the warp, which keeps it churning. It never repeats in practice.
-- **Cycling:** after 8 × 60 s the scene presents `nebula(size:)` again with `SKTransition.crossFade(withDuration: 90)`, and both `pausesIncomingScene` and `pausesOutgoingScene` false, so both nebulas keep drifting through the dissolve. Each new scene schedules its own successor. The wait is an SKAction, so it pauses while the wallpaper is covered.
+- **Changing to a new nebula** (`NebulaCycle`): one scene draws both. Its uniforms come in two sets, the nebula showing (`u_seed`, `u_zoom`, `u_band` and the palette) and the next (the same names ending in 2). An SKAction checks every 5 s whether the Settings interval has passed (so a new interval applies at once, and it pauses while the wallpaper is covered). When it has, it rolls the next nebula and runs `u_mix` from 0 to 1 over 90 s, then copies the next set into the showing one. The shader's per-nebula maths is a function, `nebulaAt`, called once normally and twice only while `u_mix` > 0, stars included, so both keep drifting through the change and the rest of the time it costs one nebula.
+  - **Dissolve and condense** (the default since 2026-09-25): the old nebula dissolves from its thin outer gas and fine filaments into its densest knots over the first three quarters, while the new one condenses out of its densest knots and spreads along its filaments over the last three, so halfway the densest quarter or so of each is showing. Each clips a smooth "thickness" (mostly the broad warp field, measured over the visible gas of several rolls at 0.5–0.85 raw and stretched to 0–1), not the gas itself, which would break into specks; that's the lesson from Weather's forming clouds, where clipping raw alpha made Swiss cheese. The clip sweeps linearly from −0.2 (all kept) to 1.2 (all gone). The two are screened together (1 − (1−a)(1−b)); added, their overlap flared white. Stars crossfade.
+  - **Crossfade**: the two whole pictures blend over the 90 s, as the old `SKTransition.crossFade` did: a double exposure while it lasts.
+  - Before, each nebula was its own scene, and the next was presented with `SKTransition.crossFade(withDuration: 90)`.
 - **Re-picking:** choosing Nebula in the menu, or a palette swatch in Settings, crossfades to a fresh roll immediately.
 - No location or network use. No Light Mode look; it's inherently dark.
 
 ## Settings
 - **Colors:** the palette pin, `nebula.palette` (default Random). Picking one rolls a fresh nebula.
+- **Change** (`nebula.every`, `nebula.transition`): "New nebula every" 0–30 minutes (default 8; 0 is Off, and one minute is handy for comparing), and the Transition, Crossfade or Dissolve and condense (the default). Dave asked for the choice so he could compare the two live before locking one in.
 - **Look**, live without a new roll (`ShaderScene` observes `UserDefaults.didChangeNotification`):
 
 | Key | Label | Range | Default |
@@ -74,7 +78,7 @@ Palettes (`nebulaPalettes`: background, main gas, secondary gas, hot core), each
 - Shimmer: amplitude 0.07, rate `0.6 + 5h`.
 
 ## Performance
-CPU 0.45 ms and GPU 1.52 ms per frame (release, 2x). The GPU cost is mostly the three fbm calls (5 octaves each) plus two noise octaves for dust. During the 90 s dissolve both scenes render, so it roughly doubles (`ponytail:` noted in code). That's acceptable once every 8 minutes. The Settings grade is a handful of arithmetic per pixel and doesn't show in the measurement.
+CPU 0.45 ms and GPU about 1.6 ms per frame (release, 2x; the dissolve's thickness adds about 0.07 ms over the old 1.52). The GPU cost is mostly the three fbm calls (5 octaves each) plus two noise octaves for dust. During the 90 s change both nebulas are drawn, about 3.1 ms, as the old two-scene crossfade was. That's acceptable once every 8 minutes. The Settings grade is a handful of arithmetic per pixel and doesn't show in the measurement.
 
 ## Gotchas and shortcuts
 - `u_time` doesn't advance in the render test, and every roll is random. To compare palettes, pin one with `SNAPSHOT_DEFAULTS="nebula.palette=Hubble"`. To see another moment, temporarily add an offset to `u_time`.

@@ -346,62 +346,139 @@ let nebulaPalettes: [(name: String, colours: [SIMD3<Float>])] = [
     ("Oxygen", [[0.0, 0.03, 0.03], [0.10, 0.70, 0.50], [0.15, 0.45, 0.75], [0.85, 1.0, 0.92]]),       // like NGC 3242: OIII green, Hβ blue
 ]
 
+/// Nebula's settings: how often it changes to a new one and how, then the Look sliders.
+let nebulaKnobs = [
+    Knob(key: "nebula.every", label: "New nebula every", range: 0...30, standard: 8, section: "Change", format: .minutes),
+    Knob(key: "nebula.transition", label: "Transition", range: 0...1, standard: 1, section: "Change",
+         format: .choice(["Crossfade", "Dissolve and condense"])),
+] + gradeKnobs("nebula")
+
 /// Deep-space gas clouds cut by dark dust lanes, drifting very slowly. Every load rolls a new one: its own cloud
 /// structure, scale, palette (unless one is pinned in Settings), star field, and the band the cloud lies along.
-/// Left running, it dissolves into a freshly rolled one every few minutes.
+/// Left running, it changes to a freshly rolled one every few minutes (see `NebulaCycle`).
 @MainActor func nebula(size: CGSize) -> SKScene {
-    let palette = (nebulaPalettes.first { $0.name == UserDefaults.standard.string(forKey: "nebula.palette") }
-        ?? nebulaPalettes.randomElement()!).colours
-    let uniforms = [
-        SKUniform(name: "u_seed", vectorFloat2: [.random(in: 0...100), .random(in: 0...100)]),
-        SKUniform(name: "u_zoom", float: .random(in: 1.2...1.9)),
-        SKUniform(name: "u_band", vectorFloat3: [.random(in: 0.38...0.62), .random(in: -0.6...0.6), .random(in: 0.26...0.4)]),
-        SKUniform(name: "u_base", vectorFloat3: palette[0]),
-        SKUniform(name: "u_dense", vectorFloat3: palette[1]),
-        SKUniform(name: "u_accent", vectorFloat3: palette[2]),
-        SKUniform(name: "u_hot", vectorFloat3: palette[3]),
-    ]
+    let cycle = NebulaCycle()
     let scene = shaderScene(size: size, source: shaderCommon + """
-    void main() {
-        float aspect = u_size.x / u_size.y;
-        vec2 p = v_tex_coord * vec2(aspect, 1.0);
-        float t = u_time * 0.005; // one screen height of drift every ~5 minutes
-
+    // One nebula: its glow (rgb) and density (a). As `clip` rises from -0.2 to 1.2 it dissolves, the thin outer gas and
+    // fine filaments first and the densest knots last; lowered again, the same nebula condenses from its knots outward.
+    // It clips a smoother measure than the gas itself, mostly the broad warp field, or it breaks into specks.
+    vec4 nebulaAt(vec2 uv, float aspect, float t, vec2 seed, float zoom, vec3 shape, vec3 base, vec3 dense, vec3 accent,
+                  vec3 hot, float clip) {
         // domain-warped fbm: the warp vector w folds the clouds into filaments
-        vec2 q = p * u_zoom + u_seed + vec2(t, t * 0.4);
+        vec2 q = uv * vec2(aspect, 1.0) * zoom + seed + vec2(t, t * 0.4);
         vec2 w = vec2(fbm(q + vec2(0.0, 1.3)), fbm(q + vec2(5.2, 8.1)));
         float gas = fbm(q + 1.8 * w + vec2(t * 0.5, 0.0));
         float dust = noise(q * 2.2 + 2.5 * w + 11.0) * 0.6 + noise(q * 4.7 + 3.0 * w) * 0.4;
 
-        // ponytail: a band (height, slope, width from u_band) so the cloud always crosses the screen
-        float band = exp(-pow((v_tex_coord.y - u_band.x + u_band.y * (v_tex_coord.x - 0.5)) / u_band.z, 2.0));
+        // ponytail: a band (height, slope, width from `shape`) so the cloud always crosses the screen
+        float band = exp(-pow((uv.y - shape.x + shape.y * (uv.x - 0.5)) / shape.z, 2.0));
         float g = gas * 0.7 + band * 0.4;
 
-        vec3 c = mix(u_base, u_dense, smoothstep(0.4, 0.8, g));
-        c = mix(c, u_accent, smoothstep(0.42, 0.62, w.x) * 0.9);
-        c = mix(c, u_hot, 0.8 * smoothstep(0.45, 0.65, g * w.y * 1.1));
-        float density = smoothstep(0.25, 0.8, g);
+        vec3 c = mix(base, dense, smoothstep(0.4, 0.8, g));
+        c = mix(c, accent, smoothstep(0.42, 0.62, w.x) * 0.9);
+        c = mix(c, hot, 0.8 * smoothstep(0.45, 0.65, g * w.y * 1.1));
+        // measured over the visible gas of several rolls it runs 0.5 to 0.85, stretched here to 0 to 1
+        float thick = clamp((g * 0.55 + (w.x + w.y) * 0.3 + band * 0.1 - 0.5) / 0.35, 0.0, 1.0);
+        float keep = smoothstep(clip - 0.15, clip + 0.15, thick); // all of it while clip is -0.2 or less
+        float density = smoothstep(0.25, 0.8, g) * keep;
         vec3 neb = 1.0 - exp(-c * density * density * 2.2);                // soft clip keeps bright cores from blowing out
         neb *= 1.0 - 0.85 * smoothstep(0.5, 0.72, dust);                     // dark dust lanes
+        return vec4(neb + c * 0.07 * band * keep, density);                  // plus a faint wash around the cloud
+    }
 
-        vec2 pts = v_tex_coord * u_size + u_seed * 97.0; // the seed moves the star field too
-        vec3 col = vec3(0.004, 0.004, 0.012) + neb + c * 0.07 * band; // faint wash around the cloud
-        col += vec3(0.8, 0.85, 1.0) * starField(pts, 7.0, 0.3, u_time) * (1.0 - 0.6 * density);
-        col += vec3(1.0, 0.92, 0.85) * brightStar(pts + vec2(u_time * 0.2, 0.0), 180.0, u_time);
+    void main() {
+        float aspect = u_size.x / u_size.y;
+        float t = u_time * 0.005; // one screen height of drift every ~5 minutes
+        vec2 uv = v_tex_coord;
+        vec2 pts = uv * u_size;
+
+        // While it changes (u_mix 0 to 1 over 90 s), the next nebula is drawn too. Crossfade blends the two whole
+        // pictures; dissolve and condense clips the old one away from its edges inward over the first three quarters
+        // while the new one condenses out of its densest knots over the last three quarters, evenly, so halfway the
+        // densest quarter or so of each is showing.
+        bool condense = u_transition > 0.5;
+        float clipNow = condense ? mix(-0.2, 1.2, clamp(u_mix / 0.75, 0.0, 1.0)) : -0.2;
+        vec4 now = nebulaAt(uv, aspect, t, u_seed, u_zoom, u_band, u_base, u_dense, u_accent, u_hot, clipNow);
+        // each nebula has its own star field, moved by its seed; they swap over as it changes
+        vec2 ptsNow = pts + u_seed * 97.0;
+        float field = starField(ptsNow, 7.0, 0.3, u_time);
+        float bright = brightStar(ptsNow + vec2(u_time * 0.2, 0.0), 180.0, u_time);
+        vec4 next = vec4(0.0);
+        if (u_mix > 0.0) { // only while changing, so the rest of the time it costs no more than one nebula
+            float clipNext = condense ? mix(1.2, -0.2, clamp((u_mix - 0.25) / 0.75, 0.0, 1.0)) : -0.2;
+            next = nebulaAt(uv, aspect, t, u_seed2, u_zoom2, u_band2, u_base2, u_dense2, u_accent2, u_hot2, clipNext);
+            vec2 ptsNext = pts + u_seed2 * 97.0;
+            field = mix(field, starField(ptsNext, 7.0, 0.3, u_time), u_mix);
+            bright = mix(bright, brightStar(ptsNext + vec2(u_time * 0.2, 0.0), 180.0, u_time), u_mix);
+        }
+        // screened, not added, or where the two overlap their light flares white
+        vec4 neb = condense ? vec4(1.0 - (1.0 - now.rgb) * (1.0 - next.rgb), max(now.a, next.a)) : mix(now, next, u_mix);
+
+        vec3 col = vec3(0.004, 0.004, 0.012) + neb.rgb;
+        col += vec3(0.8, 0.85, 1.0) * field * (1.0 - 0.6 * neb.a);
+        col += vec3(1.0, 0.92, 0.85) * bright;
 
         col = grade(col, 0.3, u_hue, u_saturation, u_contrast, u_brightness);
         col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0;
         gl_FragColor = vec4(col, 1.0);
     }
-    """, uniforms: uniforms, knobs: gradeKnobs("nebula"))
-
-    // Hand over to a new nebula with a long dissolve, both still drifting, so there's never a cut.
-    // ponytail: the dissolve renders both nebulas, about double the GPU cost while it lasts
-    scene.run(.sequence([.wait(forDuration: 8 * 60), .run { [weak scene] in
-        let fade = SKTransition.crossFade(withDuration: 90)
-        fade.pausesIncomingScene = false
-        fade.pausesOutgoingScene = false
-        scene?.view?.presentScene(nebula(size: size), transition: fade)
-    }]))
+    """, uniforms: cycle.now + cycle.next + [cycle.mix], knobs: nebulaKnobs)
+    // Every 5 s it checks whether it's time for a new one, so a new "every" in Settings applies straight away. The
+    // checks are SKActions, so they pause while the wallpaper is covered.
+    scene.run(.repeatForever(.sequence([.wait(forDuration: 5), .run { [weak scene, cycle] in
+        guard let scene, let change = cycle.tick(5) else { return }
+        scene.run(change)
+    }])))
     return scene
+}
+
+/// Hands one nebula over to a freshly rolled one every few minutes, as Settings says: the uniforms for the one
+/// showing (`now`) and the next, which the shader draws together during the 90 s change (`mix` 0 to 1).
+@MainActor private final class NebulaCycle {
+    let now = NebulaCycle.uniforms(""), next = NebulaCycle.uniforms("2")
+    let mix = SKUniform(name: "u_mix", float: 0)
+    private var waited = 0.0, changing = false
+
+    init() { Self.roll(now) }
+
+    /// seed, zoom, band, then the palette's background, main gas, secondary gas and hot core
+    private static func uniforms(_ suffix: String) -> [SKUniform] {
+        [SKUniform(name: "u_seed" + suffix, vectorFloat2: .zero), SKUniform(name: "u_zoom" + suffix, float: 1.5),
+         SKUniform(name: "u_band" + suffix, vectorFloat3: [0.5, 0, 0.3])]
+            + ["u_base", "u_dense", "u_accent", "u_hot"].map { SKUniform(name: $0 + suffix, vectorFloat3: .zero) }
+    }
+
+    /// A new nebula: a new region of the endless noise field, its scale, the band it lies along (height, slope,
+    /// width), and a palette, unless one is pinned.
+    private static func roll(_ set: [SKUniform]) {
+        let palette = (nebulaPalettes.first { $0.name == UserDefaults.standard.string(forKey: "nebula.palette") }
+            ?? nebulaPalettes.randomElement()!).colours
+        set[0].vectorFloat2Value = [.random(in: 0...100), .random(in: 0...100)]
+        set[1].floatValue = .random(in: 1.2...1.9)
+        set[2].vectorFloat3Value = [.random(in: 0.38...0.62), .random(in: -0.6...0.6), .random(in: 0.26...0.4)]
+        for i in 0..<4 { set[3 + i].vectorFloat3Value = palette[i] }
+    }
+
+    /// Time passing; returns the change to run once it's due.
+    func tick(_ seconds: Double) -> SKAction? {
+        let every = nebulaKnobs[0].value * 60
+        guard !changing, every > 29 else { waited = 0; return nil }
+        waited += seconds
+        guard waited >= every else { return nil }
+        changing = true
+        Self.roll(next)
+        let mix = mix
+        return .sequence([.customAction(withDuration: 90) { _, elapsed in mix.floatValue = Float(elapsed / 90) },
+                          .run { [weak self] in self?.finish() }])
+    }
+
+    /// The next nebula becomes the one showing.
+    private func finish() {
+        now[0].vectorFloat2Value = next[0].vectorFloat2Value
+        now[1].floatValue = next[1].floatValue
+        for i in 2..<7 { now[i].vectorFloat3Value = next[i].vectorFloat3Value }
+        mix.floatValue = 0
+        waited = 0
+        changing = false
+    }
 }
