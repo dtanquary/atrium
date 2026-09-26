@@ -96,6 +96,7 @@ CPU 0.57 ms and GPU 0.91 ms per frame (release build, 2x, 2026-09-26).
   - So the painted sky, grass and canvas went, and so did the planned Photo/Painted comparison. The orbs stayed exactly as they were, now in the relit photo meadow with fog (0.17.0).
   - A photographic firefly model (points in focus, energy-conserving bokeh discs up close, a saturating tone map) was built and rendered, but not shipped, since Dave liked the orbs.
 - **Photo choice:** a research agent shortlisted ten licensed meadow photos and baked four: Field at dusk, Herbst (Thomas Heins, CC BY 4.0), Indian Hollow and Pewley Downs. Field at dusk won for its real dusk light, continuous treeline and grass texture up close. Herbst, a flatter and broader meadow with mist already at the trees' foot, is the runner-up. Its bake is in the scratchpad, `meadow/ship/`.
+  - Also tried: a real fog photo, "Desenka meadow 2016 G3" by George Chernilevsky (public domain), baked with its mist kept in. In the scene, at blue-hour brightness, the mist all but vanished. Its trees are near and tall at 50 mm, which leaves the meadow a thin dark strip, the opposite of broad. Shader fog over the wider field reads better.
 
 ## Ideas / next steps
 - **Synchronous flashing,** like *Photinus carolinus*: bursts of 4–8 flashes 0.5 s apart, 6–9 s dark, relayed across the field at about 0.5 m/s.
