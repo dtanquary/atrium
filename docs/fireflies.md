@@ -40,20 +40,20 @@ A research agent measured all three and read up on real fireflies. Its notes are
      - `wisps` is warped noise drifting slowly across on `u_time`.
      - The fog colour is `(0.04, 0.05, 0.07)` in linear light.
 5. **Fireflies** (`Fly`, `spawn`, `rest`, `dress`, `flySource`).
-   - There's a pool of 1200 sprites. `fireflies.density` × 600 of them are active.
+   - There's a pool of 800 sprites. `fireflies.density` × 400 of them are active.
    - **Where they are:**
-     - Each picks a spot on screen by tenth of the height from the bottom, weighted 10, 30, 60, 45, 12, 3: thickest just below the treeline, some against the trees, few above them.
-     - It's then placed in the meadow at the distance that puts it there: 0.1 m up to just below eye height over the field, or up to 1.5 m above eye height against the trees and sky.
-     - They fly at 0.04–0.12 m/s, turning up to 0.8 rad between flashes. Once one drifts out of view or past the treeline, it's put somewhere new.
+     - Most are spread evenly over the meadow's area, 3–50 m out, so there are many more far off than near, crowding toward the treeline as in photos of real fields. A third are spread evenly by distance instead, to fill the middle of the field.
+     - They fly 0.15–1.75 m up, weighted low; the few above eye height show against the trees.
+     - They drift at 0.02–0.05 m/s, turning up to 0.8 rad between flashes. Once one drifts out of view or past the treeline, it's put somewhere new.
    - **Flashing:**
-     - Each has a period of 4.5–6.5 s, with ±15% jitter each time.
-     - A flash lasts 1.4 s: in over the first 8%, held, then out over the last 15%. The fades are quick, because an orb caught half faded reads as a khaki blot.
-     - It dips a little, then climbs 0.1 m, like *Photinus*'s J-stroke. Between flashes it's hidden.
+     - Each has a period of 6–10 s, with ±15% jitter each time.
+     - A glow lasts 3 s: easing in over the first 35%, then out from 55%. That's a slow pulse, much slower than a real *Photinus* flash (about 0.5 s), by Dave's choice.
+     - It rises 0.03 m over the glow. Between glows it's hidden.
+     - `fireflies.speed` scales the scene's own clock, so drift, glows and gaps all speed up or slow down together.
    - **The orb:**
      - A cream disc (#fef09c) with a soft, slightly wobbly edge and a faint glow out to 2.6 radii.
-     - Its radius is 0.5% of the height times a log-normal spread (σ about 0.45), only a little bigger nearer (`(8/d)^0.3`, clamped to 0.75–1.3). Those sizes are measured from the painting.
-     - 20% of the bigger ones sit in a pale grey-teal halo about 2.6 times their size, a little off centre, with a ragged edge.
-     - Fireflies over 25 m away are small and dim (#9c936c). 4% are a halo alone, a firefly out of focus.
+     - Its radius is a glow about 4.5 cm across in the world (`focal·0.045/d`, with a log-normal spread of σ about 0.3, from 1 to 9 pt). So it shrinks with distance: 9 pt at 7 m, about 1.5 pt by the treeline.
+     - Within 12 m, 20% sit in a pale grey-teal halo about 2.6 times their size, a little off centre, with a ragged edge, and 25% are a halo alone, a firefly out of focus.
      - `a_fly` carries the radius, the half-width, the kind plus a seed, and how much light gets through the fog (`clearness(d)`, the same curve as the ground's). The node's alpha fades it through `v_color_mix.a`.
 
 ## Time and appearance
@@ -62,15 +62,16 @@ Time is accumulated from `frameTime` in `update(_:)`, so it pauses with the view
 ## Settings
 - `fireflies.density` (Fireflies, 0.25–2×, standard 1): how many are active. It's live.
 - `fireflies.fog` (Fog, 0–1, standard 0.5): live for the ground and sky, and for each firefly from its next flash.
+- `fireflies.speed` (Speed, 0.25–2×, standard 1): how fast they drift, glow and fade. It scales the scene's clock and is live.
 
 ## Tuning constants
 - **Photo placement and view:** in `MeadowPhoto`.
 - **Light and fog:** skylight `(0.03, 0.036, 0.042)`, fog colour `(0.04, 0.05, 0.07)`, and a fog curve of `0.1 + 2.2·far²` with 85% thinning up the trees.
-- **Fireflies:** flight 0.04–0.12 m/s; a flash 1.4 s long, a 4.5–6.5 s period and a 0.1 m climb; placement weights as above.
+- **Fireflies:** drift 0.02–0.05 m/s; a glow 3 s long, a 6–10 s period and a 0.03 m rise; a 4.5 cm glow; a third spread by distance, the rest by area.
 
 ## Performance
 CPU 0.57 ms and GPU 0.91 ms per frame (release build, 2x, 2026-09-26).
-- **CPU:** a loop over 1200 flies that only touches the ones flashing, about 150. About seven a frame get new attributes as they finish a flash.
+- **CPU:** a loop over 800 flies that only touches the ones glowing, about 150. A few a frame get new attributes as they finish a glow.
 - **GPU:**
   - the five ground slices, each covering the photo's rect, with two texture reads and three noise calls a pixel before most are discarded
   - the sky
@@ -95,6 +96,10 @@ CPU 0.57 ms and GPU 0.91 ms per frame (release build, 2x, 2026-09-26).
 - **2026-09-26:** "I don't want it to look like an art painting, I want it to look like a realistic foggy meadow with a treeline", then "forget the painting look", and "the firefly orbs you have now look very nice, use them in a more broad meadow, more real scene."
   - So the painted sky, grass and canvas went, and so did the planned Photo/Painted comparison. The orbs stayed exactly as they were, now in the relit photo meadow with fog (0.17.0).
   - A photographic firefly model (points in focus, energy-conserving bokeh discs up close, a saturating tone map) was built and rendered, but not shipped, since Dave liked the orbs.
+- **2026-09-26, first look at the meadow:** "it looks great except 2 things: most of the fireflies are right up next to the camera, they don't look spread out; they are all still moving and fading in and out too fast." Then: "add the firefly speed to a settings slider."
+  - The painting-sized orbs were all about the same size, so they read as near. They now scale with distance, and most are spread over the meadow's area.
+  - The flash went from 1.4 s with snappy fades to a 3 s pulse, the period from 4.5–6.5 s to 6–10 s, and the drift slowed by a factor of three.
+  - Speed is a knob that scales the scene's clock (0.17.1).
 - **Photo choice:** a research agent shortlisted ten licensed meadow photos and baked four: Field at dusk, Herbst (Thomas Heins, CC BY 4.0), Indian Hollow and Pewley Downs. Field at dusk won for its real dusk light, continuous treeline and grass texture up close. Herbst, a flatter and broader meadow with mist already at the trees' foot, is the runner-up. Its bake is in the scratchpad, `meadow/ship/`.
   - Also tried: a real fog photo, "Desenka meadow 2016 G3" by George Chernilevsky (public domain), baked with its mist kept in. In the scene, at blue-hour brightness, the mist all but vanished. Its trees are near and tall at 50 mm, which leaves the meadow a thin dark strip, the opposite of broad. Shader fog over the wider field reads better.
 

@@ -9,6 +9,7 @@ final class Fireflies: SKScene {
     nonisolated static let knobs = [
         Knob(key: "fireflies.density", label: "Fireflies", range: 0.25...2, standard: 1, format: .times),
         Knob(key: "fireflies.fog", label: "Fog", range: 0...1, standard: 0.5),
+        Knob(key: "fireflies.speed", label: "Speed", range: 0.25...2, standard: 1, format: .times),
     ]
 
     /// One firefly, in metres: across from the middle of the view, up from the grass, and away from the eye.
@@ -27,7 +28,7 @@ final class Fireflies: SKScene {
     private lazy var stretch = max(1, size.width / (size.height * MeadowPhoto.top * MeadowPhoto.aspect))
     private lazy var horizon = onScreen(MeadowPhoto.horizon)
     private lazy var focal = MeadowPhoto.focal * stretch
-    private let flash: CGFloat = 1.4, pool = 1200 // twice the standard count, for the density knob
+    private let flash: CGFloat = 3, pool = 800 // twice the standard count, for the density knob
     private let fog = SKUniform(name: "u_fog", float: Float(Fireflies.knobs[1].value))
 
     private var flies: [Fly] = []
@@ -43,7 +44,7 @@ final class Fireflies: SKScene {
             node.shader = shader
             node.isHidden = true
             addChild(node)
-            var fly = Fly(node: node, next: .random(in: 0...6), period: .random(in: 4.5...6.5))
+            var fly = Fly(node: node, next: .random(in: 0...10), period: .random(in: 6...10))
             spawn(&fly)
             flies.append(fly)
         }
@@ -88,7 +89,7 @@ final class Fireflies: SKScene {
     }
 
     override func update(_ currentTime: TimeInterval) {
-        time += frameTime(currentTime, &lastTime)
+        time += frameTime(currentTime, &lastTime) * Self.knobs[2].value // Speed runs the scene's clock faster or slower
         let t = CGFloat(time), active = Int(CGFloat(pool) / 2 * Self.knobs[0].value)
         for i in flies.indices where t >= flies[i].next {
             let u = (t - flies[i].next) / flash
@@ -96,11 +97,11 @@ final class Fireflies: SKScene {
                 rest(&flies[i])
                 continue
             }
-            // A slow flash while it swoops, a little dip then a climb, as Photinus does: held, with quick fades, since
-            // an orb caught half faded reads as a khaki blot.
+            // A slow glow while it drifts, rising a little as Photinus does at the end of its swoop: easing in over a
+            // third of it, and out over nearly half.
             let fly = flies[i], s = u * flash
-            fly.node.position = project(fly.x + fly.vx * s, fly.y + 0.1 * (1.6 * u * u - 0.6 * u), fly.d + fly.vd * s)
-            fly.node.alpha = smoothstep(0, 0.08, u) * (1 - smoothstep(0.85, 1, u))
+            fly.node.position = project(fly.x + fly.vx * s, fly.y + 0.03 * (1.6 * u * u - 0.6 * u), fly.d + fly.vd * s)
+            fly.node.alpha = smoothstep(0, 0.35, u) * (1 - smoothstep(0.55, 1, u))
             fly.node.isHidden = false
         }
     }
@@ -111,21 +112,17 @@ final class Fireflies: SKScene {
         return CGPoint(x: size.width / 2 + f * x / d, y: size.height * horizon + f * (y - eye) / d)
     }
 
-    /// Puts a firefly somewhere new, heading any way. It picks a spot on screen first, then is placed in the meadow
-    /// at the distance that puts it there: below eye height over the field, or above it against the trees and sky.
+    /// Puts a firefly somewhere new, heading any way. Most are spread evenly over the meadow's area, so there are many
+    /// more far off than near, crowding toward the treeline as in photos of real fields; a third are spread evenly by
+    /// distance, to fill the middle of the field. Most fly low over the grass; the few above eye height show against
+    /// the trees.
     private func spawn(_ fly: inout Fly) {
-        let f = size.height * focal, level = size.height * horizon
-        // Fireflies in each tenth of the height, from the bottom, as in photos of real fields: thickest just below
-        // the treeline, some against the trees, few above them.
-        let counts: [CGFloat] = [10, 30, 60, 45, 12, 3]
-        var pick = CGFloat.random(in: 0..<counts.reduce(0, +)), tenth = 0
-        while pick >= counts[tenth] { pick -= counts[tenth]; tenth += 1 }
-        let target = (CGFloat(tenth) + .random(in: 0...1)) * 0.1 * size.height
-        fly.y = target < level ? .random(in: 0.1...eye - 0.15) : .random(in: eye + 0.2...eye + 1.5)
-        fly.d = min(max(f * abs(fly.y - eye) / max(abs(target - level), 2), nearest), treeline)
-        let reach = size.width / 2 / f * fly.d * 1.1
+        fly.d = CGFloat.random(in: 0...1) < 0.35 ? .random(in: nearest...treeline)
+            : sqrt(nearest * nearest + .random(in: 0...1) * (treeline * treeline - nearest * nearest))
+        let reach = size.width / 2 / (size.height * focal) * fly.d * 1.1
         fly.x = .random(in: -reach...reach)
-        let heading = CGFloat.random(in: 0...(2 * .pi)), speed = CGFloat.random(in: 0.04...0.12)
+        fly.y = 0.15 + 1.6 * pow(.random(in: 0...1), 2)
+        let heading = CGFloat.random(in: 0...(2 * .pi)), speed = CGFloat.random(in: 0.02...0.05)
         fly.vx = cos(heading) * speed
         fly.vd = sin(heading) * speed
         dress(fly)
@@ -151,24 +148,16 @@ final class Fireflies: SKScene {
         exp(-CGFloat(fog.floatValue) * (0.1 + 2.2 * pow(max(MeadowPhoto.depth(d), 0), 2)))
     }
 
-    /// Dresses a firefly as a soft orb, sized as measured in Dave's reference painting (a median of 1% of the height
-    /// across, with a long tail of big ones), only a little bigger nearer. Some of the bigger ones sit in a pale halo.
-    /// Far ones are small and dim. Now and then there's a halo alone, a firefly out of focus.
+    /// Dresses a firefly as a soft orb, its glow about 4.5 cm across in the world, so it shrinks with distance to a
+    /// point by the treeline. Near ones sometimes sit in a pale halo, and now and then there's a halo alone, a
+    /// firefly out of focus.
     private func dress(_ fly: Fly) {
-        let spread = (CGFloat.random(in: -1...1) + .random(in: -1...1) + .random(in: -1...1)) * 0.45
-        var r = size.height * 0.005 * exp(spread) * min(max(pow(8 / fly.d, 0.3), 0.75), 1.3)
-        let big = r > size.height * 0.005, roll = CGFloat.random(in: 0...1)
-        let kind: CGFloat
-        if roll < 0.04 {
-            kind = 5 // a ghost stain
-            r = size.height * .random(in: 0.0075...0.028)
-        } else if fly.d > 25 {
-            kind = 4 // dim and far
-            r = .random(in: 1...1.6)
-        } else {
-            kind = CGFloat.random(in: 0...1) < (big ? 0.2 : 0.03) ? 1 : 0
-        }
-        let extent = r * [2.7, 4.4, 0, 0, 1.1, 1.3][Int(kind)] + 1
+        let spread = (CGFloat.random(in: -1...1) + .random(in: -1...1) + .random(in: -1...1)) * 0.3
+        let f = size.height * focal, near = fly.d < 12, roll = CGFloat.random(in: 0...1)
+        var r = min(max(f * 0.045 / fly.d * exp(spread), 1), 9)
+        let kind: CGFloat = near && roll < 0.25 ? 5 : near && roll < 0.45 ? 1 : 0
+        if kind == 5 { r = f * .random(in: 0.05...0.12) / fly.d }
+        let extent = r * [2.7, 4.4, 0, 0, 0, 1.3][Int(kind)] + 1
         fly.node.size = CGSize(width: extent * 2, height: extent * 2)
         fly.node.zPosition = 100 - fly.d
         fly.node.setValue(SKAttributeValue(vectorFloat4: [Float(r), Float(extent), Float(kind + .random(in: 0..<0.99)), Float(clearness(fly.d))]),
@@ -215,19 +204,19 @@ final class Fireflies: SKScene {
 
     /// A firefly as a soft orb, faded by the node's alpha and by the fog in front of it (`a_fly.w`). `a_fly` is its
     /// radius and the sprite's half-width in points, then its kind plus a seed in the fraction: 0 a cream orb with a
-    /// soft, slightly wobbly edge and a faint glow around it, 1 the same in a halo, 4 a dim far one, and 5 a halo
+    /// soft, slightly wobbly edge and a faint glow around it, 1 the same in a halo, and 5 a halo
     /// alone. A halo is a flat, pale grey-teal wash about 2.6 times the orb's size, a little off centre, with a ragged
     /// edge and a grainy texture.
     private static let flySource = """
     void main() {
         float r0 = a_fly.x, kind = floor(a_fly.z), seed = fract(a_fly.z) * 64.0;
-        float ghost = step(4.5, kind), dim = step(3.5, kind) * (1.0 - ghost), stained = max(mod(kind, 2.0) * (1.0 - dim), ghost);
+        float ghost = step(4.5, kind), stained = max(mod(kind, 2.0), ghost);
         vec2 q = (v_tex_coord - 0.5) * 2.0 * a_fly.y;
         float r = length(q);
         vec2 dir = q / max(r, 0.001);
         float edge = r0 * (0.92 + 0.16 * noise(dir * 1.5 + seed));
         float dab = smoothstep(edge + 0.5 + 0.2 * r0, edge - 0.3 * r0, r) * (1.0 - ghost);
-        float glow = 0.16 * smoothstep(r0 * 2.6, r0 * 0.8, r) * (1.0 - ghost) * (1.0 - dim);
+        float glow = 0.16 * smoothstep(r0 * 2.6, r0 * 0.8, r) * (1.0 - ghost);
         vec2 s = q - (vec2(hash11(seed), hash11(seed + 3.0)) - 0.5) * 0.5 * r0 * (1.0 - ghost);
         float rs = length(s);
         vec2 ds = s / max(rs, 0.001);
@@ -236,7 +225,7 @@ final class Fireflies: SKScene {
                     * (0.8 + 0.4 * hash42(floor(q * 0.7) + seed).x) * stained;
         vec4 under = vec4(0.353, 0.416, 0.416, 1.0) * 0.3 * stain;
         under = vec4(1.0, 0.94, 0.7, 1.0) * glow + under * (1.0 - glow);
-        vec4 paint = vec4(mix(vec3(0.996, 0.941, 0.612), vec3(0.612, 0.576, 0.424), dim), 1.0) * dab;
+        vec4 paint = vec4(0.996, 0.941, 0.612, 1.0) * dab;
         gl_FragColor = (under * (1.0 - paint.a) + paint) * v_color_mix.a * a_fly.w;
     }
     """
