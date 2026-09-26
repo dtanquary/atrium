@@ -123,9 +123,9 @@ final class Fireflies: SKScene {
     }
 
     /// Dresses a firefly as one of the painting's marks. Dabs are sized as measured there (a median of 1% of the
-    /// height across, with a long tail of big ones), only a little bigger nearer. Big ones are often torn into a
-    /// dry-brush burst with spatter, or sit in a pale stain. Far ones are dim. Now and then there's a stain with no
-    /// dab in it, a firefly out of focus.
+    /// height across, with a long tail of big ones), only a little bigger nearer, each with a faint glow of paint.
+    /// Some of the bigger ones sit in a pale stain. Far ones are dim. Now and then there's a stain with no dab in
+    /// it, a firefly out of focus.
     private func dress(_ fly: Fly) {
         let spread = (CGFloat.random(in: -1...1) + .random(in: -1...1) + .random(in: -1...1)) * 0.45
         var r = size.height * 0.005 * exp(spread) * min(max(pow(8 / fly.d, 0.3), 0.75), 1.3)
@@ -138,9 +138,9 @@ final class Fireflies: SKScene {
             kind = 4 // dim and far
             r = .random(in: 1...1.6)
         } else {
-            kind = (CGFloat.random(in: 0...1) < (big ? 0.2 : 0.03) ? 1 : 0) + (CGFloat.random(in: 0...1) < (big ? 0.35 : 0.05) ? 2 : 0)
+            kind = CGFloat.random(in: 0...1) < (big ? 0.2 : 0.03) ? 1 : 0
         }
-        let extent = r * (kind == 5 ? 1.3 : [1.1, 4.4, 2.2, 4.4, 1.1][Int(kind)]) + 1
+        let extent = r * [2.7, 4.4, 0, 0, 1.1, 1.3][Int(kind)] + 1
         fly.node.size = CGSize(width: extent * 2, height: extent * 2)
         fly.node.zPosition = 100 - fly.d
         fly.node.setValue(SKAttributeValue(vectorFloat3: [Float(r), Float(extent), Float(kind + .random(in: 0..<0.99))]), forAttribute: "a_fly")
@@ -220,32 +220,30 @@ final class Fireflies: SKScene {
     """
 
     /// A firefly as one of the painting's marks, faded by the node's alpha. `a_fly` is its radius and the sprite's
-    /// half-width in points, then its kind plus a seed in the fraction. Kinds 0–3 are a flat cream dab with a hard
-    /// edge, plus 1 if it sits in a stain and 2 if it's torn into a dry-brush burst with spatter; 4 is a dim far dab,
-    /// and 5 a stain alone. A stain is a flat, pale grey-teal wash about 2.6 times the dab's size, a little off
-    /// centre, with a ragged edge and grainy pigment.
+    /// half-width in points, then its kind plus a seed in the fraction: 0 a cream dab with a soft, slightly wobbly
+    /// edge and a faint glow of paint around it, 1 the same in a stain, 4 a dim far dab, and 5 a stain alone. A stain
+    /// is a flat, pale grey-teal wash about 2.6 times the dab's size, a little off centre, with a ragged edge and
+    /// grainy pigment. (Torn dry-brush bursts with spatter, measured in the painting, read as paint splatters.)
     private static let flySource = """
     void main() {
         float r0 = a_fly.x, kind = floor(a_fly.z), seed = fract(a_fly.z) * 64.0;
-        float ghost = step(4.5, kind), dim = step(3.5, kind) * (1.0 - ghost);
-        float stained = max(mod(kind, 2.0) * (1.0 - dim), ghost), torn = step(2.0, mod(kind, 4.0)) * (1.0 - dim);
+        float ghost = step(4.5, kind), dim = step(3.5, kind) * (1.0 - ghost), stained = max(mod(kind, 2.0) * (1.0 - dim), ghost);
         vec2 q = (v_tex_coord - 0.5) * 2.0 * a_fly.y;
         float r = length(q);
         vec2 dir = q / max(r, 0.001);
-        float edge = r0 * (0.9 + torn * 0.7 * pow(noise(dir * 5.0 + seed), 2.5));
-        float dab = smoothstep(edge + 0.5, edge - 0.5, r) * (1.0 - ghost);
-        vec4 h = hash42(floor(q / 1.6) + seed * 7.0);
-        float spatter = torn * step(0.88, h.x) * step(r0 * 1.1, r) * step(r, r0 * 2.1)
-                      * step(length(fract(q / 1.6) - 0.5 - (h.yz - 0.5) * 0.4) * 1.6, 0.35 + 0.5 * h.w);
+        float edge = r0 * (0.92 + 0.16 * noise(dir * 1.5 + seed));
+        float dab = smoothstep(edge + 0.5 + 0.2 * r0, edge - 0.3 * r0, r) * (1.0 - ghost);
+        float glow = 0.16 * smoothstep(r0 * 2.6, r0 * 0.8, r) * (1.0 - ghost) * (1.0 - dim);
         vec2 s = q - (vec2(hash11(seed), hash11(seed + 3.0)) - 0.5) * 0.5 * r0 * (1.0 - ghost);
         float rs = length(s);
         vec2 ds = s / max(rs, 0.001);
         float reach = mix(r0 * 2.6, r0, ghost) * (0.85 + 0.3 * noise(ds * 2.0 + seed) + 0.12 * noise(ds * 7.0 + seed));
         float stain = smoothstep(reach, reach * 0.8, rs) * (1.0 + 0.15 * smoothstep(reach * 0.5, 0.0, rs))
                     * (0.8 + 0.4 * hash42(floor(q * 0.7) + seed).x) * stained;
-        vec4 wash = vec4(0.353, 0.416, 0.416, 1.0) * 0.3 * stain;
-        vec4 paint = vec4(mix(vec3(0.996, 0.941, 0.612), vec3(0.612, 0.576, 0.424), dim), 1.0) * max(dab, spatter);
-        gl_FragColor = (wash * (1.0 - paint.a) + paint) * v_color_mix.a;
+        vec4 under = vec4(0.353, 0.416, 0.416, 1.0) * 0.3 * stain;
+        under = vec4(1.0, 0.94, 0.7, 1.0) * glow + under * (1.0 - glow);
+        vec4 paint = vec4(mix(vec3(0.996, 0.941, 0.612), vec3(0.612, 0.576, 0.424), dim), 1.0) * dab;
+        gl_FragColor = (under * (1.0 - paint.a) + paint) * v_color_mix.a;
     }
     """
 }

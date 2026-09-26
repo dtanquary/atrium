@@ -63,7 +63,8 @@ A research agent measured the painting (2026-09-25; its notes are in the session
      - Between flashes it's hidden, so about 150 are lit at once.
    - **The mark** (`dress`, `flySource`), from the painting's measurements:
      - A dab's radius is 0.5% of the height times a log-normal spread (σ about 0.45), and only a little bigger nearer (`(8/d)^0.3`, clamped to 0.75–1.3).
-     - Of the bigger-than-median ones, 35% are torn into a dry-brush burst with spatter and 20% sit in a stain. Smaller ones rarely are.
+     - Each dab has a soft, slightly wobbly edge and a faint glow of cream paint out to 2.6 radii.
+     - Of the bigger-than-median ones, 20% sit in a stain. Smaller ones rarely do.
      - Fireflies over 25 m away are small dim dabs (#9c936c).
      - 4% are stains alone (0.75–2.8% of the height across): fireflies out of focus.
      - `a_fly` carries the radius, the sprite's half-width, and the kind plus a seed. The node's alpha fades it through `v_color_mix.a`.
@@ -105,7 +106,8 @@ CPU 0.7 ms and GPU 1.15 ms per frame (release build, 2x, 2026-09-25).
   - Flight slowed from 0.15–0.4 m/s to 0.04–0.12, and the J-stroke climb from 0.3 m to 0.1. A near firefly was sweeping about 200 pt a second.
   - Softened: grass at half resolution with dry-brush streaks, and dabs with soft edges and a painted glow.
   - A painting will always read as illustration. The photo look is the realistic answer.
-  - Then the agent's measurements showed the softening went the wrong way. The painting's dabs are hard-edged with no glow; its character comes from torn bursts, spatter, pale stains, clumped dry-brush grass and a strong canvas speckle. So the painted look was rebuilt to those numbers.
+  - Then the agent's measurements showed the softening went the wrong way. The painting's dabs are hard-edged with no glow; its character comes from torn bursts, spatter, pale stains, clumped dry-brush grass and a strong canvas speckle. So the painted look was rebuilt to those numbers (0.16.1).
+  - Dave: "the most recent changes to the fireflies made them look worse, like paint splatters." The torn bursts and spatter went, and the dabs got their soft edge and painted glow back (0.16.2). The measured grass, canvas, colours, sizes and stains stayed. Lesson: the painting is a guide, and what reads as light matters more than matching it mark for mark.
 
 ## Ideas / next steps
 - **Photo look (in progress):** a real meadow photo relit to blue hour (as for Aurora and Weather), with photographic fireflies:
