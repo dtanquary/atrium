@@ -39,6 +39,11 @@ A research agent measured all three and read up on real fireflies. Its notes are
      - `low` thins it up the trees (down 85% by 70% of their height), so mist pools at their foot while the crowns stay a dark silhouette.
      - `wisps` is warped noise drifting slowly across on `u_time`.
      - The fog colour is `(0.04, 0.05, 0.07)` in linear light.
+   - **Wind:** the photo is sampled a little to the side, only on the open field (the aux map's green; never the trees), by `wind·(1 − far)²`: most up close, nothing in the distance.
+     - Broad gusts (`noise`, drifting across at 0.06 photo widths a second, about 1.3 m/s at 20 m) set how far the grass leans.
+     - Each patch also rustles at its own phase (`sin(1.6 t + noise)`).
+     - At `fireflies.wind` 0.5, it leans about ±0.75 pt typically and 2.5 pt at most. The leaning stalks brighten by up to 6% where a gust passes.
+   - Each pixel belongs to exactly one slice, so the other four skip all the work (an `if` on the slice); that halved the ground's cost.
 5. **Fireflies** (`Fly`, `spawn`, `rest`, `dress`, `flySource`).
    - There's a pool of 800 sprites. `fireflies.density` × 400 of them are active.
    - **Where they are:**
@@ -63,6 +68,7 @@ Time is accumulated from `frameTime` in `update(_:)`, so it pauses with the view
 - `fireflies.density` (Fireflies, 0.25–2×, standard 1): how many are active. It's live.
 - `fireflies.fog` (Fog, 0–1, standard 0.5): live for the ground and sky, and for each firefly from its next flash.
 - `fireflies.speed` (Speed, 0.25–2×, standard 1): how fast they drift, glow and fade. It scales the scene's clock and is live.
+- `fireflies.wind` (Wind, 0–1, standard 0.5): how much the grass sways. Live. 0 holds it still.
 
 ## Tuning constants
 - **Photo placement and view:** in `MeadowPhoto`.
@@ -70,10 +76,10 @@ Time is accumulated from `frameTime` in `update(_:)`, so it pauses with the view
 - **Fireflies:** drift 0.02–0.05 m/s; a glow 3 s long, a 6–10 s period and a 0.03 m rise; a 4.5 cm glow; a third spread by distance, the rest by area.
 
 ## Performance
-CPU 0.57 ms and GPU 0.91 ms per frame (release build, 2x, 2026-09-26).
+CPU 0.54 ms and GPU 0.52 ms per frame (release build, 2x, 2026-09-26).
 - **CPU:** a loop over 800 flies that only touches the ones glowing, about 150. A few a frame get new attributes as they finish a glow.
 - **GPU:**
-  - the five ground slices, each covering the photo's rect, with two texture reads and three noise calls a pixel before most are discarded
+  - the five ground slices, each covering the photo's rect; a pixel outside a slice costs one texture read, and inside, five noise calls and two reads
   - the sky
   - the orbs
 
@@ -100,6 +106,9 @@ CPU 0.57 ms and GPU 0.91 ms per frame (release build, 2x, 2026-09-26).
   - The painting-sized orbs were all about the same size, so they read as near. They now scale with distance, and most are spread over the meadow's area.
   - The flash went from 1.4 s with snappy fades to a 3 s pulse, the period from 4.5–6.5 s to 6–10 s, and the drift slowed by a factor of three.
   - Speed is a knob that scales the scene's clock (0.17.1).
+- **2026-09-26:** "Fireflies is near perfect now, we just need to find a way to have a super subtle sway animation for the grass as if there is a very slight wind." The field sways in slow gusts, with a Wind setting (0.18.2).
+  - The standard is 0.5: at 0.3 the typical lean was half a point, which read as still.
+  - The sway can't be checked in the render test, because `u_time` doesn't advance between its runs. It was measured by pinning the time at two values in a scratch copy: the near field changes, and the trees and far field don't.
 - **Photo choice:** a research agent shortlisted ten licensed meadow photos and baked four: Field at dusk, Herbst (Thomas Heins, CC BY 4.0), Indian Hollow and Pewley Downs. Field at dusk won for its real dusk light, continuous treeline and grass texture up close. Herbst, a flatter and broader meadow with mist already at the trees' foot, is the runner-up. Its bake is in the scratchpad, `meadow/ship/`.
   - Also tried: a real fog photo, "Desenka meadow 2016 G3" by George Chernilevsky (public domain), baked with its mist kept in. In the scene, at blue-hour brightness, the mist all but vanished. Its trees are near and tall at 50 mm, which leaves the meadow a thin dark strip, the opposite of broad. Shader fog over the wider field reads better.
 

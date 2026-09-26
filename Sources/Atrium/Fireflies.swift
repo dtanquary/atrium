@@ -10,6 +10,7 @@ final class Fireflies: SKScene {
         Knob(key: "fireflies.density", label: "Fireflies", range: 0.25...2, standard: 1, format: .times),
         Knob(key: "fireflies.fog", label: "Fog", range: 0...1, standard: 0.5),
         Knob(key: "fireflies.speed", label: "Speed", range: 0.25...2, standard: 1, format: .times),
+        Knob(key: "fireflies.wind", label: "Wind", range: 0...1, standard: 0.5),
     ]
 
     /// One firefly, in metres: across from the middle of the view, up from the grass, and away from the eye.
@@ -30,6 +31,7 @@ final class Fireflies: SKScene {
     private lazy var focal = MeadowPhoto.focal * stretch
     private let flash: CGFloat = 3, pool = 800 // twice the standard count, for the density knob
     private let fog = SKUniform(name: "u_fog", float: Float(Fireflies.knobs[1].value))
+    private let wind = SKUniform(name: "u_wind", float: Float(Fireflies.knobs[3].value))
 
     private var flies: [Fly] = []
     private var time: TimeInterval = 0
@@ -54,7 +56,10 @@ final class Fireflies: SKScene {
     /// A height in the photo, as a fraction of the screen height.
     private func onScreen(_ v: CGFloat) -> CGFloat { MeadowPhoto.top - (MeadowPhoto.top - v) * stretch }
 
-    @objc private func settingsChanged() { fog.floatValue = Float(Self.knobs[1].value) }
+    @objc private func settingsChanged() {
+        fog.floatValue = Float(Self.knobs[1].value)
+        wind.floatValue = Float(Self.knobs[3].value)
+    }
 
     /// The sky, then the meadow photo in slices by distance, near to far, so fireflies fly behind nearer grass. The
     /// last slice runs to the trees and beyond, behind every firefly.
@@ -70,7 +75,7 @@ final class Fireflies: SKScene {
 
         let width = size.height * MeadowPhoto.top * MeadowPhoto.aspect * stretch, height = width / MeadowPhoto.aspect
         let shared = [
-            SKUniform(name: "u_aux", texture: MeadowPhoto.aux), fog,
+            SKUniform(name: "u_aux", texture: MeadowPhoto.aux), fog, wind,
             SKUniform(name: "u_frame", vectorFloat2: [Float(size.height * MeadowPhoto.top - height), Float(height)]),
             SKUniform(name: "u_ground", vectorFloat2: [Float(size.height * onScreen(MeadowPhoto.foot)),
                                                        Float(size.height * (onScreen(MeadowPhoto.skyline) - onScreen(MeadowPhoto.foot)))]),
@@ -184,21 +189,33 @@ final class Fireflies: SKScene {
     /// greyer as the eye sees in the dark. Fog is clear close by and thickens with the square of the log distance.
     /// It hugs the ground, thinning up the trees
     /// (`u_ground` is where they stand and how tall they are, in points), in wisps that drift slowly.
+    ///
+    /// A slight wind sways the field (the aux map's green; never the trees): broad gusts roll slowly across it and the
+    /// grass leans with them, each patch rustling at its own rhythm, by up to a couple of points up close and fading
+    /// to nothing in the distance. Where a gust passes, the leaning stalks catch a touch more light.
     private static let groundSource = """
     void main() {
-        vec4 photo = texture2D(u_texture, v_tex_coord);
-        float far = texture2D(u_aux, v_tex_coord).r;
-        float keep = step(u_slice.x, far) * (1.0 - step(u_slice.y, far));
-        vec3 col = 2.0 * pow(photo.rgb / max(photo.a, 0.004), vec3(2.2)) * vec3(0.03, 0.036, 0.042);
-        col = mix(col, dot(col, vec3(0.2126, 0.7152, 0.0722)) * vec3(0.78, 0.92, 1.2), 0.15);
-        float y = u_frame.x + v_tex_coord.y * u_frame.y;
-        float low = 1.0 - 0.85 * smoothstep(u_ground.x, u_ground.x + 0.7 * u_ground.y, y);
-        vec2 w = vec2(v_tex_coord.x * 7.0 + u_time * 0.004, v_tex_coord.y * 20.0);
-        float wisps = 0.6 + 0.8 * noise(w + vec2(2.0 * noise(w * 0.5 + u_time * 0.01), 0.0));
-        float mist = 1.0 - exp(-u_fog * (0.1 + 2.2 * far * far) * wisps * low);
-        col = mix(col, vec3(0.04, 0.05, 0.07), mist);
-        col = pow(col, vec3(1.0 / 2.2)) + (hash21(v_tex_coord * 4096.0) - 0.5) / 128.0;
-        gl_FragColor = vec4(col, 1.0) * photo.a * keep;
+        vec2 aux = texture2D(u_aux, v_tex_coord).rg;
+        float far = aux.r;
+        vec4 out = vec4(0.0);
+        if (u_slice.x <= far && far < u_slice.y) { // each pixel is drawn by one slice only, so the others skip the work
+            float gust = noise(vec2(v_tex_coord.x * 5.0 - u_time * 0.06, v_tex_coord.y * 2.0 + 3.0));
+            float rustle = sin(u_time * 1.6 + 30.0 * noise(v_tex_coord * vec2(60.0, 25.0)));
+            float sway = u_wind * aux.g * (1.0 - far) * (1.0 - far);
+            vec4 photo = texture2D(u_texture, v_tex_coord + vec2(sway * (0.3 + gust) * (0.6 * gust + 0.4 * rustle) * 0.0025, 0.0));
+            vec3 col = 2.0 * pow(photo.rgb / max(photo.a, 0.004), vec3(2.2)) * vec3(0.03, 0.036, 0.042);
+            col = mix(col, dot(col, vec3(0.2126, 0.7152, 0.0722)) * vec3(0.78, 0.92, 1.2), 0.15);
+            col *= 1.0 + 0.12 * sway * (gust - 0.4);
+            float y = u_frame.x + v_tex_coord.y * u_frame.y;
+            float low = 1.0 - 0.85 * smoothstep(u_ground.x, u_ground.x + 0.7 * u_ground.y, y);
+            vec2 w = vec2(v_tex_coord.x * 7.0 + u_time * 0.004, v_tex_coord.y * 20.0);
+            float wisps = 0.6 + 0.8 * noise(w + vec2(2.0 * noise(w * 0.5 + u_time * 0.01), 0.0));
+            float mist = 1.0 - exp(-u_fog * (0.1 + 2.2 * far * far) * wisps * low);
+            col = mix(col, vec3(0.04, 0.05, 0.07), mist);
+            col = pow(col, vec3(1.0 / 2.2)) + (hash21(v_tex_coord * 4096.0) - 0.5) / 128.0;
+            out = vec4(col, 1.0) * photo.a;
+        }
+        gl_FragColor = out;
     }
     """
 
