@@ -44,6 +44,7 @@ Sampled from the painting (sRGB, 0–255):
    - A soft treeline is dabbed along the horizon: crowns at 3–8% of the height above it, with a dry-brush edge.
 3. **Grass** (`grass(from:to:)`): four bands of blades, rooted 2.5–3.4, 3.4–4.8, 4.8–7 and 7–12 m away.
    - Each blade is 0.12–0.4 m tall and 6–13 mm wide in the world, drawn as a tapered stroke in one of five sage or teal greens. A paler stroke runs up it toward the tip.
+   - It's painted at half resolution, which softens the strokes. `bristleSource` then streaks each stroke with less paint where the dry brush skipped.
    - Further blades sink toward the field colour.
    - There are 25 blades per square metre of meadow, with at least 250 a band so the front stays thick.
    - Each band is its own sprite at z `100 − its middle distance`, so fireflies pass behind nearer grass.
@@ -52,14 +53,14 @@ Sampled from the painting (sRGB, 0–255):
    - There's a pool of 1200 sprites. `fireflies.density` × 600 of them are active.
    - **Where they are:**
      - Half are spread evenly down the screen, as in the painting. The other half are spread evenly over the meadow's area, which crowds them toward the treeline.
-     - They fly 0.1–2.1 m up (weighted low) at 0.15–0.4 m/s, turning up to 0.8 rad between flashes.
+     - They fly 0.1–2.1 m up (weighted low) at 0.04–0.12 m/s, turning up to 0.8 rad between flashes.
      - Once one drifts out of view or past the treeline, it's put somewhere new.
    - **Flashing:**
      - Each has its own period of 4.5–6.5 s, with ±15% jitter each time.
      - A flash lasts 1.4 s: in over the first 12%, held, then out over the last 30%.
-     - During it the firefly dips a little, then climbs 0.3 m, like *Photinus*'s J-stroke.
+     - During it the firefly dips a little, then climbs 0.1 m, like *Photinus*'s J-stroke.
      - Between flashes it's hidden, so about 150 are lit at once.
-   - **The dab** (`flySource`): a cream disc with a slightly wobbly edge and a paler middle, `min(max(24/d, 2.2), 8)` pt in radius.
+   - **The dab** (`flySource`): a cream disc with a soft, slightly wobbly edge and a paler middle, `min(max(24/d, 2.2), 8)` pt in radius. A faint glow of cream paint surrounds every dab, out to 2.6 radii.
      - 10–50% of them (more often the nearer they are) wear a halo: either a translucent grey-teal wash about 3.4 radii wide, with pigment pooled at its ragged rim, or a pale dry-brush burst.
      - `a_fly` carries the radius, the sprite's half-width and the kind plus a seed. The node's alpha fades it through `v_color_mix.a`.
 
@@ -74,7 +75,7 @@ Planned: a Look switch between Painted and Photo (see Ideas), flash patterns (sy
 ## Tuning constants
 - Camera: eye 1.2 m, horizon 0.46, focal 1.2.
 - Meadow: 2.5 m to the treeline at 60 m. Grass bands and density are as above.
-- Flash: 1.4 s long, a 4.5–6.5 s period and a 0.3 m climb.
+- Flight: 0.04–0.12 m/s. Flash: 1.4 s long, a 4.5–6.5 s period and a 0.1 m climb.
 - Dab radius: 24/d, from 2.2 to 8 pt.
 
 ## Performance
@@ -96,6 +97,10 @@ CPU 0.5 ms and GPU 1.45 ms per frame (release build, 2x, 2026-09-25).
   - live flashes with bokeh over long-exposure trails
   - always blue hour over following the real evening
 - The painted look came first, since it needs no photo. The old forest was replaced outright rather than kept to compare, since Dave had no attachment to it.
+- 2026-09-25, first look at the painted version: "it looks too cartoony and the fireflies are moving too fast."
+  - Flight slowed from 0.15–0.4 m/s to 0.04–0.12, and the J-stroke climb from 0.3 m to 0.1. A near firefly was sweeping about 200 pt a second.
+  - Softened: grass at half resolution with dry-brush streaks, and dabs with soft edges and a painted glow.
+  - A painting will always read as illustration. The photo look is the realistic answer.
 
 ## Ideas / next steps
 - **Photo look (in progress):** a real meadow photo relit to blue hour (as for Aurora and Weather), with photographic fireflies:

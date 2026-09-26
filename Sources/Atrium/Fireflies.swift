@@ -74,7 +74,7 @@ final class Fireflies: SKScene {
             }
             // A slow flash while it swoops, a little dip then a climb, as Photinus does: quick to come, held, then fading.
             let fly = flies[i], s = u * flash
-            fly.node.position = project(fly.x + fly.vx * s, fly.y + 0.3 * (1.6 * u * u - 0.6 * u), fly.d + fly.vd * s)
+            fly.node.position = project(fly.x + fly.vx * s, fly.y + 0.1 * (1.6 * u * u - 0.6 * u), fly.d + fly.vd * s)
             fly.node.alpha = smoothstep(0, 0.12, u) * (1 - smoothstep(0.7, 1, u))
             fly.node.isHidden = false
         }
@@ -95,7 +95,7 @@ final class Fireflies: SKScene {
         let reach = size.width / 2 / (size.height * focal) * fly.d * 1.1
         fly.x = .random(in: -reach...reach)
         fly.y = 0.1 + 2 * pow(.random(in: 0...1), 2)
-        let heading = CGFloat.random(in: 0...(2 * .pi)), speed = CGFloat.random(in: 0.15...0.4)
+        let heading = CGFloat.random(in: 0...(2 * .pi)), speed = CGFloat.random(in: 0.04...0.12)
         fly.vx = cos(heading) * speed
         fly.vd = sin(heading) * speed
         dress(fly)
@@ -122,7 +122,7 @@ final class Fireflies: SKScene {
         let r = min(max(24 / fly.d, 2.2), 8)
         let haloed = CGFloat.random(in: 0...1) < 0.1 + 0.4 * (r - 1.6) / 5.4
         let kind: CGFloat = haloed ? (Bool.random() ? 1 : 2) : 0
-        let extent = r * (haloed ? 4.4 : 1.2) + 1
+        let extent = r * (haloed ? 4.4 : 2.7) + 1
         fly.node.size = CGSize(width: extent * 2, height: extent * 2)
         fly.node.zPosition = 100 - fly.d
         fly.node.setValue(SKAttributeValue(vectorFloat3: [Float(r), Float(extent), Float(kind + .random(in: 0..<0.99))]), forAttribute: "a_fly")
@@ -135,7 +135,8 @@ final class Fireflies: SKScene {
         let height = min(ground + f * (tallest - eye) / b + 4, size.height)
         let greens = [rgb(0.25, 0.36, 0.31), rgb(0.33, 0.45, 0.39), rgb(0.20, 0.29, 0.23), rgb(0.36, 0.44, 0.33), rgb(0.17, 0.23, 0.18)]
         let field = rgb(0.21, 0.21, 0.13), tip = rgb(0.50, 0.62, 0.55)
-        let texture = paint(CGSize(width: size.width, height: height)) { ctx in
+        let texture = paint(CGSize(width: size.width / 2, height: height / 2)) { ctx in
+            ctx.scaleBy(x: 0.5, y: 0.5) // half resolution softens the strokes
             ctx.setLineCap(.round)
             for _ in 0..<max(Int(25 * size.width / f * (b * b - a * a) / 2), 250) {
                 let d = sqrt(a * a + .random(in: 0...1) * (b * b - a * a)), haze = (d - grassBands[0]) / 8
@@ -157,6 +158,8 @@ final class Fireflies: SKScene {
         let sprite = SKSpriteNode(texture: texture, size: CGSize(width: size.width, height: height))
         sprite.anchorPoint = .zero
         sprite.zPosition = 100 - (a + b) / 2
+        sprite.shader = SKShader(source: shaderCommon + Self.bristleSource,
+                                 uniforms: [SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(height)])])
         return sprite
     }
 
@@ -173,6 +176,14 @@ final class Fireflies: SKScene {
         float trees = smoothstep(crown + 0.003, crown - 0.003, v_tex_coord.y) * smoothstep(u_horizon - 0.05, u_horizon, v_tex_coord.y);
         c = mix(c, vec3(0.115, 0.125, 0.15) * (0.9 + 0.2 * noise(pts * 0.05)), trees * 0.9);
         gl_FragColor = vec4(c, 1.0);
+    }
+    """
+
+    /// Dry-brush marks along the grass strokes: streaks where the bristles left less paint.
+    private static let bristleSource = """
+    void main() {
+        vec2 pts = v_tex_coord * u_size;
+        gl_FragColor = texture2D(u_texture, v_tex_coord) * (0.6 + 0.4 * noise(pts * vec2(0.6, 0.035)));
     }
     """
 
@@ -198,12 +209,13 @@ final class Fireflies: SKScene {
         float r = length(q);
         vec2 dir = q / max(r, 0.001);
         float edge = r0 * (0.92 + 0.16 * noise(dir * 1.5 + seed));
-        float dab = smoothstep(edge + 0.6, edge - 0.6, r);
+        float dab = smoothstep(edge + 0.5 + 0.2 * r0, edge - 0.3 * r0, r);
         vec3 paint = mix(vec3(1.0, 0.94, 0.62), vec3(1.0, 0.98, 0.84), 0.6 * smoothstep(r0, 0.0, r));
         float rim = r0 * 3.4 * (0.8 + 0.4 * noise(dir * 2.0 + seed + 7.0) + 0.1 * noise(dir * 6.0 + seed));
         float wash = smoothstep(rim, rim - 1.5, r) * (0.5 + 0.5 * smoothstep(rim * 0.4, rim, r));
         float rays = smoothstep(0.35, 0.8, noise(dir * 5.0 + seed)) * smoothstep(r0 * 2.8, r0, r);
-        vec4 halo = vec4(0.42, 0.52, 0.52, 1.0) * 0.35 * wash * step(0.5, kind) * step(kind, 1.5)
+        vec4 halo = vec4(1.0, 0.94, 0.7, 1.0) * 0.16 * smoothstep(r0 * 2.6, r0 * 0.8, r)
+                  + vec4(0.42, 0.52, 0.52, 1.0) * 0.35 * wash * step(0.5, kind) * step(kind, 1.5)
                   + vec4(0.9, 0.9, 0.75, 1.0) * 0.45 * rays * step(1.5, kind);
         gl_FragColor = (halo * (1.0 - dab) + vec4(paint, 1.0) * dab) * v_color_mix.a;
     }
