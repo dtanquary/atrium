@@ -346,11 +346,9 @@ let nebulaPalettes: [(name: String, colours: [SIMD3<Float>])] = [
     ("Oxygen", [[0.0, 0.03, 0.03], [0.10, 0.70, 0.50], [0.15, 0.45, 0.75], [0.85, 1.0, 0.92]]),       // like NGC 3242: OIII green, Hβ blue
 ]
 
-/// Nebula's settings: how often it changes to a new one and how, then the Look sliders.
+/// Nebula's settings: how often it changes to a new one, then the Look sliders.
 let nebulaKnobs = [
     Knob(key: "nebula.every", label: "New nebula every", range: 0...30, standard: 8, section: "Change", format: .minutes),
-    Knob(key: "nebula.transition", label: "Transition", range: 0...1, standard: 1, section: "Change",
-         format: .choice(["Crossfade", "Dissolve and condense"])),
 ] + gradeKnobs("nebula")
 
 /// Deep-space gas clouds cut by dark dust lanes, drifting very slowly. Every load rolls a new one: its own cloud
@@ -392,12 +390,10 @@ let nebulaKnobs = [
         vec2 uv = v_tex_coord;
         vec2 pts = uv * u_size;
 
-        // While it changes (u_mix 0 to 1 over 90 s), the next nebula is drawn too. Crossfade blends the two whole
-        // pictures; dissolve and condense clips the old one away from its edges inward over the first three quarters
-        // while the new one condenses out of its densest knots over the last three quarters, evenly, so halfway the
-        // densest quarter or so of each is showing.
-        bool condense = u_transition > 0.5;
-        float clipNow = condense ? mix(-0.2, 1.2, clamp(u_mix / 0.75, 0.0, 1.0)) : -0.2;
+        // While it changes (u_mix 0 to 1 over 90 s), the next nebula is drawn too: the old one dissolves from its edges
+        // inward over the first three quarters while the new one condenses out of its densest knots over the last
+        // three quarters, evenly, so halfway the densest quarter or so of each is showing.
+        float clipNow = mix(-0.2, 1.2, clamp(u_mix / 0.75, 0.0, 1.0));
         vec4 now = nebulaAt(uv, aspect, t, u_seed, u_zoom, u_band, u_base, u_dense, u_accent, u_hot, clipNow);
         // each nebula has its own star field, moved by its seed; they swap over as it changes
         vec2 ptsNow = pts + u_seed * 97.0;
@@ -405,14 +401,14 @@ let nebulaKnobs = [
         float bright = brightStar(ptsNow + vec2(u_time * 0.2, 0.0), 180.0, u_time);
         vec4 next = vec4(0.0);
         if (u_mix > 0.0) { // only while changing, so the rest of the time it costs no more than one nebula
-            float clipNext = condense ? mix(1.2, -0.2, clamp((u_mix - 0.25) / 0.75, 0.0, 1.0)) : -0.2;
+            float clipNext = mix(1.2, -0.2, clamp((u_mix - 0.25) / 0.75, 0.0, 1.0));
             next = nebulaAt(uv, aspect, t, u_seed2, u_zoom2, u_band2, u_base2, u_dense2, u_accent2, u_hot2, clipNext);
             vec2 ptsNext = pts + u_seed2 * 97.0;
             field = mix(field, starField(ptsNext, 7.0, 0.3, u_time), u_mix);
             bright = mix(bright, brightStar(ptsNext + vec2(u_time * 0.2, 0.0), 180.0, u_time), u_mix);
         }
         // screened, not added, or where the two overlap their light flares white
-        vec4 neb = condense ? vec4(1.0 - (1.0 - now.rgb) * (1.0 - next.rgb), max(now.a, next.a)) : mix(now, next, u_mix);
+        vec4 neb = vec4(1.0 - (1.0 - now.rgb) * (1.0 - next.rgb), max(now.a, next.a));
 
         vec3 col = vec3(0.004, 0.004, 0.012) + neb.rgb;
         col += vec3(0.8, 0.85, 1.0) * field * (1.0 - 0.6 * neb.a);

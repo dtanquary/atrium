@@ -39,15 +39,14 @@ Everything is maths per pixel, per frame:
 ## Time, live data and appearance
 - **Drift:** `t = u_time × 0.005`, one screen-height every ~5 minutes. It started at 0.004; Dave asked for "a very small amount" faster. The gas also drifts at 0.5t relative to the warp, which keeps it churning. It never repeats in practice.
 - **Changing to a new nebula** (`NebulaCycle`): one scene draws both. Its uniforms come in two sets, the nebula showing (`u_seed`, `u_zoom`, `u_band` and the palette) and the next (the same names ending in 2). An SKAction checks every 5 s whether the Settings interval has passed (so a new interval applies at once, and it pauses while the wallpaper is covered). When it has, it rolls the next nebula and runs `u_mix` from 0 to 1 over 90 s, then copies the next set into the showing one. The shader's per-nebula maths is a function, `nebulaAt`, called once normally and twice only while `u_mix` > 0, stars included, so both keep drifting through the change and the rest of the time it costs one nebula.
-  - **Dissolve and condense** (the default since 2026-09-25): the old nebula dissolves from its thin outer gas and fine filaments into its densest knots over the first three quarters, while the new one condenses out of its densest knots and spreads along its filaments over the last three, so halfway the densest quarter or so of each is showing. Each clips a smooth "thickness" (mostly the broad warp field, measured over the visible gas of several rolls at 0.5–0.85 raw and stretched to 0–1), not the gas itself, which would break into specks; that's the lesson from Weather's forming clouds, where clipping raw alpha made Swiss cheese. The clip sweeps linearly from −0.2 (all kept) to 1.2 (all gone). The two are screened together (1 − (1−a)(1−b)); added, their overlap flared white. Stars crossfade.
-  - **Crossfade**: the two whole pictures blend over the 90 s, as the old `SKTransition.crossFade` did: a double exposure while it lasts.
-  - Before, each nebula was its own scene, and the next was presented with `SKTransition.crossFade(withDuration: 90)`.
+  - **Dissolve and condense**: the old nebula dissolves from its thin outer gas and fine filaments into its densest knots over the first three quarters, while the new one condenses out of its densest knots and spreads along its filaments over the last three, so halfway the densest quarter or so of each is showing. Each clips a smooth "thickness" (mostly the broad warp field, measured over the visible gas of several rolls at 0.5–0.85 raw and stretched to 0–1), not the gas itself, which would break into specks; that's the lesson from Weather's forming clouds, where clipping raw alpha made Swiss cheese. The clip sweeps linearly from −0.2 (all kept) to 1.2 (all gone). The two are screened together (1 − (1−a)(1−b)); added, their overlap flared white. Stars crossfade.
+  - Before 2026-09-25 each nebula was its own scene, and the next was presented with `SKTransition.crossFade(withDuration: 90)`: a double exposure for the 90 s. Dave compared the two live with a Settings switch and chose dissolve and condense ("looks good to me, i like it"), so the switch and the crossfade were removed; they're in commit 7dafffe.
 - **Re-picking:** choosing Nebula in the menu, or a palette swatch in Settings, crossfades to a fresh roll immediately.
 - No location or network use. No Light Mode look; it's inherently dark.
 
 ## Settings
 - **Colors:** the palette pin, `nebula.palette` (default Random). Picking one rolls a fresh nebula.
-- **Change** (`nebula.every`, `nebula.transition`): "New nebula every" 0–30 minutes (default 8; 0 is Off, and one minute is handy for comparing), and the Transition, Crossfade or Dissolve and condense (the default). Dave asked for the choice so he could compare the two live before locking one in.
+- **Change** (`nebula.every`): "New nebula every" 0–30 minutes (default 8; 0 is Off, and one minute is handy for watching a change).
 - **Look**, live without a new roll (`ShaderScene` observes `UserDefaults.didChangeNotification`):
 
 | Key | Label | Range | Default |
@@ -94,9 +93,10 @@ CPU 0.45 ms and GPU about 1.6 ms per frame (release, 2x; the dissolve's thicknes
 - "A very very very subtle twinkle on some of the larger background stars": the ±7% shimmer on about half of the spiked stars. The small field stars already twinkled.
 - He asked for a palette picker in Settings.
 - He asked for colour, contrast, brightness and saturation controls, and for "1 or 2 more colour presets if there are any more natural colour combinations we see in real life that are missing". The Look sliders came from that. So did Dark Cloud and Oxygen: the set had no dark nebula and no green. A Crab-style Supernova (orange filaments on blue synchrotron) was tried and dropped because it read too close to Dusty.
+- 2026-09-25, after Weather's clouds learned to form and dissolve: "would the nebula wallpaper benefit from this new billowing forming dissolving tech we have?" Billowing no (the gas already churns), but the forming and dissolving yes, for the change between nebulas. He had it prototyped with a Settings switch against the crossfade, compared them, and chose it: "Dissolve and condense looks good to me, i like it."
 
 ## Ideas / next steps
-- More Settings: drift speed (it would need an integrated phase like Flowing Gradient, instead of `u_time`), the cycle interval, and shimmer strength.
+- More Settings: drift speed (it would need an integrated phase like Flowing Gradient, instead of `u_time`) and shimmer strength.
 - Let the band slowly rotate or move so the composition evolves within one nebula.
 - Occasional events: a brightening star, or a faint comet streak.
 
