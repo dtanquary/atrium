@@ -348,9 +348,15 @@ final class Murmuration: SKScene {
             vec3 c4 = mix(texture2D(u_before, st).rgb, texture2D(u_after, st).rgb, u_blend);
             reflected += c4 * c4 * (4.0 / 3.0);
         }
-        vec2 b = vec2(uv.x + shift.x, (uv.y - shift.y) / u_cam.z);
-        float s = u_rough * 0.5;
-        float birds = 0.4 * texture2D(u_birds, b).r + 0.3 * texture2D(u_birds, b + vec2(0.0, s)).r + 0.3 * texture2D(u_birds, b - vec2(0.0, s)).r;
+        // The flock's reflection, the same way: on calm water its mirror image; on a wavy sea smeared up toward the horizon,
+        // most of it near the mirror image, so a flock close and high still darkens the sea under it.
+        float birds = 0.0;
+        for (int i = 0; i < 5; i++) {
+            float k = 0.1 + 0.8 * float(i);
+            float y = uv.y - shift.y - u_rough * k;
+            birds += texture2D(u_birds, vec2(uv.x + shift.x, (y + 1.4 * u_cam.z) / (2.4 * u_cam.z))).r * exp(-k * 0.7);
+        }
+        birds /= 2.04;
         vec3 water = reflected * u_balance * ripples * 2.0 * (1.0 - birds * 0.9) * (1.0 + (slope.y + wavelets) * u_waves.z);
         vec3 col = sqrt(1.0 - exp(-mix(land, water, aux.r)));
         gl_FragColor = vec4(col + (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0, 1.0) * photo.a;
@@ -408,11 +414,13 @@ private final class Flock: SKNode {
     private var nextDown: Float = 0, downBudget: Float = 0
     /// Birds in the air, and whether any are on their way down.
     private(set) var flying = Flock.count, falling = 0
-    /// The flock mirrored in the water: its ink splatted each frame over the screen below the horizon, for the ground's
-    /// shader. Mirroring in level water flips a point about the horizon line on screen.
+    /// The flock mirrored in the water: its ink splatted each frame where its mirror image falls, for the ground's
+    /// shader. Mirroring in level water flips a point about the horizon line on screen. It covers from the horizon down
+    /// to 1.4 horizons below the screen's bottom, since on a wavy sea a flock whose mirror image is off the screen still
+    /// streaks the water above it (see the ground shader).
     let reflection = SKMutableTexture(size: reflectionSize)
-    static let reflectionSize = CGSize(width: 384, height: 96)
-    private var splat = [Float](repeating: 0, count: 384 * 96), bytes = [UInt8](repeating: 0, count: 384 * 96 * 4)
+    static let reflectionSize = CGSize(width: 384, height: 128), reflectionReach: Float = 1.4
+    private var splat = [Float](repeating: 0, count: 384 * 128), bytes = [UInt8](repeating: 0, count: 384 * 128 * 4)
     private var touched = 0..<0 // the rows of the reflection that last held ink
 
     // ponytail: 1,500 agents, each a parcel standing for about 40 birds (60,000 in all), which is what the CPU allows.
@@ -531,7 +539,8 @@ private final class Flock: SKNode {
         let up = SIMD3<Float>(0, 0, 1)
         let (cols, rows) = (Int(Self.reflectionSize.width), Int(Self.reflectionSize.height))
         let horizon = Float(view.size.height) * view.horizon, across = Float(view.size.width) / Float(cols)
-        let texel = across * horizon / Float(rows) // points² per texel
+        let reach = Self.reflectionReach * horizon, span = horizon + reach
+        let texel = across * span / Float(rows) // points² per texel
         var low = rows, high = 0
         for i in 0..<birds.count {
             let b = birds[i], sprite = sprites[i]
@@ -550,8 +559,8 @@ private final class Flock: SKNode {
             sprite.alpha = CGFloat(alpha)
             // Its reflection: ten birds of about 0.06 m² each, spread over the texels it lands on.
             let below = 2 * horizon - at.y
-            if below > 0 && below < horizon {
-                let x = at.x / across, y = below / horizon * Float(rows)
+            if below > -reach && below < horizon {
+                let x = at.x / across, y = (below + reach) / span * Float(rows)
                 let (tx, ty) = (Int(x.rounded(.down)), Int(y))
                 if x >= 0 && tx < cols - 1 && ty < rows - 1 {
                     let ink = alpha * 0.6 * at.perMetre * at.perMetre / texel, fx = x - Float(tx), fy = y - Float(ty)
