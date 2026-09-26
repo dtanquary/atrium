@@ -57,6 +57,10 @@ final class WeatherScene: SKScene {
     private let fog = SKUniform(name: "u_fog", float: 0), snowCover = SKUniform(name: "u_snow", float: 0)
     private let nightUniform = SKUniform(name: "u_night", float: 0), backlit = SKUniform(name: "u_backlit", float: 0)
     private let mist = SKUniform(name: "u_mist", float: 0)
+    /// The shadows of the four nearest cumulus on the ground: each one's centre and radii in km (across the view and
+    /// away from it), how much there is of each cloud, and how dark a shadow is in each colour.
+    private let shadows = (0..<4).map { SKUniform(name: "u_shadow\($0)", vectorFloat4: .zero) }
+    private let shadowLife = SKUniform(name: "u_shadowLife", vectorFloat4: .zero), shadowShade = SKUniform(name: "u_shade", vectorFloat3: [1, 1, 1])
     private let photoCloudSun = SKUniform(name: "u_cloudSun", vectorFloat3: .zero), photoCloudShade = SKUniform(name: "u_cloudAmb", vectorFloat3: .zero)
     private var sunNow = Sky.Vector(0, 0, 1)
     private let flashAmount = SKUniform(name: "u_flash", float: 0), flashPlace = SKUniform(name: "u_flashPos", vectorFloat3: .zero)
@@ -265,6 +269,9 @@ final class WeatherScene: SKScene {
         let grey = Sky.Vector(repeating: global.sum() / 3 * 0.5 * exp(-0.4 * (Double(clouds.thickness) - 1))) + skyglow * 0.4
         sunlit = sunlit * (1 - overcast) + grey * overcast
         // The eye adapts to the land as well as the sky: facing a sunset the hills go dark, but not black.
+        // In a cloud's shadow only the skylight is left: darker and a little bluer, softened toward photos' 40–60%.
+        let ratio = (light.ambient * (1 - overcast) + grey * overcast) / Sky.Vector.one.replacing(with: sunlit, where: sunlit .> 1e-6)
+        shadowShade.vectorFloat3Value = SIMD3<Float>(Sky.Vector.one * 0.35 + ratio * 0.65)
         let lit = sunlit / 8, brightness = (lit * Sky.Vector(0.2126, 0.7152, 0.0722)).sum()
         groundLight.vectorFloat3Value = SIMD3<Float>(lit * pow(max(brightness, 1e-5), -0.38) * (1 - 0.6 * smoothstep(-0.03, -0.2, light.sun.z)))
         // At night the eye sees less colour (the Purkinje shift), and the haze isn't lit from low down any more,
@@ -496,6 +503,7 @@ final class WeatherScene: SKScene {
     /// start part-way through their lives, so they don't all form at once.
     private func addPhotoClouds() {
         photoCloudsShown = []
+        overhead = []
         let cover = conditions.cloudCover / 100
         let count = conditions.kind == .partlyCloudy ? 6 + Int(cover * 14) : conditions.kind == .clear && cover > 0.08 ? 1 + Int(cover * 6) : 0
         var towers = 0
@@ -568,6 +576,53 @@ final class WeatherScene: SKScene {
             cloud.node.setValue(SKAttributeValue(float: Float(living)), forAttribute: "a_life")
             photoCloudsShown[i] = cloud
         }
+        castShadows(dt, drift: SIMD2(across, away))
+    }
+
+    /// Clouds overhead and behind, out of the frame, which only show as shadows: the ground in view is mostly within
+    /// a kilometre or two, so the visible clouds' shadows fall on the far ridges, and in real life the shadows that
+    /// sweep over the near hills come from clouds above you. Each is its shadow's centre on the ground (km across the
+    /// view and away), its width in km, and its life.
+    private var overhead: [(across: Double, away: Double, km: Double, age: Double, life: Double)] = []
+
+    /// A new overhead cloud's shadow, somewhere on the ground in view, or drifting in from the upwind side.
+    private func overheadCloud(upwind: SIMD2<Double>?) -> (across: Double, away: Double, km: Double, age: Double, life: Double) {
+        let away = 0.05 + 2.4 * pow(.random(in: 0...1), 1.5), km = Double.random(in: 1...2.4), life = cloudLifetime
+        let edge = viewpoint.tanH * away + km * 0.5
+        guard let upwind else { return (.random(in: -edge...edge), away, km, .random(in: 0.15...0.75) * life, life) }
+        return (upwind.x > 0 ? -edge : edge, away, km, 0.15 * life, life)
+    }
+
+    /// Puts cloud shadows on the ground: the two nearest visible clouds' footprints, moved away from the Sun by their
+    /// height over the tangent of its elevation, so they slide and stretch as the Sun moves, and two from overhead.
+    /// None on overcast days (the clouds are photos only on fair ones) or once the Sun is low and the light diffuse.
+    private func castShadows(_ dt: Double = 0, drift: SIMD2<Double> = .zero) {
+        var life = SIMD4<Float>.zero
+        let sunUp = smoothstep(0.08, 0.2, sunNow.z)
+        guard sunUp > 0, !photoCloudsShown.isEmpty else { shadowLife.vectorFloat4Value = life; return }
+        let offset = SIMD2(dot(sunNow, viewpoint.right), dot(sunNow, viewpoint.forward)) / sunNow.z
+        func living(_ f: Double) -> Double { smoothstep(0, 0.15, f) * (1 - smoothstep(0.8, 1, f)) }
+        let nearest = photoCloudsShown.indices.sorted { photoCloudsShown[$0].away < photoCloudsShown[$1].away }.prefix(2)
+        for (slot, i) in nearest.enumerated() {
+            let cloud = photoCloudsShown[i], f = cloud.age / cloud.life
+            let centre = SIMD2(cloud.across, cloud.away) - offset * (cloud.base + 0.3) // the cloud's middle, above the ground
+            let km = cloud.km * (0.9 + 0.12 * smoothstep(0, 0.6, f))
+            shadows[slot].vectorFloat4Value = SIMD4<Float>(Float(centre.x), Float(centre.y), Float(km * 0.45), Float(km * 0.35))
+            life[slot] = Float(living(f) * sunUp)
+        }
+        if overhead.isEmpty { overhead = (0..<2).map { _ in overheadCloud(upwind: nil) } }
+        for i in overhead.indices {
+            overhead[i].across += drift.x * dt
+            overhead[i].away += drift.y * dt
+            overhead[i].age += dt
+            let o = overhead[i], edge = viewpoint.tanH * o.away + o.km * 0.6
+            if abs(o.across) > edge || o.away < -0.5 || o.away > 3.5 { overhead[i] = overheadCloud(upwind: drift) }
+            else if o.age >= o.life { overhead[i] = overheadCloud(upwind: nil); overhead[i].age = 0 }
+            let c = overhead[i]
+            shadows[2 + i].vectorFloat4Value = SIMD4<Float>(Float(c.across), Float(c.away), Float(c.km * 0.45), Float(c.km * 0.35))
+            life[2 + i] = Float(living(c.age / c.life) * sunUp)
+        }
+        shadowLife.vectorFloat4Value = life
     }
 
     /// Relights a photo cloud: its tones mapped from skylight (dark) to sunlight (bright), shadier toward the base.
@@ -621,9 +676,9 @@ final class WeatherScene: SKScene {
                                  Float(width / size.width), Float(height / size.height))
         ground.shader = SKShader(source: Self.groundShader, uniforms: [
             SKUniform(name: "u_aux", texture: Self.groundAux), SKUniform(name: "u_frame", vectorFloat4: frame),
-            skyBefore, skyAfter, skyBlend, cameraUniforms.lens, groundLight, groundHaze, groundColour, groundHazeLit, fog, deck, flashAmount, snowCover, backlit, mist, clock,
+            skyBefore, skyAfter, skyBlend, cameraUniforms.lens, groundLight, groundHaze, groundColour, groundHazeLit, fog, deck, flashAmount, snowCover, backlit, mist, clock, shadowLife, shadowShade,
             SKUniform(name: "u_noise", texture: CloudNoise.texture),
-        ])
+        ] + shadows)
         addChild(ground)
     }
 
@@ -633,9 +688,17 @@ final class WeatherScene: SKScene {
     vec3 decode(vec3 c) { return c * c * 4.0; }
     vec2 nuv(vec2 p) { return (fract(p) * 256.0 + 0.5) / 257.0; }
 
+    // How much of a cloud's shadow falls on ground point g: an ellipse (s.xy centre, s.zw radii, km) with edges made
+    // lumpy by n, a lookup of the billow noise.
+    float footprint(vec2 g, vec4 s, float n) {
+        vec2 d = (g - s.xy) / max(s.zw, vec2(0.01));
+        return smoothstep(1.0, 0.55, length(d) + (n - 0.5) * 0.7);
+    }
+
     void main() {
         vec4 photo = texture2D(u_texture, v_tex_coord);
         vec3 aux = texture2D(u_aux, v_tex_coord).rgb;
+        vec2 screen = u_frame.xy + v_tex_coord * u_frame.zw;
         vec3 albedo = photo.rgb / max(photo.a, 0.004);
         // Snow on the ground: the open grass goes white, shaded by the photo's own light and shade so the hills keep
         // their form; the trees darken, lose colour and catch snow on their brighter parts.
@@ -650,9 +713,21 @@ final class WeatherScene: SKScene {
         // The photo's far ridges are pale with its own haze. Against a low Sun or a twilight glow they should be
         // dark layered silhouettes, so darken them with distance.
         land *= 1.0 - u_backlit * 0.5 * smoothstep(0.2, 0.9, aux.r);
+        // Shadows of the nearest clouds, cast along the sunlight onto the hills below them: lumpy ellipses about each
+        // cloud's size, where this pixel's ground lies (km across the view and away, from the depth map).
+        if (u_shadowLife.x + u_shadowLife.y + u_shadowLife.z + u_shadowLife.w > 0.0) {
+            float away = (pow(32.0, aux.r) - 1.0) / 3.1;
+            vec2 g = vec2((screen.x * 2.0 - 1.0) * u_cam.x * away, away);
+            float n0 = texture2D(u_noise, nuv((g - u_shadow0.xy) * 0.9 + 0.13)).g;
+            float n1 = texture2D(u_noise, nuv((g - u_shadow1.xy) * 0.9 + 0.41)).g;
+            float n2 = texture2D(u_noise, nuv((g - u_shadow2.xy) * 0.9 + 0.67)).g;
+            float n3 = texture2D(u_noise, nuv((g - u_shadow3.xy) * 0.9 + 0.89)).g;
+            float shade = max(max(footprint(g, u_shadow0, n0) * u_shadowLife.x, footprint(g, u_shadow1, n1) * u_shadowLife.y),
+                              max(footprint(g, u_shadow2, n2) * u_shadowLife.z, footprint(g, u_shadow3, n3) * u_shadowLife.w));
+            land *= mix(vec3(1.0), u_shade, shade);
+        }
         float lum = dot(land, vec3(0.2126, 0.7152, 0.0722));
         land = mix(vec3(lum) * vec3(0.62, 0.85, 1.45), land, u_colour); // the Purkinje shift: moonlit fields look blue-grey
-        vec2 screen = u_frame.xy + v_tex_coord * u_frame.zw;
         vec2 above = vec2(screen.x, (u_cam.z + 0.03 - u_cam.w) / (1.0 - u_cam.w));
         vec3 haze = mix(decode(texture2D(u_before, above).rgb), decode(texture2D(u_after, above).rgb), u_blend) * u_hazeLit;
         haze = mix(vec3(dot(haze, vec3(0.2126, 0.7152, 0.0722))) * vec3(0.7, 0.85, 1.25), haze, u_hazeLit); // bluer as the glow leaves the low air
@@ -923,7 +998,7 @@ private extension WeatherScene.Conditions {
     var cloudiness: Double {
         switch kind {
         case .clear: 0
-        case .partlyCloudy: cloudCover / 100 * 0.4
+        case .partlyCloudy: cloudCover / 100 * 0.2 // the rest is the clouds' own shadows
         default: 1
         }
     }
