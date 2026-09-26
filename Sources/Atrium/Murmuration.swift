@@ -12,13 +12,16 @@ private let evenings: [(name: String, sun: Double, balance: SIMD3<Float>)] = [
 /// Where the flock is watched from: a sunset photo each, its sky cut away. `horizon` is the rows from the top of the
 /// photo down to the horizon (of its height); `sky` is the photo's own sky luminance (linear) just above the horizon,
 /// which scales its land to our sky; `rough` is how far above the mirror image the water reflects the sky: a long
-/// exposure of a wavy sea averages the sky well above the horizon, where calm water is a mirror.
+/// exposure of a wavy sea averages the sky well above the horizon, where calm water is a mirror. `waves` is how slow
+/// ripples move the water: how far they bend its reflection, how fast they drift, and how much they brighten and darken
+/// it, which is all the smooth long-exposure sea can show.
 /// - Brighton's West Pier: "Tide bears the last glow - Brighton, UK" by sagesolar, CC BY 4.0,
 ///   https://commons.wikimedia.org/wiki/File:Tide_bears_the_last_glow_-_Brighton,_UK.jpg
 /// - A marsh pond: "Sunset over a tundra pond" by USFWS Alaska, public domain,
 ///   https://commons.wikimedia.org/wiki/File:Sunset_over_a_tundra_pond_(53708107535).jpg
-private let grounds: [(name: String, file: String, horizon: Float, sky: Float, rough: Float)] = [
-    ("Brighton West Pier", "murmuration-pier", 780.0 / 1533, 0.1252, 0.12), ("Marsh pond", "murmuration-marsh", 15.0 / 706, 0.2635, 0.005),
+private let grounds: [(name: String, file: String, horizon: Float, sky: Float, rough: Float, waves: SIMD3<Float>)] = [
+    ("Brighton West Pier", "murmuration-pier", 780.0 / 1533, 0.1252, 0.12, [0.012, 0.5, 0.12]),
+    ("Marsh pond", "murmuration-marsh", 15.0 / 706, 0.2635, 0.005, [0.025, 1, 0.05]),
 ]
 
 let murmurationKnobs = [
@@ -83,6 +86,7 @@ final class Murmuration: SKScene {
             SKUniform(name: "u_land", vectorFloat3: sky.horizon / ground.sky),
             SKUniform(name: "u_birds", texture: birds.reflection),
             SKUniform(name: "u_rough", float: ground.rough),
+            SKUniform(name: "u_noise", texture: CloudNoise.texture), SKUniform(name: "u_waves", vectorFloat3: ground.waves),
         ])
         addChild(land)
     }
@@ -99,12 +103,26 @@ final class Murmuration: SKScene {
 
     /// The land as photographed, scaled from the photo's sky to ours so it stays a near-black silhouette; the water as
     /// our sky mirrored in it, times the water's reflectance measured in the photo (which keeps its ripples), with the
-    /// flock's reflection darkening it. Light is linear until the end, then tone-mapped like the sky.
+    /// flock's reflection darkening it, all gently bent by slow ripples. Light is linear until the end, then tone-mapped
+    /// like the sky.
     private static let groundShader = """
+    vec2 nuv(vec2 p) { return (fract(p) * 256.0 + 0.5) / 257.0; }
+
     void main() {
+        vec2 uv = vec2(v_tex_coord.x, v_tex_coord.y * u_frame);
+        // Slow ripples on the water plane (the eye 2 m above it), from two layers of the baked noise drifting different
+        // ways. On screen they shrink toward the horizon, and they fade out far away, where they'd only shimmer.
+        float dip = max(u_cam.z - uv.y, 0.0) * 2.0 * u_cam.y;
+        float dist = 2.0 / max(dip, 0.004);
+        vec2 w = vec2((uv.x * 2.0 - 1.0) * u_cam.x * dist, dist);
+        float t = u_time * u_waves.y;
+        vec4 n1 = texture2D(u_noise, nuv(w * vec2(0.07, 0.11) + vec2(t * 0.004, t * 0.013)));
+        vec4 n2 = texture2D(u_noise, nuv(w * vec2(0.13, 0.19) + vec2(-t * 0.009, t * 0.007)));
+        vec2 slope = vec2(n1.r - n2.b, n1.b + n2.r - 1.0) * smoothstep(150.0, 40.0, dist);
+        vec2 shift = slope * dip * u_waves.x;
         vec4 photo = texture2D(u_texture, v_tex_coord);
         vec3 aux = texture2D(u_aux, v_tex_coord).rgb;
-        vec2 uv = vec2(v_tex_coord.x, v_tex_coord.y * u_frame);
+        float ripples = texture2D(u_aux, v_tex_coord + vec2(shift.x, shift.y / u_frame)).g;
         // Land and pier: the photo's shading in our horizon's colour, keeping a little of its own, and darker than the
         // photo's long exposure made it, as a silhouette against a sunset is (under 4% of the sky in photos).
         vec3 shot = pow(photo.rgb / max(photo.a, 0.004), vec3(2.2));
@@ -114,14 +132,14 @@ final class Murmuration: SKScene {
         float mirror = 2.0 * u_cam.z - uv.y;
         vec3 reflected = vec3(0.0);
         for (int i = 0; i < 3; i++) {
-            float v = mirror + u_rough * (0.3 + 0.5 * float(i));
-            vec3 c4 = texture2D(u_sky, vec2(uv.x, clamp((v - u_cam.w) / (1.0 - u_cam.w), 0.0, 1.0))).rgb;
+            float v = mirror + shift.y + u_rough * (0.3 + 0.5 * float(i));
+            vec3 c4 = texture2D(u_sky, vec2(uv.x + shift.x, clamp((v - u_cam.w) / (1.0 - u_cam.w), 0.0, 1.0))).rgb;
             reflected += c4 * c4 * (4.0 / 3.0);
         }
-        vec2 b = vec2(uv.x, uv.y / u_cam.z);
+        vec2 b = vec2(uv.x + shift.x, (uv.y - shift.y) / u_cam.z);
         float s = u_rough * 0.5;
         float birds = 0.4 * texture2D(u_birds, b).r + 0.3 * texture2D(u_birds, b + vec2(0.0, s)).r + 0.3 * texture2D(u_birds, b - vec2(0.0, s)).r;
-        vec3 water = reflected * u_balance * aux.g * 2.0 * (1.0 - birds * 0.9);
+        vec3 water = reflected * u_balance * ripples * 2.0 * (1.0 - birds * 0.9) * (1.0 + slope.y * u_waves.z);
         vec3 col = sqrt(1.0 - exp(-mix(land, water, aux.r)));
         gl_FragColor = vec4(col + (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0, 1.0) * photo.a;
     }

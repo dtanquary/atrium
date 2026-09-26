@@ -18,6 +18,7 @@ Everything was tuned against two research passes, saved in the session scratchpa
 3. **The ground** (`groundShader`), from the photo and its aux map:
    - **Land and pier** keep the photo's shading, recoloured by our sky's horizon (30% of the photo's own colour kept) and scaled from the photo's sky brightness to ours, then darkened to 35%: photos show silhouettes at 0.3–4% of the sky, and the pier photo is a long exposure.
    - **Water** is our sky, mirrored about the horizon, times the water's reflectance as measured in the photo: the photo's water divided by its own sky at the mirrored height, a per-row profile (reflectance falls away from the horizon) times the fine ripples only, so the photo's reflections of its own clouds and its vignetting don't show. Rough water reflects sky from higher up than the mirror image, and a spread of it: `rough` samples three heights above the mirror (0.12 of the screen for the long-exposure sea, almost none for the calm pond).
+   - **Slow ripples** keep the water from looking like a still photo. Two layers of Weather's baked `CloudNoise` drift different ways on the water plane, found for each pixel from its angle below the horizon with the eye 2 m up, so they shrink toward the horizon and fade out beyond about 100 m, where they would only shimmer. Their slope bends where the water samples the sky, the photo's own ripple texture and the flock's reflection (by at most a few points, near the bottom of the screen), and brightens or darkens the water a little. `waves` per ground: bend 0.012, drift ×0.5 and ±4% swell on the long-exposure sea, where bending barely shows; bend 0.025, drift ×1 and ±1.5% on the pond.
    - **The flock's reflection** darkens the water. Mirroring in level water flips a point about the horizon on screen, so each frame the flock splats each parcel's ink at its flipped position into a 384×96 texture over the water (`Flock.reflection`), saturating as d / (1 + d); the shader reads it with a little vertical smear. Only rows the flock touched this frame or last are converted and uploaded, and nothing is uploaded while the flock is too high to reflect, which is most of the time.
    - Baked offline by the scratchpad's `mur/ground/bake.py`: the sky cut by keying the dark pier against a smooth sky model (the pier) or `cutsky.py`'s skyline (the marsh), the wind farm on the pier photo's far left removed, and water found only near the horizon (below that it's all water, even where the photo's sea is dark).
 4. **The flock** (`Flock`), a cut-down StarDisplay (Hildenbrandt, Carere & Hemelrijk 2010), ported from the research agent's validated prototype:
@@ -59,6 +60,7 @@ For repeatable snapshots, `MURMURATION_SEED=3` seeds the flock.
 ## Gotchas and shortcuts
 - `ponytail:` 1,500 agents stand for about 60,000 birds, each drawn as a sprite of ten. More agents would give finer folds but cost CPU linearly.
 - The sky is baked once per build, so the light doesn't change while it runs.
+- The ripples use `u_time`, which follows the wall clock, so snapshots can't show them moving. To measure the motion, temporarily feed the shader a clock from an environment variable and diff two renders (2 s apart: the pond changes by about 1.3 levels on average, the pier's sea by about 0.3).
 - The flock is always drawn behind the ground, which is right for the pier (the flock is further out) and the far shore.
 - A splat at a negative screen x must use `floor`, not `Int()`, or its weights go negative and `UInt8` traps.
 - The pier photo is CC BY 4.0: its credit is in the code, README and Settings → About.
@@ -67,6 +69,7 @@ For repeatable snapshots, `MURMURATION_SEED=3` seeds the flock.
 - Built in the first batch; it had no fidelity pass until 2026-09-26.
 - 2026-09-26: "I love the bird swarming stuff, but what else can we do to make that one 'feel' better and look better." This pass: physical sky, real flight model, photo grounds.
 - He was shown three grounds (West Pier, marsh pond, reed bed) and asked for both the pier and the pond, as a setting, and asked whether the birds could be reflected in the water. They are.
+- After seeing it: "its near perfect, we just need some very very subtle animation to make the water look not static ... i like both locations keep both." Hence the slow ripples.
 
 ## Ideas / next steps
 - **An evening's arc:** feeder flocks streaming in and merging, the light deepening from golden hour to blue hour over the display's real length (about 26 minutes), then the flock pouring down in a funnel into the reeds or under the pier, and a new evening fading in. Or follow the real sunset where you are.
