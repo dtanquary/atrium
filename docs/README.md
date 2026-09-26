@@ -37,7 +37,7 @@ The README's screenshots live in `docs/images` as 1600-pixel JPEGs of the wallpa
 - **Colours in one family:** jewel tones like Flowing Gradient's. He called Lava Lamp's green-in-blue ugly. Nebulae shouldn't be pink every time.
 - **Light and Dark Mode:** scenes that suit both should follow the system appearance (Lava Lamp, Flowing Gradient).
 - **Tunable:** options go in the Settings window as data (knobs, switches, palettes), so he can tweak until it looks right.
-- **Easy on the battery:** 15 fps on battery, frozen in Low Power Mode, paused when covered.
+- **Easy on the battery:** 15 fps on battery, frozen in Low Power Mode, paused when covered. On 2026-09-26 he asked to be able to override this, for demos on battery: Settings → Power has a frame-rate menu (Freeze, 15, 30, 60) for mains power, battery and Low Power Mode, and the menu bar has Full Speed on Battery.
 - **Workflow:** commit early and often; redeploy after each working change and tell him what to test.
 - **Cut:** Zen Garden, on 2026-09-25: "so bright and sharp and not relaxing, opposite of zen." Calm means soft and dim as well as slow. Its code and doc were deleted; they're in git history before the cut.
 - **Photoreal wins:** Galaxy only clicked once it was compared side by side with Hubble photos: colours sampled from them, soft edges, a bright disc rather than shapes on black, and an asinh stretch. The Fish Tank and Weather got the same treatment: research agents, real photo cut-outs where they beat procedural (fish, corals, hills, cumulus), physics where it beats photos (Weather's sky), and renders compared with reference photos.

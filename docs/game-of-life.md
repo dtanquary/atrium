@@ -48,14 +48,14 @@ A `life.palette` could offer Drift (today's rainbow), Mono (one hue), Warm and C
 ## Tuning constants
 - `cellSize` 9, `stepInterval` 0.14, initial density 0.28.
 - Stall rule: 0.3% for 12 generations. Reseed: 3 patches, radius 9, density 0.4.
-- Easing: births 90/256 per frame, deaths 16/256 per frame, floor 20.
+- Easing: births 90/256 and deaths 16/256 every 30th of a second (scaled by the frame time), floor 20.
 - Shader: inset 0.2, radius 0.16, halo 0.18, hue speed 0.01, pastel mix 0.35.
 
 ## Performance
 Measured at CPU 0.47 ms and GPU 0.52 ms per frame (release build, 2x). CPU cost is the per-frame glow easing over about 18.5k cells, plus copying the 74 KB buffer (`let bytes = pixels` makes a copy every frame), plus a generation step 7 times a second. In debug it measured about 2.6 ms of CPU. There's comfortable headroom in release.
 
 ## Gotchas and shortcuts
-- **Frame-rate-dependent easing:** glow is eased per frame, not per second. At 15 fps on battery, trails last twice as long in real time (about 1.3 s at 30 fps, about 2.6 s at 15 fps). Scale the easing by `dt` if that matters.
+- **Whole-number glow:** a dying cell loses at least 1 of its 255 each frame, otherwise the smaller steps at 60 fps round to 0 and leave cells glowing forever.
 - **Blobby reseeds:** reseeded patches arrive as visible round blobs (flagged by the nature agent).
 - **Rebuild on resize:** `cols` and `rows` are fixed at load, so changing the cell size means rebuilding the scene.
 

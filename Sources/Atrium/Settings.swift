@@ -49,6 +49,11 @@ struct SettingsView: View {
                 }
                 Section {
                     HStack {
+                        IconTile(icon: "bolt.fill", tint: .green, size: 22)
+                        Text("Power")
+                    }
+                    .tag(PowerPage.tag)
+                    HStack {
                         IconTile(icon: "info", tint: .gray, size: 22)
                         Text("About")
                     }
@@ -59,6 +64,8 @@ struct SettingsView: View {
         } detail: {
             if selection == AboutPage.tag {
                 AboutPage()
+            } else if selection == PowerPage.tag {
+                PowerPage()
             } else if let wallpaper = scenes.first(where: { $0.name == selection ?? current }) {
                 WallpaperPage(wallpaper: wallpaper).id(wallpaper.name)
             }
@@ -79,6 +86,45 @@ struct IconTile: View {
             .foregroundStyle(.white)
             .frame(width: size, height: size)
             .background(tint.gradient, in: .rect(cornerRadius: size * 0.26))
+    }
+}
+
+/// How fast wallpapers run on mains power, on battery and in Low Power Mode. `applyPowerState` reads the choices.
+enum Power {
+    /// Frames per second for each menu choice; 0 freezes the wallpaper on its current frame.
+    static let rates = [0, 15, 30, 60]
+    private static let names = ["Freeze", "15 fps", "30 fps", "60 fps"]
+    static let plugged = Knob(key: "power.plugged", label: "Plugged in", range: 0...3, standard: 2, format: .choice(names))
+    static let battery = Knob(key: "power.battery", label: "On battery", range: 0...3, standard: 1, format: .choice(names))
+    static let lowPower = Knob(key: "power.lowPower", label: "Low Power Mode", range: 0...3, standard: 0, format: .choice(names))
+    static let knobs = [plugged, battery, lowPower]
+
+    /// The frame rate for a knob's current choice.
+    static func rate(_ knob: Knob) -> Int { rates[min(max(Int(knob.value), 0), rates.count - 1)] }
+}
+
+/// The frame-rate menus. Low Power Mode wins over the power source.
+struct PowerPage: View {
+    static let tag = "Power" // sidebar selection; can't clash with a wallpaper name
+
+    var body: some View {
+        Form {
+            Section {
+                ForEach(Power.knobs, id: \.key) { KnobRow(knob: $0) }
+            } header: {
+                Text("Frame Rate")
+            } footer: {
+                Text("Wallpapers are tuned for 30 fps. 60 fps is smoother and uses about twice the power. Freeze holds the current frame. Wallpapers always pause while the desktop is covered.")
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                Button("Reset to Defaults", role: .destructive) {
+                    for knob in Power.knobs { UserDefaults.standard.removeObject(forKey: knob.key) }
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle("Power")
     }
 }
 

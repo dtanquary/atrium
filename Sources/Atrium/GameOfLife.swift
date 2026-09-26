@@ -36,12 +36,13 @@ final class GameOfLife: SKScene {
     }
 
     override func update(_ currentTime: TimeInterval) {
-        sinceStep += frameTime(currentTime, &lastTime)
+        let dt = frameTime(currentTime, &lastTime)
+        sinceStep += dt
         if sinceStep >= stepInterval {
             sinceStep = 0
             step()
         }
-        upload()
+        upload(dt)
     }
 
     /// One generation, wrapping at the edges. Counts changed cells to spot a board that has gone quiet.
@@ -86,12 +87,14 @@ final class GameOfLife: SKScene {
 
     /// Eases every cell's glow toward its state (births bloom in, deaths leave a trail) and sends it to the GPU.
     /// Glow goes in the red channel; the shader does shape and colour.
-    private func upload() {
+    private func upload(_ dt: TimeInterval = 1.0 / 30) {
+        // 90/256 of the way up and 16/256 down every 30th of a second, so trails last as long at any frame rate
+        let rise = Int(256 * (1 - pow(1 - 90.0 / 256, dt * 30))), fall = Int(256 * (1 - pow(1 - 16.0 / 256, dt * 30)))
         cells.withUnsafeBufferPointer { cells in
             pixels.withUnsafeMutableBufferPointer { pixels in
                 for i in 0..<cells.count {
                     let g = Int(pixels[i * 4])
-                    pixels[i * 4] = UInt8(cells[i] == 1 ? g + (255 - g) * 90 / 256 : g > 20 ? g - g * 16 / 256 : 0)
+                    pixels[i * 4] = UInt8(cells[i] == 1 ? g + (255 - g) * rise / 256 : g > 20 ? g - max(g * fall / 256, 1) : 0)
                 }
             }
         }

@@ -129,6 +129,7 @@ It's kind to your battery:
 - 30 fps on mains power, 15 fps on battery.
 - In Low Power Mode it freezes on the current frame.
 - Rendering pauses whenever the desktop is fully covered.
+- Settings → Power changes each of these rates (Freeze, 15, 30 or 60 fps). For a demo on battery, choose Full Speed on Battery in the menu bar.
 
 Known limits: the lock screen, and the tint of the menu bar and windows, still come from your normal system wallpaper.
 

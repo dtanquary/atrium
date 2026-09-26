@@ -20,12 +20,15 @@ final class WallpaperView: SKView {
     }
 }
 
-/// Still in Low Power Mode, 15 fps on battery, 30 fps on mains power.
+/// Runs at the frame rate Settings → Power picks for Low Power Mode, battery or mains power (30 and 15 fps, and
+/// frozen in Low Power Mode, unless changed).
 @MainActor func applyPowerState(to views: [WallpaperView]) {
     let source = IOPSGetProvidingPowerSourceType(IOPSCopyPowerSourcesInfo().takeRetainedValue()).takeUnretainedValue()
+    let fps = Power.rate(ProcessInfo.processInfo.isLowPowerModeEnabled ? Power.lowPower
+                         : source as String == kIOPMBatteryPowerKey ? Power.battery : Power.plugged)
     for view in views {
-        view.preferredFramesPerSecond = source as String == kIOPMBatteryPowerKey ? 15 : 30
-        view.frozen = ProcessInfo.processInfo.isLowPowerModeEnabled
+        if fps > 0 { view.preferredFramesPerSecond = fps }
+        view.frozen = fps == 0
     }
 }
 
@@ -125,6 +128,9 @@ var current = UserDefaults.standard.string(forKey: "scene") ?? scenes[0].name
         let login = menu.addItem(withTitle: "Open at Login", action: #selector(toggleLogin), keyEquivalent: "")
         login.target = self
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
+        let fullSpeed = menu.addItem(withTitle: "Full Speed on Battery", action: #selector(toggleFullSpeed), keyEquivalent: "")
+        fullSpeed.target = self
+        fullSpeed.state = Power.battery.value >= Power.plugged.value ? .on : .off
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit", action: #selector(NSApplication.terminate), keyEquivalent: "q")
     }
@@ -137,6 +143,15 @@ var current = UserDefaults.standard.string(forKey: "scene") ?? scenes[0].name
         NSApp.activate()
         if !settings.isVisible { settings.center() } // open centred, but leave it be if it's already up
         settings.makeKeyAndOrderFront(nil)
+    }
+
+    /// For demos: battery runs as fast as mains power, or goes back to its default.
+    @objc func toggleFullSpeed(_ sender: NSMenuItem) {
+        if sender.state == .on {
+            UserDefaults.standard.removeObject(forKey: Power.battery.key)
+        } else {
+            UserDefaults.standard.set(Power.plugged.value, forKey: Power.battery.key)
+        }
     }
 
     @objc func toggleLogin() {
@@ -160,9 +175,11 @@ NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenPar
     MainActor.assumeIsolated { syncWindows() }
 }
 
-// Follow Low Power Mode and plugging in or unplugging as they happen.
-NotificationCenter.default.addObserver(forName: .NSProcessInfoPowerStateDidChange, object: nil, queue: .main) { _ in
-    MainActor.assumeIsolated { applyPowerState(to: windows.compactMap { $0.contentView as? WallpaperView }) }
+// Follow Low Power Mode, plugging in or unplugging, and Settings → Power as they change.
+for name in [.NSProcessInfoPowerStateDidChange, UserDefaults.didChangeNotification] {
+    NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { _ in
+        MainActor.assumeIsolated { applyPowerState(to: windows.compactMap { $0.contentView as? WallpaperView }) }
+    }
 }
 if let source = IOPSNotificationCreateRunLoopSource({ _ in
     MainActor.assumeIsolated { applyPowerState(to: windows.compactMap { $0.contentView as? WallpaperView }) }
