@@ -1,121 +1,107 @@
 # Fireflies
 
-A meadow at blue hour, painted in gouache on canvas: a slate-teal sky deepening to indigo at a soft treeline, an olive field, and blades of grass in the foreground. Hundreds of fireflies fly slow paths over the grass, each flashing every few seconds as it goes, as cream dabs of paint. Some wear a watery wash or a pale dry-brush burst.
+A broad meadow at blue hour: a real photo of a field running to a leafy treeline, relit for dusk under a deep blue sky with a faint afterglow. Fog pools at the foot of the trees and thickens with distance, drifting in slow wisps. Hundreds of fireflies fly slow paths over the field, each glowing as a soft cream orb every few seconds, some in a pale halo.
 
-- **Files:** `Sources/Atrium/Fireflies.swift`.
-  - The `Fireflies` scene.
-  - **The helpers shared by the nature scenes**, below `// MARK: - Shared by the nature scenes`:
-    - `frameTime(_:_:)`: the clamped frame delta
-    - `rgb` and `mixRGB`
-    - `verticalGradient(_:)`
-    - `backdrop(_:_:)`: a dithered sky sprite
-    - `radialGlow(diameter:stops:)` and `softDot()`
-    - `treeline(width:base:hills:trees:spacing:color:pineChance:clearing:resolution:)`
-    - `pine`, `broadleaf` and `grassFringe`
-
-  Campfire, Murmuration, Live Sky, Pixel City and the Fish Tank use some of these, so changing them affects those scenes too.
+- **Files:**
+  - `Sources/Atrium/Fireflies.swift`
+  - `Resources/fireflies-meadow.heic` and `Resources/fireflies-meadow-aux.png`, credited in `Resources/fireflies-credits.tsv`
+  - The helpers shared by the nature scenes are below `// MARK: - Shared by the nature scenes`: `frameTime`, `rgb`, `mixRGB`, `verticalGradient`, `backdrop`, `radialGlow`, `softDot`, `treeline`, `pine`, `broadleaf` and `grassFringe`. Campfire, Murmuration, Live Sky, Pixel City and the Fish Tank use some of them, so keep their signatures.
 - **Entry:** `@MainActor func fireflies(size:)`, which returns `final class Fireflies: SKScene`. Registry entry: icon `sparkle`, tint `.yellow`, `knobs: Fireflies.knobs`.
-- **Kind:** SpriteKit. There are two full-screen shaders (the sky, and the canvas multiplied over everything), grass painted once with Core Graphics, and a pool of firefly sprites sharing one shader.
+- **Kind:** SpriteKit. A sky shader, the photo drawn in five slices by distance with a relighting and fog shader, and a pool of firefly sprites sharing one shader.
 
 ## Reference
 Dave picked three images for the mood (2026-09-25):
-1. A gouache painting of cream fireflies over grass under a navy sky. The painted look is sampled from it.
+1. A gouache painting of cream fireflies over grass under a navy sky.
 2. A photo of fireflies at a green forest edge, with big bokeh discs up close.
 3. Mauney's Nat Geo long exposure of a meadow full of firefly streaks under an afterglow sky.
 
-A research agent measured the painting (2026-09-25; its notes are in the session scratchpad, `notes/science.md`). The painted look follows those numbers:
-
-| What | Measured |
-|---|---|
-| **Colour, bottom to top** | Olive grass #3f3e26 → darkest ground #2d2c29 at 0.37 → violet-indigo #292935 at 0.62 → slate teal #526973 at the top. It varies left to right by only about ±4 levels. |
-| **Dabs** | Flat cream #fef09c, a hard edge (1 px), no glow. Median diameter 1% of the height (p10 0.57%, p90 2.1%, max 3.4%). |
-| **Where the dabs sit** | By tenth of the height from the bottom: 16, 56, 59, 42, 28, 18, 5, and none above 0.7. They're thickest just over the grass tops. |
-| **Torn dabs** | About a third of the big ones are dry-brush bursts: a torn edge out to 1.4–1.6 radii, with cream spatter out to 2. Far ones are dim #9c936c. |
-| **Stains** | Pale grey-teal washes about 2.6 times the dab's size (the ground mixed 25–35% toward #5a6a6a, so they're lighter than the ground), flat, off-centre, with ragged edges. Some have no dab in them. |
-| **Grass** | The bottom 30% only. Near-vertical strokes 6–11% of the height long and 0.4% wide, pointed, leaning a few degrees (mostly right). Olive sage #56614e–#829480, with one in six a bluish #5c6f5f. They sit in clumps of 3–8, and the light comes from dry-brush skips, not the tips. |
-| **Canvas** | Mostly a per-pixel speckle of about ±8 levels, a faint weave about 5 pt apart, and mottling over 10–40 pt. |
+A research agent measured all three and read up on real fireflies. Its notes are in the session scratchpad, `notes/science.md`. The headlines:
+- **Real fireflies:** *Photinus pyralis* flashes about 0.5 s every 5.5 s at 25 °C, a lemon yellow of about 563 nm, flying about half a metre up.
+- **Photos:** real photos put fireflies thickest just below the treeline, 0.1–0.3 of the height beneath it.
+- **Long exposures:** the meadow between the fireflies is near-black green.
 
 ## How it works
-1. **The view is a real camera.**
-   - The eye is 1.2 m above the grass, the horizon sits at 46% of the height, and the focal length is 1.2 screen heights.
-   - `project(x, y, d)` puts a point `d` metres away and `y` metres up at `horizon + focal·(y − eye)/d`. The grass along the bottom edge is then about 3 m away.
-   - Fireflies and grass live in metres. Perspective alone makes distant ones smaller and slower, and makes near ones swoop further.
-2. **Sky and field** (`skySource`): the painting's measured gradient in a `verticalGradient` texture.
-   - It's sampled a little up or down by stretched noise, so it looks laid on in broad strokes across, with bristle streaks.
-   - A soft treeline is dabbed along the horizon: crowns at 3–8% of the height above it, with a dry-brush edge.
-3. **Grass** (`grass(from:to:)`): three bands of strokes, rooted 2.5–3.4, 3.4–4.6 and 4.6–6.2 m away, which keeps the tops below 30% of the height.
-   - 22 clumps per square metre of meadow, each of 3–8 strokes sharing a colour and a lean (−0.12 to +0.2 of their height, so mostly right).
-   - Each stroke is a flick of the brush: 0.18–0.4 m tall and 6–11 mm wide in the world, pointed at both ends and widest a third of the way up. Its root is buried a random 0–35% of its height, so the bases don't line up.
-   - It's painted at half resolution, which softens the strokes. `bristleSource` then streaks them with less paint where the dry brush skipped.
-   - Further clumps sink toward the soil colour.
-   - Each band is its own sprite at z `100 − its middle distance`, so fireflies pass behind nearer grass.
-4. **Canvas** (`canvasSource`), as measured: a speckle per point (±10%), a faint weave (±2.5%, threads about 5 pt apart) and mottling (±6%, over 10–40 pt). It's multiplied at 2x over everything, fireflies included, so 0.5 leaves a colour as it was.
-5. **Fireflies** (`Fly`, `spawn`, `rest`, `dress`).
+1. **The photo.** "Field at dusk" by Tristan Ferne (CC BY 2.0), a young wheat field running to a continuous leafy treeline, shot at real dusk.
+   - A research agent cut and baked it (its scripts are in the scratchpad, `meadow/`). The sky is cut out, and the daylight and colour cast are taken out, leaving roughly albedo at half scale: 4096×1461 with alpha.
+   - The aux map holds log distance in red (Depth Anything V2 through Core ML; 0 nearest, 1 at 32 times as far) and open field in green.
+   - The crop fills a 1512×982 screen exactly, with the photo's top edge at 0.549 of the height. On a wider screen it's scaled up from that top edge, and `stretch` scales the view with it.
+2. **The view is fitted to the photo.**
+   - The lens (16 mm on a GF1) gives a focal length of 1.424 screen heights.
+   - A ground plane fitted over the open field (`v = 0.3585 − 0.3387/D`, R² 0.987) gives the horizon, and with the eye 1.5 m up, 6.3 m per unit of the depth map's distance.
+   - `project(x, y, d)` puts a point `d` metres away and `y` metres up at `horizon + focal·(y − eye)/d`. The bottom edge is about 6 m away, and the treeline's foot about 50 m.
+3. **Sky** (`skySource`):
+   - Deep blue overhead, paler toward the treeline, with a faint warm afterglow (a little stronger to the right).
+   - A few stars, which fade out with the fog.
+   - Fog lightens it low down.
+4. **Ground** (`groundSource`), drawn five times, once per slice of distance (0–5, 5–9, 9–16, 16–28 and 28+ m, the last behind every firefly). Each slice sits at z `100 − its middle distance`, so fireflies pass behind nearer ground. In each slice:
+   - The albedo is lit by a dim blue skylight, `(0.03, 0.036, 0.042)`, with a 15% Purkinje shift toward blue-grey.
+   - **Fog** is clear close by and thickens with the square of the log distance: `1 − exp(−fog·(0.1 + 2.2·far²)·wisps·low)`.
+     - `low` thins it up the trees (down 85% by 70% of their height), so mist pools at their foot while the crowns stay a dark silhouette.
+     - `wisps` is warped noise drifting slowly across on `u_time`.
+     - The fog colour is `(0.04, 0.05, 0.07)` in linear light.
+5. **Fireflies** (`Fly`, `spawn`, `rest`, `dress`, `flySource`).
    - There's a pool of 1200 sprites. `fireflies.density` × 600 of them are active.
    - **Where they are:**
-     - Each picks a spot on screen from the painting's counts by tenth of the height. It's then placed in the meadow at the distance that puts it there: 0.1 m up to just below eye height over the field, or up to 1.5 m above eye height against the sky.
-     - They fly at 0.04–0.12 m/s, turning up to 0.8 rad between flashes.
-     - Once one drifts out of view or past the treeline, it's put somewhere new.
+     - Each picks a spot on screen by tenth of the height from the bottom, weighted 10, 30, 60, 45, 12, 3: thickest just below the treeline, some against the trees, few above them.
+     - It's then placed in the meadow at the distance that puts it there: 0.1 m up to just below eye height over the field, or up to 1.5 m above eye height against the trees and sky.
+     - They fly at 0.04–0.12 m/s, turning up to 0.8 rad between flashes. Once one drifts out of view or past the treeline, it's put somewhere new.
    - **Flashing:**
-     - Each has its own period of 4.5–6.5 s, with ±15% jitter each time.
-     - A flash lasts 1.4 s: in over the first 8%, held, then out over the last 15%. The fades are quick, because paint caught half faded reads as a khaki blot.
-     - During it the firefly dips a little, then climbs 0.1 m, like *Photinus*'s J-stroke.
-     - Between flashes it's hidden, so about 150 are lit at once.
-   - **The mark** (`dress`, `flySource`), from the painting's measurements:
-     - A dab's radius is 0.5% of the height times a log-normal spread (σ about 0.45), and only a little bigger nearer (`(8/d)^0.3`, clamped to 0.75–1.3).
-     - Each dab has a soft, slightly wobbly edge and a faint glow of cream paint out to 2.6 radii.
-     - Of the bigger-than-median ones, 20% sit in a stain. Smaller ones rarely do.
-     - Fireflies over 25 m away are small dim dabs (#9c936c).
-     - 4% are stains alone (0.75–2.8% of the height across): fireflies out of focus.
-     - `a_fly` carries the radius, the sprite's half-width, and the kind plus a seed. The node's alpha fades it through `v_color_mix.a`.
+     - Each has a period of 4.5–6.5 s, with ±15% jitter each time.
+     - A flash lasts 1.4 s: in over the first 8%, held, then out over the last 15%. The fades are quick, because an orb caught half faded reads as a khaki blot.
+     - It dips a little, then climbs 0.1 m, like *Photinus*'s J-stroke. Between flashes it's hidden.
+   - **The orb:**
+     - A cream disc (#fef09c) with a soft, slightly wobbly edge and a faint glow out to 2.6 radii.
+     - Its radius is 0.5% of the height times a log-normal spread (σ about 0.45), only a little bigger nearer (`(8/d)^0.3`, clamped to 0.75–1.3). Those sizes are measured from the painting.
+     - 20% of the bigger ones sit in a pale grey-teal halo about 2.6 times their size, a little off centre, with a ragged edge.
+     - Fireflies over 25 m away are small and dim (#9c936c). 4% are a halo alone, a firefly out of focus.
+     - `a_fly` carries the radius, the half-width, the kind plus a seed, and how much light gets through the fog (`clearness(d)`, the same curve as the ground's). The node's alpha fades it through `v_color_mix.a`.
 
 ## Time and appearance
-Time is accumulated from `frameTime` in `update(_:)`, so it pauses with the view. It's always blue hour, by Dave's choice, with no Light Mode look and no link to the real time. The layout is random on each load.
+Time is accumulated from `frameTime` in `update(_:)`, so it pauses with the view. It's always blue hour, by Dave's choice, with no Light Mode look and no link to the real time. The layout of the fireflies is random on each load.
 
 ## Settings
 - `fireflies.density` (Fireflies, 0.25–2×, standard 1): how many are active. It's live.
-
-Planned: a Look switch between Painted and Photo (see Ideas), flash patterns (synchronous *Photinus carolinus*), and focus and depth of field for the photo look.
+- `fireflies.fog` (Fog, 0–1, standard 0.5): live for the ground and sky, and for each firefly from its next flash.
 
 ## Tuning constants
-- Camera: eye 1.2 m, horizon 0.46, focal 1.2.
-- Meadow: 2.5 m to the treeline at 60 m. Grass bands and density are as above.
-- Flight: 0.04–0.12 m/s. Flash: 1.4 s long, a 4.5–6.5 s period and a 0.1 m climb.
-- Dabs, stains and grass: as measured (above).
+- **Photo placement and view:** in `MeadowPhoto`.
+- **Light and fog:** skylight `(0.03, 0.036, 0.042)`, fog colour `(0.04, 0.05, 0.07)`, and a fog curve of `0.1 + 2.2·far²` with 85% thinning up the trees.
+- **Fireflies:** flight 0.04–0.12 m/s; a flash 1.4 s long, a 4.5–6.5 s period and a 0.1 m climb; placement weights as above.
 
 ## Performance
-CPU 0.7 ms and GPU 1.15 ms per frame (release build, 2x, 2026-09-25).
+CPU 0.57 ms and GPU 0.91 ms per frame (release build, 2x, 2026-09-26).
 - **CPU:** a loop over 1200 flies that only touches the ones flashing, about 150. About seven a frame get new attributes as they finish a flash.
-- **GPU:** mostly the sky and canvas shaders, which are static but recomputed every frame. ponytail: render them to textures once with `SKView.texture(from:)` in `didMove(to:)` if the GPU cost matters. The render test never calls `didMove`, so it would still show the unbaked cost.
-- **Memory:** the four grass textures are full-width at 2x, the lower 40% of the screen or less.
+- **GPU:**
+  - the five ground slices, each covering the photo's rect, with two texture reads and three noise calls a pixel before most are discarded
+  - the sky
+  - the orbs
+
+  ponytail: crop each slice's sprite to the rows its distances occupy if the GPU cost matters.
+- **Memory:** the photo is 4096×1461 RGBA, about 24 MB decoded.
 
 ## Gotchas and shortcuts
-- Painted fireflies fade with node alpha. In SpriteKit custom shaders, that arrives as `v_color_mix.a`.
-- `half` is a reserved word in Metal, so don't name a shader variable that.
-- The grass is static: no sway.
+- **Fading:** orbs fade with node alpha, which a SpriteKit custom shader gets as `v_color_mix.a`.
+- **Metal naming:** `half` is a reserved word in Metal, so don't name a shader variable that.
+- **Depth slices:** a firefly is in front of or behind a whole slice, so it can pass in front of grass up to half a slice nearer than it. The slices are narrow near the camera, where it shows.
+- **Flat ground plane:** the plane underestimates the far end of the field, which rises to the right.
+- **Wheat, not grass:** the photo's field is young wheat. At blue hour it reads as a meadow.
 
 ## Dave's feedback and decisions
-- The first version was a flat vector forest (violet fog, cut-out pines, about 15 fireflies lit at a time), built in the "build out all of those ideas" batch. It never had a fidelity pass.
-- 2026-09-25: Dave asked for a high-fidelity pass after his three references (above). He chose:
-  - both a photoreal look and a painterly one, to compare and then cut the loser
-  - a meadow and treeline over a forest understory
-  - live flashes with bokeh over long-exposure trails
-  - always blue hour over following the real evening
-- The painted look came first, since it needs no photo. The old forest was replaced outright rather than kept to compare, since Dave had no attachment to it.
-- 2026-09-25, first look at the painted version: "it looks too cartoony and the fireflies are moving too fast."
-  - Flight slowed from 0.15–0.4 m/s to 0.04–0.12, and the J-stroke climb from 0.3 m to 0.1. A near firefly was sweeping about 200 pt a second.
-  - Softened: grass at half resolution with dry-brush streaks, and dabs with soft edges and a painted glow.
-  - A painting will always read as illustration. The photo look is the realistic answer.
-  - Then the agent's measurements showed the softening went the wrong way. The painting's dabs are hard-edged with no glow; its character comes from torn bursts, spatter, pale stains, clumped dry-brush grass and a strong canvas speckle. So the painted look was rebuilt to those numbers (0.16.1).
-  - Dave: "the most recent changes to the fireflies made them look worse, like paint splatters." The torn bursts and spatter went, and the dabs got their soft edge and painted glow back (0.16.2). The measured grass, canvas, colours, sizes and stains stayed. Lesson: the painting is a guide, and what reads as light matters more than matching it mark for mark.
+- **The first version** was a flat vector forest (violet fog, cut-out pines, about 15 fireflies lit at a time), built in the "build out all of those ideas" batch.
+- **2026-09-25:** Dave asked for a high-fidelity pass after his three references. He chose to compare a photoreal look with a painterly one, a meadow and treeline, live flashes, and always blue hour.
+- **The painted look came first** (0.15.0), with its colours, sizes and layout measured from the painting.
+  - "It looks too cartoony and the fireflies are moving too fast": the flight slowed, and the paint was softened.
+  - Rebuilt to the measured painting (torn dry-brush bursts, spatter, stains, clumped grass, canvas speckle): "made them look worse, like paint splatters." The splatter went and the soft glowing orbs came back (0.16.2).
+- **2026-09-26:** "I don't want it to look like an art painting, I want it to look like a realistic foggy meadow with a treeline", then "forget the painting look", and "the firefly orbs you have now look very nice, use them in a more broad meadow, more real scene."
+  - So the painted sky, grass and canvas went, and so did the planned Photo/Painted comparison. The orbs stayed exactly as they were, now in the relit photo meadow with fog (0.17.0).
+  - A photographic firefly model (points in focus, energy-conserving bokeh discs up close, a saturating tone map) was built and rendered, but not shipped, since Dave liked the orbs.
+- **Photo choice:** a research agent shortlisted ten licensed meadow photos and baked four: Field at dusk, Herbst (Thomas Heins, CC BY 4.0), Indian Hollow and Pewley Downs. Field at dusk won for its real dusk light, continuous treeline and grass texture up close. Herbst, a flatter and broader meadow with mist already at the trees' foot, is the runner-up. Its bake is in the scratchpad, `meadow/ship/`.
 
 ## Ideas / next steps
-- **Photo look (in progress):** a real meadow photo relit to blue hour (as for Aurora and Weather), with photographic fireflies:
-  - points in focus, bokeh discs up close, energy-conserving, with a saturating tone map so sharp cores clip to warm white
-  - fireflies hidden behind nearer grass by the photo's depth map
-  - then a Look setting to compare the two
-- **Real flash patterns:** *Photinus pyralis* timing, synchronous *Photinus carolinus* waves, *Photuris* flickers (research in progress).
-- Grass swaying gently. Bake the static shaders.
+- **Synchronous flashing,** like *Photinus carolinus*: bursts of 4–8 flashes 0.5 s apart, 6–9 s dark, relayed across the field at about 0.5 m/s.
+- **Follow the real evening:** fireflies come out at sunset, peak about 30 minutes later and thin out by 90–120 minutes.
+- **Faint light on the grass** around near flashes.
+- Crop the ground slices to their rows.
 
 ## Checking it
-`SNAPSHOT_SCENE="Fireflies" SNAPSHOT_SECONDS=8 SNAPSHOT_DIR=/tmp/ff swift test`. Motion runs through `update(_:)`, so `SNAPSHOT_SECONDS` advances flights and flashes. Compare with the painting for colour and dab size.
+`SNAPSHOT_SCENE="Fireflies" SNAPSHOT_SECONDS=8 SNAPSHOT_DIR=/tmp/ff swift test`. Motion runs through `update(_:)`, so `SNAPSHOT_SECONDS` advances flights and flashes. `u_time` follows the wall clock, so fog wisps don't move forward with it. `SNAPSHOT_DEFAULTS="fireflies.fog=1"` shows thick fog.
