@@ -1,9 +1,9 @@
 # Flowing Gradient
 
-Seven big, soft pools of colour drift and melt into each other with no visible edges. Two silk ribbons of light fold through them, under a fine film grain. The mood follows the real Sun. In Dark Mode the pools glow like coloured light; in Light Mode they're watercolour washes on pale paper. Dave's second-favourite wallpaper.
+Seven big, soft pools of colour drift and melt into each other with no visible edges. Two silk ribbons of light and a fine film grain can be switched on over them (both off by default). The mood follows the real Sun. In Dark Mode the pools glow like coloured light; in Light Mode they're watercolour washes on pale paper. Dave's second-favourite wallpaper.
 
 - **Files:** `Sources/Atrium/FlowingGradient.swift` holds everything: knobs, palettes, `pastel`, `look`, the colour cycle, and the shader source. The noise helpers come from `shaderCommon` in Shaders.swift.
-- **Entry:** `flowingGradient(size:)` returns `final class FlowingGradient: SKScene`. Its registry entry in Scenes.swift has icon `swirl.circle.righthalf.filled`, tint `.indigo`, `knobs: FlowingGradient.knobs`, and palettes `PaletteChoice(key: "gradient.palette", options: FlowingGradient.paletteOptions, standard: "Midnight")`.
+- **Entry:** `flowingGradient(size:)` returns `final class FlowingGradient: SKScene`. Its registry entry in Scenes.swift has icon `swirl.circle.righthalf.filled`, tint `.indigo`, `knobs: FlowingGradient.knobs`, and palettes `PaletteChoice(key: "gradient.palette", options: FlowingGradient.paletteOptions)`, whose empty `standard` makes Random the default.
 - **Kind:** a full-screen SKShader on one sprite, with a subclass so it can hold live uniforms.
 
 ## How it works
@@ -24,7 +24,7 @@ In the shader (`FlowingGradient.source`):
 5. **Silk ribbons (`ribbon`):** two slow waves, each made of 5 fine strands. They spread apart and pinch together with `twist`, so bright folds travel along the ribbon, wrapped in a soft glow.
 6. **Film grain:** `hash21` over `floor(pixel / u_grainSize)`. It's fixed rather than animated (a deliberate choice for a calm, printed feel) and stronger in the lights. It also dithers away 8-bit banding.
 
-**How the palette is picked (init):** `gradient.palette` is read, defaulting to "Midnight". An empty value means Random (so does any name that isn't a palette). `look(palette)` turns it into the eight colours the shader takes, `u_base` then `u_c0`…`u_c6`: the raw colours in Dark Mode, or in Light Mode `pastel(c)` for each pool over paper tinted 6% toward pool 1. `pastel` normalises the colour to its brightest channel, then mixes it 55% toward white. So each palette defines only its dark colours, and the light washes are derived from them.
+**How the palette is picked (init):** `gradient.palette` is read. Empty or missing means Random, the default (so does any name that isn't a palette). `look(palette)` turns it into the eight colours the shader takes, `u_base` then `u_c0`…`u_c6`: the raw colours in Dark Mode, or in Light Mode `pastel(c)` for each pool over paper tinted 6% toward pool 1. `pastel` normalises the colour to its brightest channel, then mixes it 55% toward white. So each palette defines only its dark colours, and the light washes are derived from them.
 
 **Colour cycle:** only when the palette is Random and `gradient.cycleMinutes` > 0. An SKAction repeats every N minutes and `cycle()` eases all eight colour uniforms to a different palette (tracked by name in `paletteName`) in the current look over 60 s, smoothstepped, while the pools keep drifting. It's rescheduled in `applySettings` only when the interval actually changes, since that also runs every minute for the Sun.
 
@@ -44,21 +44,21 @@ In the shader (`FlowingGradient.source`):
 | key | label | range | default | drives |
 |---|---|---|---|---|
 | gradient.brightness | Brightness | 0.2–1.2 | 0.6 | Dark exposure; Light ink strength (inverse) |
-| gradient.speed | Flow speed | 0–3 | 1 | phase rate (CPU side) |
+| gradient.speed | Flow speed | 0–3 | 2 | phase rate (CPU side) |
 | gradient.poolSize | Pool size | 0.5–1.8 | 1 | every pool radius |
-| gradient.ribbonsOn | Show ribbons | toggle | on | `u_ribbonsOn` |
+| gradient.ribbonsOn | Show ribbons | toggle | off | `u_ribbonsOn` |
 | gradient.ribbons | Strength | 0–1 | 0.5 | silk strength (shown when on) |
 | gradient.ribbonWidth | Width | 0.3–2.5 | 1 | strand spread and glow width (shown when on) |
-| gradient.grain | Amount | 0–1 | 0.35 | grain strength |
+| gradient.grain | Amount | 0–1 | 0 | grain strength |
 | gradient.grainSize | Size | 1–4 | 1.5 | grain cell size in pixels |
 | gradient.followDay | Follow the day | 0–1 | 0.7 | how much golden, night and noon apply |
 | gradient.previewTime | Preview a time of day | toggle | off | use today at the preview hour instead of now |
 | gradient.previewHour | Time | 0–24 | 19:00 | preview hour (shown when previewing) |
-| gradient.cycleMinutes | Change colors every | 0–30 | 8 (0 = off) | colour cycle interval, shown only while Random |
+| gradient.cycleMinutes | Change colors every | 0–30 | 5 (0 = off) | colour cycle interval, shown only while Random |
 
 Sections: Colors (swatches plus the cycle interval), Look, Silk Ribbons, Film Grain, Time of Day.
 
-**Palettes** (`FlowingGradient.palettes`: a base plus seven pools; slots 4 and 6 are warm). The default is Midnight, and Random is offered.
+**Palettes** (`FlowingGradient.palettes`: a base plus seven pools; slots 4 and 6 are warm). The default is Random, which drifts through all six; any one can be pinned.
 
 | Palette | Colours |
 |---|---|
@@ -101,6 +101,7 @@ CPU 0.47 ms and GPU 0.55 ms per frame (release, 2x), one of the cheapest scenes.
 - He asked for a switch to turn the ribbons off (`gradient.ribbonsOn`).
 - He asked for palettes plus a Dark/Light Mode look. Light Mode first came out too saturated; he got the softened washes.
 - He asked for Random to slowly drift between the palettes after a set time he can change in Settings: `gradient.cycleMinutes`, default 8 minutes, with a 60 s fade.
+- 2026-09-26 he made his own settings the defaults: Random, colours change every 5 minutes, flow speed 2, ribbons off, film grain 0 (the grain setting stays).
 
 ## Ideas / next steps
 - Breathing: a slow brightness swell over about 60 s.

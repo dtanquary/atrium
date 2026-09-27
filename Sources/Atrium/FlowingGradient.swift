@@ -10,19 +10,19 @@ import simd
 /// and the palette can be pinned there; left on Random, it eases to another palette every few minutes.
 final class FlowingGradient: SKScene {
     nonisolated static let cycleMinutes = Knob(key: "gradient.cycleMinutes", label: "Change colors every", range: 0...30,
-                                               standard: 8, section: "Colors", format: .minutes)
+                                               standard: 5, section: "Colors", format: .minutes)
     /// Its Settings. Each drives the shader uniform named `u_` plus the last part of its key.
     nonisolated static let knobs = [
         Knob(key: "gradient.brightness", label: "Brightness", range: 0.2...1.2, standard: 0.6, section: "Look"),
-        Knob(key: "gradient.speed", label: "Flow speed", range: 0...3, standard: 1, section: "Look"),
+        Knob(key: "gradient.speed", label: "Flow speed", range: 0...3, standard: 2, section: "Look"),
         Knob(key: "gradient.poolSize", label: "Pool size", range: 0.5...1.8, standard: 1, section: "Look"),
-        Knob(key: "gradient.ribbonsOn", label: "Show ribbons", range: 0...1, standard: 1, section: "Silk Ribbons",
+        Knob(key: "gradient.ribbonsOn", label: "Show ribbons", range: 0...1, standard: 0, section: "Silk Ribbons",
              format: .toggle),
         Knob(key: "gradient.ribbons", label: "Strength", range: 0...1, standard: 0.5, section: "Silk Ribbons",
              shownWhen: "gradient.ribbonsOn"),
         Knob(key: "gradient.ribbonWidth", label: "Width", range: 0.3...2.5, standard: 1, section: "Silk Ribbons",
              shownWhen: "gradient.ribbonsOn"),
-        Knob(key: "gradient.grain", label: "Amount", range: 0...1, standard: 0.35, section: "Film Grain"),
+        Knob(key: "gradient.grain", label: "Amount", range: 0...1, standard: 0, section: "Film Grain"),
         Knob(key: "gradient.grainSize", label: "Size", range: 1...4, standard: 1.5, section: "Film Grain"),
         Knob(key: "gradient.followDay", label: "Follow the day", range: 0...1, standard: 0.7, section: "Time of Day"),
         Knob(key: "gradient.previewTime", label: "Preview a time of day", range: 0...1, standard: 0, section: "Time of Day",
@@ -84,8 +84,8 @@ final class FlowingGradient: SKScene {
             ($0.key, SKUniform(name: "u_" + $0.key.split(separator: ".").last!, float: Float($0.standard)))
         })
         super.init(size: size)
-        // The pinned palette (Midnight unless changed), or a random one if Settings says Random.
-        let chosen = UserDefaults.standard.string(forKey: "gradient.palette") ?? "Midnight"
+        // The pinned palette, or a random one on Random (the default).
+        let chosen = UserDefaults.standard.string(forKey: "gradient.palette") ?? ""
         let palette = Self.palettes.first { $0.name == chosen } ?? Self.palettes.randomElement()!
         paletteName = palette.name
         for (uniform, colour) in zip(colours, Self.look(palette)) { uniform.vectorFloat3Value = colour }
@@ -127,7 +127,7 @@ final class FlowingGradient: SKScene {
     @objc private func applySettings() {
         for knob in Self.knobs { knobUniforms[knob.key]?.floatValue = Float(knob.value) }
         flowSpeed = Self.knobs[1].value
-        let chosen = UserDefaults.standard.string(forKey: "gradient.palette") ?? "Midnight"
+        let chosen = UserDefaults.standard.string(forKey: "gradient.palette") ?? ""
         let pinned = Self.palettes.contains { $0.name == chosen } // like init, anything else is Random
         let minutes = pinned ? 0 : Self.cycleMinutes.value.rounded()
         if minutes != scheduledCycle {
