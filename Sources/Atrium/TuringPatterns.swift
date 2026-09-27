@@ -4,18 +4,21 @@ import SpriteKit
 
 /// Gray–Scott reaction–diffusion: two chemicals spreading at different rates, one feeding on the other, which is how
 /// Turing (1952) proposed spots and stripes form in living things. It runs on the CPU at one cell per 5 points and
-/// wraps at the edges. Drift wanders its feed and kill rates round the patterns in order, so it never settles:
-/// coral branches, cells dividing into spots, spots swelling into a honeycomb of holes, then fingerprint stripes.
+/// wraps at the edges. Drift wanders its feed and kill rates round the patterns in order: coral branches, cells
+/// dividing into spots, spots swelling into a honeycomb of holes, then fingerprint stripes. Every pattern settles into
+/// a steady state, so Motion keeps disturbing it: Regrow dissolves patches that grow back, Flow carries it on a current.
 final class TuringPatterns: SKScene {
     /// Feed and kill rates for each pattern, from Pearson, "Complex Patterns in a Simple System" (Science, 1993) and
     /// Karl Sims' reaction–diffusion tutorial. Only the slow, settling kinds: the moving waves and spirals are too busy.
     /// In Drift order: each leg between neighbours stays inside the pattern-forming region, so nothing dies out.
-    nonisolated static let patterns: [(name: String, f: Float, k: Float)] = [
-        ("Coral", 0.0545, 0.062), ("Spots", 0.0367, 0.0649), ("Holes", 0.039, 0.058), ("Fingerprint", 0.029, 0.057),
+    /// `hold` is how many minutes Drift stays on each; Coral and Holes, Dave's favourites, get the longest.
+    nonisolated static let patterns: [(name: String, f: Float, k: Float, hold: Double)] = [
+        ("Coral", 0.0545, 0.062, 3), ("Spots", 0.0367, 0.0649, 1), ("Holes", 0.039, 0.058, 3), ("Fingerprint", 0.029, 0.057, 1),
     ]
     nonisolated static let knobs = [
         Knob(key: "turing.pattern", label: "Pattern", range: 0...Double(patterns.count), standard: 0,
              format: .choice(["Drift"] + patterns.map(\.name))),
+        Knob(key: "turing.motion", label: "Motion", range: 0...2, standard: 0, format: .choice(["Regrow", "Flow", "Still"])),
         Knob(key: "turing.speed", label: "Speed", range: 0.25...3, standard: 1, format: .times),
     ]
     /// Jewel tones: two colours the pattern drifts between across the screen, and a highlight. The background is a
@@ -28,8 +31,8 @@ final class TuringPatterns: SKScene {
         ("Garnet", [0.70, 0.14, 0.28], [0.46, 0.14, 0.52], [1.00, 0.70, 0.62]),
         ("Amber", [0.78, 0.44, 0.10], [0.72, 0.22, 0.24], [1.00, 0.88, 0.60]),
     ]
-    /// Steps each leg of Drift takes: 4 minutes at normal speed.
-    private static let leg = 14_400.0
+    /// Minutes Drift takes to ease from one pattern to the next, and the steps round its whole loop (3,600 a minute).
+    private static let ease = 2.0, loop = patterns.reduce(0) { $0 + $1.hold + ease } * 3600
 
     private let cell: CGFloat = 5
     private let stepsPerSecond = 60.0
@@ -39,7 +42,11 @@ final class TuringPatterns: SKScene {
     private var texture: SKMutableTexture!
     private var lastTime: TimeInterval?
     private var owed = 0.0
-    private var drift = Double.random(in: 0..<Double(patterns.count)) * leg // steps along Drift's loop; a new start each load
+    private var drift = Double.random(in: 0..<loop) // steps along Drift's loop; a new start each load
+    private var steps = 0
+    private var kill: [Float] = [], flowX: [Float] = [], flowY: [Float] = [] // Motion's extra kill rate and current, per cell
+    private var patches: [(x: Int, y: Int, age: Int)] = [] // Regrow's, age in steps
+    private var flowing = false
 
     override func sceneDidLoad() {
         backgroundColor = .black
@@ -51,6 +58,9 @@ final class TuringPatterns: SKScene {
         for _ in 0..<cols * rows / 800 { seed() }
         nextA = a
         nextB = b
+        kill = Array(repeating: 0, count: a.count)
+        flowX = kill
+        flowY = kill
         pixels = Array(repeating: 255, count: cols * rows * 4)
 
         texture = SKMutableTexture(size: CGSize(width: cols, height: rows))
@@ -84,25 +94,85 @@ final class TuringPatterns: SKScene {
 
     override func update(_ currentTime: TimeInterval) {
         let dt = frameTime(currentTime, &lastTime)
-        owed = min(owed + dt * stepsPerSecond * Self.knobs[1].value, 12)
-        let steps = Int(owed)
-        guard steps > 0 else { return }
-        owed -= Double(steps)
-        let pick = Int(Self.knobs[0].value)
-        for _ in 0..<steps {
+        owed = min(owed + dt * stepsPerSecond * Self.knobs[2].value, 12)
+        let count = Int(owed)
+        guard count > 0 else { return }
+        owed -= Double(count)
+        let pick = Int(Self.knobs[0].value), motion = Int(Self.knobs[1].value)
+        for _ in 0..<count {
             let (f, k) = pick > 0 ? (Self.patterns[pick - 1].f, Self.patterns[pick - 1].k) : drifting()
+            if motion == 0 { regrow() } else if !patches.isEmpty { patches = []; clear(&kill) }
+            if motion == 1 { flow() } else if flowing { flowing = false; clear(&flowX); clear(&flowY) }
             step(f: f, k: k)
+            steps += 1
         }
         upload()
     }
 
-    /// Feed and kill rates along Drift's loop, easing from each pattern to the next.
+    /// Feed and kill rates along Drift's loop: each pattern held a while, then eased into the next.
     private func drifting() -> (Float, Float) {
-        drift = (drift + 1).truncatingRemainder(dividingBy: Self.leg * Double(Self.patterns.count))
-        let i = Int(drift / Self.leg), t = Float(drift / Self.leg) - Float(i), e = t * t * (3 - 2 * t)
-        let from = Self.patterns[i], to = Self.patterns[(i + 1) % Self.patterns.count]
-        return (from.f + (to.f - from.f) * e, from.k + (to.k - from.k) * e)
+        drift = (drift + 1).truncatingRemainder(dividingBy: Self.loop)
+        var t = drift / 3600
+        for (i, from) in Self.patterns.enumerated() {
+            if t < from.hold { return (from.f, from.k) }
+            t -= from.hold
+            if t < Self.ease {
+                let to = Self.patterns[(i + 1) % Self.patterns.count], e = Float(t / Self.ease), s = e * e * (3 - 2 * e)
+                return (from.f + (to.f - from.f) * s, from.k + (to.k - from.k) * s)
+            }
+            t -= Self.ease
+        }
+        return (Self.patterns[0].f, Self.patterns[0].k)
     }
+
+    /// Regrow: every 5 s the kill rate rises by up to 0.02 in a soft patch somewhere (about 70 pt across), for 4 s up,
+    /// 6 s held and 6 s down. The pattern there dissolves, then grows back in from the edges with a new shape, as
+    /// zebrafish regrow their stripes after an injury. About three are active at once, so something is always growing.
+    private func regrow() {
+        if steps % 300 == 0 { patches.append((Int.random(in: 1...cols), Int.random(in: 1...rows), 0)) }
+        patches = patches.map { ($0.x, $0.y, $0.age + 1) }.filter { $0.age < 960 }
+        guard steps % 15 == 0 else { return }
+        clear(&kill)
+        let r = 42, spread: Float = 2 * 14 * 14, cols = cols, rows = rows, s = stride
+        kill.withUnsafeMutableBufferPointer { kill in
+            for p in patches {
+                let t = Float(p.age) / 60, strength = 0.02 * (t < 10 ? min(t / 4, 1) : max(1 - (t - 10) / 6, 0))
+                for dy in -r...r {
+                    let y = (p.y - 1 + dy + rows) % rows + 1
+                    for dx in -r...r {
+                        let x = (p.x - 1 + dx + cols) % cols + 1, i = y * s + x
+                        kill[i] = min(kill[i] + strength * exp(-Float(dx * dx + dy * dy) / spread), 0.02)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Flow: a slow current, from a stream function of three board-sized waves whose phases drift, so it swirls and
+    /// never repeats quickly and wraps with the board. Its peak is about 0.012 cells a step, about 3.6 pt a second.
+    /// It's refreshed every second, each wave split into a row part and a column part so it's cheap.
+    private func flow() {
+        guard steps % 60 == 0 || !flowing else { return }
+        flowing = true
+        clear(&flowX)
+        clear(&flowY)
+        let kx = 2 * Float.pi / Float(cols), ky = 2 * Float.pi / Float(rows), t = Float(steps % 10_000_000), s = stride
+        for (m, n, w, phase) in [(1, 1, Float(0.00011), Float(0)), (2, 1, -0.00007, 1.7), (1, 2, 0.00009, 3.1)] {
+            let fx = Float(m) * kx, fy = Float(n) * ky, scale: Float = 0.012 / 1.6 / (fx * fx + fy * fy).squareRoot()
+            let across = (0..<cols).map { fx * Float($0) + (w * t + phase).truncatingRemainder(dividingBy: 2 * .pi) }
+            let (cosX, sinX) = (across.map(cos), across.map(sin))
+            let (cosY, sinY) = ((0..<rows).map { cos(fy * Float($0)) }, (0..<rows).map { sin(fy * Float($0)) })
+            for y in 0..<rows {
+                for x in 0..<cols {
+                    let c = (cosX[x] * cosY[y] - sinX[x] * sinY[y]) * scale, i = (y + 1) * s + x + 1
+                    flowX[i] += c * fy
+                    flowY[i] -= c * fx
+                }
+            }
+        }
+    }
+
+    private func clear(_ g: inout [Float]) { g.withUnsafeMutableBufferPointer { $0.update(repeating: 0) } }
 
     /// One step of Gray–Scott with Sims' constants: diffusion 1 and 0.5, a 3×3 Laplacian, a time step of 1.
     // ponytail: scalar Swift on the main thread, about 0.45 ms a step; if more speed or finer cells are wanted, the
@@ -111,25 +181,26 @@ final class TuringPatterns: SKScene {
         wrap(&a)
         wrap(&b)
         let cols = cols, rows = rows, s = stride
-        a.withUnsafeBufferPointer { a in
-            b.withUnsafeBufferPointer { b in
-                nextA.withUnsafeMutableBufferPointer { na in
-                    nextB.withUnsafeMutableBufferPointer { nb in
-                        for y in 1...rows {
-                            for i in y * s + 1...y * s + cols {
-                                let la = (a[i - 1] + a[i + 1] + a[i - s] + a[i + s]) * 0.2
-                                    + (a[i - s - 1] + a[i - s + 1] + a[i + s - 1] + a[i + s + 1]) * 0.05 - a[i]
-                                let lb = (b[i - 1] + b[i + 1] + b[i - s] + b[i + s]) * 0.2
-                                    + (b[i - s - 1] + b[i - s + 1] + b[i + s - 1] + b[i + s + 1]) * 0.05 - b[i]
-                                let r = a[i] * b[i] * b[i]
-                                na[i] = a[i] + la - r + f * (1 - a[i])
-                                nb[i] = b[i] + 0.5 * lb + r - (k + f) * b[i]
-                            }
-                        }
-                    }
+        a.withUnsafeBufferPointer { a in b.withUnsafeBufferPointer { b in
+        kill.withUnsafeBufferPointer { kill in flowX.withUnsafeBufferPointer { fx in flowY.withUnsafeBufferPointer { fy in
+        nextA.withUnsafeMutableBufferPointer { na in nextB.withUnsafeMutableBufferPointer { nb in
+            for y in 1...rows {
+                for i in y * s + 1...y * s + cols {
+                    let la = (a[i - 1] + a[i + 1] + a[i - s] + a[i + s]) * 0.2
+                        + (a[i - s - 1] + a[i - s + 1] + a[i + s - 1] + a[i + s + 1]) * 0.05 - a[i]
+                    let lb = (b[i - 1] + b[i + 1] + b[i - s] + b[i + s]) * 0.2
+                        + (b[i - s - 1] + b[i - s + 1] + b[i + s - 1] + b[i + s + 1]) * 0.05 - b[i]
+                    let r = a[i] * b[i] * b[i]
+                    // carried by the current: central differences, stable here because diffusion dwarfs it
+                    let ca = fx[i] * (a[i + 1] - a[i - 1]) + fy[i] * (a[i + s] - a[i - s])
+                    let cb = fx[i] * (b[i + 1] - b[i - 1]) + fy[i] * (b[i + s] - b[i - s])
+                    na[i] = a[i] + la - r + f * (1 - a[i]) - 0.5 * ca
+                    nb[i] = b[i] + 0.5 * lb + r - (k + kill[i] + f) * b[i] - 0.5 * cb
                 }
             }
-        }
+        } }
+        } } }
+        } }
         swap(&a, &nextA)
         swap(&b, &nextB)
     }
