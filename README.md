@@ -149,6 +149,13 @@ Vitamin C crystallising on a microscope slide between polarisers: round spheruli
 |---|---|
 | First-order straw and gold, in Dark Mode | The same slide in Light Mode, between parallel polarisers |
 
+### Wind
+The live wind around you as thin streaks streaming across the map, in the spirit of the hint.fm wind map and earth.nullschool: a grid of Open-Meteo's hourly forecast, blended from hour to hour, with streaks that speed up, brighten and curl with the real wind, as brush strokes like hint.fm's or comets like nullschool's. Zoom from your town to half the continent, over Natural Earth's coastlines, its shaded relief, or nothing, in six jewel-toned palettes. Light Mode draws the same streaks as ink on paper.
+
+| ![Wind at the continent zoom over shaded relief, a low spinning off the East Coast](docs/images/wind.jpg) | ![Wind in Light Mode, ink on paper](docs/images/wind-light.jpg) |
+|---|---|
+| Half the continent, over shaded relief | The same in Light Mode |
+
 ### Dappled Light
 Sunlight through a tree onto a warm white plaster wall, from the real Sun where you are: it only falls when the Sun is on the wall's side, and turns golden near sunset. Every gap between the leaves is a pinhole camera, so the dapples are images of the Sun, round or stretched by the angle of the light, and crescents during a real solar eclipse. Near leaves cast sharp shadows, far ones melt into soft shade. Cloud softens it and wind sways the leaves, from the live weather; at night, faint moonlight at the real phase, or a warm streetlight.
 
@@ -201,6 +208,7 @@ To rebuild after pulling changes: `./build.sh && pkill -x Atrium; open build/Atr
 
 - **Location** (optional). Live Sky, Earth from Orbit, Weather and Flowing Gradient's time-of-day mood use your location, and the app asks once. If you decline, it guesses from your time zone.
 - **Network.** Weather and Dappled Light fetch from [Open-Meteo](https://open-meteo.com) every 15 minutes, sharing one request. Live Sky and Earth from Orbit fetch the ISS position from [wheretheiss.at](https://wheretheiss.at) at most once a minute. Earth from Orbit fetches a global cloud map from [Live Cloud Maps](https://clouds.matteason.co.uk) only once its cached copy is over 3 hours old (1.5 MB when it has changed), and not at all with Live clouds off. For lightning, it asks Open-Meteo for thunderstorms on a grid around you each time the cloud map updates, about every 3 hours. The Sun Today fetches SDO images from [Helioviewer](https://helioviewer.org) at most every 15 minutes (2048 pixels, 0.3–0.5 MB) or 30 (4096, 1–2 MB, for the close-up), keeping the last few hours on disk. None of them needs an API key.
+- **Wind** uses your location too, and asks Open-Meteo for the hourly wind forecast at 384 points around you every two hours, for the zoom on screen (about 230 KB and 384 of Open-Meteo's free 10,000 calls a day each time, so at most 4,600 a day). The last reply for each zoom stays on disk, so it works offline.
 
 ## Development
 
@@ -229,6 +237,7 @@ SNAPSHOT_SCENE="Fish Tank" SNAPSHOT_MOVIE=6 swift test       # then 6 seconds of
 - Constellation lines from [d3-celestial](https://github.com/ofrohn/d3-celestial) by Olaf Frohn, BSD 3-Clause. Its notice is kept in `Sources/Atrium/Resources/constellations.txt`.
 - Earth imagery from NASA's Blue Marble and Black Marble, public domain.
 - Clouds from [Live Cloud Maps](https://github.com/matteason/live-cloud-maps) by Matt Eason, CC0. Contains modified EUMETSAT data.
+- The Wind wallpaper's coastlines, lakes and shaded relief are from [Natural Earth](https://www.naturalearthdata.com), public domain.
 - The Moon's maps are from NASA's [CGI Moon Kit](https://svs.gsfc.nasa.gov/4720) (Ernie Wright, NASA Scientific Visualization Studio), public domain: LROC colour and LOLA heights from the Lunar Reconnaissance Orbiter.
 - Planet positions from JPL's [Approximate Positions of the Planets](https://ssd.jpl.nasa.gov/planets/approx_pos.html).
 - Images of the Sun courtesy of NASA/SDO and the AIA, EVE, and HMI science teams ([terms](https://sdo.gsfc.nasa.gov/data/rules.php)), via the ESA/NASA [Helioviewer Project](https://helioviewer.org).

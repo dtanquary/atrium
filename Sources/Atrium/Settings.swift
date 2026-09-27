@@ -302,6 +302,7 @@ struct AboutPage: View {
                 LabeledContent("Earth imagery") { Text("NASA Blue Marble and Black Marble") }
                 LabeledContent("Clouds") { Link("Live Cloud Maps; contains modified EUMETSAT data", destination: URL(string: "https://clouds.matteason.co.uk")!) }
                 LabeledContent("Planet positions") { Text("NASA JPL") }
+                LabeledContent("Wind's map") { Link("Natural Earth coastlines, lakes and shaded relief (public domain)", destination: URL(string: "https://www.naturalearthdata.com")!) }
                 LabeledContent("The Sun") { Link("Courtesy of NASA/SDO and the AIA, EVE, and HMI science teams, via the ESA/NASA Helioviewer Project",
                                                  destination: URL(string: "https://helioviewer.org")!) }
                 LabeledContent("The Moon") { Link("NASA's CGI Moon Kit: LRO's LROC colour and LOLA heights (public domain)",
