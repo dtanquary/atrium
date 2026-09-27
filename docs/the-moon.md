@@ -92,7 +92,7 @@ Any UserDefaults change triggers a bake on the next frame, so dragging a slider 
 
 ## Dave's feedback and decisions
 - **The brief (2026-09-26):** a full-screen photoreal Moon at its real phase, libration and tilt from his location; CGI Moon Kit data kept modest; lunar-Lambert/Hapke reflectance with the opposition surge; earthshine; copper in a real eclipse; checked against Dial-a-Moon like SkyTests checks Horizons; baked rather than shaded every frame; Black, Stars and Sky backdrops to compare in Settings; a time preview to scrub a month.
-- **To decide:** which backdrop to keep (or keep all three, as a choice).
+- **Backdrops (2026-09-26):** "all 3 as a choice for now": Black, Stars and Sky stay in Settings, with Stars the default.
 
 ## Ideas / next steps
 - Physical libration, if anyone ever notices 0.03°.
