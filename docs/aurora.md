@@ -31,7 +31,7 @@ The research behind it (three agents on 2026-09-25: landscape photos, 63 measure
    - Then the same grade and dither as the sky, premultiplied by the photo's alpha.
 
 ## Time and appearance
-The curtains move on `u_phase`, seconds of scene time advanced by a repeating `customAction`, so it pauses with the wallpaper and a Speed knob can scale it. Stars twinkle on `u_time`. There is no Light Mode look. Each load rolls a new arrangement of curtains and folds; the palette is Random unless pinned. `AURORA_SEED=n` in the environment repeats one arrangement (for snapshots).
+The curtains move on `u_phase`, seconds of scene time advanced by a repeating `customAction`, so it pauses with the wallpaper and a Speed knob can scale it. Stars twinkle on `u_now` (see `WallpaperTime`), and so do the glints on the snow. There is no Light Mode look. Each load rolls a new arrangement of curtains and folds; the palette is Random unless pinned. `AURORA_SEED=n` in the environment repeats one arrangement (for snapshots).
 
 ## Settings
 **Colors:** `aurora.palette`, Random by default. Each palette in `auroraPalettes` has four colours from bottom to top: fringe, body, upper and crown. They're all real emissions or mixes of them, the colours Dave listed after looking it up: green, red, pink, purple, blue, yellow and white.
@@ -85,7 +85,7 @@ CPU 0.5–0.7 ms and GPU 1.0–1.45 ms per frame (release build, 2x, 2026-09-25)
 - The photo's lens is about 29 mm (18 mm on APS-C); the sky's is wider (about 22 mm) for more of the arc. Nobody can tell from a skyline.
 - No true spirals or folds that turn back on themselves: each heading meets a curtain once. The techniques agent's option for them is CPU-projected ribbons.
 - The fold curve is 8-bit, which leaves faint kinks in a sharp edge; the lower edge is soft enough to hide them.
-- `u_time` doesn't advance in the render harness, but SKActions do, so `SNAPSHOT_SECONDS` moves the curtains (`u_phase`).
+- `SNAPSHOT_SECONDS` moves the curtains (`u_phase`, advanced by SKActions) and the twinkle (`u_now`).
 
 ## Dave's feedback and decisions
 - It was one of the four scenes Dave picked for the picker's first round (with Flowing Gradient, Rain on Glass and Night Sky, later renamed Live Sky), then built by the shaders agent.

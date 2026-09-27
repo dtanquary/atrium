@@ -113,12 +113,12 @@ final class Campfire: SKScene {
             vec3 sky = mix(vec3(0.010, 0.012, 0.021), vec3(0.0022, 0.0030, 0.0065), smoothstep(0.35, 1.0, h));
             vec2 pts = v_tex_coord * u_size;
             float clump = 0.4 + 1.2 * noise(pts / 300.0 + 7.0);
-            sky += vec3(0.8, 0.85, 1.0) * starField(pts, 6.0, 0.35 * clump, u_time) * 0.012;
+            sky += vec3(0.8, 0.85, 1.0) * starField(pts, 6.0, 0.35 * clump, u_now) * 0.012;
             vec3 col = 1.0 - exp(-sky * 1.0);
             col = mix(col * 12.92, 1.055 * pow(col, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, col));
             gl_FragColor = vec4(col + (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 255.0, 1.0);
         }
-        """, uniforms: [SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)])])
+        """, uniforms: [SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]), WallpaperTime.now])
         addChild(sky)
         let stars = StarField(camera: lens)
         stars.zPosition = -900

@@ -93,7 +93,7 @@ Everything is pre-simulated for 150 steps in `sceneDidLoad`, so schools have alr
 - the tail beat steps through 20 precomputed warp frames (`swimWarps`: an 8×1 grid with a wave from head to tail, `0.075·(1-u)²`). The beat rate scales with speed. The warps work on the photos unchanged.
 
 ## Time, live data and appearance
-Motion comes from `update(_:)` (boids and frame stepping), the coral sway actions, and `u_time` (the water and sand shaders). There's no network or location use. Light Mode is a daylight reef tank and Dark Mode its actinic evening look, read from `systemIsDark` when the scene is built.
+Motion comes from `update(_:)` (boids and frame stepping), the coral sway actions, and `u_now` (the water, sand and photo shaders). There's no network or location use. Light Mode is a daylight reef tank and Dark Mode its actinic evening look, read from `systemIsDark` when the scene is built.
 
 ## Settings
 None yet.
@@ -135,7 +135,7 @@ CPU 0.8–0.9 ms and GPU 1.3–1.5 ms per frame (release, 2x), in both looks. Th
 - `ponytail:` O(n²) boids within a school, fine up to a few dozen fish per school. Use a spatial grid, like Murmuration, if schools grow. `castShadows` is O(n²) over every fish, likewise.
 - **Shadows only fall on sand and fish.** A fish over the rock casts its shadow on the sand behind it, hidden by the rock, not on the rock or corals. Shading a coral's top where a fish passes over would need its surface, which only `TankArt.skyline` knows.
 - **Rock:** no permissively licensed photo of coralline-covered live rock exists besides `rock-1`, so `rock-3`, `rock-4` and `rock-6` are bare dry reef rock and a bleached Porites head. `coralline.py` (in the research scratch folder, not the repo) removed each photo's colour cast and painted muted pink, purple and green coralline patches onto them, in colours sampled from `rock-1`. The credits note the change, as CC BY asks. A first pass at full strength read as camouflage paint; the patches are now 70% toward the grey stone and cover about a third of it. `rock-3` and `rock-4` are toned to 0.78 and 0.88 of the live rock's mid-grey, since at full brightness they looked bleached beside it. There's still no tall pillar or arch.
-- The shaders use `u_time`, which doesn't advance in the render test, so caustics look frozen in snapshots. Fish and corals do move.
+- The shaders run on `u_now`, which moves with `SNAPSHOT_SECONDS`, so caustics move in snapshots, as fish and corals do.
 
 ## Dave's feedback and decisions
 - The first version (flat `SKShapeNode` fish, stroked seaweed) was the proof of concept. Dave called it "the primitive fish tank" and asked how to raise the fidelity.
@@ -164,4 +164,4 @@ CPU 0.8–0.9 ms and GPU 1.3–1.5 ms per frame (release, 2x), in both looks. Th
 SNAPSHOT_SCENE="Fish Tank" SNAPSHOT_SECONDS=8 swift test                        # Light Mode
 SNAPSHOT_APPEARANCE=dark SNAPSHOT_SCENE="Fish Tank" SNAPSHOT_SECONDS=8 swift test # actinic
 ```
-Each load rolls a different reef. Caustics are driven by `u_time`, which ignores `SNAPSHOT_SECONDS`.
+Each load rolls a different reef. Caustics are driven by `u_now`, which follows `SNAPSHOT_SECONDS`.

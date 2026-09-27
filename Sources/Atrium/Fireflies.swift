@@ -69,13 +69,13 @@ final class Fireflies: SKScene {
         sky.zPosition = -1000
         sky.shader = SKShader(source: shaderCommon + Self.skySource, uniforms: [
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]),
-            SKUniform(name: "u_horizon", float: Float(onScreen(MeadowPhoto.skyline))), fog,
+            SKUniform(name: "u_horizon", float: Float(onScreen(MeadowPhoto.skyline))), fog, WallpaperTime.now,
         ])
         addChild(sky)
 
         let width = size.height * MeadowPhoto.top * MeadowPhoto.aspect * stretch, height = width / MeadowPhoto.aspect
         let shared = [
-            SKUniform(name: "u_aux", texture: MeadowPhoto.aux), fog, wind,
+            SKUniform(name: "u_aux", texture: MeadowPhoto.aux), fog, wind, WallpaperTime.now,
             SKUniform(name: "u_frame", vectorFloat2: [Float(size.height * MeadowPhoto.top - height), Float(height)]),
             SKUniform(name: "u_ground", vectorFloat2: [Float(size.height * onScreen(MeadowPhoto.foot)),
                                                        Float(size.height * (onScreen(MeadowPhoto.skyline) - onScreen(MeadowPhoto.foot)))]),
@@ -177,7 +177,7 @@ final class Fireflies: SKScene {
         float h = clamp((v_tex_coord.y - u_horizon) / (1.0 - u_horizon), 0.0, 1.0);
         vec3 c = mix(vec3(0.055, 0.07, 0.10), vec3(0.010, 0.017, 0.048), pow(h, 0.55));
         c += exp(-h * 7.0) * vec3(0.05, 0.028, 0.016) * (0.7 + 0.3 * v_tex_coord.x);
-        c += starField(pts, 16.0, 0.05, u_time) * smoothstep(0.1, 0.6, h) * 0.02 * (1.0 - u_fog);
+        c += starField(pts, 16.0, 0.05, u_now) * smoothstep(0.1, 0.6, h) * 0.02 * (1.0 - u_fog);
         c = mix(c, vec3(0.05, 0.062, 0.085), u_fog * 0.6 * exp(-h * 6.0));
         c = pow(c, vec3(1.0 / 2.2)) + (hash21(pts * 2.0) - 0.5) / 128.0;
         gl_FragColor = vec4(c, 1.0);
@@ -199,8 +199,8 @@ final class Fireflies: SKScene {
         float far = aux.r;
         vec4 out = vec4(0.0);
         if (u_slice.x <= far && far < u_slice.y) { // each pixel is drawn by one slice only, so the others skip the work
-            float gust = noise(vec2(v_tex_coord.x * 5.0 - u_time * 0.06, v_tex_coord.y * 2.0 + 3.0));
-            float rustle = sin(u_time * 1.6 + 30.0 * noise(v_tex_coord * vec2(60.0, 25.0)));
+            float gust = noise(vec2(v_tex_coord.x * 5.0 - u_now * 0.06, v_tex_coord.y * 2.0 + 3.0));
+            float rustle = sin(mod(u_now, 3600.0) * 1.6 + 30.0 * noise(v_tex_coord * vec2(60.0, 25.0))); // hourly: each patch's rhythm is its own
             float sway = u_wind * aux.g * (1.0 - far) * (1.0 - far);
             vec4 photo = texture2D(u_texture, v_tex_coord + vec2(sway * (0.3 + gust) * (0.6 * gust + 0.4 * rustle) * 0.0025, 0.0));
             vec3 col = 2.0 * pow(photo.rgb / max(photo.a, 0.004), vec3(2.2)) * vec3(0.03, 0.036, 0.042);
@@ -208,8 +208,8 @@ final class Fireflies: SKScene {
             col *= 1.0 + 0.12 * sway * (gust - 0.4);
             float y = u_frame.x + v_tex_coord.y * u_frame.y;
             float low = 1.0 - 0.85 * smoothstep(u_ground.x, u_ground.x + 0.7 * u_ground.y, y);
-            vec2 w = vec2(v_tex_coord.x * 7.0 + u_time * 0.004, v_tex_coord.y * 20.0);
-            float wisps = 0.6 + 0.8 * noise(w + vec2(2.0 * noise(w * 0.5 + u_time * 0.01), 0.0));
+            vec2 w = vec2(v_tex_coord.x * 7.0 + u_now * 0.004, v_tex_coord.y * 20.0);
+            float wisps = 0.6 + 0.8 * noise(w + vec2(2.0 * noise(w * 0.5 + u_now * 0.01), 0.0));
             float mist = 1.0 - exp(-u_fog * (0.1 + 2.2 * far * far) * wisps * low);
             col = mix(col, vec3(0.04, 0.05, 0.07), mist);
             col = pow(col, vec3(1.0 / 2.2)) + (hash21(v_tex_coord * 4096.0) - 0.5) / 128.0;

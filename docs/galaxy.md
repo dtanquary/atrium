@@ -139,7 +139,7 @@ Thinning the star grain made no measurable difference. Pixels beyond 1.6 galaxy 
 - **Value noise is grid-aligned:** the clump noise's second octave is rotated, and its contrast kept soft. Hard thresholds on it came out as blocky, stencil-cut shapes.
 - **Arm direction:** the arms trail the rotation. The pattern turns anticlockwise in `d`, and `+ln(r)/tan(pitch)` in the swirl makes arms turn clockwise going outward. Both flip together with `u_spin`. This was checked by rendering one fixed roll at two moments.
 - Knob lookups go through the named statics `Galaxy.rotation` and `Galaxy.cycleMinutes`, not array indices (the trap Flowing Gradient's doc warns about).
-- `u_time` still drives the background twinkle, which doesn't move in tests.
+- `u_now` drives the background twinkle, wrapped hourly in `starLayer`, as in `starField`.
 
 ## Dave's feedback and decisions
 - He asked for "an ultra high fidelity animated background of a rotating galaxy", using the existing wallpapers and docs as the template. It was built as Nebula's sibling: real objects for colours and shapes, a new roll on every load, a slow dissolve when left running, and calm motion.

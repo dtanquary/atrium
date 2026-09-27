@@ -26,12 +26,12 @@ Conway's Game of Life on a board that wraps at the edges, drawn as soft rounded 
 5. **Shader (`cellShader`).**
    - Samples the glow at each cell's centre, so cells stay crisp.
    - Draws a rounded square (inset 0.2, radius 0.16) with a soft halo (0.18).
-   - Colour comes from a cosine palette over x, y and `u_time × 0.01`, a full hue cycle every 100 s, mixed 35% toward white for pastels.
+   - Colour comes from a cosine palette over x, y and `u_now × 0.01`, a full hue cycle every 100 s, mixed 35% toward white for pastels.
    - Glow is shaped by `pow(glow, 1.4)`, over a dark navy background with a vignette.
 
 ## Time and appearance
 - The simulation runs on `frameTime`.
-- The hue drift runs on `u_time`, so it doesn't advance in the render harness.
+- The hue drift runs on `u_now`, so it advances with `SNAPSHOT_SECONDS`.
 - It's always dark, with no Light Mode look. Each load starts from a random board.
 
 ## Settings

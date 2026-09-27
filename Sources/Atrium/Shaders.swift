@@ -50,7 +50,7 @@ float starField(vec2 pts, float cell, float density, float t) {
     vec2 off = (r.yz - 0.5) * 0.7;
     float mag = pow(r.w, 5.0);
     float d = length(fract(pts / cell) - 0.5 - off) * cell;
-    float twinkle = 0.8 + 0.2 * sin(t * (1.0 + 3.0 * h) + h * 50.0);
+    float twinkle = 0.8 + 0.2 * sin(mod(t, 3600.0) * (1.0 + 3.0 * h) + h * 50.0); // hourly: a jump in a twinkle can't be seen
     return (smoothstep(0.6 + 1.2 * mag, 0.0, d) + 0.3 * mag * exp(-d * 0.4)) * (0.3 + 0.9 * mag) * twinkle;
 }
 
@@ -62,7 +62,7 @@ float brightStar(vec2 pts, float cell, float t) {
     vec2 d = (fract(pts / cell) - 0.5 - (r.yz - 0.5) * 0.6) * cell;
     float core = exp(-dot(d, d) * 0.15);
     float spikes = exp(-abs(d.x) * 1.2) * exp(-abs(d.y) * 0.06) + exp(-abs(d.y) * 1.2) * exp(-abs(d.x) * 0.06);
-    float shimmer = h < 0.09 ? 0.93 + 0.07 * sin(t * (0.6 + 5.0 * h) + h * 90.0) : 1.0;
+    float shimmer = h < 0.09 ? 0.93 + 0.07 * sin(mod(t, 3600.0) * (0.6 + 5.0 * h) + h * 90.0) : 1.0;
     return (core + 0.35 * spikes + 0.12 * exp(-length(d) * 0.08)) * (0.5 + 2.5 * h) * shimmer;
 }
 
@@ -141,7 +141,7 @@ let nebulaKnobs = [
 
     void main() {
         float aspect = u_size.x / u_size.y;
-        float t = u_time * 0.005; // one screen height of drift every ~5 minutes
+        float t = u_now * 0.005; // one screen height of drift every ~5 minutes
         vec2 uv = v_tex_coord;
         vec2 pts = uv * u_size;
 
@@ -152,15 +152,15 @@ let nebulaKnobs = [
         vec4 now = nebulaAt(uv, aspect, t, u_seed, u_zoom, u_band, u_base, u_dense, u_accent, u_hot, clipNow);
         // each nebula has its own star field, moved by its seed; they swap over as it changes
         vec2 ptsNow = pts + u_seed * 97.0;
-        float field = starField(ptsNow, 7.0, 0.3, u_time);
-        float bright = brightStar(ptsNow + vec2(u_time * 0.2, 0.0), 180.0, u_time);
+        float field = starField(ptsNow, 7.0, 0.3, u_now);
+        float bright = brightStar(ptsNow + vec2(u_now * 0.2, 0.0), 180.0, u_now);
         vec4 next = vec4(0.0);
         if (u_mix > 0.0) { // only while changing, so the rest of the time it costs no more than one nebula
             float clipNext = mix(1.2, -0.2, clamp((u_mix - 0.25) / 0.75, 0.0, 1.0));
             next = nebulaAt(uv, aspect, t, u_seed2, u_zoom2, u_band2, u_base2, u_dense2, u_accent2, u_hot2, clipNext);
             vec2 ptsNext = pts + u_seed2 * 97.0;
-            field = mix(field, starField(ptsNext, 7.0, 0.3, u_time), u_mix);
-            bright = mix(bright, brightStar(ptsNext + vec2(u_time * 0.2, 0.0), 180.0, u_time), u_mix);
+            field = mix(field, starField(ptsNext, 7.0, 0.3, u_now), u_mix);
+            bright = mix(bright, brightStar(ptsNext + vec2(u_now * 0.2, 0.0), 180.0, u_now), u_mix);
         }
         // screened, not added, or where the two overlap their light flares white
         vec4 neb = vec4(1.0 - (1.0 - now.rgb) * (1.0 - next.rgb), max(now.a, next.a));

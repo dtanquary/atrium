@@ -69,7 +69,7 @@ final class WeatherScene: SKScene {
     private let flashAmount = SKUniform(name: "u_flash", float: 0), flashPlace = SKUniform(name: "u_flashPos", vectorFloat3: .zero)
     /// Under a deck: its underside's colour, and how much the horizon takes it on instead of the clear sky's.
     private let deck = SKUniform(name: "u_deck", vectorFloat4: .zero)
-    /// Seconds, wrapping hourly: u_time grows with uptime, and at rain's speeds a float that large loses the streaks.
+    /// Seconds, wrapping hourly: at rain's speeds a float counting days loses the streaks (see `WallpaperTime`).
     private let clock = SKUniform(name: "u_clock", float: 0)
     private let precipitation = SKUniform(name: "u_precip", vectorFloat4: .zero)
     private let rainColour = SKUniform(name: "u_rainCol", vectorFloat3: .zero), snowColour = SKUniform(name: "u_snowCol", vectorFloat3: .zero)
@@ -214,7 +214,7 @@ final class WeatherScene: SKScene {
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]), skyBefore, skyAfter, skyBlend,
             cameraUniforms.lens, cameraUniforms.forward, cameraUniforms.right, sunDirection, sunDisc, moonPlace, moonLight,
             moonColour, starsUniform, SKUniform(name: "u_moonTex", texture: Self.moonTexture),
-            SKUniform(name: "u_noise", texture: CloudNoise.texture), cloudLayer, cloudDrift, cirrusShift, cloudSun, cloudAmbient, cirrus, cirrusSun, fog, deck, flashAmount, flashPlace, nightUniform,
+            SKUniform(name: "u_noise", texture: CloudNoise.texture), cloudLayer, cloudDrift, cirrusShift, cloudSun, cloudAmbient, cirrus, cirrusSun, fog, deck, flashAmount, flashPlace, nightUniform, WallpaperTime.now,
         ])
         fog.floatValue = conditions.fog
         let clouds = conditions.clouds
@@ -364,7 +364,7 @@ final class WeatherScene: SKScene {
 
         // Stars where the sky is dark enough, thinning toward the brighter horizon.
         if (u_stars > 0.0) {
-            float s = starField(pts, 9.0, 0.35, u_time) + 0.6 * starField(pts + 300.0, 5.0, 0.25, u_time);
+            float s = starField(pts, 9.0, 0.35, u_now) + 0.6 * starField(pts + 300.0, 5.0, 0.25, u_now);
             col += vec3(0.9, 0.93, 1.0) * s * u_stars * 0.6 * clamp(1.0 - dot(col, vec3(0.3, 0.5, 0.2)) * 3.0, 0.0, 1.0);
         }
         // The Sun: a limb-darkened disc and a soft photographic glow, hidden by cloud below.
@@ -398,15 +398,15 @@ final class WeatherScene: SKScene {
             vec2 P = rd.xy * tBase + u_drift;
             vec2 toSun = u_sun.xy / max(length(u_sun.xy), 0.0001);
             vec4 na1 = texture2D(u_noise, nuv(P * 0.045));
-            vec4 nb1 = texture2D(u_noise, nuv(P * 0.19 + na1.a * 0.3 + u_time * 0.00002));
+            vec4 nb1 = texture2D(u_noise, nuv(P * 0.19 + na1.a * 0.3 + u_now * 0.00002));
             float d = cloudShape(na1, nb1, u_cloud.x, u_cloud.w, lod);
             vec2 Pu = P + normalize(rd.xy) * 0.35 * tBase / 6.0;
             vec4 na2 = texture2D(u_noise, nuv(Pu * 0.045));
-            vec4 nb2 = texture2D(u_noise, nuv(Pu * 0.19 + na2.a * 0.3 + u_time * 0.00002));
+            vec4 nb2 = texture2D(u_noise, nuv(Pu * 0.19 + na2.a * 0.3 + u_now * 0.00002));
             float du = cloudShape(na2, nb2, u_cloud.x, u_cloud.w, lod);
             vec2 Ps = P + toSun * 0.5;
             vec4 na3 = texture2D(u_noise, nuv(Ps * 0.045));
-            vec4 nb3 = texture2D(u_noise, nuv(Ps * 0.19 + na3.a * 0.3 + u_time * 0.00002));
+            vec4 nb3 = texture2D(u_noise, nuv(Ps * 0.19 + na3.a * 0.3 + u_now * 0.00002));
             float ds = cloudShape(na3, nb3, u_cloud.x, u_cloud.w, lod);
             // A deck is opaque, or the Sun's glow behind it shows through; heaped cloud has soft, thin edges.
             float a = (1.0 - exp(-d * mix(6.0, 14.0, u_cloud.w) * u_cloud.z)) * smoothstep(0.0, 0.03, rd.z);

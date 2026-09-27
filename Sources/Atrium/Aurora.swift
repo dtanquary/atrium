@@ -131,7 +131,7 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
         float aspect = u_size.x / u_size.y;
         vec2 uv = v_tex_coord;
         vec2 p = uv * vec2(aspect, 1.0);
-        float t = u_time;
+        float t = u_now;
         // a level camera facing north, its eye level where the photo's is
         vec3 dir = vec3((uv.x - 0.5) * 2.0 * \(auroraLens), max(uv.y - \(auroraHorizon), 0.001) * 2.0 * \(auroraLens) / aspect, 1.0);
         float hor = length(dir.xz);
@@ -383,7 +383,7 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
         float far = (pow(32.0, aux.r) - 1.0) / 3.1;
         col = mix(col, u_glow, 1.0 - exp(-0.06 * far));
         // crystals on the near snow catching the light, twinkling slowly
-        float glint = starField(pts, 3.0, 0.15, u_time * 3.0) * aux.g * smoothstep(0.6, 0.1, aux.r);
+        float glint = starField(pts, 3.0, 0.15, u_now * 3.0) * aux.g * smoothstep(0.6, 0.1, aux.r);
         col += glint * vec3(0.85, 0.95, 1.0) * 0.3;
         col = grade(pow(col, vec3(1.0 / 2.2)), 0.3, u_hue, u_saturation, u_contrast, u_brightness);
         col += (hash21(pts * 2.0) - 0.5) / 128.0;
@@ -392,6 +392,7 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
     """, uniforms: [
         SKUniform(name: "u_aux", texture: AuroraGround.aux), SKUniform(name: "u_width", float: Float(size.width)),
         SKUniform(name: "u_frame", vectorFloat4: [Float((size.width - width) / 2), Float(top - height), Float(width), Float(height)]),
+        WallpaperTime.now,
     ] + grade)
     return ground
 }

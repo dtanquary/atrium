@@ -101,4 +101,4 @@ The research notes are in the session scratchpad (`notes/campfire-science.md` an
 - Logs slowly burning down over the evening.
 
 ## Checking it
-`SNAPSHOT_SCENE=Campfire SNAPSHOT_SECONDS=4 swift test`. The sim, flames, sparks, embers and firelight all run on scene time, so they advance with `SNAPSHOT_SECONDS`; the faint star tail twinkles on `u_time`. For cost, use `swift test -c release -Xswiftc -enable-testing`.
+`SNAPSHOT_SCENE=Campfire SNAPSHOT_SECONDS=4 swift test`. The sim, flames, sparks, embers and firelight all run on scene time, so they advance with `SNAPSHOT_SECONDS`; the faint star tail twinkles on `u_now`, which moves with it too. For cost, use `swift test -c release -Xswiftc -enable-testing`.

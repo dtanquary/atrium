@@ -37,7 +37,7 @@ Everything is maths per pixel, per frame:
 - palette, unless one is pinned
 
 ## Time, live data and appearance
-- **Drift:** `t = u_time × 0.005`, one screen-height every ~5 minutes. It started at 0.004; Dave asked for "a very small amount" faster. The gas also drifts at 0.5t relative to the warp, which keeps it churning. It never repeats in practice.
+- **Drift:** `t = u_now × 0.005`, one screen-height every ~5 minutes. It started at 0.004; Dave asked for "a very small amount" faster. The gas also drifts at 0.5t relative to the warp, which keeps it churning. It never repeats in practice.
 - **Changing to a new nebula** (`NebulaCycle`): one scene draws both. Its uniforms come in two sets, the nebula showing (`u_seed`, `u_zoom`, `u_band` and the palette) and the next (the same names ending in 2). An SKAction checks every 5 s whether the Settings interval has passed (so a new interval applies at once, and it pauses while the wallpaper is covered). When it has, it rolls the next nebula and runs `u_mix` from 0 to 1 over 90 s, then copies the next set into the showing one. The shader's per-nebula maths is a function, `nebulaAt`, called once normally and twice only while `u_mix` > 0, stars included, so both keep drifting through the change and the rest of the time it costs one nebula.
   - **Dissolve and condense**: the old nebula dissolves from its thin outer gas and fine filaments into its densest knots over the first three quarters, while the new one condenses out of its densest knots and spreads along its filaments over the last three, so halfway the densest quarter or so of each is showing. Each clips a smooth "thickness" (mostly the broad warp field, measured over the visible gas of several rolls at 0.5–0.85 raw and stretched to 0–1), not the gas itself, which would break into specks; that's the lesson from Weather's forming clouds, where clipping raw alpha made Swiss cheese. The clip sweeps linearly from −0.2 (all kept) to 1.2 (all gone). The two are screened together (1 − (1−a)(1−b)); added, their overlap flared white. Stars crossfade.
   - Before 2026-09-25 each nebula was its own scene, and the next was presented with `SKTransition.crossFade(withDuration: 90)`: a double exposure for the 90 s. Dave compared the two live with a Settings switch and chose dissolve and condense ("looks good to me, i like it"), so the switch and the crossfade were removed; they're in commit 7dafffe.
@@ -71,7 +71,7 @@ Palettes (`nebulaPalettes`: background, main gas, secondary gas, hot core), each
 | Oxygen | NGC 3242 (Ghost of Jupiter) | OIII-rich planetary: oxygen's true green-cyan and hydrogen-beta blue, the colour bright nebulae look through a telescope |
 
 ## Tuning constants
-- Drift `0.005` (`float t = u_time * 0.005`).
+- Drift `0.005` (`float t = u_now * 0.005`).
 - Cycle every `8 * 60` s, dissolve 90 s.
 - Star cells: 7 pt at 30% density for the field, 180 pt at 18% for bright stars.
 - Shimmer: amplitude 0.07, rate `0.6 + 5h`.
@@ -80,7 +80,7 @@ Palettes (`nebulaPalettes`: background, main gas, secondary gas, hot core), each
 CPU 0.45 ms and GPU about 1.6 ms per frame (release, 2x; the dissolve's thickness adds about 0.07 ms over the old 1.52). The GPU cost is mostly the three fbm calls (5 octaves each) plus two noise octaves for dust. During the 90 s change both nebulas are drawn, about 3.1 ms, as the old two-scene crossfade was. That's acceptable once every 8 minutes. The Settings grade is a handful of arithmetic per pixel and doesn't show in the measurement.
 
 ## Gotchas and shortcuts
-- `u_time` doesn't advance in the render test, and every roll is random. To compare palettes, pin one with `SNAPSHOT_DEFAULTS="nebula.palette=Hubble"`. To see another moment, temporarily add an offset to `u_time`.
+- Every roll is random. To compare palettes, pin one with `SNAPSHOT_DEFAULTS="nebula.palette=Hubble"`. To see another moment, raise `SNAPSHOT_SECONDS`: the drift runs on `u_now`, which moves with it.
 - Helper functions can't read uniforms, so `brightStar` takes `t` as a parameter.
 - The Planetary palette's dense and accent slots are swapped on purpose. The accent covers most of the area (`w.x` is often high), so putting red in dense and teal in accent makes it read teal with a red rim, like the Helix. The first attempt came out salmon.
 - Colours are mixed in RGB and then soft-clipped. Emission's red and blue together can drift slightly pink; that's real (hydrogen-alpha plus hydrogen-beta) but has been kept restrained.
@@ -98,7 +98,7 @@ CPU 0.45 ms and GPU about 1.6 ms per frame (release, 2x; the dissolve's thicknes
 - 2026-09-26, after every Settings page got a screenshot behind its top: "I am not sure I want this so maybe just try it on one item first" about live previews. Nebula's page was the trial: its own copy of the scene runs there (`LivePreview` in Settings.swift), so the Look sliders show on the page as they move. He liked it, "yeah the live preview is awesome, add it to all of them", so every page has one now.
 
 ## Ideas / next steps
-- More Settings: drift speed (it would need an integrated phase like Flowing Gradient, instead of `u_time`) and shimmer strength.
+- More Settings: drift speed (it would need an integrated phase like Flowing Gradient, instead of `u_now`) and shimmer strength.
 - Let the band slowly rotate or move so the composition evolves within one nebula.
 - Occasional events: a brightening star, or a faint comet streak.
 
@@ -108,4 +108,4 @@ SNAPSHOT_SCENE=Nebula swift test                                        # a rand
 SNAPSHOT_DEFAULTS="nebula.palette=Planetary" SNAPSHOT_SCENE=Nebula swift test
 SNAPSHOT_DEFAULTS="nebula.palette=Hubble,nebula.contrast=1.5,nebula.hue=120" SNAPSHOT_SCENE=Nebula swift test
 ```
-`SNAPSHOT_SECONDS` won't move the gas (the shader uses `u_time`). To preview drift, temporarily change `float t = u_time * 0.005;` to add an offset from an environment variable, and remove it after. To test cycling fast, temporarily shorten the `8 * 60` wait and the 90 s dissolve, then run the app binary directly and check that it survives several handovers.
+`SNAPSHOT_SECONDS` moves the gas (the shader runs on `u_now`), so a larger value previews the drift. To test cycling fast, temporarily shorten the `8 * 60` wait and the 90 s dissolve, then run the app binary directly and check that it survives several handovers.

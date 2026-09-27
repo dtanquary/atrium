@@ -37,7 +37,7 @@ A research agent measured all three and read up on real fireflies. Its notes are
    - The albedo is lit by a dim blue skylight, `(0.03, 0.036, 0.042)`, with a 15% Purkinje shift toward blue-grey.
    - **Fog** is clear close by and thickens with the square of the log distance: `1 − exp(−fog·(0.1 + 2.2·far²)·wisps·low)`.
      - `low` thins it up the trees (down 85% by 70% of their height), so mist pools at their foot while the crowns stay a dark silhouette.
-     - `wisps` is warped noise drifting slowly across on `u_time`.
+     - `wisps` is warped noise drifting slowly across on `u_now`.
      - The fog colour is `(0.04, 0.05, 0.07)` in linear light.
    - **Wind:** the photo is sampled a little to the side, only on the open field (the aux map's green; never the trees), by `wind·(1 − far)²`: most up close, nothing in the distance.
      - Broad gusts (`noise`, drifting across at 0.06 photo widths a second, about 1.3 m/s at 20 m) set how far the grass leans.
@@ -108,7 +108,7 @@ CPU 0.54 ms and GPU 0.52 ms per frame (release build, 2x, 2026-09-26).
   - Speed is a knob that scales the scene's clock (0.17.1).
 - **2026-09-26:** "Fireflies is near perfect now, we just need to find a way to have a super subtle sway animation for the grass as if there is a very slight wind." The field sways in slow gusts, with a Wind setting (0.18.2).
   - The standard is 0.5: at 0.3 the typical lean was half a point, which read as still.
-  - The sway can't be checked in the render test, because `u_time` doesn't advance between its runs. It was measured by pinning the time at two values in a scratch copy: the near field changes, and the trees and far field don't.
+  - The sway runs on `u_now`, which moves with `SNAPSHOT_SECONDS`, so two renders a few seconds apart show it. It was first measured by pinning the time at two values in a scratch copy: the near field changes, and the trees and far field don't.
 - **Photo choice:** a research agent shortlisted ten licensed meadow photos and baked four: Field at dusk, Herbst (Thomas Heins, CC BY 4.0), Indian Hollow and Pewley Downs. Field at dusk won for its real dusk light, continuous treeline and grass texture up close. Herbst, a flatter and broader meadow with mist already at the trees' foot, is the runner-up. Its bake is in the scratchpad, `meadow/ship/`.
   - Also tried: a real fog photo, "Desenka meadow 2016 G3" by George Chernilevsky (public domain), baked with its mist kept in. In the scene, at blue-hour brightness, the mist all but vanished. Its trees are near and tall at 50 mm, which leaves the meadow a thin dark strip, the opposite of broad. Shader fog over the wider field reads better.
 
@@ -119,4 +119,4 @@ CPU 0.54 ms and GPU 0.52 ms per frame (release build, 2x, 2026-09-26).
 - Crop the ground slices to their rows.
 
 ## Checking it
-`SNAPSHOT_SCENE="Fireflies" SNAPSHOT_SECONDS=8 SNAPSHOT_DIR=/tmp/ff swift test`. Motion runs through `update(_:)`, so `SNAPSHOT_SECONDS` advances flights and flashes. `u_time` follows the wall clock, so fog wisps don't move forward with it. `SNAPSHOT_DEFAULTS="fireflies.fog=1"` shows thick fog.
+`SNAPSHOT_SCENE="Fireflies" SNAPSHOT_SECONDS=8 SNAPSHOT_DIR=/tmp/ff swift test`. Motion runs through `update(_:)`, so `SNAPSHOT_SECONDS` advances flights and flashes. The fog wisps and the grass's sway run on `u_now`, which moves with it too. The rustle's time wraps hourly: each patch keeps its own rhythm, so the jump can't be seen. `SNAPSHOT_DEFAULTS="fireflies.fog=1"` shows thick fog.

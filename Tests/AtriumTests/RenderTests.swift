@@ -48,13 +48,15 @@ import UniformTypeIdentifiers
         // SKRenderer's first update runs on the system clock, so frame times must start after it or every later
         // update counts as the past and update(_:) barely runs.
         let frames = Int(seconds * 30), clock = ProcessInfo.processInfo.systemUptime + 1
+        WallpaperTime.restart() // shaders' u_now counts from each scene's first frame, as it would on the desktop
         let movie = Int((Double(env["SNAPSHOT_MOVIE"] ?? "") ?? 0) * 30)
         let writes = DispatchGroup()
         var cpu = 0.0, gpu = 0.0
         for frame in 0...frames + movie {
-            // Movie frames run in real time, so shaders (whose u_time is the wall clock) keep pace with the scene.
+            // Movie frames run in real time, so anything on the wall clock (the time of day) keeps pace with the scene.
             while frame > frames, ProcessInfo.processInfo.systemUptime < clock + Double(frame) / 30 { Thread.sleep(forTimeInterval: 0.002) }
             let start = CFAbsoluteTimeGetCurrent()
+            WallpaperTime.set(clock + Double(frame) / 30)
             renderer.update(atTime: clock + Double(frame) / 30)
             let buffer = try #require(queue.makeCommandBuffer())
             renderer.render(withViewport: CGRect(x: 0, y: 0, width: w, height: h), commandBuffer: buffer, renderPassDescriptor: pass)

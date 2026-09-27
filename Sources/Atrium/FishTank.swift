@@ -282,7 +282,7 @@ final class FishTank: SKScene {
             void main() {
                 vec2 uv = v_tex_coord;
                 vec2 pts = uv * u_size;
-                float t = u_time;
+                float t = u_now;
                 vec3 c = mix(u_low, u_high, smoothstep(0.05, 0.9, uv.y));
                 float lamp = exp(-pow((uv.x - 0.5) / 0.6, 2.0)); // the lamp's pool of light, brightest mid-tank
                 c *= 0.75 + 0.35 * lamp;
@@ -313,7 +313,7 @@ final class FishTank: SKScene {
             """, uniforms: [
                 SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]),
                 SKUniform(name: "u_high", vectorFloat3: light.high), SKUniform(name: "u_low", vectorFloat3: light.low),
-                SKUniform(name: "u_shimmer", vectorFloat3: light.shimmer),
+                SKUniform(name: "u_shimmer", vectorFloat3: light.shimmer), WallpaperTime.now,
             ])
         addChild(water)
     }
@@ -358,7 +358,7 @@ final class FishTank: SKScene {
                 vec4 h = hash42(floor(pts * 2.0));
                 s *= 0.88 + 0.14 * noise(pts * vec2(0.18, 0.5)) + 0.1 * (h.x - 0.5); // grain and ripples in the sand
                 vec2 p = vec2(pts.x, pts.y * 2.6) / mix(140.0, 60.0, back);
-                float light = caustic(p, u_time * 0.7) * 0.75 + caustic(p * 1.7 + 3.7, u_time * 0.95) * 0.3;
+                float light = caustic(p, u_now * 0.7) * 0.75 + caustic(p * 1.7 + 3.7, u_now * 0.95) * 0.3;
                 s *= 1.0 + light * 1.1 * (1.0 - 0.6 * back);
                 s = mix(s, u_low, smoothstep(0.75, 1.0, back) * 0.5); // melting into the back panel
                 gl_FragColor = vec4(s, 1.0);
@@ -366,7 +366,7 @@ final class FishTank: SKScene {
             """, uniforms: [
                 SKUniform(name: "u_size", vectorFloat2: [Float(floorSize.width), Float(floorSize.height)]),
                 SKUniform(name: "u_sandNear", vectorFloat3: light.sandNear), SKUniform(name: "u_sandFar", vectorFloat3: light.sandFar),
-                SKUniform(name: "u_low", vectorFloat3: light.low),
+                SKUniform(name: "u_low", vectorFloat3: light.low), WallpaperTime.now,
             ])
         addChild(sand)
     }
@@ -393,7 +393,7 @@ final class FishTank: SKScene {
                 float high = clamp(pts.y / u_height, 0.0, 1.0);
                 float shade = a_shadow.w * (1.0 - smoothstep(a_shadow.y - a_shadow.z, a_shadow.y + a_shadow.z, abs(pts.x - a_shadow.x)));
                 // two crossing, wandering waves: a cheap stand-in for caustics, plenty on small moving shapes
-                float t = u_time;
+                float t = u_now;
                 float ripple = pow(abs(sin(pts.x * 0.045 + 1.7 * sin(pts.y * 0.03 + t * 0.5) + t * 0.6)
                                      * sin(pts.y * 0.05 - 1.3 * sin(pts.x * 0.035 - t * 0.4) + t * 0.45)), 3.0)
                              * (0.3 + 0.7 * smoothstep(0.35, 1.0, v_tex_coord.y)) * (1.0 - shade);
@@ -408,6 +408,7 @@ final class FishTank: SKScene {
             """, uniforms: [
                 SKUniform(name: "u_grade", vectorFloat3: light.grade), SKUniform(name: "u_haze", vectorFloat3: light.haze),
                 SKUniform(name: "u_fluoro", float: light.fluoro), SKUniform(name: "u_height", float: Float(size.height)),
+                WallpaperTime.now,
             ])
         shader.attributes = [SKAttribute(name: "a_fog", type: .float), SKAttribute(name: "a_glow", type: .float),
                              SKAttribute(name: "a_frame", type: .vectorFloat4), SKAttribute(name: "a_fish", type: .vectorFloat4),

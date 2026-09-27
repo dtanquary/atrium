@@ -61,7 +61,27 @@ struct Wallpaper {
               make: gameOfLife),
 ]
 
-/// A scene that is one full-screen GPU shader. Besides SpriteKit's `u_time` and `v_tex_coord`, the shader
+/// Seconds for shaders to animate by, as `u_now`, in place of SpriteKit's `u_time`. `u_time` counts from app launch
+/// and nothing resets it, so as a Float it coarsens: after a week of running it moves 16 times a second, and sines
+/// of it turn to noise within a month. This counts from `restart()`, which the app calls when it rebuilds a
+/// long-running wallpaper (`refreshIfStale` in main.swift), so it stays small. Every `WallpaperView` sets it as it
+/// draws; the render tests leave it at 0, as `u_time` was there.
+@MainActor enum WallpaperTime {
+    static let now = SKUniform(name: "u_now", float: 0)
+    private static var start: TimeInterval?, latest: TimeInterval = 0
+    /// Seconds counted since the last restart, as of the last frame drawn.
+    static var elapsed: TimeInterval { latest - (start ?? latest) }
+
+    static func set(_ time: TimeInterval) {
+        if start == nil { start = time }
+        latest = time
+        now.floatValue = Float(elapsed)
+    }
+
+    static func restart() { start = nil }
+}
+
+/// A scene that is one full-screen GPU shader. Besides `u_now` (see `WallpaperTime`) and `v_tex_coord`, the shader
 /// gets `u_size`, the scene size in points, for aspect-correct math, and a float for each knob, named `u_` plus
 /// the last part of its key, that follows Settings live.
 /// With a `speed` knob, the shader also gets `u_clock`: seconds that run that many times as fast as real ones, summed
@@ -73,7 +93,8 @@ struct Wallpaper {
     let sprite = SKSpriteNode(color: .black, size: size)
     sprite.anchorPoint = .zero
     let sizeUniform = SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)])
-    sprite.shader = SKShader(source: source, uniforms: [sizeUniform] + uniforms + scene.knobs.map(\.uniform) + [scene.clock?.uniform].compactMap { $0 })
+    sprite.shader = SKShader(source: source, uniforms: [sizeUniform] + uniforms + scene.knobs.map(\.uniform) + [scene.clock?.uniform].compactMap { $0 }
+                             + (source.contains("u_now") ? [WallpaperTime.now] : []))
     scene.addChild(sprite)
     NotificationCenter.default.addObserver(scene, selector: #selector(ShaderScene.applyKnobs),
                                            name: UserDefaults.didChangeNotification, object: nil)

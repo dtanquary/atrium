@@ -127,6 +127,7 @@ final class Murmuration: SKScene {
             SKUniform(name: "u_birds", texture: birds.reflection),
             SKUniform(name: "u_rough", float: ground.rough),
             SKUniform(name: "u_noise", texture: CloudNoise.texture), SKUniform(name: "u_waves", vectorFloat3: ground.waves),
+            WallpaperTime.now,
         ])
         addChild(land)
     }
@@ -322,7 +323,7 @@ final class Murmuration: SKScene {
         float dip = max(u_cam.z - uv.y, 0.0) * 2.0 * u_cam.y;
         float dist = 2.0 / max(dip, 0.004);
         vec2 w = vec2((uv.x * 2.0 - 1.0) * u_cam.x * dist, dist);
-        float t = u_time * u_waves.y;
+        float t = u_now * u_waves.y;
         vec4 n1 = texture2D(u_noise, nuv(w * vec2(0.07, 0.11) + vec2(t * 0.004, t * 0.013)));
         vec4 n2 = texture2D(u_noise, nuv(w * vec2(0.13, 0.19) + vec2(-t * 0.009, t * 0.007)));
         vec2 slope = vec2(n1.r - n2.b, n1.b + n2.r - 1.0) * smoothstep(400.0, 60.0, dist);

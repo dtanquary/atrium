@@ -72,7 +72,7 @@ For repeatable snapshots, `MURMURATION_SEED=3` seeds the flock, and `MURMURATION
 - `ponytail:` 1,500 agents stand for about 60,000 birds, each drawn as a sprite of ten. More agents would give finer folds but cost CPU linearly.
 - The fixed lights bake the sky once; Whole evening re-bakes it every 20 s on a background task (about 4 ms of work across cores each time).
 - The snapshot test renders on the main thread without yielding, so the background re-bakes never land in it: a snapshot shows the light of the evening's start point. To check the fades, temporarily bake synchronously.
-- The ripples use `u_time`, which follows the wall clock, so snapshots can't show them moving. To measure the motion, temporarily feed the shader a clock from an environment variable and diff two renders (2 s apart: the pond changes by about 2.7 levels of 255 on average, the pier's sea by about 1.8). The first version, at 1.3 and 0.3, drifted too slowly to see: "i am not seeing any ripples in the water".
+- The ripples run on `u_now`, which moves with `SNAPSHOT_SECONDS`, so two renders a couple of seconds apart show them moving (2 s apart: the pond changes by about 2.7 levels of 255 on average, the pier's sea by about 1.8). The first version, at 1.3 and 0.3, drifted too slowly to see: "i am not seeing any ripples in the water".
 - The flock is always drawn behind the ground, which is right for the pier (the flock is further out) and the far shore.
 - A splat at a negative screen x must use `floor`, not `Int()`, or its weights go negative and `UInt8` traps.
 - The pier photo is CC BY 4.0: its credit is in the code, README and Settings → About.

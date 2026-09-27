@@ -82,7 +82,7 @@ final class Galaxy: SKScene {
             SKUniform(name: "u_arms", vectorFloat3: [kind.ragged, kind.dust, kind.minor]),
             SKUniform(name: "u_core", vectorFloat3: kind.colours[0]), SKUniform(name: "u_disc", vectorFloat3: kind.colours[1]),
             SKUniform(name: "u_young", vectorFloat3: kind.colours[2]), SKUniform(name: "u_knots", vectorFloat3: kind.colours[3]),
-            phase,
+            phase, WallpaperTime.now,
         ] + companionUniforms(kind.name) + Array(knobUniforms.values))
         addChild(sprite)
 
@@ -156,7 +156,7 @@ final class Galaxy: SKScene {
         float mag = pow(h.w, 6.0) * min(cell / 17.0, 1.0);
         float r = 0.4 + 1.1 * mag;
         float glow = exp(-dot(d, d) / (r * r)) + 0.3 * mag * exp(-length(d) / (0.06 * cell));
-        float twinkle = 0.88 + 0.12 * sin(t * (0.6 + 2.0 * k.x) + k.y * 40.0);
+        float twinkle = 0.88 + 0.12 * sin(mod(t, 3600.0) * (0.6 + 2.0 * k.x) + k.y * 40.0); // hourly, as in starField
         vec3 tint = mix(mix(vec3(0.72, 0.82, 1.0), vec3(1.0, 0.97, 0.94), smoothstep(0.0, 0.3, k.z)),
                         vec3(1.0, 0.72, 0.5), smoothstep(0.55, 1.0, k.z));
         return tint * glow * (0.12 + 2.0 * mag) * twinkle;
@@ -246,8 +246,8 @@ final class Galaxy: SKScene {
         // loose clusters and thinner patches, and far-off galaxies.
         float crowd = 0.25 + 1.5 * smoothstep(0.2, 0.8, noise(pts / 160.0));
         vec3 col = vec3(0.031, 0.035, 0.043) // a Hubble frame's sky sits at 4-27/255, not black
-                 + starLayer(pts, 5.0, mat2(1.0, 0.0, 0.0, 1.0), 0.16 * crowd, u_time)
-                 + starLayer(pts, 17.0, mat2(0.76, 0.64, -0.64, 0.76), 0.3 * crowd, u_time)
+                 + starLayer(pts, 5.0, mat2(1.0, 0.0, 0.0, 1.0), 0.16 * crowd, u_now)
+                 + starLayer(pts, 17.0, mat2(0.76, 0.64, -0.64, 0.76), 0.3 * crowd, u_now)
                  + vec3(1.0, 0.9, 0.8) * farGalaxy(pts, 110.0);
 
         // Screen to galaxy: e runs along the major axis, and undoing the tilt gives d in the disc's plane (mirrored
@@ -425,7 +425,7 @@ final class Galaxy: SKScene {
         // fixed to the screen, like a sensor's, while the galaxy turns beneath it.
         vec4 grain = hash42(floor(v_tex_coord * u_size * 2.0));
         col += (grain.x + grain.y - 1.0) * (0.008 + 0.02 * sqrt(stretched));
-        col += vec3(1.0, 0.92, 0.85) * brightStar(pts, 180.0, u_time); // foreground stars, in our own galaxy
+        col += vec3(1.0, 0.92, 0.85) * brightStar(pts, 180.0, u_now); // foreground stars, in our own galaxy
         col = grade(col, 0.3, u_hue, u_saturation, u_contrast, 1.0);
         col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0;
         gl_FragColor = vec4(col, 1.0);

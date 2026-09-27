@@ -4,19 +4,26 @@ import ServiceManagement
 import SpriteKit
 import SwiftUI
 
-/// Pauses rendering while its window is fully covered, so a hidden wallpaper costs nothing, or while frozen.
-final class WallpaperView: SKView {
+/// Pauses rendering while its window is fully covered, so a hidden wallpaper costs nothing, or while frozen. Keeps
+/// `WallpaperTime` running as it draws.
+final class WallpaperView: SKView, SKViewDelegate {
     /// Holds the current frame still, e.g. in Low Power Mode.
     var frozen = false { didSet { updatePaused() } }
 
     override func viewDidMoveToWindow() {
         guard let window else { return }
+        delegate = self
         NotificationCenter.default.addObserver(self, selector: #selector(updatePaused),
                                                name: NSWindow.didChangeOcclusionStateNotification, object: window)
     }
 
     @objc func updatePaused() {
         isPaused = frozen || window?.occlusionState.contains(.visible) != true
+    }
+
+    nonisolated func view(_ view: SKView, shouldRenderAtTime time: TimeInterval) -> Bool {
+        MainActor.assumeIsolated { WallpaperTime.set(time) }
+        return true
     }
 }
 
@@ -90,6 +97,18 @@ var current = UserDefaults.standard.string(forKey: "scene") ?? scenes[0].name
         let view = window.contentView as? SKView
         view?.presentScene(currentScene(size: window.frame.size), transition: .crossFade(withDuration: 0.8))
     }
+}
+
+/// Builds the wallpapers afresh once `WallpaperTime` has run for `hours`, restarting it along with every scene's own
+/// clock, so no Float a shader animates by grows large enough to coarsen. Without `fade` it swaps them straight, for
+/// when the displays are asleep and nobody's looking.
+// ponytail: with a fade, the outgoing scene's u_now jumps to 0 as the crossfade starts; it's lost in the fade, and
+// only displays that never sleep see it, every 3 days
+@MainActor func refreshIfStale(after hours: Double, fade: Bool) {
+    guard WallpaperTime.elapsed > hours * 3600 else { return }
+    WallpaperTime.restart()
+    if fade { return switchScene() }
+    for window in windows { (window.contentView as? SKView)?.presentScene(currentScene(size: window.frame.size)) }
 }
 
 /// The menu bar icon: pick a wallpaper, open Settings, toggle Open at Login, quit.
@@ -185,6 +204,14 @@ if let source = IOPSNotificationCreateRunLoopSource({ _ in
     MainActor.assumeIsolated { applyPowerState(to: windows.compactMap { $0.contentView as? WallpaperView }) }
 }, nil)?.takeRetainedValue() {
     CFRunLoopAddSource(CFRunLoopGetMain(), source, .defaultMode)
+}
+// Rebuild a long-running wallpaper so the clocks its shaders animate by stay small: quietly once the displays sleep,
+// or with a crossfade for displays that never do.
+NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { _ in
+    MainActor.assumeIsolated { refreshIfStale(after: 12, fade: false) }
+}
+Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { _ in
+    MainActor.assumeIsolated { refreshIfStale(after: 72, fade: true) }
 }
 // Rebuild the scene in the other look when macOS switches between Light and Dark Mode.
 // ponytail: rebuilds every scene, even ones with a single look; it only happens a couple of times a day

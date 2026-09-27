@@ -29,7 +29,7 @@ final class GameOfLife: SKScene {
         let board = SKSpriteNode(texture: texture, size: CGSize(width: CGFloat(cols) * cellSize, height: CGFloat(rows) * cellSize))
         board.position = CGPoint(x: size.width / 2, y: size.height / 2)
         board.shader = SKShader(source: Self.cellShader, uniforms: [
-            SKUniform(name: "u_grid", vectorFloat2: [Float(cols), Float(rows)]),
+            SKUniform(name: "u_grid", vectorFloat2: [Float(cols), Float(rows)]), WallpaperTime.now,
         ])
         addChild(board)
         upload()
@@ -116,7 +116,7 @@ final class GameOfLife: SKScene {
             float halo = smoothstep(0.5, -0.1, d) * 0.18;
 
             vec2 uv = v_tex_coord;
-            vec3 hue = 0.5 + 0.5 * cos(6.2831 * (vec3(0.0, 0.33, 0.67) + uv.x * 0.45 + uv.y * 0.25 + u_time * 0.01));
+            vec3 hue = 0.5 + 0.5 * cos(6.2831 * (vec3(0.0, 0.33, 0.67) + uv.x * 0.45 + uv.y * 0.25 + u_now * 0.01));
             vec3 pastel = mix(hue, vec3(1.0), 0.35);
 
             vec3 bg = vec3(0.035, 0.04, 0.075) * (1.0 - 0.35 * length(uv - 0.5));
