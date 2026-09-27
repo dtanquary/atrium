@@ -138,11 +138,11 @@ Reaction–diffusion, the chemistry Alan Turing proposed for how animals get the
 | Fingerprint stripes in Dark Mode | Coral, glazed like ceramic, in Light Mode |
 
 ### The Sun Today
-The real Sun as NASA's Solar Dynamics Observatory saw it within the last hour or so: today's flares, sunspots and prominences, in eight wavelengths, each in its real SDO colour, from the gold coronal loops of 171 Å to visible light. It shimmers gently at the edge, or plays a time-lapse of the last three hours.
+The real Sun as NASA's Solar Dynamics Observatory saw it within the last hour or so: today's flares, sunspots and prominences, in eight wavelengths, each in its real SDO colour, from the gold coronal loops of 171 Å to visible light. Plasma pulses out along its loops, its corona streams away, and every few minutes one of today's active regions flares or a prominence erupts off the edge.
 
-| ![The Sun Today, 193 Bronze](docs/images/sun-193.jpg) | ![The Sun Today, 304 Red close-up](docs/images/sun-304-close-up.jpg) |
+| ![The Sun Today, 193 Bronze](docs/images/sun-193.jpg) | ![The Sun Today, 304 Red, with a prominence erupting](docs/images/sun-304-eruption.jpg) |
 |---|---|
-| 193 Å, the million-degree corona, on 27 September 2026 | 304 Å, the chromosphere, in the close-up framing |
+| 193 Å, the million-degree corona, on 27 September 2026 | 304 Å, the chromosphere, as a prominence erupts |
 
 ### Wind
 The live wind around you as thin streaks streaming across the map, in the spirit of the hint.fm wind map and earth.nullschool: a grid of Open-Meteo's hourly forecast, blended from hour to hour, with streaks that speed up, brighten and curl with the real wind, as brush strokes like hint.fm's or comets like nullschool's. Zoom from your town to half the continent, over Natural Earth's coastlines, its shaded relief, or nothing, in six jewel-toned palettes. Light Mode draws the same streaks as ink on paper.
