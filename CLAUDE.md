@@ -7,7 +7,7 @@ Atrium is a menu bar app that plays animated wallpapers on macOS 27. Swift packa
 - Each wallpaper is an `SKScene` shown in a `WallpaperView` (an `SKView`). Its frame rate comes from Settings → Power (`Power` in Settings.swift, applied by `applyPowerState` in main.swift): 30 fps on mains power, 15 fps on battery and frozen on its current frame in Low Power Mode unless changed, with 60 fps offered. The menu's Full Speed on Battery is a one-click version for demos. Scenes step by elapsed time, so they must look the same at 15, 30 and 60 fps. The view pauses whenever its window is fully covered.
 - Switching scenes crossfades inside the existing windows. Display changes only touch the displays that actually changed, so the system wallpaper never flashes through.
 - The menu bar icon (✨📺) picks the scene, saved in `UserDefaults` under `scene`. It also opens Settings, toggles Open at Login (`SMAppService`) and Full Speed on Battery, and quits the app.
-- **Settings** (`Settings.swift`) is a floating window laid out like System Settings: a sidebar of wallpapers, and a page for each one. A wallpaper's settings are plain data on its `Wallpaper` entry in Scenes.swift:
+- **Settings** (`Settings.swift`) is a floating window laid out like System Settings: a sidebar of wallpapers, and a page for each one. Each page has the wallpaper's screenshot (`Resources/preview-<name>.jpg`, see `docs/README.md`) behind its top, under a Liquid Glass header. A wallpaper's settings are plain data on its `Wallpaper` entry in Scenes.swift:
   - `knobs`: sliders, switches with `format: .toggle`, or menus with `format: .choice([names])` (stored as the index), or multipliers with `format: .times`, grouped by `section`. A knob can depend on a switch with `shownWhen`.
   - `palettes`: a `PaletteChoice` of named swatches. The pick is stored by name, and an empty value means Random.
   - `status`: a UserDefaults key the scene keeps a line of text in (Weather's last live report), shown under a knob while that knob is 0.
@@ -33,6 +33,7 @@ swift test                    # renders every scene to $TMPDIR/atrium-snapshots 
 SNAPSHOT_SCENE="Aurora" SNAPSHOT_DIR=/some/dir SNAPSHOT_SECONDS=20 swift test
 SNAPSHOT_DEFAULTS="gradient.ribbons=1,gradient.previewTime=1" swift test   # snapshot with Settings values
 SNAPSHOT_SCENE="Fish Tank" SNAPSHOT_MOVIE=6 swift test   # then 6 s in real time, saved as 15 fps frames (Fish Tank-000.png…)
+SETTINGS_SHOT="Nebula" swift test --filter settingsWindow   # opens Settings on that page for a moment and captures the window
 ffmpeg -framerate 15 -i 'Fish Tank-%03d.png' -vf "scale=800:-1:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle" docs/images/fish-tank.gif
 ```
 

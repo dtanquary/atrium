@@ -26,7 +26,7 @@ One file per wallpaper, recording what the code can't: how each scene works, why
 
 ## Screenshots
 
-The README's screenshots live in `docs/images` as 1600-pixel JPEGs of the wallpaper alone. The first seven were captured live from the wallpaper window. Galaxy, Fish Tank, Nebula Oxygen and Weather (2026-09-25) were rendered offscreen by the snapshot test at 2x Retina, which is the same pixels without switching the desktop or touching settings. For example: `SNAPSHOT_DEFAULTS="galaxy.kind=Whirlpool" SNAPSHOT_SCENE=Galaxy swift test -c release -Xswiftc -enable-testing`, with `SNAPSHOT_APPEARANCE=light|dark` for the two looks. Each was picked from three or four random rolls. Add or refresh one whenever a wallpaper's look changes.
+The README's screenshots live in `docs/images` as 1600-pixel JPEGs of the wallpaper alone. The first seven were captured live from the wallpaper window. Galaxy, Fish Tank, Nebula Oxygen and Weather (2026-09-25) were rendered offscreen by the snapshot test at 2x Retina, which is the same pixels without switching the desktop or touching settings. For example: `SNAPSHOT_DEFAULTS="galaxy.kind=Whirlpool" SNAPSHOT_SCENE=Galaxy swift test -c release -Xswiftc -enable-testing`, with `SNAPSHOT_APPEARANCE=light|dark` for the two looks. Each was picked from three or four random rolls. Add or refresh one whenever a wallpaper's look changes. Settings shows one of them behind the top of each wallpaper's page: a 1200-pixel copy in `Sources/Atrium/Resources/preview-<name>.jpg`, plus `preview-<name>-light.jpg` for a Light Mode look. Refresh it with the screenshot: `sips -Z 1200 -s formatOptions 70 docs/images/nebula-hubble.jpg --out Sources/Atrium/Resources/preview-nebula.jpg`.
 
 ## Dave's direction so far
 

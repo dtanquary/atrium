@@ -89,6 +89,17 @@ struct IconTile: View {
     }
 }
 
+extension View {
+    /// Liquid Glass on macOS 26 and later, frosted material before it.
+    @ViewBuilder func glass(cornerRadius: CGFloat) -> some View {
+        if #available(macOS 26, *) {
+            glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
+        } else {
+            background(.regularMaterial, in: .rect(cornerRadius: cornerRadius))
+        }
+    }
+}
+
 /// How fast wallpapers run on mains power, on battery and in Low Power Mode. `applyPowerState` reads the choices.
 enum Power {
     /// Frames per second for each menu choice; 0 freezes the wallpaper on its current frame.
@@ -188,10 +199,12 @@ struct AboutPage: View {
     }
 }
 
-/// One wallpaper's settings: a header to put it on the desktop, its palettes, then its knobs by section.
+/// One wallpaper's settings: its screenshot behind the top of the page, a glass header to put it on the desktop,
+/// its palettes, then its knobs by section.
 struct WallpaperPage: View {
     let wallpaper: Wallpaper
     @AppStorage("scene") private var current = scenes[0].name
+    @Environment(\.colorScheme) private var scheme
 
     private var sections: [String] {
         wallpaper.knobs.map(\.section).reduce(into: []) { if !$0.contains($1) && $1 != "Colors" { $0.append($1) } }
@@ -199,21 +212,24 @@ struct WallpaperPage: View {
 
     var body: some View {
         Form {
-            Section {
-                HStack(spacing: 14) {
-                    IconTile(icon: wallpaper.icon, tint: wallpaper.tint, size: 48)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(wallpaper.name).font(.title2.bold())
-                        Text(wallpaper.blurb).foregroundStyle(.secondary)
+            Section {} footer: { // a footer has no card behind it, and unlike a header leaves the next section's title alone
+                HStack(spacing: 12) {
+                    IconTile(icon: wallpaper.icon, tint: wallpaper.tint, size: 40)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(wallpaper.name).font(.title3.bold()).foregroundStyle(.primary)
+                        Text(wallpaper.blurb).font(.callout).foregroundStyle(.secondary).lineLimit(2)
                     }
                     Spacer()
                     if wallpaper.name == current {
-                        Label("On Desktop", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                        Label("On Desktop", systemImage: "checkmark.circle.fill").foregroundStyle(.green).padding(.trailing, 6)
                     } else {
                         Button("Show on Desktop") { show(wallpaper.name) }.buttonStyle(.borderedProminent)
                     }
                 }
-                .padding(.vertical, 6)
+                .font(.body)
+                .padding(10)
+                .glass(cornerRadius: 16)
+                .padding(.top, 150)
             }
             if let palettes = wallpaper.palettes {
                 Section("Colors") {
@@ -245,7 +261,24 @@ struct WallpaperPage: View {
             }
         }
         .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .background(alignment: .top) {
+            Color.clear.frame(height: 340)
+                .overlay { preview.resizable().scaledToFill() }
+                .clipped()
+                .mask(LinearGradient(stops: [.init(color: .black, location: 0.55), .init(color: .clear, location: 1)],
+                                     startPoint: .top, endPoint: .bottom))
+                .ignoresSafeArea()
+                .accessibilityHidden(true)
+        }
         .navigationTitle(wallpaper.name)
+    }
+
+    /// The wallpaper's screenshot, `Resources/preview-<name>.jpg`, with a `-light` one for Light Mode if it has one.
+    private var preview: Image {
+        let file = "preview-" + wallpaper.name.lowercased().replacingOccurrences(of: " ", with: "-")
+        let image = scheme == .light ? NSImage(contentsOf: resource(file + "-light.jpg")) : nil
+        return Image(nsImage: image ?? NSImage(contentsOf: resource(file + ".jpg")) ?? NSImage())
     }
 
     /// Palettes are picked when a scene is built, so a new pick rebuilds it if it's on the desktop.
