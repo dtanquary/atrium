@@ -9,7 +9,7 @@ One file per wallpaper, recording what the code can't: how each scene works, why
 | Fish Tank | [fish-tank.md](fish-tank.md) | `FishTank.swift`, `FishTankArt.swift`, `Resources/reef-*` | photo cut-outs and shaders | none yet | none | 0.85 / 1.4 |
 | Flowing Gradient | [flowing-gradient.md](flowing-gradient.md) | `FlowingGradient.swift` | shader | knobs, 6 palettes, colour cycle | Sun position | 0.47 / 0.55 |
 | Lava Lamp | [lava-lamp.md](lava-lamp.md) | `LavaLamp.swift` | shader, blob layout in Swift | knobs, 7 palettes, colour cycle | none | 0.5 / 1.0 |
-| Rain on Glass | [rain-on-glass.md](rain-on-glass.md) | `RainOnGlass.swift`, `Resources/rain-*` | baked photo backdrops or procedural bokeh, shader water | 10 photo backdrops, 7 palettes, fade on Random, drip speed, knobs | none | 0.55 / 0.9–1.7 |
+| Rain on Glass | [rain-on-glass.md](rain-on-glass.md) | `RainOnGlass.swift`, `RainWeather.swift`, `RainFrost.swift`, `Resources/rain-*` | baked photo backdrops or procedural bokeh, shader water, CPU-baked frost | 10 photo backdrops, 7 palettes, fade on Random, drip speed, follow the weather, window, weather previews, knobs | Open-Meteo, when following the weather | 0.55 / 0.9–1.7; following the weather 1.1–1.6 over photos, 1.9–2.25 over the bokeh city |
 | Aurora | [aurora.md](aurora.md) | `Aurora.swift`, `Resources/aurora-*` | perspective shader sky, photo ground lit by it | knobs, 8 palettes, speed, colour fade | none | 0.6 / 1.0–1.45 |
 | Nebula | [nebula.md](nebula.md) | `Shaders.swift` | shader | knobs, 7 palettes, change interval | none | 0.45 / 1.6 |
 | Galaxy | [galaxy.md](galaxy.md) | `Galaxy.swift` | shader | knobs, 6 real galaxies | none | 0.5 / 1.5–2.1 |

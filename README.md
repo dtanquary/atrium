@@ -32,11 +32,13 @@ Wax that rises up the middle as round heads on stems that pinch off, sticks to t
 | Coral in Dark Mode | Teal, in Light Mode |
 
 ### Rain on Glass
-Drops creeping and running down a rainy window, each a tiny lens showing the street upside down. Behind the glass: ten real places, blurred as a camera focused on the glass sees them (from a wet Hamburg square to a cabin in the snow), or city lights in seven palettes.
+Drops creeping and running down a rainy window, each a tiny lens showing the street upside down. Behind the glass: ten real places, blurred as a camera focused on the glass sees them (from a wet Hamburg square to a cabin in the snow), or city lights in seven palettes. Turn on Follow the weather and the glass does what the weather where you are would do to a real window: rain when it rains, drops drying when it stops, fog on humid mornings, snow melting into beads, and fern frost growing across the pane over hours below freezing.
 
 | ![Rain on Glass at night](docs/images/rain-on-glass-night.jpg) | ![Rain on Glass by day](docs/images/rain-on-glass-day.jpg) |
 |---|---|
 | Hamburg at night, in Dark Mode | Riomaggiore by day, in Light Mode |
+| ![Rain on Glass following the weather: fern frost](docs/images/rain-on-glass-frost.jpg) | ![Rain on Glass following the weather: fog](docs/images/rain-on-glass-fog.jpg) |
+| Following the weather: frost on a freezing night, over the Cabin | Fog on a grey morning, wiped along the runners' tracks |
 
 ### Aurora
 Northern lights over the snowy Tetons, shading through real aurora colours.
