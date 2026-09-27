@@ -44,6 +44,7 @@ final class LavaLamp: SKScene {
     private var flowSpeed = 1.0
     private var lastUpdate: TimeInterval?
     private var cycleMinutes: Double?
+    private var current = 0 // the palette showing, or being faded to
 
     private var set: [[SIMD3<Float>]] { Self.palettes.map { systemIsDark ? $0.dark : $0.light } }
 
@@ -52,8 +53,9 @@ final class LavaLamp: SKScene {
             ($0.key, SKUniform(name: "u_" + $0.key.split(separator: ".").last!, float: Float($0.standard)))
         })
         super.init(size: size)
-        let pinned = Self.palettes.firstIndex { $0.name == UserDefaults.standard.string(forKey: "lava.palette") }
-        for (uniform, colour) in zip(colours, pinned.map { set[$0] } ?? set.randomElement()!) { uniform.vectorFloat3Value = colour }
+        current = Self.palettes.firstIndex { $0.name == UserDefaults.standard.string(forKey: "lava.palette") }
+            ?? Self.palettes.indices.randomElement()!
+        for (uniform, colour) in zip(colours, set[current]) { uniform.vectorFloat3Value = colour }
 
         let sprite = SKSpriteNode(color: .black, size: size)
         sprite.anchorPoint = .zero
@@ -91,12 +93,14 @@ final class LavaLamp: SKScene {
             withKey: "cycle")
     }
 
-    /// Eases every colour to another pairing over a minute, while the wax keeps moving.
+    /// Eases every colour to another pairing over a minute, while the wax keeps moving. The pairing is tracked by
+    /// index, since a finished blend isn't bit-for-bit the colours it aimed at.
     // ponytail: a straight RGB blend, so opposite pairings pass through a muddier middle; blend in a
     // perceptual space if that minute ever looks dull
     private func cycle() {
         let from = colours.map(\.vectorFloat3Value)
-        let to = set.filter { $0[1] != from[1] }.randomElement()!
+        current = set.indices.filter { $0 != current }.randomElement()!
+        let to = set[current]
         run(.customAction(withDuration: 60) { [colours] _, elapsed in
             let k = Float(simd_smoothstep(0, 1, Double(elapsed) / 60))
             for (i, uniform) in colours.enumerated() { uniform.vectorFloat3Value = simd_mix(from[i], to[i], SIMD3(repeating: k)) }

@@ -33,7 +33,7 @@ Full-screen view inside a lava lamp. Glowing jewel-tone wax heats in a molten po
 ## Time, live data and appearance
 - **Time:** `u_phase` is integrated in `update` (`dt × speed`, dt capped at 0.5 s), so the speed slider never jumps and `SNAPSHOT_SECONDS` moves it forward.
 - **Palette at build:** the pinned `lava.palette` by name, otherwise random. Each palette has `dark` and `light` 4-colour sets, `[waxDeep, waxHot, liquidDeep, liquidLit]`, chosen by `systemIsDark`.
-- **Colour cycle:** only when the palette is Random and `lava.cycleMinutes` > 0. An SKAction repeats every N minutes and eases all four colours to another palette in the current look over 60 s (`cycle()`). It's rescheduled in `applySettings` only when the interval actually changes.
+- **Colour cycle:** only when the palette is Random and `lava.cycleMinutes` > 0. An SKAction repeats every N minutes and eases all four colours to a different palette in the current look over 60 s (`cycle()`). The palette showing is tracked by index in `current`: a finished blend isn't bit-for-bit the colours it aimed at, so the old check (comparing colours) sometimes failed to rule out the current palette and "changed" to the same one. It's rescheduled in `applySettings` only when the interval actually changes.
 - **Appearance:** a Light/Dark switch rebuilds the scene through the app (crossfade). A new palette pick rebuilds it too, if it's showing.
 
 ## Settings
@@ -105,4 +105,8 @@ CPU 0.45 ms and GPU 1.86 ms per frame (release, 2x). That's near the top of the 
 SNAPSHOT_SCENE="Lava Lamp" SNAPSHOT_SECONDS=40 swift test          # integrated phase, so time moves forward
 SNAPSHOT_DEFAULTS="lava.palette=Teal" SNAPSHOT_APPEARANCE=light SNAPSHOT_SCENE="Lava Lamp" swift test
 ```
-To check the colour cycle quickly, temporarily set `lava.cycleMinutes` very low. It's a slider value, so a fraction like 0.1 isn't possible (it rounds), so temporarily change the `* 60` in `applySettings` instead.
+To check the colour cycle, run it at its shortest interval for six changes (about 15 s of wall time):
+```sh
+SNAPSHOT_DEFAULTS="lava.cycleMinutes=1" SNAPSHOT_SECONDS=365 SNAPSHOT_SCENE="Lava Lamp" swift test
+```
+A temporary `print` in `cycle()` shows each pick.
