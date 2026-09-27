@@ -1,3 +1,4 @@
+import SpriteKit
 import SwiftUI
 
 /// One live setting of a wallpaper, stored in UserDefaults under `key`: a slider, or a switch when `format` is
@@ -205,6 +206,8 @@ struct WallpaperPage: View {
     let wallpaper: Wallpaper
     @AppStorage("scene") private var current = scenes[0].name
     @Environment(\.colorScheme) private var scheme
+    /// Bumped to rebuild the live preview with a new palette.
+    @State private var builds = 0
 
     private var sections: [String] {
         wallpaper.knobs.map(\.section).reduce(into: []) { if !$0.contains($1) && $1 != "Colors" { $0.append($1) } }
@@ -264,7 +267,11 @@ struct WallpaperPage: View {
         .scrollContentBackground(.hidden)
         .background(alignment: .top) {
             Color.clear.frame(height: 340)
-                .overlay { preview.resizable().scaledToFill() }
+                .overlay {
+                    preview.resizable().scaledToFill()
+                    // ponytail: a trial on one wallpaper; if Dave keeps it, a Wallpaper field or every page
+                    if wallpaper.name == "Nebula" { LivePreview(wallpaper: wallpaper).id(builds) }
+                }
                 .clipped()
                 .mask(LinearGradient(stops: [.init(color: .black, location: 0.55), .init(color: .clear, location: 1)],
                                      startPoint: .top, endPoint: .bottom))
@@ -281,10 +288,28 @@ struct WallpaperPage: View {
         return Image(nsImage: image ?? NSImage(contentsOf: resource(file + ".jpg")) ?? NSImage())
     }
 
-    /// Palettes are picked when a scene is built, so a new pick rebuilds it if it's on the desktop.
+    /// Palettes are picked when a scene is built, so a new pick rebuilds the preview, and the desktop if it's showing.
     private func rebuildIfShowing() {
+        builds += 1
         if wallpaper.name == current { switchScene() }
     }
+}
+
+/// The wallpaper running live, framed like the desktop: built at the main display's size and scaled to fill.
+/// `WallpaperView` pauses it whenever the Settings window is covered or closed.
+struct LivePreview: NSViewRepresentable {
+    let wallpaper: Wallpaper
+
+    func makeNSView(context: Context) -> WallpaperView {
+        let view = WallpaperView()
+        applyPowerState(to: [view])
+        let scene = wallpaper.make(NSScreen.main?.frame.size ?? CGSize(width: 1512, height: 982))
+        scene.scaleMode = .aspectFill
+        view.presentScene(scene)
+        return view
+    }
+
+    func updateNSView(_ view: WallpaperView, context: Context) {}
 }
 
 /// A scene's own status line from UserDefaults, shown while the knob `gate` is 0 and there's something to say.

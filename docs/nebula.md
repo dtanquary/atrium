@@ -95,6 +95,8 @@ CPU 0.45 ms and GPU about 1.6 ms per frame (release, 2x; the dissolve's thicknes
 - He asked for colour, contrast, brightness and saturation controls, and for "1 or 2 more colour presets if there are any more natural colour combinations we see in real life that are missing". The Look sliders came from that. So did Dark Cloud and Oxygen: the set had no dark nebula and no green. A Crab-style Supernova (orange filaments on blue synchrotron) was tried and dropped because it read too close to Dusty.
 - 2026-09-25, after Weather's clouds learned to form and dissolve: "would the nebula wallpaper benefit from this new billowing forming dissolving tech we have?" Billowing no (the gas already churns), but the forming and dissolving yes, for the change between nebulas. He had it prototyped with a Settings switch against the crossfade, compared them, and chose it: "Dissolve and condense looks good to me, i like it."
 
+- 2026-09-26, after every Settings page got a screenshot behind its top: "I am not sure I want this so maybe just try it on one item first" about live previews. Nebula's page is the trial: its own copy of the scene runs there (`LivePreview` in Settings.swift), so the Look sliders show on the page as they move. Every other page keeps its screenshot. Keep it, spread it, or drop it, once he's lived with it.
+
 ## Ideas / next steps
 - More Settings: drift speed (it would need an integrated phase like Flowing Gradient, instead of `u_time`) and shimmer strength.
 - Let the band slowly rotate or move so the composition evolves within one nebula.
