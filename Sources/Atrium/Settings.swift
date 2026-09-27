@@ -1,3 +1,4 @@
+import ServiceManagement
 import SpriteKit
 import SwiftUI
 
@@ -53,6 +54,11 @@ struct SettingsView: View {
                 }
                 Section {
                     HStack {
+                        IconTile(icon: "gearshape.fill", tint: .gray, size: 22)
+                        Text("General")
+                    }
+                    .tag(GeneralPage.tag)
+                    HStack {
                         IconTile(icon: "bolt.fill", tint: .green, size: 22)
                         Text("Power")
                     }
@@ -68,6 +74,8 @@ struct SettingsView: View {
         } detail: {
             if selection == AboutPage.tag {
                 AboutPage()
+            } else if selection == GeneralPage.tag {
+                GeneralPage()
             } else if selection == PowerPage.tag {
                 PowerPage()
             } else if let wallpaper = scenes.first(where: { $0.name == selection ?? current }) {
@@ -101,6 +109,116 @@ extension View {
         } else {
             background(.regularMaterial, in: .rect(cornerRadius: cornerRadius))
         }
+    }
+}
+
+/// While on, moves the desktop on to a random wallpaper every so often, skipping any left out in Settings → General.
+/// Any change of wallpaper, by hand or by Shuffle, starts the clock over.
+@MainActor enum Shuffle {
+    static let on = Knob(key: "shuffle.on", label: "Shuffle wallpapers", range: 0...1, standard: 0, format: .toggle)
+    static let every = Knob(key: "shuffle.every", label: "Change wallpaper", range: 0...5, standard: 2,
+                            format: .choice(["Every 5 minutes", "Every 15 minutes", "Every 30 minutes", "Every hour",
+                                             "Every 3 hours", "Every day"]), shownWhen: on.key)
+    private static let minutes: [Double] = [5, 15, 30, 60, 180, 1440]
+    /// Wallpapers left out, by name and comma separated, so new wallpapers join in.
+    static let skipKey = "shuffle.skip"
+    static var skipped: [String] { (UserDefaults.standard.string(forKey: skipKey) ?? "").split(separator: ",").map(String.init) }
+
+    /// A wallpaper to move on to: any but the one showing and those left out.
+    /// ponytail: plain random, so one can come round again before all have shown; deal from a shuffled deck if that grates
+    static func next() -> String? {
+        let showing = UserDefaults.standard.string(forKey: "scene")
+        return scenes.map(\.name).filter { $0 != showing && !skipped.contains($0) }.randomElement()
+    }
+
+    private static var pending: DispatchWorkItem?
+    /// The wallpaper, switch and interval the pending change was set for.
+    private static var scheduled: [String] = []
+
+    /// Starts the clock over if the wallpaper, the switch or the interval has changed; call it on any defaults change.
+    /// It counts wall-clock time, so a Mac that slept through the interval moves on as it wakes.
+    static func reschedule() {
+        let state = [UserDefaults.standard.string(forKey: "scene") ?? "", "\(on.value)", "\(every.value)"]
+        guard state != scheduled else { return }
+        scheduled = state
+        pending?.cancel()
+        guard on.value > 0.5 else { return }
+        let work = DispatchWorkItem {
+            MainActor.assumeIsolated {
+                scheduled = [] // go round again even when there's nothing to move on to
+                if let name = next() { show(name) }
+                reschedule()
+            }
+        }
+        pending = work
+        let interval = minutes[min(max(Int(every.value), 0), minutes.count - 1)] * 60
+        DispatchQueue.main.asyncAfter(wallDeadline: .now() + interval, execute: work)
+    }
+}
+
+/// Turns Open at Login on or off. macOS may want it approved first, so this opens Login Items when it does.
+@MainActor func setOpenAtLogin(_ on: Bool) {
+    let service = SMAppService.mainApp
+    do {
+        if on { try service.register() } else { try service.unregister() }
+    } catch {
+        NSAlert(error: error).runModal()
+    }
+    if service.status == .requiresApproval { SMAppService.openSystemSettingsLoginItems() }
+}
+
+/// Open at Login, and Shuffle with the wallpapers it picks from.
+struct GeneralPage: View {
+    static let tag = "General" // sidebar selection; can't clash with a wallpaper name
+    @State private var openAtLogin = SMAppService.mainApp.status == .enabled
+    @AppStorage(Shuffle.on.key) private var shuffling = Shuffle.on.standard
+    @AppStorage(Shuffle.skipKey) private var skip = ""
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Open at Login", isOn: Binding(get: { openAtLogin }, set: {
+                    setOpenAtLogin($0)
+                    openAtLogin = SMAppService.mainApp.status == .enabled
+                }))
+            }
+            Section {
+                KnobRow(knob: Shuffle.on)
+                KnobRow(knob: Shuffle.every)
+            } header: {
+                Text("Shuffle")
+            } footer: {
+                Text("Moves on to another wallpaper at random. Picking one yourself starts the clock over.")
+                    .foregroundStyle(.secondary)
+            }
+            if shuffling > 0.5 {
+                Section {
+                    ForEach(scenes, id: \.name) { wallpaper in
+                        Toggle(isOn: Binding(get: { !Shuffle.skipped.contains(wallpaper.name) },
+                                             set: { include(wallpaper.name, $0) })) {
+                            HStack {
+                                IconTile(icon: wallpaper.icon, tint: wallpaper.tint, size: 22)
+                                Text(wallpaper.name)
+                            }
+                        }
+                    }
+                } header: {
+                    HStack {
+                        Text("Wallpapers to Shuffle")
+                        Spacer()
+                        Button("All") { skip = "" }
+                        Button("None") { skip = scenes.map(\.name).joined(separator: ",") }
+                    }
+                    .buttonStyle(.link)
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle("General")
+    }
+
+    private func include(_ name: String, _ on: Bool) {
+        skip = (Shuffle.skipped.filter { $0 != name } + (on ? [] : [name])).joined(separator: ",")
     }
 }
 

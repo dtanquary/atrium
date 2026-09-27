@@ -32,7 +32,7 @@ The README's screenshots live in `docs/images` as 1600-pixel JPEGs of the wallpa
 
 - **Favourites:** Nebula first, then Flowing Gradient. They set the bar for the rest.
 - **Real over made up:** real data (the real sky, weather and ISS at his location) and colours from real sources (nebula palettes after real objects). He was delighted that Live Sky uses his actual location.
-- **Variety without repetition:** a new look on each load (Nebula, Lava Lamp), and slow, seamless cycling when left running, never a hard cut.
+- **Variety without repetition:** a new look on each load (Nebula, Lava Lamp), and slow, seamless cycling when left running, never a hard cut. On 2026-09-26 he asked for Shuffle: Settings → General moves the desktop on to a random wallpaper every 5 minutes to every day, from a checklist of wallpapers, and picking one by hand starts the clock over. It sits beside Open at Login, which the menu already had.
 - **Calm motion:** ambient only, with no mouse interaction. Anything flashy or bouncing is distracting (the ISS label was made static). Nudge speeds by small steps.
 - **Colours in one family:** jewel tones like Flowing Gradient's. He called Lava Lamp's green-in-blue ugly. Nebulae shouldn't be pink every time.
 - **Light and Dark Mode:** scenes that suit both should follow the system appearance (Lava Lamp, Flowing Gradient).

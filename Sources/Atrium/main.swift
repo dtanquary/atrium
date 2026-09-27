@@ -111,7 +111,7 @@ var current = UserDefaults.standard.string(forKey: "scene") ?? scenes[0].name
     for window in windows { (window.contentView as? SKView)?.presentScene(currentScene(size: window.frame.size)) }
 }
 
-/// The menu bar icon: pick a wallpaper, open Settings, toggle Open at Login, quit.
+/// The menu bar icon: pick or shuffle wallpapers, open Settings, toggle Open at Login, quit.
 @MainActor final class StatusMenu: NSObject, NSMenuDelegate {
     let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
@@ -141,6 +141,13 @@ var current = UserDefaults.standard.string(forKey: "scene") ?? scenes[0].name
             let entry = menu.addItem(withTitle: scene.name, action: #selector(pick), keyEquivalent: "")
             entry.target = self
             entry.state = scene.name == current ? .on : .off
+        }
+        menu.addItem(.separator())
+        let shuffle = menu.addItem(withTitle: "Shuffle", action: #selector(toggleShuffle), keyEquivalent: "")
+        shuffle.target = self
+        shuffle.state = Shuffle.on.value > 0.5 ? .on : .off
+        if Shuffle.on.value > 0.5 {
+            menu.addItem(withTitle: "Next Wallpaper", action: #selector(nextWallpaper), keyEquivalent: "").target = self
         }
         menu.addItem(.separator())
         menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",").target = self
@@ -174,13 +181,15 @@ var current = UserDefaults.standard.string(forKey: "scene") ?? scenes[0].name
     }
 
     @objc func toggleLogin() {
-        let service = SMAppService.mainApp
-        do {
-            if service.status == .enabled { try service.unregister() } else { try service.register() }
-        } catch {
-            NSAlert(error: error).runModal()
-        }
-        if service.status == .requiresApproval { SMAppService.openSystemSettingsLoginItems() }
+        setOpenAtLogin(SMAppService.mainApp.status != .enabled)
+    }
+
+    @objc func toggleShuffle(_ sender: NSMenuItem) {
+        UserDefaults.standard.set(sender.state == .on ? 0.0 : 1.0, forKey: Shuffle.on.key)
+    }
+
+    @objc func nextWallpaper() {
+        if let name = Shuffle.next() { show(name) }
     }
 }
 
@@ -204,6 +213,11 @@ if let source = IOPSNotificationCreateRunLoopSource({ _ in
     MainActor.assumeIsolated { applyPowerState(to: windows.compactMap { $0.contentView as? WallpaperView }) }
 }, nil)?.takeRetainedValue() {
     CFRunLoopAddSource(CFRunLoopGetMain(), source, .defaultMode)
+}
+// Move on to another wallpaper every so often while Shuffle is on.
+Shuffle.reschedule()
+NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { _ in
+    MainActor.assumeIsolated { Shuffle.reschedule() }
 }
 // Rebuild a long-running wallpaper so the clocks its shaders animate by stay small: quietly once the displays sleep,
 // or with a crossfade for displays that never do.
