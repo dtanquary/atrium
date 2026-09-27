@@ -73,11 +73,11 @@ Calm measured at CPU 0.55 ms and GPU 0.36 ms per frame (release build, 2x, 2026-
 
 ## Dave's feedback and decisions
 - Built by the nature agent in the first batch.
-- 2026-09-26: "cool but so crazy on the eyes, its so busy and wild." The cause: 7 generations a second with births at full brightness in about 0.1 s, so blinkers all over the screen flash at 3.5 Hz and pull the eye. Calm was built as a switch to compare with Classic. Over 4 s of frames at 15 fps, Classic changes 1.41 grey levels per pixel per frame on average, with 2% of pixels jumping more than 20 levels. Calm changes 0.22, with none jumping. **Next:** Dave compares them live, then remove the loser (or keep both, if he wants the choice).
+- 2026-09-26: "cool but so crazy on the eyes, its so busy and wild." The cause: 7 generations a second with births at full brightness in about 0.1 s, so blinkers all over the screen flash at 3.5 Hz and pull the eye. Calm was built as a switch to compare with Classic. Over 4 s of frames at 15 fps, Classic changes 1.41 grey levels per pixel per frame on average, with 2% of pixels jumping more than 20 levels. Calm changes 0.22, with none jumping.
+- 2026-09-26, after comparing them live: "keep both as a choice I guess, but default to calm for game of life." The Calm switch stays, on by default.
 - At the same time he asked for reaction–diffusion, which became its own wallpaper.
 
 ## Ideas / next steps
-- **Lock in** Calm or Classic once Dave has compared them.
 - **Better reseeds:** drop known patterns (gliders, lightweight spaceships, an R-pentomino, the occasional glider gun) instead of round blobs, so new life arrives with character.
 - **Looks:** a Light Mode look and palettes.
 - **Variation:** vary the rules between loads (HighLife B36/S23, Day & Night) for different textures.
