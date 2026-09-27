@@ -17,10 +17,10 @@ import CoreLocation
         var highCloud = 0.0   // percent: cirrus
         var snowDepth = 0.0   // m of snow on the ground
         var visibility = 30000.0 // m
-        var precipitationTotal = 0.0 // mm in the preceding hour: rain, showers and snow as water
-        var rain = 0.0        // mm in the preceding hour, from weather fronts
-        var showers = 0.0     // mm in the preceding hour, from convective showers
-        var snowfall = 0.0    // cm in the preceding hour
+        var precipitationTotal = 0.0 // mm in the preceding 15 minutes (Open-Meteo's `current` interval): rain, showers and snow as water
+        var rain = 0.0        // mm in the preceding 15 minutes, from weather fronts
+        var showers = 0.0     // mm in the preceding 15 minutes, from convective showers
+        var snowfall = 0.0    // cm in the preceding 15 minutes
         var temperature = 15.0 // °C at 2 m
         var humidity = 70.0   // percent at 2 m
         var dewPoint = 10.0   // °C at 2 m
