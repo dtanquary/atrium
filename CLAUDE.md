@@ -7,7 +7,7 @@ Atrium is a menu bar app that plays animated wallpapers on macOS 27. Swift packa
 - Each wallpaper is an `SKScene` shown in a `WallpaperView` (an `SKView`). Its frame rate comes from Settings → Power (`Power` in Settings.swift, applied by `applyPowerState` in main.swift): 60 fps on mains power, 30 fps on battery and frozen on its current frame in Low Power Mode unless changed, with 15 fps offered. The menu's Full Speed on Battery is a one-click version for demos. Scenes step by elapsed time, so they must look the same at 15, 30 and 60 fps. The view pauses whenever its window is fully covered.
 - Switching scenes crossfades inside the existing windows. Display changes only touch the displays that actually changed, so the system wallpaper never flashes through.
 - The menu bar icon (✨📺) picks the scene, saved in `UserDefaults` under `scene`. It also opens Settings, toggles Open at Login (`SMAppService`) and Full Speed on Battery, and quits the app.
-- **Settings** (`Settings.swift`) is a floating window laid out like System Settings: a sidebar of wallpapers, and a page for each one. Each page has the wallpaper's screenshot (`Resources/preview-<name>.jpg`, see `docs/README.md`) behind its top, under a Liquid Glass header. A wallpaper's settings are plain data on its `Wallpaper` entry in Scenes.swift:
+- **Settings** (`Settings.swift`) is a floating window laid out like System Settings: a sidebar of wallpapers, and a page for each one. Each page runs its own copy of the wallpaper live behind its top (`LivePreview`), under a Liquid Glass header, so settings show as they change. The page shows the wallpaper's screenshot (`Resources/preview-<name>.jpg`, see `docs/README.md`) until the live copy has built, then fades to it. A wallpaper's settings are plain data on its `Wallpaper` entry in Scenes.swift:
   - `knobs`: sliders, switches with `format: .toggle`, or menus with `format: .choice([names])` (stored as the index), or multipliers with `format: .times`, grouped by `section`. A knob can depend on a switch with `shownWhen`.
   - `palettes`: a `PaletteChoice` of named swatches. The pick is stored by name, and an empty value means Random.
   - `status`: a UserDefaults key the scene keeps a line of text in (Weather's last live report), shown under a knob while that knob is 0.
@@ -45,6 +45,7 @@ ffmpeg -framerate 15 -i 'Fish Tank-%03d.png' -vf "scale=800:-1:flags=lanczos,spl
 5. For separate Light and Dark Mode looks, read `systemIsDark` when the scene is built. The app rebuilds the current scene with a crossfade when macOS switches appearance. Check both looks with `SNAPSHOT_APPEARANCE=light|dark`.
 6. Stay within budget: about 2 ms of CPU and 2 ms of GPU per frame at 2x Retina, as the render test prints it. Scenes run all day.
 7. Look at the snapshot PNG before calling it done.
+8. Add a screenshot to `docs/images` and its Settings copy (see `docs/README.md`). While its Settings page is open, a second copy of the scene runs, just as it would on a second display, so shared state has to cope with two.
 
 ## Gotchas
 - SKShader is GLSL-like and gets translated to Metal. There's no `inout`, no early `return` from `main()` (it won't compile), and no `sampler2D` parameters (keep texture reads in `main()`). `u_time` follows the wall clock, so `SNAPSHOT_SECONDS` doesn't move shader animation forward (SKActions do move forward).

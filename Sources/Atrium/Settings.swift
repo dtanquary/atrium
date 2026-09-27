@@ -206,14 +206,16 @@ struct AboutPage: View {
     }
 }
 
-/// One wallpaper's settings: its screenshot behind the top of the page, a glass header to put it on the desktop,
-/// its palettes, then its knobs by section.
+/// One wallpaper's settings: the wallpaper running live behind the top of the page (its screenshot until it's built),
+/// a glass header to put it on the desktop, its palettes, then its knobs by section.
 struct WallpaperPage: View {
     let wallpaper: Wallpaper
     @AppStorage("scene") private var current = scenes[0].name
     @Environment(\.colorScheme) private var scheme
     /// Bumped to rebuild the live preview with a new palette.
     @State private var builds = 0
+    /// Whether the live preview has taken over from the screenshot.
+    @State private var live = false
 
     private var sections: [String] {
         wallpaper.knobs.map(\.section).reduce(into: []) { if !$0.contains($1) && $1 != "Colors" { $0.append($1) } }
@@ -275,8 +277,7 @@ struct WallpaperPage: View {
             Color.clear.frame(height: 340)
                 .overlay {
                     preview.resizable().scaledToFill()
-                    // ponytail: a trial on one wallpaper; if Dave keeps it, a Wallpaper field or every page
-                    if wallpaper.name == "Nebula" { LivePreview(wallpaper: wallpaper).id(builds) }
+                    if live { LivePreview(wallpaper: wallpaper).id([builds, scheme == .dark ? 1 : 0]).transition(.opacity) }
                 }
                 .clipped()
                 .mask(LinearGradient(stops: [.init(color: .black, location: 0.55), .init(color: .clear, location: 1)],
@@ -284,6 +285,10 @@ struct WallpaperPage: View {
                 .ignoresSafeArea()
                 .accessibilityHidden(true)
         }
+        // The screenshot draws first, then the live scene fades in over it once built.
+        // ponytail: Fish Tank and Weather take about half a second to build on the main thread, which stalls the
+        // page once; build them off the main thread if that grates.
+        .task { withAnimation(.easeIn(duration: 0.6)) { live = true } }
         .navigationTitle(wallpaper.name)
     }
 
@@ -302,7 +307,8 @@ struct WallpaperPage: View {
 }
 
 /// The wallpaper running live, framed like the desktop: built at the main display's size and scaled to fill.
-/// `WallpaperView` pauses it whenever the Settings window is covered or closed.
+/// `WallpaperView` pauses it whenever the Settings window is covered or closed. It's a second copy of the scene,
+/// like one on another display, so shared services (location, clouds, ISS) already cope.
 struct LivePreview: NSViewRepresentable {
     let wallpaper: Wallpaper
 

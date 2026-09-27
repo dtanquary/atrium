@@ -36,7 +36,7 @@ The README's screenshots live in `docs/images` as 1600-pixel JPEGs of the wallpa
 - **Calm motion:** ambient only, with no mouse interaction. Anything flashy or bouncing is distracting (the ISS label was made static). Nudge speeds by small steps.
 - **Colours in one family:** jewel tones like Flowing Gradient's. He called Lava Lamp's green-in-blue ugly. Nebulae shouldn't be pink every time.
 - **Light and Dark Mode:** scenes that suit both should follow the system appearance (Lava Lamp, Flowing Gradient).
-- **Tunable:** options go in the Settings window as data (knobs, switches, palettes), so he can tweak until it looks right.
+- **Tunable:** options go in the Settings window as data (knobs, switches, palettes), so he can tweak until it looks right. On 2026-09-26 each page got the wallpaper running live behind a glass header, trialled on Nebula first: "yeah the live preview is awesome, add it to all of them."
 - **Easy on the battery:** frozen in Low Power Mode, paused when covered. On 2026-09-26 he asked to be able to override this, for demos on battery: Settings → Power has a frame-rate menu (Freeze, 15, 30, 60) for mains power, battery and Low Power Mode, and the menu bar has Full Speed on Battery. Later that day he raised the defaults from 30 and 15 fps to 60 fps plugged in and 30 fps on battery: "it seems to run fine for me on 30 on my battery but we can monitor." Watch battery life and heat at these rates.
 - **Workflow:** commit early and often; redeploy after each working change and tell him what to test.
 - **Cut:** Zen Garden, on 2026-09-25: "so bright and sharp and not relaxing, opposite of zen." Calm means soft and dim as well as slow. Its code and doc were deleted; they're in git history before the cut.
