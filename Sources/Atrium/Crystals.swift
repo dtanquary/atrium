@@ -10,18 +10,21 @@ import SpriteKit
 final class Crystals: SKScene {
     nonisolated static let knobs = [
         Knob(key: "crystals.cycle", label: "Cycle length", range: 2...30, standard: 7, section: "Crystals", format: .minutes),
+        Knob(key: "crystals.speed", label: "Growth speed", range: 0.25...4, standard: 1, section: "Crystals", format: .times),
         Knob(key: "crystals.size", label: "Crystal size", range: 0.5...2, standard: 1, section: "Crystals", format: .times),
         Knob(key: "crystals.thickness", label: "Thickness", range: 0.3...3, standard: 1, section: "Look", format: .times),
         Knob(key: "crystals.brightness", label: "Brightness", range: 0.3...1.5, standard: 1, section: "Look"),
         Knob(key: "crystals.stop", label: "Round field stop", range: 0...1, standard: 0, section: "Look", format: .toggle),
     ]
 
-    /// A cycle, as fractions of its length: growing from 0 (about 3½ minutes of 7, the speed real ascorbic acid
-    /// grows at), holding, melting from `meltAt` about four times as fast as it grew, then bare liquid until 1.
-    private static let growPart = 0.55, meltAt = 0.82, meltPart = 0.15
+    /// A cycle: the slide grows for `growSeconds` at Growth speed 1 (the speed real ascorbic acid grows at: 5–7 µm/s
+    /// fills a 10× field in 3–4 minutes), holds for whatever Cycle length leaves (at least `shortestHold`), melts about
+    /// four times as fast as it grew, and rests as bare liquid for `restSeconds` before new seeds.
+    private static let growSeconds = 230.0, meltShare = 0.27, restSeconds = 13.0, shortestHold = 20.0
 
-    private var progress = Double(ProcessInfo.processInfo.environment["CRYSTALS_AT"] ?? "") ?? 0.3
-    private var meltStart = meltAt, meltLength = meltPart
+    private var grown = 0.0 // 0–1 as the fronts spread, and on to 1.3 while the last colour thickens in
+    private var held = 0.0, melted = 0.0, rested = 0.0 // seconds, 0–1, seconds
+    private var quickMelt = false // a new crystal size melts these in seconds
     private var bakedSize = 0.0
     private var next: Slide?, baking = false // the next cycle's crystals, baked in the background during the melt
     private var lastTime: TimeInterval?
@@ -31,17 +34,22 @@ final class Crystals: SKScene {
     private let thickness = SKUniform(name: "u_thickness", float: 1), brightness = SKUniform(name: "u_brightness", float: 1)
     private let stop = SKUniform(name: "u_stop", float: 0)
 
+    private static func knob(_ name: String) -> Double { knobs.first { $0.key == "crystals." + name }!.value }
+
     override func sceneDidLoad() {
         backgroundColor = .black
         let texels = CGSize(width: (size.width / Self.cell).rounded(.up), height: (size.height / Self.cell).rounded(.up))
         textures = (0..<3).map { _ in SKMutableTexture(size: texels) }
         // Linear filtering blends everything smoothly, except the nucleus a texel belongs to: blending two crystals'
-        // nuclei at a boundary gives a meaningless one, so each pixel takes its nearest texel's, and the boundary's
-        // groove covers the step that leaves.
+        // nuclei at a boundary gives a meaningless one, so the shader reads the four around each pixel and blends
+        // what each crystal would show there instead.
         textures[0].filteringMode = .linear
         textures[2].filteringMode = .linear
         var rng = SplitMix(state: UInt64(ProcessInfo.processInfo.environment["CRYSTALS_SEED"] ?? "") ?? .random(in: 0...UInt64.max))
-        show(Self.bake(texels: texels, size: size, crystalSize: Self.knobs[1].value, rng: &rng))
+        show(Self.bake(texels: texels, size: size, crystalSize: Self.knob("size"), rng: &rng))
+        // start partway into the cycle, growth about half done (or where CRYSTALS_AT, a fraction of the cycle, says)
+        let at = Double(ProcessInfo.processInfo.environment["CRYSTALS_AT"] ?? "") ?? 0.3
+        for _ in 0..<Int(at * Self.knob("cycle") * 60) { advance(1) }
 
         let lut = Self.michelLevy().flatMap { c in [c.x, c.y, c.z].map { UInt8(min(1, pow($0, 1 / 2.2)) * 255) } + [255] }
         let chart = SKTexture(data: Data(lut), size: CGSize(width: lut.count / 4, height: 1))
@@ -50,6 +58,7 @@ final class Crystals: SKScene {
         slide.anchorPoint = .zero
         slide.shader = SKShader(source: Self.shader, uniforms: [
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]),
+            SKUniform(name: "u_texels", vectorFloat2: [Float(texels.width), Float(texels.height)]),
             SKUniform(name: "u_growth", texture: textures[0]), SKUniform(name: "u_nucleus", texture: textures[1]),
             SKUniform(name: "u_marks", texture: textures[2]), SKUniform(name: "u_chart", texture: chart),
             SKUniform(name: "u_dark", float: systemIsDark ? 1 : 0), grow, level, scale, thickness, brightness, stop,
@@ -59,33 +68,43 @@ final class Crystals: SKScene {
     }
 
     override func update(_ currentTime: TimeInterval) {
-        progress += frameTime(currentTime, &lastTime) / (Self.knobs[0].value * 60)
-        // a new crystal size melts these quickly now, and the next cycle grows the new size
-        if Self.knobs[1].value != bakedSize, progress < meltStart { (meltStart, meltLength) = (progress, 0.04) }
-        if let slide = next, slide.crystalSize != Self.knobs[1].value { next = nil }
-        if progress >= meltStart, next == nil, !baking { bakeNext() }
-        let end = meltStart + meltLength + 1 - Self.meltAt - Self.meltPart
-        if progress >= end {
-            if let slide = next { // else wait in the dark until it's baked
-                (progress, meltStart, meltLength, next) = (0, Self.meltAt, Self.meltPart, nil)
-                show(slide)
-            } else {
-                progress = end
-            }
-        }
-        let grown = min(progress, meltStart) / Self.growPart, melted = min(max(0, progress - meltStart) / meltLength, 1)
+        advance(frameTime(currentTime, &lastTime))
         grow.floatValue = Float(grown)
         // the melt runs back down the arrival times, from just above the last grown (so nothing jumps) to below 0
         level.floatValue = melted > 0 ? Float((min(grown, 1) + 0.15) * (1 - melted) - 0.08) : 2
-        thickness.floatValue = Float(Self.knobs[2].value)
-        brightness.floatValue = Float(Self.knobs[3].value)
-        stop.floatValue = Float(Self.knobs[4].value)
+        thickness.floatValue = Float(Self.knob("thickness"))
+        brightness.floatValue = Float(Self.knob("brightness"))
+        stop.floatValue = Float(Self.knob("stop"))
+    }
+
+    /// Moves the cycle on by `dt` seconds. Each part runs at its own rate from the current settings, so moving a
+    /// slider changes the pace from here on without jumping.
+    private func advance(_ dt: Double) {
+        let growTime = Self.growSeconds / Self.knob("speed"), meltTime = quickMelt ? 17 : growTime * Self.meltShare
+        let hold = max(Self.knob("cycle") * 60 - growTime * (1 + Self.meltShare) - Self.restSeconds, Self.shortestHold)
+        // a new crystal size melts these quickly now, and the next cycle grows the new size
+        if Self.knob("size") != bakedSize, melted == 0 { (quickMelt, melted) = (true, 1e-9) }
+        if melted == 0 {
+            grown = min(grown + dt / growTime, 1.3)
+            if grown >= 1 { held += dt }
+            if held >= hold { melted = 1e-9 }
+        } else if melted < 1 {
+            melted = min(melted + dt / meltTime, 1)
+        } else {
+            rested += dt
+        }
+        if let slide = next, slide.crystalSize != Self.knob("size") { next = nil }
+        if melted > 0, next == nil, !baking { bakeNext() }
+        if rested >= Self.restSeconds, let slide = next { // else wait in the dark until it's baked
+            (grown, held, melted, rested, quickMelt, next) = (0, 0, 0, 0, false, nil)
+            show(slide)
+        }
     }
 
     /// Bakes the next cycle's crystals off the main thread.
     private func bakeNext() {
         baking = true
-        let texels = textures[0].size(), size = size, crystalSize = Self.knobs[1].value, seed = UInt64.random(in: 0...UInt64.max)
+        let texels = textures[0].size(), size = size, crystalSize = Self.knob("size"), seed = UInt64.random(in: 0...UInt64.max)
         Task { [weak self] in
             let slide = await Task.detached(priority: .utility) {
                 var rng = SplitMix(state: seed)
@@ -164,12 +183,12 @@ final class Crystals: SKScene {
         // (1–2 µm), straw and gold (3 µm), or now and then the second order's violet, blue and sky (4–5 µm).
         let tint = [120.0...280, 280...450, 280...450, 280...450, 480...720].randomElement(using: &rng)!
         let limited = random(0...1) < 0.75 // the crystals stop short of each other, leaving pools of liquid
-        let banded = random(0...1) < 0.3 ? random(0.2...0.45) : 0, bandPeriod = spacing * random(0.06...0.12)
+        let banded = random(0...1) < 0.25 ? random(0.15...0.3) : 0, bandPeriod = spacing * random(0.06...0.12)
         let film = (0..<5).map { _ in (k: 2 * .pi / (size.height * random(0.6...2)), a: random(0...(2 * .pi)), phase: random(0...(2 * .pi))) }
 
         func nucleus(x: Double, y: Double, born: Double, axis: Double, fan: Double, slope: ClosedRange<Double>) -> Nucleus {
             let speed = exp(random(-0.15...0.15)) * spacing, stretch = random(0...0.35), lobes = around(random(0.04...0.08), harmonics: 6...14)
-            let reach = limited ? random(0.45...0.8) : 1e6, fingers = around(0.035, harmonics: 8...24)
+            let reach = limited ? random(0.45...0.8) : 1e6, fingers = around(0.025, harmonics: 5...12)
             return Nucleus(x: x, y: y, born: born, speed: (0..<turns).map { i in
                 let a = 2 * .pi * Double(i) / Double(turns) - axis
                 return speed * lobes[i] * (1 - stretch * sin(a) * sin(a)) * (1 - fan * (1 - cos(a)) / 2)
@@ -221,19 +240,26 @@ final class Crystals: SKScene {
             let y = (Double(row) + 0.5) * sy
             for col in 0..<w {
                 let x = (Double(col) + 0.5) * sx
-                var first = Double.infinity, second = Double.infinity, owner = 0, rival = 0, rim = 0.0
+                var first = Double.infinity, second = Double.infinity, owner = 0, rival = 0, rim = 0.0, rivalRim = 0.0
                 var soonest = Double.infinity, nearest = 0, short = 0.0 // the front that would get here first if nothing stopped
+                var closest = (left: -Double.infinity, k: 0, time: 0.0) // the crystal whose rim is nearest, for the liquid
                 for (k, n) in nuclei.enumerated() {
                     let dx = x - n.x, dy = y - n.y
                     if n.born + (dx * dx + dy * dy).squareRoot() / fastest >= max(second, soonest) { continue }
                     let (time, left) = arrival(n, dx, dy)
                     if time < soonest { (soonest, nearest, short) = (time, k, left) }
+                    if left > closest.left { closest = (left, k, time) }
                     guard left >= 0 else { continue }
-                    if time < first { (second, rival, first, owner, rim) = (first, owner, time, k, left) } else if time < second { (second, rival) = (time, k) }
+                    if time < first {
+                        (second, rival, rivalRim, first, owner, rim) = (first, owner, rim, time, k, left)
+                    } else if time < second {
+                        (second, rival, rivalRim) = (time, k, left)
+                    }
                 }
                 // Liquid past a crystal's rim takes on the crystal that stopped nearest, so every field runs on
                 // smoothly across the rim and the rim itself is where the signed distance to it crosses 0.
-                if !first.isFinite { (first, owner, rim) = (soonest, nearest, short) } else { latest = max(latest, first) }
+                let reached = first.isFinite
+                if !reached { (first, owner, rim) = (closest.time, closest.k, closest.left) } else { latest = max(latest, first) }
                 let i = row * w + col, n = nuclei[owner]
                 put(&place, i * 4, (n.x / size.width + 0.25) / 1.5)
                 put(&place, i * 4 + 2, (n.y / size.height + 0.25) / 1.5)
@@ -246,11 +272,18 @@ final class Crystals: SKScene {
                 let a = (atan2(y - n.y, x - n.x) / (2 * .pi) + 1) * Double(turns)
                 let wander = n.bands[Int(a) % turns] + (n.bands[(Int(a) + 1) % turns] - n.bands[Int(a) % turns]) * (a - a.rounded(.down))
                 let band = 0.5 + 0.5 * cos(2 * .pi * pow(d * wander / bandPeriod, 0.85)) // wavy, closer together further out
-                // distance to the boundary: the gap between the two arrival times over how fast it widens across it
-                let o = nuclei[rival], od = max(((x - o.x) * (x - o.x) + (y - o.y) * (y - o.y)).squareRoot(), 1e-6), dd = max(d, 1e-6)
-                let pull = hypot((x - n.x) / dd - (x - o.x) / od, (y - n.y) / dd - (y - o.y) / od) / spacing
-                marks[i * 4] = UInt8(min(second.isFinite ? (second - first) / max(pull, 1e-9) / 8 : 1, 1) * 255)
-                marks[i * 4 + 1] = UInt8((1 - banded * pow(band, 12)) * 255)
+                // Distance to the boundary with another crystal: where the next front ties with this one (the gap
+                // between their arrival times over how fast it widens across it), where this one stops and the next
+                // carries on, or where one that would have got here first stopped short.
+                var gap = 8.0
+                if reached, second.isFinite {
+                    let o = nuclei[rival], od = max(((x - o.x) * (x - o.x) + (y - o.y) * (y - o.y)).squareRoot(), 1e-6), dd = max(d, 1e-6)
+                    let pull = hypot((x - n.x) / dd - (x - o.x) / od, (y - n.y) / dd - (y - o.y) / od) / spacing
+                    gap = min(gap, (second - first) / max(pull, 1e-9), rivalRim > rim ? rim * spacing : 8)
+                }
+                if reached, nearest != owner { gap = min(gap, -short * spacing) }
+                marks[i * 4] = UInt8(min(max(gap, 0) / 8, 1) * 255)
+                marks[i * 4 + 1] = UInt8((1 - banded * pow(band, 6)) * 255)
                 marks[i * 4 + 3] = 255
             }
         }
@@ -298,7 +331,8 @@ final class Crystals: SKScene {
     /// every crystal shows a dark cross along the polarisers, crisp at the centre and filling in toward the rim as the
     /// fibres splay); and its colour from the chart, by retardation. The colour thickens up behind the front, as the
     /// film deposits, and thins at a melting edge. Fine fibres, drawn here at screen resolution, branch as they spread
-    /// so their spacing stays about the same.
+    /// so their spacing stays about the same, in broader bundles. Along a boundary the pixel is drawn as each
+    /// crystal around it and blended, so boundaries are smooth rather than stepping with the texels.
     private static let shader = """
         float hashf(vec2 p) {
             vec3 q = fract(vec3(p.xyx) * 0.1031);
@@ -309,35 +343,64 @@ final class Crystals: SKScene {
             vec2 i = floor(p), f = fract(p), u = f * f * (3.0 - 2.0 * f);
             return mix(mix(hashf(i), hashf(i + vec2(1.0, 0.0)), u.x), mix(hashf(i + vec2(0.0, 1.0)), hashf(i + vec2(1.0, 1.0)), u.x), u.y);
         }
+        // Value noise that wraps every n cells across, for noise around a circle with no seam.
+        float ring(vec2 p, float n) {
+            vec2 i = floor(p), f = fract(p), u = f * f * (3.0 - 2.0 * f);
+            float a = mod(i.x, n), b = mod(i.x + 1.0, n);
+            return mix(mix(hashf(vec2(a, i.y)), hashf(vec2(b, i.y)), u.x), mix(hashf(vec2(a, i.y + 1.0)), hashf(vec2(b, i.y + 1.0)), u.x), u.y);
+        }
+        // What the crystal grown from `nuc` shows at `pts`: its light (x) and a factor on its retardation (y).
+        vec2 crystal(vec2 pts, vec2 nuc, float scale) {
+            vec2 off = pts - nuc;
+            float r = length(off) + 0.001, a = atan(off.y, off.x) / 6.2832 + 0.5, rs = r / scale;
+            float seed = dot(nuc, vec2(0.37, 0.61));
+            float lv = log2(max(r, 6.0) / 6.0), fl = floor(lv), n = floor(44.0 * exp2(fl));
+            float fib = mix(ring(vec2(a * n, r * 0.12 + seed + 31.0 * fl), n), ring(vec2(a * n * 2.0, r * 0.12 + seed + 31.0 * fl + 31.0), n * 2.0), lv - fl);
+            float sheaf = ring(vec2(a * 11.0, r * 0.006 + seed), 11.0);
+            float wob = (ring(vec2(a * 5.0, r * 0.01 + seed), 5.0) - 0.5) * 0.25 + (fib - 0.5) * 0.06;
+            float ext = 0.5 + 0.5 * cos(4.0 * (a * 6.2832 + wob)) * mix(0.9, 0.5, smoothstep(0.0, 0.6, rs));
+            float core = mix(0.35, 1.0, smoothstep(0.01, 0.04, rs));
+            return vec2(ext * core * (0.78 + 0.44 * fib) * (0.85 + 0.3 * sheaf), 0.95 + 0.1 * fib);
+        }
+        vec2 nucleus(vec4 n, vec2 size) { return (vec2(n.r + n.g / 255.0, n.b + n.a / 255.0) * 1.5 - 0.25) * size; }
         void main() {
             vec2 pts = v_tex_coord * u_size;
-            vec4 g = texture2D(u_growth, v_tex_coord), n = texture2D(u_nucleus, v_tex_coord), m = texture2D(u_marks, v_tex_coord);
+            vec4 g = texture2D(u_growth, v_tex_coord), m = texture2D(u_marks, v_tex_coord);
             float arrive = (g.r + g.g / 255.0) / 0.95;
-            vec2 off = pts - (vec2(n.r + n.g / 255.0, n.b + n.a / 255.0) * 1.5 - 0.25) * u_size;
-            float r = length(off) + 0.001, th = atan(off.y, off.x), rs = r / u_scale;
-
             float age = u_grow - arrive, left = u_level - arrive + (vnoise(pts * 0.03) - 0.5) * 0.06;
             float rim = (m.b - 0.5) * 16.0;
-            float solid = smoothstep(0.0, 0.004, min(u_grow, 1.01) - arrive) * smoothstep(0.0, 0.006, left) * smoothstep(-0.5, 0.5, rim);
+            float there = smoothstep(0.0, 0.004, min(u_grow, 1.01) - arrive) * smoothstep(0.0, 0.006, left);
+            float solid = smoothstep(-0.5, 0.5, rim);
+            float halo = smoothstep(-6.0, 0.0, rim);
+            solid += (1.0 - solid) * 0.14 * halo * halo * halo; // a faint halo into the liquid, as slightly out of focus
 
-            float lv = log2(max(r, 6.0) / 6.0), fl = floor(lv);
-            float k = 14.0 * exp2(fl);
-            vec2 seed = off - pts; // the nucleus, so each crystal has its own fibres
-            float fib = mix(vnoise(vec2(th * k, r * 0.35) + seed * 0.37), vnoise(vec2(th * k * 2.0, r * 0.35) + seed * 0.37 + 31.0), lv - fl);
-            fib = fib * 0.75 + 0.25 * hashf(floor(vec2(th * k * 2.0, r * 0.5)) + seed);
-            float wob = (vnoise(vec2(th * 3.0, r * 0.01) + seed) - 0.5) * 0.25 + (fib - 0.5) * 0.12;
-            float ext = 0.5 - 0.5 * cos(4.0 * (th + wob)) * mix(0.9, 0.5, smoothstep(0.0, 0.6, rs));
+            vec2 t = v_tex_coord * u_texels - 0.5, i = floor(t), f = t - i;
+            vec4 n00 = texture2D(u_nucleus, (i + 0.5) / u_texels), n10 = texture2D(u_nucleus, (i + vec2(1.5, 0.5)) / u_texels);
+            vec4 n01 = texture2D(u_nucleus, (i + vec2(0.5, 1.5)) / u_texels), n11 = texture2D(u_nucleus, (i + 1.5) / u_texels);
+            vec2 c = crystal(pts, nucleus(n00, u_size), u_scale);
+            float groove = smoothstep(0.04, 0.14, m.r);
+            vec4 same = vec4(step(dot(abs(n10 - n00), vec4(1.0)), 0.0), step(dot(abs(n01 - n00), vec4(1.0)), 0.0),
+                             step(dot(abs(n11 - n00), vec4(1.0)), 0.0), 1.0);
+            if (same.x + same.y + same.z < 3.0) {
+                // A boundary crosses this cell. Each texel's distance to it, signed by which side it's on, crosses 0
+                // right on the boundary, so the pixel takes the crystal on its side (blended over a point) and the
+                // groove follows the line exactly.
+                vec4 other = same.x < 0.5 ? n10 : (same.y < 0.5 ? n01 : n11);
+                vec4 dist = vec4(texture2D(u_marks, (i + vec2(1.5, 0.5)) / u_texels).r, texture2D(u_marks, (i + vec2(0.5, 1.5)) / u_texels).r,
+                                 texture2D(u_marks, (i + 1.5) / u_texels).r, texture2D(u_marks, (i + 0.5) / u_texels).r) * 8.0 * (same * 2.0 - 1.0);
+                float side = mix(mix(dist.w, dist.x, f.x), mix(dist.y, dist.z, f.x), f.y);
+                c = mix(crystal(pts, nucleus(other, u_size), u_scale), c, smoothstep(-0.6, 0.6, side));
+                groove = smoothstep(0.3, 1.1, abs(side));
+            }
 
-            float gam = (g.b + g.a / 255.0) * u_thickness * (0.92 + 0.16 * fib)
+            float gam = (g.b + g.a / 255.0) * u_thickness * c.y
                       * (0.55 + 0.45 * smoothstep(0.0, 0.12, age)) * smoothstep(0.0, 0.05, left);
             vec3 chart = pow(texture2D(u_chart, vec2(clamp(gam, 0.0, 1.0), 0.5)).rgb, vec3(2.2));
-            float core = mix(0.3, 1.0, smoothstep(0.015, 0.045, rs + (vnoise(off * 0.4) - 0.5) * 0.02));
-            float groove = smoothstep(0.1, 0.3, m.r);
-            float fringe = 1.0 + 0.7 * exp(-max(rim, 0.0) / 0.8);
-            vec3 lit = solid * ext * chart * (0.6 + 0.8 * fib) * m.g * groove * core * fringe;
+            float fringe = 1.0 + 0.6 * exp(-max(rim, 0.0) / 0.8);
+            vec3 lit = there * solid * c.x * chart * m.g * groove * fringe;
 
-            vec2 c = pts - 0.5 * u_size;
-            float rr = length(c) / (0.47 * u_size.y);
+            vec2 d = pts - 0.5 * u_size;
+            float rr = length(d) / (0.47 * u_size.y);
             float field = mix(1.0, smoothstep(1.0, 0.985, rr), u_stop) * (1.0 - 0.12 * min(rr * rr, 1.5));
             vec3 col = u_dark > 0.5 ? (lit * 0.32 + vec3(0.0006, 0.0008, 0.0013)) * u_brightness : (1.0 - lit) * 0.8 * u_brightness;
             col = pow(max(col * field, 0.0), vec3(1.0 / 2.2)) + (hashf(pts * 3.7) - 0.5) / 255.0;
