@@ -81,7 +81,7 @@ Sections: Colors (swatches plus the cycle interval), Motion, Light, Look. The Lo
 - Height: `smoothstep(0.06, 0.40, s) - smoothstep(0.56, 0.94, s)`, from −0.05 (inside the pool) to the top.
 - Ceiling: 65% of trips, top at `1 - 0.45r`, pancake `sy` down to 0.62 while parked (`s` 0.34–0.66; 0.3 as much for trips that turn back).
 - Lanes: rise at 0.3–0.7 of the width; slide out over `s` 0.40–0.66 by 0.1–0.22 of the width; sway `0.02·sin(0.03t + 2i)`.
-- Stem: 0.7r at the pool, tapering to 0.3× under the head; softening constant 0.00015. Drip thread: 0.4r.
+- Stem: 0.7r at the pool, tapering to 0.3× under the head; softening constant 0.00015. Drip thread: 0.4r. Both grow in as the head clears its anchor, from 0.5r to 2.5r away.
 - Pool: height 0.03, heave `0.006·sin(4x + 0.1t) + 0.004·sin(9x - 0.13t)`, strength `0.0028/d²`.
 - Satin sheen: 0.12 × pow(·, 18). Cycle fade: 60 s.
 
@@ -99,6 +99,7 @@ CPU about 0.5 ms and GPU 1.0 ms per frame (release, 2x): the stems add about 0.2
 - `LAVA_SEED=17` fixes the random seed, so before/after renders of a look change show the same blobs.
 - There's no true bloom, just a glow approximated from the wax field.
 - The stem gradient ignores how the taper changes along the segment. It's close enough for shading.
+- **Stems need room:** a stem squeezed into a short gap (a head just leaving the pool, or parked against the top over its drip anchor) makes its taper a near step in the field. Because the field reaches far, that showed as straight seams fanning across the liquid, with creases in the wax outline. So a stem's radius grows in with the gap, `smoothstep(0.5r, 2.5r, |y - anchor y|)`. It showed up in about one frame in four at 50 s; a 2-minute run at 3× speed afterwards had no seams.
 
 ## Dave's feedback and decisions
 - He asked for a "next level" pass with more colour variety. The agent's critique of the original:

@@ -118,11 +118,13 @@ final class LavaLamp: SKScene {
             heads.append(SIMD4(Float(x), Float(y), Float(r), Float((1 - 0.38 * parked) * (1 + 0.12 * max(-speed, 0)))))
             // Its stem: a column off the pool that thins and pinches off under the rising head (squared, so a thin
             // thread goes quickly rather than hanging on as a string), or a thread off the top as it starts to sink.
+            // It only grows once the head is clear of its anchor: squeezed into a short gap, its taper is a sharp
+            // step in the field, which shows as straight seams across the screen.
             let neck = 1 - simd_smoothstep(0.16, 0.32, s)
-            let drip = ceiling ? r * 0.4 * simd_smoothstep(0.54, 0.6, s) * (1 - simd_smoothstep(0.62, 0.72, s)) : 0
-            let perRadius = Float(1 / max(r, 0.001))
-            stems.append(s < 0.5 ? SIMD4(Float(rise), -0.02, Float(r * 0.7 * neck * neck), perRadius)
-                                 : SIMD4(Float(x), 1.02, Float(drip), perRadius))
+            let drip = ceiling ? 0.4 * simd_smoothstep(0.54, 0.6, s) * (1 - simd_smoothstep(0.62, 0.72, s)) : 0
+            let anchor = s < 0.5 ? SIMD2(rise, -0.02) : SIMD2(x, 1.02)
+            let stem = r * (s < 0.5 ? 0.7 * neck * neck : drip) * simd_smoothstep(0.5 * r, 2.5 * r, abs(y - anchor.y))
+            stems.append(SIMD4(Float(anchor.x), Float(anchor.y), Float(stem), Float(1 / max(r, 0.001))))
         }
         let columns = heads + stems
         for (k, uniform) in blobs.enumerated() {
