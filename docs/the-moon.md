@@ -37,7 +37,8 @@ A full-screen, photoreal Moon as it is right now from where the viewer stands: i
   - **Sky:** the physical sky where the Moon is, from `Atmosphere.march` at the Moon's azimuth and at its altitude −0.2, 0 and +0.2 rad, as a three-texel gradient. Partial auto-exposure `0.4·(L/0.1)^0.25` makes it pale blue by day, deep blue or violet at dusk, and black at night. It's laid over everything with `.screen` blending: the air is in front of the Moon, and screen never clips its bright side. The dark side takes the sky's colour, as a daytime Moon's does. The Moon is tinted by the air it's seen through, `Atmosphere.sunlight` at its altitude over that at the zenith, so it rises orange. Stars fade as the sky brightens.
 
 ## Time, live data and appearance
-- **Time:** `date` is now, or now plus `moon.previewDays` days while `moon.preview` is on. The slider covers a month, but any number of days works through `defaults`, e.g. the next total lunar eclipse (2028-12-31 16:52 UTC).
+- **Phase:** `moon.phase` is Real time where you are (0), or one of eight picked phases. A picked phase is a fixed moment in the lunation of January 2026 (`TheMoon.phases`, each 45° further from the Sun, found with SkyMath; new, the quarters and full match the published times to the minute), seen from the Earth's centre and north up, as Dial-a-Moon shows it: waxing lit on the right, waning on the left. Its libration, size and stars are that moment's, so it never changes. The Sky backdrop stays live, the sky where the real Moon is now.
+- **Time:** `date` is now, or now plus `moon.previewDays` days while `moon.preview` is on. Preview only moves real time, and the Sky backdrop. The slider covers a month, but any number of days works through `defaults`, e.g. the next total lunar eclipse (2028-12-31 16:52 UTC).
 - **Location:** `Location.shared`, started in `didMove(to:)`. A new fix writes UserDefaults, which triggers a bake.
 - **Network:** none.
 - **Appearance:** one look; it ignores Light and Dark Mode.
@@ -61,6 +62,7 @@ Linear normals at quality 0.7 lose about 0.013 of slope (RMS) to compression; a 
 ## Settings
 | key | label | range | default | drives |
 |---|---|---|---|---|
+| `moon.phase` | Phase | Real time where you are, New, Waxing crescent, First quarter, Waxing gibbous, Full, Waning gibbous, Last quarter, Waning crescent | Real time | the moment shown (`TheMoon.phases`) |
 | `moon.backdrop` | Backdrop | Black, Stars, Sky | Stars | what's behind the Moon |
 | `moon.size` | Size | 0.4–1 | 0.8 | the disc against the screen's shorter side, at mean distance |
 | `moon.brightness` | Brightness | 0.5–2× | 1× | the sunlit side's exposure |
@@ -92,6 +94,7 @@ Any UserDefaults change triggers a bake on the next frame, so dragging a slider 
 
 ## Dave's feedback and decisions
 - **The brief (2026-09-26):** a full-screen photoreal Moon at its real phase, libration and tilt from his location; CGI Moon Kit data kept modest; lunar-Lambert/Hapke reflectance with the opposition surge; earthshine; copper in a real eclipse; checked against Dial-a-Moon like SkyTests checks Horizons; baked rather than shaded every frame; Black, Stars and Sky backdrops to compare in Settings; a time preview to scrub a month.
+- **Phase (2026-09-27):** he asked for "a select box … that allows the user to pick a static moon phase or set to real time based on location". Picked phases are north up and from the Earth's centre, since a static picture has no time of night to tilt by.
 - **Backdrops (2026-09-26):** "all 3 as a choice for now": Black, Stars and Sky stay in Settings, with Stars the default.
 
 ## Ideas / next steps
@@ -103,6 +106,7 @@ Any UserDefaults change triggers a bake on the next frame, so dragging a slider 
 ## Checking it
 - `swift test --filter MoonTests`:
   - phase, distance, subsolar point, libration and position angle against NASA's Dial-a-Moon at six 2026 dates (within 0.05°; they agree to 0.03°)
+  - the eight picked phases are lit as their names say, and the last four are waning
   - the 2026-03-03 total lunar eclipse: 98% of the disc in the umbra at 11:00 UTC, all of it at 11:33, none at the new moon before
 - Side by side with Dial-a-Moon: `MOON_COMPARE=/some/dir swift test --filter moonRenders` saves our geocentric, north-up Moon for those dates at Dial-a-Moon's scale (0.35 pixels an arcsecond). Their frames come from `https://svs.gsfc.nasa.gov/api/dialamoon/2026-01-03T10:00` (the `image.url` field). `docs/images/the-moon-vs-dial-a-moon.jpg` pairs them, theirs on the left. Full-moon tones match to within a few levels at the 10th, 50th and 90th percentiles.
 - Snapshots: `SNAPSHOT_DEFAULTS="moon.backdrop=2,moon.preview=1,moon.previewDays=7.5" SNAPSHOT_SCENE="The Moon" swift test`. For an eclipse, set `moon.previewDays` to the days until one (2028-12-31 16:52 UTC).

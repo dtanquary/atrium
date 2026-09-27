@@ -65,3 +65,13 @@ func moonMatchesDialAMoon(time: String, lit: Double, km: Double, sunLon: Double,
         CGImageDestinationFinalize(destination)
     }
 }
+
+/// The phases to pick in Settings are what they say: lit (1 − cos e)/2 at elongation e = 45°, 90°, …, and the second
+/// four waning.
+@Test func pickedPhasesAreWhatTheySay() {
+    for (k, jd) in TheMoon.phases.enumerated() {
+        let expected = (1 - cos(Double(k) * .pi / 4)) / 2
+        #expect(abs(Sky.moonView(jd).lit - expected) < 0.01, "phase \(k) lit \(Sky.moonView(jd).lit), expected \(expected)")
+        if k > 0 && k != 4 { #expect(Sky.moonPhase(jd).waxing == (k < 4)) }
+    }
+}

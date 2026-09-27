@@ -10,6 +10,9 @@ import simd
 /// sky turns so the viewer's zenith stays up.
 final class TheMoon: SKScene {
     nonisolated static let knobs = [
+        Knob(key: "moon.phase", label: "Phase", range: 0...8, standard: 0, section: "Look",
+             format: .choice(["Real time where you are", "New", "Waxing crescent", "First quarter", "Waxing gibbous", "Full",
+                              "Waning gibbous", "Last quarter", "Waning crescent"])),
         Knob(key: "moon.backdrop", label: "Backdrop", range: 0...2, standard: 1, section: "Look",
              format: .choice(["Black", "Stars", "Sky"])),
         Knob(key: "moon.size", label: "Size", range: 0.4...1, standard: 0.8, section: "Look"),
@@ -21,6 +24,11 @@ final class TheMoon: SKScene {
              shownWhen: "moon.preview"),
     ]
 
+    /// The phases to pick instead of real time: moments in the lunation of January 2026, each 45° further from the
+    /// Sun, found with SkyMath. New, the quarters and full match the published times to the minute.
+    nonisolated static let phases = [2461059.3283, 2461063.1296, 2461066.6999, 2461070.0729, 2461073.4238, 2461077.0323,
+                                     2461081.0309, 2461085.1420]
+
     private let turntable = SKNode() // the Moon and its stars, turned so the zenith is up
     private let moon = SKSpriteNode()
     private let stars = SKNode()
@@ -31,7 +39,7 @@ final class TheMoon: SKScene {
 
     /// Now, or some days on while previewing.
     private var date: Date {
-        Date().addingTimeInterval(Self.knobs[4].value > 0.5 ? Self.knobs[5].value * 86400 : 0)
+        Date().addingTimeInterval(Self.knobs[5].value > 0.5 ? Self.knobs[6].value * 86400 : 0)
     }
 
     override func sceneDidLoad() {
@@ -62,9 +70,9 @@ final class TheMoon: SKScene {
     }
 
     /// How far to turn the north-up Moon so the viewer's zenith is up: the parallactic angle, which swings through
-    /// the night as the sky turns.
+    /// the night as the sky turns. A picked phase stays north up.
     private func upright(_ jd: Double) -> CGFloat {
-        guard let seen else { return 0 }
+        guard let seen, Self.knobs[0].value < 0.5 else { return 0 }
         let here = Location.shared.coordinate
         let lst = (Sky.siderealTime(jd) + here.longitude) * .pi / 180, lat = here.latitude * .pi / 180
         let zenith = Sky.Vector(cos(lat) * cos(lst), cos(lat) * sin(lst), sin(lat))
@@ -75,19 +83,22 @@ final class TheMoon: SKScene {
     private func bake() {
         needsBake = false
         let here = Location.shared.coordinate, jd = Sky.julianDate(date)
-        let seen = Sky.moonView(jd, latitude: here.latitude, longitude: here.longitude)
+        let live = Sky.moonView(jd, latitude: here.latitude, longitude: here.longitude)
+        // A picked phase is its fixed moment, seen from the Earth's centre as NASA's Dial-a-Moon shows it.
+        let phase = min(max(Int(Self.knobs[0].value), 0), Self.phases.count)
+        let seen = phase > 0 ? Sky.moonView(Self.phases[phase - 1]) : live
         self.seen = seen
-        let diameter = Self.knobs[1].value * Double(min(size.width, size.height)) * 385_000 / seen.km // bigger at perigee
-        let backdrop = Int(Self.knobs[0].value)
+        let diameter = Self.knobs[2].value * Double(min(size.width, size.height)) * 385_000 / seen.km // bigger at perigee
+        let backdrop = Int(Self.knobs[1].value)
         stars.isHidden = backdrop == 0
         sky.isHidden = backdrop != 2
         moon.colorBlendFactor = 0
         if backdrop > 0 { placeStars(seen) }
-        let skyLight = backdrop == 2 ? paintSky(jd, seen) : 0
+        let skyLight = backdrop == 2 ? paintSky(jd, live) : 0 // the sky is live even when the phase isn't
         // Earthshine is far fainter than any lit sky, so it goes as the sky brightens.
         let side = min(Int(diameter * 2) + 4, 4096)
-        moon.texture = baker.bake(seen, pixels: side, radius: diameter, brightness: Self.knobs[2].value,
-                                  earthshine: Self.knobs[3].value * max(0, 1 - skyLight / 0.01))
+        moon.texture = baker.bake(seen, pixels: side, radius: diameter, brightness: Self.knobs[3].value,
+                                  earthshine: Self.knobs[4].value * max(0, 1 - skyLight / 0.01))
         moon.size = CGSize(width: side / 2, height: side / 2)
     }
 
