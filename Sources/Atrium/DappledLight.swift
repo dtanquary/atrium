@@ -10,8 +10,8 @@ import SpriteKit
 /// Made for Light Mode; in Dark Mode the wall is charcoal.
 final class DappledLight: SKScene {
     nonisolated static let knobs = [
-        Knob(key: "dappled.facing", label: "Wall faces", range: 0...7, standard: 1, section: "Wall",
-             format: .choice(["South", "South-west", "West", "North-west", "North", "North-east", "East", "South-east"])),
+        Knob(key: "dappled.facing", label: "Wall faces", range: 0...8, standard: 0, section: "Wall",
+             format: .choice(["Toward the Sun", "South", "South-west", "West", "North-west", "North", "North-east", "East", "South-east"])),
         Knob(key: "dappled.cover", label: "Leaf cover", range: 0...1, standard: 0.5, section: "Wall"),
         Knob(key: "dappled.twig", label: "Leaves near the wall", range: 0...1, standard: 1, section: "Wall", format: .toggle),
         Knob(key: "dappled.weather", label: "Weather", range: 0...3, standard: 0, section: "Light",
@@ -110,10 +110,13 @@ final class DappledLight: SKScene {
 
     // MARK: - The light
 
-    /// The wall's frame in (east, north, up): the way it faces, and right and up as seen looking at it.
-    private var wallFrame: (out: V, right: V, up: V) {
-        let azimuth = (180 + 45 * Self.knob(.facing).rounded()) * .pi / 180
-        let out = V(sin(azimuth), cos(azimuth), 0)
+    /// The wall's frame in (east, north, up): the way it faces, and right and up as seen looking at it. Toward the Sun,
+    /// it turns to face `light` (the Sun, or the Moon by moonlight), so the light falls whenever that's up.
+    private func wallFrame(facing light: V) -> (out: V, right: V, up: V) {
+        let choice = Self.knob(.facing).rounded()
+        let level = SIMD2(light.x, light.y)
+        let out = choice < 0.5 && length(level) > 1e-6 ? V(normalize(level).x, normalize(level).y, 0)
+            : V(sin((135 + 45 * choice) * .pi / 180), cos((135 + 45 * choice) * .pi / 180), 0)
         return (out, V(-out.y, out.x, 0), V(0, 0, 1))
     }
 
@@ -130,10 +133,12 @@ final class DappledLight: SKScene {
         let sun = normalize(toHorizon * Sky.sun(jd))
         let moonSeen = Sky.moon(jd, latitude: here.latitude, longitude: here.longitude)
         let moon = normalize(toHorizon * moonSeen.direction)
-        let wallFrame = self.wallFrame
-        func onWall(_ v: V) -> V { V(dot(v, wallFrame.right), dot(v, wallFrame.up), dot(v, wallFrame.out)) }
         let air = Atmosphere.shared
         let altitude = asin(sun.z) * 180 / .pi
+        let isNight = altitude < -1.5
+        // Below the horizon neither light shows, so turning from the Sun to the Moon there can't be seen.
+        let wallFrame = self.wallFrame(facing: isNight && Self.knob(.night) < 0.5 ? moon : sun)
+        func onWall(_ v: V) -> V { V(dot(v, wallFrame.right), dot(v, wallFrame.up), dot(v, wallFrame.out)) }
 
         // Skylight on the wall: blue by day, fading through twilight to the glow of towns. Photos of leaf shadows on
         // walls put sunlit wall at 7–8 times the shade by day, 4 at golden hour.
@@ -147,7 +152,6 @@ final class DappledLight: SKScene {
         var strength = pow(air.sunlight(0.2, sun.z), V(repeating: 2)) // the low air is hazier than the model's, so twice the path
         var mask = SIMD4<Float>(0, 0, 0, 1)
         var term = SIMD2<Float>(1, 0)
-        let isNight = altitude < -1.5
         if !isNight {
             // The Moon over the Sun, seen from here; or a partial eclipse to preview.
             let moonRadius = asin(1737.4 / moonSeen.km)
@@ -521,7 +525,7 @@ final class DappledLight: SKScene {
         float sunlit = far * (1.0 - leaf) * (1.0 - twig);
         // The crown also hides part of the sky: a soft shadow straight back from where the tree really is (a little low,
         // since the sky is brightest overhead), which is all there is to see under cloud or with the Sun behind the wall.
-        vec2 cs = p + sway * 0.6 - vec2(0.0, 0.2);
+        vec2 cs = p + sway * 0.6 + vec2(0.0, 0.2);   // looking 0.2 m up the tree puts its shadow 0.2 m low
         float hidden = smoothstep(0.1, 0.8, texture2D(u_canopy, fract(cs * 0.29 + vec2(0.13, 0.61))).b + u_wind.w - 0.5);
         vec3 light = u_amb * (1.0 - 0.5 * hidden) + u_light * sunlit * max(dot(normal, u_dir), 0.0);
         vec3 col = sqrt(1.0 - exp(-albedo * light));
