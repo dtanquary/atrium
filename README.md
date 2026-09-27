@@ -157,11 +157,13 @@ The live wind around you as thin streaks streaming across the map, in the spirit
 | Half the continent, over shaded relief | The same in Light Mode |
 
 ### Dappled Light
-Sunlight through a tree onto a warm white plaster wall, from the real Sun where you are: it only falls when the Sun is on the wall's side, and turns golden near sunset. Every gap between the leaves is a pinhole camera, so the dapples are images of the Sun, round or stretched by the angle of the light, and crescents during a real solar eclipse. Near leaves cast sharp shadows, far ones melt into soft shade. Cloud softens it and wind sways the leaves, from the live weather; at night, faint moonlight at the real phase, or a warm streetlight.
+Sunlight through a tree onto a warm white plaster wall, from the real Sun where you are: it only falls when the Sun is on the wall's side, and turns golden near sunset. Every gap between the leaves is a pinhole camera, so the dapples are images of the Sun, round or stretched by the angle of the light, and crescents during a real solar eclipse. Near leaves cast sharp shadows, far ones melt into soft shade. Cloud softens it and wind sways the leaves, from the live weather; at night, faint moonlight at the real phase, or a warm streetlight. In Dark Mode the same light falls on charcoal plaster.
 
 | ![Dappled Light on an afternoon](docs/images/dappled-light.jpg) | ![Dappled Light at golden hour](docs/images/dappled-light-golden.jpg) |
 |---|---|
 | A clear afternoon on a south-west wall | Twenty-five minutes before sunset |
+| ![Dappled Light in Dark Mode, on charcoal plaster](docs/images/dappled-light-dark.jpg) | ![Dappled Light during a partial solar eclipse](docs/images/dappled-light-eclipse.jpg) |
+| Dark Mode: the same light on charcoal plaster | A partial solar eclipse: every dapple a crescent |
 
 ## How it works
 

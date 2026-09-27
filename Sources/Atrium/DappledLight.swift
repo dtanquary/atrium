@@ -7,6 +7,7 @@ import SpriteKit
 /// pinhole camera, so the bright spots are images of the Sun: round, 0.0093 × the gap's distance across, stretched
 /// by the angle the light meets the wall, and crescents during a real eclipse. Leaves near the wall cast sharp
 /// shadows. Cloud cover and wind come from the live weather; by night, moonlight at the real phase or a streetlight.
+/// Made for Light Mode; in Dark Mode the wall is charcoal.
 final class DappledLight: SKScene {
     nonisolated static let knobs = [
         Knob(key: "dappled.facing", label: "Wall faces", range: 0...7, standard: 1, section: "Wall",
@@ -51,6 +52,9 @@ final class DappledLight: SKScene {
     private var sinceLight = 0.0, clock = 0.0, lastUpdate: TimeInterval?
     /// The twig's base in the plane of its leaves, fixed when the scene is built so its shadow starts on screen.
     private var twigBase = SIMD2<Double>.zero
+    /// The wall's colour in linear light: warm white stucco, or in Dark Mode the same stucco in charcoal (the colour of
+    /// Poly Haven's Plastered Wall 05), which Dave picked over a dim white wall, dark green or terracotta.
+    private let wallColour: SIMD3<Float> = systemIsDark ? [0.060, 0.066, 0.074] : [0.693, 0.658, 0.630]
 
     override init(size: CGSize) {
         super.init(size: size)
@@ -164,7 +168,7 @@ final class DappledLight: SKScene {
             toward = wallFrame.right * -0.55 + wallFrame.up * 0.35 + wallFrame.out * 0.76
             toward = normalize(toward)
             radius = 0.008 // a 20 cm globe 12 m away
-            strength = V(1.0, 0.62, 0.32) * 0.002 * smoothstep(-1.5, -4, altitude)
+            strength = V(1.0, 0.55, 0.2) * 0.002 * smoothstep(-1.5, -4, altitude) // sodium orange
             sky += strength * 0.06
         } else {
             // Moonlight: a 2.5-millionth of sunlight at full, falling off faster than the lit fraction, and each
@@ -210,8 +214,14 @@ final class DappledLight: SKScene {
         let cloudy = conditions.sunshine == .overcast
         let scene = (cloudy ? overcastSky : sky + lit.direct * cosine * 0.5)
         let luminance = max(dot(scene, V(0.2126, 0.7152, 0.0722)), 1e-9)
-        lit.exposure = 1.8 * pow(luminance / 0.33, -0.82) / 0.33 * (1 - 0.5 * smoothstep(-3, -10, altitude))
-        tint.vectorFloat3Value = SIMD3<Float>(0.693, 0.658, 0.630) / 0.6557
+        let streetlight = Self.knob(.night) > 0.5 ? 0.25 : 0 // lamplight is bright for its size, so the eye stays dimmer
+        lit.exposure = 1.8 * pow(luminance / 0.33, -0.82) / 0.33 * (1 - (0.5 + streetlight) * smoothstep(-3, -10, altitude))
+        // A charcoal wall would go black by night, so in Dark Mode the glow of the sky is five times as strong on it.
+        if wallColour.x < 0.2 {
+            let glow = 1 + 4 * smoothstep(-3, -10, altitude)
+            (lit.sky, lit.overcastSky) = (lit.sky * glow, lit.overcastSky * glow)
+        }
+        tint.vectorFloat3Value = wallColour / 0.6557 // the texture's mean albedo
     }
 
     /// Two unit vectors square to `v` and to each other, the first level, for measuring offsets in the sky around it.
