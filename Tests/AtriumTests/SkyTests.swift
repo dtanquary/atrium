@@ -38,3 +38,18 @@ func moonPhaseMatchesHorizons(jd: Double, lit: Double, waxing: Bool) {
     let overhead = Sky.lookDirection(latitude: 40, longitude: -100, toLatitude: 40, longitude: -100, altitude: 420)
     #expect(overhead.z > 0.9999)
 }
+
+/// Real total and annular eclipses, seen from the path: at the published greatest eclipse the Moon, placed from where
+/// the viewer stands, sits on the Sun (within 30″ of the Sun's 960″ radius).
+@Test(arguments: [("2024-04-08T18:42:39Z", 32.78, -96.80), ("2017-08-21T18:28:00Z", 36.16, -86.78),
+                  ("2023-10-14T16:36:00Z", 35.08, -106.65), ("2026-08-12T18:27:00Z", 43.36, -5.85)])
+func eclipsesLineUp(time: String, latitude: Double, longitude: Double) {
+    let jd = Sky.julianDate(ISO8601DateFormatter().date(from: time)!)
+    let best = stride(from: -120.0, through: 120, by: 5).map { seconds in
+        let moon = Sky.moon(jd + seconds / 86400, latitude: latitude, longitude: longitude).direction
+        return acos(min(dot(moon, Sky.sun(jd + seconds / 86400)), 1)) * 180 / .pi * 3600
+    }.min()!
+    #expect(best < 50, "the Moon passes \(best)″ from the Sun's centre")
+    // Without parallax it misses by a good part of a degree.
+    #expect(acos(min(dot(Sky.moon(jd), Sky.sun(jd)), 1)) * 180 / .pi > 0.4)
+}

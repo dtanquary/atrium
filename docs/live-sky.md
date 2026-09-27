@@ -51,7 +51,7 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
 
 ## Astronomy (SkyMath.swift)
 - **Planets:** JPL "Approximate Positions of the Planets", table 1 Keplerian elements (1800–2050), with Kepler's equation solved by Newton's method in 5 iterations. Earth's elements give the Sun.
-- **Moon:** the Astronomical Almanac low-precision series (about 0.3°), stepped from the equinox of date back to J2000 by −1.397°·T. `moonPhase` gives lit = (1 − m·s)/2, and waxing = the Moon is east of the Sun along the ecliptic.
+- **Moon:** the main terms of ELP-2000/82 (Meeus, "Astronomical Algorithms", ch. 47: 60 longitude and distance terms, 30 latitude), about 10″, stepped from the equinox of date back to J2000 by −1.397°·T. It replaced the Astronomical Almanac's low-precision series (about 0.3°) on 2026-09-26, for Dappled Light's eclipses, which that series put 10–30 minutes off. `moon(_:latitude:longitude:)` adds the parallax from where the viewer stands (up to 1°) and gives the distance. `moonPhase` gives lit = (1 − m·s)/2, and waxing = the Moon is east of the Sun along the ecliptic.
 - **Other helpers:**
   - `siderealTime` is GMST in degrees.
   - `lookDirection` gives the direction from a ground observer to a point at altitude. It uses a spherical Earth, R = 6371 km.
@@ -91,7 +91,7 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
 
 ## Gotchas and shortcuts
 - `ponytail:` **precession.** It's ignored since J2000, about 0.35° by 2026. It shifts the whole sky together, so nothing looks wrong relative to itself.
-- `ponytail:` **no topocentric parallax for the Moon.** It can sit up to about 1° off its true place against the stars.
+- `ponytail:` **no topocentric parallax for the Moon.** It can sit up to about 1° off its true place against the stars. `Sky.moon(_:latitude:longitude:)` has it now, if Live Sky wants it.
 - `ponytail:` **fixed planet magnitudes.** Real ones swing (Mars from about −2.9 to +1.8). They only affect daytime fading.
 - `ponytail:` **hand-placed maria.** A real lunar albedo map would add fidelity.
 - `ponytail:` **fallback location.** The time-zone guess can be about 15° off in latitude until CoreLocation answers.
@@ -122,5 +122,6 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
 - `swift test --filter SkyTests`:
   - positions matched against Horizons
   - the Moon's lit fraction and waxing/waning
+  - four real total and annular eclipses line up, seen from their paths (`eclipsesLineUp`)
   - Polaris' altitude equals the latitude
   - an ISS directly overhead points straight up

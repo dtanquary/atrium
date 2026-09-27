@@ -1,7 +1,7 @@
 import Foundation
 import simd
 
-/// Just enough positional astronomy for a wallpaper: Sun, Moon and naked-eye planets to within ~0.5°, and the
+/// Just enough positional astronomy for a wallpaper: Sun and naked-eye planets to within ~0.5°, the Moon to 10″, and the
 /// turn from sky to local horizon. Directions are unit vectors. Equatorial ones are J2000 (x → RA 0h, z → north
 /// pole); horizon ones are (east, north, up).
 enum Sky {
@@ -110,19 +110,83 @@ enum Sky {
         normalize(equatorial(fromEcliptic: -heliocentric("Earth", centuries(jd))))
     }
 
-    /// Geocentric Moon from the Astronomical Almanac's low-precision series (~0.3°).
-    // ponytail: no topocentric parallax, so the Moon can sit up to ~1° off its true place against the stars
-    static func moon(_ jd: Double) -> Vector {
-        let t = centuries(jd)
-        func s(_ degrees: Double) -> Double { sin(degrees * .pi / 180) }
-        let longitude = 218.32 + 481267.881 * t
-            + 6.29 * s(135.0 + 477198.87 * t) - 1.27 * s(259.3 - 413335.36 * t) + 0.66 * s(235.7 + 890534.22 * t)
-            + 0.21 * s(269.9 + 954397.74 * t) - 0.19 * s(357.5 + 35999.05 * t) - 0.11 * s(186.5 + 966404.03 * t)
-        let latitude = 5.13 * s(93.3 + 483202.02 * t) + 0.28 * s(228.2 + 960400.89 * t)
-            - 0.28 * s(318.3 + 6003.15 * t) - 0.17 * s(217.6 - 407332.21 * t)
-        // The series is referred to the equinox of date; step back to J2000 by general precession.
-        return equatorial(fromEcliptic: direction(longitude - 1.397 * t, latitude))
+    /// Geocentric Moon, as a direction.
+    // ponytail: no topocentric parallax, so the Moon can sit up to ~1° off its true place against the stars; use
+    // `moon(_:latitude:longitude:)` where that matters (eclipses)
+    static func moon(_ jd: Double) -> Vector { normalize(moonPosition(jd)) }
+
+    /// The Moon as seen from a place on the ground, which parallax moves up to 1° from where it is from the Earth's
+    /// centre: a direction, and its distance in km.
+    static func moon(_ jd: Double, latitude: Double, longitude: Double) -> (direction: Vector, km: Double) {
+        let lst = (siderealTime(jd) + longitude) * .pi / 180, lat = latitude * .pi / 180
+        let here = Vector(cos(lat) * cos(lst), cos(lat) * sin(lst), sin(lat)) * 6371 // spherical Earth
+        let away = moonPosition(jd) - here
+        return (normalize(away), length(away))
     }
+
+    /// Geocentric Moon in km, J2000, from the main terms of ELP-2000/82 (Meeus, "Astronomical Algorithms", ch. 47),
+    /// good to about 10″: real eclipses come out within 20″ and a minute or so of their published times.
+    static func moonPosition(_ jd: Double) -> Vector {
+        let t = centuries(jd + 69.0 / 86400) // Terrestrial Time, about 69 s ahead of UTC in the 2020s
+        func angle(_ degrees: Double) -> Double { degrees * .pi / 180 }
+        let L = 218.3164477 + 481267.88123421 * t - 0.0015786 * t * t
+        let D = 297.8501921 + 445267.1114034 * t - 0.0018819 * t * t
+        let M = 357.5291092 + 35999.0502909 * t - 0.0001536 * t * t
+        let Mm = 134.9633964 + 477198.8675055 * t + 0.0087414 * t * t
+        let F = 93.2720950 + 483202.0175233 * t - 0.0036539 * t * t
+        let (a1, a2, a3) = (119.75 + 131.849 * t, 53.09 + 479264.290 * t, 313.45 + 481266.484 * t)
+        let e = 1 - 0.002516 * t - 0.0000074 * t * t // the Earth's orbit slowly rounding
+        var (l, r, b) = (0.0, 0.0, 0.0)
+        for term in moonTerms {
+            let arg = angle(term[0] * D + term[1] * M + term[2] * Mm + term[3] * F), scale = pow(e, abs(term[1]))
+            l += term[4] * scale * sin(arg)
+            r += term[5] * scale * cos(arg)
+        }
+        for term in moonLatitudeTerms {
+            b += term[4] * pow(e, abs(term[1])) * sin(angle(term[0] * D + term[1] * M + term[2] * Mm + term[3] * F))
+        }
+        l += 3958 * sin(angle(a1)) + 1962 * sin(angle(L - F)) + 318 * sin(angle(a2))
+        b += -2235 * sin(angle(L)) + 382 * sin(angle(a3)) + 175 * sin(angle(a1 - F)) + 175 * sin(angle(a1 + F))
+            + 127 * sin(angle(L - Mm)) - 115 * sin(angle(L + Mm))
+        // The series is referred to the equinox of date; step back to J2000 by general precession.
+        return equatorial(fromEcliptic: direction(L + l / 1e6 - 1.3969713 * t, b / 1e6)) * (385000.56 + r / 1000)
+    }
+
+    /// Meeus table 47.A: multiples of D, M, M′ and F, then the longitude (1e-6°) and distance (m) terms.
+    private static let moonTerms: [[Double]] = [
+        [0, 0, 1, 0, 6288774, -20905355], [2, 0, -1, 0, 1274027, -3699111], [2, 0, 0, 0, 658314, -2955968],
+        [0, 0, 2, 0, 213618, -569925], [0, 1, 0, 0, -185116, 48888], [0, 0, 0, 2, -114332, -3149],
+        [2, 0, -2, 0, 58793, 246158], [2, -1, -1, 0, 57066, -152138], [2, 0, 1, 0, 53322, -170733],
+        [2, -1, 0, 0, 45758, -204586], [0, 1, -1, 0, -40923, -129620], [1, 0, 0, 0, -34720, 108743],
+        [0, 1, 1, 0, -30383, 104755], [2, 0, 0, -2, 15327, 10321], [0, 0, 1, 2, -12528, 0],
+        [0, 0, 1, -2, 10980, 79661], [4, 0, -1, 0, 10675, -34782], [0, 0, 3, 0, 10034, -23210],
+        [4, 0, -2, 0, 8548, -21636], [2, 1, -1, 0, -7888, 24208], [2, 1, 0, 0, -6766, 30824],
+        [1, 0, -1, 0, -5163, -8379], [1, 1, 0, 0, 4987, -16675], [2, -1, 1, 0, 4036, -12831],
+        [2, 0, 2, 0, 3994, -10445], [4, 0, 0, 0, 3861, -11650], [2, 0, -3, 0, 3665, 14403],
+        [0, 1, -2, 0, -2689, -7003], [2, 0, -1, 2, -2602, 0], [2, -1, -2, 0, 2390, 10056],
+        [1, 0, 1, 0, -2348, 6322], [2, -2, 0, 0, 2236, -9884], [0, 1, 2, 0, -2120, 5751],
+        [0, 2, 0, 0, -2069, 0], [2, -2, -1, 0, 2048, -4950], [2, 0, 1, -2, -1773, 4130],
+        [2, 0, 0, 2, -1595, 0], [4, -1, -1, 0, 1215, -3958], [0, 0, 2, 2, -1110, 0],
+        [3, 0, -1, 0, -892, 3258], [2, 1, 1, 0, -810, 2616], [4, -1, -2, 0, 759, -1897],
+        [0, 2, -1, 0, -713, -2117], [2, 2, -1, 0, -700, 2354], [2, 1, -2, 0, 691, 0],
+        [2, -1, 0, -2, 596, 0], [4, 0, 1, 0, 549, -1423], [0, 0, 4, 0, 537, -1117],
+        [4, -1, 0, 0, 520, -1571], [1, 0, -2, 0, -487, -1739], [2, 1, 0, -2, -399, 0],
+        [0, 0, 2, -2, -381, -4421], [1, 1, 1, 0, 351, 0], [3, 0, -2, 0, -340, 0],
+        [4, 0, -3, 0, 330, 0], [2, -1, 2, 0, 327, 0], [0, 2, 1, 0, -323, 1165],
+        [1, 1, -1, 0, 299, 0], [2, 0, 3, 0, 294, 0], [2, 0, -1, -2, 0, 8752],
+    ]
+
+    /// Meeus table 47.B, its 30 largest terms: multiples of D, M, M′ and F, then the latitude term (1e-6°).
+    private static let moonLatitudeTerms: [[Double]] = [
+        [0, 0, 0, 1, 5128122], [0, 0, 1, 1, 280602], [0, 0, 1, -1, 277693], [2, 0, 0, -1, 173237],
+        [2, 0, -1, 1, 55413], [2, 0, -1, -1, 46271], [2, 0, 0, 1, 32573], [0, 0, 2, 1, 17198],
+        [2, 0, 1, -1, 9266], [0, 0, 2, -1, 8822], [2, -1, 0, -1, 8216], [2, 0, -2, -1, 4324],
+        [2, 0, 1, 1, 4200], [2, 1, 0, -1, -3359], [2, -1, -1, 1, 2463], [2, -1, 0, 1, 2211],
+        [2, -1, -1, -1, 2065], [0, 1, -1, -1, -1870], [4, 0, -1, -1, 1828], [0, 1, 0, 1, -1794],
+        [0, 0, 0, 3, -1749], [0, 1, -1, 1, -1565], [1, 0, 0, 1, -1491], [0, 1, 1, 1, -1475],
+        [0, 1, 1, -1, -1410], [0, 1, 0, -1, -1344], [1, 0, 0, -1, -1335], [0, 0, 3, 1, 1107],
+        [4, 0, 0, -1, 1021], [4, 0, -1, 1, 833],
+    ]
 
     /// How much of the Moon's disc is lit (0...1), and whether it's waxing (east of the Sun along the ecliptic).
     static func moonPhase(_ jd: Double) -> (lit: Double, waxing: Bool) {
