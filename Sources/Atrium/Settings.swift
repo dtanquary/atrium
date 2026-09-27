@@ -20,11 +20,14 @@ struct Knob {
 
 /// Named colour palettes a wallpaper can be pinned to, stored by name under `key`; empty rolls one at random.
 /// Each option carries a few swatch colours for its dark and light looks. `standard` is the pick before the user
-/// makes one.
+/// makes one. Options with an entry in `photos` show that resource image for each look instead of their colours.
 struct PaletteChoice {
     let key: String
     let options: [(name: String, dark: [SIMD3<Float>], light: [SIMD3<Float>])]
     var standard = ""
+    var photos: [String: (dark: String, light: String)] = [:]
+    /// The Settings section it heads.
+    var title = "Colors"
 }
 
 /// The Settings window, laid out like System Settings: wallpapers down the side, each with its own page.
@@ -190,6 +193,9 @@ struct AboutPage: View {
                 DisclosureGroup("Weather's hills, clouds and Moon, from the BLM, NASA, Poly Haven and Wikimedia Commons") {
                     ForEach(credits("weather-credits.tsv"), id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
                 }
+                DisclosureGroup("Rain on Glass backdrops, from Poly Haven, Wikimedia Commons and the NPS") {
+                    ForEach(credits("rain-credits.tsv"), id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
+                }
                 DisclosureGroup("Reef photos, from iNaturalist, Wikimedia Commons and NOAA") {
                     ForEach(credits("reef-credits.tsv"), id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
                 }
@@ -235,7 +241,7 @@ struct WallpaperPage: View {
                 .padding(.top, 150)
             }
             if let palettes = wallpaper.palettes {
-                Section("Colors") {
+                Section(palettes.title) {
                     PalettePicker(choice: palettes) { rebuildIfShowing() }
                     RandomOnly(choice: palettes) {
                         ForEach(wallpaper.knobs.filter { $0.section == "Colors" }, id: \.key) { KnobRow(knob: $0) }
@@ -398,15 +404,17 @@ struct PalettePicker: View {
 
     var body: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 76), spacing: 14)], spacing: 14) {
-            swatch("Random", colours: choice.options.compactMap { (scheme == .dark ? $0.dark : $0.light).last }, symbol: "shuffle")
+            swatch("Random", colours: choice.options.filter { choice.photos[$0.name] == nil }.compactMap { (scheme == .dark ? $0.dark : $0.light).last },
+                   symbol: "shuffle")
             ForEach(choice.options, id: \.name) { option in
-                swatch(option.name, colours: scheme == .dark ? option.dark : option.light)
+                swatch(option.name, colours: scheme == .dark ? option.dark : option.light,
+                       photo: choice.photos[option.name].map { scheme == .dark ? $0.dark : $0.light })
             }
         }
         .padding(.vertical, 6)
     }
 
-    private func swatch(_ name: String, colours: [SIMD3<Float>], symbol: String? = nil) -> some View {
+    private func swatch(_ name: String, colours: [SIMD3<Float>], symbol: String? = nil, photo: String? = nil) -> some View {
         let isSelected = (name == "Random" ? "" : name) == selected
         return Button {
             selected = name == "Random" ? "" : name
@@ -417,6 +425,11 @@ struct PalettePicker: View {
                     .fill(LinearGradient(colors: colours.map { Color(red: Double($0.x), green: Double($0.y), blue: Double($0.z)) },
                                          startPoint: .topLeading, endPoint: .bottomTrailing))
                     .frame(height: 46)
+                    .overlay {
+                        if let photo, let image = NSImage(contentsOf: resource(photo)) { // ponytail: reads the file on each redraw; small
+                            Image(nsImage: image).resizable().scaledToFill().clipShape(.rect(cornerRadius: 12))
+                        }
+                    }
                     .overlay { if let symbol { Image(systemName: symbol).font(.title3.bold()).foregroundStyle(.white) } }
                     .overlay { RoundedRectangle(cornerRadius: 15).strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 2.5).padding(-4) }
                 Text(name).font(.caption).foregroundStyle(isSelected ? .primary : .secondary).lineLimit(1)
