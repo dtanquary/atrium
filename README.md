@@ -113,9 +113,11 @@ A campfire in a stone ring in a real forest clearing at night, its flames simula
 ![Campfire in a forest clearing at night](docs/images/campfire.jpg)
 
 ### Game of Life
-Conway's cells with fading trails, reseeding so it never dies out.
+Conway's cells, reseeding so they never die out. The Calm look shows a long exposure, so cells melt into soft glowing blobs that drift slowly; the Classic look is crisp, quick and colourful.
 
-![Game of Life](docs/images/game-of-life.jpg)
+| ![Game of Life, Calm](docs/images/game-of-life.jpg) | ![Game of Life, Classic](docs/images/game-of-life-classic.jpg) |
+|---|---|
+| Calm | Classic |
 
 ## How it works
 

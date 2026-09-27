@@ -58,7 +58,7 @@ struct Wallpaper {
     Wallpaper(name: "Campfire", icon: "flame.fill", tint: .red, blurb: "A campfire in a forest clearing, under the real stars.",
               make: campfire),
     Wallpaper(name: "Game of Life", icon: "square.grid.3x3.fill", tint: .orange, blurb: "Conway's cells that never die out.",
-              make: gameOfLife),
+              make: gameOfLife, knobs: GameOfLife.knobs),
 ]
 
 /// Seconds for shaders to animate by, as `u_now`, in place of SpriteKit's `u_time`. `u_time` counts from app launch
