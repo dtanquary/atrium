@@ -1,20 +1,26 @@
 # Lava Lamp
 
-Full-screen view inside a lava lamp. Glowing jewel-tone wax heats in a molten pool at the bottom, rises as stretched teardrops that pinch off on thin necks, slumps wide at the top and sinks back. The liquid is lit from below by a bulb. It follows Light/Dark Mode.
+Full-screen view inside a lava lamp. Glowing jewel-tone wax heats in a molten pool over the bulb and rises up the middle as round heads on stems that neck and pinch off. Most of it sticks to the top for a while, pancaked, then slides out and sinks near the cooler sides, sometimes dripping off the top on a thread. The liquid is lit from below by a bulb. It follows Light/Dark Mode.
 
 - **Files:** `Sources/Atrium/LavaLamp.swift` holds the knobs, palettes, colour cycling, the blob layout (`layBlobs`) and the shader source. Noise comes from `shaderCommon` in Shaders.swift.
 - **Entry:** `lavaLamp(size:)` returns `final class LavaLamp: SKScene`. Its registry entry in Scenes.swift has icon `lamp.table.fill`, tint `.orange`, `knobs: LavaLamp.knobs`, and palettes `PaletteChoice(key: "lava.palette", ...)`. The swatches are liquid-lit to wax-hot, `[3]` and `[1]`. The standard is "", meaning Random.
 - **Kind:** a full-screen SKShader (metaballs), in a subclass with live uniforms.
 
 ## How it works
-**Blob layout (`layBlobs`, Swift):** every frame, after integrating the phase, Swift works out where the 8 blobs and their 8 tails are and packs them as (x, y, radius, stretch) into four `mat4` uniforms, `u_blobs0`…`u_blobs3`, one ball per column. It's a pure function of the phase, so it looks the same at any frame rate. This used to run in the shader for every pixel, which was 60% of the frame (see Performance).
+**Blob layout (`layBlobs`, Swift):** every frame, after integrating the time, Swift works out where the 8 heads and their 8 stems are and packs them into four `mat4` uniforms, one per column: `u_blobs0`/`u_blobs1` hold heads as (x, y, radius, stretch), `u_blobs2`/`u_blobs3` hold stems as (anchor x, anchor y, radius, 0). It's a pure function of the time, so it looks the same at any frame rate. The time is kept in Double (`time`), so the layout stays smooth after days of running; `u_phase` is only its Float copy for the wobble and pool heave. This used to run in the shader for every pixel, which was 60% of the frame (see Performance).
 
-**Wax field (`field`, shader):** those 16 balls plus the pool, as metaballs `r²/d²` with analytic gradients. Wax is wherever the field passes 1. Each blob (driven by `hash(i + seed)`, the shader's `hash11` ported to Double):
-- **Size:** radius `(0.045 + 0.075·h1²)·u_blobSize`, so mostly small with a few big ones.
-- **Trip:** a phase `s = fract(t/(55 + 50·h2) + h3)`, one trip every 55–105 s. `height(s)` rests in the pool, rises, lingers at the top and sinks back more slowly than it rose.
-- **Speed and stretch:** `speed` is the derivative of height. Moving wax stretches tall (`sy = 1 + 0.9·|speed|`); wax resting at the top slumps wide.
-- **Tail:** each blob drags a second, smaller ball (0.55 r) behind its motion. Rising wax trails a neck off the pool that thins and pinches off; sinking wax drips.
-- **Pool:** a heaving surface near y ≈ 0.03 with a `1/d²` field, so blobs rise off it on necks.
+It follows how real lamps convect (the research agent's sources: [Wikipedia on lava lamps](https://en.wikipedia.org/wiki/Lava_lamp) and Rayleigh–Taylor plumes, and [Phys. Rev. E 80, 046307](https://link.aps.org/doi/10.1103/PhysRevE.80.046307), whose lava-lamp regime has warm blobs rise, "attach to the top surface for a while", then sink). Each blob, from `hash(i + seed + trip·k)`, the shader's `hash11` ported to Double:
+- **Trips:** a phase `s` through a trip every 60–110 s. `trip = floor(u)` feeds the hashes, so every trip rolls a new size, lane and height, and no path repeats.
+- **Size:** radius `(0.028 + 0.1·h1²)·blobSize`, from pea-sized droplets to fist-sized heads (a healthy lamp has a mix; Mathmos says one big blob or many small ones means it's overheating). It shrinks to 0 at both ends of the trip, while buried in the pool, so a re-roll never pops.
+- **Height:** `height(s)` rests in the pool, rises, lingers at the top, and sinks back more slowly than it rose. 65% of trips (`h2 < 0.65`) reach the top (`1 - 0.45r`, so they press against it); the rest turn back at 0.5–0.85.
+- **Lanes:** it rises over the bulb (`rise`, 0.3–0.7 of the width), slides out along the top as it cools (`s` 0.40–0.66), and sinks toward the nearer, cooler wall (`sink`, 0.1–0.22 of the width further out, kept inside 0.07–0.93).
+- **Shape:** heads stay round (real plume heads never stretch into tall eggs). `sy = (1 - 0.38·parked)·(1 + 0.12·max(-speed, 0))`: pancaked while parked on the top, a little long while dripping.
+- **Stems:** while rising (`s` < 0.5) a column runs from the pool under its lane `(rise, -0.02)` to the head, radius `0.7r·k²` with `k = 1 - smoothstep(0.16, 0.32, s)`, so it thins and pinches off (squared, so a thin thread goes quickly instead of hanging on as a string). Trips that reached the top then drip: a thread from `(x, 1.02)` of radius `0.4r`, fading in at `s` 0.54–0.6 and pinching off by 0.72.
+
+**Wax field (`field`, shader):** the 8 heads as metaballs `r²/d²`, the 8 stems as tapered segments, and the pool, all with analytic gradients. Wax is wherever the field passes 1.
+- **Stem (`stem`):** a segment from the anchor to the head, thick at the anchor and 0.3× under the head, so it necks just below it. Its field is softened to `2r²/(d² + r² + 0.00015)`: still 1 at its radius, but it peaks at 2 on the axis instead of spiking. With a plain `r²/d²`, or without the constant, every stem's axis and every vanishing thread showed as a hard seam in the shading.
+- **Pool:** a nearly flat surface near y ≈ 0.03 (heave `0.006·sin(4x + 0.1t) + 0.004·sin(9x - 0.13t)`) with a `1/d²` field, so heads rise off it on stems. Real pools are flat; the heads resting in it make the bumps.
+- The column indices are clamped (`b0[min(i, 3)]`), since the GPU may read both sides of a `?:`.
 
 **Wobble:** `p + u_wobble·noise` before evaluating the field, so edges are soft and irregular rather than perfect ellipses.
 
@@ -33,7 +39,7 @@ Full-screen view inside a lava lamp. Glowing jewel-tone wax heats in a molten po
 **Glass:** darker toward the sides (`0.62 + 0.38·sin(πx)`), two faint vertical window reflections, then dither.
 
 ## Time, live data and appearance
-- **Time:** `u_phase` is integrated in `update` (`dt × speed`, dt capped at 0.5 s), so the speed slider never jumps and `SNAPSHOT_SECONDS` moves it forward.
+- **Time:** `time` (Double) is integrated in `update` (`dt × speed`, dt capped at 0.5 s) and copied to `u_phase`, so the speed slider never jumps and `SNAPSHOT_SECONDS` moves it forward.
 - **Palette at build:** the pinned `lava.palette` by name, otherwise random. Each palette has `dark` and `light` 4-colour sets, `[waxDeep, waxHot, liquidDeep, liquidLit]`, chosen by `systemIsDark`.
 - **Colour cycle:** only when the palette is Random and `lava.cycleMinutes` > 0. An SKAction repeats every N minutes and eases all four colours to a different palette in the current look over 60 s (`cycle()`). The palette showing is tracked by index in `current`: a finished blend isn't bit-for-bit the colours it aimed at, so the old check (comparing colours) sometimes failed to rule out the current palette and "changed" to the same one. It's rescheduled in `applySettings` only when the interval actually changes.
 - **Appearance:** a Light/Dark switch rebuilds the scene through the app (crossfade). A new palette pick rebuilds it too, if it's showing.
@@ -68,13 +74,16 @@ Sections: Colors (swatches plus the cycle interval), Motion, Light, Look. The Lo
 | Rose | rose in deep teal | rose in seafoam |
 
 ## Tuning constants
-- Blob count: 8 (the loop in `field`). Trip length: 55–105 s. Neck ball: 0.55 r at `1.8·r·speed` behind.
-- Pool: height 0.03, heave `0.018·sin(4x + 0.15t) + 0.01·sin(9x - 0.22t)`, strength `0.0028/d²`.
-- Rest height −0.06 (inside the pool), top 0.62–0.92.
+- Blob count: 8 (the loop in `layBlobs` and `field`). Trip length: 60–110 s. Radius 0.028–0.128.
+- Height: `smoothstep(0.06, 0.40, s) - smoothstep(0.56, 0.94, s)`, from −0.05 (inside the pool) to the top.
+- Ceiling: 65% of trips, top at `1 - 0.45r`, pancake `sy` down to 0.62 while parked (`s` 0.34–0.66; 0.3 as much for trips that turn back).
+- Lanes: rise at 0.3–0.7 of the width; slide out over `s` 0.40–0.66 by 0.1–0.22 of the width; sway `0.02·sin(0.03t + 2i)`.
+- Stem: 0.7r at the pool, tapering to 0.3× under the head; softening constant 0.00015. Drip thread: 0.4r.
+- Pool: height 0.03, heave `0.006·sin(4x + 0.1t) + 0.004·sin(9x - 0.13t)`, strength `0.0028/d²`.
 - Satin sheen: 0.12 × pow(·, 18). Cycle fade: 60 s.
 
 ## Performance
-CPU about 0.55 ms and GPU 0.70 ms per frame (release, 2x). It was 1.86 ms of GPU until the blob layout moved to Swift. The research agent measured where the time went (seed 17, Coral, 40 s): removing the wobble noise saved 0.02 ms, the tails 0.09, all the wax shading 0.02, and cutting 8 blobs to 6 saved 0.27. Replacing the per-blob hashes, `height()` and `sin` with constants, keeping all 16 balls, took it from 1.77 to 0.66 ms. So summing the balls is cheap; recomputing each blob's position at every pixel wasn't. The CPU side is 8 blobs of arithmetic a frame. The colour-cycle fade adds nothing to the GPU (it only animates uniforms).
+CPU about 0.5 ms and GPU 0.9 ms per frame (release, 2x): the stems add about 0.2 ms over plain balls. It was 1.86 ms of GPU until the blob layout moved to Swift. The research agent measured where the time went (seed 17, Coral, 40 s): removing the wobble noise saved 0.02 ms, the tails 0.09, all the wax shading 0.02, and cutting 8 blobs to 6 saved 0.27. Replacing the per-blob hashes, `height()` and `sin` with constants, keeping all 16 balls, took it from 1.77 to 0.66 ms. So summing the balls is cheap; recomputing each blob's position at every pixel wasn't. The CPU side is 8 blobs of arithmetic a frame. The colour-cycle fade adds nothing to the GPU (it only animates uniforms).
 
 ## Gotchas and shortcuts
 - `ponytail:` the colour cycle is a straight RGB blend, so opposite pairings pass through a muddier middle for part of the minute. Blend in a perceptual space if it ever looks dull.
@@ -84,7 +93,8 @@ CPU about 0.55 ms and GPU 0.70 ms per frame (release, 2x). It was 1.86 ms of GPU
 - The blob matrices are passed to `field` and `balls` as parameters, since SKShader uniforms are only visible inside `main()`. Indexing a `mat4` column with the loop counter (`m[i]`) compiles and runs.
 - The CPU hash (Double `sin`) doesn't match the GPU's float `sin`, so a given seed lays out differently than it did before the move. That doesn't matter: the seed is random per load.
 - The agent chose a colour blend over a Nebula-style scene crossfade, because two sets of blobs overlapping looks like a double exposure.
-- There's no true bloom, just a glow approximated from the wax field. Wax never collects at the top.
+- There's no true bloom, just a glow approximated from the wax field.
+- The stem gradient ignores how the taper changes along the segment. It's close enough for shading.
 
 ## Dave's feedback and decisions
 - He asked for a "next level" pass with more colour variety. The agent's critique of the original:
@@ -97,11 +107,12 @@ CPU about 0.55 ms and GPU 0.70 ms per frame (release, 2x). It was 1.86 ms of GPU
 - "The lava behaviour looks good, but it defaulted to a pretty ugly green and blue." He wanted prettier colours like the gradient's. The classic pairings (orange in red, the Astro red in yellow, green in blue, and so on) were replaced with the seven jewel tones.
 - He asked for it to follow the system's Dark/Light setting: darker lava colours in Dark Mode, lighter in Light Mode.
 - He said yes to sliders and a palette picker in Settings.
+- He asked for a research pass on photos and videos of real lamps, with the suggestions implemented. The agent found: per-blob maths was 60% of the GPU frame (moved to Swift); real rising wax is a round head on a stem rooted in the pool, not a stretched egg; wax sticks to the top a while, rises over the bulb and sinks at the sides; paths repeated every trip; and there were no small droplets. Those became the layout above. It advised skipping floating specks in the liquid (they read as a starfield), a whole-lamp framing (it would fill under a third of the screen), and the heating coil (it's never visible from the front).
 
 ## Ideas / next steps
 - A perceptual (OKLab-style) colour blend for the cycle.
 - A real bloom pass.
-- Wax that sometimes collects at the top.
+- A warm-up phase after login, with tall "stalagmite" towers before it settles (the Mathmos FAQ describes it). Low value; only if Dave asks.
 - The layout is in Swift now, so motion ideas (per-trip re-rolls, rising up the middle and sinking at the sides, wax that sticks at the top) are plain Swift rather than per-pixel shader code.
 
 ## Checking it

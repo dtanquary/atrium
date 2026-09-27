@@ -2,9 +2,9 @@ import SpriteKit
 
 @MainActor func lavaLamp(size: CGSize) -> SKScene { LavaLamp(size: size) }
 
-/// The inside of a lava lamp, full screen. Wax heats in a molten pool at the bottom, rises as stretched teardrops
-/// that pinch off on thin necks, slumps wide as it cools near the top, and sinks back. It glows from within, lit
-/// by the bulb below. Each load rolls a jewel-tone colour pairing (or the one pinned in Settings) and its own
+/// The inside of a lava lamp, full screen. Wax heats in a molten pool over the bulb, rises up the middle as round
+/// heads on stems that neck and pinch off, mostly sticks to the top for a while, then slides out and sinks near
+/// the cooler sides, sometimes dripping off the top on a thread. It glows from within, lit by the bulb below. Each load rolls a jewel-tone colour pairing (or the one pinned in Settings) and its own
 /// blobs; left running, it eases to another pairing every few minutes while the wax keeps moving.
 final class LavaLamp: SKScene {
     nonisolated static let knobs = [
@@ -41,9 +41,11 @@ final class LavaLamp: SKScene {
     private let knobUniforms: [String: SKUniform]
     private let colours = ["u_waxDeep", "u_waxHot", "u_liquidDeep", "u_liquidLit"].map { SKUniform(name: $0, vectorFloat3: .zero) }
     private let phase = SKUniform(name: "u_phase", float: 0)
-    /// Sixteen balls of wax as (x, y, radius, stretch), four to a matrix: each blob and the tail it drags.
+    /// The wax, one column each: eight heads as (x, y, radius, stretch), then their stems as (anchor x, anchor y,
+    /// radius, 0).
     private let blobs = (0..<4).map { SKUniform(name: "u_blobs\($0)", matrixFloat4x4: matrix_identity_float4x4) }
     private let seed = Double.random(in: 0...100)
+    private var time = 0.0 // the phase, kept in Double so the layout stays smooth after days of running
     private var flowSpeed = 1.0
     private var blobSize = 1.0
     private var lastUpdate: TimeInterval?
@@ -78,38 +80,51 @@ final class LavaLamp: SKScene {
 
     override func update(_ currentTime: TimeInterval) {
         if let last = lastUpdate { // integrated, so speed changes don't jump
-            phase.floatValue += Float(min(max(currentTime - last, 0), 0.5) * flowSpeed)
+            time += min(max(currentTime - last, 0), 0.5) * flowSpeed
+            phase.floatValue = Float(time)
         }
         lastUpdate = currentTime
         layBlobs()
     }
 
     /// Where every blob is at the current phase. It's the same for every pixel, so it's worked out once a frame
-    /// here rather than in the shader, which only sums the balls; that halves the GPU cost. A pure function of the
+    /// here rather than in the shader, which only sums the wax; that halves the GPU cost. A pure function of the
     /// phase, so it looks the same at any frame rate.
     private func layBlobs() {
         func hash(_ x: Double) -> Double { let v = sin(x * 127.1) * 43758.5453; return v - v.rounded(.down) }
         // Height along a trip (0..1): it rests in the pool, rises, lingers at the top as it cools, then sinks back
         // more slowly than it rose.
-        func height(_ s: Double) -> Double { simd_smoothstep(0.06, 0.42, s) - simd_smoothstep(0.52, 0.96, s) }
-        let t = Double(phase.floatValue), aspect = size.width / size.height
-        var balls: [SIMD4<Float>] = []
+        func height(_ s: Double) -> Double { simd_smoothstep(0.06, 0.40, s) - simd_smoothstep(0.56, 0.94, s) }
+        let aspect = size.width / size.height
+        var heads: [SIMD4<Float>] = [], stems: [SIMD4<Float>] = []
         for i in 0..<8 {
             let fi = Double(i) + seed
-            let h1 = hash(fi + 0.13), h2 = hash(fi + 0.57), h3 = hash(fi + 0.91)
-            let r = (0.045 + 0.075 * h1 * h1) * blobSize                 // mostly small, a few big
-            let s = (t / (55 + 50 * h2) + h3).truncatingRemainder(dividingBy: 1) // one trip every 55-105 s
-            let h = height(s)
-            let speed = (height(s + 0.01) - height(s - 0.01)) * 12       // about +1 rising, -0.8 sinking
-            let y = simd_mix(-0.06, 0.62 + 0.3 * h2, h)                  // resting blobs sit down in the pool
-            let x = aspect * (0.08 + 0.84 * (h3 * 13.7).truncatingRemainder(dividingBy: 1)) + 0.05 * sin(t * 0.02 + fi * 2)
-            // moving wax stretches tall; resting at the top it slumps wide
-            let sy = 1 + 0.9 * abs(speed) - 0.3 * simd_smoothstep(0.85, 1, h) * (1 - min(abs(speed), 1))
-            balls.append(SIMD4(Float(x), Float(y), Float(r), Float(sy)))
-            balls.append(SIMD4(Float(x), Float(y - 1.8 * r * speed), Float(r * 0.55), Float(sy))) // its tail
+            // One trip every 60-110 s, each with its own size, lane and height, so no path ever repeats.
+            let u = time / (60 + 50 * hash(fi + 0.57)) + hash(fi + 0.91)
+            let trip = u.rounded(.down), s = u - trip
+            let h1 = hash(fi + 0.13 + trip * 7.31), h2 = hash(fi + 0.37 + trip * 3.17), h3 = hash(fi + 0.71 + trip * 5.03)
+            // Pea-sized droplets to fist-sized heads, shrinking away while buried in the pool so a new trip never pops.
+            let r = (0.028 + 0.1 * h1 * h1) * blobSize * simd_smoothstep(0, 0.05, s) * (1 - simd_smoothstep(0.95, 1, s))
+            let ceiling = h2 < 0.65 // most reach the top and stick there a while
+            let top = ceiling ? 1 - 0.45 * r : 0.5 + 0.35 * h2
+            let h = height(s), speed = (height(s + 0.01) - height(s - 0.01)) * 12 // about +1 rising, -0.8 sinking
+            let y = -0.05 + (top + 0.05) * h
+            // It rises over the bulb, slides out along the top, and sinks toward the nearer, cooler wall.
+            let rise = aspect * (0.3 + 0.4 * h3)
+            let sink = min(max(rise + (rise < aspect / 2 ? -1 : 1) * aspect * (0.1 + 0.12 * h1), aspect * 0.07), aspect * 0.93)
+            let x = simd_mix(rise, sink, simd_smoothstep(0.40, 0.66, s)) + 0.02 * sin(time * 0.03 + fi * 2)
+            // Heads stay round: pancaked against the top while parked there, a little long as they drip.
+            let parked = simd_smoothstep(0.34, 0.42, s) * (1 - simd_smoothstep(0.56, 0.66, s)) * (ceiling ? 1 : 0.3)
+            heads.append(SIMD4(Float(x), Float(y), Float(r), Float((1 - 0.38 * parked) * (1 + 0.12 * max(-speed, 0)))))
+            // Its stem: a column off the pool that thins and pinches off under the rising head (squared, so a thin
+            // thread goes quickly rather than hanging on as a string), or a thread off the top as it starts to sink.
+            let neck = 1 - simd_smoothstep(0.16, 0.32, s)
+            let drip = ceiling ? r * 0.4 * simd_smoothstep(0.54, 0.6, s) * (1 - simd_smoothstep(0.62, 0.72, s)) : 0
+            stems.append(s < 0.5 ? SIMD4(Float(rise), -0.02, Float(r * 0.7 * neck * neck), 0) : SIMD4(Float(x), 1.02, Float(drip), 0))
         }
+        let columns = heads + stems
         for (k, uniform) in blobs.enumerated() {
-            uniform.matrixFloat4x4Value = simd_float4x4(balls[4 * k], balls[4 * k + 1], balls[4 * k + 2], balls[4 * k + 3])
+            uniform.matrixFloat4x4Value = simd_float4x4(columns[4 * k], columns[4 * k + 1], columns[4 * k + 2], columns[4 * k + 3])
         }
     }
 
@@ -152,20 +167,30 @@ final class LavaLamp: SKScene {
         return vec3(v, -2.0 * v / q * d.x, -2.0 * v / q * d.y / (sy * sy));
     }
 
-    // Four of the balls laid out by layBlobs(), one per column: (x, y, radius, stretch).
-    vec3 balls(vec2 p, mat4 m) {
-        vec3 f = vec3(0.0);
-        for (int i = 0; i < 4; i++) { f += ball(p, m[i].xy, m[i].z, m[i].w); }
-        return f;
+    // A stem from an anchor a, on the pool or the top, to a head at b: thick at the anchor and thinner under the
+    // head, so it necks just below it. Softened to 2r²/(d² + r²): still 1 at its radius, but it peaks at 2 on the
+    // axis instead of spiking, so no bright seam runs up the middle and no dimple shows where it ends in the head.
+    vec3 stem(vec2 p, vec2 a, vec2 b, float r) {
+        vec2 ab = b - a;
+        float h = clamp(dot(p - a, ab) / (dot(ab, ab) + 0.00001), 0.0, 1.0);
+        vec2 d = p - a - ab * h;
+        float rr = r * (1.0 - 0.7 * h);
+        float w = dot(d, d) + rr * rr + 0.00015; // the constant keeps a vanishing thread's gradient from spiking
+        float v = 2.0 * rr * rr / w;
+        return vec3(v, -2.0 * v / w * d);
     }
 
-    // The whole wax field and its gradient. Wax is wherever it passes 1. The pool along the bottom joins in, so
-    // blobs rise off it on necks, and each blob drags a smaller tail behind its motion so rising wax trails a neck
-    // that thins and pinches off, and sinking wax drips from above.
+    // The whole wax field and its gradient, from the heads and stems laid out by layBlobs() plus the pool. Wax is
+    // wherever it passes 1. Column indices are clamped, since both sides of a ?: may be read.
     vec3 field(vec2 p, float t, mat4 b0, mat4 b1, mat4 b2, mat4 b3) {
-        vec3 f = balls(p, b0) + balls(p, b1) + balls(p, b2) + balls(p, b3);
-        // the molten pool: a gently heaving surface near the bottom
-        float surface = 0.03 + 0.018 * sin(p.x * 4.0 + t * 0.15) + 0.01 * sin(p.x * 9.0 - t * 0.22);
+        vec3 f = vec3(0.0);
+        for (int i = 0; i < 8; i++) {
+            vec4 h = i < 4 ? b0[min(i, 3)] : b1[max(i - 4, 0)];
+            vec4 k = i < 4 ? b2[min(i, 3)] : b3[max(i - 4, 0)];
+            f += ball(p, h.xy, h.z, h.w) + stem(p, k.xy, h.xy, k.z);
+        }
+        // the molten pool: a nearly flat surface; the heads resting in it make the bumps
+        float surface = 0.03 + 0.006 * sin(p.x * 4.0 + t * 0.1) + 0.004 * sin(p.x * 9.0 - t * 0.13);
         float d = max(p.y - surface, 0.002);
         float v = 0.0028 / (d * d);
         return f + vec3(v, 0.0, -2.0 * v / d);
