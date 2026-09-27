@@ -126,6 +126,7 @@ SNAPSHOT_SCENE="Lava Lamp" SNAPSHOT_SECONDS=40 swift test          # integrated 
 SNAPSHOT_DEFAULTS="lava.palette=Teal" SNAPSHOT_APPEARANCE=light SNAPSHOT_SCENE="Lava Lamp" swift test
 LAVA_SEED=17 SNAPSHOT_SECONDS=36 SNAPSHOT_SCENE="Lava Lamp" swift test   # the same blobs every run, for before/after
 ```
+The README and Settings screenshots (2026-09-26) are `LAVA_SEED=11`, Coral at `SNAPSHOT_SECONDS=103` for Dark Mode and Teal at 33 for Light Mode, rendered with `swift test -c release -Xswiftc -enable-testing`.
 To check the colour cycle, run it at its shortest interval for six changes (about 15 s of wall time):
 ```sh
 SNAPSHOT_DEFAULTS="lava.cycleMinutes=1" SNAPSHOT_SECONDS=365 SNAPSHOT_SCENE="Lava Lamp" swift test

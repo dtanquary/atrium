@@ -25,11 +25,11 @@ Soft pools of colour with silk ribbons that follow the Sun, in six palettes. On 
 | In Dark Mode | The watercolour Light Mode |
 
 ### Lava Lamp
-Wax that rises on pinching necks, slumps and sinks, in seven jewel-tone palettes with Light and Dark looks.
+Wax that rises up the middle as round heads on stems that pinch off, sticks to the top a while, then sinks at the sides, lit by the bulb below. Seven jewel-tone palettes, with Light and Dark looks.
 
 | ![Lava Lamp in Dark Mode](docs/images/lava-lamp.jpg) | ![Lava Lamp in Light Mode, Teal palette](docs/images/lava-lamp-light.jpg) |
 |---|---|
-| Glowing wax in Dark Mode | Teal, in Light Mode |
+| Coral in Dark Mode | Teal, in Light Mode |
 
 ### Rain on Glass
 Drops creeping and running down a rainy window, each a tiny lens showing the street upside down. Behind the glass: ten real places, blurred as a camera focused on the glass sees them (from a wet Hamburg square to a cabin in the snow), or city lights in seven palettes.
