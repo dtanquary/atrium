@@ -54,23 +54,26 @@ class WeatherScene: SKScene {
     /// repeats so the floats keep their precision.
     private var deckDrift = SIMD2<Double>.zero, cirrusDrift = SIMD2<Double>.zero
 
-    // The sky shader's inputs; see `skyShader`.
-    private let skyBefore = SKUniform(name: "u_before", texture: nil), skyAfter = SKUniform(name: "u_after", texture: nil)
-    private let skyBlend = SKUniform(name: "u_blend", float: 1)
-    private let cameraUniforms = (lens: SKUniform(name: "u_cam", vectorFloat4: .zero), forward: SKUniform(name: "u_fwd", vectorFloat3: .zero),
+    // The sky shader's inputs; see `skyShader`. The ones that aren't private also light and haze a foreground.
+    let skyBefore = SKUniform(name: "u_before", texture: nil), skyAfter = SKUniform(name: "u_after", texture: nil)
+    let skyBlend = SKUniform(name: "u_blend", float: 1)
+    let cameraUniforms = (lens: SKUniform(name: "u_cam", vectorFloat4: .zero), forward: SKUniform(name: "u_fwd", vectorFloat3: .zero),
                                   right: SKUniform(name: "u_right", vectorFloat3: .zero))
     private let sunDirection = SKUniform(name: "u_sun", vectorFloat3: [0, 0, 1]), sunDisc = SKUniform(name: "u_disc", vectorFloat3: .zero)
     private let moonPlace = SKUniform(name: "u_moon", vectorFloat4: [0, 0, 0, 0]), moonLight = SKUniform(name: "u_moonLight", vectorFloat3: [0, 0, 1])
     private let moonColour = SKUniform(name: "u_moonCol", vectorFloat3: .zero), starsUniform = SKUniform(name: "u_stars", float: 0)
     private let groundLight = SKUniform(name: "u_light", vectorFloat3: [1, 1, 1]), groundHaze = SKUniform(name: "u_haze", float: 0.05)
-    private let groundColour = SKUniform(name: "u_colour", float: 1), groundHazeLit = SKUniform(name: "u_hazeLit", float: 1)
+    let groundColour = SKUniform(name: "u_colour", float: 1), groundHazeLit = SKUniform(name: "u_hazeLit", float: 1)
     private let cloudLayer = SKUniform(name: "u_cloud", vectorFloat4: .zero), cloudDrift = SKUniform(name: "u_drift", vectorFloat2: .zero)
     private let cirrusShift = SKUniform(name: "u_cirrusDrift", vectorFloat2: .zero)
     private let cloudSun = SKUniform(name: "u_sunCol", vectorFloat3: .zero), cloudAmbient = SKUniform(name: "u_amb", vectorFloat3: .zero)
     private let cirrus = SKUniform(name: "u_high", float: 0), cirrusSun = SKUniform(name: "u_highCol", vectorFloat3: .zero)
-    private let fog = SKUniform(name: "u_fog", float: 0), snowCover = SKUniform(name: "u_snow", float: 0)
+    let fog = SKUniform(name: "u_fog", float: 0), snowCover = SKUniform(name: "u_snow", float: 0)
     private let nightUniform = SKUniform(name: "u_night", float: 0), backlit = SKUniform(name: "u_backlit", float: 0)
     private let mist = SKUniform(name: "u_mist", float: 0)
+    /// The grass out of its photo's season, for a wallpaper built on this one: the open grass's colour is multiplied
+    /// by this (rgb, as the photo's values, so the square of it in light) while a is 1. Weather leaves a at 0.
+    let grassSeason = SKUniform(name: "u_grass", vectorFloat4: .zero)
     /// Cloud time for the billowing, 0…1 around one period of the noise it scrolls, so it wraps seamlessly.
     private let billow = SKUniform(name: "u_billow", float: 0)
     /// The shadows of the four nearest cumulus on the ground: each one's centre and radii in km (across the view and
@@ -81,7 +84,7 @@ class WeatherScene: SKScene {
     private var sunNow = Sky.Vector(0, 0, 1)
     private let flashAmount = SKUniform(name: "u_flash", float: 0), flashPlace = SKUniform(name: "u_flashPos", vectorFloat3: .zero)
     /// Under a deck: its underside's colour, and how much the horizon takes it on instead of the clear sky's.
-    private let deck = SKUniform(name: "u_deck", vectorFloat4: .zero)
+    let deck = SKUniform(name: "u_deck", vectorFloat4: .zero)
     /// Seconds, wrapping hourly: at rain's speeds a float counting days loses the streaks (see `WallpaperTime`).
     private let clock = SKUniform(name: "u_clock", float: 0)
     private let precipitation = SKUniform(name: "u_precip", vectorFloat4: .zero)
@@ -281,10 +284,10 @@ class WeatherScene: SKScene {
         let lit = sunlit / 8, brightness = (lit * Sky.Vector(0.2126, 0.7152, 0.0722)).sum()
         groundLight.vectorFloat3Value = SIMD3<Float>(lit * pow(max(brightness, 1e-5), -0.38) * (1 - 0.6 * smoothstep(-0.03, -0.2, light.sun.z)))
         // Whatever stands on the ground is lit the same way: the Sun (or the Moon) from its direction, less under cloud,
-        // and the diffuse light of the sky or the deck.
+        // and the diffuse light of the whole open sky (π times a patch of it) or the deck.
         let scale = pow(max(brightness, 1e-5), -0.38) * (1 - 0.6 * smoothstep(-0.03, -0.2, light.sun.z)) / 8
         let (key, from) = light.sun.z > -0.02 ? (light.sunColour, light.sun) : (moonDirect, light.moon)
-        relight(direct: key * (1 - overcast) * scale, from: from, sky: (light.ambient * (1 - overcast) + grey * overcast) * scale)
+        relight(direct: key * (1 - overcast) * scale, from: from, sky: (light.ambient * .pi * (1 - overcast) + grey * overcast) * scale)
         // At night the eye sees less colour (the Purkinje shift), and the haze isn't lit from low down any more,
         // since the air near the ground is in the Earth's shadow while the high sky still glows.
         groundColour.floatValue = Float(smoothstep(0.002, 0.03, brightness) * (1 - 0.7 * smoothstep(-0.03, -0.2, light.sun.z)))
@@ -747,7 +750,7 @@ class WeatherScene: SKScene {
                                  Float(width / size.width), Float(height / size.height))
         land.shader = SKShader(source: Self.groundShader, uniforms: [
             SKUniform(name: "u_aux", texture: ground.aux), SKUniform(name: "u_frame", vectorFloat4: frame),
-            skyBefore, skyAfter, skyBlend, cameraUniforms.lens, groundLight, groundHaze, groundColour, groundHazeLit, fog, deck, flashAmount, snowCover, backlit, mist, clock, shadowLife, shadowShade, billow,
+            skyBefore, skyAfter, skyBlend, cameraUniforms.lens, groundLight, groundHaze, groundColour, groundHazeLit, fog, deck, flashAmount, snowCover, backlit, mist, clock, shadowLife, shadowShade, billow, grassSeason,
             SKUniform(name: "u_noise", texture: CloudNoise.texture),
         ] + shadows)
         addChild(land)
@@ -771,6 +774,14 @@ class WeatherScene: SKScene {
         vec3 aux = texture2D(u_aux, v_tex_coord).rgb;
         vec2 screen = u_frame.xy + v_tex_coord * u_frame.zw;
         vec3 albedo = photo.rgb / max(photo.a, 0.004);
+        // Grass out of season: the green of the open ground (not the trees, the chalk or the soil) is regraded.
+        if (u_grass.a > 0.0) {
+            float green = smoothstep(-0.03, 0.01, albedo.g - albedo.r) * smoothstep(0.04, 0.12, albedo.g - albedo.b)
+                * (1.0 - smoothstep(0.3, 0.7, aux.g));
+            // In patches, as grass greens up through last year's straw and dries out on the thin soil first.
+            float patches = texture2D(u_noise, nuv(screen * vec2(7.0, 18.0))).r;
+            albedo *= mix(vec3(1.0), u_grass.rgb, clamp(green * u_grass.a * (0.45 + 1.1 * patches), 0.0, 1.0));
+        }
         // Snow on the ground: the open grass goes white, shaded by the photo's own light and shade so the hills keep
         // their form; the trees darken, lose colour and catch snow on their brighter parts.
         if (u_snow > 0.0) {
