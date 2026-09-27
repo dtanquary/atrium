@@ -11,7 +11,7 @@ final class Flames: SKSpriteNode {
     private let sheets = [FlameSim(nx: cells.x, ny: cells.y, width: metres), FlameSim(nx: cells.x, ny: cells.y, width: metres)]
     private let field = SKMutableTexture(size: CGSize(width: cells.x, height: cells.y))
     private let clock = SKUniform(name: "u_clock", float: 0)
-    private var owed: Double = 0, average: Float = 1
+    private var owed: Double = 0, time: Double = 0, average: Float = 1
     private(set) var light: CGFloat = 1, centre = SIMD2<Double>(0, 0.3)
 
     /// `scale` is points per metre at the fire. The sprite shows the bottom 1.3 m of the simulated box.
@@ -37,14 +37,22 @@ final class Flames: SKSpriteNode {
         while owed >= 1 / 30 {
             for sheet in sheets { sheet.step(1 / 30) }
             owed -= 1 / 30
-            clock.floatValue += 1 / 30
+            time += 1 / 30
         }
+        clock.floatValue = Self.shaderClock(time)
         let m = measure()
         average += (m.total - average) * 0.002                        // a slow reference, ~15 s
         light = CGFloat(m.total / max(average, 1e-3))
         centre = [Double(m.centre.x), Double(m.centre.y)]
         upload()
     }
+
+    /// The scene time the shaders see, wrapped hourly. Summed as a Float it would stop moving within days, and even
+    /// passed on from a Double, a Float big enough to count days makes the noise the shaders scroll with it coarse
+    /// and jumpy. The wrap jumps the flame detail, haze and ember breathing to a new phase in one frame, which in a
+    /// fire whose tongues turn over every frame or two passes for flicker.
+    // ponytail: crossfade two phases across the wrap if it's ever caught
+    static func shaderClock(_ time: Double) -> Float { Float(time.truncatingRemainder(dividingBy: 3600)) }
 
     /// Roughly the light the flames give: fuel that's hot, weighted as the shader colours it, and where
     /// its middle is.

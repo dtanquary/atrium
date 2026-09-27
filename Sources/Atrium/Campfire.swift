@@ -12,7 +12,7 @@ final class Campfire: SKScene {
     private let sparks: Sparks
     private let light = SKUniform(name: "u_light", vectorFloat4: [0, 0.35, 4.5, 1])
     private let clock = SKUniform(name: "u_clock", float: 0)
-    private var glow: CGFloat = 1, lastTime: TimeInterval?
+    private var glow: CGFloat = 1, lastTime: TimeInterval?, time = 0.0
     private let lens: FireCamera
     private var halos: [SKSpriteNode] = []
 
@@ -49,7 +49,8 @@ final class Campfire: SKScene {
         let dt = frameTime(currentTime, &lastTime)
         flames.advance(dt)
         sparks.advance(dt)
-        clock.floatValue += Float(dt)
+        time += dt
+        clock.floatValue = Flames.shaderClock(time)
         // the light it casts: a steady fifth from the embers, the rest following the flames a little smoothed, from
         // where the flames are brightest
         glow += (flames.light - glow) * min(1, dt / 0.15)

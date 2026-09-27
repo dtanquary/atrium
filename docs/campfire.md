@@ -62,6 +62,8 @@ None. The flames are one engine now (see decisions).
 ## Time and appearance
 Always night, with no Light Mode look. The sim, sparks, embers and firelight run on scene time. The stars are the real sky for the viewer's location right now (never daylight). Each load rolls new fuel patches, and the sparks are random.
 
+**The shader clocks (`u_clock`)** are summed in Double (`time` in `Campfire` and `Flames`) and handed to the shaders wrapped hourly by `Flames.shaderClock`. They used to be summed straight into Float uniforms. The scene's clock then froze after about 6 days on screen at 60 fps, and the flames' after about 12, since a frame's step rounded away. Even a Float passed on from a Double coarsens as it grows: the flames read their noise at 3.8 units a second, with octaves up to 16× finer, so by a day or two the finest detail would step and block. The wrap keeps the Float under 3600, and costs a one-frame jump in the flame detail, smoke haze, heat shimmer and ember breathing once an hour. The tongues turn over every frame or two anyway, the haze is faint, and the shimmer is a pixel, so it passes for flicker. `ClockTests` checks the wrap.
+
 ## Performance
 CPU 1.11 ms and GPU 0.84 ms per frame (release build, 2x, 2026-09-26). The simulation (two 64×128 sheets, one step each a frame) is ~0.55 ms of the CPU. Most of the GPU goes on the flames' noise, which is skipped where the box is empty. At 15 fps the sim still steps at 30 Hz of scene time (two steps a frame), so the CPU per second is the same. Memory: the ground texture is 4096 × 2660 RGBA, about 44 MB decoded.
 

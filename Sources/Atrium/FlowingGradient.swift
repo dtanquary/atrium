@@ -73,6 +73,7 @@ final class FlowingGradient: SKScene {
     private let night = SKUniform(name: "u_night", float: 0)
     private let noon = SKUniform(name: "u_noon", float: 0)
     private let colours = (["u_base"] + (0..<7).map { "u_c\($0)" }).map { SKUniform(name: $0, vectorFloat3: .zero) }
+    private var time = 0.0 // the phase, kept in Double: see update(_:)
     private var flowSpeed = 1.0
     private var lastUpdate: TimeInterval?
     private var scheduledCycle: Double?
@@ -113,8 +114,12 @@ final class FlowingGradient: SKScene {
     override func update(_ currentTime: TimeInterval) {
         defer { lastUpdate = currentTime }
         guard let last = lastUpdate else { return }
-        // Integrated rather than u_time * speed, so moving the speed slider never makes the pools jump.
-        phase.floatValue += Float(min(max(currentTime - last, 0), 0.5) * 0.04 * flowSpeed)
+        // Integrated rather than u_time * speed, so moving the speed slider never makes the pools jump. Summed in
+        // Double: a Float stops moving once a frame's step is under half its precision (after ~5 days at 60 fps).
+        // ponytail: the shader still gets a Float, so after about a week on screen without a rebuild the pools
+        // drift in steps of a few points at under 10 Hz; lay them out on the CPU, as Lava Lamp does, if that shows
+        time += min(max(currentTime - last, 0), 0.5) * 0.04 * flowSpeed
+        phase.floatValue = Float(time)
     }
 
     /// Pushes the Settings sliders and the Sun's mood into the shader, and (re)schedules the colour cycle when its
