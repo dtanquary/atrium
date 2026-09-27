@@ -45,7 +45,7 @@ private struct AuroraColours {
 }
 
 /// A seeded generator (SplitMix64), so one roll of the curtains can be rendered again while tuning.
-private struct SplitMix: RandomNumberGenerator {
+struct SplitMix: RandomNumberGenerator {
     var state: UInt64
     mutating func next() -> UInt64 {
         state &+= 0x9E37_79B9_7F4A_7C15

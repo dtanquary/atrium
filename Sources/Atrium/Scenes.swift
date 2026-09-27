@@ -65,6 +65,8 @@ struct Wallpaper {
     Wallpaper(name: "The Sun Today", icon: "sun.max.fill", tint: .orange, blurb: "The real Sun, from NASA's Solar Dynamics Observatory.",
               make: theSun, knobs: TheSun.knobs,
               palettes: PaletteChoice(key: "sun.wavelength", options: TheSun.wavelengths.map { ($0.name, $0.swatch, $0.swatch) }, title: "Wavelength")),
+    Wallpaper(name: "Crystals", icon: "hexagon.fill", tint: .yellow, blurb: "Vitamin C crystallising under polarised light.",
+              make: crystals, knobs: Crystals.knobs),
 ]
 
 /// Seconds for shaders to animate by, as `u_now`, in place of SpriteKit's `u_time`. `u_time` counts from app launch

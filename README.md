@@ -133,6 +133,13 @@ The real Sun as NASA's Solar Dynamics Observatory saw it within the last hour or
 |---|---|
 | 193 Å, the million-degree corona, on 27 September 2026 | 304 Å, the chromosphere, in the close-up framing |
 
+### Crystals
+Vitamin C crystallising on a microscope slide between polarisers: round spherulites and fans of fibres grow out of the dark liquid, each with a dark cross, then melt away and grow again in a new pattern every few minutes. The colours are physics, not a palette: the interference colours of the Michel-Lévy chart, computed for each crystal's thickness. Light Mode turns the polarisers parallel, so the same crystals show the complementary colours on white.
+
+| ![Crystals, first-order straw spherulites on the dark liquid](docs/images/crystals.jpg) | ![Crystals in Light Mode, the complementary blue on white](docs/images/crystals-light.jpg) |
+|---|---|
+| First-order straw and gold, in Dark Mode | The same slide in Light Mode, between parallel polarisers |
+
 ## How it works
 
 macOS has no public API for third-party live wallpapers. This app gives each display a borderless window at the desktop window level (`CGWindowLevelForKey(.desktopWindow)`). That puts it above the system wallpaper and below your desktop icons, on every Space, and it lets clicks pass straight through to the desktop.
