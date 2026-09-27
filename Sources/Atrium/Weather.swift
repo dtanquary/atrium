@@ -18,16 +18,7 @@ final class WeatherScene: SKScene {
              shownWhen: "weather.previewTime"),
     ]
 
-    /// The current weather as Open-Meteo reports it.
-    struct Conditions: Equatable {
-        var code = 2          // WMO weather code
-        var cloudCover = 40.0 // percent
-        var wind = 10.0       // km/h
-        var windFrom = 270.0  // degrees clockwise from north
-        var highCloud = 0.0   // percent: cirrus
-        var snowDepth = 0.0   // m of snow on the ground
-        var visibility = 30000.0 // m
-    }
+    typealias Conditions = LiveWeather.Conditions
 
     private var report: Conditions     // the latest live weather, or the pinned test state
     private var conditions: Conditions // what's on screen: `report`, or the Settings preview
@@ -77,7 +68,7 @@ final class WeatherScene: SKScene {
 
     /// Pass `conditions` to pin the scene to one state (snapshots); leave it nil to follow the live weather.
     init(size: CGSize, conditions: Conditions? = nil) {
-        report = conditions ?? Conditions()
+        report = conditions ?? Self.drawn(LiveWeather.shared.latest ?? Conditions())
         self.conditions = report
         live = conditions == nil
         viewpoint = SkyCamera(aspect: size.width / size.height, horizon: 0.45, facing: 1.5 * .pi)
@@ -86,6 +77,7 @@ final class WeatherScene: SKScene {
         build()
         if live {
             NotificationCenter.default.addObserver(self, selector: #selector(redraw), name: UserDefaults.didChangeNotification, object: nil)
+            NotificationCenter.default.addObserver(self, selector: #selector(weatherChanged), name: LiveWeather.changed, object: nil)
         }
     }
 
@@ -95,7 +87,7 @@ final class WeatherScene: SKScene {
         guard live, action(forKey: "poll") == nil else { return }
         Location.shared.start()
         run(.sequence([.wait(forDuration: 2), // give a remembered location fix a moment to land
-                       .repeatForever(.sequence([.run { [weak self] in self?.refresh() }, .wait(forDuration: 900)]))]),
+                       .repeatForever(.sequence([.run { LiveWeather.shared.poll() }, .wait(forDuration: 900)]))]),
             withKey: "poll")
     }
 
@@ -138,52 +130,17 @@ final class WeatherScene: SKScene {
         return Calendar.current.startOfDay(for: Date()).addingTimeInterval(Self.knobs[3].value * 3600)
     }
 
-    /// Where the weather is for, as 42.18°N 88.41°W.
-    private static func place(_ spot: CLLocationCoordinate2D) -> String {
-        String(format: "%.2f°%@ %.2f°%@", abs(spot.latitude), spot.latitude >= 0 ? "N" : "S", abs(spot.longitude), spot.longitude >= 0 ? "E" : "W")
+    /// Takes a new live report, keeping only what Weather draws: it rebuilds on any change, and the temperature
+    /// changes with every report.
+    @objc private func weatherChanged() {
+        guard let latest = LiveWeather.shared.latest else { return }
+        report = Self.drawn(latest)
+        redraw()
     }
 
-    /// Conditions from an Open-Meteo `current` reply.
-    static func conditions(from reply: Data) -> Conditions? {
-        struct Forecast: Decodable {
-            struct Current: Decodable {
-                let weatherCode: Int, cloudCover: Double, windSpeed: Double
-                let windFrom: Double?, highCloud: Double?, snowDepth: Double?, visibility: Double? // not every model has them
-                // Spelled out: .convertFromSnakeCase turns wind_speed_10m into windSpeed10M.
-                enum CodingKeys: String, CodingKey {
-                    case weatherCode = "weather_code", cloudCover = "cloud_cover", windSpeed = "wind_speed_10m"
-                    case windFrom = "wind_direction_10m", highCloud = "cloud_cover_high", snowDepth = "snow_depth", visibility
-                }
-            }
-            let current: Current
-        }
-        guard let now = try? JSONDecoder().decode(Forecast.self, from: reply).current else { return nil }
-        return Conditions(code: now.weatherCode, cloudCover: now.cloudCover, wind: now.windSpeed,
-                          windFrom: now.windFrom ?? 270, highCloud: now.highCloud ?? 0, snowDepth: now.snowDepth ?? 0,
-                          visibility: now.visibility ?? 30000)
-    }
-
-    /// Fetches the current weather and redraws the scene if it changed. Offline, it keeps showing what it has.
-    private func refresh() {
-        let spot = Location.shared.coordinate
-        var url = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
-        url.queryItems = [URLQueryItem(name: "latitude", value: String(spot.latitude)),
-                          URLQueryItem(name: "longitude", value: String(spot.longitude)),
-                          URLQueryItem(name: "current", value: "weather_code,cloud_cover,cloud_cover_high,wind_speed_10m,wind_direction_10m,snow_depth,visibility")]
-        Task { [weak self] in
-            let time = Date().formatted(date: .omitted, time: .shortened)
-            guard let (data, _) = try? await URLSession.shared.data(from: url.url!),
-                  let latest = WeatherScene.conditions(from: data) else {
-                let last = UserDefaults.standard.string(forKey: "weather.status") ?? ""
-                UserDefaults.standard.set("Couldn't reach Open-Meteo at \(time). " + last.replacingOccurrences(of: #"^Couldn't reach.*?\. "#, with: "", options: .regularExpression),
-                                          forKey: "weather.status")
-                return
-            }
-            UserDefaults.standard.set("Live: \(latest.summary) · \(Self.place(spot)) · updated \(time)", forKey: "weather.status")
-            guard let self else { return }
-            self.report = latest
-            self.redraw()
-        }
+    private static func drawn(_ c: Conditions) -> Conditions {
+        Conditions(code: c.code, cloudCover: c.cloudCover, wind: c.wind, windFrom: c.windFrom, highCloud: c.highCloud,
+                   snowDepth: c.snowDepth, visibility: c.visibility)
     }
 
     // MARK: - Building the scene

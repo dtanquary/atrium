@@ -19,6 +19,7 @@ Atrium is a menu bar app that plays animated wallpapers on macOS 27. Swift packa
 - `Sources/Atrium/main.swift`: the app host (one window per display, the menu, handling display changes).
 - `Scenes.swift`: the scene registry, in menu order, plus shared helpers `shaderScene`, `paint` and `resource`.
 - `Location.swift`: `Location.shared`, using CoreLocation with a fallback guessed from the time zone. The last fix is saved in UserDefaults.
+- `LiveWeather.swift`: `LiveWeather.shared`, the current weather from Open-Meteo, one fetch shared by every scene. Call `poll()` from a periodic action, read `latest`, observe `LiveWeather.changed`.
 - One file per scene. `Shaders.swift` holds the full-screen shader scenes. `SkyMath.swift` and `ISS.swift` are shared by Live Sky and Earth from Orbit.
 - `Sources/Atrium/Resources/`: data files (star catalogue, constellation lines, Earth textures, the reef tank's photo cut-outs as HEIC with alpha, credited in `reef-credits.tsv`). They're excluded from the target. `build.sh` copies them into the .app, and `resource(_:)` finds them there or in the source tree. Don't use `Bundle.module`.
 - `Tests/AtriumTests/`: `RenderTests` renders every scene offscreen, `SkyTests` checks the astronomy against JPL Horizons, and `WeatherTests` parses a real Open-Meteo reply.

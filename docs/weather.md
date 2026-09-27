@@ -2,7 +2,7 @@
 
 Green California hills and oak woodland, from a real photo, under whatever the weather is doing where the viewer is right now: clear, partly cloudy, overcast, fog, drizzle, rain, snow or a thunderstorm, by day or by night.
 
-- **Files:** `Sources/Atrium/Weather.swift` holds the scene, its shaders, and the WMO code → `Kind` mapping with each kind's clouds, rain, snow and fog. `WeatherSky.swift` holds the physical sky (`Atmosphere`, `SkyCamera`, `SkyLight`) and `CloudNoise`. `Resources/weather-*` are its images, credited in `weather-credits.tsv`. It also uses `SkyMath.swift` (the Sun and Moon) and `Location.swift`; see [live-sky.md](live-sky.md). There's a test in `Tests/AtriumTests/WeatherTests.swift`.
+- **Files:** `Sources/Atrium/Weather.swift` holds the scene, its shaders, and the WMO code → `Kind` mapping with each kind's clouds, rain, snow and fog. `WeatherSky.swift` holds the physical sky (`Atmosphere`, `SkyCamera`, `SkyLight`) and `CloudNoise`. `Resources/weather-*` are its images, credited in `weather-credits.tsv`. It also uses `SkyMath.swift` (the Sun and Moon) and `Location.swift`; see [live-sky.md](live-sky.md). The Open-Meteo fetch is shared, in `LiveWeather.swift`. There's a test in `Tests/AtriumTests/WeatherTests.swift`.
 - **Entry:** `weather(size:)` builds `final class WeatherScene: SKScene`, whose `init(size:conditions:)` is the test seam. Its entry in Scenes.swift is "Weather", icon `cloud.sun.fill`, tint `.blue`, with `WeatherScene.knobs`.
 - **Kind:** a physical sky baked on the CPU into a small texture, then three shaders: the sky with its clouds, the ground photo relit, and rain or snow.
 
@@ -73,8 +73,9 @@ Green California hills and oak woodland, from a real photo, under whatever the w
   - `cloud_cover_high` sets the cirrus; `visibility` sets how thick fog is (0.9 at 100 m, 0.4 at 1 km).
   - The extras are optional in the decoder, since not every weather model has them.
   - It's polled 2 s after `didMove`, to give a remembered location fix a moment to land, then every 15 min, from an SKAction keyed "poll". Polling stops while the wallpaper is hidden.
+  - **Shared** (`LiveWeather.shared`, since 2026-09-26): one fetch for every scene and display that shows the weather (Weather, Dappled Light, and its Settings previews), at most every 10 minutes however many ask. Each scene reads `latest` when it's built and observes `LiveWeather.changed`. The reply also carries precipitation, rain, showers, snowfall, temperature, humidity and dew point for other wallpapers; Weather keeps only the fields it draws (`drawn`), since it rebuilds on any change and the temperature changes with every report.
   - A new build only happens if the conditions actually changed, and it crossfades.
-- **Parsing:** `WeatherScene.conditions(from:)` uses explicit `CodingKeys`. It returns nil on any decode failure, and the scene keeps showing what it has.
+- **Parsing:** `LiveWeather.conditions(from:)` uses explicit `CodingKeys`. It returns nil on any decode failure, and the scene keeps showing what it has.
 - **Day and night** come from the real Sun and Moon where you are, through the physical sky, so they're right before the first fetch and offline. `is_day` isn't requested.
 - **Offline default:** `Conditions()` is code 2 (partly cloudy), 40% cover, a 10 km/h west wind.
 - **Location:** `Location.shared.start()` is called in `didMove`; see [live-sky.md](live-sky.md) for the fallback.
