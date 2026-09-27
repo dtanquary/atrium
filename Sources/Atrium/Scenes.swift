@@ -45,6 +45,8 @@ struct Wallpaper {
                                                                                      [$0.colours[0], $0.colours[3], $0.colours[2]]) })),
     Wallpaper(name: "Live Sky", icon: "moon.stars.fill", tint: .blue, blurb: "The real sky above you, right now.",
               make: liveSky, knobs: LiveSky.knobs),
+    Wallpaper(name: "The Moon", icon: "moonphase.waxing.gibbous", tint: .gray, blurb: "The Moon as it looks from where you are, right now.",
+              make: theMoon, knobs: TheMoon.knobs),
     Wallpaper(name: "Earth from Orbit", icon: "globe.americas.fill", tint: .cyan, blurb: "Day and night sweeping over the globe.",
               make: earthFromOrbit, knobs: EarthFromOrbit.knobs),
     Wallpaper(name: "Weather", icon: "cloud.sun.fill", tint: .blue, blurb: "Real hills under your live local weather.",

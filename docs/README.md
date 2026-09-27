@@ -14,6 +14,7 @@ One file per wallpaper, recording what the code can't: how each scene works, why
 | Nebula | [nebula.md](nebula.md) | `Shaders.swift` | shader | knobs, 7 palettes, change interval | none | 0.45 / 1.6 |
 | Galaxy | [galaxy.md](galaxy.md) | `Galaxy.swift` | shader | knobs, 6 real galaxies | none | 0.5 / 1.5–2.1 |
 | Live Sky | [live-sky.md](live-sky.md) | `LiveSky.swift`, `SkyMath.swift` | SpriteKit and shaders | switches, preview | location, ISS | 0.64 / 0.90 |
+| The Moon | [the-moon.md](the-moon.md) | `TheMoon.swift`, `Resources/moon-*` | LRO maps lit by a shader, baked once a minute | Black, Stars or Sky backdrop, size, brightness, earthshine, preview | location | 0.43 / 0.08–0.19 |
 | Earth from Orbit | [earth-from-orbit.md](earth-from-orbit.md) | `EarthFromOrbit.swift`, `ISS.swift`, `Clouds.swift`, `Storms.swift` | shader | ISS, clouds, lightning switches | location, ISS, clouds, storms | 0.45 / 0.31 |
 | Weather | [weather.md](weather.md) | `Weather.swift`, `WeatherSky.swift`, `Resources/weather-*` | physical sky, photo ground and clouds, shaders | weather lock, time preview | location, Open-Meteo | 0.55 / 0.45–1.2 |
 | Pixel City | [pixel-city.md](pixel-city.md) | `PixelCity.swift` | SpriteKit (pixel canvas) | none yet | location, clock | 0.43 / 0.18 |

@@ -70,6 +70,15 @@ The real sky above you: stars, planets, the Moon's phase, the Milky Way and the 
 |---|---|
 | Tonight's sky, with the Moon in its true phase, Saturn and the Milky Way | Dusk, from Preview a time of day in Settings |
 
+### The Moon
+The Moon filling the screen as it is right now from where you are: its real phase, wobble and tilt, from NASA's LRO maps, with shadows along the terminator, earthshine on the dark side, and copper during a lunar eclipse. Choose black, faint real stars or the real sky behind it.
+
+| ![The Moon, a waxing crescent with earthshine](docs/images/the-moon.jpg) | ![The Moon by day, on the Sky backdrop](docs/images/the-moon-day.jpg) |
+|---|---|
+| A waxing crescent with earthshine, among the real stars | The morning Moon on the Sky backdrop, its dark side the sky's own blue |
+| ![The Moon in the total lunar eclipse of 31 December 2028](docs/images/the-moon-eclipse.jpg) | ![The Moon beside NASA's Dial-a-Moon](docs/images/the-moon-vs-dial-a-moon.jpg) |
+| The total lunar eclipse of 31 December 2028, previewed | Checked against NASA's Dial-a-Moon (left of each pair) for phase, libration, tilt and tone |
+
 ### Earth from Orbit
 The globe above your location with the live day/night line, today's real clouds, lightning in storms near you, city lights and the ISS.
 
@@ -146,7 +155,7 @@ macOS has no public API for third-party live wallpapers. This app gives each dis
 
 It uses public AppKit and SpriteKit APIs only. It uses no private frameworks, makes no changes to system files, needs no SIP changes and doesn't inject code.
 
-Each wallpaper is a SpriteKit scene. Many are full-screen Metal shaders written as `SKShader`s, and almost everything is drawn in code. The only image files are two NASA Earth textures, a star catalogue, the live cloud map Earth from Orbit downloads, the Sun images The Sun Today downloads, the Fish Tank's fish and corals and Weather's hills and clouds, all cut out of permissively licensed photos, and Weather's Moon.
+Each wallpaper is a SpriteKit scene. Many are full-screen Metal shaders written as `SKShader`s, and almost everything is drawn in code. The only image files are two NASA Earth textures, a star catalogue, the live cloud map Earth from Orbit downloads, the Sun images The Sun Today downloads, the Fish Tank's fish and corals and Weather's hills and clouds, all cut out of permissively licensed photos, and the Moon's colour and heights, for Weather and The Moon.
 
 It's kind to your battery:
 - 60 fps on mains power, 30 fps on battery.
@@ -213,6 +222,7 @@ SNAPSHOT_SCENE="Fish Tank" SNAPSHOT_MOVIE=6 swift test       # then 6 seconds of
 - Constellation lines from [d3-celestial](https://github.com/ofrohn/d3-celestial) by Olaf Frohn, BSD 3-Clause. Its notice is kept in `Sources/Atrium/Resources/constellations.txt`.
 - Earth imagery from NASA's Blue Marble and Black Marble, public domain.
 - Clouds from [Live Cloud Maps](https://github.com/matteason/live-cloud-maps) by Matt Eason, CC0. Contains modified EUMETSAT data.
+- The Moon's maps are from NASA's [CGI Moon Kit](https://svs.gsfc.nasa.gov/4720) (Ernie Wright, NASA Scientific Visualization Studio), public domain: LROC colour and LOLA heights from the Lunar Reconnaissance Orbiter.
 - Planet positions from JPL's [Approximate Positions of the Planets](https://ssd.jpl.nasa.gov/planets/approx_pos.html).
 - Images of the Sun courtesy of NASA/SDO and the AIA, EVE, and HMI science teams ([terms](https://sdo.gsfc.nasa.gov/data/rules.php)), via the ESA/NASA [Helioviewer Project](https://helioviewer.org).
 - The Weather wallpaper's hills are a public domain photo of Fort Ord National Monument by the Bureau of Land Management, its clouds are cut out of CC0 photos from Poly Haven and Wikimedia Commons, and its Moon is from NASA's CGI Moon Kit. See [`Sources/Atrium/Resources/weather-credits.tsv`](Sources/Atrium/Resources/weather-credits.tsv) and Settings → About.
