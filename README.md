@@ -119,6 +119,13 @@ Conway's cells, reseeding so they never die out. The Calm look shows a long expo
 |---|---|
 | Calm | Classic |
 
+### Turing Patterns
+Reaction–diffusion, the chemistry Alan Turing proposed for how animals get their spots and stripes. Patterns grow from a few glowing seeds, then slowly drift from coral to dividing spots to a honeycomb to fingerprint stripes and round again, in six jewel-tone palettes.
+
+| ![Turing Patterns, fingerprint stripes in Dark Mode](docs/images/turing-patterns.jpg) | ![Turing Patterns, coral in Light Mode](docs/images/turing-patterns-light.jpg) |
+|---|---|
+| Fingerprint stripes in Dark Mode | Coral, glazed like ceramic, in Light Mode |
+
 ## How it works
 
 macOS has no public API for third-party live wallpapers. This app gives each display a borderless window at the desktop window level (`CGWindowLevelForKey(.desktopWindow)`). That puts it above the system wallpaper and below your desktop icons, on every Space, and it lets clicks pass straight through to the desktop.

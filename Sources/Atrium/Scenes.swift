@@ -59,6 +59,9 @@ struct Wallpaper {
               make: campfire),
     Wallpaper(name: "Game of Life", icon: "square.grid.3x3.fill", tint: .orange, blurb: "Conway's cells that never die out.",
               make: gameOfLife, knobs: GameOfLife.knobs),
+    Wallpaper(name: "Turing Patterns", icon: "circle.hexagongrid.fill", tint: .mint, blurb: "Coral, spots and stripes growing out of simple chemistry.",
+              make: turingPatterns, knobs: TuringPatterns.knobs,
+              palettes: PaletteChoice(key: "turing.palette", options: TuringPatterns.palettes.map { ($0.name, [$0.ink, $0.ink2, $0.glow], [$0.ink * 0.9, $0.ink2 * 0.9]) })),
 ]
 
 /// Seconds for shaders to animate by, as `u_now`, in place of SpriteKit's `u_time`. `u_time` counts from app launch
