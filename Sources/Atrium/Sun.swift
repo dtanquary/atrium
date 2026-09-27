@@ -4,9 +4,10 @@ import SpriteKit
 
 /// The real Sun as NASA's Solar Dynamics Observatory saw it within the last hour or so, in one wavelength: a corona
 /// of gold loops in 171 Å, the red chromosphere in 304, sunspots in visible light. Today's flares and sunspots show
-/// up the day they happen. Motion is either a slow shimmer in the corona over the latest image, or a time-lapse of
-/// the last three hours of real images, crossfaded; Settings switches between them, and between the whole Sun and a
-/// close-up off one edge.
+/// up the day they happen. Motion is either a slow shimmer in the corona over the latest image, or a looping
+/// time-lapse of the last three hours of real images, crossfaded; Settings switches between them, and between the
+/// whole Sun and a close-up off one edge. Every image is turned to where the Sun has rotated by now, so the loop comes
+/// round with nothing jumping.
 final class TheSun: SKScene {
     /// The channels, each in the colours SDO publishes it in (SolarSoft's `aia_lct` tables, which Helioviewer applies).
     /// `source` is Helioviewer's source id. Swatches are the table at 25, 50 and 85%; visible light's are NASA's
@@ -25,6 +26,8 @@ final class TheSun: SKScene {
         Knob(key: "sun.motion", label: "Motion", range: 0...1, standard: 0, section: "View",
              format: .choice(["Shimmer over the latest image", "Time-lapse of the last 3 hours"])),
         Knob(key: "sun.framing", label: "Framing", range: 0...1, standard: 0, section: "View", format: .choice(["Whole Sun", "Close-up"])),
+        // not `shownWhen: "sun.motion"`: KnobRow counts an unset gate as on, so it would show for Shimmer too
+        Knob(key: "sun.speed", label: "Time-lapse speed", range: 0.25...8, standard: 1, section: "View", format: .times),
     ] + gradeKnobs("sun")
 
     private let wavelength = TheSun.wavelengths.first { $0.name == UserDefaults.standard.string(forKey: "sun.wavelength") }
@@ -37,13 +40,21 @@ final class TheSun: SKScene {
     private let cropNextUniform = SKUniform(name: "u_cropNext", vectorFloat4: [0, 0, 1, 1])
     private let fadeUniform = SKUniform(name: "u_fade", float: 0)
     private let discUniform = SKUniform(name: "u_disc", vectorFloat3: .zero)
+    // Hours of the Sun's rotation to turn each frame by, to bring it to now, and the tilt of its axis toward us.
+    private let ageUniform = SKUniform(name: "u_age", float: 0)
+    private let ageNextUniform = SKUniform(name: "u_ageNext", float: 0)
+    private let tiltUniform = SKUniform(name: "u_tilt", float: sunTilt(at: Date()))
     private let knobUniforms = TheSun.knobs.map { ($0, SKUniform(name: "u_" + $0.key.split(separator: ".").last!, float: Float($0.value))) }
-    /// The frame in `u_frame`, the framing it's cropped for, and whether a change is loading or fading.
+    /// The frame in `u_frame` and the framing it's cropped for; whether a change is loading or fading; and the frame
+    /// in `u_next` once it's loaded, with how far the crossfade to it has got.
     private var showing: URL?
     private var framing = 0
     private var busy = false
-    /// Which way the time-lapse is playing through the frames: +1 toward now, -1 back.
-    private var direction = 1
+    private var next: (url: URL, crop: SIMD4<Float>, framing: Int, seam: Bool)?
+    private var progress = 0.0
+    private var lastUpdate: TimeInterval?
+    /// When the newest cached frame was taken, kept by `advance()` so the frame loop needn't list the cache.
+    private var newest = Date()
     private var timeLapse: Bool { Self.knobs[0].value > 0.5 }
 
     override func sceneDidLoad() {
@@ -52,7 +63,7 @@ final class TheSun: SKScene {
         sprite.anchorPoint = .zero
         sprite.shader = SKShader(source: shaderCommon + Self.shader, uniforms: [
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]), WallpaperTime.now,
-            frameUniform, nextUniform, cropUniform, cropNextUniform, fadeUniform, discUniform,
+            frameUniform, nextUniform, cropUniform, cropNextUniform, fadeUniform, discUniform, ageUniform, ageNextUniform, tiltUniform,
             SKUniform(name: "u_visible", float: wavelength.source == 18 ? 1 : 0),
         ] + knobUniforms.map(\.1))
         addChild(sprite)
@@ -62,9 +73,33 @@ final class TheSun: SKScene {
             frameUniform.textureValue = texture(image)
             cropUniform.vectorFloat4Value = crop(framing)
             showing = url
+            newest = SunImages.date(url)
         }
+        turnToNow()
         NotificationCenter.default.addObserver(self, selector: #selector(applyKnobs), name: UserDefaults.didChangeNotification, object: nil)
         run(.repeatForever(.sequence([.wait(forDuration: 1), .run { [weak self] in self?.advance() }])))
+    }
+
+    /// Turns both frames to now, and runs the crossfade: over 30 s to a new image, 6 s a step in the time-lapse at 1×
+    /// and three steps from now back round to three hours ago, 3 s from the placeholder, and none to a new framing.
+    override func update(_ currentTime: TimeInterval) {
+        let dt = frameTime(currentTime, &lastUpdate)
+        turnToNow()
+        guard let next else { return }
+        let seconds = next.framing != framing ? 0 : showing == nil ? 3
+            : timeLapse ? 6 / Self.knobs[2].value * (next.seam ? 3 : 1) : 30
+        progress = seconds > 0 ? min(progress + dt / seconds, 1) : 1
+        fadeUniform.floatValue = Float(progress)
+        guard progress >= 1 else { return }
+        frameUniform.textureValue = nextUniform.textureValue
+        cropUniform.vectorFloat4Value = next.crop
+        discUniform.vectorFloat3Value = disc(next.framing)
+        fadeUniform.floatValue = 0
+        showing = next.url
+        framing = next.framing
+        self.next = nil
+        busy = false
+        advance() // the time-lapse runs on without a pause
     }
 
     override func didMove(to view: SKView) {
@@ -102,45 +137,38 @@ final class TheSun: SKScene {
         return wanted.isEmpty ? SunImages.shared.frames(wavelength.source, width: 6144 - width) : wanted
     }
 
+    /// How long ago each frame was taken, for the shader to turn it on by the Sun's rotation since: to now, or if the
+    /// images have gone stale (offline, say), to 4 hours after the newest, so none turns far.
+    private func turnToNow() {
+        let now = min(Date(), newest.addingTimeInterval(4 * 3600))
+        ageUniform.floatValue = showing.map { Float(now.timeIntervalSince(SunImages.date($0)) / 3600) } ?? 0
+        ageNextUniform.floatValue = next.map { Float(now.timeIntervalSince(SunImages.date($0.url)) / 3600) } ?? 0
+    }
+
     /// Starts the next change once the last is done: to a new framing, to a newer image when one lands, or in the
-    /// time-lapse, on to the next frame, playing forward to now and back again so it never jumps.
+    /// time-lapse, on to the next frame, and from now back round to the oldest.
     private func advance() {
-        guard !busy else { return }
         let frames = frames, framing = Int(Self.knobs[1].value)
-        var target = frames.last
+        newest = frames.last.map(SunImages.date) ?? Date()
+        guard !busy else { return }
+        var target = frames.last, seam = false
         if timeLapse, frames.count > 1 {
             let at = showing.flatMap { frames.firstIndex(of: $0) } ?? frames.count - 1
-            if !frames.indices.contains(at + direction) { direction = -direction }
-            target = frames[at + direction]
+            seam = at == frames.count - 1
+            target = frames[seam ? 0 : at + 1]
         }
         guard let target, target != showing || framing != self.framing else { return }
         busy = true
         let crop = crop(framing)
         Task { [weak self] in
             let image = await Task.detached { decode(target, crop) }.value
-            self?.fade(to: image, crop, target, framing)
+            guard let self else { return }
+            guard let image else { busy = false; return }
+            nextUniform.textureValue = texture(image)
+            cropNextUniform.vectorFloat4Value = crop
+            progress = 0
+            next = (target, crop, framing, seam)
         }
-    }
-
-    /// Crossfades to a decoded frame, over 30 s to a new image or 6 s a step in the time-lapse, and 3 s from the
-    /// placeholder. A new framing cuts straight to it.
-    private func fade(to image: CGImage?, _ crop: SIMD4<Float>, _ target: URL, _ framing: Int) {
-        guard let image else { busy = false; return }
-        nextUniform.textureValue = texture(image)
-        cropNextUniform.vectorFloat4Value = crop
-        let seconds = framing != self.framing ? 0 : showing == nil ? 3 : timeLapse ? 6.0 : 30.0, fade = fadeUniform
-        run(.sequence([.customAction(withDuration: seconds) { _, elapsed in fade.floatValue = Float(elapsed / max(seconds, 0.01)) },
-                       .run { [weak self] in
-                           guard let self else { return }
-                           frameUniform.textureValue = nextUniform.textureValue
-                           cropUniform.vectorFloat4Value = crop
-                           discUniform.vectorFloat3Value = disc(framing)
-                           fade.floatValue = 0
-                           showing = target
-                           self.framing = framing
-                           busy = false
-                           advance() // the time-lapse runs on without a pause
-                       }]))
     }
 
     /// Stands in until the first image arrives: a dim disc in the wavelength's colour, sized like one of SDO's.
@@ -167,6 +195,18 @@ final class TheSun: SKScene {
         return mix(c, vec3(1.0, 0.69, 0.11), smoothstep(0.75, 0.86, v));
     }
 
+    // Where a point on the disc (d, in solar radii) was `hours` earlier, before the Sun's rotation carried it west
+    // along its latitude: 13.7° a day at the equator, 10° near the poles (synodic, after Snodgrass and Ulrich 1990),
+    // about an axis tipped `tilt` radians toward us. A point that was then round the far side keeps its place.
+    vec2 turnBack(vec2 d, float hours, float tilt) {
+        float z = sqrt(max(1.0 - dot(d, d), 0.0)), ct = cos(tilt), st = sin(tilt);
+        vec3 p = vec3(d.x, d.y * ct + z * st, z * ct - d.y * st); // y along the Sun's axis
+        float s2 = p.y * p.y; // sin² of the latitude
+        float a = (13.72 - 2.39 * s2 - 1.78 * s2 * s2) * 0.01745 / 24.0 * hours, c = cos(a), s = sin(a);
+        p = vec3(p.x * c - p.z * s, p.y, p.z * c + p.x * s);
+        return p.y * st + p.z * ct < 0.0 ? d : vec2(p.x, p.y * ct - p.z * st);
+    }
+
     void main() {
         vec2 pts = v_tex_coord * u_size;
         vec2 d = (pts - u_disc.xy) / u_disc.z; // in solar radii
@@ -182,8 +222,11 @@ final class TheSun: SKScene {
 
         // The images end 1.28 radii out, so past 1.2 the corona carries on from there, fading as it does in 193
         // (by e every 0.07 radii): streamers smeared radially, which is how they run.
-        vec2 uv = 0.5 + d * min(1.0, 1.2 / r) * 0.3895; // SDO's disc is 0.3895 of the image's width across its radius
-        vec3 col = mix(texture2D(u_frame, (uv - u_crop.xy) / u_crop.zw).rgb, texture2D(u_next, (uv - u_cropNext.xy) / u_cropNext.zw).rgb, u_fade);
+        // Each frame is turned on to now, so the time-lapse shows only what changed, and loops round without a jump.
+        vec2 dNow = d * min(1.0, 1.2 / r);
+        vec2 uv = 0.5 + (r < 1.0 ? turnBack(d, u_age, u_tilt) : dNow) * 0.3895; // the disc's radius is 0.3895 of the image
+        vec2 uvNext = 0.5 + (r < 1.0 ? turnBack(d, u_ageNext, u_tilt) : dNow) * 0.3895;
+        vec3 col = mix(texture2D(u_frame, (uv - u_crop.xy) / u_crop.zw).rgb, texture2D(u_next, (uvNext - u_cropNext.xy) / u_cropNext.zw).rgb, u_fade);
         col *= 1.0 + s * 0.35 * streaks;
         if (u_visible > 0.5) { col = visibleLight(dot(col, vec3(0.3333))); }
         col *= exp(-max(r - 1.2, 0.0) * 14.0);
@@ -208,6 +251,16 @@ nonisolated func decode(_ url: URL, _ crop: SIMD4<Float>) -> CGImage? {
     else { return nil }
     context.draw(image, in: CGRect(x: -rect.minX, y: -rect.minY, width: w, height: h))
     return context.makeImage()
+}
+
+/// The Sun's B0 angle in radians: how far its north pole tips toward us, from +7.25° in early September to −7.25° in
+/// early March, from the Sun's ecliptic longitude and the node of its equator (Meeus, Astronomical Algorithms, ch. 29).
+nonisolated func sunTilt(at date: Date) -> Float {
+    let days = date.timeIntervalSince1970 / 86400 - 10957.5, rad = Double.pi / 180 // days since J2000
+    let anomaly = (357.528 + 0.9856003 * days) * rad
+    let longitude = (280.46 + 0.9856474 * days + 1.915 * sin(anomaly) + 0.02 * sin(2 * anomaly)) * rad
+    let node = (75.76 + 1.397 * days / 36525) * rad
+    return Float(asin(sin(longitude - node) * sin(7.25 * rad)))
 }
 
 /// Full-disc images of the Sun from NASA's Solar Dynamics Observatory, through the ESA/NASA Helioviewer Project's API:
@@ -242,10 +295,10 @@ nonisolated func decode(_ url: URL, _ crop: SIMD4<Float>) -> CGImage? {
             guard let newest = await closest(source, to: Date()), await download(newest, source, width) else { return }
             for step in 1...12 where history {
                 let time = newest.date.addingTimeInterval(-Double(step) * 900)
-                guard !frames(source, width: width).contains(where: { abs(date($0).timeIntervalSince(time)) < 450 }) else { continue }
+                guard !frames(source, width: width).contains(where: { abs(Self.date($0).timeIntervalSince(time)) < 450 }) else { continue }
                 guard let frame = await closest(source, to: time), await download(frame, source, width) else { return }
             }
-            for url in frames(source, width: width) where date(url) < newest.date.addingTimeInterval(-3.5 * 3600) {
+            for url in frames(source, width: width) where Self.date(url) < newest.date.addingTimeInterval(-3.5 * 3600) {
                 try? FileManager.default.removeItem(at: url)
             }
         }
@@ -277,7 +330,8 @@ nonisolated func decode(_ url: URL, _ crop: SIMD4<Float>) -> CGImage? {
         return (try? data.write(to: file, options: .atomic)) != nil
     }
 
-    private func date(_ url: URL) -> Date {
+    /// When a cached frame was taken, from its name.
+    nonisolated static func date(_ url: URL) -> Date {
         Date(timeIntervalSince1970: Double(url.deletingPathExtension().lastPathComponent.split(separator: "-").last ?? "") ?? 0)
     }
 }

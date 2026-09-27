@@ -34,9 +34,16 @@ The real Sun as NASA's Solar Dynamics Observatory (SDO) saw it within the last h
   - Then `grade()` (the Look sliders, pivot 0.3) and a 1/128 dither.
 - **Motion** (Settings → View → Motion), two ways to compare:
   - **Shimmer over the latest image** (0): off the disc (from 0.97 to 1.1 radii in), the corona flickers ±14% in fine radial streaks that drift outward about a third of a solar radius a minute (`r·2.5 − u_now·0.015` in noise space), plus a coarser layer so no noise cells show, and wavers by up to ±0.5% of the radius. The disc itself stays still. A new image crossfades in over 30 s.
-  - **Time-lapse of the last 3 hours** (1): the real frames, about 15 minutes apart, each crossfaded into the next over 6 s, so three hours of the Sun take 72 s. It plays forward to now and back again, so it never jumps. Each crossfade starts the next as it ends (`advance()`).
-- **Changing:** `advance()` runs every second from an SKAction and does one thing at a time (`busy`): fade to a new framing (a cut), to a newly arrived image, or to the time-lapse's next frame.
-- **Clocks:** the shimmer runs on `u_now`, so it's smooth for days. Fades are SKActions, so they pause while the wallpaper is hidden.
+  - **Time-lapse of the last 3 hours** (1): the real frames, about 15 minutes apart, each crossfaded into the next over 6 s at 1×, so three hours of the Sun take 72 s. It plays forward to now, then crossfades back round to three hours ago over three steps, and on again. Each crossfade starts the next as it ends (`advance()`). **Time-lapse speed** (`sun.speed`, 0.25–8×) sets the pace live: at 8× a step is 0.75 s and a whole loop 11 s, which is the quick way to see how it looks over time.
+- **Turned to now, for a seamless loop** (`turnBack` in the shader): the Sun turns about 1.7° in three hours, which moved the disc 21 pixels (at 2048) between the oldest and newest frames, so a loop would jump back at the join. Each frame is turned on to now instead, before it's drawn:
+  - Each pixel on the disc becomes a point on the sphere, about an axis tipped toward us by B0 (`sunTilt(at:)`, ±7.25° over the year, Meeus ch. 29), and is moved back along its latitude by the Sun's synodic differential rotation since the frame was taken: `13.72 − 2.39 sin²φ − 1.78 sin⁴φ` degrees a day (Snodgrass and Ulrich 1990). `u_age` and `u_ageNext` are those hours, from the frame times in the file names, updated every frame.
+  - "Now" is the clock, but never more than 4 hours past the newest frame, so a stale cache (offline, say) isn't turned far.
+  - A point that was round the far side then keeps its place (a sliver at the east limb); off the disc, the corona isn't turned.
+  - Checked 2026-09-27 with phase correlation on a loop of 211: the raw oldest and newest frames are 21 px apart, the turned ones 0. What's left at the join is the Sun's real change over three hours, mostly loops brightening or fading, and the corona.
+  - It also turns the still in Shimmer mode, by about a point every 15 minutes, so a new image crossfades in without a shift.
+  - Before this it played forward and back (ping-pong). That never jumped, but the Sun visibly turned back and loops ran backwards.
+- **Changing:** `advance()` runs every second from an SKAction and does one thing at a time (`busy`): load a new framing (a cut), a newly arrived image, or the time-lapse's next frame. `update(_:)` runs the crossfade by elapsed time (`frameTime`), reading the speed each frame, so a new speed applies at once.
+- **Clocks:** the shimmer runs on `u_now`, so it's smooth for days. Crossfades step with the scene's frames, so they pause while the wallpaper is hidden.
 - No Light Mode look: space is black.
 
 ## Settings
@@ -55,15 +62,16 @@ The real Sun as NASA's Solar Dynamics Observatory (SDO) saw it within the last h
 
   The tables are from `aia_lct.pro`: `c0 = i`, `c1 = √(255 i)`, `c2 = i²/255`, `c3 = (c1 + c2/2)·2/3`, and `r0, g0, b0` is IDL's Red Temperature table (`r0 = 255 i/176`, `g0 = 255(i − 120)/135`, `b0 = 255(i − 190)/65`, clamped).
 - **View** (`sun.motion`, `sun.framing`): Shimmer or Time-lapse, and Whole Sun or Close-up. Both are live. These are comparisons for Dave to pick from; the losers go once he has (see "Compare, then lock in").
+- **Time-lapse speed** (`sun.speed`, 0.25–8×, default 1×). It shows for Shimmer too: `shownWhen` would hide it for Shimmer only once Motion had been changed, since `KnobRow` counts a gate that was never set as on.
 - **Look:** `gradeKnobs("sun")`, brightness, contrast, saturation and hue, as in Nebula.
 
 ## Performance
-- Release, 2x Retina at 1512×982: CPU 0.43–0.52 ms, GPU 0.38–0.58 ms per frame, measured 2026-09-26 for 193, 304 and visible whole and 171 and 304 close up. That's two texture reads and four noise calls a pixel.
+- Release, 2x Retina at 1512×982: CPU 0.43–0.52 ms, GPU 0.38–0.58 ms per frame, measured 2026-09-26 for 193, 304 and visible whole and 171 and 304 close up. That's two texture reads and four noise calls a pixel, plus since 2026-09-27 two turns on the disc (a few trig calls each), which put the time-lapse at 0.42 ms GPU whole and 0.89 ms close up, where the disc fills the screen.
 - Decoding runs off the main thread; each new texture (with mipmaps, for the small Settings preview) uploads on its first frame.
 - **Memory:** two textures, the frame showing and the next. For the whole Sun, 16 MB each plus mipmaps; for the close-up, 15 MB each.
 
 ## Gotchas and shortcuts
-- The render tests never call `didMove`, so they never download; they show whatever's cached, or the placeholder disc. Async decodes don't finish in the render test's loop either, so a `SNAPSHOT_MOVIE` shows the shimmer but not the time-lapse's steps. Stepping the time-lapse needs a test that awaits between frames.
+- The render tests never call `didMove`, so they never download; they show whatever's cached, or the placeholder disc. Async decodes don't finish in the render test's loop either, so a `SNAPSHOT_MOVIE` shows the shimmer but not the time-lapse's steps. Stepping the time-lapse needs a test that awaits between frames (`try await Task.sleep` after each `renderer.update`); one was used for the loop check and not kept.
 - `ponytail:` 4096 downloads are 1–2 MB, mostly pixels the close-up crops away. Helioviewer's `takeScreenshot` can render just a region, but as a PNG of several MB taking 6 s; its tile API could fetch only the tiles on screen, if bandwidth matters.
 - `ponytail:` Random picks a wavelength per load; unlike Nebula it doesn't move on to another while running. Shuffle and the 12-hour rebuild give variety. Cycling would mean fetching (and for the time-lapse, filling) another channel each time.
 - SDO's own latest images are frozen, and SDO's HMI browse images stopped on 24 September. If Helioviewer lags or goes down, the last cached frames stay up.
@@ -74,9 +82,11 @@ The real Sun as NASA's Solar Dynamics Observatory (SDO) saw it within the last h
 - Settings → About and the README credit "NASA/SDO and the AIA, EVE, and HMI science teams, via the ESA/NASA Helioviewer Project".
 
 ## Dave's feedback and decisions
+- 2026-09-27: "is there any way to do an accelerated time lapse just to test what it looks like over time / add something to the settings to control the looping time lapse speed, do your best to create seamless loops". That added Time-lapse speed, the forward loop, and turning every frame to now.
 - 2026-09-26, the brief: the real Sun right now, wavelength as the palette after real colours, stored by name with Random as the default. Research the source first; cache and poll politely like Clouds; crossfade when a new image arrives. Calm motion: compare a shader shimmer over the latest still with a time-lapse of real frames, and a whole disc with a big disc off one edge, in Settings. No text on screen. It should earn a place beside Nebula.
 
 ## Ideas / next steps
+- A longer loop (6 or 12 hours) would show more change, at 2–4 times the downloads.
 - Pick the close-up's edge where today's activity is (the brightest limb), rather than always the north-east.
 - A slow wavelength cycle on Random, like Nebula's.
 - A flare alert: NOAA's GOES X-ray feed could switch to 131 or 94 while an M or X flare is under way.
