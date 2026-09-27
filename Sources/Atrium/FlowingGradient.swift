@@ -7,8 +7,10 @@ import simd
 /// through them, and a fine film grain. In Dark Mode the pools glow like coloured light in the dark; in Light Mode
 /// they're watercolour washes on pale paper, with the silk as a white sheen. The mood follows the real Sun: warmer
 /// around sunrise and sunset, deeper and cooler at night, a touch brighter at noon. Every knob is live in Settings,
-/// and the palette can be pinned there.
+/// and the palette can be pinned there; left on Random, it eases to another palette every few minutes.
 final class FlowingGradient: SKScene {
+    nonisolated static let cycleMinutes = Knob(key: "gradient.cycleMinutes", label: "Change colors every", range: 0...30,
+                                               standard: 8, section: "Colors", format: .minutes)
     /// Its Settings. Each drives the shader uniform named `u_` plus the last part of its key.
     nonisolated static let knobs = [
         Knob(key: "gradient.brightness", label: "Brightness", range: 0.2...1.2, standard: 0.6, section: "Look"),
@@ -27,6 +29,7 @@ final class FlowingGradient: SKScene {
              format: .toggle),
         Knob(key: "gradient.previewHour", label: "Time", range: 0...24, standard: 19, section: "Time of Day",
              format: .clock, shownWhen: "gradient.previewTime"),
+        cycleMinutes,
     ]
 
     /// Seven pool colours (for Dark Mode, as light) over a background. Slots 4 and 6 are the warm ones that swell
@@ -57,13 +60,23 @@ final class FlowingGradient: SKScene {
         return (name: palette.name, dark: swatch, light: swatch.map(pastel))
     }
 
+    /// A palette's background then its seven pools, as `u_base` and `u_c0`…`u_c6` take them: light in Dark Mode,
+    /// washes on paper tinted toward the second pool in Light Mode.
+    private static func look(_ palette: (name: String, base: SIMD3<Float>, pools: [SIMD3<Float>])) -> [SIMD3<Float>] {
+        systemIsDark ? [palette.base] + palette.pools
+                     : [simd_mix(.one, pastel(palette.pools[1]), SIMD3(repeating: 0.06))] + palette.pools.map(pastel)
+    }
+
     private let knobUniforms: [String: SKUniform]
     private let phase = SKUniform(name: "u_phase", float: 0)
     private let golden = SKUniform(name: "u_golden", float: 0)
     private let night = SKUniform(name: "u_night", float: 0)
     private let noon = SKUniform(name: "u_noon", float: 0)
+    private let colours = (["u_base"] + (0..<7).map { "u_c\($0)" }).map { SKUniform(name: $0, vectorFloat3: .zero) }
     private var flowSpeed = 1.0
     private var lastUpdate: TimeInterval?
+    private var scheduledCycle: Double?
+    private var paletteName = ""
 
     override init(size: CGSize) {
         knobUniforms = Dictionary(uniqueKeysWithValues: Self.knobs.map {
@@ -73,15 +86,14 @@ final class FlowingGradient: SKScene {
         // The pinned palette (Midnight unless changed), or a random one if Settings says Random.
         let chosen = UserDefaults.standard.string(forKey: "gradient.palette") ?? "Midnight"
         let palette = Self.palettes.first { $0.name == chosen } ?? Self.palettes.randomElement()!
-        let dark = systemIsDark
-        let base = dark ? palette.base : simd_mix(.one, Self.pastel(palette.pools[1]), SIMD3(repeating: 0.06)) // tinted paper
-        let colours = palette.pools.enumerated().map { i, c in SKUniform(name: "u_c\(i)", vectorFloat3: dark ? c : Self.pastel(c)) }
+        paletteName = palette.name
+        for (uniform, colour) in zip(colours, Self.look(palette)) { uniform.vectorFloat3Value = colour }
 
         let sprite = SKSpriteNode(color: .black, size: size)
         sprite.anchorPoint = .zero
         sprite.shader = SKShader(source: shaderCommon + Self.source, uniforms: [
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]),
-            SKUniform(name: "u_base", vectorFloat3: base), SKUniform(name: "u_lightMode", float: dark ? 0 : 1),
+            SKUniform(name: "u_lightMode", float: systemIsDark ? 0 : 1),
             phase, golden, night, noon,
         ] + colours + Array(knobUniforms.values))
         addChild(sprite)
@@ -105,10 +117,22 @@ final class FlowingGradient: SKScene {
         phase.floatValue += Float(min(max(currentTime - last, 0), 0.5) * 0.04 * flowSpeed)
     }
 
-    /// Pushes the Settings sliders and the Sun's mood into the shader. Runs on any settings change and every minute.
+    /// Pushes the Settings sliders and the Sun's mood into the shader, and (re)schedules the colour cycle when its
+    /// timing changes. Runs on any settings change and every minute.
     @objc private func applySettings() {
         for knob in Self.knobs { knobUniforms[knob.key]?.floatValue = Float(knob.value) }
         flowSpeed = Self.knobs[1].value
+        let chosen = UserDefaults.standard.string(forKey: "gradient.palette") ?? "Midnight"
+        let pinned = Self.palettes.contains { $0.name == chosen } // like init, anything else is Random
+        let minutes = pinned ? 0 : Self.cycleMinutes.value.rounded()
+        if minutes != scheduledCycle {
+            scheduledCycle = minutes
+            removeAction(forKey: "cycle")
+            if minutes > 0 {
+                run(.repeatForever(.sequence([.wait(forDuration: minutes * 60), .run { [weak self] in self?.cycle() }])),
+                    withKey: "cycle")
+            }
+        }
 
         var date = Date()
         if Self.knobs[9].value > 0.5 { // previewing a time of day
@@ -120,6 +144,18 @@ final class FlowingGradient: SKScene {
         golden.floatValue = Float(exp(-pow((altitude - 2) / 8, 2))) // peaks with the Sun on the horizon
         night.floatValue = Float(1 - simd_smoothstep(-18, -4, altitude))
         noon.floatValue = Float(simd_smoothstep(15, 55, altitude))
+    }
+
+    /// Eases the background and every pool to another palette over a minute, while the pools keep drifting.
+    // ponytail: a straight RGB blend, like Lava Lamp's; blend in a perceptual space if the middle ever looks muddy
+    private func cycle() {
+        let next = Self.palettes.filter { $0.name != paletteName }.randomElement()!
+        paletteName = next.name
+        let from = colours.map(\.vectorFloat3Value), to = Self.look(next)
+        run(.customAction(withDuration: 60) { [colours] _, elapsed in
+            let k = Float(simd_smoothstep(0, 1, Double(elapsed) / 60))
+            for (i, uniform) in colours.enumerated() { uniform.vectorFloat3Value = simd_mix(from[i], to[i], SIMD3(repeating: k)) }
+        })
     }
 
     private static let source = """

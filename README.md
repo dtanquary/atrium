@@ -18,7 +18,7 @@ A bright reef tank of real fish and corals, cut out of photos: a chromis school,
 | By day, in Light Mode | Under actinic blue in Dark Mode, its corals fluorescing |
 
 ### Flowing Gradient
-Soft pools of colour with silk ribbons that follow the Sun, in six palettes.
+Soft pools of colour with silk ribbons that follow the Sun, in six palettes. On Random it drifts from one palette to the next every few minutes.
 
 | ![Flowing Gradient in Dark Mode](docs/images/flowing-gradient.jpg) | ![Flowing Gradient in Light Mode](docs/images/flowing-gradient-light.jpg) |
 |---|---|
