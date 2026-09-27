@@ -2,12 +2,14 @@
 
 Full-screen view inside a lava lamp. Glowing jewel-tone wax heats in a molten pool at the bottom, rises as stretched teardrops that pinch off on thin necks, slumps wide at the top and sinks back. The liquid is lit from below by a bulb. It follows Light/Dark Mode.
 
-- **Files:** `Sources/Atrium/LavaLamp.swift` holds the knobs, palettes, colour cycling and shader source. Noise and `hash11` come from `shaderCommon` in Shaders.swift.
+- **Files:** `Sources/Atrium/LavaLamp.swift` holds the knobs, palettes, colour cycling, the blob layout (`layBlobs`) and the shader source. Noise comes from `shaderCommon` in Shaders.swift.
 - **Entry:** `lavaLamp(size:)` returns `final class LavaLamp: SKScene`. Its registry entry in Scenes.swift has icon `lamp.table.fill`, tint `.orange`, `knobs: LavaLamp.knobs`, and palettes `PaletteChoice(key: "lava.palette", ...)`. The swatches are liquid-lit to wax-hot, `[3]` and `[1]`. The standard is "", meaning Random.
 - **Kind:** a full-screen SKShader (metaballs), in a subclass with live uniforms.
 
 ## How it works
-**Wax field (`field`):** 8 blobs plus the pool, as metaballs `r²/d²` with analytic gradients. Wax is wherever the field passes 1. Each blob (driven by `hash11(i + seed)`):
+**Blob layout (`layBlobs`, Swift):** every frame, after integrating the phase, Swift works out where the 8 blobs and their 8 tails are and packs them as (x, y, radius, stretch) into four `mat4` uniforms, `u_blobs0`…`u_blobs3`, one ball per column. It's a pure function of the phase, so it looks the same at any frame rate. This used to run in the shader for every pixel, which was 60% of the frame (see Performance).
+
+**Wax field (`field`, shader):** those 16 balls plus the pool, as metaballs `r²/d²` with analytic gradients. Wax is wherever the field passes 1. Each blob (driven by `hash(i + seed)`, the shader's `hash11` ported to Double):
 - **Size:** radius `(0.045 + 0.075·h1²)·u_blobSize`, so mostly small with a few big ones.
 - **Trip:** a phase `s = fract(t/(55 + 50·h2) + h3)`, one trip every 55–105 s. `height(s)` rests in the pool, rises, lingers at the top and sinks back more slowly than it rose.
 - **Speed and stretch:** `speed` is the derivative of height. Moving wax stretches tall (`sy = 1 + 0.9·|speed|`); wax resting at the top slumps wide.
@@ -72,13 +74,15 @@ Sections: Colors (swatches plus the cycle interval), Motion, Light, Look. The Lo
 - Satin sheen: 0.12 × pow(·, 18). Cycle fade: 60 s.
 
 ## Performance
-CPU 0.45 ms and GPU 1.86 ms per frame (release, 2x). That's near the top of the ~2 ms GPU budget. The 8 blobs × 2 balls with gradients per pixel dominate. Fewer blobs, or dropping the tails, would cut it. The colour-cycle fade adds nothing to the GPU (it only animates uniforms).
+CPU about 0.55 ms and GPU 0.70 ms per frame (release, 2x). It was 1.86 ms of GPU until the blob layout moved to Swift. The research agent measured where the time went (seed 17, Coral, 40 s): removing the wobble noise saved 0.02 ms, the tails 0.09, all the wax shading 0.02, and cutting 8 blobs to 6 saved 0.27. Replacing the per-blob hashes, `height()` and `sin` with constants, keeping all 16 balls, took it from 1.77 to 0.66 ms. So summing the balls is cheap; recomputing each blob's position at every pixel wasn't. The CPU side is 8 blobs of arithmetic a frame. The colour-cycle fade adds nothing to the GPU (it only animates uniforms).
 
 ## Gotchas and shortcuts
 - `ponytail:` the colour cycle is a straight RGB blend, so opposite pairings pass through a muddier middle for part of the minute. Blend in a perceptual space if it ever looks dull.
 - **Possibly wrong:** `pow(negative, 2.0)` in the cone and window-reflection terms (`pow((x - 0.5)/0.6, 2.0)` and similar). GLSL and Metal leave `pow` of a negative base undefined. It renders fine today, perhaps because the translator folds it to `x*x`, but `d*d` would be safe.
-- Knobs are read by array index: `Self.knobs[0]` (speed) and `[6]` (cycle minutes). Reordering breaks them.
-- Unused uniforms (`u_speed`, `u_cycleMinutes`) are created for every knob. That's harmless.
+- Knobs are read by array index: `Self.knobs[0]` (speed), `[1]` (blob size) and `[6]` (cycle minutes). Reordering breaks them.
+- Unused uniforms (`u_speed`, `u_blobSize`, `u_cycleMinutes`) are created for every knob. That's harmless.
+- The blob matrices are passed to `field` and `balls` as parameters, since SKShader uniforms are only visible inside `main()`. Indexing a `mat4` column with the loop counter (`m[i]`) compiles and runs.
+- The CPU hash (Double `sin`) doesn't match the GPU's float `sin`, so a given seed lays out differently than it did before the move. That doesn't matter: the seed is random per load.
 - The agent chose a colour blend over a Nebula-style scene crossfade, because two sets of blobs overlapping looks like a double exposure.
 - There's no true bloom, just a glow approximated from the wax field. Wax never collects at the top.
 
@@ -98,7 +102,7 @@ CPU 0.45 ms and GPU 1.86 ms per frame (release, 2x). That's near the top of the 
 - A perceptual (OKLab-style) colour blend for the cycle.
 - A real bloom pass.
 - Wax that sometimes collects at the top.
-- If GPU cost matters, try 6 blobs or conditional tails.
+- The layout is in Swift now, so motion ideas (per-trip re-rolls, rising up the middle and sinking at the sides, wax that sticks at the top) are plain Swift rather than per-pixel shader code.
 
 ## Checking it
 ```sh

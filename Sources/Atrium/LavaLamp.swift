@@ -41,7 +41,11 @@ final class LavaLamp: SKScene {
     private let knobUniforms: [String: SKUniform]
     private let colours = ["u_waxDeep", "u_waxHot", "u_liquidDeep", "u_liquidLit"].map { SKUniform(name: $0, vectorFloat3: .zero) }
     private let phase = SKUniform(name: "u_phase", float: 0)
+    /// Sixteen balls of wax as (x, y, radius, stretch), four to a matrix: each blob and the tail it drags.
+    private let blobs = (0..<4).map { SKUniform(name: "u_blobs\($0)", matrixFloat4x4: matrix_identity_float4x4) }
+    private let seed = Double.random(in: 0...100)
     private var flowSpeed = 1.0
+    private var blobSize = 1.0
     private var lastUpdate: TimeInterval?
     private var cycleMinutes: Double?
     private var current = 0 // the palette showing, or being faded to
@@ -61,9 +65,8 @@ final class LavaLamp: SKScene {
         sprite.anchorPoint = .zero
         sprite.shader = SKShader(source: shaderCommon + Self.source, uniforms: [
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]),
-            SKUniform(name: "u_seed", float: .random(in: 0...100)), phase,
-            SKUniform(name: "u_pivot", float: systemIsDark ? 0.3 : 0.7), // the grade's contrast pivot
-        ] + colours + Array(knobUniforms.values))
+            phase, SKUniform(name: "u_pivot", float: systemIsDark ? 0.3 : 0.7), // the grade's contrast pivot
+        ] + colours + blobs + Array(knobUniforms.values))
         addChild(sprite)
 
         applySettings()
@@ -74,15 +77,48 @@ final class LavaLamp: SKScene {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     override func update(_ currentTime: TimeInterval) {
-        defer { lastUpdate = currentTime }
-        guard let last = lastUpdate else { return }
-        phase.floatValue += Float(min(max(currentTime - last, 0), 0.5) * flowSpeed) // integrated, so speed changes don't jump
+        if let last = lastUpdate { // integrated, so speed changes don't jump
+            phase.floatValue += Float(min(max(currentTime - last, 0), 0.5) * flowSpeed)
+        }
+        lastUpdate = currentTime
+        layBlobs()
+    }
+
+    /// Where every blob is at the current phase. It's the same for every pixel, so it's worked out once a frame
+    /// here rather than in the shader, which only sums the balls; that halves the GPU cost. A pure function of the
+    /// phase, so it looks the same at any frame rate.
+    private func layBlobs() {
+        func hash(_ x: Double) -> Double { let v = sin(x * 127.1) * 43758.5453; return v - v.rounded(.down) }
+        // Height along a trip (0..1): it rests in the pool, rises, lingers at the top as it cools, then sinks back
+        // more slowly than it rose.
+        func height(_ s: Double) -> Double { simd_smoothstep(0.06, 0.42, s) - simd_smoothstep(0.52, 0.96, s) }
+        let t = Double(phase.floatValue), aspect = size.width / size.height
+        var balls: [SIMD4<Float>] = []
+        for i in 0..<8 {
+            let fi = Double(i) + seed
+            let h1 = hash(fi + 0.13), h2 = hash(fi + 0.57), h3 = hash(fi + 0.91)
+            let r = (0.045 + 0.075 * h1 * h1) * blobSize                 // mostly small, a few big
+            let s = (t / (55 + 50 * h2) + h3).truncatingRemainder(dividingBy: 1) // one trip every 55-105 s
+            let h = height(s)
+            let speed = (height(s + 0.01) - height(s - 0.01)) * 12       // about +1 rising, -0.8 sinking
+            let y = simd_mix(-0.06, 0.62 + 0.3 * h2, h)                  // resting blobs sit down in the pool
+            let x = aspect * (0.08 + 0.84 * (h3 * 13.7).truncatingRemainder(dividingBy: 1)) + 0.05 * sin(t * 0.02 + fi * 2)
+            // moving wax stretches tall; resting at the top it slumps wide
+            let sy = 1 + 0.9 * abs(speed) - 0.3 * simd_smoothstep(0.85, 1, h) * (1 - min(abs(speed), 1))
+            balls.append(SIMD4(Float(x), Float(y), Float(r), Float(sy)))
+            balls.append(SIMD4(Float(x), Float(y - 1.8 * r * speed), Float(r * 0.55), Float(sy))) // its tail
+        }
+        for (k, uniform) in blobs.enumerated() {
+            uniform.matrixFloat4x4Value = simd_float4x4(balls[4 * k], balls[4 * k + 1], balls[4 * k + 2], balls[4 * k + 3])
+        }
     }
 
     /// Pushes the Settings sliders into the shader, and (re)schedules the colour cycle when its timing changes.
     @objc private func applySettings() {
         for knob in Self.knobs { knobUniforms[knob.key]?.floatValue = Float(knob.value) }
         flowSpeed = Self.knobs[0].value
+        blobSize = Self.knobs[1].value
+        layBlobs()
         let pinned = !(UserDefaults.standard.string(forKey: "lava.palette") ?? "").isEmpty
         let minutes = pinned ? 0 : Self.knobs[6].value.rounded()
         guard minutes != cycleMinutes else { return }
@@ -108,10 +144,6 @@ final class LavaLamp: SKScene {
     }
 
     private static let source = """
-    // Height of a blob along its trip (phase 0..1): it rests in the pool, rises, lingers at the top as it cools,
-    // then sinks back more slowly than it rose.
-    float height(float s) { return smoothstep(0.06, 0.42, s) - smoothstep(0.52, 0.96, s); }
-
     // One metaball r²/d², measured in a frame stretched sy times taller, with its gradient: (v, dv/dx, dv/dy).
     vec3 ball(vec2 p, vec2 c, float r, float sy) {
         vec2 d = p - c;
@@ -120,27 +152,18 @@ final class LavaLamp: SKScene {
         return vec3(v, -2.0 * v / q * d.x, -2.0 * v / q * d.y / (sy * sy));
     }
 
+    // Four of the balls laid out by layBlobs(), one per column: (x, y, radius, stretch).
+    vec3 balls(vec2 p, mat4 m) {
+        vec3 f = vec3(0.0);
+        for (int i = 0; i < 4; i++) { f += ball(p, m[i].xy, m[i].z, m[i].w); }
+        return f;
+    }
+
     // The whole wax field and its gradient. Wax is wherever it passes 1. The pool along the bottom joins in, so
     // blobs rise off it on necks, and each blob drags a smaller tail behind its motion so rising wax trails a neck
     // that thins and pinches off, and sinking wax drips from above.
-    vec3 field(vec2 p, float t, float aspect, float seed, float size) {
-        vec3 f = vec3(0.0);
-        for (int i = 0; i < 8; i++) {
-            float fi = float(i) + seed;
-            float h1 = hash11(fi + 0.13);
-            float h2 = hash11(fi + 0.57);
-            float h3 = hash11(fi + 0.91);
-            float r = (0.045 + 0.075 * h1 * h1) * size;                 // mostly small, a few big
-            float s = fract(t / (55.0 + 50.0 * h2) + h3);                // one trip every 55-105 s
-            float h = height(s);
-            float speed = (height(s + 0.01) - height(s - 0.01)) * 12.0;  // about +1 rising, -0.8 sinking
-            float y = mix(-0.06, 0.62 + 0.3 * h2, h);                   // resting blobs sit down in the pool
-            float x = aspect * (0.08 + 0.84 * fract(h3 * 13.7)) + 0.05 * sin(t * 0.02 + fi * 2.0);
-            // moving wax stretches tall; resting at the top it slumps wide
-            float sy = 1.0 + 0.9 * abs(speed) - 0.3 * smoothstep(0.85, 1.0, h) * (1.0 - min(abs(speed), 1.0));
-            f += ball(p, vec2(x, y), r, sy);
-            f += ball(p, vec2(x, y - 1.8 * r * speed), r * 0.55, sy);
-        }
+    vec3 field(vec2 p, float t, mat4 b0, mat4 b1, mat4 b2, mat4 b3) {
+        vec3 f = balls(p, b0) + balls(p, b1) + balls(p, b2) + balls(p, b3);
         // the molten pool: a gently heaving surface near the bottom
         float surface = 0.03 + 0.018 * sin(p.x * 4.0 + t * 0.15) + 0.01 * sin(p.x * 9.0 - t * 0.22);
         float d = max(p.y - surface, 0.002);
@@ -156,7 +179,7 @@ final class LavaLamp: SKScene {
         float y = v_tex_coord.y;
         // a slow wobble in space so wax edges are soft and irregular, not perfect ellipses
         vec2 wobble = vec2(noise(p * 5.0 + t * 0.06), noise(p * 5.0 - t * 0.05 + 7.3)) - 0.5;
-        vec3 f = field(p + u_wobble * wobble, t, aspect, u_seed, u_blobSize);
+        vec3 f = field(p + u_wobble * wobble, t, u_blobs0, u_blobs1, u_blobs2, u_blobs3);
 
         // Liquid: dark, lit by the bulb in a soft cone rising from the bottom, with the wax's own glow scattering
         // into it around every blob.
