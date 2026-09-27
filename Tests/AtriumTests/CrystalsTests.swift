@@ -30,18 +30,17 @@ import Testing
 }
 
 /// The slide runs through its cycle, and the next one, baked in the background during the melt, takes over at the end.
+/// It steps the clock rather than shortening Cycle length, because tests run in parallel and the render test reads it.
 @MainActor @Test func crystalsCycle() async throws {
-    UserDefaults.standard.set(0.05, forKey: "crystals.cycle") // 3 s
-    defer { UserDefaults.standard.removeObject(forKey: "crystals.cycle") }
     let scene = crystals(size: CGSize(width: 400, height: 260))
     let grow = try #require((scene.children.first as? SKSpriteNode)?.shader?.uniformNamed("u_grow"))
     var time = 0.0, restarts = 0, last = grow.floatValue
-    for _ in 0..<240 { // 12 s at 20 fps: about four cycles
-        time += 0.05
+    for step in 0..<Int(Crystals.knobs[0].value * 60 * 10 * 3.2) { // over three cycles in 0.1 s frames
+        time += 0.1
         scene.update(time)
         if grow.floatValue < last { restarts += 1 }
         last = grow.floatValue
-        try await Task.sleep(for: .milliseconds(5)) // lets the background bake land
+        if step % 50 == 0 { try await Task.sleep(for: .milliseconds(5)) } // lets the background bake land
     }
     #expect(restarts >= 3)
 }
