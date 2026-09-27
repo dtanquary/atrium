@@ -77,7 +77,7 @@ final class TreeScene: WeatherScene {
 
     /// ponytail: white oak only; Japanese maple and Yoshino cherry are more `TreeSpecies` values and a menu, with
     /// their own leaves, bark and `Phenology`.
-    private static let species: TreeSpecies = { var s = TreeSpecies.whiteOak; s.baseX = 0.425; return s }()
+    private static let species = TreeSpecies.whiteOak
     private static let calendar = Phenology.whiteOak
 
     // The tree shader's inputs; see `shaderSource`.
@@ -89,11 +89,12 @@ final class TreeScene: WeatherScene {
     private let spring = SKUniform(name: "u_spring", vectorFloat4: .zero), autumn = SKUniform(name: "u_autumn", vectorFloat4: .zero)
     /// The whole tree's bend and the branches' sway as fractions of the sprite, and how much the leaves flutter.
     private let windUniform = SKUniform(name: "u_wind", vectorFloat3: .zero)
-    /// How wet the bark is, how much snow lies on the branches, whether dead leaves are held, and how green the inner
-    /// crown's light is, 0…1 each.
-    private let treeWeather = SKUniform(name: "u_wx", vectorFloat4: [0, 0, 1, 0])
+    /// How wet the bark is, how much snow lies on the branches, and whether dead leaves are held, 0…1 each.
+    private let treeWeather = SKUniform(name: "u_wx", vectorFloat3: [0, 0, 1])
+    /// The contact shadow's depth, and how much of the crown is in leaf (bare, only the wood's shadow is left).
+    private let shade = SKUniform(name: "u_shade", vectorFloat2: [0.4, 1])
     private var wet = 0.0, snow = 0.0, lastTreeUpdate: TimeInterval?
-    private var tree: SKSpriteNode?, treeKey: BakeKey?
+    private var tree: SKNode?, treeKey: BakeKey?
     /// The bake's pixels per metre at the trunk over its width, to turn the wind's sway in metres into the sprite's.
     private var swayScale = 0.0
 
@@ -117,9 +118,9 @@ final class TreeScene: WeatherScene {
 
     private struct BakeKey: Hashable { var seed: UInt64, age: Int, width: Int, height: Int }
 
-    /// A baked tree and its textures, shared by every copy of the scene the same size (another display, or the
-    /// Settings preview), so its memory isn't doubled. The last few are kept.
-    private static var bakes: [(key: BakeKey, bake: TreeBake, textures: [SKTexture])] = []
+    /// A baked tree, its slabs' textures and its shadow's, shared by every copy of the scene the same size (another
+    /// display, or the Settings preview), so its memory isn't doubled. The last few are kept.
+    private static var bakes: [(key: BakeKey, bake: TreeBake, textures: [SKTexture], shadow: SKTexture)] = []
 
     /// The leaf cards (the six oak leaves' colour, normals and translucency) and the bark, decoded once.
     private static let materials: (atlas: LeafAtlas, bark: BarkImage) = {
@@ -149,13 +150,13 @@ final class TreeScene: WeatherScene {
         return BakeKey(seed: seed, age: age, width: Int(size.width * 2), height: Int(size.height * 2))
     }
 
-    /// Bakes the tree for `key`, or finds it already baked. About 0.15 s at 15 years old, 0.4 s at 30.
+    /// Bakes the tree for `key`, or finds it already baked. About 0.2 s at 15 years old, 0.5 s at 30.
     /// ponytail: on the main thread, as Weather's first build is; move it off once the tree is old enough (about 35)
     /// for a bake to take over half a second, and crossfade when it lands.
-    private static func baked(_ key: BakeKey, groundY: Double, horizon: Double) -> (bake: TreeBake, textures: [SKTexture]) {
-        if let hit = bakes.first(where: { $0.key == key }) { return (hit.bake, hit.textures) }
+    private static func baked(_ key: BakeKey, trunk: SIMD2<Double>, horizon: Double) -> (bake: TreeBake, textures: [SKTexture], shadow: SKTexture) {
+        if let hit = bakes.first(where: { $0.key == key }) { return (hit.bake, hit.textures, hit.shadow) }
         let bake = TreeGrowth.bake(species, seed: key.seed, age: key.age, pixels: SIMD2(key.width, key.height), horizon: horizon,
-                                   groundY: groundY, atlas: materials.atlas, bark: materials.bark)
+                                   trunkBase: trunk, atlas: materials.atlas, bark: materials.bark)
         let size = CGSize(width: bake.size.x, height: bake.size.y)
         let textures = bake.slabs.flatMap { slab in
             [(slab.woodLight, false), (slab.woodExtra, false), (slab.leafLight, false), (slab.leafSeed, true)].map { data, nearest in
@@ -164,28 +165,58 @@ final class TreeScene: WeatherScene {
                 return texture
             }
         }
-        bakes = Array((bakes + [(key, bake, textures)]).suffix(3))
-        return (bake, textures)
+        let shadow = SKTexture(data: Data(bake.shadow.rgba), size: CGSize(width: bake.shadow.size.x, height: bake.shadow.size.y))
+        bakes = Array((bakes + [(key, bake, textures, shadow)]).suffix(3))
+        return (bake, textures, shadow)
     }
 
     override func addForeground() {
         // The trunk stands on the photo's grass just below the brow, 42.5% across and 22% of the way down the photo.
         let photo = WeatherGround.cissbury.photo.size(), aspect = photo.width / max(photo.height, 1), top = WeatherGround.cissbury.top
         let shown = max(size.width, size.height * top * aspect) / aspect / size.height
-        let key = wantedKey, (bake, textures) = Self.baked(key, groundY: Double(top - 0.22 * shown), horizon: WeatherGround.cissbury.horizon)
-        let (w, h) = (CGFloat(bake.size.x) / 2, CGFloat(bake.size.y) / 2)
-        let node = SKSpriteNode(color: .clear, size: CGSize(width: w, height: h))
-        node.anchorPoint = .zero
-        node.position = CGPoint(x: CGFloat(bake.origin.x) / 2, y: size.height - CGFloat(bake.origin.y) / 2 - h)
+        let key = wantedKey
+        let (bake, textures, shadowTexture) = Self.baked(key, trunk: [0.425, Double(top - 0.22 * shown)], horizon: WeatherGround.cissbury.horizon)
+        let group = SKNode()
+        // The bake is at 2x, so a canvas pixel is half a point; y runs down in the canvas.
+        func place(_ node: SKSpriteNode, origin: SIMD2<Int>, span: SIMD2<Int>) {
+            node.anchorPoint = .zero
+            node.size = CGSize(width: CGFloat(span.x) / 2, height: CGFloat(span.y) / 2)
+            node.position = CGPoint(x: CGFloat(origin.x) / 2, y: size.height - CGFloat(origin.y + span.y) / 2)
+        }
+        // A soft contact shadow on the grass: the light the crown (or, bare, the wood) blocks straight down. Only in
+        // front of the trunk and just behind it: beyond the brow the hill falls away to the far fields.
+        let shadow = SKSpriteNode(texture: shadowTexture)
+        place(shadow, origin: bake.shadow.origin, span: bake.shadow.span)
+        shadow.zPosition = 5.5
+        shadow.blendMode = .multiply
+        let foot = (Double(bake.shadow.origin.y + bake.shadow.span.y) - bake.trunkBase.y) / Double(bake.shadow.span.y)
+        shadow.shader = SKShader(source: """
+            void main() {
+                // Blurred, more up and down than across: seen this low, the shade under the crown is a thin band.
+                vec2 px = vec2(\(2.0 / Double(bake.shadow.size.x)), \(3.0 / Double(bake.shadow.size.y)));
+                vec4 s = vec4(0.0);
+                for (int i = -2; i <= 2; i++) {
+                    for (int j = -2; j <= 2; j++) { s += texture2D(u_texture, v_tex_coord + vec2(float(i), float(j)) * px); }
+                }
+                s /= 25.0;
+                float behind = smoothstep(\(foot - 0.02), \(foot + 0.12), v_tex_coord.y);
+                gl_FragColor = vec4(vec3(1.0 - u_shade.x * mix(s.g, s.r, u_shade.y) * (1.0 - behind)), 1.0);
+            }
+            """, uniforms: [shade])
+        group.addChild(shadow)
+        let node = SKSpriteNode(color: .clear, size: .zero)
+        place(node, origin: bake.origin, span: bake.size)
         node.zPosition = 6
         let names = (0..<bake.slabs.count).flatMap { k in ["u_woodL\(k)", "u_woodX\(k)", "u_leafL\(k)", "u_leafS\(k)"] }
-        let frame = SIMD4<Float>(Float(node.position.x / size.width), Float(node.position.y / size.height), Float(w / size.width), Float(h / size.height))
-        node.shader = SKShader(source: Self.shaderSource(slabs: bake.slabs.count, age: key.age, size: bake.size), uniforms: zip(names, textures).map {
+        let frame = SIMD4<Float>(Float(node.position.x / size.width), Float(node.position.y / size.height),
+                                 Float(node.size.width / size.width), Float(node.size.height / size.height))
+        node.shader = SKShader(source: Self.shaderSource(bake, age: key.age), uniforms: zip(names, textures).map {
             SKUniform(name: $0, texture: $1)
         } + [WallpaperTime.now, seasonDay, spring, autumn, sunLight, skyLight, lightFrom, windUniform, treeWeather, SKUniform(name: "u_frame", vectorFloat4: frame),
              skyBefore, skyAfter, skyBlend, cameraUniforms.lens, groundHazeLit, deck, fog, groundColour])
-        addChild(node)
-        tree = node
+        group.addChild(node)
+        addChild(group)
+        tree = group
         treeKey = key
         swayScale = bake.pixelsPerMetre / Double(bake.size.x)
         updateTree(dt: 0)
@@ -199,10 +230,11 @@ final class TreeScene: WeatherScene {
         let across = dot(from, viewpoint.right), ahead = dot(from, viewpoint.forward)
         let back = smoothstep(-0.15, 0.5, ahead), side = 1 - back
         lightFrom.vectorFloat3Value = SIMD3<Float>(Float(smoothstep(0.3, -0.3, across) * side), Float(smoothstep(-0.3, 0.3, across) * side), Float(back))
-        // The photo ground's colours carry its own exposure, so real leaf and bark albedos need about 2.5 times the
-        // light to sit with it.
-        sunLight.vectorFloat3Value = SIMD3<Float>(direct * 2.5)
-        skyLight.vectorFloat3Value = SIMD3<Float>(sky * 2.5)
+        sunLight.vectorFloat3Value = SIMD3<Float>(direct)
+        skyLight.vectorFloat3Value = SIMD3<Float>(sky)
+        // The contact shadow is deepest in sunshine, when the crown blocks the direct light too.
+        let sunny = (direct.sum() / max(direct.sum() + sky.sum(), 1e-6))
+        shade.vectorFloat2Value.x = Float(0.2 + 0.25 * sunny)
     }
 
     override func update(_ currentTime: TimeInterval) {
@@ -229,8 +261,10 @@ final class TreeScene: WeatherScene {
         let v = 0.9 * conditions.wind / 3.6 * Self.sway.value // m/s at the crown, a little under the 10 m wind
         let pull = Float(pow(v, 1.3) * swayScale)
         windUniform.vectorFloat3Value = [0.012 * pull, 0.004 * pull, Float(min(v / 8, 1))]
-        let inner = smoothstep(c.breaks, c.full, d) * (1 - smoothstep(c.onset, c.peak, d)) // green light inside a leafy crown
-        treeWeather.vectorFloat4Value = [Float(wet), Float(snow), Float(Self.held.value), Float(inner)]
+        treeWeather.vectorFloat3Value = [Float(wet), Float(snow), Float(Self.held.value)]
+        // How much of the crown is in leaf, for its shadow: the leaves unfolding to falling, and a young oak's held ones.
+        let late = d > 200, heldLeaves = Self.held.value * 0.4
+        shade.vectorFloat2Value.y = Float(late ? max(1 - smoothstep(c.peak - 4, c.bare, d), heldLeaves) : max(smoothstep(c.breaks, c.full, d), heldLeaves * (1 - smoothstep(c.breaks - 5, c.breaks, d))))
         if live, tree != nil, wantedKey != treeKey { tree?.removeFromParent(); addForeground() } // a year older, or a new screen
     }
 
@@ -266,20 +300,25 @@ final class TreeScene: WeatherScene {
 }
 
 extension TreeScene {
-    /// Draws the baked slabs back to front, each its wood and then its leaves. Each leaf's colour and whether it's on
-    /// the tree come from its baked seeds and the day of the year (after tree.py's leaf_colour), so the season needs no
-    /// rebake. The tree is lit like the ground and hazed, fogged and dimmed at night the same way, as far off as the
-    /// grass it stands on. Wind bends the whole sprite like a cantilever and sways the branches, with a phase that
+    /// Draws the baked slabs back to front (slab 0 is the farthest), each its wood, the snow on it, then its leaves.
+    /// Each leaf's colour and whether it's on the tree come from its baked seeds and the day of the year, so the season
+    /// needs no rebake. The tree is lit like the ground, and hazed, fogged and dimmed at night like the grass it stands
+    /// on. Wind bends the whole tree like a cantilever from its trunk base and sways the branches, with a phase that
     /// varies smoothly over the crown, all by u_now, so it's the same at any frame rate.
-    static func shaderSource(slabs: Int, age: Int, size: SIMD2<Int>) -> String {
+    /// `gain` takes the tree's real albedos (a leaf is about 0.08) up to the ground photo's, whose colours carry its
+    /// own exposure (grass about 0.25); `ambient` is the skylight inside the crown. Both were matched against the
+    /// reference crowns' contrast under this tone map.
+    static func shaderSource(_ bake: TreeBake, age: Int, gain: Double = 3, ambient: Double = 0.6) -> String {
         let s = species
         func lin(_ c: SIMD3<Double>) -> String {
             String(format: "vec3(%.5f, %.5f, %.5f)", pow(c.x / 255, 2.2), pow(c.y / 255, 2.2), pow(c.z / 255, 2.2))
         }
-        let luminance = SIMD3<Double>(0.3, 0.59, 0.11)
+        func f(_ x: Double) -> String { String(format: "%.5f", x) }
         let bark = SIMD3(pow(s.bark.x / 255, 2.2), pow(s.bark.y / 255, 2.2), pow(s.bark.z / 255, 2.2))
-        let barkTint = bark / (bark * luminance).sum()
-        let young = (1 - smoothstep(15, 40, Double(age))) * 0.5
+        let tint = bark / (bark * SIMD3<Double>(0.3, 0.59, 0.11)).sum()
+        let w = Double(bake.size.x), h = Double(bake.size.y), bottom = Double(bake.origin.y) + h
+        let baseV = (bottom - bake.trunkBase.y) / h, topV = (bottom - (bake.trunkBase.y - bake.height * bake.pixelsPerMetre)) / h
+        let young = 0.5 * (1 - smoothstep(15, 40, Double(age)))
         var source = """
         vec3 decode(vec3 c) { return c * c * 4.0; }
         vec3 pal3(vec3 a, vec3 b, vec3 c, float t) {
@@ -290,43 +329,41 @@ extension TreeScene {
             t = clamp(t, 0.0, 0.999) * 3.0;
             return mix(mix(mix(a, b, clamp(t, 0.0, 1.0)), c, clamp(t - 1.0, 0.0, 1.0)), d, clamp(t - 2.0, 0.0, 1.0));
         }
-        // Light through a leaf: brighter, more saturated, and the blue gone (measured against the light).
-        vec3 through(vec3 c) {
-            float l = dot(c, vec3(0.3, 0.59, 0.11));
-            return max(vec3(l) + (c - vec3(l)) * 1.5, vec3(0.0)) * vec3(1.9, 1.7, 0.6);
-        }
         // A leaf's colour (rgb) and whether it's on the tree (a) on day d, from its seeds (ambient, turn: the top and
-        // the sunny outside first, fall or held, tint and underside) and the calendar. `keep` 0 lets held leaves fall.
-        vec4 leafState(vec4 sd, float d, vec4 spring, vec4 autumn, float keep) {
+        // the sunny outside first, whole branches together; fall or held; tint and underside) and the calendar.
+        // `heldOn` 0 lets the held leaves fall, last.
+        vec4 leafState(vec4 sd, float d, vec4 sp, vec4 au, float heldOn) {
             float turn = sd.g;
-            float held = step(0.79, sd.b) * keep;
-            float fall = mix(min(sd.b / 0.78, 1.0), 0.0, held);
+            float heldBit = step(0.79, sd.b);
+            float held = heldBit * heldOn;
+            float fall = clamp(mix(sd.b / 0.78, (sd.b - 0.8) / 0.2, heldBit), 0.0, 1.0) * (1.0 - held);
             float under = step(0.5, sd.a);
             float tint = clamp((sd.a - 0.51 * under) / 0.49, 0.0, 1.0);
-            // Each leaf unfolds on its own day: a faint rose-grey for a week, catkin gold at the crown's scale, lime
-            // for a fortnight, and summer green by five weeks after the leaves are full.
-            float brk = spring.y + fall * 16.0;
+            // Spring: each leaf unfolds on its own day, a faint rose-grey for a week, catkin gold at the crown's
+            // scale, lime for a fortnight, and summer green (warmer or cooler by branch) by five weeks after full leaf.
+            float brk = sp.y + fall * 16.0;
             float grow = smoothstep(brk, brk + 3.0, d), since = d - brk;
             vec3 col = pal3(\(lin(s.green[0])), \(lin(s.green[1])), \(lin(s.green[2])), tint);
-            col = mix(col, \(lin(s.lime)), 1.0 - smoothstep(spring.z, spring.z + 35.0, d));
+            col *= mix(vec3(1.0), mix(vec3(1.06, 1.04, 0.86), vec3(0.93, 0.98, 1.08), turn), \(f(s.sectorTint)));
+            col = mix(col, \(lin(s.lime)), 1.0 - smoothstep(sp.z, sp.z + 35.0, d));
             col = mix(col, \(lin(s.catkin)), 0.8 * (1.0 - smoothstep(10.0, 18.0, since)));
             col = mix(col, \(lin(s.rose)), 0.5 * (1.0 - smoothstep(2.0, 7.0, since)));
             // Autumn: wine to rust (a young tree runs rose-red), browning, then each leaf falls on its own day.
-            float sh = (turn - 0.5) * 20.0;
-            float c = smoothstep(autumn.x + sh, autumn.y + sh, d);
-            vec3 au = mix(pal4(\(lin(s.autumn[0])), \(lin(s.autumn[1])), \(lin(s.autumn[2])), \(lin(s.autumn[3])), tint), \(lin(s.youngRed)), \(String(format: "%.3f", young)));
-            col = mix(col, au, c);
-            float bf = smoothstep(autumn.y + sh, autumn.w + 10.0 + sh, d);
+            float sh = (turn - 0.5) * \(f(s.autumnSpread));
+            float c = smoothstep(au.x + sh, au.y + sh, d);
+            vec3 aut = mix(pal4(\(lin(s.autumn[0])), \(lin(s.autumn[1])), \(lin(s.autumn[2])), \(lin(s.autumn[3])), tint), \(lin(s.youngRed)), \(f(young)));
+            col = mix(col, aut, c);
+            float bf = smoothstep(au.y + sh, au.w + 10.0 + sh, d);
             col = mix(col, \(lin(s.brown)), bf);
-            float tf = autumn.y - 4.0 + fall * (autumn.w - autumn.y + 4.0) + sh * 0.5;
-            float late = step(200.0, d);
+            float tf = au.y - 4.0 + fall * (au.w - au.y + 4.0) + sh * 0.5;
+            float late = step((sp.z + au.x) * 0.5, d);
             float present = grow * mix(1.0, 1.0 - smoothstep(tf - 1.0, tf + 1.0, d), late);
             // Held leaves go tan after the peak and stay, fading to pale buff by March, until the new buds break.
             vec3 heldCol = mix(\(lin(s.held)), \(lin(s.buff)), (1.0 - late) * smoothstep(20.0, 80.0, d)) * (0.9 + 0.2 * tint);
-            col = mix(col, mix(col, heldCol, smoothstep(autumn.y, autumn.z, d)), held * late);
+            col = mix(col, mix(col, heldCol, smoothstep(au.y, au.z, d)), held * late);
             present = mix(present, grow, held * late);
-            float pre = held * (1.0 - late) * (1.0 - step(spring.y, d));
-            present = mix(present, 1.0 - smoothstep(spring.y - 5.0, spring.y, d), pre);
+            float pre = held * (1.0 - late) * (1.0 - step(sp.y, d));
+            present = mix(present, 1.0 - smoothstep(sp.y - 5.0, sp.y, d), pre);
             col = mix(col, heldCol, pre);
             float dead = mix(pre, max(held, bf), late);
             vec3 underc = mix(\(lin(s.under)), \(lin(s.held)) * 1.3, dead);
@@ -337,41 +374,53 @@ extension TreeScene {
         void main() {
             vec2 uv = v_tex_coord;
             float t = u_now;
-            float hgt = clamp((uv.y - \(24.0 / Double(size.y))) / \(1 - 48.0 / Double(size.y)), 0.0, 1.2);
+            float hgt = clamp((uv.y - \(f(baseV))) / \(f(topV - baseV)), 0.0, 1.2);
             float ph = 6.2832 * (0.5 + 0.25 * sin(uv.x * 9.0 + uv.y * 5.0) + 0.25 * sin(uv.x * 4.0 - uv.y * 11.0 + 1.3));
             float gust = 0.75 + 0.25 * sin(6.2832 * 0.07 * t + 1.0);
             vec2 q = uv - gust * vec2(u_wind.x * hgt * hgt * (0.6 + 0.4 * sin(6.2832 * 0.3 * t)) + u_wind.y * hgt * sin(6.2832 * 0.8 * t + ph),
-                                      u_wind.y * 0.35 * hgt * sin(6.2832 * 1.04 * t + ph * 1.7) * \(Double(size.x) / Double(size.y)));
+                                      u_wind.y * 0.35 * hgt * sin(6.2832 * 1.04 * t + ph * 1.7) * \(f(w / h)));
+            // Green light bounced around inside a leafy crown, and snow in this light (as Weather's snowy ground).
+            float greenf = smoothstep(u_spring.y, u_spring.z, u_day) * (1.0 - smoothstep(u_autumn.x, u_autumn.y, u_day));
+            vec3 bounce = vec3(0.12, 0.2, 0.06) * 0.5 * (u_sky.r + u_sky.g + u_sky.b) / 1.8 * greenf;
+            vec3 snowCol = 0.9 * (u_sky + u_sun * (u_w.x + u_w.y) * 0.4);
+            vec3 bark = vec3(\(f(tint.x)), \(f(tint.y)), \(f(tint.z)));
             vec3 acc = vec3(0.0);
             float accA = 0.0;
-            // Wet bark is about two stops darker and a little more saturated.
-            vec3 bark = mix(vec3(\(barkTint.x), \(barkTint.y), \(barkTint.z)), vec3(\(barkTint.x * 0.26), \(barkTint.y * 0.24), \(barkTint.z * 0.2)), u_wx.x);
-            float skySum = (u_sky.r + u_sky.g + u_sky.b) / 1.8;
 
         """
-        for k in 0..<slabs {
+        for k in 0..<bake.slabs.count {
             source += """
                 {
                     vec4 wl = texture2D(u_woodL\(k), q);
                     vec4 wx = texture2D(u_woodX\(k), q);
-                    vec3 w3 = wl.rgb * wl.rgb * 0.35;
-                    vec3 wc = bark * (u_sun * dot(u_w, w3) + u_sky * (wx.r * wx.r * 0.35));
-                    acc = mix(acc, wc, wl.a);
+                    vec3 wc = bark * (u_sun * dot(u_w, wl.rgb * wl.rgb * 0.35) + u_sky * (wx.r * wx.r * 0.35 * \(f(ambient))));
+                    // Wet bark is about two stops darker, with a sheen of sky on the lit ridges.
+                    wc = mix(wc, wc * 0.3 + 0.05 * (u_sky + u_sun * 0.3) * smoothstep(0.15, 0.4, wx.r), u_wx.x);
+                    acc = mix(acc, \(f(gain)) * wc, wl.a);
                     accA = mix(accA, 1.0, wl.a);
                     float sa = smoothstep(0.95 - 0.6 * u_wx.y, 1.1 - 0.6 * u_wx.y, wx.g) * step(0.001, u_wx.y);
-                    acc = mix(acc, \(s.snow) * (u_sun * (u_w.x + u_w.y) * 0.3 + u_sky * 0.8), sa);
+                    acc = mix(acc, snowCol, sa);
                     accA = mix(accA, 1.0, sa);
                     vec4 ll = texture2D(u_leafL\(k), q);
                     vec4 sd = texture2D(u_leafS\(k), q);
                     vec3 l3 = ll.rgb * ll.rgb * 1.6;
-                    float amb = sd.r * sd.r * 1.6;
+                    float amb = sd.r * sd.r * 1.6 * \(f(ambient));
                     vec4 st = leafState(sd, u_day, u_spring, u_autumn, u_wx.z);
+                    vec3 lc = st.rgb;
+                    float lum = dot(lc, vec3(0.3, 0.59, 0.11));
+                    lc = mix(lc, max(vec3(lum) + (lc - vec3(lum)) * 1.3, 0.0) * 0.7, u_wx.x);
                     float fl = 1.0 + 0.22 * gust * u_wind.z * sin(6.2832 * 2.0 * t + sd.g * 37.0 + sd.b * 91.0);
                     float direct = dot(u_w, l3) * fl;
-                    vec3 light = u_sun * direct + u_sky * amb + vec3(0.12, 0.2, 0.06) * (1.0 - amb) * 0.5 * skySum * u_wx.w;
-                    vec3 lc = st.rgb * light * (1.0 - 0.25 * u_wx.x) + 0.018 * u_sun * direct + u_w.z * l3.b * u_sun * through(st.rgb) * 0.45;
+                    // Light through a leaf, seen against a low Sun: brighter, more saturated, the blue gone.
+                    float tl = dot(lc, vec3(0.3, 0.59, 0.11));
+                    vec3 through = max(vec3(tl) + (lc - vec3(tl)) * 1.5, 0.0) * vec3(1.9, 1.7, 0.6);
+                    vec3 c = lc * (u_sun * direct + u_sky * amb + bounce * clamp(1.0 - amb, 0.0, 1.0))
+                        + 0.018 * u_sun * direct + u_w.z * l3.b * u_sun * through * 0.45;
+                    c *= \(f(gain));
+                    // Snow settles on the leaves open to the sky above that face up: the tops of held clusters.
+                    c = mix(c, snowCol, smoothstep(0.62 - 0.35 * u_wx.y, 0.72 - 0.35 * u_wx.y, wx.b) * step(0.001, u_wx.y));
                     float a = ll.a * st.a;
-                    acc = mix(acc, lc, a);
+                    acc = mix(acc, c, a);
                     accA = mix(accA, 1.0, a);
                 }
 

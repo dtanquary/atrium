@@ -17,28 +17,36 @@ public struct TreeSpecies: Sendable {
     public var dbhRate = 0.9, crownA = 1.12, crownB = 0.221
     public var clearAges: [Double] = [0, 10, 30, 80], clearH: [Double] = [0.5, 0.5, 2.0, 4.0]
     public var planted = 15.0, transplant = 0.5
-    public var widest = 0.4, topYoung = 1.35, topOld = 2.2, envNoise = 0.16
+    public var widest = 0.4, topYoung = 1.35, topOld = 2.2, envNoise = 0.24
     public var matureAges = SIMD2<Double>(12, 60)
     public var leaderUntil = 35, leaderGap = 0.35, whorl = SIMD2<Int>(3, 5), whorlElev = SIMD2<Double>(40, 12)
     public var D = 0.16, di = 1.4, dk = 0.26, K = 5, dens = 60.0, youngDense = 1.5, replenish = 0.03
     public var perClump = 22, clumpSig = SIMD2<Double>(0.23, 0.53), shell = SIMD2<Double>(1.0, 0.35)
-    public var tropUp = 0.16, wander = 0.2, crook = 0.2, zig = 0.12, redraw = 0.1
+    public var tropUp = 0.16, wander = 0.2, crook = 0.14, zig = 0.07, redraw = 0.1
     public var e = 2.3, ring = 0.03, flare = 0.3
     // foliage
-    public var leafLen = 0.125, leafZone = 0.88, shoots = 6.5, rosette = SIMD2<Int>(5, 9)   // leafZone off the 0.16 m internode grid
+    public var leafLen = 0.125, leafZone = 0.88, shoots = 7.0, rosette = SIMD2<Int>(5, 9)   // leafZone off the 0.16 m internode grid
     // (at 5 x 0.16, dtip < leafZone flips on rounding)
-    public var shootLen = SIMD2<Double>(0.04, 0.16), clump = SIMD2<Double>(1.6, 3.6)
+    public var shootLen = SIMD2<Double>(0.04, 0.16), clump = SIMD2<Double>(3.0, 5.0)   // per 4 m of crown width
+    public var clumpEdge = SIMD2<Double>(-0.35, 0.5), clumpFloor = 0.08   // shoots thin out below the clump field's edge: gaps
+    public var massLight = 0.6          // light each leaf mass as a volume: its own sun side and shade side (0 = per leaf only)
+    public var massCell = 0.3, massBlur = 1.5
+    public var snowCap = SIMD4<Double>(0.6, 0.8, 1.4, 0.9), snowCapMax = SIMD2<Double>(5, 8)   // px: twigs a + b r, limbs c + d r
+    public var autumnSpread = 34.0, sectorTint = 1.0   // shader: days between the first and last leaves to turn; summer hue by sector
     public var heldAges: [Double] = [0, 15, 40, 80], heldFrac: [Double] = [0.7, 0.65, 0.12, 0.06]
     // bark
-    public var barkTile = SIMD2<Double>(0.45, 0.9), bark = SIMD3<Double>(128, 114, 96), twig = SIMD3<Double>(104, 94, 82)
+    public var barkTile = SIMD2<Double>(0.45, 0.9), bark = SIMD3<Double>(112, 100, 86), twig = SIMD3<Double>(72, 64, 58)
     // colours, for the shader
     public var green: [SIMD3<Double>] = [[62, 84, 26], [72, 94, 30], [54, 76, 26]], under = SIMD3<Double>(150, 158, 138)
     public var rose = SIMD3<Double>(160, 128, 118), catkin = SIMD3<Double>(158, 146, 78), lime = SIMD3<Double>(132, 146, 54)
-    public var autumn: [SIMD3<Double>] = [[130, 52, 42], [150, 66, 50], [136, 84, 58], [112, 60, 44]]
+    public var autumn: [SIMD3<Double>] = [[122, 40, 32], [140, 52, 38], [132, 72, 48], [104, 50, 38]]
     public var youngRed = SIMD3<Double>(138, 78, 64), brown = SIMD3<Double>(112, 90, 64)
     public var held = SIMD3<Double>(152, 122, 90), buff = SIMD3<Double>(188, 164, 128), snow = 0.62
-    // composition: tree height as a fraction of the screen, 37% at 15 easing toward 60%, and where the trunk stands
-    public var frac = SIMD3<Double>(0.37, 0.23, 25), baseX = 0.40
+    // composition: tree height as a fraction of the screen, 37% at 15 easing toward 60%
+    public var frac = SIMD3<Double>(0.37, 0.23, 25)
+
+    /// The tree's height as a fraction of the screen height at an age.
+    public func screenFraction(age: Double) -> Double { frac.x + frac.y * (1 - exp(-(age - 15) / frac.z)) }
 
     public init() {}
 
@@ -68,7 +76,8 @@ public struct BarkImage: Sendable {
 
 /// One depth slab's four RGBA8 textures, rows bottom-up for SKTexture(data:size:):
 /// leafLight = sqrt(left, right, back / 1.6), coverage; leafSeed = sqrt(ambient / 1.6), turn, fall|held, tint|underside;
-/// woodLight = sqrt(bark lum x (left, right, back) / 0.35), coverage; woodExtra = sqrt(bark lum x ambient / 0.35), snow, 0, 0.
+/// woodLight = sqrt(bark lum x (left, right, back) / 0.35), coverage; woodExtra = sqrt(bark lum x ambient / 0.35), snow on
+/// the wood, snow the leaf in front would catch (open sky above x facing up), 0.
 public struct TreeSlab: Sendable {
     public var leafLight: [UInt8], leafSeed: [UInt8], woodLight: [UInt8], woodExtra: [UInt8]
 }
@@ -82,7 +91,15 @@ public struct TreeBake: Sendable {
     public var pixelsPerMetre: Double      // at the trunk, for wind
     public var height: Double              // metres
     public var liveNodes: Int, leaves: Int
+    public var shadow: TreeShadow          // how much the tree blocks light straight down, on the ground around the trunk
     public var timings: [(String, Double)] // seconds per phase
+}
+
+/// The tree's contact shadow on the ground plane, in canvas space at half resolution: RGBA8 rows bottom-up, red = the
+/// whole tree's coverage, green = the wood's alone (for bare months), both 0...1 of the light blocked straight down.
+public struct TreeShadow: Sendable {
+    public var rgba: [UInt8], size: SIMD2<Int>
+    public var origin: SIMD2<Int>, span: SIMD2<Int>   // where it lies in the canvas, pixels, top-left, y down
 }
 
 /// The skeleton as grown: every node ever grown, its parent, the year it grew and the year it was shed.
@@ -458,17 +475,20 @@ public enum TreeGrowth {
     }
 
     /// This year's shoots, leaves and twigs, placed fresh from (seed, year).
+    /// ponytail: one card per leaf: 22k at 15, 110k at 30, 640k at 60 (a 2 s bake). From about age 35, swap outer
+    /// shoots for cluster cards (a spray of 5-20 leaves, seeds per cluster) to keep the bake and the leaf count down.
     static func makeLeaves(_ S: TreeSpecies, _ T: TreeSkeleton, _ st: Structure, seed: UInt64, year: Int, cells: Int) -> Leaves {
         typealias R = TreeRandom
         let ys = R.mix(seed &* R.g &+ UInt64(year))
         let P = T.P, par = T.par
         let C = V3(0, 0.55 * st.height, 0), squash = V3(1, 0.5, 1)
         let waves = PlaneWaves(seed: seed, stream: 50, n: 12, kmin: S.clump.x, kmax: S.clump.y)
+        let clumpScale = 4 / max(S.width(Double(year)), 1)     // leaf masses scale with the crown
         var L = Leaves(); L.ys = ys
         var sn: [Int] = [], sid: [Int] = [], sdir: [V3] = []
         for i in 2..<P.count where st.alive[i] && st.dtip[i] < S.leafZone && st.r[i] < 0.025 {
-            let clump = smoothstep(-0.5, 0.7, waves(P[i]))
-            let lam = S.shoots * (0.05 + 0.95 * clump)
+            let clump = smoothstep(S.clumpEdge.x, S.clumpEdge.y, waves(P[i] * clumpScale))
+            let lam = S.shoots * (S.clumpFloor + (1 - S.clumpFloor) * clump)
             let cnt = Int(floor(lam + R.uniform(ys, 1, i)))
             for k in 0..<max(cnt, 0) { sn.append(i); sid.append(i * 16 + k) }
         }
@@ -514,7 +534,7 @@ public enum TreeGrowth {
 struct LightGrid: Sendable {
     let lo: V3, cell: Double, n: SIMD3<Int>, g: [Double]
 
-    init(_ pts: [V3], area: [Double], cell: Double) {
+    init(_ pts: [V3], area: [Double], cell: Double, blur sigma: Double = 0.6) {
         var lo = V3(repeating: .infinity), hi = V3(repeating: -.infinity)
         for p in pts { lo = pointwiseMin(lo, p); hi = pointwiseMax(hi, p) }
         lo -= 1.5; hi += 1.5
@@ -528,12 +548,13 @@ struct LightGrid: Sendable {
         }
         let inv = 1 / (cell * cell * cell)
         for i in g.indices { g[i] *= inv }
-        self.g = Self.blur(g, n)
+        self.g = Self.blur(g, n, sigma)
     }
 
-    /// Separable Gaussian, sigma 0.6, radius 2, zero outside.
-    static func blur(_ g: [Double], _ n: SIMD3<Int>) -> [Double] {
-        var k = (-2...2).map { x in exp(-Double(x * x) / (2 * 0.6 * 0.6)) }
+    /// Separable Gaussian, zero outside (radius 2 at the default sigma 0.6).
+    static func blur(_ g: [Double], _ n: SIMD3<Int>, _ sigma: Double) -> [Double] {
+        let rad = max(2, Int(ceil(2.5 * sigma)))
+        var k = (-rad...rad).map { x in exp(-Double(x * x) / (2 * sigma * sigma)) }
         let ks = k.reduce(0, +); k = k.map { $0 / ks }
         var src = g
         let strides = [n.y * n.z, n.z, 1], dims = [n.x, n.y, n.z]
@@ -543,9 +564,9 @@ struct LightGrid: Sendable {
             for i in 0..<src.count {
                 let c = (i / st) % dim
                 var s = 0.0
-                for t in 0..<5 {
-                    let o = c + t - 2
-                    if o >= 0 && o < dim { s += k[t] * src[i + (t - 2) * st] } else { s += k[t] * 0 }
+                for t in 0..<k.count {
+                    let o = c + t - rad
+                    if o >= 0 && o < dim { s += k[t] * src[i + (t - rad) * st] } else { s += k[t] * 0 }
                 }
                 dst[i] = s
             }
@@ -609,6 +630,15 @@ struct LightGrid: Sendable {
             let z = ((Double(k) + 0.5) / Double(n)).squareRoot(), a = Double(k) * 2.39996, s = (1 - z * z).squareRoot()
             return V3(cos(a) * s, z, sin(a) * s)
         }
+    }
+
+    /// Which way the density falls off fastest: the outward normal of the leaf mass around p (zero deep inside or outside).
+    func outward(_ p: V3) -> V3 {
+        let q = (p - lo) / cell - 0.5
+        let g = V3(sample(q + V3(0.5, 0, 0)) - sample(q - V3(0.5, 0, 0)), sample(q + V3(0, 0.5, 0)) - sample(q - V3(0, 0.5, 0)),
+                   sample(q + V3(0, 0, 0.5)) - sample(q - V3(0, 0, 0.5)))
+        let l = len3(g)
+        return l > 1e-9 ? -g / l : .zero
     }
 
     func sky(_ p: V3, _ n: Int) -> Double {
@@ -739,14 +769,14 @@ struct LeafFrames: Sendable {
 
 // MARK: - Camera
 
-/// Level camera. The trunk base stands at (baseX, groundY); the horizon is a line the caller gives (both fractions of
-/// the height from the bottom). The tree's screen height follows frac(age).
+/// Level camera. The trunk base and the horizon are where the caller puts them (fractions of the canvas from the bottom
+/// left); the tree's screen height is `frac` of the canvas height.
 struct TreeCamera: Sendable {
     let horizon: Double, base: SIMD2<Double>, d: Double, F: Double, C: V3
 
-    init(_ S: TreeSpecies, _ W: Int, _ H: Int, height: Double, age: Double, horizon h: Double, groundY: Double) {
-        let frac = S.frac.x + S.frac.y * (1 - exp(-(age - 15) / S.frac.z))
-        horizon = Double(H) * (1 - h); base = SIMD2(S.baseX * Double(W), Double(H) * (1 - groundY))
+    /// `horizon` and `trunkBase` are fractions of the canvas from the bottom left; `frac` is the tree's height on screen.
+    init(_ W: Int, _ H: Int, height: Double, frac: Double, horizon h: Double, trunkBase: SIMD2<Double>) {
+        horizon = Double(H) * (1 - h); base = SIMD2(trunkBase.x * Double(W), Double(H) * (1 - trunkBase.y))
         let b = base.y - horizon
         let eye = b * height / (frac * Double(H))
         d = 4.5 * height + 20; F = b / eye * d
@@ -763,20 +793,24 @@ struct TreeCamera: Sendable {
 
 extension TreeGrowth {
     /// Grows the tree to `age` and bakes it for a canvas of `pixels` (e.g. 3024x1964 at 2x): 3 depth slabs of 4 RGBA8
-    /// textures each, cropped to the tree. `horizon` and `groundY` are fractions of the height from the bottom.
+    /// textures each, cropped to the tree, and its ground shadow. `horizon` (the ground plane's horizon) and `trunkBase`
+    /// are fractions of the canvas from the bottom left; `heightFraction` is the tree's height as a fraction of the
+    /// canvas height, by default the species' `screenFraction(age:)`.
     public static func bake(_ S: TreeSpecies, seed: UInt64, age: Int, pixels: SIMD2<Int>, horizon: Double = 0.30,
-                     groundY: Double = 0.2123, atlas: LeafAtlas, bark: BarkImage, slabs nslab: Int = 3) -> TreeBake {
+                            trunkBase: SIMD2<Double> = [0.425, 0.241], heightFraction: Double? = nil,
+                            atlas: LeafAtlas, bark: BarkImage, slabs nslab: Int = 3) -> TreeBake {
         var timings: [(String, Double)] = []
-        var clock = Date()
-        func lap(_ name: String) { timings.append((name, Date().timeIntervalSince(clock))); clock = Date() }
+        let clock = Date()
         let T = colonize(S, seed: seed, age: age)
-        lap("grow")
-        return bake(S, T, seed: seed, age: age, pixels: pixels, horizon: horizon, groundY: groundY, atlas: atlas, bark: bark,
-                    slabs: nslab, timings: timings)
+        timings.append(("grow", Date().timeIntervalSince(clock)))
+        return bake(S, T, seed: seed, age: age, pixels: pixels, horizon: horizon, trunkBase: trunkBase,
+                    heightFraction: heightFraction ?? S.screenFraction(age: Double(age)), atlas: atlas, bark: bark, slabs: nslab,
+                    timings: timings)
     }
 
     static func bake(_ S: TreeSpecies, _ T: TreeSkeleton, seed: UInt64, age: Int, pixels: SIMD2<Int>, horizon: Double,
-                     groundY: Double, atlas: LeafAtlas, bark: BarkImage, slabs nslab: Int, timings t0: [(String, Double)] = []) -> TreeBake {
+                     trunkBase: SIMD2<Double>, heightFraction: Double, atlas: LeafAtlas, bark: BarkImage, slabs nslab: Int,
+                     timings t0: [(String, Double)] = []) -> TreeBake {
         var timings = t0
         var clock = Date()
         func lap(_ name: String) { timings.append((name, Date().timeIntervalSince(clock))); clock = Date() }
@@ -795,7 +829,7 @@ extension TreeGrowth {
         let A0 = live.map { arc[par[$0]] } + [Double](repeating: 0, count: ns + nt)
         let A1 = live.map { arc[$0] } + [Double](repeating: 0, count: ns + nt)
         let nseg = P1.count
-        let cam = TreeCamera(S, W, H, height: st.height, age: a, horizon: horizon, groundY: groundY)
+        let cam = TreeCamera(W, H, height: st.height, frac: heightFraction, horizon: horizon, trunkBase: trunkBase)
         lap("structure and leaves")
         // light through the canopy
         let area = S.leafLen * S.leafLen * 0.36
@@ -808,7 +842,9 @@ extension TreeGrowth {
                 bTB[i] = grid.trans(Lf.pos[i], lightB); bAO[i] = grid.sky(Lf.pos[i], 10)
             }
         }
-        let TL = bTL.array(nl), TR = bTR.array(nl), TB = bTB.array(nl), AO = bAO.array(nl)
+        let bUp = SharedBuffer(nl, 0.0)
+        parallel(nl, chunk: 128) { range in for i in range { bUp[i] = grid.trans(Lf.pos[i] + V3(0, 0.05, 0), V3(0, 1, 0)) } }
+        let TL = bTL.array(nl), TR = bTR.array(nl), TB = bTB.array(nl), AO = bAO.array(nl), TUp = bUp.array(nl)
         let mid = (0..<nseg).map { 0.5 * (P1[$0] + S0[$0]) }
         let w0 = SharedBuffer(nseg, 0.0), w1 = SharedBuffer(nseg, 0.0), w2 = SharedBuffer(nseg, 0.0), wao = SharedBuffer(nseg, 0.0)
         parallel(nseg, chunk: 128) { range in
@@ -818,6 +854,14 @@ extension TreeGrowth {
             }
         }
         let WT0 = w0.array(nseg), WT1 = w1.array(nseg), WT2 = w2.array(nseg), WAO = wao.array(nseg)
+        // each leaf mass lit as a volume: blend its leaves' normals toward the mass's own outward normal
+        let massN: [V3]
+        if S.massLight > 0 {
+            let mass = LightGrid(Lf.pos, area: [Double](repeating: area, count: nl), cell: S.massCell, blur: S.massBlur)
+            let mb = SharedBuffer(nl, V3.zero)
+            parallel(nl, chunk: 512) { range in for i in range { mb[i] = mass.outward(Lf.pos[i]) } }
+            massN = mb.array(nl)
+        } else { massN = [V3](repeating: .zero, count: nl) }
         lap("light")
         // slabs and crop
         var xmin = Double.infinity, xmax = -Double.infinity, zmin = Double.infinity, zmax = -Double.infinity
@@ -869,6 +913,11 @@ extension TreeGrowth {
         let fall = (0..<nl).map { i in
             score[i] > threshold ? 0.8 + 0.2 * TreeRandom.uniform(ys, 23, Lf.lid[i]) : 0.78 * TreeRandom.uniform(ys, 24, Lf.lid[i])
         }
+        // snow catch: on top of its leaf mass (a cap on each cluster), more on a level leaf (either side up), less under
+        // leaves above (most of which are gone by the time it snows)
+        let catchSnow = (0..<nl).map { i in
+            Float((0.6 + 0.4 * TUp[i]) * clamp(massN[i].y * 1.6, 0, 1) * (0.55 + 0.45 * clamp(abs(Lf.nrm[i].y) * 1.3 - 0.1, 0, 1)))
+        }
         // cards needed, made in parallel
         let keyOf = (0..<nl).map { i -> CardKey in
             let a32 = Int(floor(F.ang[i] / (2 * Double.pi) * 32))
@@ -891,13 +940,14 @@ extension TreeGrowth {
             var wl = [SIMD4<Float>](repeating: .zero, count: npx), wa = [Float](repeating: 0, count: npx)
             var wlum = wa, snow = wa, wz = [Float](repeating: .infinity, count: npx)
             var la = [SIMD4<Float>](repeating: .zero, count: npx), lcov = wa, lb = [SIMD3<Float>](repeating: .zero, count: npx)
+            var lsnow = wa
             for i in segsOf[k] {
                 let s = proj0[i], p = proj1[i]
                 let za = s.z, zb = p.z
                 let pa = SIMD2(s.x - Double(x0), s.y - Double(y0)), pb = SIMD2(p.x - Double(x0), p.y - Double(y0))
                 let ra = R0[i] * cam.F / za, rb = R1[i] * cam.F / zb
                 let rm = max(ra, rb)
-                let cap = rm < 1 ? min(0.4 + 0.6 * rm, 4.0) : min(0.9 + 0.7 * rm, 6.0)
+                let cap = rm < 1 ? min(S.snowCap.x + S.snowCap.y * rm, S.snowCapMax.x) : min(S.snowCap.z + S.snowCap.w * rm, S.snowCapMax.y)
                 let bx0 = max(Int(floor(min(pa.x, pb.x) - rm - cap - 1.5)), 0), by0 = max(Int(floor(min(pa.y, pb.y) - rm - cap - 1.5)), 0)
                 let bx1 = min(Int(ceil(max(pa.x, pb.x) + rm + cap + 1.5)), w), by1 = min(Int(ceil(max(pa.y, pb.y) + rm + cap + 1.5)), h)
                 if bx1 <= bx0 || by1 <= by0 { continue }
@@ -938,7 +988,7 @@ extension TreeGrowth {
                         let lL = WT0[i] * max(dot3(nrm, lightL), 0), lR = WT1[i] * max(dot3(nrm, lightR), 0)
                         let rim = pow(1 - cu, 3) * clamp(dot3(nrm, lightB) + 0.5, 0, 1.5) * 0.8      // back-lit wood: only a rim
                         let lB = WT2[i] * (max(dot3(nrm, lightB), 0) + rim)
-                        let amb = WAO[i] * (0.6 + 0.4 * nrm.y) + 0.15 * max(-nrm.y, 0) + 0.06              // + light off the ground
+                        let amb = WAO[i] * (0.6 + 0.4 * nrm.y) + 0.08 * max(-nrm.y, 0) + 0.03              // + light off the ground
                         let rmet = R0[i] + (R1[i] - R0[i]) * t
                         var lum = twigAlb
                         if rm > 1 {
@@ -962,7 +1012,7 @@ extension TreeGrowth {
                     }
                 }
             }
-            let trans = 0.3
+            let trans = 0.3, massLight = S.massLight
             for i in leavesOf[k] {
                 let key = keyOf[i]
                 guard key.s2 > 0, let cd = cards[key] else { continue }
@@ -978,7 +1028,8 @@ extension TreeGrowth {
                         if !(lz[i] < Double(wz[o])) { A = 0 }
                         if A == 0 { continue }
                         let nt = cd.n[t]
-                        let nn = unit(Double(nt.x) * 0.6 * Bx[i] + Double(nt.y) * 0.6 * Ax[i] + max(Double(nt.z), 0.3) * nsv[i])
+                        var nn = unit(Double(nt.x) * 0.6 * Bx[i] + Double(nt.y) * 0.6 * Ax[i] + max(Double(nt.z), 0.3) * nsv[i])
+                        if massLight > 0 { nn = unit(nn + massLight * 2 * massN[i]) }
                         let lum = Double(cd.lum[t]), sc = Double(cd.sc[t])
                         func lit(_ Tk: Double, _ Lk: V3) -> Double {
                             let c = dot3(nn, Lk)
@@ -989,21 +1040,56 @@ extension TreeGrowth {
                         let Af = Float(A)
                         la[o] = la[o] * (1 - Af) + v * Af
                         lcov[o] = lcov[o] * (1 - Af) + Af
-                        if A > 0.4 { lb[o] = seed }
+                        if A > 0.4 { lb[o] = seed; lsnow[o] = catchSnow[i] }
                     }
                 }
             }
-            out[k] = pack(w: w, h: h, wl: wl, wa: wa, wlum: wlum, snow: snow, la: la, lcov: lcov, lb: lb)
+            out[k] = pack(w: w, h: h, wl: wl, wa: wa, wlum: wlum, snow: snow, la: la, lcov: lcov, lb: lb, lsnow: lsnow)
         }
         let packed = out.array(nslab).map { $0! }
         lap("rasterise and pack")
+        let shadow = groundShadow(cam, leaves: grid, segments: (S0, P1, R0, R1), reach: Rm + 1.5, canvas: SIMD2(W, H))
+        lap("shadow")
         return TreeBake(slabs: packed, origin: SIMD2(x0, y0), size: SIMD2(w, h), trunkBase: cam.base,
-                        pixelsPerMetre: cam.F / cam.d, height: st.height, liveNodes: live.count + 1, leaves: nl, timings: timings)
+                        pixelsPerMetre: cam.F / cam.d, height: st.height, liveNodes: live.count + 1, leaves: nl, shadow: shadow,
+                        timings: timings)
+    }
+
+    /// How much the tree blocks light straight down, on the ground plane within `reach` metres of the trunk, drawn into
+    /// the canvas at half resolution (see TreeShadow).
+    static func groundShadow(_ cam: TreeCamera, leaves: LightGrid, segments: ([V3], [V3], [Double], [Double]), reach: Double,
+                             canvas: SIMD2<Int>) -> TreeShadow {
+        let (S0, P1, R0, R1) = segments
+        let mid = (0..<P1.count).map { 0.5 * (S0[$0] + P1[$0]) }
+        let area = (0..<P1.count).map { Double.pi * max((R0[$0] + R1[$0]) / 2, 0.003) * len3(P1[$0] - S0[$0]) * 2 }
+        let wood = LightGrid(mid, area: area, cell: 0.15)
+        var xs: [Double] = [], ys: [Double] = []
+        for cx in [-reach, reach] { for cz in [-reach, reach] { let q = cam.project(V3(cx, 0, cz)); xs.append(q.x); ys.append(q.y) } }
+        let x0 = max(Int(floor(xs.min()!)), 0), x1 = min(Int(ceil(xs.max()!)), canvas.x)
+        let y0 = max(Int(floor(max(ys.min()!, cam.horizon + 1))), 0), y1 = min(Int(ceil(ys.max()!)), canvas.y)
+        let sw = max((x1 - x0 + 1) / 2, 1), sh = max((y1 - y0 + 1) / 2, 1)
+        let px = SharedBuffer(sw * sh * 4, UInt8(0))
+        parallel(sh, chunk: 8) { rows in
+            for sy in rows {
+                for sx in 0..<sw {
+                    let X = Double(x0) + (Double(sx) + 0.5) * 2, Y = Double(y0) + (Double(sy) + 0.5) * 2
+                    guard Y > cam.horizon else { continue }
+                    let z = cam.F * cam.C.y / (Y - cam.horizon)
+                    let p = V3((X - cam.base.x) * z / cam.F, 0.05, z + cam.C.z)
+                    let up = V3(0, 1, 0)
+                    let tw = wood.trans(p, up, start: 0, step: 0.2, maxd: 40), tl = leaves.trans(p, up, start: 0, step: 0.2, maxd: 40)
+                    let o = ((sh - 1 - sy) * sw + sx) * 4
+                    px[o] = UInt8(min(max(1 - tl * tw, 0), 1) * 255 + 0.5); px[o + 1] = UInt8(min(max(1 - tw, 0), 1) * 255 + 0.5)
+                    px[o + 3] = 255
+                }
+            }
+        }
+        return TreeShadow(rgba: px.array(sw * sh * 4), size: SIMD2(sw, sh), origin: SIMD2(x0, y0), span: SIMD2(sw * 2, sh * 2))
     }
 
     /// The four RGBA8 textures of a slab (see TreeSlab), rows bottom-up.
     static func pack(w: Int, h: Int, wl: [SIMD4<Float>], wa: [Float], wlum: [Float], snow: [Float],
-                     la: [SIMD4<Float>], lcov: [Float], lb: [SIMD3<Float>]) -> TreeSlab {
+                     la: [SIMD4<Float>], lcov: [Float], lb: [SIMD3<Float>], lsnow: [Float]) -> TreeSlab {
         var leafL = [UInt8](repeating: 0, count: w * h * 4), leafS = leafL, woodL = leafL, woodX = leafL
         @inline(__always) func u8(_ x: Float) -> UInt8 { UInt8(min(max(x, 0), 1) * 255 + 0.5) }
         @inline(__always) func q(_ v: Float, _ s: Float) -> Float { (min(max(v / s, 0), 1)).squareRoot() }
@@ -1016,7 +1102,7 @@ extension TreeGrowth {
                 let a = wa[i], wv = wl[i] / max(a, 1e-4), lum = wlum[i] / max(a, 1e-4)
                 woodL[o] = u8(q(lum * wv.x, 0.35)); woodL[o + 1] = u8(q(lum * wv.y, 0.35)); woodL[o + 2] = u8(q(lum * wv.z, 0.35))
                 woodL[o + 3] = u8(a)
-                woodX[o] = u8(q(lum * wv.w, 0.35)); woodX[o + 1] = u8(snow[i])
+                woodX[o] = u8(q(lum * wv.w, 0.35)); woodX[o + 1] = u8(snow[i]); woodX[o + 2] = u8(lsnow[i])
             }
         }
         return TreeSlab(leafLight: leafL, leafSeed: leafS, woodLight: woodL, woodExtra: woodX)
