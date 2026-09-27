@@ -75,6 +75,8 @@ struct Wallpaper {
               palettes: PaletteChoice(key: "wind.palette", options: WindScene.paletteOptions, standard: "Midnight")),
     Wallpaper(name: "Dappled Light", icon: "leaf.fill", tint: .green, blurb: "Sunlight through leaves on a plaster wall, from the real Sun.",
               make: dappledLight, knobs: DappledLight.knobs, status: (key: "weather.status", below: "dappled.weather")),
+    Wallpaper(name: "A Tree for the Year", icon: "tree.fill", tint: .green, blurb: "One tree on a hill, through your real seasons and weather.",
+              make: treeForTheYear, knobs: TreeScene.treeKnobs, status: (key: "weather.status", below: "tree.lock")),
 ]
 
 /// Seconds for shaders to animate by, as `u_now`, in place of SpriteKit's `u_time`. `u_time` counts from app launch

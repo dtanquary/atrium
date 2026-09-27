@@ -1,0 +1,8 @@
+# Images in A Tree for the Year, cut or derived from these originals. CC0 or public domain.
+# file	subject	author	licence	source
+tree-ground.heic	Cissbury Ring, South Downs: a hilltop whose lone tree, bench, shadow and worn patch were painted out (image quilting from the same photo), with the sky cut out and the hard April sun flattened toward overcast. From the 8160 px original, at 4096 × 1434 (rows 1650–3084 of the 4096-wide photo)	Andy Li	CC0	https://commons.wikimedia.org/wiki/File:Solitary_tree_at_Cissbury_Ring_2026-04-07.jpg
+tree-ground-aux.png	Log distance (red, estimated with Apple's Core ML Depth Anything V2 Small, Apache-2.0) and woody patches (green: hedges, copses, crest scrub) for tree-ground, 2048 wide	Atrium	Public domain	derived from tree-ground.heic
+tree-leaves.heic	Six English oak leaves (Quercus robur, young and green), scanned flat, cut out with alpha and packed stem-down into 256 px cells: LeafSet016 #1–6	Lennart Demes, ambientCG	CC0	https://ambientcg.com/view?id=LeafSet016
+tree-leaves-normal.heic	The same leaves' OpenGL normal map	Lennart Demes, ambientCG	CC0	https://ambientcg.com/view?id=LeafSet016
+tree-leaves-scatter.heic	How much light passes through each leaf, derived from the scans' luminance and alpha (LeafSet016 has no scattering map)	Atrium	Public domain	derived from tree-leaves.heic
+tree-bark.heic	Furrowed grey oak bark, tileable, at 512 × 1024	Lennart Demes, ambientCG	CC0	https://ambientcg.com/view?id=Bark001

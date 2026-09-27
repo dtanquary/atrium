@@ -167,6 +167,15 @@ Sunlight through a tree onto a warm white plaster wall, from the real Sun where 
 | ![Dappled Light in Dark Mode, on charcoal plaster](docs/images/dappled-light-dark.jpg) | ![Dappled Light during a partial solar eclipse](docs/images/dappled-light-eclipse.jpg) |
 | Dark Mode: the same light on charcoal plaster | A partial solar eclipse: every dapple a crescent |
 
+### A Tree for the Year
+One young white oak on a chalk hilltop, living through the real seasons where you are: gold catkins as the buds break, fresh green, colour from the top down to wine and rust, leaf fall, a few tan leaves held through the winter, and snow on the branches. It stands under Weather's sky and your live weather, sways in the real wind and darkens in the rain. It's grown from a seed saved the first time it's shown, so it's your own tree, the same every day and a year bigger each spring. The grass greens up and goes dormant with it.
+
+| ![A Tree for the Year at peak autumn colour under fair-weather clouds](docs/images/a-tree-for-the-year.jpg) | ![A Tree for the Year in summer](docs/images/a-tree-for-the-year-summer.jpg) |
+|---|---|
+| Late October, wine red, on a partly cloudy afternoon | Midsummer |
+| ![A Tree for the Year at bud break](docs/images/a-tree-for-the-year-spring.jpg) | ![A Tree for the Year in falling snow, holding its dead leaves](docs/images/a-tree-for-the-year-snow.jpg) |
+| Early May: catkin gold as the leaves open | January snow, the young oak still holding its dead leaves |
+
 ## How it works
 
 macOS has no public API for third-party live wallpapers. This app gives each display a borderless window at the desktop window level (`CGWindowLevelForKey(.desktopWindow)`). That puts it above the system wallpaper and below your desktop icons, on every Space, and it lets clicks pass straight through to the desktop.
@@ -211,7 +220,7 @@ To rebuild after pulling changes: `./build.sh && pkill -x Atrium; open build/Atr
 ### Permissions and network
 
 - **Location** (optional). Live Sky, Earth from Orbit, Weather and Flowing Gradient's time-of-day mood use your location, and the app asks once. If you decline, it guesses from your time zone.
-- **Network.** Weather and Dappled Light fetch from [Open-Meteo](https://open-meteo.com) every 15 minutes, sharing one request. Live Sky and Earth from Orbit fetch the ISS position from [wheretheiss.at](https://wheretheiss.at) at most once a minute. Earth from Orbit fetches a global cloud map from [Live Cloud Maps](https://clouds.matteason.co.uk) only once its cached copy is over 3 hours old (1.5 MB when it has changed), and not at all with Live clouds off. For lightning, it asks Open-Meteo for thunderstorms on a grid around you each time the cloud map updates, about every 3 hours. The Sun Today fetches SDO images from [Helioviewer](https://helioviewer.org) at most every 15 minutes (2048 pixels, 0.3–0.5 MB) or 30 (4096, 1–2 MB, for the close-up), keeping the last few hours on disk. None of them needs an API key.
+- **Network.** Weather, Dappled Light and A Tree for the Year fetch from [Open-Meteo](https://open-meteo.com) every 15 minutes, sharing one request. Live Sky and Earth from Orbit fetch the ISS position from [wheretheiss.at](https://wheretheiss.at) at most once a minute. Earth from Orbit fetches a global cloud map from [Live Cloud Maps](https://clouds.matteason.co.uk) only once its cached copy is over 3 hours old (1.5 MB when it has changed), and not at all with Live clouds off. For lightning, it asks Open-Meteo for thunderstorms on a grid around you each time the cloud map updates, about every 3 hours. The Sun Today fetches SDO images from [Helioviewer](https://helioviewer.org) at most every 15 minutes (2048 pixels, 0.3–0.5 MB) or 30 (4096, 1–2 MB, for the close-up), keeping the last few hours on disk. None of them needs an API key.
 - **Wind** uses your location too, and asks Open-Meteo for the hourly wind forecast at 384 points around you every two hours, for the zoom on screen (about 230 KB and 384 of Open-Meteo's free 10,000 calls a day each time, so at most 4,600 a day). The last reply for each zoom stays on disk, so it works offline.
 
 ## Development
@@ -251,6 +260,7 @@ SNAPSHOT_SCENE="Fish Tank" SNAPSHOT_MOVIE=6 swift test       # then 6 seconds of
 - The Fireflies wallpaper's meadow is "Field at dusk" by Tristan Ferne, CC BY 2.0 ([source](https://www.flickr.com/photos/89056504@N00/7357684410)), with its sky cut away and relit for blue hour. See [`Sources/Atrium/Resources/fireflies-credits.tsv`](Sources/Atrium/Resources/fireflies-credits.tsv).
 - The Campfire wallpaper's clearing is the CC0 panorama "Hochsal Forest" by Adrian Kubasa ([source](https://polyhaven.com/a/hochsal_forest)), relit by the fire, with CC0 scans of a stone fire pit by Sebastian Platen and dry branches by Rico Cilliers from Poly Haven. See [`Sources/Atrium/Resources/campfire-credits.tsv`](Sources/Atrium/Resources/campfire-credits.tsv).
 - The Rain on Glass backdrops are CC0 HDRIs from Poly Haven by Greg Zaal, Rico Cilliers, Alexander Scholten, Andreas Mischok and Oliksiy Yakovlyev, public domain photos from the National Park Service and USFWS, and CC BY photos from Wikimedia Commons by Douglas Paul Perkins, mariemon, epSos.de and Vyacheslav Argenberg. See [`Sources/Atrium/Resources/rain-credits.tsv`](Sources/Atrium/Resources/rain-credits.tsv) and Settings → About.
+- A Tree for the Year's hilltop is "Solitary tree at Cissbury Ring" by Andy Li, CC0 ([source](https://commons.wikimedia.org/wiki/File:Solitary_tree_at_Cissbury_Ring_2026-04-07.jpg)), with its own tree painted out; its oak leaves and bark are CC0 scans by Lennart Demes, ambientCG. See [`Sources/Atrium/Resources/tree-credits.tsv`](Sources/Atrium/Resources/tree-credits.tsv).
 - Reef fish, corals and rock in the Fish Tank are cut out of public domain, CC0 and CC BY photos from iNaturalist, Wikimedia Commons and NOAA. Each photographer and licence is listed in [`Sources/Atrium/Resources/reef-credits.tsv`](Sources/Atrium/Resources/reef-credits.tsv) and in Settings → About.
 
 ## License

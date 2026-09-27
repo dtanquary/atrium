@@ -6,8 +6,9 @@ import SwiftUI
 /// `.toggle` (stored as 0 or 1). Scenes read `value` and listen for `UserDefaults.didChangeNotification` to follow
 /// changes while the control moves; shader scenes usually feed each knob into a uniform of the same name.
 struct Knob {
-    /// `choice` is a menu of named steps, stored as the index of the pick; `times` is a multiplier like "1.5×".
-    enum Format: Equatable { case number, clock, minutes, toggle, times, choice([String]) }
+    /// `choice` is a menu of named steps, stored as the index of the pick; `times` is a multiplier like "1.5×";
+    /// `date` is a day of the year, 0 for 1 January, shown like "Oct 28".
+    enum Format: Equatable { case number, clock, minutes, toggle, times, date, choice([String]) }
 
     let key: String, label: String, range: ClosedRange<Double>, standard: Double
     /// The Settings section it's grouped under.
@@ -316,6 +317,9 @@ struct AboutPage: View {
                 DisclosureGroup("Dappled Light's plaster and leaves, from Poly Haven and ambientCG (CC0)") {
                     ForEach(credits("dappled-credits.tsv"), id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
                 }
+                DisclosureGroup("A Tree for the Year's hilltop, leaves and bark, from Wikimedia Commons and ambientCG (CC0)") {
+                    ForEach(credits("tree-credits.tsv"), id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
+                }
                 DisclosureGroup("Weather's hills, clouds and Moon, from the BLM, NASA, Poly Haven and Wikimedia Commons") {
                     ForEach(credits("weather-credits.tsv"), id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
                 }
@@ -499,11 +503,14 @@ struct KnobRow: View {
         }
     }
 
+    private static let day = { let f = DateFormatter(); f.setLocalizedDateFormatFromTemplate("MMMd"); f.timeZone = .gmt; return f }()
+
     private var formatted: String {
         switch knob.format {
         case .clock: String(format: "%d:%02d", Int(value) % 24, Int(value * 60) % 60)
         case .minutes: value < 0.5 ? "Off" : "\(Int(value.rounded())) min"
         case .times: String(format: value < 10 ? "%.1f×" : "%.0f×", value)
+        case .date: Self.day.string(from: Date(timeIntervalSinceReferenceDate: 0).addingTimeInterval(value.rounded(.down) * 86400))
         default: String(format: "%.2f", value)
         }
     }
