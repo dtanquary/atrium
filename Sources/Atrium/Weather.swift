@@ -3,31 +3,53 @@ import SpriteKit
 
 @MainActor func weather(size: CGSize) -> SKScene { WeatherScene(size: size) }
 
+/// A photo of land with its sky cut out, for `WeatherScene` to stand under the sky. `aux` is red for how far away each
+/// point is, as log distance from 0 (nearest) to 1 (32 times further), and green where there are trees and bushes.
+/// `top` is where the photo's top edge sits, as a fraction of the screen's height, and `horizon` where the sky meets
+/// the land behind it, just under the photo's lowest skyline.
+@MainActor struct WeatherGround {
+    let photo: SKTexture, aux: SKTexture
+    let top: CGFloat, horizon: Double
+
+    /// Fort Ord's green hills and oak woodland (BLM, public domain). Its distances were estimated offline with Apple's
+    /// Core ML Depth Anything V2.
+    static let fortOrd = WeatherGround(photo: SKTexture(image: NSImage(contentsOf: resource("weather-ground.heic")) ?? NSImage()),
+                                       aux: SKTexture(image: NSImage(contentsOf: resource("weather-ground-aux.png")) ?? NSImage()),
+                                       top: 0.56, horizon: 0.45)
+}
+
 /// Rolling hills under whatever the weather is doing outside right now, from Open-Meteo every 15 minutes:
 /// sun or moon and stars, drifting clouds, drizzle, rain, snow, fog or a thunderstorm. Day or night follows the
-/// real Sun where you are, checked every minute, so it's right offline too.
-final class WeatherScene: SKScene {
-    nonisolated static let knobs = [
-        Knob(key: "weather.lock", label: "Weather", range: 0...8, standard: 0, section: "Weather",
-             format: .choice(["Live where you are", "Clear", "Partly cloudy", "Overcast", "Fog", "Drizzle", "Rain", "Snow",
-                              "Thunderstorm"])),
-        Knob(key: "weather.cloudSpeed", label: "Cloud speed", range: 1...15, standard: 6, section: "Weather", format: .times),
-        Knob(key: "weather.previewTime", label: "Preview a time of day", range: 0...1, standard: 0, section: "Preview",
-             format: .toggle),
-        Knob(key: "weather.previewHour", label: "Time", range: 0...24, standard: 13, section: "Preview", format: .clock,
-             shownWhen: "weather.previewTime"),
-    ]
+/// real Sun where you are, checked every minute, so it's right offline too. Another wallpaper can stand on its own
+/// `WeatherGround` under the same sky, with its own settings keys, and add to it in `addForeground()`.
+class WeatherScene: SKScene {
+    nonisolated static let knobs = settings("weather")
+
+    /// The weather lock, cloud speed and time preview, stored under `prefix`.
+    nonisolated static func settings(_ prefix: String) -> [Knob] {
+        [
+            Knob(key: "\(prefix).lock", label: "Weather", range: 0...8, standard: 0, section: "Weather",
+                 format: .choice(["Live where you are", "Clear", "Partly cloudy", "Overcast", "Fog", "Drizzle", "Rain", "Snow",
+                                  "Thunderstorm"])),
+            Knob(key: "\(prefix).cloudSpeed", label: "Cloud speed", range: 1...15, standard: 6, section: "Weather", format: .times),
+            Knob(key: "\(prefix).previewTime", label: "Preview a time of day", range: 0...1, standard: 0, section: "Preview",
+                 format: .toggle),
+            Knob(key: "\(prefix).previewHour", label: "Time", range: 0...24, standard: 13, section: "Preview", format: .clock,
+                 shownWhen: "\(prefix).previewTime"),
+        ]
+    }
 
     typealias Conditions = LiveWeather.Conditions
 
     private var report: Conditions     // the latest live weather, or the pinned test state
-    private var conditions: Conditions // what's on screen: `report`, or the Settings preview
-    private let live: Bool
+    private(set) var conditions: Conditions // what's on screen: `report`, or the Settings preview
+    let live: Bool
+    private let knobs: [Knob], ground: WeatherGround
     private var lastUpdate: TimeInterval?
-    private var viewpoint: SkyCamera
+    private(set) var viewpoint: SkyCamera
     private var sinceTrack = 0.0, sinceBake = 0.0, baking = false, skyDate = Date.distantPast
     /// How much faster than the real wind the clouds drift: they'd look still at real speed. From Settings.
-    private var cloudSpeed = WeatherScene.knobs[1].value
+    private var cloudSpeed: Double
     /// How far the cloud deck (km) and the cirrus (in their noise's own units) have drifted, wrapped where the noise
     /// repeats so the floats keep their precision.
     private var deckDrift = SIMD2<Double>.zero, cirrusDrift = SIMD2<Double>.zero
@@ -67,11 +89,14 @@ final class WeatherScene: SKScene {
     private static let moonTexture = SKTexture(imageNamed: resource("weather-moon.png").path)
 
     /// Pass `conditions` to pin the scene to one state (snapshots); leave it nil to follow the live weather.
-    init(size: CGSize, conditions: Conditions? = nil) {
+    init(size: CGSize, conditions: Conditions? = nil, ground: WeatherGround = .fortOrd, settings prefix: String = "weather") {
         report = conditions ?? Self.drawn(LiveWeather.shared.latest ?? Conditions())
         self.conditions = report
         live = conditions == nil
-        viewpoint = SkyCamera(aspect: size.width / size.height, horizon: 0.45, facing: 1.5 * .pi)
+        knobs = Self.settings(prefix)
+        self.ground = ground
+        cloudSpeed = knobs[1].value
+        viewpoint = SkyCamera(aspect: size.width / size.height, horizon: ground.horizon, facing: 1.5 * .pi)
         super.init(size: size)
         self.conditions = wanted
         build()
@@ -93,8 +118,8 @@ final class WeatherScene: SKScene {
 
     /// The live weather, or the kind it's locked to in Settings.
     private var wanted: Conditions {
-        guard live, Self.knobs[0].value > 0.5 else { return report }
-        let kind = min(max(Int(Self.knobs[0].value) - 1, 0), 7)
+        guard live, knobs[0].value > 0.5 else { return report }
+        let kind = min(max(Int(knobs[0].value) - 1, 0), 7)
         // Across the view from left to right and a little away, so the clouds visibly travel; toward the viewer
         // they only grow, which barely reads as motion.
         let facing = Self.sunsetAzimuth(now, latitude: Location.shared.coordinate.latitude) * 180 / .pi
@@ -106,7 +131,7 @@ final class WeatherScene: SKScene {
     /// Rebuilds the scene if the weather it should show has changed, crossfading from how it looked, or bakes the sky
     /// again at once if a preview moved the time of day.
     @objc private func redraw() {
-        cloudSpeed = Self.knobs[1].value
+        cloudSpeed = knobs[1].value
         if wanted != conditions {
             let before = view?.texture(from: self)
             conditions = wanted
@@ -125,9 +150,9 @@ final class WeatherScene: SKScene {
     }
 
     /// Now, or today at the preview hour while previewing.
-    private var now: Date {
-        guard live, Self.knobs[2].value > 0.5 else { return Date() }
-        return Calendar.current.startOfDay(for: Date()).addingTimeInterval(Self.knobs[3].value * 3600)
+    var now: Date {
+        guard live, knobs[2].value > 0.5 else { return Date() }
+        return Calendar.current.startOfDay(for: Date()).addingTimeInterval(knobs[3].value * 3600)
     }
 
     /// Takes a new live report, keeping only what Weather draws: it rebuilds on any change, and the temperature
@@ -152,9 +177,18 @@ final class WeatherScene: SKScene {
         addSky()
         addPhotoClouds()
         addGround()
+        addForeground()
         addPrecipitation()
         if conditions.kind == .storm { addLightning() }
     }
+
+    /// Anything standing on the ground in front of the land and behind the rain and snow, for a wallpaper built on
+    /// this one. It's rebuilt with everything else when the weather changes.
+    func addForeground() {}
+
+    /// The light on the ground whenever the sky changes, for a foreground to match: `direct` from the Sun or Moon in
+    /// direction `from` (x east, y north, z up), and `sky`, the diffuse light, both in the ground shader's units.
+    func relight(direct: Sky.Vector, from: Sky.Vector, sky: Sky.Vector) {}
 
     // MARK: - Sky
 
@@ -246,6 +280,11 @@ final class WeatherScene: SKScene {
         shadowShade.vectorFloat3Value = SIMD3<Float>(Sky.Vector.one * 0.35 + ratio * 0.65)
         let lit = sunlit / 8, brightness = (lit * Sky.Vector(0.2126, 0.7152, 0.0722)).sum()
         groundLight.vectorFloat3Value = SIMD3<Float>(lit * pow(max(brightness, 1e-5), -0.38) * (1 - 0.6 * smoothstep(-0.03, -0.2, light.sun.z)))
+        // Whatever stands on the ground is lit the same way: the Sun (or the Moon) from its direction, less under cloud,
+        // and the diffuse light of the sky or the deck.
+        let scale = pow(max(brightness, 1e-5), -0.38) * (1 - 0.6 * smoothstep(-0.03, -0.2, light.sun.z)) / 8
+        let (key, from) = light.sun.z > -0.02 ? (light.sunColour, light.sun) : (moonDirect, light.moon)
+        relight(direct: key * (1 - overcast) * scale, from: from, sky: (light.ambient * (1 - overcast) + grey * overcast) * scale)
         // At night the eye sees less colour (the Purkinje shift), and the haze isn't lit from low down any more,
         // since the air near the ground is in the Earth's shadow while the high sky still glows.
         groundColour.floatValue = Float(smoothstep(0.002, 0.03, brightness) * (1 - 0.7 * smoothstep(-0.03, -0.2, light.sun.z)))
@@ -695,29 +734,23 @@ final class WeatherScene: SKScene {
 
     // MARK: - Ground
 
-    /// Fort Ord's green hills and oak woodland (BLM, public domain), with its sky cut out, and `weather-ground-aux`:
-    /// red is how far away each point is, as log distance from 0 (nearest) to 1 (the far mountains, 32 times further),
-    /// estimated offline with Apple's Core ML Depth Anything V2; green is where there are trees and bushes.
-    private static let groundPhoto = SKTexture(image: NSImage(contentsOf: resource("weather-ground.heic")) ?? NSImage())
-    private static let groundAux = SKTexture(image: NSImage(contentsOf: resource("weather-ground-aux.png")) ?? NSImage())
-
-    /// The photo across the bottom of the screen, its top at 0.56 of the height, cropped at the bottom on wide
-    /// screens rather than squeezing the sky. Relit for the light and weather, and hazed with distance.
+    /// The ground's photo across the bottom of the screen, its top at `ground.top` of the height, cropped at the
+    /// bottom on wide screens rather than squeezing the sky. Relit for the light and weather, and hazed with distance.
     private func addGround() {
-        let photo = Self.groundPhoto.size(), aspect = photo.width / max(photo.height, 1)
-        let width = max(size.width, size.height * 0.56 * aspect), height = width / aspect
-        let ground = SKSpriteNode(texture: Self.groundPhoto, size: CGSize(width: width, height: height))
-        ground.anchorPoint = CGPoint(x: 0.5, y: 1)
-        ground.position = CGPoint(x: size.width / 2, y: size.height * 0.56)
-        ground.zPosition = 5
-        let frame = SIMD4<Float>(Float((size.width - width) / 2 / size.width), Float((size.height * 0.56 - height) / size.height),
+        let photo = ground.photo.size(), aspect = photo.width / max(photo.height, 1), top = ground.top
+        let width = max(size.width, size.height * top * aspect), height = width / aspect
+        let land = SKSpriteNode(texture: ground.photo, size: CGSize(width: width, height: height))
+        land.anchorPoint = CGPoint(x: 0.5, y: 1)
+        land.position = CGPoint(x: size.width / 2, y: size.height * top)
+        land.zPosition = 5
+        let frame = SIMD4<Float>(Float((size.width - width) / 2 / size.width), Float((size.height * top - height) / size.height),
                                  Float(width / size.width), Float(height / size.height))
-        ground.shader = SKShader(source: Self.groundShader, uniforms: [
-            SKUniform(name: "u_aux", texture: Self.groundAux), SKUniform(name: "u_frame", vectorFloat4: frame),
+        land.shader = SKShader(source: Self.groundShader, uniforms: [
+            SKUniform(name: "u_aux", texture: ground.aux), SKUniform(name: "u_frame", vectorFloat4: frame),
             skyBefore, skyAfter, skyBlend, cameraUniforms.lens, groundLight, groundHaze, groundColour, groundHazeLit, fog, deck, flashAmount, snowCover, backlit, mist, clock, shadowLife, shadowShade, billow,
             SKUniform(name: "u_noise", texture: CloudNoise.texture),
         ] + shadows)
-        addChild(ground)
+        addChild(land)
     }
 
     /// Lights the photo's colours as linear light, fades them toward grey-blue in dim light, then hazes each point
