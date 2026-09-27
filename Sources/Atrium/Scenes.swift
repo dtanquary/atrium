@@ -62,6 +62,9 @@ struct Wallpaper {
     Wallpaper(name: "Turing Patterns", icon: "circle.hexagongrid.fill", tint: .mint, blurb: "Coral, spots and stripes growing out of simple chemistry.",
               make: turingPatterns, knobs: TuringPatterns.knobs,
               palettes: PaletteChoice(key: "turing.palette", options: TuringPatterns.palettes.map { ($0.name, [$0.ink, $0.ink2, $0.glow], [$0.ink * 0.9, $0.ink2 * 0.9]) })),
+    Wallpaper(name: "The Sun Today", icon: "sun.max.fill", tint: .orange, blurb: "The real Sun, from NASA's Solar Dynamics Observatory.",
+              make: theSun, knobs: TheSun.knobs,
+              palettes: PaletteChoice(key: "sun.wavelength", options: TheSun.wavelengths.map { ($0.name, $0.swatch, $0.swatch) }, title: "Wavelength")),
 ]
 
 /// Seconds for shaders to animate by, as `u_now`, in place of SpriteKit's `u_time`. `u_time` counts from app launch

@@ -302,6 +302,8 @@ struct AboutPage: View {
                 LabeledContent("Earth imagery") { Text("NASA Blue Marble and Black Marble") }
                 LabeledContent("Clouds") { Link("Live Cloud Maps; contains modified EUMETSAT data", destination: URL(string: "https://clouds.matteason.co.uk")!) }
                 LabeledContent("Planet positions") { Text("NASA JPL") }
+                LabeledContent("The Sun") { Link("Courtesy of NASA/SDO and the AIA, EVE, and HMI science teams, via the ESA/NASA Helioviewer Project",
+                                                 destination: URL(string: "https://helioviewer.org")!) }
                 LabeledContent("Aurora's mountains") { Link("The Tetons, NPS photo by A. Falgoust (public domain)", destination: URL(string: "https://commons.wikimedia.org/wiki/File:Teton_Point_Turnout_in_Winter_(52098766554).jpg")!) }
                 LabeledContent("Murmuration's pier") { Link("\"Tide bears the last glow\" by sagesolar (CC BY 4.0)", destination: URL(string: "https://commons.wikimedia.org/wiki/File:Tide_bears_the_last_glow_-_Brighton,_UK.jpg")!) }
                 LabeledContent("Fireflies' meadow") { Link("\"Field at dusk\" by Tristan Ferne (CC BY 2.0)", destination: URL(string: "https://www.flickr.com/photos/89056504@N00/7357684410")!) }

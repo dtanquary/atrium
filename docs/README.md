@@ -22,6 +22,7 @@ One file per wallpaper, recording what the code can't: how each scene works, why
 | Campfire | [campfire.md](campfire.md) | `Campfire.swift`, `CampfireFlames.swift`, `Resources/campfire-*` | photo ground relit by the fire, fluid-sim flames, shaders | none | location (real stars) | 1.11 / 0.84 |
 | Game of Life | [game-of-life.md](game-of-life.md) | `GameOfLife.swift` | mutable texture | Calm or Classic, speed, exposure, softness | none | 0.55 / 0.36 |
 | Turing Patterns | [turing-patterns.md](turing-patterns.md) | `TuringPatterns.swift` | CPU reaction–diffusion, lit by a shader | pattern (or Drift), speed, 6 palettes | none | 0.9–1.05 / 0.3–0.75 |
+| The Sun Today | [sun.md](sun.md) | `Sun.swift` | downloaded SDO images, one shader | 8 wavelengths, shimmer or time-lapse, whole or close-up, Look | SDO via Helioviewer | 0.43–0.52 / 0.38–0.58 |
 
 \*Release build, 2x Retina at 1512×982 points, measured 2026-09-24 with `swift test -c release -Xswiftc -enable-testing`. The budget is about 2 ms each for CPU and GPU. Debug builds are pessimistic on CPU (Murmuration runs about 16–19 ms in debug).
 
