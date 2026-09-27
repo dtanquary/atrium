@@ -32,7 +32,7 @@ final class DappledLight: SKScene {
     /// Metres of wall across the screen, and how far each layer of leaves is from the wall: the far crown, whose
     /// shadow is a soft mass with round dapples in it, sprays of leaves soft at the edges, and a twig close enough to
     /// cast a sharp shadow.
-    private static let wallWidth = 2.4, far = 4.0, mid = 1.2, near = 0.25
+    private static let wallWidth = 2.4, far = 5.0, mid = 1.2, near = 0.25
 
     private let wall = SKSpriteNode()
     private let proj = SKUniform(name: "u_proj", vectorFloat4: .zero), invL = SKUniform(name: "u_invL", float: 0)
@@ -131,9 +131,10 @@ final class DappledLight: SKScene {
         let air = Atmosphere.shared
         let altitude = asin(sun.z) * 180 / .pi
 
-        // Skylight on the wall: blue by day, fading through twilight to the glow of towns.
-        let skyDay = V(0.80, 0.88, 1.0) * 0.18 * sqrt(max(sun.z, 0) + 0.02)
-        let skyDusk = V(0.72, 0.79, 1.0) * 0.025 * exp(min(altitude, 0) / 3.2)
+        // Skylight on the wall: blue by day, fading through twilight to the glow of towns. Photos of leaf shadows on
+        // walls put sunlit wall at 7–8 times the shade by day, 4 at golden hour.
+        let skyDay = V(0.80, 0.88, 1.0) * 0.075 * sqrt(max(sun.z, 0) + 0.02)
+        let skyDusk = V(0.72, 0.79, 1.0) * 0.0106 * exp(min(altitude, 0) / 3.2)
         var sky = (altitude > 0 ? skyDay : skyDusk) + V(0.9, 0.85, 0.8) * 3e-7
         var overcastSky = V(0.93, 0.95, 1.0) * (0.3 * pow(max(sun.z + 0.05, 0), 0.8) + 0.004 * exp(min(altitude, 0) / 3.2)) + V(1, 0.8, 0.6) * 5e-7
 
@@ -184,6 +185,8 @@ final class DappledLight: SKScene {
         let lights = seen.z > 0.02 && toward.z > -0.01 // the source is in front of the wall and above the horizon
         let cosine = max(seen.z, 0)
         let fade = smoothstep(0.02, 0.12, cosine) // grazing light fades rather than stopping at an edge
+        // Sunlight bounced off the ground and everything around warms the shade, most at golden hour when the sky is dim.
+        if !isNight { sky += strength * 0.05 * pow(1 - max(sun.z, 0), 3) }
         lit = (lights ? strength * fade : .zero, sky, overcastSky, 1)
 
         // The sky offset (in source radii) that each metre of wall sees through a gap, per metre of path from it.
@@ -284,7 +287,7 @@ final class DappledLight: SKScene {
 
     /// The tree's shadow-casters, 3 m square and tiling, laid out afresh each launch from real maple, oak or beech
     /// leaves (ambientCG's leaf scans, CC0), one kind of tree at a time. Red holds sprays of leaves on their twigs,
-    /// green the far crown: denser clumps of smaller leaves, blurred into the soft masses that the Sun, 4 m on, makes
+    /// green the far crown: denser clumps of smaller leaves, blurred into the soft masses that the Sun, 5 m on, makes
     /// of them.
     private static let canopy: SKTexture = {
         let n = 1024, metres = 3.0
@@ -393,7 +396,7 @@ final class DappledLight: SKScene {
                 at = CGPoint(x: at.x + cos(heading) * step, y: at.y + sin(heading) * step)
             }
         }
-        // The Sun, 4 m past these leaves, blurs them by about 2 cm.
+        // The Sun, 5 m past these leaves, blurs them by about 2 cm.
         let crown = blurred(pixels(crownContext), radius: 7, passes: 3)
 
         var bytes = [UInt8](repeating: 255, count: n * n * 4)
@@ -413,7 +416,7 @@ final class DappledLight: SKScene {
 
     private static let shaderSource = """
     // One gap's image of the light: `q` is the offset in the sky, in the source's radii, from the image's centre, and
-    // `r` the gap's radius in the same units, which blurs the image by as much and sets how bright it is. The Moon
+    // `r` the gap's radius in the same units, which blurs the image by as much. The Moon
     // (src.xy, radius src.z) bites into it during an eclipse; a moon source shows its phase (src.w, the cosine of
     // the phase angle, with `term` pointing to its bright limb).
     float sunImage(vec2 q, float r, vec4 src, vec2 term, float px) {
@@ -427,7 +430,7 @@ final class DappledLight: SKScene {
             float v = dot(q, vec2(-term.y, term.x));
             lit *= smoothstep(-soft, soft, u + src.w * sqrt(max(1.0 - v * v, 0.0)));
         }
-        return lit * min(r * r, 1.0);
+        return lit;
     }
 
     // Gaps in the far crown, one to a 2 × 2 cell of sky offset (so every image is round here); the fluttering ones blink.
@@ -438,10 +441,13 @@ final class DappledLight: SKScene {
             for (int i = -1; i <= 1; i++) {
                 vec2 c = cell + vec2(float(i), float(j));
                 vec4 h = hash42(c);
-                float r = h.z < 0.5 - 0.3 * open ? 0.0 : (0.15 + 0.4 * h.z) * (0.5 + 0.5 * open);
-                r *= 1.0 - flutter * step(0.6, h.w) * (0.5 + 0.5 * sin(t * (15.0 + 20.0 * h.w) + h.w * 80.0));
-                float size = 0.65 + 0.8 * fract(h.z * 7.31 + h.w * 3.7);   // gaps 2.6 to 5.8 m out: the nearer, the smaller
-                if (r > 0.02) { sum += sunImage((g - (c + 0.2 + 0.6 * h.xy) * 2.0) / size, r / size, src, term, px / size); }
+                float r = h.z < 0.78 - 0.4 * open ? 0.0 : (0.1 + 0.3 * h.z) * (0.5 + 0.5 * open);
+                // A gap's image is as bright as the gap's area over the image's, so pinhole-sized gaps make dim images,
+                // but photos show the dapples at 0.7–1.6 times the median spot: the visible ones are the wider gaps.
+                float bright = fract(h.z * 13.7 + h.w * 5.3);
+                float gain = mix(0.2, 1.0, bright * bright) * (1.0 - flutter * step(0.6, h.w) * (0.5 + 0.5 * sin(t * (15.0 + 20.0 * h.w) + h.w * 80.0)));
+                float size = 0.65 + 0.8 * fract(h.z * 7.31 + h.w * 3.7);   // gaps 3.3 to 7.3 m out: the nearer, the smaller
+                if (r > 0.02) { sum += gain * sunImage((g - (c + 0.2 + 0.6 * h.xy) * 2.0) / size, r / size, src, term, px / size); }
             }
         }
         return sum;
