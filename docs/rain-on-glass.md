@@ -2,9 +2,9 @@
 
 Looking through a fogged, rain-spattered window at a city, at night in Dark Mode and on an overcast day in Light Mode: out-of-focus lights and a crawling band of traffic behind the glass. Small beads form and evaporate, and larger drops slide down in lurches, wiping clear trails. Each drop acts as a small lens showing a sharper, flipped view of the lights.
 
-- **Files:** `Sources/Atrium/Shaders.swift`. `rainOnGlass(size:)` holds the whole shader. It uses the `shaderCommon` helpers from the same file: `hash11`, `hash21`, `noise` and `fbm`.
+- **Files:** `Sources/Atrium/RainOnGlass.swift`. `rainOnGlass(size:)` holds the whole shader. It uses the `shaderCommon` helpers from Shaders.swift: `hash11`, `hash21`, `noise` and `fbm`.
 - **Entry:** `@MainActor func rainOnGlass(size:)`, which returns `shaderScene(size:source:uniforms:knobs:)` from Scenes.swift. Registry entry: icon `cloud.rain.fill`, tint `.gray`.
-- **Kind:** a single full-screen SKShader, animated by `u_time` alone. The only Swift-side state is the palette, picked when the scene is built (`rainPalettes` in Shaders.swift).
+- **Kind:** a single full-screen SKShader, animated by `u_time` alone. The only Swift-side state is the palette, picked when the scene is built (`rainPalettes`).
 
 ## How it works
 It works in `p = v_tex_coord * vec2(aspect, 1)`, so 1 unit is the screen height.
