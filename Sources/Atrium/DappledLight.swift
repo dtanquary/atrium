@@ -298,7 +298,7 @@ final class DappledLight: SKScene {
     /// The tree's shadow-casters, 3 m square and tiling, laid out afresh each launch from real maple, oak or beech
     /// leaves (ambientCG's leaf scans, CC0), one kind of tree at a time. Red holds sprays of leaves on their twigs,
     /// green the far crown: denser clumps of smaller leaves, blurred into the soft masses that the Sun, 5 m on, makes
-    /// of them.
+    /// of them; blue the crown's much softer shadow from the sky.
     private static let canopy: SKTexture = {
         let n = 1024, metres = 3.0
         guard let atlas = NSImage(contentsOf: resource("dappled-leaves.png"))?.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
@@ -408,11 +408,15 @@ final class DappledLight: SKScene {
         }
         // The Sun, 5 m past these leaves, blurs them by about 2 cm.
         let crown = blurred(pixels(crownContext), radius: 7, passes: 3)
+        // The crown's shadow from the sky, for when there's no sun: blurred about 12 cm. The sky, a huge source, would
+        // really blur a crown 5 m out over metres into an even grey; this keeps the tree readable under cloud.
+        let skyShadow = blurred(crown, radius: 40, passes: 3)
 
         var bytes = [UInt8](repeating: 255, count: n * n * 4)
         for i in 0..<n * n {
             bytes[i * 4] = UInt8(min(sprays[i], 255))
             bytes[i * 4 + 1] = UInt8(min(crown[i], 255))
+            bytes[i * 4 + 2] = UInt8(min(skyShadow[i] * 1.3, 255))
         }
         let context = CGContext(data: &bytes, width: n, height: n, bitsPerComponent: 8, bytesPerRow: n * 4, space: CGColorSpaceCreateDeviceRGB(),
                                 bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
@@ -515,8 +519,11 @@ final class DappledLight: SKScene {
         if (uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) { twig = texture2D(u_twig, uv).a * u_twigPose.w; }
 
         float sunlit = far * (1.0 - leaf) * (1.0 - twig);
-        float hidden = smoothstep(0.35, 0.75, texture2D(u_noise, fract(cf * 0.05 + 0.3)).r);   // sky the tree hides, very soft
-        vec3 light = u_amb * (1.0 - 0.2 * hidden) + u_light * sunlit * max(dot(normal, u_dir), 0.0);
+        // The crown also hides part of the sky: a soft shadow straight back from where the tree really is (a little low,
+        // since the sky is brightest overhead), which is all there is to see under cloud or with the Sun behind the wall.
+        vec2 cs = p + sway * 0.6 - vec2(0.0, 0.2);
+        float hidden = smoothstep(0.1, 0.8, texture2D(u_canopy, fract(cs * 0.29 + vec2(0.13, 0.61))).b + u_wind.w - 0.5);
+        vec3 light = u_amb * (1.0 - 0.5 * hidden) + u_light * sunlit * max(dot(normal, u_dir), 0.0);
         vec3 col = sqrt(1.0 - exp(-albedo * light));
         col = mix(col, dot(col, vec3(0.3, 0.6, 0.1)) * vec3(0.8, 0.9, 1.15), u_night * 0.6); // blue by moonlight
         col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 255.0;
