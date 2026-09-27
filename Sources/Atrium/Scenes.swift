@@ -64,24 +64,37 @@ struct Wallpaper {
 /// A scene that is one full-screen GPU shader. Besides SpriteKit's `u_time` and `v_tex_coord`, the shader
 /// gets `u_size`, the scene size in points, for aspect-correct math, and a float for each knob, named `u_` plus
 /// the last part of its key, that follows Settings live.
-@MainActor func shaderScene(size: CGSize, source: String, uniforms: [SKUniform] = [], knobs: [Knob] = []) -> SKScene {
+/// With a `speed` knob, the shader also gets `u_clock`: seconds that run that many times as fast as real ones, summed
+/// frame by frame so moving the slider never makes it jump.
+@MainActor func shaderScene(size: CGSize, source: String, uniforms: [SKUniform] = [], knobs: [Knob] = [], speed: Knob? = nil) -> SKScene {
     let scene = ShaderScene(size: size)
     scene.knobs = knobs.map { ($0, SKUniform(name: "u_" + $0.key.split(separator: ".").last!, float: Float($0.value))) }
+    scene.clock = speed.map { (SKUniform(name: "u_clock", float: 0), $0) }
     let sprite = SKSpriteNode(color: .black, size: size)
     sprite.anchorPoint = .zero
     let sizeUniform = SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)])
-    sprite.shader = SKShader(source: source, uniforms: [sizeUniform] + uniforms + scene.knobs.map(\.uniform))
+    sprite.shader = SKShader(source: source, uniforms: [sizeUniform] + uniforms + scene.knobs.map(\.uniform) + [scene.clock?.uniform].compactMap { $0 })
     scene.addChild(sprite)
     NotificationCenter.default.addObserver(scene, selector: #selector(ShaderScene.applyKnobs),
                                            name: UserDefaults.didChangeNotification, object: nil)
     return scene
 }
 
-/// A `shaderScene`, which keeps its knob uniforms in step with Settings.
+/// A `shaderScene`, which keeps its knob uniforms in step with Settings, and runs its clock if it has one.
 final class ShaderScene: SKScene {
     var knobs: [(knob: Knob, uniform: SKUniform)] = []
+    var clock: (uniform: SKUniform, speed: Knob)?
+    /// The clock's time, summed in Double so it keeps counting after days (a Float stops once each frame's step
+    /// rounds away); the shader gets it as a Float, so keep it small where the shader needs it precise.
+    var clockTime: Double = 0 { didSet { clock?.uniform.floatValue = Float(clockTime) } }
+    private var lastUpdate: TimeInterval?
 
     @objc func applyKnobs() { for (knob, uniform) in knobs { uniform.floatValue = Float(knob.value) } }
+
+    override func update(_ currentTime: TimeInterval) {
+        guard let clock else { return }
+        clockTime += frameTime(currentTime, &lastUpdate) * clock.speed.value
+    }
 }
 
 /// Whether macOS is in Dark Mode. Scenes with light and dark looks read it when they're built; the app rebuilds

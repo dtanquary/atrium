@@ -20,9 +20,16 @@ let rainPalettes: [(name: String, night: [SIMD3<Float>], day: [SIMD3<Float>], li
      [[0.95, 0.95, 1.0], [0.75, 0.78, 0.85], [0.85, 0.85, 0.85], [0.9, 0.85, 0.8], [0.7, 0.8, 0.95]]),
 ]
 
-/// Rain on Glass settings: the switch to compare the first version's drops, then the shared Look sliders.
+/// How fast the water moves: every drop, bead and trail runs on `u_clock` at this many times real time.
+let rainSpeed = Knob(key: "rain.speed", label: "Drip speed", range: 0.25...3, standard: 1, section: "Drops", format: .times)
+
+/// Rain on Glass settings: on Random, fading to another backdrop every so often (shown under the backdrops), drip
+/// speed, then the shared Look sliders.
 let rainKnobs = [
-    Knob(key: "rain.classic", label: "Classic drops, to compare", range: 0...1, standard: 0, section: "Drops", format: .toggle),
+    Knob(key: "rain.fade", label: "Fade to a new backdrop automatically", range: 0...1, standard: 1, section: "Colors", format: .toggle),
+    Knob(key: "rain.fadeMinutes", label: "Every", range: 1...60, standard: 10, section: "Colors", format: .minutes,
+         shownWhen: "rain.fade"),
+    rainSpeed,
 ] + gradeKnobs("rain")
 
 /// Photo backdrops, each baked (see docs/rain-on-glass.md) into a sharp view, seen small and upside down through
@@ -46,9 +53,39 @@ let rainPhotos: [(name: String, night: String, day: String)] = [
 /// backdrop, or a city of out-of-focus lights in a palette: night in Dark Mode, an overcast day in Light Mode.
 @MainActor func rainOnGlass(size: CGSize) -> SKScene {
     let names = rainPhotos.map(\.name) + rainPalettes.map(\.name)
-    let pick = UserDefaults.standard.string(forKey: "rain.palette").flatMap { names.contains($0) ? $0 : nil } ?? names.randomElement()!
-    if let photo = rainPhotos.first(where: { $0.name == pick }) { return rainPhotoScene(size: size, name: systemIsDark ? photo.night : photo.day) }
-    let palette = rainPalettes.first { $0.name == pick }!
+    return rainScene(size: size, backdrop: UserDefaults.standard.string(forKey: "rain.palette").flatMap { names.contains($0) ? $0 : nil }
+                                           ?? names.randomElement()!, clock: .random(in: 0..<1000))   // a fresh pane each time
+}
+
+/// The scene for one backdrop, with its water clock at `clock`. Left on Random, it fades to another one every few
+/// minutes if Settings says so; the new scene takes over the clock, so the water carries on through the fade.
+/// After about two hours of water it fades to a fresh pane of the same backdrop, which keeps the clock small enough
+/// for the shader's Floats to place drops to the pixel.
+@MainActor private func rainScene(size: CGSize, backdrop: String, clock: Double) -> SKScene {
+    let scene = rainPhotos.first { $0.name == backdrop }.map { rainPhotoScene(size: size, name: systemIsDark ? $0.night : $0.day) }
+        ?? rainBokehScene(size: size, palette: rainPalettes.first { $0.name == backdrop }!)
+    let water = scene as! ShaderScene
+    water.clockTime = clock
+    let born = Date()
+    // ponytail: counts from when the scene was built, covered time included; exact enough for "every 10 minutes"
+    water.run(.repeatForever(.sequence([.wait(forDuration: 10), .run { [weak water] in
+        guard let water, let view = water.view else { return }
+        let fade = SKTransition.crossFade(withDuration: 4)
+        fade.pausesIncomingScene = false   // both keep raining through the fade, in step on the same clock
+        fade.pausesOutgoingScene = false
+        if UserDefaults.standard.string(forKey: "rain.palette") ?? "" == "", rainKnobs[0].value > 0.5,
+           Date().timeIntervalSince(born) >= rainKnobs[1].value.rounded() * 60 {
+            let others = (rainPhotos.map(\.name) + rainPalettes.map(\.name)).filter { $0 != backdrop }
+            view.presentScene(rainScene(size: water.size, backdrop: others.randomElement()!, clock: water.clockTime), transition: fade)
+        } else if water.clockTime > 8000 {
+            view.presentScene(rainScene(size: water.size, backdrop: backdrop, clock: .random(in: 0..<1000)), transition: fade)
+        }
+    }])))
+    return scene
+}
+
+/// A city of out-of-focus lights behind the glass, in one of `rainPalettes`.
+@MainActor private func rainBokehScene(size: CGSize, palette: (name: String, night: [SIMD3<Float>], day: [SIMD3<Float>], lights: [SIMD3<Float>])) -> SKScene {
     let sky = systemIsDark ? palette.night : palette.day
     let l = palette.lights
     return shaderScene(size: size, source: shaderCommon + """
@@ -87,7 +124,6 @@ let rainPhotos: [(name: String, night: String, day: String)] = [
     }
 
     \(rainWater)
-    \(rainClassicWater)
 
     void main() {
         \(rainDrops)
@@ -101,7 +137,7 @@ let rainPhotos: [(name: String, night: String, day: String)] = [
         if (wiped > 0.0) { col = mix(col, city(p, 0.45, t, sky, a, b, u_day), wiped * 0.8); }
         // each drop is a lens (see rainPhotoScene): a sharp, upside-down view of a wide patch of the lights, with a
         // dark rim where light from outside is totally reflected
-        if (drop.z > 0.0 && u_classic < 0.5) {
+        if (drop.z > 0.0) {
             float sd = length(drop.xy);
             float sa = min(sd, 1.0) * 0.866;
             float bend = asin(min(1.333 * sa, 1.0)) - asin(sa);
@@ -111,12 +147,6 @@ let rainPhotos: [(name: String, night: String, day: String)] = [
                          * mix(1.25, 1.05, u_day) * mix(0.98, 0.89, smoothstep(0.7, 0.87, sd));
             float aa = 1.0 / max(drop.w * u_size.y * 2.0, 1.0);
             through *= mix(1.0, mix(0.05, 0.15, u_day), smoothstep(0.87 - aa, 0.87 + aa, sd));
-            col = mix(col, through, drop.z);
-        } else if (drop.z > 0.0) {   // the classic lens
-            vec3 through = city(p - drop.xy * 0.07, 0.2, t, sky, a, b, u_day) * mix(1.3, 1.05, u_day)
-                         + u_low * 0.4 * (1.0 - u_day) * smoothstep(0.95, 0.25, p.y);
-            through *= 1.0 - 0.5 * smoothstep(0.5, 1.0, length(drop.xy));
-            through += 0.25 * smoothstep(0.35, 0.0, length(drop.xy - vec2(-0.35, 0.4)));
             col = mix(col, through, drop.z);
         }
 
@@ -129,7 +159,7 @@ let rainPhotos: [(name: String, night: String, day: String)] = [
         SKUniform(name: "u_l0", vectorFloat3: l[0]), SKUniform(name: "u_l1", vectorFloat3: l[1]),
         SKUniform(name: "u_l2", vectorFloat3: l[2]), SKUniform(name: "u_l3", vectorFloat3: l[3]),
         SKUniform(name: "u_l4", vectorFloat3: l[4]), SKUniform(name: "u_day", float: systemIsDark ? 0 : 1),
-    ], knobs: rainKnobs)
+    ], knobs: gradeKnobs("rain"), speed: rainSpeed)
 }
 
 /// The water on the glass, the same over every backdrop. Drop functions return (position inside the drop on a unit
@@ -151,8 +181,10 @@ float travel(float t, vec4 r) {
 }
 
 // The track down a column: every slider in it follows the same wavy line, as later drops run down old wet tracks.
+// It stays within 0.016 of the column's middle, so a slider's trail and pearls never cross into the next column;
+// only the edge of its body can, which `rainDrops` checks for.
 float track(float y, float column, vec4 r, float w) {
-    return (column + 0.5 + (r.y - 0.5) * 0.5) * w + (noise(vec2(y * 14.0, column * 7.3 + r.z * 50.0)) - 0.5) * 0.02;
+    return (column + 0.5 + (r.y - 0.5) * 0.2) * w + (noise(vec2(y * 14.0, column * 7.3 + r.z * 50.0)) - 0.5) * 0.02;
 }
 
 // Where the slider over column `column` is: (x on its track, y, radius, speed); radius 0 for an empty column.
@@ -203,11 +235,12 @@ vec4 beadLayer(vec2 p, float cell, float rmin, float rmax, float share, float se
     float cover = smoothstep(edge, edge * 0.85, length(d)) * step(h.x, share);
     if (cover > 0.0) {
         float since = mod(t + g.y * 300.0, 40.0 + 120.0 * g.x);     // seconds since it landed
-        float column = floor(p.x / lane);
-        // swept up if the slider has passed since it landed
-        // ponytail: only p's own column sweeps; a bead straddling two columns is left alone by the other one
-        if (s.z > 0.0 && abs(c.x - track(c.y, column, hash42(vec2(column, 1.0)), lane)) < s.z + r
-            && sinceSlider(c.y + s.z, column, t, lane, 1.0) < since) { cover = 0.0; }
+        // swept up if the slider of the bead's own column has passed since it landed (judged at its middle, so the
+        // whole bead goes at once even where it straddles two columns)
+        float column = floor(c.x / lane);
+        vec4 sc = column == floor(p.x / lane) ? s : sliderAt(column, t, lane, 1.0);
+        if (sc.z > 0.0 && abs(c.x - track(c.y, column, hash42(vec2(column, 1.0)), lane)) < sc.z + r
+            && sinceSlider(c.y + sc.z, column, t, lane, 1.0) < since) { cover = 0.0; }
     }
     return vec4(d / edge, cover, r);
 }
@@ -224,20 +257,25 @@ vec4 mistLayer(vec2 p, float t) {
     return vec4(d, smoothstep(1.0, 0.8, length(d)) * on, r);
 }
 
-// The slider over p's column: a teardrop whose rounded front leads, with a tail that points upward and sharpens
-// as it speeds up, and behind it the pearls it sheds along its track. Returns (position in the drop on a unit disc,
-// coverage) and (radius, the thin wet line of the track, how clear of mist the track at p still is: 1 for 5 s
-// after the slider passed, then misting over for 25 s).
+// The body of the slider `s` over `column` at p: a teardrop whose rounded front leads, with a tail that points
+// upward and sharpens as it speeds up. Returns like beadLayer.
+vec4 sliderBody(vec2 p, float column, float w, float seed, vec4 s) {
+    vec2 d = vec2(p.x - track(p.y, column, hash42(vec2(column, seed)), w), p.y - s.y);
+    float tail = 1.25 + 1.5 * clamp(s.w, 0.0, 1.0);
+    if (d.y > 0.0) { d.x *= 1.0 + 0.6 * clamp(d.y / (s.z * tail), 0.0, 1.0); d.y /= tail; }
+    return vec4(d / max(s.z, 1e-4), smoothstep(s.z, s.z * 0.85, length(d)) * step(0.0001, s.z), s.z);
+}
+
+// The slider over p's column (its body from sliderBody) and behind it the pearls it sheds along its track. Returns
+// (position in the drop on a unit disc, coverage) and (radius, the thin wet line of the track, how clear of mist
+// the track at p still is: 1 for 5 s after the slider passed, then misting over for 25 s).
 mat3 sliderDrop(vec2 p, float t, float w, float seed, vec4 s) {
     float column = floor(p.x / w);
     vec4 r = hash42(vec2(column, seed));
     mat3 out3 = mat3(0.0);
     if (s.z > 0.0) {
         float x = track(p.y, column, r, w);
-        vec2 d = vec2(p.x - x, p.y - s.y);
-        float tail = 1.25 + 1.5 * clamp(s.w, 0.0, 1.0);
-        if (d.y > 0.0) { d.x *= 1.0 + 0.6 * clamp(d.y / (s.z * tail), 0.0, 1.0); d.y /= tail; }
-        out3[0] = vec3(d / s.z, smoothstep(s.z, s.z * 0.85, length(d)));
+        out3[0] = sliderBody(p, column, w, seed, s).xyz;
         out3[1] = vec3(s.z, smoothstep(0.0025, 0.0, abs(p.x - x)) * 0.5, 0.0);
         float band = smoothstep(s.z * 0.8, s.z * 0.4, abs(p.x - x));
         if (band > 0.0) {
@@ -257,88 +295,29 @@ mat3 sliderDrop(vec2 p, float t, float w, float seed, vec4 s) {
 }
 """
 
-/// The first version's water, kept while Dave compares it with the new one under "Classic drops".
-// ponytail: delete with the switch once he picks
-private let rainClassicWater = """
-// Condensation: a bead per small cell that slowly forms and evaporates.
-// Drop functions return (position inside the drop on a unit disc, coverage, radius).
-vec4 beads(vec2 p, float t) {
-    float cell = 0.03;
-    vec2 id = floor(p / cell);
-    float h = hash21(id);
-    vec2 off = (vec2(hash21(id + 1.7), hash21(id + 3.1)) - 0.5) * 0.45;
-    float life = fract(t * 0.02 + h);
-    float r = (0.1 + 0.22 * pow(hash21(id + 5.3), 3.0)) * smoothstep(0.0, 0.1, life) * smoothstep(1.0, 0.8, life);
-    r *= step(0.3, h);
-    vec2 d = (fract(p / cell) - 0.5 - off) / max(r, 0.001);
-    return vec4(d, smoothstep(1.0, 0.8, length(d)), r * cell);
-}
-
-// The big drop in p's column, (x, y, radius): one per column, sliding down in stick-slip lurches.
-vec3 slider(vec2 p, float t, float w, float seed) {
-    float column = floor(p.x / w);
-    float h = hash11(column * 3.7 + seed);
-    float ph = t * (0.04 + 0.06 * h) + h * 10.0;
-    float y = 1.15 - fract(ph + 0.12 * sin(ph * 6.2831)) * 1.35;       // lurch, pause, lurch
-    float x = (column + 0.5 + (h - 0.5) * 0.4) * w + 0.004 * sin(p.y * 35.0 + h * 20.0);
-    return vec3(x, y, w * (0.14 + 0.08 * h) * step(0.3, hash11(column + seed * 2.0)));
-}
-
-// How much a slider's trail has wiped the fog at p.
-float trail(vec2 p, vec3 s) {
-    float above = p.y - s.y;
-    return step(0.0, above) * smoothstep(0.3, 0.0, above) * smoothstep(s.z, s.z * 0.4, abs(p.x - s.x));
-}
-
-// The slider under p, or one of the beads it left behind, shrinking with age.
-vec4 drops(vec2 p, vec3 s, float w, float seed) {
-    float r = s.z;
-    vec2 d = p - s.xy;
-    d.y /= d.y > 0.0 ? 1.5 : 1.0;                                      // teardrop: tail stretches upward
-    vec4 drop = vec4(d / max(r, 0.001), smoothstep(r, r * 0.85, length(d)), r);
-
-    float column = floor(p.x / w);
-    float above = p.y - s.y;
-    float spacing = r * 1.6;
-    float k = floor(above / spacing);
-    float br = r * (0.2 + 0.25 * hash21(vec2(column, k) + seed)) * smoothstep(0.3, 0.05, above) * step(1.0, k);
-    vec2 bd = vec2(p.x - s.x + (hash21(vec2(k, column)) - 0.5) * r * 0.6, (fract(above / spacing) - 0.5) * spacing);
-    vec4 bead = vec4(bd / max(br, 0.0001), smoothstep(br, br * 0.8, length(bd)) * trail(p, s), br);
-    return bead.z > drop.z ? bead : drop;
-}
-"""
-
 /// The start of `main()`: the point `p` (1 = screen height), the drop over it, if any, and how much a trail has
 /// wiped the fog there.
 private let rainDrops = """
 float aspect = u_size.x / u_size.y;
 vec2 p = v_tex_coord * vec2(aspect, 1.0);
-float t = u_time;
-vec4 drop = vec4(0.0);
-float wiped = 0.0;
-if (u_classic > 0.5) {
-    drop = beads(p, t);
-    vec3 s1 = slider(p, t, 0.1, 1.0);
-    vec2 p2 = p + vec2(0.043, 0.0);
-    vec3 s2 = slider(p2, t * 0.85, 0.065, 9.0);
-    vec4 big = drops(p, s1, 0.1, 1.0);
-    if (big.z > drop.z) { drop = big; }
-    big = drops(p2, s2, 0.065, 9.0);
-    if (big.z > drop.z) { drop = big; }
-    wiped = max(trail(p, s1), trail(p2, s2));
-} else {
-    // sliders run down columns this wide; static drops in three sizes: a mist of specks, beads, and a few big ones
-    float lane = 0.06;
-    vec4 s = sliderAt(floor(p.x / lane), t, lane, 1.0);
-    mat3 slide = sliderDrop(p, t, lane, 1.0, s);
-    wiped = max(slide[1].y, slide[1].z);
-    drop = mistLayer(p, t);
-    drop.z *= 1.0 - slide[1].z;
-    vec4 bead = beadLayer(p, 0.04, 0.0025, 0.007, 0.6, 7.0, t, lane, s);
-    if (bead.z > drop.z) { drop = bead; }
-    bead = beadLayer(p, 0.09, 0.008, 0.022, 0.45, 11.0, t, lane, s);
-    if (bead.z > drop.z) { drop = bead; }
-    if (slide[0].z > drop.z) { drop = vec4(slide[0], slide[1].x); }
+float t = u_clock;
+// sliders run down columns this wide; static drops in three sizes: a mist of specks, beads, and a few big ones
+float lane = 0.06;
+vec4 s = sliderAt(floor(p.x / lane), t, lane, 1.0);
+mat3 slide = sliderDrop(p, t, lane, 1.0, s);
+float wiped = max(slide[1].y, slide[1].z);
+vec4 drop = mistLayer(p, t);
+drop.z *= 1.0 - slide[1].z;
+vec4 bead = beadLayer(p, 0.04, 0.0025, 0.007, 0.6, 7.0, t, lane, s);
+if (bead.z > drop.z) { drop = bead; }
+bead = beadLayer(p, 0.09, 0.008, 0.022, 0.45, 11.0, t, lane, s);
+if (bead.z > drop.z) { drop = bead; }
+if (slide[0].z > drop.z) { drop = vec4(slide[0], slide[1].x); }
+// right at a column's edge, the body of the next column's slider can reach over
+float across = fract(p.x / lane) < 0.5 ? -1.0 : 1.0;
+if (abs(fract(p.x / lane) - 0.5) * lane > 0.5 * lane - 0.005) {
+    vec4 next = sliderBody(p, floor(p.x / lane) + across, lane, 1.0, sliderAt(floor(p.x / lane) + across, t, lane, 1.0));
+    if (next.z > drop.z) { drop = next; }
 }
 """
 
@@ -352,7 +331,6 @@ if (u_classic > 0.5) {
     let night: Float = name.hasSuffix("night") ? 1 : 0
     return shaderScene(size: size, source: shaderCommon + """
     \(rainWater)
-    \(rainClassicWater)
 
     void main() {
         \(rainDrops)
@@ -370,11 +348,7 @@ if (u_classic > 0.5) {
         // a drop is a lens with a 60 degree contact angle: at radius s it bends the view by `bend` towards its
         // middle, so it shows a wide patch of the scene, sharp and upside down; past s = 0.87 the light is
         // totally reflected inside it and only the dark room shows
-        if (drop.z > 0.0 && u_classic > 0.5) {   // the classic lens
-            vec2 at = clamp((p - drop.xy * drop.w) / vec2(aspect, 1.0) * fit + 0.5 * (1.0 - fit) - drop.xy * vec2(0.12, 0.12 * aspect) * fit, 0.0, 1.0);
-            vec3 through = texture2D(u_near, at).rgb * 1.1 * (1.0 - 0.6 * smoothstep(0.45, 1.0, length(drop.xy)));
-            col = mix(col, through + 0.25 * smoothstep(0.35, 0.0, length(drop.xy - vec2(-0.35, 0.4))), drop.z);
-        } else if (drop.z > 0.0) {
+        if (drop.z > 0.0) {
             float sd = length(drop.xy);
             float sa = min(sd, 1.0) * 0.866;
             float bend = asin(min(1.333 * sa, 1.0)) - asin(sa);
@@ -395,5 +369,5 @@ if (u_classic > 0.5) {
         SKUniform(name: "u_haze", texture: texture("haze")), SKUniform(name: "u_night", float: night),
         SKUniform(name: "u_photoAspect", float: Float(far.size().width / max(far.size().height, 1))),
         SKUniform(name: "u_fov", float: 0.9),   // the photos' height in radians (about 52 degrees)
-    ], knobs: rainKnobs)
+    ], knobs: gradeKnobs("rain"), speed: rainSpeed)
 }

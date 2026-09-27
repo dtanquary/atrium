@@ -3,8 +3,8 @@
 Looking through a rainy window, with the camera focused on the glass. Behind the glass is a real place, heavily defocused, or a procedural city of bokeh lights. Beads of water sit on the pane, and drops creep down in lurches, now and then run, and leave trails of pearls behind them. Each drop is a strong lens showing a sharp, upside-down view of the scene. Night in Dark Mode, an overcast day in Light Mode.
 
 - **Files:** `Sources/Atrium/RainOnGlass.swift`, using the `shaderCommon` helpers from Shaders.swift (`hash42`, `noise`, `grade`…). Photos are `Resources/rain-<look>-near.jpg`, `-far.jpg` and `-haze.jpg`, credited in `Resources/rain-credits.tsv` and Settings → About.
-- **Entry:** `@MainActor func rainOnGlass(size:)` picks the backdrop and builds one of two `shaderScene`s: `rainPhotoScene` for a photo, or the bokeh city. Registry entry: icon `cloud.rain.fill`, tint `.gray`, `knobs: rainKnobs`, and a `PaletteChoice` titled "Backdrop" that lists the photos (with `photos:` thumbnails) and then the bokeh palettes.
-- **Kind:** a single full-screen SKShader, animated by `u_time` alone. The water is the same GLSL (`rainWater` and `rainDrops`) over every backdrop.
+- **Entry:** `@MainActor func rainOnGlass(size:)` picks the backdrop, and `rainScene(size:backdrop:clock:)` builds one of two `shaderScene`s, `rainPhotoScene` for a photo or `rainBokehScene` for the city, and runs the timer that fades to the next backdrop. Registry entry: icon `cloud.rain.fill`, tint `.gray`, `knobs: rainKnobs`, and a `PaletteChoice` titled "Backdrop" that lists the photos (with `photos:` thumbnails) and then the bokeh palettes.
+- **Kind:** a single full-screen SKShader. The water is the same GLSL (`rainWater` and `rainDrops`) over every backdrop, animated by `u_clock`, which runs at the Drip speed.
 
 ## Backdrops
 Ten photo backdrops, each with a night look for Dark Mode and a day look for Light Mode where a good one exists:
@@ -39,7 +39,7 @@ The seven bokeh palettes are the original look, drawn procedurally:
 | Holiday | warm fairy lights, red, green, gold, rare blue |
 | Graphite | whites and silvers only |
 
-Random rolls any of the seventeen when the scene is built.
+Random rolls any of the seventeen when the scene is built and, unless switched off, fades to another one every 10 minutes (see Settings).
 
 ## The bake
 Each look is baked offline into three textures at a MacBook's 1512:982 aspect; the shader covers other screens by cropping. The script (`rain/bake.py` in the session scratchpad, about 80 lines of numpy) does:
@@ -73,12 +73,12 @@ One model over every backdrop, in `p = v_tex_coord * vec2(aspect, 1)` (1 = the s
    - it creeps in bursts: every 8-25 s it lurches 4-9 times over 2-6 s, 5-12% of the screen in all, each lurch a fast start and a slow stop, then sits still
    - every 12-40 s it swallows a bead and runs 15-40% of the screen at about 1 screen height a second, starting at once and slowing to a stop
    - its height wraps from below the screen to above it (`1.12 − mod(travel, 1.4)`), so a new one slides in from the top
-   - every slider in a column follows the same wavy track (`track()`, noise, ±0.01), as real drops reuse old wet tracks
+   - every slider in a column follows the same wavy track (`track()`: ±0.1 of the column's width either side of its middle, plus noise of ±0.01), as real drops reuse old wet tracks. Kept that close to the middle, a trail and its pearls never cross into the next column; only a big slider's body can, by up to 0.004, and pixels that close to a column's edge also draw the next column's slider (`sliderBody`).
    - it's a teardrop with a round front and a tail stretched 1.25× at rest to 2.75× at speed, pointing more as it speeds up
 2. **When did it pass?** `sinceSlider(y)` finds when the column's slider was last at height y by searching its travel back in time (0.6, 1.8, 5.4 … 146 s, interpolated). That gives each point of a track an age:
    - **trail:** the track, 0.8 of the slider's width, stays clear of mist for 5 s, then mists over for 25 s
    - **pearls:** about one per slider radius down the track, a fifth of its width, fixed to the glass, for 2 minutes
-   - **sweeping:** a bead is gone if the slider has passed it since it landed
+   - **sweeping:** a bead is gone if its own column's slider has passed it since it landed, judged at the bead's middle so the whole bead goes at once
    - a faint wet line runs down every track
 3. **Beads.** Two grid layers: cells of 0.04 (radius 0.0025-0.007, 60% full) and 0.09 (radius 0.008-0.022, 45%), sizes skewed small (`u²`). Each lands fully formed at a random moment and lasts 40-160 s unless swept. Big ones are up to 1.4× taller than wide, and lumpy (3 and 5 lobes of ±4.5% and ±2.5%) where their edge snags on dirt.
 4. **Mist.** A layer of specks (cell 0.016, radius 0.001-0.002) that land and dry at random, faded out along fresh trails.
@@ -93,15 +93,15 @@ The water returns `drop` (position inside the drop on a unit disc, coverage, rad
 - **Glitter.** At night each speck of mist holds a pinpoint of the brightest lights: 2% of pixels, scaled by how far `far` is above 0.4.
 - **Over the bokeh city,** drops sample `city(…, 0.4)` rather than a sharp one, ×1.25 at night. The procedural city is mostly dark sky between its lights, so a sharp view left the drops as dark holes. The mist there is the city's own haze term, and trails still show `city(p, 0.45)`, as before.
 
-## Classic drops (temporary)
-**Drops → Classic drops, to compare** (`rain.classic`) switches back to the first version's water and lens (`rainClassicWater`, a flat `drop.xy * 0.07` offset and a highlight at the upper left), live, over any backdrop. It's there for Dave to compare. Once he picks, delete the switch, the losing branch and `rainClassicWater`.
-
 ## Time and appearance
-Everything runs on `u_time`, so a speed setting would need the integrated-phase pattern from `FlowingGradient`. The look follows the system appearance when the scene is built (the app rebuilds on a switch): a photo backdrop uses its `night` look in Dark Mode and its `day` look in Light Mode, and `u_night` (from the look's name) sets the rim, room glow and glitter. The bokeh city uses `u_day`: at night lights add on, and by day the sky is multiplied by `exp(-1.3 × (strength − 0.8 × tint))` and fogged glass lifts it toward white.
+The water runs on `u_clock`, the `shaderScene` clock for a `speed:` knob: `ShaderScene.update` adds each frame's time × the Drip speed, in Double, so moving the slider never makes the drops jump. It starts somewhere in its first 1000 s, so each build is a fresh pane. A backdrop fade hands the clock to the new scene, and both scenes keep running through the 4 s crossfade (`pausesIncomingScene` and `pausesOutgoingScene` off), so the water carries on unbroken and only the backdrop dissolves. Once the clock passes 8000 s (about two hours of water) the scene fades to a fresh pane of the same backdrop: the shader gets the clock as a Float, which only places a running drop to the pixel while it stays small.
+
+The look follows the system appearance when the scene is built (the app rebuilds on a switch): a photo backdrop uses its `night` look in Dark Mode and its `day` look in Light Mode, and `u_night` (from the look's name) sets the rim, room glow and glitter. The bokeh city uses `u_day`: at night lights add on, and by day the sky is multiplied by `exp(-1.3 × (strength − 0.8 × tint))` and fogged glass lifts it toward white.
 
 ## Settings
 - **Backdrop** (`rain.palette`, standard "City"): the photos as thumbnails of their defocused view, then the bokeh palettes as swatches. `PaletteChoice.photos` maps a name to its dark and light thumbnail; `title` names the section. A pick rebuilds the scene.
-- **Drops:** Classic drops, to compare (above).
+- **Fade to a new backdrop automatically** (`rain.fade`, on) and **Every** (`rain.fadeMinutes`, 1-60, 10): shown under the backdrops while Random is picked (their section is "Colors", which `RandomOnly` shows), like Aurora's. A 10 s `SKAction` timer checks them, so changes apply within 10 s; it counts from when the scene was built. Each display fades on its own, to its own pick.
+- **Drops → Drip speed** (`rain.speed`, 0.25-3×, 1×): everything in the water (lurches, runs, landings, misting) runs this much faster or slower. Dave likes the default.
 - **Look:** the shared grade sliders (`gradeKnobs("rain")`), live. Contrast pivots at 0.3 at night and 0.7 by day over the bokeh city, and 0.5 over photos.
 
 Suggested knobs, not built yet:
@@ -111,20 +111,20 @@ Suggested knobs, not built yet:
 | `rain.intensity` | Rain | drizzle-downpour | steady | bead shares, slider share, burst and run periods |
 | `rain.mist` | Mist | 0-0.7 | 0.3 | the haze mix |
 | `rain.glass` | Glass height | 12-35 cm | 20 | one scale on `p` for every size |
-| `rain.speed` | Speed | 0.2-3 | 1 | integrated time |
 
 ## Performance
-Measured at CPU 0.5-0.65 ms and GPU 0.9-1.7 ms per frame over photos, and GPU 1.64-1.84 ms over the bokeh city (release build, 2x). The classic water measured 1.45 ms over the bokeh city. The GPU numbers vary run to run by ±0.3 ms. The costly part is `sinceSlider` (seven `travel` evaluations), so it only runs for pixels on a slider's track and inside a bead near one. Running it for every bead pixel near a track cost 2.35 ms over the bokeh city.
+Measured at CPU 0.5-0.65 ms and GPU 0.9-1.7 ms per frame over photos, and GPU 1.64-1.84 ms over the bokeh city (release build, 2x). The GPU numbers vary run to run by ±0.3 ms. The costly part is `sinceSlider` (seven `travel` evaluations), so it only runs for pixels on a slider's track and inside a bead near one. Running it for every bead pixel near a track cost 2.35 ms over the bokeh city.
 
 ## Gotchas and shortcuts
 - `sliderDrop` returns a `mat3` (drop, then radius, wet line and trail clearness), because SKShader has no `out` or `inout` parameters.
 - A trail's clear length is its slider's speed × how long it stays clear. At a minute clear, every column became a full-height ribbon; 5 s clear plus 25 s misting keeps them to the recent stretch.
 - A pure sine wobble made the tracks look machined; `track()` uses noise.
-- `ponytail:` only a pixel's own column sweeps beads; a bead straddling two columns is left alone by the other one.
+- **Cut-off drops (fixed 2026-09-26):** Dave saw drops with one side sliced off along a vertical line. Two causes, both at the 0.06 columns: beads were swept by the slider of each *pixel's* column, so a bead straddling two columns could lose one half; and a slider's body could reach past its column, where the next column's pixels never drew it. Measured over four renders by counting long vertical runs of big pixel jumps: 36 at column edges against 4 mid-column before the fix, 8 against 6 after.
 - `ponytail:` drops don't merge (no metaball): a slider swallows a bead by the bead vanishing when the slider reaches its middle.
 - `ponytail:` the lens clamps at the photo's edge, so drops near the screen's edge stretch the edge colours.
 - `ponytail:` Settings thumbnails read their JPEG on each redraw; they're small.
-- `u_time` doesn't advance in the render harness, so a snapshot is always the same moment; `SNAPSHOT_MOVIE` records real time.
+- The render harness has no `SKView`, so the backdrop fade (which calls `view.presentScene`) can't run there; it was checked with a throwaway test that shows the scene in a real window with the interval at 0.
+- A test that writes `UserDefaults.standard` writes the `swiftpm-testing-helper` domain for good, and later test runs (the Settings shot too) read it back; clean up with `defer`.
 - The water's motion is easiest to judge from a plot of `travel()` (as done for this pass) rather than from frames.
 
 ## Research
@@ -139,7 +139,8 @@ From the research agents (session notes `notes/rain-science.md` and `notes/rain-
 ## Dave's feedback and decisions
 - Built in the first "build out all of those ideas" batch by the shaders agent. When that batch landed it was judged the weakest shader scene: the drops don't stand out much.
 - 2026-09-24, Dave: "raindrops is great". He asked for colour palettes in Settings, with a default that follows Light or Dark Mode, "then allow a bunch of other color pallets". Hence City as the default, and every palette with both a night and a day look.
-- 2026-09-26, Dave: "add more background options to rain on glass. I want to keep what we have as like a bokeh option but lets add other potentially popular options like a rainy city backdrop (but blurry) or country side or cottage", researched across biomes, plus "any other ideas you might have on how to level up this wallpaper". Hence the ten photo backdrops, and the water and lens rebuilt from research, with the Classic switch to compare.
+- 2026-09-26, Dave: "add more background options to rain on glass. I want to keep what we have as like a bokeh option but lets add other potentially popular options like a rainy city backdrop (but blurry) or country side or cottage", researched across biomes, plus "any other ideas you might have on how to level up this wallpaper". Hence the ten photo backdrops, and the water and lens rebuilt from research, with a Classic switch to compare.
+- 2026-09-26, Dave: "new drops are so much better ditch the classic drops". The switch and the old water are gone (they're in git history at 0.24.0). He also asked for a timed fade to a new backdrop on Random, with the interval configurable, and "a drip speed setting that can apply some overall modifier to make drips go faster or slower, i like the current default though".
 
 ## Ideas / next steps
 - **Rain knob:** drizzle to downpour, driving bead shares, slider count and burst timing; and gushes (rivulets that bead up) in heavy rain.
@@ -151,4 +152,4 @@ From the research agents (session notes `notes/rain-science.md` and `notes/rain-
 - **More places:** a café across the street, a station platform, a harbour village (Bernd Thaller's Croatian village), Shibuya in the rain.
 
 ## Checking it
-`SNAPSHOT_SCENE="Rain on Glass" SNAPSHOT_DEFAULTS="rain.palette=Hamburg" SNAPSHOT_APPEARANCE=light SNAPSHOT_DIR=/tmp/rain swift test`, then read the PNG; add `rain.classic=1` for the old water. For motion, `SNAPSHOT_MOVIE=8` and compare a crop across frames, or plot `travel()` in Python.
+`SNAPSHOT_SCENE="Rain on Glass" SNAPSHOT_DEFAULTS="rain.palette=Hamburg" SNAPSHOT_APPEARANCE=light SNAPSHOT_DIR=/tmp/rain swift test`, then read the PNG. For motion, `SNAPSHOT_MOVIE=8` and compare a crop across frames, or plot `travel()` in Python.
