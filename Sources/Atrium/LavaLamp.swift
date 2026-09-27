@@ -185,9 +185,12 @@ final class LavaLamp: SKScene {
     void main() {
         float aspect = u_size.x / u_size.y;
         float t = u_phase;
-        vec2 p = v_tex_coord * vec2(aspect, 1.0);
         float x = v_tex_coord.x;
         float y = v_tex_coord.y;
+        // Curved glass: a cylinder of liquid magnifies the middle and crowds the sides into the walls, 0.8x to
+        // 1.4x across, so wax sliding toward a wall narrows and speeds up. The light and glass below use plain x.
+        float u = 2.0 * x - 1.0;
+        vec2 p = vec2(aspect * (0.5 + 0.5 * u * (0.8 + 0.2 * u * u)), y);
         // a slow wobble in space so wax edges are soft and irregular, not perfect ellipses
         vec2 wobble = vec2(noise(p * 5.0 + t * 0.06), noise(p * 5.0 - t * 0.05 + 7.3)) - 0.5;
         vec2 q = p + u_wobble * wobble;
@@ -215,7 +218,7 @@ final class LavaLamp: SKScene {
 
         // Liquid: dark, lit by the bulb in a soft cone rising from the bottom, with the wax's own glow scattering
         // into it around every blob.
-        float cone = exp(-pow((x - 0.5) / 0.6, 2.0)) * pow(1.0 - y, 1.3);
+        float cone = exp(-(x - 0.5) * (x - 0.5) / 0.36) * pow(1.0 - y, 1.3);
         vec3 col = mix(u_liquidDeep, u_liquidLit, 0.15 + 0.95 * cone * u_bulb);
         col += u_waxHot * u_glow * smoothstep(0.2, 1.0, f.x) * (1.2 - y);
 
@@ -244,7 +247,7 @@ final class LavaLamp: SKScene {
 
         // Curved glass: darker toward the sides, with two soft vertical window reflections.
         col *= 0.62 + 0.38 * sin(3.14159 * x);
-        col += vec3(0.035 * exp(-pow((x - 0.16) / 0.02, 2.0)) + 0.02 * exp(-pow((x - 0.87) / 0.035, 2.0)));
+        col += vec3(0.035 * exp(-(x - 0.16) * (x - 0.16) / 0.0004) + 0.02 * exp(-(x - 0.87) * (x - 0.87) / 0.001225));
         col = grade(col, u_pivot, u_hue, u_saturation, u_contrast, u_brightness);
         col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0;
         gl_FragColor = vec4(col, 1.0);

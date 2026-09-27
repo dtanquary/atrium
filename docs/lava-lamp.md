@@ -37,7 +37,9 @@ It follows how real lamps convect (the research agent's sources: [Wikipedia on l
 
 **Edge:** one pixel of antialiasing from the field's gradient. Thin wax is translucent: `u_opacity + (1 - u_opacity)·smoothstep(thick)`.
 
-**Glass:** darker toward the sides (`0.62 + 0.38·sin(πx)`), two faint vertical window reflections, then dither.
+**Glass:**
+- **Refraction:** a cylinder of liquid seen from outside magnifies the middle and crowds the sides into the walls, as every whole-lamp photo shows. So the field is evaluated at a warped x, `u = 2x - 1`, `p.x = aspect·(0.5 + 0.5·u·(0.8 + 0.2u²))`: 0.8× across the middle, 1.4× at the edges. Wax sliding toward a wall narrows and speeds up. The cone and glass terms use the plain x. It costs nothing measurable.
+- darker toward the sides (`0.62 + 0.38·sin(πx)`), two faint vertical window reflections, then dither.
 
 ## Time, live data and appearance
 - **Time:** `time` (Double) is integrated in `update` (`dt × speed`, dt capped at 0.5 s) and copied to `u_phase`, so the speed slider never jumps and `SNAPSHOT_SECONDS` moves it forward.
@@ -88,7 +90,7 @@ CPU about 0.5 ms and GPU 1.0 ms per frame (release, 2x): the stems add about 0.2
 
 ## Gotchas and shortcuts
 - `ponytail:` the colour cycle is a straight RGB blend, so opposite pairings pass through a muddier middle for part of the minute. Blend in a perceptual space if it ever looks dull.
-- **Possibly wrong:** `pow(negative, 2.0)` in the cone and window-reflection terms (`pow((x - 0.5)/0.6, 2.0)` and similar). GLSL and Metal leave `pow` of a negative base undefined. It renders fine today, perhaps because the translator folds it to `x*x`, but `d*d` would be safe.
+- The cone and window-reflection terms square with `d*d`, not `pow(d, 2.0)`: GLSL and Metal leave `pow` of a negative base undefined.
 - Knobs are read by array index: `Self.knobs[0]` (speed), `[1]` (blob size) and `[6]` (cycle minutes). Reordering breaks them.
 - Unused uniforms (`u_speed`, `u_blobSize`, `u_cycleMinutes`) are created for every knob. That's harmless.
 - The blob matrices are passed to `field` and `balls` as parameters, since SKShader uniforms are only visible inside `main()`. Indexing a `mat4` column with the loop counter (`m[i]`) compiles and runs.
