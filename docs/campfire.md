@@ -63,7 +63,7 @@ None. The flames are one engine now (see decisions).
 Always night, with no Light Mode look. The sim, sparks, embers and firelight run on scene time. The stars are the real sky for the viewer's location right now (never daylight). Each load rolls new fuel patches, and the sparks are random.
 
 ## Performance
-CPU 1.11 ms and GPU 0.84 ms per frame (release build, 2x, 2026-09-26). The simulation (two 64×128 sheets, one step each a frame) is ~0.55 ms of the CPU. Most of the GPU goes on the flames' noise, which is skipped where the box is empty. At 15 fps on battery the sim still steps at 30 Hz of scene time (two steps a frame), so the CPU per second is the same. Memory: the ground texture is 4096 × 2660 RGBA, about 44 MB decoded.
+CPU 1.11 ms and GPU 0.84 ms per frame (release build, 2x, 2026-09-26). The simulation (two 64×128 sheets, one step each a frame) is ~0.55 ms of the CPU. Most of the GPU goes on the flames' noise, which is skipped where the box is empty. At 15 fps the sim still steps at 30 Hz of scene time (two steps a frame), so the CPU per second is the same. Memory: the ground texture is 4096 × 2660 RGBA, about 44 MB decoded.
 
 ## Gotchas and shortcuts
 - **Offscreen tests:** `SK3DNode` (live SceneKit inside SpriteKit) blanks the whole `SKRenderer` render, so the scene would fail the render test. The pit and sticks are baked instead, and relit in 2D.

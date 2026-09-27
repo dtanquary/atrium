@@ -66,7 +66,7 @@ For repeatable snapshots, `MURMURATION_SEED=3` seeds the flock, and `MURMURATION
 - Release build at 2x: CPU 1.25–1.8 ms (simulation 0.4–0.7, sprites 0.25, SpriteKit's own 1,500 nodes about 0.6), GPU 0.45–0.8 ms. It no longer scales with screen area.
 - The reflection costs nothing while the flock is high; about 0.05 ms while it's over the water.
 - Flipping wing poses every few frames for shimmer cost 0.15 ms and only flickered at 3–5 px, so each parcel keeps one pose.
-- On battery (15 fps) it takes two simulation steps a frame, so the flight is the same.
+- At 15 fps it takes two simulation steps a frame, so the flight is the same.
 
 ## Gotchas and shortcuts
 - `ponytail:` 1,500 agents stand for about 60,000 birds, each drawn as a sprite of ten. More agents would give finer folds but cost CPU linearly.

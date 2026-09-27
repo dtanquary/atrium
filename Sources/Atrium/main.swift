@@ -20,7 +20,7 @@ final class WallpaperView: SKView {
     }
 }
 
-/// Runs at the frame rate Settings → Power picks for Low Power Mode, battery or mains power (30 and 15 fps, and
+/// Runs at the frame rate Settings → Power picks for Low Power Mode, battery or mains power (60 and 30 fps, and
 /// frozen in Low Power Mode, unless changed).
 @MainActor func applyPowerState(to views: [WallpaperView]) {
     let source = IOPSGetProvidingPowerSourceType(IOPSCopyPowerSourcesInfo().takeRetainedValue()).takeUnretainedValue()

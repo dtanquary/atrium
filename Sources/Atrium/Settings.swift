@@ -105,8 +105,8 @@ enum Power {
     /// Frames per second for each menu choice; 0 freezes the wallpaper on its current frame.
     static let rates = [0, 15, 30, 60]
     private static let names = ["Freeze", "15 fps", "30 fps", "60 fps"]
-    static let plugged = Knob(key: "power.plugged", label: "Plugged in", range: 0...3, standard: 2, format: .choice(names))
-    static let battery = Knob(key: "power.battery", label: "On battery", range: 0...3, standard: 1, format: .choice(names))
+    static let plugged = Knob(key: "power.plugged", label: "Plugged in", range: 0...3, standard: 3, format: .choice(names))
+    static let battery = Knob(key: "power.battery", label: "On battery", range: 0...3, standard: 2, format: .choice(names))
     static let lowPower = Knob(key: "power.lowPower", label: "Low Power Mode", range: 0...3, standard: 0, format: .choice(names))
     static let knobs = [plugged, battery, lowPower]
 
@@ -125,7 +125,7 @@ struct PowerPage: View {
             } header: {
                 Text("Frame Rate")
             } footer: {
-                Text("Wallpapers are tuned for 30 fps. 60 fps is smoother and uses about twice the power. Freeze holds the current frame. Wallpapers always pause while the desktop is covered.")
+                Text("60 fps is the smoothest. 30 fps uses about half the power, and 15 fps about a quarter. Freeze holds the current frame. Wallpapers always pause while the desktop is covered.")
                     .foregroundStyle(.secondary)
             }
             Section {
