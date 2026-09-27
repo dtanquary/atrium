@@ -68,8 +68,6 @@ struct Wallpaper {
     Wallpaper(name: "The Sun Today", icon: "sun.max.fill", tint: .orange, blurb: "The real Sun, from NASA's Solar Dynamics Observatory.",
               make: theSun, knobs: TheSun.knobs,
               palettes: PaletteChoice(key: "sun.wavelength", options: TheSun.wavelengths.map { ($0.name, $0.swatch, $0.swatch) }, title: "Wavelength")),
-    Wallpaper(name: "Crystals", icon: "hexagon.fill", tint: .yellow, blurb: "Vitamin C crystallising under polarised light.",
-              make: crystals, knobs: Crystals.knobs),
     Wallpaper(name: "Wind", icon: "wind", tint: .cyan, blurb: "The live wind around you, streaming across the map.",
               make: wind, knobs: WindScene.knobs,
               palettes: PaletteChoice(key: "wind.palette", options: WindScene.paletteOptions, standard: "Midnight")),

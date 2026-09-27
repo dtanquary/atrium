@@ -144,13 +144,6 @@ The real Sun as NASA's Solar Dynamics Observatory saw it within the last hour or
 |---|---|
 | 193 Å, the million-degree corona, on 27 September 2026 | 304 Å, the chromosphere, in the close-up framing |
 
-### Crystals
-Vitamin C crystallising on a microscope slide between polarisers: round spherulites and fans of fibres grow out of the dark liquid, each with a dark cross, then melt away and grow again in a new pattern every few minutes. The colours are physics, not a palette: the interference colours of the Michel-Lévy chart, computed for each crystal's thickness. Light Mode turns the polarisers parallel, so the same crystals show the complementary colours on white.
-
-| ![Crystals, first-order straw spherulites on the dark liquid](docs/images/crystals.jpg) | ![Crystals in Light Mode, the complementary blue on white](docs/images/crystals-light.jpg) |
-|---|---|
-| First-order straw and gold, in Dark Mode | The same slide in Light Mode, between parallel polarisers |
-
 ### Wind
 The live wind around you as thin streaks streaming across the map, in the spirit of the hint.fm wind map and earth.nullschool: a grid of Open-Meteo's hourly forecast, blended from hour to hour, with streaks that speed up, brighten and curl with the real wind, as brush strokes like hint.fm's or comets like nullschool's. Zoom from your town to half the continent, over Natural Earth's coastlines, its shaded relief, or nothing, in six jewel-toned palettes. Light Mode draws the same streaks as ink on paper.
 
