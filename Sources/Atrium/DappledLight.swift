@@ -6,7 +6,7 @@ import SpriteKit
 /// Sunlight through a tree onto a plaster wall, lit by the real Sun where you are. Every gap between the leaves is a
 /// pinhole camera, so the bright spots are images of the Sun: round, 0.0093 × the gap's distance across, stretched
 /// by the angle the light meets the wall, and crescents during a real eclipse. Leaves near the wall cast sharp
-/// shadows. Cloud cover and wind come from the live weather; by night, moonlight at the real phase or a streetlight.
+/// shadows. Cloud cover and wind can come from the live weather; by night, moonlight at the real phase or a streetlight.
 /// Made for Light Mode; in Dark Mode the wall is charcoal.
 final class DappledLight: SKScene {
     nonisolated static let knobs = [
@@ -14,7 +14,8 @@ final class DappledLight: SKScene {
              format: .choice(["Toward the Sun", "South", "South-west", "West", "North-west", "North", "North-east", "East", "South-east"])),
         Knob(key: "dappled.cover", label: "Leaf cover", range: 0...1, standard: 0.5, section: "Wall"),
         Knob(key: "dappled.twig", label: "Leaves near the wall", range: 0...1, standard: 1, section: "Wall", format: .toggle),
-        Knob(key: "dappled.weather", label: "Weather", range: 0...3, standard: 0, section: "Light",
+        // Clear by default, so a first look on a cloudy day still shows the dapples.
+        Knob(key: "dappled.weather", label: "Weather", range: 0...3, standard: 1, section: "Light",
              format: .choice(["Live where you are", "Clear", "Partly cloudy", "Overcast"])),
         Knob(key: "dappled.night", label: "At night", range: 0...1, standard: 0, section: "Light",
              format: .choice(["Moonlight", "Streetlight"])),
