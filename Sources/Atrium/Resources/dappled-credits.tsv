@@ -1,0 +1,7 @@
+# Images in the Dappled Light wallpaper, cut or packed from these originals. CC0.
+# file	subject	author	licence	source
+dappled-plaster-albedo.heic	"White Stucco": fine granular off-white stucco, its albedo as luminance (2048 px, about 2 m square)	Amal Kumar, Poly Haven	CC0	https://polyhaven.com/a/white_stucco
+dappled-plaster-nx.heic	The same stucco's OpenGL normal map, x	Amal Kumar, Poly Haven	CC0	https://polyhaven.com/a/white_stucco
+dappled-plaster-ny.heic	The same stucco's OpenGL normal map, y	Amal Kumar, Poly Haven	CC0	https://polyhaven.com/a/white_stucco
+dappled-leaves.png	16 leaf silhouettes in a 4x4 atlas: maple (cells 0-5; LeafSet010 #0-3, LeafSet027 #1, #5), oak (6-9; LeafSet016 #0, #3-5), beech (10-15; LeafSet024 #0-3, LeafSet015 #0-1), cut from the sets' opacity maps	Lennart Demes, ambientCG	CC0	https://ambientcg.com/a/LeafSet010, LeafSet015, LeafSet016, LeafSet024, LeafSet027
+dappled-twig.png	A forked twig with three serrated leaves, from LeafSet005's opacity map	Lennart Demes, ambientCG	CC0	https://ambientcg.com/a/LeafSet005

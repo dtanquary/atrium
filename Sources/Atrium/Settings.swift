@@ -312,6 +312,9 @@ struct AboutPage: View {
                 LabeledContent("Campfire's clearing") { Link("\"Hochsal Forest\" by Adrian Kubasa, Poly Haven (CC0)", destination: URL(string: "https://polyhaven.com/a/hochsal_forest")!) }
                 LabeledContent("Campfire's fire pit") { Link("Scans by Sebastian Platen and Rico Cilliers, Poly Haven (CC0)", destination: URL(string: "https://polyhaven.com/a/stone_fire_pit")!) }
                 LabeledContent("Murmuration's marsh") { Link("A tundra pond, USFWS photo (public domain)", destination: URL(string: "https://commons.wikimedia.org/wiki/File:Sunset_over_a_tundra_pond_(53708107535).jpg")!) }
+                DisclosureGroup("Dappled Light's plaster and leaves, from Poly Haven and ambientCG (CC0)") {
+                    ForEach(credits("dappled-credits.tsv"), id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
+                }
                 DisclosureGroup("Weather's hills, clouds and Moon, from the BLM, NASA, Poly Haven and Wikimedia Commons") {
                     ForEach(credits("weather-credits.tsv"), id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
                 }

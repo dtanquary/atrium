@@ -25,6 +25,7 @@ One file per wallpaper, recording what the code can't: how each scene works, why
 | Turing Patterns | [turing-patterns.md](turing-patterns.md) | `TuringPatterns.swift` | CPU reaction–diffusion, lit by a shader | pattern (or Drift), speed, 6 palettes | none | 0.9–1.05 / 0.3–0.75 |
 | The Sun Today | [sun.md](sun.md) | `Sun.swift` | downloaded SDO images, one shader | 8 wavelengths, shimmer or time-lapse, whole or close-up, Look | SDO via Helioviewer | 0.43–0.52 / 0.38–0.58 |
 | Crystals | [crystals.md](crystals.md) | `Crystals.swift` | growth baked in Swift, revealed and coloured by a shader (Michel-Lévy chart) | cycle length, crystal size, thickness, brightness, field stop | none | 0.6 / 0.5–0.9 |
+| Dappled Light | [dappled-light.md](dappled-light.md) | `DappledLight.swift`, `Resources/dappled-*` | one shader: pinhole images of the Sun, leaf layers baked from real scans, photo plaster | wall facing, leaf cover, near twig, weather lock, moonlight or streetlight, sway, time and eclipse previews | location, Sun and Moon, Open-Meteo | 0.41–0.54 / 0.57–0.99 |
 
 \*Release build, 2x Retina at 1512×982 points, measured 2026-09-24 with `swift test -c release -Xswiftc -enable-testing`. The budget is about 2 ms each for CPU and GPU. Debug builds are pessimistic on CPU (Murmuration runs about 16–19 ms in debug).
 
