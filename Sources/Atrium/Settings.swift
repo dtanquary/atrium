@@ -380,7 +380,7 @@ struct WallpaperPage: View {
                 Section(section) {
                     ForEach(wallpaper.knobs.filter { $0.section == section }, id: \.key) { knob in
                         KnobRow(knob: knob)
-                        if let status = wallpaper.status, status.below == knob.key { StatusRow(key: status.key, gate: status.below) }
+                        if let status = wallpaper.status, status.below == knob.key { StatusRow(key: status.key, gate: knob) }
                     }
                 }
             }
@@ -450,18 +450,21 @@ struct LivePreview: NSViewRepresentable {
     func updateNSView(_ view: WallpaperView, context: Context) {}
 }
 
-/// A scene's own status line from UserDefaults, shown while the knob `gate` is 0 and there's something to say.
+/// A scene's own status line from UserDefaults, shown while the knob `gate` is live and there's something to say:
+/// at 0 for a menu (Weather's "Live where you are"), on for a switch (Rain on Glass's "Follow the weather").
 struct StatusRow: View {
+    let live: Bool
     @AppStorage private var text: String
     @AppStorage private var gate: Double
 
-    init(key: String, gate: String) {
+    init(key: String, gate: Knob) {
+        live = gate.format == .toggle
         _text = AppStorage(wrappedValue: "", key)
-        _gate = AppStorage(wrappedValue: 0, gate)
+        _gate = AppStorage(wrappedValue: gate.standard, gate.key)
     }
 
     var body: some View {
-        if gate < 0.5 && !text.isEmpty { Text(text).font(.callout).foregroundStyle(.secondary).textSelection(.enabled) }
+        if (gate > 0.5) == live && !text.isEmpty { Text(text).font(.callout).foregroundStyle(.secondary).textSelection(.enabled) }
     }
 }
 

@@ -12,7 +12,7 @@ struct Wallpaper {
     var knobs: [Knob] = []
     var palettes: PaletteChoice?
     /// A line the scene keeps up to date in UserDefaults under `key` (what the live weather last said, say), shown
-    /// under its knob `below` while that knob is 0.
+    /// under its knob `below` while that knob is 0, or on for a switch.
     var status: (key: String, below: String)?
 }
 
