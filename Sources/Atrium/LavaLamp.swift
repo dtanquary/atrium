@@ -42,9 +42,9 @@ final class LavaLamp: SKScene {
     private let colours = ["u_waxDeep", "u_waxHot", "u_liquidDeep", "u_liquidLit"].map { SKUniform(name: $0, vectorFloat3: .zero) }
     private let phase = SKUniform(name: "u_phase", float: 0)
     /// The wax, one column each: eight heads as (x, y, radius, stretch), then their stems as (anchor x, anchor y,
-    /// radius, 0).
+    /// radius, 1 / the head's radius). The shader would pay a quarter of a millisecond to divide by the radius itself.
     private let blobs = (0..<4).map { SKUniform(name: "u_blobs\($0)", matrixFloat4x4: matrix_identity_float4x4) }
-    private let seed = Double.random(in: 0...100)
+    private let seed = Double(ProcessInfo.processInfo.environment["LAVA_SEED"] ?? "") ?? .random(in: 0...100) // fixed, to compare looks
     private var time = 0.0 // the phase, kept in Double so the layout stays smooth after days of running
     private var flowSpeed = 1.0
     private var blobSize = 1.0
@@ -120,7 +120,9 @@ final class LavaLamp: SKScene {
             // thread goes quickly rather than hanging on as a string), or a thread off the top as it starts to sink.
             let neck = 1 - simd_smoothstep(0.16, 0.32, s)
             let drip = ceiling ? r * 0.4 * simd_smoothstep(0.54, 0.6, s) * (1 - simd_smoothstep(0.62, 0.72, s)) : 0
-            stems.append(s < 0.5 ? SIMD4(Float(rise), -0.02, Float(r * 0.7 * neck * neck), 0) : SIMD4(Float(x), 1.02, Float(drip), 0))
+            let perRadius = Float(1 / max(r, 0.001))
+            stems.append(s < 0.5 ? SIMD4(Float(rise), -0.02, Float(r * 0.7 * neck * neck), perRadius)
+                                 : SIMD4(Float(x), 1.02, Float(drip), perRadius))
         }
         let columns = heads + stems
         for (k, uniform) in blobs.enumerated() {
@@ -180,22 +182,6 @@ final class LavaLamp: SKScene {
         return vec3(v, -2.0 * v / w * d);
     }
 
-    // The whole wax field and its gradient, from the heads and stems laid out by layBlobs() plus the pool. Wax is
-    // wherever it passes 1. Column indices are clamped, since both sides of a ?: may be read.
-    vec3 field(vec2 p, float t, mat4 b0, mat4 b1, mat4 b2, mat4 b3) {
-        vec3 f = vec3(0.0);
-        for (int i = 0; i < 8; i++) {
-            vec4 h = i < 4 ? b0[min(i, 3)] : b1[max(i - 4, 0)];
-            vec4 k = i < 4 ? b2[min(i, 3)] : b3[max(i - 4, 0)];
-            f += ball(p, h.xy, h.z, h.w) + stem(p, k.xy, h.xy, k.z);
-        }
-        // the molten pool: a nearly flat surface; the heads resting in it make the bumps
-        float surface = 0.03 + 0.006 * sin(p.x * 4.0 + t * 0.1) + 0.004 * sin(p.x * 9.0 - t * 0.13);
-        float d = max(p.y - surface, 0.002);
-        float v = 0.0028 / (d * d);
-        return f + vec3(v, 0.0, -2.0 * v / d);
-    }
-
     void main() {
         float aspect = u_size.x / u_size.y;
         float t = u_phase;
@@ -204,7 +190,28 @@ final class LavaLamp: SKScene {
         float y = v_tex_coord.y;
         // a slow wobble in space so wax edges are soft and irregular, not perfect ellipses
         vec2 wobble = vec2(noise(p * 5.0 + t * 0.06), noise(p * 5.0 - t * 0.05 + 7.3)) - 0.5;
-        vec3 f = field(p + u_wobble * wobble, t, u_blobs0, u_blobs1, u_blobs2, u_blobs3);
+        vec2 q = p + u_wobble * wobble;
+
+        // The wax field and its gradient (f), from the heads and stems laid out by layBlobs() plus the pool; wax
+        // is wherever it passes 1. Alongside it, lp: each head's offset from its centre in radii, weighted by its
+        // share of the field, so lp / f says where this pixel sits inside its blob (y from -1 underneath to +1 on
+        // top), smoothly even where blobs merge. Column indices are clamped, since both sides of a ?: may be read.
+        vec3 f = vec3(0.0);
+        vec2 lp = vec2(0.0);
+        for (int i = 0; i < 8; i++) {
+            vec4 h = i < 4 ? u_blobs0[min(i, 3)] : u_blobs1[max(i - 4, 0)];
+            vec4 k = i < 4 ? u_blobs2[min(i, 3)] : u_blobs3[max(i - 4, 0)];
+            vec3 b = ball(q, h.xy, h.z, h.w);
+            f += b + stem(q, k.xy, h.xy, k.z);
+            lp += b.x * (q - h.xy) * k.w;
+        }
+        // the molten pool: a nearly flat surface, the heads resting in it make the bumps. Its lp only counts
+        // below the surface, so the top of the pool stays pale and hot rather than dimming like the top of a blob.
+        float surface = 0.03 + 0.006 * sin(q.x * 4.0 + t * 0.1) + 0.004 * sin(q.x * 9.0 - t * 0.13);
+        float pd = max(q.y - surface, 0.002);
+        float pv = 0.0028 / (pd * pd);
+        f += vec3(pv, 0.0, -2.0 * pv / pd);
+        lp += pv * vec2(0.0, clamp((q.y - surface) / 0.05, -1.0, 0.0));
 
         // Liquid: dark, lit by the bulb in a soft cone rising from the bottom, with the wax's own glow scattering
         // into it around every blob.
@@ -213,20 +220,22 @@ final class LavaLamp: SKScene {
         col += u_waxHot * u_glow * smoothstep(0.2, 1.0, f.x) * (1.2 - y);
 
         // Wax. 1/f is about (d/r)² near a blob, so sqrt(1 - 1/f) is its thickness: 0 at the edge, 1 in the core.
-        float g = 1.0 / f.x;
-        float z = sqrt(max(1.0 - g, 0.0));
+        float z = sqrt(max(1.0 - 1.0 / f.x, 0.0));
+        vec2 dl = lp / f.x;
         // How much wax the light passes through: rises from the edge and levels off, so overlapping balls
         // don't show as hot spots where the field spikes at their centres.
         float thick = 1.0 - exp(-max(f.x - 1.0, 0.0) * 0.9);
-        // Curvature mostly near the edge: deep inside, overlapping balls would otherwise dimple the surface.
-        vec3 n = normalize(vec3(-f.yz * g * g * 0.05 / max(z, 0.08) * (1.0 - 0.8 * thick), 1.0));
         float heat = 1.0 - smoothstep(0.0, 0.95, y);
-        // subsurface: thick, hot wax glows light from within, thin edges run deep and saturated
-        vec3 wax = mix(u_waxDeep, u_waxHot, thick * (0.6 + 0.4 * heat));
-        wax += u_waxHot * 0.3 * thick * thick * heat;                                          // hot core glow
-        wax *= 0.72 + 0.35 * max(dot(n, normalize(vec3(0.0, -0.8, 0.6))), 0.0) + 0.25 * heat; // lit from below
-        wax += u_waxHot * pow(1.0 - z, 3.0) * max(-n.y, 0.0) * 0.6 * (0.4 + heat);          // bulb through thin undersides
-        wax += vec3(0.12) * pow(max(dot(n, normalize(vec3(-0.35, 0.45, 0.82))), 0.0), 18.0); // satin sheen, not glass
+        // The only light is the bulb underneath, so each blob glows brightest on its underside and dims toward its
+        // top, with the thick core still glowing from within. Satin wax, so a soft limb rather than a dark outline.
+        float under = smoothstep(0.9, -0.9, dl.y);
+        vec3 wax = mix(u_waxDeep, u_waxHot, clamp(0.15 + 0.5 * under + 0.25 * heat + 0.3 * thick, 0.0, 1.0));
+        wax *= 0.7 + 0.4 * under + 0.2 * heat; // tops fall to the deep colour rather than darkening to brown
+        wax *= 0.85 + 0.15 * z;
+        wax += u_waxHot * (0.12 + 0.25 * heat) * thick * thick;                        // hot core glow
+        wax += u_waxHot * 0.45 * pow(1.0 - z, 3.0) * under * (0.4 + heat);             // bulb through the thin underside
+        vec3 n = normalize(vec3(dl * (1.0 - 0.7 * thick), z + 0.3));
+        wax += vec3(0.06) * pow(max(dot(n, normalize(vec3(-0.35, 0.45, 0.82))), 0.0), 10.0); // faint satin sheen
 
         // A smooth edge one pixel wide, from the field's gradient. Thin wax is translucent, so the liquid's colour
         // shows through near the edge instead of a hard outline.
