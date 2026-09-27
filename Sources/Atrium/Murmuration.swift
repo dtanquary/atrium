@@ -395,6 +395,7 @@ private final class Flock: SKNode {
         var zig: Float = -1, zigSide: Float = 0, zigSize: Float = 0   // a roll away from the falcon, and back
         var zigRest: Float = 0, zigCue: Float = -1, cueSide: Float = 0, cueSize: Float = 0
         var state: UInt8 = 1                                          // 0 not here (yet, or roosting), 1 flying, 2 going down
+        var alone = false                                             // strayed from the flock: flying to catch up
         var cell: Int32 = 0
     }
 
@@ -402,6 +403,8 @@ private final class Flock: SKNode {
     private var birds: [Bird] = []
     private var sprites: [SKSpriteNode] = []
     private let atlas: [SKTexture]
+    /// Each parcel's scattering (and whether it's mirrored), its wings' angle on screen, and which frame of the atlas shows.
+    private var looks: [(layout: Int, mirrored: Bool)] = [], angles: [Float] = [], frames: [Int] = []
     private var bucketStart = [Int32](repeating: 0, count: Flock.buckets + 1), bucketItems: [Int32] = []
     private var tick = 0, clock: Float = 0, nextTurn: Float = 7, nextFalcon: Float = 40
     private var falcon: (p: SIMD3<Float>, v: SIMD3<Float>, left: Float)?
@@ -432,7 +435,11 @@ private final class Flock: SKNode {
     private static let parcel: Float = 7 // metres across a parcel's sprite
     // Parcel scale: 40 birds in a parcel spread lengths by 40^(1/3) ≈ 3.4 over a bird's. Separation reaches 20 m.
     private static let core: Float = 0.68, reach: Float = 9.2
-    private let roost = SIMD3<Float>(0, 220, 44), roostSize = SIMD2<Float>(55, 40)
+    private let roost = SIMD3<Float>(0, 200, 44), roostSize = SIMD2<Float>(55, 40)
+    /// The nearest a flock heading our way comes before it turns away. Nearer than about 130 m (on a 1512-point
+    /// screen) a parcel's sprite is scaled up past the 64 points it's drawn at, and its ten birds show as one blurry
+    /// group moving together.
+    private static let nearest: Float = 160
 
     init(view: GroundView, ink: SKColor, perch: SIMD3<Float>) {
         self.view = view
@@ -445,8 +452,11 @@ private final class Flock: SKNode {
             let a = random.unit() * 2 * .pi, r = random.unit().squareRoot()
             let p = roost + SIMD3(cos(a) * r * 60, sin(a) * r * 30, 18 * sin(1) + (random.unit() - 0.5) * 16)
             birds.append(Bird(p: p, v: SIMD3(10, random.unit() * 2 - 1, random.unit() * 0.6 - 0.3)))
-            // Wings level or raised: at a few pixels a wingbeat can't be seen, and flipping between them only flickers.
-            let sprite = SKSpriteNode(texture: atlas[Int(random.next() % 8)])
+            let look = (layout: Int(random.next() % UInt64(Self.layouts)), mirrored: random.unit() < 0.5)
+            let sprite = SKSpriteNode(texture: atlas[look.layout * Self.turns])
+            looks.append(look)
+            angles.append(0)
+            frames.append(look.layout * Self.turns)
             sprite.color = ink
             sprite.colorBlendFactor = 1
             sprite.zPosition = 2
@@ -456,7 +466,7 @@ private final class Flock: SKNode {
         bucketItems = [Int32](repeating: 0, count: Self.count)
         reflection.filteringMode = .linear
         for _ in 0..<150 { simulate(1.0 / 30) } // settle into a flock first
-        place()
+        place(1)
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -464,7 +474,7 @@ private final class Flock: SKNode {
     func step(_ dt: Float) {
         let n = max(Int((dt * 30 - 0.1).rounded(.up)), 1) // one step a frame at 30 fps, two at 15
         for _ in 0..<n { simulate(dt / Float(n)) }
-        place()
+        place(dt)
     }
 
     /// An empty sky, for the start of a new evening.
@@ -477,7 +487,7 @@ private final class Flock: SKNode {
     /// A feeder flock of `count` birds flies in from beyond one side of the view, toward the roost.
     func arrive(_ count: Int) {
         let side: Float = random.unit() < 0.5 ? -1 : 1
-        let y = roost.y + (random.unit() - 0.3) * 90
+        let y = roost.y + (random.unit() - 0.1) * 90
         let centre = SIMD3(side * (y * view.tanH + 40), y, roost.z + (random.unit() - 0.3) * 30)
         let heading = simd_normalize(SIMD3(roost.x - centre.x, roost.y - centre.y, 0))
         let size = 25 * pow(Float(count) / 300, 1.0 / 3)
@@ -495,32 +505,37 @@ private final class Flock: SKNode {
         for sprite in sprites { sprite.color = ink }
     }
 
-    /// Four scatterings of ten birds, each with wings level (a dash along x) and wings raised (a small V), in one
-    /// mipmapped texture so every parcel draws in one batch. A parcel is `parcel` metres across; birds are 0.4 m.
+    /// Eight scatterings of ten birds, some with wings level (a dash) and some raised (a small V), each drawn with its
+    /// wings at `turns` angles across 180°, all in one mipmapped texture so every parcel draws in one batch. A parcel
+    /// keeps its scattering and only changes angle, so its birds turn where they are rather than the whole parcel
+    /// spinning like a wheel, which gave it away as a group. Raised wings always point up the screen. Each bird keeps
+    /// its pose: at a few pixels a wingbeat can't be seen, and flipping between them only flickers. A parcel is
+    /// `parcel` metres across; birds are 0.4 m.
+    private static let layouts = 8, turns = 16
     private static func makeAtlas() -> [SKTexture] {
         let side: CGFloat = 64, perMetre = side / CGFloat(parcel)
-        let sheet = paint(CGSize(width: side * 4, height: side * 2)) { ctx in
+        let sheet = paint(CGSize(width: side * CGFloat(turns), height: side * CGFloat(layouts))) { ctx in
             ctx.setStrokeColor(rgb(0.03, 0.025, 0.035))
             ctx.setLineCap(.round)
             ctx.setLineWidth(0.15 * perMetre)
-            for layout in 0..<4 {
+            for layout in 0..<layouts {
                 var rng = Xorshift(seed: UInt64(layout + 7))
                 for _ in 0..<10 {
                     // Gaussian scatter, σ 1.3 m, so neighbouring parcels overlap into an even texture.
-                    let r = CGFloat(min(sqrt(-2 * log(max(rng.unit(), 1e-4))) * 1.3, 3.3)), a = CGFloat(rng.unit() * 2 * .pi)
+                    let r = CGFloat(min(sqrt(-2 * log(max(rng.unit(), 1e-4))) * 1.3, 3)), a = CGFloat(rng.unit() * 2 * .pi)
                     // Spans vary by wing pose as much as by distance: in photos the 90th percentile bird is twice the median.
                     let pose = CGFloat(exp((rng.unit() + rng.unit() + rng.unit() - 1.5) * 0.55))
-                    let span = min(0.36 * pose, 0.8) * perMetre, tilt = CGFloat(rng.unit() - 0.5) * 1.2
-                    for raised in 0..<2 {
+                    let span = min(0.36 * pose, 0.8) * perMetre, tilt = CGFloat(rng.unit() - 0.5) * 1.2, raised = rng.unit() < 0.5
+                    for turn in 0..<turns {
                         ctx.saveGState()
-                        ctx.translateBy(x: CGFloat(layout) * side + side / 2 + cos(a) * r * perMetre,
-                                        y: CGFloat(raised) * side + side / 2 + sin(a) * r * perMetre)
-                        ctx.rotate(by: tilt)
-                        if raised == 0 {
-                            ctx.move(to: CGPoint(x: -span / 2, y: 0)); ctx.addLine(to: CGPoint(x: span / 2, y: 0))
-                        } else {
+                        ctx.translateBy(x: CGFloat(turn) * side + side / 2 + cos(a) * r * perMetre,
+                                        y: CGFloat(layout) * side + side / 2 + sin(a) * r * perMetre)
+                        ctx.rotate(by: tilt + (CGFloat(turn) / CGFloat(turns) - 0.5) * .pi)
+                        if raised {
                             ctx.move(to: CGPoint(x: -span * 0.4, y: span * 0.25)); ctx.addLine(to: .zero)
                             ctx.addLine(to: CGPoint(x: span * 0.4, y: span * 0.25))
+                        } else {
+                            ctx.move(to: CGPoint(x: -span / 2, y: 0)); ctx.addLine(to: CGPoint(x: span / 2, y: 0))
                         }
                         ctx.strokePath()
                         ctx.restoreGState()
@@ -529,14 +544,17 @@ private final class Flock: SKNode {
             }
         }
         sheet.usesMipmaps = true
-        return (0..<8).map { i in
-            SKTexture(rect: CGRect(x: CGFloat(i / 2) / 4, y: CGFloat(i % 2) / 2, width: 0.25, height: 0.5), in: sheet)
+        return (0..<layouts * turns).map { i in
+            SKTexture(rect: CGRect(x: CGFloat(i % turns) / CGFloat(turns), y: CGFloat(i / turns) / CGFloat(layouts),
+                                   width: 1 / CGFloat(turns), height: 1 / CGFloat(layouts)), in: sheet)
         }
     }
 
     /// Draws each parcel where it is, its wings turned as they'd look from here, darker the more wing we see
-    /// (a level bird seen from below and to the side shows little; one rolled toward us shows all of it).
-    private func place() {
+    /// (a level bird seen from below and to the side shows little; one rolled toward us shows all of it). The angle is
+    /// the bird's silhouette's long axis, wings and body together, so a bird seen side-on, its wings edge-on, lies along
+    /// its body instead of spinning with every change of bank; it follows over 0.1 s.
+    private func place(_ dt: Float) {
         let up = SIMD3<Float>(0, 0, 1)
         let (cols, rows) = (Int(Self.reflectionSize.width), Int(Self.reflectionSize.height))
         let horizon = Float(view.size.height) * view.horizon, across = Float(view.size.width) / Float(cols)
@@ -549,14 +567,21 @@ private final class Flock: SKNode {
             if b.state == 0 { continue }
             let ex = simd_normalize(b.v), ey = simd_normalize(simd_cross(up, ex) + SIMD3(0, 1e-6, 0))
             let ez = simd_cross(ex, ey) * cos(b.bank) + ey * sin(b.bank)
-            let at = view.project(b.p), wing = view.project(b.p + simd_cross(ez, ex)), top = view.project(b.p + ez)
-            var (wx, wy) = (wing.x - at.x, wing.y - at.y)
-            if wx * (top.y - at.y) - wy * (top.x - at.x) < 0 { (wx, wy) = (-wx, -wy) } // raised wings point up the bird
+            let at = view.project(b.p), wing = view.project(b.p + simd_cross(ez, ex)), nose = view.project(b.p + ex * 0.5)
+            let (wx, wy, nx, ny) = (wing.x - at.x, wing.y - at.y, nose.x - at.x, nose.y - at.y)
+            let axis = atan2(2 * (wx * wy + nx * ny), wx * wx - wy * wy + nx * nx - ny * ny) / 2
+            var turn = axis - angles[i]
+            turn -= .pi * (turn / .pi).rounded()
+            angles[i] += turn * (1 - exp(-dt / 0.1))
             let facing = abs(simd_dot(ez, simd_normalize(b.p)))
             sprite.position = CGPoint(x: CGFloat(at.x), y: CGFloat(at.y))
-            sprite.zRotation = CGFloat(atan2(wy, wx))
-            sprite.setScale(CGFloat(Self.parcel * at.perMetre / 64))
-            let alpha = (0.22 + 0.45 * facing) * min(max((b.p.z - perch.z) / 6, 0), 1) // fading into the roost
+            let look = looks[i], shown = look.mirrored ? -angles[i] : angles[i]
+            let frame = look.layout * Self.turns + Int(((shown / .pi + 0.5) * Float(Self.turns)).rounded()) & (Self.turns - 1)
+            if frames[i] != frame { sprite.texture = atlas[frame]; frames[i] = frame }
+            let scale = CGFloat(Self.parcel * at.perMetre / 64)
+            sprite.xScale = look.mirrored ? -scale : scale
+            sprite.yScale = scale
+            let alpha = (0.22 + 0.45 * facing) * (b.state == 2 ? min(max((b.p.z - perch.z) / 6, 0), 1) : 1) // fading into the roost
             sprite.alpha = CGFloat(alpha)
             // Its reflection: ten birds of about 0.06 m² each, spread over the texels it lands on.
             let below = 2 * horizon - at.y
@@ -593,16 +618,20 @@ private final class Flock: SKNode {
         let cell = Self.cell, buckets = Self.buckets, core = Self.core, reach = Self.reach
         let roost = roost, roostSize = roostSize, tick = tick
         // The roost height drifts over a few minutes, so the flock sometimes swoops low over the water.
-        let height = roost.z + 18 * sin(clock * 0.035 + 1) - dip
+        let height = max(roost.z + 18 * sin(clock * 0.035 + 1) - dip, 14) // the lowest birds skim the water
         let up = SIMD3<Float>(0, 0, 1), g: Float = 9.81
-        var middle = SIMD3<Float>.zero, flow = SIMD3<Float>.zero
+        var middle = SIMD3<Float>.zero, flow = SIMD3<Float>.zero, front = Float.infinity
         flying = 0
         falling = 0
         for b in birds {
-            if b.state == 1 { middle += b.p; flow += b.v; flying += 1 }
+            if b.state == 1 { middle += b.p; flow += b.v; flying += 1; front = min(front, b.p.y) }
             if b.state == 2 { falling += 1 }
         }
         middle = flying > 0 ? middle / Float(flying) : roost
+        // How far out a straggler is: twice the flock's RMS radius across the ground.
+        var spread: Float = 0
+        for b in birds where b.state == 1 { let d = SIMD2(b.p.x - middle.x, b.p.y - middle.y); spread += simd_dot(d, d) }
+        let straying = 4 * spread / Float(max(flying, 1))
         if flying == 0 { flow = SIMD3(1, 0, 0) }
 
         // Going down to roost: the lowest birds lead, and their neighbours follow them (below), so a funnel pours from
@@ -620,11 +649,14 @@ private final class Flock: SKNode {
         }
 
         // Every 7 s the bird furthest ahead starts a turn: back over the roost if the flock has wandered, otherwise a
-        // swing of 60–150° either way. Its neighbours copy it, and theirs copy them. (Sooner and the waves overlap.)
+        // swing of 60–150°, usually the way that ends nearer the roost. Its neighbours copy it, and theirs copy them.
+        // (Sooner and the waves overlap.) A flock heading our way turns away early, while there's time for the turn to
+        // sweep through it before its front comes nearer than `nearest`.
         nextTurn -= dt
-        if nextTurn < 0 && flying > 0 {
+        let ahead = simd_normalize(SIMD3(flow.x, flow.y, 0) + SIMD3(1e-4, 0, 0))
+        let tooNear = ahead.y < -0.2 && front + ahead.y * 60 < Self.nearest && nextTurn < 3
+        if (nextTurn < 0 || tooNear) && flying > 0 {
             nextTurn = 7
-            let ahead = simd_normalize(SIMD3(flow.x, flow.y, 0))
             var lead = 0, best = -Float.infinity
             for (i, b) in birds.enumerated() where b.state == 1 && simd_dot(b.p - middle, ahead) > best {
                 best = simd_dot(b.p - middle, ahead)
@@ -632,11 +664,35 @@ private final class Flock: SKNode {
             }
             let home = SIMD2(roost.x - middle.x, roost.y - middle.y) / roostSize
             let now = atan2(ahead.y, ahead.x)
-            birds[lead].turn = simd_dot(home, home) > 0.5
-                ? atan2(roost.y - middle.y, roost.x - middle.x) + random.unit() - 0.5
-                : now + (random.unit() < 0.5 ? -1 : 1) * (1 + 1.6 * random.unit())
-            birds[lead].turning = 0
-            birds[lead].turnRest = 0
+            if tooNear {
+                // Glancing off, at least 30° away from us. Every bird turns as the wave from the leading edge reaches
+                // it at 15 m/s, even those still resting from the last turn, which would otherwise stop it spreading
+                // (and those the last wave hasn't reached yet go no later than they would have).
+                let away = atan2(max(abs(ahead.y), 0.5), ahead.x) + (random.unit() - 0.5) * 0.4
+                for i in birds.indices where birds[i].state == 1 {
+                    let cue = simd_length(birds[i].p - birds[lead].p) / 15 + 0.01
+                    birds[i].turnCue = birds[i].turnCue < 0 ? cue : min(birds[i].turnCue, cue)
+                    birds[i].cueTurn = away
+                    birds[i].turnRest = 0
+                }
+            } else if simd_dot(home, home) > 0.5 {
+                // Back toward the roost, aiming a little beyond it so a flock that strayed far out doesn't come at us.
+                birds[lead].turn = atan2(roost.y + 15 - middle.y, roost.x - middle.x) + random.unit() - 0.5
+            } else {
+                // Of the two ways, three times in four the one that leaves the flock nearer the roost after 50 m, but
+                // not one that would bring its front near us.
+                func miss(_ heading: Float) -> Float {
+                    let step = SIMD2(cos(heading), sin(heading)) * 50
+                    let q = (SIMD2(middle.x, middle.y) + step - SIMD2(roost.x, roost.y)) / roostSize
+                    return simd_dot(q, q) + (front + step.y < Self.nearest ? 100 : 0)
+                }
+                let swing = 1 + 1.6 * random.unit(), ways = [now + swing, now - swing].sorted { miss($0) < miss($1) }
+                birds[lead].turn = random.unit() < 0.75 || miss(ways[1]) >= 100 ? ways[0] : ways[1]
+            }
+            if !tooNear {
+                birds[lead].turning = 0
+                birds[lead].turnRest = 0
+            }
         }
 
         // The falcon: every minute or so it dives through the flock from above, at 22 m/s over 6 s.
@@ -729,7 +785,7 @@ private final class Flock: SKNode {
                                     headings += o.v / max(simd_length(o.v), 0.01)
                                     if o.turning >= 0 && b.turning < 0 && b.turnRest <= 0 && b.turnCue < 0 { b.turnCue = 0.15; b.cueTurn = o.turn }
                                     if o.zig >= 0 && o.zig < 0.25 && b.zigRest <= 0 && b.zig < 0 && b.zigCue < 0 { copyRoll = (o.zigSide, o.zigSize) }
-                                    if roosting && o.state == 2 && b.state == 1 && budget >= 1 && random.unit() < 0.05 {
+                                    if roosting && o.state == 2 && b.state == 1 && budget >= 1 && random.unit() < 0.25 {
                                         b.state = 2
                                         budget -= 1
                                     }
@@ -746,13 +802,19 @@ private final class Flock: SKNode {
                                 }
                             }
                             // Few close neighbours means the thin edge: steer for the middle (Hoetzlein's Flock2), which
-                            // keeps one flock with a crisp outline. A weak spring holds the roost's height. Birds going
-                            // down to roost dive for the perch instead, keeping only their distance from each other.
+                            // keeps one flock with a crisp outline; a bird that has strayed well outside it flies straight
+                            // back, and faster. A weak spring holds the roost's height, above the water and not too
+                            // near us. Birds going down to roost dive for the perch, still flocking with each other, so
+                            // they pour down in streams rather than one parcel at a time.
                             if b.state == 2 {
-                                force = apart * (12.5 / Float(max(found, 1))) + simd_normalize(perch - b.p) * 15
+                                force += simd_normalize(perch - b.p) * 15
                             } else {
-                                force += simd_normalize(middle - b.p + SIMD3(0, 0, 1e-4)) * (12.5 * max(0, 1 - Float(crowd) / 12))
+                                let out = SIMD2(b.p.x - middle.x, b.p.y - middle.y)
+                                b.alone = simd_dot(out, out) > straying
+                                force += simd_normalize(middle - b.p + SIMD3(0, 0, 1e-4)) * (12.5 * (b.alone ? 1 : max(0, 1 - Float(crowd) / 12)))
                                 force.z -= (b.p.z - height) * 0.1
+                                if b.p.z < 3 { force.z += (3 - b.p.z) * 2 }                      // not into the water
+                                if b.p.y < Self.nearest - 40 { force.y += (Self.nearest - 40 - b.p.y) * 0.5 } // nor at us
                             }
                             force += SIMD3(random.unit() - 0.5, random.unit() - 0.5, random.unit() - 0.5) * 0.25
                             if let hawk {
@@ -770,7 +832,8 @@ private final class Flock: SKNode {
                             b.force = force
                         }
 
-                        let force = b.force + ex * ((b.state == 2 ? 14 : 10) - speed) // cruise at 10 m/s, faster diving
+                        // Cruise at 10 m/s; faster diving to roost, or catching up with the flock after straying.
+                        let force = b.force + ex * ((b.state == 2 || b.alone ? 14 : 10) - speed)
                         if b.turning >= 0 { b.turning += dt }
                         b.turnRest -= dt
                         if b.turnCue >= 0 { b.turnCue -= dt; if b.turnCue < 0 { b.turning = 0; b.turn = b.cueTurn } }
