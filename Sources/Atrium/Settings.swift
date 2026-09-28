@@ -330,6 +330,9 @@ struct AboutPage: View {
                 DisclosureGroup("Solar System Tour's photos, from NASA, ESA, JAXA and the people who processed them") {
                     ForEach(credits("solar-photos.tsv"), id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
                 }
+                DisclosureGroup("Deep Space Tour's photos, from ESA/Hubble, ESA/Webb, ESO, NOIRLab, Euclid, Chandra and the EHT") {
+                    ForEach(credits("deep-photos.tsv"), id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
+                }
                 DisclosureGroup("Reef photos, from iNaturalist, Wikimedia Commons and NOAA") {
                     ForEach(credits("reef-credits.tsv"), id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
                 }

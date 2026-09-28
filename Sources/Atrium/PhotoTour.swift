@@ -412,15 +412,23 @@ final class PhotoTour: SKScene {
         let focus = view.focus * SIMD2(w, h), middle = SIMD2(w, h) / 2
         var wide: Double, tight: Double, fromCentre: SIMD2<Double>, toCentre: SIMD2<Double>
         func jitter(_ k: Double) -> SIMD2<Double> { SIMD2(.random(in: -1...1) * sw, .random(in: -1...1) * sh) * 0.04 / k }
-        if view.kind != .disc { // a close-up, from orbit or the ground
+        // A close-up fills the screen, unless that would magnify it past the limit: a small photo from the ground (Huygens on
+        // Titan, Eros from 250 m) is shown whole instead, as a world on black would be.
+        if view.kind != .disc, max(sw / w, sh / h) * pixelScale <= maxMagnification * 1.05 {
             wide = max(sw / w, sh / h)
             tight = max(min(wide * z, maxMagnification / pixelScale), wide)
             // Inside the photo at scale k: the centre can't come nearer an edge than half the screen.
             func inside(_ c: SIMD2<Double>, _ k: Double) -> SIMD2<Double> {
                 simd_clamp(c, SIMD2(sw, sh) / (2 * k), SIMD2(w, h) - SIMD2(sw, sh) / (2 * k))
             }
-            toCentre = inside(focus, tight)
-            fromCentre = inside(middle * 2 - focus + jitter(wide), wide) // from the far side, so a wide photo pans across
+            // A photo more than twice the screen's width (a rover's panorama) shows a different stretch each visit.
+            var target = focus
+            if w * wide > 2.2 * sw { target.x = .random(in: 0...w) }
+            toCentre = inside(target, tight)
+            fromCentre = inside(middle * 2 - target + jitter(wide), wide) // from the far side, so a wide photo pans across
+            // but never more than 0.6 of a screen's width in one view, so it stays slow.
+            let reach = 0.6 * sw / wide, d = fromCentre - toCentre
+            if simd_length(d) > reach { fromCentre = inside(toCentre + d * (reach / simd_length(d)), wide) }
         } else {
             wide = min(0.86 * sh / h, 0.94 * sw / w)
             tight = min(wide * z, maxMagnification / pixelScale)

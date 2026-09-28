@@ -23,21 +23,25 @@ sys.path.insert(0, TABLES)
 from photos import PHOTOS, HEADER  # noqa: E402
 
 
-def load(path):
-    """RGB floats 0..1, colour-managed to sRGB when the file carries a profile."""
+def load(path, crop=None):
+    """RGB floats 0..1, colour-managed to sRGB when the file carries a profile. `crop` (fractions) is taken before
+    converting, so a 30,000-pixel panorama never becomes gigabytes of floats; the second value says if it was."""
     try:
         im = Image.open(path)
         if im.mode in ('RGB', 'RGBA', 'L', 'P', 'CMYK', 'LA'):
+            if crop:
+                W, H = im.size
+                im = im.crop((int(crop[0] * W), int(crop[1] * H), int(crop[2] * W), int(crop[3] * H)))
             if 'icc_profile' in im.info:
                 src = ImageCms.ImageCmsProfile(io.BytesIO(im.info['icc_profile']))
                 im = ImageCms.profileToProfile(im.convert('RGB'), src, ImageCms.createProfile('sRGB'), outputMode='RGB')
-            return np.asarray(im.convert('RGB'), dtype=np.float32) / 255
+            return np.asarray(im.convert('RGB'), dtype=np.float32) / 255, bool(crop)
     except Exception:
         pass
     probe = json.loads(subprocess.check_output(['ffprobe', '-v', 'error', '-select_streams', 'v:0', '-show_entries',
                                                 'stream=width,height', '-of', 'json', path]))['streams'][0]
     raw = subprocess.check_output(['ffmpeg', '-v', 'error', '-i', path, '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'rgb48le', '-'])
-    return np.frombuffer(raw, dtype='<u2').reshape(probe['height'], probe['width'], 3).astype(np.float32) / 65535
+    return np.frombuffer(raw, dtype='<u2').reshape(probe['height'], probe['width'], 3).astype(np.float32) / 65535, False
 
 
 def level(a, black=None):
@@ -78,6 +82,23 @@ def despeckle(a, t):
     return a
 
 
+def fade(a, p):
+    """`vignette`: an oval fade for a photo whose whole background is lit (Titan before Saturn): no corners. `feather`:
+    a photo cut off at its edges, or with no black around it, fades out there."""
+    if p.get('vignette'):  # an oval fade, for a photo whose whole background is lit (Titan before Saturn): no corners
+        h, w = a.shape[:2]
+        yy, xx = np.mgrid[0:h, 0:w]
+        r = np.sqrt(((xx + 0.5) / w * 2 - 1) ** 2 + ((yy + 0.5) / h * 2 - 1) ** 2)
+        t = np.clip((r - (1 - p['vignette'])) / p['vignette'], 0, 1)
+        a = a * (1 - t * t * (3 - 2 * t))[..., None]
+    if p.get('feather'):  # a photo cut off at its edges, or with no black around it (Titan before the rings), fades out there
+        h, w = a.shape[:2]
+        f = p['feather'] * min(w, h)
+        ramp = lambda n: np.clip(np.minimum(np.arange(n) + 0.5, n - np.arange(n) - 0.5) / f, 0, 1) ** 2 * (3 - 2 * np.clip(np.minimum(np.arange(n) + 0.5, n - np.arange(n) - 0.5) / f, 0, 1))
+        a = a * (ramp(h)[:, None] * ramp(w)[None, :])[..., None]
+    return a
+
+
 def pad_crop(a, x0, y0, x1, y1):
     """Crops, padding with black past the photo's edges."""
     out = np.zeros((y1 - y0, x1 - x0, 3), dtype=a.dtype)
@@ -114,13 +135,20 @@ def thumb(a, disc, out):
 
 def cut(p):
     """Returns the saved name, the pixels, and the focus in the cut photo (given as fractions of the original)."""
-    a = load(os.path.join(ORIGINALS, p['src']))
-    H0, W0 = a.shape[:2]
+    path = os.path.join(ORIGINALS, p['src'])
+    a, cropped = load(path, p.get('crop'))
+    if cropped:
+        W0, H0 = Image.open(path).size
+    else:
+        H0, W0 = a.shape[:2]
     ox, oy = 0.0, 0.0  # where the cut photo's corner sits in the original, in original pixels
     if 'crop' in p:  # x0, y0, x1, y1 as fractions: labels, borders, neighbours
         x0, y0, x1, y1 = p['crop']
         ox, oy = int(x0 * W0), int(y0 * H0)
-        a = a[oy:int(y1 * H0), ox:int(x1 * W0)]
+        if not cropped:
+            a = a[oy:int(y1 * H0), ox:int(x1 * W0)]
+    if p.get('flip'):  # NASA publishes DART's last images mirrored top to bottom, as the detector saw them
+        a = a[::-1].copy()
     if p.get('despeckle'):
         a = despeckle(np.array(a), p['despeckle'])
     if p.get('gain'):
@@ -131,17 +159,7 @@ def cut(p):
     if p['kind'] == 'disc':
         if not p.get('keepblack'):
             a = level(a, p.get('black'))
-        if p.get('vignette'):  # an oval fade, for a photo whose whole background is lit (Titan before Saturn): no corners
-            h, w = a.shape[:2]
-            yy, xx = np.mgrid[0:h, 0:w]
-            r = np.sqrt(((xx + 0.5) / w * 2 - 1) ** 2 + ((yy + 0.5) / h * 2 - 1) ** 2)
-            t = np.clip((r - (1 - p['vignette'])) / p['vignette'], 0, 1)
-            a = a * (1 - t * t * (3 - 2 * t))[..., None]
-        if p.get('feather'):  # a photo cut off at its edges, or with no black around it (Titan before the rings), fades out there
-            h, w = a.shape[:2]
-            f = p['feather'] * min(w, h)
-            ramp = lambda n: np.clip(np.minimum(np.arange(n) + 0.5, n - np.arange(n) - 0.5) / f, 0, 1) ** 2 * (3 - 2 * np.clip(np.minimum(np.arange(n) + 0.5, n - np.arange(n) - 0.5) / f, 0, 1))
-            a = a * (ramp(h)[:, None] * ramp(w)[None, :])[..., None]
+        a = fade(a, p)
         if 'box' in p:  # a crescent's box needs giving, or it's only the lit part; fractions of the original
             bx0, by0, bx1, by1 = p['box']
             x0, y0, x1, y1 = int(bx0 * W0 - ox), int(by0 * H0 - oy), int(bx1 * W0 - ox), int(by1 * H0 - oy)
@@ -152,18 +170,19 @@ def cut(p):
         ox, oy = ox + int(x0 - m), oy + int(y0 - m)
         cap = p.get('cap', 3200)
     else:
-        cap = p.get('cap', 5120)
+        a = fade(a, p)  # a small photo from the ground, shown whole on black
+        cap = p.get('cap', 4096)  # 5120 until 2026-09-28; Dave chose 4096 to keep the app near 330 MB
     h, w = a.shape[:2]
     f = min(1, cap / max(w, h))
     if p['kind'] in ('closeup', 'surface') and max(w, h) / min(w, h) > 2:  # a long strip: keep its short side
-        f = min(1, 3400 / min(w, h))
+        f = min(1, 2600 / min(w, h))  # 3400 until 2026-09-28
     f *= p.get('shrink', 1)  # an upscaled original goes back toward its real sharpness
     if f < 1:
         a = resize(a, round(w * f), round(h * f))
     fx, fy = p.get('at', (None, None))
     focus = (0.5, 0.5) if fx is None else ((fx * W0 - ox) / w, (fy * H0 - oy) / h)
     name = f"{PREFIX}-{p['name']}.heic"
-    save_heic(a, os.path.join(RES, name), p.get('quality', 80))
+    save_heic(a, os.path.join(RES, name), p.get('quality', 60 if PREFIX == 'deep' else 80))
     return name, a, focus
 
 
@@ -173,9 +192,21 @@ FOCUS = {r[0]: tuple(float(v) for v in r[7].split(',')[:2]) for r in (l.rstrip('
          if len(r) > 7 and r[7]} if os.path.exists(TSV) else {}
 
 
+def segments(p):
+    """A long panorama as `split` overlapping pieces along its length, each a view of its own, so none is huge to decode
+    and each visit pans a piece of it."""
+    n = p.get('split', 1)
+    if n == 1:
+        return [p]
+    x0, y0, x1, y1 = p.get('crop', (0, 0, 1, 1))
+    width = (x1 - x0) / n * 1.15  # a little overlap
+    step = (x1 - x0 - width) / (n - 1)
+    return [dict(p, name=f"{p['name']}-{i + 1}", base=p['name'], crop=(x0 + i * step, y0, x0 + i * step + width, y1)) for i in range(n)]
+
+
 def main(only):
     rows, thumbs = [], {}
-    for p in PHOTOS:
+    for p in [q for p in PHOTOS for q in segments(p)]:
         body = p['body']
         group = p.get('group', body)  # what Show holds the tour on: the body itself, or a kind of object
         slug = group.lower().replace(' ', '-')
@@ -183,7 +214,7 @@ def main(only):
             rows.append([f'live-{slug}', body, p['credit'], p['licence'], p['source'], p['caption'], 'live', ''])
             continue
         name = f"{PREFIX}-{p['name']}.heic"
-        if not only or p['name'] in only:
+        if not only or p['name'] in only or p.get('base') in only:
             name, a, focus = cut(p)
             if slug not in thumbs and (p.get('thumb') or not any(q.get('group', q['body']) == group and q.get('thumb') for q in PHOTOS)):
                 thumb(a, p['kind'] == 'disc', os.path.join(RES, f'{PREFIX}-thumb-{slug}.jpg'))

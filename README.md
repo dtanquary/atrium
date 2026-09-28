@@ -185,6 +185,13 @@ When the tour reaches the Moon, one of its views is the Moon filling the screen 
 | ![The Moon in the total lunar eclipse of 31 December 2028](docs/images/the-moon-eclipse.jpg) | ![The Moon beside NASA's Dial-a-Moon](docs/images/the-moon-vs-dial-a-moon.jpg) |
 | The total lunar eclipse of 31 December 2028, previewed | Checked against NASA's Dial-a-Moon (left of each pair) for phase, libration, tilt and tone |
 
+### Deep Space Tour
+Solar System Tour's sister, beyond the Solar System: slow pans and zooms across 92 of the best real photos of nebulae, star clusters, dying stars, galaxies, deep fields, and the only two black holes ever imaged, from Webb, Hubble, ESO, Euclid, the Rubin Observatory, Chandra and the Event Horizon Telescope. Real photos only: no artist's impressions or simulations. Each object comes with a caption and two facts, and Settings → Show holds the tour on one kind of object.
+
+| ![Deep Space Tour: the Pillars of Creation from Webb](docs/images/deep-space-pillars.jpg) | ![Deep Space Tour: M87*, the first image of a black hole](docs/images/deep-space-m87.jpg) |
+|---|---|
+| The Pillars of Creation, from Webb | M87*, the first image of a black hole |
+
 ## How it works
 
 macOS has no public API for third-party live wallpapers. This app gives each display a borderless window at the desktop window level (`CGWindowLevelForKey(.desktopWindow)`). That puts it above the system wallpaper and below your desktop icons, on every Space, and it lets clicks pass straight through to the desktop.
@@ -271,6 +278,7 @@ SNAPSHOT_SCENE="Fish Tank" SNAPSHOT_MOVIE=6 swift test       # then 6 seconds of
 - The Rain on Glass backdrops are CC0 HDRIs from Poly Haven by Greg Zaal, Rico Cilliers, Alexander Scholten, Andreas Mischok and Oliksiy Yakovlyev, public domain photos from the National Park Service and USFWS, and CC BY photos from Wikimedia Commons by Douglas Paul Perkins, mariemon, epSos.de and Vyacheslav Argenberg. See [`Sources/Atrium/Resources/rain-credits.tsv`](Sources/Atrium/Resources/rain-credits.tsv) and Settings → About.
 - A Tree for the Year's hilltop is "Solitary tree at Cissbury Ring" by Andy Li, CC0 ([source](https://commons.wikimedia.org/wiki/File:Solitary_tree_at_Cissbury_Ring_2026-04-07.jpg)), with its own tree painted out; its oak leaves and bark are CC0 scans by Lennart Demes, ambientCG. See [`Sources/Atrium/Resources/tree-credits.tsv`](Sources/Atrium/Resources/tree-credits.tsv).
 - Solar System Tour's photos are from NASA, JPL, ESA, JAXA, the Space Science Institute, JHUAPL/SwRI, NSO and the people who processed them, public domain, CC BY or CC BY-SA. Each one's credit, licence and source is in [`Sources/Atrium/Resources/solar-photos.tsv`](Sources/Atrium/Resources/solar-photos.tsv) and in Settings → About.
+- Deep Space Tour's photos are from ESA/Hubble, ESA/Webb, ESO, NOIRLab, ESA's Euclid, NASA's Chandra and the Event Horizon Telescope Collaboration, CC BY 4.0, CC BY-SA 3.0 IGO or public domain. Each one's credit, licence and source is in [`Sources/Atrium/Resources/deep-photos.tsv`](Sources/Atrium/Resources/deep-photos.tsv) and in Settings → About.
 - Reef fish, corals and rock in the Fish Tank are cut out of public domain, CC0 and CC BY photos from iNaturalist, Wikimedia Commons and NOAA. Each photographer and licence is listed in [`Sources/Atrium/Resources/reef-credits.tsv`](Sources/Atrium/Resources/reef-credits.tsv) and in Settings → About.
 
 ## License
