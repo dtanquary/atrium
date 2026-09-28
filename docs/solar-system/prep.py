@@ -125,6 +125,11 @@ def cut(p):
     if p['kind'] == 'disc':
         if not p.get('keepblack'):
             a = level(a, p.get('black'))
+        if p.get('feather'):  # a photo cut off at its edges, or with no black around it (Titan before the rings), fades out there
+            h, w = a.shape[:2]
+            f = p['feather'] * min(w, h)
+            ramp = lambda n: np.clip(np.minimum(np.arange(n) + 0.5, n - np.arange(n) - 0.5) / f, 0, 1) ** 2 * (3 - 2 * np.clip(np.minimum(np.arange(n) + 0.5, n - np.arange(n) - 0.5) / f, 0, 1))
+            a = a * (ramp(h)[:, None] * ramp(w)[None, :])[..., None]
         if 'box' in p:  # a crescent's box needs giving, or it's only the lit part; fractions of the original
             bx0, by0, bx1, by1 = p['box']
             x0, y0, x1, y1 = int(bx0 * W0 - ox), int(by0 * H0 - oy), int(bx1 * W0 - ox), int(by1 * H0 - oy)

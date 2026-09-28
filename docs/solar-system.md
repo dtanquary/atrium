@@ -33,7 +33,7 @@ A slow tour of the Sun's family in the best photos spacecraft and telescopes hav
 
 ## Photos
 - **What's in:** whole worlds and close-ups from orbit, the best-looking version of each, true or enhanced colour, infrared or radar, with the caption saying which (Dave's picks, 2026-09-27). No surface landscapes, famous-moment shots (Earthrise, Pale Blue Dot), renders, or spacecraft in frame.
-- **Research,** 2026-09-27: five agents, one per region, searched NASA Photojournal (now at science.nasa.gov, full-size files under `assets.science.nasa.gov/content/dam/science/psd/photojournal/pia/piaNN/piaNNNNN/`), images.nasa.gov, ESA, ESA/Webb and ESA/Hubble, JAXA, pluto.jhuapl.edu and Wikimedia Commons and Flickr (for citizen processing), downloaded the originals, and checked each one at 1:1.
+- **Research,** 2026-09-27: five agents, one per region (Sun to Moon; Mars and the small worlds; Jupiter; Saturn; Uranus outward), searched NASA Photojournal (now at science.nasa.gov, full-size files under `assets.science.nasa.gov/content/dam/science/psd/photojournal/pia/piaNN/piaNNNNN/`), images.nasa.gov, ESA, ESA/Webb and ESA/Hubble, JAXA, pluto.jhuapl.edu and Wikimedia Commons and Flickr (for citizen processing), downloaded the originals, and checked each one at 1:1.
 - **Licences:** public domain, CC BY or CC BY-SA only (ESA's CC BY-SA 3.0 IGO, Webb's and Hubble's CC BY 4.0), credited in About from the TSV. Out: anything non-commercial or unclear. Juno images processed by volunteers are often NC (Seán Doran, Gerald Eichstädt, Björn Jónsson) or published by NASA with no licence (PIA21641's south pole, PIA26484's Io), so only those marked CC BY are in. Callisto (Justin Cowart's Voyager 2 mosaic) was CC BY 2.0 when Wikimedia Commons' licence review checked it; its Flickr page now says CC BY-NC, but a CC licence can't be withdrawn from a copy already given under it.
 - **Cutting** (`prep.py`, with numpy, Pillow, scipy and ffmpeg):
   - **Load** as floats, colour-managed to sRGB; 16-bit TIFFs Pillow can't read go through ffmpeg as rgb48.
@@ -41,6 +41,7 @@ A slow tour of the Sun's family in the best photos spacecraft and telescopes hav
   - **Despeckle** (`despeckle`): JunoCam frames carry a grid of dark marks every 118 px; pixels more than t darker than their 5-pixel median (t = 0.12) are replaced by the 7-pixel median. Dark only: both ways caught 6% of pixels, real cloud texture.
   - **Black level,** whole worlds only: the black point is the border's median plus 3σ of its noise (exact zeros, a padded frame, left out), and a soft toe, y²/(y + 0.015), keeps faint haze and night sides instead of clipping them. Every photo then sits on the same black, so the dissolves don't pump.
   - **Box,** whole worlds only: the biggest bright blob (so stars and small moons don't widen it), or `box` for a crescent or a world with its moon, plus 7% margin, padded with black.
+  - **Fade** (`feather`, a fraction of the short side): a whole world cut off by its original's frame (the 2012 eruption, Artemis II's Orientale, Pluto's haze ring, 67P) fades out there instead of ending in a straight line inside the black margin. It runs after the black level. With `keepblack` and a full `box`, it also floats a photo with no black around it (Titan before the rings, Daphnis in the Keeler gap, 67P's cliffs) on black.
   - **Size:** whole worlds at most 3200 px (`cap`; 4000–4800 for the Sun and Pluto, which zoom deeper), close-ups 5120 px, long strips keep a 3400 px short side. `shrink` takes an upscaled original back toward its real sharpness (Andrea Luck's Neptune close-up 0.6, Triton 0.7, Arrokoth and Nix 0.6).
   - **Save:** HEIC at quality 80 via `sips`, with an sRGB profile and ±½ dither; clean at 1:1. Whole worlds are mostly black, so many are under 0.2 MB.
   - **Focus** (`at`) is given in the original's fractions, as the research agents reported it, and moved through the crop, box and scaling.
@@ -51,7 +52,7 @@ A slow tour of the Sun's family in the best photos spacecraft and telescopes hav
 - 0.49–0.55 ms CPU and 0.26–0.32 ms GPU for a photo, 0.85 ms GPU with the live Sun (release, 2x Retina at 1512×982, 2026-09-27). A dissolve samples two photos, still well under a millisecond.
 - **Memory:** two textures at up to screen size (24 MB each at 3024×1964), plus a transient full decode while cutting (up to 70 MB, in the background).
 - **Cutting** takes 110–240 ms per photo. Only the first view is cut on the main thread, when the scene is built, so the render test has a photo.
-- **App size:** about 63 MB of photos for about 30 worlds.
+- **App size:** 109 MB of photos: 136 photos of 44 worlds, plus the live Sun and Moon (2026-09-27).
 
 ## Gotchas and shortcuts
 - **SpriteKit leaves a texture uniform undeclared while its texture is nil,** and the shader then fails to compile. Both slots start with a 1-pixel black texture.
@@ -69,7 +70,7 @@ Every photo's credit, licence and source is in `solar-photos.tsv`, listed in Set
 - "consider folding the sun and moon wallpaper directly into this one since its redundant, and then just provide a settings option to lock to a specific solar body": the live Sun and Moon are views in the tour, and Show holds it on one world. The Sun Today and The Moon left the menu; main.swift moves anyone on either to Solar System held on that world, and an old wavelength pick to `sun.light`.
 
 ## Ideas / next steps
-- Mars and its moons, the asteroids and comets, and Saturn and its moons are still being researched.
+- **Gaps the research found:** Deimos, Vesta, Eros, Janus, Epimetheus, Prometheus, Pandora, Hydra and Amalthea have nothing over about 700 px with a clear licence. No Saturn ring close-up reaches 4000 px (Grand Finale frames are 1024). Itokawa, Hope (EMM) and Tianwen-1 images have unclear licences. HiRISE's colour strips above 4K are 300–800 MB JP2s, not fetched. Juno's south pole (PIA21641) and Io's north pole (PIA26484) name a processor but no licence; asking would get them in.
 - A slow parallax of the stars behind whole worlds was ruled out: photos of planets don't show stars, and Dave prefers real over made up.
 - A Show choice for several worlds (a planet and its moons) if holding on one is too narrow.
 
