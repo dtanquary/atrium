@@ -128,6 +128,13 @@ Reaction–diffusion, the chemistry Alan Turing proposed for how animals get the
 |---|---|
 | Fingerprint stripes in Dark Mode | Coral, glazed like ceramic, in Light Mode |
 
+### Schlieren
+Rising heat as a colour schlieren camera sees it, after the photos of Gary Settles, Andrew Davidhazy and Ted Kinsman. Warm air bends light, and the camera turns each bend into a colour, so the two edges of a candle's plume glow in opposite colours as it rises, sways and curls into turbulence, in slow motion. It uses a real fluid simulation of the room's air. Pick candles, one taper, a mug of coffee or a radiator; a dark-field, rainbow, banded or knife-edge filter; and one of eight palettes, with the lab's round mirror as an option.
+
+| ![Schlieren, four candles in the dark field](docs/images/schlieren.jpg) | ![Schlieren, a rainbow filter after Davidhazy](docs/images/schlieren-rainbow.jpg) |
+|---|---|
+| Four candles glowing in the dark field | The rainbow filter on ultramarine, after Davidhazy |
+
 ### Wind
 The live wind around you as thin streaks streaming across the map, in the spirit of the hint.fm wind map and earth.nullschool: a grid of Open-Meteo's hourly forecast, blended from hour to hour, with streaks that speed up, brighten and curl with the real wind, as brush strokes like hint.fm's or comets like nullschool's. Zoom from your town to half the continent, over a map at the opacity you choose: the Earth by day or at night, terrain and the sea floor, or yesterday's satellite view with its real clouds (all from NASA), Natural Earth's shaded relief, or nothing, in six jewel-toned palettes. Light Mode draws the same streaks as ink on paper.
 
