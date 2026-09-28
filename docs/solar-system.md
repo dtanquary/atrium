@@ -57,6 +57,7 @@ A slow tour of the Sun's family in the best photos spacecraft and telescopes hav
 
 ## Gotchas and shortcuts
 - **SpriteKit leaves a texture uniform undeclared while its texture is nil,** and the shader then fails to compile. Both slots start with a 1-pixel black texture.
+- **A child's zPosition adds to its parent's,** so a nested live scene's own layers (The Moon's sky at 2, its disc at 1) drew over the photo layer at 1: the live Moon popped in and out instead of dissolving (Dave, 2026-09-27: "the 1st image did not fade out it popped out"). The photo layer is at 100 and the caption at 101, above anything the live scenes use.
 - **Nested scenes ignore alpha** in their own shaders, so a live view can't be faded. The photo layer sits above it and fades instead. Two live views would both show through at once, which is why the tour never puts them back to back.
 - **Render tests** never finish a background cut (the detached task needs the main actor the test holds), so they only ever show the first view; use `solar.photo` and `solar.at` to see a given photo at a given point.
 - `ponytail:` every display and the Settings preview cut their own copy of a photo. Share cuts across copies if memory on many displays matters.

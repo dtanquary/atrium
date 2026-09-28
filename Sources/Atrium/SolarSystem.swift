@@ -104,14 +104,16 @@ final class SolarSystem: SKScene {
         backgroundColor = .black
         let sprite = SKSpriteNode(color: .black, size: size)
         sprite.anchorPoint = .zero
-        sprite.zPosition = 1
+        // A child's zPosition adds to its parent's, so a live scene's own layers (The Moon's sky is at 2) would draw
+        // over a photo at 1 and pop instead of fading. 100 is above anything they use.
+        sprite.zPosition = 100
         sprite.blendMode = .alpha // live views show through where the shader leaves it clear
         sprite.shader = SKShader(source: shaderCommon + Self.shader, uniforms: [
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]),
             aUniform, bUniform, aPlace, bPlace, aSize, bSize, fadeUniform, opaqueUniform, captionUniform, brightnessUniform,
         ])
         addChild(sprite)
-        caption.zPosition = 2
+        caption.zPosition = 101
         caption.position = CGPoint(x: 44, y: 60)
         caption.alpha = 0
         addChild(caption)
