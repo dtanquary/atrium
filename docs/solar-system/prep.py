@@ -128,6 +128,12 @@ def cut(p):
     if p['kind'] == 'disc':
         if not p.get('keepblack'):
             a = level(a, p.get('black'))
+        if p.get('vignette'):  # an oval fade, for a photo whose whole background is lit (Titan before Saturn): no corners
+            h, w = a.shape[:2]
+            yy, xx = np.mgrid[0:h, 0:w]
+            r = np.sqrt(((xx + 0.5) / w * 2 - 1) ** 2 + ((yy + 0.5) / h * 2 - 1) ** 2)
+            t = np.clip((r - (1 - p['vignette'])) / p['vignette'], 0, 1)
+            a = a * (1 - t * t * (3 - 2 * t))[..., None]
         if p.get('feather'):  # a photo cut off at its edges, or with no black around it (Titan before the rings), fades out there
             h, w = a.shape[:2]
             f = p['feather'] * min(w, h)

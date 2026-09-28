@@ -43,6 +43,7 @@ A slow tour of the Sun's family in the best photos spacecraft and telescopes hav
   - **Box,** whole worlds only: the biggest bright blob (so stars and small moons don't widen it), or `box` for a crescent or a world with its moon, plus 7% margin, padded with black.
   - **Fade** (`feather`, a fraction of the short side): a whole world cut off by its original's frame (the 2012 eruption, Artemis II's Orientale, Pluto's haze ring, 67P) fades out there instead of ending in a straight line inside the black margin. It runs after the black level. With `keepblack` and a full `box`, it also floats a photo with no black around it (Titan before the rings, Daphnis in the Keeler gap, 67P's cliffs) on black.
   - **Saturation** (`saturation`): the research agent's 8-bit conversions of Mars Express's global mosaic came out much redder than Viking's globes; 0.7 brings them into the same butterscotch.
+  - **Vignette** (`vignette`, the fraction of the radius that fades): an oval fade for a photo whose whole background is lit (Titan before Saturn, Daphnis in the ring plane, 67P's cliffs). The rectangular `feather` left a glowing rectangle floating on black; an oval reads as a soft glow.
   - **Size:** whole worlds at most 3200 px (`cap`; 4000–4800 for the Sun and Pluto, which zoom deeper), close-ups 5120 px, long strips keep a 3400 px short side. `shrink` takes an upscaled original back toward its real sharpness (Andrea Luck's Neptune close-up 0.6, Triton 0.7, Arrokoth and Nix 0.6).
   - **Save:** HEIC at quality 80 via `sips`, with an sRGB profile and ±½ dither; clean at 1:1. Whole worlds are mostly black, so many are under 0.2 MB.
   - **Focus** (`at`) is given in the original's fractions, as the research agents reported it, and moved through the crop, box and scaling.
@@ -53,7 +54,7 @@ A slow tour of the Sun's family in the best photos spacecraft and telescopes hav
 - 0.49–0.55 ms CPU and 0.26–0.32 ms GPU for a photo, 0.85 ms GPU with the live Sun (release, 2x Retina at 1512×982, 2026-09-27). A dissolve samples two photos, still well under a millisecond.
 - **Memory:** two textures at up to screen size (24 MB each at 3024×1964), plus a transient full decode while cutting (up to 70 MB, in the background).
 - **Cutting** takes 110–240 ms per photo. Only the first view is cut on the main thread, when the scene is built, so the render test has a photo.
-- **App size:** 109 MB of photos: 136 photos of 44 worlds, plus the live Sun and Moon (2026-09-27).
+- **App size:** 108MB of photos: 141 photos of 44 worlds, plus the live Sun and Moon (2026-09-27).
 
 ## Gotchas and shortcuts
 - **SpriteKit leaves a texture uniform undeclared while its texture is nil,** and the shader then fails to compile. Both slots start with a 1-pixel black texture.
@@ -69,6 +70,7 @@ Every photo's credit, licence and source is in `solar-photos.tsv`, listed in Set
 ## Dave's feedback and decisions
 - 2026-09-27: "slow panning and zooming between all of the best solar system photos we can find, at least one of each planet and any moon we can get high res imagery of … super high quality." Picked: whole worlds and close-ups from orbit (not surface landscapes or famous moments); the best-looking version of each, true or enhanced; small photos shown smaller on black rather than skipped; photos bundled in the app.
 - "you can do many of a planet if you find many, we want to just shuffle around the solar system … when we shuffle back to saturn we use a different one from last shuffle": the tour is by world, with a rotation per world.
+- "please try to add some more titan images: https://science.nasa.gov/gallery/titan-images/": five from that gallery (PIA14910, 08235, 19642, 21904, 18335), all Cassini, for eight views of Titan. The Huygens descent panels (PIA08119) are fisheye projections in a grid, the triple VIMS globes (PIA02145) repeat PIA21923, PIA07232 is a surface view, and PIA17001 is an artist's concept of Kepler-62f.
 - "consider folding the sun and moon wallpaper directly into this one since its redundant, and then just provide a settings option to lock to a specific solar body": the live Sun and Moon are views in the tour, and Show holds it on one world. The Sun Today and The Moon left the menu; main.swift moves anyone on either to Solar System held on that world, and an old wavelength pick to `sun.light`.
 
 ## Ideas / next steps
