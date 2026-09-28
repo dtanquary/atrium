@@ -5,7 +5,7 @@ import SpriteKit
 /// up the day they happen. Brought to life: plasma pulses out along the bright loops, active regions flicker, the
 /// corona streams outward, and every few minutes one of today's active regions flares or a prominence erupts off the
 /// limb. Settings compares that with the still image, and the whole Sun with a close-up off one edge. It's the Sun's live
-/// view in Solar System, which runs it nested in its own scene.
+/// view in Solar System Tour, which runs it nested in its own scene.
 final class TheSun: SKScene {
     /// The channels, each in the colours SDO publishes it in (SolarSoft's `aia_lct` tables, which Helioviewer applies).
     /// `source` is Helioviewer's source id. Swatches are the table at 25, 50 and 85%; visible light's are NASA's

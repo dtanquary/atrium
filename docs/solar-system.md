@@ -1,4 +1,4 @@
-# Solar System
+# Solar System Tour
 
 A slow tour of the Sun's family in the best photos spacecraft and telescopes have taken. Each view drifts and zooms for a minute (Ken Burns), then dissolves into the next. The tour moves from world to world, not photo to photo, so each visit to a world shows the next of its photos. The Sun and the Moon are live: today's Sun from SDO (The Sun Today's scene) and the Moon as it is right now where you are (The Moon's scene), run inside this one. Settings can hold the tour on one world.
 
@@ -8,7 +8,7 @@ A slow tour of the Sun's family in the best photos spacecraft and telescopes hav
   - `Sources/Atrium/Resources/solar-photos.tsv`: one row per view, from the Sun outward: file, world, credit, licence, source, caption, kind (`disc`, `closeup` or `live`) and focus. About reads its credits.
   - `Sources/Atrium/Resources/solar-<name>.heic`: the photos, cut by `docs/solar-system/prep.py`. `solar-thumb-<world>.jpg`: a 152×92 swatch per world for Settings.
   - `docs/solar-system/photos.py`: every photo's original, crop, focus, caption and credit, the source of truth for the TSV. `docs/solar-system/prep.py` cuts them (see Photos below).
-- **Entry:** `solarSystem(size:)`. Its registry entry is "Solar System", icon `smallcircle.filled.circle`, tint `.orange`, knobs `SolarSystem.knobs`, then The Sun's (with `TheSun.wavelengthKnob`) and The Moon's, each moved under its own section with `Knob.in(_:)`, and palettes `SolarSystem.bodyChoice`: the worlds, each with its thumbnail.
+- **Entry:** `solarSystem(size:)`. Its registry entry is "Solar System Tour", icon `smallcircle.filled.circle`, tint `.orange`, knobs `SolarSystem.knobs`, then The Sun's (with `TheSun.wavelengthKnob`) and The Moon's, each moved under its own section with `Knob.in(_:)`, and palettes `SolarSystem.bodyChoice`: the worlds, each with its thumbnail.
 - **Kind:** photos in one full-screen SKShader, and two live scenes nested in this one.
 
 ## How it works
@@ -67,17 +67,18 @@ A slow tour of the Sun's family in the best photos spacecraft and telescopes hav
 - **Nested scenes ignore alpha** in their own shaders, so a live view can't be faded. The photo layer sits above it and fades instead. Two live views would both show through at once, which is why the tour never puts them back to back.
 - **Render tests** never finish a background cut (the detached task needs the main actor the test holds), so they only ever show the first view; use `solar.photo` and `solar.at` to see a given photo at a given point.
 - `ponytail:` every display and the Settings preview cut their own copy of a photo. Share cuts across copies if memory on many displays matters.
-- `ponytail:` the first cut blocks the main thread for up to 240 ms. Start on black and cut it in the background if the switch to Solar System feels sticky.
+- `ponytail:` the first cut blocks the main thread for up to 240 ms. Start on black and cut it in the background if the switch to Solar System Tour feels sticky.
 
 ## Credits and terms
-Every photo's credit, licence and source is in `solar-photos.tsv`, listed in Settings → About under "Solar System's photos". The live Sun and Moon keep their own credits.
+Every photo's credit, licence and source is in `solar-photos.tsv`, listed in Settings → About under "Solar System Tour's photos". The live Sun and Moon keep their own credits.
 
 ## Dave's feedback and decisions
 - 2026-09-27: "slow panning and zooming between all of the best solar system photos we can find, at least one of each planet and any moon we can get high res imagery of … super high quality." Picked: whole worlds and close-ups from orbit (not surface landscapes or famous moments); the best-looking version of each, true or enhanced; small photos shown smaller on black rather than skipped; photos bundled in the app.
 - "you can do many of a planet if you find many, we want to just shuffle around the solar system … when we shuffle back to saturn we use a different one from last shuffle": the tour is by world, with a rotation per world.
+- 2026-09-28: renamed from Solar System to Solar System Tour, as Dave suggested, since "Solar System" alone suggests a live model of the planets; main.swift moves the old name across (the scene, and Shuffle's skip list). Its settings keep their `solar.*` keys. A sister wallpaper, Deep Space Tour, shares the engine.
 - "is there a 2nd row of small text that could be added (by moving the existing text up a bit) that could have like 1 or 2 facts about that body but very succint … est avg diameter, axial tilt, time takes to orbit", then "pair with objects we have more than 1 photo of too as we can store more than 1 fact … shuffle the facts too": Facts, above.
 - "please try to add some more titan images: https://science.nasa.gov/gallery/titan-images/": five from that gallery (PIA14910, 08235, 19642, 21904, 18335), all Cassini, for eight views of Titan. The Huygens descent panels (PIA08119) are fisheye projections in a grid, the triple VIMS globes (PIA02145) repeat PIA21923, PIA07232 is a surface view, and PIA17001 is an artist's concept of Kepler-62f.
-- "consider folding the sun and moon wallpaper directly into this one since its redundant, and then just provide a settings option to lock to a specific solar body": the live Sun and Moon are views in the tour, and Show holds it on one world. The Sun Today and The Moon left the menu; main.swift moves anyone on either to Solar System held on that world, and an old wavelength pick to `sun.light`.
+- "consider folding the sun and moon wallpaper directly into this one since its redundant, and then just provide a settings option to lock to a specific solar body": the live Sun and Moon are views in the tour, and Show holds it on one world. The Sun Today and The Moon left the menu; main.swift moves anyone on either to Solar System Tour held on that world, and an old wavelength pick to `sun.light`.
 
 ## Ideas / next steps
 - **Gaps the research found:** Deimos, Vesta, Eros, Janus, Epimetheus, Prometheus, Pandora, Hydra and Amalthea have nothing over about 700 px with a clear licence. No Saturn ring close-up reaches 4000 px (Grand Finale frames are 1024). Itokawa, Hope (EMM) and Tianwen-1 images have unclear licences. HiRISE's colour strips above 4K are 300–800 MB JP2s, not fetched. Juno's south pole (PIA21641) and Io's north pole (PIA26484) name a processor but no licence; asking would get them in.
@@ -85,7 +86,7 @@ Every photo's credit, licence and source is in `solar-photos.tsv`, listed in Set
 - A Show choice for several worlds (a planet and its moons) if holding on one is too narrow.
 
 ## Checking it
-- `SNAPSHOT_SCENE="Solar System" SNAPSHOT_DEFAULTS="solar.photo=solar-pluto-true.heic,solar.at=1" swift test --filter everySceneRenders`: one photo at the end of its motion (which end is random).
+- `SNAPSHOT_SCENE="Solar System Tour" SNAPSHOT_DEFAULTS="solar.photo=solar-pluto-true.heic,solar.at=1" swift test --filter everySceneRenders`: one photo at the end of its motion (which end is random).
 - `SNAPSHOT_DEFAULTS="solar.photo=live-the-moon"`: the live Moon inside the tour.
-- `SETTINGS_SHOT="Solar System" swift test --filter settingsWindow`: the Show grid.
+- `SETTINGS_SHOT="Solar System Tour" swift test --filter settingsWindow`: the Show grid.
 - `defaults read com.dtanquary.atrium solar.seen` and `solar.recent`: the rotation.

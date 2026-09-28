@@ -153,10 +153,10 @@ One young white oak on a chalk hilltop, living through the real seasons where yo
 | ![A Tree for the Year at bud break](docs/images/a-tree-for-the-year-spring.jpg) | ![A Tree for the Year in falling snow, holding its dead leaves](docs/images/a-tree-for-the-year-snow.jpg) |
 | Early May: catkin gold as the leaves open | January snow, the young oak still holding its dead leaves |
 
-### Solar System
+### Solar System Tour
 A slow tour of the Sun's family in 141 of the best photos spacecraft and telescopes have taken: Cassini's Saturn, Juno's Jupiter, Mars Express's Mars, New Horizons' Pluto, Webb's Uranus, Magellan's Venus, the Nile from the space station, and 44 worlds in all, down to Saturn's moon Pan and comet 67P. Each drifts and zooms for a minute, then dissolves into another world, and a world you come back to shows you a different photo. Under each name, a line on the photo and two quick facts about the world, never the same pair twice in a row. The Sun is today's real Sun and the Moon is tonight's real Moon, both live. Settings → Show holds the tour on one world.
 
-| ![Solar System: Jupiter from Juno, in enhanced colour](docs/images/solar-system-jupiter.jpg) | ![Solar System: the Nile, Sinai and the Red Sea from the International Space Station](docs/images/solar-system-nile.jpg) |
+| ![Solar System Tour: Jupiter from Juno, in enhanced colour](docs/images/solar-system-jupiter.jpg) | ![Solar System Tour: the Nile, Sinai and the Red Sea from the International Space Station](docs/images/solar-system-nile.jpg) |
 |---|---|
 | Jupiter, from Juno | The Nile and the Red Sea, from the space station |
 
@@ -167,10 +167,10 @@ One of the Sun's views is the real Sun as NASA's Solar Dynamics Observatory saw 
 |---|---|
 | 193 Å, the million-degree corona, on 27 September 2026 | 304 Å, the chromosphere, as a prominence erupts |
 
-It was its own wallpaper, The Sun Today, until it joined Solar System.
+It was its own wallpaper, The Sun Today, until it joined Solar System Tour.
 
 #### The Moon, live
-When the tour reaches the Moon, one of its views is the Moon filling the screen as it is right now from where you are: its real phase, wobble and tilt, from NASA's LRO maps, with shadows along the terminator, earthshine on the dark side, and copper during a lunar eclipse. Choose black, faint real stars or the real sky behind it. It was its own wallpaper, The Moon, until it joined Solar System.
+When the tour reaches the Moon, one of its views is the Moon filling the screen as it is right now from where you are: its real phase, wobble and tilt, from NASA's LRO maps, with shadows along the terminator, earthshine on the dark side, and copper during a lunar eclipse. Choose black, faint real stars or the real sky behind it. It was its own wallpaper, The Moon, until it joined Solar System Tour.
 
 | ![The Moon, a waxing crescent with earthshine](docs/images/the-moon.jpg) | ![The Moon by day, on the Sky backdrop](docs/images/the-moon-day.jpg) |
 |---|---|
@@ -184,7 +184,7 @@ macOS has no public API for third-party live wallpapers. This app gives each dis
 
 It uses public AppKit and SpriteKit APIs only. It uses no private frameworks, makes no changes to system files, needs no SIP changes and doesn't inject code.
 
-Each wallpaper is a SpriteKit scene. Many are full-screen Metal shaders written as `SKShader`s, and almost everything is drawn in code. The only image files are two NASA Earth textures, a star catalogue, the live cloud map Earth from Orbit downloads, the Sun images Solar System's live Sun downloads, the Fish Tank's fish and corals and Weather's hills and clouds, all cut out of permissively licensed photos, the Moon's colour and heights, for Weather and the live Moon, and Solar System's photos of the planets and moons.
+Each wallpaper is a SpriteKit scene. Many are full-screen Metal shaders written as `SKShader`s, and almost everything is drawn in code. The only image files are two NASA Earth textures, a star catalogue, the live cloud map Earth from Orbit downloads, the Sun images Solar System Tour's live Sun downloads, the Fish Tank's fish and corals and Weather's hills and clouds, all cut out of permissively licensed photos, the Moon's colour and heights, for Weather and the live Moon, and Solar System Tour's photos of the planets and moons.
 
 It's kind to your battery:
 - 60 fps on mains power, 30 fps on battery.
@@ -222,7 +222,7 @@ To rebuild after pulling changes: `./build.sh && pkill -x Atrium; open build/Atr
 ### Permissions and network
 
 - **Location** (optional). Live Sky, Earth from Orbit, Weather and Flowing Gradient's time-of-day mood use your location, and the app asks once. If you decline, it guesses from your time zone.
-- **Network.** Weather, Dappled Light and A Tree for the Year fetch from [Open-Meteo](https://open-meteo.com) every 15 minutes, sharing one request. Live Sky and Earth from Orbit fetch the ISS position from [wheretheiss.at](https://wheretheiss.at) at most once a minute. Earth from Orbit fetches a global cloud map from [Live Cloud Maps](https://clouds.matteason.co.uk) only once its cached copy is over 3 hours old (1.5 MB when it has changed), and not at all with Live clouds off. For lightning, it asks Open-Meteo for thunderstorms on a grid around you each time the cloud map updates, about every 3 hours. Solar System's live Sun, while it's on screen, fetches SDO images from [Helioviewer](https://helioviewer.org) at most every 15 minutes (2048 pixels, 0.3–0.5 MB) or 30 (4096, 1–2 MB, for the close-up), keeping the last few hours on disk. None of them needs an API key.
+- **Network.** Weather, Dappled Light and A Tree for the Year fetch from [Open-Meteo](https://open-meteo.com) every 15 minutes, sharing one request. Live Sky and Earth from Orbit fetch the ISS position from [wheretheiss.at](https://wheretheiss.at) at most once a minute. Earth from Orbit fetches a global cloud map from [Live Cloud Maps](https://clouds.matteason.co.uk) only once its cached copy is over 3 hours old (1.5 MB when it has changed), and not at all with Live clouds off. For lightning, it asks Open-Meteo for thunderstorms on a grid around you each time the cloud map updates, about every 3 hours. Solar System Tour's live Sun, while it's on screen, fetches SDO images from [Helioviewer](https://helioviewer.org) at most every 15 minutes (2048 pixels, 0.3–0.5 MB) or 30 (4096, 1–2 MB, for the close-up), keeping the last few hours on disk. None of them needs an API key.
 - **Wind** uses your location too, and asks Open-Meteo for the hourly wind forecast at 384 points around you every two hours, for the zoom on screen (about 230 KB and 384 of Open-Meteo's free 10,000 calls a day each time, so at most 4,600 a day). The last reply for each zoom stays on disk, so it works offline. With an Earth background it downloads NASA's imagery tiles for the view from [GIBS](https://nasa-gibs.github.io/gibs-api-docs/) once and keeps them: about 1–2 MB for most maps, up to 7 MB at night for half the continent, and a fresh 1–2 MB a day for the satellite view.
 
 ## Development
@@ -263,7 +263,7 @@ SNAPSHOT_SCENE="Fish Tank" SNAPSHOT_MOVIE=6 swift test       # then 6 seconds of
 - The Campfire wallpaper's clearing is the CC0 panorama "Hochsal Forest" by Adrian Kubasa ([source](https://polyhaven.com/a/hochsal_forest)), relit by the fire, with CC0 scans of a stone fire pit by Sebastian Platen and dry branches by Rico Cilliers from Poly Haven. See [`Sources/Atrium/Resources/campfire-credits.tsv`](Sources/Atrium/Resources/campfire-credits.tsv).
 - The Rain on Glass backdrops are CC0 HDRIs from Poly Haven by Greg Zaal, Rico Cilliers, Alexander Scholten, Andreas Mischok and Oliksiy Yakovlyev, public domain photos from the National Park Service and USFWS, and CC BY photos from Wikimedia Commons by Douglas Paul Perkins, mariemon, epSos.de and Vyacheslav Argenberg. See [`Sources/Atrium/Resources/rain-credits.tsv`](Sources/Atrium/Resources/rain-credits.tsv) and Settings → About.
 - A Tree for the Year's hilltop is "Solitary tree at Cissbury Ring" by Andy Li, CC0 ([source](https://commons.wikimedia.org/wiki/File:Solitary_tree_at_Cissbury_Ring_2026-04-07.jpg)), with its own tree painted out; its oak leaves and bark are CC0 scans by Lennart Demes, ambientCG. See [`Sources/Atrium/Resources/tree-credits.tsv`](Sources/Atrium/Resources/tree-credits.tsv).
-- Solar System's photos are from NASA, JPL, ESA, JAXA, the Space Science Institute, JHUAPL/SwRI, NSO and the people who processed them, public domain, CC BY or CC BY-SA. Each one's credit, licence and source is in [`Sources/Atrium/Resources/solar-photos.tsv`](Sources/Atrium/Resources/solar-photos.tsv) and in Settings → About.
+- Solar System Tour's photos are from NASA, JPL, ESA, JAXA, the Space Science Institute, JHUAPL/SwRI, NSO and the people who processed them, public domain, CC BY or CC BY-SA. Each one's credit, licence and source is in [`Sources/Atrium/Resources/solar-photos.tsv`](Sources/Atrium/Resources/solar-photos.tsv) and in Settings → About.
 - Reef fish, corals and rock in the Fish Tank are cut out of public domain, CC0 and CC BY photos from iNaturalist, Wikimedia Commons and NOAA. Each photographer and licence is listed in [`Sources/Atrium/Resources/reef-credits.tsv`](Sources/Atrium/Resources/reef-credits.tsv) and in Settings → About.
 
 ## License

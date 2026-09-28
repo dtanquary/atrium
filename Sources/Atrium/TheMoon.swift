@@ -5,7 +5,7 @@ import simd
 /// The Moon as it is right now from where you are: its real phase, libration and tilt, lit the way the Moon's dusty
 /// ground reflects light, with earthshine on its dark side and copper in the Earth's shadow. It barely changes, so
 /// `MoonBaker` renders it into a texture once a minute and the desktop only draws a sprite, turned each frame as the
-/// sky turns so the viewer's zenith stays up. It's the Moon's live view in Solar System, which runs it nested in its own
+/// sky turns so the viewer's zenith stays up. It's the Moon's live view in Solar System Tour, which runs it nested in its own
 /// scene.
 final class TheMoon: SKScene {
     nonisolated static let knobs = [

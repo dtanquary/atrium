@@ -327,7 +327,7 @@ struct AboutPage: View {
                 DisclosureGroup("Rain on Glass backdrops, from Poly Haven, Wikimedia Commons and the NPS") {
                     ForEach(credits("rain-credits.tsv"), id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
                 }
-                DisclosureGroup("Solar System's photos, from NASA, ESA, JAXA and the people who processed them") {
+                DisclosureGroup("Solar System Tour's photos, from NASA, ESA, JAXA and the people who processed them") {
                     ForEach(credits("solar-photos.tsv"), id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
                 }
                 DisclosureGroup("Reef photos, from iNaturalist, Wikimedia Commons and NOAA") {

@@ -71,7 +71,7 @@ struct Wallpaper {
               make: dappledLight, knobs: DappledLight.knobs, status: (key: "weather.status", below: "dappled.weather")),
     Wallpaper(name: "A Tree for the Year", icon: "tree.fill", tint: .green, blurb: "One tree on a hill, through your real seasons and weather.",
               make: treeForTheYear, knobs: TreeScene.treeKnobs, status: (key: "weather.status", below: "tree.lock")),
-    Wallpaper(name: "Solar System", icon: "smallcircle.filled.circle", tint: .orange,
+    Wallpaper(name: "Solar System Tour", icon: "smallcircle.filled.circle", tint: .orange,
               blurb: "Slow pans across the best photos of every world, with the live Sun and Moon.", make: solarSystem,
               knobs: SolarSystem.knobs + ([TheSun.wavelengthKnob] + TheSun.knobs).map { $0.in("The Sun") } + TheMoon.knobs.map { $0.in("The Moon") },
               palettes: SolarSystem.bodyChoice),

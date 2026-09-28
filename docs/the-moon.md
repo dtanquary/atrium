@@ -7,7 +7,7 @@ A full-screen, photoreal Moon as it is right now from where the viewer stands: i
   - `Sources/Atrium/Resources/moon-colour.heic` (1.3 MB), `moon-east.heic` (1.1 MB), `moon-north.heic` (0.8 MB) and `moon-height.heic` (0.3 MB): the near side at 16 pixels a degree, 3200×2880. See Data below.
   - `Tests/AtriumTests/MoonTests.swift`.
   - The Moon's position comes from `Sky.moonPosition` and `Sky.moon(_:latitude:longitude:)` in `SkyMath.swift` (Meeus ch. 47, about 10″), the Sun from `Sky.sun`, and the sky from Weather's `Atmosphere` in `WeatherSky.swift`.
-- **Entry:** since 2026-09-27, the Moon's live view in Solar System (see [solar-system.md](solar-system.md)), which builds `TheMoon(size:)` and runs it nested in its own scene, passing it `update(_:)` and `didMove(to:)`. Its settings are under The Moon on Solar System's page. Until then it was its own wallpaper, "The Moon", right after Live Sky, icon `moonphase.waxing.gibbous`, tint `.gray`.
+- **Entry:** since 2026-09-27, the Moon's live view in Solar System Tour (see [solar-system.md](solar-system.md)), which builds `TheMoon(size:)` and runs it nested in its own scene, passing it `update(_:)` and `didMove(to:)`. Its settings are under The Moon on Solar System Tour's page. Until then it was its own wallpaper, "The Moon", right after Live Sky, icon `moonphase.waxing.gibbous`, tint `.gray`.
 - **Kind:** a baked shader. `MoonBaker` renders the lit Moon with an SKShader into a texture through its own `SKRenderer`, and the scene shows it as one sprite.
 
 ## How it works
@@ -109,4 +109,4 @@ Any UserDefaults change triggers a bake on the next frame, so dragging a slider 
   - the eight picked phases are lit as their names say, and the last four are waning
   - the 2026-03-03 total lunar eclipse: 98% of the disc in the umbra at 11:00 UTC, all of it at 11:33, none at the new moon before
 - Side by side with Dial-a-Moon: `MOON_COMPARE=/some/dir swift test --filter moonRenders` saves our geocentric, north-up Moon for those dates at Dial-a-Moon's scale (0.35 pixels an arcsecond). Their frames come from `https://svs.gsfc.nasa.gov/api/dialamoon/2026-01-03T10:00` (the `image.url` field). `docs/images/the-moon-vs-dial-a-moon.jpg` pairs them, theirs on the left. Full-moon tones match to within a few levels at the 10th, 50th and 90th percentiles.
-- Snapshots: `SNAPSHOT_DEFAULTS="solar.photo=live-the-moon,moon.backdrop=2,moon.preview=1,moon.previewDays=7.5" SNAPSHOT_SCENE="Solar System" swift test`. For an eclipse, set `moon.previewDays` to the days until one (2028-12-31 16:52 UTC).
+- Snapshots: `SNAPSHOT_DEFAULTS="solar.photo=live-the-moon,moon.backdrop=2,moon.preview=1,moon.previewDays=7.5" SNAPSHOT_SCENE="Solar System Tour" swift test`. For an eclipse, set `moon.previewDays` to the days until one (2028-12-31 16:52 UTC).
