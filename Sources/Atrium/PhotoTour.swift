@@ -1,55 +1,128 @@
 import SpriteKit
 
-@MainActor func solarSystem(size: CGSize) -> SKScene { SolarSystem(size: size) }
+@MainActor func solarSystemTour(size: CGSize) -> SKScene { PhotoTour(size: size, tour: .solarSystem) }
+@MainActor func deepSpaceTour(size: CGSize) -> SKScene { PhotoTour(size: size, tour: .deepSpace) }
 
-/// A slow tour of the Sun's family in the best photos spacecraft and telescopes have taken: each world drifts and
-/// zooms for a minute, then dissolves into the next. The tour moves from world to world rather than photo to photo,
-/// so Saturn comes round no more often than Io, and each visit shows the next of its photos. The Sun and the Moon
-/// are live: today's Sun from SDO (`TheSun`) and the Moon as it is right now (`TheMoon`), run inside this scene.
-/// Settings can hold the tour on one world.
-final class SolarSystem: SKScene {
-    /// One view of a world, a row of `solar-photos.tsv`. A photo is a whole world on black, shown whole and never
-    /// larger than its pixels allow, or a close-up that always fills the screen. `focus` is where the zoom heads, as
-    /// fractions of the photo's width and height from its top left; `zoom` is how far, or 0 for the Zoom setting.
+/// A set of photos to tour: its views from `<prefix>-photos.tsv`, its facts from `<prefix>-facts.tsv`, and its settings
+/// under `<prefix>.…`. Solar System Tour's are worlds; Deep Space Tour's are nebulae, galaxies and the rest.
+struct Tour: Sendable {
+    /// One view, a row of the photos table. `body` is what the tour moves between (a world, a nebula) and `group` what
+    /// Show holds it on (the same world; a kind of object). A `disc` is a whole world on black, shown whole and never
+    /// larger than its pixels allow; a `closeup` always fills the screen; a `surface` view is a close-up from the ground,
+    /// which a switch can leave out; `live` is `TheSun` or `TheMoon`. `focus` is where the zoom heads, as fractions of
+    /// the photo's width and height from its top left; `zoom` is how far, or 0 for the Zoom setting.
     struct View: Sendable {
-        enum Kind: String, Sendable { case disc, closeup, live }
-        let file: String, body: String, caption: String, kind: Kind
+        enum Kind: String, Sendable { case disc, closeup, surface, live }
+        let file: String, body: String, group: String, caption: String, kind: Kind
         let focus: SIMD2<Double>, zoom: Double
     }
 
-    nonisolated static let views: [View] = ((try? String(contentsOf: resource("solar-photos.tsv"), encoding: .utf8)) ?? "")
-        .split(separator: "\n").filter { !$0.hasPrefix("#") }.compactMap { line in
-            let f = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+    static let solarSystem = Tour(prefix: "solar", show: "solar.body", surfaceSwitch: true)
+    static let deepSpace = Tour(prefix: "deep", show: "deep.show", surfaceSwitch: false)
+
+    let prefix: String
+    let views: [View]
+    /// What the tour moves between, and what Show can hold it on, in the table's order.
+    let bodies: [String], groups: [String]
+    let facts: [String: [String]]
+    let seconds: Knob, zoom: Knob, captions: Knob, showFacts: Knob, brightness: Knob
+    /// Solar System Tour's switch for views from the ground.
+    let surface: Knob?
+    /// The group the tour is held on, by name; empty tours them all.
+    let showKey: String
+
+    var knobs: [Knob] { [seconds, zoom, captions, showFacts] + (surface.map { [$0] } ?? []) + [brightness] }
+    /// The pick for Settings: every group, each with its thumbnail (`<prefix>-thumb-<name>.jpg`).
+    var showChoice: PaletteChoice {
+        PaletteChoice(key: showKey, options: groups.map { ($0, [[0.05, 0.07, 0.2], [0.3, 0.2, 0.45]], [[0.05, 0.07, 0.2], [0.3, 0.2, 0.45]]) },
+                      photos: Dictionary(uniqueKeysWithValues: groups.map { ($0, (thumb($0), thumb($0))) }), title: "Show")
+    }
+    func thumb(_ group: String) -> String { "\(prefix)-thumb-\(group.lowercased().replacingOccurrences(of: " ", with: "-")).jpg" }
+
+    init(prefix: String, show: String, surfaceSwitch: Bool) {
+        func rows(_ file: String) -> [[String]] {
+            ((try? String(contentsOf: resource(file), encoding: .utf8)) ?? "").split(separator: "\n").filter { !$0.hasPrefix("#") }
+                .map { $0.split(separator: "\t", omittingEmptySubsequences: false).map(String.init) }
+        }
+        func unique(_ names: [String]) -> [String] { names.reduce(into: []) { if !$0.contains($1) { $0.append($1) } } }
+        self.prefix = prefix
+        views = rows("\(prefix)-photos.tsv").compactMap { f in
             guard f.count >= 8, let kind = View.Kind(rawValue: f[6]) else { return nil }
             let n = f[7].split(separator: ",").compactMap { Double($0) }
-            return View(file: f[0], body: f[1], caption: f[5], kind: kind,
+            return View(file: f[0], body: f[1], group: f.count > 8 && !f[8].isEmpty ? f[8] : f[1], caption: f[5], kind: kind,
                         focus: n.count >= 2 ? [n[0], n[1]] : [0.5, 0.5], zoom: n.count >= 3 ? n[2] : 0)
         }
-    /// Facts to show under each world's caption, from `solar-facts.tsv`.
-    nonisolated static let facts: [String: [String]] = ((try? String(contentsOf: resource("solar-facts.tsv"), encoding: .utf8)) ?? "")
-        .split(separator: "\n").filter { !$0.hasPrefix("#") }.reduce(into: [:]) { facts, line in
-            let f = line.split(separator: "\t").map(String.init)
-            if f.count == 2 { facts[f[0], default: []].append(f[1]) }
-        }
-    /// Every world, from the Sun outward, as the photo list orders them.
-    nonisolated static let bodies = views.map(\.body).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
-
-    nonisolated static let knobs = [
-        Knob(key: "solar.seconds", label: "Each view for", range: 20...300, standard: 60, section: "Tour", format: .seconds),
-        Knob(key: "solar.zoom", label: "Zoom", range: 1...1.6, standard: 1.25, section: "Tour", format: .times),
-        Knob(key: "solar.captions", label: "Names", range: 0...1, standard: 1, section: "Tour", format: .toggle),
-        Knob(key: "solar.facts", label: "Facts", range: 0...1, standard: 1, section: "Tour", format: .toggle, shownWhen: "solar.captions"),
-        Knob(key: "solar.brightness", label: "Brightness", range: 0.4...1.2, standard: 1, section: "Tour", format: .times),
-    ]
-    /// The world the tour is held on, by name; empty tours them all.
-    nonisolated static let bodyKey = "solar.body"
-    /// The pick for Settings: every world, each with its thumbnail (`solar-thumb-<name>.jpg`).
-    nonisolated static let bodyChoice = PaletteChoice(
-        key: bodyKey, options: bodies.map { ($0, [[0.05, 0.07, 0.2], [0.3, 0.2, 0.45]], [[0.05, 0.07, 0.2], [0.3, 0.2, 0.45]]) },
-        photos: Dictionary(uniqueKeysWithValues: bodies.map { ($0, (thumb($0), thumb($0))) }), title: "Show")
-    nonisolated static func thumb(_ body: String) -> String {
-        "solar-thumb-\(body.lowercased().replacingOccurrences(of: " ", with: "-")).jpg"
+        bodies = unique(views.map(\.body))
+        groups = unique(views.map(\.group))
+        facts = rows("\(prefix)-facts.tsv").reduce(into: [:]) { if $1.count == 2 { $0[$1[0], default: []].append($1[1]) } }
+        seconds = Knob(key: prefix + ".seconds", label: "Each view for", range: 20...300, standard: 60, section: "Tour", format: .seconds)
+        zoom = Knob(key: prefix + ".zoom", label: "Zoom", range: 1...1.6, standard: 1.25, section: "Tour", format: .times)
+        captions = Knob(key: prefix + ".captions", label: "Names", range: 0...1, standard: 1, section: "Tour", format: .toggle)
+        showFacts = Knob(key: prefix + ".facts", label: "Facts", range: 0...1, standard: 1, section: "Tour", format: .toggle,
+                         shownWhen: prefix + ".captions")
+        brightness = Knob(key: prefix + ".brightness", label: "Brightness", range: 0.4...1.2, standard: 1, section: "Tour", format: .times)
+        surface = surfaceSwitch && views.contains(where: { $0.kind == .surface }) ? Knob(key: prefix + ".surface", label: "Views from the surface", range: 0...1, standard: 1,
+                                       section: "Tour", format: .toggle) : nil
+        showKey = show
     }
+
+    /// The next body and which of its views: one in the group held in Settings, or else one not seen lately, likelier
+    /// the more views it has (up to three times); then that body's next view, in the order of the table, remembered
+    /// across launches. `<prefix>.photo` pins one photo by file name, for trying one out.
+    func pickNext(after last: View?) -> View? {
+        let defaults = UserDefaults.standard
+        if let file = defaults.string(forKey: prefix + ".photo"), let pinned = views.first(where: { $0.file == file }) { return pinned }
+        let usable = (surface?.value ?? 1) > 0.5 ? views : views.filter { $0.kind != .surface }
+        let held = defaults.string(forKey: showKey) ?? ""
+        let candidates = groups.contains(held) ? unique(usable.filter { $0.group == held }.map(\.body)) : unique(usable.map(\.body))
+        let recent = defaults.stringArray(forKey: prefix + ".recent") ?? []
+        // Two live views never meet: both show through, so their dissolve would be a double exposure.
+        let live = Set(views.filter { $0.kind == .live }.map(\.body))
+        let fresh = candidates.filter { !recent.suffix(candidates.count / 2).contains($0) && $0 != last?.body && !(last?.kind == .live && live.contains($0)) }
+        let weighted = (fresh.isEmpty ? candidates : fresh).flatMap { b in Array(repeating: b, count: min(usable.filter { $0.body == b }.count, 3)) }
+        guard let body = weighted.randomElement() else { return nil }
+        let own = usable.filter { $0.body == body }
+        var seen = defaults.dictionary(forKey: prefix + ".seen") as? [String: Int] ?? [:]
+        var index = seen[body, default: 0] % own.count
+        if own.count > 1, own[index].file == last?.file { index = (index + 1) % own.count }
+        seen[body] = index + 1
+        defaults.set(seen, forKey: prefix + ".seen")
+        defaults.set(Array((recent.filter { $0 != body } + [body]).suffix(bodies.count / 2)), forKey: prefix + ".recent")
+        return own[index]
+    }
+
+    /// Two of a body's facts, the next in its own shuffled order (the same order every launch), so none repeats until
+    /// all have shown. Where it's got to is kept per body under `<prefix>.factsSeen`.
+    func nextFacts(_ body: String) -> String {
+        guard let all = facts[body], !all.isEmpty else { return "" }
+        var rng = SplitMix(state: body.utf8.reduce(0xCBF2_9CE4_8422_2325) { ($0 ^ UInt64($1)) &* 0x100_0000_01B3 }) // FNV-1a: stable, unlike hashValue
+        let order = Array(all.indices).shuffled(using: &rng)
+        var seen = UserDefaults.standard.dictionary(forKey: prefix + ".factsSeen") as? [String: Int] ?? [:]
+        let start = seen[body, default: 0], count = min(2, all.count)
+        seen[body] = (start + count) % all.count
+        UserDefaults.standard.set(seen, forKey: prefix + ".factsSeen")
+        return (0..<count).map { all[order[(start + $0) % all.count]] }.joined(separator: "  ·  ")
+    }
+
+    private func unique(_ names: [String]) -> [String] { names.reduce(into: []) { if !$0.contains($1) { $0.append($1) } } }
+}
+
+/// A slow tour of a `Tour`'s photos, the best spacecraft and telescopes have taken: each drifts and zooms for a minute,
+/// then dissolves into the next. The tour moves from body to body rather than photo to photo, so Saturn comes round
+/// no more often than Io, and each visit shows the next of its photos. In Solar System Tour the Sun and the Moon are
+/// live: today's Sun from SDO (`TheSun`) and the Moon as it is right now (`TheMoon`), run inside this scene. Settings
+/// can hold the tour on one group.
+final class PhotoTour: SKScene {
+    typealias View = Tour.View
+    let tour: Tour
+
+    init(size: CGSize, tour: Tour) {
+        self.tour = tour
+        still = UserDefaults.standard.object(forKey: tour.prefix + ".at") as? Double
+        super.init(size: size)
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
 
     /// Seconds each dissolve takes; a view's motion runs on through its dissolve into the next.
     nonisolated private static let fade = 6.0
@@ -82,7 +155,7 @@ final class SolarSystem: SKScene {
     }
 
     // SpriteKit leaves a texture uniform undeclared while it's nil, so both start black.
-    private let aUniform = SKUniform(name: "u_a", texture: SolarSystem.black), bUniform = SKUniform(name: "u_b", texture: SolarSystem.black)
+    private let aUniform = SKUniform(name: "u_a", texture: PhotoTour.black), bUniform = SKUniform(name: "u_b", texture: PhotoTour.black)
     private static let black = SKTexture(data: Data(repeating: 0, count: 4), size: CGSize(width: 1, height: 1))
     /// Per view: texel offset x, y, texels per point, and the texture's width and height.
     private let aPlace = SKUniform(name: "u_pa", vectorFloat4: .zero), bPlace = SKUniform(name: "u_pb", vectorFloat4: .zero)
@@ -103,9 +176,9 @@ final class SolarSystem: SKScene {
     /// Screen pixels per point, for how sharp a photo can be shown. The render test and the desktop are both 2x.
     private let pixelScale = Double(NSScreen.main?.backingScaleFactor ?? 2)
 
-    private var seconds: Double { max(Self.knobs[0].value, Self.fade * 2) }
-    /// Holds the motion at this point, 0 to 1, for snapshots of a photo's start or end (`solar.at`).
-    private let still = UserDefaults.standard.object(forKey: "solar.at") as? Double
+    private var seconds: Double { max(tour.seconds.value, Self.fade * 2) }
+    /// Holds the motion at this point, 0 to 1, for snapshots of a photo's start or end (`<prefix>.at`).
+    private let still: Double?
 
     override func sceneDidLoad() {
         backgroundColor = .black
@@ -128,9 +201,9 @@ final class SolarSystem: SKScene {
         NotificationCenter.default.addObserver(self, selector: #selector(applyKnobs), name: UserDefaults.didChangeNotification, object: nil)
 
         // The first view straight away, so the wallpaper never opens on black, then the next in the background.
-        guard let first = Self.pickNext(after: nil) else { return }
+        guard let first = tour.pickNext(after: nil) else { return }
         var shown = Shown(view: first)
-        if first.kind == .live { shown.scene = liveScene(first) } else if let cut = Self.cut(first, size: size, pixelScale: pixelScale, zoom: Self.knobs[1].value) { shown = Shown(cut) }
+        if first.kind == .live { shown.scene = liveScene(first) } else if let cut = Self.cut(first, size: size, pixelScale: pixelScale, zoom: tour.zoom.value) { shown = Shown(cut) }
         shown.start = 0
         show(shown, in: 0)
         current = shown
@@ -144,8 +217,8 @@ final class SolarSystem: SKScene {
     }
 
     @objc private func applyKnobs() {
-        brightnessUniform.floatValue = Float(Self.knobs[4].value)
-        if Self.knobs[2].value < 0.5 { caption.removeAllActions(); setCaption(0) }
+        brightnessUniform.floatValue = Float(tour.brightness.value)
+        if tour.captions.value < 0.5 { caption.removeAllActions(); setCaption(0) }
     }
 
     override func update(_ currentTime: TimeInterval) {
@@ -178,7 +251,7 @@ final class SolarSystem: SKScene {
 
     /// Picks the next view and cuts its photo in the background, or builds its live scene, hidden until its turn.
     private func load() {
-        guard let view = Self.pickNext(after: current?.view) else { return }
+        guard let view = tour.pickNext(after: current?.view) else { return }
         if view.kind == .live {
             var shown = Shown(view: view)
             shown.scene = current?.view.file == view.file ? current?.scene : liveScene(view)
@@ -188,7 +261,7 @@ final class SolarSystem: SKScene {
             return
         }
         loading = true
-        let size = size, scale = pixelScale, zoom = Self.knobs[1].value
+        let size = size, scale = pixelScale, zoom = tour.zoom.value
         Task { [weak self] in
             let cut = await Task.detached { Self.cut(view, size: size, pixelScale: scale, zoom: zoom) }.value
             guard let self else { return }
@@ -233,12 +306,12 @@ final class SolarSystem: SKScene {
 
     private func showCaption(_ view: View) {
         caption.removeAllChildren()
-        guard Self.knobs[2].value > 0.5 else { return }
+        guard tour.captions.value > 0.5 else { return }
         let title = SKLabelNode(attributedText: NSAttributedString(string: view.body, attributes: [
             .font: NSFont.systemFont(ofSize: 26, weight: .semibold), .foregroundColor: NSColor(white: 1, alpha: 0.82)]))
         let line = SKLabelNode(attributedText: NSAttributedString(string: liveCaption(view) ?? view.caption, attributes: [
             .font: NSFont.systemFont(ofSize: 13, weight: .regular), .foregroundColor: NSColor(white: 1, alpha: 0.6)]))
-        let facts = SKLabelNode(attributedText: NSAttributedString(string: Self.knobs[3].value > 0.5 ? Self.nextFacts(view.body) : "", attributes: [
+        let facts = SKLabelNode(attributedText: NSAttributedString(string: tour.showFacts.value > 0.5 ? tour.nextFacts(view.body) : "", attributes: [
             .font: NSFont.systemFont(ofSize: 12, weight: .regular), .foregroundColor: NSColor(white: 1, alpha: 0.45)]))
         for label in [title, line, facts] {
             label.horizontalAlignmentMode = .left
@@ -271,50 +344,6 @@ final class SolarSystem: SKScene {
         return "\(names[Int(TheMoon.knobs[0].value)]), from the Moon's real maps"
     }
 
-    /// Two of a world's facts, the next in its own shuffled order (the same order every launch), so none repeats until
-    /// all have shown. Where it's got to is kept per world under `solar.factsSeen`.
-    static func nextFacts(_ body: String) -> String {
-        guard let all = facts[body], !all.isEmpty else { return "" }
-        var rng = SplitMix(state: body.utf8.reduce(0xCBF2_9CE4_8422_2325) { ($0 ^ UInt64($1)) &* 0x100_0000_01B3 }) // FNV-1a: stable, unlike hashValue
-        let order = Array(all.indices).shuffled(using: &rng)
-        var seen = UserDefaults.standard.dictionary(forKey: "solar.factsSeen") as? [String: Int] ?? [:]
-        let start = seen[body, default: 0], count = min(2, all.count)
-        seen[body] = (start + count) % all.count
-        UserDefaults.standard.set(seen, forKey: "solar.factsSeen")
-        return (0..<count).map { all[order[(start + $0) % all.count]] }.joined(separator: "  ·  ")
-    }
-
-    // MARK: Choosing the next view
-
-    /// The next world and which of its views: the world held in Settings, or a world not seen lately, likelier the
-    /// more views it has (up to three times); then that world's next view, in the order of the list, remembered
-    /// across launches. `solar.photo` pins one photo by file name, for trying one out.
-    nonisolated static func pickNext(after last: View?) -> View? {
-        let defaults = UserDefaults.standard
-        if let file = defaults.string(forKey: "solar.photo"), let pinned = views.first(where: { $0.file == file }) { return pinned }
-        let held = defaults.string(forKey: bodyKey) ?? ""
-        let recent = defaults.stringArray(forKey: "solar.recent") ?? []
-        let body: String
-        if bodies.contains(held) {
-            body = held
-        } else {
-            // Two live views never meet: both show through, so their dissolve would be a double exposure.
-            let live = Set(views.filter { $0.kind == .live }.map(\.body))
-            let fresh = bodies.filter { !recent.suffix(bodies.count / 2).contains($0) && $0 != last?.body && !(last?.kind == .live && live.contains($0)) }
-            let weighted = (fresh.isEmpty ? bodies : fresh).flatMap { b in Array(repeating: b, count: min(views.filter { $0.body == b }.count, 3)) }
-            guard let pick = weighted.randomElement() else { return nil }
-            body = pick
-        }
-        let own = views.filter { $0.body == body }
-        var seen = defaults.dictionary(forKey: "solar.seen") as? [String: Int] ?? [:]
-        var index = seen[body, default: 0] % own.count
-        if own.count > 1, own[index].file == last?.file { index = (index + 1) % own.count }
-        seen[body] = index + 1
-        defaults.set(seen, forKey: "solar.seen")
-        defaults.set(Array((recent.filter { $0 != body } + [body]).suffix(bodies.count / 2)), forKey: "solar.recent")
-        return own[index]
-    }
-
     // MARK: Framing
 
     /// Plans a photo's motion for a screen of `size` points and cuts out what it shows, scaled so the widest moment is
@@ -331,7 +360,7 @@ final class SolarSystem: SKScene {
         let focus = view.focus * SIMD2(w, h), middle = SIMD2(w, h) / 2
         var wide: Double, tight: Double, fromCentre: SIMD2<Double>, toCentre: SIMD2<Double>
         func jitter(_ k: Double) -> SIMD2<Double> { SIMD2(.random(in: -1...1) * sw, .random(in: -1...1) * sh) * 0.04 / k }
-        if view.kind == .closeup {
+        if view.kind != .disc { // a close-up, from orbit or the ground
             wide = max(sw / w, sh / h)
             tight = max(min(wide * z, maxMagnification / pixelScale), wide)
             // Inside the photo at scale k: the centre can't come nearer an edge than half the screen.

@@ -64,6 +64,9 @@ struct Wallpaper {
     Wallpaper(name: "Turing Patterns", icon: "circle.hexagongrid.fill", tint: .mint, blurb: "Coral, spots and stripes growing out of simple chemistry.",
               make: turingPatterns, knobs: TuringPatterns.knobs,
               palettes: PaletteChoice(key: "turing.palette", options: TuringPatterns.palettes.map { ($0.name, [$0.ink, $0.ink2, $0.glow], [$0.ink * 0.9, $0.ink2 * 0.9]) })),
+    Wallpaper(name: "Schlieren", icon: "heat.waves", tint: .pink, blurb: "Rising heat made visible in color, as a schlieren camera sees it.",
+              make: schlieren, knobs: Schlieren.knobs,
+              palettes: PaletteChoice(key: "schlieren.palette", options: Schlieren.paletteOptions)),
     Wallpaper(name: "Wind", icon: "wind", tint: .cyan, blurb: "The live wind around you, streaming across the map.",
               make: wind, knobs: WindScene.knobs,
               palettes: PaletteChoice(key: "wind.palette", options: WindScene.paletteOptions, standard: "Midnight")),
@@ -72,9 +75,9 @@ struct Wallpaper {
     Wallpaper(name: "A Tree for the Year", icon: "tree.fill", tint: .green, blurb: "One tree on a hill, through your real seasons and weather.",
               make: treeForTheYear, knobs: TreeScene.treeKnobs, status: (key: "weather.status", below: "tree.lock")),
     Wallpaper(name: "Solar System Tour", icon: "smallcircle.filled.circle", tint: .orange,
-              blurb: "Slow pans across the best photos of every world, with the live Sun and Moon.", make: solarSystem,
-              knobs: SolarSystem.knobs + ([TheSun.wavelengthKnob] + TheSun.knobs).map { $0.in("The Sun") } + TheMoon.knobs.map { $0.in("The Moon") },
-              palettes: SolarSystem.bodyChoice),
+              blurb: "Slow pans across the best photos of every world, with the live Sun and Moon.", make: solarSystemTour,
+              knobs: Tour.solarSystem.knobs + ([TheSun.wavelengthKnob] + TheSun.knobs).map { $0.in("The Sun") } + TheMoon.knobs.map { $0.in("The Moon") },
+              palettes: Tour.solarSystem.showChoice),
 ].sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
 
 /// The wallpaper on first launch, and in place of a saved one that's since been cut.

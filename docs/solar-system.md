@@ -3,12 +3,12 @@
 A slow tour of the Sun's family in the best photos spacecraft and telescopes have taken. Each view drifts and zooms for a minute (Ken Burns), then dissolves into the next. The tour moves from world to world, not photo to photo, so each visit to a world shows the next of its photos. The Sun and the Moon are live: today's Sun from SDO (The Sun Today's scene) and the Moon as it is right now where you are (The Moon's scene), run inside this one. Settings can hold the tour on one world.
 
 - **Files:**
-  - `Sources/Atrium/SolarSystem.swift`: the scene (`SolarSystem`), the tour (`pickNext`), the framing and cut (`cut`), and the shader.
+  - `Sources/Atrium/PhotoTour.swift`: shared with Deep Space Tour. `Tour` describes a set of photos (its tables, its settings under a prefix, `solar` here, and the tour's choices, `pickNext` and `nextFacts`); `PhotoTour` is the scene (the framing and cut, `cut`, and the shader).
   - `Sources/Atrium/Resources/solar-facts.tsv`: facts for the caption's third line, a few per world (`world<TAB>fact`), from NASA's fact sheets.
   - `Sources/Atrium/Resources/solar-photos.tsv`: one row per view, from the Sun outward: file, world, credit, licence, source, caption, kind (`disc`, `closeup` or `live`) and focus. About reads its credits.
   - `Sources/Atrium/Resources/solar-<name>.heic`: the photos, cut by `docs/solar-system/prep.py`. `solar-thumb-<world>.jpg`: a 152×92 swatch per world for Settings.
   - `docs/solar-system/photos.py`: every photo's original, crop, focus, caption and credit, the source of truth for the TSV. `docs/solar-system/prep.py` cuts them (see Photos below).
-- **Entry:** `solarSystem(size:)`. Its registry entry is "Solar System Tour", icon `smallcircle.filled.circle`, tint `.orange`, knobs `SolarSystem.knobs`, then The Sun's (with `TheSun.wavelengthKnob`) and The Moon's, each moved under its own section with `Knob.in(_:)`, and palettes `SolarSystem.bodyChoice`: the worlds, each with its thumbnail.
+- **Entry:** `solarSystemTour(size:)`. Its registry entry is "Solar System Tour", icon `smallcircle.filled.circle`, tint `.orange`, knobs `Tour.solarSystem.knobs`, then The Sun's (with `TheSun.wavelengthKnob`) and The Moon's, each moved under its own section with `Knob.in(_:)`, and palettes `Tour.solarSystem.showChoice`: the worlds, each with its thumbnail.
 - **Kind:** photos in one full-screen SKShader, and two live scenes nested in this one.
 
 ## How it works

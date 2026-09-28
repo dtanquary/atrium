@@ -50,7 +50,7 @@ if UserDefaults.standard.string(forKey: "scene") == "Night Sky" { UserDefaults.s
 // 2026-09-28; drop these moves after a while
 if let body = ["The Sun Today": "The Sun", "The Moon": "The Moon"][UserDefaults.standard.string(forKey: "scene") ?? ""] {
     UserDefaults.standard.set("Solar System Tour", forKey: "scene")
-    UserDefaults.standard.set(body, forKey: SolarSystem.bodyKey)
+    UserDefaults.standard.set(body, forKey: Tour.solarSystem.showKey)
 }
 if UserDefaults.standard.string(forKey: "scene") == "Solar System" { UserDefaults.standard.set("Solar System Tour", forKey: "scene") }
 if let skip = UserDefaults.standard.string(forKey: Shuffle.skipKey), skip.split(separator: ",").contains("Solar System") {
