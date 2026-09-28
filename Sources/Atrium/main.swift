@@ -46,6 +46,15 @@ if UserDefaults.standard.object(forKey: "scene") == nil,
     for (key, value) in old { UserDefaults.standard.set(value, forKey: key) }
 }
 if UserDefaults.standard.string(forKey: "scene") == "Night Sky" { UserDefaults.standard.set("Live Sky", forKey: "scene") }
+// ponytail: The Sun Today and The Moon became views in Solar System on 2026-09-27; drop these moves after a while
+if let body = ["The Sun Today": "The Sun", "The Moon": "The Moon"][UserDefaults.standard.string(forKey: "scene") ?? ""] {
+    UserDefaults.standard.set("Solar System", forKey: "scene")
+    UserDefaults.standard.set(body, forKey: SolarSystem.bodyKey)
+}
+if let name = UserDefaults.standard.string(forKey: "sun.wavelength") {
+    if let i = TheSun.wavelengths.firstIndex(where: { $0.name == name }) { UserDefaults.standard.set(Double(i + 1), forKey: TheSun.wavelengthKnob.key) }
+    UserDefaults.standard.removeObject(forKey: "sun.wavelength")
+}
 var current = UserDefaults.standard.string(forKey: "scene") ?? scenes[0].name
 
 @MainActor func currentScene(size: CGSize) -> SKScene {

@@ -27,9 +27,9 @@ A slow tour of the Sun's family in the best photos spacecraft and telescopes hav
 ## Settings
 - **Show** (`solar.body`, by name; empty is Random): the palette slot, as a grid of worlds with thumbnails. Random tours them all; a world holds the tour there, still moving through its views. Picking one rebuilds the scene.
 - **Tour:** Each view for (`solar.seconds`, 20–300 s, 60), Zoom (`solar.zoom`, 1–1.6×, 1.25), Names (`solar.captions`, on), Brightness (`solar.brightness`, 0.4–1.2×, 1; photos only, the live views have their own).
-- **The Sun:** Wavelength (`sun.light`, Random or one of the eight), then all of The Sun Today's settings. The Sun's palette slot is taken by Show, so its wavelength became a menu; `sun.wavelength` (by name) still applies while The Sun Today exists and the menu is on Random.
-- **The Moon:** The Moon's settings.
-- **For trying things out** (`defaults write com.dtanquary.atrium …`): `solar.photo` pins one view by file name (`live` is the Sun), `solar.at` (0–1) holds the motion at that point, for snapshots.
+- **The Sun:** Wavelength (`sun.light`, Random or one of the eight), then the rest of the Sun's settings (see [sun.md](sun.md)). Show holds the palette slot, so the wavelength became a menu.
+- **The Moon:** the Moon's settings (see [the-moon.md](the-moon.md)).
+- **For trying things out** (`defaults write com.dtanquary.atrium …`): `solar.photo` pins one view by file name (`live-the-sun`, `live-the-moon` for the live views), `solar.at` (0–1) holds the motion at that point, for snapshots.
 
 ## Photos
 - **What's in:** whole worlds and close-ups from orbit, the best-looking version of each, true or enhanced colour, infrared or radar, with the caption saying which (Dave's picks, 2026-09-27). No surface landscapes, famous-moment shots (Earthrise, Pale Blue Dot), renders, or spacecraft in frame.
@@ -66,7 +66,7 @@ Every photo's credit, licence and source is in `solar-photos.tsv`, listed in Set
 ## Dave's feedback and decisions
 - 2026-09-27: "slow panning and zooming between all of the best solar system photos we can find, at least one of each planet and any moon we can get high res imagery of … super high quality." Picked: whole worlds and close-ups from orbit (not surface landscapes or famous moments); the best-looking version of each, true or enhanced; small photos shown smaller on black rather than skipped; photos bundled in the app.
 - "you can do many of a planet if you find many, we want to just shuffle around the solar system … when we shuffle back to saturn we use a different one from last shuffle": the tour is by world, with a rotation per world.
-- "consider folding the sun and moon wallpaper directly into this one since its redundant, and then just provide a settings option to lock to a specific solar body": the live Sun and Moon are views in the tour, and Show holds it on one world.
+- "consider folding the sun and moon wallpaper directly into this one since its redundant, and then just provide a settings option to lock to a specific solar body": the live Sun and Moon are views in the tour, and Show holds it on one world. The Sun Today and The Moon left the menu; main.swift moves anyone on either to Solar System held on that world, and an old wavelength pick to `sun.light`.
 
 ## Ideas / next steps
 - Mars and its moons, the asteroids and comets, and Saturn and its moons are still being researched.
@@ -75,6 +75,6 @@ Every photo's credit, licence and source is in `solar-photos.tsv`, listed in Set
 
 ## Checking it
 - `SNAPSHOT_SCENE="Solar System" SNAPSHOT_DEFAULTS="solar.photo=solar-pluto-true.heic,solar.at=1" swift test --filter everySceneRenders`: one photo at the end of its motion (which end is random).
-- `SNAPSHOT_DEFAULTS="solar.body=The Moon"`: the live Moon inside the tour.
+- `SNAPSHOT_DEFAULTS="solar.photo=live-the-moon"`: the live Moon inside the tour.
 - `SETTINGS_SHOT="Solar System" swift test --filter settingsWindow`: the Show grid.
 - `defaults read com.dtanquary.atrium solar.seen` and `solar.recent`: the rotation.

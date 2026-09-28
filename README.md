@@ -72,15 +72,6 @@ The real sky above you: stars, planets, the Moon's phase, the Milky Way and the 
 |---|---|
 | Tonight's sky, with the Moon in its true phase, Saturn and the Milky Way | Dusk, from Preview a time of day in Settings |
 
-### The Moon
-The Moon filling the screen as it is right now from where you are: its real phase, wobble and tilt, from NASA's LRO maps, with shadows along the terminator, earthshine on the dark side, and copper during a lunar eclipse. Choose black, faint real stars or the real sky behind it.
-
-| ![The Moon, a waxing crescent with earthshine](docs/images/the-moon.jpg) | ![The Moon by day, on the Sky backdrop](docs/images/the-moon-day.jpg) |
-|---|---|
-| A waxing crescent with earthshine, among the real stars | The morning Moon on the Sky backdrop, its dark side the sky's own blue |
-| ![The Moon in the total lunar eclipse of 31 December 2028](docs/images/the-moon-eclipse.jpg) | ![The Moon beside NASA's Dial-a-Moon](docs/images/the-moon-vs-dial-a-moon.jpg) |
-| The total lunar eclipse of 31 December 2028, previewed | Checked against NASA's Dial-a-Moon (left of each pair) for phase, libration, tilt and tone |
-
 ### Earth from Orbit
 The globe above your location with the live day/night line, today's real clouds, lightning in storms near you, city lights and the ISS.
 
@@ -137,13 +128,6 @@ Reaction–diffusion, the chemistry Alan Turing proposed for how animals get the
 |---|---|
 | Fingerprint stripes in Dark Mode | Coral, glazed like ceramic, in Light Mode |
 
-### The Sun Today
-The real Sun as NASA's Solar Dynamics Observatory saw it within the last hour or so: today's flares, sunspots and prominences, in eight wavelengths, each in its real SDO colour, from the gold coronal loops of 171 Å to visible light. Plasma pulses out along its loops, its corona streams away, and every few minutes one of today's active regions flares or a prominence erupts off the edge.
-
-| ![The Sun Today, 193 Bronze](docs/images/sun-193.jpg) | ![The Sun Today, 304 Red, with a prominence erupting](docs/images/sun-304-eruption.jpg) |
-|---|---|
-| 193 Å, the million-degree corona, on 27 September 2026 | 304 Å, the chromosphere, as a prominence erupts |
-
 ### Wind
 The live wind around you as thin streaks streaming across the map, in the spirit of the hint.fm wind map and earth.nullschool: a grid of Open-Meteo's hourly forecast, blended from hour to hour, with streaks that speed up, brighten and curl with the real wind, as brush strokes like hint.fm's or comets like nullschool's. Zoom from your town to half the continent, over a map at the opacity you choose: the Earth by day or at night, terrain and the sea floor, or yesterday's satellite view with its real clouds (all from NASA), Natural Earth's shaded relief, or nothing, in six jewel-toned palettes. Light Mode draws the same streaks as ink on paper.
 
@@ -176,13 +160,31 @@ A slow tour of the Sun's family in the best photos spacecraft and telescopes hav
 |---|---|
 | Jupiter, from Juno | The Nile and the Red Sea, from the space station |
 
+#### The Sun, live
+One of the Sun's views is the real Sun as NASA's Solar Dynamics Observatory saw it within the last hour or so: today's flares, sunspots and prominences, in eight wavelengths, each in its real SDO colour, from the gold coronal loops of 171 Å to visible light. Plasma pulses out along its loops, its corona streams away, and every few minutes one of today's active regions flares or a prominence erupts off the edge.
+
+| ![The Sun Today, 193 Bronze](docs/images/sun-193.jpg) | ![The Sun Today, 304 Red, with a prominence erupting](docs/images/sun-304-eruption.jpg) |
+|---|---|
+| 193 Å, the million-degree corona, on 27 September 2026 | 304 Å, the chromosphere, as a prominence erupts |
+
+It was its own wallpaper, The Sun Today, until it joined Solar System.
+
+#### The Moon, live
+When the tour reaches the Moon, one of its views is the Moon filling the screen as it is right now from where you are: its real phase, wobble and tilt, from NASA's LRO maps, with shadows along the terminator, earthshine on the dark side, and copper during a lunar eclipse. Choose black, faint real stars or the real sky behind it. It was its own wallpaper, The Moon, until it joined Solar System.
+
+| ![The Moon, a waxing crescent with earthshine](docs/images/the-moon.jpg) | ![The Moon by day, on the Sky backdrop](docs/images/the-moon-day.jpg) |
+|---|---|
+| A waxing crescent with earthshine, among the real stars | The morning Moon on the Sky backdrop, its dark side the sky's own blue |
+| ![The Moon in the total lunar eclipse of 31 December 2028](docs/images/the-moon-eclipse.jpg) | ![The Moon beside NASA's Dial-a-Moon](docs/images/the-moon-vs-dial-a-moon.jpg) |
+| The total lunar eclipse of 31 December 2028, previewed | Checked against NASA's Dial-a-Moon (left of each pair) for phase, libration, tilt and tone |
+
 ## How it works
 
 macOS has no public API for third-party live wallpapers. This app gives each display a borderless window at the desktop window level (`CGWindowLevelForKey(.desktopWindow)`). That puts it above the system wallpaper and below your desktop icons, on every Space, and it lets clicks pass straight through to the desktop.
 
 It uses public AppKit and SpriteKit APIs only. It uses no private frameworks, makes no changes to system files, needs no SIP changes and doesn't inject code.
 
-Each wallpaper is a SpriteKit scene. Many are full-screen Metal shaders written as `SKShader`s, and almost everything is drawn in code. The only image files are two NASA Earth textures, a star catalogue, the live cloud map Earth from Orbit downloads, the Sun images The Sun Today downloads, the Fish Tank's fish and corals and Weather's hills and clouds, all cut out of permissively licensed photos, and the Moon's colour and heights, for Weather and The Moon.
+Each wallpaper is a SpriteKit scene. Many are full-screen Metal shaders written as `SKShader`s, and almost everything is drawn in code. The only image files are two NASA Earth textures, a star catalogue, the live cloud map Earth from Orbit downloads, the Sun images Solar System's live Sun downloads, the Fish Tank's fish and corals and Weather's hills and clouds, all cut out of permissively licensed photos, the Moon's colour and heights, for Weather and the live Moon, and Solar System's photos of the planets and moons.
 
 It's kind to your battery:
 - 60 fps on mains power, 30 fps on battery.
@@ -220,7 +222,7 @@ To rebuild after pulling changes: `./build.sh && pkill -x Atrium; open build/Atr
 ### Permissions and network
 
 - **Location** (optional). Live Sky, Earth from Orbit, Weather and Flowing Gradient's time-of-day mood use your location, and the app asks once. If you decline, it guesses from your time zone.
-- **Network.** Weather, Dappled Light and A Tree for the Year fetch from [Open-Meteo](https://open-meteo.com) every 15 minutes, sharing one request. Live Sky and Earth from Orbit fetch the ISS position from [wheretheiss.at](https://wheretheiss.at) at most once a minute. Earth from Orbit fetches a global cloud map from [Live Cloud Maps](https://clouds.matteason.co.uk) only once its cached copy is over 3 hours old (1.5 MB when it has changed), and not at all with Live clouds off. For lightning, it asks Open-Meteo for thunderstorms on a grid around you each time the cloud map updates, about every 3 hours. The Sun Today fetches SDO images from [Helioviewer](https://helioviewer.org) at most every 15 minutes (2048 pixels, 0.3–0.5 MB) or 30 (4096, 1–2 MB, for the close-up), keeping the last few hours on disk. None of them needs an API key.
+- **Network.** Weather, Dappled Light and A Tree for the Year fetch from [Open-Meteo](https://open-meteo.com) every 15 minutes, sharing one request. Live Sky and Earth from Orbit fetch the ISS position from [wheretheiss.at](https://wheretheiss.at) at most once a minute. Earth from Orbit fetches a global cloud map from [Live Cloud Maps](https://clouds.matteason.co.uk) only once its cached copy is over 3 hours old (1.5 MB when it has changed), and not at all with Live clouds off. For lightning, it asks Open-Meteo for thunderstorms on a grid around you each time the cloud map updates, about every 3 hours. Solar System's live Sun, while it's on screen, fetches SDO images from [Helioviewer](https://helioviewer.org) at most every 15 minutes (2048 pixels, 0.3–0.5 MB) or 30 (4096, 1–2 MB, for the close-up), keeping the last few hours on disk. None of them needs an API key.
 - **Wind** uses your location too, and asks Open-Meteo for the hourly wind forecast at 384 points around you every two hours, for the zoom on screen (about 230 KB and 384 of Open-Meteo's free 10,000 calls a day each time, so at most 4,600 a day). The last reply for each zoom stays on disk, so it works offline. With an Earth background it downloads NASA's imagery tiles for the view from [GIBS](https://nasa-gibs.github.io/gibs-api-docs/) once and keeps them: about 1–2 MB for most maps, up to 7 MB at night for half the continent, and a fresh 1–2 MB a day for the satellite view.
 
 ## Development

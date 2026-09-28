@@ -1,12 +1,11 @@
 import SpriteKit
 
-@MainActor func theSun(size: CGSize) -> SKScene { TheSun(size: size) }
-
 /// The real Sun as NASA's Solar Dynamics Observatory saw it within the last hour or so, in one wavelength: a corona
 /// of gold loops in 171 Å, the red chromosphere in 304, sunspots in visible light. Today's flares and sunspots show
 /// up the day they happen. Brought to life: plasma pulses out along the bright loops, active regions flicker, the
 /// corona streams outward, and every few minutes one of today's active regions flares or a prominence erupts off the
-/// limb. Settings compares that with the still image, and the whole Sun with a close-up off one edge.
+/// limb. Settings compares that with the still image, and the whole Sun with a close-up off one edge. It's the Sun's live
+/// view in Solar System, which runs it nested in its own scene.
 final class TheSun: SKScene {
     /// The channels, each in the colours SDO publishes it in (SolarSoft's `aia_lct` tables, which Helioviewer applies).
     /// `source` is Helioviewer's source id. Swatches are the table at 25, 50 and 85%; visible light's are NASA's
@@ -29,12 +28,12 @@ final class TheSun: SKScene {
         Knob(key: "sun.life", label: "Liveliness", range: 0...2, standard: 1, section: "View"),
     ] + gradeKnobs("sun")
 
-    /// The wavelength menu, for where the Sun has no palette of its own (in Solar System): 0 is Random.
+    /// The wavelength, picked when the scene is built: 0 is Random.
     nonisolated static let wavelengthKnob = Knob(key: "sun.light", label: "Wavelength", range: 0...Double(wavelengths.count), standard: 0,
                                                  section: "View", format: .choice(["Random"] + wavelengths.map(\.name)))
 
-    private let wavelength = TheSun.wavelengthKnob.value > 0.5 ? TheSun.wavelengths[min(Int(TheSun.wavelengthKnob.value), TheSun.wavelengths.count) - 1]
-        : TheSun.wavelengths.first { $0.name == UserDefaults.standard.string(forKey: "sun.wavelength") } ?? TheSun.wavelengths.randomElement()!
+    private let wavelength = TheSun.wavelengthKnob.value > 0.5
+        ? TheSun.wavelengths[min(Int(TheSun.wavelengthKnob.value), TheSun.wavelengths.count) - 1] : TheSun.wavelengths.randomElement()!
     // The frame showing and the one it's fading to (by `u_fade`), each cropped to what the framing shows: `u_crop`
     // and `u_cropNext` are the part of SDO's image each holds, as x, y, width and height from 0 to 1.
     private lazy var frameUniform = SKUniform(name: "u_frame", texture: placeholder())

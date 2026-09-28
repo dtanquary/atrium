@@ -3,7 +3,7 @@
 The real Sun as NASA's Solar Dynamics Observatory (SDO) saw it within the last hour or so, in one wavelength at a time: the gold loops of the corona in 171 Å, the red chromosphere in 304, sunspots in visible light. Today's flares, sunspots and prominences show up the day they happen. Brought to life: plasma pulses out along the bright loops, active regions flicker, the corona streams outward, and every few minutes one of today's active regions flares or a prominence erupts off the limb. It's built to sit beside [Nebula](nebula.md): real colours from a real source, calm motion, a new look on each load.
 
 - **Files:** `Sources/Atrium/Sun.swift`: the scene (`TheSun`), its shader, `decode(_:_:)`, `sunTilt(at:)` and `SunImages`, which fetches and caches the images. `Tests/AtriumTests/SunTests.swift` reads a real Helioviewer reply and checks the tilt.
-- **Entry:** `theSun(size:)`. Its registry entry is "The Sun Today", icon `sun.max.fill`, tint `.orange`, `knobs: TheSun.knobs`, palettes `PaletteChoice(key: "sun.wavelength", …, title: "Wavelength")`, whose standard is "", Random.
+- **Entry:** since 2026-09-27, the Sun's live view in Solar System (see [solar-system.md](solar-system.md)), which builds `TheSun(size:)` and runs it nested in its own scene, passing it `update(_:)` and `didMove(to:)`. Its settings are under The Sun on Solar System's page: `TheSun.wavelengthKnob` then `TheSun.knobs`. Until then it was its own wallpaper, "The Sun Today", icon `sun.max.fill`, tint `.orange`, with its wavelength as the palette.
 - **Name:** Dave asked for "The Sun, today", but Shuffle keeps the wallpapers it skips as one comma-separated string (`shuffle.skip`), so a comma in a name would break it.
 - **Kind:** downloaded photos, drawn by one full-screen SKShader.
 
@@ -54,7 +54,7 @@ The real Sun as NASA's Solar Dynamics Observatory (SDO) saw it within the last h
 - No Light Mode look: space is black.
 
 ## Settings
-- **Wavelength** (`sun.wavelength`, by name, default Random): picked when the scene is built. A new pick rebuilds it.
+- **Wavelength** (`sun.light`, a menu: 0 is Random, then the eight in the order of `wavelengths`): picked when the scene is built. It was a palette stored by name (`sun.wavelength`) while the Sun was its own wallpaper; Solar System's palette slot holds its worlds, so it became a menu, and main.swift moves an old pick across once.
 
 | Name | Channel | What it shows | Swatch (25, 50, 85% of the table) |
 |---|---|---|---|
@@ -107,11 +107,12 @@ The real Sun as NASA's Solar Dynamics Observatory (SDO) saw it within the last h
 
 ## Checking it
 ```sh
-SNAPSHOT_SCENE="The Sun Today" SNAPSHOT_DEFAULTS="sun.wavelength=193 Bronze" swift test                  # whatever's cached
-SNAPSHOT_SCENE="The Sun Today" SNAPSHOT_DEFAULTS="sun.wavelength=304 Red,sun.framing=1" swift test       # close-up
-SNAPSHOT_SCENE="The Sun Today" SNAPSHOT_DEFAULTS="sun.wavelength=171 Gold" SNAPSHOT_MOVIE=8 swift test   # the flow and shimmer
-SNAPSHOT_SCENE="The Sun Today" SNAPSHOT_SECONDS=8 SNAPSHOT_DEFAULTS="sun.wavelength=171 Gold,sun.nextEvent=flare" swift test       # a flare near its peak
-SNAPSHOT_SCENE="The Sun Today" SNAPSHOT_SECONDS=20 SNAPSHOT_DEFAULTS="sun.wavelength=304 Red,sun.nextEvent=eruption" swift test   # an eruption
+# sun.light: 1 171 Gold, 2 193 Bronze, 3 211 Purple, 4 304 Red, 5 131 Teal, 6 94 Green, 7 335 Blue, 8 Visible
+SNAPSHOT_SCENE="Solar System" SNAPSHOT_DEFAULTS="solar.photo=live-the-sun,sun.light=2" swift test                  # whatever's cached
+SNAPSHOT_SCENE="Solar System" SNAPSHOT_DEFAULTS="solar.photo=live-the-sun,sun.light=4,sun.framing=1" swift test    # close-up
+SNAPSHOT_SCENE="Solar System" SNAPSHOT_DEFAULTS="solar.photo=live-the-sun,sun.light=1" SNAPSHOT_MOVIE=8 swift test # the flow and shimmer
+SNAPSHOT_SCENE="Solar System" SNAPSHOT_SECONDS=8 SNAPSHOT_DEFAULTS="solar.photo=live-the-sun,sun.light=1,sun.nextEvent=flare" swift test      # a flare near its peak
+SNAPSHOT_SCENE="Solar System" SNAPSHOT_SECONDS=20 SNAPSHOT_DEFAULTS="solar.photo=live-the-sun,sun.light=4,sun.nextEvent=eruption" swift test  # an eruption
 ls ~/Library/Caches/com.dtanquary.atrium/sun/*/          # what's been fetched
 ```
 The render test only shows cached frames: run the app on that wavelength (and framing) first, or it shows the placeholder disc.

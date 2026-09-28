@@ -1,6 +1,6 @@
 # Solar System's views, cut by prep.py from these originals. Public domain, CC BY or CC BY-SA; CC BY and CC BY-SA
 # require this attribution. file	body	credit	licence	source	caption	kind	focus x,y[,zoom]
-live	The Sun	NASA/SDO and the AIA, EVE and HMI science teams, via Helioviewer	Public domain	https://helioviewer.org	Today, from NASA's Solar Dynamics Observatory	live	
+live-the-sun	The Sun	NASA/SDO and the AIA, EVE and HMI science teams, via Helioviewer	Public domain	https://helioviewer.org	Today, from NASA's Solar Dynamics Observatory	live	
 solar-sun-orbiter.heic	The Sun	ESA & NASA/Solar Orbiter/EUI Team, E. Kraaikamp (ROB)	CC BY-SA 3.0 IGO	https://www.esa.int/ESA_Multimedia/Images/2025/04/Solar_Orbiter_s_widest_high-res_view_of_the_Sun	Solar Orbiter, 2025 · extreme ultraviolet	disc	0.377,0.552,1.5
 solar-sun-visible.heic	The Sun	ESA & NASA/Solar Orbiter/PHI Team; image processing by PHI Team members at MPS	CC BY-SA 3.0 IGO	https://www.esa.int/ESA_Multimedia/Images/2024/11/PHI_s_view_of_the_Sun_in_visible_light	Sunspots · Solar Orbiter, 2023	disc	0.213,0.584,1.5
 solar-sun-eruption.heic	The Sun	NASA/GSFC/SDO	Public domain	https://images.nasa.gov/details/GSFC_20171208_Archive_e001661	A filament erupts · Solar Dynamics Observatory, 31 August 2012 · ultraviolet	disc	0.129,0.713
@@ -25,7 +25,7 @@ solar-earth-clouds.heic	Earth	ISS Expedition 34 crew, NASA Johnson Space Center	
 solar-earth-americas.heic	Earth	NASA EPIC Team	Public domain	https://epic.gsfc.nasa.gov/?date=2024-06-21	The Americas · DSCOVR, 21 June 2024	disc	0.5,0.5
 solar-earth-hawaii.heic	Earth	NASA	Public domain	https://commons.wikimedia.org/wiki/File:ISS-38_Hawaiian_Island_chain.jpg	The Hawaiian Islands · International Space Station	closeup	0.78,0.82
 solar-earth-night.heic	Earth	NASA	Public domain	https://commons.wikimedia.org/wiki/File:ISS-46_Northern_India_at_night.jpg	Northern India at night · International Space Station	closeup	0.5,0.5
-live	The Moon	NASA's CGI Moon Kit: LRO's LROC colour and LOLA heights	Public domain	https://svs.gsfc.nasa.gov/4720	Right now, from where you are	live	
+live-the-moon	The Moon	NASA's CGI Moon Kit: LRO's LROC colour and LOLA heights	Public domain	https://svs.gsfc.nasa.gov/4720	Right now, from where you are	live	
 solar-moon-farside.heic	The Moon	NASA	Public domain	https://images.nasa.gov/details/art002e009276	Orientale basin, where the near side meets the far · Artemis II, 2026	disc	0.466,0.639
 solar-moon-limb.heic	The Moon	NASA	Public domain	https://images.nasa.gov/details/art002e010399	Ancient craters · Artemis II, 2026	closeup	0.5,0.5
 solar-moon-orientale.heic	The Moon	NASA	Public domain	https://images.nasa.gov/details/art002e012183	Orientale basin and Grimaldi crater · Artemis II, 2026	disc	0.389,0.739

@@ -162,7 +162,7 @@ def main(only):
         body = p['body']
         slug = body.lower().replace(' ', '-')
         if p['kind'] == 'live':
-            rows.append(['live', body, p['credit'], p['licence'], p['source'], p['caption'], 'live', ''])
+            rows.append([f'live-{slug}', body, p['credit'], p['licence'], p['source'], p['caption'], 'live', ''])
             continue
         name = f"solar-{p['name']}.heic"
         if not only or p['name'] in only:
