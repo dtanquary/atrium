@@ -122,6 +122,9 @@ def cut(p):
         a = despeckle(np.array(a), p['despeckle'])
     if p.get('gain'):
         a = a * p['gain']
+    if 'saturation' in p:  # an over-stretched conversion (Mars Express's globes) back toward the planet's own colour
+        lum = (a @ np.array([0.2126, 0.7152, 0.0722], dtype=np.float32))[..., None]
+        a = lum + (a - lum) * p['saturation']
     if p['kind'] == 'disc':
         if not p.get('keepblack'):
             a = level(a, p.get('black'))
