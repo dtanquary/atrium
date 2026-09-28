@@ -154,7 +154,7 @@ One young white oak on a chalk hilltop, living through the real seasons where yo
 | Early May: catkin gold as the leaves open | January snow, the young oak still holding its dead leaves |
 
 ### Solar System
-A slow tour of the Sun's family in 141 of the best photos spacecraft and telescopes have taken: Cassini's Saturn, Juno's Jupiter, Mars Express's Mars, New Horizons' Pluto, Webb's Uranus, Magellan's Venus, the Nile from the space station, and 44 worlds in all, down to Saturn's moon Pan and comet 67P. Each drifts and zooms for a minute, then dissolves into another world, and a world you come back to shows you a different photo. The Sun is today's real Sun and the Moon is tonight's real Moon, both live. Settings → Show holds the tour on one world.
+A slow tour of the Sun's family in 141 of the best photos spacecraft and telescopes have taken: Cassini's Saturn, Juno's Jupiter, Mars Express's Mars, New Horizons' Pluto, Webb's Uranus, Magellan's Venus, the Nile from the space station, and 44 worlds in all, down to Saturn's moon Pan and comet 67P. Each drifts and zooms for a minute, then dissolves into another world, and a world you come back to shows you a different photo. Under each name, a line on the photo and two quick facts about the world, never the same pair twice in a row. The Sun is today's real Sun and the Moon is tonight's real Moon, both live. Settings → Show holds the tour on one world.
 
 | ![Solar System: Jupiter from Juno, in enhanced colour](docs/images/solar-system-jupiter.jpg) | ![Solar System: the Nile, Sinai and the Red Sea from the International Space Station](docs/images/solar-system-nile.jpg) |
 |---|---|

@@ -25,6 +25,12 @@ final class SolarSystem: SKScene {
             return View(file: f[0], body: f[1], caption: f[5], kind: kind,
                         focus: n.count >= 2 ? [n[0], n[1]] : [0.5, 0.5], zoom: n.count >= 3 ? n[2] : 0)
         }
+    /// Facts to show under each world's caption, from `solar-facts.tsv`.
+    nonisolated static let facts: [String: [String]] = ((try? String(contentsOf: resource("solar-facts.tsv"), encoding: .utf8)) ?? "")
+        .split(separator: "\n").filter { !$0.hasPrefix("#") }.reduce(into: [:]) { facts, line in
+            let f = line.split(separator: "\t").map(String.init)
+            if f.count == 2 { facts[f[0], default: []].append(f[1]) }
+        }
     /// Every world, from the Sun outward, as the photo list orders them.
     nonisolated static let bodies = views.map(\.body).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
 
@@ -32,6 +38,7 @@ final class SolarSystem: SKScene {
         Knob(key: "solar.seconds", label: "Each view for", range: 20...300, standard: 60, section: "Tour", format: .seconds),
         Knob(key: "solar.zoom", label: "Zoom", range: 1...1.6, standard: 1.25, section: "Tour", format: .times),
         Knob(key: "solar.captions", label: "Names", range: 0...1, standard: 1, section: "Tour", format: .toggle),
+        Knob(key: "solar.facts", label: "Facts", range: 0...1, standard: 1, section: "Tour", format: .toggle, shownWhen: "solar.captions"),
         Knob(key: "solar.brightness", label: "Brightness", range: 0.4...1.2, standard: 1, section: "Tour", format: .times),
     ]
     /// The world the tour is held on, by name; empty tours them all.
@@ -137,7 +144,7 @@ final class SolarSystem: SKScene {
     }
 
     @objc private func applyKnobs() {
-        brightnessUniform.floatValue = Float(Self.knobs[3].value)
+        brightnessUniform.floatValue = Float(Self.knobs[4].value)
         if Self.knobs[2].value < 0.5 { caption.removeAllActions(); setCaption(0) }
     }
 
@@ -231,12 +238,16 @@ final class SolarSystem: SKScene {
             .font: NSFont.systemFont(ofSize: 26, weight: .semibold), .foregroundColor: NSColor(white: 1, alpha: 0.82)]))
         let line = SKLabelNode(attributedText: NSAttributedString(string: liveCaption(view) ?? view.caption, attributes: [
             .font: NSFont.systemFont(ofSize: 13, weight: .regular), .foregroundColor: NSColor(white: 1, alpha: 0.6)]))
-        for label in [title, line] {
+        let facts = SKLabelNode(attributedText: NSAttributedString(string: Self.knobs[3].value > 0.5 ? Self.nextFacts(view.body) : "", attributes: [
+            .font: NSFont.systemFont(ofSize: 12, weight: .regular), .foregroundColor: NSColor(white: 1, alpha: 0.45)]))
+        for label in [title, line, facts] {
             label.horizontalAlignmentMode = .left
             label.verticalAlignmentMode = .baseline
             caption.addChild(label)
         }
-        title.position.y = 24
+        let lift: CGFloat = facts.frame.isEmpty ? 0 : 19 // the facts take the bottom line when there are any
+        line.position.y = lift
+        title.position.y = lift + 24
         caption.run(.sequence([.wait(forDuration: 1.5), .customAction(withDuration: 3) { [weak self] _, t in
             self?.setCaption(Double(t) / 3)
         }]))
@@ -258,6 +269,19 @@ final class SolarSystem: SKScene {
         guard view.body == "The Moon", view.kind == .live, TheMoon.knobs[0].value > 0.5,
               case .choice(let names) = TheMoon.knobs[0].format else { return nil }
         return "\(names[Int(TheMoon.knobs[0].value)]), from the Moon's real maps"
+    }
+
+    /// Two of a world's facts, the next in its own shuffled order (the same order every launch), so none repeats until
+    /// all have shown. Where it's got to is kept per world under `solar.factsSeen`.
+    static func nextFacts(_ body: String) -> String {
+        guard let all = facts[body], !all.isEmpty else { return "" }
+        var rng = SplitMix(state: body.utf8.reduce(0xCBF2_9CE4_8422_2325) { ($0 ^ UInt64($1)) &* 0x100_0000_01B3 }) // FNV-1a: stable, unlike hashValue
+        let order = Array(all.indices).shuffled(using: &rng)
+        var seen = UserDefaults.standard.dictionary(forKey: "solar.factsSeen") as? [String: Int] ?? [:]
+        let start = seen[body, default: 0], count = min(2, all.count)
+        seen[body] = (start + count) % all.count
+        UserDefaults.standard.set(seen, forKey: "solar.factsSeen")
+        return (0..<count).map { all[order[(start + $0) % all.count]] }.joined(separator: "  ·  ")
     }
 
     // MARK: Choosing the next view
@@ -382,7 +406,7 @@ final class SolarSystem: SKScene {
         vec3 col = max(a, 0.0) * oa + max(b, 0.0) * ob; // premultiplied: a live view shows through the rest
         float alpha = oa + ob;
         col *= u_brightness;
-        vec2 fromCaption = (pts - vec2(150.0, 70.0)) / vec2(260.0, 90.0);
+        vec2 fromCaption = (pts - vec2(170.0, 80.0)) / vec2(320.0, 100.0);
         float shade = u_caption * 0.45 * exp(-dot(fromCaption, fromCaption));
         col *= 1.0 - shade;
         alpha = max(alpha, shade);
