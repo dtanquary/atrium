@@ -8,7 +8,7 @@ import SwiftUI
 struct Knob {
     /// `choice` is a menu of named steps, stored as the index of the pick; `times` is a multiplier like "1.5×";
     /// `date` is a day of the year, 0 for 1 January, shown like "Oct 28".
-    enum Format: Equatable { case number, clock, minutes, toggle, times, date, choice([String]) }
+    enum Format: Equatable { case number, clock, minutes, seconds, toggle, times, date, choice([String]) }
 
     let key: String, label: String, range: ClosedRange<Double>, standard: Double
     /// The Settings section it's grouped under.
@@ -327,6 +327,9 @@ struct AboutPage: View {
                 DisclosureGroup("Rain on Glass backdrops, from Poly Haven, Wikimedia Commons and the NPS") {
                     ForEach(credits("rain-credits.tsv"), id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
                 }
+                DisclosureGroup("Solar System's photos, from NASA, ESA, JAXA and the people who processed them") {
+                    ForEach(credits("solar-photos.tsv"), id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
+                }
                 DisclosureGroup("Reef photos, from iNaturalist, Wikimedia Commons and NOAA") {
                     ForEach(credits("reef-credits.tsv"), id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
                 }
@@ -510,6 +513,7 @@ struct KnobRow: View {
         switch knob.format {
         case .clock: String(format: "%d:%02d", Int(value) % 24, Int(value * 60) % 60)
         case .minutes: value < 0.5 ? "Off" : "\(Int(value.rounded())) min"
+        case .seconds: "\(Int(value.rounded())) s"
         case .times: String(format: value < 10 ? "%.1f×" : "%.0f×", value)
         case .date: Self.day.string(from: Date(timeIntervalSinceReferenceDate: 0).addingTimeInterval(value.rounded(.down) * 86400))
         default: String(format: "%.2f", value)
@@ -547,7 +551,8 @@ struct PalettePicker: View {
 
     var body: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 76), spacing: 14)], spacing: 14) {
-            swatch("Random", colours: choice.options.filter { choice.photos[$0.name] == nil }.compactMap { (scheme == .dark ? $0.dark : $0.light).last },
+            let plain = choice.options.filter { choice.photos[$0.name] == nil }
+            swatch("Random", colours: (plain.isEmpty ? choice.options : plain).compactMap { (scheme == .dark ? $0.dark : $0.light).last },
                    symbol: "shuffle")
             ForEach(choice.options, id: \.name) { option in
                 swatch(option.name, colours: scheme == .dark ? option.dark : option.light,

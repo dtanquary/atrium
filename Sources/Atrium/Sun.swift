@@ -29,8 +29,12 @@ final class TheSun: SKScene {
         Knob(key: "sun.life", label: "Liveliness", range: 0...2, standard: 1, section: "View"),
     ] + gradeKnobs("sun")
 
-    private let wavelength = TheSun.wavelengths.first { $0.name == UserDefaults.standard.string(forKey: "sun.wavelength") }
-        ?? TheSun.wavelengths.randomElement()!
+    /// The wavelength menu, for where the Sun has no palette of its own (in Solar System): 0 is Random.
+    nonisolated static let wavelengthKnob = Knob(key: "sun.light", label: "Wavelength", range: 0...Double(wavelengths.count), standard: 0,
+                                                 section: "View", format: .choice(["Random"] + wavelengths.map(\.name)))
+
+    private let wavelength = TheSun.wavelengthKnob.value > 0.5 ? TheSun.wavelengths[min(Int(TheSun.wavelengthKnob.value), TheSun.wavelengths.count) - 1]
+        : TheSun.wavelengths.first { $0.name == UserDefaults.standard.string(forKey: "sun.wavelength") } ?? TheSun.wavelengths.randomElement()!
     // The frame showing and the one it's fading to (by `u_fade`), each cropped to what the framing shows: `u_crop`
     // and `u_cropNext` are the part of SDO's image each holds, as x, y, width and height from 0 to 1.
     private lazy var frameUniform = SKUniform(name: "u_frame", texture: placeholder())

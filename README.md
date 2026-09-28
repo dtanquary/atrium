@@ -169,6 +169,13 @@ One young white oak on a chalk hilltop, living through the real seasons where yo
 | ![A Tree for the Year at bud break](docs/images/a-tree-for-the-year-spring.jpg) | ![A Tree for the Year in falling snow, holding its dead leaves](docs/images/a-tree-for-the-year-snow.jpg) |
 | Early May: catkin gold as the leaves open | January snow, the young oak still holding its dead leaves |
 
+### Solar System
+A slow tour of the Sun's family in the best photos spacecraft and telescopes have taken: Juno's Jupiter, New Horizons' Pluto, Webb's Uranus, Magellan's Venus, the Nile from the space station, and every moon with a photo worth showing. Each drifts and zooms for a minute, then dissolves into another world, and a world you come back to shows you a different photo. The Sun is today's real Sun and the Moon is tonight's real Moon, both live. Settings → Show holds the tour on one world.
+
+| ![Solar System: Jupiter from Juno, in enhanced colour](docs/images/solar-system-jupiter.jpg) | ![Solar System: the Nile, Sinai and the Red Sea from the International Space Station](docs/images/solar-system-nile.jpg) |
+|---|---|
+| Jupiter, from Juno | The Nile and the Red Sea, from the space station |
+
 ## How it works
 
 macOS has no public API for third-party live wallpapers. This app gives each display a borderless window at the desktop window level (`CGWindowLevelForKey(.desktopWindow)`). That puts it above the system wallpaper and below your desktop icons, on every Space, and it lets clicks pass straight through to the desktop.
@@ -254,6 +261,7 @@ SNAPSHOT_SCENE="Fish Tank" SNAPSHOT_MOVIE=6 swift test       # then 6 seconds of
 - The Campfire wallpaper's clearing is the CC0 panorama "Hochsal Forest" by Adrian Kubasa ([source](https://polyhaven.com/a/hochsal_forest)), relit by the fire, with CC0 scans of a stone fire pit by Sebastian Platen and dry branches by Rico Cilliers from Poly Haven. See [`Sources/Atrium/Resources/campfire-credits.tsv`](Sources/Atrium/Resources/campfire-credits.tsv).
 - The Rain on Glass backdrops are CC0 HDRIs from Poly Haven by Greg Zaal, Rico Cilliers, Alexander Scholten, Andreas Mischok and Oliksiy Yakovlyev, public domain photos from the National Park Service and USFWS, and CC BY photos from Wikimedia Commons by Douglas Paul Perkins, mariemon, epSos.de and Vyacheslav Argenberg. See [`Sources/Atrium/Resources/rain-credits.tsv`](Sources/Atrium/Resources/rain-credits.tsv) and Settings → About.
 - A Tree for the Year's hilltop is "Solitary tree at Cissbury Ring" by Andy Li, CC0 ([source](https://commons.wikimedia.org/wiki/File:Solitary_tree_at_Cissbury_Ring_2026-04-07.jpg)), with its own tree painted out; its oak leaves and bark are CC0 scans by Lennart Demes, ambientCG. See [`Sources/Atrium/Resources/tree-credits.tsv`](Sources/Atrium/Resources/tree-credits.tsv).
+- Solar System's photos are from NASA, JPL, ESA, JAXA, the Space Science Institute, JHUAPL/SwRI, NSO and the people who processed them, public domain, CC BY or CC BY-SA. Each one's credit, licence and source is in [`Sources/Atrium/Resources/solar-photos.tsv`](Sources/Atrium/Resources/solar-photos.tsv) and in Settings → About.
 - Reef fish, corals and rock in the Fish Tank are cut out of public domain, CC0 and CC BY photos from iNaturalist, Wikimedia Commons and NOAA. Each photographer and licence is listed in [`Sources/Atrium/Resources/reef-credits.tsv`](Sources/Atrium/Resources/reef-credits.tsv) and in Settings → About.
 
 ## License

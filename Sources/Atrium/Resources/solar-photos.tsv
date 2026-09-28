@@ -1,0 +1,85 @@
+# Solar System's views, cut by prep.py from these originals. Public domain, CC BY or CC BY-SA; CC BY and CC BY-SA
+# require this attribution. file	body	credit	licence	source	caption	kind	focus x,y[,zoom]
+live	The Sun	NASA/SDO and the AIA, EVE and HMI science teams, via Helioviewer	Public domain	https://helioviewer.org	Today, from NASA's Solar Dynamics Observatory	live	
+solar-sun-orbiter.heic	The Sun	ESA & NASA/Solar Orbiter/EUI Team, E. Kraaikamp (ROB)	CC BY-SA 3.0 IGO	https://www.esa.int/ESA_Multimedia/Images/2025/04/Solar_Orbiter_s_widest_high-res_view_of_the_Sun	Solar Orbiter, 2025 · extreme ultraviolet	disc	0.377,0.552,1.5
+solar-sun-visible.heic	The Sun	ESA & NASA/Solar Orbiter/PHI Team; image processing by PHI Team members at MPS	CC BY-SA 3.0 IGO	https://www.esa.int/ESA_Multimedia/Images/2024/11/PHI_s_view_of_the_Sun_in_visible_light	Sunspots · Solar Orbiter, 2023	disc	0.213,0.584,1.5
+solar-sun-eruption.heic	The Sun	NASA/GSFC/SDO	Public domain	https://images.nasa.gov/details/GSFC_20171208_Archive_e001661	A filament erupts · Solar Dynamics Observatory, 31 August 2012 · ultraviolet	disc	0.129,0.713
+solar-sun-spot.heic	The Sun	NSF/NSO/AURA	CC BY 4.0	https://noirlab.edu/public/images/NSO-DKIST-spot450_full1-CC/	A sunspot · Inouye Solar Telescope, 2021	closeup	0.5,0.5
+solar-sun-filament.heic	The Sun	NASA/SDO	Public domain	https://images.nasa.gov/details/GSFC_20171208_Archive_e000790	A dark filament · Solar Dynamics Observatory, 2015 · ultraviolet	disc	0.636,0.509
+solar-sun-granules.heic	The Sun	NSO/NSF/AURA	CC BY 4.0	https://nso.edu/telescopes/dkist/first-light-full-image/	Granules the size of Texas · Inouye Solar Telescope, 2019	closeup	0.5,0.5
+solar-mercury-colour.heic	Mercury	NASA/Johns Hopkins University Applied Physics Laboratory/Carnegie Institution of Washington	Public domain	https://commons.wikimedia.org/wiki/File:Mercury_in_color_-_Prockter07_centered.jpg	MESSENGER, 2008 · enhanced colour	disc	0.5,0.5
+solar-mercury-flyby.heic	Mercury	NASA/Johns Hopkins University Applied Physics Laboratory/Carnegie Institution of Washington	Public domain	https://photojournal.jpl.nasa.gov/catalog/PIA13840	MESSENGER, 2008	disc	0.121,0.408
+solar-mercury-caloris.heic	Mercury	NASA/Johns Hopkins University Applied Physics Laboratory/Carnegie Institution of Washington	Public domain	https://photojournal.jpl.nasa.gov/catalog/PIA13675	The Caloris basin · MESSENGER, 2008	closeup	0.45,0.5
+solar-venus-radar.heic	Venus	NASA/JPL	Public domain	https://photojournal.jpl.nasa.gov/catalog/PIA00104	The surface under the clouds · Magellan radar, 1990–94, in the colours Venera saw	disc	0.5,0.5
+solar-venus-akatsuki.heic	Venus	JAXA/ISAS Akatsuki UVI; processing by Mark McCaughrean	CC BY-SA 4.0	https://www.flickr.com/photos/markmccaughrean/54444410132/	The clouds · Akatsuki · ultraviolet	disc	0.5,0.5
+solar-venus-mariner.heic	Venus	NASA/JPL	Public domain	https://www.flickr.com/photos/nasacommons/7544560662/	The clouds · Mariner 10, 1974 · ultraviolet	disc	0.5,0.5
+solar-venus-north.heic	Venus	NASA/JPL	Public domain	https://photojournal.jpl.nasa.gov/catalog/PIA00271	The north pole and Maxwell Montes · Magellan radar, 1990–94	disc	0.48,0.616
+solar-venus-clouds.heic	Venus	NASA/JPL-Caltech	Public domain	https://photojournal.jpl.nasa.gov/catalog/PIA23791	Mariner 10, 1974 · contrast enhanced	disc	0.5,0.5
+solar-earth-marble.heic	Earth	NASA/Apollo 17 crew	Public domain	https://commons.wikimedia.org/wiki/File:The_Blue_Marble,_AS17-148-22727.jpg	The Blue Marble · Apollo 17, 1972	disc	0.57,0.428
+solar-earth-nile.heic	Earth	ISS Expedition 35 crew, NASA Johnson Space Center	Public domain	https://commons.wikimedia.org/wiki/File:ISS035-E-007148_Nile_-_Sinai_-_Dead_Sea_-_Wide_Angle_View.jpg	The Nile, Sinai and the Red Sea · International Space Station, 2013	closeup	0.55,0.5
+solar-earth-africa.heic	Earth	NASA EPIC Team	Public domain	https://epic.gsfc.nasa.gov/?date=2024-06-21	Africa and Europe · DSCOVR, 21 June 2024	disc	0.5,0.5
+solar-earth-glint.heic	Earth	NASA	Public domain	https://commons.wikimedia.org/wiki/File:Cloudscape_Over_the_Philippine_Sea.jpg	Clouds over the Philippine Sea · International Space Station	closeup	0.55,0.65
+solar-earth-storms.heic	Earth	NASA Expedition 20 crew, NASA Earth Observatory	Public domain	https://commons.wikimedia.org/wiki/File:ISS-20_Thunderstorms_on_the_Brazilian_Horizon.jpg	Thunderstorms over Brazil · International Space Station, 2009	closeup	0.75,0.6
+solar-earth-aurora.heic	Earth	NASA	Public domain	https://images.nasa.gov/details/iss073e0247726	The southern lights over the Indian Ocean · International Space Station, 2025	closeup	0.5,0.5
+solar-earth-clouds.heic	Earth	ISS Expedition 34 crew, NASA Johnson Space Center	Public domain	https://commons.wikimedia.org/wiki/File:ISS034E016601_-_Stratocumulus_Clouds_-_Pacific_Ocean.jpg	Stratocumulus over the Pacific · International Space Station	closeup	0.5,0.5
+solar-earth-americas.heic	Earth	NASA EPIC Team	Public domain	https://epic.gsfc.nasa.gov/?date=2024-06-21	The Americas · DSCOVR, 21 June 2024	disc	0.5,0.5
+solar-earth-hawaii.heic	Earth	NASA	Public domain	https://commons.wikimedia.org/wiki/File:ISS-38_Hawaiian_Island_chain.jpg	The Hawaiian Islands · International Space Station	closeup	0.78,0.82
+solar-earth-night.heic	Earth	NASA	Public domain	https://commons.wikimedia.org/wiki/File:ISS-46_Northern_India_at_night.jpg	Northern India at night · International Space Station	closeup	0.5,0.5
+live	The Moon	NASA's CGI Moon Kit: LRO's LROC colour and LOLA heights	Public domain	https://svs.gsfc.nasa.gov/4720	Right now, from where you are	live	
+solar-moon-farside.heic	The Moon	NASA	Public domain	https://images.nasa.gov/details/art002e009276	Orientale basin, where the near side meets the far · Artemis II, 2026	disc	0.466,0.639
+solar-moon-limb.heic	The Moon	NASA	Public domain	https://images.nasa.gov/details/art002e010399	Ancient craters · Artemis II, 2026	closeup	0.5,0.5
+solar-moon-orientale.heic	The Moon	NASA	Public domain	https://images.nasa.gov/details/art002e012183	Orientale basin and Grimaldi crater · Artemis II, 2026	disc	0.389,0.739
+solar-moon-terminator.heic	The Moon	NASA	Public domain	https://images.nasa.gov/details/art002e009281	Long shadows at the edge of lunar day · Artemis II, 2026	closeup	0.5,0.5
+solar-moon-king.heic	The Moon	NASA/Johnson Space Center	Public domain	https://images.nasa.gov/details/as16-120-19228	North of King crater, on the far side · Apollo 16, 1972	closeup	0.5,0.5
+solar-moon-vavilov.heic	The Moon	NASA	Public domain	https://images.nasa.gov/details/art002e009282	Vavilov crater, on the rim of the Hertzsprung basin · Artemis II, 2026	closeup	0.5,0.5
+solar-moon-rings.heic	The Moon	NASA	Public domain	https://images.nasa.gov/details/art002e012090	The rings of Orientale basin · Artemis II, 2026	closeup	0.5,0.5
+solar-moon-gibbous.heic	The Moon	NASA	Public domain	https://images.nasa.gov/details/art002e009627	Artemis II, 2026	disc	0.5,0.5
+solar-moon-aristarchus.heic	The Moon	NASA	Public domain	https://images.nasa.gov/details/art002e012114	Aristarchus crater and the Marius Hills · Artemis II, 2026	closeup	0.5,0.5
+solar-jupiter-hubble.heic	Jupiter	NASA, ESA, A. Simon (Goddard Space Flight Center) and M. H. Wong (University of California, Berkeley)	CC BY 4.0	https://esahubble.org/images/heic1914a/	Hubble, 2019	disc	0.654,0.54
+solar-jupiter-marble.heic	Jupiter	NASA/JPL-Caltech/SwRI/MSSS, enhanced image by Kevin M. Gill	CC BY	https://photojournal.jpl.nasa.gov/catalog/PIA22946	Juno, 2019 · enhanced colour	disc	0.73,0.165
+solar-jupiter-belt.heic	Jupiter	NASA/JPL-Caltech/SwRI/MSSS, image processing by Brian Swift	CC BY	https://photojournal.jpl.nasa.gov/catalog/PIA24972	Clouds of the North Equatorial Belt · Juno, 2021 · enhanced colour	closeup	0.55,0.4
+solar-jupiter-cassini.heic	Jupiter	NASA/JPL/Space Science Institute	Public domain	https://photojournal.jpl.nasa.gov/catalog/PIA04866	Cassini, 2000	disc	0.54,0.661
+solar-jupiter-grs.heic	Jupiter	NASA/JPL-Caltech/SwRI/MSSS, enhanced image by Kevin M. Gill	CC BY	https://photojournal.jpl.nasa.gov/catalog/PIA21395	The Great Red Spot · Juno, 2017 · enhanced colour	closeup	0.5,0.5
+solar-jupiter-webb.heic	Jupiter	NASA, ESA, CSA, Jupiter ERS Team; image processing by Judy Schmidt	CC BY 4.0	https://esawebb.org/images/jupiter-auroras1/	Webb, 2022 · infrared	disc	0.72,0.694
+solar-jupiter-shadow.heic	Jupiter	NASA/JPL-Caltech/SwRI/MSSS, image processing by Thomas Thomopoulos	CC BY	https://photojournal.jpl.nasa.gov/catalog/PIA25015	Ganymede's shadow · Juno, 2022 · enhanced colour	closeup	0.128,0.48
+solar-jupiter-horizon.heic	Jupiter	NASA/JPL-Caltech/SwRI/MSSS, enhanced image by Kevin M. Gill	CC BY	https://photojournal.jpl.nasa.gov/catalog/PIA22950	The Great Red Spot on the horizon · Juno, 2019 · enhanced colour	closeup	0.844,0.62
+solar-jupiter-north.heic	Jupiter	NASA/JPL-Caltech/SwRI/MSSS, enhanced image by Kevin M. Gill	CC BY	https://photojournal.jpl.nasa.gov/catalog/PIA22949	The northern hemisphere · Juno, 2019 · enhanced colour	disc	0.399,0.39
+solar-jupiter-swirls.heic	Jupiter	NASA/JPL-Caltech/SwRI/MSSS, enhanced image by Kevin M. Gill	CC BY	https://photojournal.jpl.nasa.gov/catalog/PIA21978	The North Temperate Belt · Juno, 2018 · enhanced colour	closeup	0.556,0.45
+solar-jupiter-roses.heic	Jupiter	NASA/JPL-Caltech/SwRI/MSSS, image processing by Rita Najm	CC BY	https://photojournal.jpl.nasa.gov/catalog/PIA24293	Storms of the north · Juno, 2020 · enhanced colour	closeup	0.5,0.5
+solar-jupiter-stormy.heic	Jupiter	NASA/JPL-Caltech/SwRI/MSSS, enhanced image by Kevin M. Gill	CC BY	https://photojournal.jpl.nasa.gov/catalog/PIA22423	Juno, 2018 · enhanced colour	closeup	0.5,0.4
+solar-io-galileo.heic	Io	NASA/JPL/University of Arizona	Public domain	https://photojournal.jpl.nasa.gov/catalog/PIA02308	Moon of Jupiter · Galileo, 1999	disc	0.35,0.632
+solar-io-mosaic.heic	Io	zelario12, from NASA/JPL data	CC BY-SA 4.0	https://www.flickr.com/photos/197038812@N04/53515582835	Moon of Jupiter · Galileo and Voyager	disc	0.5,0.5
+solar-europa-galileo.heic	Europa	NASA/JPL-Caltech/SETI Institute	Public domain	https://photojournal.jpl.nasa.gov/catalog/PIA19048	Moon of Jupiter · Galileo, late 1990s · enhanced colour	disc	0.5,0.5
+solar-europa-juno.heic	Europa	NASA/JPL-Caltech/SwRI/MSSS/Kevin M. Gill	CC BY 2.0	https://www.flickr.com/photos/kevinmgill/53255790801	Moon of Jupiter · Juno, 2022	disc	0.5,0.5
+solar-europa-limb.heic	Europa	NASA/JPL-Caltech/SwRI/MSSS/Andrea Luck	CC BY 2.0	https://www.flickr.com/photos/192271236@N03/52401392707	Moon of Jupiter · Juno, 2022 · enhanced colour	closeup	0.5,0.639
+solar-ganymede-juno.heic	Ganymede	NASA/JPL-Caltech/SwRI/MSSS/Kevin M. Gill	CC BY 2.0	https://www.flickr.com/photos/kevinmgill/51237058399	Moon of Jupiter · Juno, 2021	disc	0.71,0.358
+solar-callisto-voyager.heic	Callisto	NASA/JPL/Justin Cowart	CC BY 2.0	https://commons.wikimedia.org/wiki/File:Callisto_-_Voyager_2_(26602921414).png	Moon of Jupiter · Voyager 2, 1979	disc	0.5,0.5
+solar-uranus-webb.heic	Uranus	ESA/Webb, NASA, CSA, STScI, P. Tiranti, H. Melin, M. Zamani (ESA/Webb)	CC BY 4.0	https://esawebb.org/images/weic2602a/	Its rings and aurora · Webb, 2026 · infrared	disc	0.461,0.359
+solar-uranus-voyager.heic	Uranus	NASA/JPL-Caltech	Public domain	https://photojournal.jpl.nasa.gov/catalog/PIA18182	Voyager 2, 1986	disc	0.5,0.5
+solar-uranus-crescent.heic	Uranus	NASA/JPL-Caltech/Voyager-ISS/Andrea Luck	CC BY 2.0	https://www.flickr.com/photos/192271236@N03/52523609952	Leaving Uranus · Voyager 2, 1986	disc	0.5,0.5
+solar-uranus-rings.heic	Uranus	NASA, ESA, CSA, STScI, J. DePasquale (STScI)	CC BY 4.0	https://esawebb.org/images/weic2310a/	Webb, 2023 · infrared	disc	0.5,0.5
+solar-miranda-voyager.heic	Miranda	NASA/JPL-Caltech, processed by zelario12	CC BY-SA 2.0	https://www.flickr.com/photos/197038812@N04/53467048107	Moon of Uranus · Voyager 2, 1986	disc	0.48,0.485
+solar-miranda-south.heic	Miranda	NASA/JPL-Caltech	Public domain	https://photojournal.jpl.nasa.gov/catalog/PIA01490	Moon of Uranus · Voyager 2, 1986	disc	0.5,0.5
+solar-ariel-voyager.heic	Ariel	NASA/JPL-Caltech	Public domain	https://photojournal.jpl.nasa.gov/catalog/PIA01534	Moon of Uranus · Voyager 2, 1986	disc	0.686,0.576
+solar-umbriel-voyager.heic	Umbriel	NASA/JPL-Caltech	Public domain	https://photojournal.jpl.nasa.gov/catalog/PIA00040	Moon of Uranus · Voyager 2, 1986	disc	0.5,0.5
+solar-titania-voyager.heic	Titania	NASA/JPL-Caltech/Kevin M. Gill	CC BY 2.0	https://www.flickr.com/photos/53460575@N03/31492575221	Moon of Uranus · Voyager 2, 1986	disc	0.5,0.5
+solar-titania-colour.heic	Titania	NASA/JPL-Caltech	Public domain	https://photojournal.jpl.nasa.gov/catalog/PIA00036	Moon of Uranus · Voyager 2, 1986	disc	0.5,0.5
+solar-oberon-voyager.heic	Oberon	NASA/JPL-Caltech	Public domain	https://photojournal.jpl.nasa.gov/catalog/PIA00034	Moon of Uranus · Voyager 2, 1986	disc	0.5,0.5
+solar-neptune-voyager.heic	Neptune	NASA/JPL-Caltech/Voyager-ISS/Andrea Luck	CC BY 2.0	https://www.flickr.com/photos/192271236@N03/52494377269	The Great Dark Spot · Voyager 2, 1989 · enhanced colour	disc	0.313,0.459
+solar-neptune-true.heic	Neptune	NASA/JPL-Caltech/Voyager-ISS/Andrea Luck	CC BY 2.0	https://www.flickr.com/photos/192271236@N03/53506151058	Voyager 2, 1989	disc	0.286,0.405
+solar-neptune-clouds.heic	Neptune	NASA/JPL-Caltech/Voyager-ISS/Andrea Luck	CC BY 2.0	https://www.flickr.com/photos/192271236@N03/51599930794	High cirrus · Voyager 2, 1989	closeup	0.7,0.259
+solar-neptune-other.heic	Neptune	NASA/JPL-Caltech/Voyager-ISS/Andrea Luck	CC BY 2.0	https://www.flickr.com/photos/192271236@N03/51932458995	Voyager 2, 1989 · enhanced colour	disc	0.5,0.5
+solar-neptune-crescent.heic	Neptune	NASA/JPL-Caltech/Voyager-ISS/Andrea Luck	CC BY 2.0	https://www.flickr.com/photos/192271236@N03/51935821827	Neptune and Triton, leaving · Voyager 2, 1989	disc	0.5,0.5
+solar-neptune-south.heic	Neptune	NASA/JPL-Caltech	Public domain	https://photojournal.jpl.nasa.gov/catalog/PIA01539	Leaving Neptune · Voyager 2, 1989	disc	0.5,0.5
+solar-triton-voyager.heic	Triton	NASA/JPL/USGS	Public domain	https://photojournal.jpl.nasa.gov/catalog/PIA00317	Moon of Neptune · Voyager 2, 1989	disc	0.464,0.705
+solar-proteus-voyager.heic	Proteus	NASA/JPL-Caltech	Public domain	https://photojournal.jpl.nasa.gov/catalog/PIA00062	Moon of Neptune · Voyager 2, 1989	disc	0.5,0.5
+solar-pluto-true.heic	Pluto	NASA/JHUAPL/SwRI/Alex Parker	Public domain	https://pluto.jhuapl.edu/Galleries/Featured-Images/image.php?gallery_id=2&image_id=543	New Horizons, 2015	disc	0.645,0.558
+solar-pluto-colour.heic	Pluto	NASA/JHUAPL/SwRI	Public domain	https://photojournal.jpl.nasa.gov/catalog/PIA19952	New Horizons, 2015 · enhanced colour	disc	0.298,0.616
+solar-pluto-haze.heic	Pluto	NASA/JHUAPL/SwRI	Public domain	https://photojournal.jpl.nasa.gov/catalog/PIA20727	Haze lit from behind · New Horizons, 2015	disc	0.51,0.14
+solar-pluto-mountains.heic	Pluto	NASA/JHUAPL/SwRI	Public domain	https://photojournal.jpl.nasa.gov/catalog/PIA19948	Mountains, ice plains and haze at sunset · New Horizons, 2015	closeup	0.35,0.6
+solar-pluto-blue.heic	Pluto	NASA/JHUAPL/SwRI	Public domain	https://photojournal.jpl.nasa.gov/catalog/PIA21590	Blue haze on departure · New Horizons, 2015	disc	0.5,0.5
+solar-pluto-north.heic	Pluto	NASA/JHUAPL/SwRI	Public domain	https://photojournal.jpl.nasa.gov/catalog/PIA20473	Canyons of the north pole · New Horizons, 2015 · enhanced colour	closeup	0.5,0.5
+solar-charon-colour.heic	Charon	NASA/JHUAPL/SwRI	Public domain	https://photojournal.jpl.nasa.gov/catalog/PIA19968	Moon of Pluto · New Horizons, 2015 · enhanced colour	disc	0.514,0.1
+solar-charon-true.heic	Charon	NASA/JHUAPL/SwRI/Alex Parker	Public domain	https://pluto.jhuapl.edu/Galleries/Featured-Images/image.php?gallery_id=2&image_id=544	Moon of Pluto · New Horizons, 2015	disc	0.5,0.5
+solar-nix-nh.heic	Nix	NASA/JHUAPL/SwRI	Public domain	https://photojournal.jpl.nasa.gov/catalog/PIA20287	Moon of Pluto · New Horizons, 2015	disc	0.5,0.5
+solar-arrokoth-nh.heic	Arrokoth	NASA/JHUAPL/SwRI/Roman Tkachenko	Public domain	https://pluto.jhuapl.edu/Galleries/Featured-Images/image.php?gallery_id=2&image_id=626	In the Kuiper belt, 6.6 billion km out · New Horizons, 2019 · enhanced colour	disc	0.5,0.5
