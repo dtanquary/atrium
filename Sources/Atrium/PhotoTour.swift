@@ -25,13 +25,17 @@ struct Tour: Sendable {
     /// What the tour moves between, and what Show can hold it on, in the table's order.
     let bodies: [String], groups: [String]
     let facts: [String: [String]]
-    let seconds: Knob, zoom: Knob, captions: Knob, showFacts: Knob, brightness: Knob
+    let seconds: Knob, zoom: Knob, brightness: Knob
+    /// The caption: which lines, how many facts and how they're laid out, where, how big, and how far from the edges.
+    let captionLines: Knob, factCount: Knob, factLayout: Knob, captionPlace: Knob, captionSize: Knob, captionMargin: Knob
     /// Solar System Tour's switch for views from the ground.
     let surface: Knob?
     /// The group the tour is held on, by name; empty tours them all.
     let showKey: String
 
-    var knobs: [Knob] { [seconds, zoom, captions, showFacts] + (surface.map { [$0] } ?? []) + [brightness] }
+    var knobs: [Knob] {
+        [seconds, zoom] + (surface.map { [$0] } ?? []) + [brightness, captionLines, factCount, factLayout, captionPlace, captionSize, captionMargin]
+    }
     /// The pick for Settings: every group, each with its thumbnail (`<prefix>-thumb-<name>.jpg`).
     var showChoice: PaletteChoice {
         PaletteChoice(key: showKey, options: groups.map { ($0, [[0.05, 0.07, 0.2], [0.3, 0.2, 0.45]], [[0.05, 0.07, 0.2], [0.3, 0.2, 0.45]]) },
@@ -57,9 +61,19 @@ struct Tour: Sendable {
         facts = rows("\(prefix)-facts.tsv").reduce(into: [:]) { if $1.count == 2 { $0[$1[0], default: []].append($1[1]) } }
         seconds = Knob(key: prefix + ".seconds", label: "Each view for", range: 20...300, standard: 60, section: "Tour", format: .seconds)
         zoom = Knob(key: prefix + ".zoom", label: "Zoom", range: 1...1.6, standard: 1.25, section: "Tour", format: .times)
-        captions = Knob(key: prefix + ".captions", label: "Names", range: 0...1, standard: 1, section: "Tour", format: .toggle)
-        showFacts = Knob(key: prefix + ".facts", label: "Facts", range: 0...1, standard: 1, section: "Tour", format: .toggle,
-                         shownWhen: prefix + ".captions")
+        captionLines = Knob(key: prefix + ".captionLines", label: "Show", range: 0...3, standard: 3, section: "Caption",
+                            format: .choice(["Nothing", "The name", "The name and a line on the photo", "The name, the photo and facts"]))
+        factCount = Knob(key: prefix + ".factCount", label: "Facts", range: 0...2, standard: 1, section: "Caption",
+                         format: .choice(["One at a time", "Two at a time", "Three at a time"]), shownWhen: prefix + ".captionLines")
+        factLayout = Knob(key: prefix + ".factLayout", label: "Facts laid out", range: 0...1, standard: 0, section: "Caption",
+                          format: .choice(["On one line", "One per line"]), shownWhen: prefix + ".captionLines")
+        captionPlace = Knob(key: prefix + ".captionPlace", label: "Position", range: 0...5, standard: 3, section: "Caption",
+                            format: .choice(["Top left", "Top centre", "Top right", "Bottom left", "Bottom centre", "Bottom right"]),
+                            shownWhen: prefix + ".captionLines")
+        captionSize = Knob(key: prefix + ".captionSize", label: "Size", range: 0.6...2, standard: 1, section: "Caption", format: .times,
+                           shownWhen: prefix + ".captionLines")
+        captionMargin = Knob(key: prefix + ".captionMargin", label: "Margin", range: 16...240, standard: 52, section: "Caption",
+                             format: .points, shownWhen: prefix + ".captionLines")
         brightness = Knob(key: prefix + ".brightness", label: "Brightness", range: 0.4...1.2, standard: 1, section: "Tour", format: .times)
         surface = surfaceSwitch && views.contains(where: { $0.kind == .surface }) ? Knob(key: prefix + ".surface", label: "Views from the surface", range: 0...1, standard: 1,
                                        section: "Tour", format: .toggle) : nil
@@ -91,17 +105,17 @@ struct Tour: Sendable {
         return own[index]
     }
 
-    /// Two of a body's facts, the next in its own shuffled order (the same order every launch), so none repeats until
-    /// all have shown. Where it's got to is kept per body under `<prefix>.factsSeen`.
-    func nextFacts(_ body: String) -> String {
-        guard let all = facts[body], !all.isEmpty else { return "" }
+    /// `count` of a body's facts, the next in its own shuffled order (the same order every launch), so none repeats
+    /// until all have shown. Where it's got to is kept per body under `<prefix>.factsSeen`.
+    func nextFacts(_ body: String, count wanted: Int) -> [String] {
+        guard let all = facts[body], !all.isEmpty else { return [] }
         var rng = SplitMix(state: body.utf8.reduce(0xCBF2_9CE4_8422_2325) { ($0 ^ UInt64($1)) &* 0x100_0000_01B3 }) // FNV-1a: stable, unlike hashValue
         let order = Array(all.indices).shuffled(using: &rng)
         var seen = UserDefaults.standard.dictionary(forKey: prefix + ".factsSeen") as? [String: Int] ?? [:]
-        let start = seen[body, default: 0], count = min(2, all.count)
+        let start = seen[body, default: 0], count = min(wanted, all.count)
         seen[body] = (start + count) % all.count
         UserDefaults.standard.set(seen, forKey: prefix + ".factsSeen")
-        return (0..<count).map { all[order[(start + $0) % all.count]] }.joined(separator: "  ·  ")
+        return (0..<count).map { all[order[(start + $0) % all.count]] }
     }
 
     private func unique(_ names: [String]) -> [String] { names.reduce(into: []) { if !$0.contains($1) { $0.append($1) } } }
@@ -164,6 +178,8 @@ final class PhotoTour: SKScene {
     private let fadeUniform = SKUniform(name: "u_fade", float: 0)
     private let opaqueUniform = SKUniform(name: "u_opaque", vectorFloat2: [1, 1])
     private let captionUniform = SKUniform(name: "u_caption", float: 0)
+    /// The shadow behind the caption: its centre and reach, in points.
+    private let shadeUniform = SKUniform(name: "u_shade", vectorFloat4: [170, 80, 320, 100])
     private let brightnessUniform = SKUniform(name: "u_brightness", float: 1)
 
     private var current: Shown?
@@ -172,6 +188,11 @@ final class PhotoTour: SKScene {
     private var time = 0.0
     private var lastUpdate: TimeInterval?
     private let caption = SKNode()
+    /// The view the caption is for, its facts (kept so a change of layout doesn't move them on), and the Settings it was
+    /// laid out with.
+    private var captionView: View?
+    private var shownFacts: [String] = []
+    private var captionLayout: [Double] = []
     private weak var host: SKView?
     /// Screen pixels per point, for how sharp a photo can be shown. The render test and the desktop are both 2x.
     private let pixelScale = Double(NSScreen.main?.backingScaleFactor ?? 2)
@@ -190,7 +211,7 @@ final class PhotoTour: SKScene {
         sprite.blendMode = .alpha // live views show through where the shader leaves it clear
         sprite.shader = SKShader(source: shaderCommon + Self.shader, uniforms: [
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]),
-            aUniform, bUniform, aPlace, bPlace, aSize, bSize, fadeUniform, opaqueUniform, captionUniform, brightnessUniform,
+            aUniform, bUniform, aPlace, bPlace, aSize, bSize, fadeUniform, opaqueUniform, captionUniform, shadeUniform, brightnessUniform,
         ])
         addChild(sprite)
         caption.zPosition = 101
@@ -218,7 +239,14 @@ final class PhotoTour: SKScene {
 
     @objc private func applyKnobs() {
         brightnessUniform.floatValue = Float(tour.brightness.value)
-        if tour.captions.value < 0.5 { caption.removeAllActions(); setCaption(0) }
+        let layout = [tour.captionLines, tour.factCount, tour.factLayout, tour.captionPlace, tour.captionSize, tour.captionMargin].map(\.value)
+        guard layout != captionLayout, let view = captionView else { return } // any defaults change lands here; most aren't ours
+        captionLayout = layout
+        if tour.captionLines.value > 2.5, shownFacts.count != Int(tour.factCount.value) + 1 {
+            shownFacts = tour.nextFacts(view.body, count: Int(tour.factCount.value) + 1)
+        }
+        layoutCaption()
+        if caption.alpha == 0, !caption.hasActions(), next?.start == nil { fadeInCaption() } // turned back on mid-view
     }
 
     override func update(_ currentTime: TimeInterval) {
@@ -304,26 +332,50 @@ final class PhotoTour: SKScene {
         (slot == 0 ? aPlace : bPlace).vectorFloat4Value = [Float(x), Float(y), Float(s / k), 0]
     }
 
+    /// A new view's caption, with its next facts, faded in once the view has arrived.
     private func showCaption(_ view: View) {
-        caption.removeAllChildren()
-        guard tour.captions.value > 0.5 else { return }
-        let title = SKLabelNode(attributedText: NSAttributedString(string: view.body, attributes: [
-            .font: NSFont.systemFont(ofSize: 26, weight: .semibold), .foregroundColor: NSColor(white: 1, alpha: 0.82)]))
-        let line = SKLabelNode(attributedText: NSAttributedString(string: liveCaption(view) ?? view.caption, attributes: [
-            .font: NSFont.systemFont(ofSize: 13, weight: .regular), .foregroundColor: NSColor(white: 1, alpha: 0.6)]))
-        let facts = SKLabelNode(attributedText: NSAttributedString(string: tour.showFacts.value > 0.5 ? tour.nextFacts(view.body) : "", attributes: [
-            .font: NSFont.systemFont(ofSize: 12, weight: .regular), .foregroundColor: NSColor(white: 1, alpha: 0.45)]))
-        for label in [title, line, facts] {
-            label.horizontalAlignmentMode = .left
-            label.verticalAlignmentMode = .baseline
-            caption.addChild(label)
-        }
-        let lift: CGFloat = facts.frame.isEmpty ? 0 : 19 // the facts take the bottom line when there are any
-        line.position.y = lift
-        title.position.y = lift + 24
+        captionView = view
+        shownFacts = tour.captionLines.value > 2.5 ? tour.nextFacts(view.body, count: Int(tour.factCount.value) + 1) : []
+        captionLayout = [tour.captionLines, tour.factCount, tour.factLayout, tour.captionPlace, tour.captionSize, tour.captionMargin].map(\.value)
+        layoutCaption()
+        fadeInCaption()
+    }
+
+    private func fadeInCaption() {
+        guard tour.captionLines.value > 0.5 else { return }
         caption.run(.sequence([.wait(forDuration: 1.5), .customAction(withDuration: 3) { [weak self] _, t in
             self?.setCaption(Double(t) / 3)
         }]))
+    }
+
+    /// Lays out the caption as Settings ask: the name (26 pt), a line on the photo (13 pt) and facts (12 pt, on one line
+    /// or one per line), all scaled by Size, in a corner or the middle of the top or bottom edge, Margin from the edges.
+    /// The shader's shadow behind it follows.
+    private func layoutCaption() {
+        caption.removeAllChildren()
+        guard let view = captionView, tour.captionLines.value > 0.5 else { caption.removeAllActions(); setCaption(0); return }
+        var rows: [(text: String, size: CGFloat, weight: NSFont.Weight, alpha: CGFloat)] = [(view.body, 26, .semibold, 0.82)]
+        if tour.captionLines.value > 1.5 { rows.append((liveCaption(view) ?? view.caption, 13, .regular, 0.6)) }
+        if tour.captionLines.value > 2.5, !shownFacts.isEmpty {
+            rows += (tour.factLayout.value > 0.5 ? shownFacts : [shownFacts.joined(separator: "  ·  ")]).map { ($0, 12, .regular, 0.45) }
+        }
+        let scale = CGFloat(tour.captionSize.value), place = Int(tour.captionPlace.value), column = place % 3
+        var baseline: CGFloat = 0
+        for (i, row) in rows.enumerated() {
+            if i > 0 { baseline -= (rows[i - 1].size * 0.3 + row.size * 1.3) * scale } // the last line's descent, then this one's height
+            let label = SKLabelNode(attributedText: NSAttributedString(string: row.text, attributes: [
+                .font: NSFont.systemFont(ofSize: row.size * scale, weight: row.weight), .foregroundColor: NSColor(white: 1, alpha: row.alpha)]))
+            label.horizontalAlignmentMode = [.left, .center, .right][column]
+            label.verticalAlignmentMode = .baseline
+            label.position.y = baseline
+            caption.addChild(label)
+        }
+        caption.position = .zero
+        let block = caption.calculateAccumulatedFrame(), margin = CGFloat(tour.captionMargin.value)
+        caption.position = CGPoint(x: [margin, size.width / 2, size.width - margin][column],
+                                   y: place < 3 ? size.height - margin - block.maxY : margin - block.minY)
+        let shade = block.offsetBy(dx: caption.position.x, dy: caption.position.y)
+        shadeUniform.vectorFloat4Value = [Float(shade.midX), Float(shade.midY), Float(shade.width / 2 + 100 * scale), Float(shade.height / 2 + 65 * scale)]
     }
 
     private func hideCaption() {
@@ -435,7 +487,7 @@ final class PhotoTour: SKScene {
         vec3 col = max(a, 0.0) * oa + max(b, 0.0) * ob; // premultiplied: a live view shows through the rest
         float alpha = oa + ob;
         col *= u_brightness;
-        vec2 fromCaption = (pts - vec2(170.0, 80.0)) / vec2(320.0, 100.0);
+        vec2 fromCaption = (pts - u_shade.xy) / u_shade.zw;
         float shade = u_caption * 0.45 * exp(-dot(fromCaption, fromCaption));
         col *= 1.0 - shade;
         alpha = max(alpha, shade);

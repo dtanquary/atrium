@@ -52,6 +52,13 @@ if let body = ["The Sun Today": "The Sun", "The Moon": "The Moon"][UserDefaults.
     UserDefaults.standard.set("Solar System Tour", forKey: "scene")
     UserDefaults.standard.set(body, forKey: Tour.solarSystem.showKey)
 }
+// ponytail: Names and Facts switches became one Show menu on 2026-09-28; drop this move after a while
+if let names = UserDefaults.standard.object(forKey: "solar.captions") as? Double {
+    let facts = UserDefaults.standard.object(forKey: "solar.facts") as? Double ?? 1
+    UserDefaults.standard.set(names < 0.5 ? 0.0 : facts < 0.5 ? 2.0 : 3.0, forKey: "solar.captionLines")
+    UserDefaults.standard.removeObject(forKey: "solar.captions")
+    UserDefaults.standard.removeObject(forKey: "solar.facts")
+}
 if UserDefaults.standard.string(forKey: "scene") == "Solar System" { UserDefaults.standard.set("Solar System Tour", forKey: "scene") }
 if let skip = UserDefaults.standard.string(forKey: Shuffle.skipKey), skip.split(separator: ",").contains("Solar System") {
     UserDefaults.standard.set(skip.split(separator: ",").map { $0 == "Solar System" ? "Solar System Tour" : String($0) }.joined(separator: ","),

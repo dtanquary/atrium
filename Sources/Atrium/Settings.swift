@@ -8,7 +8,7 @@ import SwiftUI
 struct Knob {
     /// `choice` is a menu of named steps, stored as the index of the pick; `times` is a multiplier like "1.5×";
     /// `date` is a day of the year, 0 for 1 January, shown like "Oct 28".
-    enum Format: Equatable { case number, clock, minutes, seconds, toggle, times, date, choice([String]) }
+    enum Format: Equatable { case number, clock, minutes, seconds, points, toggle, times, date, choice([String]) }
 
     let key: String, label: String, range: ClosedRange<Double>, standard: Double
     /// The Settings section it's grouped under.
@@ -514,6 +514,7 @@ struct KnobRow: View {
         case .clock: String(format: "%d:%02d", Int(value) % 24, Int(value * 60) % 60)
         case .minutes: value < 0.5 ? "Off" : "\(Int(value.rounded())) min"
         case .seconds: "\(Int(value.rounded())) s"
+        case .points: "\(Int(value.rounded())) pt"
         case .times: String(format: value < 10 ? "%.1f×" : "%.0f×", value)
         case .date: Self.day.string(from: Date(timeIntervalSinceReferenceDate: 0).addingTimeInterval(value.rounded(.down) * 86400))
         default: String(format: "%.2f", value)

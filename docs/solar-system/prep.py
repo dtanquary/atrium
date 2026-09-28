@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Cuts Solar System's photos: level the black of space, crop to the world, cap the size, save HEIC + a thumbnail.
+"""Cuts a photo tour's photos: level the black of space, crop to the subject, cap the size, save HEIC + a thumbnail.
 
-    SOLAR_ORIGINALS=/path/to/originals python3 prep.py [name ...]   # every entry in photos.py, or just those
-Writes Sources/Atrium/Resources/solar-<name>.heic, solar-thumb-<body>.jpg, and solar-photos.tsv. The originals aren't
+    SOLAR_ORIGINALS=/path/to/originals python3 prep.py [name ...]             # Solar System Tour (this folder's photos.py)
+    TOUR=deep SOLAR_ORIGINALS=/path/to/originals python3 prep.py [name ...]   # Deep Space Tour (../deep-space/photos.py)
+Writes Sources/Atrium/Resources/<prefix>-<name>.heic, <prefix>-thumb-<group>.jpg, and <prefix>-photos.tsv. The originals aren't
 in the repo (about 2 GB); each one's source page is in photos.py, and `src` is its path under SOLAR_ORIGINALS.
 Needs numpy, Pillow, scipy, and ffmpeg for 16-bit TIFFs.
 """
@@ -13,10 +14,12 @@ from scipy import ndimage
 
 Image.MAX_IMAGE_PIXELS = None
 HERE = os.path.dirname(os.path.abspath(__file__))
+PREFIX = os.environ.get('TOUR', 'solar')
+TABLES = {'solar': HERE, 'deep': os.path.join(HERE, '../deep-space')}[PREFIX]
 ORIGINALS = os.environ.get('SOLAR_ORIGINALS', os.path.join(HERE, 'originals'))
 RES = os.path.join(HERE, '../../Sources/Atrium/Resources')
 SRGB = ImageCms.ImageCmsProfile(ImageCms.createProfile('sRGB')).tobytes()
-sys.path.insert(0, HERE)
+sys.path.insert(0, TABLES)
 from photos import PHOTOS, HEADER  # noqa: E402
 
 
@@ -152,20 +155,20 @@ def cut(p):
         cap = p.get('cap', 5120)
     h, w = a.shape[:2]
     f = min(1, cap / max(w, h))
-    if p['kind'] == 'closeup' and max(w, h) / min(w, h) > 2:  # a long strip: keep its short side
+    if p['kind'] in ('closeup', 'surface') and max(w, h) / min(w, h) > 2:  # a long strip: keep its short side
         f = min(1, 3400 / min(w, h))
     f *= p.get('shrink', 1)  # an upscaled original goes back toward its real sharpness
     if f < 1:
         a = resize(a, round(w * f), round(h * f))
     fx, fy = p.get('at', (None, None))
     focus = (0.5, 0.5) if fx is None else ((fx * W0 - ox) / w, (fy * H0 - oy) / h)
-    name = f"solar-{p['name']}.heic"
+    name = f"{PREFIX}-{p['name']}.heic"
     save_heic(a, os.path.join(RES, name), p.get('quality', 80))
     return name, a, focus
 
 
 # Photos not cut this run keep the focus the table already has for them.
-TSV = os.path.join(RES, 'solar-photos.tsv')
+TSV = os.path.join(RES, f'{PREFIX}-photos.tsv')
 FOCUS = {r[0]: tuple(float(v) for v in r[7].split(',')[:2]) for r in (l.rstrip('\n').split('\t') for l in open(TSV) if not l.startswith('#'))
          if len(r) > 7 and r[7]} if os.path.exists(TSV) else {}
 
@@ -174,20 +177,22 @@ def main(only):
     rows, thumbs = [], {}
     for p in PHOTOS:
         body = p['body']
-        slug = body.lower().replace(' ', '-')
+        group = p.get('group', body)  # what Show holds the tour on: the body itself, or a kind of object
+        slug = group.lower().replace(' ', '-')
         if p['kind'] == 'live':
             rows.append([f'live-{slug}', body, p['credit'], p['licence'], p['source'], p['caption'], 'live', ''])
             continue
-        name = f"solar-{p['name']}.heic"
+        name = f"{PREFIX}-{p['name']}.heic"
         if not only or p['name'] in only:
             name, a, focus = cut(p)
-            if slug not in thumbs and (p.get('thumb') or not any(q['body'] == body and q.get('thumb') for q in PHOTOS)):
-                thumb(a, p['kind'] == 'disc', os.path.join(RES, f'solar-thumb-{slug}.jpg'))
+            if slug not in thumbs and (p.get('thumb') or not any(q.get('group', q['body']) == group and q.get('thumb') for q in PHOTOS)):
+                thumb(a, p['kind'] == 'disc', os.path.join(RES, f'{PREFIX}-thumb-{slug}.jpg'))
             print(f"{name}: {a.shape[1]}x{a.shape[0]}, {os.path.getsize(os.path.join(RES, name)) / 1e6:.2f} MB, focus {focus[0]:.2f},{focus[1]:.2f}", flush=True)
             FOCUS[name] = focus
         thumbs.setdefault(slug, True)
         focus = tuple(FOCUS.get(name, (0.5, 0.5))) + ((p['zoom'],) if 'zoom' in p else ())
-        rows.append([name, body, p['credit'], p['licence'], p['source'], p['caption'], p['kind'], ','.join(f'{v:.3g}' for v in focus)])
+        rows.append([name, body, p['credit'], p['licence'], p['source'], p['caption'], p['kind'], ','.join(f'{v:.3g}' for v in focus)]
+                    + ([group] if group != body else []))
     with open(TSV, 'w') as f:
         f.write(HEADER)
         for r in rows:
