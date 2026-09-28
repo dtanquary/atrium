@@ -26,6 +26,8 @@ struct Tour: Sendable {
     let bodies: [String], groups: [String]
     let facts: [String: [String]]
     let seconds: Knob, zoom: Knob, brightness: Knob
+    /// Fill the screen with every photo that's big enough (the default), or show each whole, worlds on black.
+    let framing: Knob
     /// The caption: which lines, how many facts and how they're laid out, where, how big, and how far from the edges.
     let captionLines: Knob, factCount: Knob, factLayout: Knob, captionPlace: Knob, captionSize: Knob, captionMargin: Knob
     /// Solar System Tour's switch for views from the ground.
@@ -34,7 +36,7 @@ struct Tour: Sendable {
     let showKey: String
 
     var knobs: [Knob] {
-        [seconds, zoom] + (surface.map { [$0] } ?? []) + [brightness, captionLines, factCount, factLayout, captionPlace, captionSize, captionMargin]
+        [seconds, zoom, framing] + (surface.map { [$0] } ?? []) + [brightness, captionLines, factCount, factLayout, captionPlace, captionSize, captionMargin]
     }
     /// The pick for Settings: every group, each with its thumbnail (`<prefix>-thumb-<name>.jpg`).
     var showChoice: PaletteChoice {
@@ -74,6 +76,8 @@ struct Tour: Sendable {
                            shownWhen: prefix + ".captionLines")
         captionMargin = Knob(key: prefix + ".captionMargin", label: "Margin", range: 16...240, standard: 52, section: "Caption",
                              format: .points, shownWhen: prefix + ".captionLines")
+        framing = Knob(key: prefix + ".framing", label: "Framing", range: 0...1, standard: 0, section: "Tour",
+                       format: .choice(["Fill the screen", "Show the whole photo"]))
         brightness = Knob(key: prefix + ".brightness", label: "Brightness", range: 0.4...1.2, standard: 1, section: "Tour", format: .times)
         surface = surfaceSwitch && views.contains(where: { $0.kind == .surface }) ? Knob(key: prefix + ".surface", label: "Views from the surface", range: 0...1, standard: 1,
                                        section: "Tour", format: .toggle) : nil
@@ -224,7 +228,8 @@ final class PhotoTour: SKScene {
         // The first view straight away, so the wallpaper never opens on black, then the next in the background.
         guard let first = tour.pickNext(after: nil) else { return }
         var shown = Shown(view: first)
-        if first.kind == .live { shown.scene = liveScene(first) } else if let cut = Self.cut(first, size: size, pixelScale: pixelScale, zoom: tour.zoom.value) { shown = Shown(cut) }
+        let fills = tour.framing.value < 0.5
+        if first.kind == .live { shown.scene = liveScene(first) } else if let cut = Self.cut(first, size: size, pixelScale: pixelScale, zoom: tour.zoom.value, fill: fills) { shown = Shown(cut) }
         shown.start = 0
         show(shown, in: 0)
         current = shown
@@ -289,9 +294,9 @@ final class PhotoTour: SKScene {
             return
         }
         loading = true
-        let size = size, scale = pixelScale, zoom = tour.zoom.value
+        let size = size, scale = pixelScale, zoom = tour.zoom.value, fill = tour.framing.value < 0.5
         Task { [weak self] in
-            let cut = await Task.detached { Self.cut(view, size: size, pixelScale: scale, zoom: zoom) }.value
+            let cut = await Task.detached { Self.cut(view, size: size, pixelScale: scale, zoom: zoom, fill: fill) }.value
             guard let self else { return }
             loading = false
             guard let cut else { return }
@@ -400,10 +405,11 @@ final class PhotoTour: SKScene {
 
     /// Plans a photo's motion for a screen of `size` points and cuts out what it shows, scaled so the widest moment is
     /// one texel to a screen pixel (or the photo's own pixels, if it has fewer): after that it only ever magnifies, so
-    /// fine detail like Saturn's ringlets never shimmers. Whole worlds fit 86% of the height, a little smaller and
-    /// sharper if the photo is small, and drift halfway toward their focus; close-ups cover the screen and pan all
-    /// the way to it. Half zoom in, half out.
-    private nonisolated static func cut(_ view: View, size: CGSize, pixelScale: Double, zoom: Double) -> Cut? {
+    /// fine detail like Saturn's ringlets never shimmers. With Framing on Fill (`fill`), every photo covers the screen
+    /// and pans toward its focus, unless covering would magnify it past the limit; then, as with Show the whole photo,
+    /// a whole world fits 86% of the height, a little smaller and sharper if the photo is small, and drifts halfway toward
+    /// its focus. Close-ups always cover when they can. Half zoom in, half out.
+    private nonisolated static func cut(_ view: View, size: CGSize, pixelScale: Double, zoom: Double, fill: Bool) -> Cut? {
         guard let source = CGImageSourceCreateWithURL(resource(view.file) as CFURL, nil),
               let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
         let (w, h) = (Double(image.width), Double(image.height))
@@ -414,12 +420,14 @@ final class PhotoTour: SKScene {
         func jitter(_ k: Double) -> SIMD2<Double> { SIMD2(.random(in: -1...1) * sw, .random(in: -1...1) * sh) * 0.04 / k }
         // A close-up fills the screen, unless that would magnify it past the limit: a small photo from the ground (Huygens on
         // Titan, Eros from 250 m) is shown whole instead, as a world on black would be.
-        if view.kind != .disc, max(sw / w, sh / h) * pixelScale <= maxMagnification * 1.05 {
-            wide = max(sw / w, sh / h)
+        // Filling, a whole world stays 5% in from its edges: its black margin, or the fade baked into a deep-sky photo.
+        let edge = view.kind == .disc ? 0.05 * min(w, h) : 0
+        if view.kind != .disc || fill, max(sw / (w - 2 * edge), sh / (h - 2 * edge)) * pixelScale <= maxMagnification * 1.05 {
+            wide = max(sw / (w - 2 * edge), sh / (h - 2 * edge))
             tight = max(min(wide * z, maxMagnification / pixelScale), wide)
             // Inside the photo at scale k: the centre can't come nearer an edge than half the screen.
             func inside(_ c: SIMD2<Double>, _ k: Double) -> SIMD2<Double> {
-                simd_clamp(c, SIMD2(sw, sh) / (2 * k), SIMD2(w, h) - SIMD2(sw, sh) / (2 * k))
+                simd_clamp(c, SIMD2(sw, sh) / (2 * k) + edge, SIMD2(w, h) - SIMD2(sw, sh) / (2 * k) - edge)
             }
             // A photo more than twice the screen's width (a rover's panorama) shows a different stretch each visit.
             var target = focus

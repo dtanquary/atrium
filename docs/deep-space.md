@@ -13,6 +13,7 @@ Solar System Tour's sister: slow pans and zooms across the best real photos of w
 
 ## How it differs from Solar System Tour
 - **Show** (`deep.show`) holds the tour on a group, not an object: most objects have one to three photos, so a kind of object is the more useful hold. The tour still moves object to object within it.
+- **Framing** (`deep.framing`): like Solar System Tour's, every photo fills the screen by default (Dave, 2026-09-28), unless it's too small to without going soft; Show the whole photo brings back the objects on black.
 - **Whole objects** (`whole()` in photos.py): galaxies, nebulae and clusters on dark sky are shown whole, like a world, but they're already on black as released, so they aren't black-levelled or boxed; a 5% edge fade melts the frame into the screen's black. The black holes are levelled and boxed, since the Event Horizon Telescope's frames sit on a warm near-black.
 - **Close-ups** fill the screen and pan, as in Solar System Tour. Long panoramas (Andromeda, the Milky Way's centre) are split into overlapping segments.
 - **Quality:** HEIC at 60 (80 in Solar System Tour's older photos); deep-sky photos are busy, and at 1:1 the difference doesn't show.
