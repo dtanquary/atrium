@@ -7,16 +7,24 @@ import SpriteKit
 /// The wind comes from `WindField` as a small texture. There are no particles on the CPU: every pixel traces the
 /// wind upstream and asks whether a streak has just passed it (see `source`).
 final class WindScene: SKScene {
-    nonisolated static let knobs = [
-        Knob(key: "wind.zoom", label: "Zoom", range: 0...2, standard: 1, section: "Map",
-             format: .choice(["My town", "My region", "Half the continent"])),
-        Knob(key: "wind.background", label: "Background", range: 0...2, standard: 1, section: "Map",
-             format: .choice(["None", "Coastline", "Shaded relief"])),
-        Knob(key: "wind.look", label: "Look", range: 0...1, standard: 1, section: "Streaks", format: .choice(["Comets", "Brush strokes"])),
-        Knob(key: "wind.speed", label: "Speed", range: 0.25...4, standard: 1, section: "Streaks", format: .times),
-        Knob(key: "wind.length", label: "Streak length", range: 0.25...2, standard: 1, section: "Streaks", format: .times),
-        Knob(key: "wind.density", label: "Density", range: 0.1...1, standard: 0.6, section: "Streaks"),
-    ]
+    nonisolated static let zoom = Knob(key: "wind.zoom", label: "Zoom", range: 0...2, standard: 1, section: "Map",
+                                       format: .choice(["My town", "My region", "Half the continent"]))
+    // a new key: the old one (None, Coastline, Shaded relief) would land on the wrong choices
+    nonisolated static let background = Knob(key: "wind.map", label: "Background", range: 0...5, standard: 2, section: "Map",
+                                             format: .choice(["None", "Shaded relief", "Earth by day", "Earth at night",
+                                                              "Terrain and sea floor", "Satellite, yesterday"]))
+    nonisolated static let opacity = Knob(key: "wind.mapOpacity", label: "Opacity", range: 0...1, standard: 0.35, section: "Map",
+                                          shownWhen: background.key)
+    nonisolated static let brightness = Knob(key: "wind.mapBrightness", label: "Brightness", range: 0.3...2, standard: 1, section: "Map",
+                                             shownWhen: background.key)
+    nonisolated static let saturation = Knob(key: "wind.mapSaturation", label: "Saturation", range: 0...1.5, standard: 0.8, section: "Map",
+                                             shownWhen: background.key)
+    nonisolated static let look = Knob(key: "wind.look", label: "Look", range: 0...1, standard: 1, section: "Streaks",
+                                       format: .choice(["Comets", "Brush strokes"]))
+    nonisolated static let speed = Knob(key: "wind.speed", label: "Speed", range: 0.25...4, standard: 1, section: "Streaks", format: .times)
+    nonisolated static let length = Knob(key: "wind.length", label: "Streak length", range: 0.25...2, standard: 1, section: "Streaks", format: .times)
+    nonisolated static let density = Knob(key: "wind.density", label: "Density", range: 0.1...1, standard: 0.6, section: "Streaks")
+    nonisolated static let knobs = [zoom, background, opacity, brightness, saturation, look, speed, length, density]
 
     /// Calm to strong, for Dark Mode; Light Mode draws the same hues as ink.
     nonisolated static let palettes: [(name: String, stops: [SIMD3<Float>])] = [
@@ -34,12 +42,16 @@ final class WindScene: SKScene {
                             rect: SKUniform(name: "u_rect", vectorFloat4: .zero), trail: SKUniform(name: "u_trail", float: 2),
                             density: SKUniform(name: "u_density", float: 0.6), brush: SKUniform(name: "u_brush", float: 1),
                             pace: SKUniform(name: "u_pace", float: 5))
+    /// The background's kind (1 relief, 2 day, 3 night) and its sliders.
+    private let ground = (kind: SKUniform(name: "u_kind", float: 0), opacity: SKUniform(name: "u_opacity", float: 0.35),
+                          brightness: SKUniform(name: "u_brightness", float: 1), saturation: SKUniform(name: "u_saturation", float: 0.8))
     private var clockTime: Double = 0, lastUpdate: TimeInterval?, sinceField: TimeInterval = 0
-    private var zoom = -1, background = -1, mapCentre = CLLocationCoordinate2D()
+    private var zoomShown = -1, backgroundShown = -1, mapCentre = CLLocationCoordinate2D()
     private let dark = systemIsDark, base: SIMD3<Float>
-    private let relief = SKSpriteNode(), coast = SKSpriteNode()
-    private lazy var reliefShader = SKShader(source: Self.reliefSource, uniforms: [
+    private let map = SKSpriteNode()
+    private lazy var mapShader = SKShader(source: Self.mapSource, uniforms: [
         SKUniform(name: "u_base", vectorFloat3: base), SKUniform(name: "u_dark", float: dark ? 1 : 0),
+        ground.kind, ground.opacity, ground.brightness, ground.saturation,
     ])
 
     override init(size: CGSize) {
@@ -50,12 +62,9 @@ final class WindScene: SKScene {
         super.init(size: size)
         field.filteringMode = .linear
         backgroundColor = SKColor(red: CGFloat(base.x), green: CGFloat(base.y), blue: CGFloat(base.z), alpha: 1)
-        for layer in [relief, coast] {
-            layer.anchorPoint = .zero
-            layer.size = size
-            addChild(layer)
-        }
-        coast.zPosition = 1 // over the streaks, as nullschool draws it
+        map.anchorPoint = .zero
+        map.size = size
+        addChild(map)
 
         // drawn at half resolution: an effect node renders its children at their own scale, then scales the result up
         let half = SKEffectNode()
@@ -82,56 +91,89 @@ final class WindScene: SKScene {
         run(.sequence([.wait(forDuration: 2), // give a remembered location fix a moment to land
                        .repeatForever(.sequence([.run { [weak self] in self?.poll() }, .wait(forDuration: 300)]))]),
             withKey: "poll")
+        fetchEarth()
     }
 
     @objc private func applyKnobs() {
-        uniforms.brush.floatValue = Float(Self.knobs[2].value)
-        uniforms.trail.floatValue = Float(2 * Self.knobs[4].value)
-        uniforms.density.floatValue = Float(Self.knobs[5].value)
-        let wanted = (zoom: Int(Self.knobs[0].value), background: Int(Self.knobs[1].value))
-        guard wanted.zoom != zoom || wanted.background != background else { return }
-        let rezoom = wanted.zoom != zoom
-        (zoom, background) = wanted
+        uniforms.brush.floatValue = Float(Self.look.value)
+        uniforms.trail.floatValue = Float(2 * Self.length.value)
+        uniforms.density.floatValue = Float(Self.density.value)
+        ground.opacity.floatValue = Float(Self.opacity.value)
+        ground.brightness.floatValue = Float(Self.brightness.value)
+        ground.saturation.floatValue = Float(Self.saturation.value)
+        let wanted = (zoom: Int(Self.zoom.value), background: Int(Self.background.value))
+        guard wanted.zoom != zoomShown || wanted.background != backgroundShown else { return }
+        let rezoom = wanted.zoom != zoomShown
+        (zoomShown, backgroundShown) = wanted
         drawMap()
+        fetchEarth()
         if rezoom {
             // the grid is 1.2 screen widths across and 0.8 up, centred on you
             let w = Float(size.width)
             uniforms.rect.vectorFloat4Value = [w / 2 - 0.6 * w, Float(size.height) / 2 - 0.4 * w, 1.2 * w, 0.8 * w]
-            uniforms.pace.floatValue = [14, 8, 5][zoom] // pt/s per m/s: faster close up, as nullschool does, or a town looks frozen
+            uniforms.pace.floatValue = [14, 8, 5][zoomShown] // pt/s per m/s: faster close up, as nullschool does, or a town looks frozen
             showField()
             if view != nil { poll() } // not from init: the render tests would fetch, from a guessed place, into the app's cache
         }
     }
 
-    /// The coastline and relief for the zoom and where you are.
+    private var place: WindMap { WindMap(centre: mapCentre, kmAcross: WindField.spans[zoomShown], size: size) }
+
+    /// The relief or Earth image for the zoom and where you are, from what's on disk. A plain sprite of the
+    /// background colour without one (SKRenderer, in the tests, ignores backgroundColor).
     private func drawMap() {
-        mapCentre = WindField.shared.forecast(zoom: zoom).centre
-        let map = WindMap(centre: mapCentre, kmAcross: WindField.spans[zoom], size: size)
-        coast.texture = background == 0 ? nil : map.coastlines(width: background == 1 ? 0.9 : 0.7,
-                                                               colour: dark ? CGColor(gray: 1, alpha: 0.25) : CGColor(gray: 0.1, alpha: 0.28))
-        coast.isHidden = background == 0
-        // the ground is the plain background colour without relief (SKRenderer, in the tests, ignores backgroundColor)
-        relief.texture = background == 2 ? map.shadedRelief() : nil
-        relief.shader = relief.texture == nil ? nil : reliefShader
-        relief.color = backgroundColor
+        mapCentre = WindField.shared.forecast(zoom: zoomShown).centre
+        map.texture = backgroundShown == 1 ? place.shadedRelief() : place.earth(Imagery.layers(backgroundShown))
+        map.shader = map.texture == nil ? nil : mapShader
+        map.color = backgroundColor
+        ground.kind.floatValue = backgroundShown == 1 ? 0 : backgroundShown == 3 ? 2 : 1 // shade, an image, or lights
     }
 
-    /// Relief as light and shade on the background: grey 205 is level ground or water.
-    private static let reliefSource = """
+    /// Downloads the Earth tiles the view is missing, while on screen, then draws them.
+    private func fetchEarth() {
+        guard view != nil else { return }
+        if backgroundShown == 5 { Imagery.forgetOtherDays() }
+        let missing = place.earthTiles(Imagery.layers(backgroundShown)).filter { !FileManager.default.fileExists(atPath: $0.file.path) }
+        guard !missing.isEmpty else { return }
+        EarthTiles.shared.fetch(missing.map { ($0.remote, $0.file) }) { [weak self] in self?.drawMap() }
+    }
+
+    /// The background under the streaks, with Brightness and Saturation applied to the image. `u_kind` 0 is relief:
+    /// light and shade on the background colour (grey 205 is level ground or water), Opacity its strength. 1 is an
+    /// image (Earth by day, terrain, the satellite), laid over the background at the Opacity, or in Light Mode printed
+    /// on the paper lightened, since dark greens at a third turned the paper muddy. 2 is the night's lights, added, or
+    /// in Light Mode printed as ink.
+    private static let mapSource = """
     void main() {
-        float s = clamp((texture2D(u_texture, v_tex_coord).r - 0.804) * 5.0, -1.0, 1.0);
-        vec3 c = u_dark > 0.5 ? u_base * (1.4 + 0.9 * s) + max(s, 0.0) * 0.02 : u_base + s * 0.06;
+        vec3 raw = texture2D(u_texture, v_tex_coord).rgb;
+        vec3 t = raw * u_brightness;
+        t = max(mix(vec3(dot(t, vec3(0.2126, 0.7152, 0.0722))), t, u_saturation), 0.0);
+        vec3 c;
+        if (u_kind < 0.5) {
+            float s = clamp((raw.r - 0.804) * 5.0, -1.0, 1.0) * u_opacity / 0.35;
+            c = u_dark > 0.5 ? u_base * (1.4 + 0.9 * s) * u_brightness : u_base + s * 0.06 * u_brightness;
+        } else if (u_kind < 1.5) {
+            c = u_dark > 0.5 ? mix(u_base, t, u_opacity) : u_base * mix(vec3(1.0), min(t * 2.2, vec3(1.0)), u_opacity);
+        } else {
+            c = u_dark > 0.5 ? u_base + t * u_opacity : u_base * (1.0 - t * u_opacity);
+        }
         gl_FragColor = vec4(c, 1.0);
     }
     """
 
-    private func poll() { WindField.shared.poll(zoom: zoom) { [weak self] in self?.showField() } }
+    private func poll() {
+        WindField.shared.poll(zoom: zoomShown) { [weak self] in self?.showField() }
+        fetchEarth() // tiles that failed offline
+    }
 
     /// The wind now, blended between forecast hours, into the texture.
     private func showField() {
-        let centre = WindField.shared.forecast(zoom: zoom).centre
-        if centre.latitude != mapCentre.latitude || centre.longitude != mapCentre.longitude { drawMap() }
-        let (bytes, vmax) = WindField.shared.texels(zoom: zoom, at: Date())
+        let centre = WindField.shared.forecast(zoom: zoomShown).centre
+        if centre.latitude != mapCentre.latitude || centre.longitude != mapCentre.longitude {
+            drawMap()
+            fetchEarth()
+        }
+        let (bytes, vmax) = WindField.shared.texels(zoom: zoomShown, at: Date())
         uniforms.vmax.floatValue = vmax
         field.modifyPixelData { data, length in bytes.withUnsafeBytes { data?.copyMemory(from: $0.baseAddress!, byteCount: min(length, $0.count)) } }
     }
@@ -139,7 +181,7 @@ final class WindScene: SKScene {
     override func update(_ currentTime: TimeInterval) {
         let dt = frameTime(currentTime, &lastUpdate)
         // every streak's period divides an hour, so the clock wraps there without a jump
-        clockTime = (clockTime + dt * Self.knobs[3].value).truncatingRemainder(dividingBy: 3600)
+        clockTime = (clockTime + dt * Self.speed.value).truncatingRemainder(dividingBy: 3600)
         uniforms.clock.floatValue = Float(clockTime)
         sinceField += dt
         if sinceField > 5 {
@@ -368,19 +410,17 @@ final class WindScene: SKScene {
     }
 }
 
-/// The map under the streaks, from Natural Earth (public domain, naturalearthdata.com): its coastlines and lake
-/// shores, and its 1:10m shaded relief. Both are drawn once, when the scene is built, in the wind's local plate
-/// carrée: `kmAcross` fills the width, centred on `centre`.
+/// The map under the streaks, drawn once per zoom and place in the wind's local plate carrée: `kmAcross` fills the
+/// width, centred on `centre`. Natural Earth's shaded relief ships with the app; NASA's Earth imagery is downloaded
+/// as needed and kept on disk.
 struct WindMap {
     let centre: CLLocationCoordinate2D, kmAcross: Double, size: CGSize
 
-    /// Coastlines and lake shores (ne_10m_coastline and ne_10m_lakes, simplified to 0.002°): records of an Int32
-    /// count n, a Float32 bounding box (west, south, east, north), then n × Float32 (longitude, latitude).
-    private static let coast = try? Data(contentsOf: resource("wind-coast.bin"), options: .alwaysMapped)
-    /// The shaded relief (SR_HR, 60 px a degree, 3×3 median filtered) cut into 15° greyscale HEIC tiles: four Int32
-    /// (15, 24 columns, 12 rows, pixels a degree), then an Int32 offset and length for each tile from the north-west,
-    /// row by row; a length of 0 is open sea. Level ground and water are grey 205, lit slopes lighter and shaded
-    /// ones darker. HEIC, since JPEG's blocks showed as a grid of faint boxes once magnified.
+    /// Natural Earth's 1:10m shaded relief (SR_HR, 60 px a degree, public domain, naturalearthdata.com), 3×3 median
+    /// filtered and cut into 15° greyscale HEIC tiles: four Int32 (15, 24 columns, 12 rows, pixels a degree), then an
+    /// Int32 offset and length for each tile from the north-west, row by row; a length of 0 is open sea. Level ground
+    /// and water are grey 205, lit slopes lighter and shaded ones darker. HEIC, since JPEG's blocks showed as a grid
+    /// of faint boxes once magnified.
     private static let relief = try? Data(contentsOf: resource("wind-relief.bin"), options: .alwaysMapped)
 
     /// Points per degree east and north.
@@ -393,63 +433,150 @@ struct WindMap {
         CGPoint(x: size.width / 2 + remainder(lon - centre.longitude, 360) * scale.x, y: size.height / 2 + (lat - centre.latitude) * scale.y)
     }
 
-    /// The coastlines as lines on a clear texture.
-    func coastlines(width: CGFloat, colour: CGColor) -> SKTexture {
-        paint(size) { context in
-            guard let data = Self.coast else { return }
-            context.setStrokeColor(colour)
-            context.setLineWidth(width)
-            context.setLineJoin(.round)
-            let view = CGRect(origin: .zero, size: size).insetBy(dx: -10, dy: -10)
-            data.withUnsafeBytes { raw in
-                var offset = 0
-                while offset + 20 <= raw.count {
-                    let n = Int(raw.load(fromByteOffset: offset, as: Int32.self))
-                    let box = (0..<4).map { Double(raw.load(fromByteOffset: offset + 4 + $0 * 4, as: Float32.self)) }
-                    let corners = [point(box[0], box[1]), point(box[2], box[3])]
-                    let bounds = CGRect(x: corners[0].x, y: corners[0].y, width: 0, height: 0).union(CGRect(origin: corners[1], size: .zero))
-                    // skip what wraps round the globe, and lakes too small to see
-                    if bounds.intersects(view), bounds.width < size.width * 4, max(bounds.width, bounds.height) > 20 {
-                        for i in 0..<n {
-                            let at = offset + 20 + i * 8
-                            let p = point(Double(raw.load(fromByteOffset: at, as: Float32.self)), Double(raw.load(fromByteOffset: at + 4, as: Float32.self)))
-                            if i == 0 { context.move(to: p) } else { context.addLine(to: p) }
-                        }
-                        context.strokePath()
-                    }
-                    offset += 20 + n * 8
-                }
-            }
-        }
+    /// The view's extent in tiles `degrees` across, numbered from 180° W and 90° N.
+    private func tiles(_ degrees: Double) -> (columns: ClosedRange<Int>, rows: ClosedRange<Int>) {
+        let halfLon = Double(size.width) / 2 / scale.x, halfLat = Double(size.height) / 2 / scale.y
+        let west = Int(floor((centre.longitude - halfLon + 180) / degrees)), east = Int(floor((centre.longitude + halfLon + 180) / degrees))
+        let north = Int(floor((90 - centre.latitude - halfLat) / degrees)), south = Int(floor((90 - centre.latitude + halfLat) / degrees))
+        return (west...max(east, west), max(north, 0)...max(south, north, 0))
     }
 
-    /// The shaded relief as a greyscale texture at one pixel a point.
-    func shadedRelief() -> SKTexture? {
-        guard let data = Self.relief else { return nil }
+    /// A context at one pixel a point, with tiles drawn into it at their places.
+    private func draw(grey: Bool, fill: CGFloat, tiles: [(degrees: Double, column: Int, row: Int, image: CGImage)]) -> SKTexture? {
         let (w, h) = (Int(size.width), Int(size.height))
         guard let context = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
-                                      space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue) else { return nil }
-        context.setFillColor(gray: 206.0 / 255, alpha: 1)
+                                      space: grey ? CGColorSpaceCreateDeviceGray() : CGColorSpace(name: CGColorSpace.sRGB)!,
+                                      bitmapInfo: grey ? CGImageAlphaInfo.none.rawValue : CGImageAlphaInfo.noneSkipLast.rawValue) else { return nil }
+        context.setFillColor(CGColor(gray: fill, alpha: 1))
         context.fill(CGRect(x: 0, y: 0, width: w, height: h))
         context.interpolationQuality = .high
-        data.withUnsafeBytes { raw in
+        for tile in tiles {
+            let corner = point(Double(tile.column) * tile.degrees - 180, 90 - Double(tile.row + 1) * tile.degrees)
+            context.draw(tile.image, in: CGRect(x: corner.x, y: corner.y, width: tile.degrees * scale.x, height: tile.degrees * scale.y))
+        }
+        return context.makeImage().map { SKTexture(cgImage: $0) }
+    }
+
+    /// The shaded relief as a greyscale texture.
+    func shadedRelief() -> SKTexture? {
+        guard let data = Self.relief else { return nil }
+        return data.withUnsafeBytes { raw in
             let int = { Int(raw.load(fromByteOffset: $0 * 4, as: Int32.self)) }
-            let (degrees, cols, rows) = (Double(int(0)), int(1), int(2))
-            let halfLon = Double(size.width) / 2 / scale.x, halfLat = Double(size.height) / 2 / scale.y
-            let west = Int(floor((centre.longitude - halfLon + 180) / degrees)), east = Int(floor((centre.longitude + halfLon + 180) / degrees))
-            let north = max(Int(floor((90 - centre.latitude - halfLat) / degrees)), 0)
-            let south = min(Int(floor((90 - centre.latitude + halfLat) / degrees)), rows - 1)
-            guard north <= south, east - west < cols else { return }
-            for j in north...south { for i in west...east {
+            let (degrees, cols) = (Double(int(0)), int(1))
+            let span = tiles(degrees)
+            let images: [(Double, Int, Int, CGImage)] = span.rows.filter { $0 < int(2) }.flatMap { j in span.columns.compactMap { i in
                 let tile = j * cols + (i % cols + cols) % cols
                 let (start, length) = (int(4 + tile * 2), int(5 + tile * 2))
                 guard length > 0, let source = CGImageSourceCreateWithData(Data(raw[start..<start + length]) as CFData, nil),
-                      let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { continue }
-                let lon = Double(i) * degrees - 180, lat = 90 - Double(j + 1) * degrees
-                let corner = point(lon, lat)
-                context.draw(image, in: CGRect(x: corner.x, y: corner.y, width: degrees * scale.x, height: degrees * scale.y))
+                      let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
+                return (degrees, i, j, image)
+            } }
+            return draw(grey: true, fill: 206.0 / 255, tiles: images)
+        }
+    }
+
+    /// The Earth tiles the view needs, coarsest layer first, each layer at the level that gives about a pixel a point,
+    /// or its finest; a finer layer only where the coarser one runs out of detail.
+    func earthTiles(_ layers: [Imagery]) -> [(level: Int, column: Int, row: Int, base: Bool, remote: URL, file: URL)] {
+        let wanted = max(Int(ceil(log2(scale.y * 288 / 512))), 0)
+        var found: [(Int, Int, Int, Bool, URL, URL)] = []
+        for (k, layer) in layers.enumerated() where k == 0 || layer.over || wanted > layers[k - 1].finest {
+            let level = min(wanted, layer.finest), degrees = 288 / pow(2, Double(level))
+            let span = tiles(degrees), last = (columns: Int(ceil(360 / degrees)) - 1, rows: Int(ceil(180 / degrees)) - 1)
+            for j in span.rows where j <= last.rows { for i in span.columns where i >= 0 && i <= last.columns {
+                let tile = layer.tile(level: level, row: j, column: i)
+                found.append((level, i, j, k == 0, tile.remote, tile.file))
             } }
         }
-        return context.makeImage().map { SKTexture(cgImage: $0) }
+        return found
+    }
+
+    /// NASA's Earth imagery from the tiles on disk; nil before any have downloaded.
+    func earth(_ layers: [Imagery]) -> SKTexture? {
+        let images: [(Double, Int, Int, CGImage)] = earthTiles(layers).compactMap { tile in
+            guard let source = CGImageSourceCreateWithURL(tile.file as CFURL, nil),
+                  let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
+            // a finer layer's black is where it has no data (Landsat's sea), so the layer under it shows there
+            return (288 / pow(2, Double(tile.level)), tile.column, tile.row,
+                    tile.base ? image : image.copy(maskingColorComponents: [0, 6, 0, 6, 0, 6]) ?? image)
+        }
+        return images.isEmpty ? nil : draw(grey: false, fill: 0, tiles: images)
+    }
+}
+
+/// NASA imagery from GIBS, the Global Imagery Browse Services (public domain; no key), in geographic tiles of 512 px:
+/// a level-n tile is 288/2ⁿ degrees across, counted from 180° W and 90° N. Most of it never changes, so tiles are kept
+/// for good; the satellite's are kept for its one day.
+struct Imagery {
+    let name: String, path: String, format: String, finest: Int
+    /// Drawn over the layer under it at every zoom, not only where that one runs out of detail.
+    var over = false
+
+    /// Blue Marble Next Generation: a cloud-free Earth, 500 m a pixel.
+    static let blueMarble = Imagery(name: "day", path: "BlueMarble_NextGeneration/default/500m", format: "jpeg", finest: 7)
+    /// Landsat, from the Global Web-Enabled Landsat Data (NASA and USGS, 2000): 30 m a pixel, for the town zoom, where
+    /// Blue Marble's pixels are 7 points across. Its sea is black.
+    static let landsat = Imagery(name: "landsat", path: "Landsat_WELD_CorrectedReflectance_TrueColor_Global_Annual/default/2000-12-01/31.25m",
+                                 format: "jpeg", finest: 11)
+    /// Black Marble: the city lights at night, from VIIRS in 2016, 500 m a pixel.
+    static let blackMarble = Imagery(name: "night", path: "VIIRS_Black_Marble/default/2016-01-01/500m", format: "png", finest: 7)
+
+    /// Blue Marble's shaded relief with the sea floor: a physical map, 500 m a pixel.
+    static let terrain = Imagery(name: "terrain", path: "BlueMarble_ShadedRelief_Bathymetry/default/500m", format: "jpeg", finest: 7)
+    /// Yesterday as NOAA-20's VIIRS saw it, with its real clouds (NASA LANCE corrected reflectance, 250 m a pixel):
+    /// today's is still being filled in, pass by pass. Its black gaps between passes show Blue Marble under it.
+    static var satellite: Imagery {
+        Imagery(name: "satellite/\(yesterday)", path: "VIIRS_NOAA20_CorrectedReflectance_TrueColor/default/\(yesterday)/250m",
+                format: "jpeg", finest: 8, over: true)
+    }
+    private static var yesterday: String { Date(timeIntervalSinceNow: -86400).ISO8601Format(.iso8601.year().month().day()) }
+
+    /// Deletes the satellite's earlier days.
+    static func forgetOtherDays() {
+        let folder = URL.cachesDirectory.appending(path: "com.dtanquary.atrium/earth/satellite")
+        for day in (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? [] where day != yesterday {
+            try? FileManager.default.removeItem(at: folder.appending(path: day))
+        }
+    }
+
+    /// The layers for a Background choice, coarsest first: a finer layer adds detail at the town zoom.
+    static func layers(_ background: Int) -> [Imagery] {
+        [[], [], [blueMarble, landsat], [blackMarble], [terrain, landsat], [blueMarble, satellite]][min(max(background, 0), 5)]
+    }
+
+    /// A tile's address, and where it's kept.
+    func tile(level: Int, row: Int, column: Int) -> (remote: URL, file: URL) {
+        (URL(string: "https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/\(path)/\(level)/\(row)/\(column).\(format)")!,
+         URL.cachesDirectory.appending(path: "com.dtanquary.atrium/earth/\(name)/\(level)/\(row)-\(column).\(format)"))
+    }
+}
+
+/// Downloads GIBS tiles to disk, once each however many displays ask, and tells everyone who asked when a batch lands.
+@MainActor final class EarthTiles {
+    static let shared = EarthTiles()
+    private var pending: Set<URL> = []
+    private var waiting: [@MainActor () -> Void] = []
+
+    func fetch(_ tiles: [(remote: URL, file: URL)], done: @escaping @MainActor () -> Void) {
+        waiting.append(done)
+        let wanted = tiles.filter { !pending.contains($0.file) }
+        guard !wanted.isEmpty else { return }
+        pending.formUnion(wanted.map(\.file))
+        Task {
+            await withTaskGroup(of: Void.self) { group in
+                for tile in wanted {
+                    group.addTask {
+                        guard let (data, response) = try? await URLSession.shared.data(from: tile.remote),
+                              (response as? HTTPURLResponse)?.statusCode == 200 else { return }
+                        try? FileManager.default.createDirectory(at: tile.file.deletingLastPathComponent(), withIntermediateDirectories: true)
+                        try? data.write(to: tile.file)
+                    }
+                }
+            }
+            pending.subtract(wanted.map(\.file))
+            let calls = waiting
+            waiting = []
+            for call in calls { call() }
+        }
     }
 }

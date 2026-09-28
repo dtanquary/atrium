@@ -23,3 +23,20 @@ import Testing
     #expect(abs(forecast.u[1][0]) < 0.01 && abs(forecast.v[1][0] - 10) < 0.01) // blowing toward the north
     #expect(WindField.forecast(from: Data("[]".utf8)) == nil)
 }
+
+/// The Earth background asks GIBS for tiles at about a pixel a point: Blue Marble at level 5 for half the continent and
+/// 7 (its finest) for the region; for a town, Landsat at level 10 over Blue Marble, since Blue Marble runs out of detail.
+@MainActor @Test func earthTileLevels() {
+    let here = CLLocationCoordinate2D(latitude: 42, longitude: -88), size = CGSize(width: 1512, height: 982)
+    let levels = { (km: Double) in Set(WindMap(centre: here, kmAcross: km, size: size).earthTiles(Imagery.layers(2)).map(\.level)) }
+    #expect(levels(3500) == [5])
+    #expect(levels(800) == [7])
+    #expect(levels(100) == [7, 10])
+    // yesterday's satellite goes over Blue Marble at every zoom, at its finest (8) in a town
+    let satellite = { (km: Double) in Set(WindMap(centre: here, kmAcross: km, size: size).earthTiles(Imagery.layers(5)).map(\.level)) }
+    #expect(satellite(3500) == [5] && satellite(100) == [7, 8])
+    let town = WindMap(centre: here, kmAcross: 100, size: size).earthTiles(Imagery.layers(2))
+    #expect(town.filter(\.base).count == 2 && town.count == 20) // 42° N falls on a Blue Marble tile edge: 2 of them, 18 of Landsat's
+    // the tile over the centre: 288/2^7 = 2.25° tiles from 180° W and 90° N
+    #expect(town.contains { $0.remote.path.hasSuffix("BlueMarble_NextGeneration/default/500m/7/21/40.jpeg") })
+}

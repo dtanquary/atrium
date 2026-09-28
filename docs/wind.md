@@ -1,18 +1,18 @@
 # Wind
 
-The live wind around you, drawn as thin streaks streaming across the map, in the spirit of the hint.fm wind map and earth.nullschool. The streaks follow the real 10 m wind from Open-Meteo, speed up and brighten where it blows harder, crowd together where it converges, and curl round lows. They're brush strokes that stop and fade where they lie, like hint.fm's (the default), or comets with long tails, like nullschool's. The map is Natural Earth's coastlines and lakes, or its shaded relief, or nothing.
+The live wind around you, drawn as thin streaks streaming across the map, in the spirit of the hint.fm wind map and earth.nullschool. The streaks follow the real 10 m wind from Open-Meteo, speed up and brighten where it blows harder, crowd together where it converges, and curl round lows. They're brush strokes that stop and fade where they lie, like hint.fm's (the default), or comets with long tails, like nullschool's. Under them, a map of your choice at the opacity you like: the Earth by day, at night, as terrain with the sea floor, or yesterday's satellite view with its real clouds, or Natural Earth's shaded relief, or nothing.
 
-- **Files:** `Sources/Atrium/Wind.swift` holds the scene and its shader (`WindScene`), the data (`WindField`) and the map (`WindMap`). `Resources/wind-coast.bin` and `Resources/wind-relief.bin` are the map data. The test is `Tests/AtriumTests/WindTests.swift`.
+- **Files:** `Sources/Atrium/Wind.swift` holds the scene and its shader (`WindScene`), the data (`WindField`), the map (`WindMap`) and NASA's imagery (`Imagery`, `EarthTiles`). `Resources/wind-relief.bin` is the relief. The tests are in `Tests/AtriumTests/WindTests.swift`.
 - **Entry:** `wind(size:)` builds `final class WindScene: SKScene`. Its entry in Scenes.swift is "Wind", icon `wind`, tint `.cyan`, with `WindScene.knobs` and a `PaletteChoice` on `wind.palette` (standard Midnight).
 - **Kind:** one full-screen shader at half resolution over a map drawn once. No particles on the CPU.
 
-![Wind at the continent zoom, over shaded relief: a low spinning off the East Coast](images/wind.jpg)
+![Wind at the continent zoom over the Earth by day: the Great Lakes, and a low spinning off the East Coast](images/wind.jpg)
 
 ## How it works
 - **The wind field.** `WindField.shared` asks Open-Meteo for the hourly 10 m wind at a grid of 24 × 16 points, 1.2 screen widths across and 0.8 up, centred on you, in one request (a comma-separated list of coordinates; the reply is an array in the same order).
   - `texels(zoom:at:)` blends the two forecast hours either side of now, turns "from" directions into east and north components, and upsamples the grid with Catmull–Rom to a 93 × 61 RGBA texture (`SKMutableTexture`, linear filtering): east in red, north in green, 0.5 for calm and ±1 for `vmax`, the strongest wind anywhere in the forecast, so the encoding never changes between hours. Bilinear from the raw grid put visible kinks in the streaks at every grid line.
   - The scene refreshes the texture every 5 s, so the field eases from hour to hour instead of jumping when a new reply lands.
-- **The map's projection** is a local plate carrée at the forecast grid's centre: x = R·cos(lat₀)·Δlon, y = R·Δlat, with the zoom's span across the screen's width. The map is drawn at the grid's centre (from the reply), not at `Location.shared`, so wind and coastline always agree.
+- **The map's projection** is a local plate carrée at the forecast grid's centre: x = R·cos(lat₀)·Δlon, y = R·Δlat, with the zoom's span across the screen's width. The map is drawn at the grid's centre (from the reply), not at `Location.shared`, so wind and map always agree.
   - `ponytail:` plate carrée stretches shapes east–west away from the centre latitude, about ±15% at the continent zoom. An orthographic projection would fix it, but wind vectors would then need rotating to screen north.
 - **The streaks** (`source`) are stateless particles, a take on oriented line integral convolution (Wegenkittl & Gröller's OLIC, animated):
   - Streaks start from spots on a lattice of 5 pt cells, turned 23° so it lines up with no wind. `noise`, a 256² texture of random bytes read unfiltered, says which cells have a spot (18% of cells at the default Density), where it sits in its cell, and its phase.
@@ -28,14 +28,21 @@ The live wind around you, drawn as thin streaks streaming across the map, in the
 - **Speed on screen** depends on the zoom (`u_pace`): 1 m/s is 14 pt/s at the town zoom, 8 at the region and 5 at the continent, times the Speed setting. nullschool's ratio is 1 : 2.4 : 6.4 for the same three; at 5 pt/s everywhere a town looked frozen (330× real time).
 - **Crowding:** real particles pile up where the wind converges and thin out where it spreads, which draws hint.fm's bright convergence lines. Stateless streaks can't pile up, so the shader brightens where the field's divergence (over ±20 pt) is negative and dims where it's positive.
 - **Half resolution:** the streaks render into an `SKEffectNode` scaled up 2×, with its child at half size. An effect node renders its children at their own scale, so the shader runs once per point, not per Retina pixel. That cut the GPU cost 4.5× (5.0 → 1.1 ms in the first version), and 1 pt lines barely soften.
-- **The map** (`WindMap`) is drawn once per zoom, background or location:
-  - **Coastline:** Natural Earth 1:10m coastlines, lakes, and its North America and Europe lake supplements, as 0.9 pt lines (white at 25% on dark, grey at 28% on paper), drawn over the streaks as nullschool does, so the map isn't buried. Lakes under 20 pt across are skipped, since hundreds of Canadian lakes cluttered the continent zoom.
-  - **Shaded relief:** Natural Earth 1:10m shaded relief (SR_HR) as light and shade on the background colour (`reliefSource`: grey 205 is level ground or water), plus the coastline at 0.7 pt. Neither reference has relief; it stays within a few percent of the ground's brightness so the streaks lead.
+- **The map** (`WindMap`) is drawn once per zoom, background or location, then graded live by a shader (`mapSource`): Opacity, Brightness and Saturation.
+  - **Earth by day:** NASA's Blue Marble Next Generation (cloud-free, 500 m a pixel), and at the town zoom, where Blue Marble's pixels are 7 points across, Landsat on top (the Global Web-Enabled Landsat Data mosaic, 2000, 30 m): fields, towns, rivers and lakes. A finer layer is drawn only where the coarser one runs out of detail (`earthTiles`). Landsat's sea is black, masked out, so Blue Marble shows there. In Dark Mode it's laid over the background at the Opacity (35%); in Light Mode it's printed on the paper, lightened 2.2×, since dark greens at a third turned the paper muddy.
+  - **Terrain and sea floor:** Blue Marble's shaded relief with bathymetry (500 m), a physical map where the continental shelf shows; Landsat on top at the town zoom, as by day.
+  - **Satellite, yesterday:** NOAA-20's VIIRS true colour for yesterday (NASA LANCE corrected reflectance, 250 m), with the day's real clouds, so the streaks swirl over the very low they belong to. Yesterday, since today's is still filling in pass by pass (UTC days). It's drawn over Blue Marble at every zoom (`over`), and its black gaps between passes are masked so Blue Marble shows there; the brightness steps between passes show faintly. When the day changes, the next poll finds the new day's tiles missing and fetches them, and earlier days' folders are deleted (`forgetOtherDays`). At the town zoom it's soft (250 m, magnified 3.7×), which suits clouds. Its clouds are bright, so it wants a lower Opacity than the others.
+
+  ![Satellite, yesterday: the low's cloud spiral under its wind](images/wind-satellite.jpg)
+
+  - **Earth at night:** NASA's Black Marble (VIIRS city lights, 2016, 500 m), added to the background, or in Light Mode printed on the paper as grey ink, a map of where people live. At the town zoom it's soft glows.
+  - **Where it comes from:** GIBS, NASA's Global Imagery Browse Services (public domain, no key), as 512 px tiles in the same geographic grid as the map (a level-n tile is 288/2ⁿ degrees), so drawing them is only placing rectangles. Each layer is fetched at the level that gives about a pixel a point, or its finest: level 5 for half the continent, 7 for the region, 10 for Landsat in a town (`earthTiles`). Tiles download only while the wallpaper is on screen, once however many displays ask (`EarthTiles`), and are kept for good in `~/Library/Caches/com.dtanquary.atrium/earth/`, since the imagery never changes. A view takes 1–25 tiles: at Dave's place about 1 MB by day at every zoom, and up to 7 MB at night for the continent (Black Marble's tiles are PNGs).
+  - **Tried first:** Natural Earth's coastline and lake outlines (1:10m). Dave: "the outlines are a bit odd though, at first I was really confused until I zoomed out to half the continent then the lines made sense." Lines only mean something when you can see the whole coast; an image shows land and water at any zoom. Cut on 2026-09-27, with its 3.9 MB data file. EOX's Sentinel-2 cloudless (10 m, CC BY) was also looked at for the town zoom, but its server refused plain downloads.
+  - **Shaded relief:** Natural Earth 1:10m shaded relief (SR_HR) as light and shade on the background colour (grey 205 is level ground or water); Opacity sets its strength. Neither reference has relief; at the default it stays within a few percent of the ground's brightness so the streaks lead.
   - The background colour is a sprite, not `backgroundColor`, because `SKRenderer` in the tests ignores `backgroundColor`.
 
 ## Data files
-Both were prepared by a research agent (scripts in its scratch folder: `coast.py`, `relief.py`).
-- **`wind-coast.bin`** (3.9 MB): records of an Int32 count n, a Float32 bounding box (west, south, east, north), then n × Float32 (lon, lat). It holds ne_10m_coastline and ne_10m_lakes plus ne_10m_lakes_north_america and ne_10m_lakes_europe (one duplicate removed: the base file's "Lago di Bracciano" is really Bolsena), simplified by Douglas–Peucker at 0.002° and cut into chunks of at most 256 points so the boxes cull well. At 0.001° it was 4.1 MB and looked the same.
+Prepared by a research agent (scripts in its scratch folder: `relief.py`).
 - **`wind-relief.bin`** (5.8 MB): SR_HR (21600 × 10800, 60 px a degree) median-filtered 3 × 3, cut into 15° tiles stored as greyscale HEIC at quality 50. A header of four Int32 (15, 24 columns, 12 rows, 60) and an Int32 offset and length per tile from the north-west; 60 all-ocean tiles have length 0. The ocean is exactly 206; flat land 202–207; relief runs 56–252, lit from the north-west. JPEG tiles (9.5 MB at q75) showed their 8 × 8 blocks as faint boxes once magnified at town zoom; HEIC's deblocking filter removes them at the same size.
 
 ## Time, live data and appearance
@@ -49,17 +56,20 @@ Both were prepared by a research agent (scripts in its scratch folder: `coast.py
 - **Location:** `Location.shared.start()` in `didMove`.
 - **Appearance:** Dark Mode is lines of light over a dusky ground tinted by the palette's calmest colour (about 10% luma: both references sit on a lifted graphite, and pure black looked harsh); Light Mode is the same streaks as ink on paper (each stop's hue at full strength, deeper where it's windier), after hint.fm. Checked with `SNAPSHOT_APPEARANCE=light|dark`.
 
-![Wind in Light Mode, ink on paper over shaded relief](images/wind-light.jpg)
+![Wind in Light Mode at the town zoom, over Landsat printed on paper](images/wind-light.jpg)
 
 ## Settings
 All live, except Palette, which rebuilds. Zoom and Background redraw the map; a new zoom fetches its own grid.
 
-![Comets at the continent zoom over the coastline](images/wind-comets.jpg)
+![Comets at the continent zoom over the Earth at night](images/wind-comets.jpg)
 
 | Key | Label | Range | Default | Notes |
 |---|---|---|---|---|
 | `wind.zoom` | Zoom | My town, My region, Half the continent | My region | 100, 800 and 3,500 km across the screen |
-| `wind.background` | Background | None, Coastline, Shaded relief | Coastline | Dave asked to compare the three |
+| `wind.map` | Background | None, Shaded relief, Earth by day, Earth at night, Terrain and sea floor, Satellite yesterday | Earth by day | a new key: the first version's `wind.background` (None, Coastline, Shaded relief) would have landed on the wrong choices |
+| `wind.mapOpacity` | Opacity | 0–1 | 0.35 | how strongly the image or relief shows |
+| `wind.mapBrightness` | Brightness | 0.3–2 | 1 | of the image, before it's laid down |
+| `wind.mapSaturation` | Saturation | 0–1.5 | 0.8 | of the image; 0 is a grey Earth |
 | `wind.look` | Look | Comets, Brush strokes | Brush strokes | nullschool's comets or hint.fm's strokes, to compare |
 | `wind.speed` | Speed | 0.25–4× | 1× | only changes how fast `u_clock` runs, so the picture stays the same and nothing jumps |
 | `wind.length` | Streak length | 0.25–2× | 1× | the tail's time constant, 2 s × this; a streak lives 2.25 × that |
@@ -77,9 +87,9 @@ All live, except Palette, which rebuilds. Zoom and Background redraw the map; a 
 - Background: `stops[0] × 0.2 + 0.055` in Dark Mode; paper (0.955, 0.953, 0.94) tinted 4% toward stop 1.
 
 ## Performance
-Release build, 2x, 1512×982, measured 2026-09-26 in paired runs with Nebula (whose documented cost is 1.6 ms): **CPU 0.45–0.6 ms, GPU about 1.6 ms**, level with Nebula (1.66–1.80 against its 1.76–1.86 in the same runs), across the zooms, looks and backgrounds. Before the film, highlights and brush strokes it was 1.16–1.35 ms. Almost all of the GPU time is the walk; the texture reads are about a fifth of it, and the cost scales with the number of steps (40 steps cost 1.86 ms at full density in an early version, 20 cost 0.91), so 48 steps is the first cut if it needs one. The map costs nothing per frame. The field texture is rebuilt every 5 s on the CPU (93 × 61 Catmull–Rom samples, well under a millisecond), and the map when the zoom, background or place changes: the coastline is a loop over 8,500 records, the relief a decode of 2–6 HEIC tiles.
+Release build, 2x, 1512×982, measured 2026-09-26 and again with the Earth backgrounds on 2026-09-27 (1.43–1.65 ms GPU, against Nebula's 1.63–1.73), in paired runs with Nebula (whose documented cost is 1.6 ms): **CPU 0.45–0.6 ms, GPU about 1.6 ms**, level with Nebula (1.66–1.80 against its 1.76–1.86 in the same runs), across the zooms, looks and backgrounds. Before the film, highlights and brush strokes it was 1.16–1.35 ms. Almost all of the GPU time is the walk; the texture reads are about a fifth of it, and the cost scales with the number of steps (40 steps cost 1.86 ms at full density in an early version, 20 cost 0.91), so 48 steps is the first cut if it needs one. The map costs nothing per frame. The field texture is rebuilt every 5 s on the CPU (93 × 61 Catmull–Rom samples, well under a millisecond), and the map when the zoom, background or place changes: the coastline is a loop over 8,500 records, the relief a decode of 2–6 HEIC tiles.
 - Rendering the streaks at full Retina resolution cost 4.5× as much.
-- Memory: the two data files are memory-mapped (9.7 MB); the relief texture is 1.5 MB.
+- Memory: the relief file is memory-mapped (5.8 MB); the map texture is 1.5–6 MB. Drawing a new map (a new zoom, background or place) decodes 1–25 tiles on the main thread, a few tens of milliseconds, about as often as you change a setting.
 
 ## Gotchas and shortcuts
 - **SKRenderer ignores `backgroundColor`,** so a scene that relies on it renders black in the tests. The background is a sprite.
@@ -102,18 +112,18 @@ Two research agents, 2026-09-26: one on the look of the reference maps (reading 
 ## Dave's brief
 2026-09-26: "the live wind around me drawn as slow, flowing streaks, in the spirit of the hint.fm wind map and earth.nullschool". Open-Meteo, a grid plus the hourly forecast, blended hour to hour, polled about hourly within the free tier, cached for offline; the field in a mutable texture and a shader moving noise along it, no CPU particles; jewel-toned palettes by speed; speed, streak length, density and zoom (town, region, half the continent); and backgrounds to compare as a Settings choice: none, a faint coastline, dim shaded relief. "It's data art rather than photoreal, so the bar is 'as beautiful as the reference maps'."
 - **Decided:** polling every two hours for a 24 × 16 grid instead of hourly for 16 × 10, since the denser grid shows clearly more real structure (eddies, fans over the plains, faster wind over Lake Michigan) and the forecast covers the gap. Revert by changing `cols`, `rows` and the 7000 s in `poll`.
-- **The reference agent's review** of the first renders (measured: 11–13% of pixels lit against 21–50%, no highlights, a near-black ground) led to the highlights, the film, the lifted ground, the pace by zoom, the coastline on top and the Brush strokes look.
-- **Next:** Dave compares the three backgrounds and the two looks live, then keep one of each, or several, as a choice.
+- **The reference agent's review** of the first renders (measured: 11–13% of pixels lit against 21–50%, no highlights, a near-black ground) led to the highlights, the film, the lifted ground, the pace by zoom, and the Brush strokes look.
+- **2026-09-27:** "I love this one, the outlines are a bit odd though… Lets ditch those subtle lines and instead add an option for a subtle background earth image underlayed with controllable opacity etc." So the coastline went, and Earth by day and at night came in, with Opacity, Brightness and Saturation. He asked again the same day for "various map types underneath with selective opacity", which added Terrain and sea floor, and Satellite, yesterday.
+- **Next:** Dave tries the backgrounds and the two looks live, then keep one of each, or several, as a choice.
 
 ## Ideas / next steps
-- **Town-zoom relief:** Natural Earth's relief is magnified 28× there and turns to mush. AWS Open Data's Terrain Tiles (Mapzen terrarium PNGs, `s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png`) give about 15 z10 tiles (1–1.5 MB per place, cached forever) that shade sharply, e.g. Denver's Dakota Hogback and creek valleys. They need an attribution line for their mixed sources (USGS 3DEP, SRTM, GMTED2010, ETOPO1, EU-DEM, and others) and a vertical exaggeration of about 2 to match Natural Earth.
+- **Town-zoom relief:** Natural Earth's relief is magnified 28× there and turns to mush (Earth by day uses Landsat there instead). AWS Open Data's Terrain Tiles (Mapzen terrarium PNGs, `s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png`) give about 15 z10 tiles (1–1.5 MB per place, cached forever) that shade sharply, e.g. Denver's Dakota Hogback and creek valleys. They need an attribution line for their mixed sources (USGS 3DEP, SRTM, GMTED2010, ETOPO1, EU-DEM, and others) and a vertical exaggeration of about 2 to match Natural Earth.
 - **A live status line** in Settings, like Weather's ("Live: 12 km/h from SW · updated 3:05 PM"), once `StatusRow` can show under an ungated row.
 - **A nullschool-style overlay:** a faint jewel wash of wind speed over the background.
 - **Crossfade** on a zoom change, as Weather does on a new forecast.
-- **Rivers and borders** from Natural Earth for inland places with no coast (Kansas City has no water in 400 km at 1:10m).
 
 ## Checking it
-- `SNAPSHOT_SCENE=Wind swift test` renders the cached wind for the region zoom (or the made-up breeze); add `SNAPSHOT_DEFAULTS="wind.zoom=2,wind.background=2"` for the continent over relief, and `SNAPSHOT_APPEARANCE=light`.
+- `SNAPSHOT_SCENE=Wind swift test` renders the cached wind for the region zoom (or the made-up breeze); add `SNAPSHOT_DEFAULTS="wind.zoom=2,wind.map=3"` for the continent at night (Earth tiles only show once downloaded: tests never fetch, so view each zoom on the desktop first), and `SNAPSHOT_APPEARANCE=light`.
 - `swift test --filter parsesWindGrid` checks the grid order, directions and centre.
 - `SNAPSHOT_MOVIE=2` then compare frames: at the continent zoom frames change by 0.58 grey levels on average, with 0.18% of pixels jumping more than 40 (Game of Life's Calm look is 0.22).
 - To see the live data: `ls -la ~/Library/Caches/com.dtanquary.atrium/wind-*.json`, and the grid's first point with `python3 -c "import json;print(json.load(open('$HOME/Library/Caches/com.dtanquary.atrium/wind-1.json'))[0]['hourly'])"`.
