@@ -457,3 +457,156 @@ PHOTOS = [
          credit='ESA/Rosetta/NAVCAM', licence='CC BY-SA 3.0 IGO', source='https://www.esa.int/ESA_Multimedia/Images/2014/12/Comet_on_10_December_2014_NavCam',
          caption='Cliffs and jets on Churyumov–Gerasimenko · Rosetta, 2014'),
 ]
+
+# Mars from the ground, woven in among the views from orbit so a visit alternates between them.
+MARS_SURFACE = [
+    dict(name='mars-jezero', src='../surface/mars/mars-surface-perseverance-jezero-delta-2.5-gigapixel-PIA24921.jpg', kind='surface', body='Mars', quality=60,
+         crop=(0.46, 0, 1, 0.763), at=(0.58, 0.10), credit='NASA/JPL-Caltech/ASU/MSSS', licence='Public domain',
+         source='https://photojournal.jpl.nasa.gov/catalog/PIA24921', caption="The delta in Jezero crater · Perseverance, 2022 · enhanced colour"),
+    dict(name='mars-gediz', src='../surface/mars/mars-surface-curiosity-heading-west-gediz-PIA26471.jpg', kind='surface', body='Mars', quality=60,
+         crop=(0.015, 0.114, 0.352, 0.812), at=(0.27, 0.25), credit='NASA/JPL-Caltech/MSSS', licence='Public domain',
+         source='https://photojournal.jpl.nasa.gov/catalog/PIA26471', caption="Leaving Gediz Vallis, on Mount Sharp · Curiosity, 2024" + " · colours as if under Earth's sky"),
+    dict(name='mars-pinestand', src='../surface/mars/mars-surface-perseverance-pinestand-PIA25830.tif', kind='surface', body='Mars', quality=60,
+         crop=(0, 0, 0.99, 0.909), at=(0.70, 0.30), credit='NASA/JPL-Caltech/ASU/MSSS', licence='Public domain',
+         source='https://photojournal.jpl.nasa.gov/catalog/PIA25830', caption="The 'Pinestand' mound, on Jezero's delta · Perseverance, 2023"),
+    dict(name='mars-paraitepuy', src='../surface/mars/mars-surface-curiosity-paraitepuy-pass-PIA25413.jpg', kind='surface', body='Mars', quality=60, split=3,
+         crop=(0.131, 0.258, 0.94, 0.523), credit='NASA/JPL-Caltech/MSSS', licence='Public domain',
+         source='https://photojournal.jpl.nasa.gov/catalog/PIA25413', caption="Paraitepuy Pass, between two buttes · Curiosity, 2022" + " · colours as if under Earth's sky"),
+    dict(name='mars-falbreen', src='../surface/mars/mars-surface-perseverance-falbreen-PIA26644.jpg', kind='surface', body='Mars', quality=60,
+         crop=(0.221, 0, 0.771, 0.745), credit='NASA/JPL-Caltech/ASU/MSSS', licence='Public domain',
+         source='https://photojournal.jpl.nasa.gov/catalog/PIA26644', caption="'Falbreen', on the rim of Jezero crater · Perseverance, 2025 · enhanced colour"),
+    dict(name='mars-santa-maria', src='../surface/mars/mars-surface-opportunity-santa-maria-PIA13794.tif', kind='surface', body='Mars', quality=60, split=2,
+         crop=(0.083, 0.2, 0.9, 0.76), credit='NASA/JPL-Caltech/Cornell/ASU', licence='Public domain',
+         source='https://photojournal.jpl.nasa.gov/catalog/PIA13794', caption="Santa Maria crater · Opportunity, 2010"),
+    dict(name='mars-husband-hill', src='../surface/mars/mars-surface-spirit-husband-hill-summit-PIA04184.tif', kind='surface', body='Mars', quality=60, split=3,
+         crop=(0, 0, 1, 0.68), credit='NASA/JPL-Caltech/Cornell', licence='Public domain',
+         source='https://photojournal.jpl.nasa.gov/catalog/PIA04184', caption="From the summit of Husband Hill, over Gusev crater · Spirit, 2005"),
+    dict(name='mars-bolivar', src='../surface/mars/mars-surface-curiosity-bolivar-sand-ridges-PIA25414.tif', kind='surface', body='Mars', quality=60,
+         crop=(0.054, 0.209, 0.946, 0.852), at=(0.80, 0.35), credit='NASA/JPL-Caltech/MSSS', licence='Public domain',
+         source='https://photojournal.jpl.nasa.gov/catalog/PIA25414', caption="Sand ridges and the 'Bolívar' butte · Curiosity, 2022" + " · colours as if under Earth's sky"),
+    dict(name='mars-glen-torridon', src='../surface/mars/mars-surface-curiosity-glen-torridon-1.8-gigapixel-PIA23623.jpg', kind='surface', body='Mars', quality=60, split=2,
+         crop=(0.005, 0.16, 0.579, 0.62), credit='NASA/JPL-Caltech/MSSS', licence='Public domain',
+         source='https://photojournal.jpl.nasa.gov/catalog/PIA23623', caption="Glen Torridon, from the 1.8-billion-pixel panorama · Curiosity, 2019"),
+    dict(name='mars-bright-angel', src='../surface/mars/mars-surface-perseverance-bright-angel-PIA26369.jpg', kind='surface', body='Mars', quality=60, split=3,
+         crop=(0, 0, 0.8, 0.44), credit='NASA/JPL-Caltech/ASU/MSSS', licence='Public domain',
+         source='https://photojournal.jpl.nasa.gov/catalog/PIA26369', caption="Around 'Bright Angel', in Neretva Vallis · Perseverance, 2024 · enhanced colour"),
+    dict(name='mars-boulders', src='../surface/mars/mars-surface-perseverance-boulder-field-PIA25963.tif', kind='surface', body='Mars', quality=60,
+         crop=(0.035, 0.041, 0.919, 0.981), at=(0.70, 0.85), credit='NASA/JPL-Caltech/ASU/MSSS', licence='Public domain',
+         source='https://photojournal.jpl.nasa.gov/catalog/PIA25963', caption="A boulder field on top of Jezero's delta · Perseverance, 2023"),
+    dict(name='mars-mount-sharp', src='../surface/mars/mars-surface-curiosity-dramatic-mount-sharp-PIA23898.tif', kind='surface', body='Mars', quality=60, split=2,
+         crop=(0.263, 0.235, 0.749, 0.711), credit='NASA/JPL-Caltech/MSSS', licence='Public domain',
+         source='https://photojournal.jpl.nasa.gov/catalog/PIA23898', caption="Mount Sharp and the Greenheugh pediment · Curiosity, 2019" + " · colours as if under Earth's sky"),
+    dict(name='mars-texoli', src='../surface/mars/mars-surface-curiosity-texoli-PIA26477.tif', kind='surface', body='Mars', quality=60, split=2,
+         crop=(0.199, 0.105, 0.554, 0.728), credit='NASA/JPL-Caltech/MSSS', licence='Public domain',
+         source='https://photojournal.jpl.nasa.gov/catalog/PIA26477', caption="The 'Texoli' butte · Curiosity, 2024" + " · colours as if under Earth's sky"),
+    dict(name='mars-ingenuity', src='../surface/mars/mars-surface-ingenuity-castell-henllys-PIA25890.tif', kind='surface', body='Mars', quality=60,
+         crop=(0.036, 0, 0.965, 1), credit='NASA/JPL-Caltech', licence='Public domain',
+         source='https://photojournal.jpl.nasa.gov/catalog/PIA25890', caption="From the air, over 'Castell Henllys' · Ingenuity, 2023 · enhanced colour"),
+]
+
+
+def weave(photos, body, surface):
+    """The body's views from orbit and from the ground, alternating, in place of its views from orbit."""
+    own = [p for p in photos if p['body'] == body]
+    at = photos.index(own[0])
+    rest = [p for p in photos if p['body'] != body]
+    woven = [p for pair in zip(own, surface) for p in pair] + own[len(surface):] + surface[len(own):]
+    return rest[:at] + woven + rest[at:]
+
+
+PHOTOS = weave(PHOTOS, 'Mars', MARS_SURFACE)
+
+# The Moon and the small worlds from the ground, or the last moments before touching it.
+O = '../surface/other/'
+MOON_SURFACE = [
+    dict(name='moon-apollo16', src=O + 'moon-pano-apollo16-young-rover-orion-flag-jsc2011e118363.jpg', kind='surface', body='The Moon', quality=60,
+         at=(0.52, 0.35), credit='NASA/Johnson Space Center', licence='Public domain', source='https://images.nasa.gov/details/jsc2011e118363',
+         caption='John Young, the rover and the lander at Descartes · Apollo 16, 1972'),
+    dict(name='moon-aldrin', src=O + 'moon-surface-apollo11-aldrin-AS11-40-5903.jpg', kind='surface', body='The Moon', quality=60,
+         crop=(0, 0, 0.985, 1), at=(0.52, 0.15), credit='NASA / Project Apollo Archive', licence='Public domain',
+         source='https://www.flickr.com/photos/projectapolloarchive/21039130393', caption='Buzz Aldrin at Tranquility Base · Apollo 11, 1969'),
+    dict(name='moon-hadley-rille', src=O + 'moon-pano-apollo15-rover-hadley-rille-jsc2011e118359.jpg', kind='surface', body='The Moon', quality=60,
+         at=(0.47, 0.55), credit='NASA/Johnson Space Center', licence='Public domain', source='https://images.nasa.gov/details/jsc2011e118359',
+         caption='David Scott and the rover at the rim of Hadley Rille · Apollo 15, 1971'),
+    dict(name='moon-earth-flag', src=O + 'moon-surface-apollo17-schmitt-flag-earth-AS17-134-20384.jpg', kind='surface', body='The Moon', quality=60,
+         at=(0.60, 0.24), credit='NASA / Project Apollo Archive', licence='Public domain',
+         source='https://www.flickr.com/photos/projectapolloarchive/21492224000', caption='Earth over the flag, with Harrison Schmitt · Apollo 17, 1972'),
+    dict(name='moon-taurus-littrow', src=O + 'moon-pano-apollo17-rover-taurus-littrow-jsc2004e52775.jpg', kind='surface', body='The Moon', quality=60,
+         split=2, credit='NASA/Johnson Space Center', licence='Public domain', source='https://images.nasa.gov/details/jsc2004e52775',
+         caption='The valley of Taurus-Littrow · Apollo 17, 1972'),
+    dict(name='moon-tracys-rock', src=O + 'moon-surface-apollo17-station6-tracys-rock-AS17-140-21497.jpg', kind='surface', body='The Moon', quality=60,
+         at=(0.27, 0.72), credit='NASA / Project Apollo Archive', licence='Public domain',
+         source='https://www.flickr.com/photos/projectapolloarchive/21496389518', caption="Harrison Schmitt at the split boulder, Station 6 · Apollo 17, 1972"),
+    dict(name='moon-little-west', src=O + 'moon-pano-apollo11-crater-eagle-jsc2008e040725.jpg', kind='surface', body='The Moon', quality=60,
+         split=2, credit='NASA/Johnson Space Center', licence='Public domain', source='https://images.nasa.gov/details/jsc2008e040725',
+         caption='Little West crater, with Eagle on the horizon · Apollo 11, 1969'),
+    dict(name='moon-irwin', src=O + 'moon-surface-apollo15-irwin-salute-rover-AS15-88-11866.jpg', kind='surface', body='The Moon', quality=60,
+         at=(0.22, 0.50), credit='NASA / Project Apollo Archive', licence='Public domain',
+         source='https://www.flickr.com/photos/projectapolloarchive/21648389932', caption='James Irwin salutes, below Hadley Delta · Apollo 15, 1971'),
+    dict(name='moon-station8', src=O + 'moon-pano-apollo15-station8-mt-hadley-lm-jsc2011e118360.jpg', kind='surface', body='The Moon', quality=60,
+         at=(0.70, 0.45), credit='NASA/Johnson Space Center', licence='Public domain', source='https://images.nasa.gov/details/jsc2011e118360',
+         caption='The lander Falcon under Mount Hadley · Apollo 15, 1971'),
+    dict(name='moon-young-jump', src=O + 'moon-surface-apollo16-young-jump-salute-AS16-113-18339.jpg', kind='surface', body='The Moon', quality=60,
+         at=(0.62, 0.45), credit='NASA / Project Apollo Archive', licence='Public domain',
+         source='https://www.flickr.com/photos/projectapolloarchive/21028582504', caption='John Young, mid-jump in a salute · Apollo 16, 1972'),
+    dict(name='moon-surveyor-crater', src=O + 'moon-pano-apollo12-bean-intrepid-surveyor-crater-jsc2011e118358.jpg', kind='surface', body='The Moon',
+         quality=60, at=(0.61, 0.58), credit='NASA/Johnson Space Center', licence='Public domain',
+         source='https://images.nasa.gov/details/jsc2011e118358', caption='Alan Bean at the rim of Surveyor crater · Apollo 12, 1969'),
+    dict(name='moon-mt-hadley', src=O + 'moon-surface-apollo15-mt-hadley-AS15-90-12187.jpg', kind='surface', body='The Moon', quality=60,
+         credit='NASA / Project Apollo Archive', licence='Public domain', source='https://www.flickr.com/photos/projectapolloarchive/21501817950',
+         caption='Mount Hadley · Apollo 15, 1971'),
+    dict(name='moon-surveyor3', src=O + 'moon-surface-apollo12-surveyor3-intrepid-AS12-48-7133.jpg', kind='surface', body='The Moon', quality=60,
+         at=(0.62, 0.38), credit='NASA / Project Apollo Archive', licence='Public domain',
+         source='https://www.flickr.com/photos/projectapolloarchive/21470506269', caption='Pete Conrad at Surveyor 3, landed two years before · Apollo 12, 1969'),
+]
+OTHER_SURFACE = {
+    'Titan': [dict(name='titan-huygens', src=O + 'titan-huygens-surface-first-colour-PIA07232.jpg', kind='surface', body='Titan', quality=70,
+                   crop=(0.211, 0.046, 0.789, 0.952), feather=0.1, credit='NASA/JPL/ESA/University of Arizona', licence='Public domain',
+                   source='https://photojournal.jpl.nasa.gov/catalog/PIA07232',
+                   caption="The only photo from its surface; the pebbles are 4 to 15 cm · Huygens, 2005 · colours from its spectra")],
+    'Bennu': [dict(name='bennu-tag', src=O + 'bennu-osirisrex-tag-contact-debris-samcam-20201020T214951.png', kind='surface', body='Bennu', quality=70,
+                   vignette=0.35, credit='NASA/Goddard/University of Arizona', licence='Public domain',
+                   source='https://sbnarchive.psi.edu/pds4/orex/orex.ocams/', caption='The moment OSIRIS-REx grabbed its sample · 2020'),
+              dict(name='bennu-before', src=O + 'bennu-osirisrex-tag-before-contact-samcam-20201020T214944.png', kind='surface', body='Bennu', quality=70,
+                   vignette=0.35, credit='NASA/Goddard/University of Arizona', licence='Public domain',
+                   source='https://sbnarchive.psi.edu/pds4/orex/orex.ocams/', caption='Seconds before touching down · OSIRIS-REx, 2020')],
+    'Ryugu': [dict(name='ryugu-horizon', src=O + 'ryugu-hayabusa2-td2-horizon-onc-w2-20190711T010457.png', kind='surface', body='Ryugu', quality=70,
+                   crop=(0, 0, 1, 0.99), vignette=0.3, credit='ISAS/JAXA (contrast stretched)', licence='Japanese Government Standard Terms of Use 2.0',
+                   source='https://darts.isas.jaxa.jp/pub/hayabusa2/onc_bundle/', caption='Boulders to the horizon, touching down · Hayabusa2, 2019'),
+              dict(name='ryugu-shadow', src=O + 'ryugu-hayabusa2-td1-after-touchdown-shadow-onc-w1-20190221T222957.png', kind='surface', body='Ryugu',
+                   quality=70, vignette=0.3, credit='ISAS/JAXA (contrast stretched)', licence='Japanese Government Standard Terms of Use 2.0',
+                   source='https://darts.isas.jaxa.jp/pub/hayabusa2/onc_bundle/', caption="Hayabusa2's shadow, rising after its first touchdown · 2019"),
+              dict(name='ryugu-approach', src=O + 'ryugu-hayabusa2-td1-shadow-approach-onc-w1-20190221T222828.png', kind='surface', body='Ryugu',
+                   quality=70, vignette=0.3, credit='ISAS/JAXA (contrast stretched)', licence='Japanese Government Standard Terms of Use 2.0',
+                   source='https://darts.isas.jaxa.jp/pub/hayabusa2/onc_bundle/', caption="Hayabusa2's shadow, coming down · 2019")],
+    'Comet 67P': [dict(name='67p-maat', src=O + 'comet67p-rosetta-descent-maat-pit-osiris-nac-N20160930T092653.png', kind='surface', body='Comet 67P',
+                       quality=70, credit='ESA/Rosetta/MPS for OSIRIS Team MPS/UPD/LAM/IAA/SSO/INTA/UPM/DASP/IDA', licence='CC BY-SA 4.0',
+                       source='https://imagearchives.esac.esa.int/picture.php?/178085', caption="A pit in the Ma'at region, 4.8 km out · Rosetta's last day, 2016"),
+                  dict(name='67p-boulders', src=O + 'comet67p-rosetta-descent-boulders-osiris-nac-N20160930T100706.png', kind='surface', body='Comet 67P',
+                       quality=70, at=(0.6, 0.2), credit='ESA/Rosetta/MPS for OSIRIS Team MPS/UPD/LAM/IAA/SSO/INTA/UPM/DASP/IDA', licence='CC BY-SA 4.0',
+                       source='https://imagearchives.esac.esa.int/picture.php?/178109', caption="Boulders on a pit's edge, 3.3 km out · Rosetta's last day, 2016"),
+                  dict(name='67p-cliffs-descent', src=O + 'comet67p-rosetta-descent-maat-cliffs-osiris-wac-W20160930T090355.png', kind='surface',
+                       body='Comet 67P', quality=70, credit='ESA/Rosetta/MPS for OSIRIS Team MPS/UPD/LAM/IAA/SSO/INTA/UPM/DASP/IDA', licence='CC BY-SA 4.0',
+                       source='https://imagearchives.esac.esa.int/picture.php?/178968', caption="Cliffs and pits, 5.5 km out · Rosetta's last day, 2016")],
+}
+NEW_SMALL_WORLDS = [
+    dict(name='dimorphos-last', src=O + 'dimorphos-dart-last-complete-image-12km-0401930049.png', kind='surface', body='Dimorphos', quality=70, flip=True,
+         vignette=0.3, credit='NASA/Johns Hopkins APL', licence='Public domain',
+         source='https://www.nasa.gov/solar-system/darts-final-images-prior-to-impact/',
+         caption='Moonlet of the asteroid Didymos, 12 km out, two seconds before DART hit it · 2022'),
+    dict(name='dimorphos-whole', src=O + 'dimorphos-dart-whole-moonlet-68km-0401930040.png', kind='surface', body='Dimorphos', quality=70, flip=True,
+         credit='NASA/Johns Hopkins APL', licence='Public domain', source='https://www.nasa.gov/solar-system/darts-final-images-prior-to-impact/',
+         caption='Moonlet of the asteroid Didymos, 68 km out · DART, 2022'),
+    dict(name='eros-250m', src=O + 'eros-near-final-descent-250m-20010212e.tif', kind='surface', body='Eros', quality=80, vignette=0.3,
+         credit='NASA/JHUAPL', licence='Public domain', source='https://near.jhuapl.edu/iod/20010212e/index.html',
+         caption='250 m up, landing on an asteroid for the first time · NEAR Shoemaker, 2001'),
+    dict(name='eros-120m', src=O + 'eros-near-last-image-120m-20010212f.tif', kind='surface', body='Eros', quality=80, crop=(0, 0, 1, 0.73), vignette=0.3,
+         credit='NASA/JHUAPL', licence='Public domain', source='https://near.jhuapl.edu/iod/20010212f/index.html',
+         caption='Its last picture, 120 m up · NEAR Shoemaker, 2001'),
+]
+
+PHOTOS = weave(PHOTOS, 'The Moon', MOON_SURFACE)
+for body, surface in OTHER_SURFACE.items():
+    PHOTOS = weave(PHOTOS, body, surface)
+_after = max(i for i, p in enumerate(PHOTOS) if p['body'] == 'Lutetia') + 1
+PHOTOS = PHOTOS[:_after] + NEW_SMALL_WORLDS + PHOTOS[_after:]

@@ -12,13 +12,13 @@ A slow tour of the Sun's family in the best photos spacecraft and telescopes hav
 - **Kind:** photos in one full-screen SKShader, and two live scenes nested in this one.
 
 ## How it works
-- **A view** is a row of the TSV. `disc`: a whole world (or a crescent) on black. `closeup`: a surface or cloud tops that always fill the screen. `live`: `TheSun` or `TheMoon`.
+- **A view** is a row of the TSV. `disc`: a whole world (or a crescent) on black. `closeup`: a surface or cloud tops seen from orbit, filling the screen. `surface`: a view from the ground (rover panoramas, Apollo, the last seconds before touching down), framed like a close-up and left out by the Views from the surface switch. `live`: `TheSun` or `TheMoon`. A close-up or surface photo too small to fill the screen without magnifying past 1.5× (Huygens on Titan, NEAR over Eros) is shown whole on black instead.
 - **The tour** (`pickNext`): the world held in Settings, or else a random world not among the last half of all worlds shown (`solar.recent`), weighted by how many views it has up to 3, so Saturn and Jupiter come round more often than Umbriel but not twelve times as often. Then that world's next view in the TSV's order (`solar.seen`, a count per world), so a return to Saturn shows a different Saturn. Both are kept in UserDefaults, so the rotation carries on across launches. Two live views never follow each other (see Gotchas). Each display and the Settings preview tour on their own, sharing the counts.
 - **Timing:** each view shows for `solar.seconds` (60 s), then the next dissolves in over 6 s with a smoothstep. A view's motion runs over its time plus its dissolve out, so nothing stops moving on screen. The next photo is cut in the background once the current one has fully arrived; if it isn't ready, the current view holds at the end of its motion.
 - **Framing** (`cut`), in photo pixels and points:
   - **Whole worlds** fit 86% of the screen's height or 94% of its width at their widest, and zoom by `solar.zoom` (1.25×) or the row's own zoom. The zoom heads halfway to the focus, so the world stays whole and near the middle; the wide end is jittered by up to 4% of the screen.
   - **Never soft:** the tight end is capped at 1.5 screen pixels per photo pixel. A small photo (Voyager's Umbriel, 280 px) shows smaller on black instead, as Dave chose.
-  - **Close-ups** cover the screen at their widest and zoom toward the focus, clamped so the screen never leaves the photo. They start from the focus's reflection through the middle, so a long strip (Juno's limbs, Pluto at sunset) pans across it.
+  - **Close-ups** cover the screen at their widest and zoom toward the focus, clamped so the screen never leaves the photo. They start from the focus's reflection through the middle, so a long strip (Juno's limbs, Pluto at sunset) pans across it, but never more than 0.6 of a screen's width in one view, so it stays slow. A photo more than 2.2 screens wide (a rover panorama) aims at a random stretch each visit instead of its focus.
   - **Direction:** half zoom in, half out (`Bool.random()`).
 - **The cut:** only the part of the photo the motion ever shows (the union of its two ends' views, which contain every frame between: the left edge is concave in time and the right convex), decoded off the main thread, scaled with Core Graphics' high interpolation so the widest moment is one texel per screen pixel (or the photo's own pixels, if fewer). After that the texture only ever magnifies, so fine detail like ringlets never aliases or shimmers.
 - **Shader:** both views (showing, and dissolving in) are sampled with Catmull-Rom in nine bilinear taps (Sigg and Hadwiger's trick), which stays sharp as it slowly magnifies where bilinear blurs, and pulses as the photo slides across texels. Outside a photo is black. A live view's slot is clear, and the sprite blends with `.alpha` (premultiplied), so the live scene below shows through; the dissolve between a photo and a live view is the photo's alpha. ±½/255 dither.
@@ -56,11 +56,20 @@ A slow tour of the Sun's family in the best photos spacecraft and telescopes hav
   - **Thumbnails:** each world's first photo (or the one marked `thumb`): whole worlds 62% of the box around the middle, close-ups from their middle.
 - **The order** within a world is the order the tour shows them: the best first.
 
+## Views from the surface
+- **What** (Dave, 2026-09-28: "lets also discuss the idea of opening up to non earth surface images"; then: mixed in with a switch, astronauts and hardware allowed): 14 rover and helicopter photos of Mars (Curiosity, Perseverance, Spirit, Opportunity, Ingenuity), 13 Apollo photos of the Moon (six NASA JSC panoramas and seven single Hasselblad frames from the Project Apollo Archive), Huygens's one photo from Titan's surface, Rosetta's last-day descent on comet 67P, Hayabusa2's touchdowns on Ryugu, OSIRIS-REx grabbing Bennu, DART's last seconds before Dimorphos and NEAR landing on Eros. Dimorphos and Eros are new worlds that only have views from the ground.
+- **Woven:** each world's views from orbit and from the ground alternate in the table (`weave` in photos.py), so a visit to Mars goes orbit, ground, orbit.
+- **Switch** (`solar.surface`, Views from the surface, on): appears once there are surface views; off, the tour skips them and the worlds that only have them.
+- **Panoramas** (`split` in photos.py): a panorama many screens long is cut into 2 or 3 overlapping pieces, each a view of its own, so none is huge to decode and each visit pans a stretch of it. The prep crops before converting to floats, so a 30,000-pixel panorama never becomes gigabytes.
+- **Colour:** Perseverance's best panoramas were only published in enhanced colour (its natural-colour versions' links are dead), and Curiosity's are mostly adjusted to Earth-like lighting; the captions say so.
+- **Left out:** Venus: the only surface photos (Venera 9, 10, 13 and 14) aren't clearly public domain (NASA's NSSDCA says "not necessarily in the public domain") and the well-known reprocessings are copyrighted. Philae's panorama and ROLIS images are ESA Standard Licence, and ASU's high-resolution Apollo scans are non-commercial. Viking's lander images top out at 2497×512 px. Chinese and commercial lunar landers' licences aren't CC or public domain. Itokawa's frames couldn't be checked for mirroring.
+- **Size:** capped at 4096 px, strips at 2600 px tall, HEIC at 60 (Dave chose this over 5120 px to keep the app near 330 MB).
+
 ## Performance
 - 0.49–0.55 ms CPU and 0.26–0.32 ms GPU for a photo, 0.85 ms GPU with the live Sun (release, 2x Retina at 1512×982, 2026-09-27). A dissolve samples two photos, still well under a millisecond.
 - **Memory:** two textures at up to screen size (24 MB each at 3024×1964), plus a transient full decode while cutting (up to 70 MB, in the background).
 - **Cutting** takes 110–240 ms per photo. Only the first view is cut on the main thread, when the scene is built, so the render test has a photo.
-- **App size:** 108MB of photos: 141 photos of 44 worlds, plus the live Sun and Moon (2026-09-27).
+- **App size:** Solar System Tour's photos are about 190 MB with the views from the surface (2026-09-28).
 
 ## Gotchas and shortcuts
 - **SpriteKit leaves a texture uniform undeclared while its texture is nil,** and the shader then fails to compile. Both slots start with a 1-pixel black texture.

@@ -161,11 +161,13 @@ One young white oak on a chalk hilltop, living through the real seasons where yo
 | Early May: catkin gold as the leaves open | January snow, the young oak still holding its dead leaves |
 
 ### Solar System Tour
-A slow tour of the Sun's family in 141 of the best photos spacecraft and telescopes have taken: Cassini's Saturn, Juno's Jupiter, Mars Express's Mars, New Horizons' Pluto, Webb's Uranus, Magellan's Venus, the Nile from the space station, and 44 worlds in all, down to Saturn's moon Pan and comet 67P. Each drifts and zooms for a minute, then dissolves into another world, and a world you come back to shows you a different photo. Under each name, a line on the photo and two quick facts about the world, never the same pair twice in a row. The Sun is today's real Sun and the Moon is tonight's real Moon, both live. Settings → Show holds the tour on one world.
+A slow tour of the Sun's family in 193 of the best photos spacecraft and telescopes have taken: Cassini's Saturn, Juno's Jupiter, Mars Express's Mars, New Horizons' Pluto, Webb's Uranus, Magellan's Venus, the Nile from the space station, and 46 worlds in all, down to Saturn's moon Pan and comet 67P. It also goes down to the ground: rover panoramas on Mars, the Apollo astronauts on the Moon, Huygens on Titan, and the last seconds before landing on comets and asteroids, which Settings can leave out. Each drifts and zooms for a minute, then dissolves into another world, and a world you come back to shows you a different photo. Under each name, a line on the photo and two quick facts about the world, never the same pair twice in a row. The Sun is today's real Sun and the Moon is tonight's real Moon, both live. Settings → Show holds the tour on one world.
 
 | ![Solar System Tour: Jupiter from Juno, in enhanced colour](docs/images/solar-system-jupiter.jpg) | ![Solar System Tour: the Nile, Sinai and the Red Sea from the International Space Station](docs/images/solar-system-nile.jpg) |
 |---|---|
 | Jupiter, from Juno | The Nile and the Red Sea, from the space station |
+| ![Solar System Tour: the delta in Jezero crater, from Perseverance](docs/images/solar-system-mars-jezero.jpg) | ![Solar System Tour: John Young, the rover and the lander at Descartes, Apollo 16](docs/images/solar-system-moon-apollo16.jpg) |
+| Jezero crater on Mars, from Perseverance | Apollo 16 at Descartes |
 
 #### The Sun, live
 One of the Sun's views is the real Sun as NASA's Solar Dynamics Observatory saw it within the last hour or so: today's flares, sunspots and prominences, in eight wavelengths, each in its real SDO colour, from the gold coronal loops of 171 Å to visible light. Plasma pulses out along its loops, its corona streams away, and every few minutes one of today's active regions flares or a prominence erupts off the edge.
