@@ -61,7 +61,8 @@ final class Schlieren: SKScene {
                             filter: SKUniform(name: "u_filter", texture: nil), texel: SKUniform(name: "u_texel", vectorFloat2: .zero),
                             mtexel: SKUniform(name: "u_mtexel", vectorFloat2: .zero), gain: SKUniform(name: "u_gain", float: 0),
                             mirror: SKUniform(name: "u_mirror", float: 0), aspect: SKUniform(name: "u_aspect", float: 1),
-                            tilt: SKUniform(name: "u_tilt", vectorFloat2: .zero), visible: SKUniform(name: "u_visible", float: 1))
+                            tilt: SKUniform(name: "u_tilt", vectorFloat2: .zero), visible: SKUniform(name: "u_visible", float: 1),
+                            air: SKUniform(name: "u_air", vectorFloat2: .zero))
     private let look = gradeKnobs("schlieren").map { SKUniform(name: "u_" + $0.key.split(separator: ".").last!, float: Float($0.value)) }
 
     override init(size: CGSize) {
@@ -81,7 +82,7 @@ final class Schlieren: SKScene {
         uniforms.tilt.vectorFloat2Value = [Float.random(in: -0.15...0.15), Float.random(in: -0.08...0.08)]
         screen.shader = SKShader(source: shaderCommon + Self.shader, uniforms: [
             uniforms.field, uniforms.mask, uniforms.filter, uniforms.texel, uniforms.mtexel, uniforms.gain, uniforms.mirror,
-            uniforms.aspect, uniforms.tilt, uniforms.visible, WallpaperTime.now,
+            uniforms.aspect, uniforms.tilt, uniforms.visible, uniforms.air, WallpaperTime.now,
         ] + look)
         addChild(screen)
         applySettings()
@@ -208,6 +209,8 @@ final class Schlieren: SKScene {
             left -= dt
         }
         upload()
+        // sim seconds (wrapped hourly) and how far a plume rises in one, in frame heights, for the eddies the grid can't hold
+        uniforms.air.vectorFloat2Value = [Float(Double(air.seconds).truncatingRemainder(dividingBy: 3600)), 0.4 / Self.sources[shown.source].metres]
         // the flames lean with the air round them and breathe with the sim's flicker
         for (node, i) in flames {
             let h = air.heaters[i], wind = air.velocity(atX: h.x, y: h.y + h.height * 0.5)
@@ -311,6 +314,11 @@ final class Schlieren: SKScene {
         vec2 p = v_tex_coord;
         // the bend: rays turn toward cooler, denser air, by the gradient of T0/T (the air runs on above the frame)
         vec2 e = u_texel, a = vec2(p.x, p.y * u_visible);
+        // eddies finer than the sim's 3 mm cells: a small warp that rises with the plume, fading in above the stem,
+        // so the turbulent crown gets the fine filaments of the photos
+        vec2 nq = vec2(p.x * u_aspect, p.y) * 28.0 - vec2(0.0, u_air.x * u_air.y * 28.0);
+        vec2 eddy = vec2(noise(nq) + 0.5 * noise(nq * 2.1 + 3.7), noise(nq + vec2(5.2, 1.3)) + 0.5 * noise(nq * 2.1 + 9.1)) - 0.75;
+        a += eddy * e * 3.0 * smoothstep(0.4, 0.85, p.y);
         float l = air(texture2D(u_field, a - vec2(e.x, 0.0))), r = air(texture2D(u_field, a + vec2(e.x, 0.0)));
         float b = air(texture2D(u_field, a - vec2(0.0, e.y))), t = air(texture2D(u_field, a + vec2(0.0, e.y)));
         float c = air(texture2D(u_field, a));
@@ -363,9 +371,11 @@ final class AirSim {
     var draftStrength: Float = 0.02
     var wander = false
     private var draft: [Float], time: Float = 0
+    /// Seconds of simulated time so far.
+    var seconds: Float { time }
     /// How fast warm air mixes away, per second: a 2D slice can't spread sideways in depth, as real plumes do.
     var cool: Float = 1
-    private let buoyancy: Float = 9.8, vorticity: Float = 2, iterations = 16, drag: Float = 1.2, diffuse: Float = 3e-5
+    private let buoyancy: Float = 9.8, vorticity: Float = 5, iterations = 16, drag: Float = 1.2, diffuse: Float = 3e-5
 
     init(nx: Int, ny: Int, height: Float, fine: Int) {
         self.nx = nx; self.ny = ny; w = nx + 2; h = height / Float(ny)
