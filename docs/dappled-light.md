@@ -1,6 +1,6 @@
 # Dappled Light
 
-Sunlight through a tree onto a warm white plaster wall (komorebi), lit by the real Sun where the viewer is. The light only falls when the Sun is on the wall's side and above the horizon, golden near sunset, gone at night but for faint moonlight at the real phase or a warm streetlight. Set to follow the live weather, it softens under cloud and the wind sets how much the leaves sway; it starts on Clear. It's the first wallpaper made for Light Mode; in Dark Mode the wall is charcoal.
+Sunlight through a tree onto a warm white plaster wall (komorebi), lit by the real Sun where the viewer is. The light only falls when the Sun is on the wall's side and above the horizon, golden near sunset, gone at night but for a warm streetlight or faint moonlight at the real phase. Set to follow the live weather, it softens under cloud and the wind sets how much the leaves sway; it starts on Clear. It's the first wallpaper made for Light Mode; in Dark Mode the wall is charcoal.
 
 - **Files:** `Sources/Atrium/DappledLight.swift` (the scene, its textures and its shader). `Resources/dappled-*`: the plaster as three greyscale HEICs, a leaf atlas and one twig, credited in `dappled-credits.tsv`. It uses `SkyMath.swift` for the Sun and Moon, `Location.swift`, `LiveWeather.swift` for cloud and wind, `Atmosphere` (WeatherSky.swift) for the colour of sunlight through the air, and `CloudNoise` for smooth noise.
 - **Entry:** `dappledLight(size:)` builds `final class DappledLight: SKScene`. Its entry in Scenes.swift is "Dappled Light", icon `leaf.fill`, tint `.green`, with `DappledLight.knobs` and Weather's status line (`weather.status`) under its Weather menu.
@@ -29,7 +29,7 @@ Sunlight through a tree onto a warm white plaster wall (komorebi), lit by the re
 | `dappled.cover` | Leaf cover | 0–1 | 0.5 | the crown's threshold and the sprays' weight |
 | `dappled.twig` | Leaves near the wall | switch | on | the twig |
 | `dappled.weather` | Weather | Live, Clear, Partly cloudy, Overcast | Clear | `conditions` (Clear is a calm 8 km/h breeze); Weather's status line shows under it while Live |
-| `dappled.night` | At night | Moonlight, Streetlight | Moonlight | the night source |
+| `dappled.night` | At night | Moonlight, Streetlight | Streetlight | the night source |
 | `dappled.sway` | Sway | 0–3× | 1× | sway, flutter and the twig's swing |
 | `dappled.previewTime`, `dappled.previewHour` | Preview a time of day, Time | switch, 0–24 h | off, 13:00 | `now` |
 | `dappled.previewEclipse` | Preview an eclipse | switch | off | a 70% partial eclipse |
@@ -78,6 +78,7 @@ What the photos showed besides:
 
 - **"A grey screen"** (2026-09-27, 6:57 am): fog (0.1 km visibility), the Sun a few minutes up in the east behind his south-west wall, in Dark Mode: really no direct light, so a flat charcoal wall. That led to the sky's shadow of the tree, and to Toward the Sun, which he chose as the default over keeping the real south-west wall or ignoring the weather by day.
 
+- **Streetlight by default** (2026-09-27): "the default for night should be street light not moon light".
 - **Clear by default** (2026-09-27): "so that first impressions are good if the user is having a cloudy day". Live weather is one menu pick away.
 
 ## Ideas / next steps
