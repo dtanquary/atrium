@@ -55,10 +55,10 @@ if let name = UserDefaults.standard.string(forKey: "sun.wavelength") {
     if let i = TheSun.wavelengths.firstIndex(where: { $0.name == name }) { UserDefaults.standard.set(Double(i + 1), forKey: TheSun.wavelengthKnob.key) }
     UserDefaults.standard.removeObject(forKey: "sun.wavelength")
 }
-var current = UserDefaults.standard.string(forKey: "scene") ?? scenes[0].name
+var current = UserDefaults.standard.string(forKey: "scene") ?? defaultScene.name
 
 @MainActor func currentScene(size: CGSize) -> SKScene {
-    (scenes.first { $0.name == current } ?? scenes[0]).make(size)
+    (scenes.first { $0.name == current } ?? defaultScene).make(size)
 }
 
 /// A borderless window for one display, parked at desktop level: above the system wallpaper,

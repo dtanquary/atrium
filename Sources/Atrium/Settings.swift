@@ -34,7 +34,7 @@ struct PaletteChoice {
 
 /// The Settings window, laid out like System Settings: wallpapers down the side, each with its own page.
 struct SettingsView: View {
-    @AppStorage("scene") private var current = scenes[0].name
+    @AppStorage("scene") private var current = defaultScene.name
     @State private var selection: String?
 
     var body: some View {
@@ -344,7 +344,7 @@ struct AboutPage: View {
 /// a glass header to put it on the desktop, its palettes, then its knobs by section.
 struct WallpaperPage: View {
     let wallpaper: Wallpaper
-    @AppStorage("scene") private var current = scenes[0].name
+    @AppStorage("scene") private var current = defaultScene.name
     @Environment(\.colorScheme) private var scheme
     /// Bumped to rebuild the live preview with a new palette.
     @State private var builds = 0

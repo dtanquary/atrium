@@ -7,6 +7,7 @@ Atrium is a menu bar app that plays animated wallpapers on macOS 27. Swift packa
 - Each wallpaper is an `SKScene` shown in a `WallpaperView` (an `SKView`). Its frame rate comes from Settings → Power (`Power` in Settings.swift, applied by `applyPowerState` in main.swift): 60 fps on mains power, 30 fps on battery and frozen on its current frame in Low Power Mode unless changed, with 15 fps offered. The menu's Full Speed on Battery is a one-click version for demos. Scenes step by elapsed time, so they must look the same at 15, 30 and 60 fps. The view pauses whenever its window is fully covered.
 - Switching scenes crossfades inside the existing windows. A wallpaper that has run for 12 hours is rebuilt when the displays sleep, or with a crossfade after 3 days if they never do (`refreshIfStale` in main.swift), so the clocks its shaders animate by stay small. Display changes only touch the displays that actually changed, so the system wallpaper never flashes through.
 - The menu bar icon (✨📺) picks the scene, saved in `UserDefaults` under `scene`. It also toggles Shuffle (with Next Wallpaper while it's on), opens Settings, toggles Open at Login (`SMAppService`) and Full Speed on Battery, and quits the app.
+- Wallpapers are listed alphabetically, in both the menu and the Settings sidebar (and Shuffle's list in General). `scenes` in Scenes.swift sorts itself by name, so a new, renamed or removed wallpaper needs no reordering: never hand-order the list or index into it (`scenes[0]`). The first-launch wallpaper is `defaultScene` (Fish Tank), named rather than taken from the top of the list.
 - **Settings** (`Settings.swift`) is a floating window laid out like System Settings: a sidebar of wallpapers, and a page for each one, then General, Power and About. General holds Open at Login and Shuffle. `Shuffle` moves the desktop on to a random wallpaper on a wall-clock timer that any change of `scene` restarts, skipping the names in `shuffle.skip`. Each page runs its own copy of the wallpaper live behind its top (`LivePreview`), under a Liquid Glass header, so settings show as they change. The page shows the wallpaper's screenshot (`Resources/preview-<name>.jpg`, see `docs/README.md`) until the live copy has built, then fades to it. A wallpaper's settings are plain data on its `Wallpaper` entry in Scenes.swift:
   - `knobs`: sliders, switches with `format: .toggle`, or menus with `format: .choice([names])` (stored as the index), or multipliers with `format: .times`, grouped by `section`. A knob can depend on a switch with `shownWhen`.
   - `palettes`: a `PaletteChoice` of named swatches. The pick is stored by name, and an empty value means Random.
@@ -17,7 +18,7 @@ Atrium is a menu bar app that plays animated wallpapers on macOS 27. Swift packa
 
 ## Layout
 - `Sources/Atrium/main.swift`: the app host (one window per display, the menu, handling display changes).
-- `Scenes.swift`: the scene registry, in menu order, plus shared helpers `shaderScene`, `paint` and `resource`.
+- `Scenes.swift`: the scene registry (sorted by name for the menu and Settings), plus shared helpers `shaderScene`, `paint` and `resource`.
 - `Location.swift`: `Location.shared`, using CoreLocation with a fallback guessed from the time zone. The last fix is saved in UserDefaults.
 - `LiveWeather.swift`: `LiveWeather.shared`, the current weather from Open-Meteo, one fetch shared by every scene. Call `poll()` from a periodic action, read `latest`, observe `LiveWeather.changed`.
 - `Sources/TreeGrowth/`: A Tree for the Year's growth and bake, its own module built with `-O` even in debug (Foundation and simd only).
@@ -40,7 +41,7 @@ ffmpeg -framerate 15 -i 'Fish Tank-%03d.png' -vf "scale=800:-1:flags=lanczos,spl
 ```
 
 ## Adding a scene
-1. Create a file with `@MainActor func myScene(size: CGSize) -> SKScene` and add it to `scenes` in Scenes.swift.
+1. Create a file with `@MainActor func myScene(size: CGSize) -> SKScene` and add it to `scenes` in Scenes.swift anywhere: it sorts by name. After adding, renaming or cutting a wallpaper, check the menu and Settings still list it in alphabetical order.
 2. Build everything visible in `init` or `sceneDidLoad`. The render test uses `SKRenderer`, which never calls `didMove(to:)`.
 3. Start live services (`Location.shared.start()`, network polling) in `didMove(to:)`.
 4. Drive periodic work with SKActions or `update(_:)`, not Timers, so it stops while the wallpaper is hidden.

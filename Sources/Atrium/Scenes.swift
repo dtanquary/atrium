@@ -16,7 +16,8 @@ struct Wallpaper {
     var status: (key: String, below: String)?
 }
 
-/// Every wallpaper, in menu order.
+/// Every wallpaper. The list sorts itself by name, so the menu and Settings show them alphabetically wherever an
+/// entry sits here.
 @MainActor let scenes: [Wallpaper] = [
     Wallpaper(name: "Fish Tank", icon: "fish.fill", tint: .teal, blurb: "A bright reef tank of real fish and corals.",
               make: { FishTank(size: $0) }),
@@ -74,7 +75,10 @@ struct Wallpaper {
               blurb: "Slow pans across the best photos of every world, with the live Sun and Moon.", make: solarSystem,
               knobs: SolarSystem.knobs + ([TheSun.wavelengthKnob] + TheSun.knobs).map { $0.in("The Sun") } + TheMoon.knobs.map { $0.in("The Moon") },
               palettes: SolarSystem.bodyChoice),
-]
+].sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+
+/// The wallpaper on first launch, and in place of a saved one that's since been cut.
+@MainActor let defaultScene = scenes.first { $0.name == "Fish Tank" }!
 
 /// Seconds for shaders to animate by, as `u_now`, in place of SpriteKit's `u_time`. `u_time` counts from app launch
 /// and nothing resets it, so as a Float it coarsens: after a week of running it moves 16 times a second, and sines
