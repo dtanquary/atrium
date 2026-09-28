@@ -16,9 +16,12 @@ final class Schlieren: SKScene {
     /// µrad filter near the flame, as in the photos; a mug's plume bends light a tenth as much, so its rig is more
     /// sensitive (research notes in docs/schlieren.md).
     nonisolated static let sources: [(name: String, metres: Float, depth: Float, span: Float)] = [
-        ("Candles", 0.18, 0.012, 450), ("Candle", 0.32, 0.02, 260), ("Mug", 0.34, 0.05, 90), ("Warm air", 0.4, 0.08, 120),
+        ("Candles", 0.13, 0.012, 450), ("Candle", 0.32, 0.02, 260), ("Mug", 0.34, 0.05, 90), ("Warm air", 0.4, 0.08, 120),
     ]
     nonisolated static let filters = ["Dark field", "Rainbow", "Bands", "Knife edge"]
+    /// Each filter's rig as it was set in the photos: the rainbow and band shots run their plumes out to the filter's
+    /// outer colours, the dark field and knife edge keep them softer.
+    nonisolated static let filterGain: [Float] = [1, 2, 1.6, 1]
     nonisolated static let knobs = [
         Knob(key: "schlieren.source", label: "Heat", range: 0...Double(sources.count - 1), standard: 0, format: .choice(sources.map(\.name))),
         Knob(key: "schlieren.filter", label: "Filter", range: 0...Double(filters.count - 1), standard: 0, format: .choice(filters)),
@@ -75,7 +78,7 @@ final class Schlieren: SKScene {
         screen.anchorPoint = .zero
         uniforms.aspect.floatValue = Float(size.width / size.height)
         // the light doesn't quite focus on the filter's centre everywhere, so the background drifts a little across it
-        uniforms.tilt.vectorFloat2Value = [Float.random(in: -0.25...0.25), Float.random(in: -0.1...0.1)]
+        uniforms.tilt.vectorFloat2Value = [Float.random(in: -0.15...0.15), Float.random(in: -0.08...0.08)]
         screen.shader = SKShader(source: shaderCommon + Self.shader, uniforms: [
             uniforms.field, uniforms.mask, uniforms.filter, uniforms.texel, uniforms.mtexel, uniforms.gain, uniforms.mirror,
             uniforms.aspect, uniforms.tilt, uniforms.visible, WallpaperTime.now,
@@ -94,7 +97,7 @@ final class Schlieren: SKScene {
         shown = (source, filter)
         let s = Self.sources[source]
         // bend in filter half-widths per unit of ∇(T0/T) per fine cell: (n0 − 1)·depth / span / cell size
-        uniforms.gain.floatValue = 2.72e-4 * s.depth / (s.span * 1e-6) / air.cell * Float(Self.knobs[2].value)
+        uniforms.gain.floatValue = 2.72e-4 * s.depth / (s.span * 1e-6) / air.cell * Float(Self.knobs[2].value) * Self.filterGain[filter]
         uniforms.mirror.floatValue = Float(Self.knobs[5].value)
         for (uniform, knob) in zip(look, gradeKnobs("schlieren")) { uniform.floatValue = Float(knob.value) }
     }
@@ -122,9 +125,9 @@ final class Schlieren: SKScene {
         case 2: // a mug of coffee at 70 °C: its surface and walls warm the air (θ = ΔT/T0)
             let x = 0.5 * width, r: Float = 0.042, h: Float = 0.095, base: Float = 0.01
             air.addSolid(x0: x - r, x1: x + r, y0: 0, y1: base + h)
-            air.heaters.append(.init(x: x, y: base + h, width: 2 * r * 0.92, height: 0.006, heat: 0.15, flame: false))
+            air.heaters.append(.init(x: x, y: base + h - 0.003, width: 2 * r * 0.9, height: 0.005, heat: 0.15, flame: false, ripple: 0.4))
             for side: Float in [-1, 1] {
-                air.heaters.append(.init(x: x + side * (r + 0.002), y: base + 0.01, width: 0.004, height: h - 0.012, heat: 0.1, flame: false))
+                air.heaters.append(.init(x: x + side * (r + 0.001), y: base + 0.01, width: 0.002, height: h - 0.012, heat: 0.05, flame: false))
             }
             shapes.append { ctx in
                 let cx = CGFloat(x), r = CGFloat(r), h = CGFloat(h), base = CGFloat(base)
@@ -137,7 +140,7 @@ final class Schlieren: SKScene {
             let top: Float = 0.018
             air.addSolid(x0: 0, x1: width, y0: 0, y1: top)
             for i in 0..<5 {
-                air.heaters.append(.init(x: (0.1 + 0.2 * Float(i)) * width, y: top, width: 0.06, height: 0.006, heat: 0.2, flame: false))
+                air.heaters.append(.init(x: (0.1 + 0.2 * Float(i)) * width, y: top, width: 0.06, height: 0.006, heat: 0.2, flame: false, ripple: 0.6))
             }
             air.cool = 0.35
             shapes.append { ctx in
@@ -171,7 +174,7 @@ final class Schlieren: SKScene {
         for flame in flames { flame.node.removeFromParent() }
         flames = air.heaters.indices.filter { air.heaters[$0].flame }.map { i in
             let h = air.heaters[i]
-            let node = SKSpriteNode(texture: Self.flameTexture, size: CGSize(width: CGFloat(h.width) * scale.x * 2, height: CGFloat(h.height) * scale.y * 1.5))
+            let node = SKSpriteNode(texture: Self.flameTexture, size: CGSize(width: CGFloat(h.width) * scale.x * 1.5, height: CGFloat(h.height) * scale.y * 1.5))
             node.anchorPoint = CGPoint(x: 0.5, y: 0.08)
             node.blendMode = .add
             node.zPosition = 1
@@ -234,7 +237,8 @@ final class Schlieren: SKScene {
 
     /// What the camera sees for a bend of (x, y) filter half-widths, over ±2 half-widths: the filter's colour
     /// averaged over the light source's image as the bend slides it across, a slit for the strips and knife edge, a
-    /// pinhole round the dark field's stop. Past the filter's edge is its opaque holder, so the brightest bends go black.
+    /// pinhole round the dark field's stop. The bands end in an opaque holder, so their strongest bends go black; the
+    /// rainbow's and dark field's outer colours run on, as round the flames in Davidhazy's and Settles' photos.
     nonisolated static func filterTable(_ filter: Int, _ c: [SIMD3<Float>]) -> SKTexture {
         let n = 128
         var source: [SIMD2<Float>] = []
@@ -256,9 +260,9 @@ final class Schlieren: SKScene {
             case 0: // a round stop, ringed by the left colours on the left and the right colours on the right
                 let r = simd_length(p), side = smooth(-0.7, 0.7, p.x / max(r, 1e-4))
                 let inner = simd_mix(c[1], c[3], SIMD3(repeating: side)), outer = simd_mix(c[0], c[4], SIMD3(repeating: side))
-                return simd_mix(inner, outer, SIMD3(repeating: smooth(0.35, 1.3, r))) * smooth(0.18, 0.2, r) * (1 - smooth(1.7, 1.9, r))
-            case 1: // a continuous strip, as in rainbow schlieren
-                return ramp(p.x) * (1 - smooth(1.15, 1.3, abs(p.x)))
+                return simd_mix(inner, outer, SIMD3(repeating: smooth(0.35, 1.3, r))) * smooth(0.18, 0.2, r)
+            case 1: // a continuous strip, as in rainbow schlieren, its end colours running on to the edge
+                return ramp(p.x)
             case 2: // coloured strips, with the thin dark gaps between an LED's dies
                 let x = abs(p.x), band = x < 0.3 ? 2 : x < 0.9 ? (p.x < 0 ? 1 : 3) : x < 1.4 ? (p.x < 0 ? 0 : 4) : -1
                 let gap = min(abs(x - 0.3), abs(x - 0.9), abs(x - 1.4)) < 0.035 ? Float(0.15) : 1
@@ -345,7 +349,7 @@ final class Schlieren: SKScene {
 /// lacks, where a real plume spreads and dilutes.
 final class AirSim {
     /// A source of heat: a flame (a teardrop of hot gas `heat` hot, in a halo of warmed air) or a warm patch.
-    struct Heater { var x, y, width, height, heat: Float; var flame: Bool }
+    struct Heater { var x, y, width, height, heat: Float; var flame: Bool; var ripple: Float = 0 }
 
     let nx: Int, ny: Int, w: Int, h: Float
     let fx: Int, fy: Int, fw: Int, cell: Float
@@ -354,7 +358,8 @@ final class AirSim {
     private(set) var t: UnsafeMutablePointer<Float>
     private var t1, t2, ox, oy, lo, hi: UnsafeMutablePointer<Float>
     private var solid: [Bool]
-    var heaters: [Heater] = []
+    var heaters: [Heater] = [] { didSet { stamps = [:] } }
+    private var stamps: [Int: (x0: Int, y0: Int, cols: Int, values: [Float])] = [:]
     var draftStrength: Float = 0.02
     var wander = false
     private var draft: [Float], time: Float = 0
@@ -435,43 +440,72 @@ final class AirSim {
         advect(u, into: a, dt); advect(v, into: b, dt)
         swap(&u, &a); swap(&v, &b)
         advectFine(dt)
-        // warm air mixes out, spreading and cooling
-        let passes = max(1, Int((diffuse * dt / (cell * cell) / 0.2).rounded(.up)))
+        // warm air mixes out, spreading and cooling; flame gas, hundreds of degrees hotter, mixes down to a few hundred
+        // within a couple of centimetres (θ ≈ 1 by the flame's tip, NIST), so the plume above is broad and smooth
+        let passes = max(1, Int((diffuse * dt / (cell * cell) / 0.24).rounded(.up))) // explicit diffusion is stable to 0.25
         let decay = exp(-cool * dt / Float(passes)), c = diffuse * dt / (cell * cell) / Float(passes)
+        let quench = 1 - exp(-12 * dt / Float(passes))
         for _ in 0..<passes {
             for y in 1...fy { for x in 1...fx {
                 let k = y * fw + x
-                t2[k] = (t[k] + c * (t[k - 1] + t[k + 1] + t[k - fw] + t[k + fw] - 4 * t[k])) * decay
+                let mixed = t[k] + c * (t[k - 1] + t[k + 1] + t[k - fw] + t[k + fw] - 4 * t[k])
+                t2[k] = (mixed - max(mixed - 0.8, 0) * quench) * decay
             } }
             swap(&t, &t2)
         }
         time += dt
     }
 
-    /// Holds each heater's air at its temperature: a flame is a teardrop of gas at ~1150 K (θ = 3) in a halo of air
-    /// it has warmed, which makes the plume as wide as the candle, as in the photos.
+    /// Holds each heater's air at its temperature. A flame is a teardrop of gas at ~1150 K (θ = 3), and above it the
+    /// first few centimetres of its plume: a cone that starts as wide as the flame and widens and cools as it rises
+    /// (θ ≈ 1 by the tip, NIST), after which the sim carries it on. That gives the V the photos show at the base. Flames
+    /// are stamped from a table made once; warm patches, which ripple, are drawn each step.
     private func heat() {
         let fw = fw, cell = cell
         for (i, f) in heaters.enumerated() {
-            let halo: Float = f.flame ? f.width * 1.2 : 0, tall = f.flame ? f.height * flicker(i) : f.height
-            let x0 = max(1, Int((f.x - f.width - 3 * halo) / cell)), x1 = min(fx, Int((f.x + f.width + 3 * halo) / cell) + 1)
-            let y0 = max(1, Int((f.y - halo) / cell)), y1 = min(fy, Int((f.y + tall + 6 * halo) / cell) + 1) // where the halo fades out
+            if f.flame {
+                if stamps[i] == nil { stamps[i] = stamp(f) }
+                let (x0, y0, cols, values) = stamps[i]!
+                var j = 0
+                for y in y0..<y0 + values.count / cols {
+                    let row = y * fw
+                    for x in x0..<x0 + cols { t[row + x] = max(t[row + x], values[j]); j += 1 }
+                }
+                continue
+            }
+            let x0 = max(1, Int((f.x - f.width) / cell)), x1 = min(fx, Int((f.x + f.width) / cell) + 1)
+            let y0 = max(1, Int((f.y - f.height) / cell)), y1 = min(fy, Int((f.y + 2 * f.height) / cell) + 1)
             guard x0 <= x1, y0 <= y1 else { continue }
             for y in y0...y1 { for x in x0...x1 {
                 let px = (Float(x) - 0.5) * cell - f.x, py = (Float(y) - 0.5) * cell - f.y
-                var q: Float
-                if f.flame {
-                    let e = px * px / (f.width * f.width * 0.25) + pow((py - tall * 0.45) / (tall * 0.55), 2)
-                    let above = max(py - tall * 0.6, 0), below = min(py, 0)
-                    q = max(e < 1 ? f.heat * (1 - e * e) : 0, 0.8 * exp(-(px * px + above * above * 0.3 + below * below * 4) / (halo * halo)))
-                } else {
-                    let ex = max(abs(px) - f.width * 0.5, 0) / (cell * 2), ey = max(abs(py - f.height * 0.5) - f.height * 0.5, 0) / (cell * 2)
-                    q = f.heat * exp(-ex * ex - ey * ey)
-                }
+                let ex = max(abs(px) - f.width * 0.5, 0) / (cell * 2), ey = max(abs(py - f.height * 0.5) - f.height * 0.5, 0) / (cell * 2)
+                // a warm surface sheds its heat from a few wandering spots, not evenly
+                let spots = f.ripple * (sin(px * 260 + time * 0.7) * sin(px * 97 - time * 0.45 + Float(i)))
                 let k = y * fw + x
-                t[k] = max(t[k], q)
+                t[k] = max(t[k], f.heat * exp(-ex * ex - ey * ey) * (1 + spots))
             } }
         }
+    }
+
+    /// A flame and the start of its plume, as θ on the fine cells round it: its first cell and the table's width.
+    private func stamp(_ f: Heater) -> (x0: Int, y0: Int, cols: Int, values: [Float]) {
+        let rise = f.height * 2.5, spread: Float = 0.3 // the cone's height, and how fast it widens
+        let reach = f.width + (f.width * 0.5 + spread * rise) * 2
+        let x0 = max(1, Int((f.x - reach) / cell)), x1 = min(fx, Int((f.x + reach) / cell) + 1)
+        let y0 = max(1, Int((f.y - f.width) / cell)), y1 = min(fy, Int((f.y + f.height + rise) / cell) + 1)
+        guard x0 <= x1, y0 <= y1 else { return (1, 1, 1, []) }
+        var values: [Float] = []
+        for y in y0...y1 { for x in x0...x1 {
+            let px = (Float(x) - 0.5) * cell - f.x, py = (Float(y) - 0.5) * cell - f.y
+            let dy = (py - f.height * 0.45) / (f.height * 0.55), e = px * px / (f.width * f.width * 0.25) + dy * dy
+            let flame = e < 1 ? f.heat * (1 - e * e) : 0
+            // the cone: from the flame's middle up, a Gaussian across that widens as it cools, fading in below
+            let z = max(py - f.height * 0.5, 0), width = f.width * 0.5 + spread * z
+            let fade = py < 0 ? exp(-py * py / (f.width * f.width * 0.1)) : 1
+            let cone = 1.1 / (1 + 2.5 * z / f.height) * exp(-px * px / (width * width)) * fade * max(1 - z / rise, 0)
+            values.append(max(flame, cone))
+        } }
+        return (x0, y0, x1 - x0 + 1, values)
     }
 
     /// Vorticity confinement: puts back the small swirls that the coarse grid smooths away.
