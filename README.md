@@ -1,14 +1,20 @@
 # Atrium
 
-Living, animated desktop wallpapers for macOS: a reef tank of real fish and corals, drifting nebulae, a turning spiral galaxy, a lava lamp, the real sky above you right now, Earth from orbit with the live ISS, your local weather, and more. It's a small menu bar app written in Swift and SpriteKit, with no dependencies.
+Living, animated desktop wallpapers for macOS, 22 of them: a reef tank of real fish and corals, slow tours through the best real photos of the Solar System and deep space, the real sky above you right now, your live weather and wind, an oak living through your real seasons, sunlight through leaves from the real Sun, rising heat as a schlieren camera sees it, drifting nebulae, and more. It's a small menu bar app written in Swift and SpriteKit, with no dependencies.
 
 There are no prebuilt downloads. Clone it, build it and run it yourself; it takes about a minute.
 
 ## The wallpapers
 
-Screenshots show the wallpaper alone, with no desktop icons, menu bar or Dock. Everything moves: the fish school, the nebulae drift and fold, the galaxies turn, the sky turns and the starlings wheel. Galaxy, Nebula and the reef are rebuilt differently on every load. The docs in [`docs/`](docs/README.md) cover each wallpaper in depth: how it works, its settings, cost and ideas for next steps.
+Screenshots show the wallpaper alone, with no desktop icons, menu bar or Dock. Everything moves: the fish school, the photos drift and zoom, the wind streams, the nebulae fold, the galaxies turn and the starlings wheel. Galaxy, Nebula and the reef are rebuilt differently on every load. Every wallpaper has its own page in [Settings](#settings). The docs in [`docs/`](docs/README.md) cover each wallpaper in depth: how it works, its settings, cost and ideas for next steps.
 
-### Fish Tank
+- **Nature and weather:** [Fish Tank](#fish-tank) · [Weather](#weather) · [A Tree for the Year](#a-tree-for-the-year) · [Dappled Light](#dappled-light) · [Rain on Glass](#rain-on-glass) · [Wind](#wind) · [Murmuration](#murmuration) · [Aurora](#aurora) · [Fireflies](#fireflies) · [Campfire](#campfire)
+- **Space:** [Solar System Tour](#solar-system-tour) · [Deep Space Tour](#deep-space-tour) · [Nebula](#nebula) · [Galaxy](#galaxy) · [Live Sky](#live-sky) · [Earth from Orbit](#earth-from-orbit)
+- **Colour, light and pattern:** [Flowing Gradient](#flowing-gradient) · [Lava Lamp](#lava-lamp) · [Schlieren](#schlieren) · [Turing Patterns](#turing-patterns) · [Game of Life](#game-of-life) · [Pixel City](#pixel-city)
+
+### Nature and weather
+
+#### Fish Tank
 A bright reef tank of real fish and corals, cut out of photos: a chromis school, tangs, clownfish in their anemone, and soft corals swaying.
 
 ![Fish Tank in motion: fish schooling over the reef under actinic blue, with light rippling across the sand](docs/images/fish-tank.gif)
@@ -17,69 +23,7 @@ A bright reef tank of real fish and corals, cut out of photos: a chromis school,
 |---|---|
 | By day, in Light Mode | Under actinic blue in Dark Mode, its corals fluorescing |
 
-### Flowing Gradient
-Soft pools of colour with silk ribbons that follow the Sun, in six palettes. On Random it drifts from one palette to the next every few minutes.
-
-| ![Flowing Gradient in Dark Mode](docs/images/flowing-gradient.jpg) | ![Flowing Gradient in Light Mode](docs/images/flowing-gradient-light.jpg) |
-|---|---|
-| In Dark Mode | The watercolour Light Mode |
-
-### Lava Lamp
-Wax that rises up the middle as round heads on stems that pinch off, sticks to the top a while, then sinks at the sides, lit by the bulb below. Seven jewel-tone palettes, with Light and Dark looks.
-
-| ![Lava Lamp in Dark Mode](docs/images/lava-lamp.jpg) | ![Lava Lamp in Light Mode, Teal palette](docs/images/lava-lamp-light.jpg) |
-|---|---|
-| Coral in Dark Mode | Teal, in Light Mode |
-
-### Rain on Glass
-Drops creeping and running down a rainy window, each a tiny lens showing the street upside down. Behind the glass: ten real places, blurred as a camera focused on the glass sees them (from a wet Hamburg square to a cabin in the snow), or city lights in seven palettes. Turn on Follow the weather and the glass does what the weather where you are would do to a real window: rain when it rains, drops drying when it stops, fog on humid mornings, snow melting into beads, and fern frost growing across the pane over hours below freezing.
-
-| ![Rain on Glass at night](docs/images/rain-on-glass-night.jpg) | ![Rain on Glass by day](docs/images/rain-on-glass-day.jpg) |
-|---|---|
-| Hamburg at night, in Dark Mode | Riomaggiore by day, in Light Mode |
-| ![Rain on Glass following the weather: fern frost](docs/images/rain-on-glass-frost.jpg) | ![Rain on Glass following the weather: fog](docs/images/rain-on-glass-fog.jpg) |
-| Following the weather: frost on a freezing night, over the Cabin | Fog on a grey morning, wiped along the runners' tracks |
-
-### Aurora
-Northern lights over the snowy Tetons, shading through real aurora colours.
-
-| ![Aurora in green](docs/images/aurora-green.jpg) | ![Aurora in purple](docs/images/aurora-purple.jpg) |
-|---|---|
-| The classic green | The Purple palette |
-
-### Nebula
-A unique deep-space cloud on every load, in real nebula colours, dissolving into a new one every few minutes.
-
-| ![Nebula, Hubble palette](docs/images/nebula-hubble.jpg) | ![Nebula, Reflection palette](docs/images/nebula-reflection.jpg) |
-|---|---|
-| The Hubble palette | The Reflection palette |
-| ![Nebula, Planetary palette](docs/images/nebula-planetary.jpg) | ![Nebula, Oxygen palette](docs/images/nebula-oxygen.jpg) |
-| The Planetary palette | The Oxygen palette |
-
-### Galaxy
-A spiral galaxy turning slowly, after a real one, with dust lanes, star clusters and pink star-forming knots.
-
-| ![Galaxy, Whirlpool](docs/images/galaxy-whirlpool.jpg) | ![Galaxy, Andromeda](docs/images/galaxy-andromeda.jpg) |
-|---|---|
-| The Whirlpool (M51) and its companion, in colours sampled from Hubble's portrait | Andromeda, steeply tilted, with M32 and M110 beside it |
-| ![Galaxy, Great Barred](docs/images/galaxy-barred.jpg) | ![Galaxy, Milky Way](docs/images/galaxy-milky-way.jpg) |
-| NGC 1300, the Great Barred Spiral, with dust lanes along its bar | The Milky Way, seen face-on |
-
-### Live Sky
-The real sky above you: stars, planets, the Moon's phase, the Milky Way and the ISS. Deep blue by day.
-
-| ![Live Sky at night](docs/images/live-sky.jpg) | ![Live Sky at dusk](docs/images/live-sky-dusk.jpg) |
-|---|---|
-| Tonight's sky, with the Moon in its true phase, Saturn and the Milky Way | Dusk, from Preview a time of day in Settings |
-
-### Earth from Orbit
-The globe above your location with the live day/night line, today's real clouds, lightning in storms near you, city lights and the ISS.
-
-| ![Earth from Orbit at night](docs/images/earth-from-orbit.jpg) | ![Earth from Orbit by day](docs/images/earth-from-orbit-day.jpg) |
-|---|---|
-| City lights on the night side, with the live ISS | The day side, under today's real clouds |
-
-### Weather
+#### Weather
 Real hills under your live local weather, beneath a physical sky with the real Sun and Moon: sunrise and twilight, real clouds on the real wind, rain, snow lying on the ground, valley mist and lightning.
 
 | ![Weather, fair](docs/images/weather-fair.jpg) | ![Weather, sunset](docs/images/weather-sunset.jpg) |
@@ -88,19 +32,41 @@ Real hills under your live local weather, beneath a physical sky with the real S
 | ![Weather, fog](docs/images/weather-fog.jpg) | ![Weather, snow](docs/images/weather-snow.jpg) |
 | Fog, with mist lying in the valley | Snow falling, and lying on the hills |
 
-### Pixel City
-A pixel-art skyline that follows your clock, with traffic and windows lighting up through the evening.
+#### A Tree for the Year
+One young white oak on a chalk hilltop, living through the real seasons where you are: gold catkins as the buds break, fresh green, colour from the top down to wine and rust, leaf fall, a few tan leaves held through the winter, and snow on the branches. It stands under Weather's sky and your live weather, sways in the real wind and darkens in the rain. It's grown from a seed saved the first time it's shown, so it's your own tree, the same every day and a year bigger each spring. The grass greens up and goes dormant with it.
 
-| ![Pixel City at dusk](docs/images/pixel-city-dusk.jpg) | ![Pixel City at night](docs/images/pixel-city-night.jpg) |
+| ![A Tree for the Year at peak autumn colour under fair-weather clouds](docs/images/a-tree-for-the-year.jpg) | ![A Tree for the Year in summer](docs/images/a-tree-for-the-year-summer.jpg) |
 |---|---|
-| Dusk, the windows coming on | Late at night, under the Moon |
+| Late October, wine red, on a partly cloudy afternoon | Midsummer |
+| ![A Tree for the Year at bud break](docs/images/a-tree-for-the-year-spring.jpg) | ![A Tree for the Year in falling snow, holding its dead leaves](docs/images/a-tree-for-the-year-snow.jpg) |
+| Early May, fresh green as the leaves open | January snow, the young oak still holding its dead leaves |
 
-### Fireflies
-Fireflies drifting over a misty meadow at blue hour.
+#### Dappled Light
+Sunlight through a tree onto a warm white plaster wall, from the real Sun where you are: it only falls when the Sun is on the wall's side, and turns golden near sunset. Every gap between the leaves is a pinhole camera, so the dapples are images of the Sun, round or stretched by the angle of the light, and crescents during a real solar eclipse. Near leaves cast sharp shadows, far ones melt into soft shade. Cloud softens it and wind sways the leaves, from the live weather; at night, faint moonlight at the real phase, or a warm streetlight. In Dark Mode the same light falls on charcoal plaster.
 
-![Fireflies over a misty meadow at blue hour](docs/images/fireflies.jpg)
+| ![Dappled Light on an afternoon](docs/images/dappled-light.jpg) | ![Dappled Light at golden hour](docs/images/dappled-light-golden.jpg) |
+|---|---|
+| A clear afternoon | Golden hour, just before sunset |
+| ![Dappled Light in Dark Mode, on charcoal plaster](docs/images/dappled-light-dark.jpg) | ![Dappled Light during a partial solar eclipse](docs/images/dappled-light-eclipse.jpg) |
+| Dark Mode: the same light on charcoal plaster | A partial solar eclipse: every dapple a crescent |
 
-### Murmuration
+#### Rain on Glass
+Drops creeping and running down a rainy window, each a tiny lens showing the street upside down. Behind the glass: ten real places, blurred as a camera focused on the glass sees them (from a wet Hamburg square to a cabin in the snow), or city lights in seven palettes. Turn on Follow the weather and the glass does what the weather where you are would do to a real window: rain when it rains, drops drying when it stops, fog on humid mornings, snow melting into beads, and fern frost growing across the pane over hours below freezing.
+
+| ![Rain on Glass at night](docs/images/rain-on-glass-night.jpg) | ![Rain on Glass by day](docs/images/rain-on-glass-day.jpg) |
+|---|---|
+| Hamburg at night, in Dark Mode | Riomaggiore by day, in Light Mode |
+| ![Rain on Glass following the weather: fern frost](docs/images/rain-on-glass-frost.jpg) | ![Rain on Glass following the weather: fogged glass](docs/images/rain-on-glass-fog.jpg) |
+| Following the weather: fern frost on a freezing night, over the Cabin | Fogged glass on a grey morning, over the Countryside |
+
+#### Wind
+The live wind around you as thin streaks streaming across the map, in the spirit of the hint.fm wind map and earth.nullschool: a grid of Open-Meteo's hourly forecast, blended from hour to hour, with streaks that speed up, brighten and curl with the real wind, as brush strokes like hint.fm's or comets like nullschool's. Zoom from your town to half the continent, over a map at the opacity you choose: the Earth by day or at night, terrain and the sea floor, or yesterday's satellite view with its real clouds (all from NASA), Natural Earth's shaded relief, or nothing, in six jewel-toned palettes. Light Mode draws the same streaks as ink on paper.
+
+| ![Wind at the continent zoom over the Earth by day, a low spinning off the East Coast](docs/images/wind.jpg) | ![Wind in Light Mode at the region zoom, over the Earth printed on paper](docs/images/wind-light.jpg) |
+|---|---|
+| Half the continent, over the Earth by day | A region in Light Mode, ink on a pale print of the map |
+
+#### Murmuration
 Tens of thousands of starlings wheeling over Brighton's West Pier or a marsh pond, flying like the real thing (a published flight model), mirrored in the water and scattering from a falcon. By default a whole evening plays out, from golden hour to the roost.
 
 ![Murmuration in motion: a flock of starlings folding over Brighton's West Pier at sunset](docs/images/murmuration.gif)
@@ -109,59 +75,27 @@ Tens of thousands of starlings wheeling over Brighton's West Pier or a marsh pon
 |---|---|
 | The marsh pond in the afterglow | The West Pier at blue hour |
 
-### Campfire
+#### Aurora
+Northern lights over the snowy Tetons, shading through real aurora colours.
+
+| ![Aurora in green](docs/images/aurora-green.jpg) | ![Aurora in purple](docs/images/aurora-purple.jpg) |
+|---|---|
+| The classic green | The Purple palette |
+
+#### Fireflies
+Fireflies drifting over a misty meadow at blue hour.
+
+![Fireflies over a misty meadow at blue hour](docs/images/fireflies.jpg)
+
+#### Campfire
 A campfire in a stone ring in a real forest clearing at night, its flames simulated, lighting the stones, ground and nearby trees as it flickers, under the real stars.
 
 ![Campfire in a forest clearing at night](docs/images/campfire.jpg)
 
-### Game of Life
-Conway's cells, reseeding so they never die out. The Calm look shows a long exposure, so cells melt into soft glowing blobs that drift slowly; the Classic look is crisp, quick and colourful.
+### Space
 
-| ![Game of Life, Calm](docs/images/game-of-life.jpg) | ![Game of Life, Classic](docs/images/game-of-life-classic.jpg) |
-|---|---|
-| Calm | Classic |
-
-### Turing Patterns
-Reaction–diffusion, the chemistry Alan Turing proposed for how animals get their spots and stripes. Patterns grow from a few glowing seeds, then slowly drift from coral to dividing spots to a honeycomb to fingerprint stripes and round again, in six jewel-tone palettes. Patches keep dissolving and growing back in, so it never stops moving, or it can swirl on a slow current instead.
-
-| ![Turing Patterns, fingerprint stripes in Dark Mode](docs/images/turing-patterns.jpg) | ![Turing Patterns, coral in Light Mode](docs/images/turing-patterns-light.jpg) |
-|---|---|
-| Fingerprint stripes in Dark Mode | Coral, glazed like ceramic, in Light Mode |
-
-### Schlieren
-Rising heat as a colour schlieren camera sees it, after the photos of Gary Settles, Andrew Davidhazy and Ted Kinsman. Warm air bends light, and the camera turns each bend into a colour, so the two edges of a candle's plume glow in opposite colours as it rises, sways and curls into turbulence, in slow motion. It uses a real fluid simulation of the room's air. Pick candles, one taper, a mug of coffee or a radiator; a dark-field, rainbow, banded or knife-edge filter; and one of eight palettes, with the lab's round mirror as an option.
-
-| ![Schlieren, four candles in the dark field](docs/images/schlieren.jpg) | ![Schlieren, a rainbow filter after Davidhazy](docs/images/schlieren-rainbow.jpg) |
-|---|---|
-| Four candles glowing in the dark field | The rainbow filter on ultramarine, after Davidhazy |
-
-### Wind
-The live wind around you as thin streaks streaming across the map, in the spirit of the hint.fm wind map and earth.nullschool: a grid of Open-Meteo's hourly forecast, blended from hour to hour, with streaks that speed up, brighten and curl with the real wind, as brush strokes like hint.fm's or comets like nullschool's. Zoom from your town to half the continent, over a map at the opacity you choose: the Earth by day or at night, terrain and the sea floor, or yesterday's satellite view with its real clouds (all from NASA), Natural Earth's shaded relief, or nothing, in six jewel-toned palettes. Light Mode draws the same streaks as ink on paper.
-
-| ![Wind at the continent zoom over the Earth by day, a low spinning off the East Coast](docs/images/wind.jpg) | ![Wind in Light Mode at the town zoom, over Landsat printed on paper](docs/images/wind-light.jpg) |
-|---|---|
-| Half the continent, over the Earth by day | A town in Light Mode, ink on a pale print of Landsat |
-
-### Dappled Light
-Sunlight through a tree onto a warm white plaster wall, from the real Sun where you are: it only falls when the Sun is on the wall's side, and turns golden near sunset. Every gap between the leaves is a pinhole camera, so the dapples are images of the Sun, round or stretched by the angle of the light, and crescents during a real solar eclipse. Near leaves cast sharp shadows, far ones melt into soft shade. Cloud softens it and wind sways the leaves, from the live weather; at night, faint moonlight at the real phase, or a warm streetlight. In Dark Mode the same light falls on charcoal plaster.
-
-| ![Dappled Light on an afternoon](docs/images/dappled-light.jpg) | ![Dappled Light at golden hour](docs/images/dappled-light-golden.jpg) |
-|---|---|
-| A clear afternoon on a south-west wall | Twenty-five minutes before sunset |
-| ![Dappled Light in Dark Mode, on charcoal plaster](docs/images/dappled-light-dark.jpg) | ![Dappled Light during a partial solar eclipse](docs/images/dappled-light-eclipse.jpg) |
-| Dark Mode: the same light on charcoal plaster | A partial solar eclipse: every dapple a crescent |
-
-### A Tree for the Year
-One young white oak on a chalk hilltop, living through the real seasons where you are: gold catkins as the buds break, fresh green, colour from the top down to wine and rust, leaf fall, a few tan leaves held through the winter, and snow on the branches. It stands under Weather's sky and your live weather, sways in the real wind and darkens in the rain. It's grown from a seed saved the first time it's shown, so it's your own tree, the same every day and a year bigger each spring. The grass greens up and goes dormant with it.
-
-| ![A Tree for the Year at peak autumn colour under fair-weather clouds](docs/images/a-tree-for-the-year.jpg) | ![A Tree for the Year in summer](docs/images/a-tree-for-the-year-summer.jpg) |
-|---|---|
-| Late October, wine red, on a partly cloudy afternoon | Midsummer |
-| ![A Tree for the Year at bud break](docs/images/a-tree-for-the-year-spring.jpg) | ![A Tree for the Year in falling snow, holding its dead leaves](docs/images/a-tree-for-the-year-snow.jpg) |
-| Early May: catkin gold as the leaves open | January snow, the young oak still holding its dead leaves |
-
-### Solar System Tour
-A slow tour of the Sun's family in 193 of the best photos spacecraft and telescopes have taken: Cassini's Saturn, Juno's Jupiter, Mars Express's Mars, New Horizons' Pluto, Webb's Uranus, Magellan's Venus, the Nile from the space station, and 46 worlds in all, down to Saturn's moon Pan and comet 67P. It also goes down to the ground: rover panoramas on Mars, the Apollo astronauts on the Moon, Huygens on Titan, and the last seconds before landing on comets and asteroids, which Settings can leave out. Each drifts and zooms for a minute, then dissolves into another world, and a world you come back to shows you a different photo. Under each name, a line on the photo and two quick facts about the world, never the same pair twice in a row. The Sun is today's real Sun and the Moon is tonight's real Moon, both live. Settings → Show holds the tour on one world.
+#### Solar System Tour
+A slow tour of the Sun's family in 193 of the best photos spacecraft and telescopes have taken: Cassini's Saturn, Juno's Jupiter, Mars Express's Mars, New Horizons' Pluto, Webb's Uranus, Magellan's Venus, the Nile from the space station, and 46 worlds in all, down to Saturn's moon Pan and comet 67P. It also goes down to the ground: rover panoramas on Mars, the Apollo astronauts on the Moon, Huygens on Titan, and the last seconds before landing on comets and asteroids, which Settings can leave out. Each fills the screen, drifting and zooming for a minute, then dissolves into another world, and a world you come back to shows you a different photo. Under each name, a line on the photo and two quick facts about the world, never the same pair twice in a row. The Sun is today's real Sun and the Moon is tonight's real Moon, both live. Settings → Show holds the tour on one world, and Framing can show each photo whole instead of filling the screen.
 
 | ![Solar System Tour: Jupiter from Juno, in enhanced colour](docs/images/solar-system-jupiter.jpg) | ![Solar System Tour: the Nile, Sinai and the Red Sea from the International Space Station](docs/images/solar-system-nile.jpg) |
 |---|---|
@@ -169,30 +103,116 @@ A slow tour of the Sun's family in 193 of the best photos spacecraft and telesco
 | ![Solar System Tour: the delta in Jezero crater, from Perseverance](docs/images/solar-system-mars-jezero.jpg) | ![Solar System Tour: John Young, the rover and the lander at Descartes, Apollo 16](docs/images/solar-system-moon-apollo16.jpg) |
 | Jezero crater on Mars, from Perseverance | Apollo 16 at Descartes |
 
-#### The Sun, live
+##### The Sun, live
 One of the Sun's views is the real Sun as NASA's Solar Dynamics Observatory saw it within the last hour or so: today's flares, sunspots and prominences, in eight wavelengths, each in its real SDO colour, from the gold coronal loops of 171 Å to visible light. Plasma pulses out along its loops, its corona streams away, and every few minutes one of today's active regions flares or a prominence erupts off the edge.
 
 | ![The Sun Today, 193 Bronze](docs/images/sun-193.jpg) | ![The Sun Today, 304 Red, with a prominence erupting](docs/images/sun-304-eruption.jpg) |
 |---|---|
-| 193 Å, the million-degree corona, on 27 September 2026 | 304 Å, the chromosphere, as a prominence erupts |
+| 193 Å, the million-degree corona, with a dark coronal hole, on 29 September 2026 | 304 Å, the chromosphere, as a prominence erupts |
 
 It was its own wallpaper, The Sun Today, until it joined Solar System Tour.
 
-#### The Moon, live
+##### The Moon, live
 When the tour reaches the Moon, one of its views is the Moon filling the screen as it is right now from where you are: its real phase, wobble and tilt, from NASA's LRO maps, with shadows along the terminator, earthshine on the dark side, and copper during a lunar eclipse. Choose black, faint real stars or the real sky behind it. It was its own wallpaper, The Moon, until it joined Solar System Tour.
 
 | ![The Moon, a waxing crescent with earthshine](docs/images/the-moon.jpg) | ![The Moon by day, on the Sky backdrop](docs/images/the-moon-day.jpg) |
 |---|---|
-| A waxing crescent with earthshine, among the real stars | The morning Moon on the Sky backdrop, its dark side the sky's own blue |
+| A waxing crescent with earthshine, among the real stars | Today's waning gibbous on the Sky backdrop, its dark side the sky's own blue |
 | ![The Moon in the total lunar eclipse of 31 December 2028](docs/images/the-moon-eclipse.jpg) | ![The Moon beside NASA's Dial-a-Moon](docs/images/the-moon-vs-dial-a-moon.jpg) |
 | The total lunar eclipse of 31 December 2028, previewed | Checked against NASA's Dial-a-Moon (left of each pair) for phase, libration, tilt and tone |
 
-### Deep Space Tour
-Solar System Tour's sister, beyond the Solar System: slow pans and zooms across 92 of the best real photos of nebulae, star clusters, dying stars, galaxies, deep fields, and the only two black holes ever imaged, from Webb, Hubble, ESO, Euclid, the Rubin Observatory, Chandra and the Event Horizon Telescope. Real photos only: no artist's impressions or simulations. Each object comes with a caption and two facts, and Settings → Show holds the tour on one kind of object.
+#### Deep Space Tour
+Solar System Tour's sister, beyond the Solar System: slow pans and zooms across 95 of the best real photos of nebulae, star clusters, dying stars, galaxies, deep fields, and the only two black holes ever imaged, from Webb, Hubble, ESO, Euclid, the Rubin Observatory, Chandra and the Event Horizon Telescope. Real photos only: no artist's impressions or simulations. Each object comes with a caption and two facts, and Settings → Show holds the tour on one kind of object.
 
 | ![Deep Space Tour: the Pillars of Creation from Webb](docs/images/deep-space-pillars.jpg) | ![Deep Space Tour: M87*, the first image of a black hole](docs/images/deep-space-m87.jpg) |
 |---|---|
 | The Pillars of Creation, from Webb | M87*, the first image of a black hole |
+
+#### Nebula
+A unique deep-space cloud on every load, in real nebula colours, dissolving into a new one every few minutes.
+
+| ![Nebula, Hubble palette](docs/images/nebula-hubble.jpg) | ![Nebula, Reflection palette](docs/images/nebula-reflection.jpg) |
+|---|---|
+| The Hubble palette | The Reflection palette |
+| ![Nebula, Planetary palette](docs/images/nebula-planetary.jpg) | ![Nebula, Oxygen palette](docs/images/nebula-oxygen.jpg) |
+| The Planetary palette | The Oxygen palette |
+
+#### Galaxy
+A spiral galaxy turning slowly, after a real one, with dust lanes, star clusters and pink star-forming knots.
+
+| ![Galaxy, Whirlpool](docs/images/galaxy-whirlpool.jpg) | ![Galaxy, Andromeda](docs/images/galaxy-andromeda.jpg) |
+|---|---|
+| The Whirlpool (M51) and its companion, in colours sampled from Hubble's portrait | Andromeda, steeply tilted, with M32 and M110 beside it |
+| ![Galaxy, Great Barred](docs/images/galaxy-barred.jpg) | ![Galaxy, Milky Way](docs/images/galaxy-milky-way.jpg) |
+| NGC 1300, the Great Barred Spiral, with dust lanes along its bar | The Milky Way, seen face-on |
+
+#### Live Sky
+The real sky above you: stars, planets, the Moon's phase, the Milky Way and the ISS. Deep blue by day.
+
+| ![Live Sky at night](docs/images/live-sky.jpg) | ![Live Sky at dusk](docs/images/live-sky-dusk.jpg) |
+|---|---|
+| Nine tonight, looking south, with the Milky Way setting in the south-west | Dusk, from Preview a time of day in Settings |
+
+#### Earth from Orbit
+The globe above your location with the live day/night line, today's real clouds, lightning in storms near you, city lights and the ISS.
+
+| ![Earth from Orbit at night, over India](docs/images/earth-from-orbit.jpg) | ![Earth from Orbit by day, over North America](docs/images/earth-from-orbit-day.jpg) |
+|---|---|
+| City lights across India before dawn, with day coming in from the east | Late afternoon over North America, under today's real clouds |
+
+### Colour, light and pattern
+
+#### Flowing Gradient
+Soft pools of colour in six palettes, drifting from one palette to the next every few minutes on Random, with silk ribbons that follow the Sun if you turn them on.
+
+| ![Flowing Gradient in Dark Mode](docs/images/flowing-gradient.jpg) | ![Flowing Gradient in Light Mode](docs/images/flowing-gradient-light.jpg) |
+|---|---|
+| In Dark Mode | The watercolour Light Mode |
+
+#### Lava Lamp
+Wax that rises up the middle as round heads on stems that pinch off, sticks to the top a while, then sinks at the sides, lit by the bulb below. Seven jewel-tone palettes, with Light and Dark looks.
+
+| ![Lava Lamp in Dark Mode](docs/images/lava-lamp.jpg) | ![Lava Lamp in Light Mode, Teal palette](docs/images/lava-lamp-light.jpg) |
+|---|---|
+| Coral in Dark Mode | Teal, in Light Mode |
+
+#### Schlieren
+Rising heat as a colour schlieren camera sees it, after the photos of Gary Settles, Andrew Davidhazy and Ted Kinsman. Warm air bends light, and the camera turns each bend into a colour, so the two edges of a candle's plume glow in opposite colours as it rises, sways and curls into turbulence, in slow motion. It uses a real fluid simulation of the room's air. Pick candles, one taper, a mug of coffee or a radiator; a dark-field, rainbow, banded or knife-edge filter; and one of eight palettes, with the lab's round mirror as an option.
+
+| ![Schlieren, candles in the dark field](docs/images/schlieren.jpg) | ![Schlieren, one candle through a rainbow filter after Davidhazy](docs/images/schlieren-rainbow.jpg) |
+|---|---|
+| Candles glowing in the dark field | One candle through the rainbow filter, after Davidhazy |
+
+#### Turing Patterns
+Reaction–diffusion, the chemistry Alan Turing proposed for how animals get their spots and stripes. Patterns grow from a few glowing seeds, then slowly drift from coral to dividing spots to a honeycomb to fingerprint stripes and round again, in six jewel-tone palettes. Patches keep dissolving and growing back in, so it never stops moving, or it can swirl on a slow current instead.
+
+| ![Turing Patterns, fingerprint stripes in Dark Mode](docs/images/turing-patterns.jpg) | ![Turing Patterns, coral in Light Mode](docs/images/turing-patterns-light.jpg) |
+|---|---|
+| Fingerprint stripes in Dark Mode | Coral, glazed like ceramic, in Light Mode |
+
+#### Game of Life
+Conway's cells, reseeding so they never die out. The Calm look shows a long exposure, so cells melt into soft glowing blobs that drift slowly; the Classic look is crisp, quick and colourful.
+
+| ![Game of Life, Calm](docs/images/game-of-life.jpg) | ![Game of Life, Classic](docs/images/game-of-life-classic.jpg) |
+|---|---|
+| Calm | Classic |
+
+#### Pixel City
+A pixel-art skyline that follows your clock, with traffic and windows lighting up through the evening.
+
+| ![Pixel City at dusk](docs/images/pixel-city-dusk.jpg) | ![Pixel City at night](docs/images/pixel-city-night.jpg) |
+|---|---|
+| Dusk, the windows coming on | Late at night, under the Moon |
+
+## Settings
+
+Choose Settings… (⌘,) from the menu bar icon. Every wallpaper has a page, laid out like System Settings, with its palettes, photos, sliders, switches and menus. The wallpaper runs live behind the top of its page, so each change shows as you make it. General holds Open at Login and Shuffle; Power sets the frame rate on mains power, on battery and in Low Power Mode.
+
+| ![Settings for Solar System Tour: a grid of worlds to hold the tour on](docs/images/settings-solar-system-tour.jpg) | ![Settings for Rain on Glass: ten real places and seven city-light palettes behind the glass](docs/images/settings-rain-on-glass.jpg) |
+|---|---|
+| Solar System Tour: hold the tour on one world, or let it roam | Rain on Glass: ten real places behind the glass, or city lights in seven palettes |
+| ![Settings for Nebula: its palettes and how often a new nebula forms](docs/images/settings-nebula.jpg) | ![Settings for Dappled Light in Light Mode: which way the wall faces, leaf cover, weather and the light at night](docs/images/settings-dappled-light.jpg) |
+| Nebula: seven palettes after real nebulae, or Random | Dappled Light, in Light Mode: the wall, the weather and the light at night |
 
 ## How it works
 
@@ -200,7 +220,7 @@ macOS has no public API for third-party live wallpapers. This app gives each dis
 
 It uses public AppKit and SpriteKit APIs only. It uses no private frameworks, makes no changes to system files, needs no SIP changes and doesn't inject code.
 
-Each wallpaper is a SpriteKit scene. Many are full-screen Metal shaders written as `SKShader`s, and almost everything is drawn in code. The only image files are two NASA Earth textures, a star catalogue, the live cloud map Earth from Orbit downloads, the Sun images Solar System Tour's live Sun downloads, the Fish Tank's fish and corals and Weather's hills and clouds, all cut out of permissively licensed photos, the Moon's colour and heights, for Weather and the live Moon, and Solar System Tour's photos of the planets and moons.
+Each wallpaper is a SpriteKit scene. Many are full-screen Metal shaders written as `SKShader`s, and whatever can be drawn in code is: skies, water, wax, flames, streaks of wind, starlings, reaction–diffusion and rising heat. Photos come in where they beat anything procedural: the reef's fish and corals, and the landscapes behind Weather, A Tree for the Year, Aurora, Murmuration, Fireflies, Campfire and Rain on Glass, all cut out of permissively licensed photos and relit; the two tours' photos from spacecraft and telescopes; and NASA's maps of the Earth and the Moon. Live data comes over the network: the weather, the wind, the clouds, the ISS and the Sun.
 
 It's kind to your battery:
 - 60 fps on mains power, 30 fps on battery.
@@ -237,8 +257,8 @@ To rebuild after pulling changes: `./build.sh && pkill -x Atrium; open build/Atr
 
 ### Permissions and network
 
-- **Location** (optional). Live Sky, Earth from Orbit, Weather and Flowing Gradient's time-of-day mood use your location, and the app asks once. If you decline, it guesses from your time zone.
-- **Network.** Weather, Dappled Light and A Tree for the Year fetch from [Open-Meteo](https://open-meteo.com) every 15 minutes, sharing one request. Live Sky and Earth from Orbit fetch the ISS position from [wheretheiss.at](https://wheretheiss.at) at most once a minute. Earth from Orbit fetches a global cloud map from [Live Cloud Maps](https://clouds.matteason.co.uk) only once its cached copy is over 3 hours old (1.5 MB when it has changed), and not at all with Live clouds off. For lightning, it asks Open-Meteo for thunderstorms on a grid around you each time the cloud map updates, about every 3 hours. Solar System Tour's live Sun, while it's on screen, fetches SDO images from [Helioviewer](https://helioviewer.org) at most every 15 minutes (2048 pixels, 0.3–0.5 MB) or 30 (4096, 1–2 MB, for the close-up), keeping the last few hours on disk. None of them needs an API key.
+- **Location** (optional). Live Sky, Earth from Orbit, Weather, A Tree for the Year, Dappled Light, Wind, Pixel City, Campfire's stars, the live Moon, Rain on Glass following the weather and Flowing Gradient's time-of-day mood use your location, and the app asks once. If you decline, it guesses from your time zone.
+- **Network.** Weather, Dappled Light, A Tree for the Year and Rain on Glass (while following the weather) fetch from [Open-Meteo](https://open-meteo.com) every 15 minutes, sharing one request. Live Sky and Earth from Orbit fetch the ISS position from [wheretheiss.at](https://wheretheiss.at) at most once a minute. Earth from Orbit fetches a global cloud map from [Live Cloud Maps](https://clouds.matteason.co.uk) only once its cached copy is over 3 hours old (1.5 MB when it has changed), and not at all with Live clouds off. For lightning, it asks Open-Meteo for thunderstorms on a grid around you each time the cloud map updates, about every 3 hours. Solar System Tour's live Sun, while it's on screen, fetches SDO images from [Helioviewer](https://helioviewer.org) at most every 15 minutes (2048 pixels, 0.3–0.5 MB) or 30 (4096, 1–2 MB, for the close-up), keeping the last few hours on disk. None of them needs an API key.
 - **Wind** uses your location too, and asks Open-Meteo for the hourly wind forecast at 384 points around you every two hours, for the zoom on screen (about 230 KB and 384 of Open-Meteo's free 10,000 calls a day each time, so at most 4,600 a day). The last reply for each zoom stays on disk, so it works offline. With an Earth background it downloads NASA's imagery tiles for the view from [GIBS](https://nasa-gibs.github.io/gibs-api-docs/) once and keeps them: about 1–2 MB for most maps, up to 7 MB at night for half the continent, and a fresh 1–2 MB a day for the satellite view.
 
 ## Development
@@ -249,6 +269,7 @@ swift test             # renders every wallpaper offscreen to PNGs and prints ea
 SNAPSHOT_SCENE="Nebula" SNAPSHOT_DIR=/tmp/shots swift test     # one wallpaper
 SNAPSHOT_DEFAULTS="gradient.palette=Sunset" SNAPSHOT_APPEARANCE=light swift test   # with settings, in Light Mode
 SNAPSHOT_SCENE="Fish Tank" SNAPSHOT_MOVIE=6 swift test       # then 6 seconds of frames at 15 fps, for a GIF
+SETTINGS_SHOT="Nebula" swift test --filter settingsWindow   # opens Settings on that page for a moment and captures it
 ```
 
 - **Tests.** The render test fails if a scene comes out as one flat colour, for example a shader that didn't compile. The astronomy is checked against JPL Horizons, and the weather parser against a real Open-Meteo reply.
