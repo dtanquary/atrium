@@ -2,7 +2,7 @@
 
 Living, animated desktop wallpapers for macOS, 22 of them: a reef tank of real fish and corals, slow tours through the best real photos of the Solar System and deep space, the real sky above you right now, your live weather and wind, an oak living through your real seasons, sunlight through leaves from the real Sun, rising heat as a schlieren camera sees it, drifting nebulae, and more. It's a small menu bar app written in Swift and SpriteKit, with no dependencies.
 
-There are no prebuilt downloads. Clone it, build it and run it yourself; it takes about a minute.
+It's free. [Download it](#download), or build it yourself in a few minutes.
 
 ## The wallpapers
 
@@ -230,6 +230,19 @@ It's kind to your battery:
 
 The lock screen, and the tint of the menu bar and windows, come from your normal system wallpaper, which Atrium only covers. To match them, turn on **Settings → General → Match the lock screen**: it sets your system wallpaper to a still of Atrium's, refreshed as it changes, and puts yours back when you turn it off or quit.
 
+## Download
+
+Download the DMG from the [Releases](https://github.com/dtanquary/atrium/releases) page, open it, and drag Atrium into Applications.
+
+Atrium isn't notarised by Apple (that needs a paid developer account), so the first time you open it macOS says it can't verify it. To let it through, once:
+1. Choose **Done** in that message.
+2. Open **System Settings → Privacy & Security**, scroll down to **Security**, and click **Open Anyway** beside Atrium.
+3. Confirm with your password or Touch ID, then choose **Open Anyway** again.
+
+After that it opens like any other app. If you'd rather not, build it yourself from the source (below): that needs no exceptions.
+
+To make the DMG yourself: `./dmg.sh` → `build/Atrium-<version>.dmg`.
+
 ## Requirements
 
 - macOS 26 or later, on Apple silicon. It's developed and tested on macOS 27.
@@ -254,6 +267,16 @@ Once it's running, use the ✨📺 icon in the menu bar to:
 - **Quit**.
 
 To rebuild after pulling changes: `./build.sh && pkill -x Atrium; open build/Atrium.app`
+
+### Updating and uninstalling
+
+- **Update:** download the new DMG and replace the app in Applications, or `git pull && ./build.sh`. Your settings carry over.
+- **Uninstall:** turn off **Open at Login** and **Match the lock screen** in Settings → General (the second puts your own wallpaper back), quit Atrium, and move it to the Trash. To remove its settings and caches too:
+
+  ```sh
+  defaults delete com.dtanquary.atrium
+  rm -rf ~/Library/Caches/com.dtanquary.atrium ~/Library/HTTPStorages/com.dtanquary.atrium "$HOME/Library/Application Support/com.dtanquary.atrium"
+  ```
 
 ### Permissions and network
 
