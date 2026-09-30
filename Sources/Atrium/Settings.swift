@@ -215,7 +215,6 @@ struct GeneralPage: View {
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("General")
     }
 
     private func include(_ name: String, _ on: Bool) {
@@ -258,7 +257,6 @@ struct PowerPage: View {
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("Power")
     }
 }
 
@@ -339,7 +337,6 @@ struct AboutPage: View {
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("About")
     }
 }
 
@@ -426,7 +423,6 @@ struct WallpaperPage: View {
         // ponytail: Fish Tank and Weather take about half a second to build on the main thread, which stalls the
         // page once; build them off the main thread if that grates.
         .task { withAnimation(.easeIn(duration: 0.6)) { live = true } }
-        .navigationTitle(wallpaper.name)
     }
 
     /// The wallpaper's screenshot, `Resources/preview-<name>.jpg`, with a `-light` one for Light Mode if it has one.
