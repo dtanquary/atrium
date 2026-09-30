@@ -22,6 +22,9 @@ import CoreLocation
         manager.delegate = self
     }
 
+    /// True until the user has answered macOS's location prompt.
+    var undecided: Bool { manager.authorizationStatus == .notDetermined }
+
     func start() {
         if manager.authorizationStatus == .notDetermined {
             manager.requestWhenInUseAuthorization() // answer arrives in locationManagerDidChangeAuthorization

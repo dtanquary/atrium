@@ -331,10 +331,13 @@ let delegate = AppDelegate()
 app.delegate = delegate
 let menu = StatusMenu()
 app.mainMenu = mainMenu(menu)
-// First launch: open Settings, so there's something to see besides a new icon in the menu bar.
+// First launch: open Settings with the welcome over it, so there's more to see than a new icon in the menu bar.
 if !UserDefaults.standard.bool(forKey: "welcomed") {
     UserDefaults.standard.set(true, forKey: "welcomed")
-    if UserDefaults.standard.object(forKey: "scene") == nil { SettingsWindow.shared.open() }
+    if UserDefaults.standard.object(forKey: "scene") == nil {
+        UserDefaults.standard.set(true, forKey: WelcomeView.key)
+        SettingsWindow.shared.open()
+    }
 }
 
 syncWindows()

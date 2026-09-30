@@ -39,6 +39,7 @@ struct SettingsView: View {
     static let pageKey = "settings.page"
     @AppStorage("scene") private var current = defaultScene.name
     @AppStorage(pageKey) private var page = ""
+    @AppStorage(WelcomeView.key) private var welcome = false
     @State private var query = ""
 
     private var selection: Binding<String?> {
@@ -84,6 +85,7 @@ struct SettingsView: View {
                 }
             }
         }
+        .sheet(isPresented: $welcome) { WelcomeView() }
     }
 
     private func row(_ name: String, icon: String, tint: Color) -> some View {
@@ -268,6 +270,7 @@ struct PowerPage: View {
 struct AboutPage: View {
     static let tag = "About" // sidebar selection; can't clash with a wallpaper name
 
+    @AppStorage(WelcomeView.key) private var welcome = false
     private let name = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "Atrium"
     /// "Version 1.0.0 (412) · rc 1": the version, the build number and any prerelease, from build.sh.
     private let version: String = {
@@ -313,6 +316,7 @@ struct AboutPage: View {
                     Text(name).font(.largeTitle.bold()).accessibilityAddTraits(.isHeader)
                     Text(version).foregroundStyle(.secondary).textSelection(.enabled)
                     Text("Living, animated wallpapers for macOS. Free and open source.").padding(.top, 4)
+                    Button("Show Welcome…") { welcome = true }.padding(.top, 6)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
@@ -480,17 +484,23 @@ struct WallpaperPage: View {
         .task { if !reduceMotion { withAnimation(.easeIn(duration: 0.6)) { live = true } } }
     }
 
-    /// The wallpaper's screenshot, `Resources/preview-<name>.jpg`, with a `-light` one for Light Mode if it has one.
     private var preview: Image {
-        let file = "preview-" + wallpaper.name.lowercased().replacingOccurrences(of: " ", with: "-")
-        let image = scheme == .light ? NSImage(contentsOf: resource(file + "-light.jpg")) : nil
-        return Image(nsImage: image ?? NSImage(contentsOf: resource(file + ".jpg")) ?? NSImage())
+        Image(nsImage: NSImage(contentsOf: wallpaper.preview(light: scheme == .light)) ?? NSImage())
     }
 
     /// Palettes are picked when a scene is built, so a new pick rebuilds the preview, and the desktop if it's showing.
     private func rebuildIfShowing() {
         builds += 1
         if wallpaper.name == current { switchScene() }
+    }
+}
+
+extension Wallpaper {
+    /// Its screenshot, `Resources/preview-<name>.jpg`, or `preview-<name>-light.jpg` in Light Mode if it has one.
+    func preview(light: Bool) -> URL {
+        let file = "preview-" + name.lowercased().replacingOccurrences(of: " ", with: "-")
+        let lit = resource(file + "-light.jpg")
+        return light && FileManager.default.fileExists(atPath: lit.path) ? lit : resource(file + ".jpg")
     }
 }
 
