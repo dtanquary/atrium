@@ -122,6 +122,7 @@ var current = UserDefaults.standard.string(forKey: "scene") ?? defaultScene.name
     let added = screens.filter { screen in !kept.contains { $0.frame == screen.frame } }.map(wallpaperWindow)
     let gone = windows.filter { !kept.contains($0) }
     windows = kept + added
+    if !added.isEmpty { matchLockScreen(after: 1.5) }
     guard !gone.isEmpty else { return }
     Task { // let the new windows draw a frame first, so the system wallpaper never flashes through
         try? await Task.sleep(for: .seconds(0.5))
@@ -142,6 +143,14 @@ var current = UserDefaults.standard.string(forKey: "scene") ?? defaultScene.name
         let view = window.contentView as? SKView
         view?.presentScene(currentScene(size: window.frame.size), transition: .crossFade(withDuration: 0.8))
     }
+    matchLockScreen(after: 1.5)
+}
+
+/// With Match the lock screen on, takes a fresh still once the scene has settled.
+@MainActor func matchLockScreen(after seconds: Double) {
+    DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
+        if LockScreen.knob.value > 0.5 { LockScreen.match(windows) }
+    }
 }
 
 /// Builds the wallpapers afresh once `WallpaperTime` has run for `hours`, restarting it along with every scene's own
@@ -154,6 +163,7 @@ var current = UserDefaults.standard.string(forKey: "scene") ?? defaultScene.name
     WallpaperTime.restart()
     if fade { return switchScene() }
     for window in windows { (window.contentView as? SKView)?.presentScene(currentScene(size: window.frame.size)) }
+    matchLockScreen(after: 1.5)
 }
 
 /// The Settings window, an ordinary window that reopens where it was left. While it's open Atrium turns into a
@@ -278,6 +288,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         SettingsWindow.shared.open()
         return false
     }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        LockScreen.restore()
+    }
 }
 
 /// The menus shown while Settings is open and Atrium is a regular app: the standard shortcuts (⌘W, ⌘Q, ⌘M, ⌘C…).
@@ -343,12 +357,24 @@ if let source = IOPSNotificationCreateRunLoopSource({ _ in
 // Move on to another wallpaper every so often while Shuffle is on.
 Shuffle.reschedule()
 NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { _ in
-    MainActor.assumeIsolated { Shuffle.reschedule() }
+    MainActor.assumeIsolated {
+        Shuffle.reschedule()
+        LockScreen.settingChanged(windows)
+    }
+}
+// Match the lock screen, or put back the user's wallpaper if a crash left one of ours, once the scenes have drawn;
+// then keep the still fresh (time-of-day scenes drift), and take one as the displays sleep, just before a lock.
+DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { LockScreen.update(windows) }
+Timer.scheduledTimer(withTimeInterval: 600, repeats: true) { _ in
+    MainActor.assumeIsolated { matchLockScreen(after: 0) }
 }
 // Rebuild a long-running wallpaper so the clocks its shaders animate by stay small: quietly once the displays sleep,
 // or with a crossfade for displays that never do.
 NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { _ in
-    MainActor.assumeIsolated { refreshIfStale(after: 12, fade: false) }
+    MainActor.assumeIsolated {
+        refreshIfStale(after: 12, fade: false)
+        matchLockScreen(after: 0)
+    }
 }
 Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { _ in
     MainActor.assumeIsolated { refreshIfStale(after: 72, fade: true) }

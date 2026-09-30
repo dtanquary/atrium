@@ -194,6 +194,12 @@ struct GeneralPage: View {
                 Text("Moves on to another wallpaper at random. Picking one yourself starts the clock over.")
                     .foregroundStyle(.secondary)
             }
+            Section {
+                KnobRow(knob: LockScreen.knob)
+            } footer: {
+                Text("Sets your Mac's own wallpaper to a still of Atrium's, so the lock screen and the tint of windows and the menu bar match it. Yours comes back when you turn this off or quit Atrium. A moving Aerial may come back as a still; if so, pick it again in System Settings → Wallpaper.")
+                    .foregroundStyle(.secondary)
+            }
             if shuffling > 0.5 {
                 Section {
                     ForEach(scenes, id: \.name) { wallpaper in

@@ -14,7 +14,7 @@ Atrium is a menu bar app that plays animated wallpapers on macOS 27. Swift packa
   - `status`: a UserDefaults key the scene keeps a line of text in (Weather's last live report), shown under a knob while that knob is 0.
 
   Knobs are stored in UserDefaults. Live scenes read `knob.value` and observe `UserDefaults.didChangeNotification` to feed their shader uniforms (see `FlowingGradient` and `LavaLamp`). A plain shader scene can instead pass `knobs:` to `shaderScene`, and each knob becomes a live uniform; a `speed:` knob adds `u_clock`, time that runs at that speed without jumping when the slider moves (see Rain on Glass). `gradeKnobs(prefix)` plus `grade()` in the shader add the shared brightness, contrast, saturation and hue sliders (see Nebula). A new palette pick rebuilds the scene if it's on the desktop. To tune, read the values back with `defaults read com.dtanquary.atrium`.
-- Known seams: the lock screen, and the tint of the menu bar and windows, still come from the system wallpaper.
+- Known seams: the lock screen, and the tint of the menu bar and windows, come from the system wallpaper. General → Match the lock screen (`LockScreen.swift`, opt-in) sets it to a still of each display's scene, saved by display UUID, and puts the user's own back when turned off, on quitting, or at the next launch after a crash. `pkill` skips the quit, so the next launch restores it.
 
 ## Layout
 - `Sources/Atrium/main.swift`: the app host (one window per display, the menu, handling display changes).

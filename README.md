@@ -228,7 +228,7 @@ It's kind to your battery:
 - Rendering pauses whenever the desktop is fully covered.
 - Settings → Power changes each of these rates (Freeze, 15, 30 or 60 fps). For a demo on battery, choose Full Speed on Battery in the menu bar.
 
-Known limits: the lock screen, and the tint of the menu bar and windows, still come from your normal system wallpaper.
+The lock screen, and the tint of the menu bar and windows, come from your normal system wallpaper, which Atrium only covers. To match them, turn on **Settings → General → Match the lock screen**: it sets your system wallpaper to a still of Atrium's, refreshed as it changes, and puts yours back when you turn it off or quit.
 
 ## Requirements
 
