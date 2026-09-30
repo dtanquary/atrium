@@ -1,5 +1,7 @@
 # Atrium
 
+<img src="docs/images/app-icon.png" alt="Atrium's icon: a skylight onto a glowing nebula" width="128">
+
 Living, animated desktop wallpapers for macOS, 22 of them: a reef tank of real fish and corals, slow tours through the best real photos of the Solar System and deep space, the real sky above you right now, your live weather and wind, an oak living through your real seasons, sunlight through leaves from the real Sun, rising heat as a schlieren camera sees it, drifting nebulae, and more. It's a small menu bar app written in Swift and SpriteKit, with no dependencies.
 
 It's free. [Download it](#download), or build it yourself in a few minutes.

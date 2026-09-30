@@ -1,7 +1,7 @@
 #!/bin/sh
 # Builds build/Atrium.app, a menu-bar-only app. Run it with: open build/Atrium.app
 set -e
-VERSION=0.64.0 # semantic versioning; see "Versioning" in CLAUDE.md
+VERSION=0.64.1 # semantic versioning; see "Versioning" in CLAUDE.md
 PRERELEASE= # e.g. "rc 1" while a release candidate: shown in Settings → About; VERSION stays three numbers, as macOS requires
 cd "$(dirname "$0")"
 
@@ -25,6 +25,7 @@ cat > "$APP/Contents/Info.plist" <<EOF
     <key>CFBundleExecutable</key><string>Atrium</string>
     <key>CFBundleIdentifier</key><string>com.dtanquary.atrium</string>
     <key>CFBundleName</key><string>Atrium</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundleShortVersionString</key><string>$VERSION</string>
     <key>CFBundleVersion</key><string>$BUILD</string>
     <key>AtriumPrerelease</key><string>$PRERELEASE</string>
