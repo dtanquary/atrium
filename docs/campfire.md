@@ -1,5 +1,7 @@
 # Campfire
 
+> **Unfinished, hidden for 1.0 (2026-09-30).** Dave feels Campfire isn't hitting the mark yet, so it's flagged `unfinished: true` in Scenes.swift: left out of the menu, Settings, Shuffle, the welcome and the README, but still built and render-tested. **Revisit:** ask Dave what's missing (the look, the motion, or something specific), record it under his feedback here, and fix that before un-hiding it. To see it while working on it: `defaults write com.dtanquary.atrium unfinished -bool true`, then relaunch.
+
 A campfire in a ring of upright stones, in a real forest clearing at night under the real stars. The flames are a small fluid simulation, drawn as crisp tongues and torn wisps and coloured the way a camera records fire. Their light, measured from the flames themselves, falls on the stones, the charred sticks, the ground and the nearest trunks with the right distance, angle and shadows, and flickers as they do. Sparks rise in streaks, embers glow in the bed, and a faint warm haze, glow and heat shimmer hang over the flames.
 
 - **Files:**

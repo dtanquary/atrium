@@ -1,5 +1,7 @@
 # A Tree for the Year
 
+> **Unfinished, hidden for 1.0 (2026-09-30).** Dave feels A Tree for the Year isn't hitting the mark yet, so it's flagged `unfinished: true` in Scenes.swift: left out of the menu, Settings, Shuffle, the welcome and the README, but still built and render-tested. **Revisit:** ask Dave what's missing (the look, the motion, or something specific), record it under his feedback here, and fix that before un-hiding it. To see it while working on it: `defaults write com.dtanquary.atrium unfinished -bool true`, then relaunch.
+
 One young white oak on a chalk hilltop, living through the real seasons where you are, under Weather's physical sky and your live weather: khaki-gold bud break with catkins, lime then deep green, colour from the top and the sunny side down to wine and rust, leaf fall, tan dead leaves held through the winter, and snow on the branches. Wind sways it, rain darkens its bark, and it's this Mac's own tree: grown from a seed saved the first time it's shown, a year older each spring.
 
 - **Files:** `Sources/Atrium/TreeForTheYear.swift` holds the scene (`TreeScene`, a `WeatherScene`), its shader, `Phenology` and the grass's year. `Sources/TreeGrowth/TreeGrowth.swift` grows and bakes the tree, in its own module (see Performance). `Resources/tree-*`: the hilltop, its aux map, six oak leaves (colour, normals, translucency) and oak bark, credited in `tree-credits.tsv`. Tests: `Tests/AtriumTests/TreeTests.swift`.

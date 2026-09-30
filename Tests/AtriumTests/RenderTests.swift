@@ -34,7 +34,7 @@ import UniformTypeIdentifiers
     descriptor.usage = [.renderTarget, .shaderRead]
     descriptor.storageMode = .shared
 
-    for wallpaper in scenes where env["SNAPSHOT_SCENE"].map({ $0 == wallpaper.name }) ?? true {
+    for wallpaper in allScenes where env["SNAPSHOT_SCENE"].map({ $0 == wallpaper.name }) ?? true {
         let name = wallpaper.name
         let renderer = SKRenderer(device: device)
         renderer.scene = wallpaper.make(size)

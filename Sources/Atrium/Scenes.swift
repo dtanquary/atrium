@@ -14,11 +14,14 @@ struct Wallpaper {
     /// A line the scene keeps up to date in UserDefaults under `key` (what the live weather last said, say), shown
     /// under its knob `below` while that knob is 0, or on for a switch.
     var status: (key: String, below: String)?
+    /// Not good enough to show yet: left out of the menu, Settings, Shuffle and the welcome unless `unfinished` is set
+    /// (`defaults write com.dtanquary.atrium unfinished -bool true`, then relaunch), but still built and render-tested.
+    var unfinished = false
 }
 
-/// Every wallpaper. The list sorts itself by name, so the menu and Settings show them alphabetically wherever an
-/// entry sits here.
-@MainActor let scenes: [Wallpaper] = [
+/// Every wallpaper, finished or not. The list sorts itself by name, so the menu and Settings show them alphabetically
+/// wherever an entry sits here.
+@MainActor let allScenes: [Wallpaper] = [
     Wallpaper(name: "Fish Tank", icon: "fish.fill", tint: .teal, blurb: "A bright reef tank of real fish and corals.",
               make: { FishTank(size: $0) }),
     Wallpaper(name: "Flowing Gradient", icon: "swirl.circle.righthalf.filled", tint: .pink,
@@ -58,7 +61,7 @@ struct Wallpaper {
     Wallpaper(name: "Murmuration", icon: "bird.fill", tint: .brown, blurb: "Starlings swirling over a sunset.",
               make: murmuration, knobs: murmurationKnobs),
     Wallpaper(name: "Campfire", icon: "flame.fill", tint: .red, blurb: "A campfire in a forest clearing, under the real stars.",
-              make: campfire),
+              make: campfire, unfinished: true),
     Wallpaper(name: "Game of Life", icon: "square.grid.3x3.fill", tint: .orange, blurb: "Conway's cells that never die out.",
               make: gameOfLife, knobs: GameOfLife.knobs),
     Wallpaper(name: "Turing Patterns", icon: "circle.hexagongrid.fill", tint: .mint, blurb: "Coral, spots and stripes growing out of simple chemistry.",
@@ -73,7 +76,8 @@ struct Wallpaper {
     Wallpaper(name: "Dappled Light", icon: "leaf.fill", tint: .mint, blurb: "Sunlight through leaves on a plaster wall, from the real Sun.",
               make: dappledLight, knobs: DappledLight.knobs, status: (key: "weather.status", below: "dappled.weather")),
     Wallpaper(name: "A Tree for the Year", icon: "tree.fill", tint: .green, blurb: "One tree on a hill, through your real seasons and weather.",
-              make: treeForTheYear, knobs: TreeScene.treeKnobs, status: (key: "weather.status", below: "tree.lock")),
+              make: treeForTheYear, knobs: TreeScene.treeKnobs, status: (key: "weather.status", below: "tree.lock"),
+              unfinished: true),
     Wallpaper(name: "Deep Space Tour", icon: "star.circle.fill", tint: .blue,
               blurb: "Slow pans across the best real photos of nebulae, galaxies and the two black holes ever seen.", make: deepSpaceTour,
               knobs: Tour.deepSpace.knobs, palettes: Tour.deepSpace.showChoice),
@@ -82,6 +86,9 @@ struct Wallpaper {
               knobs: Tour.solarSystem.knobs + ([TheSun.wavelengthKnob] + TheSun.knobs).map { $0.in("The Sun") } + TheMoon.knobs.map { $0.in("The Moon") },
               palettes: Tour.solarSystem.showChoice),
 ].sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+
+/// The wallpapers people see: all but the unfinished ones, unless `unfinished` is set for working on them.
+@MainActor let scenes = allScenes.filter { !$0.unfinished || UserDefaults.standard.bool(forKey: "unfinished") }
 
 /// The wallpaper on first launch, and in place of a saved one that's since been cut.
 @MainActor let defaultScene = scenes.first { $0.name == "Fish Tank" }!

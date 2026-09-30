@@ -1,7 +1,7 @@
 #!/bin/sh
 # Builds build/Atrium.app, a menu-bar-only app. Run it with: open build/Atrium.app
 set -e
-VERSION=0.65.0 # semantic versioning; see "Versioning" in CLAUDE.md
+VERSION=0.66.0 # semantic versioning; see "Versioning" in CLAUDE.md
 PRERELEASE= # e.g. "rc 1" while a release candidate: shown in Settings → About; VERSION stays three numbers, as macOS requires
 cd "$(dirname "$0")"
 
@@ -10,7 +10,7 @@ cd "$(dirname "$0")"
 swift build -c release -Xlinker -platform_version -Xlinker macos -Xlinker 26.0 -Xlinker "$(xcrun --show-sdk-version)"
 BUILD=$(git rev-list --count HEAD 2>/dev/null || echo 0)
 
-LOCATION="Wallpapers like Live Sky, Weather, Wind, Dappled Light and A Tree for the Year show the real sky, weather, light and seasons where you are. Without your location, Atrium guesses from your time zone."
+LOCATION="Wallpapers like Live Sky, Weather, Wind and Dappled Light show the real sky, weather and light where you are. Without your location, Atrium guesses from your time zone."
 APP=build/Atrium.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"

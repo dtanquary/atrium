@@ -2,7 +2,7 @@
 
 <img src="docs/images/app-icon.png" alt="Atrium's icon: a skylight onto a glowing nebula" width="128">
 
-Living, animated desktop wallpapers for macOS, 22 of them: a reef tank of real fish and corals, slow tours through the best real photos of the Solar System and deep space, the real sky above you right now, your live weather and wind, an oak living through your real seasons, sunlight through leaves from the real Sun, rising heat as a schlieren camera sees it, drifting nebulae, and more. It's a small menu bar app written in Swift and SpriteKit, with no dependencies.
+Living, animated desktop wallpapers for macOS, 20 of them: a reef tank of real fish and corals, slow tours through the best real photos of the Solar System and deep space, the real sky above you right now, your live weather and wind, sunlight through leaves from the real Sun, rising heat as a schlieren camera sees it, drifting nebulae, and more. It's a small menu bar app written in Swift and SpriteKit, with no dependencies.
 
 It's free. [Download it](#download), or build it yourself in a few minutes.
 
@@ -10,7 +10,7 @@ It's free. [Download it](#download), or build it yourself in a few minutes.
 
 Screenshots show the wallpaper alone, with no desktop icons, menu bar or Dock. Everything moves: the fish school, the photos drift and zoom, the wind streams, the nebulae fold, the galaxies turn and the starlings wheel. Galaxy, Nebula and the reef are rebuilt differently on every load. Every wallpaper has its own page in [Settings](#settings). The docs in [`docs/`](docs/README.md) cover each wallpaper in depth: how it works, its settings, cost and ideas for next steps.
 
-- **Nature and weather:** [Fish Tank](#fish-tank) · [Weather](#weather) · [A Tree for the Year](#a-tree-for-the-year) · [Dappled Light](#dappled-light) · [Rain on Glass](#rain-on-glass) · [Wind](#wind) · [Murmuration](#murmuration) · [Aurora](#aurora) · [Fireflies](#fireflies) · [Campfire](#campfire)
+- **Nature and weather:** [Fish Tank](#fish-tank) · [Weather](#weather) · [Dappled Light](#dappled-light) · [Rain on Glass](#rain-on-glass) · [Wind](#wind) · [Murmuration](#murmuration) · [Aurora](#aurora) · [Fireflies](#fireflies)
 - **Space:** [Solar System Tour](#solar-system-tour) · [Deep Space Tour](#deep-space-tour) · [Nebula](#nebula) · [Galaxy](#galaxy) · [Live Sky](#live-sky) · [Earth from Orbit](#earth-from-orbit)
 - **Colour, light and pattern:** [Flowing Gradient](#flowing-gradient) · [Lava Lamp](#lava-lamp) · [Schlieren](#schlieren) · [Turing Patterns](#turing-patterns) · [Game of Life](#game-of-life) · [Pixel City](#pixel-city)
 
@@ -33,15 +33,6 @@ Real hills under your live local weather, beneath a physical sky with the real S
 | A fair morning, with real clouds drifting on the wind | Sunset from a physical sky, the hills gone to silhouettes |
 | ![Weather, fog](docs/images/weather-fog.jpg) | ![Weather, snow](docs/images/weather-snow.jpg) |
 | Fog, with mist lying in the valley | Snow falling, and lying on the hills |
-
-#### A Tree for the Year
-One young white oak on a chalk hilltop, living through the real seasons where you are: gold catkins as the buds break, fresh green, colour from the top down to wine and rust, leaf fall, a few tan leaves held through the winter, and snow on the branches. It stands under Weather's sky and your live weather, sways in the real wind and darkens in the rain. It's grown from a seed saved the first time it's shown, so it's your own tree, the same every day and a year bigger each spring. The grass greens up and goes dormant with it.
-
-| ![A Tree for the Year at peak autumn colour under fair-weather clouds](docs/images/a-tree-for-the-year.jpg) | ![A Tree for the Year in summer](docs/images/a-tree-for-the-year-summer.jpg) |
-|---|---|
-| Late October, wine red, on a partly cloudy afternoon | Midsummer |
-| ![A Tree for the Year at bud break](docs/images/a-tree-for-the-year-spring.jpg) | ![A Tree for the Year in falling snow, holding its dead leaves](docs/images/a-tree-for-the-year-snow.jpg) |
-| Early May, fresh green as the leaves open | January snow, the young oak still holding its dead leaves |
 
 #### Dappled Light
 Sunlight through a tree onto a warm white plaster wall, from the real Sun where you are: it only falls when the Sun is on the wall's side, and turns golden near sunset. Every gap between the leaves is a pinhole camera, so the dapples are images of the Sun, round or stretched by the angle of the light, and crescents during a real solar eclipse. Near leaves cast sharp shadows, far ones melt into soft shade. Cloud softens it and wind sways the leaves, from the live weather; at night, faint moonlight at the real phase, or a warm streetlight. In Dark Mode the same light falls on charcoal plaster.
@@ -88,11 +79,6 @@ Northern lights over the snowy Tetons, shading through real aurora colours.
 Fireflies drifting over a misty meadow at blue hour.
 
 ![Fireflies over a misty meadow at blue hour](docs/images/fireflies.jpg)
-
-#### Campfire
-A campfire in a stone ring in a real forest clearing at night, its flames simulated, lighting the stones, ground and nearby trees as it flickers, under the real stars.
-
-![Campfire in a forest clearing at night](docs/images/campfire.jpg)
 
 ### Space
 
@@ -222,7 +208,7 @@ macOS has no public API for third-party live wallpapers. This app gives each dis
 
 It uses public AppKit and SpriteKit APIs only. It uses no private frameworks, makes no changes to system files, needs no SIP changes and doesn't inject code.
 
-Each wallpaper is a SpriteKit scene. Many are full-screen Metal shaders written as `SKShader`s, and whatever can be drawn in code is: skies, water, wax, flames, streaks of wind, starlings, reaction–diffusion and rising heat. Photos come in where they beat anything procedural: the reef's fish and corals, and the landscapes behind Weather, A Tree for the Year, Aurora, Murmuration, Fireflies, Campfire and Rain on Glass, all cut out of permissively licensed photos and relit; the two tours' photos from spacecraft and telescopes; and NASA's maps of the Earth and the Moon. Live data comes over the network: the weather, the wind, the clouds, the ISS and the Sun.
+Each wallpaper is a SpriteKit scene. Many are full-screen Metal shaders written as `SKShader`s, and whatever can be drawn in code is: skies, water, wax, streaks of wind, starlings, reaction–diffusion and rising heat. Photos come in where they beat anything procedural: the reef's fish and corals, and the landscapes behind Weather, Aurora, Murmuration, Fireflies and Rain on Glass, all cut out of permissively licensed photos and relit; the two tours' photos from spacecraft and telescopes; and NASA's maps of the Earth and the Moon. Live data comes over the network: the weather, the wind, the clouds, the ISS and the Sun.
 
 It's kind to your battery:
 - 60 fps on mains power, 30 fps on battery.
@@ -282,8 +268,8 @@ To rebuild after pulling changes: `./build.sh && pkill -x Atrium; open build/Atr
 
 ### Permissions and network
 
-- **Location** (optional). Live Sky, Earth from Orbit, Weather, A Tree for the Year, Dappled Light, Wind, Pixel City, Campfire's stars, the live Moon, Rain on Glass following the weather and Flowing Gradient's time-of-day mood use your location, and the app asks once. If you decline, it guesses from your time zone.
-- **Network.** Weather, Dappled Light, A Tree for the Year and Rain on Glass (while following the weather) fetch from [Open-Meteo](https://open-meteo.com) every 15 minutes, sharing one request. Live Sky and Earth from Orbit fetch the ISS position from [wheretheiss.at](https://wheretheiss.at) at most once a minute. Earth from Orbit fetches a global cloud map from [Live Cloud Maps](https://clouds.matteason.co.uk) only once its cached copy is over 3 hours old (1.5 MB when it has changed), and not at all with Live clouds off. For lightning, it asks Open-Meteo for thunderstorms on a grid around you each time the cloud map updates, about every 3 hours. Solar System Tour's live Sun, while it's on screen, fetches SDO images from [Helioviewer](https://helioviewer.org) at most every 15 minutes (2048 pixels, 0.3–0.5 MB) or 30 (4096, 1–2 MB, for the close-up), keeping the last few hours on disk. None of them needs an API key.
+- **Location** (optional). Live Sky, Earth from Orbit, Weather, Dappled Light, Wind, Pixel City, the live Moon, Rain on Glass following the weather and Flowing Gradient's time-of-day mood use your location, and the app asks once. If you decline, it guesses from your time zone.
+- **Network.** Weather, Dappled Light and Rain on Glass (while following the weather) fetch from [Open-Meteo](https://open-meteo.com) every 15 minutes, sharing one request. Live Sky and Earth from Orbit fetch the ISS position from [wheretheiss.at](https://wheretheiss.at) at most once a minute. Earth from Orbit fetches a global cloud map from [Live Cloud Maps](https://clouds.matteason.co.uk) only once its cached copy is over 3 hours old (1.5 MB when it has changed), and not at all with Live clouds off. For lightning, it asks Open-Meteo for thunderstorms on a grid around you each time the cloud map updates, about every 3 hours. Solar System Tour's live Sun, while it's on screen, fetches SDO images from [Helioviewer](https://helioviewer.org) at most every 15 minutes (2048 pixels, 0.3–0.5 MB) or 30 (4096, 1–2 MB, for the close-up), keeping the last few hours on disk. None of them needs an API key.
 - **Wind** uses your location too, and asks Open-Meteo for the hourly wind forecast at 384 points around you every two hours, for the zoom on screen (about 230 KB and 384 of Open-Meteo's free 10,000 calls a day each time, so at most 4,600 a day). The last reply for each zoom stays on disk, so it works offline. With an Earth background it downloads NASA's imagery tiles for the view from [GIBS](https://nasa-gibs.github.io/gibs-api-docs/) once and keeps them: about 1–2 MB for most maps, up to 7 MB at night for half the continent, and a fresh 1–2 MB a day for the satellite view.
 
 ## Development

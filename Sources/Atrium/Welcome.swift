@@ -109,7 +109,7 @@ struct WelcomeView: View {
         VStack(spacing: 14) {
             Spacer()
             Image(systemName: "location.circle.fill").font(.system(size: 54)).foregroundStyle(.tint).accessibilityHidden(true)
-            Text("Live Sky, Weather, A Tree for the Year and the others follow where you are: the real stars overhead, today's weather, the Sun's angle on the wall, your seasons. Atrium only needs a rough location, and sends it rounded to about a kilometer. Without it, it guesses from your time zone.")
+            Text("Live Sky, Weather, Dappled Light and the others follow where you are: the real stars overhead, today's weather, the Sun's angle on the wall, your seasons. Atrium only needs a rough location, and sends it rounded to about a kilometer. Without it, it guesses from your time zone.")
                 .multilineTextAlignment(.center).frame(maxWidth: 520)
             Button("Allow Location…") {
                 Location.shared.start()

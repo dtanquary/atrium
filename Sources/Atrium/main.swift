@@ -92,6 +92,11 @@ if let name = UserDefaults.standard.string(forKey: "sun.wavelength") {
     UserDefaults.standard.removeObject(forKey: "sun.wavelength")
 }
 var current = UserDefaults.standard.string(forKey: "scene") ?? defaultScene.name
+// A wallpaper that's been cut or hidden as unfinished gives way to the default.
+if !scenes.contains(where: { $0.name == current }) {
+    current = defaultScene.name
+    UserDefaults.standard.removeObject(forKey: "scene")
+}
 
 @MainActor func currentScene(size: CGSize) -> SKScene {
     (scenes.first { $0.name == current } ?? defaultScene).make(size)
