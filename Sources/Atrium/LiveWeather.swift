@@ -28,11 +28,16 @@ import CoreLocation
 
     /// The last report, or nil before the first one lands.
     private(set) var latest: Conditions?
+    /// When the last report arrived.
+    private(set) var updated: Date?
     private var lastPoll = Date.distantPast
+    /// When Refresh Now can next fetch.
+    var available: Date { lastPoll + 300 }
 
-    /// Fetches the weather now, but at most every 10 minutes however many scenes ask. Offline, `latest` stays as it was.
-    func poll() {
-        guard Date().timeIntervalSince(lastPoll) > 600 else { return }
+    /// Fetches the weather now, but at most every 10 minutes however many scenes ask, or 5 with `force` (Refresh Now).
+    /// Offline, `latest` stays as it was.
+    func poll(force: Bool = false) {
+        guard Date().timeIntervalSince(lastPoll) > (force ? 300 : 600) else { return }
         lastPoll = Date()
         let spot = Location.shared.coordinate
         var url = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
@@ -51,6 +56,7 @@ import CoreLocation
             }
             UserDefaults.standard.set("Live: \(report.summary) · \(Self.place(spot)) · updated \(time)", forKey: "weather.status")
             latest = report
+            updated = Date()
             NotificationCenter.default.post(name: Self.changed, object: nil)
         }
     }

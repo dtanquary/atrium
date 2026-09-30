@@ -14,9 +14,33 @@ struct Wallpaper {
     /// A line the scene keeps up to date in UserDefaults under `key` (what the live weather last said, say), shown
     /// under its knob `below` while that knob is 0, or on for a switch.
     var status: (key: String, below: String)?
+    /// A Refresh Now button for its live data, if it has any.
+    var refresh: Refresh?
     /// Not good enough to show yet: left out of the menu, Settings, Shuffle and the welcome unless `unfinished` is set
     /// (`defaults write com.dtanquary.atrium unfinished -bool true`, then relaunch), but still built and render-tested.
     var unfinished = false
+}
+
+/// Refresh Now on a wallpaper's Settings page: `run` fetches its live data now, `available` says when it can next
+/// (each source keeps its own cooldown, so it can't be used to hammer the service), and `updated` when the data it's
+/// showing arrived.
+struct Refresh {
+    let run: @MainActor () -> Void
+    let available: @MainActor () -> Date
+    let updated: @MainActor () -> Date?
+
+    /// Open-Meteo's weather where you are, shared by Weather, Dappled Light, Rain on Glass and A Tree for the Year.
+    @MainActor static let weather = Refresh(run: { LiveWeather.shared.poll(force: true) },
+                                            available: { LiveWeather.shared.available }, updated: { LiveWeather.shared.updated })
+    /// Wind's forecast for the zoom picked.
+    @MainActor static let wind = Refresh(run: { WindField.shared.poll(zoom: Int(WindScene.zoom.value), force: true) },
+                                         available: { WindField.shared.available(zoom: Int(WindScene.zoom.value)) },
+                                         updated: { WindField.shared.updated(zoom: Int(WindScene.zoom.value)) })
+    /// Earth from Orbit's storms and cloud map.
+    @MainActor static let earth = Refresh(run: {
+        Storms.shared.poll(around: Location.shared.coordinate, force: true)
+        Clouds.shared.poll(force: true)
+    }, available: { max(Storms.shared.available, Clouds.shared.available) }, updated: { Storms.shared.updated })
 }
 
 /// Every wallpaper, finished or not. The list sorts itself by name, so the menu and Settings show them alphabetically
@@ -38,7 +62,7 @@ struct Wallpaper {
                                       standard: "City",
                                       photos: Dictionary(uniqueKeysWithValues: rainPhotos.map { ($0.name, ("rain-\($0.night)-far.jpg", "rain-\($0.day)-far.jpg")) }),
                                       title: "Backdrop"),
-              status: (key: "rain.status", below: "rain.weather")),
+              status: (key: "rain.status", below: "rain.weather"), refresh: .weather),
     Wallpaper(name: "Aurora", icon: "mountain.2.fill", tint: .teal, blurb: "Northern lights over snowy peaks.", make: aurora, knobs: auroraKnobs,
               palettes: PaletteChoice(key: "aurora.palette", options: auroraPalettes.map { ($0.name, $0.colours.reversed(), $0.colours.reversed()) })),
     Wallpaper(name: "Nebula", icon: "sparkles", tint: .purple, blurb: "A new deep-space cloud every few minutes.",
@@ -51,9 +75,9 @@ struct Wallpaper {
     Wallpaper(name: "Live Sky", icon: "moon.stars.fill", tint: .blue, blurb: "The real sky above you, right now.",
               make: liveSky, knobs: LiveSky.knobs),
     Wallpaper(name: "Earth from Orbit", icon: "globe.americas.fill", tint: .cyan, blurb: "Day and night sweeping over the globe.",
-              make: earthFromOrbit, knobs: EarthFromOrbit.knobs),
+              make: earthFromOrbit, knobs: EarthFromOrbit.knobs, refresh: .earth),
     Wallpaper(name: "Weather", icon: "cloud.sun.fill", tint: .blue, blurb: "Real hills under your live local weather.",
-              make: weather, knobs: WeatherScene.knobs, status: (key: "weather.status", below: "weather.lock")),
+              make: weather, knobs: WeatherScene.knobs, status: (key: "weather.status", below: "weather.lock"), refresh: .weather),
     Wallpaper(name: "Pixel City", icon: "building.2.fill", tint: .pink, blurb: "A pixel-art skyline on your clock.",
               make: pixelCity),
     Wallpaper(name: "Fireflies", icon: "sparkle", tint: .yellow, blurb: "A meadow at blue hour, twinkling with fireflies.",
@@ -72,12 +96,13 @@ struct Wallpaper {
               palettes: PaletteChoice(key: "schlieren.palette", options: Schlieren.paletteOptions)),
     Wallpaper(name: "Wind", icon: "wind", tint: .cyan, blurb: "The live wind around you, streaming across the map.",
               make: wind, knobs: WindScene.knobs,
-              palettes: PaletteChoice(key: "wind.palette", options: WindScene.paletteOptions, standard: "Midnight")),
+              palettes: PaletteChoice(key: "wind.palette", options: WindScene.paletteOptions, standard: "Midnight"), refresh: .wind),
     Wallpaper(name: "Dappled Light", icon: "leaf.fill", tint: .mint, blurb: "Sunlight through leaves on a plaster wall, from the real Sun.",
-              make: dappledLight, knobs: DappledLight.knobs, status: (key: "weather.status", below: "dappled.weather")),
+              make: dappledLight, knobs: DappledLight.knobs, status: (key: "weather.status", below: "dappled.weather"),
+              refresh: .weather),
     Wallpaper(name: "A Tree for the Year", icon: "tree.fill", tint: .green, blurb: "One tree on a hill, through your real seasons and weather.",
               make: treeForTheYear, knobs: TreeScene.treeKnobs, status: (key: "weather.status", below: "tree.lock"),
-              unfinished: true),
+              refresh: .weather, unfinished: true),
     Wallpaper(name: "Deep Space Tour", icon: "star.circle.fill", tint: .blue,
               blurb: "Slow pans across the best real photos of nebulae, galaxies and the two black holes ever seen.", make: deepSpaceTour,
               knobs: Tour.deepSpace.knobs, palettes: Tour.deepSpace.showChoice),

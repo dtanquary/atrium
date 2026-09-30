@@ -10,6 +10,8 @@ import SpriteKit
     private let url = URL(string: "https://clouds.matteason.co.uk/images/4096x2048/clouds.jpg")!
     private let file = URL.cachesDirectory.appending(path: "com.dtanquary.atrium/clouds.jpg")
     private var lastCheck = Date.distantPast
+    /// When Refresh Now can next check.
+    var available: Date { lastCheck + 15 * 60 }
 
     /// The latest map, shared by every display; nil before one loads, or while clouds are off.
     private(set) var texture: SKTexture?
@@ -27,9 +29,12 @@ import SpriteKit
     /// Checks for a new map, but only once the cached one is over three hours old (the source's own cadence), and
     /// at most hourly however many displays ask; this isn't data worth hurrying. The ETag turns an unchanged map
     /// into a tiny 304 reply, which restarts the three hours.
-    func poll() {
+    /// With `force` (Refresh Now) it checks now, if the last check was over 15 minutes ago; an unchanged map costs a
+    /// few bytes (304).
+    func poll(force: Bool = false) {
         let saved = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
-        guard Date().timeIntervalSince(saved) > 3 * 3600, Date().timeIntervalSince(lastCheck) > 3600 else { return }
+        let since = Date().timeIntervalSince(lastCheck)
+        guard force ? since > 15 * 60 : Date().timeIntervalSince(saved) > 3 * 3600 && since > 3600 else { return }
         lastCheck = Date()
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
         if saved != .distantPast, let tag = UserDefaults.standard.string(forKey: "clouds.etag") {

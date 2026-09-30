@@ -451,6 +451,9 @@ struct WallpaperPage: View {
                     }
                 }
             }
+            if let refresh = wallpaper.refresh {
+                Section("Live Data") { RefreshRow(refresh: refresh) }
+            }
             if !empty {
                 ResetSection {
                     for key in wallpaper.knobs.map(\.key) + [wallpaper.palettes?.key].compactMap({ $0 }) {
@@ -675,6 +678,29 @@ struct PalettePicker: View {
     private func tile(_ file: String) -> some View {
         Image(nsImage: NSImage(contentsOf: resource(file)) ?? NSImage()).resizable().scaledToFill()
             .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity).clipped()
+    }
+}
+
+/// Refresh Now for a wallpaper's live data, greyed out while its source cools down, with when the data arrived.
+struct RefreshRow: View {
+    let refresh: Refresh
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 10)) { context in
+            let wait = refresh.available().timeIntervalSince(context.date)
+            LabeledContent {
+                Button("Refresh Now", action: refresh.run).disabled(wait > 0)
+            } label: {
+                Text("Latest data")
+                Text(caption(wait, context.date)).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func caption(_ wait: TimeInterval, _ now: Date) -> String {
+        let updated = refresh.updated().map { "Updated " + ($0 > now - 60 ? "just now" : $0.formatted(.relative(presentation: .named, unitsStyle: .wide))) }
+            ?? "Not fetched yet"
+        return wait > 0 ? updated + " · Refresh Now again in \(Int((wait / 60).rounded(.up))) min" : updated
     }
 }
 

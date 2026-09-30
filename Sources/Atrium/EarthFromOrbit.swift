@@ -89,12 +89,9 @@ final class EarthFromOrbit: SKScene {
         Location.shared.start()
         run(.repeatForever(.sequence([.run { if Self.knobs[0].value > 0.5 { ISS.shared.poll() } }, .wait(forDuration: 60)])))
         run(.repeatForever(.sequence([.run { if Self.knobs[1].value > 0.5 { Clouds.shared.poll() } }, .wait(forDuration: 900)])))
-        // storms normally refresh with each new cloud map (updateClouds); this covers launch, clouds off, and
-        // a cloud map that hasn't changed in a while
+        // a day of hourly storms, every 6 hours (Storms decides when)
         run(.repeatForever(.sequence([.run {
-            if Self.knobs[2].value > 0.5, Storms.shared.age > (Self.knobs[1].value > 0.5 ? 4 : 3) * 3600 {
-                Storms.shared.poll(around: Location.shared.coordinate)
-            }
+            if Self.knobs[2].value > 0.5 { Storms.shared.poll(around: Location.shared.coordinate) }
         }, .wait(forDuration: 900)])))
     }
 
@@ -150,7 +147,6 @@ final class EarthFromOrbit: SKScene {
         if on, cloudVersion != Clouds.shared.version, let map = Clouds.shared.texture {
             cloudVersion = Clouds.shared.version
             fadeClouds(to: map, currentTime)
-            if Self.knobs[2].value > 0.5 { Storms.shared.poll(around: Location.shared.coordinate) } // storms to match
         }
         guard let start = cloudFadeStart else { return }
         cloudFadeUniform.floatValue = Float(min((currentTime - start) / 60, 1))

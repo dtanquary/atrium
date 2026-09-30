@@ -81,9 +81,12 @@ final class WindScene: SKScene {
         addChild(half)
         applyKnobs()
         NotificationCenter.default.addObserver(self, selector: #selector(applyKnobs), name: UserDefaults.didChangeNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(forecastLanded), name: WindField.changed, object: nil)
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
+
+    @objc private func forecastLanded() { showField() }
 
     override func didMove(to view: SKView) {
         guard action(forKey: "poll") == nil else { return }
@@ -162,7 +165,7 @@ final class WindScene: SKScene {
     """
 
     private func poll() {
-        WindField.shared.poll(zoom: zoomShown) { [weak self] in self?.showField() }
+        WindField.shared.poll(zoom: zoomShown)
         fetchEarth() // tiles that failed offline
     }
 
@@ -267,35 +270,47 @@ final class WindScene: SKScene {
     """
 }
 
-/// The 10 m wind on a grid around you, from Open-Meteo's hourly forecast (free, no key, CC BY 4.0): `cols` × `rows`
-/// points over 1.2 screen widths by 0.8, at the zoom's span, in one request. One fetch serves every display, every
-/// two hours for the zoom on screen. Each point counts as one of the free 10,000 calls a day, so that's at most
-/// 4,600 a day; hourly would be 9,200, too close to the limit with Weather and Earth from Orbit's storms. The
-/// forecast runs 12 hours ahead, so the wind still blends from hour to hour, keeps going offline, and the last
-/// reply for each zoom is cached on disk so it shows at once.
+/// The 10 m wind on a grid around you, from Open-Meteo's hourly forecast (free, no key, CC BY 4.0), over 1.2 screen
+/// widths by 0.8 at the zoom's span, in one request: the next 24 hours, fetched every 6 hours for the zoom on screen
+/// (or now, with Refresh Now), serving every display. Open-Meteo counts each point as one of its free 10,000 calls a
+/// day, so the grid is as coarse as each zoom allows: 12 × 8 for a town (points 9 km apart, as fine as the models
+/// there), and 24 × 16 for a region or half the continent, where 12 × 8 lost real structure: a low's tight spiral
+/// became a broad bend, and a region's eddies and fast lanes over lakes smoothed away (both checked side by side,
+/// 2026-09-30). That's at most 384 or 1,536 calls a day. The wind blends from hour to hour, keeps going offline, and
+/// the last reply for each zoom is cached on disk so it shows at once.
 @MainActor final class WindField {
     static let shared = WindField()
-    static let cols = 24, rows = 16, texels = (x: 93, y: 61)
+    /// Posted when a new forecast lands.
+    static let changed = Notification.Name("WindField.changed")
+    static let texels = (x: 93, y: 61)
     /// Kilometres across the screen at each zoom.
     static let spans: [Double] = [100, 800, 3500]
+    /// How long a forecast serves before the next, and how soon Refresh Now can ask again.
+    static let every: TimeInterval = 6 * 3600, cooldown: TimeInterval = 15 * 60
+
+    /// The grid's columns and rows at a zoom.
+    static func grid(_ zoom: Int) -> (cols: Int, rows: Int) { zoom == 0 ? (12, 8) : (24, 16) }
 
     /// Hourly wind at each grid point, west to east then south to north, in m/s toward east and north, around `centre`.
     struct Forecast {
-        var centre: CLLocationCoordinate2D, times: [Double] = [], u: [[Float]] = [], v: [[Float]] = []
+        var centre: CLLocationCoordinate2D, cols: Int, rows: Int, times: [Double] = [], u: [[Float]] = [], v: [[Float]] = []
     }
     private var forecasts: [Int: Forecast] = [:]
     private var lastTry: [Int: Date] = [:]
 
     private static func cache(_ zoom: Int) -> URL { URL.cachesDirectory.appending(path: "com.dtanquary.atrium/wind-\(zoom).json") }
 
-    /// Fetches the forecast for a zoom if what we have is two hours old or for somewhere else, at most every
-    /// 10 minutes however many displays ask. `done` runs once a new one has landed.
-    func poll(zoom: Int, done: @escaping @MainActor () -> Void) {
+    /// Fetches the forecast for a zoom once what we have is `every` old or for somewhere else, at most every 10 minutes
+    /// however many displays ask; or now with `force` (Refresh Now), if the last try was over `cooldown` ago. Posts
+    /// `changed` once a new one has landed.
+    func poll(zoom: Int, force: Bool = false) {
         let here = Location.shared.coordinate, file = Self.cache(zoom), centre = forecast(zoom: zoom).centre
-        let saved = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
-        let spacing = Self.spans[zoom] / 111 / Double(Self.cols) // degrees, roughly
+        let spacing = Self.spans[zoom] / 111 / Double(Self.grid(zoom).cols) // degrees, roughly
         let moved = abs(centre.latitude - here.latitude) > spacing || abs(remainder(centre.longitude - here.longitude, 360)) > spacing
-        guard Date().timeIntervalSince(saved) > 7000 || moved, Date().timeIntervalSince(lastTry[zoom] ?? .distantPast) > 600 else { return }
+        // made up (nothing on disk, or a cache from another grid, which forecast(zoom:) doesn't keep) counts as stale
+        let stale = forecasts[zoom] == nil || Date().timeIntervalSince(updated(zoom: zoom) ?? .distantPast) > Self.every
+        let since = Date().timeIntervalSince(lastTry[zoom] ?? .distantPast)
+        guard force ? since > Self.cooldown : since > 600 && (stale || moved) else { return }
         lastTry[zoom] = Date()
         let points = Self.points(around: here, zoom: zoom)
         var url = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
@@ -303,22 +318,31 @@ final class WindScene: SKScene {
             URLQueryItem(name: "latitude", value: points.map { String(format: "%.2f", $0.latitude) }.joined(separator: ",")), // ~1 km, as Weather
             URLQueryItem(name: "longitude", value: points.map { String(format: "%.2f", $0.longitude) }.joined(separator: ",")),
             URLQueryItem(name: "hourly", value: "wind_speed_10m,wind_direction_10m"),
-            URLQueryItem(name: "past_hours", value: "1"), URLQueryItem(name: "forecast_hours", value: "12"),
+            URLQueryItem(name: "past_hours", value: "1"), URLQueryItem(name: "forecast_hours", value: "24"),
             URLQueryItem(name: "wind_speed_unit", value: "ms"), URLQueryItem(name: "timeformat", value: "unixtime"),
             URLQueryItem(name: "cell_selection", value: "nearest"),
         ]
         Task {
-            guard let (data, _) = try? await URLSession.shared.data(from: url.url!), let forecast = Self.forecast(from: data) else { return }
+            guard let (data, _) = try? await URLSession.shared.data(from: url.url!), let forecast = Self.forecast(from: data, zoom: zoom)
+            else { return }
             try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? data.write(to: file)
             forecasts[zoom] = forecast
-            done()
+            NotificationCenter.default.post(name: Self.changed, object: nil)
         }
     }
 
+    /// When the forecast on disk for a zoom arrived.
+    func updated(zoom: Int) -> Date? {
+        (try? Self.cache(zoom).resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+    }
+
+    /// When Refresh Now can next fetch a zoom.
+    func available(zoom: Int) -> Date { (lastTry[zoom] ?? .distantPast) + Self.cooldown }
+
     /// The grid's points around a place, in a local plate carrée: west to east, then south to north.
     static func points(around here: CLLocationCoordinate2D, zoom: Int) -> [CLLocationCoordinate2D] {
-        let km = spans[zoom], perDegree = 111.32, stretch = cos(here.latitude * .pi / 180)
+        let km = spans[zoom], perDegree = 111.32, stretch = cos(here.latitude * .pi / 180), (cols, rows) = grid(zoom)
         return (0..<rows).flatMap { j in (0..<cols).map { i in
             let x = (Double(i) / Double(cols - 1) - 0.5) * 1.2 * km, y = (Double(j) / Double(rows - 1) - 0.5) * 0.8 * km
             return CLLocationCoordinate2D(latitude: min(max(here.latitude + y / perDegree, -89), 89),
@@ -326,8 +350,9 @@ final class WindScene: SKScene {
         } }
     }
 
-    /// A forecast from an Open-Meteo reply for many points.
-    static func forecast(from reply: Data) -> Forecast? {
+    /// A forecast from an Open-Meteo reply for a zoom's grid of points.
+    static func forecast(from reply: Data, zoom: Int) -> Forecast? {
+        let (cols, rows) = grid(zoom)
         struct Point: Decodable {
             struct Hourly: Decodable {
                 let time: [Double], speed: [Double?], from: [Double?]
@@ -341,7 +366,8 @@ final class WindScene: SKScene {
         let first = points[0].longitude
         var forecast = Forecast(centre: CLLocationCoordinate2D(
             latitude: points.map(\.latitude).reduce(0, +) / Double(points.count),
-            longitude: first + points.map { remainder($0.longitude - first, 360) }.reduce(0, +) / Double(points.count)), times: times)
+            longitude: first + points.map { remainder($0.longitude - first, 360) }.reduce(0, +) / Double(points.count)),
+            cols: cols, rows: rows, times: times)
         for h in times.indices {
             var u = [Float](), v = [Float]()
             for point in points {
@@ -359,18 +385,18 @@ final class WindScene: SKScene {
     /// The forecast for a zoom, from memory or the disk cache, or a made-up breeze with a low to the north-east.
     func forecast(zoom: Int) -> Forecast {
         if let known = forecasts[zoom] { return known }
-        if let data = try? Data(contentsOf: Self.cache(zoom)), let cached = Self.forecast(from: data) {
+        if let data = try? Data(contentsOf: Self.cache(zoom)), let cached = Self.forecast(from: data, zoom: zoom) {
             forecasts[zoom] = cached
             return cached
         }
-        var u = [Float](), v = [Float]()
-        for j in 0..<Self.rows { for i in 0..<Self.cols {
-            let x = Float(i) / Float(Self.cols - 1) * 1.5 - 1.0, y = Float(j) / Float(Self.rows - 1) - 0.7
+        var u = [Float](), v = [Float](), (cols, rows) = Self.grid(zoom)
+        for j in 0..<rows { for i in 0..<cols {
+            let x = Float(i) / Float(cols - 1) * 1.5 - 1.0, y = Float(j) / Float(rows - 1) - 0.7
             let r2 = x * x + y * y, swirl = 9 * exp(-r2 * 2.2)
             u.append(5 - y * swirl - x * 1.5)
             v.append(x * swirl + 1.5 * sin(x * 2.5))
         } }
-        return Forecast(centre: Location.shared.coordinate, times: [0], u: [u], v: [v])
+        return Forecast(centre: Location.shared.coordinate, cols: cols, rows: rows, times: [0], u: [u], v: [v])
     }
 
     /// The wind at a moment, blended between forecast hours, smoothly upsampled (Catmull–Rom) to `texels` as
@@ -387,16 +413,17 @@ final class WindScene: SKScene {
         let (tx, ty) = Self.texels
         var bytes = [UInt8](repeating: 255, count: tx * ty * 4)
         for y in 0..<ty { for x in 0..<tx {
-            let gx = (Float(x) + 0.5) / Float(tx) * Float(Self.cols - 1), gy = (Float(y) + 0.5) / Float(ty) * Float(Self.rows - 1)
-            let o = (y * tx + x) * 4
-            bytes[o] = UInt8((min(max(0.5 + 0.5 * Self.catmullRom(u, gx, gy) / vmax, 0), 1) * 255).rounded())
-            bytes[o + 1] = UInt8((min(max(0.5 + 0.5 * Self.catmullRom(v, gx, gy) / vmax, 0), 1) * 255).rounded())
+            let gx = (Float(x) + 0.5) / Float(tx) * Float(forecast.cols - 1), gy = (Float(y) + 0.5) / Float(ty) * Float(forecast.rows - 1)
+            let o = (y * tx + x) * 4, size = (forecast.cols, forecast.rows)
+            bytes[o] = UInt8((min(max(0.5 + 0.5 * Self.catmullRom(u, size, gx, gy) / vmax, 0), 1) * 255).rounded())
+            bytes[o + 1] = UInt8((min(max(0.5 + 0.5 * Self.catmullRom(v, size, gx, gy) / vmax, 0), 1) * 255).rounded())
         } }
         return (bytes, vmax)
     }
 
-    /// Catmull–Rom interpolation of a grid at a point in grid units, clamped at the edges.
-    private static func catmullRom(_ grid: [Float], _ x: Float, _ y: Float) -> Float {
+    /// Catmull–Rom interpolation of a grid of `size` columns and rows at a point in grid units, clamped at the edges.
+    private static func catmullRom(_ grid: [Float], _ size: (cols: Int, rows: Int), _ x: Float, _ y: Float) -> Float {
+        let (cols, rows) = size
         func weights(_ t: Float) -> [Float] {
             [((-t + 2) * t - 1) * t / 2, ((3 * t - 5) * t * t + 2) / 2, ((-3 * t + 4) * t + 1) * t / 2, (t - 1) * t * t / 2]
         }

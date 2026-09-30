@@ -9,19 +9,19 @@ import Testing
 @MainActor @Test func parsesWindGrid() throws {
     let here = CLLocationCoordinate2D(latitude: 42, longitude: -88)
     let points = WindField.points(around: here, zoom: 1)
-    #expect(points.count == WindField.cols * WindField.rows)
+    #expect(points.count == WindField.grid(1).cols * WindField.grid(1).rows)
     #expect(points[0].latitude < here.latitude && points[0].longitude < here.longitude) // south-west first
-    #expect(points[WindField.cols - 1].longitude > here.longitude) // then east along the row
+    #expect(points[WindField.grid(1).cols - 1].longitude > here.longitude) // then east along the row
 
     // a west wind of 10 m/s this hour, and a south wind of 10 m/s the next
     let reply = "[" + points.map { point in
         #"{"latitude":\#(point.latitude),"longitude":\#(point.longitude),"hourly":{"time":[1000,4600],"wind_speed_10m":[10,10],"wind_direction_10m":[270,180]}}"#
     }.joined(separator: ",") + "]"
-    let forecast = try #require(WindField.forecast(from: Data(reply.utf8)))
+    let forecast = try #require(WindField.forecast(from: Data(reply.utf8), zoom: 1))
     #expect(abs(forecast.centre.latitude - 42) < 0.01 && abs(forecast.centre.longitude + 88) < 0.01)
     #expect(abs(forecast.u[0][0] - 10) < 0.01 && abs(forecast.v[0][0]) < 0.01) // blowing toward the east
     #expect(abs(forecast.u[1][0]) < 0.01 && abs(forecast.v[1][0] - 10) < 0.01) // blowing toward the north
-    #expect(WindField.forecast(from: Data("[]".utf8)) == nil)
+    #expect(WindField.forecast(from: Data("[]".utf8), zoom: 1) == nil)
 }
 
 /// The Earth background asks GIBS for tiles at about a pixel a point: Blue Marble at level 5 for half the continent and
