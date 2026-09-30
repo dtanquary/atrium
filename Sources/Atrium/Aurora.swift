@@ -18,10 +18,10 @@ let auroraPalettes: [(name: String, colours: [SIMD3<Float>])] = [
 let auroraKnobs = [
     Knob(key: "aurora.speed", label: "Speed", range: 0...6, standard: 1, section: "Motion", format: .times),
     Knob(key: "aurora.rearrange", label: "Slowly rearrange the curtains", range: 0...1, standard: 1, section: "Motion", format: .toggle),
-    Knob(key: "aurora.rearrangeMinutes", label: "Every", range: 1...30, standard: 4, section: "Motion", format: .minutes,
+    Knob(key: "aurora.rearrangeMinutes", label: "Rearrange every", range: 1...30, standard: 4, section: "Motion", format: .minutes,
          shownWhen: "aurora.rearrange"),
     Knob(key: "aurora.fade", label: "Fade to a new color automatically", range: 0...1, standard: 0, section: "Colors", format: .toggle),
-    Knob(key: "aurora.fadeMinutes", label: "Every", range: 1...60, standard: 10, section: "Colors", format: .minutes,
+    Knob(key: "aurora.fadeMinutes", label: "Fade every", range: 1...60, standard: 10, section: "Colors", format: .minutes,
          shownWhen: "aurora.fade"),
 ] + gradeKnobs("aurora")
 

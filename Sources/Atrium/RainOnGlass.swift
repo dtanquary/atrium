@@ -27,7 +27,7 @@ let rainSpeed = Knob(key: "rain.speed", label: "Drip speed", range: 0.25...3, st
 /// weather (RainWeather.swift), drip speed, the shared Look sliders, then previews of the weather.
 let rainKnobs = [
     Knob(key: "rain.fade", label: "Fade to a new backdrop automatically", range: 0...1, standard: 1, section: "Colors", format: .toggle),
-    Knob(key: "rain.fadeMinutes", label: "Every", range: 1...60, standard: 10, section: "Colors", format: .minutes,
+    Knob(key: "rain.fadeMinutes", label: "Fade every", range: 1...60, standard: 10, section: "Colors", format: .minutes,
          shownWhen: "rain.fade"),
     rainFollow, rainWindow, rainSpeed,
 ] + gradeKnobs("rain") + rainPreview

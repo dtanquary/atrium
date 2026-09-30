@@ -9,16 +9,39 @@ import SwiftUI
 final class WallpaperView: SKView, SKViewDelegate {
     /// Holds the current frame still, e.g. in Low Power Mode.
     var frozen = false { didSet { updatePaused() } }
+    /// Runs even while frozen until then, so a new scene draws its first frame, or finishes crossfading, and an
+    /// uncovered window catches up, before it's held still.
+    private var awakeUntil = Date.distantPast
 
     override func viewDidMoveToWindow() {
         guard let window else { return }
         delegate = self
-        NotificationCenter.default.addObserver(self, selector: #selector(updatePaused),
+        NotificationCenter.default.addObserver(self, selector: #selector(occlusionChanged),
                                                name: NSWindow.didChangeOcclusionStateNotification, object: window)
     }
 
+    override func presentScene(_ scene: SKScene?) {
+        super.presentScene(scene)
+        wake(for: 0.5)
+    }
+
+    override func presentScene(_ scene: SKScene, transition: SKTransition) {
+        super.presentScene(scene, transition: transition)
+        wake(for: 1.5)
+    }
+
+    private func wake(for seconds: Double) {
+        awakeUntil = Date() + seconds
+        updatePaused()
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds + 0.05) { [weak self] in self?.updatePaused() }
+    }
+
+    @objc private func occlusionChanged() {
+        if window?.occlusionState.contains(.visible) == true { wake(for: 0.5) } else { updatePaused() }
+    }
+
     @objc func updatePaused() {
-        isPaused = frozen || window?.occlusionState.contains(.visible) != true
+        isPaused = (frozen && Date() >= awakeUntil) || window?.occlusionState.contains(.visible) != true
     }
 
     nonisolated func view(_ view: SKView, shouldRenderAtTime time: TimeInterval) -> Bool {
@@ -133,22 +156,53 @@ var current = UserDefaults.standard.string(forKey: "scene") ?? defaultScene.name
     for window in windows { (window.contentView as? SKView)?.presentScene(currentScene(size: window.frame.size)) }
 }
 
+/// The Settings window, an ordinary window that reopens where it was left. While it's open Atrium turns into a
+/// regular app, in the Dock and ⌘-Tab with its own menus; closed, it's back to menu bar only. Its content is built
+/// on opening and dropped on closing, so the live preview's scene doesn't linger.
+@MainActor final class SettingsWindow: NSObject, NSWindowDelegate {
+    static let shared = SettingsWindow()
+
+    private lazy var window: NSWindow = {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 820, height: 640),
+                              styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+                              backing: .buffered, defer: true)
+        window.titlebarAppearsTransparent = true // sidebar runs up under the title bar, like System Settings
+        window.titleVisibility = .hidden // the page has its own header; the title still names it in the Dock and Mission Control
+        window.title = "Atrium"
+        window.contentMinSize = NSSize(width: 720, height: 480)
+        window.isReleasedWhenClosed = false
+        window.delegate = self
+        return window
+    }()
+
+    /// Opens Settings, on `page` if given (a wallpaper's name, or General, Power or About), else where it was left.
+    func open(page: String? = nil) {
+        if let page { UserDefaults.standard.set(page, forKey: SettingsView.pageKey) }
+        if !window.isVisible {
+            let hosting = NSHostingController(rootView: SettingsView())
+            hosting.sizingOptions = [] // grouped Forms scroll, so they have no height of their own to size the window by
+            window.contentViewController = hosting
+            if !window.setFrameUsingName("Settings") {
+                window.setContentSize(NSSize(width: 820, height: 640))
+                window.center()
+            }
+            window.setFrameAutosaveName("Settings")
+            NSApp.setActivationPolicy(.regular)
+        }
+        NSApp.activate()
+        window.makeKeyAndOrderFront(nil)
+        window.orderFrontRegardless() // in front even when macOS holds back activating a menu bar app
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        window.contentViewController = nil
+        NSApp.setActivationPolicy(.accessory)
+    }
+}
+
 /// The menu bar icon: pick or shuffle wallpapers, open Settings, toggle Open at Login, quit.
 @MainActor final class StatusMenu: NSObject, NSMenuDelegate {
     let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-
-    private lazy var settings: NSWindow = {
-        let hosting = NSHostingController(rootView: SettingsView())
-        hosting.sizingOptions = [] // grouped Forms scroll, so they have no height of their own to size the window by
-        let window = NSWindow(contentViewController: hosting)
-        window.setContentSize(NSSize(width: 820, height: 640))
-        window.styleMask.insert(.fullSizeContentView) // sidebar runs up under the title bar, like System Settings
-        window.titlebarAppearsTransparent = true
-        window.title = "Atrium"
-        window.level = .floating // stays above other windows while you watch the wallpaper change
-        window.isReleasedWhenClosed = false
-        return window
-    }()
 
     override init() {
         super.init()
@@ -180,7 +234,7 @@ var current = UserDefaults.standard.string(forKey: "scene") ?? defaultScene.name
         fullSpeed.target = self
         fullSpeed.state = Power.battery.value >= Power.plugged.value ? .on : .off
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Quit", action: #selector(NSApplication.terminate), keyEquivalent: "q")
+        menu.addItem(withTitle: "Quit Atrium", action: #selector(NSApplication.terminate), keyEquivalent: "q")
     }
 
     @objc func pick(_ sender: NSMenuItem) {
@@ -188,9 +242,11 @@ var current = UserDefaults.standard.string(forKey: "scene") ?? defaultScene.name
     }
 
     @objc func openSettings() {
-        NSApp.activate()
-        if !settings.isVisible { settings.center() } // open centred, but leave it be if it's already up
-        settings.makeKeyAndOrderFront(nil)
+        SettingsWindow.shared.open()
+    }
+
+    @objc func openAbout() {
+        SettingsWindow.shared.open(page: AboutPage.tag)
     }
 
     /// For demos: battery runs as fast as mains power, or goes back to its default.
@@ -215,9 +271,57 @@ var current = UserDefaults.standard.string(forKey: "scene") ?? defaultScene.name
     }
 }
 
+/// Opening Atrium again while it runs (from Finder, Spotlight or the Dock) opens Settings: the way back in if the
+/// menu bar icon is hidden behind the notch or by the Menu Bar settings.
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        SettingsWindow.shared.open()
+        return false
+    }
+}
+
+/// The menus shown while Settings is open and Atrium is a regular app: the standard shortcuts (⌘W, ⌘Q, ⌘M, ⌘C…).
+@MainActor func mainMenu(_ status: StatusMenu) -> NSMenu {
+    let bar = NSMenu()
+    func add(_ title: String, _ items: [NSMenuItem]) -> NSMenu {
+        let menu = NSMenu(title: title)
+        items.forEach(menu.addItem)
+        bar.addItem(withTitle: title, action: nil, keyEquivalent: "").submenu = menu
+        return menu
+    }
+    func item(_ title: String, _ action: Selector, _ key: String, _ target: AnyObject? = nil,
+              _ modifiers: NSEvent.ModifierFlags = .command) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+        item.target = target
+        item.keyEquivalentModifierMask = modifiers
+        return item
+    }
+    _ = add("Atrium", [item("About Atrium", #selector(StatusMenu.openAbout), "", status), .separator(),
+                       item("Settings…", #selector(StatusMenu.openSettings), ",", status), .separator(),
+                       item("Hide Atrium", #selector(NSApplication.hide), "h"),
+                       item("Hide Others", #selector(NSApplication.hideOtherApplications), "h", nil, [.command, .option]),
+                       item("Show All", #selector(NSApplication.unhideAllApplications), ""), .separator(),
+                       item("Quit Atrium", #selector(NSApplication.terminate), "q")])
+    _ = add("File", [item("Close Window", #selector(NSWindow.performClose), "w")])
+    _ = add("Edit", [item("Cut", #selector(NSText.cut), "x"), item("Copy", #selector(NSText.copy), "c"),
+                     item("Paste", #selector(NSText.paste), "v"), item("Select All", #selector(NSText.selectAll), "a")])
+    NSApp.windowsMenu = add("Window", [item("Minimize", #selector(NSWindow.performMiniaturize), "m"),
+                                       item("Zoom", #selector(NSWindow.performZoom), ""), .separator(),
+                                       item("Bring All to Front", #selector(NSApplication.arrangeInFront), "")])
+    return bar
+}
+
 let app = NSApplication.shared
-app.setActivationPolicy(.accessory) // menu bar only, no Dock icon
+app.setActivationPolicy(.accessory) // menu bar only, no Dock icon, until Settings opens
+let delegate = AppDelegate()
+app.delegate = delegate
 let menu = StatusMenu()
+app.mainMenu = mainMenu(menu)
+// First launch: open Settings, so there's something to see besides a new icon in the menu bar.
+if !UserDefaults.standard.bool(forKey: "welcomed") {
+    UserDefaults.standard.set(true, forKey: "welcomed")
+    if UserDefaults.standard.object(forKey: "scene") == nil { SettingsWindow.shared.open() }
+}
 
 syncWindows()
 NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,

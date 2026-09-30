@@ -32,58 +32,65 @@ struct PaletteChoice {
     var title = "Colors"
 }
 
-/// The Settings window, laid out like System Settings: wallpapers down the side, each with its own page.
+/// The Settings window, laid out like System Settings: General, Power and About, then the wallpapers, down the side,
+/// each with its own page. It reopens on the page last picked, or the wallpaper on the desktop.
 struct SettingsView: View {
+    /// The page last picked, by its sidebar tag; empty for the wallpaper on the desktop.
+    static let pageKey = "settings.page"
     @AppStorage("scene") private var current = defaultScene.name
-    @State private var selection: String?
+    @AppStorage(pageKey) private var page = ""
+    @State private var query = ""
+
+    private var selection: Binding<String?> {
+        Binding(get: { page.isEmpty ? current : page }, set: { page = $0 ?? "" })
+    }
 
     var body: some View {
         NavigationSplitView {
-            List(selection: $selection) {
+            List(selection: selection) {
+                if query.isEmpty {
+                    Section {
+                        row("General", icon: "gearshape.fill", tint: .gray).tag(GeneralPage.tag)
+                        row("Power", icon: "bolt.fill", tint: .green).tag(PowerPage.tag)
+                        row("About", icon: "info", tint: .gray).tag(AboutPage.tag)
+                    }
+                }
                 Section("Wallpapers") {
-                    ForEach(scenes, id: \.name) { wallpaper in
+                    ForEach(scenes.filter { query.isEmpty || $0.name.localizedCaseInsensitiveContains(query) }, id: \.name) { wallpaper in
                         HStack {
-                            IconTile(icon: wallpaper.icon, tint: wallpaper.tint, size: 22)
-                            Text(wallpaper.name)
+                            row(wallpaper.name, icon: wallpaper.icon, tint: wallpaper.tint)
                             Spacer()
                             if wallpaper.name == current {
                                 Image(systemName: "checkmark").font(.caption.bold()).foregroundStyle(.secondary)
+                                    .accessibilityLabel("On Desktop")
                             }
                         }
                         .tag(wallpaper.name)
                     }
                 }
-                Section {
-                    HStack {
-                        IconTile(icon: "gearshape.fill", tint: .gray, size: 22)
-                        Text("General")
-                    }
-                    .tag(GeneralPage.tag)
-                    HStack {
-                        IconTile(icon: "bolt.fill", tint: .green, size: 22)
-                        Text("Power")
-                    }
-                    .tag(PowerPage.tag)
-                    HStack {
-                        IconTile(icon: "info", tint: .gray, size: 22)
-                        Text("About")
-                    }
-                    .tag(AboutPage.tag)
+            }
+            .navigationSplitViewColumnWidth(min: 220, ideal: 240, max: 300)
+            .frame(minWidth: 220) // hosted in AppKit, the split view goes by this rather than the column width
+            .searchable(text: $query, placement: .sidebar, prompt: "Search")
+            .toolbar(removing: .sidebarToggle)
+        } detail: {
+            switch selection.wrappedValue {
+            case AboutPage.tag: AboutPage()
+            case GeneralPage.tag: GeneralPage()
+            case PowerPage.tag: PowerPage()
+            case let name:
+                if let wallpaper = scenes.first(where: { $0.name == name }) ?? scenes.first(where: { $0.name == current }) {
+                    WallpaperPage(wallpaper: wallpaper).id(wallpaper.name)
                 }
             }
-            .navigationSplitViewColumnWidth(min: 210, ideal: 230)
-        } detail: {
-            if selection == AboutPage.tag {
-                AboutPage()
-            } else if selection == GeneralPage.tag {
-                GeneralPage()
-            } else if selection == PowerPage.tag {
-                PowerPage()
-            } else if let wallpaper = scenes.first(where: { $0.name == selection ?? current }) {
-                WallpaperPage(wallpaper: wallpaper).id(wallpaper.name)
-            }
         }
-        .onAppear { selection = selection ?? current }
+    }
+
+    private func row(_ name: String, icon: String, tint: Color) -> some View {
+        HStack {
+            IconTile(icon: icon, tint: tint, size: 22)
+            Text(name)
+        }
     }
 }
 
@@ -99,6 +106,7 @@ struct IconTile: View {
             .foregroundStyle(.white)
             .frame(width: size, height: size)
             .background(tint.gradient, in: .rect(cornerRadius: size * 0.26))
+            .accessibilityHidden(true) // decoration: the name beside it says what it is
     }
 }
 
@@ -152,7 +160,8 @@ struct IconTile: View {
     do {
         if on { try service.register() } else { try service.unregister() }
     } catch {
-        NSAlert(error: error).runModal()
+        let alert = NSAlert(error: error)
+        if let window = NSApp.keyWindow { alert.beginSheetModal(for: window) } else { alert.runModal() }
     }
     if service.status == .requiresApproval { SMAppService.openSystemSettingsLoginItems() }
 }
@@ -171,6 +180,10 @@ struct GeneralPage: View {
                     setOpenAtLogin($0)
                     openAtLogin = SMAppService.mainApp.status == .enabled
                 }))
+            } footer: {
+                if SMAppService.mainApp.status == .requiresApproval {
+                    Text("Waiting for your approval in System Settings → General → Login Items.").foregroundStyle(.secondary)
+                }
             }
             Section {
                 KnobRow(knob: Shuffle.on)
@@ -239,11 +252,7 @@ struct PowerPage: View {
                 Text("60 fps is the smoothest. 30 fps uses about half the power, and 15 fps about a quarter. Freeze holds the current frame. Wallpapers always pause while the desktop is covered.")
                     .foregroundStyle(.secondary)
             }
-            Section {
-                Button("Reset to Defaults", role: .destructive) {
-                    for knob in Power.knobs { UserDefaults.standard.removeObject(forKey: knob.key) }
-                }
-            }
+            ResetSection { for knob in Power.knobs { UserDefaults.standard.removeObject(forKey: knob.key) } }
         }
         .formStyle(.grouped)
     }
@@ -254,7 +263,14 @@ struct AboutPage: View {
     static let tag = "About" // sidebar selection; can't clash with a wallpaper name
 
     private let name = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "Atrium"
-    private let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
+    /// "Version 1.0.0 (412) · rc 1": the version, the build number and any prerelease, from build.sh.
+    private let version: String = {
+        let info = Bundle.main.infoDictionary ?? [:]
+        let pre = info["AtriumPrerelease"] as? String ?? ""
+        return "Version \(info["CFBundleShortVersionString"] as? String ?? "dev")"
+            + (info["CFBundleVersion"].map { " (\($0))" } ?? "") + (pre.isEmpty ? "" : " · \(pre)")
+    }()
+
     /// The photographers, as CC BY asks: "subject: author, licence" for each image in a credits file.
     private func credits(_ file: String) -> [String] {
         ((try? String(contentsOf: resource(file), encoding: .utf8)) ?? "")
@@ -267,65 +283,77 @@ struct AboutPage: View {
     var body: some View {
         Form {
             Section {
-                HStack(spacing: 14) {
-                    IconTile(icon: "sparkles.tv", tint: .indigo, size: 48)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(name).font(.title2.bold())
-                        Text("Version \(version)").foregroundStyle(.secondary)
-                    }
+                VStack(spacing: 6) {
+                    Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 96, height: 96).accessibilityHidden(true)
+                    Text(name).font(.largeTitle.bold()).accessibilityAddTraits(.isHeader)
+                    Text(version).foregroundStyle(.secondary).textSelection(.enabled)
+                    Text("Living, animated wallpapers for macOS. Free and open source.").padding(.top, 4)
                 }
-                .padding(.vertical, 6)
-                Text("Living, animated wallpapers for macOS. Open source, and built to be built yourself.")
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
             }
             Section("Made by") {
                 LabeledContent("Dave Tanquary") { Link("dtanquary.com", destination: URL(string: "https://dtanquary.com")!) }
                 LabeledContent("Source") { Link("github.com/dtanquary/atrium", destination: URL(string: "https://github.com/dtanquary/atrium")!) }
-                LabeledContent("License") { Text("MIT") }
+                LabeledContent("License") { Text("MIT for the code; each photo and data set keeps its own license, below") }
             }
-            Section("Data and Credits") {
-                LabeledContent("Weather") { Link("Open-Meteo.com (CC BY 4.0)", destination: URL(string: "https://open-meteo.com")!) }
-                LabeledContent("ISS position") { Link("wheretheiss.at", destination: URL(string: "https://wheretheiss.at")!) }
-                LabeledContent("Stars") { Text("Yale Bright Star Catalogue") }
-                LabeledContent("Constellations") { Link("d3-celestial (BSD 3-Clause)", destination: URL(string: "https://github.com/ofrohn/d3-celestial")!) }
-                LabeledContent("Earth imagery") { Text("NASA Blue Marble and Black Marble") }
-                LabeledContent("Clouds") { Link("Live Cloud Maps; contains modified EUMETSAT data", destination: URL(string: "https://clouds.matteason.co.uk")!) }
-                LabeledContent("Planet positions") { Text("NASA JPL") }
-                LabeledContent("Wind's map") { Link("NASA's Blue Marble, Black Marble, Landsat and VIIRS via GIBS, and Natural Earth's relief (public domain)",
-                                                    destination: URL(string: "https://nasa-gibs.github.io/gibs-api-docs/")!) }
-                LabeledContent("The Sun") { Link("Courtesy of NASA/SDO and the AIA, EVE, and HMI science teams, via the ESA/NASA Helioviewer Project",
-                                                 destination: URL(string: "https://helioviewer.org")!) }
-                LabeledContent("The Moon") { Link("NASA's CGI Moon Kit: LRO's LROC colour and LOLA heights (public domain)",
-                                                  destination: URL(string: "https://svs.gsfc.nasa.gov/4720")!) }
-                LabeledContent("Aurora's mountains") { Link("The Tetons, NPS photo by A. Falgoust (public domain)", destination: URL(string: "https://commons.wikimedia.org/wiki/File:Teton_Point_Turnout_in_Winter_(52098766554).jpg")!) }
-                LabeledContent("Murmuration's pier") { Link("\"Tide bears the last glow\" by sagesolar (CC BY 4.0)", destination: URL(string: "https://commons.wikimedia.org/wiki/File:Tide_bears_the_last_glow_-_Brighton,_UK.jpg")!) }
-                LabeledContent("Fireflies' meadow") { Link("\"Field at dusk\" by Tristan Ferne (CC BY 2.0)", destination: URL(string: "https://www.flickr.com/photos/89056504@N00/7357684410")!) }
-                LabeledContent("Campfire's clearing") { Link("\"Hochsal Forest\" by Adrian Kubasa, Poly Haven (CC0)", destination: URL(string: "https://polyhaven.com/a/hochsal_forest")!) }
-                LabeledContent("Campfire's fire pit") { Link("Scans by Sebastian Platen and Rico Cilliers, Poly Haven (CC0)", destination: URL(string: "https://polyhaven.com/a/stone_fire_pit")!) }
-                LabeledContent("Murmuration's marsh") { Link("A tundra pond, USFWS photo (public domain)", destination: URL(string: "https://commons.wikimedia.org/wiki/File:Sunset_over_a_tundra_pond_(53708107535).jpg")!) }
-                DisclosureGroup("Dappled Light's plaster and leaves, from Poly Haven and ambientCG (CC0)") {
-                    ForEach(credits("dappled-credits.tsv"), id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
-                }
-                DisclosureGroup("A Tree for the Year's hilltop, leaves and bark, from Wikimedia Commons and ambientCG (CC0)") {
-                    ForEach(credits("tree-credits.tsv"), id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
-                }
-                DisclosureGroup("Weather's hills, clouds and Moon, from the BLM, NASA, Poly Haven and Wikimedia Commons") {
-                    ForEach(credits("weather-credits.tsv"), id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
-                }
-                DisclosureGroup("Rain on Glass backdrops, from Poly Haven, Wikimedia Commons and the NPS") {
-                    ForEach(credits("rain-credits.tsv"), id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
-                }
-                DisclosureGroup("Solar System Tour's photos, from NASA, ESA, JAXA and the people who processed them") {
-                    ForEach(credits("solar-photos.tsv"), id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
-                }
-                DisclosureGroup("Deep Space Tour's photos, from ESA/Hubble, ESA/Webb, ESO, NOIRLab, Euclid, Chandra and the EHT") {
-                    ForEach(credits("deep-photos.tsv"), id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
-                }
-                DisclosureGroup("Reef photos, from iNaturalist, Wikimedia Commons and NOAA") {
-                    ForEach(credits("reef-credits.tsv"), id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
-                }
+            Section("Live Data") {
+                credit("Weather and wind", "Open-Meteo.com (CC BY 4.0)", "https://open-meteo.com")
+                credit("ISS position", "wheretheiss.at", "https://wheretheiss.at")
+                credit("Clouds", "Live Cloud Maps by Matt Eason (CC0); contains modified EUMETSAT data", "https://clouds.matteason.co.uk")
+                credit("The Sun", "Courtesy of NASA/SDO and the AIA, EVE, and HMI science teams, via the ESA/NASA Helioviewer Project",
+                       "https://helioviewer.org")
+                credit("Wind's maps", "NASA's Blue Marble, Black Marble, Landsat and VIIRS via GIBS, and Natural Earth's relief (public domain)",
+                       "https://nasa-gibs.github.io/gibs-api-docs/")
+            }
+            Section("Sky, Earth and Moon") {
+                credit("Stars", "Yale Bright Star Catalogue, 5th edition (public domain)")
+                credit("Constellations", "d3-celestial by Olaf Frohn (BSD 3-Clause)", "https://github.com/ofrohn/d3-celestial")
+                credit("Planet positions", "NASA JPL's Approximate Positions of the Planets", "https://ssd.jpl.nasa.gov/planets/approx_pos.html")
+                credit("Earth imagery", "NASA's Blue Marble and Black Marble (public domain)")
+                credit("The Moon", "NASA's CGI Moon Kit: LRO's LROC color and LOLA heights (public domain)", "https://svs.gsfc.nasa.gov/4720")
+            }
+            Section("Photos") {
+                credit("Aurora's mountains", "The Tetons, NPS photo by A. Falgoust (public domain)",
+                       "https://commons.wikimedia.org/wiki/File:Teton_Point_Turnout_in_Winter_(52098766554).jpg")
+                credit("Murmuration's pier", "\"Tide bears the last glow\" by sagesolar (CC BY 4.0)",
+                       "https://commons.wikimedia.org/wiki/File:Tide_bears_the_last_glow_-_Brighton,_UK.jpg")
+                credit("Murmuration's marsh", "A tundra pond, USFWS photo (public domain)",
+                       "https://commons.wikimedia.org/wiki/File:Sunset_over_a_tundra_pond_(53708107535).jpg")
+                credit("Fireflies' meadow", "\"Field at dusk\" by Tristan Ferne (CC BY 2.0)", "https://www.flickr.com/photos/89056504@N00/7357684410")
+                credit("Campfire's clearing", "\"Hochsal Forest\" by Adrian Kubasa, Poly Haven (CC0)", "https://polyhaven.com/a/hochsal_forest")
+                credit("Campfire's fire pit", "Scans by Sebastian Platen and Rico Cilliers, Poly Haven (CC0)", "https://polyhaven.com/a/stone_fire_pit")
+                group("Dappled Light", "Plaster and leaves from Poly Haven and ambientCG (CC0)", "dappled-credits.tsv")
+                group("A Tree for the Year", "Hilltop, leaves and bark from Wikimedia Commons and ambientCG (CC0)", "tree-credits.tsv")
+                group("Weather", "Hills, clouds and Moon from the BLM, NASA, Poly Haven and Wikimedia Commons", "weather-credits.tsv")
+                group("Rain on Glass", "Backdrops from Poly Haven, Wikimedia Commons and the NPS", "rain-credits.tsv")
+                group("Fish Tank", "Reef photos from iNaturalist, Wikimedia Commons and NOAA", "reef-credits.tsv")
+                group("Solar System Tour", "Photos from NASA, ESA, JAXA and the people who processed them", "solar-photos.tsv")
+                group("Deep Space Tour", "Photos from ESA/Hubble, ESA/Webb, ESO, NOIRLab, Euclid, Chandra and the EHT", "deep-photos.tsv")
             }
         }
         .formStyle(.grouped)
+    }
+
+    /// A credit: what it's for, then who and under what license, linked to the source when there is one.
+    private func credit(_ title: String, _ detail: String, _ link: String? = nil) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+            if let link, let url = URL(string: link) {
+                Link(detail, destination: url).font(.callout)
+            } else {
+                Text(detail).font(.callout).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    /// A wallpaper's photo credits, one per image, folded away under a summary.
+    private func group(_ title: String, _ detail: String, _ file: String) -> some View {
+        DisclosureGroup {
+            ForEach(credits(file), id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
+        } label: {
+            credit(title, detail)
+        }
     }
 }
 
@@ -335,10 +363,14 @@ struct WallpaperPage: View {
     let wallpaper: Wallpaper
     @AppStorage("scene") private var current = defaultScene.name
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Bumped to rebuild the live preview with a new palette.
     @State private var builds = 0
     /// Whether the live preview has taken over from the screenshot.
     @State private var live = false
+
+    /// No settings: the wallpaper fills the page, with its header low down.
+    private var empty: Bool { wallpaper.knobs.isEmpty && wallpaper.palettes == nil }
 
     private var sections: [String] {
         wallpaper.knobs.map(\.section).reduce(into: []) { if !$0.contains($1) && $1 != "Colors" { $0.append($1) } }
@@ -350,20 +382,20 @@ struct WallpaperPage: View {
                 HStack(spacing: 12) {
                     IconTile(icon: wallpaper.icon, tint: wallpaper.tint, size: 40)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(wallpaper.name).font(.title3.bold()).foregroundStyle(.primary)
+                        Text(wallpaper.name).font(.title3.bold()).foregroundStyle(.primary).accessibilityAddTraits(.isHeader)
                         Text(wallpaper.blurb).font(.callout).foregroundStyle(.secondary).lineLimit(2)
                     }
                     Spacer()
                     if wallpaper.name == current {
-                        Label("On Desktop", systemImage: "checkmark.circle.fill").foregroundStyle(.green).padding(.trailing, 6)
+                        Button {} label: { Label("On Desktop", systemImage: "checkmark") }.buttonStyle(.glass).disabled(true)
                     } else {
-                        Button("Show on Desktop") { show(wallpaper.name) }.buttonStyle(.borderedProminent)
+                        Button("Show on Desktop") { show(wallpaper.name) }.buttonStyle(.glassProminent)
                     }
                 }
                 .font(.body)
                 .padding(10)
                 .glassEffect(.regular, in: .rect(cornerRadius: 16))
-                .padding(.top, 150)
+                .padding(.top, empty ? 380 : 150)
             }
             if let palettes = wallpaper.palettes {
                 Section(palettes.title) {
@@ -381,37 +413,37 @@ struct WallpaperPage: View {
                     }
                 }
             }
-            if wallpaper.knobs.isEmpty && wallpaper.palettes == nil {
-                Section { Text("No settings for this wallpaper yet.").foregroundStyle(.secondary) }
-            } else {
-                Section {
-                    Button("Reset to Defaults", role: .destructive) {
-                        for key in wallpaper.knobs.map(\.key) + [wallpaper.palettes?.key].compactMap({ $0 }) {
-                            UserDefaults.standard.removeObject(forKey: key)
-                        }
-                        rebuildIfShowing()
+            if !empty {
+                ResetSection {
+                    for key in wallpaper.knobs.map(\.key) + [wallpaper.palettes?.key].compactMap({ $0 }) {
+                        UserDefaults.standard.removeObject(forKey: key)
                     }
+                    rebuildIfShowing()
                 }
             }
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
         .background(alignment: .top) {
-            Color.clear.frame(height: 340)
+            Color.clear.frame(maxHeight: empty ? .infinity : 340)
                 .overlay {
                     preview.resizable().scaledToFill()
                     if live { LivePreview(wallpaper: wallpaper).id([builds, scheme == .dark ? 1 : 0]).transition(.opacity) }
                 }
                 .clipped()
-                .mask(LinearGradient(stops: [.init(color: .black, location: 0.55), .init(color: .clear, location: 1)],
+                // In Light Mode a long fade from a dark scene to the white page turns muddy, so it's shorter there.
+                .mask(LinearGradient(stops: empty ? [.init(color: .black, location: 1)]
+                                        : [.init(color: .black, location: scheme == .dark ? 0.55 : 0.45),
+                                           .init(color: .clear, location: scheme == .dark ? 1 : 0.8)],
                                      startPoint: .top, endPoint: .bottom))
                 .ignoresSafeArea()
                 .accessibilityHidden(true)
         }
-        // The screenshot draws first, then the live scene fades in over it once built.
+        // The screenshot draws first, then the live scene fades in over it once built. With Reduce Motion on, the
+        // screenshot stays.
         // ponytail: Fish Tank and Weather take about half a second to build on the main thread, which stalls the
         // page once; build them off the main thread if that grates.
-        .task { withAnimation(.easeIn(duration: 0.6)) { live = true } }
+        .task { if !reduceMotion { withAnimation(.easeIn(duration: 0.6)) { live = true } } }
     }
 
     /// The wallpaper's screenshot, `Resources/preview-<name>.jpg`, with a `-light` one for Light Mode if it has one.
@@ -473,7 +505,10 @@ struct KnobRow: View {
     init(knob: Knob) {
         self.knob = knob
         _value = AppStorage(wrappedValue: knob.standard, knob.key)
-        _gate = AppStorage(wrappedValue: 1, knob.shownWhen ?? knob.key) // an empty key crashes KVO; unused when ungated
+        // A gated knob hides while its switch is off, so the gate starts at the switch's own default. (An empty key
+        // crashes KVO, so an ungated knob watches its own key, unused.)
+        let gateStandard = (scenes.flatMap(\.knobs) + [Shuffle.on]).first { $0.key == knob.shownWhen }?.standard ?? 1
+        _gate = AppStorage(wrappedValue: gateStandard, knob.shownWhen ?? knob.key)
     }
 
     var body: some View {
@@ -487,8 +522,9 @@ struct KnobRow: View {
             } else {
                 LabeledContent(knob.label) {
                     HStack {
-                        Slider(value: $value, in: knob.range)
+                        Slider(value: $value, in: knob.range).accessibilityValue(formatted)
                         Text(formatted).monospacedDigit().foregroundStyle(.secondary).frame(width: 52, alignment: .trailing)
+                            .accessibilityHidden(true)
                     }
                 }
             }
@@ -541,17 +577,22 @@ struct PalettePicker: View {
     var body: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 76), spacing: 14)], spacing: 14) {
             let plain = choice.options.filter { choice.photos[$0.name] == nil }
+            // Random blends the plain palettes' colours; where every option is a photo, it's a mosaic of the first four.
             swatch("Random", colours: (plain.isEmpty ? choice.options : plain).compactMap { (scheme == .dark ? $0.dark : $0.light).last },
-                   symbol: "shuffle")
+                   symbol: "shuffle", mosaic: plain.isEmpty ? choice.options.prefix(4).compactMap { photo(choice.photos[$0.name]) } : [])
             ForEach(choice.options, id: \.name) { option in
-                swatch(option.name, colours: scheme == .dark ? option.dark : option.light,
-                       photo: choice.photos[option.name].map { scheme == .dark ? $0.dark : $0.light })
+                swatch(option.name, colours: scheme == .dark ? option.dark : option.light, photo: photo(choice.photos[option.name]))
             }
         }
         .padding(.vertical, 6)
     }
 
-    private func swatch(_ name: String, colours: [SIMD3<Float>], symbol: String? = nil, photo: String? = nil) -> some View {
+    private func photo(_ files: (dark: String, light: String)?) -> String? {
+        files.map { scheme == .dark ? $0.dark : $0.light }
+    }
+
+    private func swatch(_ name: String, colours: [SIMD3<Float>], symbol: String? = nil, photo: String? = nil,
+                        mosaic: [String] = []) -> some View {
         let isSelected = (name == "Random" ? "" : name) == selected
         return Button {
             selected = name == "Random" ? "" : name
@@ -563,15 +604,50 @@ struct PalettePicker: View {
                                          startPoint: .topLeading, endPoint: .bottomTrailing))
                     .frame(height: 46)
                     .overlay {
-                        if let photo, let image = NSImage(contentsOf: resource(photo)) { // ponytail: reads the file on each redraw; small
-                            Image(nsImage: image).resizable().scaledToFill().clipShape(.rect(cornerRadius: 12))
+                        if let photo { tile(photo) } // ponytail: reads the file on each redraw; small
+                    }
+                    .overlay {
+                        if !mosaic.isEmpty {
+                            Grid(horizontalSpacing: 1, verticalSpacing: 1) {
+                                ForEach(0..<2, id: \.self) { row in
+                                    GridRow { ForEach(0..<2, id: \.self) { column in tile(mosaic[(row * 2 + column) % mosaic.count]) } }
+                                }
+                            }
+                            .overlay(Color.black.opacity(0.3)) // so the shuffle symbol reads over the photos
                         }
                     }
+                    .clipShape(.rect(cornerRadius: 12))
                     .overlay { if let symbol { Image(systemName: symbol).font(.title3.bold()).foregroundStyle(.white) } }
                     .overlay { RoundedRectangle(cornerRadius: 15).strokeBorder(isSelected ? Color.accentColor : .clear, lineWidth: 2.5).padding(-4) }
                 Text(name).font(.caption).foregroundStyle(isSelected ? .primary : .secondary).lineLimit(1)
             }
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(name)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    /// A photo filling its cell, cropped to it.
+    private func tile(_ file: String) -> some View {
+        Image(nsImage: NSImage(contentsOf: resource(file)) ?? NSImage()).resizable().scaledToFill()
+            .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity).clipped()
+    }
+}
+
+/// Puts a page's settings back to their defaults once confirmed, set apart at the bottom right like System Settings.
+struct ResetSection: View {
+    let reset: () -> Void
+    @State private var asking = false
+
+    var body: some View {
+        Section {} footer: {
+            HStack {
+                Spacer()
+                Button("Reset to Defaults…") { asking = true }
+            }
+            .confirmationDialog("Reset these settings to their defaults?", isPresented: $asking) {
+                Button("Reset", role: .destructive, action: reset)
+            }
+        }
     }
 }
