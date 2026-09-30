@@ -36,8 +36,9 @@ import CoreLocation
         lastPoll = Date()
         let spot = Location.shared.coordinate
         var url = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
-        url.queryItems = [URLQueryItem(name: "latitude", value: String(spot.latitude)),
-                          URLQueryItem(name: "longitude", value: String(spot.longitude)),
+        // 0.01° (about a kilometre) is finer than the forecast, and says no more than that about where you are
+        url.queryItems = [URLQueryItem(name: "latitude", value: String(format: "%.2f", spot.latitude)),
+                          URLQueryItem(name: "longitude", value: String(format: "%.2f", spot.longitude)),
                           URLQueryItem(name: "current", value: "weather_code,cloud_cover,cloud_cover_high,wind_speed_10m,wind_direction_10m,snow_depth,visibility,"
                                            + "precipitation,rain,showers,snowfall,temperature_2m,relative_humidity_2m,dew_point_2m")]
         Task {

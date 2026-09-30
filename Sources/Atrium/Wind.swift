@@ -300,8 +300,8 @@ final class WindScene: SKScene {
         let points = Self.points(around: here, zoom: zoom)
         var url = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!
         url.queryItems = [
-            URLQueryItem(name: "latitude", value: points.map { String(format: "%.3f", $0.latitude) }.joined(separator: ",")),
-            URLQueryItem(name: "longitude", value: points.map { String(format: "%.3f", $0.longitude) }.joined(separator: ",")),
+            URLQueryItem(name: "latitude", value: points.map { String(format: "%.2f", $0.latitude) }.joined(separator: ",")), // ~1 km, as Weather
+            URLQueryItem(name: "longitude", value: points.map { String(format: "%.2f", $0.longitude) }.joined(separator: ",")),
             URLQueryItem(name: "hourly", value: "wind_speed_10m,wind_direction_10m"),
             URLQueryItem(name: "past_hours", value: "1"), URLQueryItem(name: "forecast_hours", value: "12"),
             URLQueryItem(name: "wind_speed_unit", value: "ms"), URLQueryItem(name: "timeformat", value: "unixtime"),
