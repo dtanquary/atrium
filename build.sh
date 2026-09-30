@@ -1,7 +1,7 @@
 #!/bin/sh
 # Builds build/Atrium.app, a menu-bar-only app. Run it with: open build/Atrium.app
 set -e
-VERSION=0.64.1 # semantic versioning; see "Versioning" in CLAUDE.md
+VERSION=0.64.2 # semantic versioning; see "Versioning" in CLAUDE.md
 PRERELEASE= # e.g. "rc 1" while a release candidate: shown in Settings → About; VERSION stays three numbers, as macOS requires
 cd "$(dirname "$0")"
 
@@ -17,6 +17,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/Atrium "$APP/Contents/MacOS/"
 cp -R Sources/Atrium/Resources/ "$APP/Contents/Resources/"
 rm -f "$APP/Contents/Resources/.gitkeep"
+cp LICENSE NOTICE "$APP/Contents/Resources/"
 cat > "$APP/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

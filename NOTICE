@@ -1,0 +1,12 @@
+Atrium
+Copyright (c) 2026 Dave Tanquary
+
+The MIT License in LICENSE covers Atrium's source code only.
+
+The photos, maps, star data and other third-party files in Sources/Atrium/Resources and docs/images are not covered
+by it. Each keeps its own license: public domain, CC0, CC BY, CC BY-SA, or the Japanese Government Standard Terms of
+Use 2.0 (compatible with CC BY 4.0). Every one is credited, with its author, license and source, in the
+*-credits.tsv and *-photos.tsv files beside it, in README.md's Credits, and in the app's Settings → About.
+
+The photos are cropped, cut out, relit or recolored from their originals. Adapted copies of CC BY-SA photos stay
+under CC BY-SA.

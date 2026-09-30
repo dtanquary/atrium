@@ -277,13 +277,32 @@ struct AboutPage: View {
             + (info["CFBundleVersion"].map { " (\($0))" } ?? "") + (pre.isEmpty ? "" : " · \(pre)")
     }()
 
-    /// The photographers, as CC BY asks: "subject: author, licence" for each image in a credits file.
-    private func credits(_ file: String) -> [String] {
+    /// The photographers, as CC BY asks: "subject: author, license" for each image in a credits file, linked to its
+    /// source and its license's deed. Every credits file's columns start: file, subject, author, license, source.
+    private func credits(_ file: String) -> [AttributedString] {
         ((try? String(contentsOf: resource(file), encoding: .utf8)) ?? "")
             .split(separator: "\n").filter { !$0.hasPrefix("#") }.map { line in
-                let field = line.split(separator: "\t").map(String.init)
-                return field.count > 3 ? "\(field[1]): \(field[2]), \(field[3])" : String(line)
+                let field = line.split(separator: "\t", omittingEmptySubsequences: false).map(String.init)
+                guard field.count > 3 else { return AttributedString(line) }
+                return Self.attribution("\(field[1]): \(field[2])", source: field.count > 4 ? field[4] : nil, license: field[3])
             }
+    }
+
+    /// "what, license", the first part linked to its source and the license to its deed where there are ones.
+    static func attribution(_ what: String, source: String?, license: String) -> AttributedString {
+        var text = AttributedString(what), terms = AttributedString(license)
+        text.link = source.flatMap(URL.init(string:))
+        terms.link = deed(license)
+        return text + AttributedString(", ") + terms
+    }
+
+    /// A Creative Commons license's deed, from "CC BY 4.0", "CC BY-SA 3.0 IGO" or "CC0"; nil for anything else,
+    /// including a "CC BY" with no version.
+    static func deed(_ license: String) -> URL? {
+        if license == "CC0" { return URL(string: "https://creativecommons.org/publicdomain/zero/1.0/") }
+        let part = license.split(separator: " ")
+        guard part.count >= 3, part[0] == "CC", part[2].first?.isNumber == true else { return nil }
+        return URL(string: "https://creativecommons.org/licenses/\(part[1].lowercased())/\(part[2])/" + (part.count > 3 ? "igo/" : ""))
     }
 
     var body: some View {
@@ -301,10 +320,10 @@ struct AboutPage: View {
             Section("Made by") {
                 LabeledContent("Dave Tanquary") { Link("dtanquary.com", destination: URL(string: "https://dtanquary.com")!) }
                 LabeledContent("Source") { Link("github.com/dtanquary/atrium", destination: URL(string: "https://github.com/dtanquary/atrium")!) }
-                LabeledContent("License") { Text("MIT for the code; each photo and data set keeps its own license, below") }
+                LabeledContent("License") { Link("MIT, for the code", destination: URL(string: "https://github.com/dtanquary/atrium/blob/main/LICENSE")!) }
             }
             Section("Live Data") {
-                credit("Weather and wind", "Open-Meteo.com (CC BY 4.0)", "https://open-meteo.com")
+                credit("Weather and wind", "Open-Meteo.com", "https://open-meteo.com", license: "CC BY 4.0")
                 credit("ISS position", "wheretheiss.at", "https://wheretheiss.at")
                 credit("Clouds", "Live Cloud Maps by Matt Eason (CC0); contains modified EUMETSAT data", "https://clouds.matteason.co.uk")
                 credit("The Sun", "Courtesy of NASA/SDO and the AIA, EVE, and HMI science teams, via the ESA/NASA Helioviewer Project",
@@ -316,17 +335,19 @@ struct AboutPage: View {
                 credit("Stars", "Yale Bright Star Catalogue, 5th edition (public domain)")
                 credit("Constellations", "d3-celestial by Olaf Frohn (BSD 3-Clause)", "https://github.com/ofrohn/d3-celestial")
                 credit("Planet positions", "NASA JPL's Approximate Positions of the Planets", "https://ssd.jpl.nasa.gov/planets/approx_pos.html")
-                credit("Earth imagery", "NASA's Blue Marble and Black Marble (public domain)")
+                credit("Earth imagery", "NASA's Blue Marble (public domain)", "https://visibleearth.nasa.gov/collection/1484/blue-marble")
+                credit("Earth at night", "NASA's Black Marble (public domain)", "https://earthobservatory.nasa.gov/features/NightLights")
                 credit("The Moon", "NASA's CGI Moon Kit: LRO's LROC color and LOLA heights (public domain)", "https://svs.gsfc.nasa.gov/4720")
             }
-            Section("Photos") {
+            Section {
                 credit("Aurora's mountains", "The Tetons, NPS photo by A. Falgoust (public domain)",
                        "https://commons.wikimedia.org/wiki/File:Teton_Point_Turnout_in_Winter_(52098766554).jpg")
-                credit("Murmuration's pier", "\"Tide bears the last glow\" by sagesolar (CC BY 4.0)",
-                       "https://commons.wikimedia.org/wiki/File:Tide_bears_the_last_glow_-_Brighton,_UK.jpg")
+                credit("Murmuration's pier", "\"Tide bears the last glow\" by sagesolar",
+                       "https://commons.wikimedia.org/wiki/File:Tide_bears_the_last_glow_-_Brighton,_UK.jpg", license: "CC BY 4.0")
                 credit("Murmuration's marsh", "A tundra pond, USFWS photo (public domain)",
                        "https://commons.wikimedia.org/wiki/File:Sunset_over_a_tundra_pond_(53708107535).jpg")
-                credit("Fireflies' meadow", "\"Field at dusk\" by Tristan Ferne (CC BY 2.0)", "https://www.flickr.com/photos/89056504@N00/7357684410")
+                credit("Fireflies' meadow", "\"Field at dusk\" by Tristan Ferne", "https://www.flickr.com/photos/89056504@N00/7357684410",
+                       license: "CC BY 2.0")
                 credit("Campfire's clearing", "\"Hochsal Forest\" by Adrian Kubasa, Poly Haven (CC0)", "https://polyhaven.com/a/hochsal_forest")
                 credit("Campfire's fire pit", "Scans by Sebastian Platen and Rico Cilliers, Poly Haven (CC0)", "https://polyhaven.com/a/stone_fire_pit")
                 group("Dappled Light", "Plaster and leaves from Poly Haven and ambientCG (CC0)", "dappled-credits.tsv")
@@ -336,16 +357,23 @@ struct AboutPage: View {
                 group("Fish Tank", "Reef photos from iNaturalist, Wikimedia Commons and NOAA", "reef-credits.tsv")
                 group("Solar System Tour", "Photos from NASA, ESA, JAXA and the people who processed them", "solar-photos.tsv")
                 group("Deep Space Tour", "Photos from ESA/Hubble, ESA/Webb, ESO, NOIRLab, Euclid, Chandra and the EHT", "deep-photos.tsv")
+            } header: {
+                Text("Photos")
+            } footer: {
+                Text("Photos are cropped, cut out, relit or recolored from their originals, and each keeps its own license: adapted copies of CC BY-SA photos stay CC BY-SA.")
+                    .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
     }
 
-    /// A credit: what it's for, then who and under what license, linked to the source when there is one.
-    private func credit(_ title: String, _ detail: String, _ link: String? = nil) -> some View {
+    /// A credit: what it's for, then who, linked to the source when there is one, and any license, linked to its deed.
+    private func credit(_ title: String, _ detail: String, _ link: String? = nil, license: String? = nil) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
-            if let link, let url = URL(string: link) {
+            if let license {
+                Text(Self.attribution(detail, source: link, license: license)).font(.callout)
+            } else if let link, let url = URL(string: link) {
                 Link(detail, destination: url).font(.callout)
             } else {
                 Text(detail).font(.callout).foregroundStyle(.secondary)
@@ -356,7 +384,7 @@ struct AboutPage: View {
     /// A wallpaper's photo credits, one per image, folded away under a summary.
     private func group(_ title: String, _ detail: String, _ file: String) -> some View {
         DisclosureGroup {
-            ForEach(credits(file), id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
+            ForEach(credits(file), id: \.self) { Text($0).font(.caption).foregroundStyle(.secondary) }
         } label: {
             credit(title, detail)
         }

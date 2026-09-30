@@ -331,4 +331,4 @@ SETTINGS_SHOT="Nebula" swift test --filter settingsWindow   # opens Settings on 
 
 ## License
 
-[MIT](LICENSE) © 2026 Dave Tanquary
+The code is [MIT](LICENSE) © 2026 Dave Tanquary. The photos and data aren't: each keeps its own license (public domain, CC0, CC BY or CC BY-SA), listed under Credits, in the credits files beside them, and in Settings → About. Photos are cropped, cut out, relit or recolored from their originals, and adapted copies of CC BY-SA photos stay CC BY-SA. See [NOTICE](NOTICE).
