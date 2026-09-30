@@ -102,17 +102,6 @@ struct IconTile: View {
     }
 }
 
-extension View {
-    /// Liquid Glass on macOS 26 and later, frosted material before it.
-    @ViewBuilder func glass(cornerRadius: CGFloat) -> some View {
-        if #available(macOS 26, *) {
-            glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
-        } else {
-            background(.regularMaterial, in: .rect(cornerRadius: cornerRadius))
-        }
-    }
-}
-
 /// While on, moves the desktop on to a random wallpaper every so often, skipping any left out in Settings → General.
 /// Any change of wallpaper, by hand or by Shuffle, starts the clock over.
 @MainActor enum Shuffle {
@@ -373,7 +362,7 @@ struct WallpaperPage: View {
                 }
                 .font(.body)
                 .padding(10)
-                .glass(cornerRadius: 16)
+                .glassEffect(.regular, in: .rect(cornerRadius: 16))
                 .padding(.top, 150)
             }
             if let palettes = wallpaper.palettes {

@@ -232,8 +232,8 @@ Known limits: the lock screen, and the tint of the menu bar and windows, still c
 
 ## Requirements
 
-- macOS 15 or later. It's developed and tested on macOS 27 on Apple silicon.
-- Xcode 16 or later, or its command line tools (Swift 6).
+- macOS 26 or later, on Apple silicon. It's developed and tested on macOS 27.
+- Xcode 26 or later, or its command line tools (Swift 6).
 
 ## Build and run
 

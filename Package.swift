@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "Atrium",
-    platforms: [.macOS(.v15)],
+    platforms: [.macOS("26.0")],
     targets: [
         // A Tree for the Year's growth and bake: numeric code a hundred times slower unoptimised, which would add minutes
         // to every debug `swift test`, so it's always built with -O.
