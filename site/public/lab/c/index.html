@@ -27,7 +27,7 @@
   .top { position: fixed; top: 36px; left: 56px; right: 56px; display: flex; justify-content: space-between; font-size: 17px; opacity: 0; visibility: hidden; transition: opacity 1.2s ease-in-out, visibility 0s 1.2s; }
   .is-open:not(.is-last) .top { opacity: 1; visibility: visible; transition: opacity 1.6s ease-in-out 0.4s, visibility 0s; }
   .opening { inset: auto 56px 60px; display: flex; justify-content: space-between; align-items: flex-end; }
-  .opening > div { display: flex; flex-direction: column; gap: 6px; max-width: 460px; }
+  .opening > div { display: flex; flex-direction: column; gap: 6px; width: 280px; } /* clear of the skylight */
   .wordmark { font-size: 20px; }
   .tagline { font-size: 15px; font-style: italic; color: #a8a7a3; line-height: 1.4; }
   .fine { font-size: 13px; color: var(--text-3); }
@@ -85,7 +85,7 @@
       <div>
         <h1 class="wordmark">Atrium</h1>
         <p class="tagline">Living wallpapers for your Mac.</p>
-        <p class="fine">Free · macOS 26 or later, on Apple silicon · <a href="https://github.com/dtanquary/atrium">Source on GitHub (MIT)</a></p>
+        <p class="fine">Free · macOS 26 or later, on Apple silicon<br><a href="https://github.com/dtanquary/atrium">Source on GitHub (MIT)</a></p>
       </div>
       <a class="download" href="https://github.com/dtanquary/atrium/releases/latest">Download</a>
     </div>

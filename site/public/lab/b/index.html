@@ -35,19 +35,21 @@
   .last .fine { color: #e4ecff; }
   .last .row { display: flex; gap: 18px; align-items: baseline; white-space: nowrap; }
   .last .features { width: 400px; font-size: 14px; line-height: 1.5; color: #e4ecff; gap: 8px; padding-top: 6px; }
-  /* Each label fades in as it rises into place and out as it leaves; elsewhere they simply pass. */
+  /* Each label fades in as its section rises into place and out as it leaves, wherever the label sits in it;
+     where scroll-driven animations are missing, labels simply pass. */
   @supports (animation-timeline: view()) {
-    .label { animation: pass linear both; animation-timeline: view(); }
-    @keyframes pass { 0%, 10% { opacity: 0; } 40%, 44% { opacity: 1; } 75%, 100% { opacity: 0; } }
+    section { view-timeline-name: --section; }
+    .label { animation: pass linear both; animation-timeline: --section; }
+    @keyframes pass { 0%, 25% { opacity: 0; } 45%, 55% { opacity: 1; } 75%, 100% { opacity: 0; } }
   }
+  [data-work=murmuration] .label { top: 24%; } /* in the open sky, clear of the pier */
 
   @media (max-width: 699px) {
     .top { top: 28px; left: 24px; right: 24px; }
     .opening { left: 24px; right: 24px; bottom: 48px; gap: 8px; }
     .tagline { font-size: 20px; }
     .fine { font-size: 12px; }
-    .label, [data-work=fish-tank] .label { left: 24px; right: 24px; top: 130px; }
-    @keyframes pass { 0%, 40% { opacity: 0; } 70%, 85% { opacity: 1; } 95%, 100% { opacity: 0; } }
+    .label, [data-work] .label { left: 24px; right: 24px; top: 130px; }
     .last { inset: 110px 24px auto; flex-direction: column; gap: 28px; }
     .last .row { flex-direction: column; gap: 10px; white-space: normal; }
     .last .features { width: auto; }
