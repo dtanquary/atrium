@@ -8,7 +8,7 @@
 # Needs ffmpeg with libsvtav1 and libx265 (Homebrew's has both).
 set -e
 cd "$(dirname "$0")/.."
-OUT=site/public/media
+OUT=${OUT:-site/public/media} # OUT=/some/dir to try a roll without replacing the current one
 TMP=${TMPDIR:-/tmp}/atrium-site-media
 LOOP=12 FADE=2 # seconds: the loop, and the crossfade from its tail into its head that hides the seam
 
@@ -17,7 +17,7 @@ WORKS='nebula|Nebula|54|4|SNAPSHOT_DEFAULTS=nebula.palette=Hubble
 flowing-gradient|Flowing Gradient|34|4|SNAPSHOT_DEFAULTS=gradient.palette=Midnight
 live-sky|Live Sky|72|4|SNAPSHOT_DEFAULTS=sky.previewTime=1,sky.previewHour=23
 galaxy|Galaxy|48|4|SNAPSHOT_DEFAULTS=galaxy.kind=Whirlpool
-murmuration|Murmuration|66|20|SNAPSHOT_DEFAULTS=murmuration.light=5,murmuration.ground=0 MURMURATION_SEED=3
+murmuration|Murmuration|44|20|SNAPSHOT_DEFAULTS=murmuration.light=5,murmuration.ground=0 MURMURATION_SEED=3
 fish-tank|Fish Tank|42|4|SNAPSHOT_APPEARANCE=light'
 
 mkdir -p "$OUT"
