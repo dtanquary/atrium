@@ -12,6 +12,7 @@ import UniformTypeIdentifiers
 ///     SNAPSHOT_DEFAULTS="gradient.ribbons=1,gradient.previewTime=1" swift test  # with Settings values
 ///     SNAPSHOT_APPEARANCE=light swift test                                      # in Light Mode
 ///     SNAPSHOT_SCENE="Fish Tank" SNAPSHOT_MOVIE=6 swift test    # then 6 s of frames at 15 fps, for a GIF
+///     SNAPSHOT_MOVIE_FPS=30 …                                    # or at 30 fps, for the website's video
 ///
 /// Only sceneDidLoad/init content shows up here: SKRenderer never calls didMove(to:).
 @MainActor @Test func everySceneRenders() throws {
@@ -50,6 +51,7 @@ import UniformTypeIdentifiers
         let frames = Int(seconds * 30), clock = ProcessInfo.processInfo.systemUptime + 1
         WallpaperTime.restart() // shaders' u_now counts from each scene's first frame, as it would on the desktop
         let movie = Int((Double(env["SNAPSHOT_MOVIE"] ?? "") ?? 0) * 30)
+        let every = env["SNAPSHOT_MOVIE_FPS"] == "30" ? 1 : 2 // save every frame, or every other one for 15 fps
         let writes = DispatchGroup()
         var cpu = 0.0, gpu = 0.0
         for frame in 0...frames + movie {
@@ -62,8 +64,8 @@ import UniformTypeIdentifiers
             renderer.render(withViewport: CGRect(x: 0, y: 0, width: w, height: h), commandBuffer: buffer, renderPassDescriptor: pass)
             buffer.commit()
             buffer.waitUntilCompleted()
-            if frame > frames, frame % 2 == 0 {
-                let pixels = read(texture, w, h), url = dir.appendingPathComponent(String(format: "%@-%03d.png", name, (frame - frames) / 2))
+            if frame > frames, frame % every == 0 {
+                let pixels = read(texture, w, h), url = dir.appendingPathComponent(String(format: "%@-%03d.png", name, (frame - frames) / every))
                 DispatchQueue.global().async(group: writes) { save(pixels, w, h, to: url) }
             }
             if frame > frames - 30, frame <= frames {
