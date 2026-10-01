@@ -12,8 +12,7 @@
 <style>
   /* One Endless Canvas (design.md, 2b): the canvas never moves; scrolling a screen dissolves one work into the
      next, and only the words travel, at the page's own speed. */
-  .top { position: fixed; top: 36px; left: 56px; right: 56px; display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; z-index: 1; transition: opacity 0.6s ease-in-out; }
-  .is-over .top { opacity: 0; visibility: hidden; transition: opacity 0.6s ease-in-out, visibility 0s 0.6s; }
+  .top { position: fixed; top: 36px; left: 56px; right: 56px; display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; z-index: 1; }
   .top .wordmark { font-weight: 600; }
   .top .end { display: flex; gap: 28px; align-items: baseline; }
   .top .download { font-weight: 500; transition: opacity 1.2s ease-in-out; }
@@ -38,6 +37,7 @@
   .last .fine { color: #e4ecff; }
   .last .row { display: flex; gap: 18px; align-items: baseline; white-space: nowrap; }
   .last .features { width: 400px; font-size: 14px; line-height: 1.5; color: #e4ecff; gap: 8px; padding-top: 6px; }
+  .show-more { align-self: flex-start; background: none; border: 0; border-bottom: 1px solid rgb(228 236 255 / 0.45); padding: 0 0 2px; font: inherit; font-size: 14px; color: #e4ecff; cursor: pointer; }
   /* Each label fades in as its section rises into place and out as it leaves, wherever the label sits in it;
      where scroll-driven animations are missing, labels simply pass. */
   @supports (animation-timeline: view()) {
@@ -46,13 +46,25 @@
     @keyframes pass { 0%, 25% { opacity: 0; } 45%, 55% { opacity: 1; } 75%, 100% { opacity: 0; } }
   }
 
-  /* Below the canvas, on the ground: the wallpapers it doesn't feature, as quiet 16:10 cards. */
-  .more { position: relative; background: var(--ground); padding: 48px 56px 64px; }
-  .more h2 { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-3); margin-bottom: 20px; }
-  .cards { list-style: none; display: grid; grid-template-columns: repeat(7, 1fr); gap: 28px 12px; }
-  .cards img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 10; object-fit: cover; background: #141416; }
-  .cards p { margin-top: 10px; font-size: 13px; color: var(--text-2); }
-  .more .features { display: none; } /* phones only: there the canvas has coral where these lines would sit */
+  /* The wallpapers the canvas doesn't feature, as cards on a pane of glass over it (Dave asked for glass here,
+     2026-10-01). A native <dialog>: focus, Esc and holding the page still are the browser's job. The tint is
+     70% so the names still read 4.5:1 where the pane sits over Fish Tank's bright sand. */
+  html:has(.more[open]) { overflow: hidden; }
+  .more { width: min(1240px, 100vw - 112px); max-height: calc(100svh - 112px); box-sizing: border-box; padding: 0; overflow: auto;
+    border: 1px solid rgb(255 255 255 / 0.1); border-radius: 18px; color: var(--text);
+    background: rgb(10 10 11 / 0.7); -webkit-backdrop-filter: blur(30px) saturate(160%); backdrop-filter: blur(30px) saturate(160%);
+    opacity: 0; transition: opacity 0.6s ease-in-out, overlay 0.6s allow-discrete, display 0.6s allow-discrete; }
+  .more[open] { opacity: 1; }
+  .more::backdrop { background: rgb(10 10 11 / 0); transition: background 0.6s ease-in-out, overlay 0.6s allow-discrete, display 0.6s allow-discrete; }
+  .more[open]::backdrop { background: rgb(10 10 11 / 0.3); }
+  @starting-style { .more[open] { opacity: 0; } .more[open]::backdrop { background: rgb(10 10 11 / 0); } }
+  .panel { position: relative; padding: 30px 36px 36px; }
+  .panel h2 { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-2); margin-bottom: 22px; }
+  .close { position: absolute; top: 25px; right: 32px; background: none; border: 0; padding: 0; font: inherit; font-size: 14px; color: var(--text); cursor: pointer; }
+  .cards { list-style: none; display: grid; grid-template-columns: repeat(7, 1fr); gap: 26px 12px; }
+  .cards img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 10; object-fit: cover; background: rgb(255 255 255 / 0.04); }
+  .cards p { margin-top: 10px; font-size: 13px; color: #e9e8e4; }
+  .panel .features { display: none; } /* phones only: there Fish Tank has coral where these lines would sit */
 
   @media (max-width: 1100px) { .cards { grid-template-columns: repeat(4, 1fr); } }
   @media (max-width: 699px) {
@@ -63,12 +75,19 @@
     .fine { font-size: 12px; }
     .label, [data-work] .label { left: 24px; right: 24px; top: 130px; }
     .last { inset: 88px 24px auto; flex-direction: column; gap: 28px; }
-    .last > div { gap: 10px; }
-    .last .row { flex-direction: column; gap: 10px; white-space: normal; }
+    /* Download and the cards share a line, so the words end above Fish Tank's coral. */
+    .last > div:first-child { display: grid; grid-template-columns: auto 1fr; gap: 12px 22px; align-items: baseline; }
+    .last .row { display: contents; }
+    .last .tagline, .last .fine { grid-column: 1 / -1; }
+    .last .fine { grid-row: 3; white-space: normal; }
+    .last .download { grid-area: 2 / 1; justify-self: start; }
+    .show-more { grid-area: 2 / 2; justify-self: start; }
     .last .features { display: none; }
-    .more .features { display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.5; color: var(--text-2); margin-bottom: 40px; }
-    .more { padding: 40px 24px 56px; }
-    .cards { grid-template-columns: repeat(2, 1fr); gap: 24px 10px; }
+    .more { width: calc(100vw - 24px); max-height: calc(100svh - 24px); border-radius: 16px; }
+    .panel { padding: 24px 18px 28px; }
+    .panel .features { display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.5; color: #e9e8e4; margin: 30px 0 32px; }
+    .close { top: 20px; right: 18px; }
+    .cards { grid-template-columns: repeat(2, 1fr); gap: 22px 10px; }
   }
 </style>
 <script type="module" src="site.js"></script>
@@ -109,11 +128,15 @@
       <div>
         <p class="tagline">Living wallpapers for your Mac.</p>
         <div class="row"><a class="download download--line" href="https://github.com/dtanquary/atrium/releases/latest">Download</a><p class="fine">Free · macOS 26 or later, on Apple silicon · <a href="https://github.com/dtanquary/atrium">Source on GitHub (MIT)</a> · <a href="credits.html">Credits</a></p></div>
+        <button class="show-more" type="button">Fourteen more in the app</button>
       </div>
       <div class="features"><p>It's your desktop: it plays behind your icons and windows, and pauses when they cover it.</p><p>Easy on your Mac: frozen in Low Power Mode, about 2 ms a frame.</p></div>
     </div>
   </section>
-  <section class="more" aria-labelledby="more">
+</main>
+<dialog class="more" aria-labelledby="more">
+  <div class="panel">
+    <button class="close" type="button">Close</button>
     <div class="features"><p>It's your desktop: it plays behind your icons and windows, and pauses when they cover it.</p><p>Easy on your Mac: frozen in Low Power Mode, about 2 ms a frame.</p></div>
     <h2 id="more">Fourteen more in the app</h2>
     <ul class="cards">
@@ -132,7 +155,7 @@
       <li><img src="media/card-weather.jpg" alt="" width="640" height="400" loading="lazy"><p>Weather</p></li>
       <li><img src="media/card-wind.jpg" alt="" width="640" height="400" loading="lazy"><p>Wind</p></li>
     </ul>
-  </section>
-</main>
+  </div>
+</dialog>
 </body>
 </html>

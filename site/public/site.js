@@ -14,10 +14,9 @@ const codecs = kind === 'desktop' ? { av1: 'av01.0.12M.08', hevc: 'hvc1.1.6.L150
 const sections = [...document.querySelectorAll('[data-work]')];
 const stage = document.querySelector('.stage');
 const pause = document.querySelector('.pause');
-const more = document.querySelector('.more'); // the cards below the canvas
+const more = document.querySelector('.more'); // the glass pane of cards for the other wallpapers
 const root = document.documentElement;
 let playing = !matchMedia('(prefers-reduced-motion: reduce)').matches; // Reduce Motion starts on the posters
-let covered = false; // the cards fill the screen, so the canvas can't be seen
 
 for (const el of sections) el.style.setProperty('--own', accents[el.dataset.work]); // each label's medium word
 
@@ -37,7 +36,7 @@ for (const slug of new Set(sections.map(s => s.dataset.work))) {
   stage.append(v);
 }
 const all = Object.values(videos);
-const run = v => (playing && !covered && !document.hidden ? v.play().catch(() => {}) : v.pause());
+const run = v => (playing && !document.hidden ? v.play().catch(() => {}) : v.pause());
 const sync = () => all.forEach(v => (+v.style.opacity > 0 ? run(v) : v.pause()));
 document.addEventListener('visibilitychange', sync); // pause with the tab, as the app pauses when covered
 
@@ -45,6 +44,11 @@ document.addEventListener('visibilitychange', sync); // pause with the tab, as t
 const label = () => { pause.textContent = playing ? 'Pause' : 'Play'; };
 pause.addEventListener('click', () => { playing = !playing; label(); sync(); });
 label();
+
+// The glass pane: the browser's own modal, so focus, Esc and holding the page still come with it.
+document.querySelector('.show-more').addEventListener('click', () => more.showModal());
+more.querySelector('.close').addEventListener('click', () => more.close());
+more.addEventListener('click', e => { if (e.target === more) more.close(); }); // a click outside the pane
 
 /** Start loading a work: its poster (the loop's first frame) and its video. */
 function warm(slug) {
@@ -77,10 +81,9 @@ function frame() {
   const a = sections[i].dataset.work, b = sections[clamp(i + 1)].dataset.work;
   mix(a, b, a === b ? 0 : t * t * (3 - 2 * t)); // smoothstep, so each work settles at either end
   warm(sections[i + 2]?.dataset.work);
-  document.body.classList.toggle('is-last', f > sections.length - 1.5);
-  const top = more.getBoundingClientRect().top;
-  document.body.classList.toggle('is-over', top < 72); // the cards have reached the top bar
-  if (covered !== (top <= 0)) { covered = top <= 0; sync(); } // as the app pauses when covered
+  const last = f > sections.length - 1.5;
+  document.body.classList.toggle('is-last', last);
+  if (last) more.querySelectorAll('img[loading=lazy]').forEach(img => (img.loading = 'eager')); // ready before it opens
 }
 const queue = () => { if (!queued) { queued = true; requestAnimationFrame(frame); } };
 
