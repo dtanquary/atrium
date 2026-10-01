@@ -4,51 +4,48 @@ Atrium's website. Its job is to show the art: the wallpapers are the product and
 
 `../../CLAUDE.md` belongs to dtanquary.com. Its design system (Dark Liquid Glass, Inter, #6eb1ff) doesn't apply here; only its Cloudflare account rule does. That file sits outside this repo, which is public, and it's the only place the account ID is written down. Never put the account ID, an API token, or a `wrangler.toml` with `account_id` in this repo.
 
-## Principles, in order
-1. **The art is the page.** Atrium's own wallpapers fill the screen, moving. When in doubt, make the art bigger and use fewer words. The site draws no decoration of its own: no gradient blobs, glows, noise, 3D, stock photos or AI-generated images. The only pictures are Atrium's own renders, its Settings window and its icon. The page's colours come from the work on screen: sample an accent per work into a custom property, and keep the rest near black.
-2. **Calm, like the app.** Dave's direction in `../docs/README.md` applies here too: slow, ambient, soft and dim. Crossfades of a second or more, never a hard cut between works. No bounce, spring, parallax or scroll-jacking; the page scrolls like a page. Nothing flashy.
-3. **Modern by being native.** Use what browsers now do well instead of libraries: scroll-driven animations (`animation-timeline: view()`), view transitions, `@property`, container queries, OKLCH and `color-mix()`, `text-wrap: balance`, a variable font, AV1 video and AVIF stills. Where a feature is missing, the page falls back to a still one that is just as beautiful.
-4. **Honest.** Every claim traces to `../README.md` or `../docs/`. No invented testimonials, download counts, press quotes or features. Wallpapers go by the names the app gives them.
+**The design is `design.md`**, the Claude Design handoff: hard rules, the verbatim copy, colour and type tokens, and nine directions. Its layout values came from frames drawn in HTML; the lab pages carry them now. Where this file and `design.md` differ, `design.md` wins on look and copy, and this file on how the site is built.
 
-## What's on the page
-One page, `index.html`, plus `credits.html`, in this order:
-- **Opening:** a wallpaper playing full screen. The name, one line (the README's "living, animated desktop wallpapers" says it) and Download, small and off to one side.
-- **The works:** every wallpaper in `../docs/README.md`'s table except those flagged `unfinished: true` in `../Sources/Atrium/Scenes.swift`. Each fills the screen with a wall label, as in a museum: its name and one line on what it's made of or from (e.g. "Shader · colours sampled from Hubble nebulae", "Live · the sky above you, right now"). Take that line from the wallpaper's doc. Order them for flow, not alphabetically, and open with Dave's favourites (Nebula, then Flowing Gradient).
-- **Real, not made up:** the live wallpapers: the sky above you, your weather and wind, today's Sun, the ISS. A few words.
-- **It's your desktop:** one view of a wallpaper behind desktop icons and a window, so it's clear what the product is, plus a Settings screenshot (`../docs/images/settings-*.jpg`) showing its live preview.
-- **Easy on the Mac:** it pauses when covered, freezes in Low Power Mode, and costs about 2 ms a frame.
-- **Download:** free; macOS 26 or later, on Apple silicon; the Gatekeeper steps from README → Download; the source on GitHub under MIT. Link to `https://github.com/dtanquary/atrium/releases/latest` once a release exists (`gh release list`), and to the repo until then.
-- **Credits (`credits.html`):** every photo, map and data source the site shows, with author, license and source links. CC BY and CC BY-SA require credit on the site itself, not only in the app. Take them from README → Credits and `../Sources/Atrium/Resources/*-credits.tsv` and `*-photos.tsv`.
+## Principles, in order
+1. **The art is the page.** Atrium's own wallpapers fill the screen, moving (at least 80% of the viewport). The site draws no decoration of its own: no gradient blobs, glows, glass, noise, 3D, stock photos or AI-generated images. The only pictures are Atrium's own renders, its Settings window and its icon. The page is near black (`#0A0A0B`), and its one accent comes from the work on screen.
+2. **Calm, like the app.** Dave's direction in `../docs/README.md` applies here too: slow, ambient, soft and dim. Crossfades of a second or more, never a hard cut, even on first paint. No bounce, spring, parallax or scroll-jacking; the page scrolls like a page.
+3. **Modern by being native.** `@property`, `color-mix()` in OKLCH, `animation-timeline: view()`, `clip-path`, variable fonts, AV1. Where a feature is missing, the page falls back to a still one that is just as beautiful.
+4. **Honest.** Only the copy in `design.md`. No invented testimonials, download counts, press quotes or features.
+
+## What's built
+- `public/lab/shared.js` and `shared.css`: the stage (one looping video per work, stacked full screen), `rooms()` (crossing into a section crossfades its work and words over time) and `canvas()` (scroll position scrubs the dissolve), the accent, pause with the tab, and arrow keys between rooms. A page lists its sections as one-screen-tall elements with `data-work` and lays out its own words.
+- `public/lab/a/`, `b/`, `c/`: directions 2a The Exhibition (rooms, with revisions R1–R3), 2b One Endless Canvas (canvas) and 2c The Skylight (rooms, with a `clip-path` skylight that the first screen of scrolling widens). Each is one HTML file with its own CSS.
+- `public/index.html`: a chooser while the directions are compared. The chosen direction replaces it.
+- `public/credits.html`: the photographs and data inside the six works. The Fish Tank list was generated from `../Sources/Atrium/Resources/reef-credits.tsv` (one line per source); regenerate it if the reef changes. CC BY requires credit on the site itself, so every direction's download section links to it.
+- `public/fonts/`: Instrument Sans, Figtree and Newsreader, variable, Latin only, from Google Fonts (OFL). Self-hosted: no third-party requests.
 
 ## Media
 Every image comes from the app's own renderer, never a screen recording, so the site shows exactly what the app draws.
-- `site/media.sh` renders each wallpaper with the snapshot test (`SNAPSHOT_SCENE`, `SNAPSHOT_MOVIE`, `SNAPSHOT_DEFAULTS`; see `../CLAUDE.md`) and writes a loop and a poster per work to `public/media/`. Use the settings behind each look in `../docs/images` (e.g. `nebula-hubble`, `galaxy-whirlpool`). `../docs/README.md` → Screenshots says how to seed the caches for live data. `public/media/` is gitignored, so the script is the source of truth.
-- Loops must be seamless: render a few seconds extra and crossfade the tail into the head (ffmpeg `xfade`). 8–12 s each.
-- The test saves 15 fps (`frame % 2 == 0` in `../Tests/AtriumTests/RenderTests.swift`). If motion looks stepped, add a `SNAPSHOT_MOVIE_FPS` option there rather than interpolating.
-- Encode AV1 first with an H.264 fallback, in `<source>` order, plus a rendition about 1080 px wide for phones. The poster is the loop's first frame. Keep each loop to a few MB; Pages caps a file at 25 MiB.
-- Phones are portrait, but the wallpapers are 16:10. Try rendering portrait loops (add a `SNAPSHOT_SIZE` option to the test). Keep the ones that look right, and crop the rest with a per-work `object-position`.
+- `site/media.sh [slug…]` renders each work with the snapshot test at 30 fps (`SNAPSHOT_MOVIE_FPS=30`) and its look's settings (e.g. `nebula.palette=Hubble`, `galaxy.kind=Whirlpool`), crossfades the last 2 s of a 14 s render into its first 2 s so the 12 s loop has no seam, and writes AV1 and HEVC (Safari on M1 and M2 can't decode AV1) plus a JPEG poster of the first frame to `public/media/`. That folder is gitignored, so the script is the source of truth. About 1.5 minutes a work.
+- Desktop is 2560 wide; phones get a 3:4 portrait slab cut around the work's focal point from `design.md`, at 1080×1440. `shared.js` picks phone media on portrait screens. The `codecs` strings in `shared.js` match the levels the encodes come out at; check with `ffprobe` if the sizes change.
+- Nebula rolls a new nebula every render. Re-render until the roll suits the skylight's square and the phone crop.
+- ffmpeg and swift test read stdin; in the script's loop they must not (`-nostdin`, `</dev/null`), or they swallow the list of works.
 
-## Performance and access
-- Only videos on screen play (IntersectionObserver). The rest use `preload="none"` with posters. The opening poster shows at once.
-- `prefers-reduced-motion` and Save-Data get stills, and a visible control pauses all motion (WCAG 2.2.2).
-- Text over art meets WCAG AA contrast, with a soft scrim where needed. Every work has alt text, and keyboard use and focus styles work throughout. It works from 390 px phones to 5K displays.
-- No analytics, cookies, trackers or third-party requests. Fonts are self-hosted.
+## Access and performance
+- Only works on screen play; the rest wait with `preload="none"` until they're next. Everything pauses with the tab.
+- `prefers-reduced-motion` gets the posters and no skylight widening, and the crossfades stay (dissolves are what Reduce Motion asks for).
+- Still to do once a direction is chosen: a visible control that pauses all motion (WCAG 2.2.2), placed where that direction has room for it.
+- No analytics, cookies, trackers or third-party requests.
 
 ## Build and deploy
-- Plain HTML, CSS and JS in `public/`: no framework, no build step, no npm packages. `npx wrangler` is the only tool.
-- Preview with `npx wrangler pages dev site/public`. Check it in a browser at 1440×900 and 390×844, and with reduced motion on. Keep the console clean, and look at screenshots before calling anything done.
-- Deploy only to the Cloudflare account named in `../../CLAUDE.md`, never another. Pass its ID on the command line as `CLOUDFLARE_ACCOUNT_ID=… npx wrangler pages deploy site/public --project-name atrium`, so it never lands in a file here. Add `--branch <name>` for a preview URL Dave can open on his phone. `atrium.show` is registered in that account (2026-10-01) and gets attached as the project's custom domain at launch.
+- Plain HTML, CSS and JS in `public/`: no framework, no build step, no npm packages. `npx wrangler` is the only tool. Run it from `site/` so its `.wrangler/` state lands there (gitignored).
+- Preview: `cd site && npx wrangler pages dev public --port 8788 --compatibility-date=2026-04-01` (the installed wrangler's runtime is older than today's date). It doesn't serve byte ranges, so Safari won't play the video locally; Chrome will, and Pages itself does.
+- Check every change at 1440×900 and 390×844, at several scroll positions and with reduced motion, with no console errors, and look at the screenshots. Headless Chrome over the DevTools protocol works when the Chrome extension isn't connected (launch it with `--remote-allow-origins=*`).
+- Deploy only to the Cloudflare account named in `../../CLAUDE.md`, never another: wrangler is logged in to two. Pass the ID on the command line, `CLOUDFLARE_ACCOUNT_ID=… npx wrangler pages deploy public --project-name atrium --branch lab`, so it never lands in a file here. `--branch` gives Dave a preview URL to open on his phone; production is `main`. `atrium.show` is registered in that account (2026-10-01) and gets attached to the project at launch.
 - Other Claude sessions share this working tree (see `.git/atrium-claims.md`). Commit only site files, by explicit path. The site has no version number, and never bumps the app's.
 
 ## Plan
-1. **Pick a direction** (compare, then lock in, as with the app's big looks). Write `media.sh` and render the handful of works the lab needs. Then build the opening and the first three or four works three ways, at `public/lab/a/`, `b/` and `c/`, sharing one media folder, and deploy them to a preview branch. The words are the same in all three, so only the design differs. Each direction also tries its own typeface.
-   - **A. The Exhibition:** a gallery walk. Each work fills the screen with a small wall label; scrolling moves from room to room through slow crossfades.
-   - **B. One Endless Canvas:** one wallpaper fills the viewport all the way down and slowly turns into the next as you scroll; the words float over it and pass by.
-   - **C. The Skylight,** after the icon ("a skylight onto the cosmos", `../docs/app-icon.md`): the page opens in darkness on an opening that widens into full-screen art as you scroll, then walks through the works.
-2. **Build it:** the whole page and credits in the direction Dave picks (or his mix of them). Delete the other directions.
-3. **Polish:** a social card, a favicon from the icon, the title "Atrium: living wallpapers for Mac" and a meta description, a phone pass, and page weights.
+1. **Pick a direction** (now): 2a, 2b and 2c are built live with the real loops, on a preview branch. Dave compares them on his Mac and phone, and picks one or a mix.
+2. **Build it:** the chosen direction at the root, with the pause control and a phone pass; delete `lab/` and the chooser.
+3. **Polish:** a social card, a favicon from the icon, the title "Atrium: living wallpapers for Mac" and its meta description, page weights.
 4. **Launch:** a production deploy, with atrium.show attached.
 
 ## Dave's direction so far
 - 2026-09-30: art first, above everything: "ultra modern, but just as much if not more so artistic". Domain atrium.show, video loops rendered by the app, three directions to compare, and the site kept in `site/` in this repo.
 - 2026-10-01: Dave registered atrium.show, in the same Cloudflare account. He doesn't want his Cloudflare details in this public repo.
+- 2026-10-01: Claude Design explored nine directions (`design.md`); only the six works with wall labels appear. Dave picked 2c The Skylight, 2a The Exhibition and 2b One Endless Canvas to build live and compare.

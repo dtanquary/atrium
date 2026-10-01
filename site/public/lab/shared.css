@@ -1,0 +1,48 @@
+/* What every direction shares: the ground, the fonts, the stage of works and the accent that follows them. */
+
+@font-face { font-family: 'Instrument Sans'; src: url(../fonts/instrument-sans-normal.woff2) format('woff2'); font-weight: 400 700; font-display: swap; }
+@font-face { font-family: Figtree; src: url(../fonts/figtree-normal.woff2) format('woff2'); font-weight: 300 700; font-display: swap; }
+@font-face { font-family: Newsreader; src: url(../fonts/newsreader-normal.woff2) format('woff2'); font-weight: 300 600; font-display: swap; }
+@font-face { font-family: Newsreader; src: url(../fonts/newsreader-italic.woff2) format('woff2'); font-weight: 300 600; font-style: italic; font-display: swap; }
+
+/* Registered so it crossfades with the art, half a beat behind it. */
+@property --accent { syntax: '<color>'; inherits: true; initial-value: #95d0d9; }
+
+:root {
+  --ground: #0a0a0b;
+  --text: #eeede9;
+  --text-2: #c9c8c4;
+  --text-3: #8b8a86;
+  --fade-in: 1.6s;
+  --fade-out: 1.2s;
+  color-scheme: dark;
+  background: var(--ground);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  transition: --accent 1.6s ease-in-out 0.4s;
+}
+body { margin: 0; }
+a { color: inherit; text-decoration: none; }
+a:hover { color: #fff; }
+:focus-visible { outline: 1px solid var(--accent); outline-offset: 4px; }
+p, h1, h2 { margin: 0; font: inherit; }
+section[data-work] { height: 100svh; scroll-snap-align: start; }
+
+/* The stage fades up from the ground once its first work can draw, so even the first paint is a crossfade. */
+.stage { position: fixed; inset: 0; overflow: hidden; background: var(--ground); opacity: 0; transition: opacity 1.6s ease-in-out; }
+.stage.is-ready { opacity: 1; }
+.art { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity var(--fade-out) ease-in-out var(--fade-out-delay, 0s); }
+.art.is-on { opacity: 1; transition: opacity var(--fade-in) ease-in-out; }
+
+.medium { text-transform: uppercase; color: var(--own, var(--accent)); }
+.download { color: var(--accent); }
+.download--line { border-bottom: 1px solid var(--accent); padding-bottom: 2px; }
+
+/* Rooms: each section's words are fixed in place; they leave first, then fade up half a beat after its work. */
+.rooms .words { position: fixed; opacity: 0; visibility: hidden; transition: opacity 0.6s ease-in-out, visibility 0s 0.6s; }
+.rooms .is-current .words { opacity: 1; visibility: visible; transition: opacity 1.2s ease-in-out 0.6s, visibility 0s; } /* out before in: words never overlap */
+html:has(.rooms) { scroll-snap-type: y proximity; }
+
+@media (prefers-reduced-motion: reduce) {
+  :root { scroll-behavior: auto; }
+}
