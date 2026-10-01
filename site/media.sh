@@ -5,6 +5,7 @@
 # HEVC for Safari on M1 and M2. Output goes to site/public/media, which is gitignored: this script is the source.
 #   site/media.sh               # all of them
 #   site/media.sh nebula galaxy # just these
+#   site/media.sh cards         # just the cards for the other wallpapers, cut from the README's screenshots
 # Needs ffmpeg with libsvtav1 and libx265 (Homebrew's has both).
 set -e
 cd "$(dirname "$0")/.."
@@ -20,7 +21,30 @@ galaxy|Galaxy|48|4|SNAPSHOT_DEFAULTS=galaxy.kind=Whirlpool
 murmuration|Murmuration|44|20|SNAPSHOT_DEFAULTS=murmuration.light=5,murmuration.ground=0 MURMURATION_SEED=3
 fish-tank|Fish Tank|42|4|SNAPSHOT_APPEARANCE=light'
 
+# The wallpapers the canvas doesn't feature, as 16:10 stills for the cards below it: slug|screenshot in docs/images.
+CARDS='aurora|aurora-purple
+dappled-light|dappled-light-golden
+deep-space-tour|deep-space-pillars
+earth-from-orbit|earth-from-orbit
+fireflies|fireflies
+game-of-life|game-of-life
+lava-lamp|lava-lamp
+pixel-city|pixel-city-dusk
+rain-on-glass|rain-on-glass-night
+schlieren|schlieren
+solar-system-tour|solar-system-jupiter
+turing-patterns|turing-patterns
+weather|weather-sunset
+wind|wind'
+
 mkdir -p "$OUT"
+if [ $# -eq 0 ] || echo " $* " | grep -q " cards "; then
+    echo "$CARDS" | while IFS='|' read -r slug shot; do
+        ffmpeg -nostdin -loglevel error -y -i "docs/images/$shot.jpg" \
+            -vf "scale=640:400:force_original_aspect_ratio=increase:flags=lanczos,crop=640:400" -q:v 4 "$OUT/card-$slug.jpg"
+    done
+    echo "== cards: $(echo "$CARDS" | wc -l | tr -d ' ')"
+fi
 echo "$WORKS" | while IFS='|' read -r slug scene focal seconds extra; do
     [ $# -gt 0 ] && ! echo " $* " | grep -q " $slug " && continue
     dir="$TMP/$slug"

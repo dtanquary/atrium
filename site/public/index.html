@@ -3,23 +3,136 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Atrium · three directions</title>
-<meta name="robots" content="noindex">
-<link rel="stylesheet" href="lab/shared.css">
+<title>Atrium: living wallpapers for Mac</title>
+<meta name="description" content="Living wallpapers for your Mac. Free, for macOS 26 or later on Apple silicon. Source on GitHub (MIT).">
+<link rel="icon" href="icon.png">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="preload" href="fonts/figtree-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="site.css">
 <style>
-  /* ponytail: a chooser while the directions are compared; the chosen one replaces this page. */
-  body { font-family: 'Instrument Sans', system-ui, sans-serif; max-width: 640px; margin: 0 auto; padding: 72px 40px; color: var(--text-2); font-size: 14px; line-height: 1.6; }
-  h1 { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 32px; }
-  a { display: block; padding: 18px 0; border-top: 1px solid #1c1c20; }
-  a strong { display: block; color: var(--text); font-weight: 500; font-size: 17px; }
-  @media (max-width: 699px) { body { padding: 48px 24px; } }
+  /* One Endless Canvas (design.md, 2b): the canvas never moves; scrolling a screen dissolves one work into the
+     next, and only the words travel, at the page's own speed. */
+  .top { position: fixed; top: 36px; left: 56px; right: 56px; display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; z-index: 1; transition: opacity 0.6s ease-in-out; }
+  .is-over .top { opacity: 0; visibility: hidden; transition: opacity 0.6s ease-in-out, visibility 0s 0.6s; }
+  .top .wordmark { font-weight: 600; }
+  .top .end { display: flex; gap: 28px; align-items: baseline; }
+  .top .download { font-weight: 500; transition: opacity 1.2s ease-in-out; }
+  .is-last .top .download { opacity: 0; visibility: hidden; transition: opacity 1.2s ease-in-out, visibility 0s 1.2s; }
+  .pause { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; }
+  main { position: relative; }
+  section { position: relative; }
+  .opening { position: absolute; left: 56px; bottom: 64px; display: flex; flex-direction: column; gap: 10px; }
+  .tagline { font-size: 22px; font-weight: 300; }
+  .fine { font-size: 13px; color: #d6d2e2; }
+  .label { position: absolute; left: 56px; top: 57.8%; display: flex; flex-direction: column; gap: 6px; }
+  .title { font-size: 17px; font-weight: 500; }
+  .medium { font-size: 11px; letter-spacing: 0.12em; }
+  .line { font-size: 14px; color: var(--text-2); }
+  [data-work=murmuration] .label { top: 24%; } /* in the open sky, clear of the pier */
+  /* Over Fish Tank's open water, not its bright sand; the text lifts to hold 4.5:1. */
+  [data-work=fish-tank] .label { top: 130px; }
+  [data-work=fish-tank] .line { color: #e4ecff; }
+  .last { position: absolute; inset: 130px 56px auto; display: flex; justify-content: space-between; gap: 48px; }
+  .last > div { display: flex; flex-direction: column; gap: 14px; max-width: 560px; }
+  .last .download { color: #c8dfff; border-color: #c8dfff; font-size: 16px; font-weight: 500; }
+  .last .fine { color: #e4ecff; }
+  .last .row { display: flex; gap: 18px; align-items: baseline; white-space: nowrap; }
+  .last .features { width: 400px; font-size: 14px; line-height: 1.5; color: #e4ecff; gap: 8px; padding-top: 6px; }
+  /* Each label fades in as its section rises into place and out as it leaves, wherever the label sits in it;
+     where scroll-driven animations are missing, labels simply pass. */
+  @supports (animation-timeline: view()) {
+    section { view-timeline-name: --section; }
+    .label { animation: pass linear both; animation-timeline: --section; }
+    @keyframes pass { 0%, 25% { opacity: 0; } 45%, 55% { opacity: 1; } 75%, 100% { opacity: 0; } }
+  }
+
+  /* Below the canvas, on the ground: the wallpapers it doesn't feature, as quiet 16:10 cards. */
+  .more { position: relative; background: var(--ground); padding: 48px 56px 64px; }
+  .more h2 { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-3); margin-bottom: 20px; }
+  .cards { list-style: none; display: grid; grid-template-columns: repeat(7, 1fr); gap: 28px 12px; }
+  .cards img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 10; object-fit: cover; background: #141416; }
+  .cards p { margin-top: 10px; font-size: 13px; color: var(--text-2); }
+  .more .features { display: none; } /* phones only: there the canvas has coral where these lines would sit */
+
+  @media (max-width: 1100px) { .cards { grid-template-columns: repeat(4, 1fr); } }
+  @media (max-width: 699px) {
+    .top { top: 28px; left: 24px; right: 24px; }
+    .top .end { gap: 20px; }
+    .opening { left: 24px; right: 24px; bottom: 48px; gap: 8px; }
+    .tagline { font-size: 20px; }
+    .fine { font-size: 12px; }
+    .label, [data-work] .label { left: 24px; right: 24px; top: 130px; }
+    .last { inset: 88px 24px auto; flex-direction: column; gap: 28px; }
+    .last > div { gap: 10px; }
+    .last .row { flex-direction: column; gap: 10px; white-space: normal; }
+    .last .features { display: none; }
+    .more .features { display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.5; color: var(--text-2); margin-bottom: 40px; }
+    .more { padding: 40px 24px 56px; }
+    .cards { grid-template-columns: repeat(2, 1fr); gap: 24px 10px; }
+  }
 </style>
+<script type="module" src="site.js"></script>
 </head>
 <body>
-<h1>Atrium · atrium.show, three directions to compare</h1>
-<a href="lab/c/"><strong>2c The Skylight</strong>Opens in darkness on a four-paned skylight that widens into the art as you scroll. Newsreader.</a>
-<a href="lab/b/"><strong>2b One Endless Canvas</strong>A canvas that never moves; scrolling dissolves one work into the next, and the words pass by. Figtree.</a>
-<a href="lab/a/"><strong>2a The Exhibition</strong>Rooms above a wall-label strip; each scroll crossfades to the next work. Instrument Sans.</a>
-<a href="credits.html"><strong>Credits</strong>The photographs and data inside the works.</a>
+<div class="stage" aria-hidden="true"></div>
+<header class="top">
+  <h1 class="wordmark">Atrium</h1>
+  <div class="end"><a class="download" href="https://github.com/dtanquary/atrium/releases/latest">Download</a><button class="pause" type="button">Pause</button></div>
+</header>
+<main>
+  <section data-work="flowing-gradient">
+    <div class="opening">
+      <p class="tagline">Living wallpapers for your Mac.</p>
+      <p class="fine">Free · macOS 26 or later, on Apple silicon · <a href="https://github.com/dtanquary/atrium">Source on GitHub (MIT)</a></p>
+    </div>
+  </section>
+  <section data-work="flowing-gradient">
+    <div class="label"><h2 class="title">Flowing Gradient</h2><p class="medium">Shader</p><p class="line">pools of colour whose mood follows the real Sun</p></div>
+  </section>
+  <section data-work="live-sky">
+    <div class="label"><h2 class="title">Live Sky</h2><p class="medium">Live</p><p class="line">the real sky above you, right now</p></div>
+  </section>
+  <section data-work="nebula">
+    <div class="label"><h2 class="title">Nebula</h2><p class="medium">Shader</p><p class="line">a new nebula every time, in colours modelled on real ones</p></div>
+  </section>
+  <section data-work="galaxy">
+    <div class="label"><h2 class="title">Galaxy</h2><p class="medium">Shader</p><p class="line">after real galaxies: the Whirlpool, Andromeda, the Milky Way</p></div>
+  </section>
+  <section data-work="murmuration">
+    <div class="label"><h2 class="title">Murmuration</h2><p class="medium">Simulation</p><p class="line">tens of thousands of starlings at sunset</p></div>
+  </section>
+  <section data-work="fish-tank">
+    <div class="label"><h2 class="title">Fish Tank</h2><p class="line">Real fish, cut out of photographs, in a sunlit reef tank</p></div>
+  </section>
+  <section data-work="fish-tank">
+    <div class="last">
+      <div>
+        <p class="tagline">Living wallpapers for your Mac.</p>
+        <div class="row"><a class="download download--line" href="https://github.com/dtanquary/atrium/releases/latest">Download</a><p class="fine">Free · macOS 26 or later, on Apple silicon · <a href="https://github.com/dtanquary/atrium">Source on GitHub (MIT)</a> · <a href="credits.html">Credits</a></p></div>
+      </div>
+      <div class="features"><p>It's your desktop: it plays behind your icons and windows, and pauses when they cover it.</p><p>Easy on your Mac: frozen in Low Power Mode, about 2 ms a frame.</p></div>
+    </div>
+  </section>
+  <section class="more" aria-labelledby="more">
+    <div class="features"><p>It's your desktop: it plays behind your icons and windows, and pauses when they cover it.</p><p>Easy on your Mac: frozen in Low Power Mode, about 2 ms a frame.</p></div>
+    <h2 id="more">Fourteen more in the app</h2>
+    <ul class="cards">
+      <li><img src="media/card-aurora.jpg" alt="" width="640" height="400" loading="lazy"><p>Aurora</p></li>
+      <li><img src="media/card-dappled-light.jpg" alt="" width="640" height="400" loading="lazy"><p>Dappled Light</p></li>
+      <li><img src="media/card-deep-space-tour.jpg" alt="" width="640" height="400" loading="lazy"><p>Deep Space Tour</p></li>
+      <li><img src="media/card-earth-from-orbit.jpg" alt="" width="640" height="400" loading="lazy"><p>Earth from Orbit</p></li>
+      <li><img src="media/card-fireflies.jpg" alt="" width="640" height="400" loading="lazy"><p>Fireflies</p></li>
+      <li><img src="media/card-game-of-life.jpg" alt="" width="640" height="400" loading="lazy"><p>Game of Life</p></li>
+      <li><img src="media/card-lava-lamp.jpg" alt="" width="640" height="400" loading="lazy"><p>Lava Lamp</p></li>
+      <li><img src="media/card-pixel-city.jpg" alt="" width="640" height="400" loading="lazy"><p>Pixel City</p></li>
+      <li><img src="media/card-rain-on-glass.jpg" alt="" width="640" height="400" loading="lazy"><p>Rain on Glass</p></li>
+      <li><img src="media/card-schlieren.jpg" alt="" width="640" height="400" loading="lazy"><p>Schlieren</p></li>
+      <li><img src="media/card-solar-system-tour.jpg" alt="" width="640" height="400" loading="lazy"><p>Solar System Tour</p></li>
+      <li><img src="media/card-turing-patterns.jpg" alt="" width="640" height="400" loading="lazy"><p>Turing Patterns</p></li>
+      <li><img src="media/card-weather.jpg" alt="" width="640" height="400" loading="lazy"><p>Weather</p></li>
+      <li><img src="media/card-wind.jpg" alt="" width="640" height="400" loading="lazy"><p>Wind</p></li>
+    </ul>
+  </section>
+</main>
 </body>
 </html>
