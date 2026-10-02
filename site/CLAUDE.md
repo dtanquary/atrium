@@ -28,7 +28,7 @@ Every image comes from the app's own renderer, never a screen recording, so the 
 - Desktop is 2560 wide; phones get a 3:4 portrait slab cut around the work's focal point from `design.md`, at 1080×1440. `site.js` picks phone media on portrait screens. The `codecs` strings in `site.js` match the levels the encodes come out at; check with `ffprobe` if the sizes change.
 - Nebula rolls a new nebula every render. Re-render with `OUT=/some/dir` until a roll suits, then copy it in.
 - `site/media.sh cards` cuts a card (640×400) for every wallpaper from the README's screenshots in `../docs/images`; the `CARDS` list in the script picks one each. Add a line there and a `<li>` in the pane for a new wallpaper.
-- Aurora (Purple palette) ends the canvas; its accent, `#d9b0fa`, was measured like the others: the chroma-weighted mean hue of its render at oklch L 0.82, C 0.11.
+- Aurora (Purple palette, at 2× its natural speed so its curtains visibly move on the end view: Dave asked) ends the canvas; its accent, `#d9b0fa`, was measured like the others: the chroma-weighted mean hue of its render at oklch L 0.82, C 0.11.
 - ffmpeg and swift test read stdin; in the script's loop they must not (`-nostdin`, `</dev/null`), or they swallow the list of works.
 
 ## Access and performance
