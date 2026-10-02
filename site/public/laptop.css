@@ -20,12 +20,9 @@
 .laptop .screen > .stage, .laptop .screen > .menubar, .laptop .screen > .dock { position: absolute; }
 .laptop .notch { position: absolute; top: 0; left: 50%; width: 9vw; height: 28px; border-radius: 0 0 9px 9px; background: #0c0c0e; opacity: var(--frame, 1);
   transform: translateX(-50%) translateZ(2px); backface-visibility: hidden; } /* just in front of the screen */
-/* The menu bar and Dock only show while the laptop does: they fade with the zoom (--frame), and on the way in they
-   also wait for the screen to wake, after the wallpaper fades up (site.js). --awake makes that a timed fade. */
-@property --awake { syntax: '<number>'; inherits: true; initial-value: 0; }
-.laptop { --awake: 0; transition: --awake 1.2s ease-in-out 1.6s; }
-.laptop.is-opening { --awake: 1; }
-.laptop .screen > .menubar, .laptop .screen > .dock { display: flex; opacity: calc(var(--frame, 1) * var(--awake)); }
+/* The menu bar and Dock only show while the laptop does, there from the first moment like the notch, and fading
+   with the zoom (--frame). */
+.laptop .screen > .menubar, .laptop .screen > .dock { display: flex; opacity: var(--frame, 1); }
 
 /* The base: a deck lying back from the hinge toward you, with its keyboard and trackpad, and a thin front edge.
    Its back edge is exactly as wide as the lid, meeting the lid's bottom corners, and perspective widens it toward
@@ -45,5 +42,5 @@
 .laptop .last { inset: auto 56px 44px; align-items: flex-end; }
 
 @media (prefers-reduced-motion: reduce) {
-  .laptop, .laptop .lid { transition: none; }
+  .laptop .lid { transition: none; }
 }

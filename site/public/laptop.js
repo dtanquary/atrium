@@ -57,7 +57,7 @@ if (matchMedia('(min-width: 700px) and (min-aspect-ratio: 1/1)').matches) {
   // Open the lid once the closed laptop has been drawn. Reduce Motion starts it open, and so does arriving partway
   // down the page, where the screen already fills the window.
   if (still || scrollY > first.offsetHeight / 2) {
-    lid.style.transition = root.style.transition = 'none'; // no swing, and the screen's already awake
+    lid.style.transition = 'none'; // no swing
     root.classList.add('is-opening');
   } else requestAnimationFrame(() => requestAnimationFrame(() => root.classList.add('is-opening')));
 }
