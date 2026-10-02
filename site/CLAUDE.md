@@ -42,14 +42,14 @@ Every image comes from the app's own renderer, never a screen recording, so the 
 - Pages serves static files whole (a 200, even for a range request), and Safari won't play video from a server like that. `functions/media/[[path]].js` answers byte ranges for `/media/*`; `node site/range-check.mjs` checks it. If traffic outgrows the free tier of Function calls, cache `/media` with a Cache Rule on atrium.show, or move it to R2.
 - Preview: `cd site && npx wrangler pages dev public --port 8788 --compatibility-date=2026-04-01` (the installed wrangler's runtime is older than today's date). Run from `site/` it serves the Function too.
 - Check every change at 1440×900 and 390×844, at several scroll positions and with reduced motion, with no console errors, and look at the screenshots. Headless Chrome over the DevTools protocol works when the Chrome extension isn't connected (launch it with `--remote-allow-origins=*`).
-- Deploy only to the Cloudflare account named in `../../CLAUDE.md`, never another: wrangler is logged in to two. Pass the ID on the command line, `CLOUDFLARE_ACCOUNT_ID=… npx wrangler pages deploy public --project-name atrium --branch lab`, so it never lands in a file here. `--branch lab` is the preview Dave opens on his phone (lab.atrium-4pv.pages.dev); production is `main`. `atrium.show` is registered in that account (2026-10-01) and gets attached to the project at launch.
+- Deploy only to the Cloudflare account named in `../../CLAUDE.md`, never another: wrangler is logged in to two. Pass the ID on the command line, `CLOUDFLARE_ACCOUNT_ID=… npx wrangler pages deploy public --project-name atrium --branch lab`, so it never lands in a file here. `--branch lab` is the preview Dave opens on his phone (lab.atrium-4pv.pages.dev); production is `main`. `atrium.show` is registered in that account (2026-10-01) and is the project's custom domain (live 2026-10-02), with `www.atrium.show` attached too. A custom domain needs its DNS record as well (a proxied CNAME to atrium-4pv.pages.dev), and wrangler's login can't edit DNS, so Dave adds that in the dashboard.
 - Other Claude sessions share this working tree (see `.git/atrium-claims.md`). Commit only site files, by explicit path. The site has no version number, and never bumps the app's.
 
 ## Plan
 1. ~~Pick a direction~~: 2b, One Endless Canvas (2026-10-01).
 2. ~~Build it~~, with every wallpaper on a Liquid Glass pane, and a laptop that opens the page and closes it.
 3. **Polish:** a social card (`og:image`), page weights, and a pass on a real iPhone and in Safari.
-4. **Launch:** a production deploy (`--branch main`), with atrium.show attached as the project's custom domain.
+4. **Launch:** a production deploy (`--branch main`), with atrium.show attached as the project's custom domain. Done 2026-10-02.
 
 ## Dave's direction so far
 - 2026-09-30: art first, above everything: "ultra modern, but just as much if not more so artistic". Domain atrium.show, video loops rendered by the app, three directions to compare, and the site kept in `site/` in this repo.
