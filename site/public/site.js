@@ -6,7 +6,6 @@
 const accents = {
   nebula: '#95d0d9', 'flowing-gradient': '#cab9f3', 'live-sky': '#b9c2ec',
   galaxy: '#ddbe9a', murmuration: '#ecb799', 'fish-tank': '#9bc5ff',
-  aurora: '#d9b0fa', // measured the same way from its render, 2026-10-01
 };
 const media = new URL('media/', import.meta.url);
 const kind = matchMedia('(max-aspect-ratio: 1/1)').matches ? 'phone' : 'desktop';

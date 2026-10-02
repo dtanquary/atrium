@@ -19,8 +19,7 @@ flowing-gradient|Flowing Gradient|34|4|SNAPSHOT_DEFAULTS=gradient.palette=Midnig
 live-sky|Live Sky|72|4|SNAPSHOT_DEFAULTS=sky.previewTime=1,sky.previewHour=23
 galaxy|Galaxy|48|4|SNAPSHOT_DEFAULTS=galaxy.kind=Whirlpool
 murmuration|Murmuration|44|20|SNAPSHOT_DEFAULTS=murmuration.light=5,murmuration.ground=0 MURMURATION_SEED=3
-fish-tank|Fish Tank|42|4|SNAPSHOT_APPEARANCE=light
-aurora|Aurora|50|4|SNAPSHOT_DEFAULTS=aurora.palette=Purple'
+fish-tank|Fish Tank|42|4|SNAPSHOT_APPEARANCE=light'
 
 # Every wallpaper in the app, as 16:10 stills for the cards on the glass pane: slug|screenshot in docs/images.
 CARDS='aurora|aurora-purple
