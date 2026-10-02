@@ -5,7 +5,7 @@
 # HEVC for Safari on M1 and M2. Output goes to site/public/media, which is gitignored: this script is the source.
 #   site/media.sh               # all of them
 #   site/media.sh nebula galaxy # just these
-#   site/media.sh cards         # just the cards for the other wallpapers, cut from the README's screenshots
+#   site/media.sh cards         # just the cards for every wallpaper, cut from the README's screenshots
 # Needs ffmpeg with libsvtav1 and libx265 (Homebrew's has both).
 set -e
 cd "$(dirname "$0")/.."
@@ -19,16 +19,23 @@ flowing-gradient|Flowing Gradient|34|4|SNAPSHOT_DEFAULTS=gradient.palette=Midnig
 live-sky|Live Sky|72|4|SNAPSHOT_DEFAULTS=sky.previewTime=1,sky.previewHour=23
 galaxy|Galaxy|48|4|SNAPSHOT_DEFAULTS=galaxy.kind=Whirlpool
 murmuration|Murmuration|44|20|SNAPSHOT_DEFAULTS=murmuration.light=5,murmuration.ground=0 MURMURATION_SEED=3
-fish-tank|Fish Tank|42|4|SNAPSHOT_APPEARANCE=light'
+fish-tank|Fish Tank|42|4|SNAPSHOT_APPEARANCE=light
+aurora|Aurora|50|4|SNAPSHOT_DEFAULTS=aurora.palette=Purple'
 
-# The wallpapers the canvas doesn't feature, as 16:10 stills for the cards below it: slug|screenshot in docs/images.
+# Every wallpaper in the app, as 16:10 stills for the cards on the glass pane: slug|screenshot in docs/images.
 CARDS='aurora|aurora-purple
 dappled-light|dappled-light-golden
 deep-space-tour|deep-space-pillars
 earth-from-orbit|earth-from-orbit
 fireflies|fireflies
+fish-tank|fish-tank-day
+flowing-gradient|flowing-gradient
+galaxy|galaxy-whirlpool
 game-of-life|game-of-life
 lava-lamp|lava-lamp
+live-sky|live-sky
+murmuration|murmuration-blue-hour
+nebula|nebula-hubble
 pixel-city|pixel-city-dusk
 rain-on-glass|rain-on-glass-night
 schlieren|schlieren

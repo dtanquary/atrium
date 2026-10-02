@@ -6,6 +6,7 @@
 const accents = {
   nebula: '#95d0d9', 'flowing-gradient': '#cab9f3', 'live-sky': '#b9c2ec',
   galaxy: '#ddbe9a', murmuration: '#ecb799', 'fish-tank': '#9bc5ff',
+  aurora: '#d9b0fa', // measured the same way from its render, 2026-10-01
 };
 const media = new URL('media/', import.meta.url);
 const kind = matchMedia('(max-aspect-ratio: 1/1)').matches ? 'phone' : 'desktop';
@@ -14,11 +15,11 @@ const codecs = kind === 'desktop' ? { av1: 'av01.0.12M.08', hevc: 'hvc1.1.6.L150
 const sections = [...document.querySelectorAll('[data-work]')];
 const stage = document.querySelector('.stage');
 const pause = document.querySelector('.pause');
-const more = document.querySelector('.more'); // the glass pane of cards for the other wallpapers
+const more = document.querySelector('.more'); // the glass pane with a card for every wallpaper
 const root = document.documentElement;
 let playing = !matchMedia('(prefers-reduced-motion: reduce)').matches; // Reduce Motion starts on the posters
 
-for (const el of sections) el.style.setProperty('--own', accents[el.dataset.work]); // each label's medium word
+for (const el of sections) if (!el.style.getPropertyValue('--own')) el.style.setProperty('--own', accents[el.dataset.work]); // each label's medium word, unless lifted
 
 const videos = {};
 for (const slug of new Set(sections.map(s => s.dataset.work))) {
@@ -45,7 +46,10 @@ const label = () => { pause.textContent = playing ? 'Pause' : 'Play'; };
 pause.addEventListener('click', () => { playing = !playing; label(); sync(); });
 label();
 
-// The glass pane: the browser's own modal, so focus, Esc and holding the page still come with it.
+// The glass pane: the browser's own modal, so focus, Esc and holding the page still come with it. Its count comes
+// from its cards, so it can't drift from them.
+const count = `${more.querySelectorAll('.cards li').length} in the app`;
+document.querySelector('.show-more').textContent = more.querySelector('h2').textContent = count;
 document.querySelector('.show-more').addEventListener('click', () => more.showModal());
 more.querySelector('.close').addEventListener('click', () => more.close());
 more.addEventListener('click', e => { if (e.target === more) more.close(); }); // a click outside the pane
@@ -97,3 +101,14 @@ first.decode().catch(() => {}).then(() => {
   addEventListener('resize', queue);
   frame();
 });
+
+// The pretend desktop's clock and calendar, in the visitor's own time and language, as the menu bar would show them.
+const clock = document.querySelector('.clock'), day = document.querySelector('.cal-day'), date = document.querySelector('.cal-num');
+const tick = () => {
+  const now = new Date();
+  clock.textContent = now.toLocaleString(undefined, { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).replace(/,/g, '');
+  day.textContent = now.toLocaleString(undefined, { weekday: 'short' }).toUpperCase();
+  date.textContent = now.getDate();
+};
+tick();
+setInterval(tick, 20000);

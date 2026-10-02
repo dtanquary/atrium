@@ -7,15 +7,15 @@ Atrium's website. Its job is to show the art: the wallpapers are the product and
 **The design is `design.md`**, the Claude Design handoff: hard rules, the verbatim copy, colour and type tokens, and nine directions. Its layout values came from frames drawn in HTML; the lab pages carry them now. Where this file and `design.md` differ, `design.md` wins on look and copy, and this file on how the site is built.
 
 ## Principles, in order
-1. **The art is the page.** Atrium's own wallpapers fill the screen, moving (at least 80% of the viewport). The site draws no decoration of its own: no gradient blobs, glows, glass, noise, 3D, stock photos or AI-generated images. The one exception is the glass pane of cards, which Dave asked for. The only pictures are Atrium's own renders, its Settings window and its icon. The page is near black (`#0A0A0B`), and its one accent comes from the work on screen.
+1. **The art is the page.** Atrium's own wallpapers fill the screen, moving (at least 80% of the viewport). The site draws no decoration of its own: no gradient blobs, glows, glass, noise, 3D, stock photos or AI-generated images. The exceptions, which Dave asked for: Liquid Glass on the pane of cards, and a pretend macOS menu bar and Dock. The only pictures are Atrium's own renders, its Settings window and its icon. The page is near black (`#0A0A0B`), and its one accent comes from the work on screen.
 2. **Calm, like the app.** Dave's direction in `../docs/README.md` applies here too: slow, ambient, soft and dim. Crossfades of a second or more, never a hard cut, even on first paint. No bounce, spring, parallax or scroll-jacking; the page scrolls like a page.
 3. **Modern by being native.** `@property`, `color-mix()` in OKLCH, `animation-timeline: view()`, `clip-path`, variable fonts, AV1. Where a feature is missing, the page falls back to a still one that is just as beautiful.
 4. **Honest.** Only the copy in `design.md`. No invented testimonials, download counts, press quotes or features.
 
 ## What's built
 The site is direction 2b, One Endless Canvas, from `design.md`.
-- `public/index.html`: one fixed canvas of six works; each section is one screen tall, with `data-work` and its words. Scrolling a screen dissolves one section's work into the next (consecutive sections with the same work hold it still), and only the words travel, at the page's own speed. Labels fade by their section's progress (`view-timeline`). The page ends on the download screen over Fish Tank; there, "Fourteen more in the app" opens a glass pane (a native `<dialog>`, 70% tint so names hold 4.5:1 over the sand) of cards for the wallpapers the canvas doesn't feature. Neither the cards nor the glass are in `design.md`: Dave asked for both (2026-10-01).
-- `public/site.js`: the stage (one looping video per work, stacked full screen), the scroll-driven dissolve, the accent, the glass pane, and pausing: with the tab, and from the Pause button in the top bar (WCAG 2.2.2).
+- `public/index.html`: one fixed canvas: six works with labels (title, type, line), then the download screen, which dissolves to Aurora (no label). Each section is one screen tall, with `data-work` and its words; consecutive sections with the same work hold it still, and only the words travel, at the page's own speed. Labels fade by their section's progress (`view-timeline`). On the download screen, "20 in the app" opens a Liquid Glass pane (a native `<dialog>`) with a card for every wallpaper. On desktops a pretend macOS menu bar (Finder's menus, Atrium's status icon, a live clock) sits above the site's top bar, and a glass Dock at the bottom: our own icons and no Apple logo, so none of Apple's artwork or marks; decorative and `aria-hidden`. None of this glass or desktop is in `design.md`: Dave asked for it (2026-10-01).
+- `public/site.js`: the stage (one looping video per work, stacked full screen), the scroll-driven dissolve, the accent, the glass pane (its count comes from its cards), the pretend clock and calendar, and pausing: with the tab, and from the Pause button in the top bar (WCAG 2.2.2).
 - `public/site.css`: the ground, Figtree and the stage. `public/credits.html` uses it too.
 - `public/credits.html`: the photographs and data inside the six works and on the cards. The Fish Tank list was generated from `../Sources/Atrium/Resources/reef-credits.tsv` (one line per source); regenerate it if the reef changes. CC BY requires credit on the site itself, so the download screen links to it.
 - `public/fonts/`: Figtree, variable, Latin only, from Google Fonts (OFL). Self-hosted: no third-party requests.
@@ -26,13 +26,14 @@ Every image comes from the app's own renderer, never a screen recording, so the 
 - `site/media.sh [slug…]` renders each work with the snapshot test at 30 fps (`SNAPSHOT_MOVIE_FPS=30`) and its look's settings (e.g. `nebula.palette=Hubble`, `galaxy.kind=Whirlpool`), crossfades the last 2 s of a 14 s render into its first 2 s so the 12 s loop has no seam, and writes AV1 and HEVC (Safari on M1 and M2 can't decode AV1) plus a JPEG poster of the first frame to `public/media/`. That folder is gitignored, so the script is the source of truth. About 1.5 minutes a work.
 - Desktop is 2560 wide; phones get a 3:4 portrait slab cut around the work's focal point from `design.md`, at 1080×1440. `site.js` picks phone media on portrait screens. The `codecs` strings in `site.js` match the levels the encodes come out at; check with `ffprobe` if the sizes change.
 - Nebula rolls a new nebula every render. Re-render with `OUT=/some/dir` until a roll suits, then copy it in.
-- `site/media.sh cards` cuts the cards (640×400) from the README's screenshots in `../docs/images`; the `CARDS` list in the script picks one per wallpaper.
+- `site/media.sh cards` cuts a card (640×400) for every wallpaper from the README's screenshots in `../docs/images`; the `CARDS` list in the script picks one each. Add a line there and a `<li>` in the pane for a new wallpaper.
+- Aurora (Purple palette) ends the canvas; its accent, `#d9b0fa`, was measured like the others: the chroma-weighted mean hue of its render at oklch L 0.82, C 0.11.
 - ffmpeg and swift test read stdin; in the script's loop they must not (`-nostdin`, `</dev/null`), or they swallow the list of works.
 
 ## Access and performance
 - Only works on screen play; the rest wait with `preload="none"` until they're next. Everything pauses with the tab.
 - `prefers-reduced-motion` starts on the posters (Play resumes), and the dissolves stay (they're what Reduce Motion asks for).
-- On phones the download screen's two feature lines move into the glass pane, clear of the coral in Fish Tank's phone crop; only one copy is ever displayed. Download and the pane's link share a line there for the same reason.
+- On phones Download and the pane's button share a line, and there's no pretend desktop: a menu bar and Dock would crowd a 390-px screen.
 - No analytics, cookies, trackers or third-party requests.
 
 ## Build and deploy
@@ -45,7 +46,7 @@ Every image comes from the app's own renderer, never a screen recording, so the 
 
 ## Plan
 1. ~~Pick a direction~~: 2b, One Endless Canvas (2026-10-01).
-2. ~~Build it~~, with the cards in a glass pane.
+2. ~~Build it~~, with every wallpaper on a Liquid Glass pane, Aurora at the end, and a pretend desktop.
 3. **Polish:** a social card (`og:image`), page weights, and a pass on a real iPhone and in Safari.
 4. **Launch:** a production deploy (`--branch main`), with atrium.show attached as the project's custom domain.
 
@@ -55,3 +56,4 @@ Every image comes from the app's own renderer, never a screen recording, so the 
 - 2026-10-01: Claude Design explored nine directions (`design.md`); only the six works with wall labels appear. Dave picked 2c The Skylight, 2a The Exhibition and 2b One Endless Canvas to build live and compare.
 - 2026-10-01: Dave chose 2b One Endless Canvas ("my favorite"), and asked for sleek cards at the bottom showing the wallpapers the canvas doesn't feature. 2a and 2c are in git history before the change that removed `lab/`.
 - 2026-10-01: a band of cards below the canvas lost the page's ending on Fish Tank, with the words "in that really nice spot". Dave asked for the cards on "a semi transparent glass background modal" instead, so the page ends where it did.
+- 2026-10-01: Dave asked for the button to read "<total> in the app" with a card for every wallpaper, Fish Tank's label to have a type row like the others ("Simulation"), Aurora after Fish Tank (the download screen dissolves to it), the pane to look like Apple's Liquid Glass, and a pretend menu bar and Dock (our own icons, no Apple logo; a separate bar above the site's own; desktop only).
