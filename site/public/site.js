@@ -41,7 +41,7 @@ const sync = () => all.forEach(v => (+v.style.opacity > 0 ? run(v) : v.pause()))
 document.addEventListener('visibilitychange', sync); // pause with the tab, as the app pauses when covered
 
 // A visible way to stop all motion (WCAG 2.2.2).
-const label = () => { pause.textContent = playing ? 'Pause' : 'Play'; };
+const label = () => { pause.textContent = playing ? 'Pause' : 'Play'; root.classList.toggle('is-paused', !playing); }; // laptop.js reads is-paused
 pause.addEventListener('click', () => { playing = !playing; label(); sync(); });
 label();
 

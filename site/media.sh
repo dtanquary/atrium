@@ -2,7 +2,8 @@
 # Renders the works on atrium.show with the app's own renderer (the snapshot test), so the site shows exactly what
 # the app draws. Each work gets a seamless 30 fps loop and a poster, for desktop (2560 wide) and for phones (a 3:4
 # portrait slab around the work's focal point, from the design handoff). AV1 for Chrome, Firefox and newer Safari;
-# HEVC for Safari on M1 and M2. Output goes to site/public/media, which is gitignored: this script is the source.
+# HEVC for Safari on M1 and M2, plus a small landscape copy for the laptop on portrait phones. Output goes to
+# site/public/media, which is gitignored: this script is the source.
 #   site/media.sh               # all of them
 #   site/media.sh nebula galaxy # just these
 #   site/media.sh cards         # just the cards for every wallpaper, cut from the README's screenshots
@@ -73,8 +74,12 @@ echo "$WORKS" | while IFS='|' read -r slug scene focal seconds extra; do
     slab=$((h * 3 / 4 / 2 * 2)) x=$((w * focal / 100 - h * 3 / 8))
     [ $x -lt 0 ] && x=0
     [ $x -gt $((w - slab)) ] && x=$((w - slab))
-    for size in desktop phone; do
-        if [ $size = desktop ]; then vf="scale=2560:-2:flags=lanczos"; else vf="crop=$slab:$h:$x:0,scale=1080:1440:flags=lanczos"; fi
+    for size in desktop phone laptop; do
+        case $size in
+            desktop) vf="scale=2560:-2:flags=lanczos" ;;
+            phone) vf="crop=$slab:$h:$x:0,scale=1080:1440:flags=lanczos" ;;
+            laptop) vf="scale=960:-2:flags=lanczos" ;; # the small laptop's screen on portrait phones (laptop.js)
+        esac
         ffmpeg -nostdin -loglevel error -y -i "$dir/master.mp4" -vf "$vf" -an -pix_fmt yuv420p -g 150 -movflags +faststart \
             -c:v libsvtav1 -preset 5 -crf 36 -svtav1-params tune=0 "$OUT/$slug-$size.av1.mp4"
         ffmpeg -nostdin -loglevel error -y -i "$dir/master.mp4" -vf "$vf" -an -pix_fmt yuv420p -g 150 -movflags +faststart \

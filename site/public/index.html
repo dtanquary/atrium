@@ -102,6 +102,7 @@
     .tagline { font-size: 20px; }
     .fine { font-size: 12px; }
     .label, [data-work] .label { left: 24px; right: 24px; top: 130px; }
+    @keyframes pass { 0%, 25% { opacity: 0; } 45%, 50% { opacity: 1; } 54%, 100% { opacity: 0; } } /* gone before they reach the site's bar */
     .last { inset: 88px 24px auto; flex-direction: column; gap: 28px; }
     /* Download and the pane's button share a line. */
     .last > div:first-child { display: grid; grid-template-columns: auto 1fr; gap: 12px 22px; align-items: baseline; }
