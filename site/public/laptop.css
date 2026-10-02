@@ -20,9 +20,12 @@
 .laptop .screen > .stage, .laptop .screen > .menubar, .laptop .screen > .dock { position: absolute; }
 .laptop .notch { position: absolute; top: 0; left: 50%; width: 9vw; height: 28px; border-radius: 0 0 9px 9px; background: #0c0c0e; opacity: var(--frame, 1);
   transform: translateX(-50%) translateZ(2px); backface-visibility: hidden; } /* just in front of the screen */
-/* The screen wakes as the lid rises: the wallpaper fades up (site.js), then the menu bar and Dock. */
-.laptop .screen > .menubar, .laptop .screen > .dock { opacity: 0; transition: opacity 1.2s ease-in-out 1.6s; }
-.laptop.is-opening .screen > .menubar, .laptop.is-opening .screen > .dock { opacity: 1; }
+/* The menu bar and Dock only show while the laptop does: they fade with the zoom (--frame), and on the way in they
+   also wait for the screen to wake, after the wallpaper fades up (site.js). --awake makes that a timed fade. */
+@property --awake { syntax: '<number>'; inherits: true; initial-value: 0; }
+.laptop { --awake: 0; transition: --awake 1.2s ease-in-out 1.6s; }
+.laptop.is-opening { --awake: 1; }
+.laptop .screen > .menubar, .laptop .screen > .dock { display: flex; opacity: calc(var(--frame, 1) * var(--awake)); }
 
 /* The base: a deck lying back from the hinge toward you, with its keyboard and trackpad, and a thin front edge.
    Its back edge is exactly as wide as the lid, meeting the lid's bottom corners, and perspective widens it toward
@@ -37,12 +40,10 @@
   background: linear-gradient(#4a4a51, #232327 30%, #141416); }
 .laptop .front::before { content: ''; position: absolute; top: 0; left: 50%; translate: -50% 0; width: 13%; height: 45%; border-radius: 0 0 1vw 1vw; background: #18181b; }
 
-/* Words: the site's bar rises with the menu bar it sits under; the opening lines centre under the laptop, and the
-   download screen's sit in the dark below it. */
-.laptop .top { top: calc(50px - 14px * var(--frame, 1)); }
+/* Words: the opening lines centre under the laptop, and the download screen's sit in the dark below it. */
 .laptop .opening { left: 0; right: 0; bottom: 48px; align-items: center; text-align: center; opacity: calc(1 - 3 * var(--e, 0)); } /* gone before the zoom passes it */
 .laptop .last { inset: auto 56px 44px; align-items: flex-end; }
 
 @media (prefers-reduced-motion: reduce) {
-  .laptop .lid, .laptop .screen > .menubar, .laptop .screen > .dock { transition: none; }
+  .laptop, .laptop .lid { transition: none; }
 }

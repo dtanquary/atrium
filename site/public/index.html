@@ -12,9 +12,9 @@
 <link rel="stylesheet" href="laptop.css"> <!-- the laptop opening: delete this line and laptop.js below to turn it off -->
 <style>
   /* One Endless Canvas (design.md, 2b): the canvas never moves; scrolling a screen dissolves one work into the
-     next, and only the words travel, at the page's own speed. On desktops a pretend menu bar and Dock frame it as a
-     Mac desktop (Dave asked for them, 2026-10-01). */
-  .top { position: fixed; top: 50px; left: 56px; right: 56px; display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; z-index: 1; }
+     next, and only the words travel, at the page's own speed. On the laptop (laptop.js) a pretend menu bar and Dock
+     frame it as a Mac desktop (Dave asked for them, 2026-10-01). */
+  .top { position: fixed; top: 36px; left: 56px; right: 56px; display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; z-index: 1; }
   .top .wordmark { font-weight: 600; }
   .top .end { display: flex; gap: 28px; align-items: baseline; }
   .top .download { font-weight: 500; transition: opacity 1.2s ease-in-out; }
@@ -22,7 +22,7 @@
   .pause { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; }
   main { position: relative; }
   section { position: relative; }
-  .opening { position: absolute; left: 56px; bottom: 116px; display: flex; flex-direction: column; gap: 10px; }
+  .opening { position: absolute; left: 56px; bottom: 64px; display: flex; flex-direction: column; gap: 10px; }
   .tagline { font-size: 22px; font-weight: 300; }
   .fine { font-size: 13px; color: #d6d2e2; }
   .label { position: absolute; left: 56px; top: 57.8%; display: flex; flex-direction: column; gap: 6px; }
@@ -57,8 +57,9 @@
     -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
     mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); }
 
-  /* The pretend desktop: decorative, hidden from assistive technology, and on desktops only. Our own icons and no
-     Apple logo, so none of Apple's artwork or marks. */
+  /* The pretend desktop: decorative and hidden from assistive technology. It only ever shows on the laptop's screen,
+     so laptop.css shows it (and fades it with the zoom); without the laptop, as on phones, there's none. Our own
+     icons and no Apple logo, so none of Apple's artwork or marks. */
   .menubar { position: fixed; inset: 0 0 auto; height: 28px; z-index: 2; display: flex; justify-content: space-between; align-items: center; padding: 0 16px 0 18px;
     font: 500 13px/1 -apple-system, BlinkMacSystemFont, system-ui, sans-serif; color: #fff; text-shadow: 0 1px 2px rgb(0 0 0 / 0.3);
     background: rgb(255 255 255 / 0.05); -webkit-backdrop-filter: blur(18px) saturate(160%); backdrop-filter: blur(18px) saturate(160%); }
@@ -70,6 +71,7 @@
   .dock svg, .dock img { display: block; width: 100%; height: 100%; }
   .dock .on::after { content: ''; position: absolute; left: 50%; bottom: -6px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: rgb(255 255 255 / 0.85); }
   .dock hr { align-self: stretch; width: 1px; margin: 4px 3px; border: 0; background: rgb(255 255 255 / 0.3); }
+  .menubar, .dock { display: none; }
 
   /* Every wallpaper in the app, as cards on a pane of glass. A native <dialog>: focus, Esc and holding the page
      still are the browser's job. The panel scrolls inside the dialog so the rim and Close stay put. */
@@ -91,7 +93,6 @@
 
   @media (max-width: 1100px) { .cards { grid-template-columns: repeat(4, 1fr); } }
   @media (max-width: 699px) {
-    .menubar, .dock { display: none; }
     .top { top: 28px; left: 24px; right: 24px; }
     .top .end { gap: 20px; }
     .opening { left: 24px; right: 24px; bottom: 48px; gap: 8px; }
