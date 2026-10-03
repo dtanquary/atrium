@@ -173,17 +173,18 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
                 float dh = h - u_low[i];
                 // the emission rises over a few km at the lower edge and fades with height, smoothly: any step or
                 // corner at the edge draws a hairline along it
-                float green = (dh < 0.0 ? exp(-dh * dh / (30.0 + 2.0 * sh * sh + 400.0 * ax))
+                float green = (dh < 0.0 ? exp(-dh * dh / (30.0 + 0.17 * sh * sh + 400.0 * ax))
                                         : exp((4.0 - sqrt(dh * dh + 16.0)) / (10.0 + 25.0 * r.a * r.a)))
                               * (0.85 + 0.3 * r.b);
                 float red = exp(-(h - 240.0) * (h - 240.0) / 3600.0);
                 float glow = (0.015 + 0.1 * ax) * exp(-abs(dh) / (15.0 + 100.0 * ax));   // scattered around the edge
-                float path = pfh * min(length(dir) / hor, 3.0) * patches * u_lum[i] * seen;
+                float column = min(length(dir) / hor, 3.0) * patches * u_lum[i] * seen;
+                float path = pfh * column;
                 // the thin fringe under the edge only tints what it covers: seen through a deep slab it averages away
                 vec3 hue = mix(u_body, u_fringe, (1.0 - smoothstep(-4.0, 3.0, dh)) * 4.0 / (4.0 + sh));
                 hue = mix(hue, u_upper, smoothstep(20.0, 70.0, dh));
                 // the crown: oxygen red (or the palette's top colour) high up, too slow to show rays
-                light += (hue * (green + glow) + u_crown * u_red * red) * path;
+                light += (hue * green + u_crown * u_red * red) * path + hue * glow * column;
             }
         }
         // airglow, grey-teal and brighter toward the horizon, then stars: a faint tail and a few bright ones,
@@ -285,7 +286,7 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
     private func spawn(_ i: Int) {
         let main = !(0..<4).contains { $0 != i && target[$0] >= 0.8 }
         dist[i] = main ? .random(in: 220...330, using: &rng) : .random(in: 180...380, using: &rng)
-        angle[i] = heading + .random(in: -0.25...0.25, using: &rng)
+        angle[i] = heading + .random(in: -0.06...0.06, using: &rng) // real arcs run nearly parallel, one behind another
         target[i] = main ? 1 : .random(in: 0.3...0.7, using: &rng)
         low[i] = .random(in: 98...110, using: &rng)
         thick[i] = .random(in: 3...12, using: &rng)
@@ -297,7 +298,7 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
     func rearrange() {
         let on = (0..<4).filter { target[$0] > 0 }, free = (0..<4).filter { target[$0] == 0 && lum[$0] == 0 }
         guard let out = on.randomElement(using: &rng) else { return }
-        heading = min(max(heading + .random(in: -0.15...0.15, using: &rng), -0.4), 0.4)
+        heading = min(max(heading + .random(in: -0.06...0.06, using: &rng), -0.4), 0.4)
         target[out] = 0
         let want = [1, 1, 2, 2, 3].randomElement(using: &rng)!
         if on.count - 1 < want, let slot = free.randomElement(using: &rng) { spawn(slot) }
