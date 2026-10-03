@@ -79,6 +79,19 @@ vec3 grade(vec3 col, float pivot, float hue, float saturation, float contrast, f
 
 """
 
+/// How brightly the Sun lights a point on the Moon's disc, for the small Moons in Weather and Live Sky: McEwen's
+/// lunar-Lambert, as in The Moon. A full Moon is flat to the limb; at other phases the light fades toward the
+/// terminator, as it does in the sky. `n` is the surface normal and `l` points at the Sun, with the viewer along +z.
+let moonShade = """
+float moonShade(vec3 n, vec3 l) {
+    float g = acos(clamp(l.z, -1.0, 1.0)) * 57.29578;
+    float lommel = clamp(1.0 - 0.019 * g + 2.42e-4 * g * g - 1.46e-6 * g * g * g, 0.4, 1.0);
+    float mu0 = max(dot(n, l), 0.0);
+    return lommel * 2.0 * mu0 / (mu0 + n.z + 1e-4) + (1.0 - lommel) * mu0;
+}
+
+"""
+
 /// The Look sliders for a plain shader scene, keyed under `prefix`. Pass their uniforms to `grade` in the shader.
 func gradeKnobs(_ prefix: String) -> [Knob] {
     [

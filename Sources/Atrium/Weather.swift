@@ -204,7 +204,7 @@ class WeatherScene: SKScene {
         cameraUniforms.right.vectorFloat3Value = SIMD3<Float>(viewpoint.right)
         let sky = SKSpriteNode(color: .black, size: size)
         sky.anchorPoint = .zero
-        sky.shader = SKShader(source: shaderCommon + Self.skyShader, uniforms: [
+        sky.shader = SKShader(source: shaderCommon + moonShade + Self.skyShader, uniforms: [
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]), skyBefore, skyAfter, skyBlend,
             cameraUniforms.lens, cameraUniforms.forward, cameraUniforms.right, sunDirection, sunDisc, moonPlace, moonLight,
             moonColour, starsUniform, SKUniform(name: "u_moonTex", texture: Self.moonTexture),
@@ -378,7 +378,7 @@ class WeatherScene: SKScene {
             float sn = sin(u_moon.w);
             vec4 surface = texture2D(u_moonTex, vec2(cs * m.x + sn * m.y, cs * m.y - sn * m.x) * 0.5 + 0.5);
             vec3 n = vec3(m, sqrt(max(1.0 - dot(m, m), 0.0)));
-            float lit = smoothstep(-0.03, 0.06, dot(n, u_moonLight));
+            float lit = moonShade(n, u_moonLight);
             col += surface.rgb * surface.rgb * u_moonCol * (lit + 0.015) * surface.a;
         }
 

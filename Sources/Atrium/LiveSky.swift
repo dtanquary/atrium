@@ -320,7 +320,7 @@ final class LiveSky: SKScene {
 
         // A sphere lit from u_light (in the disc's frame), with the big maria where they sit seen from the north.
         // ponytail: maria are hand-placed soft blobs; swap in a real albedo map for more fidelity
-        moon.shader = SKShader(source: """
+        moon.shader = SKShader(source: moonShade + """
             float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
             float noise(vec2 x) {
                 vec2 i = floor(x);
@@ -344,12 +344,16 @@ final class LiveSky: SKScene {
                     + mare(p, vec2(-0.50, -0.40), 0.10);
                 float mottle = 0.9 + 0.1 * noise(p * 22.0);
                 vec3 surface = vec3(0.93, 0.91, 0.86) * (1.0 - 0.3 * min(dark, 1.0)) * mottle * (0.85 + 0.15 * n.z);
-                float lit = smoothstep(-0.04, 0.08, dot(n, u_light));
-                vec3 colour = surface * lit + vec3(0.03, 0.035, 0.05) * (1.0 - lit);
+                // Light to display (a square root, as Weather's film curve does) by night. By day the sky in front of
+                // the Moon outshines its dim ground near the terminator, its dark side and the earthshine on it, so the
+                // lit part fades into the blue.
+                float shade = moonShade(n, u_light);
+                float lit = mix(sqrt(shade), shade, u_day);
+                vec3 colour = surface * lit + vec3(0.03, 0.035, 0.05) * (1.0 - min(lit, 1.0)) * (1.0 - u_day);
                 float a = smoothstep(1.0, 0.93, r2);
-                gl_FragColor = vec4(colour * a, a);
+                gl_FragColor = vec4(colour * a, a * mix(1.0, min(lit, 1.0), u_day));
             }
-            """, uniforms: [moonLight])
+            """, uniforms: [moonLight, dayUniform])
         moon.zPosition = 4
         addChild(moon)
     }

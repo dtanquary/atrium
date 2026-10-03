@@ -29,6 +29,7 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
 - **Sun:** a 48 pt disc and a 360 pt glow, blended toward orange below 12° altitude. It's hidden below the horizon or out of view.
 - **Moon:** a 46 pt disc (exaggerated; the real Moon is about 5 pt at this scale) drawn by a shader.
   - The shader treats the disc as a sphere lit from `u_light`, with 11 hand-placed maria blobs.
+  - Its shading is `moonShade` (Shaders.swift, shared with Weather): McEwen's lunar-Lambert, as in The Moon, so the light fades toward the terminator instead of stopping at an edge. By night it's shown as its square root (light to display), over an opaque disc with a little earthshine. By day (`u_day`) the shade is used as it is and also as the disc's alpha, and the earthshine goes, so the dark side is sky and the lit part fades into the blue.
   - The disc is rotated so its north points to the celestial pole on screen (`screenAngle` toward `poleH`).
   - The light direction is measured from the Moon's north using `skyAngle`, which works in the local frame of someone facing the Moon with their head upright. That keeps it correct however the disc is turned.
   - The phase angle comes from `Sky.moonPhase(jd).lit` (`acos(2·lit − 1)`).
@@ -103,6 +104,7 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
 - **Name.** He asked for Night Sky based on his real location; it was renamed Live Sky once it followed the day. The code, file and type were renamed, and a saved "Night Sky" selection is migrated in main.swift.
 - **Daytime behaviour.** He chose option 3: stay a night sky but react to the Sun. The tag `night-sky-always-dark` keeps the always-dark version, in case he wants separate Day and Night wallpapers (`git show night-sky-always-dark:Sources/Wallpaper/NightSky.swift`).
 - **Moon.** "Show the moon phase as it would from my location" meant that the Moon itself should be accurate. A bottom-left phase badge was added, then removed at his request as redundant. Don't bring back a HUD for this.
+- **Moon's terminator (2026-10-03).** In Weather he saw the half Moon end in a hard edge by day, where the real one fades into the sky, and asked for Live Sky to be checked too. Both now share `moonShade`. Live Sky had also drawn the dark side as a black half-disc on the blue day sky.
 - **Switches.** He asked for the constellation and planet-label switches.
 - **Preview.** Added so he could see the daytime look on demand.
 
