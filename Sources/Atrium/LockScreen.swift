@@ -32,10 +32,10 @@ import UniformTypeIdentifiers
         for window in windows {
             guard let screen = window.screen, let id = uuid(screen), let view = window.contentView as? SKView,
                   let scene = view.scene, let image = view.texture(from: scene)?.cgImage() else { continue }
-            let current = NSWorkspace.shared.desktopImageURL(for: screen)
-            let ours = current?.path.hasPrefix(folder.path) == true
             // Theirs, unless it's one of ours; a wallpaper they've picked since replaces the one saved.
-            if let current, !ours { saved[id] = current.absoluteString }
+            if let current = NSWorkspace.shared.desktopImageURL(for: screen), !current.path.hasPrefix(folder.path) {
+                saved[id] = current.absoluteString
+            }
             // A name never used before: macOS keeps its picture of each URL, across launches, so a name that comes
             // round again can show a still from days ago.
             let file = folder.appending(path: "\(id)-\(UUID().uuidString).jpg")
@@ -43,7 +43,11 @@ import UniformTypeIdentifiers
             CGImageDestinationAddImage(out, image, [kCGImageDestinationLossyCompressionQuality: 0.9] as CFDictionary)
             guard CGImageDestinationFinalize(out) else { continue }
             do { try NSWorkspace.shared.setDesktopImageURL(file, for: screen, options: [.allowClipping: true]) } catch { continue }
-            if let current, ours { try? FileManager.default.removeItem(at: current) }
+            // The display's earlier stills go. Listed rather than asked of macOS, which reports a new wallpaper late.
+            for old in (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+            where old.lastPathComponent.hasPrefix(id) && old.lastPathComponent != file.lastPathComponent {
+                try? FileManager.default.removeItem(at: old)
+            }
         }
         UserDefaults.standard.set(saved, forKey: savedKey)
     }
