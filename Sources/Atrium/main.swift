@@ -365,8 +365,12 @@ if let source = IOPSNotificationCreateRunLoopSource({ _ in
 }, nil)?.takeRetainedValue() {
     CFRunLoopAddSource(CFRunLoopGetMain(), source, .defaultMode)
 }
-// Move on to another wallpaper every so often while Shuffle is on.
+// Move on to another wallpaper every so often while Shuffle is on, or at each unlock if it's set to. loginwindow posts
+// the unlock; the name isn't documented, but has been the same for years.
 Shuffle.reschedule()
+DistributedNotificationCenter.default().addObserver(forName: .init("com.apple.screenIsUnlocked"), object: nil, queue: .main) { _ in
+    MainActor.assumeIsolated { if Shuffle.onUnlock, let name = Shuffle.next() { show(name) } }
+}
 NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { _ in
     MainActor.assumeIsolated {
         Shuffle.reschedule()

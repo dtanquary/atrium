@@ -112,14 +112,17 @@ struct IconTile: View {
     }
 }
 
-/// While on, moves the desktop on to a random wallpaper every so often, skipping any left out in Settings → General.
-/// Any change of wallpaper, by hand or by Shuffle, starts the clock over.
+/// While on, moves the desktop on to a random wallpaper every so often, or each time the Mac is unlocked, skipping any
+/// left out in Settings → General. Any change of wallpaper, by hand or by Shuffle, starts the clock over.
 @MainActor enum Shuffle {
     static let on = Knob(key: "shuffle.on", label: "Shuffle wallpapers", range: 0...1, standard: 0, format: .toggle)
-    static let every = Knob(key: "shuffle.every", label: "Change wallpaper", range: 0...5, standard: 2,
+    static let every = Knob(key: "shuffle.every", label: "Change wallpaper", range: 0...6, standard: 2,
                             format: .choice(["Every 5 minutes", "Every 15 minutes", "Every 30 minutes", "Every hour",
-                                             "Every 3 hours", "Every day"]), shownWhen: on.key)
+                                             "Every 3 hours", "Every day", "On every unlock"]), shownWhen: on.key)
+    /// Each timed choice in minutes. The choice after them, On every unlock, has no timer.
     private static let minutes: [Double] = [5, 15, 30, 60, 180, 1440]
+    /// Whether Shuffle moves on as the Mac unlocks rather than on a timer.
+    static var onUnlock: Bool { on.value > 0.5 && Int(every.value) >= minutes.count }
     /// Wallpapers left out, by name and comma separated, so new wallpapers join in.
     static let skipKey = "shuffle.skip"
     static var skipped: [String] { (UserDefaults.standard.string(forKey: skipKey) ?? "").split(separator: ",").map(String.init) }
@@ -142,7 +145,7 @@ struct IconTile: View {
         guard state != scheduled else { return }
         scheduled = state
         pending?.cancel()
-        guard on.value > 0.5 else { return }
+        guard on.value > 0.5, !onUnlock else { return }
         let work = DispatchWorkItem {
             MainActor.assumeIsolated {
                 scheduled = [] // go round again even when there's nothing to move on to
@@ -151,7 +154,7 @@ struct IconTile: View {
             }
         }
         pending = work
-        let interval = minutes[min(max(Int(every.value), 0), minutes.count - 1)] * 60
+        let interval = minutes[max(Int(every.value), 0)] * 60
         DispatchQueue.main.asyncAfter(wallDeadline: .now() + interval, execute: work)
     }
 }

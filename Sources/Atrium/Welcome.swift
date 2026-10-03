@@ -126,7 +126,7 @@ struct WelcomeView: View {
         Form {
             if picks.count > 1 {
                 Section {
-                    Text("Shuffle will move between your \(picks.count) wallpapers every \(shuffleInterval). Change how often in Settings → General.")
+                    Text("Shuffle will move between your \(picks.count) wallpapers \(shuffleInterval). Change how often in Settings → General.")
                         .foregroundStyle(.secondary)
                 }
             }
@@ -207,9 +207,9 @@ struct WelcomeView: View {
 
     private var shuffleInterval: String {
         if case .choice(let names) = Shuffle.every.format {
-            return names[min(max(Int(Shuffle.every.value), 0), names.count - 1)].replacingOccurrences(of: "Every ", with: "").lowercased()
+            return names[min(max(Int(Shuffle.every.value), 0), names.count - 1)].lowercased()
         }
-        return "so often"
+        return "every so often"
     }
 
     private func move(_ by: Int) {
