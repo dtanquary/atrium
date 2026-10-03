@@ -196,12 +196,15 @@ if !scenes.contains(where: { $0.name == current }) {
         if !window.isVisible {
             let hosting = NSHostingController(rootView: SettingsView())
             hosting.sizingOptions = [] // grouped Forms scroll, so they have no height of their own to size the window by
+            // The window takes its new content's size, which is nothing yet, and would save that as a 1×1 frame.
+            hosting.view.frame.size = window.contentRect(forFrameRect: window.frame).size
             window.contentViewController = hosting
-            if !window.setFrameUsingName("Settings") {
+            // Not "Settings": 0.67.0 saved a 1×1 frame under that name on reopening Settings, which hid it for good.
+            if !window.setFrameUsingName("Settings Window") {
                 window.setContentSize(NSSize(width: 820, height: 640))
                 window.center()
             }
-            window.setFrameAutosaveName("Settings")
+            window.setFrameAutosaveName("Settings Window")
             NSApp.setActivationPolicy(.regular)
         }
         NSApp.activate()
