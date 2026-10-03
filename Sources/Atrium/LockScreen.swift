@@ -13,8 +13,6 @@ import UniformTypeIdentifiers
     private static let savedKey = "lockScreen.saved"
     private static let folder = URL.applicationSupportDirectory.appending(path: "com.dtanquary.atrium/lock-screen")
     private static var matching: Bool?
-    /// Alternates the stills' names: macOS may not reload a wallpaper whose URL hasn't changed.
-    private static var turn = 0
 
     /// Matches or restores as the switch says; call it whenever the wallpaper or the displays change.
     static func update(_ windows: [NSWindow]) {
@@ -31,19 +29,21 @@ import UniformTypeIdentifiers
     static func match(_ windows: [NSWindow]) {
         var saved = UserDefaults.standard.dictionary(forKey: savedKey) as? [String: String] ?? [:]
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        turn += 1
         for window in windows {
             guard let screen = window.screen, let id = uuid(screen), let view = window.contentView as? SKView,
                   let scene = view.scene, let image = view.texture(from: scene)?.cgImage() else { continue }
+            let current = NSWorkspace.shared.desktopImageURL(for: screen)
+            let ours = current?.path.hasPrefix(folder.path) == true
             // Theirs, unless it's one of ours; a wallpaper they've picked since replaces the one saved.
-            if let current = NSWorkspace.shared.desktopImageURL(for: screen), !current.path.hasPrefix(folder.path) {
-                saved[id] = current.absoluteString
-            }
-            let file = folder.appending(path: "\(id)-\(turn % 2).jpg")
+            if let current, !ours { saved[id] = current.absoluteString }
+            // A name never used before: macOS keeps its picture of each URL, across launches, so a name that comes
+            // round again can show a still from days ago.
+            let file = folder.appending(path: "\(id)-\(UUID().uuidString).jpg")
             guard let out = CGImageDestinationCreateWithURL(file as CFURL, UTType.jpeg.identifier as CFString, 1, nil) else { continue }
             CGImageDestinationAddImage(out, image, [kCGImageDestinationLossyCompressionQuality: 0.9] as CFDictionary)
             guard CGImageDestinationFinalize(out) else { continue }
-            try? NSWorkspace.shared.setDesktopImageURL(file, for: screen, options: [.allowClipping: true])
+            do { try NSWorkspace.shared.setDesktopImageURL(file, for: screen, options: [.allowClipping: true]) } catch { continue }
+            if let current, ours { try? FileManager.default.removeItem(at: current) }
         }
         UserDefaults.standard.set(saved, forKey: savedKey)
     }
