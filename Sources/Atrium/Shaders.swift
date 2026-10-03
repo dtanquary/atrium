@@ -51,7 +51,10 @@ float starField(vec2 pts, float cell, float density, float t) {
     float mag = pow(r.w, 5.0);
     float d = length(fract(pts / cell) - 0.5 - off) * cell;
     float twinkle = 0.8 + 0.2 * sin(mod(t, 3600.0) * (1.0 + 3.0 * h) + h * 50.0); // hourly: a jump in a twinkle can't be seen
-    return (smoothstep(0.6 + 1.2 * mag, 0.0, d) + 0.3 * mag * exp(-d * 0.4)) * (0.3 + 0.9 * mag) * twinkle;
+    // A star can't draw outside its cell, so it and its glow fade out within `room`, the distance to the cell's
+    // nearest edge; cut off at the edge, the glow showed as a faint square around each bright star.
+    float room = (0.5 - max(abs(off.x), abs(off.y))) * cell;
+    return (smoothstep(min(0.6 + 1.2 * mag, room), 0.0, d) + 0.3 * mag * exp(-d * 0.4) * smoothstep(room, 0.0, d)) * (0.3 + 0.9 * mag) * twinkle;
 }
 
 // A few bright foreground stars with four-point diffraction spikes; about half shimmer very gently and slowly.
