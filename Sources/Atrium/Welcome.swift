@@ -2,9 +2,9 @@ import ImageIO
 import ServiceManagement
 import SwiftUI
 
-/// The welcome, a sheet over Settings on first launch and from About → Show Welcome: pick the wallpapers you like
-/// (the first goes on the desktop, and Shuffle moves between them), allow location if they use it, then a few
-/// switches. Skipping changes nothing.
+/// The welcome, a sheet over Settings on first launch and from About → Show Welcome: tap a wallpaper to put it on the
+/// desktop (as many as you like, to try them), allow location if they use it, then a few switches.
+/// Skipping keeps the wallpaper last tapped and changes nothing else.
 struct WelcomeView: View {
     /// Set to show the welcome; Settings shows it over whatever page is open.
     static let key = "welcome.show"
@@ -23,14 +23,15 @@ struct WelcomeView: View {
     @Environment(\.colorScheme) private var scheme
     private enum Step { case pick, location, switches }
     @State private var step = Step.pick
-    /// In the order picked; the first goes on the desktop.
-    @State private var picks: [String] = []
+    @AppStorage("scene") private var current = defaultScene.name
+    /// On for a new user, so they meet every wallpaper; otherwise as Shuffle is.
+    @State private var shuffle = UserDefaults.standard.object(forKey: Shuffle.on.key) == nil || Shuffle.on.value > 0.5
     @State private var openAtLogin = SMAppService.mainApp.status == .enabled
     @State private var matchLockScreen = LockScreen.knob.value > 0.5
     @State private var fullSpeed = Power.battery.value >= Power.plugged.value
 
     private var steps: [Step] {
-        Location.shared.undecided && picks.contains(where: Self.local.contains) ? [.pick, .location, .switches] : [.pick, .switches]
+        Location.shared.undecided && (shuffle || Self.local.contains(current)) ? [.pick, .location, .switches] : [.pick, .switches]
     }
 
     var body: some View {
@@ -80,8 +81,8 @@ struct WelcomeView: View {
 
     private var subtitle: String {
         switch step {
-        case .pick: "Pick the wallpapers you like. The first goes on your desktop, and Atrium moves between them."
-        case .location: "Some of your picks show the real sky, weather and light where you are."
+        case .pick: "Tap a wallpaper to put it on your desktop. Try as many as you like."
+        case .location: "Some wallpapers show the real sky, weather and light where you are."
         case .switches: "A few last choices. Everything here is in Settings too."
         }
     }
@@ -124,12 +125,6 @@ struct WelcomeView: View {
 
     private var switches: some View {
         Form {
-            if picks.count > 1 {
-                Section {
-                    Text("Shuffle will move between your \(picks.count) wallpapers \(shuffleInterval). Change how often in Settings → General.")
-                        .foregroundStyle(.secondary)
-                }
-            }
             Section {
                 Toggle("Open at Login", isOn: $openAtLogin)
             } footer: {
@@ -139,6 +134,12 @@ struct WelcomeView: View {
                 Toggle("Match the lock screen", isOn: $matchLockScreen)
             } footer: {
                 Text("Sets your Mac's own wallpaper to a still of Atrium's, so the lock screen and the tint of windows match. Yours comes back when you turn this off or quit.")
+                    .foregroundStyle(.secondary)
+            }
+            Section {
+                Toggle("Shuffle between all wallpapers automatically", isOn: $shuffle)
+            } footer: {
+                Text("Moves on to a different wallpaper \(shuffleInterval), so you get to see them all. Change how often, or leave some out, in Settings → General.")
                     .foregroundStyle(.secondary)
             }
             Section {
@@ -163,9 +164,9 @@ struct WelcomeView: View {
     }
 
     private func tile(_ name: String) -> some View {
-        let picked = picks.contains(name)
+        let picked = name == current
         return Button {
-            if picked { picks.removeAll { $0 == name } } else { picks.append(name) }
+            show(name)
         } label: {
             VStack(spacing: 6) {
                 Color.clear
@@ -217,14 +218,11 @@ struct WelcomeView: View {
         if steps.indices.contains(i) { step = steps[i] }
     }
 
-    /// Puts the first pick on the desktop and Shuffle on the rest, then applies the switches.
+    /// Applies the switches, Shuffle taking in every wallpaper, and leaves Settings on the wallpaper picked.
     private func finish() {
-        if let first = picks.first {
-            UserDefaults.standard.set(scenes.map(\.name).filter { !picks.contains($0) }.joined(separator: ","), forKey: Shuffle.skipKey)
-            UserDefaults.standard.set(picks.count > 1 ? 1.0 : 0.0, forKey: Shuffle.on.key)
-            UserDefaults.standard.set(first, forKey: SettingsView.pageKey)
-            show(first)
-        }
+        UserDefaults.standard.set(current, forKey: SettingsView.pageKey)
+        UserDefaults.standard.set(shuffle ? 1.0 : 0.0, forKey: Shuffle.on.key)
+        if shuffle { UserDefaults.standard.removeObject(forKey: Shuffle.skipKey) }
         if openAtLogin != (SMAppService.mainApp.status == .enabled) { setOpenAtLogin(openAtLogin) }
         UserDefaults.standard.set(matchLockScreen ? 1.0 : 0.0, forKey: LockScreen.knob.key)
         if fullSpeed {

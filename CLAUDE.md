@@ -20,7 +20,7 @@ Atrium is a menu bar app that plays animated wallpapers on macOS 27. Swift packa
 ## Layout
 - `Sources/Atrium/main.swift`: the app host (one window per display, the menu, handling display changes).
 - `Scenes.swift`: the scene registry (sorted by name for the menu and Settings), plus shared helpers `shaderScene`, `paint` and `resource`.
-- `Welcome.swift`: the welcome sheet over Settings (first launch, and About → Show Welcome): pick wallpapers by screenshot (the first goes on the desktop, Shuffle takes the rest), location if they use it, then Open at Login, Match the lock screen and full speed on battery. Its mood groups and `local` list name wallpapers; a new one joins the last group on its own.
+- `Welcome.swift`: the welcome sheet over Settings (first launch, and About → Show Welcome): tap a screenshot to put that wallpaper on the desktop (as many as they like), location if they use it, then Open at Login, Match the lock screen, Shuffle between all wallpapers (on for new users) and full speed on battery. Its mood groups and `local` list name wallpapers; a new one joins the last group on its own.
 - `Location.swift`: `Location.shared`, using CoreLocation with a fallback guessed from the time zone. The last fix is saved in UserDefaults.
 - `LiveWeather.swift`: `LiveWeather.shared`, the current weather from Open-Meteo, one fetch shared by every scene. Call `poll()` from a periodic action, read `latest`, observe `LiveWeather.changed`.
 - `Sources/TreeGrowth/`: A Tree for the Year's growth and bake, its own module built with `-O` even in debug (Foundation and simd only).

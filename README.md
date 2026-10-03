@@ -194,7 +194,7 @@ A pixel-art skyline that follows your clock, with traffic and windows lighting u
 
 ## Settings
 
-The first time Atrium opens, a short welcome helps you pick the wallpapers you like (it's in Settings → About → Show Welcome any time after). Choose Settings… (⌘,) from the menu bar icon. Every wallpaper has a page, laid out like System Settings, with its palettes, photos, sliders, switches and menus. The wallpaper runs live behind the top of its page, so each change shows as you make it. General holds Open at Login and Shuffle; Power sets the frame rate on mains power, on battery and in Low Power Mode.
+The first time Atrium opens, a short welcome lets you try the wallpapers on your desktop and shuffle between them all (it's in Settings → About → Show Welcome any time after). Choose Settings… (⌘,) from the menu bar icon. Every wallpaper has a page, laid out like System Settings, with its palettes, photos, sliders, switches and menus. The wallpaper runs live behind the top of its page, so each change shows as you make it. General holds Open at Login and Shuffle; Power sets the frame rate on mains power, on battery and in Low Power Mode.
 
 | ![Settings for Solar System Tour: a grid of worlds to hold the tour on](docs/images/settings-solar-system-tour.jpg) | ![Settings for Rain on Glass: ten real places and seven city-light palettes behind the glass](docs/images/settings-rain-on-glass.jpg) |
 |---|---|
