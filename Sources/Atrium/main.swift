@@ -25,7 +25,10 @@ final class WallpaperView: SKView, SKViewDelegate {
         wake(for: 0.5)
     }
 
+    /// Covered, the view isn't drawing, so a transition would wait there, `self.scene` still the old one, until it's
+    /// uncovered: the lock screen's still, taken meanwhile, would be of the wallpaper before. So it swaps straight.
     override func presentScene(_ scene: SKScene, transition: SKTransition) {
+        guard window?.occlusionState.contains(.visible) == true else { return presentScene(scene) }
         super.presentScene(scene, transition: transition)
         wake(for: 1.5)
     }

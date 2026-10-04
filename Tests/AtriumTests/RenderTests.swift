@@ -4,6 +4,16 @@ import Testing
 import UniformTypeIdentifiers
 @testable import Atrium
 
+/// A view that isn't drawing (covered, locked, asleep) can't run a crossfade, which would leave the old scene in
+/// place for the lock screen's still.
+@MainActor @Test func coveredViewSwitchesSceneWithoutFading() {
+    let view = WallpaperView(frame: CGRect(x: 0, y: 0, width: 64, height: 64))
+    let old = SKScene(size: view.frame.size), new = SKScene(size: view.frame.size)
+    view.presentScene(old)
+    view.presentScene(new, transition: .crossFade(withDuration: 0.8))
+    #expect(view.scene === new)
+}
+
 /// Renders every wallpaper offscreen at Retina size, saves a PNG to look at, and prints what a frame costs.
 /// Fails if a scene comes out as one flat colour (e.g. a shader that didn't compile).
 ///
