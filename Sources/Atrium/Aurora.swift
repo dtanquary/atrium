@@ -172,12 +172,15 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
                 float patches = 0.4 + 0.6 * smoothstep(0.2, 0.75, texture2D(u_arc, arcAt(l / 2500.0 + u_offset[i] * 1.4 + u_phase * 0.00002)).r);
                 float dh = h - u_low[i];
                 // the emission rises over a few km at the lower edge and fades with height, smoothly: any step or
-                // corner at the edge draws a hairline along it
+                // corner at the edge draws a hairline along it. Nothing shines under a real aurora's lower border
+                // (docs/aurora.md, Sources), so below it only the slab's depth (`sh` km of heights along the line of
+                // sight, a box: variance sh²/12) and haze soften the edge
                 float green = (dh < 0.0 ? exp(-dh * dh / (30.0 + 0.17 * sh * sh + 400.0 * ax))
                                         : exp((4.0 - sqrt(dh * dh + 16.0)) / (10.0 + 25.0 * r.a * r.a)))
                               * (0.85 + 0.3 * r.b);
                 float red = exp(-(h - 240.0) * (h - 240.0) / 3600.0);
                 float glow = (0.015 + 0.1 * ax) * exp(-abs(dh) / (15.0 + 100.0 * ax));   // scattered around the edge
+                // scattered light is smooth, so the glow takes the curtain's brightness without the fold pillars
                 float column = min(length(dir) / hor, 3.0) * patches * u_lum[i] * seen;
                 float path = pfh * column;
                 // the thin fringe under the edge only tints what it covers: seen through a deep slab it averages away

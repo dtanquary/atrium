@@ -97,7 +97,8 @@ CPU 0.5–0.7 ms and GPU 1.0–1.45 ms per frame (release build, 2x, 2026-09-25)
   - The lower edge's smear from the slab's depth was `2·sh²`, about four times what the geometry gives, so where a curtain is seen at a slant (the edges of the view, and fold pillars) its hem dissolved into streaks hanging 20–30 km below. Now `0.17·sh²`.
   - The scattered glow was multiplied by the fold pillars' path factor, which drew faint dull-red columns from the band down to the mountains. It now takes only the curtain's brightness.
   - Curtains lay up to 0.5 rad apart, so a fainter one's rays showed under the main band where two crossed. Dave chose nearly parallel (±0.06 rad, and the heading's wander per rearrangement from ±0.15 to ±0.06) over the wider spread's variety.
-  - Sources: the British Astronomical Association's "Observing the visible aurora" (britastro.org/node/12495), the NPS's "Light emission in aurora" (nps.gov/articles/-articles-aps-v8-i1-c9.htm), the Geophysical Institute's "Auroral arcs and bands" (gi.alaska.edu/alaska-science-forum/auroral-arcs-and-bands).
+  - Checked on all eight palettes, two arrangements each: clear sky under every band, no columns to the mountains. The coloured hem in Storm, Red, Purple and Blue is the fringe colour, the same before and after. Where two bands are stacked, the streaks between them are the farther arc's rays, rising from its own lower edge behind the nearer one.
+  - What it rests on is under Sources, below.
 
 ## Ideas / next steps
 - **Drift:** real arcs creep toward or away from the pole at 0.1–0.3 km/s; the curtains could drift their distances slowly within the clearance limits.
@@ -106,6 +107,20 @@ CPU 0.5–0.7 ms and GPU 1.0–1.45 ms per frame (release build, 2x, 2026-09-25)
 - **Ground:** a still lake mirroring the live sky; a Norwegian alternative (Raftsund) if the Tetons ever grate; a faint rim of light on the summits' snow from the aurora behind them.
 - **Stars:** the real catalogue (Live Sky's) for true clustering and the Milky Way.
 - **Night only:** follow the real Sun (dimmer or absent by day), as Flowing Gradient's mood does.
+
+## Sources
+For the 2026-10-03 change (all read that day). The quotes are what each page says; what follows is what it backs here.
+
+1. **"Observing the visible aurora"**, British Astronomical Association, britastro.org/node/12495. "There is an area of clear below the lower edge, which is usually more clearly defined than the upper edge." Also: an arc or band with vertical structure is a rayed arc or rayed band, and rays passing overhead converge by perspective into a corona. Backs: clear sky under the band, a crisp lower edge and a soft top.
+2. **"Light emission in aurora"**, U.S. National Park Service (Alaska Park Science), nps.gov/articles/-articles-aps-v8-i1-c9.htm. "Below the altitude of about 59 miles (95 km), collisions are so frequent that the green oxygen line has no chance to be emitted." "The bottom edge of a green auroral curtain gets this purple color when auroral electrons are accelerated to very high energy." Charged particles "can generally only travel along the direction of the magnetic field. This shapes the aurora into curtain and ray-like structures." Backs: why the lower edge is where it is (`u_low`, 98–110 km) and why nothing glows beneath it; Storm's pink fringe.
+3. **"Auroral arcs and bands"**, T. Neil Davis, Geophysical Institute, University of Alaska Fairbanks, 1979, gi.alaska.edu/alaska-science-forum/auroral-arcs-and-bands. "Those long arches that extend roughly east-west (actually magnetic east-west) from horizon to horizon are called arcs." "The lower edge is typically 80 to 120 km (50 to 75 miles) above the earth." "Though the rays appear to converge upward, they are, in reality, essentially parallel shafts of light." Backs: an arc bowing down to the horizon at both sides of the view, and rays that rise from the edge.
+4. **"Spiralling down electrons create auroras"**, European Space Agency, esa.int/ESA_Multimedia/Images/2007/02/Spiralling-down_electrons_create_auroras. The electrons are stopped "at altitudes of a few hundreds kilometres down to 80 kilometres" by "collisions with neutral atoms and molecules, primarily oxygen and nitrogen". Backs: light above the lower edge only, fading upward over a long way.
+5. **"Auroral arcs"**, European Space Agency, esa.int/spaceinimages/Images/2007/02/Auroral_arcs. An arc "stretches across the sky in an east-west direction"; it "can be as large as several thousands kilometres, but its width can be as small as 100 metres". Backs: curtains as thin sheets.
+
+Not from a source:
+- **Nearly parallel arcs** is an inference: each arc lies along magnetic east-west (3 and 5), so arcs seen together run close to parallel. No page read here says so in those words.
+- **`0.17·sh²`** is geometry: a line of sight that crosses `sh` km of heights inside the slab averages the emission over a box that deep, whose variance is `sh²/12`.
+- **The smooth glow** is the ordinary behaviour of scattered light; no aurora source was read for it.
 
 ## Checking it
 `AURORA_SEED=3 SNAPSHOT_SCENE="Aurora" SNAPSHOT_DEFAULTS="aurora.palette=Storm" SNAPSHOT_DIR=/tmp/aurora swift test -c release -Xswiftc -enable-testing`. `SNAPSHOT_SECONDS=60` shows the same arrangement a minute on. The reference agent's scripts (scratchpad `aurora/reference/`) re-measure a render against the 63 photos; `aurora/stats.py` gives the quick version (sky, peak, coverage, snow).
