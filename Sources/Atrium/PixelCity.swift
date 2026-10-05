@@ -2752,6 +2752,15 @@ final class PixelCity: SKScene {
         return (Float(zones[b.zone]) + 0.5 - 16 * scale * sin(angle), Float(ground + 1) + rows + 4 * scale * sin(angle), angle, scale)
     }
 
+    /// Where Starship's booster is as it comes back to its tower, and how far over it leans. It doesn't come straight
+    /// down, as a Falcon's does onto its legs: it falls 26 columns out from the arms, slides in toward them through
+    /// its landing burn, foot first and leaning back along its path, and straightens as it comes between them.
+    private func pose(caught b: Booster) -> (x: Float, y: Float, angle: Float, scale: Float) {
+        func at(_ z: Float) -> SIMD2<Float> { [Float(starX) + 0.5 + 26 * smoothstep(4, 150, z), Float(starMount) + lens(z).rows] }
+        let here = at(b.z), above = at(b.z + 3)
+        return (here.x, here.y, b.phase == .landed ? 0 : atan2(above.x - here.x, above.y - here.y), lens(b.z).scale)
+    }
+
     /// The flames burning now: where each begins, which way its rocket leans, the size it's drawn at, how long and
     /// wide it is, and how strongly it lights the smoke round it.
     private func flames() -> [(x: Float, y: Float, angle: Float, scale: Float, length: Float, wide: Float, power: Float)] {
@@ -2770,8 +2779,13 @@ final class PixelCity: SKScene {
                 fires.append((at.x, at.y, at.angle, at.scale, 20, 3, 0.9 * k))
                 continue
             }
-            let (rows, scale) = lens(b.z), tower = b.zone == 2 // Starship's booster comes down to the arms, over its mount
-            fires.append((Float(landing(b.zone)) + 0.5, Float(tower ? starMount : ground + 1) + rows + scale, 0, scale, tower ? 26 : 18, tower ? 4 : 2, 0.9 * k))
+            if b.zone == 2 {
+                let at = pose(caught: b)
+                fires.append((at.x, at.y + at.scale, at.angle, at.scale, 26, 4, 0.9 * k))
+                continue
+            }
+            let (rows, scale) = lens(b.z)
+            fires.append((Float(zones[b.zone]) + 0.5, Float(ground + 1) + rows + scale, 0, scale, 18, 2, 0.9 * k))
         }
         return fires
     }
@@ -2811,7 +2825,7 @@ final class PixelCity: SKScene {
         var shown = [smokeSteps, flicker, pad.phase.rawValue, Int(hinge.x), Int(hinge.y), Int(lean * 80), Int(crane.x), Int(crane.t * 2), crane.phase.rawValue, arms, Int(caught.y),
                      orbiter.phase.rawValue, Int(orbiter.x), Int(orbiter.y)]
         if let flying { shown += [Int(flying.x), Int(flying.y), Int(flying.scale * 60)] }
-        for b in boosters { shown += [b.phase.rawValue, Int(lens(b.z).rows), Int(lens(b.z).scale * 40)] }
+        for b in boosters { shown += [b.phase.rawValue, Int(b.z * 2), Int(lens(b.z).scale * 40)] }
         guard shown != launchShown else { return }
         launchShown = shown
 
@@ -2861,8 +2875,8 @@ final class PixelCity: SKScene {
         // The boosters: falling, burning down to the pad on their legs, standing there, or hanging from the crane's hook.
         let hookX = Int(crane.x.rounded(.down)) - 33, lifted = crane.phase == .hook ? max(0, min(crane.t - 5, 4)) : 4
         for b in boosters where b.phase != .away && b.zone == 2 { // Starship's: no legs, and it comes down to the tower
-            let (rows, scale) = lens(b.z), down = b.phase == .landed
-            stamp(superHeavyArt, into: &px, x: down ? caught.x : Float(starX) + 0.5, y: down ? caught.y : Float(starMount) + rows, scale: scale,
+            let at = pose(caught: b), down = b.phase == .landed
+            stamp(superHeavyArt, into: &px, x: down ? caught.x : at.x, y: down ? caught.y : at.y, angle: at.angle, scale: at.scale,
                   paint: rocketPaint(flood: down ? 1 : 0), heat: b.phase == .burn ? 0.85 : 0)
         }
         // The tower's arms: a carriage on the tower and a beam out across the rocket, under its grid fins.
