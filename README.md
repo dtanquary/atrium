@@ -184,15 +184,15 @@ Conway's cells, reseeding so they never die out. The Calm look shows a long expo
 | Calm | Classic |
 
 #### Pixel City
-A pixel-art skyline that follows your clock, with traffic and windows lighting up through the evening.
+A pixel-art city that follows your clock and the real Sun, with traffic and windows lighting up through the evening. Pick the Waterfront, a downtown mirrored in the water with its walls lit from wherever the Sun is, or the Street.
 
-| ![Pixel City at dusk](docs/images/pixel-city-dusk.jpg) | ![Pixel City at night](docs/images/pixel-city-night.jpg) |
+| ![Pixel City's Waterfront at dusk](docs/images/pixel-city-dusk.jpg) | ![Pixel City's Street at night](docs/images/pixel-city-night.jpg) |
 |---|---|
-| Dusk, the windows coming on | Late at night, under the Moon |
+| The Waterfront at dusk, the windows coming on | The Street, late at night |
 
 ## Settings
 
-The first time Atrium opens, a short welcome lets you try the wallpapers on your desktop and shuffle between them all (it's in Settings → About → Show Welcome any time after). Choose Settings… (⌘,) from the menu bar icon. Every wallpaper has a page, laid out like System Settings, with its palettes, photos, sliders, switches and menus (Fish Tank and Pixel City have none yet). The wallpaper runs live behind the top of its page, so each change shows as you make it. General holds Open at Login, Shuffle and Match the lock screen; Power sets the frame rate when plugged in, on battery and in Low Power Mode.
+The first time Atrium opens, a short welcome lets you try the wallpapers on your desktop and shuffle between them all (it's in Settings → About → Show Welcome any time after). Choose Settings… (⌘,) from the menu bar icon. Every wallpaper has a page, laid out like System Settings, with its palettes, photos, sliders, switches and menus (Fish Tank has none yet). The wallpaper runs live behind the top of its page, so each change shows as you make it. General holds Open at Login, Shuffle and Match the lock screen; Power sets the frame rate when plugged in, on battery and in Low Power Mode.
 
 | ![Settings for Solar System Tour: a grid of worlds to hold the tour on](docs/images/settings-solar-system-tour.jpg) | ![Settings for Rain on Glass: ten real places and seven city-light palettes behind the glass](docs/images/settings-rain-on-glass.jpg) |
 |---|---|
