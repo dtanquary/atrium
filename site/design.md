@@ -28,8 +28,8 @@ The files open directly in a browser. Each one is a pannable canvas of frames: d
 - Living wallpapers for your Mac.
 - Download · Free · macOS 26 or later, on Apple silicon · Source on GitHub (MIT)
 - Wall labels (title: medium · line):
-  - Nebula: Shader · a new nebula every time, in colours modelled on real ones
-  - Flowing Gradient: Shader · pools of colour whose mood follows the real Sun
+  - Nebula: Shader · a new nebula every time, in colors modeled on real ones
+  - Flowing Gradient: Shader · pools of color whose mood follows the real Sun
   - Live Sky: Live · the real sky above you, right now
   - Galaxy: Shader · after real galaxies: the Whirlpool, Andromeda, the Milky Way
   - Murmuration: Simulation · tens of thousands of starlings at sunset
