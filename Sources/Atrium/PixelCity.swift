@@ -269,7 +269,7 @@ final class PixelCity: SKScene {
         let (halo, lamp) = (SKSpriteNode(color: .clear, size: CGSize(width: 3, height: 3)), SKSpriteNode(color: .clear, size: CGSize(width: 1, height: 1)))
         beacon.addChild(halo)
         beacon.addChild(lamp)
-        beacon.zPosition = 5
+        beacon.zPosition = city == .spaceport ? 4.4 : 5 // behind the Spaceport's smoke, which hides the tower it stands on
         beacon.run(.repeatForever(.sequence(flashes.flatMap { flash in
             [.run { (halo.color, lamp.color) = (flash.withAlphaComponent(0.3), flash) }, .fadeAlpha(to: 1, duration: 0), .wait(forDuration: 0.25),
              .fadeAlpha(to: 0.15, duration: 0), .wait(forDuration: flashes.count > 1 ? 1.95 : 1.25)]
