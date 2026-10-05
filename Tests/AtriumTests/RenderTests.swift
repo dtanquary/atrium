@@ -117,10 +117,10 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
 /// Pixel City lays itself out again when Settings picks another city: every one must build, and going back to the
 /// first must leave nothing of the others behind.
 @MainActor @Test func pixelCitySwitchesCity() {
-    defer { UserDefaults.standard.removeObject(forKey: "city.view") }
+    defer { UserDefaults.standard.removeObject(forKey: "city.place") }
     let scene = pixelCity(size: CGSize(width: 800, height: 500))
     let nodes = (Array(0...Int(PixelCity.knobs[0].range.upperBound)) + [0]).map { view in
-        UserDefaults.standard.set(Double(view), forKey: "city.view") // posts the change the scene listens for
+        UserDefaults.standard.set(Double(view), forKey: "city.place") // posts the change the scene listens for
         return scene.children[0].children.count
     }
     #expect(nodes.allSatisfy { $0 > 10 } && nodes.last == nodes.first)
@@ -129,7 +129,7 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
 /// Pixel City's automatic move goes to a different city every time and saves it, so Settings and every display
 /// follow; in a view, it hands over to a new scene of that city.
 @MainActor @Test func pixelCityMovesOn() {
-    defer { UserDefaults.standard.removeObject(forKey: "city.view") }
+    defer { UserDefaults.standard.removeObject(forKey: "city.place") }
     let view = WallpaperView(frame: CGRect(x: 0, y: 0, width: 400, height: 250))
     view.presentScene(PixelCity(size: view.frame.size))
     for _ in 0..<12 {
@@ -142,7 +142,7 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
 /// With the automatic move on, Pixel City comes back as another city if the wait ran out while it was off the desktop
 /// (the app's own Shuffle builds it afresh each time), and as the same one if it didn't.
 @MainActor @Test func pixelCityMovesWhileAway() {
-    defer { for key in ["city.view", "city.shuffle", "city.movedAt"] { UserDefaults.standard.removeObject(forKey: key) } }
+    defer { for key in ["city.place", "city.shuffle", "city.movedAt"] { UserDefaults.standard.removeObject(forKey: key) } }
     UserDefaults.standard.set(1.0, forKey: "city.shuffle")
     UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "city.movedAt")
     let before = PixelCity.knobs[0].value

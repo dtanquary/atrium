@@ -184,15 +184,15 @@ Conway's cells, reseeding so they never die out. The Calm look shows a long expo
 | Calm | Classic |
 
 #### Pixel City
-A pixel-art city that follows your clock and the real Sun, with traffic and windows lighting up through the evening. Pick a city: the Waterfront, a downtown mirrored in the water with its walls lit from wherever the Sun is; Foothills, a small downtown under snow-capped mountains that hold the last of the sunlight; the Long Bridge, strung with lights across a bay; Hillside Town, tiled houses stacked above a harbour; the Overlook, out over a sea of rooftops; or the Street. It can move between them by itself every few minutes. You can also choose which way you look, so the Sun sets in view or lights the buildings from behind you.
+A pixel-art city that follows your clock and the real Sun, with traffic and windows lighting up through the evening. Pick a city: the Waterfront, a downtown mirrored in the water with its walls lit from wherever the Sun is; Foothills, a small downtown under snow-capped mountains that hold the last of the sunlight; the Long Bridge, strung with lights across a bay; Hillside Town, tiled houses stacked above a harbour; or the Overlook, out over a sea of rooftops. It can move between them by itself every few minutes. You can also choose which way you look, so the Sun sets in view or lights the buildings from behind you.
 
 | ![Pixel City's Waterfront at dusk](docs/images/pixel-city-dusk.jpg) | ![Pixel City's Foothills on a clear morning](docs/images/pixel-city-foothills.jpg) |
 |---|---|
 | The Waterfront at dusk, the windows coming on | Foothills on a clear morning |
 | ![Pixel City's Long Bridge at night](docs/images/pixel-city-bridge.jpg) | ![Pixel City's Hillside Town in the afternoon](docs/images/pixel-city-hillside.jpg) |
 | The Long Bridge at night, strung with lights | Hillside Town in the afternoon |
-| ![Pixel City's Overlook at sunset](docs/images/pixel-city-overlook.jpg) | ![Pixel City's Street at night](docs/images/pixel-city-night.jpg) |
-| The Overlook at sunset | The Street, late at night |
+| ![Pixel City's Overlook at sunset](docs/images/pixel-city-overlook.jpg) | ![Pixel City's Hillside Town at night](docs/images/pixel-city-hillside-night.jpg) |
+| The Overlook at sunset | Hillside Town at night, its lamps in the harbour |
 
 ## Settings
 
