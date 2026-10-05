@@ -665,7 +665,7 @@ final class PixelCity: SKScene {
     }
 
     /// How busy the Airport is: Settings' figure for the day or for the night, easing from one to the other between
-    /// 5 and 7 in the morning and from 8 in the evening to midnight. Waits on a stand and away are divided by it.
+    /// 5 and 7 in the morning and from 8 in the evening to midnight. Waits on a stand and away run down at this pace.
     private var flying: Double {
         let day = smoothstep(5, 7, Float(hour)) * (1 - smoothstep(20, 24, Float(hour)))
         return Double(mix(Float(Self.knob(.flightsNight)), Float(Self.knob(.flightsDay)), day))
@@ -1892,6 +1892,7 @@ final class PixelCity: SKScene {
         func edge(_ way: Float) -> Float { way > 0 ? -out : Float(w) + out } // where something heading that way comes in
         func gone(_ x: Float, _ way: Float) -> Bool { way > 0 ? x > Float(w) + out : x < -out }
         var clear = !flights.contains { $0.onRunway }
+        let pace = flying
         // The runway changes direction only once the airfield has emptied, as a real one's traffic pauses for it.
         if flights.allSatisfy({ $0.phase == .away }) { runwayWay = windWay }
         for i in flights.indices {
@@ -1899,6 +1900,8 @@ final class PixelCity: SKScene {
             // Aircraft on the taxiway all go the same way; one holds while another is close ahead of it.
             let near = flights.indices.filter { $0 != i && flights[$0].taxiing && abs(flights[$0].x - f.x) < 80 }
             let held = near.contains { (flights[$0].x - f.x) * -f.way > 0 }
+            // Time on a stand and time away run down at Settings' pace, so moving a slider shows at once, not at the next wait.
+            if f.phase == .away || f.phase == .parked, clock < f.until { f.until += Double(dt) * (1 - pace) }
             switch f.phase {
             case .away: // back when its wait is over, the runway is clear and there's a stand for it
                 let free = stands.indices.filter { stand in !flights.contains { (1...5).contains($0.phase.rawValue) && $0.stand == stand } }
@@ -1923,7 +1926,7 @@ final class PixelCity: SKScene {
                 let left = (Float(stands[f.stand]) - f.x) * -f.way
                 f.berth = 1 - min(max(left / 30, 0), 1)
                 if !held { f.x -= f.way * min(taxi, 2.5 + left * 0.15) * dt }
-                if left <= 0.5 { (f.phase, f.x, f.berth, f.until) = (.parked, Float(stands[f.stand]), 1, clock + .random(in: 150...330) / flying) }
+                if left <= 0.5 { (f.phase, f.x, f.berth, f.until) = (.parked, Float(stands[f.stand]), 1, clock + .random(in: 150...330)) }
             case .parked: // its engines start a few seconds before it moves off
                 if clock >= f.until, near.isEmpty { (f.phase, f.speed) = (.taxiOut, 0) }
             case .taxiOut: // off its stand, and on along the taxiway to the runway's other end
@@ -1948,7 +1951,7 @@ final class PixelCity: SKScene {
                 f.gear = f.height < 12
                 if gone(f.x, f.way) || f.height > Float(h) {
                     movements += 1
-                    (f.phase, f.until, f.height, clear) = (.away, clock + .random(in: 40...150) / flying, 0, true)
+                    (f.phase, f.until, f.height, clear) = (.away, clock + .random(in: 40...150), 0, true)
                 }
             }
             let y = f.onRunway ? Float(runway) + f.height : Float(taxiway) + f.berth * Float(apron - taxiway)
