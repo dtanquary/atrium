@@ -63,3 +63,4 @@ Every image comes from the app's own renderer, never a screen recording, so the 
 - 2026-10-02: the menu bar and Dock only show when the laptop does, fading in step with the zoom; no laptop, no overlay. They're on the screen from the first moment the lid opens, exactly like the notch (Dave: "clone that").
 - 2026-10-02: Aurora cut from the canvas ("1 too many"): after Fish Tank's label, the last scroll pulls back to the laptop, still on Fish Tank.
 - 2026-10-02: the laptop on phones too, full version, in portrait ("most users will view the site on phone in portrait").
+- 2026-10-04: the keyboard had "way way too many buttons" (a fine grid, about 95 keys across). It's now a real layout: six rows 14.5 keys wide, offset row to row, with a space bar and arrow keys, in the same well, so no dimensions changed.
