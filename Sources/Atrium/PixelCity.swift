@@ -45,6 +45,10 @@ final class PixelCity: SKScene {
     private var farHaze: Float = 1 // how much of the usual haze the far row of buildings takes
     private var slope: [Float] = [] // Hillside Town's hill: how far the land stands above the quay at each column
     private var boats: [(node: SKSpriteNode, rows: [String], hull: RGB)] = []
+    // The Overlook's life: steam from its vents, a flock of pigeons wheeling over the roofs, lights on the far towers.
+    private var steam: [SKSpriteNode] = []
+    private var flock: [(node: SKSpriteNode, lag: Float, offset: SIMD2<Float>)] = []
+    private var towerLights: [SKSpriteNode] = []
     private let canvas = SKNode()
     private let sky = SKSpriteNode()      // sky, stars, Sun and Moon…
     private let backdrop = SKSpriteNode() // …and the city in front, so clouds and planes pass between the two
@@ -181,7 +185,7 @@ final class PixelCity: SKScene {
         case .overlook: ground = Int(Float(h) * 0.54) // the far skyline's feet: rooftops fill everything below
         }
         crest = Array(repeating: ground, count: w)
-        (ridges, downtown, farHaze, slope, boats) = ([], 0.5, 1, [], [])
+        (ridges, downtown, farHaze, slope, boats, steam, flock, towerLights) = ([], 0.5, 1, [], [], [], [], [])
         for (node, z) in [(sky, 0.0), (backdrop, 2)] {
             node.anchorPoint = .zero
             node.size = CGSize(width: w, height: h)
@@ -226,13 +230,14 @@ final class PixelCity: SKScene {
 
         let paints = [rgb(196, 58, 52), rgb(58, 98, 186), rgb(222, 222, 216), rgb(236, 188, 48),
                       rgb(66, 138, 88), rgb(40, 40, 48), rgb(160, 166, 172)]
-        let far = city == .foothills || city == .bridge // traffic seen from miles off: a car is a dash of paint, and at night just its lights
+        let far = city == .foothills || city == .bridge || city == .overlook // traffic seen from miles off: a dash of paint, and at night just its lights
         carLooks = far ? paints.map { speck(2, body: $0) } + [speck(4, body: rgb(226, 226, 218))]
                        : paints.map { vehicle(sedan, body: $0) } + [vehicle(bus, body: rgb(228, 150, 40))]
         (carPace, carGap) = far ? (0.35, 7) : (1, 36)
-        let lanes = city == .bridge ? [deck + 1, deck + 2] : far ? [ground - 16, ground - 14] : [streetBase + 5, streetBase + 13]
+        let lanes = city == .bridge ? [deck + 1, deck + 2] : city == .overlook ? [ground + 6, ground + 7]
+            : far ? [ground - 16, ground - 14] : [streetBase + 5, streetBase + 13]
         for lane in 0...1 {
-            for _ in 0..<(city == .hillside || city == .overlook ? 0 : far ? 14 : 6) { // no road in view in those two
+            for _ in 0..<(city == .hillside ? 0 : far ? 14 : 6) { // the town's lanes are too steep for traffic
                 let node = SKSpriteNode()
                 node.anchorPoint = CGPoint(x: 0.5, y: 0)
                 node.position.y = CGFloat(lanes[lane])
@@ -541,23 +546,79 @@ final class PixelCity: SKScene {
                 x += width + (Float.random(in: 0..<1, using: &rng) < 0.3 ? max(2, widths.lowerBound / 5) : 0) // a street, now and then
             }
         }
-        // Steam from the two vents on our own roof, a puff at a time, each stepping up a pixel as it thins.
-        for (vent, x) in [w * 31 / 100, w * 58 / 100].enumerated() {
+        // Steam: wisps from the two stacks on our own roof and from one on each of three roofs nearby.
+        let blocks = skyline.indices.filter { skyline[$0].kind == .block && skyline[$0].pitch >= 9 }
+        var stacks = [(w * 31 / 100 + 1, 27), (w * 58 / 100 + 1, 27)]
+        for share in [0.18, 0.74, 0.93] as [Float] {
+            guard let i = blocks.min(by: { abs(Float(skyline[$0].x) - share * Float(w)) < abs(Float(skyline[$1].x) - share * Float(w)) }) else { continue }
+            skyline[i].roof = .antenna // marks a roof with a steaming stack, which `drawBlock` draws
+            stacks.append((stack(on: skyline[i]).x, stack(on: skyline[i]).y + 5))
+        }
+        for (x, y) in stacks {
+            // Each puff swells, thins and leans downwind as it climbs, a whole pixel at a time, then starts again.
             for puff in 0..<3 {
-                let node = SKSpriteNode(color: NSColor(white: 0.92, alpha: 1), size: CGSize(width: 2, height: 2))
-                node.anchorPoint = .zero
+                let node = SKSpriteNode()
+                node.anchorPoint = CGPoint(x: 0.5, y: 0)
                 node.zPosition = 3
-                node.alpha = 0
-                let rise = (0..<8).flatMap { step in
-                    [SKAction.wait(forDuration: 0.5), .run { node.position.y += 1; node.alpha = 0.5 * (1 - CGFloat(step) / 8) }]
+                node.isHidden = true
+                node.colorBlendFactor = 1
+                let frames = puffs.enumerated().flatMap { i, frame in
+                    [SKAction.run {
+                        node.texture = frame
+                        node.size = frame.size()
+                        node.position = CGPoint(x: x + i, y: y + [0, 1, 4, 8, 13][i])
+                        node.alpha = [0.55, 0.4, 0.28, 0.17, 0.08][i]
+                        node.isHidden = false
+                    }, .wait(forDuration: 0.9)]
                 }
-                node.run(.sequence([.wait(forDuration: Double(puff) * 1.4 + Double(vent) * 0.7),
-                                    .repeatForever(.sequence([.run { node.position = CGPoint(x: x, y: 22); node.alpha = 0.5 }] + rise))]))
+                node.run(.sequence([.wait(forDuration: Double(puff) * 1.6 + Double(x % 7) * 0.3),
+                                    .repeatForever(.sequence(frames + [.run { node.isHidden = true }, .wait(forDuration: 0.3)]))]))
                 canvas.addChild(node)
+                steam.append(node)
             }
+        }
+        // Pigeons: a flock that wheels over the middle roofs by day, each bird beating its wings in its own time.
+        let wings = [art(["#.#", ".#."], ["#": .one]), art([".#.", "#.#"], ["#": .one])]
+        for _ in 0..<9 {
+            let node = SKSpriteNode(texture: wings[0])
+            node.size = CGSize(width: 3, height: 2)
+            node.zPosition = 3.5
+            node.colorBlendFactor = 1
+            node.run(.repeatForever(.animate(with: wings, timePerFrame: .random(in: 0.2...0.32))))
+            canvas.addChild(node)
+            flock.append((node, Float.random(in: 0...0.9, using: &rng),
+                          SIMD2(Float.random(in: -9...9, using: &rng), Float.random(in: -4...4, using: &rng))))
+        }
+        // Red lights on three of the far skyline's taller buildings, each blinking in its own slow time.
+        let tall = skyline.indices.filter { skyline[$0].kind != .block && skyline[$0].kind != .haze && skyline[$0].roof != .antenna }
+            .sorted { skyline[$0].height > skyline[$1].height }.prefix(3)
+        for (n, i) in tall.enumerated() {
+            let node = SKSpriteNode(color: NSColor(red: 1, green: 0.25, blue: 0.2, alpha: 1), size: CGSize(width: 1, height: 1))
+            node.anchorPoint = .zero
+            node.position = CGPoint(x: skyline[i].x + skyline[i].width / 2, y: ground + skyline[i].height)
+            node.zPosition = 5
+            node.run(.repeatForever(.sequence([.fadeAlpha(to: 1, duration: 0), .wait(forDuration: 1.1),
+                                               .fadeAlpha(to: 0, duration: 0), .wait(forDuration: 1.3 + Double(n) * 0.45)])))
+            canvas.addChild(node)
+            towerLights.append(node)
         }
         return tower
     }
+
+    /// Where the steaming stack stands on one of the Overlook's roofs.
+    private func stack(on b: Building) -> (x: Int, y: Int) {
+        (b.x + b.width * 2 / 3, (b.base ?? ground) + b.height + b.pitch / 2)
+    }
+
+    /// A puff of steam at five ages: a dab at the vent, then a round cloud that swells as it thins. Round and whole:
+    /// at this size a square reads as a stray block, and a puff with holes in it as a symbol.
+    private lazy var puffs: [SKTexture] = [
+        ["##"],
+        [".##.", "####", ".##."],
+        [".###.", "#####", "#####", ".###."],
+        [".####.", "######", "######", "######", ".####."],
+        ["..###..", ".#####.", "#######", "#######", ".#####.", "..###.."],
+    ].map { art($0, ["#": .one]) }
 
     // The Long Bridge's shape: the columns its two towers stand at, the row of its roadway, and the row their tops reach.
     private var towers: [Int] { [w * 22 / 100, w * 78 / 100] }
@@ -753,7 +814,13 @@ final class PixelCity: SKScene {
         case .hillside:
             drawHarbour(into: &px)
             for boat in boats { boat.node.texture = afloat(boat.rows, hull: boat.hull, dark: night > 0.5) }
-        case .overlook: drawRooftop(into: &px)
+        case .overlook:
+            drawRooftop(into: &px)
+            // Steam takes the light it rises through: white by day, warm at dusk, a grey shadow by night.
+            let vapour = pointwiseMin(RGB(0.93, 0.94, 0.96) * (ambient + keyTop * 0.35), .one)
+            for node in steam { node.color = NSColor(red: CGFloat(vapour.x), green: CGFloat(vapour.y), blue: CGFloat(vapour.z), alpha: 1) }
+            for light in towerLights { light.isHidden = night < 0.4 }
+            for bird in flock { bird.node.isHidden = night > 0.35 } // they roost at dusk
         }
         backdrop.texture = px.texture()
         mirrored.first?.textureValue = sky.texture
@@ -1256,6 +1323,11 @@ final class PixelCity: SKScene {
         px.fill(b.x, top + depth - 1, b.width, 1, roof * 0.82)                 // and its far one
         guard depth >= 5 else { return }
         let metal = tone(mix(rgb(70, 70, 80), rgb(14, 14, 22), night)), fromRight = keyRight.sum() >= keyLeft.sum()
+        if b.roof == .antenna { // a steaming stack (its steam is a sprite: see `layOutOverlook`)
+            let at = stack(on: b)
+            px.fill(at.x - 1, at.y, 3, 4, tone(lit(rgb(126, 128, 134), keyFront)))
+            px.fill(at.x - 2, at.y + 4, 5, 1, metal)
+        }
         for slot in 0..<b.width / 11 { // what stands on it, each with a shadow away from the Sun
             let x = b.x + 3 + slot * 11 + Int.random(in: 0...3, using: &rng), y = top + 1 + Int.random(in: 0...max(0, depth - 5), using: &rng)
             let shadow = roof * 0.7
@@ -1290,6 +1362,10 @@ final class PixelCity: SKScene {
     /// big water tank at one end, an aerial and two vents.
     private func drawRooftop(into px: inout Pixels) {
         let wall = lit(rgb(64, 60, 66), keyFront), coping = lit(rgb(110, 104, 106), keyTop * 0.6, shade: 1.1), dark = lit(rgb(40, 38, 44), .zero)
+        // Far off, an expressway on piers across the foot of the skyline, for the traffic.
+        let concrete = mix(lit(rgb(150, 150, 146), keyTop * 0.4), behind, 0.45)
+        px.fill(0, ground + 5, w, 1, concrete)
+        for x in stride(from: 5, to: w, by: 13) { px.fill(x, ground + 1, 1, 4, concrete * 0.8) }
         px.fill(0, 0, w, 13, wall)
         px.fill(0, 13, w, 2, coping)
         for x in stride(from: 0, to: w, by: 16) { px.fill(x, 0, 1, 13, dark) } // joints
@@ -1299,9 +1375,11 @@ final class PixelCity: SKScene {
         for row in 0..<22 { px.fill(tx, 27 + row, 26, 1, lit(rgb(124, 86, 62), keyFront, shade: row % 7 == 3 ? 0.55 : 0.85)) }
         px.fill(tx + (keyRight.sum() >= keyLeft.sum() ? 22 : 0), 27, 4, 22, lit(rgb(124, 86, 62), max(keyRight, keyLeft), shade: 0.7))
         for r in 0..<5 { px.fill(tx - 1 + r * 3, 49 + r, 28 - r * 6, 1, lit(rgb(96, 68, 52), keyTop * 0.5)) } // its conical lid
-        for x in [w * 31 / 100, w * 58 / 100] { // vents
-            px.fill(x - 1, 15, 4, 5, lit(rgb(120, 124, 130), keyFront))
-            px.fill(x - 2, 20, 6, 1, dark)
+        for x in [w * 31 / 100, w * 58 / 100] { // two steaming stacks: a pipe with a rain cap
+            px.fill(x, 15, 3, 9, lit(rgb(120, 124, 130), keyFront))
+            px.fill(x + (keyRight.sum() >= keyLeft.sum() ? 2 : 0), 15, 1, 9, lit(rgb(120, 124, 130), max(keyRight, keyLeft), shade: 0.7))
+            px.fill(x - 1, 25, 5, 1, dark)
+            px.fill(x, 26, 3, 1, dark)
         }
         let ax = w * 44 / 100 // an aerial
         px.fill(ax, 15, 1, 18, dark)
@@ -1538,6 +1616,15 @@ final class PixelCity: SKScene {
             plane.position.y = CGFloat(Int(Float(h) * Float.random(in: 0.8...0.93)))
             plane.xScale = CGFloat(planeDirection)
             plane.isHidden = false
+        }
+        for bird in flock { // one slow turn in 26 seconds, on a wide flat ring that itself drifts about
+            let t = Float(clock), turn = t * 2 * .pi / 26 + bird.lag
+            let x = Float(w) * 0.5 + 34 * sin(t / 41) + Float(w) * 0.19 * cos(turn) + bird.offset.x
+            let y = Float(h) * 0.37 + 5 * sin(t / 29) + 9 * sin(turn) + bird.offset.y
+            bird.node.position = CGPoint(x: CGFloat(x.rounded(.down)), y: CGFloat(y.rounded(.down)))
+            // A wheeling flock flashes pale and dark as its birds bank toward the light and away.
+            let shade = CGFloat(0.5 + 0.5 * sin(turn + 0.8)) * CGFloat(1 - night)
+            bird.node.color = NSColor(white: 0.2 + 0.6 * shade, alpha: 1)
         }
         if city == .bridge {
             if shipDirection == 0, clock >= nextShip {
