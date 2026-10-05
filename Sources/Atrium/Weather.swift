@@ -25,7 +25,7 @@ import SpriteKit
 class WeatherScene: SKScene {
     nonisolated static let knobs = settings("weather")
 
-    /// The weather lock, cloud speed and time preview, stored under `prefix`.
+    /// The weather lock, cloud speed, time preview and star trails, stored under `prefix`.
     nonisolated static func settings(_ prefix: String) -> [Knob] {
         [
             Knob(key: "\(prefix).lock", label: "Weather", range: 0...8, standard: 0, section: "Weather",
@@ -36,6 +36,7 @@ class WeatherScene: SKScene {
                  format: .toggle),
             Knob(key: "\(prefix).previewHour", label: "Time", range: 0...24, standard: 13, section: "Preview", format: .clock,
                  shownWhen: "\(prefix).previewTime"),
+            Knob(key: "\(prefix).starTrails", label: "Star trails", range: 0...1, standard: 0, section: "Night", format: .toggle),
         ]
     }
 
@@ -61,7 +62,7 @@ class WeatherScene: SKScene {
                                   right: SKUniform(name: "u_right", vectorFloat3: .zero))
     private let sunDirection = SKUniform(name: "u_sun", vectorFloat3: [0, 0, 1]), sunDisc = SKUniform(name: "u_disc", vectorFloat3: .zero)
     private let moonPlace = SKUniform(name: "u_moon", vectorFloat4: [0, 0, 0, 0]), moonLight = SKUniform(name: "u_moonLight", vectorFloat3: [0, 0, 1])
-    private let moonColour = SKUniform(name: "u_moonCol", vectorFloat3: .zero), starsUniform = SKUniform(name: "u_stars", float: 0)
+    private let moonColour = SKUniform(name: "u_moonCol", vectorFloat3: .zero), starsUniform = SKUniform(name: "u_stars", vectorFloat2: .zero) // how much they show, their trails' length
     private let starTurn = SKUniform(name: "u_turn", matrixFloat3x3: matrix_identity_float3x3)
     private let groundLight = SKUniform(name: "u_light", vectorFloat3: [1, 1, 1]), groundHaze = SKUniform(name: "u_haze", float: 0.05)
     let groundColour = SKUniform(name: "u_colour", float: 1), groundHazeLit = SKUniform(name: "u_hazeLit", float: 1)
@@ -136,6 +137,7 @@ class WeatherScene: SKScene {
     /// again at once if a preview moved the time of day.
     @objc private func redraw() {
         cloudSpeed = knobs[1].value
+        starsUniform.vectorFloat2Value.y = trails
         if wanted != conditions {
             let before = view?.texture(from: self)
             conditions = wanted
@@ -152,6 +154,9 @@ class WeatherScene: SKScene {
             track()
         }
     }
+
+    /// How long a trail each star leaves, in radians of the sky's turn: half an hour's, with Star trails on.
+    private var trails: Float { live && knobs[4].value > 0.5 ? 0.1309 : 0 }
 
     /// Now, or today at the preview hour while previewing.
     var now: Date {
@@ -203,6 +208,7 @@ class WeatherScene: SKScene {
         cameraUniforms.lens.vectorFloat4Value = [Float(viewpoint.tanH), Float(viewpoint.tanV), Float(viewpoint.horizon), Float(viewpoint.horizon - 0.06)]
         cameraUniforms.forward.vectorFloat3Value = SIMD3<Float>(viewpoint.forward)
         cameraUniforms.right.vectorFloat3Value = SIMD3<Float>(viewpoint.right)
+        starsUniform.vectorFloat2Value.y = trails
         let sky = SKSpriteNode(color: .black, size: size)
         sky.anchorPoint = .zero
         sky.shader = SKShader(source: shaderCommon + moonShade + Self.skyShader, uniforms: [
@@ -242,7 +248,7 @@ class WeatherScene: SKScene {
         let visible: Double = conditions.kind == .clear || conditions.kind == .partlyCloudy ? 1 : 0
         let moonUp: Double = light.moon.z > 0 ? min(light.moonPower / 2.5e-6, 1) : 0
         let dark = smoothstep(-0.07, -0.25, light.sun.z)
-        starsUniform.floatValue = Float(dark * (1 - 0.6 * moonUp) * visible)
+        starsUniform.vectorFloat2Value.x = Float(dark * (1 - 0.6 * moonUp) * visible)
         sunDisc.vectorFloat3Value = light.sun.z > -0.02 ? SIMD3<Float>(light.sunColour) : .zero
         cloudSun.vectorFloat3Value = SIMD3<Float>(light.sunAtCloud)
         photoCloudSun.vectorFloat3Value = SIMD3<Float>(light.sunAtCloud * 0.18)
@@ -362,6 +368,9 @@ class WeatherScene: SKScene {
         return smoothstep(1.0 - cover, 1.0 - cover + mix(0.18, 0.5, deck), d);
     }
 
+    // Where a direction among the stars lands through the lens: `turn` is a rotation, so its columns turn it back.
+    vec2 throughLens(vec3 s, mat3 turn) { return vec2(dot(s, turn[0]), dot(s, turn[2])) / dot(s, turn[1]); }
+
     // A layer of stars fixed to the sky, so they turn with it. `at` is this pixel through the lens (x right, 1 ahead,
     // z up), `scale` its points per unit, and `turn` takes it to a direction among the stars. The grid of `cell`-point
     // squares lies on the six faces of a cube around the sky, evenly in angle and a whole number to a face, so no
@@ -382,11 +391,40 @@ class WeatherScene: SKScene {
         if (r.x > density * (1.0 + c.x * c.x) * (1.0 + c.y * c.y) / pow(1.0 + dot(c, c), 1.5)) { return 0.0; }
         vec2 off = (r.yz - 0.5) * 0.7;
         vec2 w = tan(((g + 0.5 + off) / cells - 0.5) * 1.5708);
-        vec3 s = n + u * w.x + v * w.y;
-        vec3 q = vec3(dot(s, turn[0]), dot(s, turn[1]), dot(s, turn[2])); // the star, back through the lens
         // The star's room: how far it is from its cell's nearest edge, in points, on a cell the cube has skewed.
         vec2 edge = (0.5 - abs(off)) * sqrt((1.0 + c * c) / (1.0 + dot(c, c)));
-        return starLight(length(q.xz / q.y - at.xz) * scale, min(edge.x, edge.y) * scale * 1.5708 / cells, r, t);
+        return starLight(length(throughLens(n + u * w.x + v * w.y, turn) - at.xz) * scale, min(edge.x, edge.y) * scale * 1.5708 / cells, r, t);
+    }
+
+    // Star trails: the turning sky as a long exposure. Each star leads a streak `arc` radians of the sky's turn long,
+    // fading out at its tail. The grid here runs the way the sky turns: rows of declination about `cell` points high,
+    // cut into cells one streak long, so a pixel can only be on a streak from its own cell or the one before it.
+    // Cells narrow toward the poles, so fewer of those hold a star.
+    float starTrails(vec3 at, mat3 turn, float scale, float cell, float density, float arc, float t) {
+        vec3 e = normalize(turn * at);
+        float around = floor(6.2832 / arc);
+        float rows = floor(3.927 * scale / cell + 0.5); // half a turn, times 1.25 as in skyStars
+        float x = (atan(e.y, e.x) / 6.2832 + 0.5) * around;
+        float row = floor((asin(e.z) / 3.1416 + 0.5) * rows);
+        vec2 east = e.xy / max(length(e.xy), 0.0001);
+        float light = 0.0;
+        for (int k = 0; k < 2; k++) {
+            float column = mod(floor(x) - float(k), around);
+            vec4 r = hash42(vec2(column, row) + cell * 131.0);
+            float dec = ((row + 0.5 + (r.z - 0.5) * 0.7) / rows - 0.5) * 3.1416;
+            if (r.x < density * cos(dec)) {
+                float head = column + 0.08 + 0.9 * r.y; // clear of the cell's leading edge, for its glow
+                float ra = (head / around - 0.5) * 6.2832;
+                float room = (0.5 - abs(r.z - 0.5) * 0.7) * 3.1416 * scale / rows;
+                light += starLight(length(throughLens(vec3(cos(dec) * cos(ra), cos(dec) * sin(ra), sin(dec)), turn) - at.xz) * scale, room, r, t);
+                // The streak: how far back along it this pixel is, 0 at the star to 1 at its tail, and how far off
+                // it, measured on screen to the point of the star's path at this pixel's own right ascension.
+                float back = mod(x - head, around) * 6.2832 / around / arc;
+                float off = length(throughLens(vec3(cos(dec) * east, sin(dec)), turn) - at.xz) * scale;
+                light += back < 1.0 ? smoothstep(min(0.9, room), 0.0, off) * (1.0 - back) * (1.0 - back) * 0.3 * (0.25 + 0.95 * pow(r.w, 5.0)) : 0.0;
+            }
+        }
+        return light;
     }
 
     // Henyey–Greenstein: how much light a cloud scatters forward, toward us when we face the Sun.
@@ -400,11 +438,16 @@ class WeatherScene: SKScene {
         vec3 col = mix(decode(texture2D(u_before, st).rgb), decode(texture2D(u_after, st).rgb), u_blend);
 
         // Stars where the sky is dark enough, thinning toward the brighter horizon.
-        if (u_stars > 0.0) {
+        if (u_stars.x > 0.0) {
             vec3 at = vec3((uv.x * 2.0 - 1.0) * u_cam.x, 1.0, (uv.y - u_cam.z) * 2.0 * u_cam.y);
             float scale = u_size.x * 0.5 / u_cam.x;
-            float s = skyStars(at, u_turn, scale, 9.0, 0.3, u_now) + 0.6 * skyStars(at, u_turn, scale, 5.0, 0.22, u_now);
-            col += vec3(0.9, 0.93, 1.0) * s * u_stars * 0.5 * clamp(1.0 - dot(col, vec3(0.3, 0.5, 0.2)) * 3.0, 0.0, 1.0);
+            float s = 0.0;
+            if (u_stars.y > 0.0) {
+                s = starTrails(at, u_turn, scale, 9.0, 0.3, u_stars.y, u_now) + 0.6 * starTrails(at, u_turn, scale, 5.0, 0.16, u_stars.y, u_now);
+            } else {
+                s = skyStars(at, u_turn, scale, 9.0, 0.3, u_now) + 0.6 * skyStars(at, u_turn, scale, 5.0, 0.22, u_now);
+            }
+            col += vec3(0.9, 0.93, 1.0) * s * u_stars.x * 0.5 * clamp(1.0 - dot(col, vec3(0.3, 0.5, 0.2)) * 3.0, 0.0, 1.0);
         }
         // The Sun: a limb-darkened disc and a soft photographic glow, hidden by cloud below.
         float c = dot(rd, u_sun);
@@ -1032,7 +1075,7 @@ class WeatherScene: SKScene {
         skyBlend.floatValue = min(skyBlend.floatValue + Float(dt) / 60, 1) // into the latest sky over a minute
         sinceTrack += dt
         sinceBake += dt
-        if sinceTrack >= 1 { sinceTrack = 0; track() } else if starsUniform.floatValue > 0 { turnStars() }
+        if sinceTrack >= 1 { sinceTrack = 0; track() } else if starsUniform.vectorFloat2Value.x > 0 { turnStars() }
         if sinceBake >= 60 && !baking { sinceBake = 0; bakeSky() }
         clock.floatValue = (clock.floatValue + Float(dt)).truncatingRemainder(dividingBy: 3600)
         // The deck drifts with the wind; its noise repeats every 200 km. Cirrus, higher up, drifts twice as fast.

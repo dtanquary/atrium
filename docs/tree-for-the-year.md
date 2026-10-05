@@ -39,7 +39,7 @@ One young white oak on a chalk hilltop, living through the real seasons where yo
 | `tree.sway` | Sway | 0–2× | 1× | the wind's bend, sway and flutter |
 | `tree.previewDay` | Preview a day of the year | switch | off | moves `now` to that day this year (the Sun, the season and the tree's age) |
 | `tree.day` | Day | Jan 1–Dec 31 | Jun 30 | the day, a new `.date` knob format |
-| `tree.lock`, `tree.cloudSpeed`, `tree.previewTime`, `tree.previewHour` | Weather's own | | | as in Weather, under their own keys |
+| `tree.lock`, `tree.cloudSpeed`, `tree.previewTime`, `tree.previewHour`, `tree.starTrails` | Weather's own | | | as in Weather, under their own keys |
 | `tree.seed`, `tree.planted` | (no control) | | first run | this Mac's tree and its planting day |
 
 ## Tuning constants
