@@ -62,6 +62,7 @@ class WeatherScene: SKScene {
     private let sunDirection = SKUniform(name: "u_sun", vectorFloat3: [0, 0, 1]), sunDisc = SKUniform(name: "u_disc", vectorFloat3: .zero)
     private let moonPlace = SKUniform(name: "u_moon", vectorFloat4: [0, 0, 0, 0]), moonLight = SKUniform(name: "u_moonLight", vectorFloat3: [0, 0, 1])
     private let moonColour = SKUniform(name: "u_moonCol", vectorFloat3: .zero), starsUniform = SKUniform(name: "u_stars", float: 0)
+    private let starTurn = SKUniform(name: "u_turn", matrixFloat3x3: matrix_identity_float3x3)
     private let groundLight = SKUniform(name: "u_light", vectorFloat3: [1, 1, 1]), groundHaze = SKUniform(name: "u_haze", float: 0.05)
     let groundColour = SKUniform(name: "u_colour", float: 1), groundHazeLit = SKUniform(name: "u_hazeLit", float: 1)
     private let cloudLayer = SKUniform(name: "u_cloud", vectorFloat4: .zero), cloudDrift = SKUniform(name: "u_drift", vectorFloat2: .zero)
@@ -207,7 +208,7 @@ class WeatherScene: SKScene {
         sky.shader = SKShader(source: shaderCommon + moonShade + Self.skyShader, uniforms: [
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]), skyBefore, skyAfter, skyBlend,
             cameraUniforms.lens, cameraUniforms.forward, cameraUniforms.right, sunDirection, sunDisc, moonPlace, moonLight,
-            moonColour, starsUniform, SKUniform(name: "u_moonTex", texture: Self.moonTexture),
+            moonColour, starsUniform, starTurn, SKUniform(name: "u_moonTex", texture: Self.moonTexture),
             SKUniform(name: "u_noise", texture: CloudNoise.texture), cloudLayer, cloudDrift, cirrusShift, cloudSun, cloudAmbient, cirrus, cirrusSun, fog, deck, flashAmount, flashPlace, nightUniform, WallpaperTime.now,
         ])
         fog.floatValue = conditions.fog
@@ -313,6 +314,7 @@ class WeatherScene: SKScene {
         let sun = normalize(toHorizon * Sky.sun(jd)), moon = normalize(toHorizon * Sky.moon(jd))
         sunDirection.vectorFloat3Value = SIMD3<Float>(sun.z > -0.14 ? sun : moon) // what lights the clouds
         sunNow = sun
+        turnStars()
         guard let at = viewpoint.screen(moon), moon.z > -0.01 else { moonPlace.vectorFloat4Value = [0, 0, 0, 0]; return }
         // Light it from the real Sun, and turn it so its north points to the celestial pole, as in Live Sky.
         func angle(toward target: Sky.Vector) -> Double {
@@ -324,6 +326,15 @@ class WeatherScene: SKScene {
         let phase = acos(2 * Sky.moonPhase(jd).lit - 1) // the Sun–Moon–Earth angle
         moonLight.vectorFloat3Value = [Float(sin(phase) * cos(toSun)), Float(sin(phase) * sin(toSun)), Float(cos(phase))]
         moonPlace.vectorFloat4Value = [Float(at.x * size.width), Float(at.y * size.height), 15, Float(north - .pi / 2)]
+    }
+
+    /// Turns the stars to where the sky is now. `update` calls it every frame while they show: a second's turn at once
+    /// is a fifth of a pixel, which every star would take on the same frame.
+    private func turnStars() {
+        let here = Location.shared.coordinate
+        let turn = viewpoint.amongStars(now, latitude: here.latitude, longitude: here.longitude)
+        starTurn.matrixFloat3x3Value = simd_float3x3(columns: (SIMD3<Float>(turn.columns.0), SIMD3<Float>(turn.columns.1),
+                                                               SIMD3<Float>(turn.columns.2)))
     }
 
     /// Where the Sun sets today, in radians clockwise from north, so sunsets happen in view; due west where it
@@ -351,6 +362,33 @@ class WeatherScene: SKScene {
         return smoothstep(1.0 - cover, 1.0 - cover + mix(0.18, 0.5, deck), d);
     }
 
+    // A layer of stars fixed to the sky, so they turn with it. `at` is this pixel through the lens (x right, 1 ahead,
+    // z up), `scale` its points per unit, and `turn` takes it to a direction among the stars. The grid of `cell`-point
+    // squares lies on the six faces of a cube around the sky, evenly in angle and a whole number to a face, so no
+    // star meets a face's edge; a star is then drawn where its own direction lands on screen, so it stays round
+    // wherever the grid is skewed. Cells cover less sky toward a face's edges, so fewer of those hold a star.
+    float skyStars(vec3 at, mat3 turn, float scale, float cell, float density, float t) {
+        vec3 e = turn * at;
+        vec3 a = abs(e);
+        vec3 n = a.x > a.y && a.x > a.z ? vec3(sign(e.x), 0.0, 0.0) : (a.y > a.z ? vec3(0.0, sign(e.y), 0.0) : vec3(0.0, 0.0, sign(e.z)));
+        vec3 u = n.yzx;
+        vec3 v = n.zxy;
+        // 1.96: a quarter turn to a face, times 1.25 so the cells average `cell` points across over the view, since
+        // the lens spreads the sky wider away from its centre on the horizon.
+        float cells = floor(scale * 1.96 / cell + 0.5);
+        vec2 g = floor((atan(vec2(dot(e, u), dot(e, v)) / dot(e, n)) / 1.5708 + 0.5) * cells);
+        vec4 r = hash42(g + dot(n, vec3(1237.0, 2473.0, 3719.0)) + cell * 131.0); // its own stars on each face and in each layer
+        vec2 c = tan(((g + 0.5) / cells - 0.5) * 1.5708);
+        if (r.x > density * (1.0 + c.x * c.x) * (1.0 + c.y * c.y) / pow(1.0 + dot(c, c), 1.5)) { return 0.0; }
+        vec2 off = (r.yz - 0.5) * 0.7;
+        vec2 w = tan(((g + 0.5 + off) / cells - 0.5) * 1.5708);
+        vec3 s = n + u * w.x + v * w.y;
+        vec3 q = vec3(dot(s, turn[0]), dot(s, turn[1]), dot(s, turn[2])); // the star, back through the lens
+        // The star's room: how far it is from its cell's nearest edge, in points, on a cell the cube has skewed.
+        vec2 edge = (0.5 - abs(off)) * sqrt((1.0 + c * c) / (1.0 + dot(c, c)));
+        return starLight(length(q.xz / q.y - at.xz) * scale, min(edge.x, edge.y) * scale * 1.5708 / cells, r, t);
+    }
+
     // Henyey–Greenstein: how much light a cloud scatters forward, toward us when we face the Sun.
     float hg(float c, float g) { return (1.0 - g * g) / pow(1.0 + g * g - 2.0 * g * c, 1.5) * 0.0796; }
 
@@ -363,7 +401,9 @@ class WeatherScene: SKScene {
 
         // Stars where the sky is dark enough, thinning toward the brighter horizon.
         if (u_stars > 0.0) {
-            float s = starField(pts, 9.0, 0.28, u_now) + 0.6 * starField(pts + 300.0, 5.0, 0.2, u_now);
+            vec3 at = vec3((uv.x * 2.0 - 1.0) * u_cam.x, 1.0, (uv.y - u_cam.z) * 2.0 * u_cam.y);
+            float scale = u_size.x * 0.5 / u_cam.x;
+            float s = skyStars(at, u_turn, scale, 9.0, 0.3, u_now) + 0.6 * skyStars(at, u_turn, scale, 5.0, 0.22, u_now);
             col += vec3(0.9, 0.93, 1.0) * s * u_stars * 0.5 * clamp(1.0 - dot(col, vec3(0.3, 0.5, 0.2)) * 3.0, 0.0, 1.0);
         }
         // The Sun: a limb-darkened disc and a soft photographic glow, hidden by cloud below.
@@ -992,7 +1032,7 @@ class WeatherScene: SKScene {
         skyBlend.floatValue = min(skyBlend.floatValue + Float(dt) / 60, 1) // into the latest sky over a minute
         sinceTrack += dt
         sinceBake += dt
-        if sinceTrack >= 1 { sinceTrack = 0; track() }
+        if sinceTrack >= 1 { sinceTrack = 0; track() } else if starsUniform.floatValue > 0 { turnStars() }
         if sinceBake >= 60 && !baking { sinceBake = 0; bakeSky() }
         clock.floatValue = (clock.floatValue + Float(dt)).truncatingRemainder(dividingBy: 3600)
         // The deck drifts with the wind; its noise repeats every 200 km. Cirrus, higher up, drifts twice as fast.

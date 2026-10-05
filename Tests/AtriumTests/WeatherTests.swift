@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import simd
 @testable import Atrium
 
 /// A real Open-Meteo reply parses. A snake-case decoding strategy once turned wind_speed_10m into windSpeed10M,
@@ -18,4 +19,22 @@ import Testing
     // Some weather models leave out the extras; the reply still counts.
     let bare = #"{"current":{"weather_code":3,"cloud_cover":100,"wind_speed_10m":5}}"#
     #expect(LiveWeather.conditions(from: Data(bare.utf8))?.snowDepth == 0)
+}
+
+/// Weather's stars turn with the sky. A star among them has to land on screen where the Sun and Moon's own path
+/// (`Sky.horizonMatrix`, then `SkyCamera.screen`) puts its direction, and, looking west, sink as the minutes pass.
+/// `place` is what `skyStars` does in the sky shader.
+@Test func weatherStarsTurnWithTheSky() throws {
+    let camera = SkyCamera(aspect: 1.5, horizon: 0.45, facing: 1.5 * .pi)
+    let date = Date(timeIntervalSince1970: 1_790_000_000), later = date.addingTimeInterval(600)
+    func toHorizon(_ date: Date) -> simd_double3x3 { Sky.horizonMatrix(jd: Sky.julianDate(date), latitude: 40, longitude: -90) }
+    func place(_ star: Sky.Vector, _ date: Date) -> SIMD2<Double> {
+        let lens = camera.amongStars(date, latitude: 40, longitude: -90).transpose * star
+        return [0.5 + lens.x / lens.y / (2 * camera.tanH), camera.horizon + lens.z / lens.y / (2 * camera.tanV)]
+    }
+    let star = toHorizon(date).transpose * camera.ray(0.3, 0.8) // the star behind one point on screen
+    #expect(distance(place(star, date), [0.3, 0.8]) < 1e-9)
+    let moved = try #require(camera.screen(toHorizon(later) * star))
+    #expect(distance(place(star, later), moved) < 1e-9)
+    #expect(moved.y < 0.78 && moved.x > 0.3) // setting, down and to the north
 }

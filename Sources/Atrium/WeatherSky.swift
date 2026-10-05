@@ -132,6 +132,14 @@ struct SkyCamera: Sendable {
         guard f > 0.01 else { return nil }
         return [0.5 + dot(d, right) / f / (2 * tanH), horizon + d.z / f / (2 * tanV)]
     }
+
+    /// The lens's axes (right, ahead, up) among the stars at `date`: it turns a point through the lens into a J2000
+    /// direction, and its transpose turns one back. The sky shader's stars are fixed in that frame, so they turn
+    /// with the sky.
+    func amongStars(_ date: Date, latitude: Double, longitude: Double) -> simd_double3x3 {
+        Sky.horizonMatrix(jd: Sky.julianDate(date), latitude: latitude, longitude: longitude).transpose
+            * simd_double3x3(columns: (right, forward, V3(0, 0, 1)))
+    }
 }
 
 /// Everything about the light at one moment that the shaders need: the sky as a small texture, and the colours of

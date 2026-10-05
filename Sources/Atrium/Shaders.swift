@@ -42,19 +42,21 @@ float fbm(vec2 p) {
     return v;
 }
 
+// One star's light `d` points from its centre, from its cell's four random numbers `r`. A star can't draw outside
+// its cell, so it and its glow fade out within `room`, the distance to the cell's nearest edge; cut off at the edge,
+// the glow showed as a faint square around each bright star.
+float starLight(float d, float room, vec4 r, float t) {
+    float mag = pow(r.w, 5.0);
+    float twinkle = 0.8 + 0.2 * sin(mod(t, 3600.0) * (1.0 + 3.0 * r.x) + r.x * 50.0); // hourly: a jump in a twinkle can't be seen
+    return (smoothstep(min(0.6 + 1.2 * mag, room), 0.0, d) + 0.3 * mag * exp(-d * 0.4) * smoothstep(room, 0.0, d)) * (0.3 + 0.9 * mag) * twinkle;
+}
+
 // One star per `cell`-point grid square, kept with probability `density`; most faint, a few bright, all twinkling.
 float starField(vec2 pts, float cell, float density, float t) {
     vec4 r = hash42(floor(pts / cell));
-    float h = r.x;
-    if (h > density) { return 0.0; }
+    if (r.x > density) { return 0.0; }
     vec2 off = (r.yz - 0.5) * 0.7;
-    float mag = pow(r.w, 5.0);
-    float d = length(fract(pts / cell) - 0.5 - off) * cell;
-    float twinkle = 0.8 + 0.2 * sin(mod(t, 3600.0) * (1.0 + 3.0 * h) + h * 50.0); // hourly: a jump in a twinkle can't be seen
-    // A star can't draw outside its cell, so it and its glow fade out within `room`, the distance to the cell's
-    // nearest edge; cut off at the edge, the glow showed as a faint square around each bright star.
-    float room = (0.5 - max(abs(off.x), abs(off.y))) * cell;
-    return (smoothstep(min(0.6 + 1.2 * mag, room), 0.0, d) + 0.3 * mag * exp(-d * 0.4) * smoothstep(room, 0.0, d)) * (0.3 + 0.9 * mag) * twinkle;
+    return starLight(length(fract(pts / cell) - 0.5 - off) * cell, (0.5 - max(abs(off.x), abs(off.y))) * cell, r, t);
 }
 
 // A few bright foreground stars with four-point diffraction spikes; about half shimmer very gently and slowly.
