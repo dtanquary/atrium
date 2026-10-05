@@ -37,6 +37,7 @@ live-sky|live-sky
 murmuration|murmuration-blue-hour
 nebula|nebula-hubble
 pixel-city|pixel-city-dusk
+pixel-spaceport|pixel-spaceport
 rain-on-glass|rain-on-glass-night
 schlieren|schlieren
 solar-system-tour|solar-system-jupiter

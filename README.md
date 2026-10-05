@@ -2,7 +2,7 @@
 
 <img src="docs/images/app-icon.png" alt="Atrium's icon: a skylight onto a glowing nebula" width="128">
 
-Living, animated desktop wallpapers for macOS, 21 of them: a reef tank of real fish and corals, slow tours through the best real photos of the Solar System and deep space, the real sky above you right now, your live weather and wind, sunlight through leaves from the real Sun, rising heat as a schlieren camera sees it, drifting nebulae, and more. It's a small menu bar app written in Swift and SpriteKit, with no dependencies.
+Living, animated desktop wallpapers for macOS, 21 of them: a reef tank of real fish and corals, slow tours through the best real photos of the Solar System and deep space, the real sky above you right now, your live weather and wind, sunlight through leaves from the real Sun, rising heat as a schlieren camera sees it, drifting nebulae, a pixel-art spaceport where rockets launch and land, and more. It's a small menu bar app written in Swift and SpriteKit, with no dependencies.
 
 It's free and open source, for macOS 26 or later on Apple silicon. See it move at **[atrium.show](https://atrium.show)**, [download it](#download), or [build it yourself](#build-from-source) in a few minutes.
 
