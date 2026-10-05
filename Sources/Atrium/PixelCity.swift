@@ -91,10 +91,12 @@ final class PixelCity: SKScene {
     // The Spaceport: its pad, the boosters that come back, the crane that takes them away and the smoke of it all;
     // the layer they are painted into, which the lagoon mirrors; and the figures on the countdown clock.
     private var pad = Pad(), boosters: [Booster] = [], crane = Crane(), plume: [Puff] = []
+    private var pace = 1.0 // Settings' Launches, read once a frame
     private var liftoffAt: TimeInterval = -1000, trailFrom: SIMD2<Float>?
     private var launchLayer = SKSpriteNode(), launchTexture: SKMutableTexture?, launchShown: [Int] = []
     private var smoke = Bytes(1, 1, floor: 0), density: [Float] = [], smokeTime: Float = 0, smokeMoved = false, smokeSteps = 0
-    private var countdown = SKSpriteNode(), counted = ""
+    private var smoked = 0..<0 // the rows of it the last painting reached, which are all the next has to clear
+    private var countdown = SKSpriteNode(), counted = (false, -1, "")
     private var visitor = SKSpriteNode(), visiting: Flag?, hoist: Float = 0 // a visiting rocket's flag, and how far up its pole it is
     private var orbiter = Orbiter() // the Shuttle's, when it glides home
     private var hazeColour = RGB.zero // the horizon's colour, which far-off things fade toward
@@ -2187,12 +2189,13 @@ final class PixelCity: SKScene {
         hangar = Self.lastHangar
         hangar.landers.shuffle()
         hangar.others.shuffle()
-        (pad.phase, pad.until, pad.rocket, pad.flown) = (.count, clock + 24 * knob(.launches), nextRocket(), Bool.random())
+        pace = knob(.launches)
+        (pad.phase, pad.until, pad.rocket, pad.flown) = (.count, clock + 24 * pace, nextRocket(), Bool.random())
         boosters = pad.rocket.kit.lands == 2 ? [] : [Booster(phase: .landed, zone: 1, until: clock + 2)]
         pad.x = roll(pad.rocket.kit) // it has rolled all the way out, so its strongback or crawler has that far to go home
         let rows = h - waterRows, texture = SKMutableTexture(size: CGSize(width: w, height: rows))
         texture.filteringMode = .nearest
-        (launchTexture, smoke) = (texture, Bytes(w, rows, floor: waterRows))
+        (launchTexture, smoke, smoked, density) = (texture, Bytes(w, rows, floor: waterRows), 0..<0, [])
         launchLayer = SKSpriteNode(texture: texture)
         launchLayer.anchorPoint = .zero
         launchLayer.size = texture.size()
@@ -2203,7 +2206,7 @@ final class PixelCity: SKScene {
         countdown.size = CGSize(width: 31, height: 11)
         countdown.position = CGPoint(x: w * 9 / 100, y: 14)
         countdown.zPosition = 3
-        counted = ""
+        counted = (false, -1, "")
         visitor = SKSpriteNode()
         visitor.anchorPoint = .zero
         visitor.size = CGSize(width: 9, height: 6)
@@ -2432,7 +2435,7 @@ final class PixelCity: SKScene {
 
     /// Seconds from lift-off, negative through the count, while there's a rocket on the mount or on its way up.
     private var flightTime: Float? {
-        pad.phase == .climb ? pad.t : pad.phase == .count ? -Float((pad.until - clock) / knob(.launches)) : nil
+        pad.phase == .climb ? pad.t : pad.phase == .count ? -Float((pad.until - clock) / pace) : nil
     }
 
     /// Moves the Spaceport on through its round. A rocket rolls out to the pad, lying on a strongback from the hangar
@@ -2440,7 +2443,8 @@ final class PixelCity: SKScene {
     /// strongback or crawler rolls back for the next. If its boosters come back, they do so a minute later, each to
     /// a landing zone, and a crane comes for each and carries it away.
     private func launch(_ dt: Float) {
-        let pace = knob(.launches), kit = pad.rocket.kit
+        pace = knob(.launches)
+        let kit = pad.rocket.kit
         // A rocket that comes out standing only has to settle; Starship is lifted onto its mount by the tower's arms.
         let rolled = roll(kit), raising: Float = kit.caught ? 10 : kit.standing ? 4 : 18
         // Time in the hangar and the count run down at the pace Settings gives, so a change shows at once.
@@ -2596,9 +2600,9 @@ final class PixelCity: SKScene {
         case .climb, .recover, .rollBack: left = 0
         }
         let up = since < 95 || pad.phase == .recover || pad.phase == .rollBack, seconds = Int(up ? since : left.rounded(.up))
-        let text = "T" + (up ? "+" : "-") + String(format: "%02d:%02d", min(seconds / 60, 99), seconds % 60)
-        if text + next.name != counted {
-            counted = text + next.name
+        if (up, seconds, next.name) != counted {
+            counted = (up, seconds, next.name)
+            let text = "T" + (up ? "+" : "-") + String(format: "%02d:%02d", min(seconds / 60, 99), seconds % 60)
             var px = Pixels(31, 11)
             for (line, words, ink) in [(0, text, rgb(255, 176, 60)), (1, next.name, rgb(250, 236, 200))] {
                 let from = (31 - (words.count * 4 - 1)) / 2
@@ -2692,28 +2696,33 @@ final class PixelCity: SKScene {
     /// Earth's shadow, a flame's near one, the pad's floodlights by night.
     private func paintSmoke() {
         let rows = smoke.h, base = waterRows, w = w
-        if density.count != w * rows { density = Array(repeating: 0, count: w * rows) }
+        if density.count != w * rows { (density, smoked) = (Array(repeating: 0, count: w * rows), 0..<0) }
         var (x0, x1, y0, y1) = (w, -1, rows, -1)
+        let last = smoked
+        var squares = [Float](repeating: 0, count: w) // across a puff, how far each column is from its middle, squared
         density.withUnsafeMutableBufferPointer { field in
-            field.update(repeating: 0)
-            for p in plume {
-                let k = min(1, p.age / 0.4) * (1 - smoothstep(0.55, 1, p.age / p.life)), inverse = 1 / (p.r * p.r)
-                let left = max(Int(p.x - p.r) - 1, 0), right = min(Int(p.x + p.r) + 1, w - 1)
-                let low = max(Int(p.y - p.r) - 1 - base, 0), high = min(Int(p.y + p.r) + 1 - base, rows - 1)
-                guard left <= right, low <= high else { continue }
-                for y in low...high {
-                    let dy = Float(y + base) + 0.5 - p.y
-                    var i = y * w + left, dx = Float(left) + 0.5 - p.x
-                    for _ in left...right {
-                        let d = 1 - (dx * dx + dy * dy) * inverse
-                        if d > 0 { field[i] += d * k }
-                        (i, dx) = (i + 1, dx + 1)
+            UnsafeMutableBufferPointer(rebasing: field[last.lowerBound * w..<last.upperBound * w]).update(repeating: 0)
+            squares.withUnsafeMutableBufferPointer { squares in
+                for p in plume {
+                    let k = min(1, p.age / 0.4) * (1 - smoothstep(0.55, 1, p.age / p.life)), inverse = 1 / (p.r * p.r)
+                    let left = max(Int(p.x - p.r) - 1, 0), right = min(Int(p.x + p.r) + 1, w - 1)
+                    let low = max(Int(p.y - p.r) - 1 - base, 0), high = min(Int(p.y + p.r) + 1 - base, rows - 1)
+                    guard left <= right, low <= high else { continue }
+                    var dx = Float(left) + 0.5 - p.x
+                    for j in 0...right - left { (squares[j], dx) = (dx * dx, dx + 1) }
+                    for y in low...high {
+                        let dy = Float(y + base) + 0.5 - p.y, up = dy * dy, row = y * w + left
+                        for j in 0...right - left { // nothing to branch on, so several columns are done at a time
+                            let d = 1 - (squares[j] + up) * inverse
+                            field[row + j] += (d > 0 ? d : 0) * k
+                        }
                     }
+                    (x0, x1, y0, y1) = (min(x0, left), max(x1, right), min(y0, low), max(y1, high))
                 }
-                (x0, x1, y0, y1) = (min(x0, left), max(x1, right), min(y0, low), max(y1, high))
             }
         }
-        smoke.rgba.withUnsafeMutableBufferPointer { $0.update(repeating: 0) }
+        smoke.rgba.withUnsafeMutableBufferPointer { UnsafeMutableBufferPointer(rebasing: $0[last.lowerBound * w * 4..<last.upperBound * w * 4]).update(repeating: 0) }
+        smoked = y0 <= y1 ? y0..<y1 + 1 : 0..<0
         guard x0 <= x1, y0 <= y1 else { return }
 
         let steam = rgb(246, 246, 248), side = (keyRight - keyLeft).sum() >= 0 ? 1 : -1
@@ -2726,11 +2735,12 @@ final class PixelCity: SKScene {
         let sunlit = [rgb(255, 232, 196), rgb(255, 186, 140), rgb(190, 120, 128)]
         let fires = flames()
         let flood = pad.phase == .count || pad.phase == .raise ? night : 0, floodlit: [Float] = [1, 0.9, 0.72]
+        var lights = tones
         density.withUnsafeBufferPointer { field in
             smoke.rgba.withUnsafeMutableBufferPointer { out in
                 for y in y0...y1 {
                     let up = twilight * smoothstep(shadow - 14, shadow + 14, Float(y + base))
-                    let lights = (0..<3).map { mix(tones[$0], sunlit[$0], up) }
+                    for tone in 0..<3 { lights[tone] = mix(tones[tone], sunlit[tone], up) }
                     for x in x0...x1 {
                         let d = field[y * w + x]
                         guard d >= 0.14 else { continue }
@@ -2836,7 +2846,7 @@ final class PixelCity: SKScene {
         // The tower's arms rest low, where a crawler brings a rocket under them, and are at whatever they hold otherwise.
         let holding = kit.caught && pad.phase != .hangar && pad.phase != .rollOut && pad.phase != .rollBack
         let arms = Int(holding ? (pad.phase == .raise ? hinge.y : pad.phase == .recover ? lowering : Float(starMount)) : Float(ground + 4)) + 43
-        var shown = [smokeSteps, flicker, pad.phase.rawValue, Int(hinge.x), Int(hinge.y), Int(lean * 80), Int(crane.x), Int(crane.t * 2), crane.phase.rawValue, arms, Int(caught.y),
+        var shown = [smokeSteps, flicker, pad.phase.rawValue, Int(hinge.x), Int(hinge.y), kit.standing ? 0 : Int(lean * 80), Int(crane.x), Int(crane.t * 2), crane.phase.rawValue, arms, Int(caught.y),
                      orbiter.phase.rawValue, Int(orbiter.x), Int(orbiter.y)]
         if let flying { shown += [Int(flying.x), Int(flying.y), Int(flying.scale * 60)] }
         for b in boosters { shown += [b.phase.rawValue, Int(b.z * 2), Int(lens(b.z).scale * 40)] }
@@ -2965,6 +2975,13 @@ final class PixelCity: SKScene {
             + [flat(rgb(52, 96, 190))]
     }
 
+    /// The rows or columns a turned rectangle can cover, so that `stamp` and `flame` look at no others: it starts
+    /// at `at`, runs `along`, and is `across` to each side. A pixel to spare each way, and never beyond `reach`.
+    private func span(_ at: Float, _ along: Float, _ across: Float, reach: Int) -> ClosedRange<Int> {
+        let from = Int((at + min(0, along) - abs(across)).rounded(.down)) - 2, to = Int((at + max(0, along) + abs(across)).rounded(.up)) + 1
+        return max(Int(at) - reach, from)...min(Int(at) + reach, to)
+    }
+
     /// Paints a rocket with the middle of its foot at (`x`, `y`), leaning `angle` radians right of upright, at
     /// `scale`. Each pixel under it looks up the art it falls on, so it turns and shrinks without gaps. A booster
     /// that has flown is sooty toward its foot (`soot`: for how many rows up), and takes a flame's light there (`heat`).
@@ -2972,8 +2989,9 @@ final class PixelCity: SKScene {
                        paint: [RGB], soot: Int = 0, heat: Float = 0) {
         let rows = art.count, wide = art[0].count, reach = Int(Float(rows + wide) * scale) + 2
         let (ax, ay) = (sin(angle), cos(angle)), (qx, qy) = (cos(angle), -sin(angle)), glare = rgb(255, 170, 90)
-        for py in Int(y) - reach...Int(y) + reach {
-            for column in Int(x) - reach...Int(x) + reach {
+        let long = Float(rows) * scale, half = Float(wide) * scale / 2, columns = span(x, ax * long, qx * half, reach: reach)
+        for py in span(y, ay * long, qy * half, reach: reach) {
+            for column in columns {
                 let rx = Float(column) + 0.5 - x, ry = Float(py) + 0.5 - y
                 let along = (rx * ax + ry * ay) / scale, across = (rx * qx + ry * qy) / scale + Float(wide) / 2
                 guard along >= 0, across >= 0, Int(along) < rows, Int(across) < wide else { continue }
@@ -2992,8 +3010,9 @@ final class PixelCity: SKScene {
         let (ax, ay) = (-sin(angle), -cos(angle)), (qx, qy) = (cos(angle), -sin(angle))
         let n = max(2, length * scale), w0 = max(1, wide * scale), reach = Int(n + w0) + 3
         guard length > 1 else { return }
-        for py in Int(y) - reach...Int(y) + reach {
-            for column in Int(x) - reach...Int(x) + reach {
+        let widest = w0 / 2 + scale + 0.35, columns = span(x, ax * n, qx * widest, reach: reach)
+        for py in span(y, ay * n, qy * widest, reach: reach) {
+            for column in columns {
                 let rx = Float(column) + 0.5 - x, ry = Float(py) + 0.5 - y
                 let along = rx * ax + ry * ay, across = abs(rx * qx + ry * qy)
                 guard along >= 0, along < n else { continue }
