@@ -363,8 +363,8 @@ class WeatherScene: SKScene {
 
         // Stars where the sky is dark enough, thinning toward the brighter horizon.
         if (u_stars > 0.0) {
-            float s = starField(pts, 9.0, 0.35, u_now) + 0.6 * starField(pts + 300.0, 5.0, 0.25, u_now);
-            col += vec3(0.9, 0.93, 1.0) * s * u_stars * 0.6 * clamp(1.0 - dot(col, vec3(0.3, 0.5, 0.2)) * 3.0, 0.0, 1.0);
+            float s = starField(pts, 9.0, 0.28, u_now) + 0.6 * starField(pts + 300.0, 5.0, 0.2, u_now);
+            col += vec3(0.9, 0.93, 1.0) * s * u_stars * 0.5 * clamp(1.0 - dot(col, vec3(0.3, 0.5, 0.2)) * 3.0, 0.0, 1.0);
         }
         // The Sun: a limb-darkened disc and a soft photographic glow, hidden by cloud below.
         float c = dot(rd, u_sun);

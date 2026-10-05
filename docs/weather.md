@@ -114,6 +114,7 @@ What changed from it:
 - **Snow:** layers fall at 18–74 pt/s, drifting with the wind.
 - **Ground:** covers the bottom 56% of the screen; horizon at 0.45; lit by `sunlit / 8`, compressed `^−0.38`.
 - **Exposure:** `0.7·mean^−0.88·0.05^−0.12`, halved at night.
+- **Stars:** a 9 pt grid with a star in 28% of its cells, plus a 5 pt grid with one in 20% at 0.6 of the brightness, all times 0.5.
 
 ## Performance
 - Release build, 2x, 1512×982, measured 2026-09-25: about 0.5 ms CPU in every state. GPU 0.45–0.7 ms for clear, cloudy, fog and twilight, 0.85 ms for rain and storms, 1.2–1.3 ms for snow (five flake layers; the first cut would be making the nearest layers an emitter).
@@ -132,6 +133,7 @@ What changed from it:
 - **Cloud motion** (2026-09-25): asked whether the partly cloudy clouds moved at all (at the real wind's speed they barely did), which led to the Cloud speed setting, the form-and-dissolve life cycle and billowing research. Then "can you see if we could do anything like having realistic looking cloud shadows move along with some of the closer clouds"; on seeing them: "cloud shadows are awesome, great work". He asked that billowing keep the shadows in step.
 - **The high-fidelity pass** (2026-09-25): "Give it the same level of treatment we gave galaxy, nebula, and fish tank. Do in depth research, gather assets and resources needed to make that scene visually look a lot nicer without too much impact to performance." Three research agents ran: rendering techniques (prototyping a physical sky, procedural ridges and clouds), reference photos and colours, and photo assets. Where they disagreed (procedural ridges against a photo ground) the renders settled it: the photo read as a photograph by day, and graded as backlit it held up at sunset too, so the physical sky and the photo ground were combined.
 - **The Moon's terminator** (2026-10-03): the photo was right, but a 48% Moon by day ended in a hard edge, and "in real life it's not an abrupt cut off of the moon, it fades out". It now shades with `moonShade`, and Live Sky's Moon does too.
+- **Clear-night stars** (2026-10-05): "the clear night is a bit intense in terms of star light … I get in country side you would see a lot of stars but lets tone it down just a bit here. not a lot". About a fifth fewer stars (28% and 20% of cells, from 35% and 25%) and a sixth dimmer (0.5, from 0.6).
 
 ## Ideas / next steps
 - An optional temperature readout with a °F/°C setting, which Dave was offered.
