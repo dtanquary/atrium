@@ -1,53 +1,64 @@
 import SpriteKit
 
 @MainActor func pixelCity(size: CGSize) -> SKScene { PixelCity(size: size) }
+/// Pixel Spaceport: the same scene pinned to its launch site, as a wallpaper of its own with its own settings.
+@MainActor func pixelSpaceport(size: CGSize) -> SKScene { PixelCity(size: size, spaceport: true) }
 
 /// A pixel-art city that follows the real sun and clock: dawn, day, dusk and night skies, windows lighting up and
 /// going dark through the evening, traffic, a blinking beacon and the odd plane, with walls lit from wherever the
 /// Sun really is. Everything lives on a low-resolution canvas measured in art pixels, scaled up with nearest
 /// filtering. Settings picks the city (`City`): a downtown across water, one under mountains, a bridge over a bay,
-/// a town up a hillside, the view over a sea of rooftops, an airport with aircraft coming and going, or a launch
-/// site whose rockets lift off and whose boosters come back.
+/// a town up a hillside, the view over a sea of rooftops, or an airport with aircraft coming and going. The same
+/// scene, pinned to a launch site whose rockets lift off and whose boosters come back, is Pixel Spaceport, a
+/// wallpaper of its own (`spaceport`).
 final class PixelCity: SKScene {
-    nonisolated static let knobs = [
-        Knob(key: "city.place", label: "City", range: 0...Double(City.allCases.count - 1), standard: 0, section: "City",
-             format: .choice(City.allCases.map(\.name))),
-        Knob(key: "city.shuffle", label: "Move to another city automatically", range: 0...1, standard: 0, section: "City",
-             format: .toggle),
-        Knob(key: "city.shuffleMinutes", label: "Move every", range: 1...60, standard: 10, section: "City", format: .minutes,
-             shownWhen: "city.shuffle"),
-        Knob(key: "city.looking", label: "Looking", range: 0...8, standard: 0, section: "City",
-             format: .choice(["Toward the midday Sun", "North", "North-east", "East", "South-east", "South", "South-west", "West", "North-west"])),
-        Knob(key: "city.flightsDay", label: "Flights by day", range: 0.25...3, standard: 1, section: "Airport", format: .times),
-        Knob(key: "city.flightsNight", label: "Flights at night", range: 0.25...3, standard: 0.7, section: "Airport", format: .times),
-        Knob(key: "city.wind", label: "Land and take off into the real wind", range: 0...1, standard: 1, section: "Airport",
-             format: .toggle),
-        Knob(key: "city.launches", label: "Launches", range: 0.25...3, standard: 1, section: "Spaceport", format: .times),
-        Knob(key: "city.rocket.falcon9", label: "Falcon 9", range: 0...1, standard: 1, section: "Spaceport", format: .toggle),
-        Knob(key: "city.rocket.heavy", label: "Falcon Heavy", range: 0...1, standard: 1, section: "Spaceport", format: .toggle),
-        Knob(key: "city.rocket.starship", label: "Starship", range: 0...1, standard: 1, section: "Spaceport", format: .toggle),
-        Knob(key: "city.rocket.sls", label: "SLS", range: 0...1, standard: 1, section: "Spaceport", format: .toggle),
-        Knob(key: "city.rocket.shuttle", label: "Space Shuttle", range: 0...1, standard: 1, section: "Spaceport", format: .toggle),
-        Knob(key: "city.rocket.saturn", label: "Saturn V", range: 0...1, standard: 1, section: "Spaceport", format: .toggle),
-        Knob(key: "city.rocket.ariane", label: "Ariane 5", range: 0...1, standard: 1, section: "Spaceport", format: .toggle),
-        Knob(key: "city.rocket.titan", label: "Gemini-Titan", range: 0...1, standard: 1, section: "Spaceport", format: .toggle),
-        Knob(key: "city.rocket.atlas", label: "Mercury-Atlas", range: 0...1, standard: 1, section: "Spaceport", format: .toggle),
-        Knob(key: "city.rocket.redstone", label: "Mercury-Redstone", range: 0...1, standard: 1, section: "Spaceport", format: .toggle),
-        Knob(key: "city.rocket.soyuz", label: "Soyuz", range: 0...1, standard: 1, section: "Spaceport", format: .toggle),
-        Knob(key: "city.rocket.longmarch", label: "Long March 5", range: 0...1, standard: 1, section: "Spaceport", format: .toggle),
-        Knob(key: "city.rocket.h3", label: "H3", range: 0...1, standard: 1, section: "Spaceport", format: .toggle),
-        Knob(key: "city.rocket.lvm3", label: "LVM3", range: 0...1, standard: 1, section: "Spaceport", format: .toggle),
-        Knob(key: "city.previewTime", label: "Preview a time of day", range: 0...1, standard: 0, section: "Preview",
-             format: .toggle),
-        Knob(key: "city.previewHour", label: "Time", range: 0...24, standard: 19, section: "Preview", format: .clock,
-             shownWhen: "city.previewTime"),
-    ]
     private enum K: Int {
         case view, shuffle, shuffleMinutes, looking, flightsDay, flightsNight, wind, launches
         case falcon9, falconHeavy, starship, sls, shuttle, saturnV, ariane, titan, atlas, redstone, soyuz, longMarch, h3, lvm3, previewTime, previewHour
     }
-    private static func knob(_ k: K) -> Double { knobs[k.rawValue].value }
-    private var settings = PixelCity.knobs.map(\.value)
+    /// Pixel City's settings, each with the name the scene reads it by.
+    nonisolated private static let cityKnobs: [(K, Knob)] = [
+        (.view, Knob(key: "city.place", label: "City", range: 0...Double(City.menu.count - 1), standard: 0, section: "City",
+                     format: .choice(City.menu.map(\.name)))),
+        (.shuffle, Knob(key: "city.shuffle", label: "Move to another city automatically", range: 0...1, standard: 0, section: "City", format: .toggle)),
+        (.shuffleMinutes, Knob(key: "city.shuffleMinutes", label: "Move every", range: 1...60, standard: 10, section: "City", format: .minutes,
+                               shownWhen: "city.shuffle")),
+        (.looking, Knob(key: "city.looking", label: "Looking", range: 0...8, standard: 0, section: "City", format: .choice(["Toward the midday Sun", "North", "North-east", "East", "South-east", "South", "South-west", "West", "North-west"]))),
+        (.flightsDay, Knob(key: "city.flightsDay", label: "Flights by day", range: 0.25...3, standard: 1, section: "Airport", format: .times)),
+        (.flightsNight, Knob(key: "city.flightsNight", label: "Flights at night", range: 0.25...3, standard: 0.7, section: "Airport", format: .times)),
+        (.wind, Knob(key: "city.wind", label: "Land and take off into the real wind", range: 0...1, standard: 1, section: "Airport", format: .toggle)),
+        (.previewTime, Knob(key: "city.previewTime", label: "Preview a time of day", range: 0...1, standard: 0, section: "Preview", format: .toggle)),
+        (.previewHour, Knob(key: "city.previewHour", label: "Time", range: 0...24, standard: 19, section: "Preview", format: .clock,
+                            shownWhen: "city.previewTime")),
+    ]
+    /// Pixel Spaceport's settings: how often it launches, a switch for each rocket, and a view and a time preview of its own.
+    nonisolated private static let launchKnobs: [(K, Knob)] = [
+        (.launches, Knob(key: "spaceport.launches", label: "Launches", range: 0.25...3, standard: 1, section: "Launches", format: .times)),
+        (.falcon9, Knob(key: "spaceport.rocket.falcon9", label: "Falcon 9", range: 0...1, standard: 1, section: "Rockets", format: .toggle)),
+        (.falconHeavy, Knob(key: "spaceport.rocket.heavy", label: "Falcon Heavy", range: 0...1, standard: 1, section: "Rockets", format: .toggle)),
+        (.starship, Knob(key: "spaceport.rocket.starship", label: "Starship", range: 0...1, standard: 1, section: "Rockets", format: .toggle)),
+        (.sls, Knob(key: "spaceport.rocket.sls", label: "SLS", range: 0...1, standard: 1, section: "Rockets", format: .toggle)),
+        (.shuttle, Knob(key: "spaceport.rocket.shuttle", label: "Space Shuttle", range: 0...1, standard: 1, section: "Rockets", format: .toggle)),
+        (.saturnV, Knob(key: "spaceport.rocket.saturn", label: "Saturn V", range: 0...1, standard: 1, section: "Rockets", format: .toggle)),
+        (.ariane, Knob(key: "spaceport.rocket.ariane", label: "Ariane 5", range: 0...1, standard: 1, section: "Rockets", format: .toggle)),
+        (.titan, Knob(key: "spaceport.rocket.titan", label: "Gemini-Titan", range: 0...1, standard: 1, section: "Rockets", format: .toggle)),
+        (.atlas, Knob(key: "spaceport.rocket.atlas", label: "Mercury-Atlas", range: 0...1, standard: 1, section: "Rockets", format: .toggle)),
+        (.redstone, Knob(key: "spaceport.rocket.redstone", label: "Mercury-Redstone", range: 0...1, standard: 1, section: "Rockets", format: .toggle)),
+        (.soyuz, Knob(key: "spaceport.rocket.soyuz", label: "Soyuz", range: 0...1, standard: 1, section: "Rockets", format: .toggle)),
+        (.longMarch, Knob(key: "spaceport.rocket.longmarch", label: "Long March 5", range: 0...1, standard: 1, section: "Rockets", format: .toggle)),
+        (.h3, Knob(key: "spaceport.rocket.h3", label: "H3", range: 0...1, standard: 1, section: "Rockets", format: .toggle)),
+        (.lvm3, Knob(key: "spaceport.rocket.lvm3", label: "LVM3", range: 0...1, standard: 1, section: "Rockets", format: .toggle)),
+        (.looking, Knob(key: "spaceport.looking", label: "Looking", range: 0...8, standard: 0, section: "View", format: .choice(["Toward the midday Sun", "North", "North-east", "East", "South-east", "South", "South-west", "West", "North-west"]))),
+        (.previewTime, Knob(key: "spaceport.previewTime", label: "Preview a time of day", range: 0...1, standard: 0, section: "Preview", format: .toggle)),
+        (.previewHour, Knob(key: "spaceport.previewHour", label: "Time", range: 0...24, standard: 19, section: "Preview", format: .clock,
+                            shownWhen: "spaceport.previewTime")),
+    ]
+    nonisolated static let knobs = cityKnobs.map(\.1), spaceportKnobs = launchKnobs.map(\.1)
+    /// Which wallpaper this scene is: Pixel City, with its menu of cities, or Pixel Spaceport, which is always the launch site.
+    private let spaceport: Bool
+    private var mine: [Knob] { spaceport ? Self.spaceportKnobs : Self.knobs }
+    private func knob(_ k: K) -> Double { (spaceport ? Self.launchKnobs : Self.cityKnobs).first { $0.0 == k }?.1.value ?? 0 }
+    private var settings: [Double] = []
     private var retired = false // it has handed over to a scene of another city, and is fading out
     private static var easing = false // the city is changing by itself, so take the fade slowly
     /// When the city last changed, for the automatic move. It's the wall clock, saved, not time counted by this scene:
@@ -124,7 +135,10 @@ final class PixelCity: SKScene {
     private var planeX: Float = 0, planeDirection: Float = 0
     private var ship = SKSpriteNode(), shipX: Float = 0, shipDirection: Float = 0, nextShip = TimeInterval.random(in: 20...90)
 
-    override init(size: CGSize) {
+    override convenience init(size: CGSize) { self.init(size: size, spaceport: false) }
+
+    init(size: CGSize, spaceport: Bool) {
+        self.spaceport = spaceport
         let pixel = max(2, (size.height / 240).rounded()) // points per art pixel
         w = Int((size.width / pixel).rounded(.up))
         h = Int((size.height / pixel).rounded(.up))
@@ -132,7 +146,7 @@ final class PixelCity: SKScene {
         canvas.setScale(pixel)
         addChild(canvas)
         moveIfDue() // it may have been away, or the app closed, for longer than the wait
-        settings = Self.knobs.map(\.value)
+        settings = mine.map(\.value)
         layOut()
         redraw()
         run(.repeatForever(.sequence([.wait(forDuration: 30), .run { [weak self] in self?.redraw() }])))
@@ -151,16 +165,16 @@ final class PixelCity: SKScene {
     /// Fetches the weather, for the wind, while the Airport is showing and Settings has it follow the real wind.
     /// It's the one request every weather wallpaper shares, and no other city makes it.
     private func askTheWind() {
-        if city == .airport, Self.knob(.wind) > 0.5 { LiveWeather.shared.poll() }
+        if city == .airport, knob(.wind) > 0.5 { LiveWeather.shared.poll() }
     }
 
     /// Repaints when one of its own settings changes (the notification comes for every wallpaper's).
     @objc private func settingsChanged() {
-        let picked = Self.knobs.map(\.value)
+        let picked = mine.map(\.value)
         guard picked != settings, !retired else { return }
-        let moved = picked[K.view.rawValue] != settings[K.view.rawValue]
+        let moved = !spaceport && picked[K.view.rawValue] != settings[K.view.rawValue]
         // Picking a city by hand, or changing whether and how often it moves, starts the wait over.
-        let restart = [K.view, .shuffle, .shuffleMinutes].contains { picked[$0.rawValue] != settings[$0.rawValue] }
+        let restart = !spaceport && [K.view, .shuffle, .shuffleMinutes].contains { picked[$0.rawValue] != settings[$0.rawValue] }
         settings = picked
         if restart, !Self.easing { UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: Self.movedKey) }
         if moved, let view { // another city: dissolve into a new scene of it with both still running, never a cut
@@ -180,36 +194,36 @@ final class PixelCity: SKScene {
     /// Moves to another city if Settings has that on and the wait is up. Checked every few seconds, and when the
     /// scene is built: if Pixel City has been off the desktop for longer than the wait, it comes back as a new city.
     private func moveIfDue() {
-        guard Self.knob(.shuffle) > 0.5, !retired else { return }
+        guard !spaceport, knob(.shuffle) > 0.5, !retired else { return }
         let now = Date().timeIntervalSince1970
         guard let moved = UserDefaults.standard.object(forKey: Self.movedKey) as? Double else {
             return UserDefaults.standard.set(now, forKey: Self.movedKey) // just switched on: the wait starts here
         }
-        if now - moved >= Self.knob(.shuffleMinutes).rounded() * 60 { moveOn() }
+        if now - moved >= knob(.shuffleMinutes).rounded() * 60 { moveOn() }
     }
 
     /// Moves to another city, picked at random. It saves the pick as Settings would, so every display's copy of the
     /// scene follows it and the City menu shows where we are.
     func moveOn() {
-        guard !retired else { return }
+        guard !retired, !spaceport else { return }
         Self.easing = true
         defer { Self.easing = false }
         UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: Self.movedKey)
-        let others = City.allCases.filter { $0.rawValue != Int(Self.knob(.view)) } // any but the one saved, which a new scene hasn't laid out yet
+        let others = City.menu.filter { $0.rawValue != Int(knob(.view)) } // any but the one saved, which a new scene hasn't laid out yet
         UserDefaults.standard.set(Double(others.randomElement()!.rawValue), forKey: Self.knobs[K.view.rawValue].key)
     }
 
     /// The compass bearing we look along: toward the equator, where the Sun and Moon cross the sky, unless Settings
     /// picks one. Looking the other way puts the Sun at our backs, so it lights the fronts of the buildings.
     private func heading(_ latitude: Double) -> Double {
-        let pick = Int(Self.knob(.looking))
+        let pick = Int(knob(.looking))
         return pick == 0 ? (latitude >= 0 ? 180 : 0) : Double(pick - 1) * 45
     }
 
     /// Now, or today at the preview hour while previewing.
     private var now: Date {
-        guard Self.knob(.previewTime) > 0.5 else { return Date() }
-        return Calendar.current.startOfDay(for: Date()).addingTimeInterval(Self.knob(.previewHour) * 3600)
+        guard knob(.previewTime) > 0.5 else { return Date() }
+        return Calendar.current.startOfDay(for: Date()).addingTimeInterval(knob(.previewHour) * 3600)
     }
 
     // MARK: - Layout (once)
@@ -222,7 +236,7 @@ final class PixelCity: SKScene {
         (plane, planeLights, beacon, mirrored, waterTints, mirrors) = (SKSpriteNode(), SKNode(), SKNode(), [], [], [])
         (trafficStrip, trafficShown, launchTexture, plume, boosters) = (nil, [], nil, [], [])
         (nextCar, planeDirection, shipDirection, ship) = ([clock, clock], 0, 0, SKSpriteNode())
-        city = City(rawValue: Int(Self.knob(.view))) ?? .waterfront
+        city = spaceport ? .spaceport : City.menu.first { $0.rawValue == Int(knob(.view)) } ?? .waterfront
         waterRows = city == .waterfront ? Int(Float(h) * 0.21) : 0
         switch city {
         case .waterfront: ground = waterRows + quay + 26
@@ -686,7 +700,7 @@ final class PixelCity: SKScene {
     /// The live wind's speed along the runway in km/h, from the right when positive, or nil if Settings has the
     /// Airport ignore it or no report has come in. We look along `facing`, so the right is 90° on from that.
     private var windAlong: Float? {
-        guard Self.knob(.wind) > 0.5, let report = LiveWeather.shared.latest else { return nil }
+        guard knob(.wind) > 0.5, let report = LiveWeather.shared.latest else { return nil }
         return Float(report.wind * cos((report.windFrom - facing - 90) * .pi / 180))
     }
 
@@ -702,7 +716,7 @@ final class PixelCity: SKScene {
     /// 5 and 7 in the morning and from 8 in the evening to midnight. Waits on a stand and away run down at this pace.
     private var flying: Double {
         let day = smoothstep(5, 7, Float(hour)) * (1 - smoothstep(20, 24, Float(hour)))
-        return Double(mix(Float(Self.knob(.flightsNight)), Float(Self.knob(.flightsDay)), day))
+        return Double(mix(Float(knob(.flightsNight)), Float(knob(.flightsDay)), day))
     }
 
     /// For the tests: how many aircraft have the runway at this moment.
@@ -2173,7 +2187,7 @@ final class PixelCity: SKScene {
         hangar = Self.lastHangar
         hangar.landers.shuffle()
         hangar.others.shuffle()
-        (pad.phase, pad.until, pad.rocket, pad.flown) = (.count, clock + 24 * Self.knob(.launches), nextRocket(), Bool.random())
+        (pad.phase, pad.until, pad.rocket, pad.flown) = (.count, clock + 24 * knob(.launches), nextRocket(), Bool.random())
         boosters = pad.rocket.kit.lands == 2 ? [] : [Booster(phase: .landed, zone: 1, until: clock + 2)]
         pad.x = roll(pad.rocket.kit) // it has rolled all the way out, so its strongback or crawler has that far to go home
         let rows = h - waterRows, texture = SKMutableTexture(size: CGSize(width: w, height: rows))
@@ -2363,7 +2377,7 @@ final class PixelCity: SKScene {
     ]
     // ponytail: with every rocket switched off it flies them all, so the pad is never left empty
     private static var rockets: [Rocket] {
-        let on = fleet.filter { knob($0.knob) > 0.5 }.map(\.rocket)
+        let on = fleet.filter { rocket in launchKnobs.first { $0.0 == rocket.knob }?.1.value ?? 1 > 0.5 }.map(\.rocket)
         return on.isEmpty ? fleet.map(\.rocket) : on
     }
 
@@ -2418,7 +2432,7 @@ final class PixelCity: SKScene {
 
     /// Seconds from lift-off, negative through the count, while there's a rocket on the mount or on its way up.
     private var flightTime: Float? {
-        pad.phase == .climb ? pad.t : pad.phase == .count ? -Float((pad.until - clock) / Self.knob(.launches)) : nil
+        pad.phase == .climb ? pad.t : pad.phase == .count ? -Float((pad.until - clock) / knob(.launches)) : nil
     }
 
     /// Moves the Spaceport on through its round. A rocket rolls out to the pad, lying on a strongback from the hangar
@@ -2426,7 +2440,7 @@ final class PixelCity: SKScene {
     /// strongback or crawler rolls back for the next. If its boosters come back, they do so a minute later, each to
     /// a landing zone, and a crane comes for each and carries it away.
     private func launch(_ dt: Float) {
-        let pace = Self.knob(.launches), kit = pad.rocket.kit
+        let pace = knob(.launches), kit = pad.rocket.kit
         // A rocket that comes out standing only has to settle; Starship is lifted onto its mount by the tower's arms.
         let rolled = roll(kit), raising: Float = kit.caught ? 10 : kit.standing ? 4 : 18
         // Time in the hangar and the count run down at the pace Settings gives, so a change shows at once.
@@ -2998,6 +3012,8 @@ private enum Roof: CaseIterable { case plain, ledge, setback, tank, antenna }
 
 /// The cities Settings can pick, in the menu's order. The pick is stored as its index, so add new ones at the end.
 private enum City: Int, CaseIterable {
+    /// Those Pixel City's menu offers. The launch site was one, until it became Pixel Spaceport, a wallpaper of its own.
+    static var menu: [City] { allCases.filter { $0 != .spaceport } }
     case waterfront, foothills, bridge, hillside, overlook, airport, spaceport
     var name: String { ["Waterfront", "Foothills", "Long Bridge", "Hillside Town", "Overlook", "Airport", "Spaceport"][rawValue] }
 }

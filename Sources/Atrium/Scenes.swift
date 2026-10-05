@@ -80,6 +80,8 @@ struct Refresh {
               make: weather, knobs: WeatherScene.knobs, status: (key: "weather.status", below: "weather.lock"), refresh: .weather),
     Wallpaper(name: "Pixel City", icon: "building.2.fill", tint: .pink, blurb: "A pixel-art skyline on your clock.",
               make: pixelCity, knobs: PixelCity.knobs),
+    Wallpaper(name: "Pixel Spaceport", icon: "location.north.fill", tint: .orange, blurb: "A pixel-art launch site that never stops.",
+              make: pixelSpaceport, knobs: PixelCity.spaceportKnobs),
     Wallpaper(name: "Fireflies", icon: "sparkle", tint: .yellow, blurb: "A meadow at blue hour, twinkling with fireflies.",
               make: fireflies, knobs: Fireflies.knobs),
     Wallpaper(name: "Murmuration", icon: "bird.fill", tint: .brown, blurb: "Starlings swirling over a sunset.",

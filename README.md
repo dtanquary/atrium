@@ -2,7 +2,7 @@
 
 <img src="docs/images/app-icon.png" alt="Atrium's icon: a skylight onto a glowing nebula" width="128">
 
-Living, animated desktop wallpapers for macOS, 20 of them: a reef tank of real fish and corals, slow tours through the best real photos of the Solar System and deep space, the real sky above you right now, your live weather and wind, sunlight through leaves from the real Sun, rising heat as a schlieren camera sees it, drifting nebulae, and more. It's a small menu bar app written in Swift and SpriteKit, with no dependencies.
+Living, animated desktop wallpapers for macOS, 21 of them: a reef tank of real fish and corals, slow tours through the best real photos of the Solar System and deep space, the real sky above you right now, your live weather and wind, sunlight through leaves from the real Sun, rising heat as a schlieren camera sees it, drifting nebulae, and more. It's a small menu bar app written in Swift and SpriteKit, with no dependencies.
 
 It's free and open source, for macOS 26 or later on Apple silicon. See it move at **[atrium.show](https://atrium.show)**, [download it](#download), or [build it yourself](#build-from-source) in a few minutes.
 
@@ -11,7 +11,7 @@ It's free and open source, for macOS 26 or later on Apple silicon. See it move a
 Screenshots show the wallpaper alone, with no desktop icons, menu bar or Dock. Everything moves: the fish school, the photos drift and zoom, the wind streams, the nebulae fold, the galaxies turn and the starlings wheel. Galaxy, Nebula and the reef are rebuilt differently on every load. Every wallpaper has its own page in [Settings](#settings). The docs in [`docs/`](docs/README.md) cover each wallpaper in depth: how it works, its settings, cost and ideas for next steps.
 
 - **Nature and weather:** [Fish Tank](#fish-tank) · [Weather](#weather) · [Dappled Light](#dappled-light) · [Rain on Glass](#rain-on-glass) · [Wind](#wind) · [Murmuration](#murmuration) · [Aurora](#aurora) · [Fireflies](#fireflies)
-- **Space:** [Solar System Tour](#solar-system-tour) · [Deep Space Tour](#deep-space-tour) · [Nebula](#nebula) · [Galaxy](#galaxy) · [Live Sky](#live-sky) · [Earth from Orbit](#earth-from-orbit)
+- **Space:** [Solar System Tour](#solar-system-tour) · [Deep Space Tour](#deep-space-tour) · [Nebula](#nebula) · [Galaxy](#galaxy) · [Live Sky](#live-sky) · [Earth from Orbit](#earth-from-orbit) · [Pixel Spaceport](#pixel-spaceport)
 - **Color, light and pattern:** [Flowing Gradient](#flowing-gradient) · [Lava Lamp](#lava-lamp) · [Schlieren](#schlieren) · [Turing Patterns](#turing-patterns) · [Game of Life](#game-of-life) · [Pixel City](#pixel-city)
 
 ### Nature and weather
@@ -146,6 +146,38 @@ The globe above your location with the live day/night line, today's real clouds,
 |---|---|
 | City lights across India before dawn, with day coming in from the east | Late afternoon over North America, under today's real clouds |
 
+#### Pixel Spaceport
+A pixel-art launch site that never stops, drawn like [Pixel City](#pixel-city) and lit by the same real Sun, seen from the bank across a lagoon. A rocket rolls out of the hangar lying on its transporter, climbs the ramp to the pad and is stood up, then fuels through a count you can follow on the countdown board on the near bank. It lifts off on a cloud of steam and arcs away, shrinking to a spark at the top of its trail. A little over a minute later its booster comes back, lights its landing burn, drops its legs and lands beside the pad, and a crane carries it off while the next rocket rolls out.
+
+- **Fourteen rockets,** each with its own switch in Settings: Falcon 9 and Falcon Heavy, Starship, SLS, the Space Shuttle, the Saturn V, Gemini-Titan, Mercury-Atlas and Mercury-Redstone from the 1960s, and from abroad Ariane 5, Soyuz, Long March 5, Japan's H3 and India's LVM3. They are drawn to one scale, so a Saturn V stands as tall as the pad's tower and a Redstone not much taller than its floodlights. The countdown board names the one on the pad.
+- **Four of them come back.** A Falcon 9's booster lands beside the pad, and a Falcon Heavy's two land side by side. Starship has a pad of its own: its tower's arms lift it onto the mount, and catch its booster when that flies back. A little later its ship comes home too: it falls on its belly, flips upright on its engines and lands on a landing zone. And two and a half minutes after a Shuttle launch its orbiter glides in to the runway along the shore, rolls out behind a drag chute and is towed away. Rockets whose boosters come back and rockets that fly once take turns, so a booster returns after every other lift-off.
+- **Each flies as itself.** The big NASA rockets and Ariane roll out standing on a crawler; the Shuttle and SLS leave the thick white trail of their solid boosters; the Saturn V climbs slowly.
+- **A tip of the hat:** when a rocket from abroad is on the pad, its country's flag goes up a second pole beside the Stars and Stripes: the French tricolour for Ariane 5, and Russia's, China's, Japan's and India's for the others.
+- **How often:** a lift-off every four minutes or so, or anywhere from every two minutes to every twelve with the Launches slider.
+- **The light is the real Sun's,** as in Pixel City, and you can choose which way you look or preview a time of day. A night launch lights its own steam, and for half an hour after sunset the trail still catches the Sun above a pad already in shadow.
+- **All of it is mirrored in the lagoon,** the flames included.
+- **It runs to its own clock,** not the real launch schedule, and makes no network requests. The rockets are drawn after the real ones, without names or logos on them; Atrium isn't affiliated with SpaceX, NASA or any other space agency or launch company.
+
+![Pixel Spaceport's fourteen rockets on the pad, from Mercury-Redstone to Starship](docs/images/pixel-spaceport-fleet.jpg)
+
+| ![Pixel Spaceport at sunset, a Falcon 9 nine seconds after lift-off](docs/images/pixel-spaceport.jpg) | ![Pixel Spaceport at sunset, a Falcon Heavy's two boosters landing](docs/images/pixel-spaceport-double.jpg) |
+|---|---|
+| Sunset, nine seconds after lift-off | A Falcon Heavy's two boosters coming home |
+| ![Pixel Spaceport by day, a rocket being stood up as a booster lands](docs/images/pixel-spaceport-day.jpg) | ![Pixel Spaceport after sunset, the trail lit pink above a pad in shadow](docs/images/pixel-spaceport-twilight.jpg) |
+| The next rocket is stood up as the last one's booster lands | After sunset, the trail still in sunlight |
+| ![Pixel Spaceport at night, a Falcon Heavy floodlit on the pad](docs/images/pixel-spaceport-heavy.jpg) | ![Pixel Spaceport at night, a booster on its landing burn](docs/images/pixel-spaceport-night.jpg) |
+| A Falcon Heavy on the pad, nine seconds from lift-off | A booster on its landing burn at night |
+| ![Pixel Spaceport at sunset, a Saturn V eight seconds after lift-off](docs/images/pixel-spaceport-saturn.jpg) | ![Pixel Spaceport by day, the Space Shuttle seven seconds after lift-off](docs/images/pixel-spaceport-shuttle.jpg) |
+| A Saturn V at sunset | The Space Shuttle by day |
+| ![Pixel Spaceport by day, an Ariane 5 on the pad with the French flag beside the Stars and Stripes](docs/images/pixel-spaceport-ariane.jpg) | ![Pixel Spaceport at night, SLS floodlit on the pad](docs/images/pixel-spaceport-sls.jpg) |
+| An Ariane 5 on the pad, the tricolour up beside the Stars and Stripes | SLS floodlit at night |
+| ![Pixel Spaceport by day, Starship on its own pad beside its tower](docs/images/pixel-spaceport-starship.jpg) | ![Pixel Spaceport at sunset, Starship's booster coming down to the tower's arms](docs/images/pixel-spaceport-catch.jpg) |
+| Starship on its own pad | Its booster coming back to the tower's arms |
+| ![Pixel Spaceport at sunset, Starship's ship swinging upright on its engines](docs/images/pixel-spaceport-flip.jpg) | ![Pixel Spaceport at sunset, Starship's ship coming down on a landing zone](docs/images/pixel-spaceport-ship.jpg) |
+| Then its ship comes home: the flip | Down on its engines |
+| ![Pixel Spaceport by day, the Shuttle's orbiter rolling out along the runway behind its drag chute](docs/images/pixel-spaceport-orbiter.jpg) | ![Pixel Spaceport at sunset, a Soyuz lifting off with Russia's flag beside the Stars and Stripes](docs/images/pixel-spaceport-soyuz.jpg) |
+| The Shuttle's orbiter home, rolling out behind its drag chute | A Soyuz at sunset, its flag up beside the Stars and Stripes |
+
 ### Color, light and pattern
 
 #### Flowing Gradient
@@ -184,7 +216,7 @@ Conway's cells, reseeding so they never die out. The Calm look shows a long expo
 | Calm | Classic |
 
 #### Pixel City
-A pixel-art city that follows your clock and the real Sun, with traffic and windows lighting up through the evening. Pick a city: the Waterfront, a downtown mirrored in the water with its walls lit from wherever the Sun is; Foothills, a small downtown under snow-capped mountains that hold the last of the sunlight; the Long Bridge, strung with lights across a bay; Hillside Town, tiled houses stacked above a harbour; the Overlook, out over a sea of rooftops; the Airport, across a bay, where airliners land, taxi to the terminal and take off again into the real wind, mirrored in the water; or the Spaceport, seen from the bank across a lagoon, where rockets roll out to the pad and lift off on a column of smoke, their boosters fly back to land, and a crane carries them away. It can move between them by itself every few minutes. You can also choose which way you look, so the Sun sets in view or lights the buildings from behind you.
+A pixel-art city that follows your clock and the real Sun, with traffic and windows lighting up through the evening. Pick a city: the Waterfront, a downtown mirrored in the water with its walls lit from wherever the Sun is; Foothills, a small downtown under snow-capped mountains that hold the last of the sunlight; the Long Bridge, strung with lights across a bay; Hillside Town, tiled houses stacked above a harbour; the Overlook, out over a sea of rooftops; or the Airport, across a bay, where airliners land, taxi to the terminal and take off again into the real wind, mirrored in the water. It can move between them by itself every few minutes. You can also choose which way you look, so the Sun sets in view or lights the buildings from behind you.
 
 | ![Pixel City's Waterfront at dusk](docs/images/pixel-city-dusk.jpg) | ![Pixel City's Foothills on a clear morning](docs/images/pixel-city-foothills.jpg) |
 |---|---|
@@ -195,37 +227,6 @@ A pixel-art city that follows your clock and the real Sun, with traffic and wind
 | The Overlook at sunset | Hillside Town at night, its lamps in the harbour |
 | ![Pixel City's Airport at sunset](docs/images/pixel-city-airport.jpg) | ![Pixel City's Airport at night](docs/images/pixel-city-airport-night.jpg) |
 | The Airport at sunset, an airliner just down | The Airport at night |
-
-**The Spaceport** is a launch site that never stops. A rocket rolls out of the hangar lying on its transporter, climbs the ramp to the pad and is stood up, then fuels through a count you can follow on the countdown board on the near bank. It lifts off on a cloud of steam and arcs away, shrinking to a spark at the top of its trail. A little over a minute later its booster comes back, lights its landing burn, drops its legs and lands beside the pad, and a crane carries it off while the next rocket rolls out.
-
-- **Fourteen rockets,** each with its own switch in Settings: Falcon 9 and Falcon Heavy, Starship, SLS, the Space Shuttle, the Saturn V, Gemini-Titan, Mercury-Atlas and Mercury-Redstone from the 1960s, and from abroad Ariane 5, Soyuz, Long March 5, Japan's H3 and India's LVM3. They are drawn to one scale, so a Saturn V stands as tall as the pad's tower and a Redstone not much taller than its floodlights. The countdown board names the one on the pad.
-- **Four of them come back.** A Falcon 9's booster lands beside the pad, and a Falcon Heavy's two land side by side. Starship has a pad of its own: its tower's arms lift it onto the mount, and catch its booster when that flies back. A little later its ship comes home too: it falls on its belly, flips upright on its engines and lands on a landing zone. And two and a half minutes after a Shuttle launch its orbiter glides in to the runway along the shore, rolls out behind a drag chute and is towed away. Rockets whose boosters come back and rockets that fly once take turns, so a booster returns after every other lift-off.
-- **Each flies as itself.** The big NASA rockets and Ariane roll out standing on a crawler; the Shuttle and SLS leave the thick white trail of their solid boosters; the Saturn V climbs slowly.
-- **A tip of the hat:** when a rocket from abroad is on the pad, its country's flag goes up a second pole beside the Stars and Stripes: the French tricolour for Ariane 5, and Russia's, China's, Japan's and India's for the others.
-- **How often:** a lift-off every four minutes or so, or anywhere from every two minutes to every twelve with the Launches slider.
-- **The light is the real Sun's,** as in every city. A night launch lights its own steam, and for half an hour after sunset the trail still catches the Sun above a pad already in shadow.
-- **All of it is mirrored in the lagoon,** the flames included.
-- **It runs to its own clock,** not the real launch schedule, and makes no network requests. The rockets are drawn after the real ones, without names or logos on them; Atrium isn't affiliated with SpaceX, NASA or any other space agency or launch company.
-
-![The Spaceport's fourteen rockets on the pad, from Mercury-Redstone to Starship](docs/images/pixel-city-spaceport-fleet.jpg)
-
-| ![Pixel City's Spaceport at sunset, a Falcon 9 nine seconds after lift-off](docs/images/pixel-city-spaceport.jpg) | ![Pixel City's Spaceport at sunset, a Falcon Heavy's two boosters landing](docs/images/pixel-city-spaceport-double.jpg) |
-|---|---|
-| Sunset, nine seconds after lift-off | A Falcon Heavy's two boosters coming home |
-| ![Pixel City's Spaceport by day, a rocket being stood up as a booster lands](docs/images/pixel-city-spaceport-day.jpg) | ![Pixel City's Spaceport after sunset, the trail lit pink above a pad in shadow](docs/images/pixel-city-spaceport-twilight.jpg) |
-| The next rocket is stood up as the last one's booster lands | After sunset, the trail still in sunlight |
-| ![Pixel City's Spaceport at night, a Falcon Heavy floodlit on the pad](docs/images/pixel-city-spaceport-heavy.jpg) | ![Pixel City's Spaceport at night, a booster on its landing burn](docs/images/pixel-city-spaceport-night.jpg) |
-| A Falcon Heavy on the pad, nine seconds from lift-off | A booster on its landing burn at night |
-| ![Pixel City's Spaceport at sunset, a Saturn V eight seconds after lift-off](docs/images/pixel-city-spaceport-saturn.jpg) | ![Pixel City's Spaceport by day, the Space Shuttle seven seconds after lift-off](docs/images/pixel-city-spaceport-shuttle.jpg) |
-| A Saturn V at sunset | The Space Shuttle by day |
-| ![Pixel City's Spaceport by day, an Ariane 5 on the pad with the French flag beside the Stars and Stripes](docs/images/pixel-city-spaceport-ariane.jpg) | ![Pixel City's Spaceport at night, SLS floodlit on the pad](docs/images/pixel-city-spaceport-sls.jpg) |
-| An Ariane 5 on the pad, the tricolour up beside the Stars and Stripes | SLS floodlit at night |
-| ![Pixel City's Spaceport by day, Starship on its own pad beside its tower](docs/images/pixel-city-spaceport-starship.jpg) | ![Pixel City's Spaceport at sunset, Starship's booster coming down to the tower's arms](docs/images/pixel-city-spaceport-catch.jpg) |
-| Starship on its own pad | Its booster coming back to the tower's arms |
-| ![Pixel City's Spaceport at sunset, Starship's ship swinging upright on its engines](docs/images/pixel-city-spaceport-flip.jpg) | ![Pixel City's Spaceport at sunset, Starship's ship coming down on a landing zone](docs/images/pixel-city-spaceport-ship.jpg) |
-| Then its ship comes home: the flip | Down on its engines |
-| ![Pixel City's Spaceport by day, the Shuttle's orbiter rolling out along the runway behind its drag chute](docs/images/pixel-city-spaceport-orbiter.jpg) | ![Pixel City's Spaceport at sunset, a Soyuz lifting off with Russia's flag beside the Stars and Stripes](docs/images/pixel-city-spaceport-soyuz.jpg) |
-| The Shuttle's orbiter home, rolling out behind its drag chute | A Soyuz at sunset, its flag up beside the Stars and Stripes |
 
 ## Settings
 
@@ -285,7 +286,7 @@ Atrium's icon in the menu bar is a TV with sparkles (✨📺). Use it to:
 
 Atrium has no account, no analytics and no update checks. The services below are every connection it makes, each only while a wallpaper that uses it is running.
 
-- **Location** (optional). Live Sky, Earth from Orbit, Weather, Dappled Light, Wind, Pixel City, the live Moon, Rain on Glass following the weather and Flowing Gradient's time-of-day mood use your location, and the app asks once. If you decline, it guesses from your time zone. It's kept on your Mac, and only leaves it rounded to about a kilometer, as the place Open-Meteo forecasts for (and, for Wind's maps, as the tiles it asks NASA for).
+- **Location** (optional). Live Sky, Earth from Orbit, Weather, Dappled Light, Wind, Pixel City, Pixel Spaceport, the live Moon, Rain on Glass following the weather and Flowing Gradient's time-of-day mood use your location, and the app asks once. If you decline, it guesses from your time zone. It's kept on your Mac, and only leaves it rounded to about a kilometer, as the place Open-Meteo forecasts for (and, for Wind's maps, as the tiles it asks NASA for).
 - **Network.** Weather, Dappled Light, Rain on Glass (while following the weather) and Pixel City's Airport (while following the wind) fetch from [Open-Meteo](https://open-meteo.com) every 10 to 15 minutes, sharing one request. Live Sky and Earth from Orbit fetch the ISS position from [wheretheiss.at](https://wheretheiss.at) at most once a minute. Earth from Orbit fetches a global cloud map from [Live Cloud Maps](https://clouds.matteason.co.uk) only once its cached copy is over 3 hours old (1.5 MB when it has changed), and not at all with Live clouds off. For lightning, it asks Open-Meteo for the next day's thunderstorms on a grid around you every 6 hours. Solar System Tour's live Sun, while it's on screen, fetches SDO images from [Helioviewer](https://helioviewer.org) at most every 15 minutes (2048 pixels, 0.3–0.5 MB) or 30 (4096, 1–2 MB, for the close-up), keeping the newest two of each wavelength on disk. None of them needs an API key. Weather, Dappled Light, Rain on Glass, Earth from Orbit and Wind have **Refresh Now** on their Settings pages, which fetches at once, at most every 5 to 15 minutes.
 - **Wind** asks Open-Meteo for the next day's hourly wind forecast on a grid around you every 6 hours, for the zoom on screen: 96 points for a town, 384 for a region or half the continent (Open-Meteo counts each point as one of its free 10,000 calls a day, so at most 1,536 a day). The last reply for each zoom stays on disk, so it works offline. With an Earth background it downloads NASA's imagery tiles for the view from [GIBS](https://nasa-gibs.github.io/gibs-api-docs/) once and keeps them: about 1–2 MB for most maps, up to 7 MB at night for half the continent, and a fresh 1–2 MB a day for the satellite view.
 

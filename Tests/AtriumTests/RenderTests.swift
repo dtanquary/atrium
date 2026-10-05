@@ -123,7 +123,7 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
         UserDefaults.standard.set(Double(view), forKey: "city.place") // posts the change the scene listens for
         return scene.children[0].children.count
     }
-    #expect(nodes.allSatisfy { $0 > 8 } && nodes.last == nodes.first) // the Spaceport has fewest: its moving things share one node
+    #expect(nodes.allSatisfy { $0 > 10 } && nodes.last == nodes.first)
 }
 
 /// Pixel City's automatic move goes to a different city every time and saves it, so Settings and every display
@@ -169,15 +169,14 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
     #expect(scene.movements >= 8 && !crowded, "\(scene.movements) landings and take-offs")
 }
 
-/// Pixel City's Spaceport keeps going round: over twenty minutes at twice its usual pace there are lift-offs and
+/// Pixel Spaceport keeps going round: over twenty minutes at twice its usual pace there are lift-offs and
 /// landings, and no booster is sent back to a landing zone the last one is still standing on. Its layer is painted
 /// every two seconds, not every step: its smoke is slow to paint in a debug build.
-@MainActor @Test func pixelCitySpaceportKeepsLaunching() throws {
-    guard case .choice(let cities) = PixelCity.knobs[0].format else { return }
-    let settings = ["city.place": Double(try #require(cities.firstIndex(of: "Spaceport"))), "city.previewTime": 1, "city.previewHour": 12, "city.launches": 2]
+@MainActor @Test func pixelSpaceportKeepsLaunching() throws {
+    let settings: [String: Double] = ["spaceport.previewTime": 1, "spaceport.previewHour": 12, "spaceport.launches": 2]
     defer { settings.keys.forEach(UserDefaults.standard.removeObject) }
     for (key, value) in settings { UserDefaults.standard.set(value, forKey: key) }
-    let scene = PixelCity(size: CGSize(width: 800, height: 500))
+    let scene = PixelCity(size: CGSize(width: 800, height: 500), spaceport: true)
     var shared = false, flown = Set<String>()
     for step in 0..<12_000 { // a tenth of a second at a time
         scene.update(Double(step) / 10)
@@ -189,13 +188,12 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
 }
 
 /// The Spaceport flies only the rockets Settings has switched on: with every switch off but one, that one every time.
-@MainActor @Test func pixelCitySpaceportFliesTheRocketsPicked() throws {
-    guard case .choice(let cities) = PixelCity.knobs[0].format else { return }
-    var settings = ["city.place": Double(try #require(cities.firstIndex(of: "Spaceport"))), "city.launches": 3]
-    for knob in PixelCity.knobs where knob.key.hasPrefix("city.rocket.") { settings[knob.key] = knob.key == "city.rocket.saturn" ? 1 : 0 }
+@MainActor @Test func pixelSpaceportFliesTheRocketsPicked() throws {
+    var settings: [String: Double] = ["spaceport.launches": 3]
+    for knob in PixelCity.spaceportKnobs where knob.key.hasPrefix("spaceport.rocket.") { settings[knob.key] = knob.key == "spaceport.rocket.saturn" ? 1 : 0 }
     defer { settings.keys.forEach(UserDefaults.standard.removeObject) }
     for (key, value) in settings { UserDefaults.standard.set(value, forKey: key) }
-    let scene = PixelCity(size: CGSize(width: 800, height: 500))
+    let scene = PixelCity(size: CGSize(width: 800, height: 500), spaceport: true)
     var flown = Set<String>()
     for step in 0..<6_000 {
         scene.update(Double(step) / 10)
@@ -206,13 +204,12 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
 
 /// Starship has a pad of its own at the Spaceport: with only it switched on, it lifts off and its booster comes back
 /// to the tower again and again, and nothing else is ever on the pad.
-@MainActor @Test func pixelCitySpaceportCatchesStarship() throws {
-    guard case .choice(let cities) = PixelCity.knobs[0].format else { return }
-    var settings = ["city.place": Double(try #require(cities.firstIndex(of: "Spaceport"))), "city.launches": 3]
-    for knob in PixelCity.knobs where knob.key.hasPrefix("city.rocket.") { settings[knob.key] = knob.key == "city.rocket.starship" ? 1 : 0 }
+@MainActor @Test func pixelSpaceportCatchesStarship() throws {
+    var settings: [String: Double] = ["spaceport.launches": 3]
+    for knob in PixelCity.spaceportKnobs where knob.key.hasPrefix("spaceport.rocket.") { settings[knob.key] = knob.key == "spaceport.rocket.starship" ? 1 : 0 }
     defer { settings.keys.forEach(UserDefaults.standard.removeObject) }
     for (key, value) in settings { UserDefaults.standard.set(value, forKey: key) }
-    let scene = PixelCity(size: CGSize(width: 800, height: 500))
+    let scene = PixelCity(size: CGSize(width: 800, height: 500), spaceport: true)
     var flown = Set<String>()
     for step in 0..<7_200 {
         scene.update(Double(step) / 10)
@@ -224,13 +221,12 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
 
 /// The Shuttle's orbiter comes home to the Spaceport's runway after each of its flights: with only the Shuttle
 /// switched on, seven and a half minutes at the Spaceport's busiest see three lift-offs and two landings.
-@MainActor @Test func pixelCitySpaceportBringsTheOrbiterHome() throws {
-    guard case .choice(let cities) = PixelCity.knobs[0].format else { return }
-    var settings = ["city.place": Double(try #require(cities.firstIndex(of: "Spaceport"))), "city.launches": 3]
-    for knob in PixelCity.knobs where knob.key.hasPrefix("city.rocket.") { settings[knob.key] = knob.key == "city.rocket.shuttle" ? 1 : 0 }
+@MainActor @Test func pixelSpaceportBringsTheOrbiterHome() throws {
+    var settings: [String: Double] = ["spaceport.launches": 3]
+    for knob in PixelCity.spaceportKnobs where knob.key.hasPrefix("spaceport.rocket.") { settings[knob.key] = knob.key == "spaceport.rocket.shuttle" ? 1 : 0 }
     defer { settings.keys.forEach(UserDefaults.standard.removeObject) }
     for (key, value) in settings { UserDefaults.standard.set(value, forKey: key) }
-    let scene = PixelCity(size: CGSize(width: 800, height: 500))
+    let scene = PixelCity(size: CGSize(width: 800, height: 500), spaceport: true)
     for step in 0..<4_500 {
         scene.update(Double(step) / 10)
         if step % 20 == 0 { scene.didFinishUpdate() }
@@ -240,12 +236,11 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
 
 /// Each display runs its own Spaceport, and so does the copy behind Settings. On every one of them, rockets that
 /// come back and rockets that fly once still take turns: none is dealt all of one kind.
-@MainActor @Test func pixelCitySpaceportTakesTurnsOnEveryDisplay() throws {
-    guard case .choice(let cities) = PixelCity.knobs[0].format else { return }
-    let settings = ["city.place": Double(try #require(cities.firstIndex(of: "Spaceport"))), "city.launches": 3]
+@MainActor @Test func pixelSpaceportTakesTurnsOnEveryDisplay() throws {
+    let settings: [String: Double] = ["spaceport.launches": 3]
     defer { settings.keys.forEach(UserDefaults.standard.removeObject) }
     for (key, value) in settings { UserDefaults.standard.set(value, forKey: key) }
-    let scenes = [PixelCity(size: CGSize(width: 800, height: 500)), PixelCity(size: CGSize(width: 800, height: 500))]
+    let scenes = [PixelCity(size: CGSize(width: 800, height: 500), spaceport: true), PixelCity(size: CGSize(width: 800, height: 500), spaceport: true)]
     var flown: [[String]] = [[], []]
     for step in 0..<9_000 {
         for (i, scene) in scenes.enumerated() {
