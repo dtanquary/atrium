@@ -11,12 +11,14 @@ final class PixelCity: SKScene {
     nonisolated static let knobs = [
         Knob(key: "city.view", label: "City", range: 0...1, standard: 1, section: "City",
              format: .choice(["Street", "Waterfront"])),
+        Knob(key: "city.looking", label: "Looking", range: 0...8, standard: 0, section: "City",
+             format: .choice(["Toward the midday Sun", "North", "North-east", "East", "South-east", "South", "South-west", "West", "North-west"])),
         Knob(key: "city.previewTime", label: "Preview a time of day", range: 0...1, standard: 0, section: "Preview",
              format: .toggle),
         Knob(key: "city.previewHour", label: "Time", range: 0...24, standard: 19, section: "Preview", format: .clock,
              shownWhen: "city.previewTime"),
     ]
-    private enum K: Int { case view, previewTime, previewHour }
+    private enum K: Int { case view, looking, previewTime, previewHour }
     private static func knob(_ k: K) -> Double { knobs[k.rawValue].value }
     private var settings = PixelCity.knobs.map(\.value)
 
@@ -42,6 +44,8 @@ final class PixelCity: SKScene {
     private var beacon = SKNode()
     // Light on the waterfront's walls: what the sky gives every wall, and what the Sun or Moon adds to one facing it.
     private var ambient = RGB.one, keyFront = RGB.zero, keyLeft = RGB.zero, keyRight = RGB.zero, keyTop = RGB.zero
+    private var behind = RGB.zero // the horizon's colour at our backs, which glass fronts mirror
+    private var span: Double { waterfront ? 260 : 200 } // degrees of compass across the screen
 
     private var night: Float = 0 // 0 in daylight … 1 at full dark
     private var hour = 12.0      // local clock, 0–24
@@ -78,6 +82,13 @@ final class PixelCity: SKScene {
         if picked[K.view.rawValue] != settings[K.view.rawValue] { layOut() }
         settings = picked
         redraw()
+    }
+
+    /// The compass bearing we look along: toward the equator, where the Sun and Moon cross the sky, unless Settings
+    /// picks one. Looking the other way puts the Sun at our backs, so it lights the fronts of the buildings.
+    private func heading(_ latitude: Double) -> Double {
+        let pick = Int(Self.knob(.looking))
+        return pick == 0 ? (latitude >= 0 ? 180 : 0) : Double(pick - 1) * 45
     }
 
     /// Now, or today at the preview hour while previewing.
@@ -328,7 +339,17 @@ final class PixelCity: SKScene {
         hour = Double(parts.hour ?? 12) + Double(parts.minute ?? 0) / 60
         let el = Float(sun.elevation)
         night = smoothstep(4, -8, el)
-        let (top, horizon) = skyColours(el, morning: hour < 12)
+        let (top, sunward) = skyColours(el, morning: hour < 12)
+        // Around a low Sun the horizon changes with the compass: orange under the Sun, and opposite it the pink band
+        // over the Earth's shadow.
+        let facing = heading(spot.latitude), low = smoothstep(-10, -2, el) * smoothstep(12, 3, el)
+        let lilac = mix(top, rgb(226, 156, 176), 0.5)
+        func horizonToward(_ azimuth: Double) -> RGB {
+            mix(sunward, lilac, Float(1 - cos((azimuth - sun.azimuth) * .pi / 180)) / 2 * low * 0.85)
+        }
+        let horizons = (0..<w).map { horizonToward(facing + (Double($0) / Double(w) - 0.5) * span) }
+        let horizon = horizons[w / 2]
+        behind = horizonToward(facing + 180)
         var px = Pixels(w, h)
 
         // Sky: banded and dithered like old pixel art, glowing around a low sun.
@@ -341,7 +362,7 @@ final class PixelCity: SKScene {
             let t = max(0, Float(y - streetTop) / Float(h - streetTop))
             for x in 0..<w {
                 let d = bayer(x, y)
-                var c = mix(horizon, top, pow(min(1, (t * 14 + (1 - band) / 2 + d * band).rounded(.down) / 14), 0.6))
+                var c = mix(horizons[x], top, pow(min(1, (t * 14 + (1 - band) / 2 + d * band).rounded(.down) / 14), 0.6))
                 if waterfront, night > 0 { // the city's own glow in the night sky, strongest over downtown
                     let u = Float(x) / Float(w) - 0.5
                     let lift = night * exp(-t * 3) * (0.5 + 0.5 * exp(-u * u / 0.08))
@@ -378,23 +399,24 @@ final class PixelCity: SKScene {
         sky.texture = px.texture()
 
         px = Pixels(w, h) // the city, clear wherever the sky shows through
+        // The sky lights every wall evenly; the Sun, or the Moon after dark, lights the walls that face it.
+        ambient = mix(mix(RGB(0.84, 0.86, 0.92), RGB(0.52, 0.48, 0.62), smoothstep(16, 0, el)), RGB(0.19, 0.2, 0.31), night)
+        (keyFront, keyLeft, keyRight, keyTop) = (.zero, .zero, .zero, .zero)
+        for (body, colour) in [(sun, mix(rgb(255, 126, 54), rgb(255, 240, 214), smoothstep(0, 20, el)) * smoothstep(-1.5, 5, el) * mix(0.95, 0.62, smoothstep(0, 20, el))),
+                               (moon, rgb(120, 140, 200) * Float(1 - cos(2 * .pi * moonPhase)) * smoothstep(0, 10, Float(moon.elevation)) * night * 0.15)] {
+            let bearing = Float(body.azimuth - facing) * .pi / 180 // 0 straight ahead, positive to the right
+            let height = Float(max(body.elevation, 0)) * .pi / 180
+            keyRight += colour * max(0, sin(bearing)) * cos(height)
+            keyLeft += colour * max(0, -sin(bearing)) * cos(height)
+            keyFront += colour * max(0, -cos(bearing)) * cos(height)
+            keyTop += colour * (0.3 + 0.7 * sin(height))
+        }
         if waterfront {
-            // The sky lights every wall evenly; the Sun, or the Moon after dark, lights the walls that face it.
-            ambient = mix(mix(RGB(0.84, 0.86, 0.92), RGB(0.52, 0.48, 0.62), smoothstep(16, 0, el)), RGB(0.19, 0.2, 0.31), night)
-            (keyFront, keyLeft, keyRight, keyTop) = (.zero, .zero, .zero, .zero)
-            for (body, colour) in [(sun, mix(rgb(255, 126, 54), rgb(255, 240, 214), smoothstep(0, 20, el)) * smoothstep(-1.5, 5, el) * mix(0.95, 0.62, smoothstep(0, 20, el))),
-                                   (moon, rgb(120, 140, 200) * Float(1 - cos(2 * .pi * moonPhase)) * smoothstep(0, 10, Float(moon.elevation)) * night * 0.15)] {
-                let bearing = Float(body.azimuth - (spot.latitude >= 0 ? 180 : 0)) * .pi / 180 // 0 straight ahead, positive to the right
-                let height = Float(max(body.elevation, 0)) * .pi / 180
-                keyRight += colour * max(0, sin(bearing)) * cos(height)
-                keyLeft += colour * max(0, -sin(bearing)) * cos(height)
-                keyFront += colour * max(0, -cos(bearing)) * cos(height)
-                keyTop += colour * (0.3 + 0.7 * sin(height))
-            }
             drawHorizon(into: &px, zenith: top, horizon: horizon)
         }
         for building in skyline {
-            if building.kind == .box { draw(building, into: &px, horizon: horizon) } else { drawTower(building, into: &px, zenith: top, horizon: horizon) }
+            let haze = horizons[min(max(building.x + building.width / 2, 0), w - 1)] // the horizon behind it
+            if building.kind == .box { draw(building, into: &px, horizon: haze) } else { drawTower(building, into: &px, zenith: top, horizon: haze) }
         }
         drawParks(into: &px)
         drawStreet(into: &px)
@@ -436,15 +458,15 @@ final class PixelCity: SKScene {
         return (mix(a.1, b.1, t), horizon)
     }
 
-    /// Where a sky position lands on the canvas, looking toward the equator (so east is on the left up north).
+    /// Where a sky position lands on the canvas, looking along `heading` (toward the equator, east is on the left up north).
     private func place(_ p: (elevation: Double, azimuth: Double), latitude: Double) -> (x: Int, y: Int) {
-        let dx = (p.azimuth - (latitude >= 0 ? 180 : 0) + 540).truncatingRemainder(dividingBy: 360) - 180
+        let dx = (p.azimuth - heading(latitude) + 540).truncatingRemainder(dividingBy: 360) - 180
         let room = Double(h - streetTop - 14)
-        guard waterfront else { return (Int(Double(w) * (0.5 + dx / 200)), streetTop + Int(p.elevation / 70 * room)) }
+        guard waterfront else { return (Int(Double(w) * (0.5 + dx / span)), streetTop + Int(p.elevation / 70 * room)) }
         // The waterfront looks wider, so sunrise and sunset stay on screen all year, gives a low Sun or Moon more
         // room, and drops them out of sight as soon as they set.
         let lift = p.elevation < 0 ? p.elevation / 12 : pow(p.elevation / 70, 0.75)
-        return (Int(Double(w) * (0.5 + dx / 260)), streetTop + Int(lift * room))
+        return (Int(Double(w) * (0.5 + dx / span)), streetTop + Int(lift * room))
     }
 
     /// The moon's disc with its current phase lit on the right while waxing, the left while waning.
@@ -471,6 +493,7 @@ final class PixelCity: SKScene {
     /// One building: facade, shading, roof furniture and a grid of windows lit by the evening schedule.
     private func draw(_ b: Building, into px: inout Pixels, horizon: RGB) {
         var facade = mix(b.colour, b.colour * RGB(0.16, 0.17, 0.28) + rgb(4, 4, 10), night)
+        facade = pointwiseMin(facade + b.colour * keyFront, .one) // a Sun or Moon at our backs lights the fronts
         if b.far { facade = mix(facade, horizon, mix(0.42, 0.3, night)) }
         let metal = mix(rgb(70, 70, 80), rgb(14, 14, 22), night)
         let top = streetTop + b.height
@@ -604,11 +627,11 @@ final class PixelCity: SKScene {
             if b.roof == .antenna { px.fill(b.x + b.width / 2, y, 1, top + 18 - y, metal) }
 
         case .glass:
-            // A curtain wall mirroring the sky, zenith at its top and horizon at its foot, with a dark line at every floor.
+            // A curtain wall mirroring the sky behind us, zenith at its top and horizon at its foot, a dark line at every floor.
             let f = block(b.x, base, b.width, b.height)
             let bay = b.far ? 3 : 5, tint = lit(b.colour, keyFront)
             for row in 0..<b.height - 1 {
-                let pane = tone(mix(mix(horizon, zenith, 0.25 + 0.75 * Float(row) / Float(b.height)) * 0.82, tint, 0.38))
+                let pane = tone(mix(mix(behind, zenith, 0.25 + 0.75 * Float(row) / Float(b.height)) * 0.82, tint, 0.38))
                 px.fill(f.x, base + row, f.width, 1, row % b.floor == b.floor - 1 ? pane * 0.74 : pane)
             }
             for cy in stride(from: base + (b.far ? 0 : 8), through: top - 1 - b.floor, by: b.floor) {

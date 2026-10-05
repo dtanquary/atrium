@@ -14,7 +14,7 @@ A pixel-art city that follows the real Sun and clock. The sky moves through dawn
 - **Layers,** by `zPosition`: the sky (0), clouds (1), the plane (1.5), the city (2), the water (2.5), cars (3 and 4), the beacon (5). The city texture is clear wherever the sky shows, so clouds and planes pass behind the towers.
 - **`layOut()`** builds everything that never changes, and runs again when Settings picks another city. Each city has its own skyline (`layOutStreet`, `layOutWaterfront`) from a fixed `SeededRandom`, so it's identical on every redraw and every display. Shared by both: 170 stars, 3 cloud masks, a pool of 6 cars per lane with headlights (7 sedan colours plus a bus), a plane with blinking nav lights, and the beacon (0.25 s on, 1.25 s off) on the landmark.
 - **`redraw()`** runs at init, every 30 s and when a setting changes. It paints the sky into one `Pixels` buffer and the city into another:
-  - **Sky:** a gradient between zenith and horizon colours from `skyColours(elevation, morning:)`. The stops run −18°, −10°, −4°, 0°, 6° and 15°, and dawn is pinker than dusk. It's quantised into 14 bands with 4×4 Bayer dithering, plus a sun glow around a low Sun in 5 flat rings, dithered only where two rings meet (dithering right across each ring left a halo of loose dots).
+  - **Sky:** a gradient between zenith and horizon colours from `skyColours(elevation, morning:)`. The stops run −18°, −10°, −4°, 0°, 6° and 15°, and dawn is pinker than dusk. Around a low Sun the horizon's colour changes with the compass (`horizonToward`): orange under the Sun and, opposite it, the pink band over the Earth's shadow, so a sunset sky differs from one side of the screen to the other. It's quantised into 14 bands with 4×4 Bayer dithering, plus a sun glow around a low Sun in 5 flat rings, dithered only where two rings meet (dithering right across each ring left a halo of loose dots).
   - **Stars** fade in below about −5°; the brightest get a small cross.
   - **Moon:**
     - **Phase:** from a mean synodic month counted from the new Moon of 2000-01-06 18:14 UTC.
@@ -34,7 +34,7 @@ A pixel-art city that follows the real Sun and clock. The sky moves through dawn
 ### The Street city
 - **Far row:** hazy blue-grey buildings. **Near row:** brick, stone and concrete blocks (`Kind.box`, drawn by `draw`), with per-building window spacing (`floor`, `pitch`) and a roof (plain, ledge, setback or water tank).
 - **The landmark:** the widest near building around 3/5 across is raised to 50% height, with an antenna and the beacon.
-- **Light:** facades darken toward moonlit blue at night, and the far row takes on the horizon colour as haze. It has no direction.
+- **Light:** facades darken toward moonlit blue at night, and the far row takes on the horizon colour as haze. The only direction in it is `keyFront`: a Sun or Moon at our backs lights the fronts, which by default happens on summer mornings and evenings.
 - **Windows** turn on one by one via `isLit()` with three seeded draws per window. About 65% are lit on an evening schedule: people get home between 16:30 and 21:00 and go to bed between 21:00 and 03:00. 30% come on for early risers from 05:30. 3% are always on (stairwells and night owls). The colours are mostly warm tungsten, with a few cool blue or white ones.
 
 ### The Waterfront city
@@ -51,7 +51,7 @@ Built from a design review on 2026-10-04 (see Dave's feedback below), after a lo
   - **`glass`:** a curtain wall that mirrors the sky (zenith at its top, horizon at its foot, so it warms at sunset), a dark line at every floor, mullions, a lobby, and a flat, slanted or plant-room top.
   - **`brick`:** a walk-up with sash windows and sills under a cornice, a fire escape on about half, a shop under a striped awning (lit from 7 until it closes, between 8 and 11 at night), and a tank, stair head or chimney on the roof.
   - **`slab`:** concrete with ribbon windows, on columns over an open ground floor.
-- **Light with a direction.** `ambient` is what the sky gives every wall (cooler toward dusk, moonlit blue at night). The Sun, and after dark the Moon scaled by its real phase, add to walls that face them: `keyRight` and `keyLeft` for side walls, `keyFront` for fronts, `keyTop` for roof edges, each the cosine of the angle between the light and that wall. We look toward the equator, so the Sun is behind the city for most of the day: fronts stay in the sky's cool light and only catch the Sun when it's behind us (summer mornings and evenings), while side walls light up warm at one end of the day and fall into shadow at the other. `lit(colour, key, shade:)` applies it.
+- **Light with a direction.** `ambient` is what the sky gives every wall (cooler toward dusk, moonlit blue at night). The Sun, and after dark the Moon scaled by its real phase, add to walls that face them: `keyRight` and `keyLeft` for side walls, `keyFront` for fronts, `keyTop` for roof edges, each the cosine of the angle between the light and that wall. By default we look toward the equator, so the Sun is behind the city for most of the day: fronts stay in the sky's cool light and only catch the Sun when it's behind us (summer mornings and evenings), while side walls light up warm at one end of the day and fall into shadow at the other. Looking another way (Settings → Looking) changes all of it: face east and the fronts turn gold at sunset, with the Sun out of the picture behind us. Glass fronts mirror the horizon at our backs (`behind`). `lit(colour, key, shade:)` applies it.
 - **Side walls.** Each building shows a sliver of the wall facing the middle of the screen (`side`, 1 to 5 pixels, wider toward the edges), as one-point perspective would. So in the morning the walls on show right of centre are sunlit, and in the evening those left of centre.
 - **Windows in dashes** (`storey`): a floor's windows are lit a run of neighbours at a time. Homes (brick, and half the slabs) keep the Street's evening hours, with 45% of rooms on that schedule instead of 65%, in warm light of varying brightness. Offices (the rest) light `officeShare` of their runs: half at dusk, falling to 8% by midnight and rising again from 05:30, in cool white on most glass and slab buildings and warm on stone. Each run's draw is fixed by the building's seed, so as the share falls the same runs go dark in the same order. Taller roofs carry red corner lights.
 - **Where the Sun and Moon land** (`place`): azimuth spans about 260° across the screen (200° on the Street), so sunrise and sunset stay on screen all year at mid latitudes. Elevation runs as the 0.75 power of elevation / 70°, which gives a low Sun more room, and a body below the horizon drops out of sight within about half a degree.
@@ -61,13 +61,14 @@ Built from a design review on 2026-10-04 (see Dave's feedback below), after a lo
 ## Time, live data and appearance
 - **Time:** `now`: the real time, or today at the preview hour while Settings is previewing one. The hour for windows and traffic is the local clock hour.
 - **Sun:** `skyPosition()` at `Location.shared` (low precision, about 1°). `night = smoothstep(4°, −8°, sun elevation)`.
-- **Placement:** sky positions go onto the canvas looking toward the equator (`place()`).
+- **Placement:** sky positions go onto the canvas looking along `heading()` (`place()`): toward the equator, or the compass point picked in Settings.
 - **No network.** `Location.shared.start()` is called in `didMove`.
 - **Appearance:** it ignores Light/Dark Mode. The real Sun already sets the look.
 
 ## Settings
 `PixelCity.knobs`, read with `knob(_:)`. A change repaints at once (`settingsChanged`), and a change of city lays the scene out again first.
 - **City** (`city.view`): Street or Waterfront. Waterfront is the default. It's a menu so that more cities can be added to it (Dave asked for one or two more on 2026-10-04).
+- **Looking** (`city.looking`): Toward the midday Sun (the default: toward the equator, which keeps the Sun and Moon in the sky and the city backlit) or one of eight compass points. Dave asked for it on 2026-10-04 after reading that the Waterfront's fronts stay in cool shade at sunset: "lets add support for the sun direction perhaps". The Waterfront's flanks were laid out for the default, so looking east or west the Sun rises or sets behind downtown.
 - **Preview a time of day** (`city.previewTime`, `city.previewHour`): shows today at that hour instead of now, the only way to see a sunset at noon. Off by default.
 
 ## Tuning constants
@@ -118,6 +119,6 @@ From the 2026-10-04 review, not yet done:
 
 ## Checking it
 - `SNAPSHOT_SCENE="Pixel City" swift test` renders the current time at the fallback location, as the Waterfront.
-- **Particular times and cities:** `SNAPSHOT_DEFAULTS="city.previewTime=1,city.previewHour=19.2,city.view=0" SNAPSHOT_SCENE="Pixel City" swift test` renders today at that hour (`city.view=0` is the Street, 1 the Waterfront). On 2026-10-04 the Waterfront was checked at 7:18, 12:48, 17:12, 18:18, 18:27, 19:00, 21:00 and 21:30, and the Street at 12:48 and 19:24.
+- **Particular times and cities:** `SNAPSHOT_DEFAULTS="city.previewTime=1,city.previewHour=19.2,city.view=0" SNAPSHOT_SCENE="Pixel City" swift test` renders today at that hour (`city.view=0` is the Street, 1 the Waterfront). On 2026-10-04 the Waterfront was checked at 7:18, 12:48, 17:12, 18:18, 18:27, 19:00, 21:00 and 21:30, and the Street at 12:48 and 19:24. `city.looking` is the menu's index: 0 toward the midday Sun, then 1 north round to 8 north-west; sunset was checked looking east (3), west (7) and north (1).
 - **Traffic, planes and the water:** use `SNAPSHOT_SECONDS=30` or more; `SNAPSHOT_MOVIE=3` saves frames to compare for the ripples.
 - **Screenshots:** `pixel-city-dusk.jpg` is the Waterfront at 19:00 on 4 October and `pixel-city-night.jpg` the Street at 23:30, both at the fallback location from a release build. `preview-pixel-city.jpg` is a 1200-pixel copy of the first.
