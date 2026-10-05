@@ -32,6 +32,10 @@ final class PixelCity: SKScene {
         Knob(key: "city.rocket.titan", label: "Gemini-Titan", range: 0...1, standard: 1, section: "Spaceport", format: .toggle),
         Knob(key: "city.rocket.atlas", label: "Mercury-Atlas", range: 0...1, standard: 1, section: "Spaceport", format: .toggle),
         Knob(key: "city.rocket.redstone", label: "Mercury-Redstone", range: 0...1, standard: 1, section: "Spaceport", format: .toggle),
+        Knob(key: "city.rocket.soyuz", label: "Soyuz", range: 0...1, standard: 1, section: "Spaceport", format: .toggle),
+        Knob(key: "city.rocket.longmarch", label: "Long March 5", range: 0...1, standard: 1, section: "Spaceport", format: .toggle),
+        Knob(key: "city.rocket.h3", label: "H3", range: 0...1, standard: 1, section: "Spaceport", format: .toggle),
+        Knob(key: "city.rocket.lvm3", label: "LVM3", range: 0...1, standard: 1, section: "Spaceport", format: .toggle),
         Knob(key: "city.previewTime", label: "Preview a time of day", range: 0...1, standard: 0, section: "Preview",
              format: .toggle),
         Knob(key: "city.previewHour", label: "Time", range: 0...24, standard: 19, section: "Preview", format: .clock,
@@ -39,7 +43,7 @@ final class PixelCity: SKScene {
     ]
     private enum K: Int {
         case view, shuffle, shuffleMinutes, looking, flightsDay, flightsNight, wind, launches
-        case falcon9, falconHeavy, sls, shuttle, saturnV, ariane, titan, atlas, redstone, previewTime, previewHour
+        case falcon9, falconHeavy, sls, shuttle, saturnV, ariane, titan, atlas, redstone, soyuz, longMarch, h3, lvm3, previewTime, previewHour
     }
     private static func knob(_ k: K) -> Double { knobs[k.rawValue].value }
     private var settings = PixelCity.knobs.map(\.value)
@@ -2325,7 +2329,7 @@ final class PixelCity: SKScene {
     /// The rockets Settings can switch on and off, each with its switch. A Falcon 9 under a capsule goes by the Falcon 9's.
     private static let fleet: [(rocket: Rocket, knob: K)] = [
         (.falcon9, .falcon9), (.heavy, .falconHeavy), (.sls, .sls), (.shuttle, .shuttle), (.saturnV, .saturnV), (.ariane, .ariane),
-        (.titan, .titan), (.atlas, .atlas), (.redstone, .redstone),
+        (.titan, .titan), (.atlas, .atlas), (.redstone, .redstone), (.soyuz, .soyuz), (.longMarch, .longMarch), (.h3, .h3), (.lvm3, .lvm3),
     ]
     // ponytail: with every rocket switched off it flies them all, so the pad is never left empty
     private static var rockets: [Rocket] {
@@ -2796,8 +2800,8 @@ final class PixelCity: SKScene {
     }
 
     /// A rocket's paints in the light it stands in, in the order `bytes` numbers them: white on its lit side, its
-    /// face and its shaded side; black; engine bells; a tank's orange foam, bare metal and a cream, each on the same
-    /// three sides; then red and grey. On the pad after dark (`flood`) the floodlights have it.
+    /// face and its shaded side; black; engine bells; a tank's orange foam and bare metal, each on the same three
+    /// sides; red and grey; a cream on its three sides; and blue. On the pad after dark (`flood`) the floodlights have it.
     private func rocketPaint(flood: Float) -> [RGB] {
         let sunRight = (keyRight - keyLeft).sum() >= 0, lamp = rgb(255, 248, 232), on = flood * night
         func sides(_ c: RGB) -> [RGB] {
@@ -2808,6 +2812,7 @@ final class PixelCity: SKScene {
         func flat(_ c: RGB) -> RGB { mix(lit(c, keyFront), c * lamp * 0.9, on) }
         return sides(rgb(238, 238, 234)) + [mix(lit(rgb(34, 34, 38), .zero), rgb(20, 20, 26), 0.3), lit(rgb(60, 58, 60), .zero)]
             + sides(rgb(224, 128, 58)) + sides(rgb(200, 206, 214)) + [flat(rgb(206, 56, 48)), flat(rgb(120, 124, 132))] + sides(rgb(236, 226, 190))
+            + [flat(rgb(52, 96, 190))]
     }
 
     /// Paints a rocket with the middle of its foot at (`x`, `y`), leaning `angle` radians right of upright, at
@@ -2899,7 +2904,7 @@ private struct Pad {
 
 /// The rockets the Spaceport flies.
 private enum Rocket: Int {
-    case falcon9, dragon, heavy, ariane, shuttle, sls, saturnV, titan, atlas, redstone
+    case falcon9, dragon, heavy, ariane, shuttle, sls, saturnV, titan, atlas, redstone, soyuz, longMarch, h3, lvm3
 
     /// What sets one rocket apart: its picture, and the name the countdown board gives it; how many of its
     /// boosters come back to land; whether it rolls out standing on a crawler, or lying on a strongback that stands
@@ -2922,14 +2927,28 @@ private enum Rocket: Int {
         Kit(art: titanArt, name: "TITAN II", lands: 0, standing: false, flame: (16, 3), smoke: 0.75, steam: 0.3, pace: 1.05, cold: false, flag: nil),
         Kit(art: atlasArt, name: "ATLAS", lands: 0, standing: false, flame: (20, 3), smoke: 0.85, steam: 0.35, pace: 1, cold: true, flag: nil),
         Kit(art: redstoneArt, name: "REDSTONE", lands: 0, standing: false, flame: (14, 2), smoke: 0.8, steam: 0.3, pace: 0.95, cold: true, flag: nil),
+        Kit(art: soyuzArt, name: "SOYUZ", lands: 0, standing: false, flame: (26, 5), smoke: 1, steam: 0.7, pace: 1.05, cold: true, flag: .russia),
+        Kit(art: longMarchArt, name: "CZ-5", lands: 0, standing: true, flame: (34, 6), smoke: 1.2, steam: 1.1, pace: 1, cold: true, flag: .china),
+        Kit(art: h3Art, name: "H3", lands: 0, standing: true, flame: (34, 6), smoke: 1.4, steam: 1, pace: 1.1, cold: true, flag: .japan),
+        Kit(art: lvm3Art, name: "LVM3", lands: 0, standing: true, flame: (30, 6), smoke: 1.6, steam: 1, pace: 1.05, cold: false, flag: .india),
     ]
 }
 
 /// The flag a rocket from abroad flies under, nine pixels by six, as rows of letters and the colours they stand for.
 private enum Flag {
-    case france
-    var rows: [String] { Array(repeating: "bbbwwwrrr", count: 6) }
-    var colours: [Character: RGB] { ["b": rgb(44, 70, 150), "w": rgb(236, 236, 232), "r": rgb(206, 56, 60)] }
+    case france, russia, china, japan, india
+    var rows: [String] {
+        switch self {
+        case .france: Array(repeating: "bbbwwwrrr", count: 6)
+        case .russia: ["wwwwwwwww", "wwwwwwwww", "bbbbbbbbb", "bbbbbbbbb", "rrrrrrrrr", "rrrrrrrrr"]
+        case .china: ["ryyrrrrrr", "ryyryrrrr", "rrrrrrrrr", "rrrrrrrrr", "rrrrrrrrr", "rrrrrrrrr"]
+        case .japan: ["wwwwwwwww", "wwwrrrwww", "wwrrrrrww", "wwrrrrrww", "wwwrrrwww", "wwwwwwwww"]
+        case .india: ["ooooooooo", "ooooooooo", "wwwwbwwww", "wwwwbwwww", "ggggggggg", "ggggggggg"]
+        }
+    }
+    var colours: [Character: RGB] {
+        ["b": rgb(44, 70, 150), "w": rgb(236, 236, 232), "r": rgb(206, 56, 60), "y": rgb(250, 214, 60), "o": rgb(240, 150, 50), "g": rgb(40, 130, 70)]
+    }
 }
 
 /// A booster on its way back from a flight, or standing on its landing zone.
@@ -3004,10 +3023,10 @@ private struct Puff {
 // The Spaceport's rockets, drawn standing, from the nose down: white paint on the lit side (l), the face (w) and
 // the shaded side (s), black (K) and engine bells (n). About a metre and a half to the pixel, and half as slender
 // as the real ones, which would be two pixels wide. The other rockets add a tank's orange foam (p, q, r for its lit
-// side, face and shaded side), bare metal (x, y, z), a cream (c, d, e), red (R) and grey (g). `bytes` turns the
+// side, face and shaded side), bare metal (x, y, z), a cream (c, d, e), red (R), grey (g) and blue (B). `bytes` turns the
 // letters into the numbers of `rocketPaint`'s paints, and anything else into 255, for nothing.
 private func tall(_ parts: [(String, Int)]) -> [String] { parts.flatMap { Array(repeating: $0.0, count: $0.1) } }
-private func bytes(_ rows: [String]) -> [[UInt8]] { rows.map { $0.utf8.map { UInt8(Array("lwsKnpqrxyzRgcde".utf8).firstIndex(of: $0) ?? 255) } } }
+private func bytes(_ rows: [String]) -> [[UInt8]] { rows.map { $0.utf8.map { UInt8(Array("lwsKnpqrxyzRgcdeB".utf8).firstIndex(of: $0) ?? 255) } } }
 private let falconRows = tall([("..w..", 1), (".lws.", 2), ("lwwss", 7), (".lws.", 5), (".KKK.", 3), (".lws.", 21), (".KwK.", 5), (".KKK.", 2)])
 private let falconArt = bytes(falconRows)
 private let dragonArt = bytes(tall([("..w..", 1), (".lws.", 2), (".lKs.", 3)]) + falconRows[10...])
@@ -3038,6 +3057,16 @@ private let atlasArt = bytes(tall([("..R..", 3), ("..K..", 1), (".KKK.", 2), (".
 private let titanArt = bytes(tall([("..K..", 1), (".KKK.", 2), (".lws.", 3), (".xyz.", 6), (".KKK.", 1), (".xyz.", 12), (".n.n.", 1)]))
 /// Ariane 5: a cream core under a long white fairing, between two white boosters.
 private let arianeArt = bytes(tall([("...ww...", 1), ("..lwws..", 10), ("..gggg..", 1), ("..cdde..", 3), ("l.cdde.s", 1), ("lscddels", 18), ("nn.nn.nn", 1)]))
+/// Soyuz: a white fairing under its escape tower, a grey third stage, the core's orange band, and four tapered
+/// boosters that make a skirt of its foot. (The colours are from memory of the older ones.)
+private let soyuzArt = bytes(tall([("...w...", 3), ("..lws..", 6), ("..xyz..", 5), ("..g.g..", 1), ("..pqr..", 5), (".xxyzz.", 4), ("xxxyzzz", 8), ("n.nnn.n", 1)]))
+/// Long March 5: a white core with blue bands, between boosters with slanted noses.
+private let longMarchArt = bytes(tall([("...ww...", 1), ("..lwws..", 9), ("..BBBB..", 1), ("..lwws..", 7), ("l.lwws.s", 1), ("lslwwsls", 8), ("BBlwwsBB", 1),
+                                       ("lslwwsls", 8), ("nn.nn.nn", 1)]))
+/// H3: an orange core under a long white fairing, with two short white boosters at its foot.
+private let h3Art = bytes(tall([("...ww...", 1), ("..lwws..", 10), ("..gggg..", 1), ("..pqqr..", 18), ("l.pqqr.s", 1), ("lspqqrls", 9), ("nn.nn.nn", 1)]))
+/// LVM3: a white core with a dark upper stage under a bulbous fairing, between two big white boosters.
+private let lvm3Art = bytes(tall([("...ww...", 1), ("..lwws..", 6), ("..KKKK..", 3), ("..lwws..", 3), ("l.lwws.s", 1), ("lslwwsls", 14), ("nn.nn.nn", 1)]))
 /// Saturn V: three stages stepping in to the spacecraft and its escape tower, white with black roll marks.
 private let saturnArt = bytes(tall([
     ("....w....", 4), ("....g....", 2), ("....w....", 1), ("...lws...", 1), ("...xyz...", 4), ("...lws...", 2), ("..lwwss..", 3),
@@ -3064,7 +3093,7 @@ private let figures: [Character: [UInt8]] = [
     "+": [0, 2, 7, 2, 0], ":": [0, 2, 0, 2, 0],
     "A": [2, 5, 7, 5, 5], "C": [3, 4, 4, 4, 3], "D": [6, 5, 5, 5, 6], "E": [7, 4, 6, 4, 7], "F": [7, 4, 6, 4, 4], "H": [5, 5, 7, 5, 5],
     "I": [7, 2, 2, 2, 7], "L": [4, 4, 4, 4, 7], "N": [6, 5, 5, 5, 5], "O": [7, 5, 5, 5, 7], "R": [6, 5, 6, 5, 5], "S": [3, 4, 2, 1, 6],
-    "U": [5, 5, 5, 5, 7], "V": [5, 5, 5, 5, 2], "Y": [5, 5, 2, 2, 2],
+    "U": [5, 5, 5, 5, 7], "V": [5, 5, 5, 5, 2], "Y": [5, 5, 2, 2, 2], "Z": [7, 1, 2, 4, 7], "M": [5, 7, 7, 5, 5], "P": [6, 5, 6, 4, 4],
 ]
 
 // The people on the Spaceport's bank, in silhouette, and the crown of its palm.

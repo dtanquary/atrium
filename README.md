@@ -198,16 +198,16 @@ A pixel-art city that follows your clock and the real Sun, with traffic and wind
 
 **The Spaceport** is a launch site that never stops. A rocket rolls out of the hangar lying on its transporter, climbs the ramp to the pad and is stood up, then fuels through a count you can follow on the countdown board on the near bank. It lifts off on a cloud of steam and arcs away, shrinking to a spark at the top of its trail. A little over a minute later its booster comes back, lights its landing burn, drops its legs and lands beside the pad, and a crane carries it off while the next rocket rolls out.
 
-- **Nine rockets,** each with its own switch in Settings: Falcon 9 and Falcon Heavy, SLS, the Space Shuttle, the Saturn V, Ariane 5, and Gemini-Titan, Mercury-Atlas and Mercury-Redstone from the 1960s. They are drawn to one scale, so a Saturn V stands as tall as the pad's tower and a Redstone not much taller than its floodlights. The countdown board names the one on the pad.
+- **Thirteen rockets,** each with its own switch in Settings: Falcon 9 and Falcon Heavy, SLS, the Space Shuttle, the Saturn V, Gemini-Titan, Mercury-Atlas and Mercury-Redstone from the 1960s, and from abroad Ariane 5, Soyuz, Long March 5, Japan's H3 and India's LVM3. They are drawn to one scale, so a Saturn V stands as tall as the pad's tower and a Redstone not much taller than its floodlights. The countdown board names the one on the pad.
 - **Only the Falcons come back.** A Falcon 9's booster lands beside the pad, and a Falcon Heavy's two land side by side. Rockets that land and rockets that don't take turns, so there's a landing after every other lift-off.
 - **Each flies as itself.** The big NASA rockets and Ariane roll out standing on a crawler; the Shuttle and SLS leave the thick white trail of their solid boosters; the Saturn V climbs slowly.
-- **A tip of the hat:** when a rocket from abroad is on the pad, its flag goes up a second pole beside the Stars and Stripes. For Ariane 5 that's the French tricolour.
+- **A tip of the hat:** when a rocket from abroad is on the pad, its country's flag goes up a second pole beside the Stars and Stripes: the French tricolour for Ariane 5, and Russia's, China's, Japan's and India's for the others.
 - **How often:** a lift-off every four minutes or so, or anywhere from every two minutes to every twelve with the Launches slider.
 - **The light is the real Sun's,** as in every city. A night launch lights its own steam, and for half an hour after sunset the trail still catches the Sun above a pad already in shadow.
 - **All of it is mirrored in the lagoon,** the flames included.
-- **It runs to its own clock,** not the real launch schedule, and makes no network requests. The rockets are drawn after the real ones, without names or logos on them; Atrium isn't affiliated with SpaceX, NASA, ESA or Arianespace.
+- **It runs to its own clock,** not the real launch schedule, and makes no network requests. The rockets are drawn after the real ones, without names or logos on them; Atrium isn't affiliated with SpaceX, NASA or any other space agency or launch company.
 
-![The Spaceport's nine rockets on the pad, from Mercury-Redstone to the Saturn V](docs/images/pixel-city-spaceport-fleet.jpg)
+![Nine of the Spaceport's rockets on the pad, from Mercury-Redstone to the Saturn V](docs/images/pixel-city-spaceport-fleet.jpg)
 
 | ![Pixel City's Spaceport at sunset, a Falcon 9 nine seconds after lift-off](docs/images/pixel-city-spaceport.jpg) | ![Pixel City's Spaceport at sunset, a Falcon Heavy's two boosters landing](docs/images/pixel-city-spaceport-double.jpg) |
 |---|---|
