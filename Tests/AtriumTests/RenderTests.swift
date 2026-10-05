@@ -203,3 +203,21 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
     }
     #expect(flown == ["SATURN V"] && scene.movements >= 3, "\(scene.movements) lift-offs, of \(flown.sorted())")
 }
+
+/// Starship has a pad of its own at the Spaceport: with only it switched on, it lifts off and its booster comes back
+/// to the tower again and again, and nothing else is ever on the pad.
+@MainActor @Test func pixelCitySpaceportCatchesStarship() throws {
+    guard case .choice(let cities) = PixelCity.knobs[0].format else { return }
+    var settings = ["city.place": Double(try #require(cities.firstIndex(of: "Spaceport"))), "city.launches": 3]
+    for knob in PixelCity.knobs where knob.key.hasPrefix("city.rocket.") { settings[knob.key] = knob.key == "city.rocket.starship" ? 1 : 0 }
+    defer { settings.keys.forEach(UserDefaults.standard.removeObject) }
+    for (key, value) in settings { UserDefaults.standard.set(value, forKey: key) }
+    let scene = PixelCity(size: CGSize(width: 800, height: 500))
+    var flown = Set<String>()
+    for step in 0..<7_200 {
+        scene.update(Double(step) / 10)
+        if step % 20 == 0 { scene.didFinishUpdate() }
+        flown.insert(scene.rocketName)
+    }
+    #expect(flown == ["STARSHIP"] && scene.movements >= 4, "\(scene.movements) lift-offs and catches, of \(flown.sorted())")
+}

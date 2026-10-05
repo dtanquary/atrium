@@ -25,6 +25,7 @@ final class PixelCity: SKScene {
         Knob(key: "city.launches", label: "Launches", range: 0.25...3, standard: 1, section: "Spaceport", format: .times),
         Knob(key: "city.rocket.falcon9", label: "Falcon 9", range: 0...1, standard: 1, section: "Spaceport", format: .toggle),
         Knob(key: "city.rocket.heavy", label: "Falcon Heavy", range: 0...1, standard: 1, section: "Spaceport", format: .toggle),
+        Knob(key: "city.rocket.starship", label: "Starship", range: 0...1, standard: 1, section: "Spaceport", format: .toggle),
         Knob(key: "city.rocket.sls", label: "SLS", range: 0...1, standard: 1, section: "Spaceport", format: .toggle),
         Knob(key: "city.rocket.shuttle", label: "Space Shuttle", range: 0...1, standard: 1, section: "Spaceport", format: .toggle),
         Knob(key: "city.rocket.saturn", label: "Saturn V", range: 0...1, standard: 1, section: "Spaceport", format: .toggle),
@@ -43,7 +44,7 @@ final class PixelCity: SKScene {
     ]
     private enum K: Int {
         case view, shuffle, shuffleMinutes, looking, flightsDay, flightsNight, wind, launches
-        case falcon9, falconHeavy, sls, shuttle, saturnV, ariane, titan, atlas, redstone, soyuz, longMarch, h3, lvm3, previewTime, previewHour
+        case falcon9, falconHeavy, starship, sls, shuttle, saturnV, ariane, titan, atlas, redstone, soyuz, longMarch, h3, lvm3, previewTime, previewHour
     }
     private static func knob(_ k: K) -> Double { knobs[k.rawValue].value }
     private var settings = PixelCity.knobs.map(\.value)
@@ -2150,6 +2151,13 @@ final class PixelCity: SKScene {
     private var mount: Int { padDeck + 4 }
     private var hangarX: Int { padX - 139 }
     private var zones: [Int] { [w * 77 / 100, w * 89 / 100] }
+    // Starship's own pad, between the hangar and the ramp: its column, and the row of its launch mount's top.
+    private var starX: Int { padX - 69 }
+    private var starMount: Int { ground + 13 }
+    /// Where the rocket on the pad stands: the launch mount's, or Starship's.
+    private var site: SIMD2<Float> { pad.rocket.kit.caught ? [Float(starX) + 0.5, Float(starMount)] : [Float(padX) + 0.5, Float(mount)] }
+    /// The column a booster comes down at: one of the two landing zones, or (2) the arms of Starship's tower.
+    private func landing(_ zone: Int) -> Int { zone < zones.count ? zones[zone] : starX }
 
     /// The Spaceport: a launch site across a lagoon, seen from the bank the public watches from. Everything of its
     /// that moves is painted into one layer over the land, which the lagoon mirrors. Returns the top of the tower's
@@ -2212,7 +2220,7 @@ final class PixelCity: SKScene {
         var x = -3
         while x < w {
             let r = Int.random(in: 2...5, using: &rng)
-            let cleared = (hx - 16..<hx + 56).contains(x) || (padX - 63..<padX + 57).contains(x) || (zones[0] - 28..<zones[1] + 26).contains(x)
+            let cleared = (hx - 16..<padX + 100).contains(x) || (zones[0] - 28..<zones[1] + 26).contains(x)
             if !cleared || rng.next() % 8 == 0 {
                 for dy in 0...r { px.fill(x - r + dy / 2, ground - 1 + dy, (r - dy / 2) * 2 + 1, 1, trees * (dy == r ? 1.18 : 1)) }
             }
@@ -2229,17 +2237,31 @@ final class PixelCity: SKScene {
         px.fill(hx + 34, ground, 13, 9, mix(haze(lit(rgb(70, 74, 84), .zero)), rgb(255, 214, 150), glow * 0.75))
         for dx in stride(from: hx + 3, to: hx + 30, by: 6) { px.fill(dx, ground + 5, 2, 2, mix(haze(lit(rgb(90, 110, 130), .zero)), lamp, glow * 0.6)) }
 
-        // The tank farm: two tanks on their sides, and the liquid oxygen's sphere.
+        // The tank farm, beyond the pad: two tanks on their sides, and the liquid oxygen's sphere.
         let tank = haze(lit(rgb(236, 236, 232), keyFront + keyTop * 0.3))
-        for tx in [padX - 79, padX - 69] {
+        for tx in [padX + 66, padX + 76] {
             px.fill(tx, ground + 1, 8, 3, tank)
             px.fill(tx, ground + 1, 8, 1, tank * 0.78)
             for leg in [tx + 1, tx + 6] { px.plot(leg, ground, steel) }
         }
         for (dy, half) in [(1, 1), (2, 3), (3, 3), (4, 3), (5, 3), (6, 2), (7, 1)] {
-            px.fill(padX - 51 - half, ground + dy, half * 2 + 1, 1, tank * (dy < 3 ? 0.8 : 1))
+            px.fill(padX + 92 - half, ground + dy, half * 2 + 1, 1, tank * (dy < 3 ? 0.8 : 1))
         }
-        for leg in [padX - 53, padX - 49] { px.plot(leg, ground, steel) }
+        for leg in [padX + 90, padX + 94] { px.plot(leg, ground, steel) }
+
+        // Starship's pad: a launch mount, a table on legs with the flame's way out under it, and beside it the
+        // tower, taller than anything else here, whose arms lift the rocket on and catch its booster when that
+        // comes back. The arms are painted with the things that move.
+        let sx = starX, iron = mix(haze(lit(rgb(62, 64, 74), .zero), 0.12), rgb(14, 14, 22), night * 0.85)
+        for leg in [sx - 7, sx - 6, sx + 5, sx + 6] { px.fill(leg, ground, 1, 10, iron) }
+        px.fill(sx - 7, starMount - 3, 14, 3, iron)
+        px.fill(sx - 7, starMount - 1, 14, 1, steel)
+        for y in ground..<ground + 96 {
+            for column in [sx - 14, sx - 13, sx - 10, sx - 9] { px.plot(column, y, iron) }
+            if (y - ground) % 4 == 0 { px.fill(sx - 14, y, 6, 1, iron) }
+        }
+        px.fill(sx - 12, ground + 96, 2, 5, iron)
+        for y in [ground + 30, ground + 62, ground + 94] { px.plot(sx - 9, y, mix(iron, red, night)) }
 
         // The pad: a mound with a long ramp on the hangar's side, the flame trench through it, and the launch mount.
         let earth = haze(lit(rgb(124, 132, 100), keyTop * 0.3), 0.15), concrete = haze(lit(rgb(196, 192, 180), keyTop * 0.5), 0.12)
@@ -2328,7 +2350,7 @@ final class PixelCity: SKScene {
 
     /// The rockets Settings can switch on and off, each with its switch. A Falcon 9 under a capsule goes by the Falcon 9's.
     private static let fleet: [(rocket: Rocket, knob: K)] = [
-        (.falcon9, .falcon9), (.heavy, .falconHeavy), (.sls, .sls), (.shuttle, .shuttle), (.saturnV, .saturnV), (.ariane, .ariane),
+        (.falcon9, .falcon9), (.heavy, .falconHeavy), (.starship, .starship), (.sls, .sls), (.shuttle, .shuttle), (.saturnV, .saturnV), (.ariane, .ariane),
         (.titan, .titan), (.atlas, .atlas), (.redstone, .redstone), (.soyuz, .soyuz), (.longMarch, .longMarch), (.h3, .h3), (.lvm3, .lvm3),
     ]
     // ponytail: with every rocket switched off it flies them all, so the pad is never left empty
@@ -2372,12 +2394,12 @@ final class PixelCity: SKScene {
     /// leaning over to the right as it gathers speed.
     private func ascent(_ t: Float) -> (x: Float, y: Float, scale: Float) {
         let z = t > 0 ? 0.65 * t * t * (1 + t / 40) : 0, (rows, scale) = lens(z)
-        return (Float(padX) + 0.5 + 0.0094 * pow(max(z - 70, 0), 1.8) * scale, Float(mount) + rows, scale) // it leans once it's above the tower
+        return (site.x + 0.0094 * pow(max(z - 70, 0), 1.8) * scale, site.y + rows, scale) // it leans once it's above the tower
     }
 
     /// How far a rocket rolls to the mount: from the hangar's door on its strongback, or from beyond the left edge
     /// on its crawler.
-    private func roll(_ kit: Rocket.Kit) -> Float { kit.standing ? Float(padX + 16) : Float(padX - hangarX - 34) }
+    private func roll(_ kit: Rocket.Kit) -> Float { kit.caught ? Float(starX + 16) : kit.standing ? Float(padX + 16) : Float(padX - hangarX - 34) }
 
     /// Where the rocket that has just lifted off is `t` seconds on: some climb more briskly than others.
     private func climb(_ t: Float) -> (x: Float, y: Float, scale: Float) { ascent(t * pad.rocket.kit.pace) }
@@ -2393,7 +2415,8 @@ final class PixelCity: SKScene {
     /// a landing zone, and a crane comes for each and carries it away.
     private func launch(_ dt: Float) {
         let pace = Self.knob(.launches), kit = pad.rocket.kit
-        let rolled = roll(kit), raising: Float = kit.standing ? 4 : 18 // a rocket that comes out standing only has to settle
+        // A rocket that comes out standing only has to settle; Starship is lifted onto its mount by the tower's arms.
+        let rolled = roll(kit), raising: Float = kit.caught ? 10 : kit.standing ? 4 : 18
         // Time in the hangar and the count run down at the pace Settings gives, so a change shows at once.
         if pad.phase == .hangar || pad.phase == .count, clock < pad.until { pad.until += Double(dt) * (1 - pace) }
         pad.t += dt
@@ -2412,7 +2435,7 @@ final class PixelCity: SKScene {
         case .count:
             // Every booster needs a landing zone to come back to. If one from the last flight is still standing
             // on it, the count holds at ten seconds.
-            let free = zones.indices.filter { zone in !boosters.contains { $0.zone == zone } }, need = kit.lands
+            let free = zones.indices.filter { zone in !boosters.contains { $0.zone == zone } }, need = kit.caught ? 0 : kit.lands
             if free.count < need, pad.until - clock < 10 * pace { pad.until = clock + 10 * pace }
             if clock >= pad.until {
                 (pad.phase, pad.t, liftoffAt, trailFrom) = (.climb, 0, clock, nil)
@@ -2420,12 +2443,21 @@ final class PixelCity: SKScene {
                 for (i, zone) in free.shuffled().prefix(need).sorted().enumerated() {
                     boosters.append(Booster(zone: zone, until: clock + 62 + Double(i) * 1.3))
                 }
+                if kit.caught { boosters.append(Booster(zone: 2, until: clock + 62)) } // Starship's comes back to its tower
             }
         case .climb:
-            if pad.t >= 21 / kit.pace { (pad.phase, pad.t) = (.rollBack, 0) } // out of sight, and the strongback is down
+            if pad.t >= 21 / kit.pace { (pad.phase, pad.t) = (kit.caught ? .recover : .rollBack, 0) } // out of sight, and the strongback is down
+        case .recover:
+            // Starship's crawler waits under the tower. Once its booster has hung in the arms a while they lower it
+            // onto the crawler, ten seconds' work, and it rides home.
+            if boosters.contains(where: { $0.zone == 2 && $0.phase == .landed && clock >= $0.until }) { pad.lowered += dt }
+            if pad.lowered >= 10 { (pad.phase, pad.t) = (.rollBack, 0) }
         case .rollBack:
             pad.x = max(pad.x - 5 * dt, 0)
-            if pad.x <= 0 { (pad.phase, pad.until, pad.rocket, pad.flown) = (.hangar, clock + .random(in: 50...110), Self.nextRocket(), Bool.random()) }
+            if pad.x <= 0 {
+                boosters.removeAll { $0.zone == 2 }
+                (pad.phase, pad.until, pad.rocket, pad.flown, pad.lowered) = (.hangar, clock + .random(in: 50...110), Self.nextRocket(), Bool.random(), 0)
+            }
         }
         // A rocket from abroad has its flag run up the second pole, from its roll-out until its crawler is home again.
         let flag = pad.phase == .hangar ? nil : pad.rocket.kit.flag
@@ -2461,7 +2493,7 @@ final class PixelCity: SKScene {
         let reach: Float = 33 // its hook hangs this far to its left
         switch crane.phase {
         case .away:
-            if let zone = boosters.filter({ $0.phase == .landed && clock >= $0.until }).map(\.zone).max() {
+            if let zone = boosters.filter({ $0.phase == .landed && clock >= $0.until && $0.zone < 2 }).map(\.zone).max() {
                 (crane.phase, crane.zone, crane.x) = (.driveIn, zone, Float(w) + 40)
             }
         case .driveIn:
@@ -2508,10 +2540,10 @@ final class PixelCity: SKScene {
         case .rollOut: left = Double((rolled - pad.x) / 3.5 + raising) + 70 / pace
         case .raise: left = Double(raising - pad.t) + 70 / pace
         case .count: left = max(0, pad.until - clock) / pace
-        case .climb, .rollBack: left = 0
+        case .climb, .recover, .rollBack: left = 0
         }
-        let seconds = Int(since < 95 ? since : left.rounded(.up))
-        let text = "T" + (since < 95 ? "+" : "-") + String(format: "%02d:%02d", min(seconds / 60, 99), seconds % 60)
+        let up = since < 95 || pad.phase == .recover || pad.phase == .rollBack, seconds = Int(up ? since : left.rounded(.up))
+        let text = "T" + (up ? "+" : "-") + String(format: "%02d:%02d", min(seconds / 60, 99), seconds % 60)
         if text + next.name != counted {
             counted = text + next.name
             var px = Pixels(31, 11)
@@ -2553,7 +2585,7 @@ final class PixelCity: SKScene {
     /// Dust and smoke thrown out along the ground by a booster's flame as it comes down on a landing zone.
     private func dust(zone: Int) {
         let side: Float = Bool.random() ? 1 : -1
-        puff(Float(zones[zone]) + side * .random(in: 2...20), Float(ground) + .random(in: 1...4), side * .random(in: 4...18), .random(in: 0...4),
+        puff(Float(landing(zone)) + side * .random(in: 2...20), Float(ground) + .random(in: 1...4), side * .random(in: 4...18), .random(in: 0...4),
              .random(in: 1.5...3), 0.8, .random(in: 3...6), 9)
     }
 
@@ -2562,7 +2594,7 @@ final class PixelCity: SKScene {
     /// steam, out of both ends of the flame trench and up round the mount; the trail a climbing rocket leaves; and
     /// the dust under a landing booster.
     private func puff() {
-        let x = Float(padX) + 0.5, foot = Float(mount), kit = pad.rocket.kit
+        let x = site.x, foot = site.y, kit = pad.rocket.kit
         if let t = flightTime {
             if kit.cold, t < -3, Int.random(in: 0..<6) == 0 { // off its side, about two thirds of the way up
                 puff(x - Float(kit.art[0].count) / 2 - 0.5, foot + Float(kit.art.count) * .random(in: 0.6...0.72), .random(in: -3 ... -2), -0.6, 1, 0.25, 2.4, 5)
@@ -2662,7 +2694,7 @@ final class PixelCity: SKScene {
                             if heat > 0 { c = mix(c, rgb(255, 168, 84) * (0.75 + 0.25 * c.sum() / 3), heat) }
                         }
                         if flood > 0 {
-                            let dx = Float(x - padX), dy = Float(y + base - padDeck - 20) * 0.8
+                            let dx = Float(x) - site.x, dy = (Float(y + base) - site.y - 16) * 0.8
                             let near = (1 - (dx * dx + dy * dy).squareRoot() / 40) * flood
                             if near > 0 { c = mix(c, rgb(250, 246, 236) * floodlit[tone], near) }
                         }
@@ -2680,15 +2712,15 @@ final class PixelCity: SKScene {
         let k = 0.35 + 0.65 * night
         var fires: [(x: Float, y: Float, angle: Float, scale: Float, length: Float, wide: Float, power: Float)] = []
         if let t = flightTime, t > -2.6 {
-            let at = climb(t), next = climb(t + 0.2), z = at.y - Float(mount), flame = pad.rocket.kit.flame
+            let at = climb(t), next = climb(t + 0.2), z = at.y - site.y, flame = pad.rocket.kit.flame
             if at.y < Float(h) + 40 {
                 fires.append((at.x, at.y, atan2(next.x - at.x, next.y - at.y), at.scale, flame.length * smoothstep(-2.6, -0.4, t),
                               flame.wide, min(1, k * (z < 110 ? 1.2 : 0.8)) * max(0.2, 1 - z / 160)))
             }
         }
         for b in boosters where b.phase == .burn {
-            let (rows, scale) = lens(b.z)
-            fires.append((Float(zones[b.zone]) + 0.5, Float(ground + 1) + rows + scale, 0, scale, 18, 2, 0.9 * k))
+            let (rows, scale) = lens(b.z), tower = b.zone == 2 // Starship's booster comes down to the arms, over its mount
+            fires.append((Float(landing(b.zone)) + 0.5, Float(tower ? starMount : ground + 1) + rows + scale, 0, scale, tower ? 26 : 18, tower ? 4 : 2, 0.9 * k))
         }
         return fires
     }
@@ -2702,7 +2734,7 @@ final class PixelCity: SKScene {
         // Where the strongback or the crawler is, how far a strongback leans (0 upright, a quarter turn back when
         // it lies on its wheels), and where the rocket on it has its foot.
         let kit = pad.rocket.kit, art = kit.art, lying = -Float.pi / 2
-        var hinge = SIMD2(Float(padX) + 0.5, Float(mount)), lean: Float = 0
+        var hinge = site, lean: Float = 0
         // The ramp lifts whatever rolls up it 6 rows over 30 columns.
         func track(_ x: Float) -> Float { Float(ground) + 6 * min(max((x - Float(padX - 55)) / 30, 0), 1) }
         switch pad.phase {
@@ -2711,12 +2743,21 @@ final class PixelCity: SKScene {
             let x = kit.standing ? pad.x - 16 : Float(hangarX + 34) + pad.x
             hinge = SIMD2(x.rounded(.down) + 0.5, (track(x) + 4).rounded(.down))
             lean = lying - atan2(track(x) - track(x - 40), 40) // a strongback rides on wheels at its foot and 40 columns behind
-        case .raise: lean = lying * (1 - smoothstep(0, 18, pad.t))
+        case .raise:
+            lean = lying * (1 - smoothstep(0, 18, pad.t))
+            if kit.caught { hinge.y = mix(Float(ground + 4), Float(starMount), smoothstep(0, 10, pad.t)).rounded(.down) } // going up in the arms
+        case .recover: break
         case .count: lean = (flightTime ?? 0) > -20 ? -0.052 : 0 // it leans clear for the last of the count
         case .climb: lean = pad.t < 10 ? mix(-0.052, -0.66, smoothstep(0, 1.5, pad.t)) : mix(-0.66, lying, smoothstep(10, 21, pad.t))
         }
         let flying = pad.phase == .climb ? climb(pad.t) : nil
-        var shown = [smokeSteps, flicker, pad.phase.rawValue, Int(hinge.x), Int(hinge.y), Int(lean * 80), Int(crane.x), Int(crane.t * 2), crane.phase.rawValue]
+        // Starship's booster, once caught: hanging over the mount, coming down in the arms, or riding home on the crawler.
+        let lowering = mix(Float(starMount), Float(ground + 4), smoothstep(0, 10, pad.lowered)).rounded(.down)
+        let caught = pad.phase == .rollBack && kit.caught ? hinge : SIMD2(Float(starX) + 0.5, lowering)
+        // The tower's arms rest low, where a crawler brings a rocket under them, and are at whatever they hold otherwise.
+        let holding = kit.caught && pad.phase != .hangar && pad.phase != .rollOut && pad.phase != .rollBack
+        let arms = Int(holding ? (pad.phase == .raise ? hinge.y : pad.phase == .recover ? lowering : Float(starMount)) : Float(ground + 4)) + 43
+        var shown = [smokeSteps, flicker, pad.phase.rawValue, Int(hinge.x), Int(hinge.y), Int(lean * 80), Int(crane.x), Int(crane.t * 2), crane.phase.rawValue, arms, Int(caught.y)]
         if let flying { shown += [Int(flying.x), Int(flying.y), Int(flying.scale * 60)] }
         for b in boosters { shown += [b.phase.rawValue, Int(lens(b.z).rows), Int(lens(b.z).scale * 40)] }
         guard shown != launchShown else { return }
@@ -2736,7 +2777,7 @@ final class PixelCity: SKScene {
         if pad.phase != .hangar {
             if kit.standing {
                 // The crawler: a platform on two sets of tracks, with the rocket standing on it.
-                let x = Int(hinge.x.rounded(.down)), y = Int(hinge.y)
+                let x = Int(hinge.x.rounded(.down)), y = kit.caught ? ground + 4 : Int(hinge.y) // Starship's stays on the ground
                 px.fill(x - 8, y - 2, 17, 2, steel)
                 for tread in [x - 7, x + 3] { px.fill(tread, y - 4, 5, 2, dark) }
             } else {
@@ -2752,7 +2793,7 @@ final class PixelCity: SKScene {
                     if rolling, i % 6 < 2 { px.plot(Int((sx - qx * 2).rounded(.down)), Int((sy - qy * 2).rounded(.down)), dark) } // its wheels
                 }
             }
-            if pad.phase != .climb, pad.phase != .rollBack {
+            if pad.phase.rawValue < Pad.Phase.climb.rawValue { // still on its strongback or crawler, or on the mount
                 let floodlit: Float = pad.phase == .rollOut ? 0 : 1
                 stamp(art, into: &px, x: hinge.x, y: hinge.y, angle: pad.phase == .count || kit.standing ? 0 : lean, paint: rocketPaint(flood: floodlit), soot: soot)
             }
@@ -2767,7 +2808,16 @@ final class PixelCity: SKScene {
         }
         // The boosters: falling, burning down to the pad on their legs, standing there, or hanging from the crane's hook.
         let hookX = Int(crane.x.rounded(.down)) - 33, lifted = crane.phase == .hook ? max(0, min(crane.t - 5, 4)) : 4
-        for b in boosters where b.phase != .away {
+        for b in boosters where b.phase != .away && b.zone == 2 { // Starship's: no legs, and it comes down to the tower
+            let (rows, scale) = lens(b.z), down = b.phase == .landed
+            stamp(superHeavyArt, into: &px, x: down ? caught.x : Float(starX) + 0.5, y: down ? caught.y : Float(starMount) + rows, scale: scale,
+                  paint: rocketPaint(flood: down ? 1 : 0), heat: b.phase == .burn ? 0.85 : 0)
+        }
+        // The tower's arms: a carriage on the tower and a beam out across the rocket, under its grid fins.
+        let iron = mix(mix(lit(rgb(62, 64, 74), .zero), hazeColour, 0.12), rgb(14, 14, 22), night * 0.85)
+        px.fill(starX - 15, arms - 2, 8, 5, iron)
+        px.fill(starX - 8, arms, 16, 2, iron)
+        for b in boosters where b.phase != .away && b.zone < 2 {
             let held = crane.phase.rawValue >= Crane.Phase.hook.rawValue && crane.zone == b.zone
             let (rows, scale) = lens(b.z), flying = b.phase == .fall || b.phase == .burn
             let x = held ? Float(hookX) + 0.5 : Float(zones[b.zone]) + 0.5, y = Float(ground + 1) + (held ? lifted.rounded(.down) : rows)
@@ -2893,27 +2943,31 @@ private struct Car {
 /// The Spaceport's launch pad, and where its round has got to.
 private struct Pad {
     /// In the hangar; rolling out to the pad on its transporter; being stood up; fuelling, through the count;
-    /// climbing away, while the strongback is lowered behind it; and that rolling back to the hangar.
-    enum Phase: Int { case hangar, rollOut, raise, count, climb, rollBack }
+    /// climbing away, while the strongback is lowered behind it; for Starship, waiting for its booster to be caught
+    /// and lowered; and the strongback or crawler rolling back.
+    enum Phase: Int { case hangar, rollOut, raise, count, climb, recover, rollBack }
     var phase = Phase.hangar
     var until: TimeInterval = 0 // when the wait in the hangar, or the count, ends
     var t: Float = 0            // seconds into this phase
     var x: Float = 0            // how far the transporter has rolled from the hangar's door
+    var lowered: Float = 0      // seconds the tower's arms have spent lowering Starship's booster to its crawler
     var rocket = Rocket.falcon9, flown = false // a booster that has flown before is sooty
 }
 
 /// The rockets the Spaceport flies.
 private enum Rocket: Int {
-    case falcon9, dragon, heavy, ariane, shuttle, sls, saturnV, titan, atlas, redstone, soyuz, longMarch, h3, lvm3
+    case falcon9, dragon, heavy, ariane, shuttle, sls, saturnV, titan, atlas, redstone, soyuz, longMarch, h3, lvm3, starship
 
     /// What sets one rocket apart: its picture, and the name the countdown board gives it; how many of its
     /// boosters come back to land; whether it rolls out standing on a crawler, or lying on a strongback that stands
     /// it up; how long and wide its flame is at full size; how thick its trail and how much steam it raises at
     /// lift-off, against a Falcon 9's; how briskly it climbs; whether it's fuelled cold enough to shed vapour; and
-    /// the flag it flies under, if not the Stars and Stripes.
+    /// the flag it flies under, if not the Stars and Stripes. Starship alone has a pad of its own, where the tower's
+    /// arms lift it onto the mount and catch its booster (`caught`).
     struct Kit {
         let art: [[UInt8]], name: String, lands: Int, standing: Bool
         let flame: (length: Float, wide: Float), smoke: Float, steam: Float, pace: Float, cold: Bool, flag: Flag?
+        var caught = false
     }
     var kit: Kit { Self.kits[rawValue] }
     private static let kits = [
@@ -2931,6 +2985,7 @@ private enum Rocket: Int {
         Kit(art: longMarchArt, name: "CZ-5", lands: 0, standing: true, flame: (34, 6), smoke: 1.2, steam: 1.1, pace: 1, cold: true, flag: .china),
         Kit(art: h3Art, name: "H3", lands: 0, standing: true, flame: (34, 6), smoke: 1.4, steam: 1, pace: 1.1, cold: true, flag: .japan),
         Kit(art: lvm3Art, name: "LVM3", lands: 0, standing: true, flame: (30, 6), smoke: 1.6, steam: 1, pace: 1.05, cold: false, flag: .india),
+        Kit(art: starshipArt, name: "STARSHIP", lands: 1, standing: true, flame: (56, 6), smoke: 0.9, steam: 1.5, pace: 0.9, cold: true, flag: nil, caught: true),
     ]
 }
 
@@ -3057,6 +3112,11 @@ private let atlasArt = bytes(tall([("..R..", 3), ("..K..", 1), (".KKK.", 2), (".
 private let titanArt = bytes(tall([("..K..", 1), (".KKK.", 2), (".lws.", 3), (".xyz.", 6), (".KKK.", 1), (".xyz.", 12), (".n.n.", 1)]))
 /// Ariane 5: a cream core under a long white fairing, between two white boosters.
 private let arianeArt = bytes(tall([("...ww...", 1), ("..lwws..", 10), ("..gggg..", 1), ("..cdde..", 3), ("l.cdde.s", 1), ("lscddels", 18), ("nn.nn.nn", 1)]))
+/// Starship's booster by itself, as it comes back: bare steel under its grid fins and the dark ring the ship stood on.
+private let superHeavyRows = tall([(".gKgKgK.", 2), ("gxyyyyzg", 1), (".xyyyyz.", 44), (".nnnnnn.", 1)])
+private let superHeavyArt = bytes(superHeavyRows)
+/// Starship: that booster under the ship, steel on one side and black tiles on the other, with its four flaps.
+private let starshipArt = bytes(tall([("...xK...", 1), ("..xyKK..", 2), (".xyyKKK.", 1), ("xxyyKKKK", 5), (".xyyKKK.", 15), ("xxyyKKKK", 8), (".xyyKKK.", 1)]) + superHeavyRows)
 /// Soyuz: a white fairing under its escape tower, a grey third stage, the core's orange band, and four tapered
 /// boosters that make a skirt of its foot. (The colours are from memory of the older ones.)
 private let soyuzArt = bytes(tall([("...w...", 3), ("..lws..", 6), ("..xyz..", 5), ("..g.g..", 1), ("..pqr..", 5), (".xxyzz.", 4), ("xxxyzzz", 8), ("n.nnn.n", 1)]))
