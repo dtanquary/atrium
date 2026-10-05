@@ -1,6 +1,7 @@
 #!/bin/sh
-# Builds build/Atrium-<version>.dmg for a GitHub release outside the App Store: signed with a Developer ID,
-# notarized by Apple and stapled, so it opens without a Gatekeeper warning.
+# Builds build/Atrium-<version>.dmg (Atrium-<version>-beta.dmg while build.sh has a PRERELEASE) for a GitHub release
+# outside the App Store: signed with a Developer ID, notarized by Apple and stapled, so it opens without a Gatekeeper
+# warning.
 # One-time setup on this Mac:
 #   1. Xcode → Settings → Accounts → the team → Manage Certificates → + → Developer ID Application
 #   2. xcrun notarytool store-credentials atrium-notary --apple-id <Apple ID> --team-id <team ID>
@@ -14,7 +15,8 @@ ID=$(security find-identity -v -p codesigning | sed -n 's/.*"\(Developer ID Appl
 ./build.sh
 APP=build/Atrium.app
 VERSION=$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$APP/Contents/Info.plist")
-DMG=build/Atrium-$VERSION.dmg
+PRE=$(/usr/libexec/PlistBuddy -c 'Print AtriumPrerelease' "$APP/Contents/Info.plist" | tr -d ' ') # "rc 1" → "rc1"
+DMG=build/Atrium-$VERSION${PRE:+-$PRE}.dmg
 
 # Notarizing needs the hardened runtime, which keeps location from the app unless it's entitled to it.
 cat > build/release.entitlements <<EOF

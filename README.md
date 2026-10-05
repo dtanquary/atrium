@@ -267,7 +267,7 @@ open build/Atrium.app
 
 To rebuild after pulling changes: `./build.sh && pkill -x Atrium; open build/Atrium.app`
 
-`./dmg.sh` wraps that build in a disk image in `build/`, to carry to another Mac. It's signed ad hoc, so that Mac asks you to allow it the first time, in **System Settings → Privacy & Security → Open Anyway**. The notarised DMG on the Releases page comes from `./release.sh`, which needs a Developer ID (the setup is at its top).
+The notarised DMG on the Releases page comes from `./release.sh`, which needs a Developer ID (the setup is at its top).
 
 ## Development
 

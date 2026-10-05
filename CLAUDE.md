@@ -33,7 +33,7 @@ Atrium is a menu bar app that plays animated wallpapers on macOS 27. Swift packa
 ## Commands
 ```sh
 ./build.sh                    # release build → build/Atrium.app (ad-hoc signed, menu bar only)
-./release.sh                  # for a GitHub release: build/Atrium-<version>.dmg, Developer ID signed and notarized (setup at its top)
+./release.sh                  # for a GitHub release: build/Atrium-<version>-beta.dmg (no -beta from 1.0), Developer ID signed and notarized (setup at its top)
 pkill -x Atrium; open build/Atrium.app
 defaults write com.dtanquary.atrium scene "Live Sky"   # pick a scene without the menu
 swift test                    # renders every scene to $TMPDIR/atrium-snapshots and prints the cost per frame
