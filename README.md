@@ -12,7 +12,7 @@ Screenshots show the wallpaper alone, with no desktop icons, menu bar or Dock. E
 
 - **Nature and weather:** [Fish Tank](#fish-tank) · [Weather](#weather) · [Dappled Light](#dappled-light) · [Rain on Glass](#rain-on-glass) · [Wind](#wind) · [Murmuration](#murmuration) · [Aurora](#aurora) · [Fireflies](#fireflies)
 - **Space:** [Solar System Tour](#solar-system-tour) · [Deep Space Tour](#deep-space-tour) · [Nebula](#nebula) · [Galaxy](#galaxy) · [Live Sky](#live-sky) · [Earth from Orbit](#earth-from-orbit)
-- **Colour, light and pattern:** [Flowing Gradient](#flowing-gradient) · [Lava Lamp](#lava-lamp) · [Schlieren](#schlieren) · [Turing Patterns](#turing-patterns) · [Game of Life](#game-of-life) · [Pixel City](#pixel-city)
+- **Color, light and pattern:** [Flowing Gradient](#flowing-gradient) · [Lava Lamp](#lava-lamp) · [Schlieren](#schlieren) · [Turing Patterns](#turing-patterns) · [Game of Life](#game-of-life) · [Pixel City](#pixel-city)
 
 ### Nature and weather
 
@@ -50,7 +50,7 @@ Drops creeping and running down a rainy window, each a tiny lens showing the str
 |---|---|
 | Hamburg at night, in Dark Mode | Riomaggiore by day, in Light Mode |
 | ![Rain on Glass following the weather: fern frost](docs/images/rain-on-glass-frost.jpg) | ![Rain on Glass following the weather: fogged glass](docs/images/rain-on-glass-fog.jpg) |
-| Following the weather: fern frost on a freezing night, over the Cabin | Fogged glass on a grey morning, over the Countryside |
+| Following the weather: fern frost on a freezing night, over the Cabin | Fogged glass on a gray morning, over the Countryside |
 
 #### Wind
 The live wind around you as thin streaks streaming across the map, in the spirit of the hint.fm wind map and earth.nullschool: a grid of Open-Meteo's hourly forecast, blended from hour to hour, with streaks that speed up, brighten and curl with the real wind, as brush strokes like hint.fm's or comets like nullschool's. Zoom from your town to half the continent, over a map at the opacity you choose: the Earth by day or at night, terrain and the sea floor, or yesterday's satellite view with its real clouds (all from NASA), Natural Earth's shaded relief, or nothing, in six jewel-toned palettes. Light Mode draws the same streaks as ink on paper.
@@ -69,7 +69,7 @@ Tens of thousands of starlings wheeling over Brighton's West Pier or a marsh pon
 | The marsh pond in the afterglow | The West Pier at blue hour |
 
 #### Aurora
-Northern lights over the snowy Tetons, shading through real aurora colours.
+Northern lights over the snowy Tetons, shading through real aurora colors.
 
 | ![Aurora in green](docs/images/aurora-green.jpg) | ![Aurora in purple](docs/images/aurora-purple.jpg) |
 |---|---|
@@ -85,18 +85,18 @@ Fireflies drifting over a misty meadow at blue hour.
 #### Solar System Tour
 A slow tour of the Sun's family in 193 of the best photos spacecraft and telescopes have taken: Cassini's Saturn, Juno's Jupiter, Mars Express's Mars, New Horizons' Pluto, Webb's Uranus, Magellan's Venus, the Nile from the space station, and 46 worlds in all, down to Saturn's moon Pan and comet 67P. It also goes down to the ground: rover panoramas on Mars, the Apollo astronauts on the Moon, Huygens on Titan, and the last seconds before landing on comets and asteroids, which Settings can leave out. Each fills the screen, drifting and zooming for a minute, then dissolves into another world, and a world you come back to shows you a different photo. Under each name, a line on the photo and two quick facts about the world, never the same pair twice in a row. The Sun is today's real Sun and the Moon is tonight's real Moon, both live. Settings → Show holds the tour on one world, and Framing can show each photo whole instead of filling the screen.
 
-| ![Solar System Tour: Jupiter from Juno, in enhanced colour](docs/images/solar-system-jupiter.jpg) | ![Solar System Tour: the Nile, Sinai and the Red Sea from the International Space Station](docs/images/solar-system-nile.jpg) |
+| ![Solar System Tour: Jupiter from Juno, in enhanced color](docs/images/solar-system-jupiter.jpg) | ![Solar System Tour: the Nile, Sinai and the Red Sea from the International Space Station](docs/images/solar-system-nile.jpg) |
 |---|---|
 | Jupiter, from Juno | The Nile and the Red Sea, from the space station |
 | ![Solar System Tour: the delta in Jezero crater, from Perseverance](docs/images/solar-system-mars-jezero.jpg) | ![Solar System Tour: John Young, the rover and the lander at Descartes, Apollo 16](docs/images/solar-system-moon-apollo16.jpg) |
 | Jezero crater on Mars, from Perseverance | Apollo 16 at Descartes |
 
 ##### The Sun, live
-One of the Sun's views is the real Sun as NASA's Solar Dynamics Observatory saw it about an hour ago (two or three in visible light): today's flares, sunspots and prominences, in eight wavelengths, each in its real SDO colour, from the gold coronal loops of 171 Å to visible light. Plasma pulses out along its loops, its corona streams away, and every few minutes one of today's active regions flares or a prominence erupts off the edge.
+One of the Sun's views is the real Sun as NASA's Solar Dynamics Observatory saw it about an hour ago (two or three in visible light): today's flares, sunspots and prominences, in eight wavelengths, each in its real SDO color, from the gold coronal loops of 171 Å to visible light. Plasma pulses out along its loops, its corona streams away, and every few minutes one of today's active regions flares or a prominence erupts off the edge.
 
 | ![The Sun Today, 193 Bronze](docs/images/sun-193.jpg) | ![The Sun Today, 304 Red, with a prominence erupting](docs/images/sun-304-eruption.jpg) |
 |---|---|
-| 193 Å, the million-degree corona, with a dark coronal hole, on 29 September 2026 | 304 Å, the chromosphere, as a prominence erupts |
+| 193 Å, the million-degree corona, with a dark coronal hole, on September 29, 2026 | 304 Å, the chromosphere, as a prominence erupts |
 
 ##### The Moon, live
 When the tour reaches the Moon, one of its views is the Moon filling the screen as it is right now from where you are: its real phase, wobble and tilt, from NASA's LRO maps, with shadows along the terminator, earthshine on the dark side, and copper during a lunar eclipse. Choose black, faint real stars or the real sky behind it.
@@ -104,8 +104,8 @@ When the tour reaches the Moon, one of its views is the Moon filling the screen 
 | ![The Moon, a waxing crescent with earthshine](docs/images/the-moon.jpg) | ![The Moon by day, on the Sky backdrop](docs/images/the-moon-day.jpg) |
 |---|---|
 | A waxing crescent with earthshine, among the real stars | Today's waning gibbous on the Sky backdrop, its dark side the sky's own blue |
-| ![The Moon in the total lunar eclipse of 31 December 2028](docs/images/the-moon-eclipse.jpg) | ![The Moon beside NASA's Dial-a-Moon](docs/images/the-moon-vs-dial-a-moon.jpg) |
-| The total lunar eclipse of 31 December 2028, previewed | Checked against NASA's Dial-a-Moon (left of each pair) for phase, libration, tilt and tone |
+| ![The Moon in the total lunar eclipse of December 31, 2028](docs/images/the-moon-eclipse.jpg) | ![The Moon beside NASA's Dial-a-Moon](docs/images/the-moon-vs-dial-a-moon.jpg) |
+| The total lunar eclipse of December 31, 2028, previewed | Checked against NASA's Dial-a-Moon (left of each pair) for phase, libration, tilt and tone |
 
 #### Deep Space Tour
 Solar System Tour's sister, beyond the Solar System: slow pans and zooms across 95 of the best real photos of nebulae, star clusters, dying stars, galaxies, deep fields, and the only two black holes ever imaged, from Webb, Hubble, ESO, Euclid, the Rubin Observatory, Chandra and the Event Horizon Telescope. Real photos only: no artist's impressions or simulations. Each object comes with a caption and two facts, and Settings → Show holds the tour on one kind of object.
@@ -115,7 +115,7 @@ Solar System Tour's sister, beyond the Solar System: slow pans and zooms across 
 | The Pillars of Creation, from Webb | M87*, the first image of a black hole |
 
 #### Nebula
-A unique deep-space cloud on every load, in real nebula colours, dissolving into a new one every few minutes.
+A unique deep-space cloud on every load, in real nebula colors, dissolving into a new one every few minutes.
 
 | ![Nebula, Hubble palette](docs/images/nebula-hubble.jpg) | ![Nebula, Reflection palette](docs/images/nebula-reflection.jpg) |
 |---|---|
@@ -128,7 +128,7 @@ A spiral galaxy turning slowly, after a real one, with dust lanes, star clusters
 
 | ![Galaxy, Whirlpool](docs/images/galaxy-whirlpool.jpg) | ![Galaxy, Andromeda](docs/images/galaxy-andromeda.jpg) |
 |---|---|
-| The Whirlpool (M51) and its companion, in colours sampled from Hubble's portrait | Andromeda, steeply tilted, with M32 and M110 beside it |
+| The Whirlpool (M51) and its companion, in colors sampled from Hubble's portrait | Andromeda, steeply tilted, with M32 and M110 beside it |
 | ![Galaxy, Great Barred](docs/images/galaxy-barred.jpg) | ![Galaxy, Milky Way](docs/images/galaxy-milky-way.jpg) |
 | NGC 1300, the Great Barred Spiral, with dust lanes along its bar | The Milky Way, seen face-on |
 
@@ -146,14 +146,14 @@ The globe above your location with the live day/night line, today's real clouds,
 |---|---|
 | City lights across India before dawn, with day coming in from the east | Late afternoon over North America, under today's real clouds |
 
-### Colour, light and pattern
+### Color, light and pattern
 
 #### Flowing Gradient
-Soft pools of colour in six palettes, drifting from one palette to the next every few minutes on Random, with silk ribbons that follow the Sun if you turn them on.
+Soft pools of color in six palettes, drifting from one palette to the next every few minutes on Random, with silk ribbons that follow the Sun if you turn them on.
 
 | ![Flowing Gradient in Dark Mode](docs/images/flowing-gradient.jpg) | ![Flowing Gradient in Light Mode](docs/images/flowing-gradient-light.jpg) |
 |---|---|
-| In Dark Mode | The watercolour Light Mode |
+| In Dark Mode | The watercolor Light Mode |
 
 #### Lava Lamp
 Wax that rises up the middle as round heads on stems that pinch off, sticks to the top a while, then sinks at the sides, lit by the bulb below. Seven jewel-tone palettes, with Light and Dark looks.
@@ -163,7 +163,7 @@ Wax that rises up the middle as round heads on stems that pinch off, sticks to t
 | Coral in Dark Mode | Teal, in Light Mode |
 
 #### Schlieren
-Rising heat as a colour schlieren camera sees it, after the photos of Gary Settles, Andrew Davidhazy and Ted Kinsman. Warm air bends light, and the camera turns each bend into a colour, so the two edges of a candle's plume glow in opposite colours as it rises, sways and curls into turbulence, in slow motion. It uses a real fluid simulation of the room's air. Pick candles, one taper, a mug of coffee or a radiator; a dark-field, rainbow, banded or knife-edge filter; and one of eight palettes, with the lab's round mirror as an option.
+Rising heat as a color schlieren camera sees it, after the photos of Gary Settles, Andrew Davidhazy and Ted Kinsman. Warm air bends light, and the camera turns each bend into a color, so the two edges of a candle's plume glow in opposite colors as it rises, sways and curls into turbulence, in slow motion. It uses a real fluid simulation of the room's air. Pick candles, one taper, a mug of coffee or a radiator; a dark-field, rainbow, banded or knife-edge filter; and one of eight palettes, with the lab's round mirror as an option.
 
 | ![Schlieren, candles in the dark field](docs/images/schlieren.jpg) | ![Schlieren, one candle through a rainbow filter after Davidhazy](docs/images/schlieren-rainbow.jpg) |
 |---|---|
@@ -177,7 +177,7 @@ Reaction–diffusion, the chemistry Alan Turing proposed for how animals get the
 | Fingerprint stripes in Dark Mode | Coral, glazed like ceramic, in Light Mode |
 
 #### Game of Life
-Conway's cells, reseeding so they never die out. The Calm look shows a long exposure, so cells melt into soft glowing blobs that drift slowly; the Classic look is crisp, quick and colourful.
+Conway's cells, reseeding so they never die out. The Calm look shows a long exposure, so cells melt into soft glowing blobs that drift slowly; the Classic look is crisp, quick and colorful.
 
 | ![Game of Life, Calm](docs/images/game-of-life.jpg) | ![Game of Life, Classic](docs/images/game-of-life-classic.jpg) |
 |---|---|
@@ -192,7 +192,7 @@ A pixel-art skyline that follows your clock, with traffic and windows lighting u
 
 ## Settings
 
-The first time Atrium opens, a short welcome lets you try the wallpapers on your desktop and shuffle between them all (it's in Settings → About → Show Welcome any time after). Choose Settings… (⌘,) from the menu bar icon. Every wallpaper has a page, laid out like System Settings, with its palettes, photos, sliders, switches and menus (Fish Tank and Pixel City have none yet). The wallpaper runs live behind the top of its page, so each change shows as you make it. General holds Open at Login, Shuffle and Match the lock screen; Power sets the frame rate on mains power, on battery and in Low Power Mode.
+The first time Atrium opens, a short welcome lets you try the wallpapers on your desktop and shuffle between them all (it's in Settings → About → Show Welcome any time after). Choose Settings… (⌘,) from the menu bar icon. Every wallpaper has a page, laid out like System Settings, with its palettes, photos, sliders, switches and menus (Fish Tank and Pixel City have none yet). The wallpaper runs live behind the top of its page, so each change shows as you make it. General holds Open at Login, Shuffle and Match the lock screen; Power sets the frame rate when plugged in, on battery and in Low Power Mode.
 
 | ![Settings for Solar System Tour: a grid of worlds to hold the tour on](docs/images/settings-solar-system-tour.jpg) | ![Settings for Rain on Glass: ten real places and seven city-light palettes behind the glass](docs/images/settings-rain-on-glass.jpg) |
 |---|---|
@@ -209,7 +209,7 @@ It uses public AppKit and SpriteKit APIs only. It uses no private frameworks, ma
 Each wallpaper is a SpriteKit scene. Many are full-screen Metal shaders written as `SKShader`s, and whatever can be drawn in code is: skies, water, wax, streaks of wind, starlings, reaction–diffusion and rising heat. Photos come in where they beat anything procedural: the reef's fish and corals, and the landscapes behind Weather, Aurora, Murmuration, Fireflies and Rain on Glass, all cut out of permissively licensed photos and relit; the two tours' photos from spacecraft and telescopes; and NASA's maps of the Earth and the Moon. Live data comes over the network: the weather, the wind, the clouds, the ISS and the Sun.
 
 It's kind to your battery:
-- 60 fps on mains power, 30 fps on battery.
+- 60 fps plugged in, 30 fps on battery.
 - In Low Power Mode it freezes on the current frame.
 - Rendering pauses whenever the desktop is fully covered.
 - Settings → Power changes each of these rates (Freeze, 15, 30 or 60 fps). For a demo on battery, choose Full Speed on Battery in the menu bar.
@@ -220,7 +220,7 @@ The lock screen, and the tint of the menu bar and windows, come from your normal
 
 **[Download the DMG from Releases](https://github.com/dtanquary/atrium/releases)**, open it, and drag Atrium into Applications. It needs macOS 26 or later, on Apple silicon.
 
-It's signed with a Developer ID and notarised by Apple, so it opens like any other app. Until 1.0 the releases are betas, marked Pre-release.
+It's signed with a Developer ID and notarized by Apple, so it opens like any other app. Until 1.0 the releases are betas, marked Pre-release.
 
 Open Atrium and a short welcome lets you try the wallpapers. After that it lives in the menu bar, with no Dock icon unless Settings is open. Bugs and ideas are welcome in [Issues](https://github.com/dtanquary/atrium/issues).
 
@@ -231,7 +231,7 @@ Atrium's icon in the menu bar is a TV with sparkles (✨📺). Use it to:
 - Turn on **Shuffle** to move on to a random wallpaper every so often, and choose **Next Wallpaper** to skip ahead. Settings → General sets how often (every 5 minutes to every day, or on every unlock) and which wallpapers take part.
 - Open **Settings…** (⌘,): a page for each wallpaper, with palettes, sliders and switches that update live, plus General, Power and About.
 - Turn on **Open at Login**, here or in Settings → General. macOS may ask you to approve it in System Settings → General → Login Items.
-- Turn on **Full Speed on Battery** to run on battery as fast as on mains power.
+- Turn on **Full Speed on Battery** to run on battery as fast as when plugged in.
 - **Quit**.
 
 ### Updating and uninstalling
@@ -248,7 +248,7 @@ Atrium's icon in the menu bar is a TV with sparkles (✨📺). Use it to:
 
 Atrium has no account, no analytics and no update checks. The services below are every connection it makes, each only while a wallpaper that uses it is running.
 
-- **Location** (optional). Live Sky, Earth from Orbit, Weather, Dappled Light, Wind, Pixel City, the live Moon, Rain on Glass following the weather and Flowing Gradient's time-of-day mood use your location, and the app asks once. If you decline, it guesses from your time zone. It's kept on your Mac, and only leaves it rounded to about a kilometre, as the place Open-Meteo forecasts for (and, for Wind's maps, as the tiles it asks NASA for).
+- **Location** (optional). Live Sky, Earth from Orbit, Weather, Dappled Light, Wind, Pixel City, the live Moon, Rain on Glass following the weather and Flowing Gradient's time-of-day mood use your location, and the app asks once. If you decline, it guesses from your time zone. It's kept on your Mac, and only leaves it rounded to about a kilometer, as the place Open-Meteo forecasts for (and, for Wind's maps, as the tiles it asks NASA for).
 - **Network.** Weather, Dappled Light and Rain on Glass (while following the weather) fetch from [Open-Meteo](https://open-meteo.com) every 10 to 15 minutes, sharing one request. Live Sky and Earth from Orbit fetch the ISS position from [wheretheiss.at](https://wheretheiss.at) at most once a minute. Earth from Orbit fetches a global cloud map from [Live Cloud Maps](https://clouds.matteason.co.uk) only once its cached copy is over 3 hours old (1.5 MB when it has changed), and not at all with Live clouds off. For lightning, it asks Open-Meteo for the next day's thunderstorms on a grid around you every 6 hours. Solar System Tour's live Sun, while it's on screen, fetches SDO images from [Helioviewer](https://helioviewer.org) at most every 15 minutes (2048 pixels, 0.3–0.5 MB) or 30 (4096, 1–2 MB, for the close-up), keeping the newest two of each wavelength on disk. None of them needs an API key. Weather, Dappled Light, Rain on Glass, Earth from Orbit and Wind have **Refresh Now** on their Settings pages, which fetches at once, at most every 5 to 15 minutes.
 - **Wind** asks Open-Meteo for the next day's hourly wind forecast on a grid around you every 6 hours, for the zoom on screen: 96 points for a town, 384 for a region or half the continent (Open-Meteo counts each point as one of its free 10,000 calls a day, so at most 1,536 a day). The last reply for each zoom stays on disk, so it works offline. With an Earth background it downloads NASA's imagery tiles for the view from [GIBS](https://nasa-gibs.github.io/gibs-api-docs/) once and keeps them: about 1–2 MB for most maps, up to 7 MB at night for half the continent, and a fresh 1–2 MB a day for the satellite view.
 
@@ -267,7 +267,7 @@ open build/Atrium.app
 
 To rebuild after pulling changes: `./build.sh && pkill -x Atrium; open build/Atrium.app`
 
-The notarised DMG on the Releases page comes from `./release.sh`, which needs a Developer ID (the setup is at its top).
+The notarized DMG on the Releases page comes from `./release.sh`, which needs a Developer ID (the setup is at its top).
 
 ## Development
 
@@ -280,7 +280,7 @@ SNAPSHOT_SCENE="Fish Tank" SNAPSHOT_MOVIE=6 swift test       # then 6 seconds of
 SETTINGS_SHOT="Nebula" swift test --filter settingsWindow   # opens Settings on that page for a moment and captures it
 ```
 
-- **Tests.** The render test fails if a scene comes out as one flat colour, for example a shader that didn't compile. The astronomy is checked against JPL Horizons, and the weather parser against a real Open-Meteo reply.
+- **Tests.** The render test fails if a scene comes out as one flat color, for example a shader that didn't compile. The astronomy is checked against JPL Horizons, and the weather parser against a real Open-Meteo reply.
 - **Adding a wallpaper:** create a file that returns an `SKScene` and add a `Wallpaper` entry in `Sources/Atrium/Scenes.swift`. Its settings are plain data on that entry. [`CLAUDE.md`](CLAUDE.md) covers the scene contract, the ~2 ms per-frame budget, and SpriteKit and shader pitfalls.
 - **Layout:**
   - `Sources/Atrium/main.swift`: the app host (windows, menu, power and appearance handling)
@@ -301,7 +301,7 @@ SETTINGS_SHOT="Nebula" swift test --filter settingsWindow   # opens Settings on 
 - Earth imagery from NASA's Blue Marble and Black Marble, public domain.
 - Clouds from [Live Cloud Maps](https://github.com/matteason/live-cloud-maps) by Matt Eason, CC0. Contains modified EUMETSAT data.
 - The Wind wallpaper's shaded relief is from [Natural Earth](https://www.naturalearthdata.com), public domain, and its maps are NASA's Blue Marble Next Generation (with shaded relief and bathymetry), Black Marble, the Global Web-Enabled Landsat Data (NASA and USGS) and NOAA-20 VIIRS imagery from LANCE, public domain. We acknowledge the use of imagery provided by services from NASA's Global Imagery Browse Services ([GIBS](https://nasa-gibs.github.io/gibs-api-docs/)), part of NASA's Earth Science Data and Information System (ESDIS).
-- The Moon's maps are from NASA's [CGI Moon Kit](https://svs.gsfc.nasa.gov/4720) (Ernie Wright, NASA Scientific Visualization Studio), public domain: LROC colour and LOLA heights from the Lunar Reconnaissance Orbiter.
+- The Moon's maps are from NASA's [CGI Moon Kit](https://svs.gsfc.nasa.gov/4720) (Ernie Wright, NASA Scientific Visualization Studio), public domain: LROC color and LOLA heights from the Lunar Reconnaissance Orbiter.
 - Planet positions from JPL's [Approximate Positions of the Planets](https://ssd.jpl.nasa.gov/planets/approx_pos.html).
 - Images of the Sun courtesy of NASA/SDO and the AIA, EVE, and HMI science teams ([terms](https://sdo.gsfc.nasa.gov/data/rules.php)), via the ESA/NASA [Helioviewer Project](https://helioviewer.org).
 - The Weather wallpaper's hills are a public domain photo of Fort Ord National Monument by the Bureau of Land Management, its clouds are cut out of CC0 photos from Poly Haven and Wikimedia Commons, and its Moon is from NASA's CGI Moon Kit. See [`Sources/Atrium/Resources/weather-credits.tsv`](Sources/Atrium/Resources/weather-credits.tsv) and Settings → About.
@@ -312,10 +312,10 @@ SETTINGS_SHOT="Nebula" swift test --filter settingsWindow   # opens Settings on 
 - The Rain on Glass backdrops are CC0 HDRIs from Poly Haven by Greg Zaal, Rico Cilliers, Alexander Scholten, Andreas Mischok and Oliksiy Yakovlyev, public domain photos from the National Park Service and USFWS, and CC BY photos from Wikimedia Commons by Douglas Paul Perkins, mariemon, epSos.de and Vyacheslav Argenberg. See [`Sources/Atrium/Resources/rain-credits.tsv`](Sources/Atrium/Resources/rain-credits.tsv) and Settings → About.
 - The Dappled Light wallpaper's plaster is the CC0 "White Stucco" by Amal Kumar from Poly Haven ([source](https://polyhaven.com/a/white_stucco)), and its leaves and twig are CC0 scans by Lennart Demes, ambientCG. See [`Sources/Atrium/Resources/dappled-credits.tsv`](Sources/Atrium/Resources/dappled-credits.tsv).
 - A Tree for the Year (unfinished, and hidden for now): its hilltop is "Solitary tree at Cissbury Ring" by Andy Li, CC0 ([source](https://commons.wikimedia.org/wiki/File:Solitary_tree_at_Cissbury_Ring_2026-04-07.jpg)), with its own tree painted out; its oak leaves and bark are CC0 scans by Lennart Demes, ambientCG. See [`Sources/Atrium/Resources/tree-credits.tsv`](Sources/Atrium/Resources/tree-credits.tsv).
-- Solar System Tour's photos are from NASA, JPL, ESA, JAXA, the Space Science Institute, JHUAPL/SwRI, NSO and the people who processed them, public domain, CC BY or CC BY-SA, with three from JAXA under the Japanese Government Standard Terms of Use 2.0 (compatible with CC BY 4.0). Each one's credit, licence and source is in [`Sources/Atrium/Resources/solar-photos.tsv`](Sources/Atrium/Resources/solar-photos.tsv) and in Settings → About.
-- Deep Space Tour's photos are from ESA/Hubble, ESA/Webb, ESO, NOIRLab, the Rubin Observatory, ESA's Euclid, NASA's Chandra and the Event Horizon Telescope Collaboration, CC BY 4.0, CC BY-SA 3.0 IGO or public domain. Each one's credit, licence and source is in [`Sources/Atrium/Resources/deep-photos.tsv`](Sources/Atrium/Resources/deep-photos.tsv) and in Settings → About.
-- Reef fish, corals and rock in the Fish Tank are cut out of public domain, CC0 and CC BY photos from iNaturalist, Wikimedia Commons and NOAA. Each photographer and licence is listed in [`Sources/Atrium/Resources/reef-credits.tsv`](Sources/Atrium/Resources/reef-credits.tsv) and in Settings → About.
+- Solar System Tour's photos are from NASA, JPL, ESA, JAXA, the Space Science Institute, JHUAPL/SwRI, NSO and the people who processed them, public domain, CC BY or CC BY-SA, with three from JAXA under the Japanese Government Standard Terms of Use 2.0 (compatible with CC BY 4.0). Each one's credit, license and source is in [`Sources/Atrium/Resources/solar-photos.tsv`](Sources/Atrium/Resources/solar-photos.tsv) and in Settings → About.
+- Deep Space Tour's photos are from ESA/Hubble, ESA/Webb, ESO, NOIRLab, the Rubin Observatory, ESA's Euclid, NASA's Chandra and the Event Horizon Telescope Collaboration, CC BY 4.0, CC BY-SA 3.0 IGO or public domain. Each one's credit, license and source is in [`Sources/Atrium/Resources/deep-photos.tsv`](Sources/Atrium/Resources/deep-photos.tsv) and in Settings → About.
+- Reef fish, corals and rock in the Fish Tank are cut out of public domain, CC0 and CC BY photos from iNaturalist, Wikimedia Commons and NOAA. Each photographer and license is listed in [`Sources/Atrium/Resources/reef-credits.tsv`](Sources/Atrium/Resources/reef-credits.tsv) and in Settings → About.
 
 ## License
 
-The code is [MIT](LICENSE) © 2026 Dave Tanquary. The photos and data aren't: each keeps its own licence (public domain, CC0, CC BY, CC BY-SA or the Japanese Government Standard Terms of Use 2.0), listed under Credits, in the credits files beside them, and in Settings → About. Photos are cropped, cut out, relit or recoloured from their originals, and adapted copies of CC BY-SA photos stay CC BY-SA. See [NOTICE](NOTICE).
+The code is [MIT](LICENSE) © 2026 Dave Tanquary. The photos and data aren't: each keeps its own license (public domain, CC0, CC BY, CC BY-SA or the Japanese Government Standard Terms of Use 2.0), listed under Credits, in the credits files beside them, and in Settings → About. Photos are cropped, cut out, relit or recolored from their originals, and adapted copies of CC BY-SA photos stay CC BY-SA. See [NOTICE](NOTICE).

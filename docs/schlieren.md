@@ -77,7 +77,7 @@ Rising heat as a colour schlieren camera sees it, after the photos of Gary Settl
 | `schlieren.draft` | Draft | 0–1 | 0.35 | live; up to 0.06 m/s of room air |
 | `schlieren.mirror` | Round mirror | switch | off | live; the z-type mirror's circle on black |
 | `schlieren.brightness`… | Look | shared grade | | live |
-| `schlieren.palette` | Colors | Candlelight, Spectrum, Tricolour, Pastel, Ember, Sapphire, Emerald, Amethyst | Random | rebuilds |
+| `schlieren.palette` | Colors | Candlelight, Spectrum, Tricolor, Pastel, Ember, Sapphire, Emerald, Amethyst | Random | rebuilds |
 
 ## Performance
 - Release, 2x, 2026-09-28: CPU 1.9–2.1 ms, GPU 0.35–1.6 ms per frame. The GPU is highest with the mirror and on bright screens.

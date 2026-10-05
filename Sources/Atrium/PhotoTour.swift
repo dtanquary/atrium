@@ -70,7 +70,7 @@ struct Tour: Sendable {
         factLayout = Knob(key: prefix + ".factLayout", label: "Facts laid out", range: 0...1, standard: 0, section: "Caption",
                           format: .choice(["On one line", "One per line"]), shownWhen: prefix + ".captionLines")
         captionPlace = Knob(key: prefix + ".captionPlace", label: "Position", range: 0...5, standard: 3, section: "Caption",
-                            format: .choice(["Top left", "Top centre", "Top right", "Bottom left", "Bottom centre", "Bottom right"]),
+                            format: .choice(["Top left", "Top center", "Top right", "Bottom left", "Bottom center", "Bottom right"]),
                             shownWhen: prefix + ".captionLines")
         captionSize = Knob(key: prefix + ".captionSize", label: "Size", range: 0.6...2, standard: 1, section: "Caption", format: .times,
                            shownWhen: prefix + ".captionLines")

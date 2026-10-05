@@ -5,4 +5,4 @@ tree-ground-aux.png	Log distance (red, estimated with Apple's Core ML Depth Anyt
 tree-leaves.heic	Six English oak leaves (Quercus robur, young and green), scanned flat, cut out with alpha and packed stem-down into 256 px cells: LeafSet016 #1–6	Lennart Demes, ambientCG	CC0	https://ambientcg.com/view?id=LeafSet016
 tree-leaves-normal.heic	The same leaves' OpenGL normal map	Lennart Demes, ambientCG	CC0	https://ambientcg.com/view?id=LeafSet016
 tree-leaves-scatter.heic	How much light passes through each leaf, derived from the scans' luminance and alpha (LeafSet016 has no scattering map)	Atrium	Public domain	derived from tree-leaves.heic
-tree-bark.heic	Furrowed grey oak bark, tileable, at 512 × 1024	Lennart Demes, ambientCG	CC0	https://ambientcg.com/view?id=Bark001
+tree-bark.heic	Furrowed gray oak bark, tileable, at 512 × 1024	Lennart Demes, ambientCG	CC0	https://ambientcg.com/view?id=Bark001
