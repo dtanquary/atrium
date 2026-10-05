@@ -7,6 +7,7 @@ A pixel-art city that follows the real Sun and clock. The sky moves through dawn
 - **Foothills** (2026-10-04): a small downtown far off under three ridges of mountains, the highest snow-capped, across a valley floor with a highway and a line of pines.
 - **Long Bridge** (2026-10-04): a suspension bridge across a bay, strung with lights at night, with a small city and a headland on the far shore and a freighter that crosses now and then.
 - **Hillside Town** (2026-10-04): tiled houses terraced up a hill above a harbour, a church at the top, boats at their moorings, and a lighthouse at the end of the breakwater with the open sea beyond.
+- **Overlook** (2026-10-04): the view from a rooftop over a sea of other roofs, with their tanks, stair heads and gardens, to a skyline on the horizon.
 
 - **Files:** `Sources/Atrium/PixelCity.swift`, which holds everything: the scene, both cities, the `Pixels` canvas, sprite art as strings, `SeededRandom`, the water's shader and its own low-precision `skyPosition()` for the Sun. It reads `Location.swift` ([live-sky.md](live-sky.md)).
 - **Entry:** `pixelCity(size:)` builds `final class PixelCity: SKScene`. Its entry in Scenes.swift is "Pixel City", icon `building.2.fill`, tint `.pink`, with `PixelCity.knobs`.
@@ -16,7 +17,7 @@ A pixel-art city that follows the real Sun and clock. The sky moves through dawn
 - **Resolution:** `pixel = max(2, round(height/240))` points per art pixel, so 4 pt on a 982 pt-tall display. The canvas is `w × h` art pixels (378 × 246 there). Motion rounds to whole art pixels so nothing blurs.
 - **Layers,** by `zPosition`: the sky (0), clouds (1), the plane (1.5), the city (2), the water (2.5), cars (3 and 4), the beacon (5). The city texture is clear wherever the sky shows, so clouds and planes pass behind the towers.
 - **A city is a case of `City`** (the menu's order, stored as the index, so new ones go at the end). `layOut()` sets what differs: `ground` (the row the city stands on), `waterRows`, `crest` (for each column, the row where the sky begins, which is the horizon the Sun and Moon rise over) and `skyBase` (the lowest of those, where the sky's gradient starts). `classic` is true for the Street, which keeps its first, simpler sky and light.
-- **`layOut()`** builds everything that never changes, and runs again when Settings picks another city. Each city has its own skyline (`layOutStreet`, `layOutWaterfront`, `layOutFoothills`, `layOutBridge`, `layOutHillside`) from a fixed `SeededRandom`, so it's identical on every redraw and every display. Shared by both: 170 stars, 3 cloud masks, a pool of 6 cars per lane with headlights (7 sedan colours plus a bus), a plane with blinking nav lights, and the beacon (0.25 s on, 1.25 s off) on the landmark.
+- **`layOut()`** builds everything that never changes, and runs again when Settings picks another city. Each city has its own skyline (`layOutStreet`, `layOutWaterfront`, `layOutFoothills`, `layOutBridge`, `layOutHillside`, `layOutOverlook`) from a fixed `SeededRandom`, so it's identical on every redraw and every display. Shared by both: 170 stars, 3 cloud masks, a pool of 6 cars per lane with headlights (7 sedan colours plus a bus), a plane with blinking nav lights, and the beacon (0.25 s on, 1.25 s off) on the landmark.
 - **`redraw()`** runs at init, every 30 s and when a setting changes. It paints the sky into one `Pixels` buffer and the city into another:
   - **Sky:** a gradient between zenith and horizon colours from `skyColours(elevation, morning:)`. The stops run −18°, −10°, −4°, 0°, 6° and 15°, and dawn is pinker than dusk. Around a low Sun the horizon's colour changes with the compass (`horizonToward`): orange under the Sun and, opposite it, the pink band over the Earth's shadow, so a sunset sky differs from one side of the screen to the other. It's quantised into 14 bands with 4×4 Bayer dithering, plus a sun glow around a low Sun in 5 flat rings, dithered only where two rings meet (dithering right across each ring left a halo of loose dots).
   - **Stars** fade in below about −5°; the brightest get a small cross.
@@ -94,6 +95,17 @@ The third of Dave's picks, and the only one with no towers: a Mediterranean town
 - **Boats:** six sprites at moorings off the quay (`fishingBoat`, `sailboat`, painted by `afloat` with their own reflections, like the freighter), each rising and falling one pixel in its own time. There is no traffic: `cars` is empty.
 - **The water** mirrors the town about the quay's waterline, and the far headland about the horizon. The headland and sails are painted at 0.99 alpha, which the shader reads as "across the water" and leaves out of the near reflection, or they would be mirrored twice.
 
+### The Overlook city
+The last of Dave's picks, and the only view from above. The research agent's worry was that the middle distance of roofs would turn to noise at this size and advised testing a still at noon and at night first. It reads: what holds it together is a steady fall in size from band to band, haze that deepens with it, and muted roofs.
+
+- **Composition,** bottom to top: our own roof (`drawRooftop`: a dark parapet along the bottom where the Dock sits, a big water tank at the left, an aerial and two vents), five bands of buildings seen from above, the far skyline standing on `ground` (54% up, from `layOutBand` with a downtown 42% across), low hills behind it, and the sky.
+- **Buildings from above** (`layOutOverlook`, seed 2074, `Kind.block`, drawn by `drawBlock`): each is a front wall with its flat roof behind it, two fifths as deep as the building is wide. The bands stand at 5.5%, 20%, 34%, 44% and 50% of the screen's height and shrink from 34–56 pixels wide to 5–9, the far ones laid first so nearer ones overlap them. A building is hazier the farther up it stands, up to half the horizon's colour.
+  - **Walls** are in more shade than elsewhere (0.8 of the sky's light), with the usual side wall on show and windows lit in runs: two buildings in three are homes, with 32% of rooms on the evening's hours, the rest offices.
+  - **Roofs** take the sky's light plus the Sun from above, with a lit near edge to the parapet. Roofs 5 or more deep carry one thing per 11 pixels of width: a water tank, a stair head, air conditioning, a skylight (some lit at night), a garden, solar panels or nothing, the standing ones with a shadow on the side away from the Sun.
+- **Streets** are the gaps between: tarmac by day, and by night a dim warm glow with 420 street lamps scattered over the ground, of which only those no building covers show.
+- **Steam:** three puffs at a time from each vent on our roof, as sprites that step up a pixel every half second as they thin.
+- There is no traffic (`cars` is empty): no road is in view.
+
 ## Time, live data and appearance
 - **Time:** `now`: the real time, or today at the preview hour while Settings is previewing one. The hour for windows and traffic is the local clock hour.
 - **Sun:** `skyPosition()` at `Location.shared` (low precision, about 1°). `night = smoothstep(4°, −8°, sun elevation)`.
@@ -103,7 +115,7 @@ The third of Dave's picks, and the only one with no towers: a Mediterranean town
 
 ## Settings
 `PixelCity.knobs`, read with `knob(_:)`. A change repaints at once (`settingsChanged`), and a change of city lays the scene out again first.
-- **City** (`city.view`): Street, Waterfront, Foothills, Long Bridge or Hillside Town, as the index into `City`. Waterfront is the default.
+- **City** (`city.view`): Street, Waterfront, Foothills, Long Bridge, Hillside Town or Overlook, as the index into `City`. Waterfront is the default.
 - **Looking** (`city.looking`): Toward the midday Sun (the default: toward the equator, which keeps the Sun and Moon in the sky and the city backlit) or one of eight compass points. Dave asked for it on 2026-10-04 after reading that the Waterfront's fronts stay in cool shade at sunset: "lets add support for the sun direction perhaps". The Waterfront's flanks were laid out for the default, so looking east or west the Sun rises or sets behind downtown.
 - **Preview a time of day** (`city.previewTime`, `city.previewHour`): shows today at that hour instead of now, the only way to see a sunset at noon. Off by default.
 
@@ -113,6 +125,7 @@ The third of Dave's picks, and the only one with no towers: a Mediterranean town
 - **Foothills:** ground `0.27 × h`; ridges (base, relief, as shares of the sky above the ground) 0.36 + 0.22, 0.22 + 0.17, 0.07 + 0.12; snow line 0.47; haze 0.36, 0.28, 0.14; highway 14–17 rows below the ground.
 - **Long Bridge:** ground `0.32 × h`; towers at 22% and 78%; deck `ground + 14`; tower tops 36% of the sky above the deck; hills scaled 1.7 on the left to 4.9 on the right; the ship 40 rows below the far shore.
 - **Hillside Town:** horizon `0.26 × h`, waterline `0.14 × h`; the hill `0.5 × h` tall, gone by 66% across; terraces every 10 rows; lighthouse at 84%.
+- **Overlook:** ground `0.54 × h`; bands at 0.055, 0.2, 0.34, 0.44 and 0.5 of `h`; roofs 0.4 of the width deep; our parapet 15 rows.
 - **Timing:** redraw every 30 s.
 - **Window schedule** (`isLit`): home 16.5 h + 4.5·rand; bed 21 h + 6·rand; early risers 5.5 h + 1.5·rand. `officeShare`: 0.5 until 18:00, down to 0.08 by midnight, 0.08 to 0.45 between 05:30 and 08:00.
 - **Traffic:** the `traffic` table has 24 hourly multipliers.
@@ -144,7 +157,8 @@ The third of Dave's picks, and the only one with no towers: a Mediterranean town
 
 ## Ideas / next steps
 From the 2026-10-04 review, not yet done:
-- **Cities still to build** of the four Dave picked: Overlook. Hillside Town could take chimney smoke that leans with the real wind, a bus's lights climbing the hill, and a slow sweep from the lighthouse. Foothills could take weather well: a snow line that follows real snowfall, a cloud deck over the peaks, fog in the valley. The Long Bridge too: live fog swallowing the deck and leaving the tower tops, and a glitter path under the Sun and Moon.
+- **All four cities Dave picked are built.** Left from the research's list: Park (trees that follow the season), Old Town (a clock tower showing the real time), Desert City, and an elevated railway for the Street or the Overlook.
+- **Per city:** Hillside Town could take chimney smoke that leans with the real wind, a bus's lights climbing the hill, and a slow sweep from the lighthouse. The Overlook could take snow settling on its flat roofs, long roof shadows from a low Sun, steam that leans with the wind, and a far train of lit windows. Foothills could take weather well: a snow line that follows real snowfall, a cloud deck over the peaks, fog in the valley. The Long Bridge too: live fog swallowing the deck and leaving the tower tops, and a glitter path under the Sun and Moon.
 - **Life:** windows switching one at a time, rooftop steam, slow star twinkle, birds at dawn, a traffic light with cars queueing, a lit train or ferry every few minutes, reflections of the cars' lights in the water.
 - **More vehicles** (taxi, van, truck, bike) with ground shadows.
 - **Clouds:** layered, of varied size, lit from the Sun's side, their number from the real cloud cover.
@@ -159,9 +173,10 @@ From the 2026-10-04 review, not yet done:
 
 ## Checking it
 - `SNAPSHOT_SCENE="Pixel City" swift test` renders the current time at the fallback location, as the Waterfront.
-- **Particular times and cities:** `SNAPSHOT_DEFAULTS="city.previewTime=1,city.previewHour=19.2,city.view=0" SNAPSHOT_SCENE="Pixel City" swift test` renders today at that hour (`city.view=0` is the Street, 1 the Waterfront, 2 Foothills, 3 the Long Bridge, 4 Hillside Town). On 2026-10-04 the Waterfront was checked at 7:18, 12:48, 17:12, 18:18, 18:27, 19:00, 21:00 and 21:30, and the Street at 12:48 and 19:24. `city.looking` is the menu's index: 0 toward the midday Sun, then 1 north round to 8 north-west; sunset was checked looking east (3), west (7) and north (1).
+- **Particular times and cities:** `SNAPSHOT_DEFAULTS="city.previewTime=1,city.previewHour=19.2,city.view=0" SNAPSHOT_SCENE="Pixel City" swift test` renders today at that hour (`city.view=0` is the Street, 1 the Waterfront, 2 Foothills, 3 the Long Bridge, 4 Hillside Town, 5 the Overlook). On 2026-10-04 the Waterfront was checked at 7:18, 12:48, 17:12, 18:18, 18:27, 19:00, 21:00 and 21:30, and the Street at 12:48 and 19:24. `city.looking` is the menu's index: 0 toward the midday Sun, then 1 north round to 8 north-west; sunset was checked looking east (3), west (7) and north (1).
 - **Traffic, planes and the water:** use `SNAPSHOT_SECONDS=30` or more; `SNAPSHOT_MOVIE=3` saves frames to compare for the ripples.
 - **Foothills** was checked on 2026-10-04 at 7:18, 10:30, 12:48, 17:48, 18:30 and 21:30.
 - **The Long Bridge** was checked on 2026-10-04 at 7:18, 12:48, 18:18 and 21:30 (`SNAPSHOT_SECONDS=60` to catch the freighter).
 - **Hillside Town** was checked on 2026-10-04 at 7:18, 12:48, 16:30, 18:18, 20:00 and 21:00.
+- **The Overlook** was checked on 2026-10-04 at 12:48, 18:12 and 21:00.
 - **Screenshots:** `pixel-city-dusk.jpg` is the Waterfront at 19:00 on 4 October and `pixel-city-night.jpg` the Street at 23:30, both at the fallback location from a release build. `preview-pixel-city.jpg` is a 1200-pixel copy of the first.

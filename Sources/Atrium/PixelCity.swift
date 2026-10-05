@@ -131,6 +131,7 @@ final class PixelCity: SKScene {
         case .hillside:
             ground = Int(Float(h) * 0.26) // the sea's horizon, out past the harbour
             waterRows = ground
+        case .overlook: ground = Int(Float(h) * 0.54) // the far skyline's feet: rooftops fill everything below
         }
         crest = Array(repeating: ground, count: w)
         (ridges, downtown, farHaze, slope, boats) = ([], 0.5, 1, [], [])
@@ -148,6 +149,7 @@ final class PixelCity: SKScene {
         case .foothills: tower = layOutFoothills(&rng)
         case .bridge: tower = layOutBridge(&rng)
         case .hillside: tower = layOutHillside(&rng)
+        case .overlook: tower = layOutOverlook(&rng)
         }
         skyBase = crest.min() ?? ground
         beacon.position = CGPoint(x: tower.x, y: tower.y)
@@ -183,7 +185,7 @@ final class PixelCity: SKScene {
         (carPace, carGap) = far ? (0.35, 7) : (1, 36)
         let lanes = city == .bridge ? [deck + 1, deck + 2] : far ? [ground - 16, ground - 14] : [streetBase + 5, streetBase + 13]
         for lane in 0...1 {
-            for _ in 0..<(city == .hillside ? 0 : far ? 14 : 6) { // the town's lanes are too steep for traffic
+            for _ in 0..<(city == .hillside || city == .overlook ? 0 : far ? 14 : 6) { // no road in view in those two
                 let node = SKSpriteNode()
                 node.anchorPoint = CGPoint(x: 0.5, y: 0)
                 node.position.y = CGFloat(lanes[lane])
@@ -471,6 +473,45 @@ final class PixelCity: SKScene {
         return (w * 84 / 100 + 2, quayTop + 28)
     }
 
+    /// The Overlook: a far skyline on the horizon, and below it five bands of buildings seen from above, each a front
+    /// wall with its flat roof behind, smaller and closer together the farther off. Returns the top of the far
+    /// landmark's mast, for the beacon.
+    private func layOutOverlook(_ rng: inout SeededRandom) -> (x: Int, y: Int) {
+        rng = SeededRandom(state: 2074)
+        downtown = 0.42
+        let tower = layOutBand(&rng, spread: 0.3, tallest: 0.44, suburbs: true)
+        let walls = [rgb(150, 92, 76), rgb(176, 150, 118), rgb(138, 134, 132), rgb(196, 182, 158), rgb(120, 96, 90), rgb(160, 120, 96)]
+        // Each band, far to near: the row it stands on, and the least and greatest width and wall height.
+        for (row, widths, heights) in [(0.5, 5...9, 3...8), (0.44, 8...14, 6...14), (0.34, 14...24, 10...24), (0.2, 22...36, 16...34),
+                                       (0.055, 34...56, 24...48)] as [(Float, ClosedRange<Int>, ClosedRange<Int>)] {
+            var x = -Int.random(in: 0...widths.lowerBound, using: &rng)
+            while x < w {
+                let width = Int.random(in: widths, using: &rng)
+                skyline.append(Building(x: x, width: width, height: Int.random(in: heights, using: &rng), colour: walls.randomElement(using: &rng)!,
+                                        far: widths.upperBound < 30, floor: widths.upperBound < 12 ? 2 : widths.upperBound < 30 ? 3 : 4,
+                                        pitch: max(2, width * 2 / 5), roof: .plain, seed: rng.next(), kind: .block,
+                                        base: Int(Float(h) * row) + Int.random(in: -2...2, using: &rng)))
+                x += width + (Float.random(in: 0..<1, using: &rng) < 0.3 ? max(2, widths.lowerBound / 5) : 0) // a street, now and then
+            }
+        }
+        // Steam from the two vents on our own roof, a puff at a time, each stepping up a pixel as it thins.
+        for (vent, x) in [w * 31 / 100, w * 58 / 100].enumerated() {
+            for puff in 0..<3 {
+                let node = SKSpriteNode(color: NSColor(white: 0.92, alpha: 1), size: CGSize(width: 2, height: 2))
+                node.anchorPoint = .zero
+                node.zPosition = 3
+                node.alpha = 0
+                let rise = (0..<8).flatMap { step in
+                    [SKAction.wait(forDuration: 0.5), .run { node.position.y += 1; node.alpha = 0.5 * (1 - CGFloat(step) / 8) }]
+                }
+                node.run(.sequence([.wait(forDuration: Double(puff) * 1.4 + Double(vent) * 0.7),
+                                    .repeatForever(.sequence([.run { node.position = CGPoint(x: x, y: 22); node.alpha = 0.5 }] + rise))]))
+                canvas.addChild(node)
+            }
+        }
+        return tower
+    }
+
     // The Long Bridge's shape: the columns its two towers stand at, the row of its roadway, and the row their tops reach.
     private var towers: [Int] { [w * 22 / 100, w * 78 / 100] }
     private var deck: Int { ground + 14 }
@@ -630,12 +671,25 @@ final class PixelCity: SKScene {
         case .hillside:
             drawHorizon(into: &px, zenith: top, horizon: horizon)
             drawHill(into: &px)
+        case .overlook:
+            drawHorizon(into: &px, zenith: top, horizon: horizon)
+            // The streets between the rooftops: tarmac by day, paler with distance; by night a dim warm glow, with
+            // street lamps wherever a building doesn't hide them.
+            var lamps = SeededRandom(state: 5)
+            for y in 0..<ground {
+                let far = Float(y) / Float(ground)
+                px.fill(0, y, w, 1, mix(mix(lit(rgb(84, 86, 94), .zero), rgb(112, 78, 52), night * 0.4), horizon, far * 0.4))
+            }
+            for _ in 0..<420 where night > 0.15 {
+                px.plot(Int.random(in: 0..<w, using: &lamps), Int.random(in: 14..<ground, using: &lamps), rgb(255, 214, 150), min(1, night * 1.6) * 0.85)
+            }
         }
         for building in skyline {
             let haze = horizons[min(max(building.x + building.width / 2, 0), w - 1)] // the horizon behind it
             switch building.kind {
             case .box: draw(building, into: &px, horizon: haze)
             case .house, .cypress: drawHouse(building, into: &px)
+            case .block: drawBlock(building, into: &px, zenith: top, horizon: haze)
             default: drawTower(building, into: &px, zenith: top, horizon: haze)
             }
         }
@@ -652,6 +706,7 @@ final class PixelCity: SKScene {
         case .hillside:
             drawHarbour(into: &px)
             for boat in boats { boat.node.texture = afloat(boat.rows, hull: boat.hull, dark: night > 0.5) }
+        case .overlook: drawRooftop(into: &px)
         }
         backdrop.texture = px.texture()
         mirrored.first?.textureValue = sky.texture
@@ -838,7 +893,7 @@ final class PixelCity: SKScene {
         }
 
         switch b.kind {
-        case .box, .house, .cypress: break // drawn elsewhere
+        case .box, .house, .cypress, .block: break // drawn elsewhere
         case .haze:
             _ = block(b.x, base, b.width, b.height)
             if b.roof == .setback, b.width >= 10 { _ = block(b.x + 2, top, b.width - 4, 6) }
@@ -1118,6 +1173,92 @@ final class PixelCity: SKScene {
             for r in 0..<rows { px.fill(b.x - 1 + r * 2, top + r, b.width + 2 - r * 4, 1, r == 0 ? eaves : r == rows - 1 ? ridge : roof) }
             if rng.next() % 3 == 0 { px.fill(b.x + 2, top + 1, 2, 3, lit(rgb(176, 156, 136), keyFront)) } // a chimney
         }
+    }
+
+    /// One of the Overlook's buildings, seen from above: its front wall with windows, its flat roof behind with a
+    /// parapet, and whatever stands on the roof. Hazier the farther up the screen it stands.
+    private func drawBlock(_ b: Building, into px: inout Pixels, zenith: RGB, horizon: RGB) {
+        var rng = SeededRandom(state: b.seed)
+        let base = b.base ?? ground, top = base + b.height, depth = b.pitch, dark = night > 0.15, glow = min(1, night * 1.6)
+        let haze = Float(base) / Float(ground) * 0.5
+        func tone(_ c: RGB) -> RGB { mix(c, horizon, haze) }
+        let onRight = b.x + b.width / 2 < w / 2, side = min(1 + b.width / 12, 4), sideKey = onRight ? keyRight : keyLeft
+        let front = tone(lit(b.colour, keyFront, shade: 0.8)), glass = tone(lit(b.colour * 0.4, .zero) + zenith * 0.16 + rgb(10, 14, 26) * night)
+        px.fill(b.x, base, b.width, b.height, front)
+        px.fill(onRight ? b.x + b.width - side : b.x, base, side, b.height, tone(lit(b.colour, sideKey, shade: 0.58)))
+        let homes = rng.next() % 3 > 0, size = b.floor > 3 ? 2 : 1, share = officeShare
+        for y in stride(from: base + 2, through: top - b.floor, by: b.floor) { // windows, lit a few neighbours at a time
+            var x = b.x + 1 + (onRight ? 0 : side)
+            while x < b.x + b.width - size - (onRight ? side : 0) {
+                let run = Int.random(in: 1...3, using: &rng)
+                let (r1, r2, r3) = (Float.random(in: 0..<1, using: &rng), Float.random(in: 0..<1, using: &rng), Float.random(in: 0..<1, using: &rng))
+                let on = dark && (homes ? isLit(r1, r2, r3, home: 0.32) : r3 < share)
+                let lamp = tone((homes ? mix(rgb(255, 190, 100), rgb(255, 226, 150), r1) : mix(rgb(160, 184, 216), rgb(200, 212, 224), r1)) * (0.55 + 0.4 * r2))
+                for i in 0..<run where x + i * (size + 1) < b.x + b.width - size {
+                    px.fill(x + i * (size + 1), y, size, b.floor - 1, on ? mix(glass, lamp, glow) : glass)
+                }
+                x += run * (size + 1)
+            }
+        }
+        // The roof: the sky lights it more than any wall, so by day it is the brightest thing in view.
+        let surface = [rgb(92, 94, 104), rgb(150, 144, 132), rgb(128, 86, 72), rgb(104, 122, 112), rgb(160, 160, 156), rgb(116, 114, 118),
+                       rgb(92, 94, 104), rgb(134, 128, 120)].randomElement(using: &rng)!
+        let roof = tone(lit(surface, keyTop * 0.45))
+        px.fill(b.x, top, b.width, depth, roof)
+        px.fill(b.x, top, b.width, 1, tone(lit(surface, keyTop * 0.8, shade: 1.2))) // the parapet's near edge, lit
+        px.fill(b.x, top + depth - 1, b.width, 1, roof * 0.82)                 // and its far one
+        guard depth >= 5 else { return }
+        let metal = tone(mix(rgb(70, 70, 80), rgb(14, 14, 22), night)), fromRight = keyRight.sum() >= keyLeft.sum()
+        for slot in 0..<b.width / 11 { // what stands on it, each with a shadow away from the Sun
+            let x = b.x + 3 + slot * 11 + Int.random(in: 0...3, using: &rng), y = top + 1 + Int.random(in: 0...max(0, depth - 5), using: &rng)
+            let shadow = roof * 0.7
+            switch rng.next() % 7 {
+            case 0:
+                px.fill(fromRight ? x - 3 : x + 4, y, 3, 2, shadow)
+                drawTank(into: &px, x: x, y: y, legs: metal)
+            case 1: // a stair head
+                px.fill(fromRight ? x - 2 : x + 5, y, 2, 2, shadow)
+                px.fill(x, y, 5, 3, front)
+                px.fill(x, y + 3, 5, 2, roof)
+                px.fill(x + 2, y, 1, 2, glass)
+            case 2: // air conditioning
+                px.fill(fromRight ? x - 1 : x + 3, y, 1, 1, shadow)
+                px.fill(x, y, 3, 2, tone(lit(rgb(190, 192, 196), keyTop * 0.6)))
+                px.fill(x, y, 3, 1, tone(lit(rgb(120, 124, 130), .zero)))
+            case 3: // a skylight
+                px.fill(x, y, 4, 2, dark && rng.next() % 2 == 0 ? mix(glass, rgb(255, 214, 150), glow * 0.7) : tone(zenith * 0.8 + 0.1))
+            case 4: // a roof garden
+                px.fill(x, y, 6, 3, tone(lit(rgb(84, 126, 80), keyTop * 0.5)))
+                px.plot(x + 1, y + 1, tone(lit(rgb(130, 160, 96), keyTop * 0.5)))
+                px.plot(x + 4, y + 2, tone(lit(rgb(130, 160, 96), keyTop * 0.5)))
+            case 5: // solar panels
+                px.fill(x, y, 6, 2, tone(lit(rgb(44, 60, 104), keyTop * 0.4)))
+                for i in [1, 3, 5] { px.plot(x + i, y + 1, tone(lit(rgb(90, 112, 160), keyTop * 0.4))) }
+            default: break // bare roof
+            }
+        }
+    }
+
+    /// The roof the Overlook looks out from, along the bottom of the screen where the Dock sits: a dark parapet, a
+    /// big water tank at one end, an aerial and two vents.
+    private func drawRooftop(into px: inout Pixels) {
+        let wall = lit(rgb(64, 60, 66), keyFront), coping = lit(rgb(110, 104, 106), keyTop * 0.6, shade: 1.1), dark = lit(rgb(40, 38, 44), .zero)
+        px.fill(0, 0, w, 13, wall)
+        px.fill(0, 13, w, 2, coping)
+        for x in stride(from: 0, to: w, by: 16) { px.fill(x, 0, 1, 13, dark) } // joints
+        let tx = w * 6 / 100 // the tank: staves and hoops on a steel frame
+        for x in [tx + 2, tx + 12, tx + 22] { px.fill(x, 15, 1, 12, dark) }
+        px.fill(tx, 26, 26, 1, dark)
+        for row in 0..<22 { px.fill(tx, 27 + row, 26, 1, lit(rgb(124, 86, 62), keyFront, shade: row % 7 == 3 ? 0.55 : 0.85)) }
+        px.fill(tx + (keyRight.sum() >= keyLeft.sum() ? 22 : 0), 27, 4, 22, lit(rgb(124, 86, 62), max(keyRight, keyLeft), shade: 0.7))
+        for r in 0..<5 { px.fill(tx - 1 + r * 3, 49 + r, 28 - r * 6, 1, lit(rgb(96, 68, 52), keyTop * 0.5)) } // its conical lid
+        for x in [w * 31 / 100, w * 58 / 100] { // vents
+            px.fill(x - 1, 15, 4, 5, lit(rgb(120, 124, 130), keyFront))
+            px.fill(x - 2, 20, 6, 1, dark)
+        }
+        let ax = w * 44 / 100 // an aerial
+        px.fill(ax, 15, 1, 18, dark)
+        for (y, half) in [(30, 4), (27, 3), (24, 2)] { px.fill(ax - half, y, half * 2 + 1, 1, dark) }
     }
 
     /// Hillside Town's harbour, in front of the houses: the quay with its lamps, the breakwater and its lighthouse,
@@ -1456,14 +1597,14 @@ private enum Roof: CaseIterable { case plain, ledge, setback, tank, antenna }
 
 /// The cities Settings can pick, in the menu's order. The pick is stored as its index, so add new ones at the end.
 private enum City: Int, CaseIterable {
-    case street, waterfront, foothills, bridge, hillside
-    var name: String { ["Street", "Waterfront", "Foothills", "Long Bridge", "Hillside Town"][rawValue] }
+    case street, waterfront, foothills, bridge, hillside, overlook
+    var name: String { ["Street", "Waterfront", "Foothills", "Long Bridge", "Hillside Town", "Overlook"][rawValue] }
 }
 
 /// What a building is: the Street's plain block; on the waterfront a windowless tower in the haze, a stone tower
 /// with setbacks, a glass curtain wall, a brick walk-up over a shop, or a concrete slab with ribbon windows; or in
-/// Hillside Town a house, or the cypress in a gap between two.
-private enum Kind { case box, haze, deco, glass, brick, slab, house, cypress }
+/// Hillside Town a house, or the cypress in a gap between two; or one of the Overlook's buildings seen from above.
+private enum Kind { case box, haze, deco, glass, brick, slab, house, cypress, block }
 
 private struct Building {
     var x: Int, width: Int, height: Int
