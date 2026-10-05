@@ -133,9 +133,10 @@ The last of Dave's picks, and the only view from above. The research agent's wor
 - **Planes:** 40–120 s apart, 7 px/s.
 
 ## Performance
-- About 0.45 ms CPU and 0.15 ms GPU per frame for either city (release build, 2x, 1512×982, measured 2026-10-04: 0.42–0.50 and 0.12–0.18 across both cities by day and night).
-- The 30 s repaint costs about 3 ms once, for either city. It loops over every art pixel in Swift for the sky, draws the city over a second buffer, and builds two `CGImage`s.
-- Per-frame work is a few dozen sprites and, on the waterfront, one small shader over the water. Lots of headroom.
+Release build, 2x, 1512×982, measured 2026-10-04 with every city in place:
+- **Per frame:** 0.45–0.49 ms CPU and 0.12–0.23 ms GPU, the same for all six cities. It's a few dozen sprites and, where there's water, one small shader over it.
+- **The 30 s repaint:** about 3 to 4.5 ms once (Street 3.4, Waterfront 4.4, Foothills 4.2, Long Bridge 2.7–3.6, Hillside Town 3.6, Overlook 3.9). It loops over every art pixel in Swift for the sky, draws the city over a second buffer, and builds two `CGImage`s.
+- Lots of headroom against the 2 ms budget.
 
 ## Gotchas and shortcuts
 - **Its own maths.** `skyPosition()` and the Moon phase duplicate what `SkyMath` does better (`Sky.sun`, `Sky.moon`, `Sky.moonPhase`). The Moon can be about 5° off, since it has no lunar inclination, and its lit side isn't mirrored for the southern hemisphere.
@@ -179,4 +180,4 @@ From the 2026-10-04 review, not yet done:
 - **The Long Bridge** was checked on 2026-10-04 at 7:18, 12:48, 18:18 and 21:30 (`SNAPSHOT_SECONDS=60` to catch the freighter).
 - **Hillside Town** was checked on 2026-10-04 at 7:18, 12:48, 16:30, 18:18, 20:00 and 21:00.
 - **The Overlook** was checked on 2026-10-04 at 12:48, 18:12 and 21:00.
-- **Screenshots:** `pixel-city-dusk.jpg` is the Waterfront at 19:00 on 4 October and `pixel-city-night.jpg` the Street at 23:30, both at the fallback location from a release build. `preview-pixel-city.jpg` is a 1200-pixel copy of the first.
+- **Screenshots,** all for 4 October at the fallback location from a release build: `pixel-city-dusk.jpg` is the Waterfront at 19:00, `pixel-city-foothills.jpg` Foothills at 10:30, `pixel-city-bridge.jpg` the Long Bridge at 21:30, `pixel-city-hillside.jpg` Hillside Town at 16:30, `pixel-city-overlook.jpg` the Overlook at 18:12 and `pixel-city-night.jpg` the Street at 23:30. `preview-pixel-city.jpg` is a 1200-pixel copy of the first.
