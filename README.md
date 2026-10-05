@@ -195,8 +195,22 @@ A pixel-art city that follows your clock and the real Sun, with traffic and wind
 | The Overlook at sunset | Hillside Town at night, its lamps in the harbour |
 | ![Pixel City's Airport at sunset](docs/images/pixel-city-airport.jpg) | ![Pixel City's Airport at night](docs/images/pixel-city-airport-night.jpg) |
 | The Airport at sunset, an airliner just down | The Airport at night |
-| ![Pixel City's Spaceport at sunset](docs/images/pixel-city-spaceport.jpg) | ![Pixel City's Spaceport at night](docs/images/pixel-city-spaceport-night.jpg) |
-| The Spaceport at sunset, nine seconds after lift-off | The Spaceport at night, a booster on its landing burn |
+
+**The Spaceport** is a launch site that never stops. A rocket rolls out of the hangar lying on its transporter, climbs the ramp to the pad and is stood up, then fuels through a count you can follow on the countdown clock on the near bank. It lifts off on a cloud of steam and arcs away, shrinking to a spark at the top of its trail. A little over a minute later its booster comes back, lights its landing burn, drops its legs and lands beside the pad, and a crane carries it off while the next rocket rolls out.
+
+- **The rockets** are a Falcon 9, under a fairing or a capsule, and one launch in three a Falcon Heavy, whose two side boosters come home to land side by side.
+- **How often:** a lift-off every four minutes or so, or anywhere from every two minutes to every twelve with the Launches slider.
+- **The light is the real Sun's,** as in every city. A night launch lights its own steam, and for half an hour after sunset the trail still catches the Sun above a pad already in shadow.
+- **All of it is mirrored in the lagoon,** the flames included.
+- **It runs to its own clock,** not the real launch schedule, and makes no network requests. The rockets are drawn after SpaceX's, without names or logos; Atrium isn't affiliated with SpaceX.
+
+| ![Pixel City's Spaceport at sunset, a Falcon 9 nine seconds after lift-off](docs/images/pixel-city-spaceport.jpg) | ![Pixel City's Spaceport at sunset, a Falcon Heavy's two boosters landing](docs/images/pixel-city-spaceport-double.jpg) |
+|---|---|
+| Sunset, nine seconds after lift-off | A Falcon Heavy's two boosters coming home |
+| ![Pixel City's Spaceport by day, a rocket being stood up as a booster lands](docs/images/pixel-city-spaceport-day.jpg) | ![Pixel City's Spaceport after sunset, the trail lit pink above a pad in shadow](docs/images/pixel-city-spaceport-twilight.jpg) |
+| The next rocket is stood up as the last one's booster lands | After sunset, the trail still in sunlight |
+| ![Pixel City's Spaceport at night, a Falcon Heavy floodlit on the pad](docs/images/pixel-city-spaceport-heavy.jpg) | ![Pixel City's Spaceport at night, a booster on its landing burn](docs/images/pixel-city-spaceport-night.jpg) |
+| A Falcon Heavy on the pad, nine seconds from lift-off | A booster on its landing burn at night |
 
 ## Settings
 
