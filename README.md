@@ -4,7 +4,7 @@
 
 Living, animated desktop wallpapers for macOS, 20 of them: a reef tank of real fish and corals, slow tours through the best real photos of the Solar System and deep space, the real sky above you right now, your live weather and wind, sunlight through leaves from the real Sun, rising heat as a schlieren camera sees it, drifting nebulae, and more. It's a small menu bar app written in Swift and SpriteKit, with no dependencies.
 
-It's free. [Download it](#download), or build it yourself in a few minutes.
+It's free and open source, for macOS 26 or later on Apple silicon. See it move at **[atrium.show](https://atrium.show)**, [download it](#download), or [build it yourself](#build-from-source) in a few minutes.
 
 ## The wallpapers
 
@@ -92,16 +92,14 @@ A slow tour of the Sun's family in 193 of the best photos spacecraft and telesco
 | Jezero crater on Mars, from Perseverance | Apollo 16 at Descartes |
 
 ##### The Sun, live
-One of the Sun's views is the real Sun as NASA's Solar Dynamics Observatory saw it within the last hour or so: today's flares, sunspots and prominences, in eight wavelengths, each in its real SDO colour, from the gold coronal loops of 171 Å to visible light. Plasma pulses out along its loops, its corona streams away, and every few minutes one of today's active regions flares or a prominence erupts off the edge.
+One of the Sun's views is the real Sun as NASA's Solar Dynamics Observatory saw it about an hour ago (two or three in visible light): today's flares, sunspots and prominences, in eight wavelengths, each in its real SDO colour, from the gold coronal loops of 171 Å to visible light. Plasma pulses out along its loops, its corona streams away, and every few minutes one of today's active regions flares or a prominence erupts off the edge.
 
 | ![The Sun Today, 193 Bronze](docs/images/sun-193.jpg) | ![The Sun Today, 304 Red, with a prominence erupting](docs/images/sun-304-eruption.jpg) |
 |---|---|
 | 193 Å, the million-degree corona, with a dark coronal hole, on 29 September 2026 | 304 Å, the chromosphere, as a prominence erupts |
 
-It was its own wallpaper, The Sun Today, until it joined Solar System Tour.
-
 ##### The Moon, live
-When the tour reaches the Moon, one of its views is the Moon filling the screen as it is right now from where you are: its real phase, wobble and tilt, from NASA's LRO maps, with shadows along the terminator, earthshine on the dark side, and copper during a lunar eclipse. Choose black, faint real stars or the real sky behind it. It was its own wallpaper, The Moon, until it joined Solar System Tour.
+When the tour reaches the Moon, one of its views is the Moon filling the screen as it is right now from where you are: its real phase, wobble and tilt, from NASA's LRO maps, with shadows along the terminator, earthshine on the dark side, and copper during a lunar eclipse. Choose black, faint real stars or the real sky behind it.
 
 | ![The Moon, a waxing crescent with earthshine](docs/images/the-moon.jpg) | ![The Moon by day, on the Sky backdrop](docs/images/the-moon-day.jpg) |
 |---|---|
@@ -194,7 +192,7 @@ A pixel-art skyline that follows your clock, with traffic and windows lighting u
 
 ## Settings
 
-The first time Atrium opens, a short welcome lets you try the wallpapers on your desktop and shuffle between them all (it's in Settings → About → Show Welcome any time after). Choose Settings… (⌘,) from the menu bar icon. Every wallpaper has a page, laid out like System Settings, with its palettes, photos, sliders, switches and menus. The wallpaper runs live behind the top of its page, so each change shows as you make it. General holds Open at Login and Shuffle; Power sets the frame rate on mains power, on battery and in Low Power Mode.
+The first time Atrium opens, a short welcome lets you try the wallpapers on your desktop and shuffle between them all (it's in Settings → About → Show Welcome any time after). Choose Settings… (⌘,) from the menu bar icon. Every wallpaper has a page, laid out like System Settings, with its palettes, photos, sliders, switches and menus (Fish Tank and Pixel City have none yet). The wallpaper runs live behind the top of its page, so each change shows as you make it. General holds Open at Login, Shuffle and Match the lock screen; Power sets the frame rate on mains power, on battery and in Low Power Mode.
 
 | ![Settings for Solar System Tour: a grid of worlds to hold the tour on](docs/images/settings-solar-system-tour.jpg) | ![Settings for Rain on Glass: ten real places and seven city-light palettes behind the glass](docs/images/settings-rain-on-glass.jpg) |
 |---|---|
@@ -220,18 +218,43 @@ The lock screen, and the tint of the menu bar and windows, come from your normal
 
 ## Download
 
-Download the DMG from the [Releases](https://github.com/dtanquary/atrium/releases) page, open it, and drag Atrium into Applications.
+**[Download the DMG from Releases](https://github.com/dtanquary/atrium/releases)**, open it, and drag Atrium into Applications. It needs macOS 26 or later, on Apple silicon.
 
-It's signed and notarised by Apple, so it opens like any other app. Until 1.0 the releases are betas, marked Pre-release.
+It's signed with a Developer ID and notarised by Apple, so it opens like any other app. Until 1.0 the releases are betas, marked Pre-release.
 
-To make the DMG yourself: `./dmg.sh` → `build/Atrium-<version>.dmg`. That one is signed ad hoc, so another Mac asks you to allow it the first time, in **System Settings → Privacy & Security → Open Anyway**.
+Open Atrium and a short welcome lets you try the wallpapers. After that it lives in the menu bar, with no Dock icon unless Settings is open. Bugs and ideas are welcome in [Issues](https://github.com/dtanquary/atrium/issues).
 
-## Requirements
+## Using it
 
-- macOS 26 or later, on Apple silicon. It's developed and tested on macOS 27.
-- Xcode 26 or later, or its command line tools (Swift 6).
+Atrium's icon in the menu bar is a TV with sparkles (✨📺). Use it to:
+- **Pick** a wallpaper.
+- Turn on **Shuffle** to move on to a random wallpaper every so often, and choose **Next Wallpaper** to skip ahead. Settings → General sets how often (every 5 minutes to every day, or on every unlock) and which wallpapers take part.
+- Open **Settings…** (⌘,): a page for each wallpaper, with palettes, sliders and switches that update live, plus General, Power and About.
+- Turn on **Open at Login**, here or in Settings → General. macOS may ask you to approve it in System Settings → General → Login Items.
+- Turn on **Full Speed on Battery** to run on battery as fast as on mains power.
+- **Quit**.
 
-## Build and run
+### Updating and uninstalling
+
+- **Update:** Atrium doesn't check for updates. Download the new DMG and replace the app in Applications, or `git pull && ./build.sh`. Your settings carry over. To hear about new versions, watch the repo's releases on GitHub.
+- **Uninstall:** turn off **Open at Login** and **Match the lock screen** in Settings → General (the second puts your own wallpaper back), quit Atrium, and move it to the Trash. To remove its settings and caches too:
+
+  ```sh
+  defaults delete com.dtanquary.atrium
+  rm -rf ~/Library/Caches/com.dtanquary.atrium ~/Library/HTTPStorages/com.dtanquary.atrium "$HOME/Library/Application Support/com.dtanquary.atrium"
+  ```
+
+### Privacy, permissions and network
+
+Atrium has no account, no analytics and no update checks. The services below are every connection it makes, each only while a wallpaper that uses it is running.
+
+- **Location** (optional). Live Sky, Earth from Orbit, Weather, Dappled Light, Wind, Pixel City, the live Moon, Rain on Glass following the weather and Flowing Gradient's time-of-day mood use your location, and the app asks once. If you decline, it guesses from your time zone. It's kept on your Mac, and only leaves it rounded to about a kilometre, as the place Open-Meteo forecasts for (and, for Wind's maps, as the tiles it asks NASA for).
+- **Network.** Weather, Dappled Light and Rain on Glass (while following the weather) fetch from [Open-Meteo](https://open-meteo.com) every 10 to 15 minutes, sharing one request. Live Sky and Earth from Orbit fetch the ISS position from [wheretheiss.at](https://wheretheiss.at) at most once a minute. Earth from Orbit fetches a global cloud map from [Live Cloud Maps](https://clouds.matteason.co.uk) only once its cached copy is over 3 hours old (1.5 MB when it has changed), and not at all with Live clouds off. For lightning, it asks Open-Meteo for the next day's thunderstorms on a grid around you every 6 hours. Solar System Tour's live Sun, while it's on screen, fetches SDO images from [Helioviewer](https://helioviewer.org) at most every 15 minutes (2048 pixels, 0.3–0.5 MB) or 30 (4096, 1–2 MB, for the close-up), keeping the newest two of each wavelength on disk. None of them needs an API key. Weather, Dappled Light, Rain on Glass, Earth from Orbit and Wind have **Refresh Now** on their Settings pages, which fetches at once, at most every 5 to 15 minutes.
+- **Wind** asks Open-Meteo for the next day's hourly wind forecast on a grid around you every 6 hours, for the zoom on screen: 96 points for a town, 384 for a region or half the continent (Open-Meteo counts each point as one of its free 10,000 calls a day, so at most 1,536 a day). The last reply for each zoom stays on disk, so it works offline. With an Earth background it downloads NASA's imagery tiles for the view from [GIBS](https://nasa-gibs.github.io/gibs-api-docs/) once and keeps them: about 1–2 MB for most maps, up to 7 MB at night for half the continent, and a fresh 1–2 MB a day for the satellite view.
+
+## Build from source
+
+You need macOS 26 or later on Apple silicon, and Xcode 26 or later or its command line tools (Swift 6). It's developed and tested on macOS 27.
 
 ```sh
 git clone https://github.com/dtanquary/atrium.git
@@ -242,30 +265,9 @@ open build/Atrium.app
 
 `build.sh` runs `swift build -c release`, wraps the binary in a menu-bar-only `.app` (no Dock icon), copies in the data files, and signs it ad hoc for your own Mac. Move the app into `/Applications` if you like.
 
-Once it's running, use the ✨📺 icon in the menu bar to:
-- **Pick** a wallpaper.
-- Turn on **Shuffle** to move on to a random wallpaper every so often, and choose **Next Wallpaper** to skip ahead. Settings → General sets how often (every 5 minutes to every day, or on every unlock) and which wallpapers take part.
-- Open **Settings…** (⌘,): a page for each wallpaper, with palettes, sliders and switches that update live, plus General, Power and About.
-- Turn on **Open at Login**, here or in Settings → General. macOS may ask you to approve it in System Settings → General → Login Items.
-- **Quit**.
-
 To rebuild after pulling changes: `./build.sh && pkill -x Atrium; open build/Atrium.app`
 
-### Updating and uninstalling
-
-- **Update:** download the new DMG and replace the app in Applications, or `git pull && ./build.sh`. Your settings carry over.
-- **Uninstall:** turn off **Open at Login** and **Match the lock screen** in Settings → General (the second puts your own wallpaper back), quit Atrium, and move it to the Trash. To remove its settings and caches too:
-
-  ```sh
-  defaults delete com.dtanquary.atrium
-  rm -rf ~/Library/Caches/com.dtanquary.atrium ~/Library/HTTPStorages/com.dtanquary.atrium "$HOME/Library/Application Support/com.dtanquary.atrium"
-  ```
-
-### Permissions and network
-
-- **Location** (optional). Live Sky, Earth from Orbit, Weather, Dappled Light, Wind, Pixel City, the live Moon, Rain on Glass following the weather and Flowing Gradient's time-of-day mood use your location, and the app asks once. If you decline, it guesses from your time zone.
-- **Network.** Weather, Dappled Light and Rain on Glass (while following the weather) fetch from [Open-Meteo](https://open-meteo.com) every 15 minutes, sharing one request. Live Sky and Earth from Orbit fetch the ISS position from [wheretheiss.at](https://wheretheiss.at) at most once a minute. Earth from Orbit fetches a global cloud map from [Live Cloud Maps](https://clouds.matteason.co.uk) only once its cached copy is over 3 hours old (1.5 MB when it has changed), and not at all with Live clouds off. For lightning, it asks Open-Meteo for the next day's thunderstorms on a grid around you every 6 hours. Solar System Tour's live Sun, while it's on screen, fetches SDO images from [Helioviewer](https://helioviewer.org) at most every 15 minutes (2048 pixels, 0.3–0.5 MB) or 30 (4096, 1–2 MB, for the close-up), keeping the last few hours on disk. None of them needs an API key. Pages whose wallpaper uses live data have **Refresh Now** in Settings, which fetches at once, at most every 5 to 15 minutes.
-- **Wind** uses your location too, and asks Open-Meteo for the next day's hourly wind forecast on a grid around you every 6 hours, for the zoom on screen: 96 points for a town, 384 for a region or half the continent (Open-Meteo counts each point as one of its free 10,000 calls a day, so at most 1,536 a day). The last reply for each zoom stays on disk, so it works offline. With an Earth background it downloads NASA's imagery tiles for the view from [GIBS](https://nasa-gibs.github.io/gibs-api-docs/) once and keeps them: about 1–2 MB for most maps, up to 7 MB at night for half the continent, and a fresh 1–2 MB a day for the satellite view.
+`./dmg.sh` wraps that build in a disk image in `build/`, to carry to another Mac. It's signed ad hoc, so that Mac asks you to allow it the first time, in **System Settings → Privacy & Security → Open Anyway**. The notarised DMG on the Releases page comes from `./release.sh`, which needs a Developer ID (the setup is at its top).
 
 ## Development
 
@@ -286,6 +288,9 @@ SETTINGS_SHOT="Nebula" swift test --filter settingsWindow   # opens Settings on 
   - `Settings.swift`: the Settings window
   - one file per wallpaper
   - `Resources/`: data files
+  - `Tests/AtriumTests/`: the render, astronomy and weather tests
+  - `docs/`: a doc for each wallpaper
+  - `site/`: the website, [atrium.show](https://atrium.show)
 
 ## Credits
 
@@ -303,13 +308,14 @@ SETTINGS_SHOT="Nebula" swift test --filter settingsWindow   # opens Settings on 
 - The Aurora wallpaper's mountains are a public domain National Park Service photo of the Tetons in winter by A. Falgoust ([source](https://commons.wikimedia.org/wiki/File:Teton_Point_Turnout_in_Winter_(52098766554).jpg)).
 - The Murmuration wallpaper's grounds are "Tide bears the last glow - Brighton, UK" by sagesolar, CC BY 4.0 ([source](https://commons.wikimedia.org/wiki/File:Tide_bears_the_last_glow_-_Brighton,_UK.jpg)), with its sky cut away and its sea relit, and a public domain U.S. Fish and Wildlife Service photo of a tundra pond ([source](https://commons.wikimedia.org/wiki/File:Sunset_over_a_tundra_pond_(53708107535).jpg)).
 - The Fireflies wallpaper's meadow is "Field at dusk" by Tristan Ferne, CC BY 2.0 ([source](https://www.flickr.com/photos/89056504@N00/7357684410)), with its sky cut away and relit for blue hour. See [`Sources/Atrium/Resources/fireflies-credits.tsv`](Sources/Atrium/Resources/fireflies-credits.tsv).
-- The Campfire wallpaper's clearing is the CC0 panorama "Hochsal Forest" by Adrian Kubasa ([source](https://polyhaven.com/a/hochsal_forest)), relit by the fire, with CC0 scans of a stone fire pit by Sebastian Platen and dry branches by Rico Cilliers from Poly Haven. See [`Sources/Atrium/Resources/campfire-credits.tsv`](Sources/Atrium/Resources/campfire-credits.tsv).
+- Campfire (unfinished, and hidden for now): its clearing is the CC0 panorama "Hochsal Forest" by Adrian Kubasa ([source](https://polyhaven.com/a/hochsal_forest)), relit by the fire, with CC0 scans of a stone fire pit by Sebastian Platen and dry branches by Rico Cilliers from Poly Haven. See [`Sources/Atrium/Resources/campfire-credits.tsv`](Sources/Atrium/Resources/campfire-credits.tsv).
 - The Rain on Glass backdrops are CC0 HDRIs from Poly Haven by Greg Zaal, Rico Cilliers, Alexander Scholten, Andreas Mischok and Oliksiy Yakovlyev, public domain photos from the National Park Service and USFWS, and CC BY photos from Wikimedia Commons by Douglas Paul Perkins, mariemon, epSos.de and Vyacheslav Argenberg. See [`Sources/Atrium/Resources/rain-credits.tsv`](Sources/Atrium/Resources/rain-credits.tsv) and Settings → About.
-- A Tree for the Year's hilltop is "Solitary tree at Cissbury Ring" by Andy Li, CC0 ([source](https://commons.wikimedia.org/wiki/File:Solitary_tree_at_Cissbury_Ring_2026-04-07.jpg)), with its own tree painted out; its oak leaves and bark are CC0 scans by Lennart Demes, ambientCG. See [`Sources/Atrium/Resources/tree-credits.tsv`](Sources/Atrium/Resources/tree-credits.tsv).
-- Solar System Tour's photos are from NASA, JPL, ESA, JAXA, the Space Science Institute, JHUAPL/SwRI, NSO and the people who processed them, public domain, CC BY or CC BY-SA. Each one's credit, licence and source is in [`Sources/Atrium/Resources/solar-photos.tsv`](Sources/Atrium/Resources/solar-photos.tsv) and in Settings → About.
-- Deep Space Tour's photos are from ESA/Hubble, ESA/Webb, ESO, NOIRLab, ESA's Euclid, NASA's Chandra and the Event Horizon Telescope Collaboration, CC BY 4.0, CC BY-SA 3.0 IGO or public domain. Each one's credit, licence and source is in [`Sources/Atrium/Resources/deep-photos.tsv`](Sources/Atrium/Resources/deep-photos.tsv) and in Settings → About.
+- The Dappled Light wallpaper's plaster is the CC0 "White Stucco" by Amal Kumar from Poly Haven ([source](https://polyhaven.com/a/white_stucco)), and its leaves and twig are CC0 scans by Lennart Demes, ambientCG. See [`Sources/Atrium/Resources/dappled-credits.tsv`](Sources/Atrium/Resources/dappled-credits.tsv).
+- A Tree for the Year (unfinished, and hidden for now): its hilltop is "Solitary tree at Cissbury Ring" by Andy Li, CC0 ([source](https://commons.wikimedia.org/wiki/File:Solitary_tree_at_Cissbury_Ring_2026-04-07.jpg)), with its own tree painted out; its oak leaves and bark are CC0 scans by Lennart Demes, ambientCG. See [`Sources/Atrium/Resources/tree-credits.tsv`](Sources/Atrium/Resources/tree-credits.tsv).
+- Solar System Tour's photos are from NASA, JPL, ESA, JAXA, the Space Science Institute, JHUAPL/SwRI, NSO and the people who processed them, public domain, CC BY or CC BY-SA, with three from JAXA under the Japanese Government Standard Terms of Use 2.0 (compatible with CC BY 4.0). Each one's credit, licence and source is in [`Sources/Atrium/Resources/solar-photos.tsv`](Sources/Atrium/Resources/solar-photos.tsv) and in Settings → About.
+- Deep Space Tour's photos are from ESA/Hubble, ESA/Webb, ESO, NOIRLab, the Rubin Observatory, ESA's Euclid, NASA's Chandra and the Event Horizon Telescope Collaboration, CC BY 4.0, CC BY-SA 3.0 IGO or public domain. Each one's credit, licence and source is in [`Sources/Atrium/Resources/deep-photos.tsv`](Sources/Atrium/Resources/deep-photos.tsv) and in Settings → About.
 - Reef fish, corals and rock in the Fish Tank are cut out of public domain, CC0 and CC BY photos from iNaturalist, Wikimedia Commons and NOAA. Each photographer and licence is listed in [`Sources/Atrium/Resources/reef-credits.tsv`](Sources/Atrium/Resources/reef-credits.tsv) and in Settings → About.
 
 ## License
 
-The code is [MIT](LICENSE) © 2026 Dave Tanquary. The photos and data aren't: each keeps its own license (public domain, CC0, CC BY or CC BY-SA), listed under Credits, in the credits files beside them, and in Settings → About. Photos are cropped, cut out, relit or recolored from their originals, and adapted copies of CC BY-SA photos stay CC BY-SA. See [NOTICE](NOTICE).
+The code is [MIT](LICENSE) © 2026 Dave Tanquary. The photos and data aren't: each keeps its own licence (public domain, CC0, CC BY, CC BY-SA or the Japanese Government Standard Terms of Use 2.0), listed under Credits, in the credits files beside them, and in Settings → About. Photos are cropped, cut out, relit or recoloured from their originals, and adapted copies of CC BY-SA photos stay CC BY-SA. See [NOTICE](NOTICE).

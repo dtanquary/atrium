@@ -1,7 +1,7 @@
 #!/bin/sh
 # Builds build/Atrium-<version>.dmg: the app beside a link to Applications, for people who'd rather not build it.
 # It's signed ad hoc, not notarised (that needs a paid Apple Developer ID), so macOS stops it the first time it's
-# opened; README.md → Download says how to let it through.
+# opened; README.md → Build from source says how to let it through.
 set -e
 cd "$(dirname "$0")"
 ./build.sh
