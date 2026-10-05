@@ -6,7 +6,7 @@ import SpriteKit
 /// going dark through the evening, traffic, a blinking beacon and the odd plane, with walls lit from wherever the
 /// Sun really is. Everything lives on a low-resolution canvas measured in art pixels, scaled up with nearest
 /// filtering. Settings picks the city (`City`): a downtown across water, one under mountains, a bridge over a bay,
-/// a town up a hillside, or the view over a sea of rooftops.
+/// a town up a hillside, the view over a sea of rooftops, or an airport with aircraft coming and going.
 final class PixelCity: SKScene {
     nonisolated static let knobs = [
         Knob(key: "city.place", label: "City", range: 0...Double(City.allCases.count - 1), standard: 0, section: "City",
@@ -17,12 +17,16 @@ final class PixelCity: SKScene {
              shownWhen: "city.shuffle"),
         Knob(key: "city.looking", label: "Looking", range: 0...8, standard: 0, section: "City",
              format: .choice(["Toward the midday Sun", "North", "North-east", "East", "South-east", "South", "South-west", "West", "North-west"])),
+        Knob(key: "city.flightsDay", label: "Flights by day", range: 0.25...3, standard: 1, section: "Airport", format: .times),
+        Knob(key: "city.flightsNight", label: "Flights at night", range: 0.25...3, standard: 0.7, section: "Airport", format: .times),
+        Knob(key: "city.wind", label: "Land and take off into the real wind", range: 0...1, standard: 1, section: "Airport",
+             format: .toggle),
         Knob(key: "city.previewTime", label: "Preview a time of day", range: 0...1, standard: 0, section: "Preview",
              format: .toggle),
         Knob(key: "city.previewHour", label: "Time", range: 0...24, standard: 19, section: "Preview", format: .clock,
              shownWhen: "city.previewTime"),
     ]
-    private enum K: Int { case view, shuffle, shuffleMinutes, looking, previewTime, previewHour }
+    private enum K: Int { case view, shuffle, shuffleMinutes, looking, flightsDay, flightsNight, wind, previewTime, previewHour }
     private static func knob(_ k: K) -> Double { knobs[k.rawValue].value }
     private var settings = PixelCity.knobs.map(\.value)
     private var retired = false // it has handed over to a scene of another city, and is fading out
@@ -48,11 +52,18 @@ final class PixelCity: SKScene {
     private var steam: [SKSpriteNode] = []
     private var flock: [(node: SKSpriteNode, lag: Float, offset: SIMD2<Float>)] = []
     private var towerLights: [SKSpriteNode] = []
+    // The Airport: its aircraft, the rows their wheels stand on, where the stands are, and which way the runway is in use.
+    private var flights: [Flight] = []
+    private var runway = 0, taxiway = 0, apron = 0
+    private var stands: [Int] = []
+    private var runwayWay: Float = 1
+    private(set) var movements = 0 // landings and take-offs so far, for the tests
     private let canvas = SKNode()
     private let sky = SKSpriteNode()      // sky, stars, Sun and Moon…
     private let backdrop = SKSpriteNode() // …and the city in front, so clouds and planes pass between the two
     private var mirrored: [SKUniform] = []   // the sky and city textures the water reflects…
     private var waterTints: [SKUniform] = [] // …and the colours of deep water and of the glints on it
+    private var mirrors: [(picture: SKUniform, place: SKUniform)] = [] // …and each of the Airport's aircraft, and where it is
     private var skyline: [Building] = []
     private var parks: [(x: Int, width: Int)] = []
     private var stars: [(x: Int, y: Int, brightness: Float)] = []
@@ -101,6 +112,13 @@ final class PixelCity: SKScene {
 
     override func didMove(to view: SKView) {
         Location.shared.start()
+        run(.repeatForever(.sequence([.run { [weak self] in self?.askTheWind() }, .wait(forDuration: 900)])))
+    }
+
+    /// Fetches the weather, for the wind, while the Airport is showing and Settings has it follow the real wind.
+    /// It's the one request every weather wallpaper shares, and no other city makes it.
+    private func askTheWind() {
+        if city == .airport, Self.knob(.wind) > 0.5 { LiveWeather.shared.poll() }
     }
 
     /// Repaints when one of its own settings changes (the notification comes for every wallpaper's).
@@ -122,6 +140,7 @@ final class PixelCity: SKScene {
             return view.presentScene(next, transition: fade)
         }
         if moved { layOut() } // no view to fade in: the render tests
+        if view != nil { askTheWind() } // in case that has just been switched on
         redraw()
     }
 
@@ -167,7 +186,7 @@ final class PixelCity: SKScene {
     private func layOut() {
         canvas.removeAllChildren()
         (skyline, parks, stars, clouds, cars) = ([], [], [], [], [])
-        (plane, planeLights, beacon, mirrored, waterTints) = (SKSpriteNode(), SKNode(), SKNode(), [], [])
+        (plane, planeLights, beacon, mirrored, waterTints, mirrors) = (SKSpriteNode(), SKNode(), SKNode(), [], [], [])
         (nextCar, planeDirection, shipDirection, ship) = ([clock, clock], 0, 0, SKSpriteNode())
         city = City(rawValue: Int(Self.knob(.view))) ?? .waterfront
         waterRows = city == .waterfront ? Int(Float(h) * 0.21) : 0
@@ -181,9 +200,12 @@ final class PixelCity: SKScene {
             ground = Int(Float(h) * 0.26) // the sea's horizon, out past the harbour
             waterRows = ground
         case .overlook: ground = Int(Float(h) * 0.54) // the far skyline's feet: rooftops fill everything below
+        case .airport:
+            waterRows = Int(Float(h) * 0.215) // a bay, with the airfield along its far shore
+            ground = waterRows + 25           // the far skyline's feet, behind the terminal
         }
         crest = Array(repeating: ground, count: w)
-        (ridges, downtown, farHaze, slope, boats, steam, flock, towerLights) = ([], 0.5, 1, [], [], [], [], [])
+        (ridges, downtown, farHaze, slope, boats, steam, flock, towerLights, flights) = ([], 0.5, 1, [], [], [], [], [], [])
         for (node, z) in [(sky, 0.0), (backdrop, 2)] {
             node.anchorPoint = .zero
             node.size = CGSize(width: w, height: h)
@@ -198,16 +220,22 @@ final class PixelCity: SKScene {
         case .bridge: tower = layOutBridge(&rng)
         case .hillside: tower = layOutHillside(&rng)
         case .overlook: tower = layOutOverlook(&rng)
+        case .airport: tower = layOutAirport(&rng)
         }
         skyBase = crest.min() ?? ground
         beacon.position = CGPoint(x: tower.x, y: tower.y)
-        // A red aircraft light on a mast, or on Hillside Town's lighthouse a white flash.
-        let flash = city == .hillside ? NSColor(red: 1, green: 0.96, blue: 0.8, alpha: 1) : NSColor(red: 1, green: 0.25, blue: 0.2, alpha: 1)
-        beacon.addChild(SKSpriteNode(color: flash.withAlphaComponent(0.3), size: CGSize(width: 3, height: 3)))
-        beacon.addChild(SKSpriteNode(color: flash, size: CGSize(width: 1, height: 1)))
+        // A red aircraft light on a mast; on Hillside Town's lighthouse a white flash; on the Airport's tower the
+        // beacon of a civil airfield, white and green by turns, 27 flashes a minute.
+        let white = NSColor(red: 1, green: 0.96, blue: 0.8, alpha: 1), red = NSColor(red: 1, green: 0.25, blue: 0.2, alpha: 1)
+        let flashes = city == .airport ? [white, NSColor(red: 0.3, green: 1, blue: 0.5, alpha: 1)] : [city == .hillside ? white : red]
+        let (halo, lamp) = (SKSpriteNode(color: .clear, size: CGSize(width: 3, height: 3)), SKSpriteNode(color: .clear, size: CGSize(width: 1, height: 1)))
+        beacon.addChild(halo)
+        beacon.addChild(lamp)
         beacon.zPosition = 5
-        beacon.run(.repeatForever(.sequence([.fadeAlpha(to: 1, duration: 0), .wait(forDuration: 0.25),
-                                             .fadeAlpha(to: 0.15, duration: 0), .wait(forDuration: 1.25)])))
+        beacon.run(.repeatForever(.sequence(flashes.flatMap { flash in
+            [.run { (halo.color, lamp.color) = (flash.withAlphaComponent(0.3), flash) }, .fadeAlpha(to: 1, duration: 0), .wait(forDuration: 0.25),
+             .fadeAlpha(to: 0.15, duration: 0), .wait(forDuration: flashes.count > 1 ? 1.95 : 1.25)]
+        })))
         canvas.addChild(beacon)
 
         stars = (0..<170).map { _ in
@@ -227,14 +255,16 @@ final class PixelCity: SKScene {
 
         let paints = [rgb(196, 58, 52), rgb(58, 98, 186), rgb(222, 222, 216), rgb(236, 188, 48),
                       rgb(66, 138, 88), rgb(40, 40, 48), rgb(160, 166, 172)]
-        let far = city == .foothills || city == .bridge || city == .overlook // traffic seen from miles off: a dash of paint, and at night just its lights
+        let far = city != .waterfront && city != .hillside // traffic seen from miles off: a dash of paint, and at night just its lights
         carLooks = far ? paints.map { speck(2, body: $0) } + [speck(4, body: rgb(226, 226, 218))]
                        : paints.map { vehicle(sedan, body: $0) } + [vehicle(bus, body: rgb(228, 150, 40))]
         (carPace, carGap) = far ? (0.35, 7) : (1, 36)
         let lanes = city == .bridge ? [deck + 1, deck + 2] : city == .overlook ? [ground + 6, ground + 7]
+            : city == .airport ? [apron + 2, apron + 3] // the service road along the terminal, behind the stands
             : far ? [ground - 16, ground - 14] : [streetBase + 5, streetBase + 13]
         for lane in 0...1 {
-            for _ in 0..<(city == .hillside ? 0 : far ? 14 : 6) { // the town's lanes are too steep for traffic
+            // The town's lanes are too steep for traffic, and an apron has a few vans and tugs, not a road's worth.
+            for _ in 0..<(city == .hillside ? 0 : city == .airport ? 3 : far ? 14 : 6) {
                 let node = SKSpriteNode()
                 node.anchorPoint = CGPoint(x: 0.5, y: 0)
                 node.position.y = CGFloat(lanes[lane])
@@ -274,6 +304,7 @@ final class PixelCity: SKScene {
         plane.addChild(planeLights)
         canvas.addChild(plane)
         if waterRows > 0 { addWater() }
+        if city == .airport { for flight in flights { canvas.addChild(flight.node) } } // in front of the water
         if city == .bridge { // a freighter that crosses the bay in front of the bridge now and then
             ship.anchorPoint = CGPoint(x: 0.5, y: 0)
             ship.size = CGSize(width: freighter[0].count, height: freighter.count + 4)
@@ -574,6 +605,69 @@ final class PixelCity: SKScene {
         return tower
     }
 
+    /// The Airport: an airfield along the far shore of a bay. Nearest the water is the runway, then a taxiway, then
+    /// the apron and its stands in front of a low terminal, with the control tower and hangars to its left; the
+    /// city it serves is far off on the horizon. Returns the top of the tower, for the beacon.
+    private func layOutAirport(_ rng: inout SeededRandom) -> (x: Int, y: Int) {
+        rng = SeededRandom(state: 2085)
+        (downtown, farHaze) = (0.12, 0.8)
+        (runway, taxiway, apron) = (waterRows + 6, waterRows + 14, waterRows + 18)
+        stands = [36, 52, 68].map { w * $0 / 100 }
+        for x in 0..<w { crest[x] = ground + hill(x) }
+        for x in terminal { crest[x] = max(crest[x], apron + 17) } // the Sun sets behind the terminal's roof
+        _ = layOutBand(&rng, spread: 0.14, tallest: 0.2, suburbs: true)
+
+        (facing, runwayWay) = (heading(Location.shared.coordinate.latitude), 1)
+        runwayWay = windWay
+        for i in 0..<4 { // two on their stands, one a few seconds out on the approach, one away
+            var f = Flight()
+            change(&f)
+            (f.way, f.stand, f.berth) = (runwayWay, min(i * 2, 2), i < 2 ? 1 : 0)
+            (f.phase, f.x) = i < 2 ? (.parked, Float(stands[i * 2])) : (.away, 0)
+            f.until = clock + [.random(in: 25...50), .random(in: 150...260), 4, .random(in: 70...120)][i]
+            (f.lamp.texture, f.lamp.size) = (art([".#.", "###", ".#."], ["#": .one]), CGSize(width: 3, height: 3))
+            (f.lamp.alpha, f.lamp.blendMode) = (0.4, .add)
+            for light in [f.wingtip, f.beacon, f.strobe, f.lamp] { f.node.addChild(light) }
+            let flash = { (on: Double, off: Double) in
+                SKAction.repeatForever(.sequence([.fadeAlpha(to: 1, duration: 0), .wait(forDuration: on), .fadeAlpha(to: 0, duration: 0), .wait(forDuration: off)]))
+            }
+            f.beacon.run(.sequence([.wait(forDuration: Double(i) * 0.3), flash(0.12, 1)]))
+            f.strobe.run(.sequence([.wait(forDuration: Double(i) * 0.3 + 0.5), flash(0.07, 1.3)]))
+            f.node.isHidden = true
+            flights.append(f)
+        }
+        return (controlTower, apron + 4 + 61)
+    }
+
+    // The Airport's buildings: the columns the terminal runs between, and the column the control tower stands at.
+    private var terminal: Range<Int> { w * 31 / 100..<w * 75 / 100 }
+    private var controlTower: Int { w * 26 / 100 }
+
+    /// The live wind's speed along the runway in km/h, from the right when positive, or nil if Settings has the
+    /// Airport ignore it or no report has come in. We look along `facing`, so the right is 90° on from that.
+    private var windAlong: Float? {
+        guard Self.knob(.wind) > 0.5, let report = LiveWeather.shared.latest else { return nil }
+        return Float(report.wind * cos((report.windFrom - facing - 90) * .pi / 180))
+    }
+
+    /// The way the runway should be in use, 1 for to the right: aircraft land and take off into the wind. It stays
+    /// as it is until the wind along the runway reaches 9 km/h, the 5 knots at which a real airport goes by the wind
+    /// (FAA AIM 4-3-6), and is to the right when there's no wind to go by.
+    private var windWay: Float {
+        guard let along = windAlong else { return 1 }
+        return abs(along) < 9 ? runwayWay : along > 0 ? 1 : -1
+    }
+
+    /// How busy the Airport is: Settings' figure for the day or for the night, easing from one to the other between
+    /// 5 and 7 in the morning and from 8 in the evening to midnight. Waits on a stand and away are divided by it.
+    private var flying: Double {
+        let day = smoothstep(5, 7, Float(hour)) * (1 - smoothstep(20, 24, Float(hour)))
+        return Double(mix(Float(Self.knob(.flightsNight)), Float(Self.knob(.flightsDay)), day))
+    }
+
+    /// For the tests: how many aircraft have the runway at this moment.
+    var runwayCount: Int { flights.filter(\.onRunway).count }
+
     /// Where the steaming stack stands on one of the Overlook's roofs.
     private func stack(on b: Building) -> (x: Int, y: Int) {
         (b.x + b.width * 2 / 3, (b.base ?? ground) + b.height + b.pitch / 2)
@@ -613,50 +707,67 @@ final class PixelCity: SKScene {
         node.zPosition = 2.5
         mirrored = [SKUniform(name: "u_sky", texture: nil), SKUniform(name: "u_city", texture: nil)]
         waterTints = [SKUniform(name: "u_deep", vectorFloat3: .zero), SKUniform(name: "u_glint", vectorFloat3: .zero)]
-        node.shader = SKShader(source: Self.waterShader, uniforms: mirrored + waterTints + [
+        mirrors = flights.indices.map { (SKUniform(name: "u_plane\($0)", texture: nil), SKUniform(name: "u_place\($0)", vectorFloat4: [-999, 0, 1, 1])) }
+        node.shader = SKShader(source: Self.waterShader(aircraft: mirrors.count), uniforms: mirrored + waterTints + mirrors.flatMap { [$0.picture, $0.place] } + [
             SKUniform(name: "u_canvas", vectorFloat2: [Float(w), Float(h)]),
             // The water's size; the row things nearest us stand in the water at (the bridge's towers, the town's quay,
             // short of the far shore); and the rows of quay wall and of street, which lies flat and out of sight, above it.
             SKUniform(name: "u_water", vectorFloat4: [Float(w), Float(waterRows), Float(city == .bridge ? ground - 12 : city == .hillside ? harbour : waterRows),
-                                                      Float(city == .waterfront ? quay : 0)]),
-            SKUniform(name: "u_street", float: city == .waterfront ? 26 : 0),
+                                                      Float(city == .waterfront ? quay : city == .airport ? 4 : 0)]),
+            SKUniform(name: "u_street", float: city == .waterfront ? 26 : city == .airport ? 18 : 0), // the airfield lies flat too
             WallpaperTime.now,
         ])
         canvas.addChild(node)
     }
 
-    // ponytail: only the backdrop is mirrored, so cars and clouds have no reflection; mirror their sprites if it shows
-    private static let waterShader = """
-    void main() {
-        vec2 p = floor(v_tex_coord * u_water.xy);   // this art pixel, counted from the water's bottom left
-        float line = p.y < u_water.z ? u_water.z : u_water.y; // the waterline this row mirrors
-        float d = line - 1.0 - p.y;                 // rows below it
-        float near = 1.0 - p.y / u_water.y;         // 0 at the far edge of the water, 1 nearest us
-        // Ripples slide each row sideways by whole pixels, wider toward us.
-        float wave = sin(d * 1.1 + u_now * 1.1) + sin(d * 0.43 - u_now * 0.6);
-        float shift = floor(wave * (0.3 + near * 1.3) + 0.5);
-        // The mirror image: the quay wall if there is one, then what stands beyond it, squashed. Water beyond the
-        // nearest things mirrors only the foot of the far shore, not those things over again.
-        float squash = p.y < u_water.z ? 1.8 : 0.7;
-        float row = line + (d < u_water.w ? d : u_water.w + u_street + (d - u_water.w) * squash);
-        // Sampled at the centre of a whole pixel: a shader's texture is smoothed between pixels, nearest filter or not.
-        vec2 uv = (vec2(p.x + shift, floor(min(row, u_canvas.y - 1.0))) + 0.5) / u_canvas;
-        vec4 city = texture2D(u_city, uv);
-        // Land across the water is painted a shade short of solid. It mirrors about the horizon, so the water this
-        // side of the nearest shore doesn't mirror it a second time.
-        city *= 1.0 - step(0.9, city.a) * step(city.a, 0.995) * step(p.y, u_water.z - 0.5);
-        vec3 c = texture2D(u_sky, uv).rgb * (1.0 - city.a) + city.rgb;
-        float bright = smoothstep(0.75, 1.0, max(c.r, max(c.g, c.b))); // the Sun, the Moon and lamps keep their shine
-        c = mix(c, u_deep, (0.3 + 0.4 * near) * (1.0 - 0.7 * bright)) * (0.94 - 0.2 * near * (1.0 - bright));
-        // Glints: short dashes of sky on every other row, drifting.
-        float cell = floor((p.x + floor(u_now * (0.6 + near))) / 5.0);
-        float chance = fract(sin(cell * 12.9898 + d * 78.233) * 43758.5453);
-        c += u_glint * step(0.93, chance) * mod(d, 2.0) * 0.12;
-        // Whatever the city's painting has standing in the water (a bridge's towers) shows over it.
-        vec4 here = texture2D(u_city, (p + 0.5) / u_canvas);
-        gl_FragColor = vec4(c * (1.0 - here.a) + here.rgb, 1.0);
+    // ponytail: only the backdrop and the Airport's aircraft are mirrored, so cars and clouds have no reflection;
+    // mirror their sprites the same way if it shows
+    /// The water's shader, which mirrors the sky and the city and this many aircraft. An aircraft isn't in the
+    /// city's painting, so it's mirrored from its own picture (`u_plane`), placed by how far above the ground it is
+    /// (`u_place`: its left edge and its foot, then its size, the width negative when it faces left). On the runway
+    /// its image hangs from the sea wall's, as the terminal's does; as it climbs, its image sinks toward us.
+    private static func waterShader(aircraft: Int) -> String {
+        let planes = (0..<aircraft).map { i in
+            "vec2 q\(i) = (at - u_place\(i).xy) / u_place\(i).zw;"
+                + " vec4 a\(i) = texture2D(u_plane\(i), q\(i)) * above * step(0.0, q\(i).x) * step(q\(i).x, 1.0) * step(0.0, q\(i).y) * step(q\(i).y, 1.0);"
+                + " c = c * (1.0 - a\(i).a) + a\(i).rgb;"
+        }.joined(separator: "\n")
+        return """
+        void main() {
+            vec2 p = floor(v_tex_coord * u_water.xy);   // this art pixel, counted from the water's bottom left
+            float line = p.y < u_water.z ? u_water.z : u_water.y; // the waterline this row mirrors
+            float d = line - 1.0 - p.y;                 // rows below it
+            float near = 1.0 - p.y / u_water.y;         // 0 at the far edge of the water, 1 nearest us
+            // Ripples slide each row sideways by whole pixels, wider toward us.
+            float wave = sin(d * 1.1 + u_now * 1.1) + sin(d * 0.43 - u_now * 0.6);
+            float shift = floor(wave * (0.3 + near * 1.3) + 0.5);
+            // The mirror image: the quay wall if there is one, then what stands beyond it, squashed. Water beyond the
+            // nearest things mirrors only the foot of the far shore, not those things over again.
+            float squash = p.y < u_water.z ? 1.8 : 0.7;
+            float row = line + (d < u_water.w ? d : u_water.w + u_street + (d - u_water.w) * squash);
+            // Sampled at the centre of a whole pixel: a shader's texture is smoothed between pixels, nearest filter or not.
+            vec2 uv = (vec2(p.x + shift, floor(min(row, u_canvas.y - 1.0))) + 0.5) / u_canvas;
+            vec4 city = texture2D(u_city, uv);
+            // Land across the water is painted a shade short of solid. It mirrors about the horizon, so the water this
+            // side of the nearest shore doesn't mirror it a second time.
+            city *= 1.0 - step(0.9, city.a) * step(city.a, 0.995) * step(p.y, u_water.z - 0.5);
+            vec3 c = texture2D(u_sky, uv).rgb * (1.0 - city.a) + city.rgb;
+            // This row's mirror image, as a height above the ground, for the aircraft: none in the quay wall's own image.
+            vec2 at = vec2(p.x + shift, floor((d - u_water.w) * squash)) + 0.5;
+            float above = step(u_water.w, d);
+            \(planes)
+            float bright = smoothstep(0.75, 1.0, max(c.r, max(c.g, c.b))); // the Sun, the Moon and lamps keep their shine
+            c = mix(c, u_deep, (0.3 + 0.4 * near) * (1.0 - 0.7 * bright)) * (0.94 - 0.2 * near * (1.0 - bright));
+            // Glints: short dashes of sky on every other row, drifting.
+            float cell = floor((p.x + floor(u_now * (0.6 + near))) / 5.0);
+            float chance = fract(sin(cell * 12.9898 + d * 78.233) * 43758.5453);
+            c += u_glint * step(0.93, chance) * mod(d, 2.0) * 0.12;
+            // Whatever the city's painting has standing in the water (a bridge's towers) shows over it.
+            vec4 here = texture2D(u_city, (p + 0.5) / u_canvas);
+            gl_FragColor = vec4(c * (1.0 - here.a) + here.rgb, 1.0);
+        }
+        """
     }
-    """
 
     // MARK: - Time of day (every 30 s)
 
@@ -741,9 +852,8 @@ final class PixelCity: SKScene {
         (keyRight, keyLeft) = (sunKey.right + moonKey.right, sunKey.left + moonKey.left)
         (keyFront, keyTop) = (sunKey.front + moonKey.front, sunKey.top + moonKey.top)
         switch city {
-        case .waterfront: drawHorizon(into: &px, zenith: top, horizon: horizon)
+        case .waterfront, .bridge, .airport: drawHorizon(into: &px, zenith: top, horizon: horizon)
         case .foothills: drawMountains(into: &px, horizons: horizons)
-        case .bridge: drawHorizon(into: &px, zenith: top, horizon: horizon)
         case .hillside:
             drawHorizon(into: &px, zenith: top, horizon: horizon)
             drawHill(into: &px)
@@ -787,6 +897,9 @@ final class PixelCity: SKScene {
             for node in steam { node.color = NSColor(red: CGFloat(vapour.x), green: CGFloat(vapour.y), blue: CGFloat(vapour.z), alpha: 1) }
             for light in towerLights { light.isHidden = night < 0.4 }
             for bird in flock { bird.node.isHidden = night > 0.35 } // they roost at dusk
+        case .airport:
+            drawAirfield(into: &px, zenith: top, horizon: horizon)
+            for i in flights.indices { dress(i) }
         }
         backdrop.texture = px.texture()
         mirrored.first?.textureValue = sky.texture
@@ -1343,6 +1456,132 @@ final class PixelCity: SKScene {
         }
     }
 
+    /// The Airport, in front of the far skyline and nearest last: trees along the airfield's far side, the hangars,
+    /// the terminal and the control tower, the apron under its floodlights, the taxiway, the runway and the sea wall.
+    private func drawAirfield(into px: inout Pixels, zenith: RGB, horizon: RGB) {
+        let field = waterRows, base = apron + 4, dark = night > 0.15, glow = min(1, night * 1.6), lamp = rgb(255, 226, 170)
+        let metal = mix(rgb(84, 88, 98), rgb(16, 16, 24), night)
+        // The ground: grass from the sea wall back to the trees, the apron's concrete, two strips of tarmac.
+        let grass = lit(rgb(116, 134, 84), keyTop * 0.5)
+        px.fill(0, field, w, ground - field, grass)
+        var rng = SeededRandom(state: 85)
+        var x = -2
+        while x < w { // trees along the far side
+            let r = Int.random(in: 2...4, using: &rng)
+            for dy in 0...r { px.fill(x - r + dy / 2, ground - 2 + dy, (r - dy / 2) * 2 + 1, 1, lit(rgb(52, 84, 58) * (dy == r ? 1.2 : 1), keyTop * 0.3)) }
+            x += Int.random(in: 3...7, using: &rng)
+        }
+        px.fill(0, taxiway + 2, w * 82 / 100, base - taxiway - 2, mix(lit(rgb(168, 166, 158), keyTop * 0.5), rgb(40, 40, 52), night * 0.8))
+
+        // Hangars: a wide door under a shallow curved roof, one of them open and lit at night.
+        for (i, hx) in [w * 3 / 100, w * 13 / 100].enumerated() {
+            let wide = w * 9 / 100, wall = [rgb(176, 180, 186), rgb(160, 170, 160)][i]
+            px.fill(hx, base, wide, 11, lit(wall, keyFront))
+            for r in 0..<4 { px.fill(hx + r * r, base + 11 + r, wide - 2 * r * r, 1, lit(wall * 0.9, keyTop, shade: 1.05)) }
+            let door = dark && i == 1 ? mix(lit(wall * 0.5, .zero), rgb(255, 214, 150), glow * 0.7) : lit(wall * 0.55, .zero)
+            px.fill(hx + 4, base, wide - 8, 9, door)
+            for dx in stride(from: hx + 4, to: hx + wide - 4, by: 5) { px.fill(dx, base, 1, 9, lit(wall * 0.42, .zero)) }
+        }
+
+        // The terminal: a long glass front under a white roof, with a taller hall in the middle.
+        let (left, right) = (terminal.lowerBound, terminal.upperBound), hall = (left + right) / 2 - 24..<(left + right) / 2 + 24
+        var lights = SeededRandom(state: 86)
+        func glazing(_ x0: Int, _ x1: Int, _ y: Int, _ rows: Int, share: Float) {
+            for row in 0..<rows { // mirroring the sky at our backs by day
+                px.fill(x0, y + row, x1 - x0, 1, mix(mix(behind, zenith, 0.3 + 0.7 * Float(row) / Float(rows)) * 0.8, lit(rgb(110, 156, 176), keyFront), 0.4))
+            }
+            for bay in stride(from: x0, to: x1, by: 6) { // and lit from inside after dark, a few bays at a time
+                let r = Float.random(in: 0..<1, using: &lights)
+                if dark, r < share { px.fill(bay + 1, y, min(5, x1 - bay - 1), rows, mix(rgb(255, 206, 130), rgb(255, 232, 180), r / share), glow * (0.55 + 0.35 * r)) }
+                px.fill(bay, y, 1, rows, .zero, 0.25)
+            }
+        }
+        // It never closes, but half its lights go off in the small hours.
+        let open: Float = hour >= 5 && hour < 23.5 ? 0.9 : 0.45
+        px.fill(left, base, right - left, 2, lit(rgb(150, 150, 146), keyFront))
+        glazing(left, right, base + 2, 8, share: open)
+        px.fill(left - 2, base + 10, right - left + 4, 2, lit(rgb(232, 232, 226), keyFront, shade: 0.8))
+        px.fill(left - 2, base + 12, right - left + 4, 1, lit(rgb(240, 240, 234), keyTop, shade: 1.1))
+        px.fill(hall.lowerBound, base + 13, hall.count, 1, lit(rgb(150, 150, 146), keyFront))
+        glazing(hall.lowerBound, hall.upperBound, base + 14, 5, share: open)
+        for r in 0..<3 { px.fill(hall.lowerBound - 2 + r * 3, base + 19 + r, hall.count + 4 - r * 6, 1, lit(rgb(240, 240, 234), keyTop, shade: r == 2 ? 1.1 : 0.9)) }
+        for vent in [left + 14, left + 30, right - 20] { px.fill(vent, base + 13, 6, 2, lit(rgb(170, 172, 176), keyFront, shade: 0.85)) }
+
+        // The control tower: a concrete shaft, a cab of dark glass leaning out under its roof, and the beacon's mast.
+        let tx = controlTower, concrete = rgb(196, 192, 182), onRight = tx < w / 2
+        px.fill(tx - 2, base, 5, 44, lit(concrete, keyFront))
+        px.fill(onRight ? tx + 2 : tx - 2, base, 1, 44, lit(concrete, onRight ? keyRight : keyLeft, shade: 0.72))
+        for y in stride(from: base + 6, to: base + 40, by: 8) { px.fill(tx - 1, y, 1, 3, lit(concrete * 0.5, .zero)) }
+        for (r, half) in [(44, 3), (45, 4), (46, 5)] { px.fill(tx - half, base + r, half * 2 + 1, 1, lit(concrete * 0.9, keyFront)) }
+        let cab = mix(mix(behind, zenith, 0.6) * 0.5, rgb(20, 44, 40), 0.4)
+        for r in 0..<5 { px.fill(tx - 6 - r / 2, base + 47 + r, 13 + r / 2 * 2, 1, dark ? mix(cab, rgb(150, 190, 160), glow * 0.22) : cab) }
+        for mx in [tx - 3, tx, tx + 3] { px.fill(mx, base + 47, 1, 5, .zero, 0.35) }
+        px.fill(tx - 9, base + 52, 19, 1, lit(rgb(232, 232, 226), keyTop, shade: 1.1))
+        px.fill(tx - 4, base + 53, 9, 2, lit(concrete * 0.85, keyFront))
+        px.fill(tx, base + 55, 1, 6, metal)
+        px.fill(tx + 3, base + 55, 1, 3, metal)
+        px.plot(tx + 3, base + 58, rgb(255, 60, 50), night)
+
+        // Floodlights over the stands: a mast between each pair, and at night a pool of light on the apron under it.
+        for mx in (stands + [stands.last! + stands[1] - stands[0]]).map({ $0 - (stands[1] - stands[0]) / 2 }) {
+            px.fill(mx, base - 1, 1, 22, metal)
+            px.fill(mx - 2, base + 21, 5, 1, metal)
+            px.fill(mx - 2, base + 20, 5, 1, mix(rgb(200, 200, 196), lamp, night))
+            guard night > 0.3 else { continue }
+            for (rx, a) in [(30, 0.1), (20, 0.1), (11, 0.12)] as [(Int, Float)] {
+                for dy in 0...5 { let reach = rx * (6 - dy) / 6; px.fill(mx - reach, apron - 1 + dy, reach * 2 + 1, 1, lamp, a * night) }
+            }
+            for dy in -1...1 { px.fill(mx - 3, base + 20 + dy, 7, 1, lamp, 0.25 * night) }
+        }
+
+        // The taxiway, with a yellow line down it and blue lights along its edges.
+        let tarmac = mix(rgb(86, 88, 96), rgb(20, 20, 30), night)
+        px.fill(0, taxiway - 1, w, 3, tarmac)
+        px.fill(0, taxiway, w, 1, mix(rgb(214, 190, 90), tarmac, 0.55 + 0.3 * night))
+        for lx in stride(from: 4, to: w, by: 10) where dark {
+            px.plot(lx, taxiway - 1, rgb(70, 120, 255), glow)
+            px.plot(lx + 5, taxiway + 1, rgb(70, 120, 255), glow * 0.8)
+        }
+        // A windsock on the grass beyond the apron: streaming downwind, fully out at 28 km/h (a real one's 15 knots)
+        // and drooping as the wind drops; limp when there's no wind to go by.
+        let along = windAlong ?? 0, reach = min(6, Int(abs(along) / 28 * 6)), sx = w * 91 / 100, top = taxiway + 11
+        px.fill(sx, taxiway + 2, 1, 10, metal)
+        for i in 0..<6 {
+            let out = min(i, reach), down = i - out // so far along the wind, then hanging
+            let paint = lit(i / 2 % 2 == 0 ? rgb(238, 120, 44) : rgb(238, 236, 228), keyFront)
+            px.plot(sx + (along > 0 ? -1 - out : 1 + out), top - down, paint)
+            if i < 3 { px.plot(sx + (along > 0 ? -1 - out : 1 + out), top - down - 1, paint) }
+        }
+        px.plot(sx, top + 1, mix(metal, lamp, night))
+        // The grass between the runway and the taxiway: signs that light up.
+        for sx in [w * 22 / 100, w * 47 / 100, w * 81 / 100] {
+            px.fill(sx, taxiway - 3, 3, 1, mix(rgb(214, 190, 60), rgb(255, 220, 110), night))
+            px.plot(sx + 3, taxiway - 3, mix(rgb(170, 50, 44), rgb(255, 70, 60), night))
+        }
+        // The runway: white lines along its edges and dashes down the middle, rubber where the wheels come down, and
+        // at night white lights along both edges.
+        let asphalt = mix(rgb(66, 68, 76), rgb(14, 14, 22), night), paint = mix(rgb(226, 226, 220), rgb(96, 98, 112), night)
+        px.fill(0, field + 4, w, 6, asphalt)
+        px.fill(0, field + 4, w, 1, paint, 0.55)
+        px.fill(0, field + 9, w, 1, paint, 0.4)
+        for dx in stride(from: 3, to: w, by: 14) { px.fill(dx, runway + 1, 7, 1, paint, 0.7) }
+        for share in [0.3, 0.7] as [Float] { // the touchdown zones
+            let cx = Int(Float(w) * share)
+            px.fill(cx - 24, runway, 48, 2, .zero, 0.22)
+            for dx in [-18, -6, 6, 18] { px.fill(cx + dx - 2, runway + 2, 4, 1, paint, 0.7) }
+        }
+        for lx in stride(from: 2, to: w, by: 12) where dark {
+            px.plot(lx, field + 4, rgb(255, 244, 214), glow)
+            px.plot(lx + 6, field + 9, rgb(255, 244, 214), glow * 0.7)
+        }
+        // The sea wall: rough stone, dark and wet where it meets the water.
+        let stone = lit(rgb(132, 128, 120), keyFront)
+        px.fill(0, field, w, 4, stone)
+        px.fill(0, field + 3, w, 1, lit(rgb(160, 156, 146), keyTop))
+        px.fill(0, field, w, 1, stone * 0.5)
+        for sx in 0..<w where rng.next() % 3 == 0 { px.plot(sx, field + 1 + Int(rng.next() % 2), stone * 0.78) }
+    }
+
     /// The parks in the waterfront's gaps: a hedge and a few round trees, lit from the Sun's side.
     private func drawParks(into px: inout Pixels) {
         let leaf = rgb(72, 118, 70), fromRight = keyRight.sum() >= keyLeft.sum()
@@ -1561,6 +1800,7 @@ final class PixelCity: SKScene {
                 nextShip = clock + .random(in: 90...240)
             }
         }
+        if city == .airport { fly(dt) }
         if planeDirection != 0 {
             planeX += planeDirection * 7 * dt
             plane.position.x = CGFloat(planeX.rounded(.down))
@@ -1588,7 +1828,168 @@ final class PixelCity: SKScene {
         cars[i].beam.position = CGPoint(x: CGFloat(look.length) / 2 - 1, y: -1)
         cars[i].node.position.x = CGFloat(x.rounded(.down))
         cars[i].node.isHidden = false
-        nextCar[lane] = clock + .random(in: 1.5...6) / traffic
+        nextCar[lane] = clock + .random(in: 1.5...6) / traffic * (city == .airport ? 6 : 1)
+    }
+
+    // MARK: - The Airport's aircraft
+
+    /// Moves the Airport's aircraft on through their rounds: down the approach and along the runway, off its far
+    /// end and back along the taxiway to a stand, a wait there, on along the taxiway to the runway's other end,
+    /// and away. One at a time has the runway, and all of them land and take off the same way, into the wind.
+    private func fly(_ dt: Float) {
+        let out: Float = 70, taxi: Float = 7 // how far past the screen's edge is out of sight; taxiing speed
+        func edge(_ way: Float) -> Float { way > 0 ? -out : Float(w) + out } // where something heading that way comes in
+        func gone(_ x: Float, _ way: Float) -> Bool { way > 0 ? x > Float(w) + out : x < -out }
+        var clear = !flights.contains { $0.onRunway }
+        // The runway changes direction only once the airfield has emptied, as a real one's traffic pauses for it.
+        if flights.allSatisfy({ $0.phase == .away }) { runwayWay = windWay }
+        for i in flights.indices {
+            var f = flights[i]
+            // Aircraft on the taxiway all go the same way; one holds while another is close ahead of it.
+            let near = flights.indices.filter { $0 != i && flights[$0].taxiing && abs(flights[$0].x - f.x) < 80 }
+            let held = near.contains { (flights[$0].x - f.x) * -f.way > 0 }
+            switch f.phase {
+            case .away: // back when its wait is over, the runway is clear and there's a stand for it
+                let free = stands.indices.filter { stand in !flights.contains { (1...5).contains($0.phase.rawValue) && $0.stand == stand } }
+                guard clock >= f.until, clear, runwayWay == windWay, let stand = free.randomElement() else { break }
+                change(&f)
+                (f.phase, f.stand, f.way, f.x, f.speed) = (.approach, stand, runwayWay, edge(runwayWay), 26)
+                (f.slope, f.gear, f.berth, clear) = (0, true, 0, false)
+            case .approach: // down a steady slope to the touchdown point, easing off with the nose up at the last
+                f.x += f.way * f.speed * dt
+                let left = (Float(w) * (0.5 - 0.2 * f.way) - f.x) * f.way
+                f.height = left > 40 ? left * 0.105 : max(0, 4.2 * left * left / 1600)
+                f.slope = left > 40 ? 0 : 0.06
+                if left <= 0 { (f.phase, f.until, movements) = (.rollout, clock + 1.5, movements + 1) }
+            case .rollout: // the nose comes down, and it slows along the runway and off its far end
+                if clock >= f.until { f.slope = 0 }
+                f.speed = max(10, f.speed - 1.3 * dt)
+                f.x += f.way * f.speed * dt
+                if gone(f.x, f.way) { (f.phase, f.until, clear) = (.vacated, clock + .random(in: 10...20), true) }
+            case .vacated:
+                if clock >= f.until, near.isEmpty { (f.phase, f.x, f.speed) = (.taxiIn, edge(-f.way), taxi) }
+            case .taxiIn: // back along the taxiway, slowing as it pulls off onto its stand
+                let left = (Float(stands[f.stand]) - f.x) * -f.way
+                f.berth = 1 - min(max(left / 30, 0), 1)
+                if !held { f.x -= f.way * min(taxi, 2.5 + left * 0.15) * dt }
+                if left <= 0.5 { (f.phase, f.x, f.berth, f.until) = (.parked, Float(stands[f.stand]), 1, clock + .random(in: 150...330) / flying) }
+            case .parked: // its engines start a few seconds before it moves off
+                if clock >= f.until, near.isEmpty { (f.phase, f.speed) = (.taxiOut, 0) }
+            case .taxiOut: // off its stand, and on along the taxiway to the runway's other end
+                f.speed = min(taxi, f.speed + 2 * dt)
+                if !held { f.x -= f.way * f.speed * dt }
+                f.berth = max(0, 1 - abs(f.x - Float(stands[f.stand])) / 30)
+                if gone(f.x, -f.way) { (f.phase, f.until) = (.crossing, clock + .random(in: 8...16)) }
+            case .crossing:
+                if clock >= f.until, clear { (f.phase, f.x, f.speed, clear) = (.lineUp, edge(f.way), taxi + 2, false) }
+            case .lineUp: // onto the runway, and a pause at the start of its run
+                if (Float(w) * (0.5 - 0.4 * f.way) - f.x) * f.way > 0 {
+                    f.x += f.way * f.speed * dt
+                    f.until = clock + 4
+                } else if clock >= f.until { (f.phase, f.speed) = (.takeoff, 0) }
+            case .takeoff: // faster and faster, then the nose lifts, it leaves the ground and the wheels go up
+                f.speed = min(36, f.speed + 3.5 * dt)
+                f.x += f.way * f.speed * dt
+                // ponytail: the nose goes no higher than 1 in 6, where the art still slides in clean steps; steeper
+                // and its stripes break into checks. Draw a climbing aircraft by hand if it should pitch like a real one.
+                if f.speed > 24 { f.slope = min(1 / 6, f.slope + 0.1 * dt) }
+                if f.slope > 0.08 { f.height += f.speed * (f.slope * 1.25 - 0.02) * dt }
+                f.gear = f.height < 12
+                if gone(f.x, f.way) || f.height > Float(h) {
+                    movements += 1
+                    (f.phase, f.until, f.height, clear) = (.away, clock + .random(in: 40...150) / flying, 0, true)
+                }
+            }
+            let y = f.onRunway ? Float(runway) + f.height : Float(taxiway) + f.berth * Float(apron - taxiway)
+            f.node.position = CGPoint(x: CGFloat(f.x.rounded(.down)), y: CGFloat(y.rounded(.down)))
+            let running = f.phase != .parked || clock > f.until - 8
+            let look = [f.phase.rawValue, Int(f.slope * 50), f.gear ? 1 : 0, Int(f.berth * 4), running ? 1 : 0]
+            let changed = look != f.look
+            f.look = look
+            flights[i] = f
+            if changed { dress(i) }
+            if mirrors.indices.contains(i) { // where the water's shader finds it: its left edge, and its foot above the ground
+                let turned: Float = f.facing < 0 ? -1 : 1, size = f.node.size
+                let place: SIMD4<Float> = f.node.isHidden ? [-999, 0, 1, 1]
+                    : [f.x.rounded(.down) - turned * Float(f.wheels), (f.onRunway ? f.height.rounded(.down) : 0) - Float(flights[i].below),
+                       turned * Float(size.width), Float(size.height)]
+                if mirrors[i].place.vectorFloat4Value != place { mirrors[i].place.vectorFloat4Value = place }
+            }
+        }
+    }
+
+    /// A new aircraft for a flight: mostly airliners, some turboprops and one wide-body at most, in a livery of our
+    /// own that no other aircraft on the airfield is wearing.
+    private func change(_ f: inout Flight) {
+        let heavy = flights.contains { $0.rows == widebody && $0.node !== f.node }
+        f.rows = [airliner, airliner, airliner, airliner, turboprop, turboprop, heavy ? airliner : widebody].randomElement()!
+        let liveries = [rgb(34, 120, 132), rgb(204, 84, 52), rgb(44, 62, 120), rgb(226, 176, 52), rgb(120, 60, 110), rgb(70, 140, 84)]
+        f.accent = liveries.filter { paint in !flights.contains { $0.accent == paint } }.randomElement() ?? liveries[0]
+        f.wheels = Array(f.rows.last!).firstIndex(of: "o") ?? 0
+    }
+
+    /// Gives an aircraft the look of this moment: its pitch and wheels, the light it stands in, the way it faces
+    /// and which of its lights are on. The water mirrors the same picture.
+    private func dress(_ i: Int) {
+        let f = flights[i], slope = Float(Int(f.slope * 50)) / 50
+        func lift(_ x: Int) -> Int { Int((Float(x - f.wheels) * slope).rounded()) }
+        /// The column of the first or last of a character in the art, and its row counted up from the wheels.
+        func find(_ ch: Character, last: Bool = false) -> (x: Int, y: Int) {
+            let found = f.rows.enumerated().compactMap { r, row -> (x: Int, y: Int)? in
+                let line = Array(row)
+                return (last ? line.lastIndex(of: ch) : line.firstIndex(of: ch)).map { ($0, f.rows.count - 1 - r) }
+            }
+            return (last ? found.max { $0.x < $1.x } : found.min { $0.x < $1.x }) ?? (0, 0)
+        }
+        func spot(_ x: Int, _ y: Int) -> CGPoint { CGPoint(x: CGFloat(x - f.wheels) + 0.5, y: CGFloat(y + lift(x)) + 0.5) }
+        let nose = find("o", last: true), tip = find("S"), mid = f.rows[0].count / 2
+        let back = f.rows.count - (f.rows.firstIndex { Array($0)[mid] != "." } ?? 0) // its back, halfway along
+        let landing = [.approach, .lineUp, .takeoff].contains(f.phase)
+        // The light it stands in: the sky's and the Sun's, and at night the apron's floodlights once it's on its stand.
+        let light = mix(ambient + keyFront + keyTop * 0.25, RGB(0.8, 0.74, 0.62), night * Float(Int(f.berth * 4)) / 4 * 0.6)
+        let (texture, below) = aircraft(f.rows, accent: f.accent, slope: slope, gear: f.gear, wheels: f.wheels, light: light,
+                                        lamp: landing ? (nose.x, nose.y + 1) : nil)
+        let size = texture.size()
+        (f.node.texture, f.node.size) = (texture, size)
+        f.node.anchorPoint = CGPoint(x: CGFloat(f.wheels) / size.width, y: CGFloat(below) / size.height)
+        flights[i].below = below
+        if mirrors.indices.contains(i) { mirrors[i].picture.textureValue = texture }
+        (f.beacon.position, f.lamp.position) = (spot(mid, back), spot(nose.x, nose.y + 1))
+        (f.wingtip.position, f.strobe.position) = (spot(tip.x, tip.y), spot(tip.x, tip.y))
+        f.node.xScale = CGFloat(f.facing)
+        f.node.zPosition = f.onRunway ? 4.6 : f.berth > 0.5 ? 4.2 : 4.4
+        f.node.isHidden = [.away, .vacated, .crossing].contains(f.phase)
+        f.wingtip.color = f.facing > 0 ? NSColor(red: 0.2, green: 1, blue: 0.4, alpha: 1) : NSColor(red: 1, green: 0.2, blue: 0.15, alpha: 1)
+        f.wingtip.alpha = CGFloat(night)
+        f.beacon.isHidden = f.phase == .parked && clock <= f.until - 8
+        f.strobe.isHidden = !f.onRunway
+        f.lamp.isHidden = !landing
+    }
+
+    /// An aircraft from rows of characters, nose to the right, in this `light`, with its nose up by `slope` pixels
+    /// for each pixel along: every column slides up or down whole pixels about the main wheels, which is how pixel
+    /// art draws a shallow line. Without `gear` its wheels are up. Its cabin lights show after dark, and a landing
+    /// light at `lamp` (a column, and a row above the wheels) if it has one on. Returns the picture and how far it
+    /// reaches below the wheels.
+    private func aircraft(_ rows: [String], accent: RGB, slope: Float, gear: Bool, wheels: Int, light: RGB,
+                          lamp: (x: Int, y: Int)?) -> (texture: SKTexture, below: Int) {
+        func lift(_ x: Int) -> Int { Int((Float(x - wheels) * slope).rounded()) }
+        let width = rows[0].count, below = max(0, -lift(0)), height = rows.count + below + max(0, lift(width - 1))
+        var paints: [Character: RGB] = [
+            "W": rgb(236, 238, 240), "g": rgb(170, 176, 186), "c": accent, "T": accent, "h": rgb(200, 204, 212), "S": rgb(206, 210, 218),
+            "s": rgb(150, 156, 168), "e": rgb(110, 116, 128), "E": rgb(196, 200, 208), "p": rgb(60, 62, 70), "w": rgb(70, 96, 130), "k": rgb(52, 70, 96),
+        ]
+        if gear { (paints["l"], paints["o"]) = (rgb(90, 94, 104), rgb(30, 30, 36)) }
+        var px = Pixels(width, height)
+        for (r, row) in rows.enumerated() {
+            for (x, ch) in row.enumerated() {
+                let y = rows.count - 1 - r + below + lift(x)
+                if let colour = paints[ch] { px.plot(x, y, pointwiseMin(colour * light, .one)) }
+                if ch == "w" { px.plot(x, y, rgb(255, 220, 140), min(1, night * 1.6)) }
+            }
+        }
+        if let lamp { px.plot(lamp.x, lamp.y + below + lift(lamp.x), rgb(255, 250, 235)) }
+        return (px.texture(), below)
     }
 
     /// Relative traffic for the hour: quiet small hours, rush hours at 8 and 17.
@@ -1652,8 +2053,8 @@ private enum Roof: CaseIterable { case plain, ledge, setback, tank, antenna }
 
 /// The cities Settings can pick, in the menu's order. The pick is stored as its index, so add new ones at the end.
 private enum City: Int, CaseIterable {
-    case waterfront, foothills, bridge, hillside, overlook
-    var name: String { ["Waterfront", "Foothills", "Long Bridge", "Hillside Town", "Overlook"][rawValue] }
+    case waterfront, foothills, bridge, hillside, overlook, airport
+    var name: String { ["Waterfront", "Foothills", "Long Bridge", "Hillside Town", "Overlook", "Airport"][rawValue] }
 }
 
 /// What a building is: a windowless tower in the haze, a stone tower with setbacks, a glass curtain wall, a brick
@@ -1678,6 +2079,30 @@ private struct Car {
     let lane: Int // 0 near, heading right; 1 far, heading left
     var look = 0
     var x: Float = 0, cruise: Float = 0, speed: Float = 0, length: Float = 16
+}
+
+/// One of the Airport's aircraft, and where it is in its round.
+@MainActor private struct Flight {
+    /// Away; coming down the approach; rolling out; off the runway's end and round to the taxiway, out of sight;
+    /// taxiing in; on its stand; taxiing out; round to the runway's other end; lining up; rolling and climbing away.
+    enum Phase: Int { case away, approach, rollout, vacated, taxiIn, parked, taxiOut, crossing, lineUp, takeoff }
+    let node = SKSpriteNode()
+    let beacon = SKSpriteNode(color: NSColor(red: 1, green: 0.2, blue: 0.15, alpha: 1), size: CGSize(width: 1, height: 1)) // flashes while the engines run
+    let strobe = SKSpriteNode(color: .white, size: CGSize(width: 1, height: 1)) // flashes on the runway and in the air
+    let wingtip = SKSpriteNode(color: .green, size: CGSize(width: 1, height: 1)) // green on the right wing, red on the left
+    let lamp = SKSpriteNode() // the landing light's glare
+    var rows = airliner, accent = RGB.one
+    var phase = Phase.away, until: TimeInterval = 0
+    var way: Float = 1 // the way it lands and takes off: 1 to the right. It taxis the other way.
+    var x: Float = 0, height: Float = 0, speed: Float = 0
+    var slope: Float = 0, gear = true // how far its nose is up, in pixels per pixel along; whether its wheels are down
+    var stand = 0, berth: Float = 0   // how far it has pulled off the taxiway onto its stand, 0…1
+    var wheels = 0, below = 0         // the column its main wheels are in, and how far its picture reaches below them
+    var look: [Int] = []              // what it was last dressed for
+
+    var onRunway: Bool { [.approach, .rollout, .lineUp, .takeoff].contains(phase) }
+    var taxiing: Bool { phase == .taxiIn || phase == .taxiOut }
+    var facing: Float { taxiing || phase == .parked ? -way : way }
 }
 
 @MainActor private struct Cloud {
@@ -1751,6 +2176,61 @@ private let bus = [
     "dddddddddddddddddddddddddd",
     "ddoooddddddddddddddooodddd",
     "..ooo..............ooo....",
+]
+
+// The Airport's aircraft, nose to the right. T is the fin and c the stripe along the side, both in the airline's
+// colour; w the cabin's windows and k the flight deck's; S and s the wing; e an engine; l and o legs and wheels.
+private let airliner = [
+    ".TTT......................................",
+    ".TTTT.....................................",
+    ".TTTTT....................................",
+    "..TTTTT...................................",
+    "..TTTTTT..................................",
+    "...TTTTTT.................................",
+    "...TTTTTTTT...............................",
+    "WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW......",
+    "hhhhhWWwWwwwwwwwwwWwwwwwwwwWwwwwwwWWkkW...",
+    "..WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW.",
+    ".....ccccccccSSSSSSSSSccccccccccccccccccc.",
+    ".........ggggggggsssssssssgggggggggggg....",
+    "..................ll..eeeeeE.......l......",
+    ".................ooo...............o......",
+]
+
+private let turboprop = [
+    "hhhhh.........................",
+    "..TT..........................",
+    "..TTT.........................",
+    "...TTT......SSSSSSSSS.........",
+    "...TTTT......eeeeeeeEp........",
+    "WWWWWWWWWWWWWWWWWWWWWpWWW.....",
+    ".WWWwwwwwwwwwwwwwwwwwpwwWkkW..",
+    "...WWWWWWWWWWWWWWWWWWpWWWWWWW.",
+    ".....cccccccccccccccccccccccc.",
+    ".......ggggggggggggggpggggg...",
+    ".............oo..........o....",
+]
+
+private let widebody = [
+    "..TTT.......................................................",
+    "..TTTT......................................................",
+    "..TTTTT.....................................................",
+    "...TTTTT....................................................",
+    "...TTTTTT...................................................",
+    "....TTTTTT..................................................",
+    "....TTTTTTT.................................................",
+    "....TTTTTTTT................................................",
+    ".....TTTTTTTTT..............................................",
+    ".WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW.......",
+    "WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW.....",
+    "hhhhhhhhWwwWwwwwwwwwwwWwwwwwwwwwwwwwWwwwwwwwwwwwwWwwwwWkkkW.",
+    "...WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW",
+    ".....WWWWWWWWWWWWWWSSSSSSSSSSSSWWWWWWWWWWWWWWWWWWWWWWWWWWWWW",
+    "........ccccccccccccccSSSSSSSSSSSScccccccccccccccccccccccc..",
+    "............ggggggggggggggsssssssssssgggggggggggggggggg.....",
+    "........................ll.....eeeeeeeE............l........",
+    ".......................oooo....eeeeeeeE............o........",
+    ".......................oooo.................................",
 ]
 
 // MARK: - Pixel canvas

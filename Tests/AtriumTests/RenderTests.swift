@@ -152,3 +152,19 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
     _ = PixelCity(size: CGSize(width: 400, height: 250))
     #expect(PixelCity.knobs[0].value != before)
 }
+
+/// Pixel City's Airport keeps its aircraft going round: over twenty minutes of a day's flying there are landings and
+/// take-offs, and never two aircraft on the runway at once.
+@MainActor @Test func pixelCityAirportKeepsMoving() throws {
+    guard case .choice(let cities) = PixelCity.knobs[0].format else { return }
+    let settings = ["city.place": Double(try #require(cities.firstIndex(of: "Airport"))), "city.previewTime": 1, "city.previewHour": 12, "city.wind": 0]
+    defer { settings.keys.forEach(UserDefaults.standard.removeObject) }
+    for (key, value) in settings { UserDefaults.standard.set(value, forKey: key) }
+    let scene = PixelCity(size: CGSize(width: 800, height: 500))
+    var crowded = false
+    for step in 0..<12_000 { // a tenth of a second at a time
+        scene.update(Double(step) / 10)
+        crowded = crowded || scene.runwayCount > 1
+    }
+    #expect(scene.movements >= 8 && !crowded, "\(scene.movements) landings and take-offs")
+}
