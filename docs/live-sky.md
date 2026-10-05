@@ -13,7 +13,7 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
 - **Kind:** hybrid. The background and the Moon are SKShaders; stars, planets, the Sun, the ISS, labels and meteors are sprites; the ground is a Core Graphics texture.
 
 ## How it works
-- **Projection.** A stereographic projection centred on the horizon point the view faces: south, or north when latitude < 0 (`facingSouth`). Great circles through the centre stay straight, so the horizon is a straight line. `scale` gives about a 120° horizontal field of view; `horizonY` sits 12% up the screen. `project()` returns nil for points behind the viewer (`1 + forward <= 0.2`). `place()` hides a node that's below the horizon (z < −0.01) or more than 30 pt off-screen.
+- **Projection.** A stereographic projection centred on the horizon point the view faces: south, or north when latitude < 0 (`facingSouth`). Great circles through the centre stay straight, so the horizon is a straight line. `scale` gives about a 120° horizontal field of view; `horizonY` sits 12% up the screen (`landHorizon`), or on its bottom edge while the landscape is switched off, so the sky fills the screen and nothing in it is below the horizon. `project()` returns nil for points behind the viewer (`1 + forward <= 0.2`). `place()` hides a node that's below the horizon (z < −0.01) or more than 30 pt off-screen.
 - **Frames.** Equatorial directions are J2000 unit vectors. `Sky.horizonMatrix(jd:latitude:longitude:)` turns them into (east, north, up). `refresh()` recomputes every position every 5 s, and on any settings change.
 - **Background shader** (`addSkyBackground`): each pixel is un-projected back onto the sphere, as (right, up, forward).
   - It mixes a night gradient and a day gradient by `u_day`.
@@ -36,7 +36,7 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
   - Glow alpha = 0.5 · lit · (1 − 0.7 · day).
 - **ISS:** in `update(_:)`, using `ISS.shared.position()` → `Sky.lookDirection` → `place()`. It's shown only while sunlit (the real naked-eye condition), with a label as a child.
 - **Meteors:** a painted 140×2 pt streak every 15–75 s (`wait 45 ± 30`), fading over 0.7 s.
-- **Ground:** a hill ridge and stands of conifers painted once (`addHorizon`), plus faint compass letters (SE, S, SW, or NW, N, NE).
+- **Ground:** a hill ridge and stands of conifers painted once (`addHorizon`) into the `ground` node, which Settings can hide, plus faint compass letters (SE, S, SW, or NW, N, NE). The letters stay when the landscape goes, just above the bottom edge.
 
 ## Time, live data and appearance
 - **Time:** `skyDate` is `Date()`, or today at `sky.previewHour` while `sky.previewTime` is on.
@@ -68,13 +68,14 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
 |---|---|---|---|---|
 | `sky.constellations` | Constellation lines | toggle | on | `constellations.isHidden` |
 | `sky.planetLabels` | Planet labels | toggle | on | the planet nodes' label children |
+| `sky.landscape` | Show a landscape | toggle | on | `ground.isHidden`, and `horizonY` (12% up, or the bottom edge) through `u_horizon` |
 | `sky.previewTime` | Preview a time of day | toggle | off | `skyDate` uses the preview hour |
 | `sky.previewHour` | Time (shown while previewing) | 0–24 h | 13:00 | the hour for `skyDate` |
 
 `applySettings()` observes `UserDefaults.didChangeNotification` and calls `refresh()` every time, including for unrelated defaults writes. Each call places about 2,900 sprites, which is cheap but not free.
 
 ## Tuning constants
-- **View:** a 120° field of view (`scale`), horizon at 12% (`horizonY`).
+- **View:** a 120° field of view (`scale`), horizon at 12% (`landHorizon`).
 - **Timing:** refresh every 5 s; meteors every 45 ± 30 s.
 - **Stars:**
   - size `11 − 1.55·V`, minimum 2.2 pt
@@ -106,6 +107,7 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
 - **Moon.** "Show the moon phase as it would from my location" meant that the Moon itself should be accurate. A bottom-left phase badge was added, then removed at his request as redundant. Don't bring back a HUD for this.
 - **Moon's terminator (2026-10-03).** In Weather he saw the half Moon end in a hard edge by day, where the real one fades into the sky, and asked for Live Sky to be checked too. Both now share `moonShade`. Live Sky had also drawn the dark side as a black half-disc on the blue day sky.
 - **Switches.** He asked for the constellation and planet-label switches.
+- **Landscape (2026-10-05).** He asked for a switch to turn the landscape off, and for more silhouettes to choose between. Off means no ground at all, not a flat one: the horizon drops to the bottom edge.
 - **Preview.** Added so he could see the daytime look on demand.
 
 ## Ideas / next steps
@@ -120,7 +122,7 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
 
 ## Checking it
 - `SNAPSHOT_SCENE="Live Sky" swift test` renders the current moment at the fallback location, because the test process has its own defaults domain.
-- To render a set time: `SNAPSHOT_DEFAULTS="sky.previewTime=1,sky.previewHour=18.8" SNAPSHOT_SCENE="Live Sky" swift test`. Try 13 for noon, about 18.8 for sunset at the test's fallback longitude of −90°, and 23 for night. To hide things, add `sky.constellations=0,sky.planetLabels=0`.
+- To render a set time: `SNAPSHOT_DEFAULTS="sky.previewTime=1,sky.previewHour=18.8" SNAPSHOT_SCENE="Live Sky" swift test`. Try 13 for noon, about 18.8 for sunset at the test's fallback longitude of −90°, and 23 for night. To hide things, add `sky.constellations=0,sky.planetLabels=0,sky.landscape=0`.
 - `swift test --filter SkyTests`:
   - positions matched against Horizons
   - the Moon's lit fraction and waxing/waning

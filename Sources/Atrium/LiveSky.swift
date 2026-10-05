@@ -11,6 +11,8 @@ final class LiveSky: SKScene {
         Knob(key: "sky.constellations", label: "Constellation lines", range: 0...1, standard: 1, section: "Show",
              format: .toggle),
         Knob(key: "sky.planetLabels", label: "Planet labels", range: 0...1, standard: 1, section: "Show", format: .toggle),
+        Knob(key: "sky.landscape", label: "Show a landscape", range: 0...1, standard: 1, section: "Landscape",
+             format: .toggle),
         Knob(key: "sky.previewTime", label: "Preview a time of day", range: 0...1, standard: 0, section: "Preview",
              format: .toggle),
         Knob(key: "sky.previewHour", label: "Time", range: 0...24, standard: 13, section: "Preview", format: .clock,
@@ -33,7 +35,13 @@ final class LiveSky: SKScene {
     private let twilightUniform = SKUniform(name: "u_twilight", float: 0)
     private let sunUniform = SKUniform(name: "u_sun", vectorFloat3: [0, 0, 1])
 
-    private var horizonY: CGFloat { size.height * 0.12 }
+    /// The horizon's height on screen: `landHorizon` with a landscape, and the bottom edge without one, so the sky
+    /// fills the screen and nothing in it is below the horizon.
+    private var horizonY: CGFloat = 0
+    private var landHorizon: CGFloat { size.height * 0.12 }
+    private let horizonUniform = SKUniform(name: "u_horizon", float: 0)
+    private let ground = SKNode()
+    private var compass: [SKLabelNode] = []
     /// Points per unit of stereographic plane, for a ~120° field of view across the screen.
     private var scale: Double { Double(size.width) / 2 / (2 * tan(120.0 / 4 * .pi / 180)) }
     /// The direction we face: south, or north from the southern hemisphere.
@@ -59,7 +67,6 @@ final class LiveSky: SKScene {
         addChild(iss)
         addHorizon()
 
-        refresh()
         run(.repeatForever(.sequence([.wait(forDuration: 5), .run { [weak self] in self?.refresh() }])))
         applySettings()
         NotificationCenter.default.addObserver(self, selector: #selector(applySettings),
@@ -80,17 +87,22 @@ final class LiveSky: SKScene {
         place(iss, at: look)
     }
 
-    /// Shows or hides the constellation lines and planet labels as Settings says, and redraws for a preview time.
+    /// Shows or hides the constellation lines, planet labels and landscape as Settings says, and redraws for a
+    /// preview time.
     @objc private func applySettings() {
         constellations.isHidden = Self.knobs[0].value < 0.5
         for planet in planets { planet.node.children.forEach { $0.isHidden = Self.knobs[1].value < 0.5 } } // their labels
+        ground.isHidden = Self.knobs[2].value < 0.5
+        horizonY = ground.isHidden ? 0 : landHorizon
+        horizonUniform.floatValue = Float(horizonY)
+        for letter in compass { letter.position.y = ground.isHidden ? 8 : landHorizon * 0.3 }
         refresh()
     }
 
     /// Now, or today at the preview hour while previewing a time of day.
     private var skyDate: Date {
-        guard Self.knobs[2].value > 0.5 else { return Date() }
-        return Calendar.current.startOfDay(for: Date()).addingTimeInterval(Self.knobs[3].value * 3600)
+        guard Self.knobs[3].value > 0.5 else { return Date() }
+        return Calendar.current.startOfDay(for: Date()).addingTimeInterval(Self.knobs[4].value * 3600)
     }
 
     // MARK: Projection
@@ -403,7 +415,7 @@ final class LiveSky: SKScene {
             }
             """, uniforms: [
                 SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]),
-                SKUniform(name: "u_horizon", float: Float(horizonY)),
+                horizonUniform,
                 SKUniform(name: "u_scale", float: Float(scale)),
                 galacticUniform, dayUniform, twilightUniform, sunUniform,
             ])
@@ -412,10 +424,10 @@ final class LiveSky: SKScene {
 
     /// Rolling hills and a ragged treeline along the bottom, with faint compass points.
     private func addHorizon() {
-        let (width, height) = (size.width, horizonY + 60)
-        let ground = SKSpriteNode(texture: paint(CGSize(width: width, height: height)) { ctx in
+        let (width, height) = (size.width, landHorizon + 60)
+        let land = SKSpriteNode(texture: paint(CGSize(width: width, height: height)) { ctx in
             ctx.setFillColor(CGColor(red: 0.008, green: 0.01, blue: 0.02, alpha: 1))
-            let ridge = { (x: CGFloat) in self.horizonY * (0.72 + 0.16 * sin(x / 260 + 1) + 0.08 * sin(x / 83)) }
+            let ridge = { (x: CGFloat) in self.landHorizon * (0.72 + 0.16 * sin(x / 260 + 1) + 0.08 * sin(x / 83)) }
             let hills = CGMutablePath()
             hills.move(to: .zero)
             for x in stride(from: 0, through: width + 4, by: 4) { hills.addLine(to: CGPoint(x: x, y: ridge(x))) }
@@ -441,7 +453,8 @@ final class LiveSky: SKScene {
                 x += .random(in: 5...13)
             }
         }, size: CGSize(width: width, height: height))
-        ground.anchorPoint = .zero
+        land.anchorPoint = .zero
+        ground.addChild(land)
         ground.zPosition = 6
         addChild(ground)
 
@@ -452,9 +465,10 @@ final class LiveSky: SKScene {
             letter.text = name
             letter.fontSize = 12
             letter.fontColor = NSColor(white: 1, alpha: i == 1 ? 0.3 : 0.18)
-            letter.position = CGPoint(x: size.width / 2 + offset, y: horizonY * 0.3)
+            letter.position.x = size.width / 2 + offset
             letter.zPosition = 7
             addChild(letter)
+            compass.append(letter)
         }
     }
 
