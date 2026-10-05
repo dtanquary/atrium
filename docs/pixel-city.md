@@ -6,6 +6,7 @@ A pixel-art city that follows the real Sun and clock. The sky moves through dawn
 - **Street:** the original, side-on from the kerb, with a near and a far row of plain blocks.
 - **Foothills** (2026-10-04): a small downtown far off under three ridges of mountains, the highest snow-capped, across a valley floor with a highway and a line of pines.
 - **Long Bridge** (2026-10-04): a suspension bridge across a bay, strung with lights at night, with a small city and a headland on the far shore and a freighter that crosses now and then.
+- **Hillside Town** (2026-10-04): tiled houses terraced up a hill above a harbour, a church at the top, boats at their moorings, and a lighthouse at the end of the breakwater with the open sea beyond.
 
 - **Files:** `Sources/Atrium/PixelCity.swift`, which holds everything: the scene, both cities, the `Pixels` canvas, sprite art as strings, `SeededRandom`, the water's shader and its own low-precision `skyPosition()` for the Sun. It reads `Location.swift` ([live-sky.md](live-sky.md)).
 - **Entry:** `pixelCity(size:)` builds `final class PixelCity: SKScene`. Its entry in Scenes.swift is "Pixel City", icon `building.2.fill`, tint `.pink`, with `PixelCity.knobs`.
@@ -15,7 +16,7 @@ A pixel-art city that follows the real Sun and clock. The sky moves through dawn
 - **Resolution:** `pixel = max(2, round(height/240))` points per art pixel, so 4 pt on a 982 pt-tall display. The canvas is `w × h` art pixels (378 × 246 there). Motion rounds to whole art pixels so nothing blurs.
 - **Layers,** by `zPosition`: the sky (0), clouds (1), the plane (1.5), the city (2), the water (2.5), cars (3 and 4), the beacon (5). The city texture is clear wherever the sky shows, so clouds and planes pass behind the towers.
 - **A city is a case of `City`** (the menu's order, stored as the index, so new ones go at the end). `layOut()` sets what differs: `ground` (the row the city stands on), `waterRows`, `crest` (for each column, the row where the sky begins, which is the horizon the Sun and Moon rise over) and `skyBase` (the lowest of those, where the sky's gradient starts). `classic` is true for the Street, which keeps its first, simpler sky and light.
-- **`layOut()`** builds everything that never changes, and runs again when Settings picks another city. Each city has its own skyline (`layOutStreet`, `layOutWaterfront`, `layOutFoothills`, `layOutBridge`) from a fixed `SeededRandom`, so it's identical on every redraw and every display. Shared by both: 170 stars, 3 cloud masks, a pool of 6 cars per lane with headlights (7 sedan colours plus a bus), a plane with blinking nav lights, and the beacon (0.25 s on, 1.25 s off) on the landmark.
+- **`layOut()`** builds everything that never changes, and runs again when Settings picks another city. Each city has its own skyline (`layOutStreet`, `layOutWaterfront`, `layOutFoothills`, `layOutBridge`, `layOutHillside`) from a fixed `SeededRandom`, so it's identical on every redraw and every display. Shared by both: 170 stars, 3 cloud masks, a pool of 6 cars per lane with headlights (7 sedan colours plus a bus), a plane with blinking nav lights, and the beacon (0.25 s on, 1.25 s off) on the landmark.
 - **`redraw()`** runs at init, every 30 s and when a setting changes. It paints the sky into one `Pixels` buffer and the city into another:
   - **Sky:** a gradient between zenith and horizon colours from `skyColours(elevation, morning:)`. The stops run −18°, −10°, −4°, 0°, 6° and 15°, and dawn is pinker than dusk. Around a low Sun the horizon's colour changes with the compass (`horizonToward`): orange under the Sun and, opposite it, the pink band over the Earth's shadow, so a sunset sky differs from one side of the screen to the other. It's quantised into 14 bands with 4×4 Bayer dithering, plus a sun glow around a low Sun in 5 flat rings, dithered only where two rings meet (dithering right across each ring left a halo of loose dots).
   - **Stars** fade in below about −5°; the brightest get a small cross.
@@ -83,6 +84,16 @@ The second of Dave's picks. It reuses the Waterfront's water and the Foothills' 
 - **Traffic:** `speck` cars on two rows of the deck.
 - **The freighter** (`freighter`, `shipTexture`): one crosses in front of the bridge at 2.2 pixels a second every 1.5 to 4 minutes, drawn with its own faint reflection (the water doesn't mirror sprites). By night its hull is a shadow with lit bridge windows and a mast light.
 
+### The Hillside Town city
+The third of Dave's picks, and the only one with no towers: a Mediterranean town, whose pale walls take the Sun's colour.
+
+- **Composition:** the sea fills everything below its horizon (`ground`, 26% up). The land stands in it on the left: a quay whose waterline is `harbour` (14% up, well below the horizon because it's near us), and above it a hill (`slope`) half the screen tall at the left edge that falls to the water 66% of the way across. A breakwater runs on to 86%, with the lighthouse near its end, and across the water on the right is a low headland (`hill`). The open sea and sky are on the right, where desktop icons sit, and by default the Sun sets there.
+- **Houses** (`layOutHillside`, seed 2063, drawn by `drawHouse`): 13 terraces 10 rows apart, the highest laid first so that nearer houses overlap those behind. A terrace runs from the left edge for as far as the hill stands that high. A house is 9 to 15 wide and two or three storeys, in one of seven wall colours, with a door, windows on the homes' hours (`isLit`), shutters on half of them, and a roof that is hipped, gabled toward us or flat. One plot in five is a gap with a cypress (`Kind.cypress`, in the same list so it's drawn in terrace order).
+- **The hill** (`drawHill`, before the houses): scrub with a lit edge and outcrops of rock, and the church near the top: a nave, and a bell tower with a pointed cap, a cross and a belfry that glows at night.
+- **The harbour** (`drawHarbour`, after them): the quay with a lamp every 18 pixels, the breakwater, the lighthouse (white with red bands; the beacon is its lantern, flashing white here), and two sails hull down on the horizon.
+- **Boats:** six sprites at moorings off the quay (`fishingBoat`, `sailboat`, painted by `afloat` with their own reflections, like the freighter), each rising and falling one pixel in its own time. There is no traffic: `cars` is empty.
+- **The water** mirrors the town about the quay's waterline, and the far headland about the horizon. The headland and sails are painted at 0.99 alpha, which the shader reads as "across the water" and leaves out of the near reflection, or they would be mirrored twice.
+
 ## Time, live data and appearance
 - **Time:** `now`: the real time, or today at the preview hour while Settings is previewing one. The hour for windows and traffic is the local clock hour.
 - **Sun:** `skyPosition()` at `Location.shared` (low precision, about 1°). `night = smoothstep(4°, −8°, sun elevation)`.
@@ -92,7 +103,7 @@ The second of Dave's picks. It reuses the Waterfront's water and the Foothills' 
 
 ## Settings
 `PixelCity.knobs`, read with `knob(_:)`. A change repaints at once (`settingsChanged`), and a change of city lays the scene out again first.
-- **City** (`city.view`): Street, Waterfront, Foothills or Long Bridge, as the index into `City`. Waterfront is the default.
+- **City** (`city.view`): Street, Waterfront, Foothills, Long Bridge or Hillside Town, as the index into `City`. Waterfront is the default.
 - **Looking** (`city.looking`): Toward the midday Sun (the default: toward the equator, which keeps the Sun and Moon in the sky and the city backlit) or one of eight compass points. Dave asked for it on 2026-10-04 after reading that the Waterfront's fronts stay in cool shade at sunset: "lets add support for the sun direction perhaps". The Waterfront's flanks were laid out for the default, so looking east or west the Sun rises or sets behind downtown.
 - **Preview a time of day** (`city.previewTime`, `city.previewHour`): shows today at that hour instead of now, the only way to see a sunset at noon. Off by default.
 
@@ -101,6 +112,7 @@ The second of Dave's picks. It reuses the Waterfront's water and the Foothills' 
 - **Waterfront:** water `0.21 × h` rows, quay 6 rows; `downtown` runs from 1 at 12% off centre to 0 at 30%; the landmark is 0.66 of the sky above the street; the reflection is squashed 1.8 times.
 - **Foothills:** ground `0.27 × h`; ridges (base, relief, as shares of the sky above the ground) 0.36 + 0.22, 0.22 + 0.17, 0.07 + 0.12; snow line 0.47; haze 0.36, 0.28, 0.14; highway 14–17 rows below the ground.
 - **Long Bridge:** ground `0.32 × h`; towers at 22% and 78%; deck `ground + 14`; tower tops 36% of the sky above the deck; hills scaled 1.7 on the left to 4.9 on the right; the ship 40 rows below the far shore.
+- **Hillside Town:** horizon `0.26 × h`, waterline `0.14 × h`; the hill `0.5 × h` tall, gone by 66% across; terraces every 10 rows; lighthouse at 84%.
 - **Timing:** redraw every 30 s.
 - **Window schedule** (`isLit`): home 16.5 h + 4.5·rand; bed 21 h + 6·rand; early risers 5.5 h + 1.5·rand. `officeShare`: 0.5 until 18:00, down to 0.08 by midnight, 0.08 to 0.45 between 05:30 and 08:00.
 - **Traffic:** the `traffic` table has 24 hourly multipliers.
@@ -117,7 +129,7 @@ The second of Dave's picks. It reuses the Waterfront's water and the Foothills' 
 - **Clock versus Sun.** The hour for windows and traffic is the local clock, while the Sun uses location, so a viewer far from their time zone's centre gets slightly mismatched light and windows.
 - **`dt` is clamped** to 0–0.1 s in `update`, because the render harness once fed wildly negative steps.
 - **Snapshots** use the fallback location: 40°N at the time zone's standard meridian, so the Sun can be minutes to about half an hour off from the viewer's real one.
-- **Keep it crisp:** motion must stay rounded to whole art pixels, and new textures must use `.nearest`. The water's shader floors to art pixels itself.
+- **Keep it crisp:** motion must stay rounded to whole art pixels, and new textures must use `.nearest`. The water's shader floors to art pixels itself, and samples its textures at the centre of a whole pixel: a texture handed to a shader is smoothed between pixels whatever its filtering mode, which once let a half-blended row of the far headland through as a dark line across the sea.
 - **Seeded draws must not depend on the hour.** `drawTower` makes the same random draws in the same order on every repaint and only compares them with the hour, or the lights would reshuffle every 30 s.
 - **The water mirrors the two backdrop textures only** (`ponytail:` in the source), so cars and clouds have no reflection. The Long Bridge's freighter carries its own, painted into its sprite.
 - **The Sun often sets behind a building.** The flanks are low and half open, not empty, so on some days the last few degrees are hidden and only the glow shows. That's the real azimuth doing it.
@@ -132,7 +144,7 @@ The second of Dave's picks. It reuses the Waterfront's water and the Foothills' 
 
 ## Ideas / next steps
 From the 2026-10-04 review, not yet done:
-- **Cities still to build** of the four Dave picked: Hillside Town, Overlook. Foothills could take weather well: a snow line that follows real snowfall, a cloud deck over the peaks, fog in the valley. The Long Bridge too: live fog swallowing the deck and leaving the tower tops, and a glitter path under the Sun and Moon.
+- **Cities still to build** of the four Dave picked: Overlook. Hillside Town could take chimney smoke that leans with the real wind, a bus's lights climbing the hill, and a slow sweep from the lighthouse. Foothills could take weather well: a snow line that follows real snowfall, a cloud deck over the peaks, fog in the valley. The Long Bridge too: live fog swallowing the deck and leaving the tower tops, and a glitter path under the Sun and Moon.
 - **Life:** windows switching one at a time, rooftop steam, slow star twinkle, birds at dawn, a traffic light with cars queueing, a lit train or ferry every few minutes, reflections of the cars' lights in the water.
 - **More vehicles** (taxi, van, truck, bike) with ground shadows.
 - **Clouds:** layered, of varied size, lit from the Sun's side, their number from the real cloud cover.
@@ -147,8 +159,9 @@ From the 2026-10-04 review, not yet done:
 
 ## Checking it
 - `SNAPSHOT_SCENE="Pixel City" swift test` renders the current time at the fallback location, as the Waterfront.
-- **Particular times and cities:** `SNAPSHOT_DEFAULTS="city.previewTime=1,city.previewHour=19.2,city.view=0" SNAPSHOT_SCENE="Pixel City" swift test` renders today at that hour (`city.view=0` is the Street, 1 the Waterfront, 2 Foothills, 3 the Long Bridge). On 2026-10-04 the Waterfront was checked at 7:18, 12:48, 17:12, 18:18, 18:27, 19:00, 21:00 and 21:30, and the Street at 12:48 and 19:24. `city.looking` is the menu's index: 0 toward the midday Sun, then 1 north round to 8 north-west; sunset was checked looking east (3), west (7) and north (1).
+- **Particular times and cities:** `SNAPSHOT_DEFAULTS="city.previewTime=1,city.previewHour=19.2,city.view=0" SNAPSHOT_SCENE="Pixel City" swift test` renders today at that hour (`city.view=0` is the Street, 1 the Waterfront, 2 Foothills, 3 the Long Bridge, 4 Hillside Town). On 2026-10-04 the Waterfront was checked at 7:18, 12:48, 17:12, 18:18, 18:27, 19:00, 21:00 and 21:30, and the Street at 12:48 and 19:24. `city.looking` is the menu's index: 0 toward the midday Sun, then 1 north round to 8 north-west; sunset was checked looking east (3), west (7) and north (1).
 - **Traffic, planes and the water:** use `SNAPSHOT_SECONDS=30` or more; `SNAPSHOT_MOVIE=3` saves frames to compare for the ripples.
 - **Foothills** was checked on 2026-10-04 at 7:18, 10:30, 12:48, 17:48, 18:30 and 21:30.
 - **The Long Bridge** was checked on 2026-10-04 at 7:18, 12:48, 18:18 and 21:30 (`SNAPSHOT_SECONDS=60` to catch the freighter).
+- **Hillside Town** was checked on 2026-10-04 at 7:18, 12:48, 16:30, 18:18, 20:00 and 21:00.
 - **Screenshots:** `pixel-city-dusk.jpg` is the Waterfront at 19:00 on 4 October and `pixel-city-night.jpg` the Street at 23:30, both at the fallback location from a release build. `preview-pixel-city.jpg` is a 1200-pixel copy of the first.

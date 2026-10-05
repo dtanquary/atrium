@@ -34,6 +34,8 @@ final class PixelCity: SKScene {
     private var downtown: Float = 0.5 // how far across the city's centre is
     private var ridges: [[Float]] = [] // the Foothills' mountains, far to near: each ridge's height above the ground by column
     private var farHaze: Float = 1 // how much of the usual haze the far row of buildings takes
+    private var slope: [Float] = [] // Hillside Town's hill: how far the land stands above the quay at each column
+    private var boats: [(node: SKSpriteNode, rows: [String], hull: RGB)] = []
     private let canvas = SKNode()
     private let sky = SKSpriteNode()      // sky, stars, Sun and Moon…
     private let backdrop = SKSpriteNode() // …and the city in front, so clouds and planes pass between the two
@@ -126,9 +128,12 @@ final class PixelCity: SKScene {
         case .bridge:
             ground = Int(Float(h) * 0.32) // the far shore: the bay fills everything below it
             waterRows = ground
+        case .hillside:
+            ground = Int(Float(h) * 0.26) // the sea's horizon, out past the harbour
+            waterRows = ground
         }
         crest = Array(repeating: ground, count: w)
-        (ridges, downtown, farHaze) = ([], 0.5, 1)
+        (ridges, downtown, farHaze, slope, boats) = ([], 0.5, 1, [], [])
         for (node, z) in [(sky, 0.0), (backdrop, 2)] {
             node.anchorPoint = .zero
             node.size = CGSize(width: w, height: h)
@@ -142,11 +147,14 @@ final class PixelCity: SKScene {
         case .waterfront: tower = layOutWaterfront(&rng)
         case .foothills: tower = layOutFoothills(&rng)
         case .bridge: tower = layOutBridge(&rng)
+        case .hillside: tower = layOutHillside(&rng)
         }
         skyBase = crest.min() ?? ground
         beacon.position = CGPoint(x: tower.x, y: tower.y)
-        beacon.addChild(SKSpriteNode(color: NSColor(red: 1, green: 0.2, blue: 0.2, alpha: 0.3), size: CGSize(width: 3, height: 3)))
-        beacon.addChild(SKSpriteNode(color: NSColor(red: 1, green: 0.25, blue: 0.2, alpha: 1), size: CGSize(width: 1, height: 1)))
+        // A red aircraft light on a mast, or on Hillside Town's lighthouse a white flash.
+        let flash = city == .hillside ? NSColor(red: 1, green: 0.96, blue: 0.8, alpha: 1) : NSColor(red: 1, green: 0.25, blue: 0.2, alpha: 1)
+        beacon.addChild(SKSpriteNode(color: flash.withAlphaComponent(0.3), size: CGSize(width: 3, height: 3)))
+        beacon.addChild(SKSpriteNode(color: flash, size: CGSize(width: 1, height: 1)))
         beacon.zPosition = 5
         beacon.run(.repeatForever(.sequence([.fadeAlpha(to: 1, duration: 0), .wait(forDuration: 0.25),
                                              .fadeAlpha(to: 0.15, duration: 0), .wait(forDuration: 1.25)])))
@@ -175,7 +183,7 @@ final class PixelCity: SKScene {
         (carPace, carGap) = far ? (0.35, 7) : (1, 36)
         let lanes = city == .bridge ? [deck + 1, deck + 2] : far ? [ground - 16, ground - 14] : [streetBase + 5, streetBase + 13]
         for lane in 0...1 {
-            for _ in 0..<(far ? 14 : 6) {
+            for _ in 0..<(city == .hillside ? 0 : far ? 14 : 6) { // the town's lanes are too steep for traffic
                 let node = SKSpriteNode()
                 node.anchorPoint = CGPoint(x: 0.5, y: 0)
                 node.position.y = CGFloat(lanes[lane])
@@ -414,9 +422,59 @@ final class PixelCity: SKScene {
         return (towers[0], towerTop + 4)
     }
 
+    /// Hillside Town: houses terraced up a hill that rises to the left from a harbour, a church at the top, and the
+    /// open sea to the right beyond a breakwater. Returns the lighthouse's lantern, for the beacon.
+    private func layOutHillside(_ rng: inout SeededRandom) -> (x: Int, y: Int) {
+        rng = SeededRandom(state: 2063)
+        downtown = 0.25
+        let quayTop = harbour + 4
+        slope = (0..<w).map { x in
+            let rise = 1 - smoothstep(0.06, 0.66, Float(x) / Float(w))
+            return Float(h) * 0.5 * pow(rise, 0.85) + (4 * sin(Float(x) * 0.09) + 2.5 * sin(Float(x) * 0.23 + 1)) * rise
+        }
+        for x in 0..<w { crest[x] = max(ground, quayTop + Int(slope[x]) + 8) }
+        let walls = [rgb(238, 224, 194), rgb(242, 238, 228), rgb(230, 190, 124), rgb(230, 172, 150), rgb(196, 210, 220),
+                     rgb(218, 156, 112), rgb(236, 208, 160)]
+        for level in stride(from: 12, through: 0, by: -1) { // the highest terrace first, so nearer houses overlap those behind
+            let lift = 1 + level * 10
+            var x = Int.random(in: -6...0, using: &rng)
+            while x < w, slope[max(x, 0)] > max(Float(lift) - 2, 0.5) { // while the hill stands this high here
+                let width = Int.random(in: 9...15, using: &rng), base = quayTop + lift + Int.random(in: -1...1, using: &rng)
+                guard slope[min(x + width, w - 1)] > max(Float(lift) - 7, 0.5) else { break }
+                if Float.random(in: 0..<1, using: &rng) < 0.2 { // a gap in the row, with a cypress in it
+                    skyline.append(Building(x: x + 1, width: 3, height: Int.random(in: 9...14, using: &rng), colour: rgb(38, 72, 54), far: false,
+                                            floor: 0, pitch: 0, roof: .plain, seed: rng.next(), kind: .cypress, base: base))
+                    x += Int.random(in: 4...7, using: &rng)
+                    continue
+                }
+                skyline.append(Building(x: x, width: width, height: Int.random(in: level < 3 ? 11...15 : 8...12, using: &rng),
+                                        colour: walls.randomElement(using: &rng)!, far: false, floor: 4, pitch: 4,
+                                        roof: [Roof.plain, .plain, .ledge, .setback].randomElement(using: &rng)!, seed: rng.next(),
+                                        kind: .house, base: base))
+                x += width
+            }
+        }
+        // Fishing boats and a sailing boat or two at their moorings off the quay, each bobbing in its own time.
+        let end = slope.firstIndex { $0 <= 0.5 } ?? w
+        for i in 0..<6 {
+            let node = SKSpriteNode(), rows = i % 3 == 1 ? sailboat : fishingBoat
+            node.anchorPoint = CGPoint(x: 0.5, y: 0)
+            node.size = CGSize(width: rows[0].count, height: rows.count + 3)
+            node.position = CGPoint(x: end * (22 + i * 12) / 100 + Int.random(in: -5...5, using: &rng), y: harbour - 9 - (i % 3) * 3)
+            node.xScale = i % 2 == 0 ? 1 : -1
+            node.zPosition = 3 + CGFloat(2 - i % 3) * 0.1 // nearer boats in front
+            let pause = { SKAction.wait(forDuration: 1.6, withRange: 1.2) }
+            node.run(.repeatForever(.sequence([pause(), .moveBy(x: 0, y: 1, duration: 0), pause(), .moveBy(x: 0, y: -1, duration: 0)])))
+            canvas.addChild(node)
+            boats.append((node, rows, [rgb(232, 232, 224), rgb(60, 110, 150), rgb(170, 60, 52), rgb(50, 120, 100)][i % 4]))
+        }
+        return (w * 84 / 100 + 2, quayTop + 28)
+    }
+
     // The Long Bridge's shape: the columns its two towers stand at, the row of its roadway, and the row their tops reach.
     private var towers: [Int] { [w * 22 / 100, w * 78 / 100] }
     private var deck: Int { ground + 14 }
+    private var harbour: Int { Int(Float(h) * 0.14) } // the waterline along Hillside Town's quay
     private var towerTop: Int { deck + (h - ground) * 36 / 100 }
 
     /// The row the bridge's main cable hangs at over this column: a parabola between the towers, and from each a
@@ -439,9 +497,9 @@ final class PixelCity: SKScene {
         waterTints = [SKUniform(name: "u_deep", vectorFloat3: .zero), SKUniform(name: "u_glint", vectorFloat3: .zero)]
         node.shader = SKShader(source: Self.waterShader, uniforms: mirrored + waterTints + [
             SKUniform(name: "u_canvas", vectorFloat2: [Float(w), Float(h)]),
-            // The water's size; the row things nearest us stand in the water at (the bridge's towers, short of the far
-            // shore); and the rows of quay wall and of street, which lies flat and out of sight, above the water.
-            SKUniform(name: "u_water", vectorFloat4: [Float(w), Float(waterRows), Float(city == .bridge ? ground - 12 : waterRows),
+            // The water's size; the row things nearest us stand in the water at (the bridge's towers, the town's quay,
+            // short of the far shore); and the rows of quay wall and of street, which lies flat and out of sight, above it.
+            SKUniform(name: "u_water", vectorFloat4: [Float(w), Float(waterRows), Float(city == .bridge ? ground - 12 : city == .hillside ? harbour : waterRows),
                                                       Float(city == .waterfront ? quay : 0)]),
             SKUniform(name: "u_street", float: city == .waterfront ? 26 : 0),
             WallpaperTime.now,
@@ -463,8 +521,12 @@ final class PixelCity: SKScene {
         // nearest things mirrors only the foot of the far shore, not those things over again.
         float squash = p.y < u_water.z ? 1.8 : 0.7;
         float row = line + (d < u_water.w ? d : u_water.w + u_street + (d - u_water.w) * squash);
-        vec2 uv = (vec2(p.x + shift, min(row, u_canvas.y - 1.0)) + 0.5) / u_canvas;
+        // Sampled at the centre of a whole pixel: a shader's texture is smoothed between pixels, nearest filter or not.
+        vec2 uv = (vec2(p.x + shift, floor(min(row, u_canvas.y - 1.0))) + 0.5) / u_canvas;
         vec4 city = texture2D(u_city, uv);
+        // Land across the water is painted a shade short of solid. It mirrors about the horizon, so the water this
+        // side of the nearest shore doesn't mirror it a second time.
+        city *= 1.0 - step(0.9, city.a) * step(city.a, 0.995) * step(p.y, u_water.z - 0.5);
         vec3 c = texture2D(u_sky, uv).rgb * (1.0 - city.a) + city.rgb;
         float bright = smoothstep(0.75, 1.0, max(c.r, max(c.g, c.b))); // the Sun, the Moon and lamps keep their shine
         c = mix(c, u_deep, (0.3 + 0.4 * near) * (1.0 - 0.7 * bright)) * (0.94 - 0.2 * near * (1.0 - bright));
@@ -565,10 +627,17 @@ final class PixelCity: SKScene {
         case .waterfront: drawHorizon(into: &px, zenith: top, horizon: horizon)
         case .foothills: drawMountains(into: &px, horizons: horizons)
         case .bridge: drawHorizon(into: &px, zenith: top, horizon: horizon)
+        case .hillside:
+            drawHorizon(into: &px, zenith: top, horizon: horizon)
+            drawHill(into: &px)
         }
         for building in skyline {
             let haze = horizons[min(max(building.x + building.width / 2, 0), w - 1)] // the horizon behind it
-            if building.kind == .box { draw(building, into: &px, horizon: haze) } else { drawTower(building, into: &px, zenith: top, horizon: haze) }
+            switch building.kind {
+            case .box: draw(building, into: &px, horizon: haze)
+            case .house, .cypress: drawHouse(building, into: &px)
+            default: drawTower(building, into: &px, zenith: top, horizon: haze)
+            }
         }
         drawParks(into: &px)
         switch city {
@@ -579,7 +648,10 @@ final class PixelCity: SKScene {
         case .foothills: drawPlain(into: &px, horizons: horizons)
         case .bridge:
             drawBridge(into: &px)
-            ship.texture = shipTexture(dark: night > 0.5)
+            ship.texture = afloat(freighter, hull: rgb(44, 56, 76), dark: night > 0.5)
+        case .hillside:
+            drawHarbour(into: &px)
+            for boat in boats { boat.node.texture = afloat(boat.rows, hull: boat.hull, dark: night > 0.5) }
         }
         backdrop.texture = px.texture()
         mirrored.first?.textureValue = sky.texture
@@ -766,7 +838,7 @@ final class PixelCity: SKScene {
         }
 
         switch b.kind {
-        case .box: break
+        case .box, .house, .cypress: break // drawn elsewhere
         case .haze:
             _ = block(b.x, base, b.width, b.height)
             if b.roof == .setback, b.width >= 10 { _ = block(b.x + 2, top, b.width - 4, 6) }
@@ -882,11 +954,15 @@ final class PixelCity: SKScene {
         return mix(0.5, 0.08, smoothstep(18, 24, evening))
     }
 
-    /// How high the far shore's hills stand at this column: low behind the Waterfront, and behind the Long Bridge
-    /// rising to a headland on the right.
+    /// How high the far shore's hills stand at this column: low behind the Waterfront, rising to a headland on the
+    /// right behind the Long Bridge, and only on the right, across the water, from Hillside Town.
     private func hill(_ x: Int) -> Int {
         let f = Float(x), roll = 4.5 + 2.5 * sin(f * 0.023 + 1) + 1.6 * sin(f * 0.061 + 4) + 0.8 * sin(f * 0.13)
-        return Int(city == .bridge ? roll * (1.7 + 3.2 * smoothstep(0.35, 0.95, f / Float(w))) : roll)
+        switch city {
+        case .bridge: return Int(roll * (1.7 + 3.2 * smoothstep(0.35, 0.95, f / Float(w))))
+        case .hillside: return Int(roll * 1.6 * smoothstep(0.55, 0.8, f / Float(w))) // a headland across the water, right of the town
+        default: return Int(roll)
+        }
     }
 
     /// The far shore: hills in the haze, seen through the Waterfront's gaps and over its low roofs, and across the
@@ -894,7 +970,7 @@ final class PixelCity: SKScene {
     private func drawHorizon(into px: inout Pixels, zenith: RGB, horizon: RGB) {
         let land = mix(horizon * 0.82, zenith, 0.25)
         for x in 0..<w {
-            px.fill(x, ground, 1, hill(x), land)
+            px.fill(x, ground, 1, hill(x), land, city == .hillside ? 0.99 : 1) // see the water's shader for the 0.99
             if city == .bridge { px.fill(x, ground, 1, min(2, hill(x)), land * 0.8) } // the shore, darker at the water
         }
     }
@@ -945,25 +1021,139 @@ final class PixelCity: SKScene {
         for x in stride(from: 3, to: w, by: 8) where dark { px.plot(x, deck + 1, lamp, glow) }
     }
 
-    /// The Long Bridge's freighter, heading right, with a faint reflection under it. By night its hull is a shadow and
-    /// the bridge windows and mast light show.
-    private func shipTexture(dark: Bool) -> SKTexture {
-        let dim = dark ? RGB(0.3, 0.32, 0.45) : .one
+    /// A vessel from rows of characters, heading right, with a faint reflection under it (the water doesn't mirror
+    /// sprites). By night its hull is a shadow, and its windows and mast light show.
+    private func afloat(_ rows: [String], hull: RGB, dark: Bool) -> SKTexture {
+        let dim = dark ? RGB(0.3, 0.32, 0.45) : .one, mirrored = min(4, rows.count / 2)
         let paints: [Character: RGB] = [
-            "H": rgb(44, 56, 76) * dim, "r": rgb(150, 52, 46) * dim, "W": rgb(226, 226, 218) * dim, "m": rgb(120, 124, 130) * dim,
+            "H": hull * dim, "h": pointwiseMin(hull * 1.25 + 0.06, .one) * dim, "r": rgb(150, 52, 46) * dim,
+            "W": rgb(226, 226, 218) * dim, "c": rgb(232, 230, 220) * dim, "s": rgb(240, 234, 214) * dim, "m": rgb(120, 124, 130) * dim,
             "a": rgb(172, 86, 62) * dim, "b": rgb(62, 130, 140) * dim, "d": rgb(196, 160, 72) * dim,
             "w": dark ? rgb(255, 220, 140) : rgb(70, 90, 110), "l": dark ? rgb(255, 250, 230) : rgb(120, 124, 130),
         ]
-        var px = Pixels(freighter[0].count, freighter.count + 4)
-        for (r, row) in freighter.enumerated() {
+        var px = Pixels(rows[0].count, rows.count + mirrored)
+        for (r, row) in rows.enumerated() {
             for (x, ch) in row.enumerated() {
                 guard let colour = paints[ch] else { continue }
-                let y = freighter.count - 1 - r
-                px.plot(x, y + 4, colour)
-                if y < 4 { px.plot(x, 3 - y, colour * 0.6, 0.45) }
+                let y = rows.count - 1 - r
+                px.plot(x, y + mirrored, colour)
+                if y < mirrored { px.plot(x, mirrored - 1 - y, colour * 0.6, 0.45) }
             }
         }
         return px.texture()
+    }
+
+    /// Hillside Town's hill, under the houses: scrub with a lit edge and outcrops of rock, and the church at its top.
+    private func drawHill(into px: inout Pixels) {
+        var rng = SeededRandom(state: 91)
+        let quayTop = harbour + 4, scrub = rgb(124, 132, 88), sunlight = keyTop * 0.4
+        for x in 0..<w where slope[x] > 0.5 {
+            let top = quayTop + Int(slope[x])
+            px.fill(x, quayTop, 1, top - quayTop, lit(scrub, sunlight))
+            px.fill(x, top - 1, 1, 1, lit(scrub, keyTop, shade: 1.1))
+            if rng.next() % 9 == 0 { px.fill(x, top - Int.random(in: 3...9, using: &rng), 3, 1, lit(rgb(170, 158, 134), sunlight)) }
+        }
+        // The church: a nave under a tiled roof, and a bell tower with a pointed cap and a cross.
+        let cx = w * 15 / 100, base = quayTop + Int(slope[cx]) - 9
+        let wall = rgb(240, 234, 220), tile = lit(rgb(190, 98, 68), keyTop * 0.6)
+        px.fill(cx + 6, base, 17, 10, lit(wall, keyFront))
+        for r in 0..<4 { px.fill(cx + 5 + r * 2, base + 10 + r, 19 - r * 4, 1, tile) }
+        px.fill(cx + 13, base, 3, 5, lit(rgb(110, 76, 56), .zero)) // its door
+        px.fill(cx, base, 7, 28, lit(wall, keyFront))
+        px.fill(cx + 5, base, 2, 28, lit(wall, keyRight, shade: 0.72))
+        let bells = night > 0.15 ? mix(rgb(40, 36, 40), rgb(255, 214, 150), min(1, night * 1.6) * 0.8) : lit(rgb(70, 62, 60), .zero)
+        for x in [cx + 1, cx + 3] { px.fill(x, base + 20, 1, 4, bells) } // the belfry's openings
+        for r in 0..<4 { px.fill(cx - 1 + r, base + 28 + r * 2, 9 - r * 2, 2, tile) }
+        px.fill(cx + 3, base + 36, 1, 3, lit(rgb(70, 62, 60), .zero))
+        px.fill(cx + 2, base + 37, 3, 1, lit(rgb(70, 62, 60), .zero))
+    }
+
+    /// One of Hillside Town's houses: pale walls that take the Sun's colour, shuttered windows, a door, and a tiled
+    /// roof that is hipped, gabled or flat. Or the cypress standing in a gap between two.
+    private func drawHouse(_ b: Building, into px: inout Pixels) {
+        var rng = SeededRandom(state: b.seed)
+        let base = b.base ?? ground, top = base + b.height, dark = night > 0.15, glow = min(1, night * 1.6)
+        let onRight = b.x + b.width / 2 < w / 2, side = onRight ? keyRight : keyLeft
+        guard b.kind == .house else { // a cypress: a dark spindle, lit down the Sun's side
+            for row in 0..<b.height {
+                let wide = row > 1 && row < b.height - 3
+                px.fill(b.x + (wide ? 0 : 1), base + row, wide ? 3 : 1, 1, lit(b.colour, .zero))
+                if wide { px.plot(onRight ? b.x + 2 : b.x, base + row, lit(b.colour, side * 0.5 + keyTop * 0.2)) }
+            }
+            return
+        }
+        let tile = [rgb(196, 100, 70), rgb(176, 88, 62), rgb(206, 122, 84)].randomElement(using: &rng)!
+        let shutter = lit([rgb(60, 110, 96), rgb(70, 96, 140), rgb(120, 78, 60), rgb(150, 60, 56)].randomElement(using: &rng)!, keyFront)
+        let front = lit(b.colour, keyFront), glass = lit(b.colour * 0.4, .zero) + rgb(10, 14, 26) * night
+        px.fill(b.x, base, b.width, b.height, front)
+        px.fill(onRight ? b.x + b.width - 2 : b.x, base, 2, b.height, lit(b.colour, side, shade: 0.72))
+        px.fill(b.x, base, b.width, 1, front * 0.7) // its shadow on the terrace
+        let columns = (b.width - 3) / 4, door = Int.random(in: 0..<max(1, columns), using: &rng), shuttered = rng.next() % 2 == 0
+        for storey in 0..<(b.height - 2) / 4 {
+            for i in 0..<columns {
+                let x = b.x + 2 + i * 4, y = base + 2 + storey * 4
+                let (r1, r2, r3) = (Float.random(in: 0..<1, using: &rng), Float.random(in: 0..<1, using: &rng), Float.random(in: 0..<1, using: &rng))
+                if storey == 0, i == door {
+                    px.fill(x, base + 1, 2, 3, shutter * 0.7)
+                    continue
+                }
+                let on = dark && isLit(r1, r2, r3, home: 0.5)
+                px.fill(x, y, 2, 2, on ? mix(glass, mix(rgb(255, 190, 100), rgb(255, 226, 150), r1) * (0.6 + 0.4 * r2), glow) : glass)
+                if shuttered { px.fill(x - 1, y, 1, 2, shutter) }
+            }
+        }
+        let roof = lit(tile, keyTop * 0.6), eaves = lit(tile * 0.74, .zero), ridge = lit(tile, keyTop, shade: 1.12)
+        switch b.roof {
+        case .setback: // flat, with a parapet
+            px.fill(b.x, top, b.width, 1, lit(b.colour, keyTop, shade: 1.1))
+        case .ledge: // a gable end toward us: wall up to the peak, under two slopes of tile
+            for r in 0..<(b.width + 2) / 3 {
+                let inset = r * 3 / 2
+                px.fill(b.x + inset, top + r, b.width - inset * 2, 1, front)
+                px.fill(b.x + inset - 1, top + r, 2, 1, roof)
+                px.fill(b.x + b.width - inset - 1, top + r, 2, 1, eaves)
+            }
+        default: // hipped: eaves that overhang, then tiles stepping in to the ridge
+            let rows = 3 + Int(rng.next() % 2)
+            for r in 0..<rows { px.fill(b.x - 1 + r * 2, top + r, b.width + 2 - r * 4, 1, r == 0 ? eaves : r == rows - 1 ? ridge : roof) }
+            if rng.next() % 3 == 0 { px.fill(b.x + 2, top + 1, 2, 3, lit(rgb(176, 156, 136), keyFront)) } // a chimney
+        }
+    }
+
+    /// Hillside Town's harbour, in front of the houses: the quay with its lamps, the breakwater and its lighthouse,
+    /// and far out a couple of sails.
+    private func drawHarbour(into px: inout Pixels) {
+        let quayTop = harbour + 4, end = slope.firstIndex { $0 <= 0.5 } ?? w, pier = w * 86 / 100
+        let stone = lit(rgb(176, 166, 146), keyFront), lamp = rgb(255, 222, 160), glow = min(1, night * 1.6)
+        px.fill(0, harbour, end + 2, 4, stone)
+        px.fill(0, quayTop - 1, end + 2, 1, lit(rgb(196, 188, 170), keyTop))
+        px.fill(0, harbour, end + 2, 1, stone * 0.55)
+        px.fill(end + 2, harbour, pier - end - 2, 3, stone * 0.8) // the breakwater, lower and rougher
+        px.fill(end + 2, harbour, pier - end - 2, 1, stone * 0.5)
+        for x in stride(from: end + 4, to: pier, by: 5) { px.plot(x, harbour + 3, stone * 0.7) }
+        for x in stride(from: 9, to: end, by: 18) { // lamps along the quay
+            px.fill(x, quayTop, 1, 5, lit(rgb(60, 62, 68), .zero))
+            px.plot(x, quayTop + 5, mix(rgb(120, 120, 112), lamp, night))
+            guard night > 0.3 else { continue }
+            for dy in -2...2 { for dx in -2...2 where dx * dx + dy * dy <= 5 { px.plot(x + dx, quayTop + 5 + dy, lamp, 0.22 * night) } }
+        }
+        // The lighthouse at the breakwater's end: white with two red bands, a gallery and a lantern.
+        let lx = w * 84 / 100, white = rgb(238, 236, 228)
+        px.fill(lx - 1, harbour + 3, 7, 2, stone)
+        for row in 0..<22 {
+            let paint = (row / 5) % 2 == 1 ? rgb(190, 62, 54) : white
+            px.fill(lx, harbour + 5 + row, 5, 1, lit(paint, keyFront))
+            px.fill(lx + (lx < w / 2 ? 4 : 0), harbour + 5 + row, 1, 1, lit(paint, lx < w / 2 ? keyRight : keyLeft, shade: 0.72))
+        }
+        px.fill(lx - 1, harbour + 27, 7, 1, lit(rgb(60, 62, 68), .zero))
+        px.fill(lx + 1, harbour + 28, 3, 3, mix(lit(rgb(90, 110, 120), .zero), lamp, glow * 0.6))
+        px.fill(lx, harbour + 31, 5, 1, lit(rgb(170, 60, 52), keyTop * 0.5))
+        px.fill(lx + 2, harbour + 32, 1, 2, lit(rgb(60, 62, 68), .zero))
+        for x in [w * 72 / 100, w * 94 / 100] { // sails, hull down on the horizon
+            px.fill(x, ground, 2, 1, lit(white * 0.7, .zero), 0.99) // 0.99, like the far shore: see the water's shader
+            px.fill(x, ground + 1, 1, 3, lit(white, keyFront), 0.99)
+            px.fill(x + 1, ground + 1, 1, 2, lit(white, keyFront), 0.99)
+        }
     }
 
     /// The parks in the waterfront's gaps: a hedge and a few round trees, lit from the Sun's side.
@@ -1266,13 +1456,14 @@ private enum Roof: CaseIterable { case plain, ledge, setback, tank, antenna }
 
 /// The cities Settings can pick, in the menu's order. The pick is stored as its index, so add new ones at the end.
 private enum City: Int, CaseIterable {
-    case street, waterfront, foothills, bridge
-    var name: String { ["Street", "Waterfront", "Foothills", "Long Bridge"][rawValue] }
+    case street, waterfront, foothills, bridge, hillside
+    var name: String { ["Street", "Waterfront", "Foothills", "Long Bridge", "Hillside Town"][rawValue] }
 }
 
-/// What a building is: the Street's plain block, or on the waterfront a windowless tower in the haze, a stone
-/// tower with setbacks, a glass curtain wall, a brick walk-up over a shop, or a concrete slab with ribbon windows.
-private enum Kind { case box, haze, deco, glass, brick, slab }
+/// What a building is: the Street's plain block; on the waterfront a windowless tower in the haze, a stone tower
+/// with setbacks, a glass curtain wall, a brick walk-up over a shop, or a concrete slab with ribbon windows; or in
+/// Hillside Town a house, or the cypress in a gap between two.
+private enum Kind { case box, haze, deco, glass, brick, slab, house, cypress }
 
 private struct Building {
     var x: Int, width: Int, height: Int
@@ -1282,6 +1473,7 @@ private struct Building {
     var roof: Roof
     var seed: UInt64
     var kind = Kind.box
+    var base: Int? // the row it stands on, for a house up a hillside; the ground otherwise
 }
 
 private struct Car {
@@ -1330,6 +1522,26 @@ private let freighter = [
     "HHHHHHHHHHHHHHHHHHHHHHHHHHHHHH",
     ".HHHHHHHHHHHHHHHHHHHHHHHHHHHH.",
     "..rrrrrrrrrrrrrrrrrrrrrrrrrr..",
+]
+
+private let fishingBoat = [
+    "....m.......",
+    "....m.......",
+    "...ccc......",
+    "...cwc......",
+    "hhhhhhhhhhhh",
+    ".HHHHHHHHHH.",
+    "..HHHHHHHH..",
+]
+
+private let sailboat = [
+    "....m.....",
+    "....ms....",
+    "....mss...",
+    "....msss..",
+    "....m.....",
+    "hhhhhhhhhh",
+    ".HHHHHHHH.",
 ]
 
 private let bus = [
