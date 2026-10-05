@@ -11,7 +11,7 @@ final class LiveSky: SKScene {
         Knob(key: "sky.constellations", label: "Constellation lines", range: 0...1, standard: 1, section: "Show",
              format: .toggle),
         Knob(key: "sky.planetLabels", label: "Planet labels", range: 0...1, standard: 1, section: "Show", format: .toggle),
-        Knob(key: "sky.landscape", label: "Show a landscape", range: 0...1, standard: 1, section: "Landscape",
+        Knob(key: "sky.landscape", label: "Show a landscape", range: 0...1, standard: 0, section: "Landscape",
              format: .toggle),
         Knob(key: "sky.previewTime", label: "Preview a time of day", range: 0...1, standard: 0, section: "Preview",
              format: .toggle),

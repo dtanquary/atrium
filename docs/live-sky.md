@@ -1,6 +1,6 @@
 # Live Sky
 
-The real sky above the viewer right now, looking toward the equator: about 2,900 stars, the Milky Way, constellation lines, the five naked-eye planets, the Moon in its true phase and tilt, the ISS when it's overhead and sunlit, and an occasional meteor, above a treeline. It stays a night sky, but it reacts to the Sun: deep blue by day with only the brightest objects, the Sun drawn when it's in view, and sunrise and sunset glow at their real times.
+The real sky above the viewer right now, looking toward the equator: about 2,900 stars, the Milky Way, constellation lines, the five naked-eye planets, the Moon in its true phase and tilt, the ISS when it's overhead and sunlit, and an occasional meteor. The sky fills the screen down to the horizon unless Settings puts a landscape under it. It stays a night sky, but it reacts to the Sun: deep blue by day with only the brightest objects, the Sun drawn when it's in view, and sunrise and sunset glow at their real times.
 
 - **Files:**
   - `Sources/Atrium/LiveSky.swift`: the scene.
@@ -13,7 +13,7 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
 - **Kind:** hybrid. The background and the Moon are SKShaders; stars, planets, the Sun, the ISS, labels and meteors are sprites; the ground is a Core Graphics texture.
 
 ## How it works
-- **Projection.** A stereographic projection centred on the horizon point the view faces: south, or north when latitude < 0 (`facingSouth`). Great circles through the centre stay straight, so the horizon is a straight line. `scale` gives about a 120° horizontal field of view; `horizonY` sits 12% up the screen (`landHorizon`), or on its bottom edge while the landscape is switched off, so the sky fills the screen and nothing in it is below the horizon. `project()` returns nil for points behind the viewer (`1 + forward <= 0.2`). `place()` hides a node that's below the horizon (z < −0.01) or more than 30 pt off-screen.
+- **Projection.** A stereographic projection centred on the horizon point the view faces: south, or north when latitude < 0 (`facingSouth`). Great circles through the centre stay straight, so the horizon is a straight line. `scale` gives about a 120° horizontal field of view; `horizonY` sits on the screen's bottom edge, so the sky fills the screen and nothing in it is below the horizon, or 12% up (`landHorizon`) while a landscape shows. `project()` returns nil for points behind the viewer (`1 + forward <= 0.2`). `place()` hides a node that's below the horizon (z < −0.01) or more than 30 pt off-screen.
 - **Frames.** Equatorial directions are J2000 unit vectors. `Sky.horizonMatrix(jd:latitude:longitude:)` turns them into (east, north, up). `refresh()` recomputes every position every 5 s, and on any settings change.
 - **Background shader** (`addSkyBackground`): each pixel is un-projected back onto the sphere, as (right, up, forward).
   - It mixes a night gradient and a day gradient by `u_day`.
@@ -68,7 +68,7 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
 |---|---|---|---|---|
 | `sky.constellations` | Constellation lines | toggle | on | `constellations.isHidden` |
 | `sky.planetLabels` | Planet labels | toggle | on | the planet nodes' label children |
-| `sky.landscape` | Show a landscape | toggle | on | `ground.isHidden`, and `horizonY` (12% up, or the bottom edge) through `u_horizon` |
+| `sky.landscape` | Show a landscape | toggle | off | `ground.isHidden`, and `horizonY` (12% up, or the bottom edge) through `u_horizon` |
 | `sky.previewTime` | Preview a time of day | toggle | off | `skyDate` uses the preview hour |
 | `sky.previewHour` | Time (shown while previewing) | 0–24 h | 13:00 | the hour for `skyDate` |
 
@@ -107,7 +107,7 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
 - **Moon.** "Show the moon phase as it would from my location" meant that the Moon itself should be accurate. A bottom-left phase badge was added, then removed at his request as redundant. Don't bring back a HUD for this.
 - **Moon's terminator (2026-10-03).** In Weather he saw the half Moon end in a hard edge by day, where the real one fades into the sky, and asked for Live Sky to be checked too. Both now share `moonShade`. Live Sky had also drawn the dark side as a black half-disc on the blue day sky.
 - **Switches.** He asked for the constellation and planet-label switches.
-- **Landscape (2026-10-05).** He asked for a switch to turn the landscape off, and for more silhouettes to choose between. Off means no ground at all, not a flat one: the horizon drops to the bottom edge.
+- **Landscape (2026-10-05).** He asked for a switch to turn the landscape off, and for more silhouettes to choose between. Off means no ground at all, not a flat one: the horizon drops to the bottom edge. Once he had the switch he asked for off to be the default ("i think we should default to no landscape").
 - **Preview.** Added so he could see the daytime look on demand.
 
 ## Ideas / next steps
