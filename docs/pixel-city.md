@@ -5,6 +5,7 @@ A pixel-art city that follows the real Sun and clock. The sky moves through dawn
 - **Waterfront** (the default, from 2026-10-04): a downtown seen across water, which mirrors it in ripples. The skyline peaks in the middle and falls away to low flanks, so the Sun and Moon rise and set in view, and the walls are lit from wherever the Sun really is.
 - **Street:** the original, side-on from the kerb, with a near and a far row of plain blocks.
 - **Foothills** (2026-10-04): a small downtown far off under three ridges of mountains, the highest snow-capped, across a valley floor with a highway and a line of pines.
+- **Long Bridge** (2026-10-04): a suspension bridge across a bay, strung with lights at night, with a small city and a headland on the far shore and a freighter that crosses now and then.
 
 - **Files:** `Sources/Atrium/PixelCity.swift`, which holds everything: the scene, both cities, the `Pixels` canvas, sprite art as strings, `SeededRandom`, the water's shader and its own low-precision `skyPosition()` for the Sun. It reads `Location.swift` ([live-sky.md](live-sky.md)).
 - **Entry:** `pixelCity(size:)` builds `final class PixelCity: SKScene`. Its entry in Scenes.swift is "Pixel City", icon `building.2.fill`, tint `.pink`, with `PixelCity.knobs`.
@@ -14,7 +15,7 @@ A pixel-art city that follows the real Sun and clock. The sky moves through dawn
 - **Resolution:** `pixel = max(2, round(height/240))` points per art pixel, so 4 pt on a 982 pt-tall display. The canvas is `w × h` art pixels (378 × 246 there). Motion rounds to whole art pixels so nothing blurs.
 - **Layers,** by `zPosition`: the sky (0), clouds (1), the plane (1.5), the city (2), the water (2.5), cars (3 and 4), the beacon (5). The city texture is clear wherever the sky shows, so clouds and planes pass behind the towers.
 - **A city is a case of `City`** (the menu's order, stored as the index, so new ones go at the end). `layOut()` sets what differs: `ground` (the row the city stands on), `waterRows`, `crest` (for each column, the row where the sky begins, which is the horizon the Sun and Moon rise over) and `skyBase` (the lowest of those, where the sky's gradient starts). `classic` is true for the Street, which keeps its first, simpler sky and light.
-- **`layOut()`** builds everything that never changes, and runs again when Settings picks another city. Each city has its own skyline (`layOutStreet`, `layOutWaterfront`, `layOutFoothills`) from a fixed `SeededRandom`, so it's identical on every redraw and every display. Shared by both: 170 stars, 3 cloud masks, a pool of 6 cars per lane with headlights (7 sedan colours plus a bus), a plane with blinking nav lights, and the beacon (0.25 s on, 1.25 s off) on the landmark.
+- **`layOut()`** builds everything that never changes, and runs again when Settings picks another city. Each city has its own skyline (`layOutStreet`, `layOutWaterfront`, `layOutFoothills`, `layOutBridge`) from a fixed `SeededRandom`, so it's identical on every redraw and every display. Shared by both: 170 stars, 3 cloud masks, a pool of 6 cars per lane with headlights (7 sedan colours plus a bus), a plane with blinking nav lights, and the beacon (0.25 s on, 1.25 s off) on the landmark.
 - **`redraw()`** runs at init, every 30 s and when a setting changes. It paints the sky into one `Pixels` buffer and the city into another:
   - **Sky:** a gradient between zenith and horizon colours from `skyColours(elevation, morning:)`. The stops run −18°, −10°, −4°, 0°, 6° and 15°, and dawn is pinker than dusk. Around a low Sun the horizon's colour changes with the compass (`horizonToward`): orange under the Sun and, opposite it, the pink band over the Earth's shadow, so a sunset sky differs from one side of the screen to the other. It's quantised into 14 bands with 4×4 Bayer dithering, plus a sun glow around a low Sun in 5 flat rings, dithered only where two rings meet (dithering right across each ring left a halo of loose dots).
   - **Stars** fade in below about −5°; the brightest get a small cross.
@@ -58,7 +59,7 @@ Built from a design review on 2026-10-04 (see Dave's feedback below), after a lo
 - **Windows in dashes** (`storey`): a floor's windows are lit a run of neighbours at a time. Homes (brick, and half the slabs) keep the Street's evening hours, with 45% of rooms on that schedule instead of 65%, in warm light of varying brightness. Offices (the rest) light `officeShare` of their runs: half at dusk, falling to 8% by midnight and rising again from 05:30, in cool white on most glass and slab buildings and warm on stone. Each run's draw is fixed by the building's seed, so as the share falls the same runs go dark in the same order. Taller roofs carry red corner lights.
 - **Where the Sun and Moon land** (`place`, for every city but the Street): azimuth spans about 260° across the screen (200° on the Street), so sunrise and sunset stay on screen all year at mid latitudes. Elevation runs as the 0.75 power of elevation / 70°, which gives a low Sun more room, and a body below the horizon drops out of sight within about half a degree. The horizon it sets behind is `crest` at that column, which it clears by 15° up.
 - **Sky:** the same gradient, with only 40% of each band dithered into the next (`band`), the city's own mauve glow at night, strongest low over downtown, and stars that fade out toward the horizon.
-- **Water** (`addWater`, `waterShader`): one sprite with a shader that reads the sky and city textures. Each water row shows the quay wall, then the city from street level up, squashed 1.8 times (the street lies flat and out of sight). Rows slide sideways by whole pixels on two sine waves, wider toward the viewer, the image fades toward a deep-water colour, and short dashes of sky colour drift on every other row. It animates by `u_now`.
+- **Water** (`addWater`, `waterShader`, shared with the Long Bridge): one sprite with a shader that reads the sky and city textures. Each water row shows the quay wall, then the city from street level up, squashed 1.8 times (the street lies flat and out of sight). Bright things (the Sun, the Moon, lamps) keep their brightness in it, and anything the city's painting has standing in the water shows over it. Rows slide sideways by whole pixels on two sine waves, wider toward the viewer, the image fades toward a deep-water colour, and short dashes of sky colour drift on every other row. It animates by `u_now`.
 
 ### The Foothills city
 The first of the cities Dave picked from the research below. Everything the Waterfront has (the light, the sky, windows in dashes) applies; what's new is the land.
@@ -72,6 +73,16 @@ The first of the cities Dave picked from the research below. Everything the Wate
 - **The valley floor** (`drawPlain`, seed 77): six bands of grass paling toward the city, strips of field, 70 houses and trees thickening toward town (a house lights one window at night on the homes' hours), and a pine bank along the bottom, each tree lit on the Sun's side.
 - **The highway:** the same traffic as the other cities at a distance. `speck` draws a car as a dash of paint by day and only its tail light and headlight by night; they run at 0.35 of the usual speed (`carPace`) from a pool of 14 a lane.
 
+### The Long Bridge city
+The second of Dave's picks. It reuses the Waterfront's water and the Foothills' far-off city band and traffic; what's new is the bridge.
+
+- **Composition,** bottom to top: the bay (everything below `ground`, the far shore, 32% up), the bridge standing in it in front of the far shore, hills on that shore rising to a headland on the right (`hill`, which also sets `crest`), a small city at their left end (`layOutBand` with no suburbs, `downtown` 13% across), and the sky. The open water and sky are on the right, where desktop icons sit.
+- **The bridge** (`drawBridge`, `cable`, `towers`, `deck`, `towerTop`): two towers 22% and 78% across, their footings 12 rows short of the far shore, the roadway 14 rows above it on a truss, and tops 36% of the sky higher. The main cable is a parabola between the tower tops and a nearly straight run from each down to an anchorage off screen, with a hanger every 6 pixels. It's far steeper than a real one (about 1 in 4, where real spans are nearer 1 in 10), because true proportions would leave the towers 20 pixels tall. The steel is a grey-green of our own, so it isn't the Golden Gate.
+- **At night:** a lamp where each hanger meets the cable, one every 8 pixels along the deck, the towers floodlit from the roadway up, a red light on each top and the blinking beacon on the left one. All of it is mirrored in the bay.
+- **The water** mirrors about two lines: below the towers' footings it reflects everything from there up, and the strip between the footings and the far shore reflects only the foot of that shore (squashed 0.7), or the bridge would be reflected twice.
+- **Traffic:** `speck` cars on two rows of the deck.
+- **The freighter** (`freighter`, `shipTexture`): one crosses in front of the bridge at 2.2 pixels a second every 1.5 to 4 minutes, drawn with its own faint reflection (the water doesn't mirror sprites). By night its hull is a shadow with lit bridge windows and a mast light.
+
 ## Time, live data and appearance
 - **Time:** `now`: the real time, or today at the preview hour while Settings is previewing one. The hour for windows and traffic is the local clock hour.
 - **Sun:** `skyPosition()` at `Location.shared` (low precision, about 1°). `night = smoothstep(4°, −8°, sun elevation)`.
@@ -81,7 +92,7 @@ The first of the cities Dave picked from the research below. Everything the Wate
 
 ## Settings
 `PixelCity.knobs`, read with `knob(_:)`. A change repaints at once (`settingsChanged`), and a change of city lays the scene out again first.
-- **City** (`city.view`): Street, Waterfront or Foothills, as the index into `City`. Waterfront is the default.
+- **City** (`city.view`): Street, Waterfront, Foothills or Long Bridge, as the index into `City`. Waterfront is the default.
 - **Looking** (`city.looking`): Toward the midday Sun (the default: toward the equator, which keeps the Sun and Moon in the sky and the city backlit) or one of eight compass points. Dave asked for it on 2026-10-04 after reading that the Waterfront's fronts stay in cool shade at sunset: "lets add support for the sun direction perhaps". The Waterfront's flanks were laid out for the default, so looking east or west the Sun rises or sets behind downtown.
 - **Preview a time of day** (`city.previewTime`, `city.previewHour`): shows today at that hour instead of now, the only way to see a sunset at noon. Off by default.
 
@@ -89,6 +100,7 @@ The first of the cities Dave picked from the research below. Everything the Wate
 - **Canvas:** 240 art pixels per screen height; the street is 26 rows tall; lamps every 46 px.
 - **Waterfront:** water `0.21 × h` rows, quay 6 rows; `downtown` runs from 1 at 12% off centre to 0 at 30%; the landmark is 0.66 of the sky above the street; the reflection is squashed 1.8 times.
 - **Foothills:** ground `0.27 × h`; ridges (base, relief, as shares of the sky above the ground) 0.36 + 0.22, 0.22 + 0.17, 0.07 + 0.12; snow line 0.47; haze 0.36, 0.28, 0.14; highway 14–17 rows below the ground.
+- **Long Bridge:** ground `0.32 × h`; towers at 22% and 78%; deck `ground + 14`; tower tops 36% of the sky above the deck; hills scaled 1.7 on the left to 4.9 on the right; the ship 40 rows below the far shore.
 - **Timing:** redraw every 30 s.
 - **Window schedule** (`isLit`): home 16.5 h + 4.5·rand; bed 21 h + 6·rand; early risers 5.5 h + 1.5·rand. `officeShare`: 0.5 until 18:00, down to 0.08 by midnight, 0.08 to 0.45 between 05:30 and 08:00.
 - **Traffic:** the `traffic` table has 24 hourly multipliers.
@@ -107,7 +119,7 @@ The first of the cities Dave picked from the research below. Everything the Wate
 - **Snapshots** use the fallback location: 40°N at the time zone's standard meridian, so the Sun can be minutes to about half an hour off from the viewer's real one.
 - **Keep it crisp:** motion must stay rounded to whole art pixels, and new textures must use `.nearest`. The water's shader floors to art pixels itself.
 - **Seeded draws must not depend on the hour.** `drawTower` makes the same random draws in the same order on every repaint and only compares them with the hour, or the lights would reshuffle every 30 s.
-- **The water mirrors the two backdrop textures only** (`ponytail:` in the source), so cars and clouds have no reflection.
+- **The water mirrors the two backdrop textures only** (`ponytail:` in the source), so cars and clouds have no reflection. The Long Bridge's freighter carries its own, painted into its sprite.
 - **The Sun often sets behind a building.** The flanks are low and half open, not empty, so on some days the last few degrees are hidden and only the glow shows. That's the real azimuth doing it.
 - **Lights come on in a batch** every 30 s rather than one at a time.
 
@@ -120,7 +132,7 @@ The first of the cities Dave picked from the research below. Everything the Wate
 
 ## Ideas / next steps
 From the 2026-10-04 review, not yet done:
-- **Cities still to build** of the four Dave picked: Long Bridge, Hillside Town, Overlook. Foothills could take weather well: a snow line that follows real snowfall, a cloud deck over the peaks, fog in the valley.
+- **Cities still to build** of the four Dave picked: Hillside Town, Overlook. Foothills could take weather well: a snow line that follows real snowfall, a cloud deck over the peaks, fog in the valley. The Long Bridge too: live fog swallowing the deck and leaving the tower tops, and a glitter path under the Sun and Moon.
 - **Life:** windows switching one at a time, rooftop steam, slow star twinkle, birds at dawn, a traffic light with cars queueing, a lit train or ferry every few minutes, reflections of the cars' lights in the water.
 - **More vehicles** (taxi, van, truck, bike) with ground shadows.
 - **Clouds:** layered, of varied size, lit from the Sun's side, their number from the real cloud cover.
@@ -135,7 +147,8 @@ From the 2026-10-04 review, not yet done:
 
 ## Checking it
 - `SNAPSHOT_SCENE="Pixel City" swift test` renders the current time at the fallback location, as the Waterfront.
-- **Particular times and cities:** `SNAPSHOT_DEFAULTS="city.previewTime=1,city.previewHour=19.2,city.view=0" SNAPSHOT_SCENE="Pixel City" swift test` renders today at that hour (`city.view=0` is the Street, 1 the Waterfront, 2 Foothills). On 2026-10-04 the Waterfront was checked at 7:18, 12:48, 17:12, 18:18, 18:27, 19:00, 21:00 and 21:30, and the Street at 12:48 and 19:24. `city.looking` is the menu's index: 0 toward the midday Sun, then 1 north round to 8 north-west; sunset was checked looking east (3), west (7) and north (1).
+- **Particular times and cities:** `SNAPSHOT_DEFAULTS="city.previewTime=1,city.previewHour=19.2,city.view=0" SNAPSHOT_SCENE="Pixel City" swift test` renders today at that hour (`city.view=0` is the Street, 1 the Waterfront, 2 Foothills, 3 the Long Bridge). On 2026-10-04 the Waterfront was checked at 7:18, 12:48, 17:12, 18:18, 18:27, 19:00, 21:00 and 21:30, and the Street at 12:48 and 19:24. `city.looking` is the menu's index: 0 toward the midday Sun, then 1 north round to 8 north-west; sunset was checked looking east (3), west (7) and north (1).
 - **Traffic, planes and the water:** use `SNAPSHOT_SECONDS=30` or more; `SNAPSHOT_MOVIE=3` saves frames to compare for the ripples.
 - **Foothills** was checked on 2026-10-04 at 7:18, 10:30, 12:48, 17:48, 18:30 and 21:30.
+- **The Long Bridge** was checked on 2026-10-04 at 7:18, 12:48, 18:18 and 21:30 (`SNAPSHOT_SECONDS=60` to catch the freighter).
 - **Screenshots:** `pixel-city-dusk.jpg` is the Waterfront at 19:00 on 4 October and `pixel-city-night.jpg` the Street at 23:30, both at the fallback location from a release build. `preview-pixel-city.jpg` is a 1200-pixel copy of the first.

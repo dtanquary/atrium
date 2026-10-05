@@ -184,7 +184,7 @@ Conway's cells, reseeding so they never die out. The Calm look shows a long expo
 | Calm | Classic |
 
 #### Pixel City
-A pixel-art city that follows your clock and the real Sun, with traffic and windows lighting up through the evening. Pick a city: the Waterfront, a downtown mirrored in the water with its walls lit from wherever the Sun is; Foothills, a small downtown under snow-capped mountains that hold the last of the sunlight; or the Street. You can also choose which way you look, so the Sun sets in view or lights the buildings from behind you.
+A pixel-art city that follows your clock and the real Sun, with traffic and windows lighting up through the evening. Pick a city: the Waterfront, a downtown mirrored in the water with its walls lit from wherever the Sun is; Foothills, a small downtown under snow-capped mountains that hold the last of the sunlight; the Long Bridge, strung with lights across a bay; or the Street. You can also choose which way you look, so the Sun sets in view or lights the buildings from behind you.
 
 | ![Pixel City's Waterfront at dusk](docs/images/pixel-city-dusk.jpg) | ![Pixel City's Street at night](docs/images/pixel-city-night.jpg) |
 |---|---|

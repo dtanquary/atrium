@@ -64,6 +64,7 @@ final class PixelCity: SKScene {
     private var nextCar: [TimeInterval] = [0, 0]
     private var nextPlane = TimeInterval.random(in: 3...25)
     private var planeX: Float = 0, planeDirection: Float = 0
+    private var ship = SKSpriteNode(), shipX: Float = 0, shipDirection: Float = 0, nextShip = TimeInterval.random(in: 20...90)
 
     override init(size: CGSize) {
         let pixel = max(2, (size.height / 240).rounded()) // points per art pixel
@@ -115,13 +116,16 @@ final class PixelCity: SKScene {
         canvas.removeAllChildren()
         (skyline, parks, stars, clouds, cars) = ([], [], [], [], [])
         (plane, planeLights, beacon, mirrored, waterTints) = (SKSpriteNode(), SKNode(), SKNode(), [], [])
-        (nextCar, planeDirection) = ([clock, clock], 0)
+        (nextCar, planeDirection, shipDirection, ship) = ([clock, clock], 0, 0, SKSpriteNode())
         city = City(rawValue: Int(Self.knob(.view))) ?? .waterfront
         waterRows = city == .waterfront ? Int(Float(h) * 0.21) : 0
         switch city {
         case .street: ground = 26
         case .waterfront: ground = waterRows + quay + 26
         case .foothills: ground = Int(Float(h) * 0.27)
+        case .bridge:
+            ground = Int(Float(h) * 0.32) // the far shore: the bay fills everything below it
+            waterRows = ground
         }
         crest = Array(repeating: ground, count: w)
         (ridges, downtown, farHaze) = ([], 0.5, 1)
@@ -137,6 +141,7 @@ final class PixelCity: SKScene {
         case .street: tower = layOutStreet(&rng)
         case .waterfront: tower = layOutWaterfront(&rng)
         case .foothills: tower = layOutFoothills(&rng)
+        case .bridge: tower = layOutBridge(&rng)
         }
         skyBase = crest.min() ?? ground
         beacon.position = CGPoint(x: tower.x, y: tower.y)
@@ -164,11 +169,11 @@ final class PixelCity: SKScene {
 
         let paints = [rgb(196, 58, 52), rgb(58, 98, 186), rgb(222, 222, 216), rgb(236, 188, 48),
                       rgb(66, 138, 88), rgb(40, 40, 48), rgb(160, 166, 172)]
-        let far = city == .foothills // a highway seen from miles off: a car is a dash of paint, and at night just its lights
+        let far = city == .foothills || city == .bridge // traffic seen from miles off: a car is a dash of paint, and at night just its lights
         carLooks = far ? paints.map { speck(2, body: $0) } + [speck(4, body: rgb(226, 226, 218))]
                        : paints.map { vehicle(sedan, body: $0) } + [vehicle(bus, body: rgb(228, 150, 40))]
         (carPace, carGap) = far ? (0.35, 7) : (1, 36)
-        let lanes = far ? [ground - 16, ground - 14] : [streetBase + 5, streetBase + 13]
+        let lanes = city == .bridge ? [deck + 1, deck + 2] : far ? [ground - 16, ground - 14] : [streetBase + 5, streetBase + 13]
         for lane in 0...1 {
             for _ in 0..<(far ? 14 : 6) {
                 let node = SKSpriteNode()
@@ -210,6 +215,14 @@ final class PixelCity: SKScene {
         plane.addChild(planeLights)
         canvas.addChild(plane)
         if waterRows > 0 { addWater() }
+        if city == .bridge { // a freighter that crosses the bay in front of the bridge now and then
+            ship.anchorPoint = CGPoint(x: 0.5, y: 0)
+            ship.size = CGSize(width: freighter[0].count, height: freighter.count + 4)
+            ship.position.y = CGFloat(ground - 40)
+            ship.zPosition = 3
+            ship.isHidden = true
+            canvas.addChild(ship)
+        }
     }
 
     /// The Street city: a far and a near row of plain blocks. Returns the top of the landmark's mast, for the beacon.
@@ -340,7 +353,15 @@ final class PixelCity: SKScene {
                   ridge(base: 0.07, relief: 0.12, period: 64)]
         for x in 0..<w { crest[x] = ground + Int(ridges.map { $0[x] }.max()!) }
 
-        func centre(_ x: Int) -> Float { 1 - smoothstep(0.03, 0.2, abs(Float(x) / Float(w) - downtown)) }
+        return layOutBand(&rng, spread: 0.2, tallest: 0.3, suburbs: true)
+    }
+
+    /// A far-off band of the Waterfront's far-row buildings, with windowless towers behind: a downtown `spread` either
+    /// side of `downtown`, its landmark `tallest` of the sky above the ground, and low buildings with open ground
+    /// across the rest if there are `suburbs`. Returns the top of the landmark's mast.
+    private func layOutBand(_ rng: inout SeededRandom, spread: Float, tallest: Float, suburbs: Bool) -> (x: Int, y: Int) {
+        let room = Float(h - ground)
+        func centre(_ x: Int) -> Float { 1 - smoothstep(0.03, spread, abs(Float(x) / Float(w) - downtown)) }
         var x = 0
         while x < w { // windowless towers behind downtown
             let d = centre(x)
@@ -359,6 +380,10 @@ final class PixelCity: SKScene {
         x = -3
         while x < w {
             let width = Int.random(in: 8...16, using: &rng), d = centre(x + width / 2)
+            if !suburbs, d <= 0 { // nothing but hills beyond the town
+                x += width
+                continue
+            }
             if d < 0.15, Float.random(in: 0..<1, using: &rng) < 0.45 { // open ground between the suburbs
                 x += Int.random(in: 6...16, using: &rng)
                 continue
@@ -373,13 +398,39 @@ final class PixelCity: SKScene {
         let landmark = skyline.indices.filter { skyline[$0].kind != .haze }.max { skyline[$0].height < skyline[$1].height }!
         skyline[landmark].kind = .deco
         skyline[landmark].colour = colours[.deco]![0]
-        skyline[landmark].height = Int(room * 0.3)
+        skyline[landmark].height = Int(room * tallest)
         skyline[landmark].roof = .antenna
         let tower = skyline[landmark]
         return (tower.x + tower.width / 2, ground + tower.height + 18)
     }
 
-    /// The water in front of the waterfront: a shader that mirrors the quay and the city above it, row by rippling row.
+    /// The Long Bridge: a bay with a suspension bridge across it, hills on the far shore rising to a headland on
+    /// the right, and a small city at their left end. Returns the top of the left tower, for the beacon.
+    private func layOutBridge(_ rng: inout SeededRandom) -> (x: Int, y: Int) {
+        rng = SeededRandom(state: 2052)
+        (downtown, farHaze) = (0.13, 0.7)
+        for x in 0..<w { crest[x] = ground + hill(x) }
+        _ = layOutBand(&rng, spread: 0.16, tallest: 0.26, suburbs: false)
+        return (towers[0], towerTop + 4)
+    }
+
+    // The Long Bridge's shape: the columns its two towers stand at, the row of its roadway, and the row their tops reach.
+    private var towers: [Int] { [w * 22 / 100, w * 78 / 100] }
+    private var deck: Int { ground + 14 }
+    private var towerTop: Int { deck + (h - ground) * 36 / 100 }
+
+    /// The row the bridge's main cable hangs at over this column: a parabola between the towers, and from each a
+    /// nearly straight run down to an anchorage beyond the edge of the screen.
+    private func cable(_ x: Int) -> Float {
+        let (left, right) = (Float(towers[0]), Float(towers[1])), f = Float(x), high = Float(towerTop)
+        if f < left { return mix(Float(deck + 1), high, pow(max(0, f + 30) / (left + 30), 1.25)) }
+        if f > right { return mix(Float(deck + 1), high, pow(max(0, Float(w) + 30 - f) / (Float(w) + 30 - right), 1.25)) }
+        let u = (f - (left + right) / 2) / ((right - left) / 2)
+        return Float(deck + 4) + (high - Float(deck + 4)) * u * u
+    }
+
+    /// The water along the bottom: a shader that mirrors whatever stands above it (on the Waterfront, the quay and then
+    /// the city), row by rippling row.
     private func addWater() {
         let node = SKSpriteNode(color: .black, size: CGSize(width: w, height: waterRows))
         node.anchorPoint = .zero
@@ -388,7 +439,11 @@ final class PixelCity: SKScene {
         waterTints = [SKUniform(name: "u_deep", vectorFloat3: .zero), SKUniform(name: "u_glint", vectorFloat3: .zero)]
         node.shader = SKShader(source: Self.waterShader, uniforms: mirrored + waterTints + [
             SKUniform(name: "u_canvas", vectorFloat2: [Float(w), Float(h)]),
-            SKUniform(name: "u_water", vectorFloat4: [Float(w), Float(waterRows), Float(ground), Float(quay)]),
+            // The water's size; the row things nearest us stand in the water at (the bridge's towers, short of the far
+            // shore); and the rows of quay wall and of street, which lies flat and out of sight, above the water.
+            SKUniform(name: "u_water", vectorFloat4: [Float(w), Float(waterRows), Float(city == .bridge ? ground - 12 : waterRows),
+                                                      Float(city == .waterfront ? quay : 0)]),
+            SKUniform(name: "u_street", float: city == .waterfront ? 26 : 0),
             WallpaperTime.now,
         ])
         canvas.addChild(node)
@@ -398,22 +453,28 @@ final class PixelCity: SKScene {
     private static let waterShader = """
     void main() {
         vec2 p = floor(v_tex_coord * u_water.xy);   // this art pixel, counted from the water's bottom left
-        float d = u_water.y - 1.0 - p.y;            // rows below the quay
-        float near = d / u_water.y;                 // 0 at the quay, 1 nearest us
+        float line = p.y < u_water.z ? u_water.z : u_water.y; // the waterline this row mirrors
+        float d = line - 1.0 - p.y;                 // rows below it
+        float near = 1.0 - p.y / u_water.y;         // 0 at the far edge of the water, 1 nearest us
         // Ripples slide each row sideways by whole pixels, wider toward us.
         float wave = sin(d * 1.1 + u_now * 1.1) + sin(d * 0.43 - u_now * 0.6);
         float shift = floor(wave * (0.3 + near * 1.3) + 0.5);
-        // The mirror image: the quay wall, then the city from street level up, squashed. The street lies flat, out of sight.
-        float row = d < u_water.w ? u_water.y + d : u_water.z + (d - u_water.w) * 1.8;
+        // The mirror image: the quay wall if there is one, then what stands beyond it, squashed. Water beyond the
+        // nearest things mirrors only the foot of the far shore, not those things over again.
+        float squash = p.y < u_water.z ? 1.8 : 0.7;
+        float row = line + (d < u_water.w ? d : u_water.w + u_street + (d - u_water.w) * squash);
         vec2 uv = (vec2(p.x + shift, min(row, u_canvas.y - 1.0)) + 0.5) / u_canvas;
         vec4 city = texture2D(u_city, uv);
         vec3 c = texture2D(u_sky, uv).rgb * (1.0 - city.a) + city.rgb;
-        c = mix(c, u_deep, 0.3 + 0.4 * near) * (0.94 - 0.2 * near);
+        float bright = smoothstep(0.75, 1.0, max(c.r, max(c.g, c.b))); // the Sun, the Moon and lamps keep their shine
+        c = mix(c, u_deep, (0.3 + 0.4 * near) * (1.0 - 0.7 * bright)) * (0.94 - 0.2 * near * (1.0 - bright));
         // Glints: short dashes of sky on every other row, drifting.
         float cell = floor((p.x + floor(u_now * (0.6 + near))) / 5.0);
         float chance = fract(sin(cell * 12.9898 + d * 78.233) * 43758.5453);
         c += u_glint * step(0.93, chance) * mod(d, 2.0) * 0.12;
-        gl_FragColor = vec4(c, 1.0);
+        // Whatever the city's painting has standing in the water (a bridge's towers) shows over it.
+        vec4 here = texture2D(u_city, (p + 0.5) / u_canvas);
+        gl_FragColor = vec4(c * (1.0 - here.a) + here.rgb, 1.0);
     }
     """
 
@@ -503,6 +564,7 @@ final class PixelCity: SKScene {
         case .street: break
         case .waterfront: drawHorizon(into: &px, zenith: top, horizon: horizon)
         case .foothills: drawMountains(into: &px, horizons: horizons)
+        case .bridge: drawHorizon(into: &px, zenith: top, horizon: horizon)
         }
         for building in skyline {
             let haze = horizons[min(max(building.x + building.width / 2, 0), w - 1)] // the horizon behind it
@@ -515,6 +577,9 @@ final class PixelCity: SKScene {
             drawStreet(into: &px)
             drawQuay(into: &px)
         case .foothills: drawPlain(into: &px, horizons: horizons)
+        case .bridge:
+            drawBridge(into: &px)
+            ship.texture = shipTexture(dark: night > 0.5)
         }
         backdrop.texture = px.texture()
         mirrored.first?.textureValue = sky.texture
@@ -817,13 +882,88 @@ final class PixelCity: SKScene {
         return mix(0.5, 0.08, smoothstep(18, 24, evening))
     }
 
-    /// The far shore behind the waterfront: low hills in the haze, seen through the gaps and over the low roofs.
+    /// How high the far shore's hills stand at this column: low behind the Waterfront, and behind the Long Bridge
+    /// rising to a headland on the right.
+    private func hill(_ x: Int) -> Int {
+        let f = Float(x), roll = 4.5 + 2.5 * sin(f * 0.023 + 1) + 1.6 * sin(f * 0.061 + 4) + 0.8 * sin(f * 0.13)
+        return Int(city == .bridge ? roll * (1.7 + 3.2 * smoothstep(0.35, 0.95, f / Float(w))) : roll)
+    }
+
+    /// The far shore: hills in the haze, seen through the Waterfront's gaps and over its low roofs, and across the
+    /// Long Bridge's bay.
     private func drawHorizon(into px: inout Pixels, zenith: RGB, horizon: RGB) {
-        let hill = mix(horizon * 0.82, zenith, 0.25)
+        let land = mix(horizon * 0.82, zenith, 0.25)
         for x in 0..<w {
-            let f = Float(x)
-            px.fill(x, ground, 1, Int(4.5 + 2.5 * sin(f * 0.023 + 1) + 1.6 * sin(f * 0.061 + 4) + 0.8 * sin(f * 0.13)), hill)
+            px.fill(x, ground, 1, hill(x), land)
+            if city == .bridge { px.fill(x, ground, 1, min(2, hill(x)), land * 0.8) } // the shore, darker at the water
         }
+    }
+
+    /// The Long Bridge: cables and their hangers, two towers standing in the bay, the roadway on its truss, and at
+    /// night a string of lights along all of it.
+    private func drawBridge(into px: inout Pixels) {
+        let steel = rgb(100, 138, 134), base = ground - 12, lamp = rgb(255, 222, 160)
+        let (front, shade, edge) = (lit(steel, keyFront), lit(steel * 0.6, .zero), lit(steel, keyTop, shade: 1.1))
+        let dark = night > 0.15, glow = min(1, night * 1.6)
+        var last = Int(cable(-1))
+        for x in 0..<w {
+            let y = Int(cable(x))
+            px.fill(x, min(y, last), 1, abs(y - last) + 1, shade) // joined up where the cable runs steep
+            if x % 6 == 0, y > deck + 2 {
+                px.fill(x, deck + 1, 1, y - deck - 1, shade, 0.55) // a hanger…
+                if dark { px.plot(x, y + 1, lamp, glow) }          // …and a light where it meets the cable
+            }
+            last = y
+        }
+        for tx in towers {
+            let onRight = tx < w / 2 // as with the buildings, the side wall on show faces the middle of the screen
+            let footing = lit(rgb(168, 162, 150), keyFront)
+            px.fill(tx - 6, base - 2, 13, 5, footing)
+            px.fill(tx - 6, base + 2, 13, 1, lit(rgb(190, 184, 170), keyTop))
+            px.fill(tx - 6, base - 2, 13, 1, footing * 0.55)
+            var (half, y) = (4, base + 3)
+            for stage in 0..<3 { // the shaft narrows in three stages, with cross-braces as darker bands
+                let height = stage == 2 ? towerTop + 2 - y : (towerTop - base) * 38 / 100
+                px.fill(tx - half, y, half * 2 + 1, height, front)
+                px.fill(onRight ? tx + half - 1 : tx - half, y, 2, height, lit(steel, onRight ? keyRight : keyLeft, shade: 0.72))
+                px.fill(tx - half, y + height - 1, half * 2 + 1, 1, edge)
+                for band in stride(from: y + 6, to: y + height - 3, by: 9) { px.fill(tx - half + 1, band, half * 2 - 1, 2, shade, 0.5) }
+                (half, y) = (half - 1, y + height)
+            }
+            px.fill(tx - 1, y, 3, 2, edge)
+            if dark { for i in 0..<30 { px.fill(tx - 3, deck + 2 + i, 7, 1, lamp, 0.32 * glow * (1 - Float(i) / 30)) } } // floodlit from the deck
+            px.plot(tx, y + 2, rgb(255, 60, 50), night)
+        }
+        px.fill(0, deck - 5, w, 1, shade)
+        for x in 0..<w { // the truss: verticals with a V between each pair
+            let k = x % 6
+            if k == 0 { px.fill(x, deck - 4, 1, 3, shade) }
+            px.plot(x, deck - 1 - min(k, 6 - k), shade)
+        }
+        px.fill(0, deck - 1, w, 2, shade)
+        px.fill(0, deck, w, 1, edge)
+        for x in stride(from: 3, to: w, by: 8) where dark { px.plot(x, deck + 1, lamp, glow) }
+    }
+
+    /// The Long Bridge's freighter, heading right, with a faint reflection under it. By night its hull is a shadow and
+    /// the bridge windows and mast light show.
+    private func shipTexture(dark: Bool) -> SKTexture {
+        let dim = dark ? RGB(0.3, 0.32, 0.45) : .one
+        let paints: [Character: RGB] = [
+            "H": rgb(44, 56, 76) * dim, "r": rgb(150, 52, 46) * dim, "W": rgb(226, 226, 218) * dim, "m": rgb(120, 124, 130) * dim,
+            "a": rgb(172, 86, 62) * dim, "b": rgb(62, 130, 140) * dim, "d": rgb(196, 160, 72) * dim,
+            "w": dark ? rgb(255, 220, 140) : rgb(70, 90, 110), "l": dark ? rgb(255, 250, 230) : rgb(120, 124, 130),
+        ]
+        var px = Pixels(freighter[0].count, freighter.count + 4)
+        for (r, row) in freighter.enumerated() {
+            for (x, ch) in row.enumerated() {
+                guard let colour = paints[ch] else { continue }
+                let y = freighter.count - 1 - r
+                px.plot(x, y + 4, colour)
+                if y < 4 { px.plot(x, 3 - y, colour * 0.6, 0.45) }
+            }
+        }
+        return px.texture()
     }
 
     /// The parks in the waterfront's gaps: a hedge and a few round trees, lit from the Sun's side.
@@ -1021,6 +1161,20 @@ final class PixelCity: SKScene {
             plane.xScale = CGFloat(planeDirection)
             plane.isHidden = false
         }
+        if city == .bridge {
+            if shipDirection == 0, clock >= nextShip {
+                shipDirection = Bool.random() ? 1 : -1
+                shipX = shipDirection > 0 ? -20 : Float(w + 20)
+                ship.xScale = CGFloat(shipDirection)
+                ship.isHidden = false
+            }
+            shipX += shipDirection * 2.2 * dt
+            ship.position.x = CGFloat(shipX.rounded(.down))
+            if shipDirection != 0, shipX < -22 || shipX > Float(w + 22) {
+                (shipDirection, ship.isHidden) = (0, true)
+                nextShip = clock + .random(in: 90...240)
+            }
+        }
         if planeDirection != 0 {
             planeX += planeDirection * 7 * dt
             plane.position.x = CGFloat(planeX.rounded(.down))
@@ -1112,8 +1266,8 @@ private enum Roof: CaseIterable { case plain, ledge, setback, tank, antenna }
 
 /// The cities Settings can pick, in the menu's order. The pick is stored as its index, so add new ones at the end.
 private enum City: Int, CaseIterable {
-    case street, waterfront, foothills
-    var name: String { ["Street", "Waterfront", "Foothills"][rawValue] }
+    case street, waterfront, foothills, bridge
+    var name: String { ["Street", "Waterfront", "Foothills", "Long Bridge"][rawValue] }
 }
 
 /// What a building is: the Street's plain block, or on the waterfront a windowless tower in the haze, a stone
@@ -1165,6 +1319,17 @@ private let sedan = [
     "tBBBBBBBBBBBBBBB",
     "ddooodddddooodd.",
     "..ooo.....ooo...",
+]
+
+private let freighter = [
+    "....l.........................",
+    "...WWWW.......................",
+    "...wWwW.......................",
+    "...WWWW..aaaa.bbbb.dddd.aaaa..",
+    "...wWwW..aaaa.bbbb.dddd.aaaa..",
+    "HHHHHHHHHHHHHHHHHHHHHHHHHHHHHH",
+    ".HHHHHHHHHHHHHHHHHHHHHHHHHHHH.",
+    "..rrrrrrrrrrrrrrrrrrrrrrrrrr..",
 ]
 
 private let bus = [
