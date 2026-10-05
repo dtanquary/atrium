@@ -1,16 +1,21 @@
 import SpriteKit
 
-/// `PIXELCITY_HOUR=21` shows today at that hour instead of now, for screenshots.
-@MainActor func pixelCity(size: CGSize) -> SKScene {
-    let hour = ProcessInfo.processInfo.environment["PIXELCITY_HOUR"].flatMap(Double.init)
-    return PixelCity(size: size, at: hour.map { Calendar.current.startOfDay(for: Date()).addingTimeInterval($0 * 3600) })
-}
+@MainActor func pixelCity(size: CGSize) -> SKScene { PixelCity(size: size) }
 
 /// A pixel-art skyline that follows the real sun and clock: dawn, day, dusk and night skies, windows lighting
 /// up and going dark through the evening, traffic on the street, a blinking antenna and the odd plane.
 /// Everything lives on a low-resolution canvas measured in art pixels, scaled up with nearest filtering.
 final class PixelCity: SKScene {
-    private let fixedTime: Date? // snapshot seam: show this moment instead of now
+    nonisolated static let knobs = [
+        Knob(key: "city.previewTime", label: "Preview a time of day", range: 0...1, standard: 0, section: "Preview",
+             format: .toggle),
+        Knob(key: "city.previewHour", label: "Time", range: 0...24, standard: 19, section: "Preview", format: .clock,
+             shownWhen: "city.previewTime"),
+    ]
+    private enum K: Int { case previewTime, previewHour }
+    private static func knob(_ k: K) -> Double { knobs[k.rawValue].value }
+    private var settings = PixelCity.knobs.map(\.value)
+
     private let w: Int, h: Int
     private let streetTop = 26 // buildings stand on this row; road and sidewalks are below it
     private let canvas = SKNode()
@@ -32,8 +37,7 @@ final class PixelCity: SKScene {
     private var nextPlane = TimeInterval.random(in: 3...25)
     private var planeX: Float = 0, planeDirection: Float = 0
 
-    init(size: CGSize, at fixedTime: Date? = nil) {
-        self.fixedTime = fixedTime
+    override init(size: CGSize) {
         let pixel = max(2, (size.height / 240).rounded()) // points per art pixel
         w = Int((size.width / pixel).rounded(.up))
         h = Int((size.height / pixel).rounded(.up))
@@ -46,12 +50,28 @@ final class PixelCity: SKScene {
         layOut()
         redraw()
         run(.repeatForever(.sequence([.wait(forDuration: 30), .run { [weak self] in self?.redraw() }])))
+        NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged),
+                                               name: UserDefaults.didChangeNotification, object: nil)
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
     override func didMove(to view: SKView) {
         Location.shared.start()
+    }
+
+    /// Repaints when one of its own settings changes (the notification comes for every wallpaper's).
+    @objc private func settingsChanged() {
+        let picked = Self.knobs.map(\.value)
+        guard picked != settings else { return }
+        settings = picked
+        redraw()
+    }
+
+    /// Now, or today at the preview hour while previewing.
+    private var now: Date {
+        guard Self.knob(.previewTime) > 0.5 else { return Date() }
+        return Calendar.current.startOfDay(for: Date()).addingTimeInterval(Self.knob(.previewHour) * 3600)
     }
 
     // MARK: - Layout (once)
@@ -152,7 +172,7 @@ final class PixelCity: SKScene {
     /// Repaints everything that follows the clock: sky, sun, moon, stars, buildings, windows and street lights,
     /// then recolours the clouds, cars and plane to match.
     private func redraw() {
-        let now = fixedTime ?? Date()
+        let now = now
         let spot = Location.shared.coordinate
         let sun = skyPosition(now, latitude: spot.latitude, longitude: spot.longitude)
         let moonAge = ((now.timeIntervalSince1970 - 947_182_440) / 86_400).truncatingRemainder(dividingBy: 29.530588853)

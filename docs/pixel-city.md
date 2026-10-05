@@ -3,7 +3,7 @@
 A pixel-art skyline that follows the real Sun and clock. The sky moves through dawn, day, dusk and night, with the Sun and Moon in their real places and stars after dark. Windows light up and go dark through the evening, cars and buses run in both lanes (with headlights at night), a beacon blinks on the tallest tower, and the odd plane crosses.
 
 - **Files:** `Sources/Atrium/PixelCity.swift`, which holds everything: the scene, the `Pixels` canvas, sprite art as strings, `SeededRandom`, and its own low-precision `skyPosition()` for the Sun. It reads `Location.swift` ([live-sky.md](live-sky.md)).
-- **Entry:** `pixelCity(size:)` builds `final class PixelCity: SKScene`, whose `init(size:at:)` is the test seam (a fixed `Date`). Its entry in Scenes.swift is "Pixel City", icon `building.2.fill`, tint `.pink`, with no settings.
+- **Entry:** `pixelCity(size:)` builds `final class PixelCity: SKScene`. Its entry in Scenes.swift is "Pixel City", icon `building.2.fill`, tint `.pink`, with `PixelCity.knobs`.
 - **Kind:** SpriteKit on a low-resolution canvas. One backdrop texture is repainted every 30 s, and sprites for the moving things all sit under a `canvas` node scaled up by the pixel size. Every texture uses `.nearest` filtering, so it stays crisp.
 
 ## How it works
@@ -34,14 +34,15 @@ A pixel-art skyline that follows the real Sun and clock. The sky moves through d
   - **Plane:** one every 40–120 s, at 7 px/s, somewhere in the top 20% of the sky.
 
 ## Time, live data and appearance
-- **Time:** `fixedTime ?? Date()`. The hour for windows and traffic is the local clock hour.
+- **Time:** `now`: the real time, or today at the preview hour while Settings is previewing one. The hour for windows and traffic is the local clock hour.
 - **Sun:** `skyPosition()` at `Location.shared` (low precision, about 1°). `night = smoothstep(4°, −8°, sun elevation)`.
 - **Placement:** sky positions go onto the canvas looking toward the equator (`place()`). Azimuth spans about 200° across the screen, and elevation 0–70° spans the sky.
 - **No network.** `Location.shared.start()` is called in `didMove`.
 - **Appearance:** it ignores Light/Dark Mode. The real Sun already sets the look.
 
 ## Settings
-None yet.
+`PixelCity.knobs`, read with `knob(_:)`. A change repaints at once (`settingsChanged`).
+- **Preview a time of day** (`city.previewTime`, `city.previewHour`): shows today at that hour instead of now, the only way to see a sunset at noon. Off by default.
 
 ## Tuning constants
 - **Canvas:** 240 art pixels per screen height; the street top is at row 26; lamps every 46 px.
@@ -71,11 +72,11 @@ None yet.
 - Switch to `SkyMath` for the Sun and Moon, and delete `skyPosition`.
 - Weather tie-in: rain or snow from Weather's Open-Meteo conditions.
 - Seasonal touches: holiday lights, snow on roofs.
-- Settings: density, traffic, planes, palette (for example a neon or cyberpunk night).
+- More settings: density, traffic, planes, palette (for example a neon or cyberpunk night).
 - A second landmark, or a bridge.
 - Reflections on a wet street.
 
 ## Checking it
 - `SNAPSHOT_SCENE="Pixel City" swift test` renders the current time at the fallback location.
-- **Particular times:** `PIXELCITY_HOUR=19.2 SNAPSHOT_SCENE="Pixel City" swift test` renders today at that hour. The agent checked 12:30, 17:52 (dusk), 18:40, 23:30, 05:48 (dawn), 06:45 and 07:15.
+- **Particular times:** `SNAPSHOT_DEFAULTS="city.previewTime=1,city.previewHour=19.2" SNAPSHOT_SCENE="Pixel City" swift test` renders today at that hour (this replaced the `PIXELCITY_HOUR` variable on 2026-10-04).
 - **Traffic and planes:** use `SNAPSHOT_SECONDS=30` or more, now that the harness runs `update(_:)` properly.
