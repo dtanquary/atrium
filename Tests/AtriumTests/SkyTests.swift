@@ -53,3 +53,14 @@ func eclipsesLineUp(time: String, latitude: Double, longitude: Double) {
     // Without parallax it misses by a good part of a degree.
     #expect(acos(min(dot(Sky.moon(jd), Sky.sun(jd)), 1)) * 180 / .pi > 0.4)
 }
+
+/// Every real skyline Live Sky offers is in Resources, runs left to right and spans the whole view, so none can paint
+/// an empty ground or one that stops short of the screen's edge.
+@Test func skylinesSpanTheView() {
+    for land in Landscape.allCases where land != .pines {
+        let (across, up) = (land.profile.map { $0.azimuth * 180 / .pi }, land.profile.map { $0.altitude * 180 / .pi })
+        #expect((across.first ?? 0) < -59.9 && (across.last ?? 0) > 59.9, "\(land) spans \(across.first ?? 0)…\(across.last ?? 0)°")
+        #expect(zip(across, across.dropFirst()).allSatisfy { $0 <= $1 }, "\(land) doubles back")
+        #expect(up.allSatisfy { (0...15).contains($0) } && (up.max() ?? 0) > 3, "\(land) is flat or implausibly tall")
+    }
+}

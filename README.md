@@ -133,11 +133,11 @@ A spiral galaxy turning slowly, after a real one, with dust lanes, star clusters
 | NGC 1300, the Great Barred Spiral, with dust lanes along its bar | The Milky Way, seen face-on |
 
 #### Live Sky
-The real sky above you: stars, planets, the Moon's phase, the Milky Way and the ISS. Deep blue by day.
+The real sky above you: stars, planets, the Moon's phase, the Milky Way and the ISS. Deep blue by day. Settings can stand it on a landscape: a pine ridge, or the real skyline of Monument Valley, the Tetons, Shiprock, Devils Tower or Mount Fuji, worked out from elevation data and drawn at its true size among the stars.
 
 | ![Live Sky at night](docs/images/live-sky.jpg) | ![Live Sky at dusk](docs/images/live-sky-dusk.jpg) |
 |---|---|
-| Nine tonight, looking south, with the Milky Way setting in the south-west | Dusk, from Preview a time of day in Settings |
+| Nine tonight, looking south, with the Milky Way setting in the south-west | Dusk over Monument Valley, one of the landscapes in Settings |
 
 #### Earth from Orbit
 The globe above your location with the live day/night line, today's real clouds, lightning in storms near you, city lights and the ISS.

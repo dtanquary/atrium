@@ -345,6 +345,8 @@ struct AboutPage: View {
             Section("Sky, Earth and Moon") {
                 credit("Stars", "Yale Bright Star Catalogue, 5th edition (public domain)")
                 credit("Constellations", "d3-celestial by Olaf Frohn (BSD 3-Clause)", "https://github.com/ofrohn/d3-celestial")
+                credit("Live Sky's skylines", "Elevation from the USGS 3D Elevation Program and NASA's SRTM (public domain)",
+                       "https://www.usgs.gov/3d-elevation-program")
                 credit("Planet positions", "NASA JPL's Approximate Positions of the Planets", "https://ssd.jpl.nasa.gov/planets/approx_pos.html")
                 credit("Earth imagery", "NASA's Blue Marble (public domain)", "https://visibleearth.nasa.gov/collection/1484/blue-marble")
                 credit("Earth at night", "NASA's Black Marble (public domain)", "https://earthobservatory.nasa.gov/features/NightLights")

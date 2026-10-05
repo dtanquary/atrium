@@ -13,6 +13,8 @@ final class LiveSky: SKScene {
         Knob(key: "sky.planetLabels", label: "Planet labels", range: 0...1, standard: 1, section: "Show", format: .toggle),
         Knob(key: "sky.landscape", label: "Show a landscape", range: 0...1, standard: 0, section: "Landscape",
              format: .toggle),
+        Knob(key: "sky.ground", label: "Landscape", range: 0...Double(Landscape.allCases.count - 1), standard: 0,
+             section: "Landscape", format: .choice(Landscape.allCases.map(\.name)), shownWhen: "sky.landscape"),
         Knob(key: "sky.previewTime", label: "Preview a time of day", range: 0...1, standard: 0, section: "Preview",
              format: .toggle),
         Knob(key: "sky.previewHour", label: "Time", range: 0...24, standard: 13, section: "Preview", format: .clock,
@@ -41,6 +43,7 @@ final class LiveSky: SKScene {
     private var landHorizon: CGFloat { size.height * 0.12 }
     private let horizonUniform = SKUniform(name: "u_horizon", float: 0)
     private let ground = SKNode()
+    private var landscape: Landscape?
     private var compass: [SKLabelNode] = []
     /// Points per unit of stereographic plane, for a ~120° field of view across the screen.
     private var scale: Double { Double(size.width) / 2 / (2 * tan(120.0 / 4 * .pi / 180)) }
@@ -93,6 +96,8 @@ final class LiveSky: SKScene {
         constellations.isHidden = Self.knobs[0].value < 0.5
         for planet in planets { planet.node.children.forEach { $0.isHidden = Self.knobs[1].value < 0.5 } } // their labels
         ground.isHidden = Self.knobs[2].value < 0.5
+        let pick = Landscape.allCases[min(Int(Self.knobs[3].value), Landscape.allCases.count - 1)]
+        if !ground.isHidden, pick != landscape { paintGround(pick) }
         horizonY = ground.isHidden ? 0 : landHorizon
         horizonUniform.floatValue = Float(horizonY)
         for letter in compass { letter.position.y = ground.isHidden ? 8 : landHorizon * 0.3 }
@@ -101,8 +106,8 @@ final class LiveSky: SKScene {
 
     /// Now, or today at the preview hour while previewing a time of day.
     private var skyDate: Date {
-        guard Self.knobs[3].value > 0.5 else { return Date() }
-        return Calendar.current.startOfDay(for: Date()).addingTimeInterval(Self.knobs[4].value * 3600)
+        guard Self.knobs[4].value > 0.5 else { return Date() }
+        return Calendar.current.startOfDay(for: Date()).addingTimeInterval(Self.knobs[5].value * 3600)
     }
 
     // MARK: Projection
@@ -240,7 +245,7 @@ final class LiveSky: SKScene {
     }
 
     /// Lines of numbers from a Resources text file, skipping # comments.
-    nonisolated private static func rows(_ file: String) -> [String] {
+    nonisolated fileprivate static func rows(_ file: String) -> [String] {
         ((try? String(contentsOf: resource(file), encoding: .utf8)) ?? "")
             .split(separator: "\n").filter { !$0.hasPrefix("#") }.map(String.init)
     }
@@ -422,39 +427,22 @@ final class LiveSky: SKScene {
         addChild(sky)
     }
 
-    /// Rolling hills and a ragged treeline along the bottom, with faint compass points.
-    private func addHorizon() {
-        let (width, height) = (size.width, landHorizon + 60)
-        let land = SKSpriteNode(texture: paint(CGSize(width: width, height: height)) { ctx in
+    /// Paints a silhouette along the bottom, in place of the one before.
+    private func paintGround(_ pick: Landscape) {
+        landscape = pick
+        let (width, horizon, scale) = (size.width, landHorizon, CGFloat(scale))
+        let strip = CGSize(width: width, height: pick.height(horizon: horizon, scale: scale))
+        let land = SKSpriteNode(texture: paint(strip) { ctx in
             ctx.setFillColor(CGColor(red: 0.008, green: 0.01, blue: 0.02, alpha: 1))
-            let ridge = { (x: CGFloat) in self.landHorizon * (0.72 + 0.16 * sin(x / 260 + 1) + 0.08 * sin(x / 83)) }
-            let hills = CGMutablePath()
-            hills.move(to: .zero)
-            for x in stride(from: 0, through: width + 4, by: 4) { hills.addLine(to: CGPoint(x: x, y: ridge(x))) }
-            hills.addLine(to: CGPoint(x: width + 4, y: 0))
-            ctx.addPath(hills)
-            ctx.fillPath()
-
-            // Stands of conifers along the higher stretches: stacked tiers, varied heights and gaps.
-            var x: CGFloat = 0
-            while x < width {
-                if sin(x / 210) + 0.5 * sin(x / 53) > 0.35 {
-                    let (tall, y) = (CGFloat.random(in: 16...46), ridge(x) - 3)
-                    for tier in 0..<4 {
-                        let (base, top) = (y + tall * CGFloat(tier) * 0.2, y + tall * (0.45 + CGFloat(tier) * 0.19))
-                        let half = tall * 0.2 * (1 - CGFloat(tier) * 0.2)
-                        ctx.move(to: CGPoint(x: x - half, y: base))
-                        ctx.addLine(to: CGPoint(x: x, y: top))
-                        ctx.addLine(to: CGPoint(x: x + half, y: base))
-                    }
-                    ctx.addRect(CGRect(x: x - 1, y: y - 4, width: 2, height: 8))
-                    ctx.fillPath()
-                }
-                x += .random(in: 5...13)
-            }
-        }, size: CGSize(width: width, height: height))
+            pick.paint(ctx, width: width, horizon: horizon, scale: scale)
+        }, size: strip)
         land.anchorPoint = .zero
+        ground.removeAllChildren()
         ground.addChild(land)
+    }
+
+    /// The landscape's node, empty until `applySettings` has one to show, and faint compass points.
+    private func addHorizon() {
         ground.zPosition = 6
         addChild(ground)
 
@@ -492,5 +480,75 @@ final class LiveSky: SKScene {
                     .sequence([.fadeIn(withDuration: 0.1), .fadeOut(withDuration: 0.6)])]),
             .removeFromParent(),
         ]))
+    }
+}
+
+/// The silhouettes Live Sky can stand on, named as Settings lists them. It stores the pick by its place here, so add
+/// new ones at the end.
+enum Landscape: String, CaseIterable {
+    case pines = "Pine ridge", monument = "Monument Valley", tetons = "Teton Range", shiprock = "Shiprock",
+         tower = "Devils Tower", fuji = "Mount Fuji"
+
+    var name: String { rawValue }
+
+    /// A real skyline, from `sky-<case>.txt` (made by docs/live-sky/horizon.py): degrees right of the view's centre
+    /// and degrees above the horizon, as seen from the place its header names. Empty for the pines, which are drawn.
+    var profile: [(azimuth: CGFloat, altitude: CGFloat)] {
+        LiveSky.rows("sky-\(self).txt").compactMap { row in
+            let f = row.split(separator: " ").compactMap { Double($0) }
+            return f.count == 2 ? (f[0] * .pi / 180, f[1] * .pi / 180) : nil
+        }
+    }
+
+    /// How tall its strip is: room for its tallest feature. `horizon` is the true horizon's height in points, and
+    /// `scale` the sky's points per unit of its stereographic plane.
+    func height(horizon: CGFloat, scale: CGFloat) -> CGFloat {
+        switch self {
+        case .pines: horizon + 60
+        default: horizon + 1.35 * scale * sin(profile.map(\.altitude).max() ?? 0) + 2 // 1.35: the projection's stretch at the edges
+        }
+    }
+
+    /// Paints it in the context's fill colour, `width` points across.
+    func paint(_ ctx: CGContext, width: CGFloat, horizon: CGFloat, scale: CGFloat) {
+        switch self {
+        case .pines:
+            // Rolling hills, with stands of conifers along the higher stretches: stacked tiers, varied heights and gaps.
+            let ridge = { (x: CGFloat) in horizon * (0.72 + 0.16 * sin(x / 260 + 1) + 0.08 * sin(x / 83)) }
+            ctx.move(to: .zero)
+            for x in stride(from: 0, through: width + 4, by: 4) { ctx.addLine(to: CGPoint(x: x, y: ridge(x))) }
+            ctx.addLine(to: CGPoint(x: width + 4, y: 0))
+            ctx.fillPath()
+            var x: CGFloat = 0
+            while x < width {
+                if sin(x / 210) + 0.5 * sin(x / 53) > 0.35 {
+                    let (tall, y) = (CGFloat.random(in: 16...46), ridge(x) - 3)
+                    for tier in 0..<4 {
+                        let (base, top) = (y + tall * CGFloat(tier) * 0.2, y + tall * (0.45 + CGFloat(tier) * 0.19))
+                        let half = tall * 0.2 * (1 - CGFloat(tier) * 0.2)
+                        ctx.move(to: CGPoint(x: x - half, y: base))
+                        ctx.addLine(to: CGPoint(x: x, y: top))
+                        ctx.addLine(to: CGPoint(x: x + half, y: base))
+                    }
+                    ctx.addRect(CGRect(x: x - 1, y: y - 4, width: 2, height: 8))
+                    ctx.fillPath()
+                }
+                x += .random(in: 5...13)
+            }
+        default:
+            // A real skyline goes through the sky's own projection, so it stands as wide and as tall as it would
+            // among these stars. Its ends are carried out to the screen's edges.
+            let points = profile.map { p in
+                let k = 2 / (1 + cos(p.altitude) * cos(p.azimuth)) * scale
+                return CGPoint(x: width / 2 + k * cos(p.altitude) * sin(p.azimuth), y: horizon + k * sin(p.altitude))
+            }
+            guard let first = points.first, let last = points.last else { return }
+            ctx.move(to: CGPoint(x: -2, y: 0))
+            ctx.addLine(to: CGPoint(x: -2, y: first.y))
+            points.forEach(ctx.addLine)
+            ctx.addLine(to: CGPoint(x: width + 2, y: last.y))
+            ctx.addLine(to: CGPoint(x: width + 2, y: 0))
+            ctx.fillPath()
+        }
     }
 }

@@ -8,9 +8,10 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
   - `Sources/Atrium/Location.swift`: `Location.shared`, the viewer's position. Shared with every live scene.
   - `Sources/Atrium/ISS.swift`: see [earth-from-orbit.md](earth-from-orbit.md).
   - `Sources/Atrium/Resources/stars.txt` and `constellations.txt`.
+  - `Sources/Atrium/Resources/sky-*.txt`: the real skylines, made by `docs/live-sky/horizon.py`.
   - `Tests/AtriumTests/SkyTests.swift`.
 - **Entry:** `liveSky(size:)` builds `final class LiveSky: SKScene`. Its entry in Scenes.swift is "Live Sky", icon `moon.stars.fill`, tint `.blue`, `knobs: LiveSky.knobs`.
-- **Kind:** hybrid. The background and the Moon are SKShaders; stars, planets, the Sun, the ISS, labels and meteors are sprites; the ground is a Core Graphics texture.
+- **Kind:** hybrid. The background and the Moon are SKShaders; stars, planets, the Sun, the ISS, labels and meteors are sprites; the landscape, when one is switched on, is a Core Graphics texture.
 
 ## How it works
 - **Projection.** A stereographic projection centred on the horizon point the view faces: south, or north when latitude < 0 (`facingSouth`). Great circles through the centre stay straight, so the horizon is a straight line. `scale` gives about a 120° horizontal field of view; `horizonY` sits on the screen's bottom edge, so the sky fills the screen and nothing in it is below the horizon, or 12% up (`landHorizon`) while a landscape shows. `project()` returns nil for points behind the viewer (`1 + forward <= 0.2`). `place()` hides a node that's below the horizon (z < −0.01) or more than 30 pt off-screen.
@@ -36,7 +37,10 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
   - Glow alpha = 0.5 · lit · (1 − 0.7 · day).
 - **ISS:** in `update(_:)`, using `ISS.shared.position()` → `Sky.lookDirection` → `place()`. It's shown only while sunlit (the real naked-eye condition), with a label as a child.
 - **Meteors:** a painted 140×2 pt streak every 15–75 s (`wait 45 ± 30`), fading over 0.7 s.
-- **Ground:** a hill ridge and stands of conifers painted once (`addHorizon`) into the `ground` node, which Settings can hide, plus faint compass letters (SE, S, SW, or NW, N, NE). The letters stay when the landscape goes, just above the bottom edge.
+- **Landscape:** off unless Settings turns it on. `Landscape` (end of LiveSky.swift) lists the silhouettes, and `paintGround` paints the one picked into the `ground` node, the first time it's shown and again when the pick changes.
+  - **Pine ridge** is drawn: a hill ridge with stands of conifers, rolled afresh each time.
+  - **The rest are real skylines**: Monument Valley, the Teton Range, Shiprock, Devils Tower and Mount Fuji. Each is a `sky-<case>.txt` of about 120 to 540 points, degrees right of the view's centre and degrees above the horizon, as seen from the spot its header names. The points go through the same stereographic projection as the stars, so the skyline stands as wide and as tall as it would among them, on any display. Only Shiprock and Fuji are really seen looking south; the others face east, west and north-west.
+  - Faint compass letters (SE, S, SW, or NW, N, NE) sit on the ground, or just above the bottom edge without one.
 
 ## Time, live data and appearance
 - **Time:** `skyDate` is `Date()`, or today at `sky.previewHour` while `sky.previewTime` is on.
@@ -62,6 +66,7 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
 ## Data and licences
 - `stars.txt`: Yale Bright Star Catalogue, 5th ed. (CDS V/50), public domain. Credit is in the file header.
 - `constellations.txt`: d3-celestial (Olaf Frohn), BSD 3-Clause. The full licence notice is kept in the header and must stay there.
+- `sky-*.txt`: horizon angles worked out from elevation data by `docs/live-sky/horizon.py`. The US sites use the USGS 3D Elevation Program (public domain; USGS asks for credit, which About gives), down to 1 m lidar over the buttes and the tower. Fuji uses NASA's SRTMGL1 v3 (30 m, CC0), fetched from ESA's STEP mirror. Each file's header names the viewpoint and the source.
 
 ## Settings
 | key | label | range | default | drives |
@@ -69,6 +74,7 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
 | `sky.constellations` | Constellation lines | toggle | on | `constellations.isHidden` |
 | `sky.planetLabels` | Planet labels | toggle | on | the planet nodes' label children |
 | `sky.landscape` | Show a landscape | toggle | off | `ground.isHidden`, and `horizonY` (12% up, or the bottom edge) through `u_horizon` |
+| `sky.ground` | Landscape (shown while the switch is on) | menu | Pine ridge | which `Landscape` is painted, stored as its place in the list |
 | `sky.previewTime` | Preview a time of day | toggle | off | `skyDate` uses the preview hour |
 | `sky.previewHour` | Time (shown while previewing) | 0–24 h | 13:00 | the hour for `skyDate` |
 
@@ -107,8 +113,23 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
 - **Moon.** "Show the moon phase as it would from my location" meant that the Moon itself should be accurate. A bottom-left phase badge was added, then removed at his request as redundant. Don't bring back a HUD for this.
 - **Moon's terminator (2026-10-03).** In Weather he saw the half Moon end in a hard edge by day, where the real one fades into the sky, and asked for Live Sky to be checked too. Both now share `moonShade`. Live Sky had also drawn the dark side as a black half-disc on the blue day sky.
 - **Switches.** He asked for the constellation and planet-label switches.
-- **Landscape (2026-10-05).** He asked for a switch to turn the landscape off, and for more silhouettes to choose between. Off means no ground at all, not a flat one: the horizon drops to the bottom edge. Once he had the switch he asked for off to be the default ("i think we should default to no landscape").
+- **Landscape (2026-10-05).** He asked for a switch to turn the landscape off, and for more silhouettes to choose between. Off means no ground at all, not a flat one: the horizon drops to the bottom edge. Once he had the switch he asked for off to be the default ("i think we should default to no landscape", "it looks nice without a landscape there imo"), so the landscapes are an extra for those who want one.
 - **Preview.** Added so he could see the daytime look on demand.
+
+## Landscapes: what was looked at (2026-10-05)
+A research agent compared drawn recipes, real skylines and traced photos, each as a strip against night, twilight and day skies.
+- **Real skylines won.** They cost a few KB of text, scale to any width and look real. The method is in `docs/live-sky/horizon.py`: walk outward from the viewpoint along each bearing and keep the highest angle the ground reaches.
+  - The National Map's `exportImage` keeps pixels square in degrees: ask for a square image of a box that isn't square in degrees and it quietly widens the box in latitude, which gives a plausible but wrong skyline. The script asks for 2000 × 2000·cos(latitude). It also fails above about 2000 pixels a side, so the script fetches nested squares.
+  - To add one: a line in the script's `SITES`, run it, add a case to `Landscape` whose name matches the file, and look at it in a snapshot.
+- **Skylines computed and turned down:** the Sierra crest from the Alabama Hills, and Monte Rosa to the Matterhorn from above Zermatt or Gornergrat (walls 10° to 12° high that hide the low sky, with no one shape); Torres del Paine (16°, and SRTM puts a false needle in it); Kilimanjaro from Amboseli (a low dome); Table Mountain across Table Bay (needs its angles stretched 1.5× to read); Monument Valley from US-163 (weaker than the visitor centre's view). Yosemite's walls stand 12° and more from any classic viewpoint.
+- **Drawn recipes mostly read as clip art:** saguaros, acacias and bare trees from rules look stamped. Observatory domes and a line of radio dishes (after the VLA) were the two that held up. A city skyline is dead without lit windows and argues with a dark sky; still wind turbines look broken.
+- **Traced photos are the next step if more are wanted.** A backlit photo needs only a brightness threshold, and a traced plant looks real where a drawn one doesn't. One photo can't span the screen, so the plan is a low drawn ground with four to six cut-outs scattered on it at varied sizes, some mirrored. Candidates, all on Wikimedia Commons:
+  - Joshua trees: "Comet NEOWISE over Queen Valley" and "Milky Way, Jupiter, and night sky over Queen Valley", NPS / Emily Hassell, public domain, 8256 × 5504.
+  - Saguaros: "Sunset (2)", Saguaro National Park, tagged both CC BY 2.0 and public domain, so credit it as CC BY 2.0.
+  - Stonehenge: "Stonehenge sunset" by Bkamprath, public domain (crop out the people at its right).
+  - Mauna Kea's domes: "Mauna Kea Sunset" by Joe Parks, CC BY 2.0, about 100 pixels a dome.
+  - Already in the app: the Fireflies meadow's treeline (CC BY 2.0, credited) would make a leafy alternative to the pines.
+- **Other software:** Stellarium's polygonal landscapes are the same idea, a text list of horizon angles. Its own landscapes state no licence in a GPL repository, so none were taken.
 
 ## Ideas / next steps
 - Real planet magnitudes, from distance and phase.
@@ -119,13 +140,17 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
 - Stars that dim near the horizon (extinction).
 - Twinkling tied to how high a star sits.
 - Settings for field of view, direction faced, or the Milky Way on or off.
+- More landscapes: see the candidates below.
+- The viewer's own horizon, from the same elevation data around where they are.
 
 ## Checking it
 - `SNAPSHOT_SCENE="Live Sky" swift test` renders the current moment at the fallback location, because the test process has its own defaults domain.
 - To render a set time: `SNAPSHOT_DEFAULTS="sky.previewTime=1,sky.previewHour=18.8" SNAPSHOT_SCENE="Live Sky" swift test`. Try 13 for noon, about 18.8 for sunset at the test's fallback longitude of −90°, and 23 for night. To hide things, add `sky.constellations=0,sky.planetLabels=0,sky.landscape=0`.
+- A landscape: add `sky.landscape=1,sky.ground=1` (the number is its place in `Landscape`, 0 for the pines).
 - `swift test --filter SkyTests`:
   - positions matched against Horizons
   - the Moon's lit fraction and waxing/waning
   - four real total and annular eclipses line up, seen from their paths (`eclipsesLineUp`)
   - Polaris' altitude equals the latitude
   - an ISS directly overhead points straight up
+  - every real skyline's file is there and spans the view (`skylinesSpanTheView`)
