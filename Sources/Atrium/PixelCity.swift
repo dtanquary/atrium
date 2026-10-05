@@ -91,7 +91,7 @@ final class PixelCity: SKScene {
     // The Spaceport: its pad, the boosters that come back, the crane that takes them away and the smoke of it all;
     // the layer they are painted into, which the lagoon mirrors; and the figures on the countdown clock.
     private var pad = Pad(), boosters: [Booster] = [], crane = Crane(), plume: [Puff] = []
-    private var pace = 1.0 // Settings' Launches, read once a frame
+    private var pace = 1.0 // Settings' Launches, as of the last repaint: reading a setting costs too much to do every frame
     private var liftoffAt: TimeInterval = -1000, trailFrom: SIMD2<Float>?
     private var launchLayer = SKSpriteNode(), launchTexture: SKMutableTexture?, launchShown: [Int] = []
     private var smoke = Bytes(1, 1, floor: 0), density: [Float] = [], smokeTime: Float = 0, smokeMoved = false, smokeSteps = 0
@@ -876,6 +876,7 @@ final class PixelCity: SKScene {
     /// Repaints everything that follows the clock: sky, sun, moon, stars, buildings, windows and street lights,
     /// then recolours the clouds, cars and plane to match.
     private func redraw() {
+        if spaceport { pace = knob(.launches) } // a change in Settings repaints, so it still shows at once
         let now = now
         let spot = Location.shared.coordinate
         let sun = skyPosition(now, latitude: spot.latitude, longitude: spot.longitude)
@@ -1863,7 +1864,7 @@ final class PixelCity: SKScene {
             cars[i].node.position.x = CGFloat(cars[i].x.rounded(.down))
             if cars[i].x < -30 || cars[i].x > Float(w + 30) { cars[i].node.isHidden = true }
         }
-        for lane in 0...1 where clock >= nextCar[lane] {
+        for lane in 0...1 where !cars.isEmpty && clock >= nextCar[lane] { // with no traffic it would try every frame
             spawnCar(lane: lane, at: lane == 0 ? -20 : Float(w + 20))
         }
 
@@ -2443,7 +2444,6 @@ final class PixelCity: SKScene {
     /// strongback or crawler rolls back for the next. If its boosters come back, they do so a minute later, each to
     /// a landing zone, and a crane comes for each and carries it away.
     private func launch(_ dt: Float) {
-        pace = knob(.launches)
         let kit = pad.rocket.kit
         // A rocket that comes out standing only has to settle; Starship is lifted onto its mount by the tower's arms.
         let rolled = roll(kit), raising: Float = kit.caught ? 10 : kit.standing ? 4 : 18
