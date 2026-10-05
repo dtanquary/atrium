@@ -114,14 +114,14 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
     CGImageDestinationFinalize(destination)
 }
 
-/// Pixel City lays itself out again when Settings picks another city: each must build, and going back must leave
-/// nothing of the last one behind (the Waterfront has one node more, its water).
+/// Pixel City lays itself out again when Settings picks another city: every one must build, and going back to the
+/// first must leave nothing of the others behind.
 @MainActor @Test func pixelCitySwitchesCity() {
     defer { UserDefaults.standard.removeObject(forKey: "city.view") }
     let scene = pixelCity(size: CGSize(width: 800, height: 500))
-    let nodes = [0.0, 1, 0].map { view in
-        UserDefaults.standard.set(view, forKey: "city.view") // posts the change the scene listens for
+    let nodes = (Array(0...Int(PixelCity.knobs[0].range.upperBound)) + [0]).map { view in
+        UserDefaults.standard.set(Double(view), forKey: "city.view") // posts the change the scene listens for
         return scene.children[0].children.count
     }
-    #expect(nodes[1] == nodes[0] + 1 && nodes[2] == nodes[0])
+    #expect(nodes.allSatisfy { $0 > 10 } && nodes.last == nodes.first)
 }

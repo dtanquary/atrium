@@ -9,8 +9,8 @@ import SpriteKit
 /// lit from wherever the Sun really is.
 final class PixelCity: SKScene {
     nonisolated static let knobs = [
-        Knob(key: "city.view", label: "City", range: 0...1, standard: 1, section: "City",
-             format: .choice(["Street", "Waterfront"])),
+        Knob(key: "city.view", label: "City", range: 0...Double(City.allCases.count - 1), standard: 1, section: "City",
+             format: .choice(City.allCases.map(\.name))),
         Knob(key: "city.looking", label: "Looking", range: 0...8, standard: 0, section: "City",
              format: .choice(["Toward the midday Sun", "North", "North-east", "East", "South-east", "South", "South-west", "West", "North-west"])),
         Knob(key: "city.previewTime", label: "Preview a time of day", range: 0...1, standard: 0, section: "Preview",
@@ -23,11 +23,17 @@ final class PixelCity: SKScene {
     private var settings = PixelCity.knobs.map(\.value)
 
     private let w: Int, h: Int
-    private var waterfront = false
-    private var streetBase = 0 // the street's bottom row: the canvas's own, or above the water and quay on the waterfront
-    private var streetTop: Int { streetBase + 26 } // buildings stand on this row; road and sidewalks are below it
-    private var waterTop: Int { Int(Float(h) * 0.21) } // rows of water on the waterfront
+    private var city = City.waterfront
+    private var classic: Bool { city == .street } // the Street keeps its first, simpler sky and light
+    private var ground = 26 // the row the city stands on
+    private var streetBase: Int { ground - 26 } // where there's a street, its bottom row: road and sidewalks fill the 26 above
+    private var waterRows = 0 // rows of water along the bottom, in the cities that have it
     private let quay = 6 // rows of quay wall above the water
+    private var crest: [Int] = [] // for each column, the row where the sky begins: the horizon the Sun and Moon rise over
+    private var skyBase = 26 // the lowest of those, where the sky's gradient starts
+    private var downtown: Float = 0.5 // how far across the city's centre is
+    private var ridges: [[Float]] = [] // the Foothills' mountains, far to near: each ridge's height above the ground by column
+    private var farHaze: Float = 1 // how much of the usual haze the far row of buildings takes
     private let canvas = SKNode()
     private let sky = SKSpriteNode()      // sky, stars, Sun and Moon…
     private let backdrop = SKSpriteNode() // …and the city in front, so clouds and planes pass between the two
@@ -38,14 +44,18 @@ final class PixelCity: SKScene {
     private var stars: [(x: Int, y: Int, brightness: Float)] = []
     private var clouds: [Cloud] = []
     private var cars: [Car] = []
-    private var carLooks: [(day: SKTexture, night: SKTexture, length: Int)] = []
+    private var carLooks: [(day: SKTexture, night: SKTexture, length: Int, height: Int)] = []
+    private var carPace: Float = 1, carGap: Float = 36 // far-off traffic crawls, and runs closer together
     private var plane = SKSpriteNode()
     private var planeLights = SKNode()
     private var beacon = SKNode()
     // Light on the waterfront's walls: what the sky gives every wall, and what the Sun or Moon adds to one facing it.
     private var ambient = RGB.one, keyFront = RGB.zero, keyLeft = RGB.zero, keyRight = RGB.zero, keyTop = RGB.zero
     private var behind = RGB.zero // the horizon's colour at our backs, which glass fronts mirror
-    private var span: Double { waterfront ? 260 : 200 } // degrees of compass across the screen
+    private var span: Double { classic ? 200 : 260 } // degrees of compass across the screen
+    private var facing = 180.0 // the compass bearing we look along
+    private var sunAt = (elevation: 0.0, azimuth: 0.0)
+    private var moonKey = (right: RGB.zero, left: RGB.zero, front: RGB.zero, top: RGB.zero)
 
     private var night: Float = 0 // 0 in daylight … 1 at full dark
     private var hour = 12.0      // local clock, 0–24
@@ -106,8 +116,15 @@ final class PixelCity: SKScene {
         (skyline, parks, stars, clouds, cars) = ([], [], [], [], [])
         (plane, planeLights, beacon, mirrored, waterTints) = (SKSpriteNode(), SKNode(), SKNode(), [], [])
         (nextCar, planeDirection) = ([clock, clock], 0)
-        waterfront = Self.knob(.view) > 0.5
-        streetBase = waterfront ? waterTop + quay : 0
+        city = City(rawValue: Int(Self.knob(.view))) ?? .waterfront
+        waterRows = city == .waterfront ? Int(Float(h) * 0.21) : 0
+        switch city {
+        case .street: ground = 26
+        case .waterfront: ground = waterRows + quay + 26
+        case .foothills: ground = Int(Float(h) * 0.27)
+        }
+        crest = Array(repeating: ground, count: w)
+        (ridges, downtown, farHaze) = ([], 0.5, 1)
         for (node, z) in [(sky, 0.0), (backdrop, 2)] {
             node.anchorPoint = .zero
             node.size = CGSize(width: w, height: h)
@@ -115,7 +132,13 @@ final class PixelCity: SKScene {
             canvas.addChild(node)
         }
         var rng = SeededRandom(state: 2026)
-        let tower = waterfront ? layOutWaterfront(&rng) : layOutStreet(&rng)
+        let tower: (x: Int, y: Int)
+        switch city {
+        case .street: tower = layOutStreet(&rng)
+        case .waterfront: tower = layOutWaterfront(&rng)
+        case .foothills: tower = layOutFoothills(&rng)
+        }
+        skyBase = crest.min() ?? ground
         beacon.position = CGPoint(x: tower.x, y: tower.y)
         beacon.addChild(SKSpriteNode(color: NSColor(red: 1, green: 0.2, blue: 0.2, alpha: 0.3), size: CGSize(width: 3, height: 3)))
         beacon.addChild(SKSpriteNode(color: NSColor(red: 1, green: 0.25, blue: 0.2, alpha: 1), size: CGSize(width: 1, height: 1)))
@@ -125,7 +148,7 @@ final class PixelCity: SKScene {
         canvas.addChild(beacon)
 
         stars = (0..<170).map { _ in
-            (Int.random(in: 0..<w, using: &rng), Int.random(in: streetTop + 30..<h, using: &rng), Float.random(in: 0.35...1, using: &rng))
+            (Int.random(in: 0..<w, using: &rng), Int.random(in: skyBase + 30..<h, using: &rng), Float.random(in: 0.35...1, using: &rng))
         }
 
         for _ in 0..<3 {
@@ -141,12 +164,16 @@ final class PixelCity: SKScene {
 
         let paints = [rgb(196, 58, 52), rgb(58, 98, 186), rgb(222, 222, 216), rgb(236, 188, 48),
                       rgb(66, 138, 88), rgb(40, 40, 48), rgb(160, 166, 172)]
-        carLooks = paints.map { vehicle(sedan, body: $0) } + [vehicle(bus, body: rgb(228, 150, 40))]
+        let far = city == .foothills // a highway seen from miles off: a car is a dash of paint, and at night just its lights
+        carLooks = far ? paints.map { speck(2, body: $0) } + [speck(4, body: rgb(226, 226, 218))]
+                       : paints.map { vehicle(sedan, body: $0) } + [vehicle(bus, body: rgb(228, 150, 40))]
+        (carPace, carGap) = far ? (0.35, 7) : (1, 36)
+        let lanes = far ? [ground - 16, ground - 14] : [streetBase + 5, streetBase + 13]
         for lane in 0...1 {
-            for _ in 0..<6 {
+            for _ in 0..<(far ? 14 : 6) {
                 let node = SKSpriteNode()
                 node.anchorPoint = CGPoint(x: 0.5, y: 0)
-                node.position.y = CGFloat(streetBase + (lane == 0 ? 5 : 13))
+                node.position.y = CGFloat(lanes[lane])
                 node.zPosition = lane == 0 ? 4 : 3
                 node.xScale = lane == 0 ? 1 : -1
                 node.isHidden = true
@@ -155,6 +182,7 @@ final class PixelCity: SKScene {
                 beam.size = CGSize(width: 14, height: 4)
                 beam.blendMode = .add // light on the road, not a grey shape in the air
                 beam.zPosition = -0.5 // under the car ahead
+                beam.isHidden = far
                 node.addChild(beam)
                 canvas.addChild(node)
                 cars.append(Car(node: node, beam: beam, lane: lane))
@@ -181,7 +209,7 @@ final class PixelCity: SKScene {
         }
         plane.addChild(planeLights)
         canvas.addChild(plane)
-        if waterfront { addWater() }
+        if waterRows > 0 { addWater() }
     }
 
     /// The Street city: a far and a near row of plain blocks. Returns the top of the landmark's mast, for the beacon.
@@ -209,7 +237,7 @@ final class PixelCity: SKScene {
         skyline[landmark].height = Int(Float(h) * 0.5)
         skyline[landmark].roof = .antenna
         let tower = skyline[landmark]
-        return (tower.x + tower.width / 2, streetTop + tower.height + 18)
+        return (tower.x + tower.width / 2, ground + tower.height + 18)
     }
 
     /// The Waterfront city: a downtown that peaks in the middle and low flanks with gaps in them, where the Sun and
@@ -217,7 +245,7 @@ final class PixelCity: SKScene {
     /// kinds of building, with a park here and there. Returns the top of the landmark's spire, for the beacon.
     private func layOutWaterfront(_ rng: inout SeededRandom) -> (x: Int, y: Int) {
         rng = SeededRandom(state: 2030) // picked from a handful for its skyline, and for parks where the Sun sets
-        let room = Float(h - streetTop) // the sky above the street: heights are shares of it
+        let room = Float(h - ground) // the sky above the street: heights are shares of it
         func downtown(_ x: Int) -> Float { 1 - smoothstep(0.12, 0.3, abs(Float(x) / Float(w) - 0.5)) }
         let colours: [Kind: [RGB]] = [
             .deco: [rgb(184, 170, 148), rgb(160, 152, 144), rgb(196, 178, 146), rgb(146, 148, 158)],
@@ -283,19 +311,84 @@ final class PixelCity: SKScene {
         skyline[landmark].height = Int(room * 0.66)
         skyline[landmark].roof = .antenna
         let tower = skyline[landmark]
-        return (tower.x + tower.width / 2, streetTop + tower.height + 18)
+        return (tower.x + tower.width / 2, ground + tower.height + 18)
+    }
+
+    /// The Foothills city: three mountain ridges, and under them a far-off band of buildings with a small downtown
+    /// left of centre. Returns the top of the landmark's mast, for the beacon.
+    private func layOutFoothills(_ rng: inout SeededRandom) -> (x: Int, y: Int) {
+        rng = SeededRandom(state: 2041)
+        let room = Float(h - ground)
+        (downtown, farHaze) = (0.36, 0.45)
+
+        /// A jagged line `relief` tall standing on `base` (shares of the sky above the ground): octaves of noise, the
+        /// first two folded so the peaks come to points.
+        func ridge(base: Float, relief: Float, period: Int) -> [Float] {
+            var line = [Float](repeating: base * room, count: w)
+            var (span, gain) = (period, relief * room)
+            for octave in 0..<5 {
+                let knots = (0...w / span + 1).map { _ in Float.random(in: 0...1, using: &rng) }
+                for x in 0..<w {
+                    let v = knots[x / span] + (knots[x / span + 1] - knots[x / span]) * Float(x % span) / Float(span)
+                    line[x] += gain * (octave < 2 ? 1 - abs(2 * v - 1) : v - 0.5)
+                }
+                (span, gain) = (max(2, span / 2), gain * 0.5)
+            }
+            return line
+        }
+        ridges = [ridge(base: 0.36, relief: 0.22, period: 110), ridge(base: 0.22, relief: 0.17, period: 80),
+                  ridge(base: 0.07, relief: 0.12, period: 64)]
+        for x in 0..<w { crest[x] = ground + Int(ridges.map { $0[x] }.max()!) }
+
+        func centre(_ x: Int) -> Float { 1 - smoothstep(0.03, 0.2, abs(Float(x) / Float(w) - downtown)) }
+        var x = 0
+        while x < w { // windowless towers behind downtown
+            let d = centre(x)
+            if d > 0.2 {
+                skyline.append(Building(x: x, width: Int.random(in: 6...10, using: &rng),
+                                        height: Int(room * 0.27 * d * Float.random(in: 0.5...1, using: &rng)),
+                                        colour: rgb(150, 156, 170), far: true, floor: 3, pitch: 2,
+                                        roof: [Roof.plain, .plain, .antenna].randomElement(using: &rng)!, seed: rng.next(), kind: .haze))
+            }
+            x += Int.random(in: 7...12, using: &rng)
+        }
+        let colours: [Kind: [RGB]] = [
+            .deco: [rgb(190, 176, 152), rgb(168, 160, 150)], .glass: [rgb(96, 150, 176), rgb(92, 128, 184), rgb(118, 160, 156)],
+            .slab: [rgb(188, 184, 172), rgb(170, 172, 178), rgb(198, 184, 160), rgb(170, 132, 112)],
+        ]
+        x = -3
+        while x < w {
+            let width = Int.random(in: 8...16, using: &rng), d = centre(x + width / 2)
+            if d < 0.15, Float.random(in: 0..<1, using: &rng) < 0.45 { // open ground between the suburbs
+                x += Int.random(in: 6...16, using: &rng)
+                continue
+            }
+            let kind = (d > 0.5 ? [Kind.deco, .glass, .glass, .slab] : [.slab, .slab, .glass]).randomElement(using: &rng)!
+            let height = room * (mix(0.03, 0.1, d) + Float.random(in: 0..<1, using: &rng) * mix(0.03, 0.17, d))
+            skyline.append(Building(x: x, width: width, height: max(Int(height), 5), colour: colours[kind]!.randomElement(using: &rng)!,
+                                    far: true, floor: 3, pitch: 2, roof: Roof.allCases.dropLast().randomElement(using: &rng)!,
+                                    seed: rng.next(), kind: kind))
+            x += width + [0, 0, 3].randomElement(using: &rng)!
+        }
+        let landmark = skyline.indices.filter { skyline[$0].kind != .haze }.max { skyline[$0].height < skyline[$1].height }!
+        skyline[landmark].kind = .deco
+        skyline[landmark].colour = colours[.deco]![0]
+        skyline[landmark].height = Int(room * 0.3)
+        skyline[landmark].roof = .antenna
+        let tower = skyline[landmark]
+        return (tower.x + tower.width / 2, ground + tower.height + 18)
     }
 
     /// The water in front of the waterfront: a shader that mirrors the quay and the city above it, row by rippling row.
     private func addWater() {
-        let node = SKSpriteNode(color: .black, size: CGSize(width: w, height: waterTop))
+        let node = SKSpriteNode(color: .black, size: CGSize(width: w, height: waterRows))
         node.anchorPoint = .zero
         node.zPosition = 2.5
         mirrored = [SKUniform(name: "u_sky", texture: nil), SKUniform(name: "u_city", texture: nil)]
         waterTints = [SKUniform(name: "u_deep", vectorFloat3: .zero), SKUniform(name: "u_glint", vectorFloat3: .zero)]
         node.shader = SKShader(source: Self.waterShader, uniforms: mirrored + waterTints + [
             SKUniform(name: "u_canvas", vectorFloat2: [Float(w), Float(h)]),
-            SKUniform(name: "u_water", vectorFloat4: [Float(w), Float(waterTop), Float(streetTop), Float(quay)]),
+            SKUniform(name: "u_water", vectorFloat4: [Float(w), Float(waterRows), Float(ground), Float(quay)]),
             WallpaperTime.now,
         ])
         canvas.addChild(node)
@@ -353,18 +446,18 @@ final class PixelCity: SKScene {
         var px = Pixels(w, h)
 
         // Sky: banded and dithered like old pixel art, glowing around a low sun.
-        let band: Float = waterfront ? 0.4 : 1 // how much of each band is dithered into the next
+        let band: Float = classic ? 1 : 0.4 // how much of each band is dithered into the next
         let sunSpot = place(sun, latitude: spot.latitude)
         let glow = smoothstep(-10, 0, el) * (1 - smoothstep(6, 20, el)) * 0.7 + 0.15 * smoothstep(0, 10, el)
         let glowColour = mix(rgb(255, 128, 64), rgb(255, 214, 150), smoothstep(-2, 10, el))
         let reach = mix(1, 0.35, smoothstep(4, 20, el)) // a low sun lights a wide band of sky, a high one a small halo
         for y in 0..<h {
-            let t = max(0, Float(y - streetTop) / Float(h - streetTop))
+            let t = max(0, Float(y - skyBase) / Float(h - skyBase))
             for x in 0..<w {
                 let d = bayer(x, y)
                 var c = mix(horizons[x], top, pow(min(1, (t * 14 + (1 - band) / 2 + d * band).rounded(.down) / 14), 0.6))
-                if waterfront, night > 0 { // the city's own glow in the night sky, strongest over downtown
-                    let u = Float(x) / Float(w) - 0.5
+                if !classic, night > 0 { // the city's own glow in the night sky, strongest over downtown
+                    let u = Float(x) / Float(w) - downtown
                     let lift = night * exp(-t * 3) * (0.5 + 0.5 * exp(-u * u / 0.08))
                     c = mix(c, rgb(104, 76, 112), (lift * 4.4 + 0.42 + d * 0.16).rounded(.down) / 8)
                 }
@@ -379,8 +472,8 @@ final class PixelCity: SKScene {
 
         let starlight = smoothstep(-5, -12, el)
         for star in stars where starlight > 0 {
-            // Over the waterfront the city's glow drowns the stars near the horizon.
-            let clear = waterfront ? smoothstep(0.1, 0.6, Float(star.y - streetTop) / Float(h - streetTop)) * 0.8 : 1
+            // The city's glow drowns the stars near the horizon.
+            let clear = classic ? 1 : smoothstep(0.1, 0.6, Float(star.y - skyBase) / Float(h - skyBase)) * 0.8
             let a = starlight * star.brightness * clear
             px.plot(star.x, star.y, rgb(255, 248, 232), a)
             if star.brightness > 0.93 {
@@ -401,26 +494,28 @@ final class PixelCity: SKScene {
         px = Pixels(w, h) // the city, clear wherever the sky shows through
         // The sky lights every wall evenly; the Sun, or the Moon after dark, lights the walls that face it.
         ambient = mix(mix(RGB(0.84, 0.86, 0.92), RGB(0.52, 0.48, 0.62), smoothstep(16, 0, el)), RGB(0.19, 0.2, 0.31), night)
-        (keyFront, keyLeft, keyRight, keyTop) = (.zero, .zero, .zero, .zero)
-        for (body, colour) in [(sun, mix(rgb(255, 126, 54), rgb(255, 240, 214), smoothstep(0, 20, el)) * smoothstep(-1.5, 5, el) * mix(0.95, 0.62, smoothstep(0, 20, el))),
-                               (moon, rgb(120, 140, 200) * Float(1 - cos(2 * .pi * moonPhase)) * smoothstep(0, 10, Float(moon.elevation)) * night * 0.15)] {
-            let bearing = Float(body.azimuth - facing) * .pi / 180 // 0 straight ahead, positive to the right
-            let height = Float(max(body.elevation, 0)) * .pi / 180
-            keyRight += colour * max(0, sin(bearing)) * cos(height)
-            keyLeft += colour * max(0, -sin(bearing)) * cos(height)
-            keyFront += colour * max(0, -cos(bearing)) * cos(height)
-            keyTop += colour * (0.3 + 0.7 * sin(height))
-        }
-        if waterfront {
-            drawHorizon(into: &px, zenith: top, horizon: horizon)
+        (self.facing, sunAt) = (facing, sun)
+        moonKey = key(moon, rgb(120, 140, 200) * Float(1 - cos(2 * .pi * moonPhase)) * smoothstep(0, 10, Float(moon.elevation)) * night * 0.15)
+        let sunKey = key(sun, sunColour(el))
+        (keyRight, keyLeft) = (sunKey.right + moonKey.right, sunKey.left + moonKey.left)
+        (keyFront, keyTop) = (sunKey.front + moonKey.front, sunKey.top + moonKey.top)
+        switch city {
+        case .street: break
+        case .waterfront: drawHorizon(into: &px, zenith: top, horizon: horizon)
+        case .foothills: drawMountains(into: &px, horizons: horizons)
         }
         for building in skyline {
             let haze = horizons[min(max(building.x + building.width / 2, 0), w - 1)] // the horizon behind it
             if building.kind == .box { draw(building, into: &px, horizon: haze) } else { drawTower(building, into: &px, zenith: top, horizon: haze) }
         }
         drawParks(into: &px)
-        drawStreet(into: &px)
-        if waterfront { drawQuay(into: &px) }
+        switch city {
+        case .street: drawStreet(into: &px)
+        case .waterfront:
+            drawStreet(into: &px)
+            drawQuay(into: &px)
+        case .foothills: drawPlain(into: &px, horizons: horizons)
+        }
         backdrop.texture = px.texture()
         mirrored.first?.textureValue = sky.texture
         mirrored.last?.textureValue = backdrop.texture
@@ -437,6 +532,20 @@ final class PixelCity: SKScene {
         plane.color = NSColor(red: 0.05, green: 0.06, blue: 0.1, alpha: 1) // a dark silhouette after sunset
         plane.colorBlendFactor = CGFloat(night * 0.85)
         planeLights.alpha = CGFloat(mix(0.4, 1, night))
+    }
+
+    /// The Sun's light on a wall at this elevation in degrees: orange and strong when low, paler when high, gone below the horizon.
+    private func sunColour(_ el: Float) -> RGB {
+        mix(rgb(255, 126, 54), rgb(255, 240, 214), smoothstep(0, 20, el)) * smoothstep(-1.5, 5, el) * mix(0.95, 0.62, smoothstep(0, 20, el))
+    }
+
+    /// What a light of this colour in the sky adds to walls that face right, left and toward us, and to roof edges:
+    /// each by the cosine of the angle between the light and that wall.
+    private func key(_ body: (elevation: Double, azimuth: Double), _ colour: RGB) -> (right: RGB, left: RGB, front: RGB, top: RGB) {
+        let bearing = Float(body.azimuth - facing) * .pi / 180 // 0 straight ahead, positive to the right
+        let height = Float(max(body.elevation, 0)) * .pi / 180
+        return (colour * max(0, sin(bearing)) * cos(height), colour * max(0, -sin(bearing)) * cos(height),
+                colour * max(0, -cos(bearing)) * cos(height), colour * (0.3 + 0.7 * sin(height)))
     }
 
     /// Sky colours (zenith, horizon) for a sun elevation in degrees, from deep night through twilight to day.
@@ -461,12 +570,14 @@ final class PixelCity: SKScene {
     /// Where a sky position lands on the canvas, looking along `heading` (toward the equator, east is on the left up north).
     private func place(_ p: (elevation: Double, azimuth: Double), latitude: Double) -> (x: Int, y: Int) {
         let dx = (p.azimuth - heading(latitude) + 540).truncatingRemainder(dividingBy: 360) - 180
-        let room = Double(h - streetTop - 14)
-        guard waterfront else { return (Int(Double(w) * (0.5 + dx / span)), streetTop + Int(p.elevation / 70 * room)) }
-        // The waterfront looks wider, so sunrise and sunset stay on screen all year, gives a low Sun or Moon more
-        // room, and drops them out of sight as soon as they set.
-        let lift = p.elevation < 0 ? p.elevation / 12 : pow(p.elevation / 70, 0.75)
-        return (Int(Double(w) * (0.5 + dx / span)), streetTop + Int(lift * room))
+        let x = Int(Double(w) * (0.5 + dx / span))
+        guard !classic else { return (x, ground + Int(p.elevation / 70 * Double(h - ground - 14))) }
+        // Beyond the Street the view is wider, so sunrise and sunset stay on screen all year, a low Sun or Moon gets
+        // more room, and they drop out of sight as soon as they set: behind the skyline at that spot (`crest`), which
+        // they clear by the time they are 15 degrees up.
+        let horizon = mix(Float(crest[min(max(x, 0), w - 1)]), Float(crest.max() ?? ground), smoothstep(0, 15, Float(p.elevation)))
+        let rise = p.elevation < 0 ? p.elevation * 12 : pow(p.elevation / 70, 0.75) * Double(Float(h - 14) - horizon)
+        return (x, Int(Double(horizon) + rise))
     }
 
     /// The moon's disc with its current phase lit on the right while waxing, the left while waning.
@@ -496,9 +607,9 @@ final class PixelCity: SKScene {
         facade = pointwiseMin(facade + b.colour * keyFront, .one) // a Sun or Moon at our backs lights the fronts
         if b.far { facade = mix(facade, horizon, mix(0.42, 0.3, night)) }
         let metal = mix(rgb(70, 70, 80), rgb(14, 14, 22), night)
-        let top = streetTop + b.height
-        px.fill(b.x, streetTop, b.width, b.height, facade)
-        px.fill(b.x + b.width - 1, streetTop, 1, b.height, facade * 0.8)
+        let top = ground + b.height
+        px.fill(b.x, ground, b.width, b.height, facade)
+        px.fill(b.x + b.width - 1, ground, 1, b.height, facade * 0.8)
         px.fill(b.x, top - 1, b.width, 1, pointwiseMin(facade * 1.15, .one))
 
         switch b.roof {
@@ -520,7 +631,7 @@ final class PixelCity: SKScene {
         var rng = SeededRandom(state: b.seed)
         let size = b.far ? 1 : 2
         let glass = mix(facade * 0.55 + rgb(12, 18, 34), facade * 0.72, night)
-        for y in stride(from: streetTop + 3, through: top - 3 - size, by: b.floor) {
+        for y in stride(from: ground + 3, through: top - 3 - size, by: b.floor) {
             for x in stride(from: b.x + 2, through: b.x + b.width - 2 - size, by: b.pitch) {
                 let (r1, r2, r3) = (Float.random(in: 0..<1, using: &rng), Float.random(in: 0..<1, using: &rng), Float.random(in: 0..<1, using: &rng))
                 var colour = glass
@@ -554,12 +665,12 @@ final class PixelCity: SKScene {
         let off = Float(b.x + b.width / 2) / Float(w) - 0.5
         let side = b.far ? min(1 + Int(abs(off) * 4), 2) : min(1 + Int(abs(off) * 9), 5)
         let onRight = off < 0 // left of centre, a building shows its right-hand wall
-        let haze: Float = b.kind == .haze ? 0.8 : b.far ? mix(0.42, 0.3, night) : 0, distance = mix(horizon, zenith, 0.3)
+        let haze: Float = (b.kind == .haze ? 0.8 : b.far ? mix(0.42, 0.3, night) : 0) * farHaze, distance = mix(horizon, zenith, 0.3)
         func tone(_ c: RGB) -> RGB { mix(c, distance, haze) }
         let front = tone(lit(b.colour, keyFront)), flank = tone(lit(b.colour, onRight ? keyRight : keyLeft, shade: 0.72))
         let edge = tone(lit(b.colour, keyTop, shade: 1.1)), metal = tone(mix(rgb(70, 70, 80), rgb(14, 14, 22), night))
         let glass = tone(lit(b.colour * 0.45, .zero) + zenith * 0.2 + rgb(10, 14, 26) * night) // unlit windows mirror a little sky
-        let base = streetTop, top = base + b.height, dark = night > 0.15, glow = min(1, night * 1.6)
+        let base = ground, top = base + b.height, dark = night > 0.15, glow = min(1, night * 1.6)
         // Homes keep the evening's hours in warm light; offices empty out floor by floor, mostly in cool white.
         let homes = b.kind == .brick || (b.kind == .slab && rng.next() % 2 == 0)
         let warm = homes || b.kind == .deco || rng.next() % 3 == 0
@@ -694,7 +805,7 @@ final class PixelCity: SKScene {
         }
 
         // Red lights on the corners of the taller roofs.
-        if !b.far, b.kind != .deco, b.height > (h - streetTop) * 2 / 5 {
+        if !b.far, b.kind != .deco, b.height > (h - ground) * 2 / 5 {
             for x in [b.x, b.x + b.width - 1] { px.plot(x, top, rgb(255, 60, 50), night) }
         }
     }
@@ -711,7 +822,7 @@ final class PixelCity: SKScene {
         let hill = mix(horizon * 0.82, zenith, 0.25)
         for x in 0..<w {
             let f = Float(x)
-            px.fill(x, streetTop, 1, Int(4.5 + 2.5 * sin(f * 0.023 + 1) + 1.6 * sin(f * 0.061 + 4) + 0.8 * sin(f * 0.13)), hill)
+            px.fill(x, ground, 1, Int(4.5 + 2.5 * sin(f * 0.023 + 1) + 1.6 * sin(f * 0.061 + 4) + 0.8 * sin(f * 0.13)), hill)
         }
     }
 
@@ -721,11 +832,11 @@ final class PixelCity: SKScene {
         let (bright, mid, shade) = (lit(leaf, keyTop, shade: 1.1), lit(leaf * 0.85, .zero), lit(leaf * 0.62, .zero))
         for park in parks {
             var rng = SeededRandom(state: UInt64(park.x + 1000))
-            px.fill(park.x, streetTop, park.width, 2, shade) // hedge
+            px.fill(park.x, ground, park.width, 2, shade) // hedge
             var x = park.x + 4
             while x < park.x + park.width - 2 {
-                let r = Int.random(in: 3...5, using: &rng), cy = streetTop + 3 + r + Int.random(in: 0...2, using: &rng)
-                px.fill(x, streetTop, 1, cy - streetTop, lit(rgb(84, 62, 48), .zero))
+                let r = Int.random(in: 3...5, using: &rng), cy = ground + 3 + r + Int.random(in: 0...2, using: &rng)
+                px.fill(x, ground, 1, cy - ground, lit(rgb(84, 62, 48), .zero))
                 for dy in -r...r {
                     for dx in -r...r where dx * dx + dy * dy <= r * r + 1 {
                         let facing = Float(fromRight ? dx : -dx) + Float(dy) * 1.2 // toward the light, and up
@@ -740,11 +851,90 @@ final class PixelCity: SKScene {
     /// The quay wall the waterfront's street runs along: dressed stone, dark and wet where it meets the water.
     private func drawQuay(into px: inout Pixels) {
         let stone = lit(rgb(150, 142, 130), keyFront)
-        px.fill(0, waterTop, w, quay, stone)
-        px.fill(0, waterTop + quay - 1, w, 1, lit(rgb(172, 164, 150), keyTop)) // coping
-        px.fill(0, waterTop, w, 1, stone * 0.55)
+        px.fill(0, waterRows, w, quay, stone)
+        px.fill(0, waterRows + quay - 1, w, 1, lit(rgb(172, 164, 150), keyTop)) // coping
+        px.fill(0, waterRows, w, 1, stone * 0.55)
         for course in 0...1 {
-            for x in stride(from: course * 7, to: w, by: 14) { px.fill(x, waterTop + 1 + course * 2, 1, 2, stone * 0.82) }
+            for x in stride(from: course * 7, to: w, by: 14) { px.fill(x, waterRows + 1 + course * 2, 1, 2, stone * 0.82) }
+        }
+    }
+
+    /// The Foothills' mountains, far ridge first, hazier with distance. A face is sunlit or in shade by which way it
+    /// slopes, read from the ridge line above it over a span that widens downhill, so shadows run down from the
+    /// peaks in streaks. The Sun counts as higher the higher up a face is: the tops glow after the valley is in shade.
+    private func drawMountains(into px: inout Pixels, horizons: [RGB]) {
+        let tallest = ridges[0].max() ?? 1, snowLine = Float(h - ground) * 0.47
+        // What the Sun and Moon add to faces at each height above the ground.
+        let light = (0...Int(tallest) + 1).map { row in
+            let lift = 5 * Double(row) / Double(tallest), sun = key((sunAt.elevation + lift, sunAt.azimuth), sunColour(Float(sunAt.elevation + lift)))
+            return (right: sun.right + moonKey.right, left: sun.left + moonKey.left, front: sun.front + moonKey.front)
+        }
+        let rock = [rgb(98, 106, 128), rgb(96, 106, 116), rgb(66, 90, 78)], haze: [Float] = [0.36, 0.28, 0.14]
+        // Even at noon one side of a peak is the brighter: the side the Sun is on.
+        let fromRight = sin((sunAt.azimuth - facing) * .pi / 180) >= 0, (toward, away): (Float, Float) = (0.9, 0.68)
+        for (k, ridge) in ridges.enumerated() {
+            for x in 0..<w {
+                let snowAt = snowLine + 5 * sin(Float(x) * 0.21) + 3 * sin(Float(x) * 0.53 + 1) + Float(k) * 14
+                for row in 0..<Int(ridge[x]) {
+                    let below = ridge[x] - Float(row), reach = min(2 + Int(below * 0.3), 16)
+                    let slope = ridge[min(x + reach, w - 1)] - ridge[max(x - reach, 0)] // downhill to the right when negative
+                    let stone = k < 2 && Float(row) > snowAt - below * 0.25 ? rgb(234, 238, 248) : rock[k]
+                    let colour = slope < -Float(reach) * 0.25 ? lit(stone, light[row].right, shade: fromRight ? toward : away)
+                        : slope > Float(reach) * 0.25 ? lit(stone, light[row].left, shade: fromRight ? away : toward)
+                        : lit(stone, light[row].front, shade: 0.8)
+                    px.plot(x, ground + row, mix(colour, horizons[x], haze[k]))
+                }
+            }
+        }
+    }
+
+    /// The Foothills' valley floor in front of the city: fields, a highway, scattered houses and trees, and a dark
+    /// line of pines along the bottom, where the Dock sits.
+    private func drawPlain(into px: inout Pixels, horizons: [RGB]) {
+        var rng = SeededRandom(state: 77)
+        let grass = rgb(112, 134, 88), sunlight = keyTop * 0.5
+        for y in 0..<ground { // paler and hazier toward the city, in six bands
+            let far = (Float(y) / Float(ground) * 6).rounded(.down) / 6
+            px.fill(0, y, w, 1, mix(lit(grass * mix(0.78, 1, far), sunlight), horizons[w / 2], far * far * 0.32))
+        }
+        for _ in 0..<34 { // fields
+            let y = Int.random(in: 24..<ground - 3, using: &rng), far = Float(y) / Float(ground)
+            let tint = [rgb(176, 166, 100), rgb(84, 116, 76), rgb(152, 132, 88), rgb(128, 150, 92)].randomElement(using: &rng)!
+            px.fill(Int.random(in: -20..<w, using: &rng), y, Int(Float(Int.random(in: 16...60, using: &rng)) * (1.6 - far)),
+                    y > ground - 12 ? 1 : Int.random(in: 1...3, using: &rng), mix(lit(tint, sunlight), horizons[w / 2], far * far * 0.32))
+        }
+        let road = mix(rgb(74, 74, 82), rgb(18, 18, 26), night)
+        px.fill(0, ground - 17, w, 4, road)
+        px.fill(0, ground - 15, w, 1, pointwiseMin(road * 1.5, .one)) // the median
+        for _ in 0..<70 { // houses and trees, thicker toward the city
+            let y = ground - 2 - Int(pow(Float.random(in: 0..<1, using: &rng), 1.6) * Float(ground - 36))
+            let x = Int.random(in: 0..<w, using: &rng), r = Float.random(in: 0..<1, using: &rng)
+            guard y < ground - 18 || y > ground - 12 else { continue } // not on the road
+            if r < 0.45 {
+                px.fill(x, y, 3, 2, lit(rgb(40, 76, 56), sunlight))
+                px.fill(x + 1, y + 2, 1, 1, lit(rgb(40, 76, 56), sunlight))
+            } else {
+                px.fill(x, y, 3, 2, lit([rgb(214, 206, 190), rgb(190, 170, 150), rgb(170, 176, 186)][Int(r * 30) % 3], keyFront))
+                px.fill(x, y + 2, 3, 1, lit(rgb(120, 70, 60), sunlight))
+                if night > 0.15, isLit(r, Float.random(in: 0..<1, using: &rng), Float(Int(r * 1000) % 100) / 100, home: 0.6) {
+                    px.plot(x + 1, y, rgb(255, 206, 130), min(1, night * 1.6))
+                }
+            }
+        }
+        // Pines along the bottom: a rolling bank of them, each a stack of narrowing rows, lit on the Sun's side.
+        let pine = rgb(34, 58, 48), fromRight = keyRight.sum() >= keyLeft.sum()
+        let (sunny, shady) = (lit(pine, (fromRight ? keyRight : keyLeft) * 0.35 + sunlight * 0.3), lit(pine * 0.8, .zero))
+        var x = -2
+        while x < w + 4 {
+            let f = Float(x), bank = 9 + Int(5 * sin(f * 0.021 + 2) + 3 * sin(f * 0.068))
+            let height = Int.random(in: 13...24, using: &rng), half = Int.random(in: 3...5, using: &rng)
+            px.fill(x - half - 2, 0, half * 2 + 5, bank + 2, shady)
+            for row in 0..<height {
+                let reach = half * (height - row) / height + (row % 4 == 0 && row < height - 5 ? 1 : 0) // boughs step out every few rows
+                px.fill(x - reach, bank + row, reach, 1, fromRight ? shady : sunny)
+                px.fill(x, bank + row, reach + 1, 1, fromRight ? sunny : shady)
+            }
+            x += Int.random(in: 4...7, using: &rng)
         }
     }
 
@@ -771,7 +961,7 @@ final class PixelCity: SKScene {
         px.fill(0, y0, w, 4, walk)
         px.fill(0, y0 + 3, w, 1, pointwiseMin(walk * 1.12, .one))
         for x in stride(from: 0, to: w, by: 10) { px.fill(x, y0 + 12, 5, 1, mix(rgb(214, 200, 120), rgb(84, 80, 56), night)) }
-        if waterfront {
+        if city == .waterfront {
             for x in stride(from: 0, to: w, by: 6) { px.fill(x, y0, 1, 2, pole) }
             px.fill(0, y0 + 2, w, 1, pole)
         }
@@ -844,17 +1034,17 @@ final class PixelCity: SKScene {
 
     /// Puts a parked car from the pool on the road at `x`, if the spot is clear, and schedules the next one.
     private func spawnCar(lane: Int, at x: Float) {
-        guard !cars.contains(where: { $0.lane == lane && !$0.node.isHidden && abs($0.x - x) < 36 }),
+        guard !cars.contains(where: { $0.lane == lane && !$0.node.isHidden && abs($0.x - x) < carGap }),
               let i = cars.firstIndex(where: { $0.lane == lane && $0.node.isHidden }) else { return }
         let isBus = Float.random(in: 0..<1) < 0.1
         cars[i].look = isBus ? carLooks.count - 1 : Int.random(in: 0..<carLooks.count - 1)
-        cars[i].cruise = isBus ? .random(in: 11...14) : .random(in: 14...22)
+        cars[i].cruise = (isBus ? .random(in: 11...14) : .random(in: 14...22)) * carPace
         cars[i].speed = cars[i].cruise
         cars[i].x = x
         let look = carLooks[cars[i].look]
         cars[i].length = Float(look.length)
         cars[i].node.texture = night > 0.5 ? look.night : look.day
-        cars[i].node.size = CGSize(width: look.length, height: isBus ? 10 : 7)
+        cars[i].node.size = CGSize(width: look.length, height: look.height)
         cars[i].beam.position = CGPoint(x: CGFloat(look.length) / 2 - 1, y: -1)
         cars[i].node.position.x = CGFloat(x.rounded(.down))
         cars[i].node.isHidden = false
@@ -882,7 +1072,7 @@ final class PixelCity: SKScene {
     }()
 
     /// Day and night textures for a vehicle drawn as `rows`, painted in `body`.
-    private func vehicle(_ rows: [String], body: RGB) -> (day: SKTexture, night: SKTexture, length: Int) {
+    private func vehicle(_ rows: [String], body: RGB) -> (day: SKTexture, night: SKTexture, length: Int, height: Int) {
         func look(_ dark: Bool) -> SKTexture {
             let paint = dark ? body * RGB(0.46, 0.48, 0.62) : body
             return art(rows, ["B": paint, "#": paint * 0.85, "d": paint * 0.65,
@@ -891,7 +1081,13 @@ final class PixelCity: SKScene {
                               "h": dark ? rgb(255, 250, 215) : rgb(232, 232, 218),
                               "t": dark ? rgb(255, 50, 50) : rgb(150, 30, 30), "o": rgb(24, 24, 30)])
         }
-        return (look(false), look(true), rows[0].count)
+        return (look(false), look(true), rows[0].count, rows.count)
+    }
+
+    /// A vehicle far off: a dash of paint by day, and by night only its tail light and headlight.
+    private func speck(_ length: Int, body: RGB) -> (day: SKTexture, night: SKTexture, length: Int, height: Int) {
+        (art([String(repeating: "B", count: length)], ["B": body]),
+         art(["t" + String(repeating: ".", count: length - 2) + "h"], ["t": rgb(255, 50, 50), "h": rgb(255, 250, 215)]), length, 1)
     }
 
     /// A cloud outline: a few overlapping circles with a flat base.
@@ -913,6 +1109,12 @@ final class PixelCity: SKScene {
 // MARK: - Supporting types
 
 private enum Roof: CaseIterable { case plain, ledge, setback, tank, antenna }
+
+/// The cities Settings can pick, in the menu's order. The pick is stored as its index, so add new ones at the end.
+private enum City: Int, CaseIterable {
+    case street, waterfront, foothills
+    var name: String { ["Street", "Waterfront", "Foothills"][rawValue] }
+}
 
 /// What a building is: the Street's plain block, or on the waterfront a windowless tower in the haze, a stone
 /// tower with setbacks, a glass curtain wall, a brick walk-up over a shop, or a concrete slab with ribbon windows.
