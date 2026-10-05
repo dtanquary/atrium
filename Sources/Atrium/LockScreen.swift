@@ -6,13 +6,20 @@ import UniformTypeIdentifiers
 /// the system wallpaper, which Atrium's window only covers, so while this is on each display's system wallpaper is a
 /// still of Atrium's, refreshed as it changes. The user's own comes back when it's turned off or Atrium quits, and
 /// after a crash at the next launch, since it's saved by display.
-// ponytail: macOS sets a wallpaper for the Space in front, so other Spaces keep theirs unless "Show on all Spaces" is on
+///
+/// macOS sets a wallpaper for the Space in front and no other, so each Space is given the latest still as it comes to
+/// the front (`spaceChanged`): the Space in front is the one the lock screen shows.
+// ponytail: the user's own goes back on the Space in front only. Other Spaces that were given a still keep pointing
+// at it after it's deleted, until they're next in front with this on. Put theirs back as each comes to the front,
+// keeping what was saved, if turning this off or quitting should leave every Space as it was.
 @MainActor enum LockScreen {
     static let knob = Knob(key: "lockScreen.match", label: "Match the lock screen", range: 0...1, standard: 0, format: .toggle)
     /// Each display's own wallpaper, by display UUID, as a URL string.
     private static let savedKey = "lockScreen.saved"
     private static let folder = URL.applicationSupportDirectory.appending(path: "com.dtanquary.atrium/lock-screen")
     private static var matching: Bool?
+    /// Each display's latest still, by display UUID.
+    private static var stills: [String: URL] = [:]
 
     /// Matches or restores as the switch says; call it whenever the wallpaper or the displays change.
     static func update(_ windows: [NSWindow]) {
@@ -43,6 +50,7 @@ import UniformTypeIdentifiers
             CGImageDestinationAddImage(out, image, [kCGImageDestinationLossyCompressionQuality: 0.9] as CFDictionary)
             guard CGImageDestinationFinalize(out) else { continue }
             do { try NSWorkspace.shared.setDesktopImageURL(file, for: screen, options: [.allowClipping: true]) } catch { continue }
+            stills[id] = file
             // The display's earlier stills go. Listed rather than asked of macOS, which reports a new wallpaper late.
             for old in (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
             where old.lastPathComponent.hasPrefix(id) && old.lastPathComponent != file.lastPathComponent {
@@ -50,6 +58,17 @@ import UniformTypeIdentifiers
             }
         }
         UserDefaults.standard.set(saved, forKey: savedKey)
+    }
+
+    /// Gives the Space that has just come to the front each display's latest still. Without this a Space keeps the
+    /// still it had when it was last in front as one was taken, which has been deleted since, or the user's own
+    /// wallpaper if it never was: and that is what the lock screen showed from there.
+    static func spaceChanged() {
+        guard matching == true else { return }
+        for screen in NSScreen.screens {
+            guard let id = uuid(screen), let still = stills[id] else { continue }
+            try? NSWorkspace.shared.setDesktopImageURL(still, for: screen, options: [.allowClipping: true])
+        }
     }
 
     /// Puts back each display's own wallpaper, if Atrium replaced it.

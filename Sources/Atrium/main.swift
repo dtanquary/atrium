@@ -386,6 +386,10 @@ DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { LockScreen.update(window
 Timer.scheduledTimer(withTimeInterval: 600, repeats: true) { _ in
     MainActor.assumeIsolated { matchLockScreen(after: 0) }
 }
+// macOS gave that still to the Space in front only, so each other Space gets it as it comes to the front.
+NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { _ in
+    MainActor.assumeIsolated { LockScreen.spaceChanged() }
+}
 // Rebuild a long-running wallpaper so the clocks its shaders animate by stay small: quietly once the displays sleep,
 // or with a crossfade for displays that never do.
 NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { _ in
