@@ -237,3 +237,24 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
     }
     #expect(scene.rocketName == "SHUTTLE" && scene.movements >= 5, "\(scene.movements) lift-offs and landings")
 }
+
+/// Each display runs its own Spaceport, and so does the copy behind Settings. On every one of them, rockets that
+/// come back and rockets that fly once still take turns: none is dealt all of one kind.
+@MainActor @Test func pixelCitySpaceportTakesTurnsOnEveryDisplay() throws {
+    guard case .choice(let cities) = PixelCity.knobs[0].format else { return }
+    let settings = ["city.place": Double(try #require(cities.firstIndex(of: "Spaceport"))), "city.launches": 3]
+    defer { settings.keys.forEach(UserDefaults.standard.removeObject) }
+    for (key, value) in settings { UserDefaults.standard.set(value, forKey: key) }
+    let scenes = [PixelCity(size: CGSize(width: 800, height: 500)), PixelCity(size: CGSize(width: 800, height: 500))]
+    var flown: [[String]] = [[], []]
+    for step in 0..<9_000 {
+        for (i, scene) in scenes.enumerated() {
+            scene.update(Double(step) / 10)
+            if flown[i].last != scene.rocketName { flown[i].append(scene.rocketName) }
+        }
+    }
+    let back = ["FALCON 9", "F HEAVY", "STARSHIP"]
+    for names in flown {
+        #expect(names.count >= 4 && zip(names, names.dropFirst()).allSatisfy { back.contains($0) != back.contains($1) }, "\(names)")
+    }
+}

@@ -2169,7 +2169,11 @@ final class PixelCity: SKScene {
         // A rocket on the pad well into its count, so there's something to see at once, and a booster from the last
         // flight waiting for the crane, unless the rocket is a Falcon Heavy, whose two boosters need both zones.
         (pad, crane, plume, liftoffAt, trailFrom, launchShown, orbiter) = (Pad(), Crane(), [], -1000, nil, [], Orbiter())
-        (pad.phase, pad.until, pad.rocket, pad.flown) = (.count, clock + 24 * Self.knob(.launches), Self.nextRocket(), Bool.random())
+        // The same rockets are left to fly as in the last scene, in an order of this one's own.
+        hangar = Self.lastHangar
+        hangar.landers.shuffle()
+        hangar.others.shuffle()
+        (pad.phase, pad.until, pad.rocket, pad.flown) = (.count, clock + 24 * Self.knob(.launches), nextRocket(), Bool.random())
         boosters = pad.rocket.kit.lands == 2 ? [] : [Booster(phase: .landed, zone: 1, until: clock + 2)]
         pad.x = roll(pad.rocket.kit) // it has rolled all the way out, so its strongback or crawler has that far to go home
         let rows = h - waterRows, texture = SKMutableTexture(size: CGSize(width: w, height: rows))
@@ -2365,19 +2369,23 @@ final class PixelCity: SKScene {
 
     /// The next rocket out of the hangar, from those switched on. Rockets whose boosters come back to land and
     /// rockets that fly once take turns, so there is a landing after every other lift-off; within each kind every
-    /// rocket flies once, in a shuffled order, before any flies again. One Falcon 9 in three is under a capsule. The
-    /// order carries from scene to scene (the app's Shuffle and a move between cities build a new one each time), so
-    /// short visits don't keep seeing the same rocket.
-    private static var hangar: (landers: [Rocket], others: [Rocket], of: [Rocket]) = ([], [], [])
-    private static var landersTurn = Bool.random()
-    private static func nextRocket() -> Rocket {
-        let fleet = rockets
-        if fleet != hangar.of { hangar = ([], [], fleet) } // Settings has changed which fly
+    /// rocket flies once, in a shuffled order, before any flies again. One Falcon 9 in three is under a capsule.
+    /// Each scene keeps its own order (`hangar`): two displays, or the desktop and the copy behind Settings, each
+    /// get their turns of both kinds, where one order shared between them could deal one screen all the landings.
+    /// A new scene takes up where the last one to pick left off (the app's Shuffle and a move between cities build
+    /// a new one each time), so short visits don't keep seeing the same rocket.
+    private struct Hangar { var landers: [Rocket] = [], others: [Rocket] = [], of: [Rocket] = [], landersTurn = Bool.random() }
+    private static var lastHangar = Hangar()
+    private var hangar = Hangar()
+    private func nextRocket() -> Rocket {
+        let fleet = Self.rockets
+        if fleet != hangar.of { (hangar.landers, hangar.others, hangar.of) = ([], [], fleet) } // Settings has changed which fly
         let landers = fleet.filter { $0.kit.lands > 0 }, others = fleet.filter { $0.kit.lands == 0 }
-        landersTurn = others.isEmpty || (!landers.isEmpty && !landersTurn)
-        if landersTurn, hangar.landers.isEmpty { hangar.landers = landers.shuffled() }
-        if !landersTurn, hangar.others.isEmpty { hangar.others = others.shuffled() }
-        let pick = landersTurn ? hangar.landers.removeLast() : hangar.others.removeLast()
+        hangar.landersTurn = others.isEmpty || (!landers.isEmpty && !hangar.landersTurn)
+        if hangar.landersTurn, hangar.landers.isEmpty { hangar.landers = landers.shuffled() }
+        if !hangar.landersTurn, hangar.others.isEmpty { hangar.others = others.shuffled() }
+        let pick = hangar.landersTurn ? hangar.landers.removeLast() : hangar.others.removeLast()
+        Self.lastHangar = hangar
         return pick == .falcon9 && Int.random(in: 0..<3) == 0 ? .dragon : pick
     }
 
@@ -2428,7 +2436,7 @@ final class PixelCity: SKScene {
         case .hangar:
             if clock >= pad.until {
                 // The rocket was picked when the wait began, so the board could name it; Settings may have switched it off since.
-                if !Self.rockets.contains(pad.rocket == .dragon ? .falcon9 : pad.rocket) { pad.rocket = Self.nextRocket() }
+                if !Self.rockets.contains(pad.rocket == .dragon ? .falcon9 : pad.rocket) { pad.rocket = nextRocket() }
                 (pad.phase, pad.t, pad.x) = (.rollOut, 0, 0)
             }
         case .rollOut:
@@ -2462,7 +2470,7 @@ final class PixelCity: SKScene {
             pad.x = max(pad.x - 5 * dt, 0)
             if pad.x <= 0 {
                 boosters.removeAll { $0.zone == 2 }
-                (pad.phase, pad.until, pad.rocket, pad.flown, pad.lowered) = (.hangar, clock + .random(in: 50...110), Self.nextRocket(), Bool.random(), 0)
+                (pad.phase, pad.until, pad.rocket, pad.flown, pad.lowered) = (.hangar, clock + .random(in: 50...110), nextRocket(), Bool.random(), 0)
             }
         }
         // A rocket from abroad has its flag run up the second pole, from its roll-out until its crawler is home again.
