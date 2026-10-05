@@ -14,19 +14,20 @@ A pixel-art skyline that follows the real Sun and clock. The sky moves through d
   - **The landmark:** the widest near building around 3/5 across is raised to 50% height, with an antenna and a red beacon (0.25 s on, 1.25 s off).
   - **Also:** 170 stars, 3 cloud masks, and a pool of 6 cars per lane with headlight beams. There are 7 sedan colours plus a bus, and a plane with blinking nav lights.
 - **`redraw()`** runs at init and every 30 s, and repaints the whole backdrop with a `Pixels` buffer:
-  - **Sky:** a gradient between zenith and horizon colours from `skyColours(elevation, morning:)`. The stops run −18°, −10°, −4°, 0°, 6° and 15°, and dawn is pinker than dusk. It's quantised into 14 bands with 4×4 Bayer dithering, plus a sun glow around a low Sun, also dithered into 5 steps.
+  - **Sky:** a gradient between zenith and horizon colours from `skyColours(elevation, morning:)`. The stops run −18°, −10°, −4°, 0°, 6° and 15°, and dawn is pinker than dusk. It's quantised into 14 bands with 4×4 Bayer dithering, plus a sun glow around a low Sun in 5 flat rings, dithered only where two rings meet (dithering right across each ring left a halo of loose dots).
   - **Stars** fade in below about −5°; the brightest get a small cross.
   - **Moon:**
     - **Phase:** from a mean synodic month counted from the new Moon of 2000-01-06 18:14 UTC.
     - **Position:** the Sun's ecliptic longitude plus phase × 360° (no lunar inclination).
     - **Lit side:** on the right while waxing.
     - **Earthshine** on the dark part at night.
+    - **Size:** an 8-pixel radius. A thin crescent is drawn at least 1.6 pixels wide, because at this size a true one breaks into specks.
   - **Sun:** a 6-pixel-radius disc, orange near the horizon.
   - **Buildings:**
     - Facades darken toward moonlit blue at night, and the far row takes on the horizon colour as haze.
     - Windows turn on via `isLit()` with three seeded draws per window. About 65% are lit on an evening schedule: people get home between 16:30 and 21:00 and go to bed between 21:00 and 03:00. 30% come on for early risers from 05:30. 3% are always on (stairwells and night owls). The colours are mostly warm tungsten, with a few cool blue or white ones.
   - **Street:** sidewalks, road markings, and a lamp every 46 pixels casting a three-step pool of light at night.
-  - Clouds, cars and the plane are recoloured for the light: day and night car textures, headlight beams fading in at night, and the plane turning into a dark silhouette.
+  - Clouds, cars and the plane are recoloured for the light: day and night car textures, the plane turning into a dark silhouette, and headlights fading in at night. A headlight is a pool of light lying on the road ahead, added to the road's colour (`blendMode = .add`) and drawn under the car in front. Clouds are solid, so they hide the stars behind them.
 - **`update(_:)`** runs every frame:
   - **Cars:** they move at their cruise speed (buses 11–14, cars 14–22 art pixels per second). A car closes up behind a slower car in the same lane (gap < 6) instead of driving through it.
   - **Spawning:** new cars come in from the pool every `(1.5–6 s) / traffic`, where `traffic` is an hourly table with rush hours at 08:00 and 17:00 and quiet small hours. 10% of spawns are buses.

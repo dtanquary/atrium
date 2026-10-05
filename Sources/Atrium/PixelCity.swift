@@ -138,7 +138,9 @@ final class PixelCity: SKScene {
                 node.isHidden = true
                 let beam = SKSpriteNode(texture: headlightBeam)
                 beam.anchorPoint = CGPoint(x: 0, y: 0)
-                beam.size = CGSize(width: 12, height: 5)
+                beam.size = CGSize(width: 14, height: 4)
+                beam.blendMode = .add // light on the road, not a grey shape in the air
+                beam.zPosition = -0.5 // under the car ahead
                 node.addChild(beam)
                 canvas.addChild(node)
                 cars.append(Car(node: node, beam: beam, lane: lane))
@@ -197,7 +199,8 @@ final class PixelCity: SKScene {
                 var c = mix(horizon, top, pow(min(1, (t * 14 + d).rounded(.down) / 14), 0.6))
                 if glow > 0 {
                     let gx = Float(x - sunSpot.x) / (90 * reach), gy = Float(y - sunSpot.y) / (40 * reach)
-                    c = mix(c, glowColour, (glow * exp(-(gx * gx + gy * gy)) * 5 + d).rounded(.down) / 5)
+                    // Flat rings, dithered only where two meet: dithering all the way across left a halo of loose dots.
+                    c = mix(c, glowColour, (glow * exp(-(gx * gx + gy * gy)) * 5 + 0.3 + d * 0.4).rounded(.down) / 5)
                 }
                 px.plot(x, y, pointwiseMin(c, .one))
             }
@@ -226,12 +229,9 @@ final class PixelCity: SKScene {
 
         // Sprites that change colour with the light.
         let dusk = smoothstep(14, 2, el) * (1 - night)
-        let light = mix(mix(rgb(250, 250, 252), horizon, dusk * 0.6), rgb(64, 68, 100), night)
-        let shade = mix(mix(rgb(196, 206, 226), top, dusk * 0.5), rgb(38, 40, 66), night)
-        for cloud in clouds {
-            cloud.node.texture = cloud.texture(light: light, shade: shade)
-            cloud.node.alpha = CGFloat(mix(0.95, 0.7, night))
-        }
+        let light = mix(mix(rgb(250, 250, 252), horizon, dusk * 0.6), rgb(47, 50, 78), night)
+        let shade = mix(mix(rgb(196, 206, 226), top, dusk * 0.5), rgb(29, 31, 54), night)
+        for cloud in clouds { cloud.node.texture = cloud.texture(light: light, shade: shade) } // solid, so they hide the stars
         for car in cars { car.node.texture = night > 0.5 ? carLooks[car.look].night : carLooks[car.look].day }
         for car in cars { car.beam.alpha = CGFloat(smoothstep(0.3, 0.8, night)) }
         plane.color = NSColor(red: 0.05, green: 0.06, blue: 0.1, alpha: 1) // a dark silhouette after sunset
@@ -266,14 +266,16 @@ final class PixelCity: SKScene {
 
     /// The moon's disc with its current phase lit on the right while waxing, the left while waning.
     private func drawMoon(into px: inout Pixels, at spot: (x: Int, y: Int), phase: Double, alpha: Float) {
-        let r = 5, k = Float(cos(2 * .pi * phase))
+        // ponytail: a thin crescent is drawn at least 1.6 pixels wide, or it breaks into specks at this size
+        let r = 8, k = min(Float(cos(2 * .pi * phase)), 1 - 1.6 / 8)
         for dy in -r...r {
             for dx in -r...r {
                 let nx = Float(dx) / Float(r), ny = Float(dy) / Float(r)
-                guard nx * nx + ny * ny <= 1.1 else { continue }
+                guard nx * nx + ny * ny <= 1.05 else { continue }
                 let edge = k * (max(0, 1 - ny * ny)).squareRoot()
                 let lit = phase < 0.5 ? nx > edge : nx < -edge
-                let crater = [(-2, 1), (1, 2), (-1, -2), (2, -1), (-3, -1)].contains { $0 == (dx, dy) }
+                let crater = [(-4, 2), (-3, 2), (-4, 3), (-3, 3), (1, 4), (2, 4), (-1, -4), (0, -4), (-1, -3),
+                              (4, -2), (4, -1), (-6, -1), (1, 0)].contains { $0 == (dx, dy) } // the maria, roughly
                 if lit {
                     px.plot(spot.x + dx, spot.y + dy, crater ? rgb(200, 200, 186) : rgb(242, 240, 222), alpha)
                 } else {
@@ -430,7 +432,7 @@ final class PixelCity: SKScene {
         cars[i].length = Float(look.length)
         cars[i].node.texture = night > 0.5 ? look.night : look.day
         cars[i].node.size = CGSize(width: look.length, height: isBus ? 10 : 7)
-        cars[i].beam.position = CGPoint(x: CGFloat(look.length) / 2, y: isBus ? 2 : 1)
+        cars[i].beam.position = CGPoint(x: CGFloat(look.length) / 2 - 1, y: -1)
         cars[i].node.position.x = CGFloat(x.rounded(.down))
         cars[i].node.isHidden = false
         nextCar[lane] = clock + .random(in: 1.5...6) / traffic
@@ -445,11 +447,12 @@ final class PixelCity: SKScene {
 
     // MARK: - Art
 
+    /// The pool of light a car throws on the road ahead: an ellipse lying on the tarmac, fading in three steps.
     private lazy var headlightBeam: SKTexture = {
-        var px = Pixels(12, 5)
-        for x in 0..<12 {
-            for y in 0..<5 where abs(y - 2) <= (x < 3 ? 0 : x < 7 ? 1 : 2) {
-                px.plot(x, y, rgb(255, 240, 180), x < 3 ? 0.4 : x < 7 ? 0.22 : 0.1)
+        var px = Pixels(14, 4)
+        for x in 0..<14 {
+            for y in 0..<4 where (Float(x) - 6) * (Float(x) - 6) / 56 + (Float(y) - 1.5) * (Float(y) - 1.5) / 3.2 <= 1 {
+                px.plot(x, y, rgb(255, 232, 170), x < 5 ? 0.34 : x < 10 ? 0.22 : 0.12)
             }
         }
         return px.texture()
@@ -458,7 +461,7 @@ final class PixelCity: SKScene {
     /// Day and night textures for a vehicle drawn as `rows`, painted in `body`.
     private func vehicle(_ rows: [String], body: RGB) -> (day: SKTexture, night: SKTexture, length: Int) {
         func look(_ dark: Bool) -> SKTexture {
-            let paint = dark ? body * RGB(0.35, 0.37, 0.5) : body
+            let paint = dark ? body * RGB(0.46, 0.48, 0.62) : body
             return art(rows, ["B": paint, "#": paint * 0.85, "d": paint * 0.65,
                               "w": dark ? rgb(30, 36, 52) : rgb(150, 186, 216),
                               "W": dark ? rgb(255, 220, 140) : rgb(150, 186, 216),
