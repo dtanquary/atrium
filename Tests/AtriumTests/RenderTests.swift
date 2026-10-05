@@ -123,7 +123,7 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
         UserDefaults.standard.set(Double(view), forKey: "city.place") // posts the change the scene listens for
         return scene.children[0].children.count
     }
-    #expect(nodes.allSatisfy { $0 > 10 } && nodes.last == nodes.first)
+    #expect(nodes.allSatisfy { $0 > 8 } && nodes.last == nodes.first) // the Spaceport has fewest: its moving things share one node
 }
 
 /// Pixel City's automatic move goes to a different city every time and saves it, so Settings and every display
@@ -167,4 +167,22 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
         crowded = crowded || scene.runwayCount > 1
     }
     #expect(scene.movements >= 8 && !crowded, "\(scene.movements) landings and take-offs")
+}
+
+/// Pixel City's Spaceport keeps going round: over twenty minutes there are lift-offs and landings, and no booster
+/// is sent back to a landing zone the last one is still standing on. Its layer is painted every two seconds, not
+/// every step: its smoke is slow to paint in a debug build.
+@MainActor @Test func pixelCitySpaceportKeepsLaunching() throws {
+    guard case .choice(let cities) = PixelCity.knobs[0].format else { return }
+    let settings = ["city.place": Double(try #require(cities.firstIndex(of: "Spaceport"))), "city.previewTime": 1, "city.previewHour": 12]
+    defer { settings.keys.forEach(UserDefaults.standard.removeObject) }
+    for (key, value) in settings { UserDefaults.standard.set(value, forKey: key) }
+    let scene = PixelCity(size: CGSize(width: 800, height: 500))
+    var shared = false
+    for step in 0..<12_000 { // a tenth of a second at a time
+        scene.update(Double(step) / 10)
+        if step % 20 == 0 { scene.didFinishUpdate() }
+        shared = shared || scene.zoneShared
+    }
+    #expect(scene.movements >= 8 && !shared, "\(scene.movements) lift-offs and landings")
 }

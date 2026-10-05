@@ -184,7 +184,7 @@ Conway's cells, reseeding so they never die out. The Calm look shows a long expo
 | Calm | Classic |
 
 #### Pixel City
-A pixel-art city that follows your clock and the real Sun, with traffic and windows lighting up through the evening. Pick a city: the Waterfront, a downtown mirrored in the water with its walls lit from wherever the Sun is; Foothills, a small downtown under snow-capped mountains that hold the last of the sunlight; the Long Bridge, strung with lights across a bay; Hillside Town, tiled houses stacked above a harbour; the Overlook, out over a sea of rooftops; or the Airport, across a bay, where airliners land, taxi to the terminal and take off again into the real wind, mirrored in the water. It can move between them by itself every few minutes. You can also choose which way you look, so the Sun sets in view or lights the buildings from behind you.
+A pixel-art city that follows your clock and the real Sun, with traffic and windows lighting up through the evening. Pick a city: the Waterfront, a downtown mirrored in the water with its walls lit from wherever the Sun is; Foothills, a small downtown under snow-capped mountains that hold the last of the sunlight; the Long Bridge, strung with lights across a bay; Hillside Town, tiled houses stacked above a harbour; the Overlook, out over a sea of rooftops; the Airport, across a bay, where airliners land, taxi to the terminal and take off again into the real wind, mirrored in the water; or the Spaceport, seen from the bank across a lagoon, where rockets roll out to the pad and lift off on a column of smoke, their boosters fly back to land, and a crane carries them away. It can move between them by itself every few minutes. You can also choose which way you look, so the Sun sets in view or lights the buildings from behind you.
 
 | ![Pixel City's Waterfront at dusk](docs/images/pixel-city-dusk.jpg) | ![Pixel City's Foothills on a clear morning](docs/images/pixel-city-foothills.jpg) |
 |---|---|
@@ -195,6 +195,8 @@ A pixel-art city that follows your clock and the real Sun, with traffic and wind
 | The Overlook at sunset | Hillside Town at night, its lamps in the harbour |
 | ![Pixel City's Airport at sunset](docs/images/pixel-city-airport.jpg) | ![Pixel City's Airport at night](docs/images/pixel-city-airport-night.jpg) |
 | The Airport at sunset, an airliner just down | The Airport at night |
+| ![Pixel City's Spaceport at sunset](docs/images/pixel-city-spaceport.jpg) | ![Pixel City's Spaceport at night](docs/images/pixel-city-spaceport-night.jpg) |
+| The Spaceport at sunset, nine seconds after lift-off | The Spaceport at night, a booster on its landing burn |
 
 ## Settings
 

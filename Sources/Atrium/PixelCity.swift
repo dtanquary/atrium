@@ -6,7 +6,8 @@ import SpriteKit
 /// going dark through the evening, traffic, a blinking beacon and the odd plane, with walls lit from wherever the
 /// Sun really is. Everything lives on a low-resolution canvas measured in art pixels, scaled up with nearest
 /// filtering. Settings picks the city (`City`): a downtown across water, one under mountains, a bridge over a bay,
-/// a town up a hillside, the view over a sea of rooftops, or an airport with aircraft coming and going.
+/// a town up a hillside, the view over a sea of rooftops, an airport with aircraft coming and going, or a launch
+/// site whose rockets lift off and whose boosters come back.
 final class PixelCity: SKScene {
     nonisolated static let knobs = [
         Knob(key: "city.place", label: "City", range: 0...Double(City.allCases.count - 1), standard: 0, section: "City",
@@ -21,12 +22,13 @@ final class PixelCity: SKScene {
         Knob(key: "city.flightsNight", label: "Flights at night", range: 0.25...3, standard: 0.7, section: "Airport", format: .times),
         Knob(key: "city.wind", label: "Land and take off into the real wind", range: 0...1, standard: 1, section: "Airport",
              format: .toggle),
+        Knob(key: "city.launches", label: "Launches", range: 0.25...3, standard: 1, section: "Spaceport", format: .times),
         Knob(key: "city.previewTime", label: "Preview a time of day", range: 0...1, standard: 0, section: "Preview",
              format: .toggle),
         Knob(key: "city.previewHour", label: "Time", range: 0...24, standard: 19, section: "Preview", format: .clock,
              shownWhen: "city.previewTime"),
     ]
-    private enum K: Int { case view, shuffle, shuffleMinutes, looking, flightsDay, flightsNight, wind, previewTime, previewHour }
+    private enum K: Int { case view, shuffle, shuffleMinutes, looking, flightsDay, flightsNight, wind, launches, previewTime, previewHour }
     private static func knob(_ k: K) -> Double { knobs[k.rawValue].value }
     private var settings = PixelCity.knobs.map(\.value)
     private var retired = false // it has handed over to a scene of another city, and is fading out
@@ -57,7 +59,15 @@ final class PixelCity: SKScene {
     private var runway = 0, taxiway = 0, apron = 0
     private var stands: [Int] = []
     private var runwayWay: Float = 1
-    private(set) var movements = 0 // landings and take-offs so far, for the tests
+    private(set) var movements = 0 // landings and take-offs (or lift-offs) so far, for the tests
+    // The Spaceport: its pad, the boosters that come back, the crane that takes them away and the smoke of it all;
+    // the layer they are painted into, which the lagoon mirrors; and the figures on the countdown clock.
+    private var pad = Pad(), boosters: [Booster] = [], crane = Crane(), plume: [Puff] = []
+    private var liftoffAt: TimeInterval = -1000, trailFrom: SIMD2<Float>?
+    private var launchLayer = SKSpriteNode(), launchTexture: SKMutableTexture?, launchShown: [Int] = []
+    private var smoke = Bytes(1, 1, floor: 0), density: [Float] = [], smokeTime: Float = 0, smokeMoved = false, smokeSteps = 0
+    private var countdown = SKSpriteNode(), counted = ""
+    private var hazeColour = RGB.zero // the horizon's colour, which far-off things fade toward
     private let canvas = SKNode()
     private let sky = SKSpriteNode()      // sky, stars, Sun and Moon…
     private let backdrop = SKSpriteNode() // …and the city in front, so clouds and planes pass between the two
@@ -191,7 +201,7 @@ final class PixelCity: SKScene {
         canvas.removeAllChildren()
         (skyline, parks, stars, clouds, cars) = ([], [], [], [], [])
         (plane, planeLights, beacon, mirrored, waterTints, mirrors) = (SKSpriteNode(), SKNode(), SKNode(), [], [], [])
-        (trafficStrip, trafficShown) = (nil, [])
+        (trafficStrip, trafficShown, launchTexture, plume, boosters) = (nil, [], nil, [], [])
         (nextCar, planeDirection, shipDirection, ship) = ([clock, clock], 0, 0, SKSpriteNode())
         city = City(rawValue: Int(Self.knob(.view))) ?? .waterfront
         waterRows = city == .waterfront ? Int(Float(h) * 0.21) : 0
@@ -208,6 +218,9 @@ final class PixelCity: SKScene {
         case .airport:
             waterRows = Int(Float(h) * 0.215) // a bay, with the airfield along its far shore
             ground = waterRows + 25           // the far skyline's feet, behind the terminal
+        case .spaceport:
+            waterRows = Int(Float(h) * 0.235) // a lagoon between us and the pads, deep enough to mirror a lift-off
+            ground = waterRows + 3            // a low shore of scrub
         }
         crest = Array(repeating: ground, count: w)
         (ridges, downtown, farHaze, slope, boats, steam, flock, towerLights, flights) = ([], 0.5, 1, [], [], [], [], [], [])
@@ -226,6 +239,7 @@ final class PixelCity: SKScene {
         case .hillside: tower = layOutHillside(&rng)
         case .overlook: tower = layOutOverlook(&rng)
         case .airport: tower = layOutAirport(&rng)
+        case .spaceport: tower = layOutSpaceport(&rng)
         }
         skyBase = crest.min() ?? ground
         beacon.position = CGPoint(x: tower.x, y: tower.y)
@@ -270,7 +284,7 @@ final class PixelCity: SKScene {
             : far ? [ground - 16, ground - 14] : [streetBase + 5, streetBase + 13]
         for lane in 0...1 {
             // The town's lanes are too steep for traffic, and an apron has a few vans and tugs, not a road's worth.
-            for _ in 0..<(city == .hillside ? 0 : city == .airport ? 3 : far ? 14 : 6) {
+            for _ in 0..<(city == .hillside || city == .spaceport ? 0 : city == .airport ? 3 : far ? 14 : 6) {
                 let node = SKSpriteNode()
                 node.anchorPoint = CGPoint(x: 0.5, y: 0)
                 node.position.y = CGFloat(lanes[lane])
@@ -288,7 +302,7 @@ final class PixelCity: SKScene {
                 cars.append(Car(node: node, beam: beam, lane: lane))
             }
             // Start with a little traffic already on the road.
-            for x in [Float(w) * 0.2, Float(w) * 0.65] { spawnCar(lane: lane, at: x + Float.random(in: -20...20)) }
+            for x in [Float(w) * 0.2, Float(w) * 0.65] where !cars.isEmpty { spawnCar(lane: lane, at: x + Float.random(in: -20...20)) }
         }
 
         plane.texture = art(["#...........",
@@ -311,6 +325,7 @@ final class PixelCity: SKScene {
         canvas.addChild(plane)
         if waterRows > 0 { addWater() }
         if city == .airport { for flight in flights { canvas.addChild(flight.node) } } // in front of the water
+        if city == .spaceport { for node in [launchLayer, countdown] { canvas.addChild(node) } }
         if city == .bridge { // a freighter that crosses the bay in front of the bridge now and then
             ship.anchorPoint = CGPoint(x: 0.5, y: 0)
             ship.size = CGSize(width: freighter[0].count, height: freighter.count)
@@ -718,9 +733,14 @@ final class PixelCity: SKScene {
         node.zPosition = 2.5
         mirrored = [SKUniform(name: "u_sky", texture: nil), SKUniform(name: "u_city", texture: nil)]
         waterTints = [SKUniform(name: "u_deep", vectorFloat3: .zero), SKUniform(name: "u_glint", vectorFloat3: .zero)]
-        // Aircraft or boats first, each at its own place in the list; then the freighter; last the traffic's strip.
-        let things = flights.count + boats.count + (city == .bridge ? 1 : 0) + (cars.isEmpty ? 0 : 1)
+        // Aircraft or boats first, each at its own place in the list; then the freighter, or the layer everything
+        // at the Spaceport moves in; last the traffic's strip.
+        let things = flights.count + boats.count + (city == .bridge || city == .spaceport ? 1 : 0) + (cars.isEmpty ? 0 : 1)
         mirrors = (0..<things).map { (SKUniform(name: "u_thing\($0)", texture: nil), SKUniform(name: "u_place\($0)", vectorFloat4: [-999, 0, 1, 1])) }
+        if let layer = launchTexture { // it stands on the shore, so it mirrors about the waterline
+            mirrors[0].picture.textureValue = layer
+            reflect(0, from: 0, foot: Float(mirrorLine), size: layer.size())
+        }
         if !cars.isEmpty {
             // The strip is as tall as a bus on the Waterfront's street, where both lanes stand on the ground; one row
             // for the apron's vans; and on the Long Bridge the two rows of its deck, mirrored where the deck is.
@@ -904,6 +924,7 @@ final class PixelCity: SKScene {
         case .hillside:
             drawHorizon(into: &px, zenith: top, horizon: horizon)
             drawHill(into: &px)
+        case .spaceport: break
         case .overlook:
             drawHorizon(into: &px, zenith: top, horizon: horizon)
             // The streets between the rooftops: tarmac by day, paler with distance; by night a dim warm glow, with
@@ -951,6 +972,10 @@ final class PixelCity: SKScene {
         case .airport:
             drawAirfield(into: &px, zenith: top, horizon: horizon)
             for i in flights.indices { dress(i) }
+        case .spaceport:
+            drawSpaceport(into: &px, zenith: top, horizon: horizon)
+            (hazeColour, launchShown) = (horizon, []) // its moving things are painted again in this light
+            paintSmoke()
         }
         backdrop.texture = px.texture()
         mirrored.first?.textureValue = sky.texture
@@ -1819,7 +1844,7 @@ final class PixelCity: SKScene {
             clouds[i].node.position.x = CGFloat(clouds[i].x.rounded(.down))
         }
 
-        if planeDirection == 0, clock >= nextPlane {
+        if planeDirection == 0, clock >= nextPlane, city != .spaceport { // nothing flies over a launch site
             planeDirection = Bool.random() ? 1 : -1
             planeX = planeDirection > 0 ? -10 : Float(w + 10)
             plane.position.y = CGFloat(Int(Float(h) * Float.random(in: 0.8...0.93)))
@@ -1852,6 +1877,7 @@ final class PixelCity: SKScene {
             }
         }
         if city == .airport { fly(dt) }
+        if city == .spaceport { launch(dt) }
         if planeDirection != 0 {
             planeX += planeDirection * 7 * dt
             plane.position.x = CGFloat(planeX.rounded(.down))
@@ -2095,6 +2121,636 @@ final class PixelCity: SKScene {
             }
         }
     }
+
+    // MARK: - The Spaceport
+
+    // The Spaceport's places: the column the rocket stands at, the row of the pad's padDeck (the top of its mound),
+    // the row a rocket's foot stands at on the launch mount, the hangar's left wall, and the columns of the two
+    // landing zones.
+    private var padX: Int { w * 46 / 100 }
+    private var padDeck: Int { ground + 6 }
+    private var mount: Int { padDeck + 4 }
+    private var hangarX: Int { padX - 139 }
+    private var zones: [Int] { [w * 77 / 100, w * 89 / 100] }
+
+    /// The Spaceport: a launch site across a lagoon, seen from the bank the public watches from. Everything of its
+    /// that moves is painted into one layer over the land, which the lagoon mirrors. Returns the top of the tower's
+    /// mast, for the beacon.
+    private func layOutSpaceport(_ rng: inout SeededRandom) -> (x: Int, y: Int) {
+        downtown = 0.46
+        for x in 0..<w { crest[x] = ground + 4 }
+        // A rocket on the pad well into its count, and a booster from the last flight waiting for the crane, so
+        // there's something to see at once.
+        (pad, crane, plume, liftoffAt, trailFrom, launchShown) = (Pad(), Crane(), [], -1000, nil, [])
+        (pad.phase, pad.until) = (.count, clock + 24 * Self.knob(.launches))
+        boosters = [Booster(phase: .landed, zone: 1, until: clock + 2)]
+        let rows = h - waterRows, texture = SKMutableTexture(size: CGSize(width: w, height: rows))
+        texture.filteringMode = .nearest
+        (launchTexture, smoke) = (texture, Bytes(w, rows, floor: waterRows))
+        launchLayer = SKSpriteNode(texture: texture)
+        launchLayer.anchorPoint = .zero
+        launchLayer.size = texture.size()
+        launchLayer.position.y = CGFloat(waterRows)
+        launchLayer.zPosition = 4.5
+        countdown = SKSpriteNode()
+        countdown.anchorPoint = .zero
+        countdown.size = CGSize(width: 27, height: 5)
+        countdown.position = CGPoint(x: w * 9 / 100 + 2, y: 14)
+        countdown.zPosition = 3
+        counted = ""
+        return (padX + 11, padDeck + 74)
+    }
+
+    /// The Spaceport's fixed things: scrub along the far shore, a far-off assembly building, the hangar rockets
+    /// are readied in, a tank farm, the pad on its mound with its tower and masts, and two landing zones; and on
+    /// our side of the lagoon the bank people watch from, with its countdown clock.
+    private func drawSpaceport(into px: inout Pixels, zenith: RGB, horizon: RGB) {
+        var rng = SeededRandom(state: 96)
+        func haze(_ c: RGB, _ t: Float = 0.22) -> RGB { mix(c, horizon, t) }
+        let field = waterRows, glow = min(1, night * 1.6), lamp = rgb(255, 226, 170), red = rgb(255, 60, 50)
+        let scrub = haze(lit(rgb(84, 108, 76), keyTop * 0.3)), trees = haze(lit(rgb(56, 84, 62), keyTop * 0.2))
+        let steel = mix(haze(lit(rgb(96, 100, 110), .zero), 0.15), rgb(18, 18, 28), night * 0.85)
+        px.fill(0, field, w, ground - field, scrub)
+        for x in 0..<w where rng.next() % 10 < 7 { px.plot(x, field, haze(lit(rgb(206, 194, 160), keyTop * 0.4))) } // shell sand at the water's edge
+        px.fill(0, ground, w, 2, haze(trees, 0.25)) // the far tree line
+
+        // A far-off assembly building, tall and blank, in the haze behind the hangar.
+        let hx = hangarX, wall = rgb(206, 208, 212)
+        func far(_ c: RGB) -> RGB { haze(c, 0.55) }
+        px.fill(hx - 34, ground, 26, 40, far(lit(wall, keyFront)))
+        px.fill(hx - 34, ground, 3, 40, far(lit(wall, keyLeft, shade: 0.8)))
+        px.fill(hx - 11, ground, 3, 40, far(lit(wall, keyRight, shade: 0.8)))
+        for dx in [6, 11, 16] { px.fill(hx - 34 + dx, ground, 2, 33, far(lit(wall * 0.6, .zero))) } // its tall doors
+        px.fill(hx - 8, ground, 14, 13, far(lit(wall * 0.92, keyFront)))
+
+        // Clumps of palmetto and low trees along the shore, cleared round the hangar, the pad and the landing zones.
+        var x = -3
+        while x < w {
+            let r = Int.random(in: 2...5, using: &rng)
+            let cleared = (hx - 16..<hx + 56).contains(x) || (padX - 63..<padX + 57).contains(x) || (zones[0] - 28..<zones[1] + 26).contains(x)
+            if !cleared || rng.next() % 8 == 0 {
+                for dy in 0...r { px.fill(x - r + dy / 2, ground - 1 + dy, (r - dy / 2) * 2 + 1, 1, trees * (dy == r ? 1.18 : 1)) }
+            }
+            x += Int.random(in: 4...11, using: &rng)
+        }
+        // The road along the shore: the transporter's way to the pad, and the crane's to the landing zones.
+        px.fill(0, field + 1, w, 1, mix(haze(lit(rgb(178, 172, 156), keyTop * 0.4)), rgb(30, 30, 40), night * 0.7))
+
+        // The hangar: a long white shed with a tall door at the pad end, lit inside after dark.
+        px.fill(hx, ground, 50, 12, haze(lit(rgb(222, 224, 226), keyFront)))
+        px.fill(hx, ground, 50, 1, haze(lit(rgb(120, 124, 132), .zero)))
+        px.fill(hx, ground + 9, 50, 1, haze(lit(rgb(70, 110, 170), keyFront)))
+        for r in 0..<3 { px.fill(hx - 1 + r * 4, ground + 12 + r, 52 - r * 8, 1, haze(lit(rgb(196, 200, 206), keyTop))) }
+        px.fill(hx + 34, ground, 13, 9, mix(haze(lit(rgb(70, 74, 84), .zero)), rgb(255, 214, 150), glow * 0.75))
+        for dx in stride(from: hx + 3, to: hx + 30, by: 6) { px.fill(dx, ground + 5, 2, 2, mix(haze(lit(rgb(90, 110, 130), .zero)), lamp, glow * 0.6)) }
+
+        // The tank farm: two tanks on their sides, and the liquid oxygen's sphere.
+        let tank = haze(lit(rgb(236, 236, 232), keyFront + keyTop * 0.3))
+        for tx in [padX - 79, padX - 69] {
+            px.fill(tx, ground + 1, 8, 3, tank)
+            px.fill(tx, ground + 1, 8, 1, tank * 0.78)
+            for leg in [tx + 1, tx + 6] { px.plot(leg, ground, steel) }
+        }
+        for (dy, half) in [(1, 1), (2, 3), (3, 3), (4, 3), (5, 3), (6, 2), (7, 1)] {
+            px.fill(padX - 51 - half, ground + dy, half * 2 + 1, 1, tank * (dy < 3 ? 0.8 : 1))
+        }
+        for leg in [padX - 53, padX - 49] { px.plot(leg, ground, steel) }
+
+        // The pad: a mound with a long ramp on the hangar's side, the flame trench through it, and the launch mount.
+        let earth = haze(lit(rgb(124, 132, 100), keyTop * 0.3), 0.15), concrete = haze(lit(rgb(196, 192, 180), keyTop * 0.5), 0.12)
+        for r in 0..<6 { px.fill(padX - 55 + r * 5, ground + r, 96 - r * 7, 1, earth) }
+        px.fill(padX - 25, padDeck - 1, 54, 1, concrete)
+        px.fill(padX - 55, ground, 8, 1, concrete)
+        for r in 0..<6 { px.fill(padX - 55 + r * 5, ground + r, 5, 1, concrete) } // the ramp's track
+        px.fill(padX - 9, ground, 19, 4, mix(lit(rgb(52, 50, 52), .zero), rgb(12, 12, 18), night * 0.6))
+        px.fill(padX - 4, padDeck, 9, 4, steel)
+
+        // The tower beside the rocket: lattice steel with a padDeck every few rows, an arm out to the capsule, a mast.
+        let tx = padX + 9
+        for y in padDeck..<padDeck + 58 {
+            let k = (y - padDeck) % 6
+            px.plot(tx, y, steel)
+            px.plot(tx + 4, y, steel)
+            if k == 0 { px.fill(tx, y, 5, 1, steel) } else { px.plot(tx + (k < 4 ? k : 6 - k), y, steel, 0.8) }
+        }
+        px.fill(tx - 1, padDeck + 58, 7, 1, steel)
+        px.fill(tx + 2, padDeck + 59, 1, 15, steel)
+        px.fill(tx - 4, padDeck + 45, 4, 1, steel)
+        for y in [padDeck + 18, padDeck + 36, padDeck + 54] { px.plot(tx + 4, y, mix(steel, red, night)) }
+        // Lightning masts either side, and the water tower: a ball on a stem.
+        for (mx, base) in [(padX - 27, padDeck), (padX + 31, ground)] {
+            px.fill(mx, base, 1, 64, steel)
+            for y in stride(from: 0, to: 14, by: 2) { px.plot(mx + (y % 4 == 0 ? 1 : -1), base + y, steel, 0.8) }
+        }
+        let wx = padX + 57
+        px.fill(wx, ground, 2, 44, haze(lit(rgb(214, 216, 220), keyFront)))
+        for (dy, half) in [(44, 2), (45, 4), (46, 5), (47, 5), (48, 5), (49, 4), (50, 2)] {
+            px.fill(wx - half + 1, ground + dy, half * 2, 1, haze(lit(rgb(232, 232, 228) * (dy < 46 ? 0.82 : 1), keyFront + keyTop * 0.3)))
+        }
+        px.plot(wx, ground + 51, mix(steel, red, night))
+        // Floodlights on the padDeck, which light the rocket after dark, and the pool of their light on the mound.
+        for mx in [padX - 17, padX + 20] {
+            px.fill(mx, padDeck, 1, 16, steel)
+            px.fill(mx - 1, padDeck + 16, 3, 1, mix(rgb(200, 200, 196), lamp, night))
+            for (dx, dy) in [(0, 1), (0, -1), (2, 0), (-2, 0), (1, 1), (-1, 1), (1, -1), (-1, -1)] { px.plot(mx + dx, padDeck + 16 + dy, lamp, 0.3 * night) }
+        }
+        for (reach, a) in [(34, 0.07), (22, 0.08), (12, 0.1)] as [(Int, Float)] where night > 0.3 {
+            for dy in 0..<6 { px.fill(padX - reach * (6 - dy) / 6, ground + dy, reach * (6 - dy) / 6 * 2 + 1, 1, lamp, a * night) }
+        }
+
+        // The landing zones: a round of concrete seen edge on, lights round it at night; a hut and a mast between.
+        for zone in zones {
+            px.fill(zone - 17, ground, 35, 1, concrete)
+            px.fill(zone - 17, ground - 1, 35, 1, concrete * 0.82)
+            px.fill(zone - 3, ground, 7, 1, concrete * 0.7)
+            for dx in [-17, -9, 9, 17] where night > 0.15 { px.plot(zone + dx, ground, rgb(255, 244, 214), glow) }
+        }
+        let between = (zones[0] + zones[1]) / 2
+        px.fill(between - 3, ground, 7, 4, haze(lit(rgb(200, 200, 196), keyFront)))
+        px.fill(between + 5, ground, 1, 14, steel)
+        px.plot(between + 5, ground + 14, mix(steel, red, night))
+
+        // Our side of the lagoon: a grass bank, in shadow against the water, and what stands on it.
+        let grass = mix(lit(rgb(46, 66, 44), keyTop * 0.2), rgb(6, 8, 14), night * 0.6), shadow = grass * 0.5
+        func top(_ x: Int) -> Int { 6 + Int(1.5 * sin(Float(x) * 0.05) + 1.2 * sin(Float(x) * 0.13 + 2)) }
+        for x in 0..<w {
+            px.fill(x, 0, 1, top(x), grass)
+            if rng.next() % 10 < 3 { px.plot(x, top(x), grass * 0.85) }
+        }
+        // The countdown clock: a black board on two legs. Its figures are a sprite of their own (`countdown`).
+        let cx = w * 9 / 100
+        px.fill(cx, 12, 31, 9, rgb(10, 10, 14))
+        for leg in [cx + 3, cx + 26] { px.fill(leg, 5, 2, 7, shadow) }
+        // A flag on its pole.
+        px.fill(cx + 44, 5, 1, 36, mix(lit(rgb(200, 200, 204), .zero), rgb(40, 40, 54), night))
+        px.fill(cx + 45, 34, 9, 6, mix(lit(rgb(196, 64, 60), keyFront), rgb(30, 20, 30), night * 0.8))
+        px.fill(cx + 45, 37, 4, 3, mix(lit(rgb(52, 70, 140), keyFront), rgb(16, 18, 34), night * 0.8))
+        // People watching, in ones and twos, and a camera on its tripod.
+        for (at, who) in [(96, person), (102, pointing), (112, person), (117, child), (121, person), (250, person), (256, person),
+                          (268, pointing), (277, child), (281, person), (296, person), (301, person), (316, pointing)] {
+            let x = at * w / 378
+            px.draw(picture(who, ["#": shadow]), x: x, y: top(x) - 1)
+        }
+        let tripod = 131 * w / 378
+        for i in 0...7 { for foot in [-3, 3] { px.plot(tripod + foot - foot * i / 7, 5 + i, shadow) } }
+        px.fill(tripod - 1, 12, 4, 2, shadow)
+        px.plot(tripod + 3, 13, shadow)
+        // A cabbage palm at the right edge.
+        px.fill(w - 20, 3, 2, 42, shadow)
+        px.draw(picture(palm, ["#": shadow]), x: w - 28, y: 40)
+    }
+
+    /// For the tests: whether two boosters have been given the same landing zone.
+    var zoneShared: Bool { Set(boosters.map(\.zone)).count < boosters.count }
+
+    /// The sky through a wide lens: how many rows up something `z` pixels above the ground is drawn, and how big.
+    /// It's true to size for the first 60, then squeezed, so a rocket dwindles to a spark as it climbs and its trail
+    /// arcs over, instead of leaving the top of the picture full size.
+    private func lens(_ z: Float) -> (rows: Float, scale: Float) {
+        z < 60 ? (z, 1) : (60 + 90 * log(1 + (z - 60) / 90), 1 / (1 + (z - 60) / 90))
+    }
+
+    /// Where the rocket's foot is `t` seconds after lift-off, and its size: straight up to clear the tower, then
+    /// leaning over to the right as it gathers speed.
+    private func ascent(_ t: Float) -> (x: Float, y: Float, scale: Float) {
+        let z = t > 0 ? 0.65 * t * t * (1 + t / 40) : 0, (rows, scale) = lens(z)
+        return (Float(padX) + 0.5 + 0.0094 * pow(max(z - 70, 0), 1.8) * scale, Float(mount) + rows, scale) // it leans once it's above the tower
+    }
+
+    /// Seconds from lift-off, negative through the count, while there's a rocket on the mount or on its way up.
+    private var flightTime: Float? {
+        pad.phase == .climb ? pad.t : pad.phase == .count ? -Float((pad.until - clock) / Self.knob(.launches)) : nil
+    }
+
+    /// Moves the Spaceport on through its round. A rocket rolls out of the hangar on its transporter, is stood up
+    /// on the mount, fuels through a count and lifts off; its strongback is lowered and rolled back for the next.
+    /// A minute later its booster comes back to a landing zone (a Falcon Heavy's two side boosters to both), and a
+    /// crane comes for each and carries it away.
+    private func launch(_ dt: Float) {
+        let pace = Self.knob(.launches), rolled = Float(padX - hangarX - 34) // how far the transporter rolls, door to mount
+        // Time in the hangar and the count run down at the pace Settings gives, so a change shows at once.
+        if pad.phase == .hangar || pad.phase == .count, clock < pad.until { pad.until += Double(dt) * (1 - pace) }
+        pad.t += dt
+        switch pad.phase {
+        case .hangar:
+            if clock >= pad.until {
+                pad.rocket = [.falcon9, .falcon9, .falcon9, .dragon, .heavy].randomElement()!
+                pad.flown = Bool.random()
+                (pad.phase, pad.t, pad.x) = (.rollOut, 0, 0)
+            }
+        case .rollOut:
+            pad.x = min(pad.x + 3.5 * dt, rolled)
+            if pad.x >= rolled { (pad.phase, pad.t) = (.raise, 0) }
+        case .raise:
+            if pad.t >= 18 { (pad.phase, pad.t, pad.until) = (.count, 0, clock + 70) }
+        case .count:
+            // Every booster needs a landing zone to come back to. If one from the last flight is still standing
+            // on it, the count holds at ten seconds.
+            let free = zones.indices.filter { zone in !boosters.contains { $0.zone == zone } }, need = pad.rocket == .heavy ? 2 : 1
+            if free.count < need, pad.until - clock < 10 * pace { pad.until = clock + 10 * pace }
+            if clock >= pad.until {
+                (pad.phase, pad.t, liftoffAt, trailFrom) = (.climb, 0, clock, nil)
+                movements += 1
+                for (i, zone) in free.shuffled().prefix(need).sorted().enumerated() {
+                    boosters.append(Booster(zone: zone, until: clock + 62 + Double(i) * 1.3))
+                }
+            }
+        case .climb:
+            if pad.t >= 21 { (pad.phase, pad.t) = (.rollBack, 0) } // out of sight, and the strongback is down
+        case .rollBack:
+            pad.x = max(pad.x - 5 * dt, 0)
+            if pad.x <= 0 { (pad.phase, pad.until) = (.hangar, clock + .random(in: 50...110)) }
+        }
+
+        for i in boosters.indices {
+            var b = boosters[i]
+            switch b.phase {
+            case .away:
+                if clock >= b.until { (b.phase, b.z, b.v) = (.fall, 330, -34) }
+            case .fall, .burn:
+                if b.z <= 170 { b.phase = .burn }
+                // The landing burn slows it at whatever rate stops it as it touches.
+                if b.phase == .burn { b.v = min(b.v + b.v * b.v / (2 * max(b.z, 1)) * dt, -1.5) }
+                b.z += b.v * dt
+                if b.z <= 0 {
+                    (b.phase, b.z, b.until) = (.landed, 0, clock + 14)
+                    movements += 1
+                    for _ in 0..<16 { dust(zone: b.zone) }
+                }
+            case .landed: break
+            }
+            boosters[i] = b
+        }
+
+        // The crane: in from the right for the booster nearest that edge, down with the hook, up a little, and away.
+        let reach: Float = 33 // its hook hangs this far to its left
+        switch crane.phase {
+        case .away:
+            if let zone = boosters.filter({ $0.phase == .landed && clock >= $0.until }).map(\.zone).max() {
+                (crane.phase, crane.zone, crane.x) = (.driveIn, zone, Float(w) + 40)
+            }
+        case .driveIn:
+            crane.x = max(crane.x - 5 * dt, Float(zones[crane.zone]) + reach)
+            if crane.x <= Float(zones[crane.zone]) + reach { (crane.phase, crane.t) = (.hook, 0) }
+        case .hook:
+            crane.t += dt
+            if crane.t >= 9 { crane.phase = .carry }
+        case .carry:
+            crane.x += 4 * dt
+            if crane.x > Float(w) + 45 {
+                boosters.removeAll { $0.zone == crane.zone }
+                crane.phase = .away
+            }
+        }
+
+        // Smoke moves in steps of a fifteenth of a second, as hand-drawn smoke would.
+        smokeTime += dt
+        let had = !plume.isEmpty, before = smokeTime
+        while smokeTime >= 1 / 15 {
+            smokeTime -= 1 / 15
+            puff()
+            for i in plume.indices {
+                var p = plume[i]
+                p.age += 1 / 15
+                let drag = exp(Float(-1) / 15 / 2.6)
+                p.vx *= drag
+                p.vy = p.vy * drag + 0.06 * (p.r > 3 ? 1 : 0.3) // big clouds are warm, and rise
+                let wind = 2.2 * (0.6 + 0.45 * sin(p.y / 31 + 1.3)) * min(1, p.age / 4) // it blows the way the clouds go, more at some heights
+                p.x += (p.vx + wind) / 15
+                p.y = max(p.y + p.vy / 15, Float(ground + 1))
+                p.r = min(p.r + p.grow / 15, p.most)
+                plume[i] = p
+            }
+            plume.removeAll { $0.age >= $0.life }
+        }
+        if smokeTime < before, had || !plume.isEmpty { smokeMoved = true }
+
+        // The clock on our bank: the time to the next lift-off, or since the last for a minute and a half after it.
+        let since = clock - liftoffAt, left: Double
+        switch pad.phase {
+        case .hangar: left = max(0, pad.until - clock) / pace + Double(rolled / 3.5) + 18 + 70 / pace
+        case .rollOut: left = Double((rolled - pad.x) / 3.5) + 18 + 70 / pace
+        case .raise: left = Double(18 - pad.t) + 70 / pace
+        case .count: left = max(0, pad.until - clock) / pace
+        case .climb, .rollBack: left = 0
+        }
+        let seconds = Int(since < 95 ? since : left.rounded(.up))
+        let text = "T" + (since < 95 ? "+" : "-") + String(format: "%02d:%02d", min(seconds / 60, 99), seconds % 60)
+        if text != counted {
+            counted = text
+            var px = Pixels(27, 5)
+            for (i, figure) in text.enumerated() {
+                for (row, bits) in (figures[figure] ?? []).enumerated() {
+                    for bit in 0..<3 where bits & (4 >> bit) != 0 { px.plot(i * 4 + bit, 4 - row, rgb(255, 176, 60)) }
+                }
+            }
+            countdown.texture = px.texture()
+        }
+    }
+
+    /// Paints the Spaceport's layer once a frame's moving is done: the smoke if it has moved, then everything over
+    /// it. It's apart from `update` so that a test can run the round through by `update` alone, and paint only now
+    /// and then: the smoke is slow to paint in a debug build.
+    override func didFinishUpdate() {
+        guard city == .spaceport else { return }
+        if smokeMoved {
+            paintSmoke()
+            (smokeMoved, smokeSteps) = (false, smokeSteps + 1)
+        }
+        paintLaunch()
+    }
+
+    /// One puff of smoke or steam.
+    private func puff(_ x: Float, _ y: Float, _ vx: Float, _ vy: Float, _ r: Float, _ grow: Float, _ most: Float, _ life: Float) {
+        plume.append(Puff(x: x, y: y, vx: vx, vy: vy, r: r, grow: grow, most: most, life: life))
+    }
+
+    /// Dust and smoke thrown out along the ground by a booster's flame as it comes down on a landing zone.
+    private func dust(zone: Int) {
+        let side: Float = Bool.random() ? 1 : -1
+        puff(Float(zones[zone]) + side * .random(in: 2...20), Float(ground) + .random(in: 1...4), side * .random(in: 4...18), .random(in: 0...4),
+             .random(in: 1.5...3), 0.8, .random(in: 3...6), 9)
+    }
+
+    /// Lets off the smoke of a fifteenth of a second (puffs let off together live about as long as each other, or
+    /// the last of a cloud to go are left hanging as round dots): cold vapour from a fuelled rocket; at lift-off the deluge's
+    /// steam, out of both ends of the flame trench and up round the mount; the trail a climbing rocket leaves; and
+    /// the dust under a landing booster.
+    private func puff() {
+        let x = Float(padX) + 0.5, foot = Float(mount)
+        if let t = flightTime {
+            if t < -3, Int.random(in: 0..<6) == 0 {
+                puff(x - 3, foot + .random(in: 28...33), .random(in: -3 ... -2), -0.6, 1, 0.25, 2.4, 5)
+            }
+            if t > -2.6, t < 7.5 {
+                for side in [-1, 1] as [Float] {
+                    for _ in 0..<(t < 5 ? 2 : 1) {
+                        let big = Int.random(in: 0..<20) < 7
+                        puff(x + side * .random(in: 6...12), Float(ground) + .random(in: 1...5), side * .random(in: 8...34) * (side > 0 ? 1.15 : 0.9),
+                             .random(in: 0...9), .random(in: 2...3.2), .random(in: 0.9...1.8), big ? .random(in: 8...12) : .random(in: 4...7), .random(in: 16...21))
+                    }
+                }
+                if Int.random(in: 0..<5) < 3 { puff(x + .random(in: -6...6), foot, .random(in: -6...6), .random(in: 3...10), 2, 1.2, .random(in: 4...7), 15) }
+            }
+            if t > 0.5 { // the trail, laid from where the flame ended a moment ago to where it ends now
+                let now = ascent(t), end = SIMD2(now.x, now.y - 20 * now.scale)
+                if let from = trailFrom, end.y < Float(h) + 8 {
+                    let steps = max(1, Int(((end - from) * (end - from)).sum().squareRoot() / 1.5))
+                    for i in 0..<steps {
+                        let at = from + (end - from) * ((Float(i) + .random(in: 0..<1)) / Float(steps))
+                        guard at.y > foot + 1 else { continue }
+                        puff(at.x + .random(in: -0.7...0.7), at.y, .random(in: -1.2...1.2), .random(in: -5 ... -1) * now.scale,
+                             1.4 * now.scale + 1, 0.24, (3.2 * now.scale + 2.3) * .random(in: 0.85...1.2), .random(in: 52...60) * (0.55 + 0.45 * now.scale)) // the far end goes first
+                    }
+                }
+                trailFrom = end
+            }
+        }
+        for b in boosters where b.phase == .burn && b.z < 45 {
+            for _ in 0..<(b.z < 12 ? 2 : 1) { dust(zone: b.zone) }
+        }
+    }
+
+    /// Paints the smoke into its own canvas. Every puff adds a round hump to a field of density; where that is
+    /// thick enough there is cloud, drawn in three flat tones: a rim lit from the Sun's side, the body, and a
+    /// shaded underside. It takes the light it is in: the Sun's after sunset if it's high enough to be above the
+    /// Earth's shadow, a flame's near one, the pad's floodlights by night.
+    private func paintSmoke() {
+        let rows = smoke.h, base = waterRows, w = w
+        if density.count != w * rows { density = Array(repeating: 0, count: w * rows) }
+        var (x0, x1, y0, y1) = (w, -1, rows, -1)
+        density.withUnsafeMutableBufferPointer { field in
+            field.update(repeating: 0)
+            for p in plume {
+                let k = min(1, p.age / 0.4) * (1 - smoothstep(0.55, 1, p.age / p.life)), inverse = 1 / (p.r * p.r)
+                let left = max(Int(p.x - p.r) - 1, 0), right = min(Int(p.x + p.r) + 1, w - 1)
+                let low = max(Int(p.y - p.r) - 1 - base, 0), high = min(Int(p.y + p.r) + 1 - base, rows - 1)
+                guard left <= right, low <= high else { continue }
+                for y in low...high {
+                    let dy = Float(y + base) + 0.5 - p.y
+                    var i = y * w + left, dx = Float(left) + 0.5 - p.x
+                    for _ in left...right {
+                        let d = 1 - (dx * dx + dy * dy) * inverse
+                        if d > 0 { field[i] += d * k }
+                        (i, dx) = (i + 1, dx + 1)
+                    }
+                }
+                (x0, x1, y0, y1) = (min(x0, left), max(x1, right), min(y0, low), max(y1, high))
+            }
+        }
+        smoke.rgba.withUnsafeMutableBufferPointer { $0.update(repeating: 0) }
+        guard x0 <= x1, y0 <= y1 else { return }
+
+        let steam = rgb(246, 246, 248), side = (keyRight - keyLeft).sum() >= 0 ? 1 : -1
+        let tones = [pointwiseMin(steam * (ambient * 1.12 + keyTop * 0.5 + (keyRight + keyLeft) * 0.7), .one),
+                     pointwiseMin(steam * (ambient * 0.98 + keyTop * 0.22), .one),
+                     steam * ambient * 0.88 * RGB(0.92, 0.95, 1)]
+        // After sunset the Sun still reaches what is high enough: the Earth's shadow climbs as the Sun sinks.
+        let el = Float(sunAt.elevation), twilight = smoothstep(3, 0, el) * smoothstep(-11, -7, el)
+        let shadow = Float(ground) + max(0, -el - 0.2) * 26
+        let sunlit = [rgb(255, 232, 196), rgb(255, 186, 140), rgb(190, 120, 128)]
+        let fires = flames()
+        let flood = pad.phase == .count || pad.phase == .raise ? night : 0, floodlit: [Float] = [1, 0.9, 0.72]
+        density.withUnsafeBufferPointer { field in
+            smoke.rgba.withUnsafeMutableBufferPointer { out in
+                for y in y0...y1 {
+                    let up = twilight * smoothstep(shadow - 14, shadow + 14, Float(y + base))
+                    let lights = (0..<3).map { mix(tones[$0], sunlit[$0], up) }
+                    for x in x0...x1 {
+                        let d = field[y * w + x]
+                        guard d >= 0.14 else { continue }
+                        // A rim toward the light where the cloud is much thinner that way, shade where it is much
+                        // thinner the other way: by the ratio, so the tones follow a thick cloud's lobes without
+                        // half of it falling into shade.
+                        let tx = min(max(x + 2 * side, 0), w - 1), ax = min(max(x - 2 * side, 0), w - 1)
+                        let toward = y + 2 < rows ? field[(y + 2) * w + tx] : 0, away = y >= 2 ? field[(y - 2) * w + ax] : 0
+                        let tone = 1 + d > 1.22 * (1 + toward) ? 0 : 1 + d > 1.3 * (1 + away) ? 2 : 1
+                        var c = lights[tone]
+                        for fire in fires {
+                            let dx = Float(x) - fire.x, dy = (Float(y + base) - fire.y) * 1.2
+                            let heat = (1 - (dx * dx + dy * dy).squareRoot() / 46) * fire.power
+                            if heat > 0 { c = mix(c, rgb(255, 168, 84) * (0.75 + 0.25 * c.sum() / 3), heat) }
+                        }
+                        if flood > 0 {
+                            let dx = Float(x - padX), dy = Float(y + base - padDeck - 20) * 0.8
+                            let near = (1 - (dx * dx + dy * dy).squareRoot() / 40) * flood
+                            if near > 0 { c = mix(c, rgb(250, 246, 236) * floodlit[tone], near) }
+                        }
+                        let a: Float = d < 0.3 ? 0.4 : d < 0.5 ? 0.72 : 0.95, i = (y * w + x) * 4, k = a * 255
+                        (out[i], out[i + 1], out[i + 2], out[i + 3]) = (UInt8(min(c.x, 1) * k), UInt8(min(c.y, 1) * k), UInt8(min(c.z, 1) * k), UInt8(k))
+                    }
+                }
+            }
+        }
+    }
+
+    /// The flames burning now: where each begins, which way its rocket leans, the size it's drawn at, how long and
+    /// wide it is, and how strongly it lights the smoke round it.
+    private func flames() -> [(x: Float, y: Float, angle: Float, scale: Float, length: Float, wide: Float, power: Float)] {
+        let k = 0.35 + 0.65 * night
+        var fires: [(x: Float, y: Float, angle: Float, scale: Float, length: Float, wide: Float, power: Float)] = []
+        if let t = flightTime, t > -2.6 {
+            let at = ascent(t), next = ascent(t + 0.2), z = at.y - Float(mount)
+            if at.y < Float(h) + 40 {
+                fires.append((at.x, at.y, atan2(next.x - at.x, next.y - at.y), at.scale, 36 * smoothstep(-2.6, -0.4, t),
+                              pad.rocket == .heavy ? 7 : 3, min(1, k * (z < 110 ? 1.2 : 0.8)) * max(0.2, 1 - z / 160)))
+            }
+        }
+        for b in boosters where b.phase == .burn {
+            let (rows, scale) = lens(b.z)
+            fires.append((Float(zones[b.zone]) + 0.5, Float(ground + 1) + rows + scale, 0, scale, 18, 2, 0.9 * k))
+        }
+        return fires
+    }
+
+    /// Paints the Spaceport's moving things into their layer, when any of them has moved a pixel: the smoke, the
+    /// glare round each flame, the strongback, the rocket and its flame, the boosters and the crane, each in the
+    /// light it stands in.
+    private func paintLaunch() {
+        guard let texture = launchTexture else { return }
+        let fires = flames(), flicker = fires.isEmpty ? 0 : Int(clock * 12)
+        // Where the strongback is, how far it leans (0 upright, a quarter turn back when it lies on its wheels),
+        // and where a rocket on it has its foot.
+        var hinge = SIMD2(Float(padX) + 0.5, Float(mount)), lean: Float = 0
+        let lying = -Float.pi / 2
+        switch pad.phase {
+        case .hangar: break
+        case .rollOut, .rollBack:
+            // The ramp lifts it 6 rows over 30 columns; it rides on wheels at its foot and 40 columns behind.
+            func track(_ x: Float) -> Float { Float(ground) + 6 * min(max((x - Float(padX - 55)) / 30, 0), 1) }
+            let x = Float(hangarX + 34) + pad.x
+            hinge = SIMD2(x.rounded(.down) + 0.5, (track(x) + 4).rounded(.down))
+            lean = lying - atan2(track(x) - track(x - 40), 40)
+        case .raise: lean = lying * (1 - smoothstep(0, 18, pad.t))
+        case .count: lean = (flightTime ?? 0) > -20 ? -0.052 : 0 // it leans clear for the last of the count
+        case .climb: lean = pad.t < 10 ? mix(-0.052, -0.66, smoothstep(0, 1.5, pad.t)) : mix(-0.66, lying, smoothstep(10, 21, pad.t))
+        }
+        let flying = pad.phase == .climb ? ascent(pad.t) : nil
+        var shown = [smokeSteps, flicker, pad.phase.rawValue, Int(hinge.x), Int(hinge.y), Int(lean * 80), Int(crane.x), Int(crane.t * 2), crane.phase.rawValue]
+        if let flying { shown += [Int(flying.x), Int(flying.y), Int(flying.scale * 60)] }
+        for b in boosters { shown += [b.phase.rawValue, Int(lens(b.z).rows), Int(lens(b.z).scale * 40)] }
+        guard shown != launchShown else { return }
+        launchShown = shown
+
+        var px = smoke
+        for fire in fires where fire.length > 4 { // the glare round a flame
+            let k = 0.35 + 0.65 * night, wide = 0.5 + fire.scale / 2
+            for (r, a) in [(30, 0.045), (20, 0.07), (11, 0.11), (5, 0.16)] as [(Float, Float)] {
+                let reach = Int(r * wide), cx = Int(fire.x), cy = Int(fire.y - 12 * fire.scale)
+                for dy in -reach...reach { for dx in -reach...reach where dx * dx + dy * dy <= reach * reach { px.plot(cx + dx, cy + dy, rgb(255, 150, 70), a * k) } }
+            }
+        }
+        let steel = mix(mix(lit(rgb(110, 114, 124), .zero), hazeColour, 0.12), rgb(22, 22, 32), night * 0.8)
+        let dark = mix(lit(rgb(50, 50, 56), .zero), rgb(14, 14, 20), night * 0.7)
+        let art = pad.rocket.art, soot = pad.flown && pad.rocket != .dragon ? 18 : 0
+        if pad.phase != .hangar {
+            px.clip = hangarX + 34..<w // what is still inside the hangar's door doesn't show
+            // The strongback: a lattice spine beside the rocket, with arms out to hold it.
+            let (ax, ay) = (sin(lean), cos(lean)), (qx, qy) = (cos(lean), -sin(lean)), off: Float = pad.rocket == .heavy ? -6 : -4
+            let rolling = pad.phase == .rollOut || pad.phase == .rollBack
+            for i in 0..<39 {
+                let f = Float(i), sx = hinge.x + ax * f + qx * off, sy = hinge.y + ay * f + qy * off
+                px.plot(Int(sx.rounded(.down)), Int(sy.rounded(.down)), steel)
+                if i % 2 == 0 { px.plot(Int((sx - qx).rounded(.down)), Int((sy - qy).rounded(.down)), steel, 0.85) }
+                if [15, 35, 36].contains(i) { for k in 1...2 { px.plot(Int((sx + qx * Float(k)).rounded(.down)), Int((sy + qy * Float(k)).rounded(.down)), steel) } }
+                if rolling, i % 6 < 2 { px.plot(Int((sx - qx * 2).rounded(.down)), Int((sy - qy * 2).rounded(.down)), dark) } // its wheels
+            }
+            if pad.phase != .climb, pad.phase != .rollBack {
+                let floodlit: Float = pad.phase == .rollOut ? 0 : 1
+                stamp(art, into: &px, x: hinge.x, y: hinge.y, angle: pad.phase == .count ? 0 : lean, paint: rocketPaint(flood: floodlit), soot: soot)
+            }
+            px.clip = 0..<w
+        }
+        for (i, fire) in fires.enumerated() { // flames flicker, a dozen times a second
+            let jitter = 0.9 + 0.2 * Float((flicker &+ i &* 7) &* 2_654_435_761 % 7) / 6
+            flame(into: &px, x: fire.x, y: fire.y, angle: fire.angle, scale: fire.scale, length: fire.length * jitter, wide: fire.wide)
+        }
+        if let flying, let fire = fires.first, flying.y < Float(h) + 40 {
+            stamp(art, into: &px, x: flying.x, y: flying.y, angle: fire.angle, scale: flying.scale, paint: rocketPaint(flood: 0), soot: soot, heat: 0.3 + 0.5 * night)
+        }
+        // The boosters: falling, burning down to the pad on their legs, standing there, or hanging from the crane's hook.
+        let hookX = Int(crane.x.rounded(.down)) - 33, lifted = crane.phase == .hook ? max(0, min(crane.t - 5, 4)) : 4
+        for b in boosters where b.phase != .away {
+            let held = crane.phase.rawValue >= Crane.Phase.hook.rawValue && crane.zone == b.zone
+            let (rows, scale) = lens(b.z), flying = b.phase == .fall || b.phase == .burn
+            let x = held ? Float(hookX) + 0.5 : Float(zones[b.zone]) + 0.5, y = Float(ground + 1) + (held ? lifted.rounded(.down) : rows)
+            let legs = flying ? b.z < 26 : !(held && crane.phase == .carry)
+            stamp(legs ? landedArt : fallingArt, into: &px, x: x, y: y, scale: scale, paint: rocketPaint(flood: 0), soot: 18, heat: b.phase == .burn ? 0.85 : 0)
+        }
+        if crane.phase != .away {
+            // The crane: a crawler with its boom up over the landing zone, and the hook on its line.
+            let x = Int(crane.x.rounded(.down)), f = waterRows
+            let paint = mix(mix(lit(rgb(226, 170, 44), keyFront), hazeColour, 0.15), rgb(40, 34, 30), night * 0.7)
+            px.fill(x - 6, f + 1, 13, 2, dark)
+            px.fill(x - 5, f + 3, 10, 4, paint)
+            px.fill(x + 2, f + 5, 3, 3, paint * 0.8)
+            px.fill(x + 3, f + 6, 2, 1, dark)
+            px.fill(x + 4, f + 3, 3, 3, dark)
+            px.line(x - 3, f + 6, hookX, f + 53, paint)
+            px.line(x - 2, f + 6, hookX + 1, f + 53, paint * 0.75, every: 2)
+            px.line(x + 3, f + 9, hookX, f + 53, dark, 0.7)
+            px.fill(x + 3, f + 7, 1, 3, dark)
+            // The hook hangs high until the crane is in place, comes down to the booster's top, and goes up with it.
+            let drop = crane.phase == .driveIn ? 6 : crane.phase == .hook ? Int(mix(6, 18, crane.t / 5)) - Int(lifted) : 14
+            px.line(hookX, f + 53, hookX, f + 53 - drop, dark, 0.9)
+            px.fill(hookX - 1, f + 52 - drop, 3, 2, dark)
+        }
+
+        let bytes = px.rgba
+        texture.modifyPixelData { data, length in
+            bytes.withUnsafeBytes { data?.copyMemory(from: $0.baseAddress!, byteCount: min(length, bytes.count)) }
+        }
+    }
+
+    /// White paint in the light a rocket stands in, for its lit side, its face and its shaded side; then its black,
+    /// and its engine bells. On the pad after dark (`flood`) the floodlights have it.
+    private func rocketPaint(flood: Float) -> [RGB] {
+        let white = rgb(238, 238, 234), sunRight = (keyRight - keyLeft).sum() >= 0, lamp = rgb(255, 248, 232), on = flood * night
+        let left = lit(white, keyLeft + keyFront, shade: sunRight ? 0.86 : 1.05) * (sunRight ? 0.86 : 1)
+        let right = lit(white, keyRight + keyFront, shade: sunRight ? 1.05 : 0.86) * (sunRight ? 1 : 0.86)
+        return [mix(left, lamp, on), mix(lit(white, keyFront), lamp * 0.92, on), mix(right, lamp * 0.7, on),
+                mix(lit(rgb(34, 34, 38), .zero), rgb(20, 20, 26), 0.3), lit(rgb(60, 58, 60), .zero)]
+    }
+
+    /// Paints a rocket with the middle of its foot at (`x`, `y`), leaning `angle` radians right of upright, at
+    /// `scale`. Each pixel under it looks up the art it falls on, so it turns and shrinks without gaps. A booster
+    /// that has flown is sooty toward its foot (`soot`: for how many rows up), and takes a flame's light there (`heat`).
+    private func stamp(_ art: [[UInt8]], into px: inout Bytes, x: Float, y: Float, angle: Float = 0, scale: Float = 1,
+                       paint: [RGB], soot: Int = 0, heat: Float = 0) {
+        let rows = art.count, wide = art[0].count, reach = Int(Float(rows + wide) * scale) + 2
+        let (ax, ay) = (sin(angle), cos(angle)), (qx, qy) = (cos(angle), -sin(angle)), glare = rgb(255, 170, 90)
+        for py in Int(y) - reach...Int(y) + reach {
+            for column in Int(x) - reach...Int(x) + reach {
+                let rx = Float(column) + 0.5 - x, ry = Float(py) + 0.5 - y
+                let along = (rx * ax + ry * ay) / scale, across = (rx * qx + ry * qy) / scale + Float(wide) / 2
+                guard along >= 0, across >= 0, Int(along) < rows, Int(across) < wide else { continue }
+                let j = Int(along), tone = Int(art[rows - 1 - j][Int(across)])
+                guard tone < paint.count else { continue }
+                var c = paint[tone]
+                if tone < 3, j < soot { c *= mix(0.5, 0.92, Float(j) / Float(soot)) }
+                if heat > 0, j < 14 { c = mix(c, glare * (0.55 + 0.45 * c.sum() / 3), heat * (1 - Float(j) / 14)) }
+                px.plot(column, py, c)
+            }
+        }
+    }
+
+    /// A flame from (`x`, `y`) back along a rocket's axis: white-hot down its middle, orange outside and toward its tip.
+    private func flame(into px: inout Bytes, x: Float, y: Float, angle: Float, scale: Float, length: Float, wide: Float) {
+        let (ax, ay) = (-sin(angle), -cos(angle)), (qx, qy) = (cos(angle), -sin(angle))
+        let n = max(2, length * scale), w0 = max(1, wide * scale), reach = Int(n + w0) + 3
+        guard length > 1 else { return }
+        for py in Int(y) - reach...Int(y) + reach {
+            for column in Int(x) - reach...Int(x) + reach {
+                let rx = Float(column) + 0.5 - x, ry = Float(py) + 0.5 - y
+                let along = rx * ax + ry * ay, across = abs(rx * qx + ry * qy)
+                guard along >= 0, along < n else { continue }
+                let u = along / n, half = (w0 / 2 + scale * sin(min(u * 4, 1) * .pi / 2)) * (1 - pow(u, 1.5)) + (u < 0.92 ? 0.35 : 0)
+                guard across <= half else { continue }
+                let hot = across < half * (0.62 - 0.5 * u) || (u < 0.25 && across < half - 0.9)
+                px.plot(column, py, hot ? rgb(255, 252, 232) : mix(rgb(255, 220, 120), rgb(255, 120, 44), u * 1.15 + (across > half - 0.8 ? 0.25 : 0)))
+            }
+        }
+        }
 }
 
 // MARK: - Supporting types
@@ -2103,8 +2759,8 @@ private enum Roof: CaseIterable { case plain, ledge, setback, tank, antenna }
 
 /// The cities Settings can pick, in the menu's order. The pick is stored as its index, so add new ones at the end.
 private enum City: Int, CaseIterable {
-    case waterfront, foothills, bridge, hillside, overlook, airport
-    var name: String { ["Waterfront", "Foothills", "Long Bridge", "Hillside Town", "Overlook", "Airport"][rawValue] }
+    case waterfront, foothills, bridge, hillside, overlook, airport, spaceport
+    var name: String { ["Waterfront", "Foothills", "Long Bridge", "Hillside Town", "Overlook", "Airport", "Spaceport"][rawValue] }
 }
 
 /// What a building is: a windowless tower in the haze, a stone tower with setbacks, a glass curtain wall, a brick
@@ -2129,6 +2785,50 @@ private struct Car {
     let lane: Int // 0 near, heading right; 1 far, heading left
     var look = 0
     var x: Float = 0, cruise: Float = 0, speed: Float = 0, length: Float = 16
+}
+
+/// The Spaceport's launch pad, and where its round has got to.
+private struct Pad {
+    /// In the hangar; rolling out to the pad on its transporter; being stood up; fuelling, through the count;
+    /// climbing away, while the strongback is lowered behind it; and that rolling back to the hangar.
+    enum Phase: Int { case hangar, rollOut, raise, count, climb, rollBack }
+    var phase = Phase.hangar
+    var until: TimeInterval = 0 // when the wait in the hangar, or the count, ends
+    var t: Float = 0            // seconds into this phase
+    var x: Float = 0            // how far the transporter has rolled from the hangar's door
+    var rocket = Rocket.falcon9, flown = false // a booster that has flown before is sooty
+}
+
+/// The rockets the Spaceport flies: a Falcon 9 under a fairing or a capsule, or a Falcon Heavy.
+private enum Rocket {
+    case falcon9, dragon, heavy
+    var art: [[UInt8]] { self == .falcon9 ? falconArt : self == .dragon ? dragonArt : heavyArt }
+}
+
+/// A booster on its way back from a flight, or standing on its landing zone.
+private struct Booster {
+    /// Out of sight after lift-off; falling; slowing on its landing burn; and down, until the crane takes it away.
+    enum Phase: Int { case away, fall, burn, landed }
+    var phase = Phase.away
+    var zone: Int
+    var until: TimeInterval // when it comes back into sight, or when the crane may come for it
+    var z: Float = 0, v: Float = 0 // its height over the landing zone, and how fast it is falling
+}
+
+/// The crane that carries landed boosters away.
+private struct Crane {
+    /// Off to the right; driving in; lowering its hook and lifting; and carrying a booster off.
+    enum Phase: Int { case away, driveIn, hook, carry }
+    var phase = Phase.away
+    var zone = 0
+    var x: Float = 0, t: Float = 0
+}
+
+/// A puff of the Spaceport's smoke or steam: where it is and is going, its size and how big it will get, and its age.
+private struct Puff {
+    var x: Float, y: Float, vx: Float, vy: Float
+    var r: Float, grow: Float, most: Float
+    var age: Float = 0, life: Float
 }
 
 /// One of the Airport's aircraft, and where it is in its round.
@@ -2173,6 +2873,55 @@ private struct Car {
         return px.texture()
     }
 }
+
+// The Spaceport's rockets, drawn standing, from the nose down: white paint on the lit side (l), the face (w) and
+// the shaded side (s), black (K) and engine bells (n). About a metre and a half to the pixel, and half as slender
+// as the real ones, which would be two pixels wide. `bytes` turns the letters into the numbers of `rocketPaint`'s
+// five paints, and anything else into 255, for nothing.
+private func tall(_ parts: [(String, Int)]) -> [String] { parts.flatMap { Array(repeating: $0.0, count: $0.1) } }
+private func bytes(_ rows: [String]) -> [[UInt8]] { rows.map { $0.utf8.map { UInt8(Array("lwsKn".utf8).firstIndex(of: $0) ?? 255) } } }
+private let falconRows = tall([("..w..", 1), (".lws.", 2), ("lwwss", 7), (".lws.", 5), (".KKK.", 3), (".lws.", 21), (".KwK.", 5), (".KKK.", 2)])
+private let falconArt = bytes(falconRows)
+private let dragonArt = bytes(tall([("..w..", 1), (".lws.", 2), (".lKs.", 3)]) + falconRows[10...])
+/// A Falcon Heavy: the same rocket between two more first stages under nose cones.
+private let heavyArt: [[UInt8]] = {
+    let side = [".w.", ".w.", "lws", "lws"] + falconRows[18...].map { String($0.dropFirst().prefix(3)) }
+    return bytes(falconRows.enumerated().map { i, row in
+        let j = i - (falconRows.count - side.count), core = j >= 0 ? side[j] : "..."
+        return row.first == "." ? core + row.dropFirst().prefix(3) + core : core.prefix(2) + row + core.dropFirst()
+    })
+}()
+/// A booster by itself, coming home: its grid fins out, and its legs still folded or down.
+private let fallingArt: [[UInt8]] = {
+    var rows = falconRows[15...].map { "..." + $0 + "..." }
+    rows[1] = "...KKKKK..."
+    return bytes(rows)
+}()
+private let landedArt: [[UInt8]] = fallingArt.dropLast(6) + bytes(["....KwK....", "....KwK....", "...KlwsK...", "..K.lws.K..", ".K..KKK..K.", "K...n.n...K"])
+
+/// The countdown clock's figures, three pixels by five, as rows of bits from the top.
+private let figures: [Character: [UInt8]] = [
+    "0": [7, 5, 5, 5, 7], "1": [2, 6, 2, 2, 7], "2": [7, 1, 7, 4, 7], "3": [7, 1, 7, 1, 7], "4": [5, 5, 7, 1, 1], "5": [7, 4, 7, 1, 7],
+    "6": [7, 4, 7, 5, 7], "7": [7, 1, 1, 1, 1], "8": [7, 5, 7, 5, 7], "9": [7, 5, 7, 1, 7], "T": [7, 2, 2, 2, 2], "-": [0, 0, 7, 0, 0],
+    "+": [0, 2, 7, 2, 0], ":": [0, 2, 0, 2, 0],
+]
+
+// The people on the Spaceport's bank, in silhouette, and the crown of its palm.
+private let person = [".##.", ".##.", "####", "####", ".##.", ".##.", ".#.#", ".#.#"]
+private let pointing = [".##..#", ".##.#.", "####..", "###...", ".##...", ".##...", ".#.#..", ".#.#.."]
+private let child = ["##", "##", "##", "##", "##"]
+private let palm = [
+    "......#...#.......",
+    "...##..#.#..###...",
+    "..#..#.###.#...#..",
+    ".#..########....#.",
+    "#..#.######.##...#",
+    "#.#..######...#..#",
+    "..#.#.####.#...#..",
+    ".#..#..##...#..#..",
+    ".#.....##....#....",
+    ".......##.........",
+]
 
 private let sedan = [
     "....######......",
@@ -2368,6 +3117,43 @@ private struct Pixels {
         let texture = SKTexture(cgImage: image)
         texture.filteringMode = .nearest
         return texture
+    }
+}
+
+/// A canvas of premultiplied bytes with its rows from the bottom, as a mutable texture takes them. The Spaceport
+/// paints its moving things into one many times a second, which `Pixels`' floats would make slow. `floor` is the
+/// canvas row its bottom row stands for, and nothing is painted outside the columns of `clip`.
+private struct Bytes {
+    let w: Int, h: Int, floor: Int
+    var rgba: [UInt8]
+    var clip: Range<Int>
+
+    init(_ w: Int, _ h: Int, floor: Int) {
+        (self.w, self.h, self.floor, clip) = (w, h, floor, 0..<w)
+        rgba = Array(repeating: 0, count: w * h * 4)
+    }
+
+    mutating func plot(_ x: Int, _ y: Int, _ c: RGB, _ a: Float = 1) {
+        let row = y - floor
+        guard x >= clip.lowerBound, x < clip.upperBound, row >= 0, row < h, a > 0 else { return }
+        let i = (row * w + x) * 4, keep = 1 - a, k = a * 255
+        rgba[i] = UInt8(min(max(c.x, 0), 1) * k + Float(rgba[i]) * keep)
+        rgba[i + 1] = UInt8(min(max(c.y, 0), 1) * k + Float(rgba[i + 1]) * keep)
+        rgba[i + 2] = UInt8(min(max(c.z, 0), 1) * k + Float(rgba[i + 2]) * keep)
+        rgba[i + 3] = UInt8(k + Float(rgba[i + 3]) * keep)
+    }
+
+    mutating func fill(_ x: Int, _ y: Int, _ width: Int, _ height: Int, _ c: RGB, _ a: Float = 1) {
+        for yy in y..<y + max(height, 0) { for xx in x..<x + max(width, 0) { plot(xx, yy, c, a) } }
+    }
+
+    /// A line one pixel wide, or dotted: only every so many of its pixels.
+    mutating func line(_ x0: Int, _ y0: Int, _ x1: Int, _ y1: Int, _ c: RGB, _ a: Float = 1, every: Int = 1) {
+        let n = max(abs(x1 - x0), abs(y1 - y0), 1)
+        for i in stride(from: 0, through: n, by: every) {
+            let t = Float(i) / Float(n)
+            plot(x0 + Int((Float(x1 - x0) * t).rounded()), y0 + Int((Float(y1 - y0) * t).rounded()), c, a)
+        }
     }
 }
 
