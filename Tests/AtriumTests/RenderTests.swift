@@ -169,20 +169,37 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
     #expect(scene.movements >= 8 && !crowded, "\(scene.movements) landings and take-offs")
 }
 
-/// Pixel City's Spaceport keeps going round: over twenty minutes there are lift-offs and landings, and no booster
-/// is sent back to a landing zone the last one is still standing on. Its layer is painted every two seconds, not
-/// every step: its smoke is slow to paint in a debug build.
+/// Pixel City's Spaceport keeps going round: over twenty minutes at twice its usual pace there are lift-offs and
+/// landings, and no booster is sent back to a landing zone the last one is still standing on. Its layer is painted
+/// every two seconds, not every step: its smoke is slow to paint in a debug build.
 @MainActor @Test func pixelCitySpaceportKeepsLaunching() throws {
     guard case .choice(let cities) = PixelCity.knobs[0].format else { return }
-    let settings = ["city.place": Double(try #require(cities.firstIndex(of: "Spaceport"))), "city.previewTime": 1, "city.previewHour": 12]
+    let settings = ["city.place": Double(try #require(cities.firstIndex(of: "Spaceport"))), "city.previewTime": 1, "city.previewHour": 12, "city.launches": 2]
     defer { settings.keys.forEach(UserDefaults.standard.removeObject) }
     for (key, value) in settings { UserDefaults.standard.set(value, forKey: key) }
     let scene = PixelCity(size: CGSize(width: 800, height: 500))
-    var shared = false
+    var shared = false, flown = Set<String>()
     for step in 0..<12_000 { // a tenth of a second at a time
         scene.update(Double(step) / 10)
         if step % 20 == 0 { scene.didFinishUpdate() }
         shared = shared || scene.zoneShared
+        flown.insert(scene.rocketName)
     }
-    #expect(scene.movements >= 8 && !shared, "\(scene.movements) lift-offs and landings")
+    #expect(scene.movements >= 8 && !shared && flown.count >= 4, "\(scene.movements) lift-offs and landings, of \(flown.sorted())")
+}
+
+/// The Spaceport flies only the rockets Settings has switched on: with every switch off but one, that one every time.
+@MainActor @Test func pixelCitySpaceportFliesTheRocketsPicked() throws {
+    guard case .choice(let cities) = PixelCity.knobs[0].format else { return }
+    var settings = ["city.place": Double(try #require(cities.firstIndex(of: "Spaceport"))), "city.launches": 3]
+    for knob in PixelCity.knobs where knob.key.hasPrefix("city.rocket.") { settings[knob.key] = knob.key == "city.rocket.saturn" ? 1 : 0 }
+    defer { settings.keys.forEach(UserDefaults.standard.removeObject) }
+    for (key, value) in settings { UserDefaults.standard.set(value, forKey: key) }
+    let scene = PixelCity(size: CGSize(width: 800, height: 500))
+    var flown = Set<String>()
+    for step in 0..<6_000 {
+        scene.update(Double(step) / 10)
+        flown.insert(scene.rocketName)
+    }
+    #expect(flown == ["SATURN V"] && scene.movements >= 3, "\(scene.movements) lift-offs, of \(flown.sorted())")
 }
