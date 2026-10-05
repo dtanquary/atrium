@@ -138,3 +138,17 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
         #expect(PixelCity.knobs[0].value != before && view.scene !== scene && view.scene is PixelCity)
     }
 }
+
+/// With the automatic move on, Pixel City comes back as another city if the wait ran out while it was off the desktop
+/// (the app's own Shuffle builds it afresh each time), and as the same one if it didn't.
+@MainActor @Test func pixelCityMovesWhileAway() {
+    defer { for key in ["city.view", "city.shuffle", "city.movedAt"] { UserDefaults.standard.removeObject(forKey: key) } }
+    UserDefaults.standard.set(1.0, forKey: "city.shuffle")
+    UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "city.movedAt")
+    let before = PixelCity.knobs[0].value
+    _ = PixelCity(size: CGSize(width: 400, height: 250))
+    #expect(PixelCity.knobs[0].value == before)
+    UserDefaults.standard.set(Date().timeIntervalSince1970 - 3600, forKey: "city.movedAt")
+    _ = PixelCity(size: CGSize(width: 400, height: 250))
+    #expect(PixelCity.knobs[0].value != before)
+}

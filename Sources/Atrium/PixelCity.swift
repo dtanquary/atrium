@@ -27,6 +27,9 @@ final class PixelCity: SKScene {
     private var settings = PixelCity.knobs.map(\.value)
     private var retired = false // it has handed over to a scene of another city, and is fading out
     private static var easing = false // the city is changing by itself, so take the fade slowly
+    /// When the city last changed, for the automatic move. It's the wall clock, saved, not time counted by this scene:
+    /// the app's own Shuffle, a relaunch or a rebuild all make a new scene, and the wait has to carry across them.
+    private static let movedKey = "city.movedAt"
 
     private let w: Int, h: Int
     private var city = City.waterfront
@@ -81,10 +84,12 @@ final class PixelCity: SKScene {
         super.init(size: size)
         canvas.setScale(pixel)
         addChild(canvas)
+        moveIfDue() // it may have been away, or the app closed, for longer than the wait
+        settings = Self.knobs.map(\.value)
         layOut()
         redraw()
         run(.repeatForever(.sequence([.wait(forDuration: 30), .run { [weak self] in self?.redraw() }])))
-        waitToMove()
+        run(.repeatForever(.sequence([.wait(forDuration: 5), .run { [weak self] in self?.moveIfDue() }])))
         NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged),
                                                name: UserDefaults.didChangeNotification, object: nil)
     }
@@ -100,7 +105,10 @@ final class PixelCity: SKScene {
         let picked = Self.knobs.map(\.value)
         guard picked != settings, !retired else { return }
         let moved = picked[K.view.rawValue] != settings[K.view.rawValue]
+        // Picking a city by hand, or changing whether and how often it moves, starts the wait over.
+        let restart = [K.view, .shuffle, .shuffleMinutes].contains { picked[$0.rawValue] != settings[$0.rawValue] }
         settings = picked
+        if restart, !Self.easing { UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: Self.movedKey) }
         if moved, let view { // another city: dissolve into a new scene of it with both still running, never a cut
             let fade = SKTransition.crossFade(withDuration: Self.easing ? 4 : 0.8)
             fade.pausesIncomingScene = false
@@ -112,15 +120,17 @@ final class PixelCity: SKScene {
         }
         if moved { layOut() } // no view to fade in: the render tests
         redraw()
-        waitToMove()
     }
 
-    /// Starts the wait for the automatic move over again, if Settings has it on: any change to these settings does,
-    /// picking a city by hand included.
-    private func waitToMove() {
-        removeAction(forKey: "move")
-        guard Self.knob(.shuffle) > 0.5 else { return }
-        run(.sequence([.wait(forDuration: Self.knob(.shuffleMinutes).rounded() * 60), .run { [weak self] in self?.moveOn() }]), withKey: "move")
+    /// Moves to another city if Settings has that on and the wait is up. Checked every few seconds, and when the
+    /// scene is built: if Pixel City has been off the desktop for longer than the wait, it comes back as a new city.
+    private func moveIfDue() {
+        guard Self.knob(.shuffle) > 0.5, !retired else { return }
+        let now = Date().timeIntervalSince1970
+        guard let moved = UserDefaults.standard.object(forKey: Self.movedKey) as? Double else {
+            return UserDefaults.standard.set(now, forKey: Self.movedKey) // just switched on: the wait starts here
+        }
+        if now - moved >= Self.knob(.shuffleMinutes).rounded() * 60 { moveOn() }
     }
 
     /// Moves to another city, picked at random. It saves the pick as Settings would, so every display's copy of the
@@ -129,7 +139,9 @@ final class PixelCity: SKScene {
         guard !retired else { return }
         Self.easing = true
         defer { Self.easing = false }
-        UserDefaults.standard.set(Double(City.allCases.filter { $0 != city }.randomElement()!.rawValue), forKey: Self.knobs[K.view.rawValue].key)
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: Self.movedKey)
+        let others = City.allCases.filter { $0.rawValue != Int(Self.knob(.view)) } // any but the one saved, which a new scene hasn't laid out yet
+        UserDefaults.standard.set(Double(others.randomElement()!.rawValue), forKey: Self.knobs[K.view.rawValue].key)
     }
 
     /// The compass bearing we look along: toward the equator, where the Sun and Moon cross the sky, unless Settings
