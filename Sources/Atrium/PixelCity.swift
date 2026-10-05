@@ -2504,13 +2504,16 @@ final class PixelCity: SKScene {
                 if Int.random(in: 0..<5) < 3 { puff(x + .random(in: -6...6), foot, .random(in: -6...6), .random(in: 3...10), 2, 1.2, .random(in: 4...7), 15) }
             }
             if t > 0.5 { // the trail, laid from where the flame ended a moment ago to where it ends now
-                let now = ascent(t), end = SIMD2(now.x, now.y - 20 * now.scale)
+                // That is back along the rocket's own axis, not straight below it: once it leans they aren't the same place.
+                let now = ascent(t), next = ascent(t + 0.2), way = SIMD2(next.x - now.x, next.y - now.y)
+                let back = -way / max((way * way).sum().squareRoot(), 0.001), end = SIMD2(now.x, now.y) + back * 30 * now.scale
                 if let from = trailFrom, end.y < Float(h) + 8 {
                     let steps = max(1, Int(((end - from) * (end - from)).sum().squareRoot() / 1.5))
                     for i in 0..<steps {
                         let at = from + (end - from) * ((Float(i) + .random(in: 0..<1)) / Float(steps))
                         guard at.y > foot + 1 else { continue }
-                        puff(at.x + .random(in: -0.7...0.7), at.y, .random(in: -1.2...1.2), .random(in: -5 ... -1) * now.scale,
+                        let blown = back * (Float.random(in: 1...5) * now.scale)
+                        puff(at.x + .random(in: -0.7...0.7), at.y, blown.x + .random(in: -1.2...1.2), blown.y,
                              1.4 * now.scale + 1, 0.24, (3.2 * now.scale + 2.3) * .random(in: 0.85...1.2), .random(in: 52...60) * (0.55 + 0.45 * now.scale)) // the far end goes first
                     }
                 }
