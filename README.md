@@ -222,14 +222,9 @@ The lock screen, and the tint of the menu bar and windows, come from your normal
 
 Download the DMG from the [Releases](https://github.com/dtanquary/atrium/releases) page, open it, and drag Atrium into Applications.
 
-Atrium isn't notarised by Apple (that needs a paid developer account), so the first time you open it macOS says it can't verify it. To let it through, once:
-1. Choose **Done** in that message.
-2. Open **System Settings → Privacy & Security**, scroll down to **Security**, and click **Open Anyway** beside Atrium.
-3. Confirm with your password or Touch ID, then choose **Open Anyway** again.
+It's signed and notarised by Apple, so it opens like any other app. Until 1.0 the releases are betas, marked Pre-release.
 
-After that it opens like any other app. If you'd rather not, build it yourself from the source (below): that needs no exceptions.
-
-To make the DMG yourself: `./dmg.sh` → `build/Atrium-<version>.dmg`.
+To make the DMG yourself: `./dmg.sh` → `build/Atrium-<version>.dmg`. That one is signed ad hoc, so another Mac asks you to allow it the first time, in **System Settings → Privacy & Security → Open Anyway**.
 
 ## Requirements
 

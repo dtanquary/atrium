@@ -33,6 +33,7 @@ Atrium is a menu bar app that plays animated wallpapers on macOS 27. Swift packa
 ## Commands
 ```sh
 ./build.sh                    # release build → build/Atrium.app (ad-hoc signed, menu bar only)
+./release.sh                  # for a GitHub release: build/Atrium-<version>.dmg, Developer ID signed and notarized (setup at its top)
 pkill -x Atrium; open build/Atrium.app
 defaults write com.dtanquary.atrium scene "Live Sky"   # pick a scene without the menu
 swift test                    # renders every scene to $TMPDIR/atrium-snapshots and prints the cost per frame
@@ -78,4 +79,4 @@ ffmpeg -framerate 15 -i 'Fish Tank-%03d.png' -vf "scale=800:-1:flags=lanczos,spl
 - **Versioning:** semantic versioning, set by `VERSION=` at the top of `build.sh` (it goes into Info.plist and shows in Settings → About). Bump it in the same commit as the change that earns it:
   - until 1.0: a new or cut wallpaper, or a feature users will notice, bumps the minor version (0.2.0 → 0.3.0); fixes and tuning bump the patch (0.3.0 → 0.3.1). A run of tuning commits on one wallpaper can share one patch bump.
   - from 1.0.0, the first stable public release: breaking changes (a removed setting, a raised minimum macOS) bump the major version.
-  - only official releases get a git tag (`v1.0.0`) and a GitHub release. Dave decides when to cut one.
+  - only official releases get a git tag (`v1.0.0`) and a GitHub release, with the DMG from `release.sh`. Dave decides when to cut one. Before 1.0 they're betas: `PRERELEASE=beta` in `build.sh` (it shows in About) and marked Pre-release on GitHub, so the site's `releases/latest` link lands on the Releases page.
