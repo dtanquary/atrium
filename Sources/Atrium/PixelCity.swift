@@ -11,6 +11,10 @@ final class PixelCity: SKScene {
     nonisolated static let knobs = [
         Knob(key: "city.view", label: "City", range: 0...Double(City.allCases.count - 1), standard: 1, section: "City",
              format: .choice(City.allCases.map(\.name))),
+        Knob(key: "city.shuffle", label: "Move to another city automatically", range: 0...1, standard: 0, section: "City",
+             format: .toggle),
+        Knob(key: "city.shuffleMinutes", label: "Move every", range: 1...60, standard: 10, section: "City", format: .minutes,
+             shownWhen: "city.shuffle"),
         Knob(key: "city.looking", label: "Looking", range: 0...8, standard: 0, section: "City",
              format: .choice(["Toward the midday Sun", "North", "North-east", "East", "South-east", "South", "South-west", "West", "North-west"])),
         Knob(key: "city.previewTime", label: "Preview a time of day", range: 0...1, standard: 0, section: "Preview",
@@ -18,9 +22,11 @@ final class PixelCity: SKScene {
         Knob(key: "city.previewHour", label: "Time", range: 0...24, standard: 19, section: "Preview", format: .clock,
              shownWhen: "city.previewTime"),
     ]
-    private enum K: Int { case view, looking, previewTime, previewHour }
+    private enum K: Int { case view, shuffle, shuffleMinutes, looking, previewTime, previewHour }
     private static func knob(_ k: K) -> Double { knobs[k.rawValue].value }
     private var settings = PixelCity.knobs.map(\.value)
+    private var retired = false // it has handed over to a scene of another city, and is fading out
+    private static var easing = false // the city is changing by itself, so take the fade slowly
 
     private let w: Int, h: Int
     private var city = City.waterfront
@@ -78,6 +84,7 @@ final class PixelCity: SKScene {
         layOut()
         redraw()
         run(.repeatForever(.sequence([.wait(forDuration: 30), .run { [weak self] in self?.redraw() }])))
+        waitToMove()
         NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged),
                                                name: UserDefaults.didChangeNotification, object: nil)
     }
@@ -91,10 +98,38 @@ final class PixelCity: SKScene {
     /// Repaints when one of its own settings changes (the notification comes for every wallpaper's).
     @objc private func settingsChanged() {
         let picked = Self.knobs.map(\.value)
-        guard picked != settings else { return }
-        if picked[K.view.rawValue] != settings[K.view.rawValue] { layOut() }
+        guard picked != settings, !retired else { return }
+        let moved = picked[K.view.rawValue] != settings[K.view.rawValue]
         settings = picked
+        if moved, let view { // another city: dissolve into a new scene of it with both still running, never a cut
+            let fade = SKTransition.crossFade(withDuration: Self.easing ? 4 : 0.8)
+            fade.pausesIncomingScene = false
+            fade.pausesOutgoingScene = false
+            let next = PixelCity(size: size)
+            next.scaleMode = scaleMode
+            retired = true
+            return view.presentScene(next, transition: fade)
+        }
+        if moved { layOut() } // no view to fade in: the render tests
         redraw()
+        waitToMove()
+    }
+
+    /// Starts the wait for the automatic move over again, if Settings has it on: any change to these settings does,
+    /// picking a city by hand included.
+    private func waitToMove() {
+        removeAction(forKey: "move")
+        guard Self.knob(.shuffle) > 0.5 else { return }
+        run(.sequence([.wait(forDuration: Self.knob(.shuffleMinutes).rounded() * 60), .run { [weak self] in self?.moveOn() }]), withKey: "move")
+    }
+
+    /// Moves to another city, picked at random. It saves the pick as Settings would, so every display's copy of the
+    /// scene follows it and the City menu shows where we are.
+    func moveOn() {
+        guard !retired else { return }
+        Self.easing = true
+        defer { Self.easing = false }
+        UserDefaults.standard.set(Double(City.allCases.filter { $0 != city }.randomElement()!.rawValue), forKey: Self.knobs[K.view.rawValue].key)
     }
 
     /// The compass bearing we look along: toward the equator, where the Sun and Moon cross the sky, unless Settings

@@ -125,3 +125,16 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
     }
     #expect(nodes.allSatisfy { $0 > 10 } && nodes.last == nodes.first)
 }
+
+/// Pixel City's automatic move goes to a different city every time and saves it, so Settings and every display
+/// follow; in a view, it hands over to a new scene of that city.
+@MainActor @Test func pixelCityMovesOn() {
+    defer { UserDefaults.standard.removeObject(forKey: "city.view") }
+    let view = WallpaperView(frame: CGRect(x: 0, y: 0, width: 400, height: 250))
+    view.presentScene(PixelCity(size: view.frame.size))
+    for _ in 0..<12 {
+        let before = PixelCity.knobs[0].value, scene = view.scene as? PixelCity
+        scene?.moveOn()
+        #expect(PixelCity.knobs[0].value != before && view.scene !== scene && view.scene is PixelCity)
+    }
+}
