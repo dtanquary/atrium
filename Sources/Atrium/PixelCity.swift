@@ -2139,11 +2139,11 @@ final class PixelCity: SKScene {
     private func layOutSpaceport(_ rng: inout SeededRandom) -> (x: Int, y: Int) {
         downtown = 0.46
         for x in 0..<w { crest[x] = ground + 4 }
-        // A rocket on the pad well into its count, and a booster from the last flight waiting for the crane, so
-        // there's something to see at once.
+        // A rocket on the pad well into its count, so there's something to see at once, and a booster from the last
+        // flight waiting for the crane, unless the rocket is a Falcon Heavy, whose two boosters need both zones.
         (pad, crane, plume, liftoffAt, trailFrom, launchShown) = (Pad(), Crane(), [], -1000, nil, [])
-        (pad.phase, pad.until) = (.count, clock + 24 * Self.knob(.launches))
-        boosters = [Booster(phase: .landed, zone: 1, until: clock + 2)]
+        (pad.phase, pad.until, pad.rocket, pad.flown) = (.count, clock + 24 * Self.knob(.launches), Self.nextRocket(), Bool.random())
+        boosters = pad.rocket == .heavy ? [] : [Booster(phase: .landed, zone: 1, until: clock + 2)]
         let rows = h - waterRows, texture = SKMutableTexture(size: CGSize(width: w, height: rows))
         texture.filteringMode = .nearest
         (launchTexture, smoke) = (texture, Bytes(w, rows, floor: waterRows))
@@ -2300,6 +2300,17 @@ final class PixelCity: SKScene {
         px.draw(picture(palm, ["#": shadow]), x: w - 28, y: 40)
     }
 
+    /// The next rocket out of the hangar. They come in threes in a shuffled order, one of each three a Falcon Heavy
+    /// and the others Falcon 9s, one of them as often as not under a capsule: so a Heavy's double landing is never
+    /// more than four flights away, where a plain one-in-three chance could keep it away all evening. The order
+    /// carries from scene to scene (the app's Shuffle and a move between cities build a new one each time), so
+    /// short visits get their Heavy too.
+    private static var hangar: [Rocket] = []
+    private static func nextRocket() -> Rocket {
+        if hangar.isEmpty { hangar = [.heavy, .falcon9, Bool.random() ? .dragon : .falcon9].shuffled() }
+        return hangar.removeLast()
+    }
+
     /// For the tests: whether two boosters have been given the same landing zone.
     var zoneShared: Bool { Set(boosters.map(\.zone)).count < boosters.count }
 
@@ -2334,7 +2345,7 @@ final class PixelCity: SKScene {
         switch pad.phase {
         case .hangar:
             if clock >= pad.until {
-                pad.rocket = [.falcon9, .falcon9, .falcon9, .dragon, .heavy].randomElement()!
+                pad.rocket = Self.nextRocket()
                 pad.flown = Bool.random()
                 (pad.phase, pad.t, pad.x) = (.rollOut, 0, 0)
             }
