@@ -2439,13 +2439,14 @@ final class PixelCity: SKScene {
         case .count:
             // Every booster needs a landing zone to come back to. If one from the last flight is still standing
             // on it, the count holds at ten seconds.
-            let free = zones.indices.filter { zone in !boosters.contains { $0.zone == zone } }, need = kit.caught ? 0 : kit.lands
+            let free = zones.indices.filter { zone in !boosters.contains { $0.zone == zone } }, need = kit.lands // Starship's ship needs one too
             if free.count < need, pad.until - clock < 10 * pace { pad.until = clock + 10 * pace }
             if clock >= pad.until {
                 (pad.phase, pad.t, liftoffAt, trailFrom) = (.climb, 0, clock, nil)
                 movements += 1
                 for (i, zone) in free.shuffled().prefix(need).sorted().enumerated() {
-                    boosters.append(Booster(zone: zone, until: clock + 62 + Double(i) * 1.3))
+                    // Starship's booster goes to its tower; what comes to a landing zone, a while after, is its ship.
+                    boosters.append(Booster(zone: zone, until: clock + (kit.caught ? 100 : 62 + Double(i) * 1.3), ship: kit.caught))
                 }
                 if kit.caught { boosters.append(Booster(zone: 2, until: clock + 62)) } // Starship's comes back to its tower
                 if pad.rocket == .shuttle, orbiter.due == .infinity { orbiter.due = clock + 150 } // one may still be on the runway
@@ -2478,9 +2479,9 @@ final class PixelCity: SKScene {
             var b = boosters[i]
             switch b.phase {
             case .away:
-                if clock >= b.until { (b.phase, b.z, b.v) = (.fall, 330, -34) }
+                if clock >= b.until { (b.phase, b.z, b.v) = (.fall, 330, b.ship ? -22 : -34) } // a ship on its belly falls slower
             case .fall, .burn:
-                if b.z <= 170 { b.phase = .burn }
+                if b.z <= (b.ship ? 100 : 170) { b.phase = .burn }
                 // The landing burn slows it at whatever rate stops it as it touches.
                 if b.phase == .burn { b.v = min(b.v + b.v * b.v / (2 * max(b.z, 1)) * dt, -1.5) }
                 b.z += b.v * dt
@@ -2736,6 +2737,13 @@ final class PixelCity: SKScene {
         }
     }
 
+    /// Where Starship's ship is as it comes home, and how far over it is: on its belly through the fall, nose to
+    /// the right and its black tiles down, then swinging upright on its engines over the first of its landing burn.
+    private func pose(ship b: Booster) -> (x: Float, y: Float, angle: Float, scale: Float) {
+        let (rows, scale) = lens(b.z), angle = b.phase == .landed ? 0 : Float.pi / 2 * smoothstep(55, 100, b.z)
+        return (Float(zones[b.zone]) + 0.5 - 16 * scale * sin(angle), Float(ground + 1) + rows + 4 * scale * sin(angle), angle, scale)
+    }
+
     /// The flames burning now: where each begins, which way its rocket leans, the size it's drawn at, how long and
     /// wide it is, and how strongly it lights the smoke round it.
     private func flames() -> [(x: Float, y: Float, angle: Float, scale: Float, length: Float, wide: Float, power: Float)] {
@@ -2749,6 +2757,11 @@ final class PixelCity: SKScene {
             }
         }
         for b in boosters where b.phase == .burn {
+            if b.ship {
+                let at = pose(ship: b)
+                fires.append((at.x, at.y, at.angle, at.scale, 20, 3, 0.9 * k))
+                continue
+            }
             let (rows, scale) = lens(b.z), tower = b.zone == 2 // Starship's booster comes down to the arms, over its mount
             fires.append((Float(landing(b.zone)) + 0.5, Float(tower ? starMount : ground + 1) + rows + scale, 0, scale, tower ? 26 : 18, tower ? 4 : 2, 0.9 * k))
         }
@@ -2852,6 +2865,11 @@ final class PixelCity: SKScene {
             let held = crane.phase.rawValue >= Crane.Phase.hook.rawValue && crane.zone == b.zone
             let (rows, scale) = lens(b.z), flying = b.phase == .fall || b.phase == .burn
             let x = held ? Float(hookX) + 0.5 : Float(zones[b.zone]) + 0.5, y = Float(ground + 1) + (held ? lifted.rounded(.down) : rows)
+            if b.ship { // Starship's: on its belly, flipping, or standing on its skirt
+                let at = pose(ship: b)
+                stamp(shipArt, into: &px, x: flying ? at.x : x, y: flying ? at.y : y, angle: at.angle, scale: scale, paint: rocketPaint(flood: 0), heat: b.phase == .burn ? 0.6 : 0)
+                continue
+            }
             let legs = flying ? b.z < 26 : !(held && crane.phase == .carry)
             stamp(legs ? landedArt : fallingArt, into: &px, x: x, y: y, scale: scale, paint: rocketPaint(flood: 0), soot: 18, heat: b.phase == .burn ? 0.85 : 0)
         }
@@ -2883,7 +2901,8 @@ final class PixelCity: SKScene {
             px.line(x + 3, f + 9, hookX, f + 53, dark, 0.7)
             px.fill(x + 3, f + 7, 1, 3, dark)
             // The hook hangs high until the crane is in place, comes down to the booster's top, and goes up with it.
-            let drop = crane.phase == .driveIn ? 6 : crane.phase == .hook ? Int(mix(6, 18, crane.t / 5)) - Int(lifted) : 14
+            let reach = boosters.contains { $0.zone == crane.zone && $0.ship } ? 16 : 18 // a ship stands two rows taller than a booster
+            let drop = crane.phase == .driveIn ? 6 : crane.phase == .hook ? Int(mix(6, Float(reach), crane.t / 5)) - Int(lifted) : reach - 4
             px.line(hookX, f + 53, hookX, f + 53 - drop, dark, 0.9)
             px.fill(hookX - 1, f + 52 - drop, 3, 2, dark)
         }
@@ -3059,6 +3078,7 @@ private struct Booster {
     var zone: Int
     var until: TimeInterval // when it comes back into sight, or when the crane may come for it
     var z: Float = 0, v: Float = 0 // its height over the landing zone, and how fast it is falling
+    var ship = false               // Starship's upper stage, which comes home on its belly and lands on its skirt
 }
 
 /// The Shuttle's orbiter on its way home: away; gliding in; rolling out along the runway; standing; and under tow.
@@ -3170,7 +3190,9 @@ private let arianeArt = bytes(tall([("...ww...", 1), ("..lwws..", 10), ("..gggg.
 private let superHeavyRows = tall([(".gKgKgK.", 2), ("gxyyyyzg", 1), (".xyyyyz.", 44), (".nnnnnn.", 1)])
 private let superHeavyArt = bytes(superHeavyRows)
 /// Starship: that booster under the ship, steel on one side and black tiles on the other, with its four flaps.
-private let starshipArt = bytes(tall([("...xK...", 1), ("..xyKK..", 2), (".xyyKKK.", 1), ("xxyyKKKK", 5), (".xyyKKK.", 15), ("xxyyKKKK", 8), (".xyyKKK.", 1)]) + superHeavyRows)
+private let shipRows = tall([("...xK...", 1), ("..xyKK..", 2), (".xyyKKK.", 1), ("xxyyKKKK", 5), (".xyyKKK.", 15), ("xxyyKKKK", 8), (".xyyKKK.", 1)])
+private let shipArt = bytes(shipRows)
+private let starshipArt = bytes(shipRows + superHeavyRows)
 /// Soyuz: a white fairing under its escape tower, a grey third stage, the core's orange band, and four tapered
 /// boosters that make a skirt of its foot. (The colours are from memory of the older ones.)
 private let soyuzArt = bytes(tall([("...w...", 3), ("..lws..", 6), ("..xyz..", 5), ("..g.g..", 1), ("..pqr..", 5), (".xxyzz.", 4), ("xxxyzzz", 8), ("n.nnn.n", 1)]))
