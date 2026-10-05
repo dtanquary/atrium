@@ -199,7 +199,7 @@ A pixel-art city that follows your clock and the real Sun, with traffic and wind
 **The Spaceport** is a launch site that never stops. A rocket rolls out of the hangar lying on its transporter, climbs the ramp to the pad and is stood up, then fuels through a count you can follow on the countdown board on the near bank. It lifts off on a cloud of steam and arcs away, shrinking to a spark at the top of its trail. A little over a minute later its booster comes back, lights its landing burn, drops its legs and lands beside the pad, and a crane carries it off while the next rocket rolls out.
 
 - **Fourteen rockets,** each with its own switch in Settings: Falcon 9 and Falcon Heavy, Starship, SLS, the Space Shuttle, the Saturn V, Gemini-Titan, Mercury-Atlas and Mercury-Redstone from the 1960s, and from abroad Ariane 5, Soyuz, Long March 5, Japan's H3 and India's LVM3. They are drawn to one scale, so a Saturn V stands as tall as the pad's tower and a Redstone not much taller than its floodlights. The countdown board names the one on the pad.
-- **Three of them come back.** A Falcon 9's booster lands beside the pad, and a Falcon Heavy's two land side by side. Starship has a pad of its own: its tower's arms lift it onto the mount, and catch its booster when that flies back. Rockets that come back and rockets that don't take turns, so something returns after every other lift-off.
+- **Four of them come back.** A Falcon 9's booster lands beside the pad, and a Falcon Heavy's two land side by side. Starship has a pad of its own: its tower's arms lift it onto the mount, and catch its booster when that flies back. And two and a half minutes after a Shuttle launch its orbiter glides in to the runway along the shore, rolls out behind a drag chute and is towed away. Rockets whose boosters come back and rockets that fly once take turns, so a booster returns after every other lift-off.
 - **Each flies as itself.** The big NASA rockets and Ariane roll out standing on a crawler; the Shuttle and SLS leave the thick white trail of their solid boosters; the Saturn V climbs slowly.
 - **A tip of the hat:** when a rocket from abroad is on the pad, its country's flag goes up a second pole beside the Stars and Stripes: the French tricolour for Ariane 5, and Russia's, China's, Japan's and India's for the others.
 - **How often:** a lift-off every four minutes or so, or anywhere from every two minutes to every twelve with the Launches slider.
@@ -207,7 +207,7 @@ A pixel-art city that follows your clock and the real Sun, with traffic and wind
 - **All of it is mirrored in the lagoon,** the flames included.
 - **It runs to its own clock,** not the real launch schedule, and makes no network requests. The rockets are drawn after the real ones, without names or logos on them; Atrium isn't affiliated with SpaceX, NASA or any other space agency or launch company.
 
-![Nine of the Spaceport's rockets on the pad, from Mercury-Redstone to the Saturn V](docs/images/pixel-city-spaceport-fleet.jpg)
+![The Spaceport's fourteen rockets on the pad, from Mercury-Redstone to Starship](docs/images/pixel-city-spaceport-fleet.jpg)
 
 | ![Pixel City's Spaceport at sunset, a Falcon 9 nine seconds after lift-off](docs/images/pixel-city-spaceport.jpg) | ![Pixel City's Spaceport at sunset, a Falcon Heavy's two boosters landing](docs/images/pixel-city-spaceport-double.jpg) |
 |---|---|
@@ -222,6 +222,8 @@ A pixel-art city that follows your clock and the real Sun, with traffic and wind
 | An Ariane 5 on the pad, the tricolour up beside the Stars and Stripes | SLS floodlit at night |
 | ![Pixel City's Spaceport by day, Starship on its own pad beside its tower](docs/images/pixel-city-spaceport-starship.jpg) | ![Pixel City's Spaceport at sunset, Starship's booster coming down to the tower's arms](docs/images/pixel-city-spaceport-catch.jpg) |
 | Starship on its own pad | Its booster coming back to the tower's arms |
+| ![Pixel City's Spaceport by day, the Shuttle's orbiter rolling out along the runway behind its drag chute](docs/images/pixel-city-spaceport-orbiter.jpg) | ![Pixel City's Spaceport at sunset, a Soyuz lifting off with Russia's flag beside the Stars and Stripes](docs/images/pixel-city-spaceport-soyuz.jpg) |
+| The Shuttle's orbiter home, rolling out behind its drag chute | A Soyuz at sunset, its flag up beside the Stars and Stripes |
 
 ## Settings
 

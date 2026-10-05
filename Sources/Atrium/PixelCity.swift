@@ -85,6 +85,7 @@ final class PixelCity: SKScene {
     private var smoke = Bytes(1, 1, floor: 0), density: [Float] = [], smokeTime: Float = 0, smokeMoved = false, smokeSteps = 0
     private var countdown = SKSpriteNode(), counted = ""
     private var visitor = SKSpriteNode(), visiting: Flag?, hoist: Float = 0 // a visiting rocket's flag, and how far up its pole it is
+    private var orbiter = Orbiter() // the Shuttle's, when it glides home
     private var hazeColour = RGB.zero // the horizon's colour, which far-off things fade toward
     private let canvas = SKNode()
     private let sky = SKSpriteNode()      // sky, stars, Sun and Moon…
@@ -2167,7 +2168,7 @@ final class PixelCity: SKScene {
         for x in 0..<w { crest[x] = ground + 4 }
         // A rocket on the pad well into its count, so there's something to see at once, and a booster from the last
         // flight waiting for the crane, unless the rocket is a Falcon Heavy, whose two boosters need both zones.
-        (pad, crane, plume, liftoffAt, trailFrom, launchShown) = (Pad(), Crane(), [], -1000, nil, [])
+        (pad, crane, plume, liftoffAt, trailFrom, launchShown, orbiter) = (Pad(), Crane(), [], -1000, nil, [], Orbiter())
         (pad.phase, pad.until, pad.rocket, pad.flown) = (.count, clock + 24 * Self.knob(.launches), Self.nextRocket(), Bool.random())
         boosters = pad.rocket.kit.lands == 2 ? [] : [Booster(phase: .landed, zone: 1, until: clock + 2)]
         pad.x = roll(pad.rocket.kit) // it has rolled all the way out, so its strongback or crawler has that far to go home
@@ -2228,6 +2229,9 @@ final class PixelCity: SKScene {
         }
         // The road along the shore: the transporter's way to the pad, and the crane's to the landing zones.
         px.fill(0, field + 1, w, 1, mix(haze(lit(rgb(178, 172, 156), keyTop * 0.4)), rgb(30, 30, 40), night * 0.7))
+        // Beyond the pad it is the runway the Shuttle's orbiter comes home to: paler, with lights along it after dark.
+        px.fill(padX + 60, field + 1, w, 1, mix(haze(lit(rgb(206, 204, 196), keyTop * 0.4)), rgb(40, 40, 52), night * 0.7))
+        for x in stride(from: padX + 62, to: w, by: 12) where night > 0.15 { px.plot(x, field + 1, rgb(255, 244, 214), glow * 0.8) }
 
         // The hangar: a long white shed with a tall door at the pad end, lit inside after dark.
         px.fill(hx, ground, 50, 12, haze(lit(rgb(222, 224, 226), keyFront)))
@@ -2444,6 +2448,7 @@ final class PixelCity: SKScene {
                     boosters.append(Booster(zone: zone, until: clock + 62 + Double(i) * 1.3))
                 }
                 if kit.caught { boosters.append(Booster(zone: 2, until: clock + 62)) } // Starship's comes back to its tower
+                if pad.rocket == .shuttle, orbiter.due == .infinity { orbiter.due = clock + 150 } // one may still be on the runway
             }
         case .climb:
             if pad.t >= 21 / kit.pace { (pad.phase, pad.t) = (kit.caught ? .recover : .rollBack, 0) } // out of sight, and the strongback is down
@@ -2487,6 +2492,31 @@ final class PixelCity: SKScene {
             case .landed: break
             }
             boosters[i] = b
+        }
+
+        // The Shuttle's orbiter glides home two and a half minutes after its lift-off: steeply down from the right, a
+        // flare, a roll-out along the runway behind its drag chute, a wait, and a tow back the way it came.
+        let runway = Float(waterRows + 2)
+        switch orbiter.phase {
+        case .away:
+            if clock >= orbiter.due { orbiter = Orbiter(phase: .glide, x: Float(w) + 70, y: runway + 62, v: 16) }
+        case .glide:
+            orbiter.x -= orbiter.v * dt
+            orbiter.y -= min(11, (orbiter.y - runway) * 1.1 + 0.8) * dt // it sinks more gently as the ground comes up
+            if orbiter.y <= runway {
+                (orbiter.phase, orbiter.y) = (.roll, runway)
+                movements += 1
+            }
+        case .roll:
+            orbiter.v = max(orbiter.v - 3 * dt, 0)
+            orbiter.x -= orbiter.v * dt
+            if orbiter.v <= 0 { (orbiter.phase, orbiter.t) = (.stand, 0) }
+        case .stand:
+            orbiter.t += dt
+            if orbiter.t >= 12 { orbiter.phase = .tow }
+        case .tow:
+            orbiter.x += 4 * dt
+            if orbiter.x > Float(w) + 40 { orbiter.phase = .away }
         }
 
         // The crane: in from the right for the booster nearest that edge, down with the hook, up a little, and away.
@@ -2757,7 +2787,8 @@ final class PixelCity: SKScene {
         // The tower's arms rest low, where a crawler brings a rocket under them, and are at whatever they hold otherwise.
         let holding = kit.caught && pad.phase != .hangar && pad.phase != .rollOut && pad.phase != .rollBack
         let arms = Int(holding ? (pad.phase == .raise ? hinge.y : pad.phase == .recover ? lowering : Float(starMount)) : Float(ground + 4)) + 43
-        var shown = [smokeSteps, flicker, pad.phase.rawValue, Int(hinge.x), Int(hinge.y), Int(lean * 80), Int(crane.x), Int(crane.t * 2), crane.phase.rawValue, arms, Int(caught.y)]
+        var shown = [smokeSteps, flicker, pad.phase.rawValue, Int(hinge.x), Int(hinge.y), Int(lean * 80), Int(crane.x), Int(crane.t * 2), crane.phase.rawValue, arms, Int(caught.y),
+                     orbiter.phase.rawValue, Int(orbiter.x), Int(orbiter.y)]
         if let flying { shown += [Int(flying.x), Int(flying.y), Int(flying.scale * 60)] }
         for b in boosters { shown += [b.phase.rawValue, Int(lens(b.z).rows), Int(lens(b.z).scale * 40)] }
         guard shown != launchShown else { return }
@@ -2823,6 +2854,20 @@ final class PixelCity: SKScene {
             let x = held ? Float(hookX) + 0.5 : Float(zones[b.zone]) + 0.5, y = Float(ground + 1) + (held ? lifted.rounded(.down) : rows)
             let legs = flying ? b.z < 26 : !(held && crane.phase == .carry)
             stamp(legs ? landedArt : fallingArt, into: &px, x: x, y: y, scale: scale, paint: rocketPaint(flood: 0), soot: 18, heat: b.phase == .burn ? 0.85 : 0)
+        }
+        if orbiter.phase != .away {
+            // The orbiter: the Shuttle's own drawing of it, laid on its belly, nose to the left; nose down in the
+            // glide and up in the flare. On the ground it has its wheels, its chute while it's rolling, and a tug.
+            let runway = Float(waterRows + 2), x = orbiter.x.rounded(.down), high = orbiter.y - runway
+            let tilt: Float = orbiter.phase != .glide ? 0 : high > 9 ? 0.32 : -0.14
+            stamp(orbiterArt, into: &px, x: x + 0.5, y: orbiter.y.rounded(.down) + 4, angle: -.pi / 2 - tilt, paint: rocketPaint(flood: 0))
+            if high < 4 { for wheel in [-21, -6, -5] { px.plot(Int(x) + wheel, Int(orbiter.y) - 1, dark) } }
+            if orbiter.phase == .roll, orbiter.v > 1.5 {
+                px.line(Int(x) + 1, Int(runway) + 3, Int(x) + 6, Int(runway) + 4, dark, 0.7)
+                px.fill(Int(x) + 6, Int(runway) + 3, 3, 3, lit(rgb(232, 96, 60), keyFront))
+                px.fill(Int(x) + 7, Int(runway) + 3, 1, 3, lit(rgb(238, 238, 234), keyFront))
+            }
+            if orbiter.phase == .tow { px.fill(Int(x) + 2, Int(runway) - 1, 5, 3, lit(rgb(226, 170, 44), keyFront)) }
         }
         if crane.phase != .away {
             // The crane: a crawler with its boom up over the landing zone, and the hook on its line.
@@ -3016,6 +3061,15 @@ private struct Booster {
     var z: Float = 0, v: Float = 0 // its height over the landing zone, and how fast it is falling
 }
 
+/// The Shuttle's orbiter on its way home: away; gliding in; rolling out along the runway; standing; and under tow.
+private struct Orbiter {
+    enum Phase: Int { case away, glide, roll, stand, tow }
+    var phase = Phase.away
+    var x: Float = 0, y: Float = 0 // its tail's column, and the row its belly is at
+    var v: Float = 0, t: Float = 0 // its speed over the ground, and how long it has stood
+    var due = TimeInterval.infinity // when the next one comes home
+}
+
 /// The crane that carries landed boosters away.
 private struct Crane {
     /// Off to the right; driving in; lowering its hook and lifting; and carrying a booster off.
@@ -3138,9 +3192,12 @@ private let slsArt = bytes(tall([(".....w.....", 5), ("....lws....", 7), ("....p
                                  ("lwspnnnrlws", 1), (".n..n.n..n.", 1)]))
 /// The Space Shuttle, side on: the orbiter with its black belly against the orange tank, its tail fin out to the
 /// left, and a white booster in front of the tank.
+private let orbiterRows = ["....KK.", "...wwK.", "...KwwK"] + Array(repeating: "...lwwK", count: 13)
+    + ["..wlwwK", ".wwlwwK", ".wwlwwK", "wwKlwwK", "wKKlwwK", ".K.lwwK", "...KnnK", "....nn."]
+/// The orbiter by itself, turned the other way: laid on its belly it then flies nose to the left with its fin up.
+private let orbiterArt = bytes(orbiterRows.map { String($0.reversed()) })
 private let shuttleArt: [[UInt8]] = {
-    let orbiter = Array(repeating: ".......", count: 10) + ["....KK.", "...wwK.", "...KwwK"] + Array(repeating: "...lwwK", count: 13)
-        + ["..wlwwK", ".wwlwwK", ".wwlwwK", "wwKlwwK", "wKKlwwK", ".K.lwwK", "...KnnK", "....nn."] + Array(repeating: ".......", count: 3)
+    let orbiter = Array(repeating: ".......", count: 10) + orbiterRows + Array(repeating: ".......", count: 3)
     let tank = ["..qq..", ".pqqr."] + Array(repeating: "pqqqqr", count: 5) + ["pqqwqr"] + Array(repeating: "pqlwsr", count: 23)
         + Array(repeating: "..lws.", count: 5) + ["..nnn."]
     return bytes(zip(orbiter, tank).map { $0 + $1 })

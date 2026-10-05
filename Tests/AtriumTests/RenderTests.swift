@@ -221,3 +221,19 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
     }
     #expect(flown == ["STARSHIP"] && scene.movements >= 4, "\(scene.movements) lift-offs and catches, of \(flown.sorted())")
 }
+
+/// The Shuttle's orbiter comes home to the Spaceport's runway after each of its flights: with only the Shuttle
+/// switched on, seven and a half minutes at the Spaceport's busiest see three lift-offs and two landings.
+@MainActor @Test func pixelCitySpaceportBringsTheOrbiterHome() throws {
+    guard case .choice(let cities) = PixelCity.knobs[0].format else { return }
+    var settings = ["city.place": Double(try #require(cities.firstIndex(of: "Spaceport"))), "city.launches": 3]
+    for knob in PixelCity.knobs where knob.key.hasPrefix("city.rocket.") { settings[knob.key] = knob.key == "city.rocket.shuttle" ? 1 : 0 }
+    defer { settings.keys.forEach(UserDefaults.standard.removeObject) }
+    for (key, value) in settings { UserDefaults.standard.set(value, forKey: key) }
+    let scene = PixelCity(size: CGSize(width: 800, height: 500))
+    for step in 0..<4_500 {
+        scene.update(Double(step) / 10)
+        if step % 20 == 0 { scene.didFinishUpdate() }
+    }
+    #expect(scene.rocketName == "SHUTTLE" && scene.movements >= 5, "\(scene.movements) lift-offs and landings")
+}
