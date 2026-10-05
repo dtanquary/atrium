@@ -326,7 +326,11 @@ struct AboutPage: View {
             }
             Section("Made by") {
                 LabeledContent("Dave Tanquary") { Link("dtanquary.com", destination: URL(string: "https://dtanquary.com")!) }
+                LabeledContent("Website") { Link("atrium.show", destination: URL(string: "https://atrium.show")!) }
                 LabeledContent("Source") { Link("github.com/dtanquary/atrium", destination: URL(string: "https://github.com/dtanquary/atrium")!) }
+                // ponytail: Atrium doesn't check for updates itself; a link is enough until people miss releases
+                LabeledContent("New versions") { Link("Releases on GitHub", destination: URL(string: "https://github.com/dtanquary/atrium/releases")!) }
+                LabeledContent("Report a problem") { Link("Issues on GitHub", destination: URL(string: "https://github.com/dtanquary/atrium/issues")!) }
                 LabeledContent("License") { Link("MIT, for the code", destination: URL(string: "https://github.com/dtanquary/atrium/blob/main/LICENSE")!) }
             }
             Section("Live Data") {
