@@ -63,13 +63,17 @@ final class PixelCity: SKScene {
     private let backdrop = SKSpriteNode() // …and the city in front, so clouds and planes pass between the two
     private var mirrored: [SKUniform] = []   // the sky and city textures the water reflects…
     private var waterTints: [SKUniform] = [] // …and the colours of deep water and of the glints on it
-    private var mirrors: [(picture: SKUniform, place: SKUniform)] = [] // …and each of the Airport's aircraft, and where it is
+    // …and the things that move, which aren't in those paintings: each aircraft or boat, the freighter, and a strip
+    // the traffic is painted into. For each, its picture and where it is (see `reflect`).
+    private var mirrors: [(picture: SKUniform, place: SKUniform)] = []
+    private var trafficStrip: SKMutableTexture?, trafficShown: [Int] = []
     private var skyline: [Building] = []
     private var parks: [(x: Int, width: Int)] = []
     private var stars: [(x: Int, y: Int, brightness: Float)] = []
     private var clouds: [Cloud] = []
     private var cars: [Car] = []
     private var carLooks: [(day: SKTexture, night: SKTexture, length: Int, height: Int)] = []
+    private var carPictures: [(day: Pixels, night: Pixels)] = [] // the same, as pixels, for the water to mirror
     private var carPace: Float = 1, carGap: Float = 36 // far-off traffic crawls, and runs closer together
     private var plane = SKSpriteNode()
     private var planeLights = SKNode()
@@ -187,6 +191,7 @@ final class PixelCity: SKScene {
         canvas.removeAllChildren()
         (skyline, parks, stars, clouds, cars) = ([], [], [], [], [])
         (plane, planeLights, beacon, mirrored, waterTints, mirrors) = (SKSpriteNode(), SKNode(), SKNode(), [], [], [])
+        (trafficStrip, trafficShown) = (nil, [])
         (nextCar, planeDirection, shipDirection, ship) = ([clock, clock], 0, 0, SKSpriteNode())
         city = City(rawValue: Int(Self.knob(.view))) ?? .waterfront
         waterRows = city == .waterfront ? Int(Float(h) * 0.21) : 0
@@ -256,8 +261,9 @@ final class PixelCity: SKScene {
         let paints = [rgb(196, 58, 52), rgb(58, 98, 186), rgb(222, 222, 216), rgb(236, 188, 48),
                       rgb(66, 138, 88), rgb(40, 40, 48), rgb(160, 166, 172)]
         let far = city != .waterfront && city != .hillside // traffic seen from miles off: a dash of paint, and at night just its lights
-        carLooks = far ? paints.map { speck(2, body: $0) } + [speck(4, body: rgb(226, 226, 218))]
-                       : paints.map { vehicle(sedan, body: $0) } + [vehicle(bus, body: rgb(228, 150, 40))]
+        carPictures = far ? paints.map { speck(2, body: $0) } + [speck(4, body: rgb(226, 226, 218))]
+                          : paints.map { vehicle(sedan, body: $0) } + [vehicle(bus, body: rgb(228, 150, 40))]
+        carLooks = carPictures.map { ($0.day.texture(), $0.night.texture(), $0.day.w, $0.day.h) }
         (carPace, carGap) = far ? (0.35, 7) : (1, 36)
         let lanes = city == .bridge ? [deck + 1, deck + 2] : city == .overlook ? [ground + 6, ground + 7]
             : city == .airport ? [apron + 2, apron + 3] // the service road along the terminal, behind the stands
@@ -307,8 +313,8 @@ final class PixelCity: SKScene {
         if city == .airport { for flight in flights { canvas.addChild(flight.node) } } // in front of the water
         if city == .bridge { // a freighter that crosses the bay in front of the bridge now and then
             ship.anchorPoint = CGPoint(x: 0.5, y: 0)
-            ship.size = CGSize(width: freighter[0].count, height: freighter.count + 4)
-            ship.position.y = CGFloat(ground - 40)
+            ship.size = CGSize(width: freighter[0].count, height: freighter.count)
+            ship.position.y = CGFloat(ground - 36)
             ship.zPosition = 3
             ship.isHidden = true
             canvas.addChild(ship)
@@ -513,8 +519,8 @@ final class PixelCity: SKScene {
         for i in 0..<6 {
             let node = SKSpriteNode(), rows = i % 3 == 1 ? sailboat : fishingBoat
             node.anchorPoint = CGPoint(x: 0.5, y: 0)
-            node.size = CGSize(width: rows[0].count, height: rows.count + 3)
-            node.position = CGPoint(x: end * (22 + i * 12) / 100 + Int.random(in: -5...5, using: &rng), y: harbour - 9 - (i % 3) * 3)
+            node.size = CGSize(width: rows[0].count, height: rows.count)
+            node.position = CGPoint(x: end * (22 + i * 12) / 100 + Int.random(in: -5...5, using: &rng), y: harbour - 6 - (i % 3) * 3)
             node.xScale = i % 2 == 0 ? 1 : -1
             node.zPosition = 3 + CGFloat(2 - i % 3) * 0.1 // nearer boats in front
             let pause = { SKAction.wait(forDuration: 1.6, withRange: 1.2) }
@@ -699,38 +705,82 @@ final class PixelCity: SKScene {
         return Float(deck + 4) + (high - Float(deck + 4)) * u * u
     }
 
+    // Where the water mirrors about: the row things nearest us stand in it at (the bridge's towers, the town's quay,
+    // short of the far shore), and the rows of quay or sea wall mirrored first, below that.
+    private var mirrorLine: Int { city == .bridge ? ground - 12 : city == .hillside ? harbour : waterRows }
+    private var wall: Int { city == .waterfront ? quay : city == .airport ? 4 : 0 }
+
     /// The water along the bottom: a shader that mirrors whatever stands above it (on the Waterfront, the quay and then
-    /// the city), row by rippling row.
+    /// the city), row by rippling row, and the things that move in front of that.
     private func addWater() {
         let node = SKSpriteNode(color: .black, size: CGSize(width: w, height: waterRows))
         node.anchorPoint = .zero
         node.zPosition = 2.5
         mirrored = [SKUniform(name: "u_sky", texture: nil), SKUniform(name: "u_city", texture: nil)]
         waterTints = [SKUniform(name: "u_deep", vectorFloat3: .zero), SKUniform(name: "u_glint", vectorFloat3: .zero)]
-        mirrors = flights.indices.map { (SKUniform(name: "u_plane\($0)", texture: nil), SKUniform(name: "u_place\($0)", vectorFloat4: [-999, 0, 1, 1])) }
-        node.shader = SKShader(source: Self.waterShader(aircraft: mirrors.count), uniforms: mirrored + waterTints + mirrors.flatMap { [$0.picture, $0.place] } + [
+        // Aircraft or boats first, each at its own place in the list; then the freighter; last the traffic's strip.
+        let things = flights.count + boats.count + (city == .bridge ? 1 : 0) + (cars.isEmpty ? 0 : 1)
+        mirrors = (0..<things).map { (SKUniform(name: "u_thing\($0)", texture: nil), SKUniform(name: "u_place\($0)", vectorFloat4: [-999, 0, 1, 1])) }
+        if !cars.isEmpty {
+            // The strip is as tall as a bus on the Waterfront's street, where both lanes stand on the ground; one row
+            // for the apron's vans; and on the Long Bridge the two rows of its deck, mirrored where the deck is.
+            let rows = city == .waterfront ? bus.count : city == .bridge ? 2 : 1, strip = SKMutableTexture(size: CGSize(width: w, height: rows))
+            trafficStrip = strip
+            mirrors[things - 1].picture.textureValue = strip
+            let foot = city == .bridge ? Float(mirrorLine) - Float(deck + 1 - mirrorLine) / 1.8 : Float(mirrorLine - wall)
+            reflect(things - 1, from: 0, foot: foot, size: strip.size())
+        }
+        node.shader = SKShader(source: Self.waterShader(things: things), uniforms: mirrored + waterTints + mirrors.flatMap { [$0.picture, $0.place] } + [
             SKUniform(name: "u_canvas", vectorFloat2: [Float(w), Float(h)]),
-            // The water's size; the row things nearest us stand in the water at (the bridge's towers, the town's quay,
-            // short of the far shore); and the rows of quay wall and of street, which lies flat and out of sight, above it.
-            SKUniform(name: "u_water", vectorFloat4: [Float(w), Float(waterRows), Float(city == .bridge ? ground - 12 : city == .hillside ? harbour : waterRows),
-                                                      Float(city == .waterfront ? quay : city == .airport ? 4 : 0)]),
+            // The water's size; the line it mirrors about; and the rows of wall and then of street, which lies flat and
+            // out of sight, above that.
+            SKUniform(name: "u_water", vectorFloat4: [Float(w), Float(waterRows), Float(mirrorLine), Float(wall)]),
             SKUniform(name: "u_street", float: city == .waterfront ? 26 : city == .airport ? 18 : 0), // the airfield lies flat too
             WallpaperTime.now,
         ])
         canvas.addChild(node)
     }
 
-    // ponytail: only the backdrop and the Airport's aircraft are mirrored, so cars and clouds have no reflection;
-    // mirror their sprites the same way if it shows
-    /// The water's shader, which mirrors the sky and the city and this many aircraft. An aircraft isn't in the
-    /// city's painting, so it's mirrored from its own picture (`u_plane`), placed by how far above the ground it is
-    /// (`u_place`: its left edge and its foot, then its size, the width negative when it faces left). On the runway
-    /// its image hangs from the sea wall's, as the terminal's does; as it climbs, its image sinks toward us.
-    private static func waterShader(aircraft: Int) -> String {
-        let planes = (0..<aircraft).map { i in
-            "vec2 q\(i) = (at - u_place\(i).xy) / u_place\(i).zw;"
-                + " vec4 a\(i) = texture2D(u_plane\(i), q\(i)) * above * step(0.0, q\(i).x) * step(q\(i).x, 1.0) * step(0.0, q\(i).y) * step(q\(i).y, 1.0);"
-                + " c = c * (1.0 - a\(i).a) + a\(i).rgb;"
+    /// Tells the water's shader where one of the things it mirrors is: the column its picture starts from (its left
+    /// edge, or its right when it's `turned` to face left), the water row its foot is mirrored at, and its size.
+    /// Something floating is mirrored from its own waterline. Something on land is mirrored from the foot of the
+    /// wall's image, as the buildings are, and lower by its height over the water's squash of 1.8 as it rises.
+    private func reflect(_ i: Int, from x: Float, foot: Float, size: CGSize, turned: Bool = false, hidden: Bool = false) {
+        guard mirrors.indices.contains(i) else { return }
+        let place: SIMD4<Float> = hidden ? [-999, 0, 1, 1] : [x, foot, (turned ? -1 : 1) * Float(size.width), Float(size.height)]
+        if mirrors[i].place.vectorFloat4Value != place { mirrors[i].place.vectorFloat4Value = place }
+    }
+
+    /// Paints the traffic into the strip the water mirrors, when any of it has moved: the far lane, then the near.
+    private func mirrorTraffic() {
+        guard let strip = trafficStrip else { return }
+        let dark = night > 0.5, shown = cars.filter { !$0.node.isHidden }
+        let now = shown.flatMap { [Int($0.x.rounded(.down)), $0.look, $0.lane] }
+        guard now != trafficShown else { return }
+        trafficShown = now
+        var px = Pixels(Int(strip.size().width), Int(strip.size().height))
+        for lane in [1, 0] {
+            for car in shown where car.lane == lane {
+                let look = dark ? carPictures[car.look].night : carPictures[car.look].day
+                px.draw(look, x: Int(car.x.rounded(.down)) - look.w / 2, y: city == .bridge ? lane : 0, flipped: lane == 1)
+            }
+        }
+        let bytes = px.bytes(topDown: false)
+        strip.modifyPixelData { data, length in
+            bytes.withUnsafeBytes { data?.copyMemory(from: $0.baseAddress!, byteCount: min(length, bytes.count)) }
+        }
+    }
+
+    // ponytail: clouds and the high plane aren't mirrored: their images would fall off the bottom of the water, or
+    // under the Dock. Mirror them like the rest if a city ever has deeper water.
+    /// The water's shader, which mirrors the sky and the city and this many moving things. Those aren't in the
+    /// city's painting, so each is mirrored from its own picture (`u_thing`), placed by `u_place`: the column it
+    /// starts from, the water row its foot is mirrored at, and its size, the width negative when it faces left.
+    private static func waterShader(things: Int) -> String {
+        let things = (0..<things).reversed().map { i in // the traffic's strip first, so what stands in front of it covers it
+            "vec2 q\(i) = vec2((p.x + shift + 0.5 - u_place\(i).x) / u_place\(i).z, (floor((u_place\(i).y - 1.0 - p.y) * squash) + 0.5) / u_place\(i).w);"
+                + " vec4 t\(i) = texture2D(u_thing\(i), q\(i)) * step(0.0, q\(i).x) * step(q\(i).x, 1.0) * step(0.0, q\(i).y) * step(q\(i).y, 1.0);"
+                + " c = c * (1.0 - t\(i).a) + t\(i).rgb;"
         }.joined(separator: "\n")
         return """
         void main() {
@@ -752,10 +802,7 @@ final class PixelCity: SKScene {
             // side of the nearest shore doesn't mirror it a second time.
             city *= 1.0 - step(0.9, city.a) * step(city.a, 0.995) * step(p.y, u_water.z - 0.5);
             vec3 c = texture2D(u_sky, uv).rgb * (1.0 - city.a) + city.rgb;
-            // This row's mirror image, as a height above the ground, for the aircraft: none in the quay wall's own image.
-            vec2 at = vec2(p.x + shift, floor((d - u_water.w) * squash)) + 0.5;
-            float above = step(u_water.w, d);
-            \(planes)
+            \(things)
             float bright = smoothstep(0.75, 1.0, max(c.r, max(c.g, c.b))); // the Sun, the Moon and lamps keep their shine
             c = mix(c, u_deep, (0.3 + 0.4 * near) * (1.0 - 0.7 * bright)) * (0.94 - 0.2 * near * (1.0 - bright));
             // Glints: short dashes of sky on every other row, drifting.
@@ -887,9 +934,13 @@ final class PixelCity: SKScene {
         case .bridge:
             drawBridge(into: &px)
             ship.texture = afloat(freighter, hull: rgb(44, 56, 76), dark: night > 0.5)
+            mirrors.first?.picture.textureValue = ship.texture
         case .hillside:
             drawHarbour(into: &px)
-            for boat in boats { boat.node.texture = afloat(boat.rows, hull: boat.hull, dark: night > 0.5) }
+            for (i, boat) in boats.enumerated() {
+                boat.node.texture = afloat(boat.rows, hull: boat.hull, dark: night > 0.5)
+                mirrors[i].picture.textureValue = boat.node.texture
+            }
         case .overlook:
             drawRooftop(into: &px)
             // Steam takes the light it rises through: white by day, warm at dusk, a grey shadow by night.
@@ -913,6 +964,7 @@ final class PixelCity: SKScene {
         let shade = mix(mix(rgb(196, 206, 226), top, dusk * 0.5), rgb(29, 31, 54), night)
         for cloud in clouds { cloud.node.texture = cloud.texture(light: light, shade: shade) } // solid, so they hide the stars
         for car in cars { car.node.texture = night > 0.5 ? carLooks[car.look].night : carLooks[car.look].day }
+        trafficShown = [] // so the strip the water mirrors is painted again in this light
         for car in cars { car.beam.alpha = CGFloat(smoothstep(0.3, 0.8, night)) }
         plane.color = NSColor(red: 0.05, green: 0.06, blue: 0.1, alpha: 1) // a dark silhouette after sunset
         plane.colorBlendFactor = CGFloat(night * 0.85)
@@ -1224,26 +1276,16 @@ final class PixelCity: SKScene {
         for x in stride(from: 3, to: w, by: 8) where dark { px.plot(x, deck + 1, lamp, glow) }
     }
 
-    /// A vessel from rows of characters, heading right, with a faint reflection under it (the water doesn't mirror
-    /// sprites). By night its hull is a shadow, and its windows and mast light show.
+    /// A vessel from rows of characters, heading right. By night its hull is a shadow, and its windows and mast light
+    /// show. The water mirrors it (see `reflect`).
     private func afloat(_ rows: [String], hull: RGB, dark: Bool) -> SKTexture {
-        let dim = dark ? RGB(0.3, 0.32, 0.45) : .one, mirrored = min(4, rows.count / 2)
-        let paints: [Character: RGB] = [
+        let dim = dark ? RGB(0.3, 0.32, 0.45) : .one
+        return art(rows, [
             "H": hull * dim, "h": pointwiseMin(hull * 1.25 + 0.06, .one) * dim, "r": rgb(150, 52, 46) * dim,
             "W": rgb(226, 226, 218) * dim, "c": rgb(232, 230, 220) * dim, "s": rgb(240, 234, 214) * dim, "m": rgb(120, 124, 130) * dim,
             "a": rgb(172, 86, 62) * dim, "b": rgb(62, 130, 140) * dim, "d": rgb(196, 160, 72) * dim,
             "w": dark ? rgb(255, 220, 140) : rgb(70, 90, 110), "l": dark ? rgb(255, 250, 230) : rgb(120, 124, 130),
-        ]
-        var px = Pixels(rows[0].count, rows.count + mirrored)
-        for (r, row) in rows.enumerated() {
-            for (x, ch) in row.enumerated() {
-                guard let colour = paints[ch] else { continue }
-                let y = rows.count - 1 - r
-                px.plot(x, y + mirrored, colour)
-                if y < mirrored { px.plot(x, mirrored - 1 - y, colour * 0.6, 0.45) }
-            }
-        }
-        return px.texture()
+        ])
     }
 
     /// Hillside Town's hill, under the houses: scrub with a lit edge and outcrops of rock, and the church at its top.
@@ -1764,6 +1806,13 @@ final class PixelCity: SKScene {
             spawnCar(lane: lane, at: lane == 0 ? -20 : Float(w + 20))
         }
 
+        mirrorTraffic()
+        for (i, boat) in boats.enumerated() { // each from its own waterline, as it bobs
+            let node = boat.node, turned = node.xScale < 0
+            reflect(i, from: Float(node.position.x) + (turned ? 0.5 : -0.5) * Float(node.size.width), foot: Float(node.position.y),
+                    size: node.size, turned: turned)
+        }
+
         for i in clouds.indices {
             clouds[i].x += clouds[i].speed * dt
             if clouds[i].x - Float(clouds[i].mask[0].count) / 2 > Float(w) { clouds[i].x = -Float(clouds[i].mask[0].count) / 2 }
@@ -1795,6 +1844,8 @@ final class PixelCity: SKScene {
             }
             shipX += shipDirection * 2.2 * dt
             ship.position.x = CGFloat(shipX.rounded(.down))
+            reflect(0, from: shipX.rounded(.down) - shipDirection * Float(ship.size.width) / 2, foot: Float(ship.position.y), size: ship.size,
+                    turned: shipDirection < 0, hidden: shipDirection == 0)
             if shipDirection != 0, shipX < -22 || shipX > Float(w + 22) {
                 (shipDirection, ship.isHidden) = (0, true)
                 nextShip = clock + .random(in: 90...240)
@@ -1908,13 +1959,9 @@ final class PixelCity: SKScene {
             f.look = look
             flights[i] = f
             if changed { dress(i) }
-            if mirrors.indices.contains(i) { // where the water's shader finds it: its left edge, and its foot above the ground
-                let turned: Float = f.facing < 0 ? -1 : 1, size = f.node.size
-                let place: SIMD4<Float> = f.node.isHidden ? [-999, 0, 1, 1]
-                    : [f.x.rounded(.down) - turned * Float(f.wheels), (f.onRunway ? f.height.rounded(.down) : 0) - Float(flights[i].below),
-                       turned * Float(size.width), Float(size.height)]
-                if mirrors[i].place.vectorFloat4Value != place { mirrors[i].place.vectorFloat4Value = place }
-            }
+            let up = (f.onRunway ? f.height.rounded(.down) : 0) - Float(flights[i].below) // its picture's foot, above the ground
+            reflect(i, from: f.x.rounded(.down) - f.facing * Float(f.wheels), foot: Float(mirrorLine - wall) - up / 1.8, size: f.node.size,
+                    turned: f.facing < 0, hidden: f.node.isHidden)
         }
     }
 
@@ -2012,23 +2059,23 @@ final class PixelCity: SKScene {
         return px.texture()
     }()
 
-    /// Day and night textures for a vehicle drawn as `rows`, painted in `body`.
-    private func vehicle(_ rows: [String], body: RGB) -> (day: SKTexture, night: SKTexture, length: Int, height: Int) {
-        func look(_ dark: Bool) -> SKTexture {
+    /// A vehicle drawn as `rows` and painted in `body`, by day and by night.
+    private func vehicle(_ rows: [String], body: RGB) -> (day: Pixels, night: Pixels) {
+        func look(_ dark: Bool) -> Pixels {
             let paint = dark ? body * RGB(0.46, 0.48, 0.62) : body
-            return art(rows, ["B": paint, "#": paint * 0.85, "d": paint * 0.65,
-                              "w": dark ? rgb(30, 36, 52) : rgb(150, 186, 216),
-                              "W": dark ? rgb(255, 220, 140) : rgb(150, 186, 216),
-                              "h": dark ? rgb(255, 250, 215) : rgb(232, 232, 218),
-                              "t": dark ? rgb(255, 50, 50) : rgb(150, 30, 30), "o": rgb(24, 24, 30)])
+            return picture(rows, ["B": paint, "#": paint * 0.85, "d": paint * 0.65,
+                                  "w": dark ? rgb(30, 36, 52) : rgb(150, 186, 216),
+                                  "W": dark ? rgb(255, 220, 140) : rgb(150, 186, 216),
+                                  "h": dark ? rgb(255, 250, 215) : rgb(232, 232, 218),
+                                  "t": dark ? rgb(255, 50, 50) : rgb(150, 30, 30), "o": rgb(24, 24, 30)])
         }
-        return (look(false), look(true), rows[0].count, rows.count)
+        return (look(false), look(true))
     }
 
     /// A vehicle far off: a dash of paint by day, and by night only its tail light and headlight.
-    private func speck(_ length: Int, body: RGB) -> (day: SKTexture, night: SKTexture, length: Int, height: Int) {
-        (art([String(repeating: "B", count: length)], ["B": body]),
-         art(["t" + String(repeating: ".", count: length - 2) + "h"], ["t": rgb(255, 50, 50), "h": rgb(255, 250, 215)]), length, 1)
+    private func speck(_ length: Int, body: RGB) -> (day: Pixels, night: Pixels) {
+        (picture([String(repeating: "B", count: length)], ["B": body]),
+         picture(["t" + String(repeating: ".", count: length - 2) + "h"], ["t": rgb(255, 50, 50), "h": rgb(255, 250, 215)]))
     }
 
     /// A cloud outline: a few overlapping circles with a flat base.
@@ -2252,13 +2299,15 @@ private func bayer(_ x: Int, _ y: Int) -> Float {
 }
 
 /// Pixel art from rows of characters, top row first; characters missing from `palette` are transparent.
-private func art(_ rows: [String], _ palette: [Character: RGB]) -> SKTexture {
+private func picture(_ rows: [String], _ palette: [Character: RGB]) -> Pixels {
     var px = Pixels(rows[0].count, rows.count)
     for (r, row) in rows.enumerated() {
         for (x, ch) in row.enumerated() { if let c = palette[ch] { px.plot(x, rows.count - 1 - r, c) } }
     }
-    return px.texture()
+    return px
 }
+
+private func art(_ rows: [String], _ palette: [Character: RGB]) -> SKTexture { picture(rows, palette).texture() }
 
 /// A small straight-alpha RGBA canvas, origin bottom-left like SpriteKit, that becomes a nearest-filtered texture.
 private struct Pixels {
@@ -2283,15 +2332,31 @@ private struct Pixels {
         for yy in y..<y + max(height, 0) { for xx in x..<x + max(width, 0) { plot(xx, yy, c, a) } } // plot clips
     }
 
-    func texture() -> SKTexture {
+    /// Paints another canvas onto this one with its bottom left at (`x`, `y`), mirrored left to right if `flipped`.
+    mutating func draw(_ other: Pixels, x: Int, y: Int, flipped: Bool = false) {
+        for j in 0..<other.h {
+            for i in 0..<other.w {
+                let p = other.rgba[j * other.w + i]
+                plot(x + (flipped ? other.w - 1 - i : i), y + j, RGB(p.x, p.y, p.z), p.w)
+            }
+        }
+    }
+
+    /// Premultiplied RGBA bytes, rows from the top as an image has them, or from the bottom as a mutable texture does.
+    func bytes(topDown: Bool) -> [UInt8] {
         var bytes = [UInt8](repeating: 0, count: w * h * 4)
         for y in 0..<h {
             for x in 0..<w {
-                let p = rgba[y * w + x], o = ((h - 1 - y) * w + x) * 4 // image rows run top-down
+                let p = rgba[y * w + x], o = ((topDown ? h - 1 - y : y) * w + x) * 4
                 let premultiplied = pointwiseMin(SIMD3(p.x, p.y, p.z), .one) * p.w * 255
                 (bytes[o], bytes[o + 1], bytes[o + 2], bytes[o + 3]) = (UInt8(premultiplied.x), UInt8(premultiplied.y), UInt8(premultiplied.z), UInt8(p.w * 255))
             }
         }
+        return bytes
+    }
+
+    func texture() -> SKTexture {
+        let bytes = bytes(topDown: true)
         let image = CGImage(width: w, height: h, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: w * 4,
                             space: CGColorSpace(name: CGColorSpace.sRGB)!,
                             bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
