@@ -2560,7 +2560,7 @@ final class PixelCity: SKScene {
                 p.age += 1 / 15
                 let drag = exp(Float(-1) / 15 / 2.6)
                 p.vx *= drag
-                p.vy = p.vy * drag + 0.06 * (p.r > 3 ? 1 : 0.3) // big clouds are warm, and rise
+                p.vy = p.vy * drag + 0.06 * (p.r > 3 ? 1 : 0.3) * max(0, 1 - p.age / 14) // big clouds are warm, and rise until they cool; then they hang
                 let wind = 2.2 * (0.6 + 0.45 * sin(p.y / 31 + 1.3)) * min(1, p.age / 4) // it blows the way the clouds go, more at some heights
                 p.x += (p.vx + wind) / 15
                 p.y = max(p.y + p.vy / 15, Float(ground + 1))
@@ -2644,10 +2644,10 @@ final class PixelCity: SKScene {
                     for _ in 0..<Int(Float(t < 5 ? 2 : 1) * kit.steam + .random(in: 0..<1)) {
                         let big = Int.random(in: 0..<20) < 7
                         puff(x + side * .random(in: 6...12), Float(ground) + .random(in: 1...5), side * .random(in: 8...34) * (side > 0 ? 1.15 : 0.9) * reach,
-                             .random(in: 0...9), .random(in: 2...3.2), .random(in: 0.9...1.8), (big ? .random(in: 8...12) : .random(in: 4...7)) * size, .random(in: 16...21))
+                             .random(in: 0...9), .random(in: 2...3.2), .random(in: 0.9...1.8), (big ? .random(in: 8...12) : .random(in: 4...7)) * size, .random(in: 36...44))
                     }
                 }
-                if Int.random(in: 0..<5) < 3 { puff(x + .random(in: -6...6), foot, .random(in: -6...6) * reach, .random(in: 3...10) * reach, 2, 1.2, .random(in: 4...7) * size, 15) }
+                if Int.random(in: 0..<5) < 3 { puff(x + .random(in: -6...6), foot, .random(in: -6...6) * reach, .random(in: 3...10) * reach, 2, 1.2, .random(in: 4...7) * size, 34) }
             }
             if t > 0.5 { // the trail, laid from where the flame ended a moment ago to where it ends now
                 // That is back along the rocket's own axis, not straight below it: once it leans they aren't the same place.
@@ -2661,7 +2661,7 @@ final class PixelCity: SKScene {
                         let blown = back * (Float.random(in: 1...5) * now.scale)
                         puff(at.x + .random(in: -0.7...0.7), at.y, blown.x + .random(in: -1.2...1.2), blown.y,
                              (1.4 * now.scale + 1) * kit.smoke, 0.24 * kit.smoke, (3.2 * now.scale + 2.3) * kit.smoke * .random(in: 0.85...1.2),
-                             .random(in: 52...60) * (0.55 + 0.45 * now.scale)) // the far end goes first
+                             .random(in: 46...54) * (0.55 + 0.45 * now.scale)) // the far end goes first
                     }
                 }
                 trailFrom = end
