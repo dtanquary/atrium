@@ -202,7 +202,7 @@ struct GeneralPage: View {
             Section {
                 KnobRow(knob: LockScreen.knob)
             } footer: {
-                Text("Sets your Mac's own wallpaper to a still of Atrium's, so the lock screen and the tint of windows and the menu bar match it. Yours comes back when you turn this off or quit Atrium. A moving Aerial may come back as a still; if so, pick it again in System Settings → Wallpaper.")
+                Text("Sets your Mac's own wallpaper to a still of Atrium's, so the lock screen and the tint of windows and the menu bar match it. Yours comes back when you turn this off or quit Atrium. A moving Aerial may come back as a still; if so, pick it again in System Settings → Wallpaper. After an Aerial screen saver the lock screen shows the Aerial's last frame instead: pick another screen saver, or set it to start Never in System Settings → Lock Screen.")
                     .foregroundStyle(.secondary)
             }
             if shuffling > 0.5 {
