@@ -202,11 +202,11 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
     #expect(flown == ["SATURN V"] && scene.movements >= 3, "\(scene.movements) lift-offs, of \(flown.sorted())")
 }
 
-/// SLS sheds its solid boosters near the top of the picture, and they never come back to land: a minute after its
-/// lift-off the only movement is still that lift-off.
-@MainActor @Test func pixelSpaceportShedsTheSolidBoosters() throws {
+/// A rocket with strap-on boosters sheds them near the top of the picture, and a minute after its lift-off the only
+/// movement is still that lift-off: none has come back to land (a Falcon Heavy's are still on their way).
+@MainActor @Test(arguments: ["sls", "shuttle", "ariane", "soyuz", "longmarch", "h3", "lvm3", "heavy"]) func pixelSpaceportShedsTheBoosters(of rocket: String) throws {
     var settings: [String: Double] = ["spaceport.launches": 3]
-    for knob in PixelCity.spaceportKnobs where knob.key.hasPrefix("spaceport.rocket.") { settings[knob.key] = knob.key == "spaceport.rocket.sls" ? 1 : 0 }
+    for knob in PixelCity.spaceportKnobs where knob.key.hasPrefix("spaceport.rocket.") { settings[knob.key] = knob.key == "spaceport.rocket.\(rocket)" ? 1 : 0 }
     defer { settings.keys.forEach(UserDefaults.standard.removeObject) }
     for (key, value) in settings { UserDefaults.standard.set(value, forKey: key) }
     let scene = PixelCity(size: CGSize(width: 800, height: 500), spaceport: true)
@@ -219,9 +219,9 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
     let since = try #require(liftoff)
     for step in since..<(since + 600) {
         scene.update(Double(step) / 10)
-        if step == since + 140 { #expect(scene.shedding, "the boosters haven't fallen away 14 seconds in") }
+        if step == since + 150 { #expect(scene.shedding, "\(rocket)'s boosters haven't fallen away 15 seconds in") } // they fall away 14 seconds in, at a Falcon's pace
     }
-    #expect(!scene.shedding && scene.movements == 1, "\(scene.movements) movements a minute after an SLS lift-off")
+    #expect(!scene.shedding && scene.movements == 1, "\(scene.movements) movements a minute after \(rocket)'s lift-off")
 }
 
 /// Starship has a pad of its own at the Spaceport: with only it switched on, it lifts off and its booster comes back

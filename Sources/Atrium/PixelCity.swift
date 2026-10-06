@@ -2441,17 +2441,26 @@ final class PixelCity: SKScene {
     /// Where the rocket that has just lifted off is `t` seconds on: some climb more briskly than others.
     private func climb(_ t: Float) -> (x: Float, y: Float, scale: Float) { path(z: height(t * pad.rocket.kit.pace)) }
 
-    /// The solid boosters the rocket has shed, if it has: where each is and how far it has turned over. They fall
+    /// The strap-on boosters the rocket has shed, if it has: where each is and how far it has turned over. They fall
     /// away 14 seconds (at a Falcon's pace) into the climb, just before it leaves the top of the picture, coast on
     /// up its path more slowly than the core, drift apart and tumble outward, and leave by the top too (`.climb`
-    /// lasts long enough for that). They never come back.
+    /// lasts long enough for that). Two fall to either side; four (a Soyuz's, a Long March 5's) spread into a cross
+    /// behind the core: a pair to either side of the point they left, and a pair as far again behind, each swinging
+    /// round to point out along its diagonal, nose first, as the Korolev cross shows them from the ground. (Seen
+    /// from the side a true cross would put two of them beyond the nose.) None comes back but a Falcon Heavy's,
+    /// which come in at the top again a minute later to land.
     private var shed: [(x: Float, y: Float, angle: Float, scale: Float)] {
         let kit = pad.rocket.kit, sep: Float = 14
-        guard kit.sheds != nil, pad.phase == .climb, pad.t * kit.pace > sep else { return [] }
+        guard let parts = kit.sheds, pad.phase == .climb, pad.t * kit.pace > sep else { return [] }
         let since = pad.t - sep / kit.pace, speed = (1.3 * sep + 0.04875 * sep * sep) * kit.pace // the climb's rate when they fell away
         let at = path(z: height(sep) + speed * since - since * since), above = path(z: height(sep) + speed * since + 1)
-        let along = atan2(above.x - at.x, above.y - at.y)
-        return [-1, 1].map { side in (at.x + side * (4 + 6 * since) * at.scale, at.y, along + side * 0.3 * since, at.scale) }
+        let along = atan2(above.x - at.x, above.y - at.y), apart = (4 + 6 * since) * at.scale
+        if parts.count == 2 { return [-1, 1].map { side in (at.x + side * apart, at.y, along + side * 0.3 * since, at.scale) } }
+        let (dx, dy) = (sin(along), cos(along)), swung = min(since / 2.5, 1)
+        return [(-1, 1), (1, 1), (-1, -1), (1, -1)].map { (side, way) -> (x: Float, y: Float, angle: Float, scale: Float) in
+            let s = Float(side) * 0.7 * apart, w = way > 0 ? 0 : -1.4 * apart, arm = Float(side) * (way > 0 ? 0.25 : 0.75) * .pi
+            return (at.x + s * dy + w * dx, at.y - s * dx + w * dy, along + arm * swung, at.scale)
+        }
     }
 
     /// For the tests: whether shed solid boosters are in the sky.
@@ -2950,7 +2959,7 @@ final class PixelCity: SKScene {
             stamp(art, into: &px, x: flying.x, y: flying.y, angle: fire.angle, scale: flying.scale, paint: rocketPaint(flood: 0), soot: soot, heat: 0.3 + 0.5 * night)
         }
         if let parts = kit.sheds {
-            for b in shed where b.y < Float(h) + 40 { stamp(parts.booster, into: &px, x: b.x, y: b.y, angle: b.angle, scale: b.scale, paint: rocketPaint(flood: 0)) }
+            for b in shed where b.y < Float(h) + 40 { stamp(parts.booster, into: &px, x: b.x, y: b.y, angle: b.angle, scale: b.scale, paint: rocketPaint(flood: 0), soot: soot) }
         }
         // The boosters: falling, burning down to the pad on their legs, standing there, or hanging from the crane's hook.
         let hookX = Int(crane.x.rounded(.down)) - 33, lifted = crane.phase == .hook ? max(0, min(crane.t - 5, 4)) : 4
@@ -3145,30 +3154,32 @@ private enum Rocket: Int {
     /// lift-off, against a Falcon 9's; how briskly it climbs; whether it's fuelled cold enough to shed vapour; and
     /// the flag it flies under, if not the Stars and Stripes. Starship alone has a pad of its own, where the tower's
     /// arms lift it onto the mount and catch its booster (`caught`). The Mercury-Redstone alone never went for
-    /// orbit, so it `lean`s over far less as it climbs (1 is a Falcon's arc, 0 straight up). SLS and the Shuttle
-    /// shed their solid boosters near the top of the picture (`shed`): `sheds` is the picture of the rocket without
-    /// them and of one booster by itself. They never come back.
+    /// orbit, so it `lean`s over far less as it climbs (1 is a Falcon's arc, 0 straight up). Rockets with strap-on
+    /// boosters shed them near the top of the picture (`shed`): `sheds` is the picture of the rocket without them,
+    /// one booster by itself, and how many fall away (two to the sides, or four in a cross). None comes back but a
+    /// Falcon Heavy's, which are the `Booster`s that land a minute later.
     struct Kit {
         let art: [[UInt8]], name: String, lands: Int, standing: Bool
         let flame: (length: Float, wide: Float), smoke: Float, steam: Float, pace: Float, cold: Bool, flag: Flag?
-        var caught = false, lean: Float = 1, sheds: (core: [[UInt8]], booster: [[UInt8]])? = nil
+        var caught = false, lean: Float = 1, sheds: (core: [[UInt8]], booster: [[UInt8]], count: Int)? = nil
     }
     var kit: Kit { Self.kits[rawValue] }
     private static let kits = [
         Kit(art: falconArt, name: "FALCON 9", lands: 1, standing: false, flame: (36, 3), smoke: 1, steam: 1, pace: 1, cold: true, flag: nil),
         Kit(art: dragonArt, name: "FALCON 9", lands: 1, standing: false, flame: (36, 3), smoke: 1, steam: 1, pace: 1, cold: true, flag: nil),
-        Kit(art: heavyArt, name: "F HEAVY", lands: 2, standing: false, flame: (36, 7), smoke: 1.25, steam: 1.15, pace: 1, cold: true, flag: nil),
-        Kit(art: arianeArt, name: "ARIANE 5", lands: 0, standing: true, flame: (34, 6), smoke: 1.5, steam: 1, pace: 1.1, cold: true, flag: .france),
-        Kit(art: shuttleStack(roll: 0), name: "SHUTTLE", lands: 0, standing: true, flame: (40, 7), smoke: 1.7, steam: 1.3, pace: 1.15, cold: true, flag: nil, sheds: (shuttleStack(roll: .pi, boosters: false), shuttleBoosterArt)),
-        Kit(art: slsArt, name: "SLS", lands: 0, standing: true, flame: (44, 9), smoke: 1.7, steam: 1.3, pace: 1.1, cold: true, flag: nil, sheds: (slsCoreArt, slsBoosterArt)),
+        Kit(art: heavyArt, name: "F HEAVY", lands: 2, standing: false, flame: (36, 7), smoke: 1.25, steam: 1.15, pace: 1, cold: true, flag: nil,
+            sheds: (bytes(falconRows.map { ".." + $0 + ".." }), bytes(heavySide), 2)), // its sides fall away in the climb, then come back as `Booster`s
+        Kit(art: bytes(arianeRows), name: "ARIANE 5", lands: 0, standing: true, flame: (34, 6), smoke: 1.5, steam: 1, pace: 1.1, cold: true, flag: .france, sheds: strapOns(arianeRows, wide: 2)),
+        Kit(art: shuttleStack(roll: 0), name: "SHUTTLE", lands: 0, standing: true, flame: (40, 7), smoke: 1.7, steam: 1.3, pace: 1.15, cold: true, flag: nil, sheds: (shuttleStack(roll: .pi, boosters: false), shuttleBoosterArt, 2)),
+        Kit(art: bytes(slsRows), name: "SLS", lands: 0, standing: true, flame: (44, 9), smoke: 1.7, steam: 1.3, pace: 1.1, cold: true, flag: nil, sheds: strapOns(slsRows, wide: 3)),
         Kit(art: saturnArt, name: "SATURN V", lands: 0, standing: true, flame: (52, 7), smoke: 1.3, steam: 1.3, pace: 0.82, cold: true, flag: nil),
         Kit(art: titanArt, name: "TITAN II", lands: 0, standing: false, flame: (16, 3), smoke: 0.75, steam: 0.3, pace: 1.05, cold: false, flag: nil),
         Kit(art: atlasArt, name: "ATLAS", lands: 0, standing: false, flame: (20, 3), smoke: 0.85, steam: 0.35, pace: 1, cold: true, flag: nil),
         Kit(art: redstoneArt, name: "REDSTONE", lands: 0, standing: false, flame: (14, 2), smoke: 0.8, steam: 0.3, pace: 0.95, cold: true, flag: nil, lean: 0.33),
-        Kit(art: soyuzArt, name: "SOYUZ", lands: 0, standing: false, flame: (26, 5), smoke: 1, steam: 0.7, pace: 1.05, cold: true, flag: .russia),
-        Kit(art: longMarchArt, name: "CZ-5", lands: 0, standing: true, flame: (34, 6), smoke: 1.2, steam: 1.1, pace: 1, cold: true, flag: .china),
-        Kit(art: h3Art, name: "H3", lands: 0, standing: true, flame: (34, 6), smoke: 1.4, steam: 1, pace: 1.1, cold: true, flag: .japan),
-        Kit(art: lvm3Art, name: "LVM3", lands: 0, standing: true, flame: (30, 6), smoke: 1.6, steam: 1, pace: 1.05, cold: false, flag: .india),
+        Kit(art: bytes(soyuzRows), name: "SOYUZ", lands: 0, standing: false, flame: (26, 5), smoke: 1, steam: 0.7, pace: 1.05, cold: true, flag: .russia, sheds: strapOns(soyuzRows, wide: 2, count: 4)),
+        Kit(art: bytes(longMarchRows), name: "CZ-5", lands: 0, standing: true, flame: (34, 6), smoke: 1.2, steam: 1.1, pace: 1, cold: true, flag: .china, sheds: strapOns(longMarchRows, wide: 2, count: 4)),
+        Kit(art: bytes(h3Rows), name: "H3", lands: 0, standing: true, flame: (34, 6), smoke: 1.4, steam: 1, pace: 1.1, cold: true, flag: .japan, sheds: strapOns(h3Rows, wide: 2)),
+        Kit(art: bytes(lvm3Rows), name: "LVM3", lands: 0, standing: true, flame: (30, 6), smoke: 1.6, steam: 1, pace: 1.05, cold: false, flag: .india, sheds: strapOns(lvm3Rows, wide: 2)),
         Kit(art: starshipArt, name: "STARSHIP", lands: 1, standing: true, flame: (56, 6), smoke: 0.9, steam: 1.5, pace: 0.9, cold: true, flag: nil, caught: true),
     ]
 }
@@ -3279,14 +3290,13 @@ private func bytes(_ rows: [String]) -> [[UInt8]] { rows.map { $0.utf8.map { UIn
 private let falconRows = tall([("..w..", 1), (".lws.", 2), ("lwwss", 7), (".lws.", 5), (".KKK.", 3), (".lws.", 21), (".KwK.", 5), (".KKK.", 2)])
 private let falconArt = bytes(falconRows)
 private let dragonArt = bytes(tall([("..w..", 1), (".lws.", 2), (".lKs.", 3)]) + falconRows[10...])
-/// A Falcon Heavy: the same rocket between two more first stages under nose cones.
-private let heavyArt: [[UInt8]] = {
-    let side = [".w.", ".w.", "lws", "lws"] + falconRows[18...].map { String($0.dropFirst().prefix(3)) }
-    return bytes(falconRows.enumerated().map { i, row in
-        let j = i - (falconRows.count - side.count), core = j >= 0 ? side[j] : "..."
-        return row.first == "." ? core + row.dropFirst().prefix(3) + core : core.prefix(2) + row + core.dropFirst()
-    })
-}()
+/// A Falcon Heavy: the same rocket between two more first stages under nose cones (`heavySide`, one of those by
+/// itself, as it falls away in the climb).
+private let heavySide = [".w.", ".w.", "lws", "lws"] + falconRows[18...].map { String($0.dropFirst().prefix(3)) }
+private let heavyArt = bytes(falconRows.enumerated().map { i, row in
+    let j = i - (falconRows.count - heavySide.count), core = j >= 0 ? heavySide[j] : "..."
+    return row.first == "." ? core + row.dropFirst().prefix(3) + core : core.prefix(2) + row + core.dropFirst()
+})
 /// A booster by itself, coming home: its grid fins out, and its legs still folded or down.
 private let fallingArt: [[UInt8]] = {
     var rows = falconRows[15...].map { "..." + $0 + "..." }
@@ -3305,7 +3315,14 @@ private let atlasArt = bytes(tall([("..R..", 3), ("..K..", 1), (".KKK.", 2), (".
 /// Gemini-Titan II: a black capsule and its white adapter on two bare metal stages.
 private let titanArt = bytes(tall([("..K..", 1), (".KKK.", 2), (".lws.", 3), (".xyz.", 6), (".KKK.", 1), (".xyz.", 12), (".n.n.", 1)]))
 /// Ariane 5: a cream core under a long white fairing, between two white boosters.
-private let arianeArt = bytes(tall([("...ww...", 1), ("..lwws..", 10), ("..gggg..", 1), ("..cdde..", 3), ("l.cdde.s", 1), ("lscddels", 18), ("nn.nn.nn", 1)]))
+private let arianeRows = tall([("...ww...", 1), ("..lwws..", 10), ("..gggg..", 1), ("..cdde..", 3), ("l.cdde.s", 1), ("lscddels", 18), ("nn.nn.nn", 1)])
+/// A rocket drawn with strap-on boosters down its outer `wide` columns, as `shed` needs it once they have fallen
+/// away: its core alone, and one booster as it stands in the stack, with how many fall away.
+private func strapOns(_ rows: [String], wide: Int, count: Int = 2) -> (core: [[UInt8]], booster: [[UInt8]], count: Int) {
+    let blank = String(repeating: ".", count: wide)
+    let booster = rows.map { String($0.prefix(wide)) }.drop { $0 == blank }
+    return (bytes(rows.map { blank + $0.dropFirst(wide).dropLast(wide) + blank }), bytes(Array(booster)), count)
+}
 /// Starship's booster by itself, as it comes back: bare steel under its grid fins and the dark ring the ship stood on.
 private let superHeavyRows = tall([(".gKgKgK.", 2), ("gxyyyyzg", 1), (".xyyyyz.", 44), (".nnnnnn.", 1)])
 private let superHeavyArt = bytes(superHeavyRows)
@@ -3315,14 +3332,14 @@ private let shipArt = bytes(shipRows)
 private let starshipArt = bytes(shipRows + superHeavyRows)
 /// Soyuz: a white fairing under its escape tower, a grey third stage, the core's orange band, and four tapered
 /// boosters that make a skirt of its foot. (The colours are from memory of the older ones.)
-private let soyuzArt = bytes(tall([("...w...", 3), ("..lws..", 6), ("..xyz..", 5), ("..g.g..", 1), ("..pqr..", 5), (".xxyzz.", 4), ("xxxyzzz", 8), ("n.nnn.n", 1)]))
+private let soyuzRows = tall([("...w...", 3), ("..lws..", 6), ("..xyz..", 5), ("..g.g..", 1), ("..pqr..", 5), (".xxyzz.", 4), ("xxxyzzz", 8), ("n.nnn.n", 1)])
 /// Long March 5: a white core with blue bands, between boosters with slanted noses.
-private let longMarchArt = bytes(tall([("...ww...", 1), ("..lwws..", 9), ("..BBBB..", 1), ("..lwws..", 7), ("l.lwws.s", 1), ("lslwwsls", 8), ("BBlwwsBB", 1),
-                                       ("lslwwsls", 8), ("nn.nn.nn", 1)]))
+private let longMarchRows = tall([("...ww...", 1), ("..lwws..", 9), ("..BBBB..", 1), ("..lwws..", 7), ("l.lwws.s", 1), ("lslwwsls", 8), ("BBlwwsBB", 1),
+                                  ("lslwwsls", 8), ("nn.nn.nn", 1)])
 /// H3: an orange core under a long white fairing, with two short white boosters at its foot.
-private let h3Art = bytes(tall([("...ww...", 1), ("..lwws..", 10), ("..gggg..", 1), ("..pqqr..", 18), ("l.pqqr.s", 1), ("lspqqrls", 9), ("nn.nn.nn", 1)]))
+private let h3Rows = tall([("...ww...", 1), ("..lwws..", 10), ("..gggg..", 1), ("..pqqr..", 18), ("l.pqqr.s", 1), ("lspqqrls", 9), ("nn.nn.nn", 1)])
 /// LVM3: a white core with a dark upper stage under a bulbous fairing, between two big white boosters.
-private let lvm3Art = bytes(tall([("...ww...", 1), ("..lwws..", 6), ("..KKKK..", 3), ("..lwws..", 3), ("l.lwws.s", 1), ("lslwwsls", 14), ("nn.nn.nn", 1)]))
+private let lvm3Rows = tall([("...ww...", 1), ("..lwws..", 6), ("..KKKK..", 3), ("..lwws..", 3), ("l.lwws.s", 1), ("lslwwsls", 14), ("nn.nn.nn", 1)])
 /// Saturn V: three stages stepping in to the spacecraft and its escape tower, white with black roll marks.
 private let saturnArt = bytes(tall([
     ("....w....", 4), ("....g....", 2), ("....w....", 1), ("...lws...", 1), ("...xyz...", 4), ("...lws...", 2), ("..lwwss..", 3),
@@ -3332,10 +3349,6 @@ private let saturnArt = bytes(tall([
 /// SLS: an orange core between two white boosters, with the spacecraft and its escape tower on top.
 private let slsRows = tall([(".....w.....", 5), ("....lws....", 7), ("....pqr....", 2), ("...pqqrr...", 13), (".w.pqqrr.w.", 2), ("lwspqqrrlws", 33),
                             ("lwspnnnrlws", 1), (".n..n.n..n.", 1)])
-private let slsArt = bytes(slsRows)
-/// Its core alone, once the boosters have fallen away, and one of those boosters.
-private let slsCoreArt = bytes(slsRows.map { "..." + $0.dropFirst(3).dropLast(3) + "..." })
-private let slsBoosterArt = bytes(tall([(".w.", 2), ("lws", 34), (".n.", 1)]))
 /// The Space Shuttle, side on (`shuttleStack`): the orbiter with its black belly against the orange tank, its
 /// tail fin out to the left, and a white booster in front of the tank.
 private let orbiterRows = ["....KK.", "...wwK.", "...KwwK"] + Array(repeating: "...lwwK", count: 13)
