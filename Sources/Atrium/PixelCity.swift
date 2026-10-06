@@ -132,6 +132,7 @@ final class PixelCity: SKScene {
     private var hour = 12.0      // local clock, 0–24
     private var clock: TimeInterval = 0
     private var lastUpdate: TimeInterval?
+    private var redrawnAt = Date.distantPast // wall clock, so a wallpaper that was paused through sunset catches up on its first frame
     private var nextCar: [TimeInterval] = [0, 0]
     private var nextPlane = TimeInterval.random(in: 3...25)
     private var planeX: Float = 0, planeDirection: Float = 0
@@ -151,7 +152,6 @@ final class PixelCity: SKScene {
         settings = mine.map(\.value)
         layOut()
         redraw()
-        run(.repeatForever(.sequence([.wait(forDuration: 30), .run { [weak self] in self?.redraw() }])))
         run(.repeatForever(.sequence([.wait(forDuration: 5), .run { [weak self] in self?.moveIfDue() }])))
         NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged),
                                                name: UserDefaults.didChangeNotification, object: nil)
@@ -874,8 +874,11 @@ final class PixelCity: SKScene {
     // MARK: - Time of day (every 30 s)
 
     /// Repaints everything that follows the clock: sky, sun, moon, stars, buildings, windows and street lights,
-    /// then recolours the clouds, cars and plane to match.
+    /// then recolours the clouds, cars and plane to match. Every 30 s by the wall clock, from `update(_:)`: an
+    /// action's wait counts only while the view draws, so a wallpaper covered or frozen through sunset would show
+    /// its daytime frame when uncovered and snap to night up to half a minute later.
     private func redraw() {
+        redrawnAt = Date()
         if spaceport { pace = knob(.launches) } // a change in Settings repaints, so it still shows at once
         let now = now
         let spot = Location.shared.coordinate
@@ -1850,6 +1853,7 @@ final class PixelCity: SKScene {
         let dt = Float(min(max(currentTime - (lastUpdate ?? currentTime), 0), 0.1))
         lastUpdate = currentTime
         clock += TimeInterval(dt)
+        if Date().timeIntervalSince(redrawnAt) >= 30 { redraw() }
 
         for i in cars.indices where !cars[i].node.isHidden {
             let direction: Float = cars[i].lane == 0 ? 1 : -1
