@@ -2420,23 +2420,38 @@ final class PixelCity: SKScene {
         z < 60 ? (z, 1) : (60 + 90 * log(1 + (z - 60) / 90), 1 / (1 + (z - 60) / 90))
     }
 
-    /// Where the rocket's foot is `t` seconds after lift-off, and its size: straight up to clear the tower, then
-    /// leaning over to the right as it gathers speed.
-    private func ascent(_ t: Float) -> (x: Float, y: Float, scale: Float) {
-        let z = t > 0 ? 0.65 * t * t * (1 + t / 40) : 0, (rows, scale) = lens(z)
-        return (site.x + 0.0094 * pow(max(z - 70, 0), 1.8) * scale, site.y + rows, scale) // it leans once it's above the tower
+    /// Where the rocket's path is `z` pixels up, and the size it's drawn at there: straight up to clear the tower,
+    /// then leaning over to the right as it gathers speed (less far if it isn't going for orbit).
+    private func path(z: Float) -> (x: Float, y: Float, scale: Float) {
+        let (rows, scale) = lens(z)
+        return (site.x + 0.0094 * pow(max(z - 70, 0), 1.8) * scale * pad.rocket.kit.lean, site.y + rows, scale)
     }
+
+    /// How high a rocket is `t` seconds after lift-off, at a Falcon's pace.
+    private func height(_ t: Float) -> Float { t > 0 ? 0.65 * t * t * (1 + t / 40) : 0 }
 
     /// How far a rocket rolls to the mount: from the hangar's door on its strongback, or from beyond the left edge
     /// on its crawler.
     private func roll(_ kit: Rocket.Kit) -> Float { kit.caught ? Float(starX + 16) : kit.standing ? Float(padX + 16) : Float(padX - hangarX - 34) }
 
-    /// Where the rocket that has just lifted off is `t` seconds on: some climb more briskly than others, and one
-    /// that isn't going for orbit leans over less, or not at all.
-    private func climb(_ t: Float) -> (x: Float, y: Float, scale: Float) {
-        let kit = pad.rocket.kit, at = ascent(t * kit.pace)
-        return (site.x + (at.x - site.x) * kit.lean, at.y, at.scale)
+    /// Where the rocket that has just lifted off is `t` seconds on: some climb more briskly than others.
+    private func climb(_ t: Float) -> (x: Float, y: Float, scale: Float) { path(z: height(t * pad.rocket.kit.pace)) }
+
+    /// The solid boosters the rocket has shed, if it has: where each is and how far it has turned over. They fall
+    /// away 14 seconds (at a Falcon's pace) into the climb, just before it leaves the top of the picture, coast on
+    /// up its path more slowly than the core, drift apart and tumble outward, and leave by the top too (`.climb`
+    /// lasts long enough for that). They never come back.
+    private var shed: [(x: Float, y: Float, angle: Float, scale: Float)] {
+        let kit = pad.rocket.kit, sep: Float = 14
+        guard kit.sheds != nil, pad.phase == .climb, pad.t * kit.pace > sep else { return [] }
+        let since = pad.t - sep / kit.pace, speed = (1.3 * sep + 0.04875 * sep * sep) * kit.pace // the climb's rate when they fell away
+        let at = path(z: height(sep) + speed * since - since * since), above = path(z: height(sep) + speed * since + 1)
+        let along = atan2(above.x - at.x, above.y - at.y)
+        return [-1, 1].map { side in (at.x + side * (4 + 6 * since) * at.scale, at.y, along + side * 0.3 * since, at.scale) }
     }
+
+    /// For the tests: whether shed solid boosters are in the sky.
+    var shedding: Bool { !shed.isEmpty }
 
     /// Seconds from lift-off, negative through the count, while there's a rocket on the mount or on its way up.
     private var flightTime: Float? {
@@ -2482,7 +2497,7 @@ final class PixelCity: SKScene {
                 if pad.rocket == .shuttle, orbiter.due == .infinity { orbiter.due = clock + 150 } // one may still be on the runway
             }
         case .climb:
-            if pad.t >= 21 / kit.pace { (pad.phase, pad.t) = (kit.caught ? .recover : .rollBack, 0) } // out of sight, and the strongback is down
+            if pad.t >= (kit.sheds == nil ? 21 : 25) / kit.pace { (pad.phase, pad.t) = (kit.caught ? .recover : .rollBack, 0) } // out of sight, and the strongback is down
         case .recover:
             // Starship's crawler waits under the tower. Once its booster has hung in the arms a while they lower it
             // onto the crawler, ten seconds' work, and it rides home.
@@ -2674,7 +2689,7 @@ final class PixelCity: SKScene {
             }
             if t > 0.5 { // the trail, laid from where the flame ended a moment ago to where it ends now
                 // That is back along the rocket's own axis, not straight below it: once it leans they aren't the same place.
-                let now = climb(t), next = climb(t + 0.2), way = SIMD2(next.x - now.x, next.y - now.y)
+                let now = climb(t), next = climb(t + 0.2), way = SIMD2(next.x - now.x, next.y - now.y), smoke = kit.smoke * (shedding ? 0.5 : 1)
                 let back = -way / max((way * way).sum().squareRoot(), 0.001), end = SIMD2(now.x, now.y) + back * (kit.flame.length * 0.83 * now.scale)
                 if let from = trailFrom, end.y < Float(h) + 8 {
                     let steps = max(1, Int(((end - from) * (end - from)).sum().squareRoot() / 1.5))
@@ -2683,7 +2698,7 @@ final class PixelCity: SKScene {
                         guard at.y > foot + 1 else { continue }
                         let blown = back * (Float.random(in: 1...5) * now.scale)
                         puff(at.x + .random(in: -0.7...0.7), at.y, blown.x + .random(in: -1.2...1.2), blown.y,
-                             (1.4 * now.scale + 1) * kit.smoke, 0.24 * kit.smoke, (3.2 * now.scale + 2.3) * kit.smoke * .random(in: 0.85...1.2),
+                             (1.4 * now.scale + 1) * smoke, 0.24 * smoke, (3.2 * now.scale + 2.3) * smoke * .random(in: 0.85...1.2),
                              .random(in: 46...54) * (0.55 + 0.45 * now.scale)) // the far end goes first
                     }
                 }
@@ -2799,7 +2814,7 @@ final class PixelCity: SKScene {
             let at = climb(t), next = climb(t + 0.2), z = at.y - site.y, flame = pad.rocket.kit.flame
             if at.y < Float(h) + 40 {
                 fires.append((at.x, at.y, atan2(next.x - at.x, next.y - at.y), at.scale, flame.length * smoothstep(-2.6, -0.4, t),
-                              flame.wide, min(1, k * (z < 110 ? 1.2 : 0.8)) * max(0.2, 1 - z / 160)))
+                              flame.wide * (shedding ? 0.55 : 1), min(1, k * (z < 110 ? 1.2 : 0.8)) * max(0.2, 1 - z / 160)))
             }
         }
         for b in boosters where b.phase == .burn {
@@ -2898,8 +2913,12 @@ final class PixelCity: SKScene {
             let jitter = 0.9 + 0.2 * Float((flicker &+ i &* 7) &* 2_654_435_761 % 7) / 6
             flame(into: &px, x: fire.x, y: fire.y, angle: fire.angle, scale: fire.scale, length: fire.length * jitter, wide: fire.wide)
         }
+        let shed = shed
         if let flying, let fire = fires.first, flying.y < Float(h) + 40 {
-            stamp(art, into: &px, x: flying.x, y: flying.y, angle: fire.angle, scale: flying.scale, paint: rocketPaint(flood: 0), soot: soot, heat: 0.3 + 0.5 * night)
+            stamp((shed.isEmpty ? nil : kit.sheds?.core) ?? art, into: &px, x: flying.x, y: flying.y, angle: fire.angle, scale: flying.scale, paint: rocketPaint(flood: 0), soot: soot, heat: 0.3 + 0.5 * night)
+        }
+        if let parts = kit.sheds {
+            for b in shed where b.y < Float(h) + 40 { stamp(parts.booster, into: &px, x: b.x, y: b.y, angle: b.angle, scale: b.scale, paint: rocketPaint(flood: 0)) }
         }
         // The boosters: falling, burning down to the pad on their legs, standing there, or hanging from the crane's hook.
         let hookX = Int(crane.x.rounded(.down)) - 33, lifted = crane.phase == .hook ? max(0, min(crane.t - 5, 4)) : 4
@@ -3090,11 +3109,13 @@ private enum Rocket: Int {
     /// lift-off, against a Falcon 9's; how briskly it climbs; whether it's fuelled cold enough to shed vapour; and
     /// the flag it flies under, if not the Stars and Stripes. Starship alone has a pad of its own, where the tower's
     /// arms lift it onto the mount and catch its booster (`caught`). The Mercury-Redstone alone never went for
-    /// orbit, so it `lean`s over far less as it climbs (1 is a Falcon's arc, 0 straight up).
+    /// orbit, so it `lean`s over far less as it climbs (1 is a Falcon's arc, 0 straight up). SLS and the Shuttle
+    /// shed their solid boosters near the top of the picture (`shed`): `sheds` is the picture of the rocket without
+    /// them and of one booster by itself. They never come back.
     struct Kit {
         let art: [[UInt8]], name: String, lands: Int, standing: Bool
         let flame: (length: Float, wide: Float), smoke: Float, steam: Float, pace: Float, cold: Bool, flag: Flag?
-        var caught = false, lean: Float = 1
+        var caught = false, lean: Float = 1, sheds: (core: [[UInt8]], booster: [[UInt8]])? = nil
     }
     var kit: Kit { Self.kits[rawValue] }
     private static let kits = [
@@ -3102,8 +3123,8 @@ private enum Rocket: Int {
         Kit(art: dragonArt, name: "FALCON 9", lands: 1, standing: false, flame: (36, 3), smoke: 1, steam: 1, pace: 1, cold: true, flag: nil),
         Kit(art: heavyArt, name: "F HEAVY", lands: 2, standing: false, flame: (36, 7), smoke: 1.25, steam: 1.15, pace: 1, cold: true, flag: nil),
         Kit(art: arianeArt, name: "ARIANE 5", lands: 0, standing: true, flame: (34, 6), smoke: 1.5, steam: 1, pace: 1.1, cold: true, flag: .france),
-        Kit(art: shuttleArt, name: "SHUTTLE", lands: 0, standing: true, flame: (40, 7), smoke: 1.7, steam: 1.3, pace: 1.15, cold: true, flag: nil),
-        Kit(art: slsArt, name: "SLS", lands: 0, standing: true, flame: (44, 9), smoke: 1.7, steam: 1.3, pace: 1.1, cold: true, flag: nil),
+        Kit(art: shuttleArt, name: "SHUTTLE", lands: 0, standing: true, flame: (40, 7), smoke: 1.7, steam: 1.3, pace: 1.15, cold: true, flag: nil, sheds: (shuttleCoreArt, shuttleBoosterArt)),
+        Kit(art: slsArt, name: "SLS", lands: 0, standing: true, flame: (44, 9), smoke: 1.7, steam: 1.3, pace: 1.1, cold: true, flag: nil, sheds: (slsCoreArt, slsBoosterArt)),
         Kit(art: saturnArt, name: "SATURN V", lands: 0, standing: true, flame: (52, 7), smoke: 1.3, steam: 1.3, pace: 0.82, cold: true, flag: nil),
         Kit(art: titanArt, name: "TITAN II", lands: 0, standing: false, flame: (16, 3), smoke: 0.75, steam: 0.3, pace: 1.05, cold: false, flag: nil),
         Kit(art: atlasArt, name: "ATLAS", lands: 0, standing: false, flame: (20, 3), smoke: 0.85, steam: 0.35, pace: 1, cold: true, flag: nil),
@@ -3273,20 +3294,25 @@ private let saturnArt = bytes(tall([
     (".lwwwKKK.", 4), (".lwwwwss.", 7), (".KKKwwss.", 3), (".lwwwwss.", 6), (".lwwwKKK.", 3), ("KlwwwwssK", 2), ("..nn.nn..", 1),
 ]))
 /// SLS: an orange core between two white boosters, with the spacecraft and its escape tower on top.
-private let slsArt = bytes(tall([(".....w.....", 5), ("....lws....", 7), ("....pqr....", 2), ("...pqqrr...", 13), (".w.pqqrr.w.", 2), ("lwspqqrrlws", 33),
-                                 ("lwspnnnrlws", 1), (".n..n.n..n.", 1)]))
+private let slsRows = tall([(".....w.....", 5), ("....lws....", 7), ("....pqr....", 2), ("...pqqrr...", 13), (".w.pqqrr.w.", 2), ("lwspqqrrlws", 33),
+                            ("lwspnnnrlws", 1), (".n..n.n..n.", 1)])
+private let slsArt = bytes(slsRows)
+/// Its core alone, once the boosters have fallen away, and one of those boosters.
+private let slsCoreArt = bytes(slsRows.map { "..." + $0.dropFirst(3).dropLast(3) + "..." })
+private let slsBoosterArt = bytes(tall([(".w.", 2), ("lws", 34), (".n.", 1)]))
 /// The Space Shuttle, side on: the orbiter with its black belly against the orange tank, its tail fin out to the
 /// left, and a white booster in front of the tank.
 private let orbiterRows = ["....KK.", "...wwK.", "...KwwK"] + Array(repeating: "...lwwK", count: 13)
     + ["..wlwwK", ".wwlwwK", ".wwlwwK", "wwKlwwK", "wKKlwwK", ".K.lwwK", "...KnnK", "....nn."]
 /// The orbiter by itself, turned the other way: laid on its belly it then flies nose to the left with its fin up.
 private let orbiterArt = bytes(orbiterRows.map { String($0.reversed()) })
-private let shuttleArt: [[UInt8]] = {
-    let orbiter = Array(repeating: ".......", count: 10) + orbiterRows + Array(repeating: ".......", count: 3)
-    let tank = ["..qq..", ".pqqr."] + Array(repeating: "pqqqqr", count: 5) + ["pqqwqr"] + Array(repeating: "pqlwsr", count: 23)
-        + Array(repeating: "..lws.", count: 5) + ["..nnn."]
-    return bytes(zip(orbiter, tank).map { $0 + $1 })
-}()
+private let shuttleOrbiterRows = Array(repeating: ".......", count: 10) + orbiterRows + Array(repeating: ".......", count: 3)
+private let shuttleTankRows = ["..qq..", ".pqqr."] + Array(repeating: "pqqqqr", count: 5) + ["pqqwqr"] + Array(repeating: "pqlwsr", count: 23)
+    + Array(repeating: "..lws.", count: 5) + ["..nnn."]
+private let shuttleArt = bytes(zip(shuttleOrbiterRows, shuttleTankRows).map { $0 + $1 })
+/// The orbiter and its tank alone, once the boosters have fallen away, and one of those boosters.
+private let shuttleCoreArt = bytes(zip(shuttleOrbiterRows, shuttleTankRows).map { $0 + ($1.hasPrefix("pq") ? "pqqqqr" : $1.contains("q") ? $1 : "......") })
+private let shuttleBoosterArt = bytes(tall([(".w.", 1), ("lws", 28), (".n.", 1)]))
 
 /// The countdown board's figures and letters, three pixels by five, as rows of bits from the top.
 private let figures: [Character: [UInt8]] = [

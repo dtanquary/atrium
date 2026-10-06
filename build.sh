@@ -1,7 +1,7 @@
 #!/bin/sh
 # Builds build/Atrium.app, a menu-bar-only app. Run it with: open build/Atrium.app
 set -e
-VERSION=0.90.4 # semantic versioning; see "Versioning" in CLAUDE.md
+VERSION=0.91.0 # semantic versioning; see "Versioning" in CLAUDE.md
 PRERELEASE=beta # until 1.0, then e.g. "rc 1" while a release candidate: shown in Settings → About; VERSION stays three numbers, as macOS requires
 cd "$(dirname "$0")"
 

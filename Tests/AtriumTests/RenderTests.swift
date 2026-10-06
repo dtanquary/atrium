@@ -202,6 +202,28 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
     #expect(flown == ["SATURN V"] && scene.movements >= 3, "\(scene.movements) lift-offs, of \(flown.sorted())")
 }
 
+/// SLS sheds its solid boosters near the top of the picture, and they never come back to land: a minute after its
+/// lift-off the only movement is still that lift-off.
+@MainActor @Test func pixelSpaceportShedsTheSolidBoosters() throws {
+    var settings: [String: Double] = ["spaceport.launches": 3]
+    for knob in PixelCity.spaceportKnobs where knob.key.hasPrefix("spaceport.rocket.") { settings[knob.key] = knob.key == "spaceport.rocket.sls" ? 1 : 0 }
+    defer { settings.keys.forEach(UserDefaults.standard.removeObject) }
+    for (key, value) in settings { UserDefaults.standard.set(value, forKey: key) }
+    let scene = PixelCity(size: CGSize(width: 800, height: 500), spaceport: true)
+    var step = 0, liftoff: Int?
+    while liftoff == nil, step < 3_000 {
+        scene.update(Double(step) / 10)
+        if scene.movements == 1 { liftoff = step }
+        step += 1
+    }
+    let since = try #require(liftoff)
+    for step in since..<(since + 600) {
+        scene.update(Double(step) / 10)
+        if step == since + 140 { #expect(scene.shedding, "the boosters haven't fallen away 14 seconds in") }
+    }
+    #expect(!scene.shedding && scene.movements == 1, "\(scene.movements) movements a minute after an SLS lift-off")
+}
+
 /// Starship has a pad of its own at the Spaceport: with only it switched on, it lifts off and its booster comes back
 /// to the tower again and again, and nothing else is ever on the pad.
 @MainActor @Test func pixelSpaceportCatchesStarship() throws {
