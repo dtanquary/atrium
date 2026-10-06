@@ -2457,6 +2457,14 @@ final class PixelCity: SKScene {
     /// For the tests: whether shed solid boosters are in the sky.
     var shedding: Bool { !shed.isEmpty }
 
+    /// How far the Shuttle has rolled about its tank, in radians: its roll programme, half a turn as it clears the
+    /// tower (8 to 13 seconds into the climb at a Falcon's pace, done before its boosters fall away), so it flies
+    /// heads down through the pitch downrange.
+    private var roll: Float {
+        guard pad.rocket == .shuttle, pad.phase == .climb else { return 0 }
+        return .pi * smoothstep(8, 13, pad.t * pad.rocket.kit.pace)
+    }
+
     /// Seconds from lift-off, negative through the count, while there's a rocket on the mount or on its way up.
     private var flightTime: Float? {
         pad.phase == .climb ? pad.t : pad.phase == .count ? -Float((pad.until - clock) / pace) : nil
@@ -2813,32 +2821,46 @@ final class PixelCity: SKScene {
     }
 
     /// The flames burning now: where each begins, which way its rocket leans, the size it's drawn at, how long and
-    /// wide it is, how strongly it lights the smoke round it, and the row it's hidden below: the pad's deck, whose
+    /// wide it is, how strongly it lights the smoke round it, the row it's hidden below (the pad's deck, whose
     /// trench takes the exhaust, so at ignition only the flame between the engines and the deck shows and the
-    /// rest comes into view as the rocket climbs; the ground for Starship's mount and the landing zones.
-    private func flames() -> [(x: Float, y: Float, angle: Float, scale: Float, length: Float, wide: Float, power: Float, deck: Int)] {
+    /// rest comes into view as the rocket climbs; the ground for Starship's mount and the landing zones), and
+    /// whether it's the pale, near-invisible flame of hydrogen engines rather than a bright one.
+    private func flames() -> [(x: Float, y: Float, angle: Float, scale: Float, length: Float, wide: Float, power: Float, deck: Int, pale: Bool)] {
         let k = 0.35 + 0.65 * night
-        var fires: [(x: Float, y: Float, angle: Float, scale: Float, length: Float, wide: Float, power: Float, deck: Int)] = []
-        if let t = flightTime, t > -2.6 {
-            let at = climb(t), next = climb(t + 0.2), z = at.y - site.y, kit = pad.rocket.kit
-            if at.y < Float(h) + 40 {
-                fires.append((at.x, at.y, atan2(next.x - at.x, next.y - at.y), at.scale, kit.flame.length * smoothstep(-2.6, -0.4, t),
-                              kit.flame.wide * (shedding ? 0.55 : 1), min(1, k * (z < 110 ? 1.2 : 0.8)) * max(0.2, 1 - z / 160), kit.caught ? ground : padDeck))
+        var fires: [(x: Float, y: Float, angle: Float, scale: Float, length: Float, wide: Float, power: Float, deck: Int, pale: Bool)] = []
+        if let t = flightTime, t > (pad.rocket == .shuttle ? -6.6 : -2.6) {
+            let at = climb(t), next = climb(t + 0.2), z = at.y - site.y, kit = pad.rocket.kit, deck = kit.caught ? ground : padDeck
+            let angle = atan2(next.x - at.x, next.y - at.y), power = min(1, k * (z < 110 ? 1.2 : 0.8)) * max(0.2, 1 - z / 160)
+            if at.y >= Float(h) + 40 {
+            } else if pad.rocket == .shuttle {
+                // The Shuttle's three main engines light 6.6 seconds early, a short pale flame under the orbiter's
+                // tail, three rows above the boosters' nozzles; the boosters light at zero, at once, and both swing
+                // out from behind one another with the roll. The main engines alone burn on once they've gone.
+                let (ax, ay) = (sin(angle), cos(angle)), (qx, qy) = (cos(angle), -sin(angle)), roll = roll, main = -5 * cos(roll) * at.scale
+                fires.append((at.x + qx * main + ax * 3 * at.scale, at.y + qy * main + ay * 3 * at.scale, angle, at.scale, 16 * smoothstep(-6.6, -4.4, t), 2, 0.3 * power, deck, true))
+                if t >= 0, !shedding {
+                    for side in [-1, 1] as [Float] {
+                        let off = side * 3.5 * sin(roll) * at.scale
+                        fires.append((at.x + qx * off, at.y + qy * off, angle, at.scale, kit.flame.length, 3, 0.6 * power, deck, false))
+                    }
+                }
+            } else {
+                fires.append((at.x, at.y, angle, at.scale, kit.flame.length * smoothstep(-2.6, -0.4, t), kit.flame.wide * (shedding ? 0.55 : 1), power, deck, false))
             }
         }
         for b in boosters where b.phase == .burn {
             if b.ship {
                 let at = pose(ship: b)
-                fires.append((at.x, at.y, at.angle, at.scale, 20, 3, 0.9 * k, ground))
+                fires.append((at.x, at.y, at.angle, at.scale, 20, 3, 0.9 * k, ground, false))
                 continue
             }
             if b.zone == 2 {
                 let at = pose(caught: b)
-                fires.append((at.x, at.y + at.scale, at.angle, at.scale, 26, 4, 0.9 * k, ground))
+                fires.append((at.x, at.y + at.scale, at.angle, at.scale, 26, 4, 0.9 * k, ground, false))
                 continue
             }
             let (rows, scale) = lens(b.z)
-            fires.append((Float(zones[b.zone]) + 0.5, Float(ground + 1) + rows + scale, 0, scale, 18, 2, 0.9 * k, ground))
+            fires.append((Float(zones[b.zone]) + 0.5, Float(ground + 1) + rows + scale, 0, scale, 18, 2, 0.9 * k, ground, false))
         }
         return fires
     }
@@ -2920,11 +2942,12 @@ final class PixelCity: SKScene {
         }
         for (i, fire) in fires.enumerated() { // flames flicker, a dozen times a second
             let jitter = 0.9 + 0.2 * Float((flicker &+ i &* 7) &* 2_654_435_761 % 7) / 6
-            flame(into: &px, x: fire.x, y: fire.y, angle: fire.angle, scale: fire.scale, length: fire.length * jitter, wide: fire.wide, deck: fire.deck)
+            flame(into: &px, x: fire.x, y: fire.y, angle: fire.angle, scale: fire.scale, length: fire.length * jitter, wide: fire.wide, deck: fire.deck, pale: fire.pale)
         }
         let shed = shed
         if let flying, let fire = fires.first, flying.y < Float(h) + 40 {
-            stamp((shed.isEmpty ? nil : kit.sheds?.core) ?? art, into: &px, x: flying.x, y: flying.y, angle: fire.angle, scale: flying.scale, paint: rocketPaint(flood: 0), soot: soot, heat: 0.3 + 0.5 * night)
+            let art = pad.rocket == .shuttle ? shuttleStack(roll: roll, boosters: shed.isEmpty) : (shed.isEmpty ? nil : kit.sheds?.core) ?? art
+            stamp(art, into: &px, x: flying.x, y: flying.y, angle: fire.angle, scale: flying.scale, paint: rocketPaint(flood: 0), soot: soot, heat: 0.3 + 0.5 * night)
         }
         if let parts = kit.sheds {
             for b in shed where b.y < Float(h) + 40 { stamp(parts.booster, into: &px, x: b.x, y: b.y, angle: b.angle, scale: b.scale, paint: rocketPaint(flood: 0)) }
@@ -3039,8 +3062,11 @@ final class PixelCity: SKScene {
     }
 
     /// A flame from (`x`, `y`) back along a rocket's axis: white-hot down its middle, orange outside and toward its
-    /// tip. Nothing of it shows below the `deck` row, where the trench takes it.
-    private func flame(into px: inout Bytes, x: Float, y: Float, angle: Float, scale: Float, length: Float, wide: Float, deck: Int) {
+    /// tip, or `pale`: a hydrogen flame, white to blue and half see-through. Nothing of it shows below the `deck`
+    /// row, where the trench takes it.
+    private func flame(into px: inout Bytes, x: Float, y: Float, angle: Float, scale: Float, length: Float, wide: Float, deck: Int, pale: Bool = false) {
+        let (core, warm, cool, alpha): (RGB, RGB, RGB, Float) = pale ? (rgb(240, 246, 255), rgb(176, 204, 255), rgb(104, 144, 240), 0.6)
+            : (rgb(255, 252, 232), rgb(255, 220, 120), rgb(255, 120, 44), 1)
         let (ax, ay) = (-sin(angle), -cos(angle)), (qx, qy) = (cos(angle), -sin(angle))
         let n = max(2, length * scale), w0 = max(1, wide * scale), reach = Int(n + w0) + 3
         guard length > 1 else { return }
@@ -3053,7 +3079,7 @@ final class PixelCity: SKScene {
                 let u = along / n, half = (w0 / 2 + scale * sin(min(u * 4, 1) * .pi / 2)) * (1 - pow(u, 1.5)) + (u < 0.92 ? 0.35 : 0)
                 guard across <= half else { continue }
                 let hot = across < half * (0.62 - 0.5 * u) || (u < 0.25 && across < half - 0.9)
-                px.plot(column, py, hot ? rgb(255, 252, 232) : mix(rgb(255, 220, 120), rgb(255, 120, 44), u * 1.15 + (across > half - 0.8 ? 0.25 : 0)))
+                px.plot(column, py, hot ? core : mix(warm, cool, u * 1.15 + (across > half - 0.8 ? 0.25 : 0)), alpha)
             }
         }
         }
@@ -3133,7 +3159,7 @@ private enum Rocket: Int {
         Kit(art: dragonArt, name: "FALCON 9", lands: 1, standing: false, flame: (36, 3), smoke: 1, steam: 1, pace: 1, cold: true, flag: nil),
         Kit(art: heavyArt, name: "F HEAVY", lands: 2, standing: false, flame: (36, 7), smoke: 1.25, steam: 1.15, pace: 1, cold: true, flag: nil),
         Kit(art: arianeArt, name: "ARIANE 5", lands: 0, standing: true, flame: (34, 6), smoke: 1.5, steam: 1, pace: 1.1, cold: true, flag: .france),
-        Kit(art: shuttleArt, name: "SHUTTLE", lands: 0, standing: true, flame: (40, 7), smoke: 1.7, steam: 1.3, pace: 1.15, cold: true, flag: nil, sheds: (shuttleCoreArt, shuttleBoosterArt)),
+        Kit(art: shuttleStack(roll: 0), name: "SHUTTLE", lands: 0, standing: true, flame: (40, 7), smoke: 1.7, steam: 1.3, pace: 1.15, cold: true, flag: nil, sheds: (shuttleStack(roll: .pi, boosters: false), shuttleBoosterArt)),
         Kit(art: slsArt, name: "SLS", lands: 0, standing: true, flame: (44, 9), smoke: 1.7, steam: 1.3, pace: 1.1, cold: true, flag: nil, sheds: (slsCoreArt, slsBoosterArt)),
         Kit(art: saturnArt, name: "SATURN V", lands: 0, standing: true, flame: (52, 7), smoke: 1.3, steam: 1.3, pace: 0.82, cold: true, flag: nil),
         Kit(art: titanArt, name: "TITAN II", lands: 0, standing: false, flame: (16, 3), smoke: 0.75, steam: 0.3, pace: 1.05, cold: false, flag: nil),
@@ -3310,19 +3336,41 @@ private let slsArt = bytes(slsRows)
 /// Its core alone, once the boosters have fallen away, and one of those boosters.
 private let slsCoreArt = bytes(slsRows.map { "..." + $0.dropFirst(3).dropLast(3) + "..." })
 private let slsBoosterArt = bytes(tall([(".w.", 2), ("lws", 34), (".n.", 1)]))
-/// The Space Shuttle, side on: the orbiter with its black belly against the orange tank, its tail fin out to the
-/// left, and a white booster in front of the tank.
+/// The Space Shuttle, side on (`shuttleStack`): the orbiter with its black belly against the orange tank, its
+/// tail fin out to the left, and a white booster in front of the tank.
 private let orbiterRows = ["....KK.", "...wwK.", "...KwwK"] + Array(repeating: "...lwwK", count: 13)
     + ["..wlwwK", ".wwlwwK", ".wwlwwK", "wwKlwwK", "wKKlwwK", ".K.lwwK", "...KnnK", "....nn."]
 /// The orbiter by itself, turned the other way: laid on its belly it then flies nose to the left with its fin up.
 private let orbiterArt = bytes(orbiterRows.map { String($0.reversed()) })
-private let shuttleOrbiterRows = Array(repeating: ".......", count: 10) + orbiterRows + Array(repeating: ".......", count: 3)
-private let shuttleTankRows = ["..qq..", ".pqqr."] + Array(repeating: "pqqqqr", count: 5) + ["pqqwqr"] + Array(repeating: "pqlwsr", count: 23)
-    + Array(repeating: "..lws.", count: 5) + ["..nnn."]
-private let shuttleArt = bytes(zip(shuttleOrbiterRows, shuttleTankRows).map { $0 + $1 })
-/// The orbiter and its tank alone, once the boosters have fallen away, and one of those boosters.
-private let shuttleCoreArt = bytes(zip(shuttleOrbiterRows, shuttleTankRows).map { $0 + ($1.hasPrefix("pq") ? "pqqqqr" : $1.contains("q") ? $1 : "......") })
+/// The rest of the stack: the external tank (31 rows, 6 wide) and one solid booster (30 rows, 3 wide).
+private let tankArt = bytes(["..qq..", ".pqqr."] + Array(repeating: "pqqqqr", count: 29))
 private let shuttleBoosterArt = bytes(tall([(".w.", 1), ("lws", 28), (".n.", 1)]))
+/// The Shuttle's stack, 37 rows by 20 columns with the tank's axis up the middle, rolled `roll` radians about
+/// that axis: the orbiter swings from the tank's left round behind it to its right, mirrored, and its two boosters,
+/// one in front of the tank and one hidden behind it, swing out to its sides and back. Each part's columns land
+/// where its cross-section turns to (the orbiter's lie along a radius, a booster is round so only its middle moves),
+/// laid down farthest first so the near parts cover the far. Without `boosters` once they have fallen away.
+private func shuttleStack(roll: Float, boosters: Bool = true) -> [[UInt8]] {
+    var rows = Array(repeating: Array(repeating: UInt8(255), count: 20), count: 37)
+    let axis: Float = 10, (c, s) = (cos(roll), sin(roll))
+    var parts: [(art: [[UInt8]], top: Int, depth: Float, column: (Int) -> Float)] = [
+        (bytes(orbiterRows), 10, -5 * s, { axis - (axis - Float($0) - 0.5) * c }),
+        (tankArt, 0, 0, { Float($0) + 7.5 }),
+    ]
+    if boosters {
+        parts.append((shuttleBoosterArt, 7, 3.5 * c, { axis - 3.5 * s + Float($0) - 1 }))
+        parts.append((shuttleBoosterArt, 7, -3.5 * c, { axis + 3.5 * s + Float($0) - 1 }))
+    }
+    for part in parts.sorted(by: { $0.depth < $1.depth }) {
+        for (r, row) in part.art.enumerated() {
+            for (i, byte) in row.enumerated() where byte != 255 {
+                let x = Int(part.column(i).rounded(.down))
+                if x >= 0, x < 20 { rows[part.top + r][x] = byte }
+            }
+        }
+    }
+    return rows
+}
 
 /// The countdown board's figures and letters, three pixels by five, as rows of bits from the top.
 private let figures: [Character: [UInt8]] = [
