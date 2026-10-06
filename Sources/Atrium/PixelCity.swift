@@ -92,7 +92,7 @@ final class PixelCity: SKScene {
     // the layer they are painted into, which the lagoon mirrors; and the figures on the countdown clock.
     private var pad = Pad(), boosters: [Booster] = [], crane = Crane(), plume: [Puff] = []
     private var pace = 1.0 // Settings' Launches, as of the last repaint: reading a setting costs too much to do every frame
-    private var liftoffAt: TimeInterval = -1000, trailFrom: SIMD2<Float>?
+    private var liftoffAt: TimeInterval = -1000, trailFrom: SIMD2<Float>?, flew = Rocket.falcon9 // the last to lift off
     private var launchLayer = SKSpriteNode(), launchTexture: SKMutableTexture?, launchShown: [Int] = []
     private var smoke = Bytes(1, 1, floor: 0), density: [Float] = [], smokeTime: Float = 0, smokeMoved = false, smokeSteps = 0
     private var smoked = 0..<0 // the rows of it the last painting reached, which are all the next has to clear
@@ -2468,7 +2468,7 @@ final class PixelCity: SKScene {
             let free = zones.indices.filter { zone in !boosters.contains { $0.zone == zone } }, need = kit.lands // Starship's ship needs one too
             if free.count < need, pad.until - clock < 10 * pace { pad.until = clock + 10 * pace }
             if clock >= pad.until {
-                (pad.phase, pad.t, liftoffAt, trailFrom) = (.climb, 0, clock, nil)
+                (pad.phase, pad.t, liftoffAt, trailFrom, flew) = (.climb, 0, clock, nil, pad.rocket)
                 movements += 1
                 for (i, zone) in free.shuffled().prefix(need).sorted().enumerated() {
                     // Starship's booster goes to its tower; what comes to a landing zone, a while after, is its ship.
@@ -2591,7 +2591,7 @@ final class PixelCity: SKScene {
 
         // The board on our bank: the rocket's name, and under it the time to the next lift-off, or since the last
         // for a minute and a half after it.
-        let since = clock - liftoffAt, next = pad.rocket.kit, left: Double
+        let since = clock - liftoffAt, left: Double
         switch pad.phase {
         case .hangar: left = max(0, pad.until - clock) / pace + Double(rolled / 3.5 + raising) + 70 / pace
         case .rollOut: left = Double((rolled - pad.x) / 3.5 + raising) + 70 / pace
@@ -2600,11 +2600,12 @@ final class PixelCity: SKScene {
         case .climb, .recover, .rollBack: left = 0
         }
         let up = since < 95 || pad.phase == .recover || pad.phase == .rollBack, seconds = Int(up ? since : left.rounded(.up))
-        if (up, seconds, next.name) != counted {
-            counted = (up, seconds, next.name)
+        let name = (up ? flew : pad.rocket).kit.name // while the clock counts up, the board keeps the rocket that just flew
+        if (up, seconds, name) != counted {
+            counted = (up, seconds, name)
             let text = "T" + (up ? "+" : "-") + String(format: "%02d:%02d", min(seconds / 60, 99), seconds % 60)
             var px = Pixels(31, 11)
-            for (line, words, ink) in [(0, text, rgb(255, 176, 60)), (1, next.name, rgb(250, 236, 200))] {
+            for (line, words, ink) in [(0, text, rgb(255, 176, 60)), (1, name, rgb(250, 236, 200))] {
                 let from = (31 - (words.count * 4 - 1)) / 2
                 for (i, figure) in words.enumerated() {
                     for (row, bits) in (figures[figure] ?? []).enumerated() {
