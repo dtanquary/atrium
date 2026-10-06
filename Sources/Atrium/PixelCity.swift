@@ -2431,8 +2431,12 @@ final class PixelCity: SKScene {
     /// on its crawler.
     private func roll(_ kit: Rocket.Kit) -> Float { kit.caught ? Float(starX + 16) : kit.standing ? Float(padX + 16) : Float(padX - hangarX - 34) }
 
-    /// Where the rocket that has just lifted off is `t` seconds on: some climb more briskly than others.
-    private func climb(_ t: Float) -> (x: Float, y: Float, scale: Float) { ascent(t * pad.rocket.kit.pace) }
+    /// Where the rocket that has just lifted off is `t` seconds on: some climb more briskly than others, and one
+    /// that isn't going for orbit leans over less, or not at all.
+    private func climb(_ t: Float) -> (x: Float, y: Float, scale: Float) {
+        let kit = pad.rocket.kit, at = ascent(t * kit.pace)
+        return (site.x + (at.x - site.x) * kit.lean, at.y, at.scale)
+    }
 
     /// Seconds from lift-off, negative through the count, while there's a rocket on the mount or on its way up.
     private var flightTime: Float? {
@@ -3085,11 +3089,12 @@ private enum Rocket: Int {
     /// it up; how long and wide its flame is at full size; how thick its trail and how much steam it raises at
     /// lift-off, against a Falcon 9's; how briskly it climbs; whether it's fuelled cold enough to shed vapour; and
     /// the flag it flies under, if not the Stars and Stripes. Starship alone has a pad of its own, where the tower's
-    /// arms lift it onto the mount and catch its booster (`caught`).
+    /// arms lift it onto the mount and catch its booster (`caught`). The Mercury-Redstone alone never went for
+    /// orbit, so it `lean`s over far less as it climbs (1 is a Falcon's arc, 0 straight up).
     struct Kit {
         let art: [[UInt8]], name: String, lands: Int, standing: Bool
         let flame: (length: Float, wide: Float), smoke: Float, steam: Float, pace: Float, cold: Bool, flag: Flag?
-        var caught = false
+        var caught = false, lean: Float = 1
     }
     var kit: Kit { Self.kits[rawValue] }
     private static let kits = [
@@ -3102,7 +3107,7 @@ private enum Rocket: Int {
         Kit(art: saturnArt, name: "SATURN V", lands: 0, standing: true, flame: (52, 7), smoke: 1.3, steam: 1.3, pace: 0.82, cold: true, flag: nil),
         Kit(art: titanArt, name: "TITAN II", lands: 0, standing: false, flame: (16, 3), smoke: 0.75, steam: 0.3, pace: 1.05, cold: false, flag: nil),
         Kit(art: atlasArt, name: "ATLAS", lands: 0, standing: false, flame: (20, 3), smoke: 0.85, steam: 0.35, pace: 1, cold: true, flag: nil),
-        Kit(art: redstoneArt, name: "REDSTONE", lands: 0, standing: false, flame: (14, 2), smoke: 0.8, steam: 0.3, pace: 0.95, cold: true, flag: nil),
+        Kit(art: redstoneArt, name: "REDSTONE", lands: 0, standing: false, flame: (14, 2), smoke: 0.8, steam: 0.3, pace: 0.95, cold: true, flag: nil, lean: 0.33),
         Kit(art: soyuzArt, name: "SOYUZ", lands: 0, standing: false, flame: (26, 5), smoke: 1, steam: 0.7, pace: 1.05, cold: true, flag: .russia),
         Kit(art: longMarchArt, name: "CZ-5", lands: 0, standing: true, flame: (34, 6), smoke: 1.2, steam: 1.1, pace: 1, cold: true, flag: .china),
         Kit(art: h3Art, name: "H3", lands: 0, standing: true, flame: (34, 6), smoke: 1.4, steam: 1, pace: 1.1, cold: true, flag: .japan),
