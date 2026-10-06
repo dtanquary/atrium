@@ -1,12 +1,16 @@
 import AppKit
 import IOKit.ps
 import ServiceManagement
+import os
 import SpriteKit
 import SwiftUI
 
 /// Pauses rendering while its window is fully covered, so a hidden wallpaper costs nothing, or while frozen. Keeps
-/// `WallpaperTime` running as it draws.
+/// `WallpaperTime` running as it draws, and restarts drawing if SpriteKit lets it stop (`watch`).
 final class WallpaperView: SKView, SKViewDelegate {
+    private static let log = Logger(subsystem: "com.dtanquary.atrium", category: "wallpaper")
+    /// When it last drew a frame.
+    private var lastDrawn = Date()
     /// Holds the current frame still, e.g. in Low Power Mode.
     var frozen = false { didSet { updatePaused() } }
     /// Runs even while frozen until then, so a new scene draws its first frame, or finishes crossfading, and an
@@ -44,11 +48,28 @@ final class WallpaperView: SKView, SKViewDelegate {
     }
 
     @objc func updatePaused() {
+        let was = isPaused
         isPaused = (frozen && Date() >= awakeUntil) || window?.occlusionState.contains(.visible) != true
+        if was, !isPaused { lastDrawn = Date() } // just set going: give it the time `watch` allows before it's judged stopped
+    }
+
+    /// Restarts drawing if it has stopped while the view should be running. An SKView has been found holding its
+    /// last frame for good after the Mac slept, its display link gone though it wasn't paused, and nothing else
+    /// toggles `isPaused` until something changes; pausing and unpausing makes it set its render callback up again.
+    /// Called every few seconds, and as the screens wake.
+    func watch() {
+        guard !isPaused, Date().timeIntervalSince(lastDrawn) > 5 else { return }
+        Self.log.error("drawing stopped \(Date().timeIntervalSince(self.lastDrawn), format: .fixed(precision: 0)) s ago while running; restarting")
+        isPaused = true
+        lastDrawn = Date()
+        updatePaused()
     }
 
     nonisolated func view(_ view: SKView, shouldRenderAtTime time: TimeInterval) -> Bool {
-        MainActor.assumeIsolated { WallpaperTime.set(time) }
+        MainActor.assumeIsolated {
+            WallpaperTime.set(time)
+            lastDrawn = Date()
+        }
         return true
     }
 }
@@ -400,6 +421,13 @@ NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.screensDi
 }
 Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { _ in
     MainActor.assumeIsolated { refreshIfStale(after: 72, fade: true) }
+}
+// A wallpaper that has stopped drawing though it should be running is restarted (see `WallpaperView.watch`).
+Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in
+    MainActor.assumeIsolated { windows.compactMap { $0.contentView as? WallpaperView }.forEach { $0.watch() } }
+}
+NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { _ in
+    MainActor.assumeIsolated { windows.compactMap { $0.contentView as? WallpaperView }.forEach { $0.watch() } }
 }
 // Rebuild the scene in the other look when macOS switches between Light and Dark Mode.
 // ponytail: rebuilds every scene, even ones with a single look; it only happens a couple of times a day
