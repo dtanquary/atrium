@@ -2810,30 +2810,32 @@ final class PixelCity: SKScene {
     }
 
     /// The flames burning now: where each begins, which way its rocket leans, the size it's drawn at, how long and
-    /// wide it is, and how strongly it lights the smoke round it.
-    private func flames() -> [(x: Float, y: Float, angle: Float, scale: Float, length: Float, wide: Float, power: Float)] {
+    /// wide it is, how strongly it lights the smoke round it, and the row it's hidden below: the pad's deck, whose
+    /// trench takes the exhaust, so at ignition only the flame between the engines and the deck shows and the
+    /// rest comes into view as the rocket climbs; the ground for Starship's mount and the landing zones.
+    private func flames() -> [(x: Float, y: Float, angle: Float, scale: Float, length: Float, wide: Float, power: Float, deck: Int)] {
         let k = 0.35 + 0.65 * night
-        var fires: [(x: Float, y: Float, angle: Float, scale: Float, length: Float, wide: Float, power: Float)] = []
+        var fires: [(x: Float, y: Float, angle: Float, scale: Float, length: Float, wide: Float, power: Float, deck: Int)] = []
         if let t = flightTime, t > -2.6 {
-            let at = climb(t), next = climb(t + 0.2), z = at.y - site.y, flame = pad.rocket.kit.flame
+            let at = climb(t), next = climb(t + 0.2), z = at.y - site.y, kit = pad.rocket.kit
             if at.y < Float(h) + 40 {
-                fires.append((at.x, at.y, atan2(next.x - at.x, next.y - at.y), at.scale, flame.length * smoothstep(-2.6, -0.4, t),
-                              flame.wide * (shedding ? 0.55 : 1), min(1, k * (z < 110 ? 1.2 : 0.8)) * max(0.2, 1 - z / 160)))
+                fires.append((at.x, at.y, atan2(next.x - at.x, next.y - at.y), at.scale, kit.flame.length * smoothstep(-2.6, -0.4, t),
+                              kit.flame.wide * (shedding ? 0.55 : 1), min(1, k * (z < 110 ? 1.2 : 0.8)) * max(0.2, 1 - z / 160), kit.caught ? ground : padDeck))
             }
         }
         for b in boosters where b.phase == .burn {
             if b.ship {
                 let at = pose(ship: b)
-                fires.append((at.x, at.y, at.angle, at.scale, 20, 3, 0.9 * k))
+                fires.append((at.x, at.y, at.angle, at.scale, 20, 3, 0.9 * k, ground))
                 continue
             }
             if b.zone == 2 {
                 let at = pose(caught: b)
-                fires.append((at.x, at.y + at.scale, at.angle, at.scale, 26, 4, 0.9 * k))
+                fires.append((at.x, at.y + at.scale, at.angle, at.scale, 26, 4, 0.9 * k, ground))
                 continue
             }
             let (rows, scale) = lens(b.z)
-            fires.append((Float(zones[b.zone]) + 0.5, Float(ground + 1) + rows + scale, 0, scale, 18, 2, 0.9 * k))
+            fires.append((Float(zones[b.zone]) + 0.5, Float(ground + 1) + rows + scale, 0, scale, 18, 2, 0.9 * k, ground))
         }
         return fires
     }
@@ -2915,7 +2917,7 @@ final class PixelCity: SKScene {
         }
         for (i, fire) in fires.enumerated() { // flames flicker, a dozen times a second
             let jitter = 0.9 + 0.2 * Float((flicker &+ i &* 7) &* 2_654_435_761 % 7) / 6
-            flame(into: &px, x: fire.x, y: fire.y, angle: fire.angle, scale: fire.scale, length: fire.length * jitter, wide: fire.wide)
+            flame(into: &px, x: fire.x, y: fire.y, angle: fire.angle, scale: fire.scale, length: fire.length * jitter, wide: fire.wide, deck: fire.deck)
         }
         let shed = shed
         if let flying, let fire = fires.first, flying.y < Float(h) + 40 {
@@ -3033,13 +3035,14 @@ final class PixelCity: SKScene {
         }
     }
 
-    /// A flame from (`x`, `y`) back along a rocket's axis: white-hot down its middle, orange outside and toward its tip.
-    private func flame(into px: inout Bytes, x: Float, y: Float, angle: Float, scale: Float, length: Float, wide: Float) {
+    /// A flame from (`x`, `y`) back along a rocket's axis: white-hot down its middle, orange outside and toward its
+    /// tip. Nothing of it shows below the `deck` row, where the trench takes it.
+    private func flame(into px: inout Bytes, x: Float, y: Float, angle: Float, scale: Float, length: Float, wide: Float, deck: Int) {
         let (ax, ay) = (-sin(angle), -cos(angle)), (qx, qy) = (cos(angle), -sin(angle))
         let n = max(2, length * scale), w0 = max(1, wide * scale), reach = Int(n + w0) + 3
         guard length > 1 else { return }
         let widest = w0 / 2 + scale + 0.35, columns = span(x, ax * n, qx * widest, reach: reach)
-        for py in span(y, ay * n, qy * widest, reach: reach) {
+        for py in span(y, ay * n, qy * widest, reach: reach) where py >= deck {
             for column in columns {
                 let rx = Float(column) + 0.5 - x, ry = Float(py) + 0.5 - y
                 let along = rx * ax + ry * ay, across = abs(rx * qx + ry * qy)
