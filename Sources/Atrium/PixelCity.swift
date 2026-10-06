@@ -2795,9 +2795,12 @@ final class PixelCity: SKScene {
 
     /// Where Starship's ship is as it comes home, and how far over it is: on its belly through the fall, nose to
     /// the right and its black tiles down, then swinging upright on its engines over the first of its landing burn.
+    /// It swoops in from the left, the way its nose points, on a curve that steepens to vertical by the end of the
+    /// flip (`swoop`: about 35 columns out where it comes into view, 3 as the flip begins), so it lands over its zone.
     private func pose(ship b: Booster) -> (x: Float, y: Float, angle: Float, scale: Float) {
         let (rows, scale) = lens(b.z), angle = b.phase == .landed ? 0 : Float.pi / 2 * smoothstep(55, 100, b.z)
-        return (Float(zones[b.zone]) + 0.5 - 16 * scale * sin(angle), Float(ground + 1) + rows + 4 * scale * sin(angle), angle, scale)
+        let swoop = 24 * pow(max(b.z - 40, 0) / 220, 1.5)
+        return (Float(zones[b.zone]) + 0.5 - 16 * scale * sin(angle) - swoop, Float(ground + 1) + rows + 4 * scale * sin(angle), angle, scale)
     }
 
     /// Where Starship's booster is as it comes back to its tower, and how far over it leans. It doesn't come straight
