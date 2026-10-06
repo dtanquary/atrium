@@ -7,10 +7,39 @@ import SpriteKit
 /// pinhole camera, so the bright spots are images of the Sun: round, 0.0093 × the gap's distance across, stretched
 /// by the angle the light meets the wall, and crescents during a real eclipse. Leaves near the wall cast sharp
 /// shadows. Cloud cover and wind can come from the live weather; by night, a warm streetlight or moonlight at the real
-/// phase.
-/// Made for Light Mode; in Dark Mode the wall is charcoal.
+/// phase. The wall can be plaster, limewash, brick or painted siding, or an oak floor in the open or by a window.
+/// Made for Light Mode; in Dark Mode the white plaster is charcoal.
 final class DappledLight: SKScene {
+    /// What the light falls on: scans from Poly Haven and ambientCG (CC0, credited in dappled-credits.tsv). The
+    /// albedo is greyscale, tinted by `colour` in linear light (`dark` in Dark Mode), or with none in its own colours.
+    /// Its relief is the slope across and up (`-nx`, `-ny`) and, for relief deep enough to shade itself, `depth`
+    /// metres of height (`-height`). It tiles every `tile` metres. A floor lies flat, the light coming from the top
+    /// of the screen, through a window or in the open.
+    struct Surface {
+        let name: String, albedo: String, relief: String
+        var colour: SIMD3<Float>?, dark: SIMD3<Float>?
+        var tile: SIMD2<Float> = [2, 2]
+        var depth: Float = 0
+        var floor = false, window = false
+    }
+    nonisolated static let surfaces = [
+        // Warm white stucco; in Dark Mode the same stucco in charcoal (the colour of Poly Haven's Plastered Wall 05),
+        // which Dave picked over a dim white wall, dark green or terracotta.
+        Surface(name: "White plaster", albedo: "plaster-albedo", relief: "plaster", colour: [0.693, 0.658, 0.630], dark: [0.060, 0.066, 0.074]),
+        Surface(name: "Terracotta limewash", albedo: "limewash-albedo", relief: "plaster", colour: [0.530, 0.201, 0.142]), // F&B Red Earth
+        Surface(name: "Clay plaster", albedo: "clay-albedo", relief: "clay", colour: [0.384, 0.290, 0.220]), // the scan's own colour
+        Surface(name: "Whitewashed brick", albedo: "brick-albedo", relief: "brick", depth: 0.012),
+        // Lap siding: each board's lip shades a line under it, wider the higher the Sun.
+        Surface(name: "Sage siding", albedo: "siding-albedo", relief: "siding", colour: [0.216, 0.339, 0.276], tile: [2, 1], depth: 0.015),
+        Surface(name: "Dusty blue siding", albedo: "siding-albedo", relief: "siding", colour: [0.344, 0.459, 0.573], tile: [2, 1], depth: 0.015),
+        Surface(name: "Oak floor", albedo: "oak-albedo", relief: "oak", colour: [0.592, 0.379, 0.198], tile: [1.2, 1.2], floor: true),
+        Surface(name: "Oak floor by a window", albedo: "oak-albedo", relief: "oak", colour: [0.592, 0.379, 0.198], tile: [1.2, 1.2],
+                floor: true, window: true),
+    ]
+
     nonisolated static let knobs = [
+        Knob(key: "dappled.surface", label: "Surface", range: 0...Double(surfaces.count - 1), standard: 0, section: "Wall",
+             format: .choice(surfaces.map(\.name))),
         Knob(key: "dappled.facing", label: "Wall faces", range: 0...8, standard: 0, section: "Wall",
              format: .choice(["Toward the Sun", "South", "South-west", "West", "North-west", "North", "North-east", "East", "South-east"])),
         Knob(key: "dappled.cover", label: "Leaf cover", range: 0...1, standard: 0.5, section: "Wall"),
@@ -28,7 +57,7 @@ final class DappledLight: SKScene {
         Knob(key: "dappled.previewEclipse", label: "Preview an eclipse", range: 0...1, standard: 0, section: "Preview",
              format: .toggle),
     ]
-    private enum K: Int { case facing, cover, twig, weather, night, sway, previewTime, previewHour, previewEclipse }
+    private enum K: Int { case surface, facing, cover, twig, weather, night, sway, previewTime, previewHour, previewEclipse }
     private static func knob(_ k: K) -> Double { knobs[k.rawValue].value }
 
     typealias V = SIMD3<Double>
@@ -46,17 +75,21 @@ final class DappledLight: SKScene {
     private let direction = SKUniform(name: "u_dir", vectorFloat3: [0, 0, 1])
     private let wind = SKUniform(name: "u_wind", vectorFloat4: .zero), twigPose = SKUniform(name: "u_twigPose", vectorFloat4: .zero)
     private let tint = SKUniform(name: "u_wall", vectorFloat3: .zero), night = SKUniform(name: "u_night", float: 0)
+    private let albedo = SKUniform(name: "u_albedo", texture: nil), relief = SKUniform(name: "u_relief", texture: nil)
+    /// The surface's tile size in metres, the depth of its relief, and 1 for a window.
+    private let surfaceShape = SKUniform(name: "u_surface", vectorFloat4: .zero)
 
     /// The light as of the last `light()`: direct light at the wall (normal to the rays) and skylight, before
     /// clouds, and the exposure the eye has settled on.
     private var lit = (direct: V.zero, sky: V.zero, overcastSky: V.zero, exposure: 1.0)
     private var conditions = LiveWeather.Conditions(code: 1, cloudCover: 10, wind: 8)
     private var sinceLight = 0.0, clock = 0.0, lastUpdate: TimeInterval?
-    /// The twig's base in the plane of its leaves, fixed when the scene is built so its shadow starts on screen.
+    /// The twig's base in the plane of its leaves, fixed when the surface is picked so its shadow starts on screen.
     private var twigBase = SIMD2<Double>.zero
-    /// The wall's colour in linear light: warm white stucco, or in Dark Mode the same stucco in charcoal (the colour of
-    /// Poly Haven's Plastered Wall 05), which Dave picked over a dim white wall, dark green or terracotta.
-    private let wallColour: SIMD3<Float> = systemIsDark ? [0.060, 0.066, 0.074] : [0.693, 0.658, 0.630]
+    private var surface = surfaces[0]
+    /// The albedo's tint in linear light, over the texture's mean, and whether it's the charcoal wall of Dark Mode.
+    private var wallColour = SIMD3<Float>(repeating: 1), charcoal = false
+    private let dark = systemIsDark
 
     override init(size: CGSize) {
         super.init(size: size)
@@ -65,15 +98,14 @@ final class DappledLight: SKScene {
         wall.shader = SKShader(source: shaderCommon + Self.shaderSource, uniforms: [
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]),
             SKUniform(name: "u_mpp", float: Float(Self.wallWidth / size.width)),
-            SKUniform(name: "u_plaster", texture: Self.plaster), SKUniform(name: "u_noise", texture: CloudNoise.texture),
+            albedo, relief, surfaceShape, SKUniform(name: "u_noise", texture: CloudNoise.texture),
             SKUniform(name: "u_canopy", texture: Self.canopy), SKUniform(name: "u_twig", texture: Self.twig),
             proj, invL, shiftFar, shiftNear, blur, source, terminator, direct, ambient, direction, wind, twigPose, tint, night,
             WallpaperTime.now,
         ])
         addChild(wall)
         conditions = wanted
-        light()
-        twigBase = SIMD2(0.42, 0.33) * SIMD2(Self.wallWidth, Self.wallWidth * size.height / size.width) - shift(Self.near)
+        pickSurface()
         update(0)
         NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged), name: UserDefaults.didChangeNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged), name: LiveWeather.changed, object: nil)
@@ -91,7 +123,22 @@ final class DappledLight: SKScene {
 
     @objc private func settingsChanged() {
         conditions = wanted
+        if Self.surfaces[surfaceIndex].name != surface.name { pickSurface() } else { light() }
+    }
+
+    private var surfaceIndex: Int { min(max(Int(Self.knob(.surface).rounded()), 0), Self.surfaces.count - 1) }
+
+    /// Puts the chosen surface into the shader and works out the light on it, with the twig's shadow back on screen.
+    private func pickSurface() {
+        surface = Self.surfaces[surfaceIndex]
+        let textures = Self.textures(surface)
+        albedo.textureValue = textures.albedo
+        relief.textureValue = textures.relief
+        surfaceShape.vectorFloat4Value = [surface.tile.x, surface.tile.y, surface.depth, surface.window ? 1 : 0]
+        charcoal = dark && surface.dark != nil
+        wallColour = ((charcoal ? surface.dark : nil) ?? surface.colour).map { $0 / textures.mean } ?? [1, 1, 1]
         light()
+        twigBase = SIMD2(0.42, 0.33) * SIMD2(Self.wallWidth, Self.wallWidth * size.height / size.width) - shift(Self.near)
     }
 
     /// The live weather, or what Settings locks it to. Before the first report, a mostly clear day with a breeze.
@@ -113,12 +160,14 @@ final class DappledLight: SKScene {
     // MARK: - The light
 
     /// The wall's frame in (east, north, up): the way it faces, and right and up as seen looking at it. Toward the Sun,
-    /// it turns to face `light` (the Sun, or the Moon by moonlight), so the light falls whenever that's up.
+    /// it turns to face `light` (the Sun, or the Moon by moonlight), so the light falls whenever that's up. A floor
+    /// faces up, with the way the wall would face (the window's, or the light's) at the top of the screen.
     private func wallFrame(facing light: V) -> (out: V, right: V, up: V) {
         let choice = Self.knob(.facing).rounded()
         let level = SIMD2(light.x, light.y)
         let out = choice < 0.5 && length(level) > 1e-6 ? V(normalize(level).x, normalize(level).y, 0)
             : V(sin((135 + 45 * choice) * .pi / 180), cos((135 + 45 * choice) * .pi / 180), 0)
+        if surface.floor { return (V(0, 0, 1), V(out.y, -out.x, 0), out) }
         return (out, V(-out.y, out.x, 0), V(0, 0, 1))
     }
 
@@ -192,7 +241,8 @@ final class DappledLight: SKScene {
 
         let seen = onWall(toward)
         from = seen
-        let lights = seen.z > 0.02 && toward.z > -0.01 // the source is in front of the wall and above the horizon
+        // The source is in front of the wall, above the horizon, and on the window's side.
+        let lights = seen.z > 0.02 && toward.z > -0.01 && (!surface.window || seen.y > 0.02)
         let cosine = max(seen.z, 0)
         let fade = smoothstep(0.02, 0.12, cosine) // grazing light fades rather than stopping at an edge
         // Sunlight bounced off the ground and everything around warms the shade, most at golden hour when the sky is dim.
@@ -223,11 +273,11 @@ final class DappledLight: SKScene {
         let streetlight = Self.knob(.night) > 0.5 ? 0.25 : 0 // lamplight is bright for its size, so the eye stays dimmer
         lit.exposure = 1.8 * pow(luminance / 0.33, -0.82) / 0.33 * (1 - (0.5 + streetlight) * smoothstep(-3, -10, altitude))
         // A charcoal wall would go black by night, so in Dark Mode the glow of the sky is five times as strong on it.
-        if wallColour.x < 0.2 {
+        if charcoal {
             let glow = 1 + 4 * smoothstep(-3, -10, altitude)
             (lit.sky, lit.overcastSky) = (lit.sky * glow, lit.overcastSky * glow)
         }
-        tint.vectorFloat3Value = wallColour / 0.6557 // the texture's mean albedo
+        tint.vectorFloat3Value = wallColour
     }
 
     /// Two unit vectors square to `v` and to each other, the first level, for measuring offsets in the sky around it.
@@ -282,24 +332,55 @@ final class DappledLight: SKScene {
 
     // MARK: - Textures
 
-    /// Poly Haven's "White Stucco" (CC0), 2 m square: albedo in red, the surface's slope in green and blue, packed
-    /// from three greyscale HEICs (a colour HEIC's chroma subsampling ruins packed channels).
-    private static let plaster: SKTexture = {
-        let n = 2048
-        var bytes = [UInt8](repeating: 255, count: n * n * 4)
-        for (channel, name) in ["albedo", "nx", "ny"].enumerated() {
-            let grey = CGContext(data: nil, width: n, height: n, bitsPerComponent: 8, bytesPerRow: n, space: CGColorSpaceCreateDeviceGray(),
-                                 bitmapInfo: CGImageAlphaInfo.none.rawValue)!
-            if let image = NSImage(contentsOf: resource("dappled-plaster-\(name).heic"))?.cgImage(forProposedRect: nil, context: nil, hints: nil) {
-                grey.draw(image, in: CGRect(x: 0, y: 0, width: n, height: n))
-            }
-            let plane = grey.data!.assumingMemoryBound(to: UInt8.self)
-            for i in 0..<n * n { bytes[i * 4 + channel] = plane[i] }
+    /// The last surface's textures, kept for every display and the Settings preview; only one surface's at a time,
+    /// since each is 32 MB.
+    private static var loaded: (key: String, albedo: SKTexture, relief: SKTexture, mean: Float)?
+
+    /// A surface's albedo, and its relief packed as slope across in red, slope up in green and height in blue, from
+    /// greyscale HEICs (a colour HEIC's chroma subsampling ruins packed channels); and the albedo's mean in linear
+    /// light, which the tint is divided by.
+    static func textures(_ surface: Surface) -> (albedo: SKTexture, relief: SKTexture, mean: Float) {
+        let key = surface.albedo + "+" + surface.relief
+        if let loaded, loaded.key == key { return (loaded.albedo, loaded.relief, loaded.mean) }
+        func image(_ name: String) -> CGImage? {
+            NSImage(contentsOf: resource("dappled-\(name).heic"))?.cgImage(forProposedRect: nil, context: nil, hints: nil)
         }
-        let context = CGContext(data: &bytes, width: n, height: n, bitsPerComponent: 8, bytesPerRow: n * 4, space: CGColorSpaceCreateDeviceRGB(),
-                                bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
-        return SKTexture(cgImage: context.makeImage()!)
-    }()
+        let colour = image(surface.albedo)
+        let (w, h) = (colour?.width ?? 1, colour?.height ?? 1)
+        /// Draws `image` into 8-bit pixels, four to a pixel in colour or one in grey.
+        func pixels(_ image: CGImage?, colour: Bool) -> [UInt8] {
+            var bytes = [UInt8](repeating: 128, count: w * h * (colour ? 4 : 1))
+            guard let image else { return bytes }
+            bytes.withUnsafeMutableBytes { buffer in
+                CGContext(data: buffer.baseAddress, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * (colour ? 4 : 1),
+                          space: colour ? CGColorSpaceCreateDeviceRGB() : CGColorSpaceCreateDeviceGray(),
+                          bitmapInfo: colour ? CGImageAlphaInfo.noneSkipLast.rawValue : CGImageAlphaInfo.none.rawValue)!
+                    .draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+            }
+            return bytes
+        }
+        func texture(_ bytes: [UInt8]) -> SKTexture {
+            var bytes = bytes
+            return SKTexture(cgImage: CGContext(data: &bytes, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                                                space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!.makeImage()!)
+        }
+
+        let albedo = pixels(colour, colour: true)
+        let linear = (0..<256).map { pow(Double($0) / 255, 2.2) }
+        var sum = 0.0
+        for i in stride(from: 0, to: albedo.count, by: 4) {
+            sum += 0.2126 * linear[Int(albedo[i])] + 0.7152 * linear[Int(albedo[i + 1])] + 0.0722 * linear[Int(albedo[i + 2])]
+        }
+        var relief = [UInt8](repeating: 255, count: w * h * 4)
+        let maps = ["nx", "ny"] + (surface.depth > 0 ? ["height"] : [])
+        for (channel, map) in maps.enumerated() {
+            let plane = pixels(image(surface.relief + "-" + map), colour: false)
+            for i in 0..<w * h { relief[i * 4 + channel] = plane[i] }
+        }
+        let result = (albedo: texture(albedo), relief: texture(relief), mean: Float(sum / Double(w * h)))
+        loaded = (key, result.albedo, result.relief, result.mean)
+        return result
+    }
 
     /// The tree's shadow-casters, 3 m square and tiling, laid out afresh each launch from real maple, oak or beech
     /// leaves (ambientCG's leaf scans, CC0), one kind of tree at a time. Red holds sprays of leaves on their twigs,
@@ -477,11 +558,21 @@ final class DappledLight: SKScene {
         vec2 p = (v_tex_coord - 0.5) * u_size * u_mpp;   // metres on the wall from the middle of the screen
         float t = u_now;
 
-        // Plaster: albedo, and the slope of its grain for the light to rake across.
-        vec4 pl = texture2D(u_plaster, fract(p * 0.5));
-        vec3 albedo = pow(pl.r, 2.2) * u_wall;
-        vec2 slope = pl.gb * 2.0 - 1.0;
+        // The surface: albedo, and the slope of its grain for the light to rake across.
+        vec2 st = fract(p / u_surface.xy);
+        vec3 albedo = pow(texture2D(u_albedo, st).rgb, vec3(2.2)) * u_wall;
+        vec4 rel = texture2D(u_relief, st);
+        vec2 slope = rel.rg * 2.0 - 1.0;
         vec3 normal = vec3(slope, sqrt(max(1.0 - dot(slope, slope), 0.0)));
+        // Deep relief (siding's laps, brick's mortar) shades itself: march toward the light up through its height.
+        float relit = 1.0;
+        if (u_surface.z > 0.0) {
+            vec2 run = u_dir.xy / max(u_dir.z, 0.08) * u_surface.z * 0.125;
+            for (int k = 1; k <= 8; k++) {
+                float hk = texture2D(u_relief, fract((p + run * float(k)) / u_surface.xy)).b;
+                relit = min(relit, smoothstep(-0.04, 0.04, rel.b + float(k) * 0.125 - hk));
+            }
+        }
 
         // Branches sway, each part of the tree in its own phase.
         float phase = texture2D(u_noise, fract(p * 0.21 + 0.37)).a * 14.0;
@@ -524,12 +615,30 @@ final class DappledLight: SKScene {
         float twig = 0.0;
         if (uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) { twig = texture2D(u_twig, uv).a * u_twigPose.w; }
 
-        float sunlit = far * (1.0 - leaf) * (1.0 - twig);
+        float sunlit = far * (1.0 - leaf) * (1.0 - twig) * relit;
         // The crown also hides part of the sky: a soft shadow straight back from where the tree really is (a little low,
         // since the sky is brightest overhead), which is all there is to see under cloud or with the Sun behind the wall.
         vec2 cs = p + sway * 0.6 + vec2(0.0, 0.2);   // looking 0.2 m up the tree puts its shadow 0.2 m low
         float hidden = smoothstep(0.1, 0.8, texture2D(u_canopy, fract(cs * 0.29 + vec2(0.13, 0.61))).b + u_wind.w - 0.5);
-        vec3 light = u_amb * (1.0 - 0.5 * hidden) + u_light * sunlit * max(dot(normal, u_dir), 0.0);
+        vec3 amb = u_amb * (1.0 - 0.5 * hidden);
+        if (u_surface.w > 0.0) {
+            // Through a window in the wall past the top of the screen, 1.2 m wide and 0.8 m tall in three by two panes,
+            // its sill 0.8 m up: follow the ray toward the light back to the wall, and see if it passes through a pane.
+            // The view is centred on the patch of light, wherever the Sun puts it.
+            vec3 d = u_dir.y > 0.02 ? u_dir : vec3(0.0, 0.8, 0.6);
+            float tc = 1.2 / d.z;                                // along the ray from mid-screen to the window's middle
+            float t = (tc * d.y - p.y) / d.y;
+            vec2 a = vec2(p.x + (t - tc) * d.x, t * d.z - 0.8); // across the window from its middle, and up from its sill
+            float soft = 0.0047 * t * length(d) + 0.002;        // the Sun's half-width blurs the edges by the distance
+            float inside = smoothstep(-soft, soft, 0.6 - abs(a.x)) * smoothstep(-soft, soft, a.y) * smoothstep(-soft, soft, 0.8 - a.y);
+            vec2 m = abs(fract(vec2(a.x / 0.4 + 0.5, a.y / 0.4)) - 0.5) * 0.4;
+            sunlit *= inside * smoothstep(0.02 - soft, 0.02 + soft, min(m.x, m.y)) * step(0.02, u_dir.y);
+            // The room is lit by the sky through the window: dimmer and warmer than outdoors, brightest where the light
+            // comes in, which is all there is under cloud. The tree's shadow from the sky doesn't reach in here.
+            float glow = smoothstep(-0.25, 0.25, 0.6 - abs(a.x)) * smoothstep(-0.3, 0.2, a.y) * smoothstep(-0.3, 0.2, 0.8 - a.y);
+            amb = u_amb * vec3(1.0, 0.9, 0.78) * (0.25 + 0.9 * glow);
+        }
+        vec3 light = amb + u_light * sunlit * max(dot(normal, u_dir), 0.0);
         vec3 col = sqrt(1.0 - exp(-albedo * light));
         col = mix(col, dot(col, vec3(0.3, 0.6, 0.1)) * vec3(0.8, 0.9, 1.15), u_night * 0.6); // blue by moonlight
         col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 255.0;

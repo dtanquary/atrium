@@ -275,3 +275,13 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
         #expect(names.count >= 4 && zip(names, names.dropFirst()).allSatisfy { back.contains($0) != back.contains($1) }, "\(names)")
     }
 }
+
+/// Every Dappled Light surface finds its scans, and its albedo isn't the blank stand-in for a missing one.
+@MainActor @Test func dappledLightSurfacesLoad() {
+    for surface in DappledLight.surfaces {
+        let maps = [surface.albedo, surface.relief + "-nx", surface.relief + "-ny"] + (surface.depth > 0 ? [surface.relief + "-height"] : [])
+        for map in maps { #expect(FileManager.default.fileExists(atPath: resource("dappled-\(map).heic").path), "\(surface.name): \(map)") }
+        let mean = DappledLight.textures(surface).mean
+        #expect(mean > 0.05 && abs(mean - 0.216) > 0.01, "\(surface.name): mean albedo \(mean)") // 0.216 is all 128s
+    }
+}
