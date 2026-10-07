@@ -18,7 +18,7 @@ LOOP=12 FADE=2 # seconds: the loop, and the crossfade from its tail into its hea
 WORKS='nebula|Nebula|54|4|SNAPSHOT_DEFAULTS=nebula.palette=Hubble
 flowing-gradient|Flowing Gradient|34|4|SNAPSHOT_DEFAULTS=gradient.palette=Midnight,gradient.ribbonsOn=1
 live-sky|Live Sky|72|4|SNAPSHOT_DEFAULTS=sky.previewTime=1,sky.previewHour=23
-pixel-city|Pixel City|53|4|SNAPSHOT_DEFAULTS=city.place=0,city.previewTime=1,city.previewHour=19
+pixel-city|Pixel City|36|4|SNAPSHOT_DEFAULTS=city.place=1,city.previewTime=1,city.previewHour=18.5
 murmuration|Murmuration|44|20|SNAPSHOT_DEFAULTS=murmuration.light=5,murmuration.ground=0 MURMURATION_SEED=3
 fish-tank|Fish Tank|42|4|SNAPSHOT_APPEARANCE=light'
 

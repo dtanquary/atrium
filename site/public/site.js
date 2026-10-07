@@ -5,7 +5,7 @@
 /** Each work's accent: its render's dominant hue at oklch L 0.82, C ≤ 0.11, measured in the design handoff (Pixel City's the same way, later). */
 const accents = {
   nebula: '#95d0d9', 'flowing-gradient': '#cab9f3', 'live-sky': '#b9c2ec',
-  'pixel-city': '#bfc0eb', murmuration: '#ecb799', 'fish-tank': '#9bc5ff',
+  'pixel-city': '#b4bfff', murmuration: '#ecb799', 'fish-tank': '#9bc5ff',
 };
 const media = new URL('media/', import.meta.url);
 const kind = matchMedia('(max-aspect-ratio: 1/1)').matches ? 'phone' : 'desktop';

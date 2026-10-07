@@ -30,10 +30,10 @@
   .medium { font-size: 11px; letter-spacing: 0.12em; }
   .line { font-size: 14px; color: var(--text-2); }
   [data-work=murmuration] .label { top: 24%; } /* in the open sky, clear of the pier */
-  [data-work=pixel-city] .label { top: 24%; } /* in the sky, clear of the lit windows */
   /* Over Fish Tank's open water, not its bright sand; the words lift to hold 4.5:1 (the accent too, on the section). */
   [data-work=fish-tank] .label { top: 130px; }
   [data-work=fish-tank] .line { color: #e4ecff; }
+  [data-work=pixel-city] .line { color: #e7eaf9; } /* lifted to hold 4.5:1 over the Foothills' shaded ridges, as Fish Tank's */
   .last { position: absolute; inset: 130px 56px auto; display: flex; justify-content: space-between; gap: 48px; }
   .last > div { display: flex; flex-direction: column; gap: 14px; max-width: 560px; }
   /* Over Fish Tank's open water on phones, the dark under the laptop on desktops: lifted to hold 4.5:1 on the water. */
@@ -103,6 +103,7 @@
     .tagline { font-size: 20px; }
     .fine { font-size: 12px; }
     .label, [data-work] .label { left: 24px; right: 24px; top: 130px; }
+    [data-work=pixel-city] .label { top: 42%; } /* on the shaded ridges, below the cloud and the sunlit peaks */
     @keyframes pass { 0%, 25% { opacity: 0; } 45%, 50% { opacity: 1; } 54%, 100% { opacity: 0; } } /* gone before they reach the site's bar */
     .last { inset: 88px 24px auto; flex-direction: column; gap: 28px; }
     /* Download and the pane's button share a line. */
@@ -151,8 +152,8 @@
   <section data-work="nebula">
     <div class="label"><h2 class="title">Nebula</h2><p class="medium">Shader</p><p class="line">a new nebula every time, in colors modeled on real ones</p></div>
   </section>
-  <section data-work="pixel-city">
-    <div class="label"><h2 class="title">Pixel City</h2><p class="medium">Pixel art</p><p class="line">a waterfront city whose windows light up with your evening</p></div>
+  <section data-work="pixel-city" style="--own: #cdd5ff">
+    <div class="label"><h2 class="title">Pixel City</h2><p class="medium">Pixel art</p><p class="line">a city under the mountains, in the light of the real Sun</p></div>
   </section>
   <section data-work="murmuration">
     <div class="label"><h2 class="title">Murmuration</h2><p class="medium">Simulation</p><p class="line">tens of thousands of starlings at sunset</p></div>
