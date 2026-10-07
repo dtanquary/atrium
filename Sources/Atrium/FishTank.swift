@@ -60,6 +60,20 @@ final class FishTank: SKScene {
         addMarineSnow()
         addVignette()
         for _ in 0..<150 { swim(1.0 / 30) } // let the schools gather before the first frame
+        NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged),
+                                               name: UserDefaults.didChangeNotification, object: nil)
+    }
+
+    /// When Settings picks another lighting, dissolves into a new scene lit that way, with both still running.
+    @objc private func settingsChanged() {
+        guard Self.lookKnob.value != look, let view else { return } // no view: the render tests
+        look = Self.lookKnob.value // so this one, fading out, doesn't present another
+        let fade = SKTransition.crossFade(withDuration: 0.8)
+        fade.pausesIncomingScene = false
+        fade.pausesOutgoingScene = false
+        let next = FishTank(size: size)
+        next.scaleMode = scaleMode
+        view.presentScene(next, transition: fade)
     }
 
     override func update(_ currentTime: TimeInterval) {
@@ -263,7 +277,19 @@ final class FishTank: SKScene {
                                       shimmer: [0.6, 0.65, 1.0], sandNear: [0.5, 0.5, 0.9], sandFar: [0.16, 0.18, 0.52],
                                       grade: [0.45, 0.52, 1.05], haze: [0.07, 0.08, 0.4], fluoro: 1.5)
     }
-    private let light = systemIsDark ? Lighting.actinic : Lighting.day
+    /// Settings → Lighting: macOS's appearance (daylight in Light Mode, actinic blue in Dark Mode), or one of them held.
+    static let lookKnob = Knob(key: "tank.look", label: "Lighting", range: 0...2, standard: 0,
+                               format: .choice(["Match macOS", "Daylight", "Actinic blue"]))
+    static let knobs = [lookKnob]
+    private static var lighting: Lighting {
+        switch Int(lookKnob.value) {
+        case 1: .day
+        case 2: .actinic
+        default: systemIsDark ? .actinic : .day
+        }
+    }
+    private let light = FishTank.lighting
+    private var look = FishTank.lookKnob.value // the choice this scene was built with
 
     /// The back panel and water: saturated blue, brightest high up under the lamps and falling off toward the ends
     /// and low down, faint LED shimmer on the back wall, faint rays from the lamp array, and the underside of the

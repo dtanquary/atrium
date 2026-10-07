@@ -93,10 +93,10 @@ Everything is pre-simulated for 150 steps in `sceneDidLoad`, so schools have alr
 - the tail beat steps through 20 precomputed warp frames (`swimWarps`: an 8×1 grid with a wave from head to tail, `0.075·(1-u)²`). The beat rate scales with speed. The warps work on the photos unchanged.
 
 ## Time, live data and appearance
-Motion comes from `update(_:)` (boids and frame stepping), the coral sway actions, and `u_now` (the water, sand and photo shaders). There's no network or location use. Light Mode is a daylight reef tank and Dark Mode its actinic evening look, read from `systemIsDark` when the scene is built.
+Motion comes from `update(_:)` (boids and frame stepping), the coral sway actions, and `u_now` (the water, sand and photo shaders). There's no network or location use. Light Mode is a daylight reef tank and Dark Mode its actinic evening look, read from `systemIsDark` when the scene is built, unless Settings → Lighting holds one.
 
 ## Settings
-None yet.
+- **Lighting** (`tank.look`, a menu): Match macOS (daylight in Light Mode, actinic blue in Dark Mode), Daylight, or Actinic blue. Read into `light` when the scene is built; a change dissolves into a new scene lit that way, in the preview and on the desktop, both still running (`settingsChanged`, the Pixel City pattern).
 
 ## Tuning constants
 - **`Species` (FishTankArt.swift):**
@@ -155,12 +155,13 @@ CPU 0.8–0.9 ms and GPU 1.3–1.5 ms per frame (release, 2x), in both looks. Th
 - 2026-09-26: "shouldn't the fish be casting shadows on to the ground and on to each other? can we also adjust the lighting on each fish based on their movement and position from the top?" Added shadows on the sand and from fish above, light from where each fish swims, top light across the body, sand bounce, and a flash or dimming as a fish banks in a turn.
 
 - 2026-10-07: a failed attempt at two more tanks, cut the same day. Research agents and mock-ups led to an Ocean Voyager tank modelled on the Georgia Aquarium (whale sharks, mantas, a cownose ray squadron, trevally) and a Shallow Reef, an open-sea snorkeller's view with blacktips and a resting nurse shark, with a Tank menu and a move-automatically toggle (commits bcd3ea4, 5a2dcba, c3289f2: the sources, species tables and motion research are in their docs and messages). The giants never moved convincingly as photo cut-outs: head-on views slid sideways, two whale sharks drew through each other, cut-outs that faced left swam tail first, and even after a heading-and-speed steering model, stride-based tail beats and shark and ray warps from game and biology research, Dave's verdict was "the large whales just look so fake" and then "its just no good, I dont want users to see this". He kept only the reef tank and asked for the toggle to go with the others. Lesson: a big animal is its body's motion, and a flat photo warped into a tail beat can't carry it; the small reef fish get away with it because they're small and many.
+- 2026-10-07: "the only setting I can think of adding to fish tank is a select box to force a light/dark mode or pick auto". Added as the Lighting menu.
 
 ## Ideas / next steps
 - Not another tank of large animals as photo cut-outs (see 2026-10-07 above). A Kelp Forest was next in line and was dropped with the rest.
 - Rare visitors: a cleaner shrimp on the rock, a snail on the glass.
 - A glint on each tail beat, for shiny fish like chromis. Left out for now: 38 fish flickering at 3 beats a second may read as busy.
-- Settings: fish count, which species appear, the lighting look.
+- Settings: fish count, which species appear.
 
 ## Checking it
 ```sh

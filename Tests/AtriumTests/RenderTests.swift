@@ -341,3 +341,19 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
         #expect(mean > 0.05 && abs(mean - 0.216) > 0.01, "\(surface.name): mean albedo \(mean)") // 0.216 is all 128s
     }
 }
+
+/// Picking another lighting in Settings hands the view a new tank lit that way, and the one fading out doesn't
+/// present another on the next change.
+@MainActor @Test func fishTankFollowsLightingSetting() {
+    let view = WallpaperView(frame: CGRect(x: 0, y: 0, width: 320, height: 200))
+    let before = UserDefaults.standard.object(forKey: "tank.look")
+    defer { UserDefaults.standard.set(before, forKey: "tank.look") }
+    UserDefaults.standard.set(0.0, forKey: "tank.look")
+    let first = FishTank(size: view.frame.size)
+    view.presentScene(first)
+    UserDefaults.standard.set(2.0, forKey: "tank.look")
+    #expect(view.scene !== first && view.scene is FishTank)
+    let second = view.scene
+    NotificationCenter.default.post(name: UserDefaults.didChangeNotification, object: nil)
+    #expect(view.scene === second)
+}

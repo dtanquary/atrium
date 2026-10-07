@@ -50,7 +50,7 @@ struct Refresh {
 /// wherever an entry sits here.
 @MainActor let allScenes: [Wallpaper] = [
     Wallpaper(name: "Fish Tank", icon: "fish.fill", tint: .teal, blurb: "A bright reef tank of real fish and corals.",
-              make: { FishTank(size: $0) }),
+              make: { FishTank(size: $0) }, knobs: FishTank.knobs),
     Wallpaper(name: "Flowing Gradient", icon: "swirl.circle.righthalf.filled", tint: .pink,
               blurb: "Soft pools of color with silk ribbons that follow the Sun.", make: flowingGradient,
               knobs: FlowingGradient.knobs,
