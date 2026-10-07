@@ -3,9 +3,10 @@ import Testing
 @testable import Atrium
 
 /// Launch Library 2's list-mode reply, as saved on 2026-10-07 and trimmed to what's read, parses to launches soonest
-/// first, dropping the statuses not asked for; and the feed's names for vehicles map to the Spaceport's rockets.
+/// first, dropping the statuses not asked for and any T−0 known only to the hour; and the feed's names for vehicles map
+/// to the Spaceport's rockets.
 @MainActor @Test func launchScheduleReadsLaunchLibrary() throws {
-    let reply = #"{"count":5,"next":null,"results":[{"id":"a","name":"Falcon 9 Block 5 | Starlink Group 15-25","status":{"id":1,"name":"Go for Launch","abbrev":"Go"},"net":"2026-10-10T23:00:00Z","net_precision":{"id":1,"abbrev":"MIN"},"window_start":"2026-10-10T23:00:00Z"},{"id":"b","name":"Nuri | NeonSat-2 to 6","status":{"id":1,"abbrev":"Go"},"net":"2026-10-07T03:23:00Z"},{"id":"c","name":"Long March 12 | Unknown Payload","status":{"id":5,"abbrev":"Hold"},"net":"2026-10-09T19:25:00Z"},{"id":"d","name":"Oddity","status":{"id":2,"abbrev":"TBD"},"net":"2026-10-31T00:00:00Z"}]}"#
+    let reply = #"{"count":5,"next":null,"results":[{"id":"a","name":"Falcon 9 Block 5 | Starlink Group 15-25","status":{"id":1,"name":"Go for Launch","abbrev":"Go"},"net":"2026-10-10T23:00:00Z","net_precision":{"id":1,"abbrev":"MIN"},"window_start":"2026-10-10T23:00:00Z"},{"id":"b","name":"Nuri | NeonSat-2 to 6","status":{"id":1,"abbrev":"Go"},"net":"2026-10-07T03:23:00Z","net_precision":{"id":1,"abbrev":"MIN"}},{"id":"c","name":"Long March 12 | Unknown Payload","status":{"id":5,"abbrev":"Hold"},"net":"2026-10-09T19:25:00Z","net_precision":{"id":1,"abbrev":"MIN"}},{"id":"e","name":"Long March 2D | Hourly","status":{"id":1,"abbrev":"Go"},"net":"2026-10-09T20:00:00Z","net_precision":{"id":2,"abbrev":"HR"}},{"id":"d","name":"Oddity","status":{"id":2,"abbrev":"TBD"},"net":"2026-10-31T00:00:00Z"}]}"#
     let launches = try #require(LaunchSchedule.launches(from: Data(reply.utf8)))
     #expect(launches.map(\.rocket) == ["Nuri", "Long March 12", "Falcon 9 Block 5"], "\(launches)")
     #expect(launches.map(\.kind) == [nil, "longmarch", "falcon9"] && launches[1].status == .hold && launches[2].mission == "Starlink Group 15-25")

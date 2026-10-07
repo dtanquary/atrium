@@ -39,12 +39,20 @@ import Foundation
     /// Offline or throttled, `launches` stays as it was, so a count already running still ends at the T−0 last seen.
     func poll(force: Bool = false) {
         let now = Date()
+        // A rehearsal: `defaults write com.dtanquary.atrium spaceport.rehearse -int 240` plants a Falcon 9 that many
+        // seconds out (once; the key is cleared), so the follow can be watched without waiting for a real launch.
+        if case let lead = UserDefaults.standard.double(forKey: "spaceport.rehearse"), lead > 0 {
+            UserDefaults.standard.removeObject(forKey: "spaceport.rehearse")
+            set([Launch(rocket: "Falcon 9 Block 5", mission: "Rehearsal", net: now + lead, status: .go)], at: now)
+            return
+        }
         guard now >= throttledUntil, force ? now.timeIntervalSince(lastPoll) >= 120 : now >= nextPoll else { return }
         (lastPoll, nextPoll) = (now, now + 3600) // until the reply says otherwise
         var url = URLComponents(string: "https://ll.thespacedevs.com/2.3.0/launches/upcoming/")!
-        // Go, On Hold or In Flight, with a T−0 known to the minute or second; eight is enough to reach one the Spaceport draws.
-        url.queryItems = [URLQueryItem(name: "status__ids", value: "1,5,6"), URLQueryItem(name: "net_precision__ids", value: "0,1"),
-                          URLQueryItem(name: "limit", value: "8"), URLQueryItem(name: "mode", value: "list"), URLQueryItem(name: "ordering", value: "net")]
+        // Go, On Hold or In Flight; eight is enough to reach one the Spaceport draws with a T−0 known to the minute
+        // (the feed ignores a precision filter in the request, so `launches(from:)` does that).
+        url.queryItems = [URLQueryItem(name: "status__ids", value: "1,5,6"), URLQueryItem(name: "limit", value: "8"),
+                          URLQueryItem(name: "mode", value: "list"), URLQueryItem(name: "ordering", value: "net")]
         Task {
             let time = Date().formatted(date: .omitted, time: .shortened)
             guard let (data, response) = try? await URLSession.shared.data(from: url.url!) else { status("Couldn't reach Launch Library at \(time)."); return }
@@ -83,14 +91,16 @@ import Foundation
         struct Page: Decodable {
             struct Row: Decodable {
                 struct Status: Decodable { let id: Int }
-                let name: String, net: String, status: Status
+                let name: String, net: String, status: Status, net_precision: Status?
             }
             let results: [Row]
         }
         guard let rows = try? JSONDecoder().decode(Page.self, from: reply).results else { return nil }
         let iso = ISO8601DateFormatter()
         return rows.compactMap { row in
-            guard let net = iso.date(from: row.net), let status = Launch.Status(rawValue: row.status.id) else { return nil }
+            // Only a T−0 known to the second (0) or the minute (1): a launch known to the hour or the day would clear the
+            // pad for a lift-off that never comes, and the feed ignores a precision filter in the request.
+            guard let net = iso.date(from: row.net), let status = Launch.Status(rawValue: row.status.id), (row.net_precision?.id ?? 9) <= 1 else { return nil }
             let parts = row.name.components(separatedBy: " | ") // "Falcon 9 Block 5 | Starlink Group 15-25"
             return Launch(rocket: parts[0], mission: parts.count > 1 ? parts[1] : "", net: net, status: status)
         }.sorted { $0.net < $1.net }
