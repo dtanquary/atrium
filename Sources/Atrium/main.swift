@@ -255,6 +255,10 @@ if !scenes.contains(where: { $0.name == current }) {
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
+        if let update = Updater.shared.release {
+            menu.addItem(withTitle: "Update to Atrium \(update.version)…", action: #selector(openUpdate), keyEquivalent: "").target = self
+            menu.addItem(.separator())
+        }
         for scene in scenes {
             let entry = menu.addItem(withTitle: scene.name, action: #selector(pick), keyEquivalent: "")
             entry.target = self
@@ -285,6 +289,10 @@ if !scenes.contains(where: { $0.name == current }) {
 
     @objc func openSettings() {
         SettingsWindow.shared.open()
+    }
+
+    @objc func openUpdate() {
+        SettingsWindow.shared.open(page: UpdatePage.tag)
     }
 
     @objc func openAbout() {
@@ -428,6 +436,11 @@ Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in
 }
 NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { _ in
     MainActor.assumeIsolated { windows.compactMap { $0.contentView as? WallpaperView }.forEach { $0.watch() } }
+}
+// Look for a newer release once a day, unless Settings → Software Update says not to.
+Updater.shared.check()
+Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { _ in
+    MainActor.assumeIsolated { Updater.shared.check() }
 }
 // Rebuild the scene in the other look when macOS switches between Light and Dark Mode.
 // ponytail: rebuilds every scene, even ones with a single look; it only happens a couple of times a day

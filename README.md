@@ -276,7 +276,7 @@ Atrium's icon in the menu bar is a TV with sparkles (✨📺). Use it to:
 
 ### Updating and uninstalling
 
-- **Update:** Atrium doesn't check for updates. Download the new DMG and replace the app in Applications, or `git pull && ./build.sh`. Your settings carry over. To hear about new versions, watch the repo's releases on GitHub.
+- **Update:** Atrium looks for a new version once a day. When there is one, it opens **Settings → Software Update**, with what's new and **Install and Relaunch**: Atrium downloads it, checks it's signed by its developer, puts it in place of the old one and reopens. Your settings carry over. Turn off **Check for updates automatically** there to look only when you open that page. A copy built from source updates with `git pull && ./build.sh`.
 - **Uninstall:** turn off **Open at Login** and **Match the lock screen** in Settings → General (the second puts your own wallpaper back), quit Atrium, and move it to the Trash. To remove its settings and caches too:
 
   ```sh
@@ -286,10 +286,11 @@ Atrium's icon in the menu bar is a TV with sparkles (✨📺). Use it to:
 
 ### Privacy, permissions and network
 
-Atrium has no account, no analytics and no update checks. The services below are every connection it makes, each only while a wallpaper that uses it is running.
+Atrium has no account and no analytics. The services below are every connection it makes, each only while a wallpaper that uses it is running, apart from the check for updates.
 
 - **Location** (optional). Live Sky, Earth from Orbit, Weather, Dappled Light, Wind, Pixel City, Pixel Spaceport, the live Moon, Rain on Glass following the weather and Flowing Gradient's time-of-day mood use your location, and the app asks once. If you decline, it guesses from your time zone. It's kept on your Mac, and only leaves it rounded to about a kilometer, as the place Open-Meteo forecasts for (and, for Wind's maps, as the tiles it asks NASA for).
 - **Network.** Weather, Dappled Light, Rain on Glass (while following the weather) and Pixel City's Airport (while following the wind) fetch from [Open-Meteo](https://open-meteo.com) every 10 to 15 minutes, sharing one request. Live Sky and Earth from Orbit fetch the ISS position from [wheretheiss.at](https://wheretheiss.at) at most once a minute. Earth from Orbit fetches a global cloud map from [Live Cloud Maps](https://clouds.matteason.co.uk) only once its cached copy is over 3 hours old (1.5 MB when it has changed), and not at all with Live clouds off. For lightning, it asks Open-Meteo for the next day's thunderstorms on a grid around you every 6 hours. Solar System Tour's live Sun, while it's on screen, fetches SDO images from [Helioviewer](https://helioviewer.org) at most every 15 minutes (2048 pixels, 0.3–0.5 MB) or 30 (4096, 1–2 MB, for the close-up), keeping the newest two of each wavelength on disk. None of them needs an API key. Weather, Dappled Light, Rain on Glass, Earth from Orbit and Wind have **Refresh Now** on their Settings pages, which fetches at once, at most every 5 to 15 minutes.
+- **Updates.** Once a day, and whenever you open Settings → Software Update, Atrium asks GitHub's API for its latest releases (a few KB). It downloads a new version's disk image (about 400 MB) only when you choose Install and Relaunch. Turn off Check for updates automatically there to stop the daily look.
 - **Wind** asks Open-Meteo for the next day's hourly wind forecast on a grid around you every 6 hours, for the zoom on screen: 96 points for a town, 384 for a region or half the continent (Open-Meteo counts each point as one of its free 10,000 calls a day, so at most 1,536 a day). The last reply for each zoom stays on disk, so it works offline. With an Earth background it downloads NASA's imagery tiles for the view from [GIBS](https://nasa-gibs.github.io/gibs-api-docs/) once and keeps them: about 1–2 MB for most maps, up to 7 MB at night for half the continent, and a fresh 1–2 MB a day for the satellite view.
 
 ## Build from source
@@ -326,6 +327,7 @@ SETTINGS_SHOT="Nebula" swift test --filter settingsWindow   # opens Settings on 
   - `Sources/Atrium/main.swift`: the app host (windows, menu, power and appearance handling)
   - `Scenes.swift`: the wallpaper list and shared helpers
   - `Settings.swift`: the Settings window
+  - `Updater.swift`: the daily check for a new version, and Settings → Software Update
   - one file per wallpaper
   - `Resources/`: data files
   - `Tests/AtriumTests/`: the render, astronomy and weather tests

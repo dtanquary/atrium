@@ -32,7 +32,7 @@ struct PaletteChoice {
     var title = "Colors"
 }
 
-/// The Settings window, laid out like System Settings: General, Power and About, then the wallpapers, down the side,
+/// The Settings window, laid out like System Settings: General, Power, Software Update and About, then the wallpapers, down the side,
 /// each with its own page. It reopens on the page last picked, or the wallpaper on the desktop.
 struct SettingsView: View {
     /// The page last picked, by its sidebar tag; empty for the wallpaper on the desktop.
@@ -53,6 +53,8 @@ struct SettingsView: View {
                     Section {
                         row("General", icon: "gearshape.fill", tint: .gray).tag(GeneralPage.tag)
                         row("Power", icon: "bolt.fill", tint: .green).tag(PowerPage.tag)
+                        row("Software Update", icon: "arrow.down", tint: .blue).tag(UpdatePage.tag)
+                            .badge(Updater.shared.release == nil ? 0 : 1)
                         row("About", icon: "info", tint: .gray).tag(AboutPage.tag)
                     }
                 }
@@ -79,6 +81,7 @@ struct SettingsView: View {
             case AboutPage.tag: AboutPage()
             case GeneralPage.tag: GeneralPage()
             case PowerPage.tag: PowerPage()
+            case UpdatePage.tag: UpdatePage()
             case let name:
                 if let wallpaper = scenes.first(where: { $0.name == name }) ?? scenes.first(where: { $0.name == current }) {
                     WallpaperPage(wallpaper: wallpaper).id(wallpaper.name)
@@ -328,7 +331,6 @@ struct AboutPage: View {
                 LabeledContent("Dave Tanquary") { Link("dtanquary.com", destination: URL(string: "https://dtanquary.com")!) }
                 LabeledContent("Website") { Link("atrium.show", destination: URL(string: "https://atrium.show")!) }
                 LabeledContent("Source") { Link("github.com/dtanquary/atrium", destination: URL(string: "https://github.com/dtanquary/atrium")!) }
-                // ponytail: Atrium doesn't check for updates itself; a link is enough until people miss releases
                 LabeledContent("New versions") { Link("Releases on GitHub", destination: URL(string: "https://github.com/dtanquary/atrium/releases")!) }
                 LabeledContent("Report a problem") { Link("Issues on GitHub", destination: URL(string: "https://github.com/dtanquary/atrium/issues")!) }
                 LabeledContent("License") { Link("MIT, for the code", destination: URL(string: "https://github.com/dtanquary/atrium/blob/main/LICENSE")!) }
