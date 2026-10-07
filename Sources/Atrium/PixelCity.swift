@@ -2358,9 +2358,13 @@ final class PixelCity: SKScene {
         let cx = w * 9 / 100
         px.fill(cx - 2, 12, 35, 15, rgb(10, 10, 14))
         for leg in [cx + 3, cx + 26] { px.fill(leg, 5, 2, 7, shadow) }
-        // The Stars and Stripes on its pole, and a second pole for the flag of a rocket from abroad (`visitor`).
-        func cloth(_ c: RGB) -> RGB { mix(lit(c, keyFront), rgb(22, 20, 32), night * 0.8) }
-        for pole in [cx + 44, cx + 58] { px.fill(pole, 5, 1, 36, mix(lit(rgb(200, 200, 204), .zero), rgb(40, 40, 54), night)) }
+        // The Stars and Stripes on its pole, and a second pole for the flag of a rocket from abroad (`visitor`). A ground
+        // light at each pole's foot comes on after dark, so the poles and the cloth take its warm light instead of going black.
+        for pole in [cx + 44, cx + 58] {
+            px.fill(pole, 5, 1, 36, mix(lit(rgb(200, 200, 204), .zero), rgb(200, 200, 204) * lamp * 0.4, night))
+            px.plot(pole + 1, top(pole + 1) - 1, lamp, night)
+            px.plot(pole + 2, top(pole + 1) - 1, lamp, 0.3 * night)
+        }
         for row in 0..<6 { px.fill(cx + 45, 34 + row, 9, 1, cloth(row % 2 == 1 ? rgb(196, 64, 60) : rgb(236, 236, 232))) }
         px.fill(cx + 45, 37, 4, 3, cloth(rgb(52, 70, 140)))
         // People watching, in ones and twos, and a camera on its tripod.
@@ -2657,10 +2661,13 @@ final class PixelCity: SKScene {
         }
     }
 
+    /// A flag's cloth in the light on the bank: the Sun's by day, and after dark the ground light's at its pole's foot.
+    private func cloth(_ c: RGB) -> RGB { mix(lit(c, keyFront), c * rgb(255, 226, 170) * 0.45, night * 0.8) }
+
     /// Paints the visiting rocket's flag in the light on the bank.
     private func dressVisitor() {
         guard let flag = visiting else { return }
-        visitor.texture = art(flag.rows, flag.colours.mapValues { mix(lit($0, keyFront), rgb(22, 20, 32), night * 0.8) })
+        visitor.texture = art(flag.rows, flag.colours.mapValues(cloth))
     }
 
     /// Paints the Spaceport's layer once a frame's moving is done: the smoke if it has moved, then everything over
