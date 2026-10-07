@@ -32,3 +32,18 @@ import Testing
     #expect(schedule.nextPoll == now + 3600)
     #expect((UserDefaults.standard.string(forKey: "spaceport.status") ?? "").hasPrefix("Next: Falcon 9 Block 5"))
 }
+
+/// A rehearsal planted through its defaults key goes into the list without a fetch, stays there when a real reply
+/// replaces the rest, and is dropped a minute after its T−0.
+@MainActor @Test func launchScheduleKeepsARehearsal() {
+    let now = Date(), schedule = LaunchSchedule.shared
+    defer { schedule.set([], at: now + 1000); UserDefaults.standard.removeObject(forKey: "spaceport.rehearse") }
+    UserDefaults.standard.set(240, forKey: "spaceport.rehearse")
+    schedule.poll()
+    #expect(schedule.launches.map(\.mission) == ["Rehearsal"] && UserDefaults.standard.object(forKey: "spaceport.rehearse") == nil)
+    let real = LaunchSchedule.Launch(rocket: "Electron", mission: "Real", net: now + 7200, status: .go)
+    schedule.set([real], at: now + 60)
+    #expect(schedule.launches.map(\.mission) == ["Rehearsal", "Real"])
+    schedule.set([real], at: now + 240 + 61)
+    #expect(schedule.launches.map(\.mission) == ["Real"])
+}

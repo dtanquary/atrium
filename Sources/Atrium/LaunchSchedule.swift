@@ -30,6 +30,8 @@ import Foundation
     /// When the last reply arrived.
     private(set) var updated: Date?
     private var lastPoll = Date.distantPast, throttledUntil = Date.distantPast
+    /// A planted launch (see `poll`), kept through real fetches until a minute after its T−0.
+    private var rehearsal: Launch?
     /// When the next fetch is due (see above).
     private(set) var nextPoll = Date.distantPast
     /// When Refresh Now can next fetch.
@@ -40,10 +42,13 @@ import Foundation
     func poll(force: Bool = false) {
         let now = Date()
         // A rehearsal: `defaults write com.dtanquary.atrium spaceport.rehearse -int 240` plants a Falcon 9 that many
-        // seconds out (once; the key is cleared), so the follow can be watched without waiting for a real launch.
+        // seconds out (once; the key is cleared), so the follow can be watched without waiting for a real launch. It
+        // stays in the list through the real fetches that follow (a side agent caught the first version losing it to
+        // the T−3 fetch, which scrubbed the rehearsal a minute in).
         if case let lead = UserDefaults.standard.double(forKey: "spaceport.rehearse"), lead > 0 {
             UserDefaults.standard.removeObject(forKey: "spaceport.rehearse")
-            set([Launch(rocket: "Falcon 9 Block 5", mission: "Rehearsal", net: now + lead, status: .go)], at: now)
+            rehearsal = Launch(rocket: "Falcon 9 Block 5", mission: "Rehearsal", net: now + lead, status: .go)
+            set(launches.filter { $0.mission != "Rehearsal" }, at: now)
             return
         }
         guard now >= throttledUntil, force ? now.timeIntervalSince(lastPoll) >= 120 : now >= nextPoll else { return }
@@ -70,14 +75,15 @@ import Foundation
 
     /// Takes a reply's launches as the current ones and plans the next poll. The tests call it with their own.
     func set(_ found: [Launch], at now: Date = Date()) {
-        (launches, updated) = (found, now)
+        if let planted = rehearsal, planted.net + 60 < now { rehearsal = nil }
+        (launches, updated) = ((found + [rehearsal].compactMap { $0 }).sorted { $0.net < $1.net }, now)
         var due = now + 3600
-        if let next = found.first(where: { $0.kind != nil && $0.net > now }) {
+        if let next = launches.first(where: { $0.kind != nil && $0.net > now }) {
             for lead in [720.0, 180, 60] where next.net - lead > now + 30 { due = min(due, next.net - lead) }
         }
         nextPoll = due
         let credit = "Launch Library 2 by The Space Devs · updated \(now.formatted(date: .omitted, time: .shortened))"
-        if let next = found.first(where: { $0.kind != nil }) {
+        if let next = launches.first(where: { $0.kind != nil }) {
             let when = next.status == .hold ? "on hold" : next.net.formatted(date: .abbreviated, time: .shortened)
             status("Next: \(next.rocket) · \(next.mission) · \(when) · \(credit)")
         } else {
