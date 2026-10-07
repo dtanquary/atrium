@@ -22,8 +22,10 @@ struct Species {
     /// on the sand, the rest anywhere.
     enum Haunt { case open, anemone, rock, sand }
     var haunt = Haunt.open
-    /// How it swims: a wave from head to tail, or wings whose tips sweep up and down together (rays).
-    enum Gait { case tail, wings }
+    /// How it swims: a wave from head to tail (small fish, and the whole-body wave of a nurse or zebra shark); a
+    /// sweep, the tail swinging in and out of the plane of view so it foreshortens, with only a hint of up and
+    /// down (sharks seen from the side); or wings whose tips sweep up and down together (rays).
+    enum Gait { case tail, sweep, wings }
     var gait = Gait.tail
     /// Lies still on the sand between short moves, using `burst` as the move-and-rest cycle (bottom sharks, rays).
     var rests = false
@@ -33,6 +35,18 @@ struct Species {
     /// The part of the water column it keeps to, 0 at the sand and 1 at the top: whale sharks cruise high, bottom
     /// sharks stay low.
     var height: ClosedRange<Double> = 0...1
+    /// How quickly it changes heading, pitch and the way it faces, 1 for a small fish: the giants have inertia.
+    var agility = 1.0
+    /// How much its burst-and-coast changes its speed, 1 for a small fish: a whale shark keeps its pace while
+    /// its tail rests.
+    var thrust = 1.0
+    /// The pitch it holds at cruise, radians, nose up when positive: slow sharks swim a few degrees nose-up
+    /// (Wilga & Lauder 2004: +4° to +11° at half a body length a second).
+    var trim = 0.0
+    /// How far it travels per beat, in body lengths, when set: the beat then follows the distance swum rather than
+    /// the clock, so a slow giant doesn't thrash its tail while barely advancing (Webb & Keyes 1982: sharks
+    /// stride 0.5–0.74 L a beat). 0 beats by `beat`, as the small fish do.
+    var stride = 0.0
 
     // The reef tank
     static let chromis = Species(name: "chromis", photos: (1...3).map { "reef-chromis-\($0)" }, length: 46, cruise: 40...54, beat: 0.3,
@@ -49,26 +63,28 @@ struct Species {
 
     // Ocean Voyager (Resources/ocean-*, credited in ocean-credits.tsv). Lengths are as drawn: the window is 19 m
     // wide and the screen shows about 11 m of it, so a 7 m whale shark near the glass spans most of the screen.
-    static let whaleShark = Species(name: "whale shark", photos: (1...4).map { "ocean-whaleshark-\($0)" }, length: 760, cruise: 36...48, beat: 6,
-                                    burst: (20, 0.5), spacing: 2.5, margin: 0.7, height: 0.45...0.95) // strokes, then glides
-    static let manta = Species(name: "manta ray", photos: (1...4).map { "ocean-manta-\($0)" }, length: 420, cruise: 30...42, beat: 3.2,
-                               burst: (14, 0.6), spacing: 2.5, gait: .wings, margin: 1, height: 0.25...0.95) // a few strokes, then a glide
+    static let whaleShark = Species(name: "whale shark", photos: (1...3).map { "ocean-whaleshark-\($0)" }, length: 760, cruise: 50...60, beat: 4.5,
+                                    burst: (20, 0.65), spacing: 2.5, gait: .sweep, margin: 0.8, height: 0.35...0.8, agility: 0.12, thrust: 0.1, trim: 0.08,
+                                    stride: 0.4)
+    static let manta = Species(name: "manta ray", photos: (1...3).map { "ocean-manta-\($0)" }, length: 420, cruise: 40...50, beat: 3.4,
+                               burst: (7, 0.5), spacing: 2.5, gait: .wings, margin: 1, height: 0.15...0.6, agility: 0.25, thrust: 0.15,
+                               stride: 0.55) // one flap, then a glide
     static let cownose = Species(name: "cownose ray", photos: (1...3).map { "ocean-cownose-\($0)" }, length: 120, cruise: 30...40, beat: 1.2,
-                                 spacing: 1.1, gait: .wings, margin: 0.5, height: 0.1...0.5)
+                                 spacing: 1.8, gait: .wings, margin: 0.5, height: 0.1...0.5, agility: 0.5, stride: 0.5)
     static let trevally = Species(name: "golden trevally", photos: (1...4).map { "ocean-trevally-\($0)" }, length: 40, cruise: 25...35, beat: 0.4,
                                   burst: (1.5, 0.4), spacing: 2, height: 0.2...1)
     static let sandbar = Species(name: "sandbar shark", photos: ["ocean-sandbar-1"], length: 300, cruise: 30...40, beat: 1.6,
-                                 spacing: 3, margin: 0.6, height: 0.15...0.6)
+                                 spacing: 3, gait: .sweep, margin: 0.6, height: 0.15...0.6, agility: 0.4, trim: 0.08, stride: 0.45)
     static let zebraShark = Species(name: "zebra shark", photos: (1...2).map { "ocean-zebra-\($0)" }, length: 320, cruise: 14...20, beat: 2, burst: (40, 0.2),
                                     haunt: .sand, rests: true)
     static let guitarfish = Species(name: "bowmouth guitarfish", photos: ["ocean-guitarfish-1"], length: 300, cruise: 12...18, beat: 1.4, burst: (50, 0.15),
-                                    haunt: .sand, rests: true)
+                                    haunt: .sand, gait: .sweep, rests: true, agility: 0.4, stride: 0.45)
 
     // The shallow reef (Resources/lagoon-*, credited in lagoon-credits.tsv).
     static let blacktip = Species(name: "blacktip reef shark", photos: (1...3).map { "lagoon-blacktip-\($0)" }, length: 300, cruise: 28...36, beat: 1.1,
-                                  spacing: 2.5, margin: 0.8, height: 0.05...0.7)
+                                  spacing: 2.5, gait: .sweep, margin: 0.8, height: 0.05...0.7, agility: 0.4, trim: 0.06, stride: 0.45)
     static let nurseShark = Species(name: "nurse shark", photos: (1...2).map { "lagoon-nurse-\($0)" }, length: 380, cruise: 8...12, beat: 2, burst: (60, 0.1),
-                                    haunt: .sand, rests: true)
+                                    haunt: .sand, rests: true, agility: 0.3)
     static let epaulette = Species(name: "epaulette shark", photos: (1...2).map { "lagoon-epaulette-\($0)" }, length: 160, cruise: 10...16, beat: 1,
                                    burst: (25, 0.3), haunt: .sand, rests: true)
     static let blueSpotRay = Species(name: "blue-spotted ray", photos: (1...2).map { "lagoon-ray-\($0)" }, length: 140, cruise: 10...15, beat: 0.6,
@@ -126,18 +142,40 @@ enum TankArt {
 
     /// One beat as warp frames. A tail: a wave travelling from head to tail, swinging the tail most. Wings: both
     /// tips sweep up and down together, the body between them still, as a ray flaps.
-    static func swimWarps(_ kind: Species, textureHeight: CGFloat) -> [SKWarpGeometryGrid] {
-        let columns = 8, frames = 20
+    static func swimWarps(_ kind: Species, textureWidth: CGFloat, textureHeight: CGFloat) -> [SKWarpGeometryGrid] {
+        let columns = kind.gait == .tail ? 8 : 12, frames = 24
         let source = (0...1).flatMap { row in (0...columns).map { SIMD2<Float>(Float($0) / Float(columns), Float(row)) } }
+        let L = Double(kind.length), W = Double(textureWidth), H = Double(textureHeight)
+        func smoothstep(_ a: Double, _ b: Double, _ x: Double) -> Double { let t = min(max((x - a) / (b - a), 0), 1); return t * t * (3 - 2 * t) }
         return (0..<frames).map { frame in
             let phase = Double(frame) / Double(frames) * 2 * .pi
             let destination = source.map { p -> SIMD2<Float> in
-                let u = Double(p.x) // 0 at the tail, 1 at the nose
-                let swing: Double = switch kind.gait {
-                case .tail: (0.075 * pow(1 - u, 2) + 0.006) * sin(phase + 4.2 * u)
-                case .wings: 0.09 * pow(abs(u - 0.5) * 2, 2) * sin(phase)
+                let u = Double(p.x), v = Double(p.y), s = 1 - u // u is 0 at the tail and 1 at the nose; s the other way
+                var dx = 0.0, dy = 0.0 // points
+                switch kind.gait {
+                case .tail:
+                    dy = L * (0.075 * s * s + 0.006) * sin(phase + 4.2 * u)
+                case .sweep:
+                    // A shark from the side (the motion research's recipe): a wave travelling tailward with under
+                    // one wavelength on the body, bending from mid-body and steepest over the rear third, a small
+                    // counter-yaw at the nose, the blade foreshortening twice a beat as it swings out of the plane
+                    // of view, and the caudal blade swinging as one piece about the peduncle.
+                    let env = pow(smoothstep(0.4, 1, s), 2), theta = phase - 5 * s
+                    dy = L * (0.03 * env + 0.008 * pow(max(0, 1 - s / 0.25), 2)) * sin(theta)
+                    dx = L * 0.06 * env * pow(sin(theta), 2)
+                    if s > 0.78 {
+                        let a = 0.105 * sin(phase - 3.9), rx = (u - 0.22) * W, ry = (v - 0.5) * H
+                        dx += rx * cos(a) - ry * sin(a) - rx
+                        dy += rx * sin(a) + ry * cos(a) - ry
+                    }
+                case .wings:
+                    // A ray: the stroke runs from the wing base to the tip, the tip lagging and curling (Fish et al.
+                    // 2016), quick up and slow down, the body between the wings still, the wings held a little
+                    // above level on average.
+                    let w = abs(u - 0.5) * 2, theta = phase - 1.3 * w, theta2 = theta + 0.3 * sin(theta)
+                    dy = L * (0.2 * w * w * sin(theta2) + 0.06 * w * w)
                 }
-                return SIMD2(p.x, p.y + Float(swing * Double(kind.length) / Double(textureHeight)))
+                return SIMD2(p.x + Float(dx / W), p.y + Float(dy / H))
             }
             return SKWarpGeometryGrid(columns: columns, rows: 1, sourcePositions: source, destinationPositions: destination)
         }

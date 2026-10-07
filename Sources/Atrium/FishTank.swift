@@ -14,9 +14,13 @@ final class FishTank: SKScene {
         let length: Double       // nose to tail, in points
         var position: SIMD2<Double>
         var velocity: SIMD2<Double>
-        var facing: Double
+        var facing: Double       // 1 facing right, -1 left; between them mid-turn, as its width eases through zero
+        var speed: Double        // forward, points per second
+        var intent: SIMD2<Double> // where the steering has been pushing it: the boids' velocity, which it follows forward
+        var pitch = 0.0          // nose up or down, radians
+        var turning = false      // turning round: facing is easing toward `turnTo`
+        var turnTo = 1.0
         var wander = Double.random(in: 0..<(2 * .pi))
-        var tilt = 0.0
         var stroke = Double.random(in: 0..<1) // how far through a tail beat, in beats
         var frame = -1
         var pulse = Double.random(in: 0..<1)  // how far through a burst-and-coast cycle, for species that swim so
@@ -177,6 +181,7 @@ final class FishTank: SKScene {
             let (floor, ceiling) = bounds(school.depth, height: school.species.height)
             let edge = body * school.species.margin // big animals leave the screen before the walls turn them
             let rests = school.species.rests, sand = sandLine(school.depth) + body * 0.1
+            let agility = school.species.agility, thrust = school.species.thrust
             for i in school.members {
                 let p = swimmers[i].position, v = swimmers[i].velocity
                 var steer = SIMD2<Double>.zero, heading = SIMD2<Double>.zero, middle = SIMD2<Double>.zero, seen = 0.0
@@ -191,11 +196,11 @@ final class FishTank: SKScene {
                     }
                 }
                 if seen > 0 {
-                    steer += (heading / seen - v) * 0.9
-                    steer += (middle / seen - p) * 0.25
+                    steer += (heading / seen - v) * 0.9 * agility
+                    steer += (middle / seen - p) * 0.25 * agility
                 }
-                swimmers[i].wander += Double.random(in: -1...1) * dt * 1.5
-                steer += SIMD2(cos(swimmers[i].wander), 0.4 * sin(swimmers[i].wander)) * school.cruise * 0.45
+                swimmers[i].wander += Double.random(in: -1...1) * dt * 1.5 * agility
+                steer += SIMD2(cos(swimmers[i].wander), 0.4 * sin(swimmers[i].wander)) * school.cruise * 0.45 * agility
                 if let home = school.home { steer += (home - p) * 0.08 }
                 steer.x += max(0, wall - width * 0.04 - edge - p.x) / wall * push
                 steer.x -= max(0, p.x - (width * 1.04 - wall + edge)) / wall * push
@@ -204,41 +209,59 @@ final class FishTank: SKScene {
                     steer.y -= max(0, p.y - (ceiling - 60)) / 60 * push * 0.6
                 }
 
-                var velocity = v + steer * dt
-                if let burst = school.species.burst { // thrust while beating, drag while gliding (or resting)
-                    swimmers[i].pulse += dt / burst.cycle
-                    swimmers[i].coasting = swimmers[i].pulse.truncatingRemainder(dividingBy: 1) >= burst.share
-                    velocity += velocity / max(length(velocity), 0.001) * school.cruise * (swimmers[i].coasting ? -0.9 : 1.8) * dt
+                // The steering accumulates into an intent, the boids' free velocity. A fish never moves along it
+                // sideways or backwards, though: it always swims forward, the way it faces, pitching toward the
+                // intent within its species' lean, and turning round only by easing its width through zero, slowing
+                // and reversing as it does, the way a fish turns toward or away from the glass. Moving along the free
+                // velocity itself let flocking push sharks along backwards.
+                var fish = swimmers[i]
+                if let burst = school.species.burst { // a few beats, then a glide (or a rest on the sand)
+                    fish.pulse += dt / burst.cycle
+                    fish.coasting = fish.pulse.truncatingRemainder(dividingBy: 1) >= burst.share
+                    let along = fish.intent / max(length(fish.intent), 0.001)
+                    fish.intent += along * school.cruise * (fish.coasting ? -0.9 : 1.8) * dt * thrust
                 }
-                velocity.y *= 1 - 1.4 * dt // fish mostly swim level
-                let speed = length(velocity)
-                // A resting species settles to a stop on the sand between its moves, and slides along it. Too slow,
-                // a fish swims on the way it faces (scaling the vector up kept a slow sideways drift going, so big
-                // gliders slid backwards); too fast, it's reined in.
-                let slowest = rests && swimmers[i].coasting ? 0 : school.cruise * 0.45
-                if speed < slowest { velocity.x += (swimmers[i].facing >= 0 ? 1 : -1) * (slowest - speed) }
-                else if speed > school.cruise * 1.35 { velocity *= school.cruise * 1.35 / speed }
-                if rests { velocity.y = 0 }
-                swimmers[i].velocity = velocity
-                swimmers[i].position = rests ? SIMD2(p.x + velocity.x * dt, sand) : p + velocity * dt
+                fish.intent += steer * dt
+                fish.intent.y *= 1 - 1.4 * dt // fish mostly swim level
+                let pace = length(fish.intent), fastest = school.cruise * 1.35, slowest = rests && fish.coasting ? 0 : school.cruise * 0.45
+                if pace > fastest { fish.intent *= fastest / pace }
+                let wish = fish.intent, sign = fish.facing >= 0 ? 1.0 : -1.0
+                if !fish.turning, !(rests && fish.coasting), wish.x * sign < -0.3 * max(length(wish), 0.001) {
+                    // the giants carry on and turn out of sight; small fish turn where they are
+                    let outside = p.x < -body * 0.2 || p.x > width + body * 0.2
+                    if school.species.margin == 0 || outside {
+                        fish.turning = true
+                        fish.turnTo = -sign
+                        fish.bank = Bool.random() ? 1 : -1 // a new turn: bank toward the lamp or away
+                    }
+                }
+                if fish.turning {
+                    let turn = dt * 2.5 * max(agility, 0.4)
+                    fish.facing += max(-turn, min(turn, fish.turnTo - fish.facing))
+                    if fish.facing == fish.turnTo { fish.turning = false }
+                }
+                let lean = 0.35 * agility.squareRoot() // how far it noses up or down: 20° for a small fish, 7° for a whale shark
+                let wantPitch = max(-lean, min(lean, atan2(wish.y, max(abs(wish.x), school.cruise * 0.3)) + school.species.trim))
+                fish.pitch += (wantPitch - fish.pitch) * min(1, dt * 3 * max(agility, 0.3))
+                let want = min(max(pace, slowest), fastest)
+                fish.speed += (want - fish.speed) * min(1, dt * 4)
+                fish.velocity = SIMD2(fish.facing * cos(fish.pitch), rests ? 0 : sin(fish.pitch)) * fish.speed
+                fish.position = rests ? SIMD2(p.x + fish.velocity.x * dt, sand) : p + fish.velocity * dt
+                swimmers[i] = fish
                 pose(i, in: school, dt: dt)
             }
         }
     }
 
-    /// Faces, tilts and paces the tail beat of a fish from its velocity. Turning eases its width through zero, so
-    /// it reads as the fish turning round rather than flipping.
+    /// Places, faces, tilts and paces the tail beat of a fish from what `swim` decided.
     private func pose(_ i: Int, in school: School, dt: Double) {
         var fish = swimmers[i]
         let v = fish.velocity, cruise = school.cruise
-        let target = v.x > cruise * 0.15 ? 1.0 : v.x < -cruise * 0.15 ? -1.0 : (fish.facing >= 0 ? 1 : -1)
-        if fish.facing == -target { fish.bank = Bool.random() ? 1 : -1 } // a new turn: bank toward the lamp or away
-        fish.facing += max(-dt * 2.5, min(dt * 2.5, target - fish.facing))
-        let pitch = max(-0.3, min(0.3, atan2(v.y, max(abs(v.x), cruise * 0.5))))
-        fish.tilt += (pitch - fish.tilt) * min(1, dt * 3)
         fish.node.position = CGPoint(x: fish.position.x, y: fish.position.y)
         fish.node.xScale = CGFloat(fish.facing) * school.depth * fishUnit
-        fish.node.zRotation = CGFloat(fish.facing >= 0 ? fish.tilt : -fish.tilt)
+        // the whole body pivots a touch with each beat (ABZÛ's trick), 0.7° for the sweeping sharks
+        let pivot = school.species.gait == .sweep ? 0.012 * sin(fish.stroke * 2 * .pi) : 0
+        fish.node.zRotation = CGFloat((fish.facing >= 0 ? fish.pitch : -fish.pitch) + pivot)
         if fish.length > 30 || fish.frame < 0 { // the small fish of a cloud are lit once: it doesn't show on them
             framed(fish.node)
             illuminate(fish, in: school)
@@ -246,7 +269,11 @@ final class FishTank: SKScene {
 
         // The tail beats faster when swimming faster. Stepping through precomputed frames here, rather than an
         // SKAction whose speed changes every frame, which SpriteKit gets steadily slower at.
-        fish.stroke += dt / school.species.beat * (0.55 + 0.8 * length(v) / cruise) * (fish.coasting ? 0.15 : 1) // tail still in a glide
+        // The beat follows the distance swum for species with a stride, so a giant's tail sweeps once per 0.4–0.5
+        // body lengths rather than thrashing on the clock; otherwise it quickens with speed. Nearly still in a glide.
+        let advance = school.species.stride > 0 ? length(v) * dt / (school.species.stride * fish.length)
+            : dt / school.species.beat * (0.55 + 0.8 * length(v) / cruise)
+        fish.stroke += advance * (fish.coasting ? 0.15 : 1)
         let frame = Int(fish.stroke * Double(school.beat.count)) % school.beat.count
         if frame != fish.frame {
             fish.frame = frame
@@ -305,9 +332,9 @@ final class FishTank: SKScene {
         ]
         case .ocean: [ // small schools of trevally spread through the water as texture, the squadron, the big
             // animals, and the bottom-dwellers
-            (.trevally, 14, 0.5), (.trevally, 14, 0.56), (.whaleShark, 1, 0.62), (.trevally, 14, 0.64), (.sandbar, 1, 0.72),
-            (.trevally, 14, 0.74), (.cownose, 20, 0.75), (.manta, 1, 0.8), (.trevally, 14, 0.84), (.zebraShark, 1, 0.9),
-            (.trevally, 14, 0.92), (.guitarfish, 1, 0.95), (.manta, 1, 1.0), (.whaleShark, 1, 1.05),
+            (.whaleShark, 1, 0.5), (.trevally, 14, 0.52), (.trevally, 14, 0.58), (.trevally, 14, 0.64), (.manta, 1, 0.7), (.sandbar, 1, 0.72),
+            (.trevally, 14, 0.74), (.cownose, 16, 0.75), (.trevally, 14, 0.84), (.zebraShark, 1, 0.9), (.trevally, 14, 0.92),
+            (.whaleShark, 1, 0.95), (.guitarfish, 1, 0.95), (.manta, 1, 1.0),
         ]
         case .lagoon: [
             (.blacktip, 1, 0.6), (.baitfish, 40, 0.7), (.blacktip, 2, 0.8), (.sergeantMajor, 8, 0.85), (.nurseShark, 1, 0.88),
@@ -320,7 +347,7 @@ final class FishTank: SKScene {
             guard let first = looks.first else { continue }
             let (floor, ceiling) = bounds(depth, height: species.height)
             var school = School(species: species, depth: depth, cruise: .random(in: species.cruise) * Double(depth * unit),
-                                beat: TankArt.swimWarps(species, textureHeight: first.size.height))
+                                beat: TankArt.swimWarps(species, textureWidth: first.size.width, textureHeight: first.size.height))
             switch species.haunt {
             case .anemone: school.home = SIMD2(Double(anemone.x), Double(anemone.y + 40 * unit))
             case .rock:
@@ -343,13 +370,16 @@ final class FishTank: SKScene {
                 shadow.colorBlendFactor = 1
                 shadow.zPosition = Z.shadows
                 addChild(shadow)
-                let spread = Double(species.length * depth * fishUnit) * 2.5
+                // scattered about the school's centre, but inside the water column and no further off-screen than the
+                // walls: a giant started above the window took minutes to nose back down into it
+                let body = Double(species.length * depth * fishUnit), spread = body * 2.5
+                let start = SIMD2(min(max(centre.x + .random(in: -spread...spread), -body * species.margin), Double(size.width) + body * species.margin),
+                                  min(max(centre.y + .random(in: -spread...spread) * 0.5, floor), ceiling))
                 school.members.append(swimmers.count)
                 swimmers.append(Swimmer(node: node, shadow: shadow, depth: Double(depth) + .random(in: -0.05...0.05),
-                                        length: Double(species.length * depth * fishUnit),
-                                        position: centre + SIMD2(.random(in: -spread...spread), .random(in: -spread...spread) * 0.5),
-                                        velocity: SIMD2(heading * school.cruise, .random(in: -0.1...0.1) * school.cruise),
-                                        facing: heading))
+                                        length: body, position: start,
+                                        velocity: SIMD2(heading * school.cruise, 0), facing: heading, speed: school.cruise,
+                                        intent: SIMD2(heading * school.cruise, .random(in: -0.1...0.1) * school.cruise)))
             }
             schools.append(school)
         }

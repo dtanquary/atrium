@@ -331,7 +331,7 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
 /// so the count would drop.
 @MainActor @Test func fishTankTanksLoad() {
     defer { UserDefaults.standard.removeObject(forKey: "tank.kind") }
-    for (tank, cast) in [(FishTank.Tank.reef, 38), (.ocean, 111), (.lagoon, 58)] {
+    for (tank, cast) in [(FishTank.Tank.reef, 38), (.ocean, 107), (.lagoon, 58)] {
         UserDefaults.standard.set(Double(tank.rawValue), forKey: "tank.kind")
         let scene = FishTank(size: CGSize(width: 1512, height: 982))
         #expect(scene.tank == tank && scene.swimmers.count == cast, "\(tank.name): \(scene.swimmers.count) fish")
@@ -340,4 +340,22 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
         UserDefaults.standard.set(Double((tank.rawValue + 1) % FishTank.Tank.allCases.count), forKey: "tank.kind")
         #expect(scene.tank == tank)
     }
+}
+
+/// No fish ever swims backwards: over a minute in Ocean Voyager, every fish not mid-turn moves the way it faces.
+/// (Flocking forces integrated as a free velocity once pushed sharks along backwards; Dave saw it.)
+@MainActor @Test func fishSwimForward() {
+    UserDefaults.standard.set(1.0, forKey: "tank.kind")
+    defer { UserDefaults.standard.removeObject(forKey: "tank.kind") }
+    let scene = FishTank(size: CGSize(width: 1512, height: 982))
+    var wrong = 0, checked = 0
+    for step in 0..<1_800 {
+        let before = scene.swimmers.map(\.position)
+        scene.update(Double(step) / 30)
+        for (i, fish) in scene.swimmers.enumerated() where abs(fish.facing) == 1 {
+            let moved = fish.position.x - before[i].x
+            if abs(moved) > 0.01 { checked += 1; if moved * fish.facing < 0 { wrong += 1 } }
+        }
+    }
+    #expect(checked > 10_000 && wrong == 0, "\(wrong) backward steps of \(checked)")
 }
