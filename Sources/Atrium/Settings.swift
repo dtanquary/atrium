@@ -53,8 +53,9 @@ struct SettingsView: View {
                     Section {
                         row("General", icon: "gearshape.fill", tint: .gray).tag(GeneralPage.tag)
                         row("Power", icon: "bolt.fill", tint: .green).tag(PowerPage.tag)
-                        row("Software Update", icon: "arrow.down", tint: .blue).tag(UpdatePage.tag)
+                        row("Software Update", icon: "arrow.down", tint: .blue)
                             .badge(Updater.shared.release == nil ? 0 : 1)
+                            .tag(UpdatePage.tag) // last: a tag under the badge isn't selectable
                         row("About", icon: "info", tint: .gray).tag(AboutPage.tag)
                     }
                 }
