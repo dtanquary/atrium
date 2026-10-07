@@ -2,7 +2,7 @@
 # Builds build/Atrium.app, a menu-bar-only app. Run it with: open build/Atrium.app
 # APP_STORE=1 ./build.sh builds the Mac App Store variant instead: no updater, and sandboxed (see docs/app-store.md).
 set -e
-VERSION=0.99.3 # semantic versioning; see "Versioning" in CLAUDE.md
+VERSION=0.99.4 # semantic versioning; see "Versioning" in CLAUDE.md
 PRERELEASE=beta # until 1.0, then e.g. "rc 1" while a release candidate: shown in Settings → About; VERSION stays three numbers, as macOS requires
 cd "$(dirname "$0")"
 

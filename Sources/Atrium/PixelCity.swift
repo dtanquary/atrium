@@ -2464,10 +2464,10 @@ final class PixelCity: SKScene {
     }
 
     /// Where the rocket's path is `z` pixels up, and the size it's drawn at there: straight up to clear the tower,
-    /// then leaning over to the right as it gathers speed (less far for the Redstone and Starship: `Kit.lean`).
+    /// then leaning over to the right as it gathers speed (less far for the Redstone and the biggest: `Kit.arc`).
     private func path(z: Float) -> (x: Float, y: Float, scale: Float) {
         let (rows, scale) = lens(z)
-        return (site.x + 0.0094 * pow(max(z - 70, 0), 1.8) * scale * pad.rocket.kit.lean, site.y + rows, scale)
+        return (site.x + 0.0094 * pow(max(z - 70, 0), 1.8) * scale * pad.rocket.kit.arc, site.y + rows, scale)
     }
 
     /// How high a rocket is `t` seconds after lift-off, at a Falcon's pace.
@@ -3224,16 +3224,19 @@ private enum Rocket: Int {
     /// it up; how long and wide its flame is at full size; how thick its trail and how much steam it raises at
     /// lift-off, against a Falcon 9's; how briskly it climbs; whether it's fuelled cold enough to shed vapour; and
     /// the flag it flies under, if not the Stars and Stripes. Starship alone has a pad of its own, where the tower's
-    /// arms lift it onto the mount and catch its booster (`caught`). The Mercury-Redstone never went for orbit,
-    /// so it `lean`s over far less as it climbs (1 is a Falcon's arc, 0 straight up); Starship leans half as far,
-    /// because at its size a Falcon's turn looked abrupt. Rockets with strap-on
+    /// arms lift it onto the mount and catch its booster (`caught`). How far it leans over as it climbs is its
+    /// `arc` (1 a Falcon's, 0 straight up): the biggest, drawn taller than the 60 rows the lens shows true to size
+    /// (Starship, Saturn V, New Glenn, SLS), lean half as far, because at their size a Falcon's turn looked abrupt,
+    /// and the Mercury-Redstone, which never went for orbit, sets its own `lean` of a third. Rockets with strap-on
     /// boosters shed them near the top of the picture (`shed`): `sheds` is the picture of the rocket without them,
     /// one booster by itself, and how many fall away (two to the sides, or four in a cross). None comes back but a
     /// Falcon Heavy's, which are the `Booster`s that land a minute later, as a New Glenn's does with its own picture.
     struct Kit {
         let art: [[UInt8]], name: String, lands: Int, standing: Bool
         let flame: (length: Float, wide: Float), smoke: Float, steam: Float, pace: Float, cold: Bool, flag: Flag?
-        var caught = false, lean: Float = 1, sheds: (core: [[UInt8]], booster: [[UInt8]], count: Int)? = nil
+        var caught = false, lean: Float? = nil, sheds: (core: [[UInt8]], booster: [[UInt8]], count: Int)? = nil
+        /// How far it leans over as it climbs: `lean` if set, else half a Falcon's arc for anything over 60 rows tall.
+        var arc: Float { lean ?? (art.count > 60 ? 0.5 : 1) }
     }
     var kit: Kit { Self.kits[rawValue] }
     private static let kits = [
@@ -3252,7 +3255,7 @@ private enum Rocket: Int {
         Kit(art: bytes(longMarchRows), name: "CZ-5", lands: 0, standing: true, flame: (34, 6), smoke: 1.2, steam: 1.1, pace: 1, cold: true, flag: .china, sheds: strapOns(longMarchRows, wide: 2, count: 4)),
         Kit(art: bytes(h3Rows), name: "H3", lands: 0, standing: true, flame: (34, 6), smoke: 1.4, steam: 1, pace: 1.1, cold: true, flag: .japan, sheds: strapOns(h3Rows, wide: 2)),
         Kit(art: bytes(lvm3Rows), name: "LVM3", lands: 0, standing: true, flame: (30, 6), smoke: 1.6, steam: 1, pace: 1.05, cold: false, flag: .india, sheds: strapOns(lvm3Rows, wide: 2)),
-        Kit(art: starshipArt, name: "STARSHIP", lands: 1, standing: true, flame: (56, 6), smoke: 0.9, steam: 1.5, pace: 0.9, cold: true, flag: nil, caught: true, lean: 0.5),
+        Kit(art: starshipArt, name: "STARSHIP", lands: 1, standing: true, flame: (56, 6), smoke: 0.9, steam: 1.5, pace: 0.9, cold: true, flag: nil, caught: true),
         Kit(art: bytes(vulcanRows), name: "VULCAN", lands: 0, standing: true, flame: (36, 6), smoke: 1.5, steam: 1.1, pace: 1.05, cold: true, flag: nil, sheds: strapOns(vulcanRows, wide: 2, count: 4)),
         Kit(art: bytes(newGlennRows), name: "N GLENN", lands: 1, standing: false, flame: (52, 7), smoke: 0.7, steam: 1.4, pace: 0.9, cold: true, flag: nil),
         Kit(art: electronArt, name: "ELECTRON", lands: 0, standing: false, flame: (12, 2), smoke: 0.7, steam: 0.3, pace: 1.1, cold: true, flag: nil),
