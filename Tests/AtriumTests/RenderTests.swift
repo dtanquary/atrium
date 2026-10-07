@@ -204,7 +204,7 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
 
 /// A rocket with strap-on boosters sheds them near the top of the picture, and a minute after its lift-off the only
 /// movement is still that lift-off: none has come back to land (a Falcon Heavy's are still on their way).
-@MainActor @Test(arguments: ["sls", "shuttle", "ariane", "soyuz", "longmarch", "h3", "lvm3", "heavy"]) func pixelSpaceportShedsTheBoosters(of rocket: String) throws {
+@MainActor @Test(arguments: ["sls", "shuttle", "ariane", "soyuz", "longmarch", "h3", "lvm3", "heavy", "vulcan", "ariane6"]) func pixelSpaceportShedsTheBoosters(of rocket: String) throws {
     var settings: [String: Double] = ["spaceport.launches": 3]
     for knob in PixelCity.spaceportKnobs where knob.key.hasPrefix("spaceport.rocket.") { settings[knob.key] = knob.key == "spaceport.rocket.\(rocket)" ? 1 : 0 }
     defer { settings.keys.forEach(UserDefaults.standard.removeObject) }
@@ -241,6 +241,23 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
     #expect(flown == ["STARSHIP"] && scene.movements >= 4, "\(scene.movements) lift-offs and catches, of \(flown.sorted())")
 }
 
+/// New Glenn's booster comes back to a landing zone like a Falcon's: with only it switched on, it lifts off and
+/// lands again and again, and nothing else is ever on the pad.
+@MainActor @Test func pixelSpaceportLandsNewGlenn() throws {
+    var settings: [String: Double] = ["spaceport.launches": 3]
+    for knob in PixelCity.spaceportKnobs where knob.key.hasPrefix("spaceport.rocket.") { settings[knob.key] = knob.key == "spaceport.rocket.newglenn" ? 1 : 0 }
+    defer { settings.keys.forEach(UserDefaults.standard.removeObject) }
+    for (key, value) in settings { UserDefaults.standard.set(value, forKey: key) }
+    let scene = PixelCity(size: CGSize(width: 800, height: 500), spaceport: true)
+    var flown = Set<String>()
+    for step in 0..<7_200 {
+        scene.update(Double(step) / 10)
+        if step % 20 == 0 { scene.didFinishUpdate() }
+        flown.insert(scene.rocketName)
+    }
+    #expect(flown == ["N GLENN"] && scene.movements >= 4, "\(scene.movements) lift-offs and landings, of \(flown.sorted())")
+}
+
 /// The Shuttle's orbiter comes home to the Spaceport's runway after each of its flights: with only the Shuttle
 /// switched on, seven and a half minutes at the Spaceport's busiest see three lift-offs and two landings.
 @MainActor @Test func pixelSpaceportBringsTheOrbiterHome() throws {
@@ -270,7 +287,7 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
             if flown[i].last != scene.rocketName { flown[i].append(scene.rocketName) }
         }
     }
-    let back = ["FALCON 9", "F HEAVY", "STARSHIP"]
+    let back = ["FALCON 9", "F HEAVY", "STARSHIP", "N GLENN"]
     for names in flown {
         #expect(names.count >= 4 && zip(names, names.dropFirst()).allSatisfy { back.contains($0) != back.contains($1) }, "\(names)")
     }

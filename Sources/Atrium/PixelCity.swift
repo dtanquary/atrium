@@ -15,6 +15,7 @@ final class PixelCity: SKScene {
     private enum K: Int {
         case view, shuffle, shuffleMinutes, looking, flightsDay, flightsNight, wind, launches
         case falcon9, falconHeavy, starship, sls, shuttle, saturnV, ariane, titan, atlas, redstone, soyuz, longMarch, h3, lvm3, previewTime, previewHour
+        case vulcan, newGlenn, electron, ariane6
     }
     /// Pixel City's settings, each with the name the scene reads it by.
     nonisolated private static let cityKnobs: [(K, Knob)] = [
@@ -37,9 +38,13 @@ final class PixelCity: SKScene {
         (.falcon9, Knob(key: "spaceport.rocket.falcon9", label: "Falcon 9", range: 0...1, standard: 1, section: "Rockets", format: .toggle)),
         (.falconHeavy, Knob(key: "spaceport.rocket.heavy", label: "Falcon Heavy", range: 0...1, standard: 1, section: "Rockets", format: .toggle)),
         (.starship, Knob(key: "spaceport.rocket.starship", label: "Starship", range: 0...1, standard: 1, section: "Rockets", format: .toggle)),
+        (.newGlenn, Knob(key: "spaceport.rocket.newglenn", label: "New Glenn", range: 0...1, standard: 1, section: "Rockets", format: .toggle)),
+        (.vulcan, Knob(key: "spaceport.rocket.vulcan", label: "Vulcan", range: 0...1, standard: 1, section: "Rockets", format: .toggle)),
+        (.electron, Knob(key: "spaceport.rocket.electron", label: "Electron", range: 0...1, standard: 1, section: "Rockets", format: .toggle)),
         (.sls, Knob(key: "spaceport.rocket.sls", label: "SLS", range: 0...1, standard: 1, section: "Rockets", format: .toggle)),
         (.shuttle, Knob(key: "spaceport.rocket.shuttle", label: "Space Shuttle", range: 0...1, standard: 1, section: "Rockets", format: .toggle)),
         (.saturnV, Knob(key: "spaceport.rocket.saturn", label: "Saturn V", range: 0...1, standard: 1, section: "Rockets", format: .toggle)),
+        (.ariane6, Knob(key: "spaceport.rocket.ariane6", label: "Ariane 6", range: 0...1, standard: 1, section: "Rockets", format: .toggle)),
         (.ariane, Knob(key: "spaceport.rocket.ariane", label: "Ariane 5", range: 0...1, standard: 1, section: "Rockets", format: .toggle)),
         (.titan, Knob(key: "spaceport.rocket.titan", label: "Gemini-Titan", range: 0...1, standard: 1, section: "Rockets", format: .toggle)),
         (.atlas, Knob(key: "spaceport.rocket.atlas", label: "Mercury-Atlas", range: 0...1, standard: 1, section: "Rockets", format: .toggle)),
@@ -2386,6 +2391,7 @@ final class PixelCity: SKScene {
     private static let fleet: [(rocket: Rocket, knob: K)] = [
         (.falcon9, .falcon9), (.heavy, .falconHeavy), (.starship, .starship), (.sls, .sls), (.shuttle, .shuttle), (.saturnV, .saturnV), (.ariane, .ariane),
         (.titan, .titan), (.atlas, .atlas), (.redstone, .redstone), (.soyuz, .soyuz), (.longMarch, .longMarch), (.h3, .h3), (.lvm3, .lvm3),
+        (.vulcan, .vulcan), (.newGlenn, .newGlenn), (.electron, .electron), (.ariane6, .ariane6),
     ]
     // ponytail: with every rocket switched off it flies them all, so the pad is never left empty
     private static var rockets: [Rocket] {
@@ -2516,7 +2522,7 @@ final class PixelCity: SKScene {
                 movements += 1
                 for (i, zone) in free.shuffled().prefix(need).sorted().enumerated() {
                     // Starship's booster goes to its tower; what comes to a landing zone, a while after, is its ship.
-                    boosters.append(Booster(zone: zone, until: clock + (kit.caught ? 100 : 62 + Double(i) * 1.3), ship: kit.caught))
+                    boosters.append(Booster(zone: zone, until: clock + (kit.caught ? 100 : 62 + Double(i) * 1.3), ship: kit.caught, of: pad.rocket))
                 }
                 if kit.caught { boosters.append(Booster(zone: 2, until: clock + 62)) } // Starship's comes back to its tower
                 if pad.rocket == .shuttle, orbiter.due == .infinity { orbiter.due = clock + 150 } // one may still be on the runway
@@ -2989,7 +2995,8 @@ final class PixelCity: SKScene {
                 continue
             }
             let legs = flying ? b.z < 26 : !(held && crane.phase == .carry)
-            stamp(legs ? landedArt : fallingArt, into: &px, x: x, y: y, scale: scale, paint: rocketPaint(flood: 0), soot: 18, heat: b.phase == .burn ? 0.85 : 0)
+            let (landed, falling) = b.of == .newGlenn ? (glennLandedArt, glennFallingArt) : (landedArt, fallingArt)
+            stamp(legs ? landed : falling, into: &px, x: x, y: y, scale: scale, paint: rocketPaint(flood: 0), soot: 18, heat: b.phase == .burn ? 0.85 : 0)
         }
         if orbiter.phase != .away {
             // The orbiter: the Shuttle's own drawing of it, laid on its belly, nose to the left; nose down in the
@@ -3153,7 +3160,7 @@ private struct Pad {
 
 /// The rockets the Spaceport flies.
 private enum Rocket: Int {
-    case falcon9, dragon, heavy, ariane, shuttle, sls, saturnV, titan, atlas, redstone, soyuz, longMarch, h3, lvm3, starship
+    case falcon9, dragon, heavy, ariane, shuttle, sls, saturnV, titan, atlas, redstone, soyuz, longMarch, h3, lvm3, starship, vulcan, newGlenn, electron, ariane6
 
     /// What sets one rocket apart: its picture, and the name the countdown board gives it; how many of its
     /// boosters come back to land; whether it rolls out standing on a crawler, or lying on a strongback that stands
@@ -3165,7 +3172,7 @@ private enum Rocket: Int {
     /// because at its size a Falcon's turn looked abrupt. Rockets with strap-on
     /// boosters shed them near the top of the picture (`shed`): `sheds` is the picture of the rocket without them,
     /// one booster by itself, and how many fall away (two to the sides, or four in a cross). None comes back but a
-    /// Falcon Heavy's, which are the `Booster`s that land a minute later.
+    /// Falcon Heavy's, which are the `Booster`s that land a minute later, as a New Glenn's does with its own picture.
     struct Kit {
         let art: [[UInt8]], name: String, lands: Int, standing: Bool
         let flame: (length: Float, wide: Float), smoke: Float, steam: Float, pace: Float, cold: Bool, flag: Flag?
@@ -3189,6 +3196,10 @@ private enum Rocket: Int {
         Kit(art: bytes(h3Rows), name: "H3", lands: 0, standing: true, flame: (34, 6), smoke: 1.4, steam: 1, pace: 1.1, cold: true, flag: .japan, sheds: strapOns(h3Rows, wide: 2)),
         Kit(art: bytes(lvm3Rows), name: "LVM3", lands: 0, standing: true, flame: (30, 6), smoke: 1.6, steam: 1, pace: 1.05, cold: false, flag: .india, sheds: strapOns(lvm3Rows, wide: 2)),
         Kit(art: starshipArt, name: "STARSHIP", lands: 1, standing: true, flame: (56, 6), smoke: 0.9, steam: 1.5, pace: 0.9, cold: true, flag: nil, caught: true, lean: 0.5),
+        Kit(art: bytes(vulcanRows), name: "VULCAN", lands: 0, standing: true, flame: (36, 6), smoke: 1.5, steam: 1.1, pace: 1.05, cold: true, flag: nil, sheds: strapOns(vulcanRows, wide: 2, count: 4)),
+        Kit(art: bytes(newGlennRows), name: "N GLENN", lands: 1, standing: false, flame: (52, 7), smoke: 0.7, steam: 1.4, pace: 0.9, cold: true, flag: nil),
+        Kit(art: electronArt, name: "ELECTRON", lands: 0, standing: false, flame: (12, 2), smoke: 0.7, steam: 0.3, pace: 1.1, cold: true, flag: nil),
+        Kit(art: bytes(ariane6Rows), name: "ARIANE 6", lands: 0, standing: true, flame: (34, 6), smoke: 1.5, steam: 1, pace: 1.1, cold: true, flag: .france, sheds: strapOns(ariane6Rows, wide: 2, count: 4)),
     ]
 }
 
@@ -3218,6 +3229,7 @@ private struct Booster {
     var until: TimeInterval // when it comes back into sight, or when the crane may come for it
     var z: Float = 0, v: Float = 0 // its height over the landing zone, and how fast it is falling
     var ship = false               // Starship's upper stage, which comes home on its belly and lands on its skirt
+    var of = Rocket.falcon9        // whose it is: a New Glenn's comes home with its own picture
 }
 
 /// The Shuttle's orbiter on its way home: away; gliding in; rolling out along the runway; standing; and under tow.
@@ -3348,6 +3360,21 @@ private let longMarchRows = tall([("...ww...", 1), ("..lwws..", 9), ("..BBBB..",
 private let h3Rows = tall([("...ww...", 1), ("..lwws..", 10), ("..gggg..", 1), ("..pqqr..", 18), ("l.pqqr.s", 1), ("lspqqrls", 9), ("nn.nn.nn", 1)])
 /// LVM3: a white core with a dark upper stage under a bulbous fairing, between two big white boosters.
 private let lvm3Rows = tall([("...ww...", 1), ("..lwws..", 6), ("..KKKK..", 3), ("..lwws..", 3), ("l.lwws.s", 1), ("lslwwsls", 14), ("nn.nn.nn", 1)])
+/// Vulcan: a white core under a white fairing, a blue band at the fairing's foot and a red one for the lettering down
+/// its side, between white solid boosters: four, in a cross, as the VC4 flies.
+private let vulcanRows = tall([("...ww...", 1), ("..lwws..", 11), ("..BBBB..", 1), ("..lwws..", 4), ("..RRRR..", 1), ("..lwws..", 6), ("l.lwws.s", 1), ("lslwwsls", 14), ("nn.nn.nn", 1)])
+/// New Glenn: white tanks under a white fairing, the interstage and the engine module in their brown thermal coat,
+/// black fins at the top of the booster and black strakes at its foot. The booster is everything from the fins down.
+private let newGlennRows = tall([("...w...", 1), ("..lws..", 2), (".lwwss.", 13), (".lwwss.", 11), (".pqqrr.", 2), ("KlwwssK", 3), (".lwwss.", 25), ("KlwwssK", 4), (".pqqrr.", 3), ("nn.n.nn", 1)])
+/// A New Glenn's booster by itself, coming home, and down on its legs.
+private let glennFallingArt = bytes(newGlennRows[29...].map { ".." + $0 + ".." })
+private let glennLandedArt: [[UInt8]] = glennFallingArt.dropLast(6) + bytes(["..KlwwssK..", "..KlwwssK..", ".K.pqqrr.K.", ".K.pqqrr.K.", "K..pqqrr..K", "K..nn.nn..K"])
+/// Electron: all black carbon fibre, drawn half as tall again as true (18 m would be 12 rows) and as wide as a Falcon,
+/// with a white band for the lettering on its side.
+private let electronArt = bytes(tall([("..K..", 1), (".KKK.", 3), (".KwK.", 1), (".KKK.", 11), (".n.n.", 1)]))
+/// Ariane 6: a white core under a long white fairing with a black band, between white solid boosters: four, in a
+/// cross, as the Ariane 64 flies.
+private let ariane6Rows = tall([("...ww...", 1), ("..lwws..", 13), ("..KKKK..", 1), ("..lwws..", 16), ("l.lwws.s", 1), ("lslwwsls", 8), ("nn.nn.nn", 1)])
 /// Saturn V: three stages stepping in to the spacecraft and its escape tower, white with black roll marks.
 private let saturnArt = bytes(tall([
     ("....w....", 4), ("....g....", 2), ("....w....", 1), ("...lws...", 1), ("...xyz...", 4), ("...lws...", 2), ("..lwwss..", 3),
@@ -3400,7 +3427,7 @@ private let figures: [Character: [UInt8]] = [
     "+": [0, 2, 7, 2, 0], ":": [0, 2, 0, 2, 0],
     "A": [2, 5, 7, 5, 5], "C": [3, 4, 4, 4, 3], "D": [6, 5, 5, 5, 6], "E": [7, 4, 6, 4, 7], "F": [7, 4, 6, 4, 4], "H": [5, 5, 7, 5, 5],
     "I": [7, 2, 2, 2, 7], "L": [4, 4, 4, 4, 7], "N": [6, 5, 5, 5, 5], "O": [7, 5, 5, 5, 7], "R": [6, 5, 6, 5, 5], "S": [3, 4, 2, 1, 6],
-    "U": [5, 5, 5, 5, 7], "V": [5, 5, 5, 5, 2], "Y": [5, 5, 2, 2, 2], "Z": [7, 1, 2, 4, 7], "M": [5, 7, 7, 5, 5], "P": [6, 5, 6, 4, 4],
+    "U": [5, 5, 5, 5, 7], "V": [5, 5, 5, 5, 2], "Y": [5, 5, 2, 2, 2], "Z": [7, 1, 2, 4, 7], "M": [5, 7, 7, 5, 5], "P": [6, 5, 6, 4, 4], "G": [3, 4, 5, 5, 7],
 ]
 
 // The people on the Spaceport's bank, in silhouette, and the crown of its palm.
