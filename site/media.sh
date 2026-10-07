@@ -5,7 +5,7 @@
 # HEVC for Safari on M1 and M2, plus a small landscape copy for the laptop on portrait phones. Output goes to
 # site/public/media, which is gitignored: this script is the source.
 #   site/media.sh               # all of them
-#   site/media.sh nebula galaxy # just these
+#   site/media.sh nebula pixel-city # just these
 #   site/media.sh cards         # just the cards for every wallpaper, cut from the README's screenshots
 # Needs ffmpeg with libsvtav1 and libx265 (Homebrew's has both).
 set -e
@@ -18,7 +18,7 @@ LOOP=12 FADE=2 # seconds: the loop, and the crossfade from its tail into its hea
 WORKS='nebula|Nebula|54|4|SNAPSHOT_DEFAULTS=nebula.palette=Hubble
 flowing-gradient|Flowing Gradient|34|4|SNAPSHOT_DEFAULTS=gradient.palette=Midnight,gradient.ribbonsOn=1
 live-sky|Live Sky|72|4|SNAPSHOT_DEFAULTS=sky.previewTime=1,sky.previewHour=23
-galaxy|Galaxy|48|4|SNAPSHOT_DEFAULTS=galaxy.kind=Whirlpool
+pixel-city|Pixel City|53|4|SNAPSHOT_DEFAULTS=city.place=0,city.previewTime=1,city.previewHour=19
 murmuration|Murmuration|44|20|SNAPSHOT_DEFAULTS=murmuration.light=5,murmuration.ground=0 MURMURATION_SEED=3
 fish-tank|Fish Tank|42|4|SNAPSHOT_APPEARANCE=light'
 
