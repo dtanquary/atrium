@@ -17,17 +17,13 @@ Screenshots show the wallpaper alone, with no desktop icons, menu bar or Dock. E
 ### Nature and weather
 
 #### Fish Tank
-Three tanks in one: a bright home reef tank of real fish and corals cut out of photos (a chromis school, tangs, clownfish in their anemone, soft corals swaying); the Georgia Aquarium's Ocean Voyager window, with whale sharks, mantas and a squadron of cownose rays gliding through shafts of light; and a sunlit reef flat in the open sea, blacktip reef sharks patrolling over white sand under the rippling surface. Settings picks the tank, or moves between them on its own.
+A bright reef tank of real fish and corals, cut out of photos: a chromis school, tangs, clownfish in their anemone, and soft corals swaying.
 
 ![Fish Tank in motion: fish schooling over the reef under actinic blue, with light rippling across the sand](docs/images/fish-tank.gif)
 
 | ![Fish Tank by day](docs/images/fish-tank-day.jpg) | ![Fish Tank at night](docs/images/fish-tank-actinic.jpg) |
 |---|---|
 | By day, in Light Mode | Under actinic blue in Dark Mode, its corals fluorescing |
-
-| ![Ocean Voyager](docs/images/fish-tank-ocean-voyager.jpg) | ![Shallow Reef](docs/images/fish-tank-shallow-reef.jpg) |
-|---|---|
-| Ocean Voyager: whale sharks, mantas and cownose rays behind the Georgia Aquarium's big window | Shallow Reef: blacktips over a sunlit reef flat, a nurse shark resting on the sand |
 
 #### Weather
 Real hills under your live local weather, beneath a physical sky with the real Sun and Moon: sunrise and twilight, real clouds on the real wind, rain, snow lying on the ground, valley mist and lightning.
@@ -236,7 +232,7 @@ A pixel-art city that follows your clock and the real Sun, with traffic and wind
 
 ## Settings
 
-The first time Atrium opens, a short welcome lets you try the wallpapers on your desktop and shuffle between them all (it's in Settings → About → Show Welcome any time after). Choose Settings… (⌘,) from the menu bar icon. Every wallpaper has a page, laid out like System Settings, with its palettes, photos, sliders, switches and menus. The wallpaper runs live behind the top of its page, so each change shows as you make it. General holds Open at Login, Shuffle and Match the lock screen; Power sets the frame rate when plugged in, on battery and in Low Power Mode.
+The first time Atrium opens, a short welcome lets you try the wallpapers on your desktop and shuffle between them all (it's in Settings → About → Show Welcome any time after). Choose Settings… (⌘,) from the menu bar icon. Every wallpaper has a page, laid out like System Settings, with its palettes, photos, sliders, switches and menus (Fish Tank has none yet). The wallpaper runs live behind the top of its page, so each change shows as you make it. General holds Open at Login, Shuffle and Match the lock screen; Power sets the frame rate when plugged in, on battery and in Low Power Mode.
 
 | ![Settings for Solar System Tour: a grid of worlds to hold the tour on](docs/images/settings-solar-system-tour.jpg) | ![Settings for Rain on Glass: ten real places and seven city-light palettes behind the glass](docs/images/settings-rain-on-glass.jpg) |
 |---|---|
@@ -361,7 +357,7 @@ SETTINGS_SHOT="Nebula" swift test --filter settingsWindow   # opens Settings on 
 - Solar System Tour's photos are from NASA, JPL, ESA, JAXA, the Space Science Institute, JHUAPL/SwRI, NSO and the people who processed them, public domain, CC BY or CC BY-SA, with three from JAXA under the Japanese Government Standard Terms of Use 2.0 (compatible with CC BY 4.0). Each one's credit, license and source is in [`Sources/Atrium/Resources/solar-photos.tsv`](Sources/Atrium/Resources/solar-photos.tsv) and in Settings → About.
 - Deep Space Tour's photos are from ESA/Hubble, ESA/Webb, ESO, NOIRLab, the Rubin Observatory, ESA's Euclid, NASA's Chandra and the Event Horizon Telescope Collaboration, CC BY 4.0, CC BY-SA 3.0 IGO or public domain. Each one's credit, license and source is in [`Sources/Atrium/Resources/deep-photos.tsv`](Sources/Atrium/Resources/deep-photos.tsv) and in Settings → About.
 - Pixel Spaceport's rockets are drawn in code after the real ones, without names or logos. The times their strap-on boosters fall away come from ESA, ISRO, Spaceflight Now, Spaceflight101, The Planetary Society and Wikipedia, listed under Sources in [`docs/pixel-spaceport.md`](docs/pixel-spaceport.md#sources).
-- Reef fish, corals and rock in the Fish Tank, and the animals of its Ocean Voyager and Shallow Reef tanks, are cut out of public domain, CC0 and CC BY photos from iNaturalist, Wikimedia Commons and NOAA. Each photographer and license is listed in [`Sources/Atrium/Resources/reef-credits.tsv`](Sources/Atrium/Resources/reef-credits.tsv), [`ocean-credits.tsv`](Sources/Atrium/Resources/ocean-credits.tsv) and [`lagoon-credits.tsv`](Sources/Atrium/Resources/lagoon-credits.tsv), and in Settings → About.
+- Reef fish, corals and rock in the Fish Tank are cut out of public domain, CC0 and CC BY photos from iNaturalist, Wikimedia Commons and NOAA. Each photographer and license is listed in [`Sources/Atrium/Resources/reef-credits.tsv`](Sources/Atrium/Resources/reef-credits.tsv) and in Settings → About.
 
 ## License
 

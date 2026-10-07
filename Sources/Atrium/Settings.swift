@@ -377,8 +377,6 @@ struct AboutPage: View {
                 group("Weather", "Hills, clouds and Moon from the BLM, NASA, Poly Haven and Wikimedia Commons", "weather-credits.tsv")
                 group("Rain on Glass", "Backdrops from Poly Haven, Wikimedia Commons and the NPS", "rain-credits.tsv")
                 group("Fish Tank", "Reef photos from iNaturalist, Wikimedia Commons and NOAA", "reef-credits.tsv")
-                group("Fish Tank: Ocean Voyager", "Photos from iNaturalist, Wikimedia Commons and NOAA", "ocean-credits.tsv")
-                group("Fish Tank: Shallow Reef", "Photos from iNaturalist and Wikimedia Commons", "lagoon-credits.tsv")
                 group("Solar System Tour", "Photos from NASA, ESA, JAXA and the people who processed them", "solar-photos.tsv")
                 group("Deep Space Tour", "Photos from ESA/Hubble, ESA/Webb, ESO, NOIRLab, Euclid, Chandra and the EHT", "deep-photos.tsv")
             } header: {
