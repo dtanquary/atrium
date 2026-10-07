@@ -331,6 +331,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         LockScreen.restore()
+        // macOS drops a wallpaper set just before its app exits, at least the default one (an Aerial's still), which
+        // left the deleted still in its place. A fifth of a second was enough when tried; half is to spare.
+        Thread.sleep(forTimeInterval: 0.5)
     }
 }
 

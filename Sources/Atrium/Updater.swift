@@ -83,11 +83,14 @@ import SwiftUI
         }
     }
 
-    /// Opens this app's path again once this copy has quit, and quits, so the update takes over.
+    /// Opens this app's path again once this copy has quit, and quits, so the update takes over. It exits rather than
+    /// quitting, as `pkill` does, so Match the lock screen leaves the stills and the user's saved wallpaper to the new
+    /// copy: put back on quitting, the user's own was lost, as macOS still reported the still to the new copy a moment
+    /// later, which it doesn't save as theirs.
     private func relaunch() {
         let wait = "while kill -0 \(ProcessInfo.processInfo.processIdentifier) 2>/dev/null; do sleep 0.2; done; open \"$0\""
         _ = try? Process.run(URL(filePath: "/bin/sh"), arguments: ["-c", wait, Bundle.main.bundleURL.path])
-        NSApp.terminate(nil)
+        exit(0)
     }
 
     /// The newest release in a GitHub `releases` reply, if it's newer than `version` with its `prerelease` label.
