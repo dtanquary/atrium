@@ -10,7 +10,7 @@ import SwiftUI
 final class WallpaperView: SKView, SKViewDelegate {
     private static let log = Logger(subsystem: "com.dtanquary.atrium", category: "wallpaper")
     /// When it last drew a frame.
-    private var lastDrawn = Date()
+    var lastDrawn = Date()
     /// Holds the current frame still, e.g. in Low Power Mode.
     var frozen = false { didSet { updatePaused() } }
     /// Runs even while frozen until then, so a new scene draws its first frame, or finishes crossfading, and an
@@ -53,16 +53,19 @@ final class WallpaperView: SKView, SKViewDelegate {
         if was, !isPaused { lastDrawn = Date() } // just set going: give it the time `watch` allows before it's judged stopped
     }
 
-    /// Restarts drawing if it has stopped while the view should be running. An SKView has been found holding its
-    /// last frame for good after the Mac slept, its display link gone though it wasn't paused, and nothing else
-    /// toggles `isPaused` until something changes; pausing and unpausing makes it set its render callback up again.
-    /// Called every few seconds, and as the screens wake.
-    func watch() {
-        guard !isPaused, Date().timeIntervalSince(lastDrawn) > 5 else { return }
-        Self.log.error("drawing stopped \(Date().timeIntervalSince(self.lastDrawn), format: .fixed(precision: 0)) s ago while running; restarting")
-        isPaused = true
-        lastDrawn = Date()
-        updatePaused()
+    /// Gives way to a fresh view if drawing has stopped while this one should be running. An SKView has been found
+    /// holding its last frame for good after the Mac slept, and after a display reconfigured as it woke, its display
+    /// link gone though it wasn't paused; pausing and unpausing it, the first fix, drew nothing in 12 minutes of
+    /// trying (2026-10-07). A fresh view gets a fresh display link, and the wallpaper built afresh, since a crossfade
+    /// stuck in the old view never reached its scene. Called every few seconds, and as the screens wake.
+    func watch(building scene: @MainActor (CGSize) -> SKScene = currentScene) {
+        guard !isPaused, Date().timeIntervalSince(lastDrawn) > 5, let window else { return }
+        Self.log.error("drawing stopped \(Date().timeIntervalSince(self.lastDrawn), format: .fixed(precision: 0)) s ago while running; replacing the view")
+        let fresh = WallpaperView()
+        fresh.frozen = frozen
+        fresh.preferredFramesPerSecond = preferredFramesPerSecond
+        window.contentView = fresh
+        fresh.presentScene(scene(window.frame.size))
     }
 
     nonisolated func view(_ view: SKView, shouldRenderAtTime time: TimeInterval) -> Bool {

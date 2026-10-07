@@ -14,6 +14,21 @@ import UniformTypeIdentifiers
     #expect(view.scene === new)
 }
 
+/// A view that has stopped drawing though it should be running gives way to a fresh one showing the wallpaper
+/// built afresh, display link and all.
+@MainActor @Test func stoppedViewIsReplaced() {
+    let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 64, height: 64), styleMask: .borderless, backing: .buffered, defer: false)
+    let view = WallpaperView()
+    window.contentView = view
+    view.presentScene(SKScene(size: window.frame.size))
+    view.isPaused = false
+    view.lastDrawn = Date(timeIntervalSinceNow: -10)
+    let fresh = SKScene(size: window.frame.size)
+    view.watch { _ in fresh }
+    #expect(window.contentView !== view)
+    #expect((window.contentView as? WallpaperView)?.scene === fresh)
+}
+
 /// Renders every wallpaper offscreen at Retina size, saves a PNG to look at, and prints what a frame costs.
 /// Fails if a scene comes out as one flat colour (e.g. a shader that didn't compile).
 ///
