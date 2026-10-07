@@ -53,9 +53,11 @@ struct SettingsView: View {
                     Section {
                         row("General", icon: "gearshape.fill", tint: .gray).tag(GeneralPage.tag)
                         row("Power", icon: "bolt.fill", tint: .green).tag(PowerPage.tag)
+                        #if !APP_STORE
                         row("Software Update", icon: "arrow.down", tint: .blue)
                             .badge(Updater.shared.release == nil ? 0 : 1)
                             .tag(UpdatePage.tag) // last: a tag under the badge isn't selectable
+                        #endif
                         row("About", icon: "info", tint: .gray).tag(AboutPage.tag)
                     }
                 }
@@ -82,7 +84,9 @@ struct SettingsView: View {
             case AboutPage.tag: AboutPage()
             case GeneralPage.tag: GeneralPage()
             case PowerPage.tag: PowerPage()
+            #if !APP_STORE
             case UpdatePage.tag: UpdatePage()
+            #endif
             case let name:
                 if let wallpaper = scenes.first(where: { $0.name == name }) ?? scenes.first(where: { $0.name == current }) {
                     WallpaperPage(wallpaper: wallpaper).id(wallpaper.name)
@@ -332,7 +336,9 @@ struct AboutPage: View {
                 LabeledContent("Dave Tanquary") { Link("dtanquary.com", destination: URL(string: "https://dtanquary.com")!) }
                 LabeledContent("Website") { Link("atrium.show", destination: URL(string: "https://atrium.show")!) }
                 LabeledContent("Source") { Link("github.com/dtanquary/atrium", destination: URL(string: "https://github.com/dtanquary/atrium")!) }
+                #if !APP_STORE
                 LabeledContent("New versions") { Link("Releases on GitHub", destination: URL(string: "https://github.com/dtanquary/atrium/releases")!) }
+                #endif
                 LabeledContent("Report a problem") { Link("Issues on GitHub", destination: URL(string: "https://github.com/dtanquary/atrium/issues")!) }
                 LabeledContent("License") { Link("MIT, for the code", destination: URL(string: "https://github.com/dtanquary/atrium/blob/main/LICENSE")!) }
             }

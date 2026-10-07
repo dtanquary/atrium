@@ -34,6 +34,9 @@ One file per wallpaper, recording what the code can't: how each scene works, why
 
 \*Release build, 2x Retina at 1512×982 points, measured 2026-09-24 with `swift test -c release -Xswiftc -enable-testing`. The budget is about 2 ms each for CPU and GPU. Debug builds are pessimistic on CPU (Murmuration runs about 16–19 ms in debug).
 
+## Not a wallpaper
+- [app-store.md](app-store.md): the plan for the Mac App Store, what the sandboxed build did when tried, and the steps left.
+
 ## Screenshots
 
 The README's screenshots live in `docs/images` as 1600-pixel JPEGs of the wallpaper alone. All of them were rendered afresh on 2026-09-29 (except `the-moon-vs-dial-a-moon.jpg`, a check against NASA's frames) by the snapshot test at 2x Retina, which is the same pixels without switching the desktop or touching settings. For example: `SNAPSHOT_DEFAULTS="galaxy.kind=Whirlpool" SNAPSHOT_SCENE=Galaxy swift test -c release -Xswiftc -enable-testing`, with `SNAPSHOT_APPEARANCE=light|dark` for the two looks; the settings for most are in each wallpaper's doc. Random ones were picked from three or four rolls. A few need more than the test gives them:

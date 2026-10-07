@@ -255,10 +255,12 @@ if !scenes.contains(where: { $0.name == current }) {
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
+        #if !APP_STORE
         if let update = Updater.shared.release {
             menu.addItem(withTitle: "Update to Atrium \(update.version)…", action: #selector(openUpdate), keyEquivalent: "").target = self
             menu.addItem(.separator())
         }
+        #endif
         for scene in scenes {
             let entry = menu.addItem(withTitle: scene.name, action: #selector(pick), keyEquivalent: "")
             entry.target = self
@@ -291,9 +293,11 @@ if !scenes.contains(where: { $0.name == current }) {
         SettingsWindow.shared.open()
     }
 
+    #if !APP_STORE
     @objc func openUpdate() {
         SettingsWindow.shared.open(page: UpdatePage.tag)
     }
+    #endif
 
     @objc func openAbout() {
         SettingsWindow.shared.open(page: AboutPage.tag)
@@ -440,11 +444,13 @@ Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in
 NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { _ in
     MainActor.assumeIsolated { windows.compactMap { $0.contentView as? WallpaperView }.forEach { $0.watch() } }
 }
-// Look for a newer release once a day, unless Settings → Software Update says not to.
+// Look for a newer release once a day, unless Settings → Software Update says not to. The App Store updates its own.
+#if !APP_STORE
 Updater.shared.check()
 Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { _ in
     MainActor.assumeIsolated { Updater.shared.check() }
 }
+#endif
 // Rebuild the scene in the other look when macOS switches between Light and Dark Mode.
 // ponytail: rebuilds every scene, even ones with a single look; it only happens a couple of times a day
 let appearance = app.observe(\.effectiveAppearance) { _, _ in

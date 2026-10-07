@@ -3,6 +3,9 @@ import Observation
 import Security
 import SwiftUI
 
+// Not in the App Store build (APP_STORE, see docs/app-store.md): the App Store updates its own apps, and its rules
+// allow no other way.
+#if !APP_STORE
 /// Keeps Atrium up to date from its releases on GitHub. Once a day, while `automatic` is on, `check()` looks for a newer
 /// release and, if there is one, opens Settings → Software Update to offer it. Installing downloads the disk image,
 /// checks the app in it is intact and signed by the same developer as this one, puts it in place of this one and
@@ -268,3 +271,4 @@ struct UpdatePage: View {
         return (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
     }
 }
+#endif
