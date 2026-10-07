@@ -121,8 +121,8 @@ final class FishTank: SKScene {
     @objc private func settingsChanged() {
         let picked = Self.knobs.map(\.value)
         guard picked != settings, !retired else { return }
+        settings = picked // before any write below: its notification comes straight back here
         if !Self.easing { UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: Self.movedKey) }
-        settings = picked
         guard let next = Tank(rawValue: Int(picked[0])), next != tank, let view else { return } // no view: the render tests
         let fade = SKTransition.crossFade(withDuration: Self.easing ? 4 : 0.8)
         fade.pausesIncomingScene = false

@@ -335,5 +335,9 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
         UserDefaults.standard.set(Double(tank.rawValue), forKey: "tank.kind")
         let scene = FishTank(size: CGSize(width: 1512, height: 982))
         #expect(scene.tank == tank && scene.swimmers.count == cast, "\(tank.name): \(scene.swimmers.count) fish")
+        // Picking another tank while a scene is live must not recurse: its own UserDefaults write comes straight
+        // back as a notification (it crashed the app once, from Settings' Tank menu).
+        UserDefaults.standard.set(Double((tank.rawValue + 1) % FishTank.Tank.allCases.count), forKey: "tank.kind")
+        #expect(scene.tank == tank)
     }
 }

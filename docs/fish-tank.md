@@ -184,6 +184,7 @@ Reef Tank: CPU 0.8–0.9 ms and GPU 1.3–1.5 ms per frame (release, 2x), in bot
   - `rock-2` (a coralline nodule that read as a pink ball) was dropped.
   - `gramma-3` was left out: its Smithsonian "no known copyright restrictions" isn't formally public domain.
   - The originals and the tools (`cut.swift`, `process.py`) were in the research agent's scratch folder and aren't in the repo.
+- **Re-entrant settings:** `settingsChanged` records the picked settings before it writes anything to UserDefaults, because the write's own `didChangeNotification` comes straight back into it. The other order recursed until the stack overflowed the first time Dave picked Ocean Voyager (2026-10-07). `fishTankTanksLoad` changes the tank on a live scene to keep it so.
 - **Warp speed bug:** changing a node's `speed` every frame while `SKAction.animate(withWarps:)` runs on it makes SpriteKit steadily slower (1 ms up to 10 ms a frame within a minute). That's why fish step through warp frames by hand in `pose`. The coral sway uses warp actions only because its speed never changes. This is also noted in CLAUDE.md.
 - `ponytail:` O(n²) boids within a school, fine up to a few dozen fish per school. Use a spatial grid, like Murmuration, if schools grow. `castShadows` is O(n²) over every fish, likewise.
 - **Shadows only fall on sand and fish.** A fish over the rock casts its shadow on the sand behind it, hidden by the rock, not on the rock or corals. Shading a coral's top where a fish passes over would need its surface, which only `TankArt.skyline` knows.
