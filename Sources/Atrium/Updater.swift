@@ -119,8 +119,8 @@ import SwiftUI
         try FileManager.default.createDirectory(at: volume, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: folder) }
         try FileManager.default.moveItem(at: dmg, to: image)
-        try run("/usr/bin/hdiutil", "attach", image.path, "-nobrowse", "-readonly", "-noautoopen", "-mountpoint", volume.path)
-        defer { try? run("/usr/bin/hdiutil", "detach", volume.path, "-force") }
+        try run("/usr/sbin/diskutil", "image", "attach", "--readOnly", "--nobrowse", "--mountPoint", volume.path, image.path)
+        defer { try? run("/usr/sbin/diskutil", "eject", volume.path) }
         try run("/usr/bin/ditto", volume.appending(path: "Atrium.app").path, app.path)
         guard let requirement = requirement(), signed(app, meets: requirement) else { throw Failure("The update isn't signed by Atrium's developer.") }
         _ = try FileManager.default.replaceItemAt(Bundle.main.bundleURL, withItemAt: app)
