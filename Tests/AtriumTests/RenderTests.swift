@@ -302,3 +302,14 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
         #expect(mean > 0.05 && abs(mean - 0.216) > 0.01, "\(surface.name): mean albedo \(mean)") // 0.216 is all 128s
     }
 }
+
+/// Every Fish Tank tank builds with its whole cast: a species whose cut-outs are missing is silently left out,
+/// so the count would drop.
+@MainActor @Test func fishTankTanksLoad() {
+    defer { UserDefaults.standard.removeObject(forKey: "tank.kind") }
+    for (tank, cast) in [(FishTank.Tank.reef, 38), (.ocean, 111), (.lagoon, 58)] {
+        UserDefaults.standard.set(Double(tank.rawValue), forKey: "tank.kind")
+        let scene = FishTank(size: CGSize(width: 1512, height: 982))
+        #expect(scene.tank == tank && scene.swimmers.count == cast, "\(tank.name): \(scene.swimmers.count) fish")
+    }
+}

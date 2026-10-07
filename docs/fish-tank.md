@@ -1,5 +1,7 @@
 # Fish Tank
 
+Three tanks in one wallpaper, picked in Settings → Tank, with a shuffle that moves between them on its own: the **Reef Tank** (the original, described first), **Ocean Voyager** (the Georgia Aquarium's big window: whale sharks, mantas, a squadron of cownose rays) and the **Shallow Reef** (a snorkeller's view of a sunlit reef flat, with blacktip reef sharks). The other two are under *The other tanks* below; they share the reef tank's engine (the boids, the lit cut-outs, the shadows) with their own water, seabed, furniture and cast.
+
 A bright reef tank seen through the glass, the way reefkeepers build them. Two islands of live rock and coral stand on white aragonite sand with open water between them, and a soft cluster sits further back. Real fish, cut out of photos, school at three depths:
 - a big school of blue-green chromis
 - yellow and blue tangs
@@ -15,8 +17,9 @@ Soft corals sway in the current, caustics ripple over the sand, and the mirror o
     - `TankArt.photo`, which loads a cut-out at its on-screen size with an optional depth-of-field blur
     - the warp builders `swimWarps` and `swayWarps`
   - `Sources/Atrium/Resources/reef-*.heic`: 42 photo cut-outs, HEIC with alpha, 2.5 MB in all.
-  - `Sources/Atrium/Resources/reef-credits.tsv`: each cut-out's subject, author, licence and source. Settings → About lists them, as CC BY requires.
-- **Entry:** `final class FishTank: SKScene`, registered as `{ FishTank(size: $0) }` in Scenes.swift (icon `fish.fill`, tint `.teal`).
+  - `Sources/Atrium/Resources/ocean-*.heic` (19, 1.1 MB) and `lagoon-*.heic` (25, 1.3 MB): the other tanks' cut-outs.
+  - `Sources/Atrium/Resources/reef-credits.tsv`, `ocean-credits.tsv`, `lagoon-credits.tsv`: each cut-out's subject, author, licence and source. Settings → About lists them, as CC BY requires.
+- **Entry:** `final class FishTank: SKScene`, registered as `{ FishTank(size: $0) }` with `knobs: FishTank.knobs` in Scenes.swift (icon `fish.fill`, tint `.teal`). `init(size:)` reads the tank from `tank.kind` (`FishTank.Tank`: `.reef`, `.ocean`, `.lagoon`) and `sceneDidLoad` builds that one.
 - **Kind:** photo cut-outs on SpriteKit sprites, graded by one shared shader, over two full-screen shaders for the water and the sand.
 - **Shared helpers:** `frameTime` and `softDot` come from Fireflies.swift, and `shaderCommon`, `paint` and `resource` from Shaders.swift and Scenes.swift.
 
@@ -92,11 +95,40 @@ Everything is pre-simulated for 150 steps in `sceneDidLoad`, so schools have alr
 - tilt follows pitch, clamped to ±0.3
 - the tail beat steps through 20 precomputed warp frames (`swimWarps`: an 8×1 grid with a wave from head to tail, `0.075·(1-u)²`). The beat rate scales with speed. The warps work on the photos unchanged.
 
+## The other tanks
+Both reuse the reef tank's layers (`Z`), the photo shader, `addSchools`, `swim`, `pose`, `illuminate` and `castShadows`. What changes per tank is on `Tank` (`floor`, how much of the screen the seabed takes; `ceiling`, where the water ends), in `Lighting` (`ocean`/`oceanNight`, `lagoon`/`lagoonDusk`, with `mirror` for the lagoon's surface and `ripple` for how strongly the sun's ripples play over the cut-outs), and in the per-tank `plan` of schools in `addSchools`. The lamp's pool of light in `illuminate` is the reef tank's only; the others are lit evenly.
+
+### Ocean Voyager
+The Georgia Aquarium's 6.3-million-gallon Ocean Voyager exhibit seen through its 19 m × 7 m acrylic window. The desktop is the window: the screen shows about 11 m of it, so a 7 m whale shark near the glass spans most of the screen.
+- **Water** (`addOceanWater`): azure, `high` #2f8fc9 at the top to `low` #0a63a6 at the bottom, going navy in the far corners (`pow(|x − 0.5|·2, 2.5)`), with shafts of light fanning down from top centre (two octaves of `noise1`, the x squeezed by `1 + 0.6·(1 − y)` so they spread with depth, gone by mid-depth), a faint shimmer high up, and the gallery's dark rim along the top. The water is very clear, so distance darkens and saturates toward the water colour rather than milking: cut-outs fog by `(0.9 − depth)·1.4` toward `haze`.
+- **Seabed** (`addSeabed(cell: 220, net: 0.3, ripples: 0, melt: 0.25)`): a greyed slate-blue floor (#3e6a83 near, #28597c far, sampled from the 2022 window photos), with faint, large caustics, melting into the water from a quarter of the way back.
+- **Rockwork** (`addOceanRocks`): the reef tank's two big rocks as ledges at the foot of the window's sides, fogged 0.7 and blurred 2 pt so they go blue and soft, each with a shadow under it (`ground`).
+- **Cast** (`plan`, 111 animals): six schools of 14 golden trevally spread through the water as texture (depths 0.5–0.92), a squadron of 20 cownose rays at one height (depth 0.75, `spacing` 1.1, `height` 0.1–0.5), two whale sharks (0.62 and 1.05, `height` 0.45–0.95), two mantas (0.8 and 1.0), a sandbar shark (0.72, low), and a zebra shark and a bowmouth guitarfish resting on the floor (`haunt: .sand`, `rests`). Not in: groupers, hammerheads, sawfish, turtles, batfish (their cut-outs exist in the research folder if wanted).
+- **Dark Mode** (`Lighting.oceanNight`): the aquarium after hours, dimmed to deep blue.
+
+### Shallow Reef
+A sunlit reef flat in the open sea, 1–2 m deep, from a snorkeller's eye.
+- **Water** (`addLagoonWater`): turquoise hazing toward the horizon (`low` #15759a to `high` #33a3c7), faint shafts of sun (real shallows show the caustic net rather than beams, so these are at 0.08), and above `ceiling` (0.76 of the height) **the surface seen from below**: outside Snell's window it mirrors the bottom, so it's a darker sand-turquoise (`mirror` #337f91) crossed by long wavy streaks of light and dark (two octaves of `noise`, squashed toward the horizon by `mix(10, 2, v)`) with sun glints on the ripples (`caustic`), paler toward the top, and a bright line where it meets the water. In the reference photos the surface takes the top quarter of a horizontal view.
+- **Seabed** (`addSeabed(cell: 90, net: 1.0, ripples: 0.07, melt: 0.5)`): white sand (#ccc9bd near) going turquoise-grey (#3b93a6) by a few metres and melting into the water, under a crisp caustic net (cells about 0.1–0.2 of a shark, bright nodes clipping white as they do in photos, dark cells 0.9×) that softens with distance, over shore-parallel ripples in the sand.
+- **Furniture** (`addBommies`): four coral heads from the lagoon cut-outs (Porites mounds, Pocillopora clumps, an Acropora table) on the sand at depths 0.58–0.9, smaller, softer and bluer the further back, each with a shadow under it (`ground`). The near ones are `rockSpots` for the fish that hover over a bommie.
+- **Cast** (`plan`, 58 animals): four blacktip reef sharks at depths 0.6–1.0 patrolling low (`height` 0.05–0.7, `margin` 0.8 so they turn off-screen), a baitfish ball of 40 herring and silversides in the upper water, eight sergeant majors and two butterflyfish over the bommies, a parrotfish, and on the sand a nurse shark, an epaulette shark and a blue-spotted ribbontail ray (`haunt: .sand`, `rests`: still between short moves).
+- **Dark Mode** (`Lighting.lagoonDusk`): dusk, dimmer and bluer.
+
+### What the new animals needed in the engine
+- `Species` is now a table (`Species.all` entries as static lets) rather than an enum of switches, so a species is one line.
+- **`gait: .wings`** (`TankArt.swimWarps`): both wing tips sweep up and down together, `0.09·L·(2|u − 0.5|)²·sin`, the body between them still, for mantas and cownose rays. The ribbontail ray uses the tail wave instead: a wave running back along its fin edge reads better from the side.
+- **`rests`** with **`haunt: .sand`**: the fish lies on the sand line (`sandLine(depth) + 0.1·L`) and its `burst` cycle becomes move-and-rest: during the resting share its speed decays to zero and its tail nearly stops; during the moving share it slides along the sand at cruise. Nurse sharks move 10% of a 60 s cycle, epaulettes 30% of 25 s, the ray 20% of 35 s, the zebra shark 20% of 40 s.
+- **`margin`**, in body lengths: the soft walls move that far past the screen edges, so whale sharks (0.7), mantas (1), sharks (0.6–0.8) and the squadron (0.5) swim right off the screen before turning, never flipping in view.
+- **`height`**: the part of the water column a species keeps to, 0 at the sand and 1 at the top, which `bounds(_:height:)` maps to a floor and ceiling. Whale sharks cruise high (0.45–0.95), the squadron low (0.1–0.5), blacktips low (0.05–0.7).
+- Small fish (under 30 pt) are lit once rather than every frame, and neither cast nor catch fish-on-fish shadows: with 84 trevally it didn't show and cost a third of the frame.
+
 ## Time, live data and appearance
-Motion comes from `update(_:)` (boids and frame stepping), the coral sway actions, and `u_now` (the water, sand and photo shaders). There's no network or location use. Light Mode is a daylight reef tank and Dark Mode its actinic evening look, read from `systemIsDark` when the scene is built.
+Motion comes from `update(_:)` (boids and frame stepping), the coral sway actions, and `u_now` (the water, sand and photo shaders). There's no network or location use. Light Mode is a daylight reef tank and Dark Mode its actinic evening look, read from `systemIsDark` when the scene is built; Ocean Voyager dims to its after-hours blue and the Shallow Reef goes to dusk.
 
 ## Settings
-None yet.
+Section **Tank** (`FishTank.knobs`):
+- **Tank**: Reef Tank, Ocean Voyager or Shallow Reef (`tank.kind`, stored as the index, 0 is the reef). A new pick dissolves into a new scene of that tank with both still running (`settingsChanged`: `SKTransition.crossFade`, 0.8 s by hand, 4 s when the shuffle moves it), the way Pixel City moves between cities.
+- **Move to another tank automatically** (`tank.shuffle`, off) and **Move every** (`tank.shuffleMinutes`, 1–60, 10): `moveIfDue` checks every 5 s on the wall clock (`tank.moved`) and picks another tank at random, saving it as Settings would so every display's copy follows and the menu shows where we are. Picking a tank by hand, or changing the shuffle, starts the wait over. A scene built after the wait has passed (the app was quit, or the tank was off the desktop) comes back as another tank.
 
 ## Tuning constants
 - **`Species` (FishTankArt.swift):**
@@ -111,9 +143,30 @@ None yet.
   | firefish (burst 2.4 s, 25%) | 50 | 10–16 | 0.35 | 3 |
   | flame angelfish | 58 | 18–26 | 0.45 | 3 |
 
+- **The other tanks' species** (points at depth 1; `burst` is move-and-rest for the species that rest):
+
+  | Species | length | cruise | beat (s) | notes |
+  |---|---|---|---|---|
+  | whale shark | 760 | 36–48 | 6 | strokes 10 s, glides 10 s; margin 0.7; height 0.45–0.95; 4 photos |
+  | manta ray | 420 | 30–42 | 3.2 | wings; a few strokes then a glide (14 s, 60%); margin 1; height 0.25–0.95; 4 photos |
+  | cownose ray | 120 | 30–40 | 1.2 | wings; spacing 1.1; height 0.1–0.5; 3 photos |
+  | golden trevally | 40 | 25–35 | 0.4 | burst 1.5 s, 40%; spacing 2; 4 photos |
+  | sandbar shark | 300 | 30–40 | 1.6 | margin 0.6; height 0.15–0.6; 1 photo |
+  | zebra shark | 320 | 14–20 | 2 | rests, moves 20% of 40 s; 2 photos |
+  | bowmouth guitarfish | 300 | 12–18 | 1.4 | rests, moves 15% of 50 s; 1 photo |
+  | blacktip reef shark | 300 | 28–36 | 1.1 | margin 0.8; height 0.05–0.7; 3 photos |
+  | nurse shark | 380 | 8–12 | 2 | rests, moves 10% of 60 s; 2 photos |
+  | epaulette shark | 160 | 10–16 | 1 | rests, moves 30% of 25 s; 2 photos |
+  | blue-spotted ray | 140 | 10–15 | 0.6 | rests, moves 20% of 35 s; tail wave; 2 photos |
+  | baitfish (herring, silverside) | 36 | 35–45 | 0.3 | burst 1.3 s, 45%; spacing 1.2; height 0.4–1; 3 photos |
+  | sergeant major | 60 | 20–28 | 0.45 | haunt rock (a bommie); 2 photos |
+  | parrotfish | 150 | 16–22 | 0.6 | 2 photos |
+  | butterflyfish | 60 | 18–24 | 0.4 | haunt rock; 2 photos |
+
 - **Scene scaling:** `unit` is height/982, clamped to 0.8–1.8, so a bigger screen gets a bigger tank rather than smaller fish. `fishUnit` is `unit × 1.2`. `sandHeight` is 0.22 × height.
 - **Reef sizes** at `unit` 1: rock 440–520 pt wide, Acropora 320, toadstool 220, anemone 240, torch and hammer 210, zoanthids 110, brain 170. The front-corner colony is 230.
-- **`Lighting`** (FishTank.swift), for `day` and `actinic`:
+- **`Tank`:** `floor` (the seabed's share of the height) 0.22 / 0.16 / 0.4 and `ceiling` 0.9 / 0.98 / 0.76 for the reef, ocean and lagoon.
+- **`Lighting`** (FishTank.swift), for `day` and `actinic` (and `ocean`, `oceanNight`, `lagoon`, `lagoonDusk` likewise):
   - back panel `high` and `low` (the surface mirror is `high` brightened), `shimmer`
   - sand `sandNear` and `sandFar`
   - photo `grade`: day (0.94, 0.98, 1.06), actinic (0.45, 0.52, 1.05)
@@ -122,7 +175,7 @@ None yet.
 - **Snow:** birth rate 5, lifetime 40 s.
 
 ## Performance
-CPU 0.8–0.9 ms and GPU 1.3–1.5 ms per frame (release, 2x), in both looks. The GPU cost is mostly the two full-screen shaders (the water's caustics and noise, and the sand's two caustic layers), plus about 60 lit sprites, many overlapping in the reef, and 38 small shadow sprites. CPU is the boids, 38 fish at O(n²) per school, and the fish-on-fish shadows, O(n²) over all 38. Shadows and fish lighting added about 0.1 ms to each. The cut-outs are decoded and resized once at launch.
+Reef Tank: CPU 0.8–0.9 ms and GPU 1.3–1.5 ms per frame (release, 2x), in both looks. Ocean Voyager: CPU 0.99 ms, GPU 1.14 ms. Shallow Reef: CPU 0.84 ms, GPU 1.05 ms (release, 2x, Light Mode, 2026-10-07). The GPU cost is mostly the two full-screen shaders (the water's caustics and noise, and the sand's two caustic layers), plus about 60 lit sprites, many overlapping in the reef, and 38 small shadow sprites. CPU is the boids, 38 fish at O(n²) per school, and the fish-on-fish shadows, O(n²) over all 38. Shadows and fish lighting added about 0.1 ms to each. The cut-outs are decoded and resized once at launch.
 
 ## Gotchas and shortcuts
 - **Assets:** the cut-outs come from public domain, CC0 and CC BY photos (iNaturalist, Wikimedia Commons, NOAA). They were cut out with Vision's foreground mask, cleaned to their largest connected piece, resized (fish 480 px, corals 760, rock 900 at most) and saved as HEIC with alpha (about 8× smaller than PNG).
@@ -136,6 +189,12 @@ CPU 0.8–0.9 ms and GPU 1.3–1.5 ms per frame (release, 2x), in both looks. Th
 - **Shadows only fall on sand and fish.** A fish over the rock casts its shadow on the sand behind it, hidden by the rock, not on the rock or corals. Shading a coral's top where a fish passes over would need its surface, which only `TankArt.skyline` knows.
 - **Rock:** no permissively licensed photo of coralline-covered live rock exists besides `rock-1`, so `rock-3`, `rock-4` and `rock-6` are bare dry reef rock and a bleached Porites head. `coralline.py` (in the research scratch folder, not the repo) removed each photo's colour cast and painted muted pink, purple and green coralline patches onto them, in colours sampled from `rock-1`. The credits note the change, as CC BY asks. A first pass at full strength read as camouflage paint; the patches are now 70% toward the grey stone and cover about a third of it. `rock-3` and `rock-4` are toned to 0.78 and 0.88 of the live rock's mid-grey, since at full brightness they looked bleached beside it. There's still no tall pillar or arch.
 - The shaders run on `u_now`, which moves with `SNAPSHOT_SECONDS`, so caustics move in snapshots, as fish and corals do.
+
+## Sources
+- **Photos:** every cut-out's author, licence and URL is in `reef-credits.tsv`, `ocean-credits.tsv` and `lagoon-credits.tsv` (iNaturalist CC BY and CC0, Wikimedia Commons, NOAA). The Ocean Voyager set leans on Wikimedia Commons' 339-photo CC0 set "Georgia Aquarium in Atlanta - HCP - September 17, 2022" (Vulturesong), about 90 of them inside Ocean Voyager; its photos are pure blue LED light with no red left, so they were kept as toned luminance and the scene re-tints them. The lagoon sharks had their cameras' pink or blue casts taken off by scaling each channel so the body's mean lands on a warm grey.
+- **Ocean Voyager's look:** colours sampled from visitors' photos of the window on Wikimedia Commons: Zac Wolf's 2006 "Male whale shark at Georgia Aquarium" (the classic shot; metal-halide teal), istolethetv's 2009 "Manta ray", and the 2022 CC0 HCP set (LED-era azure, #2a7dbb top to #0168ab bottom, the floor a greyed slate blue). The window's size (23 ft × 61 ft × 2 ft) and the residents are from the Georgia Aquarium's own exhibit and animal pages. Okinawa Churaumi's Kuroshio Sea window was checked as the other great reference (purer deep blue); Dave asked for the Georgia Aquarium as the guide.
+- **Shallow Reef's look:** reef-flat photos on iNaturalist (observations 407532622, 644469523 CC0, 718929416, 465127835, 148710399) and Kris Mikael Krister's CC BY 3.0 reef-flat shots and Furlan's Moorea split-level on Wikimedia Commons: sand near white under a metre of water, #3b93a6 at 2–5 m, far water #0c6c95–#1589b3; the surface band #287991 with brighter ripple lines; the caustic net's cell size, contrast and flicker.
+- **Motion:** whale shark cruising speed from the Georgia Aquarium's species page (2.5 knots) and tail-beat scaling from Gough et al. 2019 (J Exp Biol) and Gleiss et al. 2011 (Funct Ecol, Nat Comms: glides between strokes); manta wingbeat 0.31 Hz and flap-and-glide from a 2022 drone kinematics study (Drones 6(5):111); cownose flap rate and tip amplitude from cownose ray kinematics (PMC2739381); hammerhead rolling from Payne et al. 2016 (Nat Comms 7:12289); blacktip reef shark speed and tail beat from Webb & Keyes 1982 (Fishery Bulletin 80:803) and its ledge-patrolling from Papastamatiou et al. 2009 (Ecology); the ribbontail ray's fin undulation from Rosenberger & Westneat 1999 (J Exp Biol 202:3523) and Rosenberger 2001 (J Exp Biol 204:379); epaulette walking from Porter et al. 2022 (Integr Org Biol) and Goto 1999; nurse shark and lagoon fish habits from the Florida Museum's species pages and FishBase. All real speeds are slowed three to five times for a calm desktop, as the reef tank's are.
 
 ## Dave's feedback and decisions
 - The first version (flat `SKShapeNode` fish, stroked seaweed) was the proof of concept. Dave called it "the primitive fish tank" and asked how to raise the fidelity.
@@ -154,7 +213,13 @@ CPU 0.8–0.9 ms and GPU 1.3–1.5 ms per frame (release, 2x), in both looks. Th
 - On the rebuild: "looking much better", but a reef stick floated attached to nothing in the top left, and the top of the tank looked muddy. The stick was the staghorn fragment; the fix was setting corals on the rocks' real silhouettes. The top became a bright mirror of the water with crisp ripple lines.
 - 2026-09-26: "shouldn't the fish be casting shadows on to the ground and on to each other? can we also adjust the lighting on each fish based on their movement and position from the top?" Added shadows on the sand and from fish above, light from where each fish swims, top light across the body, sand bounce, and a flash or dimming as a fish banks in a turn.
 
+- 2026-10-07: "research some new options for the fish tank, lets obviously keep what we have as an option but lets maybe add like 2 new ones": a large aquarium view "like the Georgia Aquarium" ("remember to use The Georgia Aquarium as a guide, its one of the most popular aquariums in the world") and "a shallow tropical reef and we can try to add some small shallow sharks". Two research agents found the references and cut-outs; mock-ups (cut-outs composed over the engine's real water renders, by day and in Dark Mode) went to Dave before the build. His picks: the shallow reef is the **open sea**, not an aquarium exhibit; **one wallpaper with a Tank menu** rather than three wallpapers, plus "a tank shuffle option like we have for other wallpapers such as aurora"; add a **cownose ray squadron** to Ocean Voyager and a **resting nurse shark** to the reef flat (not groupers, turtles, hammerheads, bamboo sharks or more lagoon fish); keep both Dark Mode looks as shown; and a **Kelp Forest** (Monterey Bay's) as a third new tank after these two land. "Remember to cite all sources in our docs."
+
 ## Ideas / next steps
+- **Kelp Forest**, Dave's pick for the next tank: Monterey Bay Aquarium's exhibit, giant kelp swaying in a surge under gold-green light, sardine balls, leopard sharks, garibaldi. The research (references, colours, cut-outs) is in the 2026-10-07 session's scratch folder `kelp/`.
+- The lagoon's surface band still reads a little flat; bigger swell streaks and a wobble at the horizon line would help. Nurse sharks pile together in real life; a second one under the same bommie.
+- Golden trevally pilot right in front of the whale shark's mouth, and mantas barrel-roll under the lights: both would need a per-fish target rather than a school home.
+- Batfish, groupers, a turtle, hammerheads and a sawfish have cut-outs ready in the research folder if Ocean Voyager wants more variety.
 - Rare visitors: a cleaner shrimp on the rock, a snail on the glass.
 - A glint on each tail beat, for shiny fish like chromis. Left out for now: 38 fish flickering at 3 beats a second may read as busy.
 - Settings: fish count, which species appear, the lighting look.
@@ -163,5 +228,7 @@ CPU 0.8–0.9 ms and GPU 1.3–1.5 ms per frame (release, 2x), in both looks. Th
 ```sh
 SNAPSHOT_SCENE="Fish Tank" SNAPSHOT_SECONDS=8 swift test                        # Light Mode
 SNAPSHOT_APPEARANCE=dark SNAPSHOT_SCENE="Fish Tank" SNAPSHOT_SECONDS=8 swift test # actinic
+SNAPSHOT_DEFAULTS="tank.kind=1" SNAPSHOT_SCENE="Fish Tank" SNAPSHOT_SECONDS=12 swift test   # Ocean Voyager
+SNAPSHOT_DEFAULTS="tank.kind=2" SNAPSHOT_SCENE="Fish Tank" SNAPSHOT_SECONDS=12 swift test   # Shallow Reef
 ```
 Each load rolls a different reef. Caustics are driven by `u_now`, which follows `SNAPSHOT_SECONDS`.
