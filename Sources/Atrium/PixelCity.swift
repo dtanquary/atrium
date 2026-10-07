@@ -15,7 +15,7 @@ final class PixelCity: SKScene {
     private enum K: Int {
         case view, shuffle, shuffleMinutes, looking, flightsDay, flightsNight, wind, launches
         case falcon9, falconHeavy, starship, sls, shuttle, saturnV, ariane, titan, atlas, redstone, soyuz, longMarch, h3, lvm3, previewTime, previewHour
-        case vulcan, newGlenn, electron, ariane6
+        case vulcan, newGlenn, electron, ariane6, live
     }
     /// Pixel City's settings, each with the name the scene reads it by.
     nonisolated private static let cityKnobs: [(K, Knob)] = [
@@ -35,6 +35,7 @@ final class PixelCity: SKScene {
     /// Pixel Spaceport's settings: how often it launches, a switch for each rocket, and a view and a time preview of its own.
     nonisolated private static let launchKnobs: [(K, Knob)] = [
         (.launches, Knob(key: "spaceport.launches", label: "Launches", range: 0.25...3, standard: 1, section: "Launches", format: .times)),
+        (.live, Knob(key: "spaceport.live", label: "Follow real launches", range: 0...1, standard: 0, section: "Launches", format: .toggle)),
         (.falcon9, Knob(key: "spaceport.rocket.falcon9", label: "Falcon 9", range: 0...1, standard: 1, section: "Rockets", format: .toggle)),
         (.falconHeavy, Knob(key: "spaceport.rocket.heavy", label: "Falcon Heavy", range: 0...1, standard: 1, section: "Rockets", format: .toggle)),
         (.starship, Knob(key: "spaceport.rocket.starship", label: "Starship", range: 0...1, standard: 1, section: "Rockets", format: .toggle)),
@@ -97,11 +98,13 @@ final class PixelCity: SKScene {
     // the layer they are painted into, which the lagoon mirrors; and the figures on the countdown clock.
     private var pad = Pad(), boosters: [Booster] = [], crane = Crane(), plume: [Puff] = []
     private var pace = 1.0 // Settings' Launches, as of the last repaint: reading a setting costs too much to do every frame
+    private var following = false, polledAt = Date.distantPast // Settings' Follow real launches, likewise; and when the schedule was last asked
+    private var flewLive = false // the last lift-off was a real launch's, for the board's LIVE
     private var liftoffAt: TimeInterval = -1000, trailFrom: SIMD2<Float>?, flew = Rocket.falcon9 // the last to lift off
     private var launchLayer = SKSpriteNode(), launchTexture: SKMutableTexture?, launchShown: [Int] = []
     private var smoke = Bytes(1, 1, floor: 0), density: [Float] = [], smokeTime: Float = 0, smokeMoved = false, smokeSteps = 0
     private var smoked = 0..<0 // the rows of it the last painting reached, which are all the next has to clear
-    private var countdown = SKSpriteNode(), counted = (false, -1, "")
+    private var countdown = SKSpriteNode(), counted = ("", "")
     private var visitor = SKSpriteNode(), visiting: Flag?, hoist: Float = 0 // a visiting rocket's flag, and how far up its pole it is
     private var orbiter = Orbiter() // the Shuttle's, when it glides home
     private var hazeColour = RGB.zero // the horizon's colour, which far-off things fade toward
@@ -884,7 +887,7 @@ final class PixelCity: SKScene {
     /// its daytime frame when uncovered and snap to night up to half a minute later.
     private func redraw() {
         redrawnAt = Date()
-        if spaceport { pace = knob(.launches) } // a change in Settings repaints, so it still shows at once
+        if spaceport { (pace, following) = (knob(.launches), knob(.live) > 0.5) } // a change in Settings repaints, so it still shows at once
         let now = now
         let spot = Location.shared.coordinate
         let sun = skyPosition(now, latitude: spot.latitude, longitude: spot.longitude)
@@ -1859,6 +1862,8 @@ final class PixelCity: SKScene {
         lastUpdate = currentTime
         clock += TimeInterval(dt)
         if Date().timeIntervalSince(redrawnAt) >= 30 { redraw() }
+        // Following real launches: ask the shared schedule now and then; it fetches only when a fetch is due.
+        if following, Date().timeIntervalSince(polledAt) >= 15 { (polledAt, _) = (Date(), LaunchSchedule.shared.poll()) }
 
         for i in cars.indices where !cars[i].node.isHidden {
             let direction: Float = cars[i].lane == 0 ? 1 : -1
@@ -2199,7 +2204,7 @@ final class PixelCity: SKScene {
         hangar = Self.lastHangar
         hangar.landers.shuffle()
         hangar.others.shuffle()
-        pace = knob(.launches)
+        (pace, following) = (knob(.launches), knob(.live) > 0.5)
         (pad.phase, pad.until, pad.rocket, pad.flown) = (.count, clock + 24 * pace, nextRocket(), Bool.random())
         boosters = pad.rocket.kit.lands == 2 ? [] : [Booster(phase: .landed, zone: 1, until: clock + 2)]
         pad.x = roll(pad.rocket.kit) // it has rolled all the way out, so its strongback or crawler has that far to go home
@@ -2216,7 +2221,7 @@ final class PixelCity: SKScene {
         countdown.size = CGSize(width: 31, height: 11)
         countdown.position = CGPoint(x: w * 9 / 100, y: 14)
         countdown.zPosition = 3
-        counted = (false, -1, "")
+        counted = ("", "")
         visitor = SKSpriteNode()
         visitor.anchorPoint = .zero
         visitor.size = CGSize(width: 9, height: 6)
@@ -2421,6 +2426,30 @@ final class PixelCity: SKScene {
         return pick == .falcon9 && Int.random(in: 0..<3) == 0 ? .dragon : pick
     }
 
+    /// The real launch the pad is for, or is to be cleared for, with Follow real launches on: the soonest in the
+    /// schedule of a rocket drawn here whose T−0 is inside the next 10 minutes (or passed within the last minute, or
+    /// is on hold), unless it's the one given up on. The window is 10 minutes because a rocket needs about two from
+    /// the hangar to the end of its count, and a wallpaper holding a fuelled rocket for half an hour would look stuck.
+    private var liveLaunch: (rocket: Rocket, net: Date, status: LaunchSchedule.Launch.Status)? {
+        guard following else { return nil }
+        let now = LaunchSchedule.now()
+        for launch in LaunchSchedule.shared.launches {
+            guard let kind = launch.kind, let rocket = Self.rocket(kind), launch.net != pad.passed else { continue }
+            let left = launch.net.timeIntervalSince(now)
+            if left > 600 { return nil } // soonest first: nothing inside the window
+            if left > -60 || launch.status == .hold { return (rocket, launch.net, launch.status) }
+        }
+        return nil
+    }
+    /// The rocket a launch's kind names: the end of its switch's key, or "dragon" for a Falcon 9 under a capsule.
+    private static func rocket(_ kind: String) -> Rocket? {
+        if kind == "dragon" { return .dragon }
+        guard let k = launchKnobs.first(where: { $0.1.key == "spaceport.rocket.\(kind)" })?.0 else { return nil }
+        return fleet.first { $0.knob == k }?.rocket
+    }
+
+    /// For the tests: what the countdown board says, its clock line and its name line.
+    var boardSays: (String, String) { counted }
     /// For the tests: the name the countdown board gives the rocket that is on the pad, or next to come out.
     var rocketName: String { pad.rocket.kit.name }
 
@@ -2486,7 +2515,7 @@ final class PixelCity: SKScene {
 
     /// Seconds from lift-off, negative through the count, while there's a rocket on the mount or on its way up.
     private var flightTime: Float? {
-        pad.phase == .climb ? pad.t : pad.phase == .count ? -Float((pad.until - clock) / pace) : nil
+        pad.phase == .climb ? pad.t : pad.phase == .count ? -Float((pad.until - clock) / (pad.live ? 1 : pace)) : nil
     }
 
     /// Moves the Spaceport on through its round. A rocket rolls out to the pad, lying on a strongback from the hangar
@@ -2500,11 +2529,15 @@ final class PixelCity: SKScene {
         // Time in the hangar and the count run down at the pace Settings gives, so a change shows at once.
         if pad.phase == .hangar || pad.phase == .count, clock < pad.until { pad.until += Double(dt) * (1 - pace) }
         pad.t += dt
+        // A real launch inside its window (Follow real launches) has the pad: the rocket waiting in the hangar leaves
+        // now as that rocket, and its count is the wall clock's, to the real T−0.
+        let live = liveLaunch
         switch pad.phase {
         case .hangar:
+            if let live, !pad.live { (pad.live, pad.rocket, pad.until) = (true, live.rocket, clock) }
             if clock >= pad.until {
                 // The rocket was picked when the wait began, so the board could name it; Settings may have switched it off since.
-                if !Self.rockets.contains(pad.rocket == .dragon ? .falcon9 : pad.rocket) { pad.rocket = nextRocket() }
+                if !pad.live, !Self.rockets.contains(pad.rocket == .dragon ? .falcon9 : pad.rocket) { pad.rocket = nextRocket() }
                 (pad.phase, pad.t, pad.x) = (.rollOut, 0, 0)
             }
         case .rollOut:
@@ -2513,12 +2546,22 @@ final class PixelCity: SKScene {
         case .raise:
             if pad.t >= raising { (pad.phase, pad.t, pad.until) = (.count, 0, clock + 70) }
         case .count:
+            if pad.live {
+                // The real count: to the T−0 as the feed last gave it, holding while it says On Hold. Held past 20
+                // minutes, slipped out of the window or gone from the feed, the rocket is lowered and rolled back.
+                guard let live, live.status != .hold || pad.t < 1200 else {
+                    (pad.phase, pad.t, pad.live, pad.scrubbed, pad.passed) = (.lower, 0, false, true, live?.net)
+                    break
+                }
+                // A hold freezes the count where it is, and never inside the last ten seconds, where the engines would light.
+                pad.until = live.status == .hold ? clock + max(10, pad.until - clock) : clock + max(0, live.net.timeIntervalSince(LaunchSchedule.now()))
+            }
             // Every booster needs a landing zone to come back to. If one from the last flight is still standing
             // on it, the count holds at ten seconds.
             let free = zones.indices.filter { zone in !boosters.contains { $0.zone == zone } }, need = kit.lands // Starship's ship needs one too
             if free.count < need, pad.until - clock < 10 * pace { pad.until = clock + 10 * pace }
             if clock >= pad.until {
-                (pad.phase, pad.t, liftoffAt, trailFrom, flew) = (.climb, 0, clock, nil, pad.rocket)
+                (pad.phase, pad.t, liftoffAt, trailFrom, flew, flewLive, pad.live) = (.climb, 0, clock, nil, pad.rocket, pad.live, false)
                 movements += 1
                 for (i, zone) in free.shuffled().prefix(need).sorted().enumerated() {
                     // Starship's booster goes to its tower; what comes to a landing zone, a while after, is its ship.
@@ -2527,6 +2570,8 @@ final class PixelCity: SKScene {
                 if kit.caught { boosters.append(Booster(zone: 2, until: clock + 62)) } // Starship's comes back to its tower
                 if pad.rocket == .shuttle, orbiter.due == .infinity { orbiter.due = clock + 150 } // one may still be on the runway
             }
+        case .lower:
+            if pad.t >= raising { (pad.phase, pad.t) = (.rollBack, 0) }
         case .climb:
             if pad.t >= (kit.sheds == nil ? 21 : 25) / kit.pace { (pad.phase, pad.t) = (kit.caught ? .recover : .rollBack, 0) } // out of sight, and the strongback is down
         case .recover:
@@ -2538,7 +2583,7 @@ final class PixelCity: SKScene {
             pad.x = max(pad.x - 5 * dt, 0)
             if pad.x <= 0 {
                 boosters.removeAll { $0.zone == 2 }
-                (pad.phase, pad.until, pad.rocket, pad.flown, pad.lowered) = (.hangar, clock + .random(in: 50...110), nextRocket(), Bool.random(), 0)
+                (pad.phase, pad.until, pad.rocket, pad.flown, pad.lowered, pad.scrubbed) = (.hangar, clock + .random(in: 50...110), nextRocket(), Bool.random(), 0, false)
             }
         }
         // A rocket from abroad has its flag run up the second pole, from its roll-out until its crawler is home again.
@@ -2641,19 +2686,25 @@ final class PixelCity: SKScene {
 
         // The board on our bank: the rocket's name, and under it the time to the next lift-off, or since the last
         // for a minute and a half after it.
-        let since = clock - liftoffAt, left: Double
+        let since = clock - liftoffAt
+        var left: Double
         switch pad.phase {
         case .hangar: left = max(0, pad.until - clock) / pace + Double(rolled / 3.5 + raising) + 70 / pace
         case .rollOut: left = Double((rolled - pad.x) / 3.5 + raising) + 70 / pace
         case .raise: left = Double(raising - pad.t) + 70 / pace
         case .count: left = max(0, pad.until - clock) / pace
-        case .climb, .recover, .rollBack: left = 0
+        case .lower, .climb, .recover, .rollBack: left = 0
         }
-        let up = since < 95 || pad.phase == .recover || pad.phase == .rollBack, seconds = Int(up ? since : left.rounded(.up))
-        let name = (up ? flew : pad.rocket).kit.name // while the clock counts up, the board keeps the rocket that just flew
-        if (up, seconds, name) != counted {
-            counted = (up, seconds, name)
-            let text = "T" + (up ? "+" : "-") + String(format: "%02d:%02d", min(seconds / 60, 99), seconds % 60)
+        // A real launch's board counts the real time down from the roll-out, says HOLD and SCRUB when the feed does,
+        // and trades the rocket's name for LIVE every three seconds, through the minute and a half after lift-off.
+        if pad.live, let live { left = max(0, live.net.timeIntervalSince(LaunchSchedule.now())) }
+        let up = !pad.scrubbed && (since < 95 || pad.phase == .recover || pad.phase == .rollBack), seconds = Int(up ? since : left.rounded(.up))
+        var name = (up ? flew : pad.rocket).kit.name // while the clock counts up, the board keeps the rocket that just flew
+        if up ? flewLive : pad.live, Int(clock / 3) % 2 == 1 { name = "LIVE" }
+        let text = pad.scrubbed ? "SCRUB" : pad.live && pad.phase == .count && live?.status == .hold ? "HOLD"
+            : "T" + (up ? "+" : "-") + String(format: "%02d:%02d", min(seconds / 60, 99), seconds % 60)
+        if (text, name) != counted {
+            counted = (text, name)
             var px = Pixels(31, 11)
             for (line, words, ink) in [(0, text, rgb(255, 176, 60)), (1, name, rgb(250, 236, 200))] {
                 let from = (31 - (words.count * 4 - 1)) / 2
@@ -2908,6 +2959,9 @@ final class PixelCity: SKScene {
         case .raise:
             lean = lying * (1 - smoothstep(0, 18, pad.t))
             if kit.caught { hinge.y = mix(Float(ground + 4), Float(starMount), smoothstep(0, 10, pad.t)).rounded(.down) } // going up in the arms
+        case .lower: // a scrubbed rocket going back down onto its strongback, or down out of the arms
+            lean = lying * smoothstep(0, 18, pad.t)
+            if kit.caught { hinge.y = mix(Float(starMount), Float(ground + 4), smoothstep(0, 10, pad.t)).rounded(.down) }
         case .recover: break
         case .count: lean = (flightTime ?? 0) > -20 ? -0.052 : 0 // it leans clear for the last of the count
         case .climb: lean = pad.t < 10 ? mix(-0.052, -0.66, smoothstep(0, 1.5, pad.t)) : mix(-0.66, lying, smoothstep(10, 21, pad.t))
@@ -2918,7 +2972,7 @@ final class PixelCity: SKScene {
         let caught = pad.phase == .rollBack && kit.caught ? hinge : SIMD2(Float(starX) + 0.5, lowering)
         // The tower's arms rest low, where a crawler brings a rocket under them, and are at whatever they hold otherwise.
         let holding = kit.caught && pad.phase != .hangar && pad.phase != .rollOut && pad.phase != .rollBack
-        let arms = Int(holding ? (pad.phase == .raise ? hinge.y : pad.phase == .recover ? lowering : Float(starMount)) : Float(ground + 4)) + 43
+        let arms = Int(holding ? (pad.phase == .raise || pad.phase == .lower ? hinge.y : pad.phase == .recover ? lowering : Float(starMount)) : Float(ground + 4)) + 43
         var shown = [smokeSteps, flicker, pad.phase.rawValue, Int(hinge.x), Int(hinge.y), kit.standing ? 0 : Int(lean * 80), Int(crane.x), Int(crane.t * 2), crane.phase.rawValue, arms, Int(caught.y),
                      orbiter.phase.rawValue, Int(orbiter.x), Int(orbiter.y)]
         if let flying { shown += [Int(flying.x), Int(flying.y), Int(flying.scale * 60)] }
@@ -2956,8 +3010,8 @@ final class PixelCity: SKScene {
                     if rolling, i % 6 < 2 { px.plot(Int((sx - qx * 2).rounded(.down)), Int((sy - qy * 2).rounded(.down)), dark) } // its wheels
                 }
             }
-            if pad.phase.rawValue < Pad.Phase.climb.rawValue { // still on its strongback or crawler, or on the mount
-                let floodlit: Float = pad.phase == .rollOut ? 0 : 1
+            if pad.phase.rawValue < Pad.Phase.climb.rawValue || pad.scrubbed { // still on its strongback or crawler, or on the mount; or going back unflown
+                let floodlit: Float = pad.phase == .rollOut || pad.phase == .rollBack ? 0 : 1
                 stamp(art, into: &px, x: hinge.x, y: hinge.y, angle: pad.phase == .count || kit.standing ? 0 : lean, paint: rocketPaint(flood: floodlit), soot: soot)
             }
             px.clip = 0..<w
@@ -3146,12 +3200,15 @@ private struct Car {
 
 /// The Spaceport's launch pad, and where its round has got to.
 private struct Pad {
-    /// In the hangar; rolling out to the pad on its transporter; being stood up; fuelling, through the count;
-    /// climbing away, while the strongback is lowered behind it; for Starship, waiting for its booster to be caught
+    /// In the hangar; rolling out to the pad on its transporter; being stood up; fuelling, through the count (or,
+    /// a real launch scrubbed, being lowered again); climbing away, while the strongback is lowered behind it; for Starship, waiting for its booster to be caught
     /// and lowered; and the strongback or crawler rolling back.
-    enum Phase: Int { case hangar, rollOut, raise, count, climb, recover, rollBack }
+    enum Phase: Int { case hangar, rollOut, raise, count, lower, climb, recover, rollBack }
     var phase = Phase.hangar
     var until: TimeInterval = 0 // when the wait in the hangar, or the count, ends
+    var live = false            // this round is a real launch's (Follow real launches), counted down by the wall clock
+    var scrubbed = false        // a real launch given up on: the rocket is going back to the hangar unflown
+    var passed: Date?           // that launch's T−0, not to be taken up again unless it moves
     var t: Float = 0            // seconds into this phase
     var x: Float = 0            // how far the transporter has rolled from the hangar's door
     var lowered: Float = 0      // seconds the tower's arms have spent lowering Starship's booster to its crawler
@@ -3427,7 +3484,7 @@ private let figures: [Character: [UInt8]] = [
     "+": [0, 2, 7, 2, 0], ":": [0, 2, 0, 2, 0],
     "A": [2, 5, 7, 5, 5], "C": [3, 4, 4, 4, 3], "D": [6, 5, 5, 5, 6], "E": [7, 4, 6, 4, 7], "F": [7, 4, 6, 4, 4], "H": [5, 5, 7, 5, 5],
     "I": [7, 2, 2, 2, 7], "L": [4, 4, 4, 4, 7], "N": [6, 5, 5, 5, 5], "O": [7, 5, 5, 5, 7], "R": [6, 5, 6, 5, 5], "S": [3, 4, 2, 1, 6],
-    "U": [5, 5, 5, 5, 7], "V": [5, 5, 5, 5, 2], "Y": [5, 5, 2, 2, 2], "Z": [7, 1, 2, 4, 7], "M": [5, 7, 7, 5, 5], "P": [6, 5, 6, 4, 4], "G": [3, 4, 5, 5, 7],
+    "U": [5, 5, 5, 5, 7], "V": [5, 5, 5, 5, 2], "Y": [5, 5, 2, 2, 2], "Z": [7, 1, 2, 4, 7], "M": [5, 7, 7, 5, 5], "P": [6, 5, 6, 4, 4], "G": [3, 4, 5, 5, 7], "B": [6, 5, 6, 5, 6],
 ]
 
 // The people on the Spaceport's bank, in silhouette, and the crown of its palm.

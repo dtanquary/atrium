@@ -273,6 +273,30 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
     #expect(scene.rocketName == "SHUTTLE" && scene.movements >= 5, "\(scene.movements) lift-offs and landings")
 }
 
+/// With Follow real launches on and a real Falcon 9 due in four minutes, the pad is cleared for it as soon as the
+/// Saturn V's round is done (the only rocket switched on, so the Falcon can only be the real one): it lifts off within
+/// two seconds of the real T−0 by the schedule's clock, and the board says LIVE on the way.
+@MainActor @Test func pixelSpaceportFollowsARealLaunch() throws {
+    var settings: [String: Double] = ["spaceport.launches": 3, "spaceport.live": 1]
+    for knob in PixelCity.spaceportKnobs where knob.key.hasPrefix("spaceport.rocket.") { settings[knob.key] = knob.key == "spaceport.rocket.saturn" ? 1 : 0 }
+    defer { settings.keys.forEach(UserDefaults.standard.removeObject); LaunchSchedule.now = { Date() }; LaunchSchedule.shared.set([]) }
+    for (key, value) in settings { UserDefaults.standard.set(value, forKey: key) }
+    let start = Date(), net = start + 240
+    var now = start
+    LaunchSchedule.now = { now }
+    LaunchSchedule.shared.set([.init(rocket: "Falcon 9 Block 5", mission: "Starlink Group 15-25", net: net, status: .go)], at: start)
+    let scene = PixelCity(size: CGSize(width: 800, height: 500), spaceport: true)
+    var liftoff: Date?, moved = 0, said = Set<String>()
+    for step in 0..<3_000 { // five minutes, a tenth of a second at a time
+        now = start + Double(step) / 10
+        scene.update(Double(step) / 10)
+        if scene.rocketName == "FALCON 9" { said.insert(scene.boardSays.1) }
+        if scene.movements > moved { moved = scene.movements; if liftoff == nil, scene.rocketName == "FALCON 9" { liftoff = now } }
+    }
+    let at = try #require(liftoff, "no Falcon 9 lifted off; the board said \(said)")
+    #expect(abs(at.timeIntervalSince(net)) < 2 && said.contains("LIVE") && said.contains("FALCON 9"), "lifted off \(at.timeIntervalSince(net)) s from T−0; the board said \(said)")
+}
+
 /// Each display runs its own Spaceport, and so does the copy behind Settings. On every one of them, rockets that
 /// come back and rockets that fly once still take turns: none is dealt all of one kind.
 @MainActor @Test func pixelSpaceportTakesTurnsOnEveryDisplay() throws {

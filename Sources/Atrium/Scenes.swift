@@ -41,6 +41,9 @@ struct Refresh {
         Storms.shared.poll(around: Location.shared.coordinate, force: true)
         Clouds.shared.poll(force: true)
     }, available: { max(Storms.shared.available, Clouds.shared.available) }, updated: { Storms.shared.updated })
+    /// Pixel Spaceport's schedule of real launches.
+    @MainActor static let launches = Refresh(run: { LaunchSchedule.shared.poll(force: true) },
+                                             available: { LaunchSchedule.shared.available }, updated: { LaunchSchedule.shared.updated })
 }
 
 /// Every wallpaper, finished or not. The list sorts itself by name, so the menu and Settings show them alphabetically
@@ -81,7 +84,7 @@ struct Refresh {
     Wallpaper(name: "Pixel City", icon: "building.2.fill", tint: .pink, blurb: "A pixel-art skyline on your clock.",
               make: pixelCity, knobs: PixelCity.knobs),
     Wallpaper(name: "Pixel Spaceport", icon: "location.north.fill", tint: .orange, blurb: "A pixel-art launch site that never stops.",
-              make: pixelSpaceport, knobs: PixelCity.spaceportKnobs),
+              make: pixelSpaceport, knobs: PixelCity.spaceportKnobs, status: (key: "spaceport.status", below: "spaceport.live"), refresh: .launches),
     Wallpaper(name: "Fireflies", icon: "sparkle", tint: .yellow, blurb: "A meadow at blue hour, twinkling with fireflies.",
               make: fireflies, knobs: Fireflies.knobs),
     Wallpaper(name: "Murmuration", icon: "bird.fill", tint: .brown, blurb: "Starlings swirling over a sunset.",
