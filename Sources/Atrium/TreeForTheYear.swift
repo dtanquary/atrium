@@ -228,6 +228,8 @@ final class TreeScene: WeatherScene {
         let names = (0..<bake.slabs.count).flatMap { k in ["u_woodL\(k)", "u_woodX\(k)", "u_leafL\(k)", "u_leafS\(k)"] }
         let frame = SIMD4<Float>(Float(node.position.x / size.width), Float(node.position.y / size.height),
                                  Float(node.size.width / size.width), Float(node.size.height / size.height))
+        // Nearly full: 12 slab textures, 2 of sky and SpriteKit's own make 15 of Metal's 16 samplers. Another slab or map
+        // would fail to compile at runtime and draw nothing; pack two into one first.
         node.shader = SKShader(source: Self.shaderSource(bake, age: key.age), uniforms: zip(names, textures).map {
             SKUniform(name: $0, texture: $1)
         } + [WallpaperTime.now, seasonDay, spring, autumn, sunLight, skyLight, lightFrom, windUniform, treeWeather, SKUniform(name: "u_frame", vectorFloat4: frame),
