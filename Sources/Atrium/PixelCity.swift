@@ -627,7 +627,8 @@ final class PixelCity: SKScene {
                 node.isHidden = true
                 node.colorBlendFactor = 1
                 let frames = puffs.enumerated().flatMap { i, frame in
-                    [SKAction.run {
+                    [SKAction.run { [weak node] in // the action is the node's own: held strongly, neither would ever go
+                        guard let node else { return }
                         node.texture = frame
                         node.size = frame.size()
                         node.position = CGPoint(x: x + i, y: y + [0, 1, 4, 8, 13][i])
@@ -636,7 +637,7 @@ final class PixelCity: SKScene {
                     }, .wait(forDuration: 0.9)]
                 }
                 node.run(.sequence([.wait(forDuration: Double(puff) * 1.6 + Double(x % 7) * 0.3),
-                                    .repeatForever(.sequence(frames + [.run { node.isHidden = true }, .wait(forDuration: 0.3)]))]))
+                                    .repeatForever(.sequence(frames + [.run { [weak node] in node?.isHidden = true }, .wait(forDuration: 0.3)]))]))
                 canvas.addChild(node)
                 steam.append(node)
             }
