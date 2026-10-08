@@ -118,9 +118,18 @@ final class TreeScene: WeatherScene {
 
     private struct BakeKey: Hashable { var seed: UInt64, age: Int, width: Int, height: Int }
 
-    /// A baked tree, its slabs' textures and its shadow's, shared by every copy of the scene the same size (another
-    /// display, or the Settings preview), so its memory isn't doubled. The last few are kept.
-    private static var bakes: [(key: BakeKey, bake: TreeBake, textures: [SKTexture], shadow: SKTexture)] = []
+    /// A baked tree, its slabs' textures and its shadow's.
+    private final class Baked {
+        let bake: TreeBake, textures: [SKTexture], shadow: SKTexture
+        init(_ bake: TreeBake, _ textures: [SKTexture], _ shadow: SKTexture) { (self.bake, self.textures, self.shadow) = (bake, textures, shadow) }
+    }
+
+    /// The bakes on show, shared by every copy of the scene the same size (another display, or the Settings preview),
+    /// so their memory isn't doubled. Held weakly, so each goes with the last scene showing it: the last three used to
+    /// stay for the app's life, each holding its pixels twice, 40 MB or more apiece.
+    private static let bakes = NSMapTable<NSString, Baked>.strongToWeakObjects()
+    /// The one this scene shows, which keeps it.
+    private var showing: Baked?
 
     /// The leaf cards (the six oak leaves' colour, normals and translucency) and the bark, decoded once.
     private static let materials: (atlas: LeafAtlas, bark: BarkImage) = {
@@ -153,9 +162,10 @@ final class TreeScene: WeatherScene {
     /// Bakes the tree for `key`, or finds it already baked. About 0.2 s at 15 years old, 0.5 s at 30.
     /// ponytail: on the main thread, as Weather's first build is; move it off once the tree is old enough (about 35)
     /// for a bake to take over half a second, and crossfade when it lands.
-    private static func baked(_ key: BakeKey, trunk: SIMD2<Double>, horizon: Double) -> (bake: TreeBake, textures: [SKTexture], shadow: SKTexture) {
-        if let hit = bakes.first(where: { $0.key == key }) { return (hit.bake, hit.textures, hit.shadow) }
-        let bake = TreeGrowth.bake(species, seed: key.seed, age: key.age, pixels: SIMD2(key.width, key.height), horizon: horizon,
+    private static func baked(_ key: BakeKey, trunk: SIMD2<Double>, horizon: Double) -> Baked {
+        let name = "\(key.seed) \(key.age) \(key.width) \(key.height)" as NSString
+        if let hit = bakes.object(forKey: name) { return hit }
+        var bake = TreeGrowth.bake(species, seed: key.seed, age: key.age, pixels: SIMD2(key.width, key.height), horizon: horizon,
                                    trunkBase: trunk, atlas: materials.atlas, bark: materials.bark)
         let size = CGSize(width: bake.size.x, height: bake.size.y)
         let textures = bake.slabs.flatMap { slab in
@@ -166,8 +176,14 @@ final class TreeScene: WeatherScene {
             }
         }
         let shadow = SKTexture(data: Data(bake.shadow.rgba), size: CGSize(width: bake.shadow.size.x, height: bake.shadow.size.y))
-        bakes = Array((bakes + [(key, bake, textures, shadow)]).suffix(3))
-        return (bake, textures, shadow)
+        // The textures hold their own copy of the pixels; the bake keeps its shape and how many slabs it has.
+        for k in bake.slabs.indices {
+            (bake.slabs[k].woodLight, bake.slabs[k].woodExtra, bake.slabs[k].leafLight, bake.slabs[k].leafSeed) = ([], [], [], [])
+        }
+        bake.shadow.rgba = []
+        let baked = Baked(bake, textures, shadow)
+        bakes.setObject(baked, forKey: name)
+        return baked
     }
 
     override func addForeground() {
@@ -175,7 +191,9 @@ final class TreeScene: WeatherScene {
         let photo = WeatherGround.cissbury.photo.size(), aspect = photo.width / max(photo.height, 1), top = WeatherGround.cissbury.top
         let shown = max(size.width, size.height * top * aspect) / aspect / size.height
         let key = wantedKey
-        let (bake, textures, shadowTexture) = Self.baked(key, trunk: [0.425, Double(top - 0.22 * shown)], horizon: WeatherGround.cissbury.horizon)
+        let baked = Self.baked(key, trunk: [0.425, Double(top - 0.22 * shown)], horizon: WeatherGround.cissbury.horizon)
+        let (bake, textures, shadowTexture) = (baked.bake, baked.textures, baked.shadow)
+        showing = baked
         let group = SKNode()
         // The bake is at 2x, so a canvas pixel is half a point; y runs down in the canvas.
         func place(_ node: SKSpriteNode, origin: SIMD2<Int>, span: SIMD2<Int>) {

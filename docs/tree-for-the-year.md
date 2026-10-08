@@ -52,7 +52,7 @@ One young white oak on a chalk hilltop, living through the real seasons where yo
 ## Performance
 - Release build, 2x, 1512×982, 2026-09-27: CPU 0.44–0.57 ms, GPU 0.49–0.92 ms (1.3 in snow, as Weather). The tree alone is about 0.1–0.2 ms of GPU.
 - The bake: 0.2 s at 15 (0.23 at 20, 0.49 at 30, 2.7 at 60), on the main thread when the scene is built (as Weather's first build is), then kept for every copy of the scene at that size, so the Settings preview and another display share it. It happens again once a year.
-- Memory: the tree's 12 textures are about 20 MB at 15, 29 at 30; the hilltop photo 23 MB.
+- Memory: the tree's 12 textures are about 20 MB at 15, 29 at 30; the hilltop photo 23 MB. A bake is shared by every copy of the scene the same size and goes with the last one showing it, its pixel arrays dropped once they're in textures. Until 2026-10-08 the last three bakes stayed for the app's life, each holding its pixels twice (found in the 1.0 review).
 - `TreeGrowth` is its own SwiftPM target built with `-O` even in debug (`unsafeFlags`): unoptimised, the bake took about 100 s, which added that to every `swift test`. It's Foundation and simd only, so it has no SpriteKit.
 
 ## Gotchas and shortcuts
