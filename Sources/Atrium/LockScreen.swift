@@ -72,16 +72,17 @@ import UniformTypeIdentifiers
         }
     }
 
-    /// Puts back each connected display's own wallpaper, if Atrium replaced it and it hasn't been changed since. A
-    /// display that isn't connected keeps its entry and its still, for `update` to put back once it is.
-    // ponytail: puts back the file only, at macOS's default fit; a moving Aerial may come back as its still
+    /// Puts back each connected display's own wallpaper, if Atrium replaced it. A display that isn't connected keeps
+    /// its entry and its still, for `update` to put back once it is. It doesn't ask macOS whether the display still
+    /// shows a still: macOS reports a new wallpaper late, so Match turned off just after it went on would have
+    /// skipped putting theirs back, then deleted the still.
+    // ponytail: puts back the file only, at macOS's default fit; a moving Aerial may come back as its still. And a
+    // display's own, picked while it was unplugged and Atrium wasn't running, is put back over with the older one.
     static func restore() {
         guard var saved = UserDefaults.standard.dictionary(forKey: savedKey) as? [String: String], !saved.isEmpty else { return }
         for screen in NSScreen.screens {
             guard let id = uuid(screen), let url = saved.removeValue(forKey: id).flatMap(URL.init(string:)) else { continue }
-            if NSWorkspace.shared.desktopImageURL(for: screen)?.path.hasPrefix(folder.path) != false {
-                try? NSWorkspace.shared.setDesktopImageURL(url, for: screen, options: [:])
-            }
+            try? NSWorkspace.shared.setDesktopImageURL(url, for: screen, options: [:])
         }
         UserDefaults.standard.set(saved.isEmpty ? nil : saved, forKey: savedKey)
         guard !saved.isEmpty else {
