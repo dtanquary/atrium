@@ -1,6 +1,7 @@
 import ServiceManagement
 import SpriteKit
 import SwiftUI
+import Synchronization
 
 /// One live setting of a wallpaper, stored in UserDefaults under `key`: a slider, or a switch when `format` is
 /// `.toggle` (stored as 0 or 1). Scenes read `value` and listen for `UserDefaults.didChangeNotification` to follow
@@ -17,7 +18,31 @@ struct Knob {
     /// Only shown while this toggle knob is on.
     var shownWhen: String?
 
-    var value: Double { UserDefaults.standard.object(forKey: key) as? Double ?? standard }
+    var value: Double { KnobValues.read(key) ?? standard }
+}
+
+/// What each knob's key held when last read, so scenes can read their knobs every frame for the price of a lookup:
+/// a cold UserDefaults read cost about 3% of a frame on the desktop, and a dozen scenes made one or more each frame.
+/// Emptied on every change to the defaults, by an observer added at the first read of any knob, so before any scene
+/// adds its own: a scene's handler always reads the new value.
+// ponytail: a `defaults write` from Terminal isn't seen until something in Atrium writes a setting; none needs to be
+private enum KnobValues {
+    private static let cache = Mutex((values: [String: Double?](), generation: 0))
+    private static let observing: Bool = {
+        _ = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: nil) { _ in
+            cache.withLock { $0 = ([:], $0.generation + 1) }
+        }
+        return true
+    }()
+
+    static func read(_ key: String) -> Double? {
+        _ = observing
+        let (hit, generation) = cache.withLock { ($0.values[key], $0.generation) }
+        if let hit { return hit }
+        let value = UserDefaults.standard.object(forKey: key) as? Double
+        cache.withLock { if $0.generation == generation { $0.values[key] = value } } // unless it changed meanwhile
+        return value
+    }
 }
 
 /// Named colour palettes a wallpaper can be pinned to, stored by name under `key`; empty rolls one at random.

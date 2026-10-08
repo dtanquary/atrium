@@ -1,5 +1,6 @@
 import Metal
 import SpriteKit
+import Synchronization
 import Testing
 import UniformTypeIdentifiers
 @testable import Atrium
@@ -410,4 +411,22 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
     defaults.set("Eros", forKey: "solar.body")
     defaults.set(0.0, forKey: "solar.surface")
     #expect(Tour.solarSystem.pickNext(after: nil)?.group == "Eros")
+}
+
+/// Knob values are cached for scenes that read them every frame, but a change shows at once, to a scene's own
+/// handler for the change too.
+@Test func knobValueFollowsChanges() {
+    let knob = Knob(key: "test.knob", label: "", range: 0...1, standard: 0.25), defaults = UserDefaults.standard
+    defer { defaults.removeObject(forKey: knob.key) }
+    #expect(knob.value == 0.25)
+    let seen = Mutex<Double?>(nil)
+    let token = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: nil) { _ in
+        seen.withLock { $0 = knob.value }
+    }
+    defer { NotificationCenter.default.removeObserver(token) }
+    defaults.set(0.75, forKey: knob.key)
+    #expect(knob.value == 0.75)
+    #expect(seen.withLock { $0 } == 0.75)
+    defaults.removeObject(forKey: knob.key)
+    #expect(knob.value == 0.25)
 }
