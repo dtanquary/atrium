@@ -31,8 +31,8 @@ import CoreLocation
     /// Fetches the storms once the forecast is `every` old, at most every 10 minutes however many displays ask; or
     /// now with `force` (Refresh Now), if the last try was over `cooldown` ago.
     func poll(around here: CLLocationCoordinate2D, force: Bool = false) {
-        let since = Date().timeIntervalSince(lastTry)
-        guard force ? since > Self.cooldown : since > 600 && Date().timeIntervalSince(updated ?? .distantPast) > Self.every else { return }
+        let since = abs(Date().timeIntervalSince(lastTry))
+        guard force ? since > Self.cooldown : since > 600 && abs(Date().timeIntervalSince(updated ?? .distantPast)) > Self.every else { return }
         lastTry = Date()
         let points = stride(from: -20.0, through: 20, by: 4).flatMap { dlat in
             stride(from: -28.0, through: 28, by: 4).map { dlon in

@@ -15,7 +15,7 @@ import Foundation
 
     /// Fetches fresh positions, at most every 50 s however many scenes and displays ask.
     func poll() {
-        guard Date().timeIntervalSince(lastPoll) > 50 else { return }
+        guard abs(Date().timeIntervalSince(lastPoll)) > 50 else { return }
         lastPoll = Date()
         let now = Int(Date().timeIntervalSince1970)
         let stamps = stride(from: now, through: now + 90, by: 10).map(String.init).joined(separator: ",")

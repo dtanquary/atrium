@@ -37,7 +37,7 @@ import CoreLocation
     /// Fetches the weather now, but at most every 10 minutes however many scenes ask, or 5 with `force` (Refresh Now).
     /// Offline, `latest` stays as it was.
     func poll(force: Bool = false) {
-        guard Date().timeIntervalSince(lastPoll) > (force ? 300 : 600) else { return }
+        guard abs(Date().timeIntervalSince(lastPoll)) > (force ? 300 : 600) else { return }
         lastPoll = Date()
         let spot = Location.shared.coordinate
         var url = URLComponents(string: "https://api.open-meteo.com/v1/forecast")!

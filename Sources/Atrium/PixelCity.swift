@@ -1862,9 +1862,9 @@ final class PixelCity: SKScene {
         let dt = Float(min(max(currentTime - (lastUpdate ?? currentTime), 0), 0.1))
         lastUpdate = currentTime
         clock += TimeInterval(dt)
-        if Date().timeIntervalSince(redrawnAt) >= 30 { redraw() }
+        if abs(Date().timeIntervalSince(redrawnAt)) >= 30 { redraw() }
         // Following real launches: ask the shared schedule now and then; it fetches only when a fetch is due.
-        if following, Date().timeIntervalSince(polledAt) >= 15 { (polledAt, _) = (Date(), LaunchSchedule.shared.poll()) }
+        if following, abs(Date().timeIntervalSince(polledAt)) >= 15 { (polledAt, _) = (Date(), LaunchSchedule.shared.poll()) }
 
         for i in cars.indices where !cars[i].node.isHidden {
             let direction: Float = cars[i].lane == 0 ? 1 : -1

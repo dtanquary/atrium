@@ -402,7 +402,7 @@ nonisolated func sunTilt(at date: Date) -> Float {
     /// from. Failures are silent and leave the cache as it was.
     func poll(_ source: Int, width: Int) {
         let key = "\(source) \(width)"
-        guard Date().timeIntervalSince(lastCheck[key] ?? .distantPast) > Double(width) / 2048 * 900 else { return }
+        guard abs(Date().timeIntervalSince(lastCheck[key] ?? .distantPast)) > Double(width) / 2048 * 900 else { return }
         lastCheck[key] = Date()
         Task {
             guard let newest = await closest(source, to: Date()), await download(newest, source, width) else { return }

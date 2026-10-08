@@ -42,7 +42,7 @@ import SwiftUI
     /// again at the next call.
     func check(force: Bool = false) {
         guard updatable, state != .checking, state != .installing, download == nil,
-              force || Self.automatic.value > 0.5 && Date().timeIntervalSince(checked ?? .distantPast) > 86400 else { return }
+              force || Self.automatic.value > 0.5 && abs(Date().timeIntervalSince(checked ?? .distantPast)) > 86400 else { return }
         let before = state
         state = .checking
         Task {

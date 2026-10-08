@@ -54,7 +54,7 @@ let rainPreview = [
         var features: Set<String> {
             var needs: Set<String> = ["WEATHER"]
             if rain > 0 || (before > 0 && dried < 16) || frozen > 0 { needs.insert("WATER") }
-            if rain == 0 || (rain != before && Date().timeIntervalSince(changed) < 300) { needs.insert("CHANGE") }
+            if rain == 0 || (rain != before && abs(Date().timeIntervalSince(changed)) < 300) { needs.insert("CHANGE") }
             if rain == 0 { needs.insert("DRY") }
             if water > 0.02 { needs.insert("FOG") }
             if water > 40 { needs.insert("DEW") }

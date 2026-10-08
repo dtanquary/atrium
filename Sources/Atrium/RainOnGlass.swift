@@ -88,7 +88,7 @@ let rainPhotos: [(name: String, night: String, day: String)] = [
         fade.pausesIncomingScene = false   // both keep raining through the fade, in step on the same clock
         fade.pausesOutgoingScene = false
         if UserDefaults.standard.string(forKey: "rain.palette") ?? "" == "", rainKnobs[0].value > 0.5,
-           Date().timeIntervalSince(born) >= rainKnobs[1].value.rounded() * 60 {
+           abs(Date().timeIntervalSince(born)) >= rainKnobs[1].value.rounded() * 60 {
             let others = (rainPhotos.map(\.name) + rainPalettes.map(\.name)).filter { $0 != backdrop }
             view.presentScene(rainScene(size: water.size, backdrop: others.randomElement()!, clock: water.clockTime), transition: fade)
         } else if water.clockTime > 8000 {

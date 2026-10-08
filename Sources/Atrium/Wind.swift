@@ -308,8 +308,8 @@ final class WindScene: SKScene {
         let spacing = Self.spans[zoom] / 111 / Double(Self.grid(zoom).cols) // degrees, roughly
         let moved = abs(centre.latitude - here.latitude) > spacing || abs(remainder(centre.longitude - here.longitude, 360)) > spacing
         // made up (nothing on disk, or a cache from another grid, which forecast(zoom:) doesn't keep) counts as stale
-        let stale = forecasts[zoom] == nil || Date().timeIntervalSince(updated(zoom: zoom) ?? .distantPast) > Self.every
-        let since = Date().timeIntervalSince(lastTry[zoom] ?? .distantPast)
+        let stale = forecasts[zoom] == nil || abs(Date().timeIntervalSince(updated(zoom: zoom) ?? .distantPast)) > Self.every
+        let since = abs(Date().timeIntervalSince(lastTry[zoom] ?? .distantPast))
         guard force ? since > Self.cooldown : since > 600 && (stale || moved) else { return }
         lastTry[zoom] = Date()
         let points = Self.points(around: here, zoom: zoom)

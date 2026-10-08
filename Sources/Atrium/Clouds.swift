@@ -33,8 +33,8 @@ import SpriteKit
     /// few bytes (304).
     func poll(force: Bool = false) {
         let saved = (try? file.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
-        let since = Date().timeIntervalSince(lastCheck)
-        guard force ? since > 15 * 60 : Date().timeIntervalSince(saved) > 3 * 3600 && since > 3600 else { return }
+        let since = abs(Date().timeIntervalSince(lastCheck))
+        guard force ? since > 15 * 60 : abs(Date().timeIntervalSince(saved)) > 3 * 3600 && since > 3600 else { return }
         lastCheck = Date()
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
         if saved != .distantPast, let tag = UserDefaults.standard.string(forKey: "clouds.etag") {
