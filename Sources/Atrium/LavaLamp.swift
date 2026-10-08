@@ -68,7 +68,7 @@ final class LavaLamp: SKScene {
         sprite.shader = SKShader(source: shaderCommon + Self.source, uniforms: [
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]),
             phase, SKUniform(name: "u_pivot", float: systemIsDark ? 0.3 : 0.7), // the grade's contrast pivot
-        ] + colours + blobs + Array(knobUniforms.values))
+        ] + colours + blobs + knobUniforms.values.filter { Self.source.contains($0.name) }) // only those it reads: a shader takes about 30 uniforms
         addChild(sprite)
 
         applySettings()

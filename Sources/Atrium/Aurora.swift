@@ -196,7 +196,7 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
         vec2 pts = uv * u_size;
         float clump = 0.35 + 1.3 * noise(p * 3.5 + 17.0);
         float star = starField(pts, 11.0, 0.3 * clump, t) * 0.2 + starField(pts + 5.0, 6.0, 0.35 * clump, t) * 0.05;
-        vec3 tint = mix(vec3(1.0, 0.75, 0.5), vec3(0.8, 0.88, 1.0), hash21(floor(pts / 11.0) + 3.0));
+        vec3 tint = mix(vec3(1.0, 0.75, 0.5), vec3(0.8, 0.88, 1.0), hash42(floor(pts / 11.0) + 3.0).x); // hash21 repeats every 550 pt
         vec3 col = 1.0 - exp(-(sky + (star * tint + light * 0.7) * ext));
         col = pow(col, vec3(1.0 / 2.2));
         col = grade(col, 0.3, u_hue, u_saturation, u_contrast, u_brightness);

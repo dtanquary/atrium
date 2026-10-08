@@ -4,7 +4,7 @@ Seven big, soft pools of colour drift and melt into each other with no visible e
 
 - **Files:** `Sources/Atrium/FlowingGradient.swift` holds everything: knobs, palettes, `pastel`, `look`, the colour cycle, and the shader source. The noise helpers come from `shaderCommon` in Shaders.swift.
 - **Entry:** `flowingGradient(size:)` returns `final class FlowingGradient: SKScene`. Its registry entry in Scenes.swift has icon `swirl.circle.righthalf.filled`, tint `.indigo`, `knobs: FlowingGradient.knobs`, and palettes `PaletteChoice(key: "gradient.palette", options: FlowingGradient.paletteOptions)`, whose empty `standard` makes Random the default.
-- **Kind:** a full-screen SKShader on one sprite, with a subclass so it can hold live uniforms.
+- **Kind:** a full-screen SKShader on one sprite, with a subclass so it can hold live uniforms. Only the knobs the shader reads become uniforms (not the preview's or the cycle's), which keeps it at 23 of Metal's 30 or so.
 
 ## How it works
 In the shader (`FlowingGradient.source`):
@@ -22,7 +22,7 @@ In the shader (`FlowingGradient.source`):
    - a lighter 0.12 vignette
    - the paper is white tinted 6% toward the palette's second pool
 5. **Silk ribbons (`ribbon`):** two slow waves, each made of 5 fine strands. They spread apart and pinch together with `twist`, so bright folds travel along the ribbon, wrapped in a soft glow.
-6. **Film grain:** `hash21` over `floor(pixel / u_grainSize)`. It's fixed rather than animated (a deliberate choice for a calm, printed feel) and stronger in the lights. It also dithers away 8-bit banding.
+6. **Film grain:** `hash42(...).x` over `floor(pixel / u_grainSize)` (`hash21` until 2026-10-08, which repeated every 50 by 100 grains, a visible tile once Film Grain was turned up; found in the 1.0 review). It's fixed rather than animated (a deliberate choice for a calm, printed feel) and stronger in the lights. It also dithers away 8-bit banding.
 
 **How the palette is picked (init):** `gradient.palette` is read. Empty or missing means Random, the default (so does any name that isn't a palette). `look(palette)` turns it into the eight colours the shader takes, `u_base` then `u_c0`…`u_c6`: the raw colours in Dark Mode, or in Light Mode `pastel(c)` for each pool over paper tinted 6% toward pool 1. `pastel` normalises the colour to its brightest channel, then mixes it 55% toward white. So each palette defines only its dark colours, and the light washes are derived from them.
 

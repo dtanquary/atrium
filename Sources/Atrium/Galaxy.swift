@@ -83,7 +83,7 @@ final class Galaxy: SKScene {
             SKUniform(name: "u_core", vectorFloat3: kind.colours[0]), SKUniform(name: "u_disc", vectorFloat3: kind.colours[1]),
             SKUniform(name: "u_young", vectorFloat3: kind.colours[2]), SKUniform(name: "u_knots", vectorFloat3: kind.colours[3]),
             phase, WallpaperTime.now,
-        ] + companionUniforms(kind.name) + Array(knobUniforms.values))
+        ] + companionUniforms(kind.name) + knobUniforms.values.filter { Self.source.contains($0.name) }) // only those it reads: a shader takes about 30 uniforms
         addChild(sprite)
 
         applySettings()

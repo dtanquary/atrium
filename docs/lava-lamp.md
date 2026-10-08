@@ -4,7 +4,7 @@ Full-screen view inside a lava lamp. Glowing jewel-tone wax heats in a molten po
 
 - **Files:** `Sources/Atrium/LavaLamp.swift` holds the knobs, palettes, colour cycling, the blob layout (`layBlobs`) and the shader source. Noise comes from `shaderCommon` in Shaders.swift.
 - **Entry:** `lavaLamp(size:)` returns `final class LavaLamp: SKScene`. Its registry entry in Scenes.swift has icon `lamp.table.fill`, tint `.orange`, `knobs: LavaLamp.knobs`, and palettes `PaletteChoice(key: "lava.palette", ...)`. The swatches are liquid-lit to wax-hot, `[3]` and `[1]`. The standard is "", meaning Random.
-- **Kind:** a full-screen SKShader (metaballs), in a subclass with live uniforms.
+- **Kind:** a full-screen SKShader (metaballs), in a subclass with live uniforms. Only the knobs the shader reads become uniforms (Speed, Blob size and the cycle's minutes are Swift's), to stay clear of Metal's limit of about 30.
 
 ## How it works
 **Blob layout (`layBlobs`, Swift):** every frame, after integrating the time, Swift works out where the 8 heads and their 8 stems are and packs them into four `mat4` uniforms, one per column: `u_blobs0`/`u_blobs1` hold heads as (x, y, radius, stretch), `u_blobs2`/`u_blobs3` hold stems as (anchor x, anchor y, radius, 1/the head's radius). The shader needs 1/r for its lighting, and dividing there cost about 0.25 ms. It's a pure function of the time, so it looks the same at any frame rate. The time is kept in Double (`time`), so the layout stays smooth after days of running; `u_phase` is only its Float copy for the wobble and pool heave. This used to run in the shader for every pixel, which was 60% of the frame (see Performance).

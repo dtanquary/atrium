@@ -546,7 +546,7 @@ final class DappledLight: SKScene {
                 // A gap's image is as bright as the gap's area over the image's, so pinhole-sized gaps make dim images,
                 // but photos show the dapples at 0.7–1.6 times the median spot: the visible ones are the wider gaps.
                 float bright = fract(h.z * 13.7 + h.w * 5.3);
-                float gain = mix(0.2, 1.0, bright * bright) * (1.0 - flutter * step(0.6, h.w) * (0.5 + 0.5 * sin(t * (15.0 + 20.0 * h.w) + h.w * 80.0)));
+                float gain = mix(0.2, 1.0, bright * bright) * (1.0 - flutter * step(0.6, h.w) * (0.5 + 0.5 * sin(mod(t, 3600.0) * (15.0 + 20.0 * h.w) + h.w * 80.0))); // wrapped: a fast flutter coarsens first
                 float size = 0.65 + 0.8 * fract(h.z * 7.31 + h.w * 3.7);   // gaps 3.3 to 7.3 m out: the nearer, the smaller
                 if (r > 0.02) { sum += gain * sunImage((g - (c + 0.2 + 0.6 * h.xy) * 2.0) / size, r / size, src, term, px / size); }
             }

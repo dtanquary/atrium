@@ -96,7 +96,7 @@ final class FlowingGradient: SKScene {
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]),
             SKUniform(name: "u_lightMode", float: systemIsDark ? 0 : 1),
             phase, golden, night, noon,
-        ] + colours + Array(knobUniforms.values))
+        ] + colours + knobUniforms.values.filter { Self.source.contains($0.name) }) // only those it reads: a shader takes about 30 uniforms
         addChild(sprite)
 
         applySettings()
@@ -233,7 +233,7 @@ final class FlowingGradient: SKScene {
         }
 
         // Film grain: fine and fixed, stronger in the lights like real film; it also hides 8-bit banding.
-        float g = hash21(floor(v_tex_coord * u_size * 2.0 / u_grainSize)) - 0.5;
+        float g = hash42(floor(v_tex_coord * u_size * 2.0 / u_grainSize)).x - 0.5; // hash21 tiled every 50 by 100 grains
         col += g * (1.0 / 128.0 + u_grain * (0.02 + 0.1 * dot(col, vec3(0.3, 0.5, 0.2))));
         gl_FragColor = vec4(col, 1.0);
     }

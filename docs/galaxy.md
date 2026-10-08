@@ -7,7 +7,7 @@ A spiral galaxy turning slowly in deep space. Every load rolls a new one after a
   - icon `hurricane`, tint `.indigo`
   - `knobs: Galaxy.knobs`
   - palettes `PaletteChoice(key: "galaxy.kind", ...)`, whose swatches are bulge, knots and young stars. The standard is "", meaning Random.
-- **Kind:** a full-screen SKShader in a subclass with live uniforms, fully procedural, with no image files.
+- **Kind:** a full-screen SKShader in a subclass with live uniforms, fully procedural, with no image files. Only the knobs the shader reads become uniforms (not Rotation or the cycle's minutes), to stay clear of Metal's limit of about 30.
 
 ## How it works
 Everything is maths per pixel, per frame, in four coordinate frames:

@@ -207,6 +207,7 @@ class WeatherScene: SKScene {
         starsUniform.vectorFloat2Value.y = trails
         let sky = SKSpriteNode(color: .black, size: size)
         sky.anchorPoint = .zero
+        // Full: 29 uniforms, against the 30 or so a shader takes (CLAUDE.md). Pack two into one before adding another.
         sky.shader = SKShader(source: shaderCommon + moonShade + Self.skyShader, uniforms: [
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]), skyBefore, skyAfter, skyBlend,
             cameraUniforms.lens, cameraUniforms.forward, cameraUniforms.right, sunDirection, sunDisc, moonPlace, moonLight,
