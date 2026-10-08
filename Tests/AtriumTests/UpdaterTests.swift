@@ -19,6 +19,7 @@ import Testing
     #expect(offer.dmg == URL(string: "https://example.com/v0.96.0-beta.dmg"))
     #expect(Updater.newest(from: betas, version: "0.96.0", prerelease: "beta") == nil)
     #expect(Updater.newest(from: betas, version: "0.100.0", prerelease: "beta") == nil) // numbers, not text
+    #expect(Updater.newest(from: reply([("v0.100.0-beta", true, false)]), version: "0.95.1", prerelease: "beta")?.version == "0.100.0")
 
     let stable = reply([("v1.1.0-rc1", true, false), ("v1.0.0", false, false)])
     #expect(Updater.newest(from: stable, version: "1.0.0", prerelease: "") == nil) // no release candidates for a stable build
