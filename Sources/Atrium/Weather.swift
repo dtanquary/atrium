@@ -48,7 +48,7 @@ class WeatherScene: SKScene {
     private let knobs: [Knob], ground: WeatherGround
     private var lastUpdate: TimeInterval?
     private(set) var viewpoint: SkyCamera
-    private var sinceTrack = 0.0, sinceBake = 0.0, baking = false, skyDate = Date.distantPast
+    private var sinceTrack = 0.0, baking = false, skyDate = Date.distantPast
     /// How much faster than the real wind the clouds drift: they'd look still at real speed. From Settings.
     private var cloudSpeed: Double
     /// How far the cloud deck (km) and the cirrus (in their noise's own units) have drifted, wrapped where the noise
@@ -133,8 +133,8 @@ class WeatherScene: SKScene {
                           highCloud: [30, 20, 0, 0, 0, 0, 0, 0][kind], snowDepth: kind == 6 ? 0.12 : 0, visibility: kind == 3 ? 400 : 30000)
     }
 
-    /// Rebuilds the scene if the weather it should show has changed, crossfading from how it looked, or bakes the sky
-    /// again at once if a preview moved the time of day.
+    /// Rebuilds the scene if the weather it should show has changed, crossfading from how it looked. A preview's new
+    /// time of day is baked within the second by `update`.
     @objc private func redraw() {
         cloudSpeed = knobs[1].value
         starsUniform.vectorFloat2Value.y = trails
@@ -148,10 +148,6 @@ class WeatherScene: SKScene {
             fade.zPosition = 100
             addChild(fade)
             fade.run(.sequence([.fadeOut(withDuration: 4), .removeFromParent()]))
-        } else if abs(now.timeIntervalSince(skyDate)) > 120 {
-            let here = Location.shared.coordinate
-            show(SkyLight.bake(camera: viewpoint, date: now, latitude: here.latitude, longitude: here.longitude), fade: false)
-            track()
         }
     }
 
@@ -227,14 +223,14 @@ class WeatherScene: SKScene {
         track()
     }
 
-    /// Bakes the sky for now off the main thread, then fades to it.
-    private func bakeSky() {
+    /// Bakes the sky for now off the main thread, then fades to it, or with `fade` off shows it straight.
+    private func bakeSky(fade: Bool) {
         baking = true
         let (camera, date, here) = (viewpoint, now, Location.shared.coordinate)
         Task.detached(priority: .utility) {
             let light = SkyLight.bake(camera: camera, date: date, latitude: here.latitude, longitude: here.longitude)
             await MainActor.run { [weak self] in
-                self?.show(light, fade: true)
+                self?.show(light, fade: fade)
                 self?.baking = false
             }
         }
@@ -1074,9 +1070,15 @@ class WeatherScene: SKScene {
         lastUpdate = currentTime
         skyBlend.floatValue = min(skyBlend.floatValue + Float(dt) / 60, 1) // into the latest sky over a minute
         sinceTrack += dt
-        sinceBake += dt
-        if sinceTrack >= 1 { sinceTrack = 0; track() } else if starsUniform.vectorFloat2Value.x > 0 { turnStars() }
-        if sinceBake >= 60 && !baking { sinceBake = 0; bakeSky() }
+        if sinceTrack >= 1 {
+            sinceTrack = 0
+            track()
+            // A bake a minute by the wall clock, not scene time, which stops while the view is covered or frozen: the
+            // sky came back from that hours stale, and night lasted a minute or two under the morning Sun. One that
+            // far behind is shown straight; a minute's change crossfades.
+            let behind = abs(now.timeIntervalSince(skyDate))
+            if behind >= 60 && !baking { bakeSky(fade: behind < 120) }
+        } else if starsUniform.vectorFloat2Value.x > 0 { turnStars() }
         clock.floatValue = (clock.floatValue + Float(dt)).truncatingRemainder(dividingBy: 3600)
         // The deck drifts with the wind; its noise repeats every 200 km. Cirrus, higher up, drifts twice as fast.
         let wind = conditions.windToward * (conditions.wind / 3600 * 0.6 * cloudSpeed * Double(dt))
