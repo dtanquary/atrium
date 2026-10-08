@@ -396,3 +396,13 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
     defaults.set(2.0, forKey: Power.battery.key)
     #expect(Power.fullSpeedOnBattery)
 }
+
+/// Held on a world seen only from the ground, with Views from the surface off, Solar System Tour still shows it
+/// rather than nothing.
+@Test func tourHeldOnGroundOnlyWorldShowsIt() {
+    let defaults = UserDefaults.standard
+    defer { ["solar.body", "solar.surface", "solar.seen", "solar.recent"].forEach(defaults.removeObject) }
+    defaults.set("Eros", forKey: "solar.body")
+    defaults.set(0.0, forKey: "solar.surface")
+    #expect(Tour.solarSystem.pickNext(after: nil)?.group == "Eros")
+}

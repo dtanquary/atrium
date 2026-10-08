@@ -90,8 +90,10 @@ struct Tour: Sendable {
     func pickNext(after last: View?) -> View? {
         let defaults = UserDefaults.standard
         if let file = defaults.string(forKey: prefix + ".photo"), let pinned = views.first(where: { $0.file == file }) { return pinned }
-        let usable = (surface?.value ?? 1) > 0.5 ? views : views.filter { $0.kind != .surface }
+        var usable = (surface?.value ?? 1) > 0.5 ? views : views.filter { $0.kind != .surface }
         let held = defaults.string(forKey: showKey) ?? ""
+        // Held on a world seen only from the ground (Eros, Dimorphos), the switch gives way rather than show nothing.
+        if groups.contains(held), !usable.contains(where: { $0.group == held }) { usable = views }
         let candidates = groups.contains(held) ? unique(usable.filter { $0.group == held }.map(\.body)) : unique(usable.map(\.body))
         let recent = defaults.stringArray(forKey: prefix + ".recent") ?? []
         // Two live views never meet: both show through, so their dissolve would be a double exposure.
