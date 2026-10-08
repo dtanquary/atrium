@@ -28,7 +28,7 @@ struct WelcomeView: View {
     @State private var shuffle = UserDefaults.standard.object(forKey: Shuffle.on.key) == nil || Shuffle.on.value > 0.5
     @State private var openAtLogin = SMAppService.mainApp.status == .enabled
     @State private var matchLockScreen = LockScreen.knob.value > 0.5
-    @State private var fullSpeed = Power.battery.value >= Power.plugged.value
+    @State private var fullSpeed = Power.fullSpeedOnBattery
 
     private var steps: [Step] {
         Location.shared.undecided && (shuffle || Self.local.contains(current)) ? [.pick, .location, .switches] : [.pick, .switches]
@@ -227,7 +227,7 @@ struct WelcomeView: View {
         UserDefaults.standard.set(matchLockScreen ? 1.0 : 0.0, forKey: LockScreen.knob.key)
         if fullSpeed {
             UserDefaults.standard.set(Power.plugged.value, forKey: Power.battery.key)
-        } else if Power.battery.value >= Power.plugged.value {
+        } else if Power.fullSpeedOnBattery {
             UserDefaults.standard.removeObject(forKey: Power.battery.key)
         }
         dismiss()

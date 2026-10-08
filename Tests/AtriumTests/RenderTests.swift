@@ -385,3 +385,14 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
     #expect(FishTank.lightsOut(at: 2, off: 1, on: 6) && !FishTank.lightsOut(at: 0.5, off: 1, on: 6))
     #expect(!FishTank.lightsOut(at: 9, off: 9, on: 9))
 }
+
+/// Full Speed on Battery shows on only once it's been set, so turning mains power down doesn't show it stuck on.
+@Test func fullSpeedOnBatteryOnlyOnceSet() {
+    let defaults = UserDefaults.standard
+    defer { Power.knobs.forEach { defaults.removeObject(forKey: $0.key) } }
+    defaults.removeObject(forKey: Power.battery.key)
+    defaults.set(2.0, forKey: Power.plugged.key)
+    #expect(!Power.fullSpeedOnBattery)
+    defaults.set(2.0, forKey: Power.battery.key)
+    #expect(Power.fullSpeedOnBattery)
+}

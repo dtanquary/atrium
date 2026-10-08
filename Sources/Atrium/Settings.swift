@@ -255,6 +255,12 @@ enum Power {
 
     /// The frame rate for a knob's current choice.
     static func rate(_ knob: Knob) -> Int { rates[min(max(Int(knob.value), 0), rates.count - 1)] }
+
+    /// Full Speed on Battery, in the menu and the welcome: battery set to run as fast as mains power. Only when it's
+    /// been set, so turning mains power down doesn't show it on, where turning it off would do nothing.
+    static var fullSpeedOnBattery: Bool {
+        UserDefaults.standard.object(forKey: battery.key) != nil && battery.value >= plugged.value
+    }
 }
 
 /// The frame-rate menus. Low Power Mode wins over the power source.

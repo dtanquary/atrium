@@ -294,7 +294,7 @@ if !scenes.contains(where: { $0.name == current }) {
         login.state = SMAppService.mainApp.status == .enabled ? .on : .off
         let fullSpeed = menu.addItem(withTitle: "Full Speed on Battery", action: #selector(toggleFullSpeed), keyEquivalent: "")
         fullSpeed.target = self
-        fullSpeed.state = Power.battery.value >= Power.plugged.value ? .on : .off
+        fullSpeed.state = Power.fullSpeedOnBattery ? .on : .off
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Atrium", action: #selector(NSApplication.terminate), keyEquivalent: "q")
     }
