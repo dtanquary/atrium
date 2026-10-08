@@ -17,10 +17,11 @@ import CoreLocation
     private(set) var updated: Date?
     private var lastTry = Date.distantPast
 
-    /// Grid points with a thunderstorm this hour (weather codes 95, 96 and 99).
+    /// Grid points with a thunderstorm this hour (weather codes 95, 96 and 99). None once the forecast has run out
+    /// (offline for a day), rather than its last hour's storms for good.
     var cells: [Cell] {
         let now = Date().timeIntervalSince1970
-        guard let hour = forecast.times.lastIndex(where: { $0 <= now }) else { return [] }
+        guard let hour = forecast.times.lastIndex(where: { $0 <= now }), now < forecast.times[hour] + 3600 else { return [] }
         return forecast.points.filter { hour < $0.codes.count && $0.codes[hour] >= 95 }.map(\.cell)
     }
 
