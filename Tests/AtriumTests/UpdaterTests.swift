@@ -25,6 +25,11 @@ import Testing
     #expect(Updater.newest(from: stable, version: "1.0.0", prerelease: "") == nil) // no release candidates for a stable build
     #expect(Updater.newest(from: stable, version: "1.0.0", prerelease: "rc 1")?.version == "1.1.0")
     #expect(Updater.newest(from: reply([("v1.0.0", false, false)]), version: "1.0.0", prerelease: "rc 1")?.version == "1.0.0")
+    #expect(Updater.newest(from: reply([("v1.0.0-rc2", true, false)]), version: "1.0.0", prerelease: "rc 1")?.version == "1.0.0-rc2")
+    #expect(Updater.newest(from: reply([("v1.0.0-rc1", true, false)]), version: "1.0.0", prerelease: "beta")?.version == "1.0.0-rc1")
+    #expect(Updater.newest(from: reply([("v1.0.0-rc1", true, false)]), version: "1.0.0", prerelease: "rc 1") == nil)
+    #expect(Updater.newest(from: reply([("v1.0.0-rc1", true, false)]), version: "1.0.0", prerelease: "rc 2") == nil)
+    #expect(Updater.newest(from: reply([("v1.0.0-rc10", true, false)]), version: "1.0.0", prerelease: "rc 9")?.version == "1.0.0-rc10")
     #expect(Updater.newest(from: Data("{\"message\":\"API rate limit exceeded\"}".utf8), version: "0.1.0", prerelease: "beta") == nil)
 
     #expect(String(UpdatePage.notes(offer.notes).characters) == "New\n• Pixel Spaceport")

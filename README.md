@@ -274,7 +274,7 @@ Atrium's icon in the menu bar is a TV with sparkles (✨📺). Use it to:
 
 ### Updating and uninstalling
 
-- **Update:** Atrium looks for a new version once a day. When there is one, it opens **Settings → Software Update**, with what's new and **Install and Relaunch**: Atrium downloads it, checks it's signed by its developer, puts it in place of the old one and reopens. Your settings carry over. Turn off **Check for updates automatically** there to look only when you open that page. A copy built from source updates with `git pull && ./build.sh`.
+- **Update:** Atrium looks for a new version once a day. When there is one, it opens **Settings → Software Update** once, behind whatever you're doing (after that the menu bar menu offers it), with what's new and **Install and Relaunch**: Atrium downloads it, checks it's signed by its developer, puts it in place of the old one and reopens. Your settings carry over. Turn off **Check for updates automatically** there to look only when you open that page. A copy built from source updates with `git pull && ./build.sh`.
 - **Uninstall:** turn off **Open at Login** and **Match the lock screen** in Settings → General (the second puts your own wallpaper back), quit Atrium, and move it to the Trash. To remove its settings and caches too:
 
   ```sh

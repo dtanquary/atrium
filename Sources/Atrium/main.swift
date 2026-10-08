@@ -229,7 +229,8 @@ if !scenes.contains(where: { $0.name == current }) {
     }()
 
     /// Opens Settings, on `page` if given (a wallpaper's name, or General, Power or About), else where it was left.
-    func open(page: String? = nil) {
+    /// Without `activate` it opens behind the app in front, for news nobody asked for just then.
+    func open(page: String? = nil, activate: Bool = true) {
         if let page { UserDefaults.standard.set(page, forKey: SettingsView.pageKey) }
         if !window.isVisible {
             let hosting = NSHostingController(rootView: SettingsView())
@@ -245,6 +246,7 @@ if !scenes.contains(where: { $0.name == current }) {
             window.setFrameAutosaveName("Settings Window")
             NSApp.setActivationPolicy(.regular)
         }
+        guard activate else { return window.orderFront(nil) }
         NSApp.activate()
         window.makeKeyAndOrderFront(nil)
         window.orderFrontRegardless() // in front even when macOS holds back activating a menu bar app

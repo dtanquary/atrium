@@ -7,13 +7,16 @@ import SwiftUI
 // allow no other way.
 #if !APP_STORE
 /// Keeps Atrium up to date from its releases on GitHub. Once a day, while `automatic` is on, `check()` looks for a newer
-/// release and, if there is one, opens Settings → Software Update to offer it. Installing downloads the disk image,
+/// release and, if there is one, opens Settings → Software Update to offer it, once for each release and behind the app
+/// in front, so it never pulls anyone out of what they're doing. Installing downloads the disk image,
 /// checks the app in it is intact and signed by the same developer as this one, puts it in place of this one and
 /// relaunches. Only a Developer ID build updates itself: one from build.sh is ad-hoc signed, and updates with git pull.
 @MainActor @Observable final class Updater {
     static let shared = Updater()
     static let automatic = Knob(key: "update.automatic", label: "Check for updates automatically", range: 0...1, standard: 1, format: .toggle)
     private static let checkedKey = "update.checked"
+    /// The release a daily look last opened Settings for.
+    private static let offeredKey = "update.offered"
     private static let feed = URL(string: "https://api.github.com/repos/dtanquary/atrium/releases?per_page=10")!
     /// This build's version and prerelease label ("beta", "rc 1" or none), from build.sh.
     static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
@@ -35,7 +38,8 @@ import SwiftUI
 
     /// Looks for a newer release: now with `force` (Check Now, or opening Software Update), otherwise only while
     /// automatic checks are on and a day has passed since GitHub last answered. One found by a daily look opens Settings
-    /// to offer it, again each day until it's installed. Offline, a daily look tries again at the next call.
+    /// to offer it the first time, behind the app in front; the menu offers it from then on. Offline, a daily look tries
+    /// again at the next call.
     func check(force: Bool = false) {
         guard updatable, state != .checking, state != .installing, download == nil,
               force || Self.automatic.value > 0.5 && Date().timeIntervalSince(checked ?? .distantPast) > 86400 else { return }
@@ -50,7 +54,10 @@ import SwiftUI
             UserDefaults.standard.set(Date(), forKey: Self.checkedKey)
             release = Self.newest(from: data, version: Self.version, prerelease: Self.prerelease)
             state = release == nil ? .upToDate : .available
-            if release != nil, !force { SettingsWindow.shared.open(page: UpdatePage.tag) }
+            if let release, !force, UserDefaults.standard.string(forKey: Self.offeredKey) != release.version {
+                UserDefaults.standard.set(release.version, forKey: Self.offeredKey)
+                SettingsWindow.shared.open(page: UpdatePage.tag, activate: false)
+            }
         }
     }
 
@@ -92,13 +99,17 @@ import SwiftUI
     /// later, which it doesn't save as theirs.
     private func relaunch() {
         let wait = "while kill -0 \(ProcessInfo.processInfo.processIdentifier) 2>/dev/null; do sleep 0.2; done; open \"$0\""
-        _ = try? Process.run(URL(filePath: "/bin/sh"), arguments: ["-c", wait, Bundle.main.bundleURL.path])
+        guard (try? Process.run(URL(filePath: "/bin/sh"), arguments: ["-c", wait, Bundle.main.bundleURL.path])) != nil else {
+            state = .failed("The update is installed, but Atrium couldn't reopen itself. Quit Atrium and open it again.")
+            return
+        }
         exit(0)
     }
 
     /// The newest release in a GitHub `releases` reply, if it's newer than `version` with its `prerelease` label.
-    /// Prereleases count only while this build is one: until 1.0, every release is.
-    // ponytail: one release candidate to the next ("rc 1" to "rc 2") isn't seen as newer; compare the labels if RCs pile up
+    /// Prereleases count only while this build is one: until 1.0, every release is. Of the same version, the final
+    /// release follows any candidate, and a later label another ("rc2" after "rc 1", "rc1" after "beta"); one of those
+    /// is named as tagged ("1.0.0-rc2"), so it doesn't read as this version.
     nonisolated static func newest(from reply: Data, version: String, prerelease: String) -> Release? {
         struct Entry: Decodable {
             struct Asset: Decodable { let name: String, browserDownloadUrl: URL }
@@ -110,12 +121,14 @@ import SwiftUI
               let dmg = entry.assets.first(where: { $0.name.hasSuffix(".dmg") }) else { return nil }
         let tag = entry.tagName.trimmingPrefix("v").split(separator: "-", maxSplits: 1)
         let number = String(tag.first ?? "")
-        let newer = switch number.compare(version, options: .numeric) {
+        let order = number.compare(version, options: .numeric)
+        let newer = switch order {
         case .orderedDescending: true
-        case .orderedSame: !prerelease.isEmpty && tag.count == 1 // the release that follows this build's candidate
+        case .orderedSame: !prerelease.isEmpty && (tag.count == 1 || tag[1].compare(prerelease.replacing(" ", with: ""), options: .numeric) == .orderedDescending)
         case .orderedAscending: false
         }
-        return newer ? Release(version: number, notes: entry.body ?? "", dmg: dmg.browserDownloadUrl, page: entry.htmlUrl) : nil
+        return newer ? Release(version: order == .orderedSame && tag.count == 2 ? tag.joined(separator: "-") : number, notes: entry.body ?? "",
+                               dmg: dmg.browserDownloadUrl, page: entry.htmlUrl) : nil
     }
 
     /// Puts the app in the disk image `dmg` in place of this one, if it's intact and signed as this one is.
