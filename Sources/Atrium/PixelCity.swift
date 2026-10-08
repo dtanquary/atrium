@@ -3732,7 +3732,9 @@ private struct Bytes {
 
     mutating func plot(_ x: Int, _ y: Int, _ c: RGB, _ a: Float = 1) {
         let row = y - floor
-        guard x >= clip.lowerBound, x < clip.upperBound, row >= 0, row < h, a > 0 else { return }
+        // Past the left edge too, whatever the clip: on a portrait display the hangar's clip starts below 0, and the
+        // roll-out's strongback wrapped round onto the right edge of the row below.
+        guard x >= max(clip.lowerBound, 0), x < min(clip.upperBound, w), row >= 0, row < h, a > 0 else { return }
         let i = (row * w + x) * 4, keep = 1 - a, k = a * 255
         rgba[i] = UInt8(min(max(c.x, 0), 1) * k + Float(rgba[i]) * keep)
         rgba[i + 1] = UInt8(min(max(c.y, 0), 1) * k + Float(rgba[i + 1]) * keep)
