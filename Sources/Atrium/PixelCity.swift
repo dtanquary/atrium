@@ -2839,7 +2839,7 @@ final class PixelCity: SKScene {
         let shadow = Float(ground) + max(0, -el - 0.2) * 26
         let sunlit = [rgb(255, 232, 196), rgb(255, 186, 140), rgb(190, 120, 128)]
         let fires = flames()
-        let flood = pad.phase == .count || pad.phase == .raise ? night : 0, floodlit: [Float] = [1, 0.9, 0.72]
+        let flood = night, floodlit: [Float] = [1, 0.9, 0.72] // the pad's floodlights are on all night, rocket or no rocket
         var lights = tones
         density.withUnsafeBufferPointer { field in
             smoke.rgba.withUnsafeMutableBufferPointer { out in
@@ -2863,7 +2863,8 @@ final class PixelCity: SKScene {
                         }
                         if flood > 0 {
                             let dx = Float(x) - site.x, dy = (Float(y + base) - site.y - 16) * 0.8
-                            let near = (1 - (dx * dx + dy * dy).squareRoot() / 40) * flood
+                            // Soft to its edge and short of full, so a lift-off's cloud, which fills it, glows rather than shows a disc.
+                            let near = smoothstep(40, 0, (dx * dx + dy * dy).squareRoot()) * flood * 0.6
                             if near > 0 { c = mix(c, rgb(250, 246, 236) * floodlit[tone], near) }
                         }
                         let a: Float = d < 0.3 ? 0.4 : d < 0.5 ? 0.72 : 0.95, i = (y * w + x) * 4, k = a * 255
@@ -3023,7 +3024,9 @@ final class PixelCity: SKScene {
         let shed = shed
         if let flying, let fire = fires.first, flying.y < Float(h) + 40 {
             let art = pad.rocket == .shuttle ? shuttleStack(roll: roll, boosters: shed.isEmpty) : (shed.isEmpty ? nil : kit.sheds?.core) ?? art
-            stamp(art, into: &px, x: flying.x, y: flying.y, angle: fire.angle, scale: flying.scale, paint: rocketPaint(flood: 0), soot: soot, heat: 0.3 + 0.5 * night)
+            // It climbs out of the floodlights' reach over its first 80 rows, about the tower's height, as its flame takes over.
+            let floodlit = 1 - smoothstep(0, 80, flying.y - site.y)
+            stamp(art, into: &px, x: flying.x, y: flying.y, angle: fire.angle, scale: flying.scale, paint: rocketPaint(flood: floodlit), soot: soot, heat: 0.3 + 0.5 * night)
         }
         if let parts = kit.sheds {
             for b in shed where b.y < Float(h) + 40 { stamp(parts.booster, into: &px, x: b.x, y: b.y, angle: b.angle, scale: b.scale, paint: rocketPaint(flood: 0), soot: soot) }
@@ -3094,7 +3097,8 @@ final class PixelCity: SKScene {
 
     /// A rocket's paints in the light it stands in, in the order `bytes` numbers them: white on its lit side, its
     /// face and its shaded side; black; engine bells; a tank's orange foam and bare metal, each on the same three
-    /// sides; red and grey; a cream on its three sides; and blue. On the pad after dark (`flood`) the floodlights have it.
+    /// sides; red and grey; a cream on its three sides; and blue. After dark the pad's floodlights have it (`flood`),
+    /// fully on the pad and less as it climbs away.
     private func rocketPaint(flood: Float) -> [RGB] {
         let sunRight = (keyRight - keyLeft).sum() >= 0, lamp = rgb(255, 248, 232), on = flood * night
         func sides(_ c: RGB) -> [RGB] {
