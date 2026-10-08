@@ -207,7 +207,11 @@ struct IconTile: View {
         if let window = NSApp.keyWindow { alert.beginSheetModal(for: window) } else { alert.runModal() }
     }
     if service.status == .requiresApproval { SMAppService.openSystemSettingsLoginItems() }
+    NotificationCenter.default.post(name: openAtLoginChanged, object: nil)
 }
+
+/// Posted when Open at Login is turned on or off, from Settings, the menu or the welcome, so each shows it.
+let openAtLoginChanged = Notification.Name("com.dtanquary.atrium.openAtLoginChanged")
 
 /// Open at Login, and Shuffle with the wallpapers it picks from.
 struct GeneralPage: View {
@@ -219,10 +223,14 @@ struct GeneralPage: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Open at Login", isOn: Binding(get: { openAtLogin }, set: {
-                    setOpenAtLogin($0)
-                    openAtLogin = SMAppService.mainApp.status == .enabled
-                }))
+                Toggle("Open at Login", isOn: Binding(get: { openAtLogin }, set: { setOpenAtLogin($0) }))
+                    // Turned on or off from the menu, or approved in System Settings, while this is open.
+                    .onReceive(NotificationCenter.default.publisher(for: openAtLoginChanged)) { _ in
+                        openAtLogin = SMAppService.mainApp.status == .enabled
+                    }
+                    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                        openAtLogin = SMAppService.mainApp.status == .enabled
+                    }
             } footer: {
                 if SMAppService.mainApp.status == .requiresApproval {
                     Text("Waiting for your approval in System Settings → General → Login Items.").foregroundStyle(.secondary)
