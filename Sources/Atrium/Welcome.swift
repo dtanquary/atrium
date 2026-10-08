@@ -188,19 +188,20 @@ struct WelcomeView: View {
         .accessibilityAddTraits(picked ? .isSelected : [])
     }
 
-    private static var thumbnails: [String: NSImage] = [:]
+    /// Held weakly, so they go with the sheet: kept, they were 9–18 MB for the app's life after a single welcome.
+    private static let thumbnails = NSMapTable<NSString, NSImage>.strongToWeakObjects()
 
     /// The wallpaper's screenshot, decoded small: 22 full-size ones would take about 80 MB.
     private func thumbnail(_ name: String) -> NSImage? {
         guard let wallpaper = scenes.first(where: { $0.name == name }) else { return nil }
         let url = wallpaper.preview(light: scheme == .light)
-        if let image = Self.thumbnails[url.path] { return image }
+        if let image = Self.thumbnails.object(forKey: url.path as NSString) { return image }
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [kCGImageSourceCreateThumbnailFromImageAlways: true,
                                                                            kCGImageSourceThumbnailMaxPixelSize: 400] as CFDictionary)
         else { return nil }
         let thumbnail = NSImage(cgImage: image, size: .zero)
-        Self.thumbnails[url.path] = thumbnail
+        Self.thumbnails.setObject(thumbnail, forKey: url.path as NSString)
         return thumbnail
     }
 
