@@ -15,7 +15,7 @@ Conway's Game of Life on a board that wraps at the edges. When the board stalls,
    - It starts 28% alive.
    - `cells` and `next` are `[UInt8]` buffers that are swapped each generation.
 2. **Step (`step()`).**
-   - One generation every 1/`life.speed` s in Calm (1.5 a second), or every `classicInterval` of 0.14 s in Classic (about 7 a second), counted from `frameTime`.
+   - One generation every 1/`life.speed` s in Calm (1.5 a second), or every `classicInterval` of 0.14 s in Classic (about 7 a second), counted from `frameTime`. The time past each step carries over: it was dropped until 2026-10-08, so Classic ran 6.7, 6 and 5 generations a second at 60, 30 and 15 fps (found in the 1.0 review). Settings are read as they change, not every frame.
    - Standard B3/S23 rules with wrap-around neighbours, run in unsafe buffers.
    - It counts how many cells changed.
 3. **Stall detection.**

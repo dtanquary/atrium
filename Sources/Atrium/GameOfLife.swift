@@ -26,6 +26,8 @@ final class GameOfLife: SKScene {
     private var lastTime: TimeInterval?
     private var sinceStep: TimeInterval = 0
     private var quietSteps = 0
+    /// Settings, read as they change rather than every frame.
+    private var isCalm = true, interval: TimeInterval = 0.14, exposure = 3.0
 
     override func sceneDidLoad() {
         backgroundColor = SKColor(red: 0.035, green: 0.04, blue: 0.075, alpha: 1)
@@ -44,16 +46,24 @@ final class GameOfLife: SKScene {
             SKUniform(name: "u_grid", vectorFloat2: [Float(cols), Float(rows)]), WallpaperTime.now, calm, softness,
         ])
         addChild(board)
+        settingsChanged()
+        NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged), name: UserDefaults.didChangeNotification, object: nil)
         upload()
     }
 
-    override func update(_ currentTime: TimeInterval) {
-        let dt = frameTime(currentTime, &lastTime), isCalm = Self.knobs[0].value > 0.5
+    @objc private func settingsChanged() {
+        isCalm = Self.knobs[0].value > 0.5
         calm.floatValue = isCalm ? 1 : 0
         softness.floatValue = Float(Self.knobs[3].value)
+        interval = isCalm ? 1 / Self.knobs[1].value : classicInterval
+        exposure = Self.knobs[2].value
+    }
+
+    override func update(_ currentTime: TimeInterval) {
+        let dt = frameTime(currentTime, &lastTime)
         sinceStep += dt
-        if sinceStep >= (isCalm ? 1 / Self.knobs[1].value : classicInterval) {
-            sinceStep = 0
+        if sinceStep >= interval {
+            sinceStep = min(sinceStep - interval, interval) // the rest carries over, so it keeps its rate at any frame rate
             step()
         }
         if isCalm { expose(dt) } else { upload(dt) }
@@ -118,7 +128,7 @@ final class GameOfLife: SKScene {
     /// Calm: eases each cell's average toward its state over the exposure time, into red, and a 3×3 blur of that into
     /// green, which the shader melts into blobs.
     private func expose(_ dt: TimeInterval) {
-        let exposure = Self.knobs[2].value, cols = cols, rows = rows
+        let exposure = exposure, cols = cols, rows = rows
         let k = Float(exposure > 0.01 ? 1 - exp(-dt / exposure) : 1)
         cells.withUnsafeBufferPointer { cells in
             exposed.withUnsafeMutableBufferPointer { seen in
