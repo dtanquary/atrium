@@ -101,7 +101,7 @@ Motion comes from `update(_:)` (boids and frame stepping), the coral sway action
 - **Fish** (`tank.fish`, 0.25× to 1×): thins every school alike, from a calm few to the full 38.
 - **Marine snow** (`tank.snow`): the drifting specks, which some people read as dust on the screen.
 
-Every setting is read when the scene is built (`dark`, `settings`); a change dissolves into a new scene built to it, in the preview and on the desktop, both still running (`settingsChanged` → `handOver`, the Pixel City pattern). The scene fading out is `retired` and hands over no more.
+Every setting is read when the scene is built (`dark`, `settings`); a change dissolves into a new scene built to it, in the preview and on the desktop, both still running (`settingsChanged` → `handOver`, the Pixel City pattern), once it has settled for 0.3 s by the clock: a dragged slider used to build a tank at every step, half a second each on the main thread (found in the 1.0 review, 2026-10-08). The scene fading out is `retired` and hands over no more.
 
 ## Tuning constants
 - **`Species` (FishTankArt.swift):**
@@ -127,7 +127,7 @@ Every setting is read when the scene is built (`dark`, `settings`); a change dis
 - **Snow:** birth rate 5, lifetime 40 s.
 
 ## Performance
-CPU 0.8–0.9 ms and GPU 1.3–1.5 ms per frame (release, 2x), in both looks. The GPU cost is mostly the two full-screen shaders (the water's caustics and noise, and the sand's two caustic layers), plus about 60 lit sprites, many overlapping in the reef, and 38 small shadow sprites. CPU is the boids, 38 fish at O(n²) per school, and the fish-on-fish shadows, O(n²) over all 38. Shadows and fish lighting added about 0.1 ms to each. The cut-outs are decoded and resized once at launch.
+CPU 0.8–0.9 ms and GPU 1.3–1.5 ms per frame (release, 2x), in both looks. The GPU cost is mostly the two full-screen shaders (the water's caustics and noise, and the sand's two caustic layers), plus about 60 lit sprites, many overlapping in the reef, and 38 small shadow sprites. CPU is the boids, 38 fish at O(n²) per school, and the fish-on-fish shadows, O(n²) over all 38. Shadows and fish lighting added about 0.1 ms to each. Each tank draws its cut-outs at their size, about 10 ms each (the HEIC decodes lazily, inside that draw), 0.47 s for a whole tank. `TankArt` keeps them drawn in a weak table, at widths rounded to a sixteenth of an octave (SpriteKit scales the last 2%), so a tank rebuilt for a new setting reuses most of the one it replaces': 0.1–0.25 s. They go with the last tank. The rocks' silhouettes are kept for good (a few hundred bytes each).
 
 ## Gotchas and shortcuts
 - **Assets:** the cut-outs come from public domain, CC0 and CC BY photos (iNaturalist, Wikimedia Commons, NOAA). They were cut out with Vision's foreground mask, cleaned to their largest connected piece, resized (fish 480 px, corals 760, rock 900 at most) and saved as HEIC with alpha (about 8× smaller than PNG).

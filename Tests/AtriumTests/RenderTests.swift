@@ -362,19 +362,24 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
     }
 }
 
-/// Picking another lighting in Settings hands the view a new tank lit that way, and the one fading out doesn't
-/// present another on the next change.
-@MainActor @Test func fishTankFollowsLightingSetting() {
+/// Picking another lighting in Settings hands the view a new tank lit that way, once the changes settle (a dragged
+/// slider makes many), and the one fading out doesn't present another on the next change.
+@MainActor @Test func fishTankFollowsLightingSetting() async throws {
     let view = WallpaperView(frame: CGRect(x: 0, y: 0, width: 320, height: 200))
     let before = UserDefaults.standard.object(forKey: "tank.look")
     defer { UserDefaults.standard.set(before, forKey: "tank.look") }
     UserDefaults.standard.set(0.0, forKey: "tank.look")
     let first = FishTank(size: view.frame.size)
     view.presentScene(first)
+    UserDefaults.standard.set(1.0, forKey: "tank.look")
     UserDefaults.standard.set(2.0, forKey: "tank.look")
+    #expect(view.scene === first)
+    // Other tests hold the main actor for seconds at a time, so give the handover as long as it takes.
+    for _ in 0..<100 where view.scene === first { try await Task.sleep(for: .seconds(0.1)) }
     #expect(view.scene !== first && view.scene is FishTank)
     let second = view.scene
     NotificationCenter.default.post(name: UserDefaults.didChangeNotification, object: nil)
+    try await Task.sleep(for: .seconds(0.6))
     #expect(view.scene === second)
 }
 

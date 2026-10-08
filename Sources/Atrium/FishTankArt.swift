@@ -85,21 +85,43 @@ enum Species: CaseIterable {
 enum TankArt {
     /// A photo cut-out from Resources, drawn `width` points wide with its height from its shape, and softened by
     /// `blur` points, like a camera's depth of field for things further back. Nil if the file's missing.
-    static func photo(_ name: String, width: CGFloat, blur: CGFloat = 0) -> (texture: SKTexture, size: CGSize)? {
+    @MainActor static func photo(_ name: String, width: CGFloat, blur: CGFloat = 0) -> (texture: SKTexture, size: CGSize)? {
+        // Drawn at the nearest sixteenth of an octave, SpriteKit scaling the last 2% at most, so a reef laid out
+        // again at slightly different sizes finds most of its cut-outs already drawn.
+        let drawnWidth = exp2((log2(width) * 16).rounded() / 16), key = "\(name) \(drawnWidth) \(blur)" as NSString
+        if let texture = drawn.object(forKey: key), let aspect = aspects[name] { return (texture, CGSize(width: width, height: width * aspect)) }
         guard var image = NSImage(contentsOf: resource(name + ".heic"))?.cgImage(forProposedRect: nil, context: nil, hints: nil)
         else { return nil }
-        let size = CGSize(width: width, height: width * CGFloat(image.height) / CGFloat(image.width))
-        if blur > 0 { image = blurred(image, sigma: blur * CGFloat(image.width) / width) ?? image }
-        let texture = paint(size) { ctx in
+        let aspect = CGFloat(image.height) / CGFloat(image.width), drawnSize = CGSize(width: drawnWidth, height: drawnWidth * aspect)
+        aspects[name] = aspect
+        if blur > 0 { image = blurred(image, sigma: blur * CGFloat(image.width) / drawnWidth) ?? image }
+        let texture = paint(drawnSize) { ctx in
             ctx.interpolationQuality = .high
-            ctx.draw(image, in: CGRect(origin: .zero, size: size))
+            ctx.draw(image, in: CGRect(origin: .zero, size: drawnSize))
         }
-        return (texture, size)
+        drawn.setObject(texture, forKey: key)
+        return (texture, CGSize(width: width, height: width * aspect))
     }
+
+    /// The cut-outs as drawn, while any tank still shows them: a tank built for a new setting takes most of the
+    /// one it replaces' rather than drawing all 40-odd again, about 10 ms each on the main thread. Held weakly, so
+    /// they go with the last tank.
+    @MainActor private static let drawn = NSMapTable<NSString, SKTexture>.strongToWeakObjects()
+    @MainActor private static var aspects: [String: CGFloat] = [:]
 
     /// The top edge of a cut-out: for each of `samples` columns from left to right, the height of its highest solid
     /// pixel as a fraction of the image's height (0 where the column is empty). For setting things on a rock.
-    static func skyline(_ name: String, samples: Int = 48) -> [CGFloat] {
+    @MainActor static func skyline(_ name: String, samples: Int = 48) -> [CGFloat] {
+        if let line = skylines["\(name) \(samples)"] { return line }
+        let line = readSkyline(name, samples: samples)
+        skylines["\(name) \(samples)"] = line
+        return line
+    }
+
+    /// A few hundred bytes each, kept: each costs a decode.
+    @MainActor private static var skylines: [String: [CGFloat]] = [:]
+
+    private static func readSkyline(_ name: String, samples: Int) -> [CGFloat] {
         guard let image = NSImage(contentsOf: resource(name + ".heic"))?.cgImage(forProposedRect: nil, context: nil, hints: nil)
         else { return [] }
         let rows = max(8, samples * image.height / max(image.width, 1))

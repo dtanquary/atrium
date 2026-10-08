@@ -65,12 +65,19 @@ final class FishTank: SKScene {
         run(.repeatForever(.sequence([.wait(forDuration: 30), .run { [weak self] in self?.clockChanged() }])))
     }
 
-    /// When Settings changes, dissolves into a new scene built to it, with both still running.
+    /// When Settings changes, dissolves into a new scene built to it, with both still running: once the change has
+    /// settled for a moment, as a tank takes a while to build and a dragged slider changes it many times a second.
+    /// By the clock, not an action, which a frozen view would hold.
     @objc private func settingsChanged() {
-        let picked = Self.knobs.map(\.value)
-        guard picked != settings, !retired else { return }
-        settings = picked // so this one, fading out, doesn't present another
-        handOver(fading: 0.8)
+        guard Self.knobs.map(\.value) != settings, !retired else { return }
+        changes += 1
+        let change = changes
+        Task { [weak self] in
+            try? await Task.sleep(for: .seconds(0.3))
+            guard let self, change == changes, !retired else { return }
+            settings = Self.knobs.map(\.value) // so this one, fading out, doesn't present another
+            handOver(fading: 0.8)
+        }
     }
 
     /// The lights-out timer's hours coming round do the same, slowly, like a tank's lamps dimming.
@@ -325,6 +332,7 @@ final class FishTank: SKScene {
     private var light: Lighting { dark ? .actinic : .day }
     private var settings = FishTank.knobs.map(\.value) // what this scene was built with
     private var retired = false // it has handed over to a new scene, and is fading out
+    private var changes = 0 // Settings changes so far, so only the last of a quick run hands over
 
     /// The back panel and water: saturated blue, brightest high up under the lamps and falling off toward the ends
     /// and low down, faint LED shimmer on the back wall, faint rays from the lamp array, and the underside of the
