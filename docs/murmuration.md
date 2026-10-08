@@ -68,7 +68,7 @@ For repeatable snapshots, `MURMURATION_SEED=3` seeds the flock, and `MURMURATION
 - The flock fixes of 2026-09-26 cost nothing measurable. Side by side on a busy machine: CPU 2.05–2.23 ms against 2.41–3.01 before, GPU 0.65–0.76 against 0.95–1.24. A parcel changes texture only when its angle crosses to the next of 16.
 - The reflection costs nothing while the flock is high; about 0.05 ms while it's over the water.
 - Flipping wing poses every few frames for shimmer cost 0.15 ms and only flickered at 3–5 px, so each parcel keeps one pose.
-- At 15 fps it takes two simulation steps a frame, so the flight is the same.
+- It steps in fixed thirtieths of a second, two a frame at 15 fps and one every other frame at 60, drawing each bird where it has got to since its last step, so the flight is the same at every frame rate. Until 2026-10-08 it took one step a frame at 60 fps, so on mains power birds re-planned every twelfth of a second, twice as often as on battery (found in the 1.0 review).
 
 ## Gotchas and shortcuts
 - `ponytail:` 1,500 agents stand for about 60,000 birds, each drawn as a sprite of ten. More agents would give finer folds but cost CPU linearly.

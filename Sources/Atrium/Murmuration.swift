@@ -169,7 +169,7 @@ final class Murmuration: SKScene {
     private static func sunHeight(_ phase: Double) -> Double { 4 - 8.5 * phase }
 
     /// The Somerset Levels on a winter evening (1 December 2025), when the Sun is at `elevation` degrees.
-    private static let place = (latitude: 51.16, longitude: -2.78)
+    nonisolated private static let place = (latitude: 51.16, longitude: -2.78)
     nonisolated private static func date(sunAt elevation: Double) -> Date {
         var date = Date(timeIntervalSince1970: 1_764_590_400) // 12:00 UTC, before the Sun starts down
         while asin(sunDirection(at: date).z) * 180 / .pi > elevation { date += 20 }
@@ -407,6 +407,8 @@ private final class Flock: SKNode {
     private var looks: [(layout: Int, mirrored: Bool)] = [], angles: [Float] = [], frames: [Int] = []
     private var bucketStart = [Int32](repeating: 0, count: Flock.buckets + 1), bucketItems: [Int32] = []
     private var tick = 0, clock: Float = 0, nextTurn: Float = 7, nextFalcon: Float = 40
+    /// Time not yet stepped, under a thirtieth of a second.
+    private var pending: Float = 0
     private var falcon: (p: SIMD3<Float>, v: SIMD3<Float>, left: Float)?
     private var random: Xorshift
     /// Late in the evening: metres the flock's height is lowered (the swoops get lower as the light fails), then whether
@@ -471,9 +473,15 @@ private final class Flock: SKNode {
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
+    /// Steps the flock in fixed thirtieths of a second, however fast the frames come, so it flies the same at 15, 30
+    /// and 60 fps: each bird re-plans every fifth step, a sixth of a second (at 60 fps it was every twelfth). Drawn
+    /// where each bird has got to since its last step, so it still moves every frame.
     func step(_ dt: Float) {
-        let n = max(Int((dt * 30 - 0.1).rounded(.up)), 1) // one step a frame at 30 fps, two at 15
-        for _ in 0..<n { simulate(dt / Float(n)) }
+        pending += dt
+        while pending >= 1.0 / 30 {
+            simulate(1.0 / 30)
+            pending -= 1.0 / 30
+        }
         place(dt)
     }
 
@@ -565,15 +573,15 @@ private final class Flock: SKNode {
             let b = birds[i], sprite = sprites[i]
             if sprite.isHidden != (b.state == 0) { sprite.isHidden = b.state == 0 }
             if b.state == 0 { continue }
-            let ex = simd_normalize(b.v), ey = simd_normalize(simd_cross(up, ex) + SIMD3(0, 1e-6, 0))
+            let p = b.p + b.v * pending, ex = simd_normalize(b.v), ey = simd_normalize(simd_cross(up, ex) + SIMD3(0, 1e-6, 0))
             let ez = simd_cross(ex, ey) * cos(b.bank) + ey * sin(b.bank)
-            let at = view.project(b.p), wing = view.project(b.p + simd_cross(ez, ex)), nose = view.project(b.p + ex * 0.5)
+            let at = view.project(p), wing = view.project(p + simd_cross(ez, ex)), nose = view.project(p + ex * 0.5)
             let (wx, wy, nx, ny) = (wing.x - at.x, wing.y - at.y, nose.x - at.x, nose.y - at.y)
             let axis = atan2(2 * (wx * wy + nx * ny), wx * wx - wy * wy + nx * nx - ny * ny) / 2
             var turn = axis - angles[i]
             turn -= .pi * (turn / .pi).rounded()
             angles[i] += turn * (1 - exp(-dt / 0.1))
-            let facing = abs(simd_dot(ez, simd_normalize(b.p)))
+            let facing = abs(simd_dot(ez, simd_normalize(p)))
             sprite.position = CGPoint(x: CGFloat(at.x), y: CGFloat(at.y))
             let look = looks[i], shown = look.mirrored ? -angles[i] : angles[i]
             let frame = look.layout * Self.turns + Int(((shown / .pi + 0.5) * Float(Self.turns)).rounded()) & (Self.turns - 1)
@@ -581,7 +589,7 @@ private final class Flock: SKNode {
             let scale = CGFloat(Self.parcel * at.perMetre / 64)
             sprite.xScale = look.mirrored ? -scale : scale
             sprite.yScale = scale
-            let alpha = (0.22 + 0.45 * facing) * (b.state == 2 ? min(max((b.p.z - perch.z) / 6, 0), 1) : 1) // fading into the roost
+            let alpha = (0.22 + 0.45 * facing) * (b.state == 2 ? min(max((p.z - perch.z) / 6, 0), 1) : 1) // fading into the roost
             sprite.alpha = CGFloat(alpha)
             // Its reflection: ten birds of about 0.06 m² each, spread over the texels it lands on.
             let below = 2 * horizon - at.y
