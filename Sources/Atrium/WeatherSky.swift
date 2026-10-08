@@ -187,7 +187,7 @@ struct SkyLight: Sendable {
         let (w, h) = (width, height), bottom = camera.horizon - 0.06
         var pixels = [UInt8](repeating: 255, count: w * h * 4)
         pixels.withUnsafeMutableBufferPointer { buffer in
-            let buffer = buffer
+            nonisolated(unsafe) let buffer = buffer // each row writes only its own pixels
             DispatchQueue.concurrentPerform(iterations: h) { j in
                 for i in 0..<w {
                     let (u, v) = ((Double(i) + 0.5) / Double(w), bottom + (1 - bottom) * (Double(j) + 0.5) / Double(h))
@@ -219,24 +219,24 @@ struct SkyLight: Sendable {
 @MainActor enum CloudNoise {
     static let texture: SKTexture = {
         let n = 256, m = n + 1
-        func hash(_ x: Int, _ y: Int, _ s: Int) -> Double {
+        @Sendable func hash(_ x: Int, _ y: Int, _ s: Int) -> Double {
             var h = UInt32(truncatingIfNeeded: x &* 374761393 &+ y &* 668265263 &+ s &* 2246822519)
             h = (h ^ (h >> 13)) &* 1274126177
             return Double(h ^ (h >> 16)) / Double(UInt32.max)
         }
-        func value(_ x: Double, _ y: Double, _ period: Int, _ s: Int) -> Double {
+        @Sendable func value(_ x: Double, _ y: Double, _ period: Int, _ s: Int) -> Double {
             let (xi, yi) = (Int(floor(x)), Int(floor(y)))
             var (fx, fy) = (x - floor(x), y - floor(y))
             fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy)
             func h(_ i: Int, _ j: Int) -> Double { hash((i % period + period) % period, (j % period + period) % period, s) }
             return (h(xi, yi) * (1 - fx) + h(xi + 1, yi) * fx) * (1 - fy) + (h(xi, yi + 1) * (1 - fx) + h(xi + 1, yi + 1) * fx) * fy
         }
-        func fbm(_ u: Double, _ v: Double, _ first: Int, _ s: Int) -> Double {
+        @Sendable func fbm(_ u: Double, _ v: Double, _ first: Int, _ s: Int) -> Double {
             var sum = 0.0, a = 0.5, p = first
             for o in 0..<4 { sum += a * value(u * Double(p), v * Double(p), p, s + o); a *= 0.5; p *= 2 }
             return sum / 0.9375
         }
-        func worley(_ u: Double, _ v: Double, _ period: Int) -> Double {
+        @Sendable func worley(_ u: Double, _ v: Double, _ period: Int) -> Double {
             let (x, y) = (u * Double(period), v * Double(period))
             var best = 9.0
             for j in -1...1 { for i in -1...1 {
@@ -249,7 +249,7 @@ struct SkyLight: Sendable {
         }
         var bytes = [UInt8](repeating: 0, count: m * m * 4)
         bytes.withUnsafeMutableBufferPointer { buffer in
-            let buffer = buffer
+            nonisolated(unsafe) let buffer = buffer // each row writes only its own pixels
             DispatchQueue.concurrentPerform(iterations: m) { y in
                 for x in 0..<m {
                     let (u, v) = (Double(x % n) / Double(n), Double(y % n) / Double(n))

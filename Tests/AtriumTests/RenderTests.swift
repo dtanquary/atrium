@@ -427,6 +427,8 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
     defaults.set(0.75, forKey: knob.key)
     #expect(knob.value == 0.75)
     #expect(seen.withLock { $0 } == 0.75)
+    defaults.set(5.0, forKey: knob.key) // kept to its range, as a menu's pick indexes an array
+    #expect(knob.value == 1)
     defaults.removeObject(forKey: knob.key)
     #expect(knob.value == 0.25)
 }

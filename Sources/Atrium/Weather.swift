@@ -1151,7 +1151,6 @@ private extension WeatherScene.Conditions {
     /// cumulus, 1 a featureless deck), and high cirrus. After the cloud each kind of weather comes from: fair-weather
     /// cumulus, stratocumulus when overcast, stratus for drizzle, nimbostratus for rain and snow, cumulonimbus in storms.
     var clouds: (cover: Float, base: Float, thickness: Float, deck: Float, cirrus: Float) {
-        let share = Float(cloudCover / 100)
         let cirrus = Float(min(highCloud / 100, 1) * 0.7)
         switch kind {
         case .clear, .partlyCloudy: return (0, 1.4, 1, 0, cirrus) // the cumulus are photos; see addPhotoClouds

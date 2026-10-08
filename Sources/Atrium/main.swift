@@ -90,9 +90,10 @@ final class WallpaperView: SKView, SKViewDelegate {
 /// Runs at the frame rate Settings → Power picks for Low Power Mode, battery or mains power (60 and 30 fps, and
 /// frozen in Low Power Mode, unless changed).
 @MainActor func applyPowerState(to views: [WallpaperView]) {
-    let source = IOPSGetProvidingPowerSourceType(IOPSCopyPowerSourcesInfo().takeRetainedValue()).takeUnretainedValue()
+    // Either call may return NULL, which unwrapped would crash: then it's taken as plugged in.
+    let source = IOPSCopyPowerSourcesInfo().flatMap { IOPSGetProvidingPowerSourceType($0.takeRetainedValue())?.takeUnretainedValue() }
     let fps = Power.rate(ProcessInfo.processInfo.isLowPowerModeEnabled ? Power.lowPower
-                         : source as String == kIOPMBatteryPowerKey ? Power.battery : Power.plugged)
+                         : source as String? == kIOPMBatteryPowerKey ? Power.battery : Power.plugged)
     for view in views {
         if fps > 0 { view.preferredFramesPerSecond = fps }
         view.frozen = fps == 0

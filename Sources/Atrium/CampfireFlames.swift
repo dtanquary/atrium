@@ -247,7 +247,7 @@ final class Sparks: SKNode {
 /// hotter cracks between them, each block breathing ±40 K on its own slow rhythm, hottest under the flames
 /// (~1050 K) and cooling to grey ash toward the rim. Same blackbody-through-a-camera colour as the flames. Drawn
 /// over the ground with alpha, so ash and dark char cover it and glowing parts add light.
-func coalBed(scale: CGFloat, width: CGFloat, depth: CGFloat, clock: SKUniform, ash: SKUniform) -> SKSpriteNode {
+@MainActor func coalBed(scale: CGFloat, width: CGFloat, depth: CGFloat, clock: SKUniform, ash: SKUniform) -> SKSpriteNode {
     let bed = SKSpriteNode(color: .black, size: CGSize(width: width * scale, height: depth * scale))
     bed.shader = SKShader(source: shaderCommon + """
     vec2 cellPoint(vec2 c) { return c + 0.15 + 0.7 * hash42(c).xy; }

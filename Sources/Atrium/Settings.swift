@@ -18,7 +18,12 @@ struct Knob {
     /// Only shown while this toggle knob is on.
     var shownWhen: String?
 
-    var value: Double { KnobValues.read(key) ?? standard }
+    /// Kept to its range: a menu's pick indexes an array, so a value stored by an older version with a longer menu,
+    /// or by `defaults write`, would crash the scene at every launch.
+    var value: Double {
+        guard let stored = KnobValues.read(key), !stored.isNaN else { return standard }
+        return min(max(stored, range.lowerBound), range.upperBound)
+    }
 }
 
 /// What each knob's key held when last read, so scenes can read their knobs every frame for the price of a lookup:
@@ -618,7 +623,7 @@ struct KnobRow: View {
             } else {
                 LabeledContent(knob.label) {
                     HStack {
-                        Slider(value: $value, in: knob.range).accessibilityValue(formatted)
+                        Slider(value: $value, in: knob.range).accessibilityLabel(knob.label).accessibilityValue(formatted)
                         Text(formatted).monospacedDigit().foregroundStyle(.secondary).frame(width: 52, alignment: .trailing)
                             .accessibilityHidden(true)
                     }
