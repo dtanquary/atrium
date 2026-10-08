@@ -5,7 +5,8 @@ import UniformTypeIdentifiers
 /// Matches the lock screen, and the tint macOS gives the menu bar and windows, to the wallpaper. macOS takes both from
 /// the system wallpaper, which Atrium's window only covers, so while this is on each display's system wallpaper is a
 /// still of Atrium's, refreshed as it changes. The user's own comes back when it's turned off or Atrium quits, and
-/// after a crash at the next launch, since it's saved by display.
+/// after a crash at the next launch, since it's saved by display: a display unplugged meanwhile gets its own back
+/// when it's next connected.
 ///
 /// macOS sets a wallpaper for the Space in front and no other, so each Space is given the latest still as it comes to
 /// the front (`spaceChanged`): the Space in front is the one the lock screen shows.
@@ -71,16 +72,26 @@ import UniformTypeIdentifiers
         }
     }
 
-    /// Puts back each display's own wallpaper, if Atrium replaced it.
+    /// Puts back each connected display's own wallpaper, if Atrium replaced it and it hasn't been changed since. A
+    /// display that isn't connected keeps its entry and its still, for `update` to put back once it is.
     // ponytail: puts back the file only, at macOS's default fit; a moving Aerial may come back as its still
     static func restore() {
-        guard let saved = UserDefaults.standard.dictionary(forKey: savedKey) as? [String: String], !saved.isEmpty else { return }
+        guard var saved = UserDefaults.standard.dictionary(forKey: savedKey) as? [String: String], !saved.isEmpty else { return }
         for screen in NSScreen.screens {
-            guard let id = uuid(screen), let url = saved[id].flatMap(URL.init(string:)) else { continue }
-            try? NSWorkspace.shared.setDesktopImageURL(url, for: screen, options: [:])
+            guard let id = uuid(screen), let url = saved.removeValue(forKey: id).flatMap(URL.init(string:)) else { continue }
+            if NSWorkspace.shared.desktopImageURL(for: screen)?.path.hasPrefix(folder.path) != false {
+                try? NSWorkspace.shared.setDesktopImageURL(url, for: screen, options: [:])
+            }
         }
-        UserDefaults.standard.removeObject(forKey: savedKey)
-        try? FileManager.default.removeItem(at: folder)
+        UserDefaults.standard.set(saved.isEmpty ? nil : saved, forKey: savedKey)
+        guard !saved.isEmpty else {
+            try? FileManager.default.removeItem(at: folder)
+            return
+        }
+        for still in (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+        where !saved.keys.contains(where: still.lastPathComponent.hasPrefix) {
+            try? FileManager.default.removeItem(at: still)
+        }
     }
 
     /// A display's lasting identity, the same across launches and reconnections.

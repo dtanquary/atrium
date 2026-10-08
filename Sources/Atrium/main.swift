@@ -164,7 +164,8 @@ if !scenes.contains(where: { $0.name == current }) {
     let added = screens.filter { screen in !kept.contains { $0.frame == screen.frame } }.map(wallpaperWindow)
     let gone = windows.filter { !kept.contains($0) }
     windows = kept + added
-    if !added.isEmpty { matchLockScreen(after: 1.5) }
+    // A new display gets a still, or with Match off its own wallpaper back if it was unplugged as Atrium put that back.
+    if !added.isEmpty { DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { LockScreen.update(windows) } }
     guard !gone.isEmpty else { return }
     Task { // let the new windows draw a frame first, so the system wallpaper never flashes through
         try? await Task.sleep(for: .seconds(0.5))
