@@ -3035,8 +3035,10 @@ final class PixelCity: SKScene {
         let hookX = Int(crane.x.rounded(.down)) - 33, lifted = crane.phase == .hook ? max(0, min(crane.t - 5, 4)) : 4
         for b in boosters where b.phase != .away && b.zone == 2 { // Starship's: no legs, and it comes down to the tower
             let at = pose(caught: b), down = b.phase == .landed
+            // It comes back into the floodlights' reach over its last 80 rows, as a rocket climbs out of it.
+            let floodlit = down ? 1 : 1 - smoothstep(0, 80, at.y - Float(starMount))
             stamp(superHeavyArt, into: &px, x: down ? caught.x : at.x, y: down ? caught.y : at.y, angle: at.angle, scale: at.scale,
-                  paint: rocketPaint(flood: down ? 1 : 0), heat: b.phase == .burn ? 0.85 : 0)
+                  paint: rocketPaint(flood: floodlit), heat: b.phase == .burn ? 0.85 : 0)
         }
         // The tower's arms: a carriage on the tower and a beam out across the rocket, under its grid fins.
         let iron = mix(mix(lit(rgb(62, 64, 74), .zero), hazeColour, 0.12), rgb(14, 14, 22), night * 0.85)
