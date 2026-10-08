@@ -44,7 +44,8 @@ SNAPSHOT_SCENE="Aurora" SNAPSHOT_DIR=/some/dir SNAPSHOT_SECONDS=20 swift test
 SNAPSHOT_DEFAULTS="gradient.ribbons=1,gradient.previewTime=1" swift test   # snapshot with Settings values
 SNAPSHOT_SCENE="Fish Tank" SNAPSHOT_MOVIE=6 swift test   # then 6 s in real time, saved as 15 fps frames (Fish Tank-000.png…)
 SETTINGS_SHOT="Nebula" swift test --filter settingsWindow   # opens Settings on that page for a moment and captures the window
-ffmpeg -framerate 15 -i 'Fish Tank-%03d.png' -vf "scale=800:-1:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=3:diff_mode=rectangle" docs/images/fish-tank.gif
+site/media.sh preview-fish-tank   # the site's 12 s loop, then as the README's moving picture:
+ffmpeg -i site/public/media/preview-fish-tank.hevc.mp4 -vf fps=15,scale=640:-2:flags=lanczos f/%03d.png && img2webp -loop 0 -lossy -q 70 -m 4 -d 67 f/*.png -o docs/images/fish-tank.webp
 ```
 
 ## Adding a scene
@@ -70,7 +71,7 @@ ffmpeg -framerate 15 -i 'Fish Tank-%03d.png' -vf "scale=800:-1:flags=lanczos,spl
 - A shader can take about 30 uniforms (Metal's buffer indices run 0–30, and SpriteKit adds its own). Past that it fails to compile at runtime ("'buffer' attribute parameter is out of bounds") and draws nothing; `swift build` won't catch it. Pass `shaderScene` only the knobs its shader reads, and write fixed values into the source.
 - `paint(_:_:)` draws at 2x, so the texture's pixel size is double. Give sprites an explicit size.
 - Data must be public domain or permissively licensed. Cite the source in a comment or in the data file's header.
-- README GIFs: Bayer dithering (above) makes them about a third the size of ffmpeg's default. A scene with film grain (Campfire) changes every pixel every frame and comes out over 15 MB, so use a still.
+- README moving pictures are animated WebP, a third to a quarter the size of a GIF of the same loop. Below about q70, slow scenes lose frames (WebP merges ones that look the same) and step instead of flowing. WebP redraws only what changed, so smooth scenes (gradients, soft clouds, a slow zoom) break into blocks within seconds: give those a keyframe every frame (`-kmin 0 -kmax 1`), and look at the result 9 s in. A scene that changes every pixel every frame (film grain, a zoom over a star field) comes out many MB, so lower its frame rate or use a still.
 
 ## Conventions
 - Minimal code, no dependencies, native frameworks first. Mark deliberate shortcuts with `ponytail:` comments that say where the shortcut stops being good enough.
