@@ -15,10 +15,15 @@ const sections = [...document.querySelectorAll('[data-work]')];
 const stage = document.querySelector('.stage');
 const pause = document.querySelector('.pause');
 const more = document.querySelector('.more'); // the glass pane with a card for every wallpaper
+const preview = document.querySelector('.preview'), clip = preview.querySelector('video'); // one card's wallpaper, moving
 const root = document.documentElement;
 let playing = !matchMedia('(prefers-reduced-motion: reduce)').matches; // Reduce Motion starts on the posters
 
 for (const el of sections) if (!el.style.getPropertyValue('--own')) el.style.setProperty('--own', accents[el.dataset.work]); // each label's medium word, unless lifted
+
+/** Give a video its AV1 and HEVC copies of media/<name>, for the browser to pick from. */
+const sources = (v, name, codecs) => v.replaceChildren(...Object.entries(codecs).map(([c, codec]) =>
+  Object.assign(document.createElement('source'), { src: new URL(`${name}.${c}.mp4`, media), type: `video/mp4; codecs="${codec}"` })));
 
 const videos = {};
 for (const slug of new Set(sections.map(s => s.dataset.work))) {
@@ -27,31 +32,40 @@ for (const slug of new Set(sections.map(s => s.dataset.work))) {
   v.muted = true;
   v.preload = 'none';
   v.className = 'art';
-  for (const [c, codec] of Object.entries(codecs)) {
-    const s = document.createElement('source');
-    s.src = new URL(`${slug}-${kind}.${c}.mp4`, media);
-    s.type = `video/mp4; codecs="${codec}"`;
-    v.append(s);
-  }
+  sources(v, `${slug}-${kind}`, codecs);
   stage.append(v);
 }
 const all = Object.values(videos);
 const run = v => (playing && !document.hidden ? v.play().catch(() => {}) : v.pause());
 const sync = () => all.forEach(v => (+v.style.opacity > 0 ? run(v) : v.pause()));
-document.addEventListener('visibilitychange', sync); // pause with the tab, as the app pauses when covered
+document.addEventListener('visibilitychange', () => { sync(); if (preview.open) run(clip); }); // pause with the tab, as the app pauses when covered
 
 // A visible way to stop all motion (WCAG 2.2.2).
 const label = () => { pause.textContent = playing ? 'Pause' : 'Play'; root.classList.toggle('is-paused', !playing); }; // laptop.js reads is-paused
 pause.addEventListener('click', () => { playing = !playing; label(); sync(); });
 label();
 
-// The glass pane: the browser's own modal, so focus, Esc and holding the page still come with it. Its count comes
-// from its cards, so it can't drift from them.
-const count = `${more.querySelectorAll('.cards li').length} in the app`;
-document.querySelector('.show-more').textContent = more.querySelector('h2').textContent = count;
+// The glass pane, and over it a card's preview: the browser's own modals, so focus, Esc and holding the page still
+// come with them.
 document.querySelector('.show-more').addEventListener('click', () => more.showModal());
-more.querySelector('.close').addEventListener('click', () => more.close());
-more.addEventListener('click', e => { if (e.target === more) more.close(); }); // a click outside the pane
+for (const d of [more, preview]) {
+  d.querySelector('.close').addEventListener('click', () => d.close());
+  d.addEventListener('click', e => { if (e.target === d) d.close(); }); // a click outside the pane
+}
+// A card opens its wallpaper's 12 s loop (media.sh names it after the card), on its first frame until it can play.
+more.querySelector('.cards').addEventListener('click', e => {
+  const card = e.target.closest('button');
+  if (!card) return;
+  const slug = card.querySelector('img').src.match(/card-(.+)\.jpg$/)[1];
+  preview.querySelector('p').textContent = card.textContent;
+  clip.poster = new URL(`preview-${slug}.jpg`, media);
+  sources(clip, `preview-${slug}`, { av1: 'av01.0.05M.08', hevc: 'hvc1.1.6.L120.90' }); // levels as media.sh makes them
+  clip.load();
+  run(clip);
+  preview.showModal();
+});
+preview.addEventListener('close', () => clip.pause());
+clip.addEventListener('click', () => (clip.paused ? clip.play() : clip.pause())); // the Pause button is behind the pane
 
 /** Start loading a work: its poster (the loop's first frame) and its video. */
 function warm(slug) {

@@ -79,20 +79,31 @@
   /* Every wallpaper in the app, as cards on a pane of glass. A native <dialog>: focus, Esc and holding the page
      still are the browser's job. The panel scrolls inside the dialog so the rim and Close stay put. */
   html:has(.more[open]) { overflow: hidden; }
-  .more { position: fixed; width: min(1040px, 100vw - 112px, (100svh - 110px) * 1.32); max-height: calc(100svh - 110px); /* wide enough to read, short enough that all twenty fit */ padding: 0; border: 0; border-radius: 30px; overflow: hidden; color: var(--text);
+  dialog { position: fixed; padding: 0; border: 0; overflow: hidden; color: var(--text);
     opacity: 0; scale: 0.97; transition: opacity 0.5s ease-out, scale 0.5s ease-out, overlay 0.5s allow-discrete, display 0.5s allow-discrete; }
-  .more[open] { opacity: 1; scale: 1; }
-  .more::backdrop { background: rgb(0 0 0 / 0); transition: background 0.5s ease-out, overlay 0.5s allow-discrete, display 0.5s allow-discrete; }
-  .more[open]::backdrop { background: rgb(0 0 0 / 0.25); }
-  @starting-style { .more[open] { opacity: 0; scale: 0.97; } .more[open]::backdrop { background: rgb(0 0 0 / 0); } }
+  dialog[open] { opacity: 1; scale: 1; }
+  dialog::backdrop { background: rgb(0 0 0 / 0); transition: background 0.5s ease-out, overlay 0.5s allow-discrete, display 0.5s allow-discrete; }
+  dialog[open]::backdrop { background: rgb(0 0 0 / 0.25); }
+  @starting-style { dialog[open] { opacity: 0; scale: 0.97; } dialog[open]::backdrop { background: rgb(0 0 0 / 0); } }
+  .more { width: min(1040px, 100vw - 112px, (100svh - 110px) * 1.32); max-height: calc(100svh - 110px); /* wide enough to read, short enough that all twenty fit */ border-radius: 30px; }
   .panel { max-height: inherit; overflow: auto; box-sizing: border-box; padding: 30px 34px 36px; }
   .panel h2 { font-size: 19px; font-weight: 600; margin-bottom: 24px; }
   .close { position: absolute; top: 24px; right: 26px; z-index: 1; padding: 7px 16px; border: 0; border-radius: 999px; font: inherit; font-size: 13px; font-weight: 500; color: var(--text); cursor: pointer;
     background: rgb(255 255 255 / 0.14); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.4), inset 0 0 0 1px rgb(255 255 255 / 0.12); }
   .close:hover { background: rgb(255 255 255 / 0.22); }
   .cards { list-style: none; display: grid; grid-template-columns: repeat(5, 1fr); gap: 26px 16px; }
-  .cards img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 10; object-fit: cover; border-radius: 14px; background: rgb(255 255 255 / 0.05); outline: 1px solid rgb(255 255 255 / 0.1); outline-offset: -1px; }
+  .cards button { display: block; width: 100%; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+  .cards img { display: block; width: 100%; height: auto; aspect-ratio: 16 / 10; object-fit: cover; border-radius: 14px; background: rgb(255 255 255 / 0.05); outline: 1px solid rgb(255 255 255 / 0.1); outline-offset: -1px; transition: outline-color 0.3s ease-out; }
+  .cards button:hover img { outline-color: rgb(255 255 255 / 0.45); }
   .cards p { margin-top: 9px; font-size: 13px; color: #ecebe8; }
+
+  /* One wallpaper moving, over the pane, when its card is picked: a 12 s loop from the app's renderer (media.sh). */
+  .preview { width: min(1200px, 100vw - 112px, (100svh - 150px) * 1.54); border-radius: 30px; }
+  .preview > div { padding: 14px; }
+  .preview video { display: block; width: 100%; aspect-ratio: 1280 / 832; object-fit: cover; border-radius: 18px; background: var(--ground); }
+  .preview .caption { display: flex; justify-content: space-between; align-items: center; padding: 14px 6px 2px 8px; }
+  .preview p { font-size: 17px; font-weight: 500; }
+  .preview .close { position: static; }
   .panel .features { display: none; } /* phones only: there Fish Tank has coral where these lines would sit */
 
   @media (max-width: 1100px) { .cards { grid-template-columns: repeat(4, 1fr); } }
@@ -115,13 +126,16 @@
     .show-more { grid-area: 2 / 2; justify-self: start; }
     .last .features { display: none; }
     .panel .features { display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.5; color: #ecebe8; margin: 40px 0 26px; } /* below Close */
-    .more { width: calc(100vw - 20px); max-height: calc(100svh - 20px); border-radius: 26px;
+    .more { max-height: calc(100svh - 20px); }
+    .more, .preview { width: calc(100vw - 20px); border-radius: 26px;
       background: linear-gradient(160deg, rgb(255 255 255 / 0.14), rgb(255 255 255 / 0.04) 45%, rgb(255 255 255 / 0.08)), rgb(16 16 22 / 0.58); } /* darker: here it's over Fish Tank's bright water, not the dark around a laptop */
     .panel { padding: 24px 18px 28px; }
     .panel h2 { font-size: 17px; }
     .close { top: 18px; right: 16px; }
     .cards { grid-template-columns: repeat(2, 1fr); gap: 22px 10px; }
     .cards img { border-radius: 11px; }
+    .preview > div { padding: 10px; }
+    .preview video { border-radius: 17px; }
   }
 </style>
 <script type="module" src="site.js"></script>
@@ -166,7 +180,7 @@
       <div>
         <p class="tagline">Living wallpapers for your Mac.</p>
         <div class="row"><a class="download download--line" href="https://github.com/dtanquary/atrium/releases/latest">Download</a><p class="fine">Free · macOS 26 or later, on Apple silicon · <a href="https://github.com/dtanquary/atrium">Source on GitHub (MIT)</a> · <a href="credits.html">Credits</a></p></div>
-        <button class="show-more" type="button">21 in the app</button>
+        <button class="show-more" type="button">Over 20 wallpapers included</button>
       </div>
       <div class="features"><p>It's your desktop: it plays behind your icons and windows, and pauses when they cover it.</p><p>Easy on your Mac: frozen in Low Power Mode, about 2 ms a frame.</p></div>
     </div>
@@ -191,30 +205,36 @@
   <button class="close" type="button">Close</button>
   <div class="panel">
     <div class="features"><p>It's your desktop: it plays behind your icons and windows, and pauses when they cover it.</p><p>Easy on your Mac: frozen in Low Power Mode, about 2 ms a frame.</p></div>
-    <h2 id="more">21 in the app</h2>
+    <h2 id="more">Over 20 wallpapers included</h2>
     <ul class="cards">
-      <li><img src="media/card-aurora.jpg" alt="" width="640" height="400" loading="lazy"><p>Aurora</p></li>
-      <li><img src="media/card-dappled-light.jpg" alt="" width="640" height="400" loading="lazy"><p>Dappled Light</p></li>
-      <li><img src="media/card-deep-space-tour.jpg" alt="" width="640" height="400" loading="lazy"><p>Deep Space Tour</p></li>
-      <li><img src="media/card-earth-from-orbit.jpg" alt="" width="640" height="400" loading="lazy"><p>Earth from Orbit</p></li>
-      <li><img src="media/card-fireflies.jpg" alt="" width="640" height="400" loading="lazy"><p>Fireflies</p></li>
-      <li><img src="media/card-fish-tank.jpg" alt="" width="640" height="400" loading="lazy"><p>Fish Tank</p></li>
-      <li><img src="media/card-flowing-gradient.jpg" alt="" width="640" height="400" loading="lazy"><p>Flowing Gradient</p></li>
-      <li><img src="media/card-galaxy.jpg" alt="" width="640" height="400" loading="lazy"><p>Galaxy</p></li>
-      <li><img src="media/card-game-of-life.jpg" alt="" width="640" height="400" loading="lazy"><p>Game of Life</p></li>
-      <li><img src="media/card-lava-lamp.jpg" alt="" width="640" height="400" loading="lazy"><p>Lava Lamp</p></li>
-      <li><img src="media/card-live-sky.jpg" alt="" width="640" height="400" loading="lazy"><p>Live Sky</p></li>
-      <li><img src="media/card-murmuration.jpg" alt="" width="640" height="400" loading="lazy"><p>Murmuration</p></li>
-      <li><img src="media/card-nebula.jpg" alt="" width="640" height="400" loading="lazy"><p>Nebula</p></li>
-      <li><img src="media/card-pixel-city.jpg" alt="" width="640" height="400" loading="lazy"><p>Pixel City</p></li>
-      <li><img src="media/card-pixel-spaceport.jpg" alt="" width="640" height="400" loading="lazy"><p>Pixel Spaceport</p></li>
-      <li><img src="media/card-rain-on-glass.jpg" alt="" width="640" height="400" loading="lazy"><p>Rain on Glass</p></li>
-      <li><img src="media/card-schlieren.jpg" alt="" width="640" height="400" loading="lazy"><p>Schlieren</p></li>
-      <li><img src="media/card-solar-system-tour.jpg" alt="" width="640" height="400" loading="lazy"><p>Solar System Tour</p></li>
-      <li><img src="media/card-turing-patterns.jpg" alt="" width="640" height="400" loading="lazy"><p>Turing Patterns</p></li>
-      <li><img src="media/card-weather.jpg" alt="" width="640" height="400" loading="lazy"><p>Weather</p></li>
-      <li><img src="media/card-wind.jpg" alt="" width="640" height="400" loading="lazy"><p>Wind</p></li>
+      <li><button type="button"><img src="media/card-aurora.jpg" alt="" width="640" height="400" loading="lazy"><p>Aurora</p></button></li>
+      <li><button type="button"><img src="media/card-dappled-light.jpg" alt="" width="640" height="400" loading="lazy"><p>Dappled Light</p></button></li>
+      <li><button type="button"><img src="media/card-deep-space-tour.jpg" alt="" width="640" height="400" loading="lazy"><p>Deep Space Tour</p></button></li>
+      <li><button type="button"><img src="media/card-earth-from-orbit.jpg" alt="" width="640" height="400" loading="lazy"><p>Earth from Orbit</p></button></li>
+      <li><button type="button"><img src="media/card-fireflies.jpg" alt="" width="640" height="400" loading="lazy"><p>Fireflies</p></button></li>
+      <li><button type="button"><img src="media/card-fish-tank.jpg" alt="" width="640" height="400" loading="lazy"><p>Fish Tank</p></button></li>
+      <li><button type="button"><img src="media/card-flowing-gradient.jpg" alt="" width="640" height="400" loading="lazy"><p>Flowing Gradient</p></button></li>
+      <li><button type="button"><img src="media/card-galaxy.jpg" alt="" width="640" height="400" loading="lazy"><p>Galaxy</p></button></li>
+      <li><button type="button"><img src="media/card-game-of-life.jpg" alt="" width="640" height="400" loading="lazy"><p>Game of Life</p></button></li>
+      <li><button type="button"><img src="media/card-lava-lamp.jpg" alt="" width="640" height="400" loading="lazy"><p>Lava Lamp</p></button></li>
+      <li><button type="button"><img src="media/card-live-sky.jpg" alt="" width="640" height="400" loading="lazy"><p>Live Sky</p></button></li>
+      <li><button type="button"><img src="media/card-murmuration.jpg" alt="" width="640" height="400" loading="lazy"><p>Murmuration</p></button></li>
+      <li><button type="button"><img src="media/card-nebula.jpg" alt="" width="640" height="400" loading="lazy"><p>Nebula</p></button></li>
+      <li><button type="button"><img src="media/card-pixel-city.jpg" alt="" width="640" height="400" loading="lazy"><p>Pixel City</p></button></li>
+      <li><button type="button"><img src="media/card-pixel-spaceport.jpg" alt="" width="640" height="400" loading="lazy"><p>Pixel Spaceport</p></button></li>
+      <li><button type="button"><img src="media/card-rain-on-glass.jpg" alt="" width="640" height="400" loading="lazy"><p>Rain on Glass</p></button></li>
+      <li><button type="button"><img src="media/card-schlieren.jpg" alt="" width="640" height="400" loading="lazy"><p>Schlieren</p></button></li>
+      <li><button type="button"><img src="media/card-solar-system-tour.jpg" alt="" width="640" height="400" loading="lazy"><p>Solar System Tour</p></button></li>
+      <li><button type="button"><img src="media/card-turing-patterns.jpg" alt="" width="640" height="400" loading="lazy"><p>Turing Patterns</p></button></li>
+      <li><button type="button"><img src="media/card-weather.jpg" alt="" width="640" height="400" loading="lazy"><p>Weather</p></button></li>
+      <li><button type="button"><img src="media/card-wind.jpg" alt="" width="640" height="400" loading="lazy"><p>Wind</p></button></li>
     </ul>
+  </div>
+</dialog>
+<dialog class="preview glass" aria-labelledby="preview">
+  <div>
+    <video muted loop playsinline preload="none"></video>
+    <div class="caption"><p id="preview"></p><button class="close" type="button">Close</button></div>
   </div>
 </dialog>
 <script src="laptop.js"></script> <!-- the laptop opening, with laptop.css above -->
