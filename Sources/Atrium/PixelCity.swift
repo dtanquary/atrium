@@ -2840,6 +2840,8 @@ final class PixelCity: SKScene {
         let sunlit = [rgb(255, 232, 196), rgb(255, 186, 140), rgb(190, 120, 128)]
         let fires = flames()
         let flood = night, floodlit: [Float] = [1, 0.9, 0.72] // the pad's floodlights are on all night, rocket or no rocket
+        // The pad's floodlights, and the smaller lights round each landing zone, which light a landing's dust.
+        let lamps: [(x: Float, y: Float, reach: Float, most: Float)] = [(site.x, site.y + 16, 40, 0.6)] + zones.map { (Float($0) + 0.5, Float(ground + 6), 30, 0.45) }
         var lights = tones
         density.withUnsafeBufferPointer { field in
             smoke.rgba.withUnsafeMutableBufferPointer { out in
@@ -2862,10 +2864,12 @@ final class PixelCity: SKScene {
                             if heat > 0 { c = mix(c, rgb(255, 168, 84) * (0.75 + 0.25 * c.sum() / 3), heat) }
                         }
                         if flood > 0 {
-                            let dx = Float(x) - site.x, dy = (Float(y + base) - site.y - 16) * 0.8
-                            // Soft to its edge and short of full, so a lift-off's cloud, which fills it, glows rather than shows a disc.
-                            let near = smoothstep(40, 0, (dx * dx + dy * dy).squareRoot()) * flood * 0.6
-                            if near > 0 { c = mix(c, rgb(250, 246, 236) * floodlit[tone], near) }
+                            for lamp in lamps {
+                                let dx = Float(x) - lamp.x, dy = (Float(y + base) - lamp.y) * 0.8
+                                // Soft to its edge and short of full, so a lift-off's cloud, which fills it, glows rather than shows a disc.
+                                let near = smoothstep(lamp.reach, 0, (dx * dx + dy * dy).squareRoot()) * flood * lamp.most
+                                if near > 0 { c = mix(c, rgb(250, 246, 236) * floodlit[tone], near) }
+                            }
                         }
                         let a: Float = d < 0.3 ? 0.4 : d < 0.5 ? 0.72 : 0.95, i = (y * w + x) * 4, k = a * 255
                         (out[i], out[i + 1], out[i + 2], out[i + 3]) = (UInt8(min(c.x, 1) * k), UInt8(min(c.y, 1) * k), UInt8(min(c.z, 1) * k), UInt8(k))
@@ -3012,8 +3016,7 @@ final class PixelCity: SKScene {
                 }
             }
             if pad.phase.rawValue < Pad.Phase.climb.rawValue || pad.scrubbed { // still on its strongback or crawler, or on the mount; or going back unflown
-                let floodlit: Float = pad.phase == .rollOut || pad.phase == .rollBack ? 0 : 1
-                stamp(art, into: &px, x: hinge.x, y: hinge.y, angle: pad.phase == .count || kit.standing ? 0 : lean, paint: rocketPaint(flood: floodlit), soot: soot)
+                stamp(art, into: &px, x: hinge.x, y: hinge.y, angle: pad.phase == .count || kit.standing ? 0 : lean, paint: rocketPaint(flood: floodlit(hinge, by: site)), soot: soot)
             }
             px.clip = 0..<w
         }
@@ -3024,9 +3027,7 @@ final class PixelCity: SKScene {
         let shed = shed
         if let flying, let fire = fires.first, flying.y < Float(h) + 40 {
             let art = pad.rocket == .shuttle ? shuttleStack(roll: roll, boosters: shed.isEmpty) : (shed.isEmpty ? nil : kit.sheds?.core) ?? art
-            // It climbs out of the floodlights' reach over its first 80 rows, about the tower's height, as its flame takes over.
-            let floodlit = 1 - smoothstep(0, 80, flying.y - site.y)
-            stamp(art, into: &px, x: flying.x, y: flying.y, angle: fire.angle, scale: flying.scale, paint: rocketPaint(flood: floodlit), soot: soot, heat: 0.3 + 0.5 * night)
+            stamp(art, into: &px, x: flying.x, y: flying.y, angle: fire.angle, scale: flying.scale, paint: rocketPaint(flood: floodlit(SIMD2(flying.x, flying.y), by: site)), soot: soot, heat: 0.3 + 0.5 * night)
         }
         if let parts = kit.sheds {
             for b in shed where b.y < Float(h) + 40 { stamp(parts.booster, into: &px, x: b.x, y: b.y, angle: b.angle, scale: b.scale, paint: rocketPaint(flood: 0), soot: soot) }
@@ -3034,11 +3035,9 @@ final class PixelCity: SKScene {
         // The boosters: falling, burning down to the pad on their legs, standing there, or hanging from the crane's hook.
         let hookX = Int(crane.x.rounded(.down)) - 33, lifted = crane.phase == .hook ? max(0, min(crane.t - 5, 4)) : 4
         for b in boosters where b.phase != .away && b.zone == 2 { // Starship's: no legs, and it comes down to the tower
-            let at = pose(caught: b), down = b.phase == .landed
-            // It comes back into the floodlights' reach over its last 80 rows, as a rocket climbs out of it.
-            let floodlit = down ? 1 : 1 - smoothstep(0, 80, at.y - Float(starMount))
-            stamp(superHeavyArt, into: &px, x: down ? caught.x : at.x, y: down ? caught.y : at.y, angle: at.angle, scale: at.scale,
-                  paint: rocketPaint(flood: floodlit), heat: b.phase == .burn ? 0.85 : 0)
+            let at = pose(caught: b), down = b.phase == .landed, p = down ? caught : SIMD2(at.x, at.y)
+            stamp(superHeavyArt, into: &px, x: p.x, y: p.y, angle: at.angle, scale: at.scale,
+                  paint: rocketPaint(flood: floodlit(p, by: [Float(starX) + 0.5, Float(starMount)])), heat: b.phase == .burn ? 0.85 : 0)
         }
         // The tower's arms: a carriage on the tower and a beam out across the rocket, under its grid fins.
         let iron = mix(mix(lit(rgb(62, 64, 74), .zero), hazeColour, 0.12), rgb(14, 14, 22), night * 0.85)
@@ -3048,14 +3047,16 @@ final class PixelCity: SKScene {
             let held = crane.phase.rawValue >= Crane.Phase.hook.rawValue && crane.zone == b.zone
             let (rows, scale) = lens(b.z), flying = b.phase == .fall || b.phase == .burn
             let x = held ? Float(hookX) + 0.5 : Float(zones[b.zone]) + 0.5, y = Float(ground + 1) + (held ? lifted.rounded(.down) : rows)
+            let zone = SIMD2(Float(zones[b.zone]) + 0.5, Float(ground + 1)) // its lights, weaker than the pad's floodlights
             if b.ship { // Starship's: on its belly, flipping, or standing on its skirt
                 let at = pose(ship: b)
-                stamp(shipArt, into: &px, x: flying ? at.x : x, y: flying ? at.y : y, angle: at.angle, scale: scale, paint: rocketPaint(flood: 0), heat: b.phase == .burn ? 0.6 : 0)
+                let p = flying ? SIMD2(at.x, at.y) : SIMD2(x, y)
+                stamp(shipArt, into: &px, x: p.x, y: p.y, angle: at.angle, scale: scale, paint: rocketPaint(flood: 0.6 * floodlit(p, by: zone)), heat: b.phase == .burn ? 0.6 : 0)
                 continue
             }
             let legs = flying ? b.z < 26 : !(held && crane.phase == .carry)
             let (landed, falling) = b.of == .newGlenn ? (glennLandedArt, glennFallingArt) : (landedArt, fallingArt)
-            stamp(legs ? landed : falling, into: &px, x: x, y: y, scale: scale, paint: rocketPaint(flood: 0), soot: 18, heat: b.phase == .burn ? 0.85 : 0)
+            stamp(legs ? landed : falling, into: &px, x: x, y: y, scale: scale, paint: rocketPaint(flood: 0.6 * floodlit([x, y], by: zone)), soot: 18, heat: b.phase == .burn ? 0.85 : 0)
         }
         if orbiter.phase != .away {
             // The orbiter: the Shuttle's own drawing of it, laid on its belly, nose to the left; nose down in the
@@ -3096,6 +3097,11 @@ final class PixelCity: SKScene {
             bytes.withUnsafeBytes { data?.copyMemory(from: $0.baseAddress!, byteCount: min(length, bytes.count)) }
         }
     }
+
+    /// How far into a light's reach a rocket standing at `p` is: all the way at the light, and out of it 80 pixels
+    /// off, about the tower's height. So it rolls into the floodlights, climbs out of them and comes back down into
+    /// them by degrees, never all at once.
+    private func floodlit(_ p: SIMD2<Float>, by light: SIMD2<Float>) -> Float { 1 - smoothstep(0, 80, simd_distance(p, light)) }
 
     /// A rocket's paints in the light it stands in, in the order `bytes` numbers them: white on its lit side, its
     /// face and its shaded side; black; engine bells; a tank's orange foam and bare metal, each on the same three
