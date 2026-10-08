@@ -11,6 +11,10 @@ final class WallpaperView: SKView, SKViewDelegate {
     private static let log = Logger(subsystem: "com.dtanquary.atrium", category: "wallpaper")
     /// When it last drew a frame.
     var lastDrawn = Date()
+    /// Set while the displays sleep, Power Nap's dark wakes included: nothing draws then, and nothing needs to.
+    static var screensAsleep = false
+    /// How many views in a row `watch` has put in this one's place without a frame drawn since.
+    private var replaced = 0
     /// Holds the current frame still, e.g. in Low Power Mode.
     var frozen = false { didSet { updatePaused() } }
     /// Runs even while frozen until then, so a new scene draws its first frame, or finishes crossfading, and an
@@ -57,13 +61,18 @@ final class WallpaperView: SKView, SKViewDelegate {
     /// holding its last frame for good after the Mac slept, and after a display reconfigured as it woke, its display
     /// link gone though it wasn't paused; pausing and unpausing it, the first fix, drew nothing in 12 minutes of
     /// trying (2026-10-07). A fresh view gets a fresh display link, and the wallpaper built afresh, since a crossfade
-    /// stuck in the old view never reached its scene. Called every few seconds, and as the screens wake.
+    /// stuck in the old view never reached its scene. Called every few seconds. Not while the displays sleep: in a
+    /// dark wake the window still counts as visible, and it replaced the view every 5 s through them, 984 times one
+    /// afternoon with the lid shut. Should some other state draw nothing, each fresh view that doesn't draw waits
+    /// twice as long as the one before it, up to about 11 minutes.
     func watch(building scene: @MainActor (CGSize) -> SKScene = currentScene) {
-        guard !isPaused, Date().timeIntervalSince(lastDrawn) > 5, let window else { return }
+        let patience = 5 * pow(2, Double(min(replaced, 7)))
+        guard !Self.screensAsleep, !isPaused, Date().timeIntervalSince(lastDrawn) > patience, let window else { return }
         Self.log.error("drawing stopped \(Date().timeIntervalSince(self.lastDrawn), format: .fixed(precision: 0)) s ago while running; replacing the view")
         let fresh = WallpaperView()
         fresh.frozen = frozen
         fresh.preferredFramesPerSecond = preferredFramesPerSecond
+        fresh.replaced = replaced + 1
         window.contentView = fresh
         fresh.presentScene(scene(window.frame.size))
     }
@@ -72,6 +81,7 @@ final class WallpaperView: SKView, SKViewDelegate {
         MainActor.assumeIsolated {
             WallpaperTime.set(time)
             lastDrawn = Date()
+            replaced = 0
         }
         return true
     }
@@ -420,10 +430,11 @@ NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotificati
     }
 }
 // Match the lock screen, or put back the user's wallpaper if a crash left one of ours, once the scenes have drawn;
-// then keep the still fresh (time-of-day scenes drift), and take one as the displays sleep, just before a lock.
+// then keep the still fresh while the displays are awake (time-of-day scenes drift), and take one as they sleep,
+// just before a lock.
 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { LockScreen.update(windows) }
 Timer.scheduledTimer(withTimeInterval: 600, repeats: true) { _ in
-    MainActor.assumeIsolated { matchLockScreen(after: 0) }
+    MainActor.assumeIsolated { if !WallpaperView.screensAsleep { matchLockScreen(after: 0) } }
 }
 // macOS gave that still to the Space in front only, so each other Space gets it as it comes to the front.
 NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { _ in
@@ -433,6 +444,7 @@ NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpa
 // or with a crossfade for displays that never do.
 NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { _ in
     MainActor.assumeIsolated {
+        WallpaperView.screensAsleep = true
         refreshIfStale(after: 12, fade: false)
         matchLockScreen(after: 0)
     }
@@ -444,8 +456,12 @@ Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { _ in
 Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in
     MainActor.assumeIsolated { windows.compactMap { $0.contentView as? WallpaperView }.forEach { $0.watch() } }
 }
+// Awake, each view gets the watchdog's few seconds to start drawing again before it's judged stopped.
 NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { _ in
-    MainActor.assumeIsolated { windows.compactMap { $0.contentView as? WallpaperView }.forEach { $0.watch() } }
+    MainActor.assumeIsolated {
+        WallpaperView.screensAsleep = false
+        windows.compactMap { $0.contentView as? WallpaperView }.forEach { $0.lastDrawn = Date() }
+    }
 }
 // Look for a newer release once a day, unless Settings → Software Update says not to. The App Store updates its own.
 #if !APP_STORE

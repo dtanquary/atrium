@@ -29,6 +29,26 @@ import UniformTypeIdentifiers
     #expect((window.contentView as? WallpaperView)?.scene === fresh)
 }
 
+/// While the displays sleep (Power Nap's dark wakes too) nothing draws and nothing is replaced; and a fresh view that
+/// hasn't drawn yet is given longer than the one before it, so a state that draws nothing can't rebuild every 5 s.
+@MainActor @Test func stoppedViewWaitsWhileScreensSleep() throws {
+    let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 64, height: 64), styleMask: .borderless, backing: .buffered, defer: false)
+    let view = WallpaperView()
+    window.contentView = view
+    view.isPaused = false
+    view.lastDrawn = Date(timeIntervalSinceNow: -60)
+    WallpaperView.screensAsleep = true
+    view.watch { SKScene(size: $0) }
+    WallpaperView.screensAsleep = false
+    #expect(window.contentView === view)
+    view.watch { SKScene(size: $0) }
+    let fresh = try #require(window.contentView as? WallpaperView)
+    fresh.isPaused = false
+    fresh.lastDrawn = Date(timeIntervalSinceNow: -6)
+    fresh.watch { SKScene(size: $0) }
+    #expect(window.contentView === fresh)
+}
+
 /// Renders every wallpaper offscreen at Retina size, saves a PNG to look at, and prints what a frame costs.
 /// Fails if a scene comes out as one flat colour (e.g. a shader that didn't compile).
 ///
