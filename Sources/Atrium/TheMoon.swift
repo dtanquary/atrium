@@ -35,10 +35,18 @@ final class TheMoon: SKScene {
     private let baker = MoonBaker()
     private var seen: Sky.MoonView?
     private var needsBake = true
+    /// The settings and location it was last baked for, so a change to anything else (another scene's status line,
+    /// the lock screen's still) doesn't bake it again; and from them, read then rather than every frame, how far
+    /// ahead a preview looks and whether a phase is picked.
+    private var baked: [Double] = []
+    private var ahead: TimeInterval = 0, picked = false
 
     /// Now, or some days on while previewing.
-    private var date: Date {
-        Date().addingTimeInterval(Self.knobs[5].value > 0.5 ? Self.knobs[6].value * 86400 : 0)
+    private var date: Date { Date().addingTimeInterval(ahead) }
+
+    private var inputs: [Double] {
+        let here = Location.shared.coordinate
+        return Self.knobs.map(\.value) + [here.latitude, here.longitude]
     }
 
     override func sceneDidLoad() {
@@ -61,7 +69,7 @@ final class TheMoon: SKScene {
 
     override func didMove(to view: SKView) { Location.shared.start() }
 
-    @objc private func settingsChanged() { needsBake = true } // Settings, or a new location fix
+    @objc private func settingsChanged() { if inputs != baked { needsBake = true } } // Settings, or a new location fix
 
     override func update(_ currentTime: TimeInterval) {
         if needsBake { bake() }
@@ -71,7 +79,7 @@ final class TheMoon: SKScene {
     /// How far to turn the north-up Moon so the viewer's zenith is up: the parallactic angle, which swings through
     /// the night as the sky turns. A picked phase stays north up.
     private func upright(_ jd: Double) -> CGFloat {
-        guard let seen, Self.knobs[0].value < 0.5 else { return 0 }
+        guard let seen, !picked else { return 0 }
         let here = Location.shared.coordinate
         let lst = (Sky.siderealTime(jd) + here.longitude) * .pi / 180, lat = here.latitude * .pi / 180
         let zenith = Sky.Vector(cos(lat) * cos(lst), cos(lat) * sin(lst), sin(lat))
@@ -81,6 +89,9 @@ final class TheMoon: SKScene {
     /// Lights the Moon for this minute, sizes it by its real distance, and lays out the backdrop behind it.
     private func bake() {
         needsBake = false
+        baked = inputs
+        ahead = Self.knobs[5].value > 0.5 ? Self.knobs[6].value * 86400 : 0
+        picked = Self.knobs[0].value >= 0.5
         let here = Location.shared.coordinate, jd = Sky.julianDate(date)
         let live = Sky.moonView(jd, latitude: here.latitude, longitude: here.longitude)
         // A picked phase is its fixed moment, seen from the Earth's centre as NASA's Dial-a-Moon shows it.

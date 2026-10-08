@@ -16,7 +16,7 @@ A full-screen, photoreal Moon as it is right now from where the viewer stands: i
   - The Moon's body axes (`Sky.moonAxes`), by Cassini's laws as Meeus ch. 53 sets them out: the pole 1.54242° from the ecliptic pole, on the far side from the orbit's pole, and the prime meridian at the orbit's node plus F + 180°. Ω and F are Meeus's, and the axes are stepped back to J2000 by the same general precession as `moonPosition`.
   - The Sun seen from the Moon (from 1 AU minus the Moon's position), so the phase angle is the Moon's own.
   - Libration is the viewer's direction in the Moon's axes; the position angle is the Moon's pole against celestial north on the sky.
-- **Bake** (`MoonBaker.bake`), once a minute, on a Settings change or a new location fix, at most once a frame:
+- **Bake** (`MoonBaker.bake`), once a minute, on a change to the Moon's own settings or a new location fix, at most once a frame:
   - A square the size of the disc at 2x (about 1600 pixels on a 14-inch MacBook), north up and east left, as the sky shows it.
   - Each pixel becomes a point on the sphere, turned into the Moon's axes by `u_view`, then longitude and latitude on the maps.
   - The read-back texture becomes the sprite's `SKTexture`. About 17 ms (release, 1618 px), so a frame is dropped once a minute, which a Moon that barely moves hides.
@@ -39,7 +39,7 @@ A full-screen, photoreal Moon as it is right now from where the viewer stands: i
 ## Time, live data and appearance
 - **Phase:** `moon.phase` is Real time where you are (0), or one of eight picked phases. A picked phase is a fixed moment in the lunation of January 2026 (`TheMoon.phases`, each 45° further from the Sun, found with SkyMath; new, the quarters and full match the published times to the minute), seen from the Earth's centre and north up, as Dial-a-Moon shows it: waxing lit on the right, waning on the left. Its libration, size and stars are that moment's, so it never changes. The Sky backdrop stays live, the sky where the real Moon is now.
 - **Time:** `date` is now, or now plus `moon.previewDays` days while `moon.preview` is on. Preview only moves real time, and the Sky backdrop. The slider covers a month, but any number of days works through `defaults`, e.g. the next total lunar eclipse (2028-12-31 16:52 UTC).
-- **Location:** `Location.shared`, started in `didMove(to:)`. A new fix writes UserDefaults, which triggers a bake.
+- **Location:** `Location.shared`, started in `didMove(to:)`. A new fix writes UserDefaults, and a coordinate that moved triggers a bake.
 - **Network:** none.
 - **Appearance:** one look; it ignores Light and Dark Mode.
 
@@ -70,7 +70,7 @@ Linear normals at quality 0.7 lose about 0.013 of slope (RMS) to compression; a 
 | `moon.preview` | Preview another day | toggle | off | `date` runs ahead |
 | `moon.previewDays` | Days from now | 0–29.5 | 7 | how far ahead, shown while previewing |
 
-Any UserDefaults change triggers a bake on the next frame, so dragging a slider re-lights the Moon live.
+A change to any of these bakes the Moon on the next frame, so dragging a slider re-lights it live. Other UserDefaults changes don't: any of them used to (another scene's status line, the lock screen's still every 10 minutes), each a 17 ms bake on the main thread (found in the 1.0 review, 2026-10-08). The preview offset and picked phase are read at the bake, not each frame.
 
 ## Tuning constants
 - **Base exposure** 1.25 × brightness × surge ÷ brightest; **earthshine** 0.1.
