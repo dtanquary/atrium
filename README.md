@@ -25,7 +25,7 @@ A bright reef tank of real fish and corals, cut out of photos: a chromis school,
 |---|---|
 | By day, in Light Mode | Under actinic blue in Dark Mode, its corals fluorescing |
 
-Settings → Fish Tank → Lighting holds it at daylight or actinic blue whatever the appearance.
+Settings → Fish Tank holds the lighting at daylight or actinic blue whatever the appearance, or puts the lights out on a timer at night, and sets how many fish there are and whether marine snow drifts.
 
 #### Weather
 Real hills under your live local weather, beneath a physical sky with the real Sun and Moon: sunrise and twilight, real clouds on the real wind, rain, snow lying on the ground, valley mist and lightning.

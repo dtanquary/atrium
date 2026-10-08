@@ -357,3 +357,11 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
     NotificationCenter.default.post(name: UserDefaults.didChangeNotification, object: nil)
     #expect(view.scene === second)
 }
+
+/// The lights-out span runs from the off hour to the on hour, across midnight if need be; the same hour twice is never.
+@MainActor @Test func fishTankLightsOutSpan() {
+    #expect(FishTank.lightsOut(at: 23, off: 22, on: 8) && FishTank.lightsOut(at: 3.5, off: 22, on: 8))
+    #expect(!FishTank.lightsOut(at: 8, off: 22, on: 8) && !FishTank.lightsOut(at: 12, off: 22, on: 8))
+    #expect(FishTank.lightsOut(at: 2, off: 1, on: 6) && !FishTank.lightsOut(at: 0.5, off: 1, on: 6))
+    #expect(!FishTank.lightsOut(at: 9, off: 9, on: 9))
+}

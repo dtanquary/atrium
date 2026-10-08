@@ -62,13 +62,26 @@ final class FishTank: SKScene {
         for _ in 0..<150 { swim(1.0 / 30) } // let the schools gather before the first frame
         NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged),
                                                name: UserDefaults.didChangeNotification, object: nil)
+        run(.repeatForever(.sequence([.wait(forDuration: 30), .run { [weak self] in self?.clockChanged() }])))
     }
 
-    /// When Settings picks another lighting, dissolves into a new scene lit that way, with both still running.
+    /// When Settings changes, dissolves into a new scene built to it, with both still running.
     @objc private func settingsChanged() {
-        guard Self.lookKnob.value != look, let view else { return } // no view: the render tests
-        look = Self.lookKnob.value // so this one, fading out, doesn't present another
-        let fade = SKTransition.crossFade(withDuration: 0.8)
+        let picked = Self.knobs.map(\.value)
+        guard picked != settings, !retired else { return }
+        settings = picked // so this one, fading out, doesn't present another
+        handOver(fading: 0.8)
+    }
+
+    /// The lights-out timer's hours coming round do the same, slowly, like a tank's lamps dimming.
+    private func clockChanged() {
+        if !retired, Self.dark != dark { handOver(fading: 4) }
+    }
+
+    private func handOver(fading seconds: Double) {
+        guard let view else { return } // no view: the render tests
+        retired = true
+        let fade = SKTransition.crossFade(withDuration: seconds)
         fade.pausesIncomingScene = false
         fade.pausesOutgoingScene = false
         let next = FishTank(size: size)
@@ -220,7 +233,8 @@ final class FishTank: SKScene {
         let shadowTexture = radialGlow(diameter: 32, stops: [(0, rgb(0, 0, 0)), (0.4, rgb(0, 0, 0, 0.7)), (1, rgb(0, 0, 0, 0))])
         let shade = light.low * 0.5 // shadows on the sand are lit only by the blue of the water around them
         let shadowColor = NSColor(red: CGFloat(shade.x), green: CGFloat(shade.y), blue: CGFloat(shade.z), alpha: 1)
-        for (species, count, depth) in plan {
+        for (species, planned, depth) in plan {
+            let count = max(1, Int((Double(planned) * Self.fishKnob.value).rounded())) // Settings → Fish thins every school alike
             let blur = max(0, 0.9 - depth) * 4 // the back school is a little out of focus
             let looks = species.photos.compactMap { TankArt.photo($0, width: species.length, blur: blur) }
             guard let first = looks.first else { continue }
@@ -277,19 +291,40 @@ final class FishTank: SKScene {
                                       shimmer: [0.6, 0.65, 1.0], sandNear: [0.5, 0.5, 0.9], sandFar: [0.16, 0.18, 0.52],
                                       grade: [0.45, 0.52, 1.05], haze: [0.07, 0.08, 0.4], fluoro: 1.5)
     }
-    /// Settings → Lighting: macOS's appearance (daylight in Light Mode, actinic blue in Dark Mode), or one of them held.
-    static let lookKnob = Knob(key: "tank.look", label: "Lighting", range: 0...2, standard: 0,
+    /// Settings: the look (macOS's appearance, or daylight or actinic blue held), a lights-out timer that puts the
+    /// actinic look on between two hours whatever the look says, how many fish, and whether marine snow drifts.
+    static let lookKnob = Knob(key: "tank.look", label: "Lighting", range: 0...2, standard: 0, section: "Lighting",
                                format: .choice(["Match macOS", "Daylight", "Actinic blue"]))
-    static let knobs = [lookKnob]
-    private static var lighting: Lighting {
+    static let lightsOutKnob = Knob(key: "tank.lightsOut", label: "Lights out at night", range: 0...1, standard: 0,
+                                    section: "Lighting", format: .toggle)
+    static let offKnob = Knob(key: "tank.lightsOff", label: "Lights off at", range: 0...24, standard: 22, section: "Lighting",
+                              format: .clock, shownWhen: "tank.lightsOut")
+    static let onKnob = Knob(key: "tank.lightsOn", label: "Lights on at", range: 0...24, standard: 8, section: "Lighting",
+                             format: .clock, shownWhen: "tank.lightsOut")
+    static let fishKnob = Knob(key: "tank.fish", label: "Fish", range: 0.25...1, standard: 1, section: "Tank", format: .times)
+    static let snowKnob = Knob(key: "tank.snow", label: "Marine snow", range: 0...1, standard: 1, section: "Tank", format: .toggle)
+    static let knobs = [lookKnob, lightsOutKnob, offKnob, onKnob, fishKnob, snowKnob]
+
+    /// Whether the tank is under actinic blue now: the lights-out timer first, then the look picked, then macOS.
+    private static var dark: Bool {
+        if lightsOutKnob.value > 0.5 {
+            let now = Calendar.current.dateComponents([.hour, .minute], from: Date())
+            if lightsOut(at: Double(now.hour ?? 0) + Double(now.minute ?? 0) / 60, off: offKnob.value, on: onKnob.value) { return true }
+        }
         switch Int(lookKnob.value) {
-        case 1: .day
-        case 2: .actinic
-        default: systemIsDark ? .actinic : .day
+        case 1: return false
+        case 2: return true
+        default: return systemIsDark
         }
     }
-    private let light = FishTank.lighting
-    private var look = FishTank.lookKnob.value // the choice this scene was built with
+    /// Whether `hour` falls from lights off to lights on, a span that may cross midnight; the same hour twice is never.
+    static func lightsOut(at hour: Double, off: Double, on: Double) -> Bool {
+        off < on ? hour >= off && hour < on : off > on && (hour >= off || hour < on)
+    }
+    private let dark = FishTank.dark
+    private var light: Lighting { dark ? .actinic : .day }
+    private var settings = FishTank.knobs.map(\.value) // what this scene was built with
+    private var retired = false // it has handed over to a new scene, and is fading out
 
     /// The back panel and water: saturated blue, brightest high up under the lamps and falling off toward the ends
     /// and low down, faint LED shimmer on the back wall, faint rays from the lamp array, and the underside of the
@@ -573,6 +608,7 @@ final class FishTank: SKScene {
 
     /// Specks of organic matter drifting slowly through the whole tank.
     private func addMarineSnow() {
+        guard Self.snowKnob.value > 0.5 else { return }
         let snow = SKEmitterNode()
         snow.particleTexture = softDot()
         snow.particleColor = NSColor(red: 0.8, green: 0.92, blue: 0.92, alpha: 1)
