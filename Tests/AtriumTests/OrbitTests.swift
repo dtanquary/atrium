@@ -112,3 +112,21 @@ import Testing
         }
     }
 }
+
+/// The ground is laid by a pixel's ray and the stars are put by a direction's pixel, so the two must agree: each
+/// pixel's own ray falls back in it, through either lens, and the fisheye places what lies behind the camera.
+@Test func orbitLensComesBackToItsPixel() {
+    for lens in [OrbitLens(focal: 589, fisheye: false, w: 756, h: 491), OrbitLens(focal: 250, fisheye: false, w: 61, h: 41),
+                 OrbitLens(focal: 491 / .pi, fisheye: true, w: 756, h: 491), OrbitLens(focal: 20, fisheye: true, w: 61, h: 41)] {
+        var missed = 0
+        for y in 0..<lens.h {
+            for x in 0..<lens.w {
+                let back = lens.spot(normalize(lens.ray(x, y)))
+                if back?.x != x || back?.y != y { missed += 1 }
+            }
+        }
+        #expect(missed == 0, "\(missed) pixels of a \(lens.fisheye ? "fisheye" : "rectilinear") lens \(lens.w) wide")
+    }
+    let behind = OrbitLens(focal: 491 / .pi, fisheye: true, w: 756, h: 491).spot(normalize([1, 0, -1])) // 135° off the axis, to the right
+    #expect(behind?.x == 378 + 368 && behind?.y == 245)
+}

@@ -28,8 +28,8 @@ final class PixelOrbit: SKScene {
 
     private let w: Int, h: Int // the canvas, in art pixels
     private let glass: (x: Int, y: Int, w: Int, h: Int) // the window's pane on it
-    private let windowSize: Int, looks: Int // Settings' Window and Looking, as the scene was built
-    private let focal: Double
+    private let windowSize: Int, looks: Int // Settings' Window and Looking, as the scene was built (3: the trial lens)
+    private let lens: OrbitLens
     private let eye: (ahead: Sky.Vector, right: Sky.Vector, up: Sky.Vector) // the camera, in the station's own axes
 
     // What each pixel of the pane looks at: its ring of ground (-1 for sky) and its place round it; which way the
@@ -56,14 +56,24 @@ final class PixelOrbit: SKScene {
     /// Settings shows by greying it out at 1× (`Knob.lockedWhen`).
     private var pace: Double { Self.follow.value > 0.5 ? 1 : PixelWindowSeat.speed.value }
 
+    /// A trial lens, `ORBIT_EYE="yaw,pitch,field[,fisheye]"` in the environment, in degrees: yaw 90 is out of the left side, pitch 90 straight down, field what the pane's height spans.
+    private static var trial: (yaw: Double, pitch: Double, field: Double, fisheye: Bool)? {
+        guard let words = ProcessInfo.processInfo.environment["ORBIT_EYE"]?.split(separator: ","), words.count >= 3,
+              let yaw = Double(words[0]), let pitch = Double(words[1]), let field = Double(words[2]) else { return nil }
+        return (yaw, pitch, field, words.count > 3 && words[3] == "fisheye")
+    }
+
     override init(size: CGSize) {
-        (w, h, glass, windowSize) = PixelWindowSeat.pane(size)
-        looks = Int(Self.looking.value)
+        let pane = PixelWindowSeat.pane(size), trial = Self.trial
+        (w, h) = (pane.w, pane.h)
+        // (The trial lens has the whole canvas for its pane, as Window's None does, and no wing.)
+        (glass, windowSize, looks) = trial == nil ? (pane.glass, pane.window, Int(Self.looking.value)) : ((0, 0, pane.w, pane.h), 3, 3)
         let (gw, gh) = (glass.w, glass.h)
-        focal = Double(gh) * 1.2 // the airliner's lens: 45° tall
+        lens = trial.map { OrbitLens(focal: Double(gh) / ($0.fisheye ? $0.field * .pi / 180 : 2 * tan($0.field * .pi / 360)), fisheye: $0.fisheye, w: gw, h: gh) }
+            ?? OrbitLens(focal: Double(gh) * 1.2, fisheye: false, w: gw, h: gh) // the airliner's lens: 45° tall
         // Out of the left side as the airliner looks, nose to the right, tipped down until the Earth's edge lies where
         // the airliner's horizon does; or the same tip looking ahead; or straight down, with the way we fly to the right.
-        let (yaw, pitch) = [(Double.pi / 2, 25.0), (0, 25), (Double.pi / 2, 90)][looks]
+        let (yaw, pitch) = trial.map { ($0.yaw * .pi / 180, $0.pitch) } ?? [(Double.pi / 2, 25.0), (0, 25), (Double.pi / 2, 90)][looks]
         let tip = pitch * .pi / 180
         let ahead = Sky.Vector(cos(tip) * cos(yaw), cos(tip) * sin(yaw), -sin(tip)), right = Sky.Vector(sin(yaw), -cos(yaw), 0)
         eye = (ahead, right, cross(right, ahead))
@@ -144,7 +154,7 @@ final class PixelOrbit: SKScene {
         for y in 0..<gh {
             for x in 0..<gw {
                 let i = y * gw + x
-                let ray = normalize(eye.ahead * focal + eye.right * (Double(x) + 0.5 - Double(gw) / 2) + eye.up * (Double(y) + 0.5 - Double(gh) / 2))
+                let through = lens.ray(x, y), ray = normalize(eye.ahead * through.z + eye.right * through.x + eye.up * through.y)
                 let down = ray.z * far, reach = down * down - (far * far - radius * radius)
                 dither[i] = UInt8(bayer(x, y) * 16)
                 if down < 0, reach >= 0 {
@@ -283,7 +293,7 @@ final class PixelOrbit: SKScene {
     // the view as a slab. Model the truss and its joint if it should ever be true to the station.
     private func layWing() {
         wing = []
-        guard Self.array.value < 0.5 else { return }
+        guard Self.array.value < 0.5, looks < 3 else { return }
         let (gw, gh) = (glass.w, glass.h)
         // In the camera's own axes (right, up, ahead), in metres.
         let root: Sky.Vector = looks == 2 ? [24, -12.5, 30] : [-8.5, -6.5, 14], tip: Sky.Vector = looks == 2 ? [7.5, -4.5, 30] : [-2.2, 0.3, 48]
@@ -293,7 +303,7 @@ final class PixelOrbit: SKScene {
         let side = cross(axis, face)
         for y in 0..<gh {
             for x in 0..<gw {
-                let ray = Sky.Vector(Double(x) + 0.5 - Double(gw) / 2, Double(y) + 0.5 - Double(gh) / 2, focal)
+                let ray = lens.ray(x, y)
                 let fall = dot(ray, face)
                 guard abs(fall) > 1e-6 else { continue }
                 let t = dot(root, face) / fall
@@ -425,12 +435,7 @@ final class PixelOrbit: SKScene {
             // The real stars, turning about the station as it goes round: bright ones always, the rest when we are
             // in the Earth's shadow, since a camera set for the sunlit Earth sees none.
             let dark = 1 - lit * 0.85
-            func spot(_ v: Sky.Vector) -> (x: Int, y: Int)? {
-                let depth = dot(v, eye.ahead)
-                guard depth > 0.05 else { return nil }
-                let x = Int((dot(v, eye.right) / depth * focal + Double(gw) / 2).rounded(.down)), y = Int((dot(v, eye.up) / depth * focal + Double(gh) / 2).rounded(.down))
-                return x >= 0 && x < gw && y >= 0 && y < gh ? (x, y) : nil
-            }
+            func spot(_ v: Sky.Vector) -> (x: Int, y: Int)? { lens.spot([dot(v, eye.right), dot(v, eye.up), dot(v, eye.ahead)]) }
             for star in LiveSky.catalogue {
                 let v = ours(star.direction)
                 guard asin(v.z) > -dip + 0.05, let at = spot(v), ringOf[at.y * gw + at.x] < 0 else { continue } // clear of the Earth and its air
@@ -483,6 +488,38 @@ final class PixelOrbit: SKScene {
 }
 
 // MARK: - Supporting types
+
+/// The camera's lens over a pane `w` by `h` pixels, between a pixel and a direction in the camera's own axes (right,
+/// up, ahead). Rectilinear, with `focal` in pixels per unit of tangent; or an equidistant fisheye, in pixels per
+/// radian, which puts a direction as far from the pane's centre as its angle off the axis, and so sees behind itself.
+struct OrbitLens {
+    let focal: Double, fisheye: Bool, w: Int, h: Int
+
+    /// The ray through a pixel's centre, of any length.
+    @inline(__always) func ray(_ x: Int, _ y: Int) -> Sky.Vector {
+        let (px, py) = (Double(x) + 0.5 - Double(w) / 2, Double(y) + 0.5 - Double(h) / 2)
+        guard fisheye else { return [px, py, focal] }
+        // (A pixel past the half turn, where the picture would fold back over itself, looks straight behind.)
+        let off = (px * px + py * py).squareRoot(), angle = min(off / focal, .pi), turn = off > 0 ? sin(angle) / off : 0
+        return [px * turn, py * turn, cos(angle)]
+    }
+
+    /// The pixel a unit direction falls in, or nil when that is outside the pane.
+    @inline(__always) func spot(_ v: Sky.Vector) -> (x: Int, y: Int)? {
+        let px: Double, py: Double
+        if fisheye {
+            let off = (v.x * v.x + v.y * v.y).squareRoot()
+            guard off > 0 || v.z > 0 else { return nil } // straight behind is the whole rim at once
+            let scale = off > 0 ? atan2(off, v.z) * focal / off : 0
+            (px, py) = (v.x * scale, v.y * scale)
+        } else {
+            guard v.z > 0.05 else { return nil }
+            (px, py) = (v.x / v.z * focal, v.y / v.z * focal)
+        }
+        let x = Int((px + Double(w) / 2).rounded(.down)), y = Int((py + Double(h) / 2).rounded(.down))
+        return x >= 0 && x < w && y >= 0 && y < h ? (x, y) : nil
+    }
+}
 
 /// One ring of ground: a strip of the Earth a fixed angle to one side of the track (`across`, in radians, toward
 /// port), cut into cells `size` radians long and `wide` km across. `first` is the cell at the start of the
