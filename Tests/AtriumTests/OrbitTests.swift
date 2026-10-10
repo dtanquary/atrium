@@ -78,6 +78,22 @@ import Testing
     #expect(clear * 2 < stretches.count && clear * 12 > stretches.count, "\(clear) of \(stretches.count) stretches are clear")
 }
 
+/// Following the real station means flying at its pace: Speed is ignored while Follow is on (and Settings greys
+/// its slider out), where it used to stop following without a word unless the slider sat within a hair of 1×.
+@MainActor @Test func orbitFollowsAtTheRealSpeed() {
+    let keys = [PixelOrbit.on, PixelOrbit.follow, PixelWindowSeat.speed].map(\.key)
+    defer { for key in keys { UserDefaults.standard.removeObject(forKey: key) } }
+    func flown(follow: Bool) -> Double {
+        for (key, value) in zip(keys, [1, follow ? 1 : 0, 10.0]) { UserDefaults.standard.set(value, forKey: key) }
+        let scene = pixelWindowSeat(size: CGSize(width: 1512, height: 982)), start = PixelOrbit.orbit.along
+        for frame in 0...60 { scene.update(2000 + Double(frame) / 30) }
+        return (PixelOrbit.orbit.along - start) / (Orbit.pace * 2) // in two seconds, as a multiple of the real pace
+    }
+    let (free, following) = (flown(follow: false), flown(follow: true))
+    #expect(abs(free - 10) < 0.5, "at 10× it flew \(free)×")
+    #expect(abs(following - 1) < 0.05, "following, with Speed left at 10×, it flew \(following)×")
+}
+
 /// Every display gets a scene its own size, with a window of any size or none, looking any of its three ways: each
 /// must build, fly on and paint.
 @MainActor @Test func orbitFliesAtAnySize() {

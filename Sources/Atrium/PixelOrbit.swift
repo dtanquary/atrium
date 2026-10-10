@@ -52,6 +52,9 @@ final class PixelOrbit: SKScene {
     private var paintEvery = 1 / 15.0
     private var clock: TimeInterval = 0, lastUpdate: TimeInterval?, painted: TimeInterval = -1
     private var sun = Sky.Vector(0, 0, 1), moon = Sky.Vector(0, 0, 1), moonLit = 0.5, skyAt = Date.distantPast
+    /// Settings' Speed; or the real pace while following the real station, whatever the slider was left at, which
+    /// Settings shows by greying it out at 1× (`Knob.lockedWhen`).
+    private var pace: Double { Self.follow.value > 0.5 ? 1 : PixelWindowSeat.speed.value }
 
     override init(size: CGSize) {
         (w, h, glass, windowSize) = PixelWindowSeat.pane(size)
@@ -230,7 +233,7 @@ final class PixelOrbit: SKScene {
         (sun, moon, moonLit) = (Sky.sun(jd), Sky.moon(jd), Sky.moonPhase(jd).lit)
         // Paint as often as the finest cells move on, and half as often again, between 15 and 30 times a second.
         let quickest = rings.map(\.size).min() ?? 1
-        paintEvery = 1 / min(30, max(15, Orbit.pace * PixelWindowSeat.speed.value / quickest * 1.5))
+        paintEvery = 1 / min(30, max(15, Orbit.pace * pace / quickest * 1.5))
         let weather = (Int(PixelWindowSeat.clouds.value), Self.realClouds.value > 0.5)
         if weather != (world.weather, world.real) {
             (world.weather, world.real) = weather
@@ -320,13 +323,12 @@ final class PixelOrbit: SKScene {
         let dt = min(max(currentTime - (lastUpdate ?? currentTime), 0), 0.1)
         lastUpdate = currentTime
         clock += dt
-        let speed = PixelWindowSeat.speed.value
-        Self.orbit.advance(min(max(currentTime - (Self.orbitAt ?? currentTime), 0), 0.1) * speed)
+        Self.orbit.advance(min(max(currentTime - (Self.orbitAt ?? currentTime), 0), 0.1) * pace)
         Self.orbitAt = currentTime
-        // At its real speed, with Follow on, the station is where the real one is. A fix far from where we are is a
+        // With Follow on, the station is where the real one is. A fix far from where we are is a
         // jump, which every copy of the scene sees and dissolves across; after that each fix is a nudge. (Not near
         // the top of the orbit, where a hair of latitude is a long way round it.)
-        if Self.follow.value > 0.5, abs(speed - 1) < 0.01, let fix = ISS.shared.position(), abs(fix.latitude) < 45,
+        if Self.follow.value > 0.5, let fix = ISS.shared.position(), abs(fix.latitude) < 45,
            let soon = ISS.shared.position(at: Date() + 5) {
             let real = Orbit(date: Date(), latitude: fix.latitude, longitude: fix.longitude, climbing: soon.latitude > fix.latitude)
             let (ahead, round) = (remainder(real.along - Self.orbit.along, 2 * .pi), remainder(real.node - Self.orbit.node, 2 * .pi))

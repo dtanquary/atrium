@@ -19,7 +19,8 @@ final class PixelWindowSeat: SKScene {
                                           format: .choice(["Toward the midday Sun", "North", "North-east", "East", "South-east", "South", "South-west", "West", "North-west"]),
                                           hiddenWhen: "seat.orbit")
     /// 1× is a real airliner, whose ground takes a minute and a half to cross the window.
-    nonisolated static let speed = Knob(key: "seat.speed", label: "Speed", range: 0.5...10, standard: 1, section: "Flight", format: .times)
+    nonisolated static let speed = Knob(key: "seat.speed", label: "Speed", range: 0.5...10, standard: 1, section: "Flight", format: .times,
+                                        lockedWhen: "seat.follow") // in orbit, following the real station means flying at its pace
     nonisolated static let scenery = Knob(key: "seat.scenery", label: "Scenery", range: 0...6, standard: 0, section: "Flight",
                                           format: .choice(["Changing", "Ocean", "City", "Countryside", "Mountains", "Desert", "Snow"]), hiddenWhen: "seat.orbit")
     nonisolated static let clouds = Knob(key: "seat.clouds", label: "Clouds", range: 0...4, standard: 0, section: "Flight",
@@ -31,8 +32,8 @@ final class PixelWindowSeat: SKScene {
     nonisolated static let previewHour = Knob(key: "seat.previewHour", label: "Time", range: 0...24, standard: 19, section: "Preview",
                                               format: .clock, shownWhen: "seat.previewTime", hiddenWhen: "seat.orbit")
     /// The airliner's settings and the orbit's (PixelOrbit.swift), each kind hidden while the other is flying.
-    nonisolated static let knobs = [PixelOrbit.on, seat, PixelOrbit.array, window, looking, PixelOrbit.looking, speed, scenery, clouds, lightning,
-                                    PixelOrbit.realClouds, PixelOrbit.follow, previewTime, previewHour]
+    nonisolated static let knobs = [PixelOrbit.on, seat, PixelOrbit.array, window, looking, PixelOrbit.looking, speed, PixelOrbit.follow, scenery,
+                                    clouds, PixelOrbit.realClouds, lightning, previewTime, previewHour]
 
     /// How high we fly and where the cloud layer's base is, in km, and how fast, in km a second (Mach 0.78 or so).
     nonisolated static let cruise = 11.0, deck = 2.4, pace = 0.25

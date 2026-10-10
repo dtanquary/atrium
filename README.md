@@ -235,7 +235,7 @@ Turn on **Earth orbit** in its Settings and the window is on the International S
 
 Two switches tie it to the real thing. Both are off until you turn them on:
 
-- **Follow the real ISS.** The window looks down on the ground the station is crossing at this moment, in its real daylight or dark. Its position comes from [wheretheiss.at](https://wheretheiss.at) once a minute, and the wallpaper flies on in between. It follows at the real speed; at any other, and with the switch off, the station flies an orbit of its own with the real one's shape and pace, on a track that shifts 23° west each time round, so no two passes look down on the same country.
+- **Follow the real ISS.** The window looks down on the ground the station is crossing at this moment, in its real daylight or dark. Its position comes from [wheretheiss.at](https://wheretheiss.at) once a minute, and the wallpaper flies on in between. While it's on, Speed is held at the real pace. With it off, the station flies an orbit of its own with the real one's shape, at whatever speed you set, on a track that shifts 23° west each time round, so no two passes look down on the same country.
 - **Today's real clouds.** In place of made-up weather, the cloud is today's: a satellite map of the whole Earth, redrawn every three hours (the one [Earth from Orbit](#earth-from-orbit) shows), so the fronts and storms lie where they really are.
 
 With both on, the window shows roughly what the crew sees out of theirs right now.

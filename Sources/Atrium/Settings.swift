@@ -19,6 +19,8 @@ struct Knob {
     var shownWhen: String?
     /// Hidden while this toggle knob is on.
     var hiddenWhen: String?
+    /// A slider held at its standard value, greyed out, while this toggle knob is on (and showing, if it's gated itself).
+    var lockedWhen: String?
 
     /// Kept to its range: a menu's pick indexes an array, so a value stored by an older version with a longer menu,
     /// or by `defaults write`, would crash the scene at every launch.
@@ -613,11 +615,18 @@ struct KnobRow: View {
     @AppStorage private var value: Double
     @AppStorage private var gate: Double
     @AppStorage private var hide: Double
+    @AppStorage private var lock: Double
+    @AppStorage private var lockGate: Double
+    private let locker: Knob? // the switch that holds this slider at its standard value while it's on
 
     init(knob: Knob) {
         self.knob = knob
         _value = AppStorage(wrappedValue: knob.standard, knob.key)
         _hide = AppStorage(wrappedValue: 0, knob.hiddenWhen ?? knob.key) // (its own key, unused, as below)
+        let all = scenes.flatMap(\.knobs)
+        locker = all.first { $0.key == knob.lockedWhen }
+        _lock = AppStorage(wrappedValue: locker?.standard ?? 0, locker?.key ?? knob.key)
+        _lockGate = AppStorage(wrappedValue: all.first { [key = locker?.shownWhen] in $0.key == key }?.standard ?? 1, locker?.shownWhen ?? knob.key)
         // A gated knob hides while its switch is off, so the gate starts at the switch's own default. (An empty key
         // crashes KVO, so an ungated knob watches its own key, unused.)
         let gateStandard = (scenes.flatMap(\.knobs) + [Shuffle.on]).first { $0.key == knob.shownWhen }?.standard ?? 1
@@ -635,19 +644,26 @@ struct KnobRow: View {
             } else {
                 LabeledContent(knob.label) {
                     HStack {
-                        Slider(value: $value, in: knob.range).accessibilityLabel(knob.label).accessibilityValue(formatted)
+                        Slider(value: locked ? .constant(knob.standard) : $value, in: knob.range).accessibilityLabel(knob.label).accessibilityValue(formatted)
+                        if locked { Image(systemName: "lock.fill").imageScale(.small).foregroundStyle(.tertiary).accessibilityHidden(true) }
                         Text(formatted).monospacedDigit().foregroundStyle(.secondary).frame(width: 52, alignment: .trailing)
                             .accessibilityHidden(true)
                     }
                 }
+                .disabled(locked)
+                .help(locked ? "Held at \(formatted) by \(locker?.label ?? "")" : "")
             }
         }
     }
 
     private static let day = { let f = DateFormatter(); f.setLocalizedDateFormatFromTemplate("MMMd"); f.timeZone = .gmt; return f }()
 
+    /// Whether another switch is holding this slider at its standard value: the switch is on, and showing itself.
+    private var locked: Bool { locker != nil && lock > 0.5 && (locker?.shownWhen == nil || lockGate > 0.5) }
+
     private var formatted: String {
-        switch knob.format {
+        let value = locked ? knob.standard : value
+        return switch knob.format {
         case .clock: String(format: "%d:%02d", Int(value) % 24, Int(value * 60) % 60)
         case .minutes: value < 0.5 ? "Off" : "\(Int(value.rounded())) min"
         case .seconds: "\(Int(value.rounded())) s"
