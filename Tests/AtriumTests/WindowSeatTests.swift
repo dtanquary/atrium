@@ -16,7 +16,7 @@ import Testing
     for (biome, (name, least)) in [("ocean", 15), ("city", 15), ("countryside", 10), ("mountains", 8), ("desert", 4), ("snow", 4)].enumerated() {
         let lengths = runs[biome].sorted()
         #expect(shares[biome] > least * 400, "\(name) is only \(shares[biome] / 400)% of the track")
-        // At the standard 3× that's 45 km a minute: nine stretches in ten are over within nine minutes.
+        // At the standard 1× that's 15 km a minute: nine stretches in ten are over within 27 minutes.
         #expect(lengths[lengths.count * 9 / 10] < 400, "\(name) often runs on for \(lengths[lengths.count * 9 / 10]) km")
     }
 }
@@ -30,7 +30,7 @@ import Testing
         for size in [CGSize(width: 1512, height: 982), CGSize(width: 1080, height: 1920), CGSize(width: 3440, height: 1440), CGSize(width: 300, height: 120), CGSize(width: 40, height: 30)] {
             let scene = PixelWindowSeat(size: size), start = PixelWindowSeat.flown
             for frame in 0...60 { scene.update(1000 + Double(frame) / 30) }
-            #expect(PixelWindowSeat.flown - start > 1, "after two seconds at \(size) it has flown \(PixelWindowSeat.flown - start) km")
+            #expect(PixelWindowSeat.flown - start > 0.4, "after two seconds at \(size) it has flown \(PixelWindowSeat.flown - start) km")
         }
     }
 }

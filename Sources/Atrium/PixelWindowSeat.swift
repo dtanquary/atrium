@@ -12,13 +12,12 @@ final class PixelWindowSeat: SKScene {
     nonisolated static let seat = Knob(key: "seat.wing", label: "Seat", range: 0...1, standard: 0, section: "View",
                                        format: .choice(["Over the wing", "Ahead of the wing"]))
     /// How much of the screen the window takes, or no window at all: the view alone, edge to edge.
-    nonisolated static let window = Knob(key: "seat.window", label: "Window", range: 0...3, standard: 1, section: "View",
+    nonisolated static let window = Knob(key: "seat.window", label: "Window", range: 0...3, standard: 2, section: "View",
                                          format: .choice(["Small", "Medium", "Large", "None, just the view"]))
     nonisolated static let looking = Knob(key: "seat.looking", label: "Looking", range: 0...8, standard: 0, section: "View",
                                           format: .choice(["Toward the midday Sun", "North", "North-east", "East", "South-east", "South", "South-west", "West", "North-west"]))
-    /// 1× is a real airliner, whose ground takes a minute and a half to cross the window: too still for a wallpaper,
-    /// so it flies at three times that unless asked.
-    nonisolated static let speed = Knob(key: "seat.speed", label: "Speed", range: 0.5...10, standard: 3, section: "Flight", format: .times)
+    /// 1× is a real airliner, whose ground takes a minute and a half to cross the window.
+    nonisolated static let speed = Knob(key: "seat.speed", label: "Speed", range: 0.5...10, standard: 1, section: "Flight", format: .times)
     nonisolated static let scenery = Knob(key: "seat.scenery", label: "Scenery", range: 0...6, standard: 0, section: "Flight",
                                           format: .choice(["Changing", "Ocean", "City", "Countryside", "Mountains", "Desert", "Snow"]))
     nonisolated static let clouds = Knob(key: "seat.clouds", label: "Clouds", range: 0...4, standard: 0, section: "Flight",
