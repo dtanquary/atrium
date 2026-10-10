@@ -1,6 +1,7 @@
 import SpriteKit
 
-@MainActor func pixelWindowSeat(size: CGSize) -> SKScene { PixelWindowSeat(size: size) }
+/// The airliner, or the space station while Settings' Earth orbit is on (PixelOrbit.swift).
+@MainActor func pixelWindowSeat(size: CGSize) -> SKScene { PixelOrbit.on.value > 0.5 ? PixelOrbit(size: size) : PixelWindowSeat(size: size) }
 
 /// The view from a window seat of an airliner that never lands, in Pixel City's pixel art. Outside is an endless
 /// land made up as we go (`SeatWorld`): ocean, coast, city, farmland, mountains, desert and snow, under cloud that
@@ -10,25 +11,28 @@ import SpriteKit
 /// the cloud layer, a second set of strips nearer to us.
 final class PixelWindowSeat: SKScene {
     nonisolated static let seat = Knob(key: "seat.wing", label: "Seat", range: 0...1, standard: 0, section: "View",
-                                       format: .choice(["Over the wing", "Ahead of the wing"]))
+                                       format: .choice(["Over the wing", "Ahead of the wing"]), hiddenWhen: "seat.orbit")
     /// How much of the screen the window takes, or no window at all: the view alone, edge to edge.
     nonisolated static let window = Knob(key: "seat.window", label: "Window", range: 0...3, standard: 2, section: "View",
                                          format: .choice(["Small", "Medium", "Large", "None, just the view"]))
     nonisolated static let looking = Knob(key: "seat.looking", label: "Looking", range: 0...8, standard: 0, section: "View",
-                                          format: .choice(["Toward the midday Sun", "North", "North-east", "East", "South-east", "South", "South-west", "West", "North-west"]))
+                                          format: .choice(["Toward the midday Sun", "North", "North-east", "East", "South-east", "South", "South-west", "West", "North-west"]),
+                                          hiddenWhen: "seat.orbit")
     /// 1× is a real airliner, whose ground takes a minute and a half to cross the window.
     nonisolated static let speed = Knob(key: "seat.speed", label: "Speed", range: 0.5...10, standard: 1, section: "Flight", format: .times)
     nonisolated static let scenery = Knob(key: "seat.scenery", label: "Scenery", range: 0...6, standard: 0, section: "Flight",
-                                          format: .choice(["Changing", "Ocean", "City", "Countryside", "Mountains", "Desert", "Snow"]))
+                                          format: .choice(["Changing", "Ocean", "City", "Countryside", "Mountains", "Desert", "Snow"]), hiddenWhen: "seat.orbit")
     nonisolated static let clouds = Knob(key: "seat.clouds", label: "Clouds", range: 0...4, standard: 0, section: "Flight",
                                          format: .choice(["Changing", "Clear", "Scattered", "Broken", "Overcast"]))
     nonisolated static let lightning = Knob(key: "seat.lightning", label: "Lightning in far-off storms", range: 0...1, standard: 1,
                                             section: "Flight", format: .toggle)
     nonisolated static let previewTime = Knob(key: "seat.previewTime", label: "Preview a time of day", range: 0...1, standard: 0,
-                                              section: "Preview", format: .toggle)
+                                              section: "Preview", format: .toggle, hiddenWhen: "seat.orbit")
     nonisolated static let previewHour = Knob(key: "seat.previewHour", label: "Time", range: 0...24, standard: 19, section: "Preview",
-                                              format: .clock, shownWhen: "seat.previewTime")
-    nonisolated static let knobs = [seat, window, looking, speed, scenery, clouds, lightning, previewTime, previewHour]
+                                              format: .clock, shownWhen: "seat.previewTime", hiddenWhen: "seat.orbit")
+    /// The airliner's settings and the orbit's (PixelOrbit.swift), each kind hidden while the other is flying.
+    nonisolated static let knobs = [PixelOrbit.on, seat, PixelOrbit.array, window, looking, PixelOrbit.looking, speed, scenery, clouds, lightning,
+                                    PixelOrbit.realClouds, PixelOrbit.follow, previewTime, previewHour]
 
     /// How high we fly and where the cloud layer's base is, in km, and how fast, in km a second (Mach 0.78 or so).
     nonisolated static let cruise = 11.0, deck = 2.4, pace = 0.25
@@ -73,18 +77,8 @@ final class PixelWindowSeat: SKScene {
 
     override init(size: CGSize) {
         let pixel = max(2, (size.height / 240).rounded()) // points per art pixel, as in Pixel City
-        w = Int((size.width / pixel).rounded(.up))
-        h = Int((size.height / pixel).rounded(.up))
-        // One window, wider than a real one so it fills a wide screen, and no taller than a real one on a tall screen.
-        // Or none: the pane is then the whole canvas, with no cabin drawn round it.
-        windowSize = Int(Self.window.value)
-        var (gw, gh) = (max(w * [60, 76, 90, 100][windowSize] / 100, 16), max(h * [60, 76, 90, 100][windowSize] / 100, 16))
-        if windowSize < 3 {
-            gw = min(gw, gh * 8 / 5)
-            gh = min(gh, gw * 29 / 20)
-        }
-        // (A little above centre, for the Dock, where the window's surround leaves room for that.)
-        glass = ((w - gw) / 2, (h - gh) / 2 + min(3, max(0, (h - gh) / 2 - 12)), gw, gh)
+        (w, h, glass, windowSize) = Self.pane(size)
+        let (gw, gh) = (glass.w, glass.h)
         horizon = gh * 62 / 100
         apron = gh / 6
         let cells = gw * (horizon + apron)
@@ -124,6 +118,23 @@ final class PixelWindowSeat: SKScene {
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
+    /// The canvas for a display, in art pixels, the window's pane on it, and Settings' Window as it is now. The
+    /// orbit's scene is laid out by it too, so the two dissolve into each other pane for pane.
+    static func pane(_ size: CGSize) -> (w: Int, h: Int, glass: (x: Int, y: Int, w: Int, h: Int), window: Int) {
+        let pixel = max(2, (size.height / 240).rounded())
+        let w = Int((size.width / pixel).rounded(.up)), h = Int((size.height / pixel).rounded(.up))
+        // One window, wider than a real one so it fills a wide screen, and no taller than a real one on a tall screen.
+        // Or none: the pane is then the whole canvas, with no cabin drawn round it.
+        let window = Int(Self.window.value)
+        var (gw, gh) = (max(w * [60, 76, 90, 100][window] / 100, 16), max(h * [60, 76, 90, 100][window] / 100, 16))
+        if window < 3 {
+            gw = min(gw, gh * 8 / 5)
+            gh = min(gh, gw * 29 / 20)
+        }
+        // (A little above centre, for the Dock, where the window's surround leaves room for that.)
+        return (w, h, ((w - gw) / 2, (h - gh) / 2 + min(3, max(0, (h - gh) / 2 - 12)), gw, gh), window)
+    }
+
     override func didMove(to view: SKView) { Location.shared.start() }
 
     /// Repaints when one of its own settings changes (the notification comes for every wallpaper's).
@@ -133,11 +144,12 @@ final class PixelWindowSeat: SKScene {
         let another = Int(Self.scenery.value) != world.scenery || Int(Self.clouds.value) != world.weather
         let resized = Int(Self.window.value) != windowSize // every buffer is the pane's size, so that takes a new scene
         settings = picked
-        guard !resized || view != nil else { return } // (with no view to hand over in, as in the tests, it stays as built)
-        if another || resized, let view { // a different world or window: dissolve into a new scene with both still running, never a cut
+        let orbit = PixelOrbit.on.value > 0.5 // up to the space station, which is another scene altogether
+        guard !(resized || orbit) || view != nil else { return } // (with no view to hand over in, as in the tests, it stays as built)
+        if another || resized || orbit, let view { // a different world or window: dissolve into a new scene with both still running, never a cut
             let fade = SKTransition.crossFade(withDuration: 0.8)
             (fade.pausesIncomingScene, fade.pausesOutgoingScene) = (false, false)
-            let next = PixelWindowSeat(size: size)
+            let next = pixelWindowSeat(size: size)
             next.scaleMode = scaleMode
             retired = true
             return view.presentScene(next, transition: fade)
