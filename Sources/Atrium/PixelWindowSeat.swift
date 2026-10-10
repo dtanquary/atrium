@@ -281,7 +281,10 @@ final class PixelWindowSeat: SKScene {
         paint.tipOn = night > 0.25
 
         paintCabin(light: pointwiseMin(ambient + key * 0.5, .one), haze: haze)
-        painted = -1
+        // Paint now, not at the next frame: a view that's frozen (Low Power Mode) or not drawing yet (Settings'
+        // preview as it opens, the render tests' first frame) has no next frame, and would show an empty pane.
+        advance()
+        compose()
     }
 
     // MARK: - The cabin and the wing
