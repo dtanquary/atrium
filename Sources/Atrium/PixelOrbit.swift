@@ -658,7 +658,7 @@ struct OrbitWorld {
             let lamp = glow >= 6 && pick < 5 ? 6 : glow >= 4 && pick < 6 ? 4 : pick < 4 ? 1 : noise(p, 700, 55) > 0.62 ? 7 : 2
             cell |= UInt16(lamp) << 5
         }
-        let thick = cloud(p, finest: min(long, wide), day: day)
+        let thick = cloud(p, finest: big, day: day)
         if thick > 0.5 {
             cell |= UInt16(thick > 0.8 ? 3 : thick > 0.63 ? 2 : 1) << 8
             // A storm in the thickest cloud, here and there: one of fifteen rhythms of lightning, by the place.
@@ -667,7 +667,7 @@ struct OrbitWorld {
         } else if dot(p, sun) > 0.1 {
             // A cloud's shadow: is there cloud where the Sun's light would come through the deck, 6 km up?
             let level = sun - p * dot(p, sun), reach = 6 / Orbit.radius / max(dot(p, sun), 0.1) * simd.length(level)
-            if cloud(normalize(p + normalize(level) * reach), finest: min(long, wide), day: day) > 0.58 { cell |= 1 << 10 }
+            if cloud(normalize(p + normalize(level) * reach), finest: big, day: day) > 0.58 { cell |= 1 << 10 }
         }
         return cell
     }
@@ -702,8 +702,9 @@ struct OrbitWorld {
             cover = 0.5 + (noise(bent, 2600, 41) * 0.34 + noise(bent, 1000, 42) * 0.36 + noise(bent, 380, 43) * 0.30 - 0.54) * 1.3
         }
         cover = [cover, 0, min(cover, 0.46), 0.52 + (cover - 0.5) * 0.4, 0.95][weather]
-        // Clumps and puffs, down to the finest the cell can show.
-        let puff = noise(p, 70, 2) * 0.3 + noise(p, 26, 3) * 0.35 + (finest < 9 ? noise(p, 11, 5) : 0.5) * 0.22 + (finest < 4 ? noise(p, 5, 9) : 0.5) * 0.13
+        // Clumps and puffs, down to the finest the cell can show: none smaller than its longer side, which it would
+        // sample once along that side and show as speckle. So far cloud is smooth, and the limb clean.
+        let puff = (finest < 56 ? noise(p, 70, 2) : 0.5) * 0.3 + (finest < 21 ? noise(p, 26, 3) : 0.5) * 0.35 + (finest < 9 ? noise(p, 11, 5) : 0.5) * 0.22 + (finest < 4 ? noise(p, 5, 9) : 0.5) * 0.13
         return cover + (puff - 0.5) * 0.9
     }
 }
