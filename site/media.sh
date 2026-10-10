@@ -6,7 +6,7 @@
 # site/public/media, which is gitignored: this script is the source.
 #   site/media.sh               # all of them
 #   site/media.sh nebula pixel-city # just these
-#   site/media.sh cards         # just the cards for every wallpaper, cut from the README's screenshots
+#   site/media.sh cards         # just the cards for every wallpaper, cut from the README's screenshots (or card-aurora …)
 #   site/media.sh previews      # just the 1280-wide loops the cards open (or preview-aurora … for some)
 # Needs ffmpeg with libsvtav1 and libx265 (Homebrew's has both).
 set -e
@@ -64,6 +64,7 @@ murmuration|murmuration-blue-hour
 nebula|nebula-hubble
 pixel-city|pixel-city-dusk
 pixel-spaceport|pixel-spaceport
+pixel-window-seat|pixel-window-seat
 rain-on-glass|rain-on-glass-night
 schlieren|schlieren
 solar-system-tour|solar-system-jupiter
@@ -72,12 +73,12 @@ weather|weather-sunset
 wind|wind'
 
 mkdir -p "$OUT"
-if [ $# -eq 0 ] || echo " $* " | grep -q " cards "; then
+if [ $# -eq 0 ] || echo " $* " | grep -qE " (cards|card-[a-z-]+) "; then
     echo "$CARDS" | while IFS='|' read -r slug shot; do
+        [ $# -gt 0 ] && ! echo " $* " | grep -qE " (cards|card-$slug) " && continue
         ffmpeg -nostdin -loglevel error -y -i "docs/images/$shot.jpg" \
             -vf "scale=640:400:force_original_aspect_ratio=increase:flags=lanczos,crop=640:400" -q:v 4 "$OUT/card-$slug.jpg"
     done
-    echo "== cards: $(echo "$CARDS" | wc -l | tr -d ' ')"
 fi
 # Renders LOOP + FADE seconds of a scene into $1/master.mp4, with the last FADE seconds crossfaded into the first
 # FADE, so the loop's end runs straight into its start. Args: dir scene seconds-in extra-environment.
