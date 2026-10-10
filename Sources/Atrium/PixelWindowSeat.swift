@@ -3,27 +3,33 @@ import SpriteKit
 @MainActor func pixelWindowSeat(size: CGSize) -> SKScene { PixelWindowSeat(size: size) }
 
 /// The view from a window seat of an airliner that never lands, in Pixel City's pixel art. Outside is an endless
-/// land made up as we go (`SeatWorld`): ocean, coast, city and farmland, under cloud that comes and goes, lit by the
-/// real Sun and Moon where you are. The ground is drawn a row at a time: every row of the picture is a strip of the
-/// world at one distance, which slides sideways by whole pixels at its own speed, the near rows fast and the far ones
-/// barely at all. The cloud layer is a second set of strips nearer to us, its clouds standing up as columns.
+/// land made up as we go (`SeatWorld`): ocean, coast, city, farmland, mountains, desert and snow, under cloud that
+/// comes and goes, lit by the real Sun and Moon where you are. The ground is drawn a row at a time: every row of the
+/// picture is a strip of the world at one distance, which slides sideways by whole pixels at its own speed, the near
+/// rows fast and the far ones barely at all. Mountains stand up from their rows as columns, and so do the clouds of
+/// the cloud layer, a second set of strips nearer to us.
 final class PixelWindowSeat: SKScene {
     nonisolated static let seat = Knob(key: "seat.wing", label: "Seat", range: 0...1, standard: 0, section: "View",
                                        format: .choice(["Over the wing", "Ahead of the wing"]))
+    /// How much of the screen the window takes, or no window at all: the view alone, edge to edge.
+    nonisolated static let window = Knob(key: "seat.window", label: "Window", range: 0...3, standard: 1, section: "View",
+                                         format: .choice(["Small", "Medium", "Large", "None, just the view"]))
     nonisolated static let looking = Knob(key: "seat.looking", label: "Looking", range: 0...8, standard: 0, section: "View",
                                           format: .choice(["Toward the midday Sun", "North", "North-east", "East", "South-east", "South", "South-west", "West", "North-west"]))
     /// 1× is a real airliner, whose ground takes a minute and a half to cross the window: too still for a wallpaper,
     /// so it flies at three times that unless asked.
     nonisolated static let speed = Knob(key: "seat.speed", label: "Speed", range: 0.5...10, standard: 3, section: "Flight", format: .times)
-    nonisolated static let scenery = Knob(key: "seat.scenery", label: "Scenery", range: 0...3, standard: 0, section: "Flight",
-                                          format: .choice(["Changing", "Ocean", "City", "Countryside"]))
+    nonisolated static let scenery = Knob(key: "seat.scenery", label: "Scenery", range: 0...6, standard: 0, section: "Flight",
+                                          format: .choice(["Changing", "Ocean", "City", "Countryside", "Mountains", "Desert", "Snow"]))
     nonisolated static let clouds = Knob(key: "seat.clouds", label: "Clouds", range: 0...4, standard: 0, section: "Flight",
                                          format: .choice(["Changing", "Clear", "Scattered", "Broken", "Overcast"]))
+    nonisolated static let lightning = Knob(key: "seat.lightning", label: "Lightning in far-off storms", range: 0...1, standard: 1,
+                                            section: "Flight", format: .toggle)
     nonisolated static let previewTime = Knob(key: "seat.previewTime", label: "Preview a time of day", range: 0...1, standard: 0,
                                               section: "Preview", format: .toggle)
     nonisolated static let previewHour = Knob(key: "seat.previewHour", label: "Time", range: 0...24, standard: 19, section: "Preview",
                                               format: .clock, shownWhen: "seat.previewTime")
-    nonisolated static let knobs = [seat, looking, speed, scenery, clouds, previewTime, previewHour]
+    nonisolated static let knobs = [seat, window, looking, speed, scenery, clouds, lightning, previewTime, previewHour]
 
     /// How high we fly and where the cloud layer's base is, in km, and how fast, in km a second (Mach 0.78 or so).
     nonisolated static let cruise = 11.0, deck = 2.4, pace = 0.25
@@ -33,11 +39,15 @@ final class PixelWindowSeat: SKScene {
     private let w: Int, h: Int // the canvas, in art pixels
     private let glass: (x: Int, y: Int, w: Int, h: Int) // the window's pane on it
     private let horizon: Int // the pane's row the horizon lies on, counted from its bottom; the rows below are ground
+    // Rows of ground and cloud nearer than the pane's bottom edge shows. Their level ground is out of sight below it,
+    // but a mountain or a cloud standing there rises into view, and hides the foot of the ones behind it.
+    private let apron: Int
+    private let windowSize: Int // Settings' Window, as the scene was built: 3 is none, the pane being the whole canvas
     private var rows: [Row] = []
     private var world = SeatWorld()
     // What each row of ground shows, as rings a pane wide: a pixel keeps its place in the ring from the moment it
     // slides in until it slides out, so a row moving on a pixel costs one new pixel.
-    private var land: [UInt8], glow: [UInt8], tall: [UInt8], cloud: [UInt8]
+    private var land: [UInt8], glow: [UInt8], tall: [UInt8], cloud: [UInt8], storm: [UInt8]
     private var sky: [UInt32], glint: [UInt8], picture: [UInt32], ceiling: [Int]
     private var wing: [(at: Int, part: UInt8, flash: UInt8)] = []
     private var paint = Paint()
@@ -53,7 +63,7 @@ final class PixelWindowSeat: SKScene {
     private static var flownAt: TimeInterval?
     private var settings: [Double] = []
     private var retired = false // it has handed over to a scene of another world, and is fading out
-    private var kmPerSecond = PixelWindowSeat.pace
+    private var kmPerSecond = PixelWindowSeat.pace, paintEvery = 1 / 30.0
     private var night: Float = 0, sunUp: Float = 0
     private var clock: TimeInterval = 0, lastUpdate: TimeInterval?, painted: TimeInterval = -1
     // Another airliner, now and then, crossing far off at our height with its contrail behind it: where its nose is
@@ -67,13 +77,20 @@ final class PixelWindowSeat: SKScene {
         w = Int((size.width / pixel).rounded(.up))
         h = Int((size.height / pixel).rounded(.up))
         // One window, wider than a real one so it fills a wide screen, and no taller than a real one on a tall screen.
-        var (gw, gh) = (max(w * 76 / 100, 16), max(h * 76 / 100, 16))
-        gw = min(gw, gh * 8 / 5)
-        gh = min(gh, gw * 29 / 20)
-        glass = ((w - gw) / 2, (h - gh) / 2 + 3, gw, gh)
+        // Or none: the pane is then the whole canvas, with no cabin drawn round it.
+        windowSize = Int(Self.window.value)
+        var (gw, gh) = (max(w * [60, 76, 90, 100][windowSize] / 100, 16), max(h * [60, 76, 90, 100][windowSize] / 100, 16))
+        if windowSize < 3 {
+            gw = min(gw, gh * 8 / 5)
+            gh = min(gh, gw * 29 / 20)
+        }
+        // (A little above centre, for the Dock, where the window's surround leaves room for that.)
+        glass = ((w - gw) / 2, (h - gh) / 2 + min(3, max(0, (h - gh) / 2 - 12)), gw, gh)
         horizon = gh * 62 / 100
-        (land, glow, tall, cloud) = ([UInt8](repeating: 0, count: gw * horizon), [UInt8](repeating: 0, count: gw * horizon),
-                                     [UInt8](repeating: 0, count: gw * horizon), [UInt8](repeating: 0, count: gw * horizon))
+        apron = gh / 6
+        let cells = gw * (horizon + apron)
+        (land, glow, tall) = ([UInt8](repeating: 0, count: cells), [UInt8](repeating: 0, count: cells), [UInt8](repeating: 0, count: cells))
+        (cloud, storm) = ([UInt8](repeating: 0, count: cells), [UInt8](repeating: 0, count: cells))
         (sky, glint, picture) = ([UInt32](repeating: 0, count: gw * gh), [UInt8](repeating: 0, count: gw * horizon), [UInt32](repeating: 0, count: gw * gh))
         ceiling = [Int](repeating: -1, count: gw)
         texture = SKMutableTexture(size: CGSize(width: gw, height: gh))
@@ -85,7 +102,7 @@ final class PixelWindowSeat: SKScene {
         outside.size = CGSize(width: gw, height: gh)
         outside.anchorPoint = .zero
         outside.position = CGPoint(x: glass.x, y: glass.y)
-        (cabin.size, cabin.anchorPoint, cabin.zPosition) = (CGSize(width: w, height: h), .zero, 2)
+        (cabin.size, cabin.anchorPoint, cabin.zPosition, cabin.isHidden) = (CGSize(width: w, height: h), .zero, 2, windowSize == 3)
         canvas.addChild(outside)
         canvas.addChild(cabin)
 
@@ -93,7 +110,7 @@ final class PixelWindowSeat: SKScene {
         // a pixel spans `cruise / d` km: the horizon is taken a few pixels above where the ground stops (`dip`), as the
         // Earth's curve puts it, which also keeps the last rows from each spanning a thousand kilometres.
         let focal = Double(gh) * 1.2, dip = Double(gh) * 0.04
-        rows = (0..<horizon).map { r in
+        rows = (-apron..<horizon).map { r in
             let d = Double(horizon - r) - 0.5 + dip
             let away = Self.cruise * focal / d, above = Self.cruise - Self.deck
             return Row(across: Self.cruise / d, away: away, deep: away / d, cloudAcross: above / d, cloudAway: above * focal / d,
@@ -115,8 +132,10 @@ final class PixelWindowSeat: SKScene {
         let picked = Self.knobs.map(\.value)
         guard picked != settings, !retired else { return }
         let another = Int(Self.scenery.value) != world.scenery || Int(Self.clouds.value) != world.weather
+        let resized = Int(Self.window.value) != windowSize // every buffer is the pane's size, so that takes a new scene
         settings = picked
-        if another, let view { // a different world: dissolve into a new scene of it with both still running, never a cut
+        guard !resized || view != nil else { return } // (with no view to hand over in, as in the tests, it stays as built)
+        if another || resized, let view { // a different world or window: dissolve into a new scene with both still running, never a cut
             let fade = SKTransition.crossFade(withDuration: 0.8)
             (fade.pausesIncomingScene, fade.pausesOutgoingScene) = (false, false)
             let next = PixelWindowSeat(size: size)
@@ -141,6 +160,9 @@ final class PixelWindowSeat: SKScene {
     private func redraw() {
         redrawnAt = Date()
         kmPerSecond = Self.pace * Self.speed.value
+        // Paint as often as the fastest strip (the cloud in the nearest row) moves a pixel, and a little oftener:
+        // 15 to 30 times a second. Painting is most of the scene's cost.
+        paintEvery = 1 / min(30, max(15, kmPerSecond / rows[0].cloudAcross * 1.5))
         let (gw, gh) = (glass.w, glass.h)
         let spot = Location.shared.coordinate, jd = Sky.julianDate(now)
         let turn = Sky.horizonMatrix(jd: jd, latitude: spot.latitude, longitude: spot.longitude)
@@ -280,7 +302,10 @@ final class PixelWindowSeat: SKScene {
         paint.tip = pack(rgb(255, 60, 50))
         paint.tipOn = night > 0.25
 
-        paintCabin(light: pointwiseMin(ambient + key * 0.5, .one), haze: haze)
+        paint.bolt = pack(rgb(214, 224, 255))
+        paint.storms = Self.lightning.value > 0.5 ? mix(0.22, 0.8, night) : 0 // by day a flash hardly shows against the cloud
+
+        if windowSize < 3 { paintCabin(light: pointwiseMin(ambient + key * 0.5, .one), haze: haze) }
         // Paint now, not at the next frame: a view that's frozen (Low Power Mode) or not drawing yet (Settings'
         // preview as it opens, the render tests' first frame) has no next frame, and would show an empty pane.
         advance()
@@ -393,8 +418,7 @@ final class PixelWindowSeat: SKScene {
             let way: Float = Bool.random() ? 1 : -1, sky = Float(glass.h - horizon)
             other = (way > 0 ? -2 : Float(glass.w) + 2, Float(horizon) + Float.random(in: sky * 0.14...sky * 0.62), way, Float.random(in: -0.03...0.05))
         }
-        // Nothing here moves faster than a few pixels a second, so 30 pictures a second is plenty at any frame rate.
-        if clock - painted >= 1 / 30.0 - 0.002 { compose() }
+        if clock - painted >= paintEvery - 0.002 { compose() }
     }
 
     /// Slides each row on to where the flight has got to, laying the pixels that come into view.
@@ -413,59 +437,69 @@ final class PixelWindowSeat: SKScene {
             let cloudFirst = Int((Self.flown / row.cloudAcross).rounded(.down)) - gw / 2
             if cloudFirst != row.cloudFirst {
                 for n in (row.cloudFirst != .min && cloudFirst - row.cloudFirst < gw ? row.cloudFirst + gw : cloudFirst)..<cloudFirst + gw {
-                    cloud[r * gw + ((n % gw) + gw) % gw] = world.cloud(Double(n) * row.cloudAcross, row.cloudAway, deep: row.cloudDeep)
+                    let k = r * gw + ((n % gw) + gw) % gw
+                    cloud[k] = world.cloud(Double(n) * row.cloudAcross, row.cloudAway, deep: row.cloudDeep)
+                    storm[k] = cloud[k] != 0 && row.cloudDeep > 0.5 ? world.storm(Double(n) * row.cloudAcross, row.cloudAway) : 0
                 }
                 rows[r].cloudFirst = cloudFirst
             }
         }
     }
 
-    /// Paints the view: the sky, then the ground from the horizon toward us, the cloud layer the same way so that
-    /// near clouds stand in front of far ones, and the wing over it all.
+    /// Paints the view: the sky, then the ground and the cloud layer over it, each from the nearest row to the
+    /// farthest so that what stands in front hides what is behind, and the wing over it all.
     private func compose() {
         painted = clock
         let (gw, gh) = (glass.w, glass.h), mats = paint.mats
         let tick = UInt32(truncatingIfNeeded: Int(clock * 3))
-        let lightsOn = paint.lights > 0, towerRows = gh - 1
+        let lightsOn = paint.lights > 0
         picture.withUnsafeMutableBufferPointer { out in
             for i in horizon * gw..<gh * gw { out[i] = sky[i] }
-            for r in stride(from: horizon - 1, through: 0, by: -1) {
-                let row = rows[r], base = r * gw, hz = row.haze * Float(Paint.steps - 1)
+            // The ground, nearest row first. Land that stands up (mountains, and downtown's towers) paints a column
+            // from its own row up to its top, and each column of the picture remembers how high the ground in front
+            // already reaches (`ceiling`), so that what lies behind a ridge stays hidden.
+            for i in 0..<gw { ceiling[i] = -1 }
+            for q in rows.indices {
+                let row = rows[q], r = q - apron, base = q * gw, hz = row.haze * Float(Paint.steps - 1), rise = row.lift * 0.02
                 var s = ((row.first % gw) + gw) % gw
                 for i in 0..<gw {
-                    let k = base + s, m = Int(land[k])
-                    let step = min(Paint.steps - 1, Int(hz + dither[(r & 3) * 4 + (i & 3)]))
-                    var c = paint.ground[(step * 2 + (m >> 7)) * mats + (m & 127)]
-                    let n = row.first + i
-                    if m & 127 <= Int(Mat.lastWater), glint[base + i] != 0, scatter(n, r, tick) < glint[base + i] {
-                        c = paint.byMoon ? paint.moonSparkle : paint.sparkle
-                    }
-                    if lightsOn, glow[k] != 0, scatter(n, r, 0) < paint.lights, scatter(n, r, tick >> 1) > 7 {
-                        c = paint.lamp[step * 8 + Int(glow[k])]
-                    }
-                    out[base + i] = c
-                    if tall[k] != 0 {
-                        // A tower stands up from its foot as a column, its windows lit at night.
-                        let top = min(towerRows, r + max(1, Int(Float(tall[k]) * row.lift * 0.03)))
-                        if r < top {
-                            let wall = paint.ground[(step * 2 + (m >> 7)) * mats + (m & 127)]
-                            for y in r + 1...top {
-                                out[y * gw + i] = lightsOn && (y &+ n) & 1 == 0 && scatter(n, y, 1) < 110 ? paint.window : wall
-                            }
-                            if !lightsOn { out[top * gw + i] = paint.ground[step * 2 * mats + Int(Mat.shed)] }
+                    let k = base + s, m = Int(land[k]), kind = m & 127, tower = kind == Int(Mat.tower) || kind == Int(Mat.towerShade)
+                    let top = tall[k] == 0 ? r : min(gh - 1, r + max(tower ? 1 : 0, Int(Float(tall[k]) * rise)))
+                    if top > ceiling[i] { // (so never for level ground in the apron, whose row is below the pane)
+                        let step = min(Paint.steps - 1, Int(hz + dither[(q & 3) * 4 + (i & 3)]))
+                        let plain = paint.ground[(step * 2 + (m >> 7)) * mats + kind], n = row.first + i
+                        var c = plain
+                        if kind <= Int(Mat.lastWater) || kind == Int(Mat.coldSea), r >= 0, glint[r * gw + i] != 0, scatter(n, r, tick) < glint[r * gw + i] {
+                            c = paint.byMoon ? paint.moonSparkle : paint.sparkle
                         }
+                        if lightsOn, glow[k] != 0, scatter(n, q, 0) < paint.lights, scatter(n, q, tick >> 1) > 7 {
+                            c = paint.lamp[step * 8 + Int(glow[k])]
+                        }
+                        if ceiling[i] < r { out[r * gw + i] = c }
+                        if top > r {
+                            // A slope's face takes its own colour all the way up; a tower's has windows lit at night.
+                            for y in max(r, ceiling[i]) + 1...top {
+                                out[y * gw + i] = tower && lightsOn && (y &+ n) & 1 == 0 && scatter(n, y, 1) < 110 ? paint.window : plain
+                            }
+                            if tower, !lightsOn { out[top * gw + i] = paint.ground[step * 2 * mats + Int(Mat.shed)] }
+                        }
+                        ceiling[i] = top
                     }
                     s += 1
                     if s == gw { s = 0 }
                 }
             }
-            // The cloud layer, nearest row first. A cloud stands up from its base as a column, so each column of the
-            // picture remembers how high the clouds in front already reach (`ceiling`), and a cloud behind paints
-            // only what shows above that.
+            // The cloud layer, nearest row first and in the same way: a cloud stands up from its base as a column,
+            // and one behind paints only what shows above those in front. Cloud always paints over ground: a
+            // mountain lower than the cloud's base can't hide a cloud beyond it, and most are.
+            // ponytail: a crest taller than the base (2.4 km) gets the cloud beyond it drawn across its top. To do it
+            // properly, paint ground and cloud together by distance, keeping each pixel's depth.
             let above = Float(Self.cruise / (Self.cruise - Self.deck)), tones = Paint.tones
+            // How brightly each of the sixteen storm rhythms is lit by lightning at this moment.
+            let flashes = (0..<16).map { paint.storms > 0 ? SeatWorld.lightning($0, at: clock) * paint.storms : 0 }
             for i in 0..<gw { ceiling[i] = -1 }
-            for r in 0..<horizon {
-                let row = rows[r], base = r * gw, lift = row.lift * above
+            for q in rows.indices {
+                let row = rows[q], r = q - apron, base = q * gw, lift = row.lift * above
                 let step = min(Paint.steps - 1, Int(row.haze * Float(Paint.steps - 1) + 0.5)) * tones
                 var s = ((row.cloudFirst % gw) + gw) % gw
                 for i in 0..<gw {
@@ -481,8 +515,11 @@ final class PixelWindowSeat: SKScene {
                                 tone += slope < -1 ? 1 : slope > 1 ? -1 : 0
                             }
                             let lit = min(max(tone, 1), tones - 1), foot = height < 3 ? r : r + height / 4, waist = height < 5 ? foot : r + height / 2
-                            for y in max(r, ceiling[i] + 1)...top {
-                                out[y * gw + i] = paint.cloud[step + (y < foot ? (y == r ? 0 : 1) : y < waist ? min(lit, 2) : lit)]
+                            // Inside a storm, lightning lights the cloud from within, most at the storm's heart.
+                            let spark = Int(storm[base + s]), bolt = spark == 0 ? 0 : UInt32(flashes[spark & 15] * Float(spark >> 4) * 17)
+                            for y in max(r, ceiling[i] + 1)...top { // (never below the pane: `ceiling` starts at -1)
+                                let c = paint.cloud[step + (y < foot ? (y == r ? 0 : 1) : y < waist ? min(lit, 2) : lit)]
+                                out[y * gw + i] = bolt == 0 ? c : blend(c, paint.bolt, bolt)
                             }
                             ceiling[i] = top
                         }
@@ -543,6 +580,7 @@ private struct Paint {
     var sparkle: UInt32 = 0, moonSparkle: UInt32 = 0, window: UInt32 = 0, tip: UInt32 = 0
     var byMoon = false, tipOn = false
     var sunSide = 0 // 1 with the Sun toward the nose (the right of the picture), -1 toward the tail, 0 ahead, behind or down
+    var bolt: UInt32 = 0, storms: Float = 0 // lightning's colour, and how strongly it lights a cloud (0 with it switched off)
 
     init(mats: Int = 1) {
         self.mats = mats
@@ -558,14 +596,22 @@ enum Mat {
     static let pasture: UInt8 = 14, dry: UInt8 = 15, forest: UInt8 = 16, woods: UInt8 = 17, road: UInt8 = 18, roof: UInt8 = 19
     static let block: UInt8 = 20, blockPale: UInt8 = 21, blockDark: UInt8 = 22, park: UInt8 = 23, street: UInt8 = 24
     static let tower: UInt8 = 25, towerShade: UInt8 = 26, yard: UInt8 = 27, shed: UInt8 = 28, lane: UInt8 = 29
+    // Snow, rock and desert rock each in three tones (facing the light, across it, and in shadow), then the desert
+    // floor, a frozen sea, and the dark of conifers in shade.
+    static let snow: UInt8 = 30, snowDim: UInt8 = 31, snowShade: UInt8 = 32, rockLit: UInt8 = 33, rock: UInt8 = 34, rockShade: UInt8 = 35
+    static let mesaLit: UInt8 = 36, mesa: UInt8 = 37, mesaShade: UInt8 = 38, sandLight: UInt8 = 39, duneShade: UInt8 = 40
+    static let salt: UInt8 = 41, scrub: UInt8 = 42, ice: UInt8 = 43, coldSea: UInt8 = 44, pine: UInt8 = 45
     /// Each one's colour in full daylight, before the haze.
     static let day: [RGB] = [
         rgb(22, 56, 104), rgb(28, 70, 120), rgb(52, 126, 148), rgb(40, 84, 118),
-        rgb(226, 236, 240), rgb(128, 170, 196), rgb(236, 236, 232), rgb(208, 192, 152),
+        rgb(226, 236, 240), rgb(128, 170, 196), rgb(236, 236, 232), rgb(220, 192, 142),
         rgb(96, 132, 72), rgb(70, 114, 62), rgb(198, 178, 98), rgb(170, 148, 106), rgb(126, 98, 74), rgb(124, 152, 86),
         rgb(106, 140, 82), rgb(184, 166, 120), rgb(42, 80, 56), rgb(54, 96, 62), rgb(176, 170, 156), rgb(156, 144, 136),
         rgb(98, 104, 118), rgb(128, 130, 138), rgb(78, 86, 102), rgb(84, 124, 76), rgb(152, 152, 154),
         rgb(160, 170, 190), rgb(66, 76, 102), rgb(74, 106, 78), rgb(214, 216, 220), rgb(142, 146, 112),
+        rgb(238, 242, 248), rgb(198, 210, 232), rgb(126, 150, 198), rgb(158, 152, 148), rgb(124, 120, 124), rgb(84, 88, 106),
+        rgb(196, 146, 110), rgb(160, 112, 88), rgb(108, 80, 80), rgb(236, 208, 158), rgb(188, 154, 114),
+        rgb(232, 226, 214), rgb(138, 136, 98), rgb(206, 224, 236), rgb(14, 34, 62), rgb(30, 58, 56),
     ]
     /// The lamps a pixel can carry after dark: none, a dim and a full sodium orange, a bright one for the avenues,
     /// white for downtown and for ships, and a cool white.
@@ -575,8 +621,8 @@ enum Mat {
 /// The endless country under the flight: for any spot, in km along the track (`x`) and out from it (`z`), what is
 /// there. Everything comes from hashes of the place, so nothing is stored and no two stretches are alike.
 struct SeatWorld {
-    /// Settings' Scenery (0 for whatever comes, then ocean, city, countryside) and Clouds (0 for whatever comes,
-    /// then clear to overcast).
+    /// Settings' Scenery (0 for whatever comes, then ocean, city, countryside, mountains, desert, snow) and Clouds
+    /// (0 for whatever comes, then clear to overcast).
     var scenery = 0, weather = 0
     /// Which way the Sun is across the ground, and how steeply its light comes down (rise over run); nil when it's
     /// too low to cast a shadow worth drawing.
@@ -584,14 +630,15 @@ struct SeatWorld {
 
     /// How high the land stands, in the noise's own units: below 0 is sea.
     func shore(_ x: Double, _ z: Double) -> Float {
-        let lean: Float = scenery == 1 ? -0.2 : scenery >= 2 ? 0.3 : 0.045
+        let lean: Float = scenery == 1 ? -0.2 : scenery >= 2 ? 0.3 : 0.075
         return fbm(x / 150, z / 150, 4, 11) - 0.5 + (fbm(x / 12, z / 12, 2, 13) - 0.5) * 0.035 + lean
     }
 
     /// How built-up the land is, 0 to 1: farmland below 0.5, suburbs to 0.6, city above, downtown from 0.7.
     func urban(_ x: Double, _ z: Double) -> Float {
-        let natural = noise(x / 80, z / 80, 21) * 0.75 + noise(x / 24, z / 24, 22) * 0.25 + 0.05
-        return scenery == 2 ? max(natural + 0.1, 0.61) : scenery == 3 ? natural - 0.45 : natural
+        let natural = noise(x / 80, z / 80, 21) * 0.75 + noise(x / 24, z / 24, 22) * 0.25
+        // Held over city, it's all city; over countryside, none; over desert or snow, fewer and smaller ones.
+        return scenery == 2 ? max(natural + 0.1, 0.61) : scenery == 3 ? natural - 0.45 : scenery == 5 ? natural - 0.2 : scenery == 6 ? natural - 0.1 : natural
     }
 
     /// How much of the sky below us is cloud here, 0 to 1.
@@ -605,8 +652,83 @@ struct SeatWorld {
         }
     }
 
-    /// 0 for ocean, 1 for city, 2 for countryside: what the land is called here.
-    func biome(_ x: Double, _ z: Double) -> Int { shore(x, z) < 0 ? 0 : urban(x, z) > 0.55 ? 1 : 2 }
+    /// How warm and dry the country is, 0 to 1: snow lies where it's below about 0.37, desert where it's above
+    /// about 0.63, each thinning out in patches toward its edge. The temperate middle always lies between the two.
+    func climate(_ x: Double, _ z: Double) -> Float {
+        switch scenery {
+        case 2, 3: 0.5
+        case 5: 0.95
+        case 6: 0.05
+        default: fbm(x / 330, z / 330, 2, 67)
+        }
+    }
+
+    private func snowy(_ x: Double, _ z: Double, _ climate: Float) -> Bool {
+        let cold = smoothstep(0.44, 0.34, climate)
+        return cold > 0 && cold + (noise(x / 5, z / 5, 68) - 0.5) * 0.7 > 0.5
+    }
+
+    private func sandy(_ x: Double, _ z: Double, _ climate: Float) -> Bool {
+        let dry = smoothstep(0.56, 0.66, climate)
+        return dry > 0 && dry + (noise(x / 11, z / 11, 69) - 0.5) * 0.7 > 0.5
+    }
+
+    /// How high the mountains stand above the plain at a spot, in km: 0 outside them. Ranges lie where a broad
+    /// noise runs high and the sea is well off (`high` is `shore` there). Within one the ground is ridged noise:
+    /// sharp crests along the lines where each layer crosses its middle value, with valleys between. The far rows
+    /// leave out the fine layers, which they couldn't show, and take their average height in their place.
+    func peaks(_ x: Double, _ z: Double, deep: Double, high: Float) -> Float {
+        guard scenery != 2, scenery != 3 else { return 0 }
+        var range = smoothstep(0.64, 0.8, noise(x / 170, z / 170, 71))
+        if scenery == 4 { range = max(range, 0.8) }
+        range *= smoothstep(0.004, 0.05, high)
+        guard range > 0 else { return 0 }
+        let layers = deep > 2.5 ? 2 : deep > 0.8 ? 3 : 5
+        var (sum, strength, px, pz) = (Float(0), Float(0.5), x / 24, z / 24)
+        for layer in 0..<5 {
+            if layer < layers {
+                let ridge = 1 - abs(2 * noise(px, pz, 73 &+ UInt64(layer) &* 7) - 1)
+                sum += strength * ridge * ridge
+            } else {
+                sum += strength / 3
+            }
+            (strength, px, pz) = (strength / 2, px * 2.1, pz * 2.1)
+        }
+        return range * max(0, sum - 0.1) * 4
+    }
+
+    /// What the country is called at a spot: 0 ocean, 1 city, 2 countryside, 3 mountains, 4 desert, 5 snow.
+    func biome(_ x: Double, _ z: Double) -> Int {
+        let high = shore(x, z)
+        if high < 0 { return 0 }
+        if peaks(x, z, deep: 1, high: high) > 0.3 { return 3 }
+        if urban(x, z) > 0.55 { return 1 }
+        let climate = climate(x, z)
+        return snowy(x, z, climate) ? 5 : sandy(x, z, climate) ? 4 : 2
+    }
+
+    /// Whether a spot of the cloud layer is inside a thunderstorm, as a byte: 0 if not; else how near the storm's
+    /// heart it is (1 to 15) in the high four bits, and in the low four which of sixteen rhythms the storm flashes
+    /// to. A storm is one of the tower clouds' own bumps of noise, where the cover is thick: half of those.
+    func storm(_ x: Double, _ z: Double) -> UInt8 {
+        let (ix, iz) = (Int((x / 30).rounded()), Int((z / 30).rounded()))
+        guard unit(hash(ix, iz, 57)) > 0.8 else { return 0 } // the towers' noise (`cloudTop`) peaks at this corner
+        let pick = hash(ix, iz, 91), heart = SIMD2(Double(ix), Double(iz)) * 30, off = simd_distance(SIMD2(x, z), heart)
+        guard pick & 1 == 0, off < 9, cover(heart.x, heart.y) > 0.35 else { return 0 }
+        return UInt8(1 + Int(14 * (1 - off / 9))) << 4 | UInt8(pick >> 8 & 15)
+    }
+
+    /// How brightly storm rhythm `id` (0 to 15) lights its cloud at a moment, 0 to 1. Each keeps its own slow
+    /// beat: dark for most of it, then one burst of a few flickers inside a second, and some beats pass in quiet.
+    static func lightning(_ id: Int, at t: Double) -> Float {
+        let beat = 6 + Double(id) * 0.45, since = t + Double(id) * 2.7
+        let turn = Int(since / beat), into = since - Double(turn) * beat
+        guard hash(turn, id, 93) & 3 != 0 else { return 0 }
+        let start = Double(unit(hash(turn, id, 94))) * (beat - 1.5), length = 0.12 + Double(unit(hash(turn, id, 95))) * 0.8
+        guard into >= start, into < start + length else { return 0 }
+        let spark = hash(Int((into - start) / 0.08), turn &* 16 &+ id, 96)
+        return spark & 3 == 0 ? 0 : 0.45 + 0.55 * unit(spark)
+    }
 
     /// The heights a cloud's byte can name, in km above the cloud layer's base: fine steps for fair-weather clouds
     /// a few hundred metres tall, coarse ones for towers of several km.
@@ -645,7 +767,7 @@ struct SeatWorld {
     }
 
     /// What the ground is at a spot: its material (with the top bit set in a cloud's shadow), the lamp it carries
-    /// at night, and how tall it stands, in steps of 20 m. `n` and `row` name the pixel, for its own random numbers;
+    /// at night, and how tall it's drawn standing, in steps of 20 m. `n` and `row` name the pixel, for its own random numbers;
     /// `across` and `deep` are the km it spans, so that things too small to see at that distance are left out.
     func ground(_ x: Double, _ z: Double, n: Int, row: Int, across: Double, deep: Double) -> (land: UInt8, glow: UInt8, tall: UInt8) {
         var (land, glow, tall) = surface(x, z, n: n, row: row, across: across, deep: deep)
@@ -656,13 +778,12 @@ struct SeatWorld {
             let reach = (PixelWindowSeat.deck + 0.4) / sun.slope
             if cloudTop(x + sun.toward.x * reach, z + sun.toward.y * reach, deep: 0).km > 0 { land |= 128 }
         }
-        if tall != 0, deep > 0.5 { tall = 0 }
         return (land, glow, tall)
     }
 
     private func surface(_ x: Double, _ z: Double, n: Int, row: Int, across: Double, deep: Double) -> (UInt8, UInt8, UInt8) {
         let speck = unit(hash(n, row, 7)), fleck = unit(hash(n, row, 8)) // random numbers for this pixel alone
-        let high = shore(x, z)
+        let high = shore(x, z), climate = climate(x, z)
         if high < 0 {
             // A ship now and then, drawn far larger than life, with its wake trailing along the track.
             let lane = 11.0, (cx, cz) = ((x / lane).rounded(.down), (z / lane).rounded(.down))
@@ -676,16 +797,98 @@ struct SeatWorld {
                     if along < 0, along > -2.4 { return (Mat.wake, 0, 0) }
                 }
             }
+            if snowy(x, z, climate) {
+                // A cold sea is nearly black, with pack ice along the shore breaking up into floes further out.
+                let floe = unit(hash(Int((x / 0.7).rounded(.down)), Int((z / 0.7).rounded(.down)), 64))
+                return (floe < (high > -0.018 ? 0.8 : high > -0.06 ? 0.22 : 0.02) ? Mat.ice : Mat.coldSea, 0, 0)
+            }
             if high > -0.0012, deep < 0.9 { return (Mat.surf, 0, 0) }
             let water = high > -0.016 ? Mat.shallows : high > -0.05 ? Mat.sea : Mat.deep
             return (speck < 0.003 && deep < 0.5 ? Mat.surf : water, 0, 0) // a whitecap
         }
-        if high < 0.002, deep < 1.2 { return (Mat.sand, 0, 0) }
-        if deep < 1.6, onLine(x, z, scale: 90, layers: 3, salt: 23, width: max(0.4, deep * 0.9, across)) { return (Mat.river, 0, 0) }
+        let snowy = snowy(x, z, climate), sandy = !snowy && sandy(x, z, climate)
+        if high < 0.002, deep < 1.2 { return (snowy ? Mat.snow : Mat.sand, 0, 0) }
+        let river = deep < 1.6 && onLine(x, z, scale: 90, layers: 3, salt: 23, width: max(0.4, deep * 0.9, across))
+        let peak = peaks(x, z, deep: deep, high: high)
+        if peak > 0.03 {
+            // Mountains, with a river only along a valley's floor.
+            if river, peak < 0.3 { return (snowy ? Mat.ice : Mat.river, 0, UInt8(peak * 50)) }
+            return mountain(x, z, peak: peak, high: high, climate: climate, speck: speck, deep: deep)
+        }
+        if river { return (Mat.river, 0, 0) }
+        var found = lowland(x, z, n: n, row: row, across: across, deep: deep, speck: speck, fleck: fleck, sandy: sandy)
+        // Snow lies over whatever the land is; a desert leaves a town its roofs and roads and takes its green.
+        if snowy { found.0 = frosted(found.0, speck, x, z) } else if sandy { found.0 = parched(found.0, speck) }
+        return found
+    }
+
+    /// A spot in the mountains `peak` km up: what covers it at that height in this climate, in the tone its slope
+    /// takes from the light, and how tall to draw it.
+    private func mountain(_ x: Double, _ z: Double, peak: Float, high: Float, climate: Float, speck: Float, deep: Double) -> (UInt8, UInt8, UInt8) {
+        // Which way the ground slopes, from its height a little way east and north. Without the Sun, the sky's
+        // light from above and behind us still shows the shape.
+        let step = max(0.4, deep * 0.7), light = sun ?? (SIMD2(-0.6, -0.8), 0.9)
+        let east = (peaks(x + step, z, deep: deep, high: high) - peak) / Float(step), north = (peaks(x, z + step, deep: deep, high: high) - peak) / Float(step)
+        // The light a slope takes, against what level ground takes: its tone is 0 facing the light, 1 across it and
+        // 2 turned away, or in the shadow of a higher crest toward the Sun.
+        let slope = Float(light.slope), level = slope / (1 + slope * slope).squareRoot()
+        let lit = (slope - 1.8 * (east * Float(light.toward.x) + north * Float(light.toward.y))) / ((1 + slope * slope) * (1 + 3.24 * (east * east + north * north))).squareRoot()
+        var tone = lit > level + 0.1 ? 0 : lit < level - 0.14 ? 2 : 1
+        if let sun, deep < 3, tone != 2 {
+            for reach in [0.8, 2, 4.5] where tone != 2 {
+                if peaks(x + sun.toward.x * reach, z + sun.toward.y * reach, deep: deep, high: high) > peak + Float(reach * sun.slope) + 0.06 { tone = 2 }
+            }
+        }
+        // Snow down to the snowline, rock down to the treeline, forest below, and meadows on the valley floors. The
+        // cold brings both lines down; the desert has no trees and all but no snow.
+        let cold = smoothstep(0.4, 0.31, climate), hot = smoothstep(0.56, 0.66, climate), drawn = UInt8(min(255, peak * 50))
+        let snowline = mix(mix(1.7, 0.1, cold), 3.8, hot) + (noise(x / 4, z / 4, 78) - 0.5) * 0.35 - (tone == 2 ? 0.15 : 0)
+        let treeline = mix(mix(1.0, 0.45, cold), -1, hot) + (noise(x / 3, z / 3, 79) - 0.5) * 0.3
+        if peak > snowline { return ([Mat.snow, Mat.snowDim, Mat.snowShade][tone], 0, drawn) }
+        if peak > treeline { return ((sandy(x, z, climate) ? [Mat.mesaLit, Mat.mesa, Mat.mesaShade] : [Mat.rockLit, Mat.rock, Mat.rockShade])[tone], 0, drawn) }
+        let white = snowy(x, z, climate)
+        if peak < 0.22, noise(x / 2.5, z / 2.5, 80) > 0.45 { return (white ? [Mat.snow, Mat.snow, Mat.snowDim][tone] : tone == 2 ? Mat.pasture : Mat.meadow, 0, drawn) }
+        return (white ? [Mat.forest, Mat.pine, Mat.pine][tone] : [speck < 0.3 ? Mat.forest : Mat.woods, Mat.forest, Mat.pine][tone], 0, drawn)
+    }
+
+    /// What snow makes of a material of the lowlands: fields and roofs go white, bare soil stays brown between
+    /// them, the woods keep their dark with snow among it, and roads show as dark lines.
+    private func frosted(_ m: UInt8, _ speck: Float, _ x: Double, _ z: Double) -> UInt8 {
+        switch m {
+        case Mat.grass, Mat.crop, Mat.meadow, Mat.pasture, Mat.wheat, Mat.dry, Mat.sand, Mat.yard, Mat.park: speck < 0.07 ? Mat.snowDim : Mat.snow
+        case Mat.fallow: Mat.snowDim
+        case Mat.forest, Mat.woods: noise(x / 1.2, z / 1.2, 87) > 0.74 ? Mat.snowDim : Mat.pine // clearings
+        case Mat.lane, Mat.road, Mat.street: Mat.blockDark
+        case Mat.block, Mat.blockPale: Mat.snowDim
+        case Mat.shed, Mat.roof: speck < 0.5 ? Mat.snow : m
+        default: m
+        }
+    }
+
+    /// What the desert makes of a town's green.
+    private func parched(_ m: UInt8, _ speck: Float) -> UInt8 {
+        switch m {
+        case Mat.yard, Mat.park, Mat.woods, Mat.forest: speck < 0.15 ? Mat.scrub : Mat.sand
+        case Mat.lane: Mat.duneShade
+        default: m
+        }
+    }
+
+    /// A town, if this spot is in one: there's one in `share` of the 16 km squares.
+    private func town(_ x: Double, _ z: Double, share: Float, speck: Float, fleck: Float) -> (UInt8, UInt8, UInt8)? {
+        let parish = 16.0, (px, pz) = ((x / parish).rounded(.down), (z / parish).rounded(.down))
+        guard unit(hash(Int(px), Int(pz), 43)) < share else { return nil }
+        let centre = SIMD2((px + 0.2 + 0.6 * Double(unit(hash(Int(px), Int(pz), 44)))) * parish, (pz + 0.2 + 0.6 * Double(unit(hash(Int(px), Int(pz), 45)))) * parish)
+        let size = 0.7 + 1.2 * Double(unit(hash(Int(px), Int(pz), 46))), off = simd_distance(SIMD2(x, z), centre) / size
+        return off < 1 && Double(speck) < 0.75 * (1 - off) ? (Mat.roof, fleck < 0.6 ? 2 : 0, 0) : nil
+    }
+
+    /// Level land that isn't river: a highway, city, suburbs, desert or countryside.
+    private func lowland(_ x: Double, _ z: Double, n: Int, row: Int, across: Double, deep: Double, speck: Float, fleck: Float, sandy: Bool) -> (UInt8, UInt8, UInt8) {
         let built = urban(x, z)
         // A highway now and then, winding across town and country alike.
         if deep < 1.2, onLine(x, z, scale: 45, layers: 2, salt: 47, width: max(0.09, deep * 0.9, across * 0.9)) {
-            return (Mat.road, built > 0.5 ? 3 : fleck < 0.35 ? 1 : 0, 0)
+            return (sandy ? Mat.blockDark : Mat.road, built > 0.5 ? 3 : fleck < 0.35 ? 1 : 0, 0)
         }
         if built > 0.6 {
             // City: avenues every 1.3 km with blocks between them, some of them parks, and towers downtown. The
@@ -698,12 +901,13 @@ struct SeatWorld {
             }
             let core = smoothstep(0.7, 0.82, built)
             if core > 0, deep < 0.4 {
-                // Downtown's towers, three pixels wide up close: two in the light and one in shade.
+                // Downtown's towers, three pixels wide up close: two in the light and one in shade, and drawn half
+                // as tall again as they are.
                 let plot = 1.1, (tx, tz) = ((x / plot).rounded(.down), (z / plot).rounded(.down)), draw = hash(Int(tx), Int(tz), 33)
                 let (ox, oz) = (x - (tx + 0.5 * Double(unit(draw >> 3))) * plot, z - tz * plot)
                 if unit(draw) < core * 0.6, ox >= 0, ox < across * 3, oz < deep {
                     let height = (0.1 + 0.3 * unit(hash(Int(tx), Int(tz), 34))) * (0.4 + core)
-                    return (ox < across * 2 ? Mat.tower : Mat.towerShade, 4, UInt8(height * 50))
+                    return (ox < across * 2 ? Mat.tower : Mat.towerShade, 4, UInt8(height * 75))
                 }
             }
             let kind = unit(hash(Int(bx), Int(bz), 31)), lamp: UInt8 = fleck < 0.1 + core * 0.2 ? (relit || fleck < core * 0.1 ? 5 : fleck < 0.04 ? 2 : 1) : 0
@@ -720,6 +924,7 @@ struct SeatWorld {
             if speck < (built - 0.5) * 5 { return (Mat.roof, fleck < 0.5 ? 1 : 0, 0) }
             return (unit(hash(Int((x / 0.65).rounded(.down)), Int((z / 0.65).rounded(.down)), 35)) < 0.4 ? Mat.woods : Mat.yard, 0, 0)
         }
+        if sandy { return desert(x, z, across: across, deep: deep, speck: speck, fleck: fleck) }
         // Countryside: forest in irregular patches, and between them fields a section at a time.
         let wooded = fbm(x / 26, z / 26, 3, 37)
         if wooded > 0.62 { return (speck < 0.25 ? Mat.woods : Mat.forest, 0, 0) }
@@ -728,12 +933,7 @@ struct SeatWorld {
         let side = 1.6, (sx, sz) = ((x / side).rounded(.down), (z / side).rounded(.down))
         let (fx, fz) = (x - sx * side, z - sz * side), draw = hash(Int(sx), Int(sz), 39)
         // A town every so often, and a farm's yard light in some sections.
-        let parish = 16.0, (px, pz) = ((x / parish).rounded(.down), (z / parish).rounded(.down)), town = hash(Int(px), Int(pz), 43)
-        if unit(town) < 0.6 {
-            let centre = SIMD2((px + 0.2 + 0.6 * Double(unit(hash(Int(px), Int(pz), 44)))) * parish, (pz + 0.2 + 0.6 * Double(unit(hash(Int(px), Int(pz), 45)))) * parish)
-            let size = 0.7 + 1.2 * Double(unit(hash(Int(px), Int(pz), 46))), off = simd_distance(SIMD2(x, z), centre) / size
-            if off < 1, Double(speck) < 0.75 * (1 - off) { return (Mat.roof, fleck < 0.6 ? 2 : 0, 0) }
-        }
+        if let town = town(x, z, share: 0.6, speck: speck, fleck: fleck) { return town }
         if (fx < across && across < side / 5) || (fz < deep && deep < side / 4) { return (Mat.lane, 0, 0) }
         let lamp: UInt8 = unit(draw) < 0.3 && abs(fx - 0.8) < across / 2 && abs(fz - 0.6) < deep / 2 ? 1 : 0
         // The section is one field, two, or four, each with its own crop; where it's dry, some are irrigated circles.
@@ -747,6 +947,33 @@ struct SeatWorld {
             return (qx * qx + qz * qz < 0.36 * 0.36 ? Mat.crop : Mat.dry, lamp, 0)
         }
         return (crop, lamp, 0)
+    }
+
+    /// Desert: sand, with dunes in long wavering lines, plateaux of red rock, the white of dry lake beds, green
+    /// along a river, and here and there an irrigated circle or a dark block of orchard.
+    private func desert(_ x: Double, _ z: Double, across: Double, deep: Double, speck: Float, fleck: Float) -> (UInt8, UInt8, UInt8) {
+        // Rock stands in plateaux, dark round their edges.
+        let stone = noise(x / 23, z / 23, 81)
+        if stone > 0.64 { return (stone < 0.67 ? Mat.mesaShade : speck < 0.2 ? Mat.mesaLit : Mat.mesa, 0, 0) }
+        if noise(x / 31, z / 31, 82) > 0.8 { return (Mat.salt, 0, 0) }
+        if deep > 1.3 { return (noise(x / 55, z / 55, 84) > 0.45 ? Mat.sandLight : Mat.sand, 0, 0) }
+        // A river through the desert waters a strip of fields either side of it.
+        if onLine(x, z, scale: 90, layers: 3, salt: 23, width: 3.4) {
+            return ([Mat.crop, Mat.grass, Mat.crop, Mat.wheat][Int(hash(Int((x / 0.8).rounded(.down)), Int((z / 0.8).rounded(.down)), 86) & 3)], fleck < 0.02 ? 1 : 0, 0)
+        }
+        if let town = town(x, z, share: 0.2, speck: speck, fleck: fleck) { return town }
+        // Irrigated land: a circle of green, or a block of orchard, in one section in fourteen.
+        let side = 1.6, (sx, sz) = ((x / side).rounded(.down), (z / side).rounded(.down)), draw = hash(Int(sx), Int(sz), 83)
+        if draw % 14 == 0 {
+            let (fx, fz) = (x - sx * side - side / 2, z - sz * side - side / 2)
+            if draw >> 8 & 1 == 0 ? fx * fx + fz * fz < 0.72 * 0.72 : abs(fx) < 0.62 && abs(fz) < 0.62 { return (draw >> 8 & 1 == 0 ? Mat.crop : Mat.pine, 0, 0) }
+        }
+        // Dunes lie in lines along the track, wavering: a bright crest, then its shaded lee.
+        if deep < 0.4, noise(x / 55, z / 55, 84) > 0.45 {
+            let wave = z / 1.1 + Double(noise(x / 6, z / 6, 85)) * 2.4, phase = wave - wave.rounded(.down)
+            return (phase < 0.2 ? Mat.duneShade : phase < 0.45 ? Mat.sandLight : Mat.sand, 0, 0)
+        }
+        return (speck < 0.05 ? Mat.scrub : noise(x / 55, z / 55, 84) > 0.45 ? Mat.sandLight : Mat.sand, 0, 0)
     }
 }
 

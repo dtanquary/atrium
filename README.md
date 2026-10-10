@@ -229,17 +229,23 @@ A pixel-art city that follows your clock and the real Sun, with traffic and wind
 | The Airport at sunset, an airliner just down | The Airport at night |
 
 #### Pixel Window Seat
-The view from a window seat on a flight that never lands, in the same pixel art as [Pixel City](#pixel-city). The land below is made up as you go and never repeats: ocean with ships and their wakes, coasts with surf and shallows, cities on their grids of avenues, farmland in sections, forest, and rivers and highways winding through it all. Cloud comes and goes with the land, from a clear sky through scattered cumulus to a solid floor of cloud, and casts its shadows on the ground. The Sun, Moon and stars are the real ones where you are, so you fly through your own dawn, day, sunset and night, when the cities turn to webs of orange and white lamps. The land slides past as it does from a real airliner, the near ground quicker than the far, only faster: three times a real flight's crawl, or anything from half to ten times it in Settings. You can also hold it over ocean, city or countryside, pick how cloudy it is, sit over the wing or ahead of it, and choose which way the window faces, so the Sun sets in it.
+The view from a window seat on a flight that never lands, in the same pixel art as [Pixel City](#pixel-city). The land below is made up as you go and never repeats: ocean with ships and their wakes, coasts with surf and shallows, cities on their grids of avenues, farmland in sections, forest, rivers and highways, mountains that stand up in front of one another with snow on their crests, desert with red rock, dunes and dark blocks of orchard, and country under snow beside a sea of ice. Cloud comes and goes with the land, from a clear sky through scattered cumulus to a solid floor of cloud, and casts its shadows on the ground; now and then a far-off storm flickers with lightning. The Sun, Moon and stars are the real ones where you are, so you fly through your own dawn, day, sunset and night, when the cities turn to webs of orange and white lamps. The land slides past as it does from a real airliner, the near ground quicker than the far, only faster: three times a real flight's crawl, or anything from half to ten times it in Settings. You can also hold it over one kind of country, pick how cloudy it is, turn the lightning off, sit over the wing or ahead of it, make the window smaller or larger or take it away and have the view fill the screen, and choose which way it faces, so the Sun sets in it.
 
-| <img src="docs/images/pixel-window-seat.webp" alt="Pixel Window Seat over a coast in the morning, moving" width="1600"> | ![Pixel Window Seat at sunset, looking west over a coast as the lamps come on](docs/images/pixel-window-seat-sunset.jpg) |
+| <img src="docs/images/pixel-window-seat.webp" alt="Pixel Window Seat over a coast, a city and farmland in the morning, moving" width="1600"> | ![Pixel Window Seat at sunset, looking west over a coast as the lamps come on](docs/images/pixel-window-seat-sunset.jpg) |
 |---|---|
-| A coast in the morning, the Sun's glitter on the water | Sunset, looking west, the lamps coming on |
-| ![Pixel Window Seat at night over a city on a river](docs/images/pixel-window-seat-night.jpg) | ![Pixel Window Seat over farmland under broken cloud](docs/images/pixel-window-seat-countryside.jpg) |
-| A city at night, its avenues in orange and white | Farmland under broken cloud |
-| ![Pixel Window Seat above a deck of cloud with holes in it](docs/images/pixel-window-seat-clouds.jpg) | ![Pixel Window Seat over a city on the coast at midday](docs/images/pixel-window-seat-city.jpg) |
-| Above a deck of cloud | A city on the coast at midday |
-| ![Pixel Window Seat at night, a city ending at the dark sea](docs/images/pixel-window-seat-coast-night.jpg) | ![Pixel Window Seat from the seat ahead of the wing, early in the morning](docs/images/pixel-window-seat-ahead.jpg) |
-| Night, where a city meets the sea | The seat ahead of the wing, early in the morning |
+| A coast, a city and its farmland in the morning | Sunset, looking west, the lamps coming on |
+| ![Pixel Window Seat over mountains in the early morning, forest in the valleys and snow on the far crests](docs/images/pixel-window-seat-mountains.jpg) | ![Pixel Window Seat at sunset over desert mountains](docs/images/pixel-window-seat-canyon.jpg) |
+| Mountains in the early morning | Desert mountains at sunset |
+| ![Pixel Window Seat over desert, a river with fields along it and a plateau of red rock](docs/images/pixel-window-seat-desert.jpg) | ![Pixel Window Seat over farmland and forest under snow](docs/images/pixel-window-seat-snow.jpg) |
+| Desert, with a river and its strip of fields | Farmland and forest under snow |
+| ![Pixel Window Seat at night over a city](docs/images/pixel-window-seat-night.jpg) | ![Pixel Window Seat at night, a far-off storm cloud lit from inside by lightning](docs/images/pixel-window-seat-storm.jpg) |
+| A city at night, its avenues in orange and white | A far-off storm, lit by its own lightning |
+| ![Pixel Window Seat above a deck of cloud with holes in it](docs/images/pixel-window-seat-clouds.jpg) | ![Pixel Window Seat over farmland under broken cloud](docs/images/pixel-window-seat-countryside.jpg) |
+| Above a deck of cloud | Farmland under broken cloud |
+| ![Pixel Window Seat over a city on a river at midday](docs/images/pixel-window-seat-city.jpg) | ![Pixel Window Seat at night, a city ending at the dark sea](docs/images/pixel-window-seat-coast-night.jpg) |
+| A city at midday | Night, where a city meets the sea |
+| ![Pixel Window Seat from the seat ahead of the wing, early in the morning over a coast](docs/images/pixel-window-seat-ahead.jpg) | ![Pixel Window Seat with no window, the sunset filling the screen](docs/images/pixel-window-seat-view.jpg) |
+| The seat ahead of the wing, early in the morning | No window: the view alone, at sunset |
 
 ## Settings
 

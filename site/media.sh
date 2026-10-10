@@ -40,7 +40,7 @@ murmuration|Murmuration|20|SNAPSHOT_DEFAULTS=murmuration.light=5,murmuration.gro
 nebula|Nebula|4|SNAPSHOT_DEFAULTS=nebula.palette=Hubble
 pixel-city|Pixel City|30|SNAPSHOT_DEFAULTS=city.place=0,city.previewTime=1,city.previewHour=19
 pixel-spaceport|Pixel Spaceport|19|SNAPSHOT_DEFAULTS=spaceport.previewTime=1,spaceport.previewHour=18.3
-pixel-window-seat|Pixel Window Seat|5|SEAT_AT=12300 SNAPSHOT_DEFAULTS=seat.previewTime=1,seat.previewHour=10.5
+pixel-window-seat|Pixel Window Seat|5|SEAT_AT=30500 SNAPSHOT_DEFAULTS=seat.previewTime=1,seat.previewHour=10.5
 rain-on-glass|Rain on Glass|4|SNAPSHOT_DEFAULTS=rain.palette=Hamburg SNAPSHOT_APPEARANCE=dark
 schlieren|Schlieren|14|SNAPSHOT_DEFAULTS=schlieren.palette=Candlelight,schlieren.filter=0,schlieren.source=0
 solar-system-tour|Solar System Tour|4|SNAPSHOT_DEFAULTS=solar.photo=solar-jupiter-marble.heic
