@@ -17,6 +17,8 @@ struct Knob {
     var format = Format.number
     /// Only shown while this toggle knob is on.
     var shownWhen: String?
+    /// Hidden while this toggle knob is on.
+    var hiddenWhen: String?
 
     /// Kept to its range: a menu's pick indexes an array, so a value stored by an older version with a longer menu,
     /// or by `defaults write`, would crash the scene at every launch.
@@ -610,10 +612,12 @@ struct KnobRow: View {
     let knob: Knob
     @AppStorage private var value: Double
     @AppStorage private var gate: Double
+    @AppStorage private var hide: Double
 
     init(knob: Knob) {
         self.knob = knob
         _value = AppStorage(wrappedValue: knob.standard, knob.key)
+        _hide = AppStorage(wrappedValue: 0, knob.hiddenWhen ?? knob.key) // (its own key, unused, as below)
         // A gated knob hides while its switch is off, so the gate starts at the switch's own default. (An empty key
         // crashes KVO, so an ungated knob watches its own key, unused.)
         let gateStandard = (scenes.flatMap(\.knobs) + [Shuffle.on]).first { $0.key == knob.shownWhen }?.standard ?? 1
@@ -621,7 +625,7 @@ struct KnobRow: View {
     }
 
     var body: some View {
-        if knob.shownWhen == nil || gate > 0.5 {
+        if (knob.shownWhen == nil || gate > 0.5) && (knob.hiddenWhen == nil || hide < 0.5) {
             if knob.format == .toggle {
                 Toggle(knob.label, isOn: Binding(get: { value > 0.5 }, set: { value = $0 ? 1 : 0 }))
             } else if case .choice(let names) = knob.format {
