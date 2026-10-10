@@ -37,6 +37,7 @@ One file per wallpaper, recording what the code can't: how each scene works, why
 
 ## Not a wallpaper
 - [app-store.md](app-store.md): the plan for the Mac App Store, what the sandboxed build did when tried, and the steps left.
+- [updates.md](updates.md): how the app updates itself by fetching only the files that changed, why it's built that way, what was measured and what isn't proven yet.
 
 ## Screenshots
 
@@ -62,6 +63,7 @@ Add or refresh one whenever a wallpaper's look changes. Settings shows one of th
 - **Toward 1.0** (2026-09-29): a free DMG from GitHub Releases, signed ad hoc and not notarised (Gatekeeper's Open Anyway, in the README), and no App Store for now; Apple silicon only. Match the lock screen is opt-in and puts the user's wallpaper back. The app icon is "a skylight onto the cosmos" ([app-icon.md](app-icon.md)). Photos and data must be public domain or openly licensed, and credited with source and license links in About; MIT covers the code only (NOTICE).
 - **Betas before 1.0** (2026-10-04): the DMG is now signed with Dave's Developer ID and notarised (`release.sh`), so there's no Open Anyway step. The first release is a beta marked Pre-release on GitHub, at whatever version is current when Dave cuts it; 1.0.0 waits until he's run a release build for a while.
 - **Unfinished, hidden for 1.0** (2026-09-30): A Tree for the Year and Campfire aren't hitting the mark yet, so they're flagged `unfinished` (see their docs to revisit). Merging Game of Life and Turing Patterns into one wallpaper is on hold while Dave thinks it over; the case against was that they share no engine and few settings.
+- **Small updates** (2026-10-10): "my goal is to prevent users from having to re download the whole thing over and over as i add more wallpapers." He asked about publishing a delta with each release; after research and tests he chose the design that needs no chain of deltas. An update now fetches only the files that changed, a few MB instead of 400 ([updates.md](updates.md)).
 - **Workflow:** commit early and often; redeploy after each working change and tell him what to test.
 - **Cut:** Zen Garden, on 2026-09-25: "so bright and sharp and not relaxing, opposite of zen." Calm means soft and dim as well as slow. Its code and doc were deleted; they're in git history before the cut.
 - **Cut:** Crystals (vitamin C crystallising between polarisers), on 2026-09-27, after a smoothing pass: "just doesn't look visually appealing." The physics was right (Michel-Lévy interference colours, Maltese crosses, real growth speeds), but dimmed for calm the first-order palette read olive and the crystals as flat discs, and denser fields in second-order jewel tones didn't fix it. Real micrographs get their beauty from saturated colour and dense fine detail, which fight a calm, dim wallpaper. Physics alone doesn't make it pretty. Its code, doc and research are in git history before the cut (37f51e7).
