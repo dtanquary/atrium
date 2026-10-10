@@ -7,6 +7,7 @@ import Testing
 ///
 ///     SETTINGS_SHOT="Nebula" swift test --filter settingsWindow   # → $TMPDIR/atrium-settings-Nebula.png
 ///     SETTINGS_SHOT="About" …                                       # or General or Power
+///     SNAPSHOT_DEFAULTS="seat.orbit=1" SETTINGS_SHOT="Pixel Window Seat" …   # with Settings values, as the render test takes them
 @MainActor @Test(.enabled(if: ProcessInfo.processInfo.environment["SETTINGS_SHOT"] != nil))
 func settingsWindow() throws {
     let env = ProcessInfo.processInfo.environment
@@ -16,7 +17,9 @@ func settingsWindow() throws {
     // on the desktop so a wallpaper's page shows its Show on Desktop button.
     UserDefaults.standard.set(page, forKey: SettingsView.pageKey)
     UserDefaults.standard.set("none", forKey: "scene")
-    defer { for key in [SettingsView.pageKey, "scene"] { UserDefaults.standard.removeObject(forKey: key) } }
+    let settings = (env["SNAPSHOT_DEFAULTS"] ?? "").split(separator: ",").map { $0.split(separator: "=") }.filter { $0.count == 2 }
+    for pair in settings { UserDefaults.standard.set(Double(pair[1]).map { $0 as Any } ?? String(pair[1]), forKey: String(pair[0])) }
+    defer { for key in [SettingsView.pageKey, "scene"] + settings.map { String($0[0]) } { UserDefaults.standard.removeObject(forKey: key) } }
     NSApplication.shared.setActivationPolicy(.accessory)
     let window = NSWindow(contentViewController: NSHostingController(rootView: SettingsView()))
     window.setContentSize(NSSize(width: 820, height: 640))
