@@ -2,7 +2,7 @@
 
 <img src="docs/images/app-icon.png" alt="Atrium's icon: a skylight onto a glowing nebula" width="128">
 
-Living, animated desktop wallpapers for macOS, 21 of them: a reef tank of real fish and corals, slow tours through the best real photos of the Solar System and deep space, the real sky above you right now, your live weather and wind, sunlight through leaves from the real Sun, rising heat as a schlieren camera sees it, drifting nebulae, a pixel-art spaceport where rockets launch and land, and more. It's a small menu bar app written in Swift and SpriteKit, with no dependencies.
+Living, animated desktop wallpapers for macOS, 22 of them: a reef tank of real fish and corals, slow tours through the best real photos of the Solar System and deep space, the real sky above you right now, your live weather and wind, sunlight through leaves from the real Sun, rising heat as a schlieren camera sees it, drifting nebulae, a pixel-art spaceport where rockets launch and land, and more. It's a small menu bar app written in Swift and SpriteKit, with no dependencies.
 
 It's free and open source, for macOS 26 or later on Apple silicon. See it move at **[atrium.show](https://atrium.show)**, [download it](#download), or [build it yourself](#build-from-source) in a few minutes.
 
@@ -12,7 +12,7 @@ Screenshots show the wallpaper alone, with no desktop icons, menu bar or Dock. T
 
 - **Nature and weather:** [Fish Tank](#fish-tank) · [Weather](#weather) · [Dappled Light](#dappled-light) · [Rain on Glass](#rain-on-glass) · [Wind](#wind) · [Murmuration](#murmuration) · [Aurora](#aurora) · [Fireflies](#fireflies)
 - **Space:** [Solar System Tour](#solar-system-tour) · [Deep Space Tour](#deep-space-tour) · [Nebula](#nebula) · [Galaxy](#galaxy) · [Live Sky](#live-sky) · [Earth from Orbit](#earth-from-orbit) · [Pixel Spaceport](#pixel-spaceport)
-- **Color, light and pattern:** [Flowing Gradient](#flowing-gradient) · [Lava Lamp](#lava-lamp) · [Schlieren](#schlieren) · [Turing Patterns](#turing-patterns) · [Game of Life](#game-of-life) · [Pixel City](#pixel-city)
+- **Color, light and pattern:** [Flowing Gradient](#flowing-gradient) · [Lava Lamp](#lava-lamp) · [Schlieren](#schlieren) · [Turing Patterns](#turing-patterns) · [Game of Life](#game-of-life) · [Pixel City](#pixel-city) · [Pixel Window Seat](#pixel-window-seat)
 
 ### Nature and weather
 
@@ -228,6 +228,19 @@ A pixel-art city that follows your clock and the real Sun, with traffic and wind
 | ![Pixel City's Airport at sunset](docs/images/pixel-city-airport.jpg) | ![Pixel City's Airport at night](docs/images/pixel-city-airport-night.jpg) |
 | The Airport at sunset, an airliner just down | The Airport at night |
 
+#### Pixel Window Seat
+The view from a window seat on a flight that never lands, in the same pixel art as [Pixel City](#pixel-city). The land below is made up as you go and never repeats: ocean with ships and their wakes, coasts with surf and shallows, cities on their grids of avenues, farmland in sections, forest, and rivers and highways winding through it all. Cloud comes and goes with the land, from a clear sky through scattered cumulus to a solid floor of cloud, and casts its shadows on the ground. The Sun, Moon and stars are the real ones where you are, so you fly through your own dawn, day, sunset and night, when the cities turn to webs of orange and white lamps. The land slides past as it does from a real airliner, the near ground quicker than the far, only faster: three times a real flight's crawl, or anything from half to ten times it in Settings. You can also hold it over ocean, city or countryside, pick how cloudy it is, sit over the wing or ahead of it, and choose which way the window faces, so the Sun sets in it.
+
+| <img src="docs/images/pixel-window-seat.webp" alt="Pixel Window Seat over a coast in the morning, moving" width="1600"> | ![Pixel Window Seat at sunset, looking west over a coast as the lamps come on](docs/images/pixel-window-seat-sunset.jpg) |
+|---|---|
+| A coast in the morning, the Sun's glitter on the water | Sunset, looking west, the lamps coming on |
+| ![Pixel Window Seat at night over a city on a river](docs/images/pixel-window-seat-night.jpg) | ![Pixel Window Seat over farmland under broken cloud](docs/images/pixel-window-seat-countryside.jpg) |
+| A city at night, its avenues in orange and white | Farmland under broken cloud |
+| ![Pixel Window Seat above a deck of cloud with holes in it](docs/images/pixel-window-seat-clouds.jpg) | ![Pixel Window Seat over a city on the coast at midday](docs/images/pixel-window-seat-city.jpg) |
+| Above a deck of cloud | A city on the coast at midday |
+| ![Pixel Window Seat at night, a city ending at the dark sea](docs/images/pixel-window-seat-coast-night.jpg) | ![Pixel Window Seat from the seat ahead of the wing, early in the morning](docs/images/pixel-window-seat-ahead.jpg) |
+| Night, where a city meets the sea | The seat ahead of the wing, early in the morning |
+
 ## Settings
 
 The first time Atrium opens, a short welcome lets you try the wallpapers on your desktop and shuffle between them all (it's in Settings → About → Show Welcome any time after). Choose Settings… (⌘,) from the menu bar icon. Every wallpaper has a page, laid out like System Settings, with its palettes, photos, sliders, switches and menus (Fish Tank has none yet). The wallpaper runs live behind the top of its page, so each change shows as you make it. General holds Open at Login, Shuffle and Match the lock screen; Power sets the frame rate when plugged in, on battery and in Low Power Mode.
@@ -286,7 +299,7 @@ Atrium's icon in the menu bar is a TV with sparkles (✨📺). Use it to:
 
 Atrium has no account and no analytics. The services below are every connection it makes, each only while a wallpaper that uses it is running, apart from the check for updates.
 
-- **Location** (optional). Live Sky, Earth from Orbit, Weather, Dappled Light, Wind, Pixel City, Pixel Spaceport, the live Moon, Rain on Glass following the weather and Flowing Gradient's time-of-day mood use your location, and the app asks once. If you decline, it guesses from your time zone. It's kept on your Mac, and only leaves it rounded to about a kilometer, as the place Open-Meteo forecasts for (and, for Wind's maps, as the tiles it asks NASA for).
+- **Location** (optional). Live Sky, Earth from Orbit, Weather, Dappled Light, Wind, Pixel City, Pixel Spaceport, Pixel Window Seat, the live Moon, Rain on Glass following the weather and Flowing Gradient's time-of-day mood use your location, and the app asks once. If you decline, it guesses from your time zone. It's kept on your Mac, and only leaves it rounded to about a kilometer, as the place Open-Meteo forecasts for (and, for Wind's maps, as the tiles it asks NASA for).
 - **Network.** Weather, Dappled Light, Rain on Glass (while following the weather) and Pixel City's Airport (while following the wind) fetch from [Open-Meteo](https://open-meteo.com) every 10 to 15 minutes, sharing one request. Live Sky and Earth from Orbit fetch the ISS position from [wheretheiss.at](https://wheretheiss.at) at most once a minute. Earth from Orbit fetches a global cloud map from [Live Cloud Maps](https://clouds.matteason.co.uk) only once its cached copy is over 3 hours old (1.5 MB when it has changed), and not at all with Live clouds off. For lightning, it asks Open-Meteo for the next day's thunderstorms on a grid around you every 6 hours. Solar System Tour's live Sun, while it's on screen, fetches SDO images from [Helioviewer](https://helioviewer.org) at most every 15 minutes (2048 pixels, 0.3–0.5 MB) or 30 (4096, 1–2 MB, for the close-up), keeping the newest two of each wavelength on disk. None of them needs an API key. Weather, Dappled Light, Rain on Glass, Earth from Orbit and Wind have **Refresh Now** on their Settings pages, which fetches at once, at most every 5 to 15 minutes. Pixel Spaceport, while Follow real launches is on, asks [Launch Library 2](https://thespacedevs.com/llapi) by The Space Devs for the next few launches: about once an hour, and three times in the last twelve minutes before one it will fly (a few KB each; the free limit is 15 requests an hour per internet address, shared by every Mac on your network, so Atrium stays well under it). Nothing about you is in the request.
 - **Updates.** Once a day, and whenever you open Settings → Software Update, Atrium asks GitHub's API for its latest releases (a few KB). It downloads a new version's disk image (about 400 MB) only when you choose Install and Relaunch. Turn off Check for updates automatically there to stop the daily look.
 - **Wind** asks Open-Meteo for the next day's hourly wind forecast on a grid around you every 6 hours, for the zoom on screen: 96 points for a town, 384 for a region or half the continent (Open-Meteo counts each point as one of its free 10,000 calls a day, so at most 1,536 a day). The last reply for each zoom stays on disk, so it works offline. With an Earth background it downloads NASA's imagery tiles for the view from [GIBS](https://nasa-gibs.github.io/gibs-api-docs/) once and keeps them: about 1–2 MB for most maps, up to 7 MB at night for half the continent, and a fresh 1–2 MB a day for the satellite view.

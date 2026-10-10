@@ -13,11 +13,12 @@ struct WelcomeView: View {
         ("Nature and weather", ["Fish Tank", "Weather", "A Tree for the Year", "Dappled Light", "Rain on Glass", "Wind",
                                 "Murmuration", "Aurora", "Fireflies", "Campfire"]),
         ("Space", ["Solar System Tour", "Deep Space Tour", "Nebula", "Galaxy", "Live Sky", "Earth from Orbit", "Pixel Spaceport"]),
-        ("Color, light and pattern", ["Flowing Gradient", "Lava Lamp", "Schlieren", "Turing Patterns", "Game of Life", "Pixel City"]),
+        ("Color, light and pattern", ["Flowing Gradient", "Lava Lamp", "Schlieren", "Turing Patterns", "Game of Life", "Pixel City",
+                                      "Pixel Window Seat"]),
     ]
     /// Wallpapers that follow the sky, weather, light or seasons where you are, so they ask for your location.
     static let local: Set<String> = ["Live Sky", "Earth from Orbit", "Weather", "A Tree for the Year", "Dappled Light", "Wind",
-                                     "Pixel City", "Pixel Spaceport", "Campfire", "Solar System Tour", "Flowing Gradient"]
+                                     "Pixel City", "Pixel Spaceport", "Pixel Window Seat", "Campfire", "Solar System Tour", "Flowing Gradient"]
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
