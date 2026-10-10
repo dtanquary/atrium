@@ -94,14 +94,15 @@ import Testing
     #expect(abs(following - 1) < 0.05, "following, with Speed left at 10×, it flew \(following)×")
 }
 
-/// Every display gets a scene its own size, with a window of any size or none, looking any of its three ways: each
-/// must build, fly on and paint.
+/// Every display gets a scene its own size, with a window of any size or none, looking any of its five ways: each
+/// must build, fly on and paint. (On the tiny one the Cupola's dome is a few pixels across. Window does nothing from
+/// the Cupola, so its two views are built for one.)
 @MainActor @Test func orbitFliesAtAnySize() {
     UserDefaults.standard.set(1.0, forKey: PixelOrbit.on.key)
     defer { for knob in [PixelOrbit.on, PixelOrbit.looking, PixelWindowSeat.window] { UserDefaults.standard.removeObject(forKey: knob.key) } }
-    for looking in 0...2 {
+    for looking in 0...4 {
         UserDefaults.standard.set(Double(looking), forKey: PixelOrbit.looking.key)
-        for window in [2, 3] {
+        for window in looking < 3 ? [2, 3] : [3] {
             UserDefaults.standard.set(Double(window), forKey: PixelWindowSeat.window.key)
             for size in [CGSize(width: 1512, height: 982), CGSize(width: 1080, height: 1920), CGSize(width: 3440, height: 1440), CGSize(width: 40, height: 30)] {
                 let scene = pixelWindowSeat(size: size), start = PixelOrbit.orbit.along
@@ -129,4 +130,44 @@ import Testing
     }
     let behind = OrbitLens(focal: 491 / .pi, fisheye: true, w: 756, h: 491).spot(normalize([1, 0, -1])) // 135° off the axis, to the right
     #expect(behind?.x == 378 + 368 && behind?.y == 245)
+}
+
+/// The Cupola's dome on a laptop's canvas, from Tranquility and from within: seven separate windows of sky, the
+/// round one in the middle and as wide as the mock-ups Dave picked (82 and 90 pixels of sky), each inside a copper
+/// line that nothing painted later has broken.
+@Test func cupolaHasSevenWindows() {
+    let (w, h) = (378, 246)
+    for (within, across) in [(false, 82), (true, 90)] {
+        let dome = PixelCupola(w: w, h: h, within: within)
+        var day = [UInt32?](repeating: nil, count: w * h)
+        for spot in dome.inside { day[spot.at] = spot.day }
+        #expect(dome.sky.indices.allSatisfy { dome.sky[$0] == (day[$0] == nil) }, "every pixel is sky or the dome's, not both")
+        // Each stretch of sky, and how far the room spreads from it without crossing a copper pixel.
+        var window = [Int](repeating: -1, count: w * h), room = window, windows: [[Int]] = []
+        func spread(from start: Int, into found: inout [Int], as mark: Int, over open: (Int) -> Bool) -> [Int] {
+            var reached = [start], next = 0
+            found[start] = mark
+            while next < reached.count {
+                let i = reached[next]
+                next += 1
+                for j in [i - 1, i + 1, i - w, i + w] where j >= 0 && j < w * h && abs(j % w - i % w) <= 1 && found[j] < 0 && open(j) {
+                    found[j] = mark
+                    reached.append(j)
+                }
+            }
+            return reached
+        }
+        for i in 0..<w * h where dome.sky[i] && window[i] < 0 { windows.append(spread(from: i, into: &window, as: windows.count) { dome.sky[$0] }) }
+        #expect(windows.count == 7, "\(windows.count) windows \(within ? "from within" : "from Tranquility")")
+        let copper: UInt32 = 0xFF34_51A2 // #a25134, as the picture packs it
+        for (k, sky) in windows.enumerated() {
+            let reached = spread(from: sky[0], into: &room, as: k) { day[$0] != copper }
+            #expect(reached.count < sky.count * 3, "the copper line round window \(k) is broken: the room spreads to \(reached.count) pixels")
+        }
+        // The round window is the one over the canvas's centre.
+        let round = window[h / 2 * w + w / 2]
+        let row = (0..<w).filter { window[h / 2 * w + $0] == round }, column = (0..<h).filter { window[$0 * w + w / 2] == round }
+        #expect(round >= 0 && row.count == across, "the round window is \(row.count) pixels of sky across")
+        #expect(row.first! + row.last! == w - 1 && column.first! + column.last! == h - 1, "the round window is centred")
+    }
 }

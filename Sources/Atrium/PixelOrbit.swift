@@ -3,7 +3,8 @@ import SpriteKit
 
 /// Pixel Window Seat in Earth orbit: the same window, on the International Space Station. The real Earth turns
 /// below at the station's own pace, an orbit every 93 minutes with its sunrise and its sunset, under the real Sun,
-/// Moon and stars, with a solar array wing where the airliner's wing was.
+/// Moon and stars, with a solar array wing where the airliner's wing was; or from the station's Cupola, the dome
+/// of seven windows (PixelCupola.swift).
 ///
 /// The ground is drawn as the airliner's is, in strips that slide by whole cells, but here a strip is a parallel
 /// of the orbit (the ground a fixed distance to one side of the track) and it lies across the picture in a curve.
@@ -13,8 +14,9 @@ final class PixelOrbit: SKScene {
     nonisolated static let on = Knob(key: "seat.orbit", label: "Earth orbit", range: 0...1, standard: 0, section: "View", format: .toggle)
     nonisolated static let array = Knob(key: "seat.array", label: "Seat", range: 0...1, standard: 0, section: "View",
                                         format: .choice(["By the solar array", "Clear of it"]), shownWhen: "seat.orbit")
-    nonisolated static let looking = Knob(key: "seat.orbitLooking", label: "Looking", range: 0...2, standard: 0, section: "View",
-                                          format: .choice(["Out the side", "Ahead", "Straight down"]), shownWhen: "seat.orbit")
+    nonisolated static let looking = Knob(key: "seat.orbitLooking", label: "Looking", range: 0...4, standard: 0, section: "View",
+                                          format: .choice(["Out the side", "Ahead", "Straight down", "Into the Cupola", "From the Cupola"]),
+                                          shownWhen: "seat.orbit")
     nonisolated static let realClouds = Knob(key: "seat.realClouds", label: "Today's real clouds", range: 0...1, standard: 0,
                                              section: "Flight", format: .toggle, shownWhen: "seat.orbit")
     nonisolated static let follow = Knob(key: "seat.follow", label: "Follow the real ISS", range: 0...1, standard: 0,
@@ -28,7 +30,9 @@ final class PixelOrbit: SKScene {
 
     private let w: Int, h: Int // the canvas, in art pixels
     private let glass: (x: Int, y: Int, w: Int, h: Int) // the window's pane on it
-    private let windowSize: Int, looks: Int // Settings' Window and Looking, as the scene was built (3: the trial lens)
+    private let windowSize: Int, looks: Int // Settings' Window and Looking, as the scene was built
+    private let dome: PixelCupola? // the Cupola, for the two ways of looking that are from it
+    private let hardware: [(at: Int, day: UInt32, low: UInt32, dark: UInt32)] // what stands outside it, for the seat that sees it
     private let lens: OrbitLens
     private let eye: (ahead: Sky.Vector, right: Sky.Vector, up: Sky.Vector) // the camera, in the station's own axes
 
@@ -56,24 +60,19 @@ final class PixelOrbit: SKScene {
     /// Settings shows by greying it out at 1× (`Knob.lockedWhen`).
     private var pace: Double { Self.follow.value > 0.5 ? 1 : PixelWindowSeat.speed.value }
 
-    /// A trial lens, `ORBIT_EYE="yaw,pitch,field[,fisheye]"` in the environment, in degrees: yaw 90 is out of the left side, pitch 90 straight down, field what the pane's height spans.
-    private static var trial: (yaw: Double, pitch: Double, field: Double, fisheye: Bool)? {
-        guard let words = ProcessInfo.processInfo.environment["ORBIT_EYE"]?.split(separator: ","), words.count >= 3,
-              let yaw = Double(words[0]), let pitch = Double(words[1]), let field = Double(words[2]) else { return nil }
-        return (yaw, pitch, field, words.count > 3 && words[3] == "fisheye")
-    }
-
     override init(size: CGSize) {
-        let pane = PixelWindowSeat.pane(size), trial = Self.trial
-        (w, h) = (pane.w, pane.h)
-        // (The trial lens has the whole canvas for its pane, as Window's None does, and no wing.)
-        (glass, windowSize, looks) = trial == nil ? (pane.glass, pane.window, Int(Self.looking.value)) : ((0, 0, pane.w, pane.h), 3, 3)
+        let pane = PixelWindowSeat.pane(size)
+        (w, h, looks) = (pane.w, pane.h, Int(Self.looking.value))
+        // (The Cupola has the whole canvas for its pane, as Window's None does: its dome is painted into the picture.)
+        dome = looks > 2 ? PixelCupola(w: w, h: h, within: looks == 4) : nil
+        hardware = Self.array.value < 0.5 ? dome?.hardware ?? [] : []
+        (glass, windowSize) = dome == nil ? (pane.glass, pane.window) : ((0, 0, pane.w, pane.h), 3)
         let (gw, gh) = (glass.w, glass.h)
-        lens = trial.map { OrbitLens(focal: Double(gh) / ($0.fisheye ? $0.field * .pi / 180 : 2 * tan($0.field * .pi / 360)), fisheye: $0.fisheye, w: gw, h: gh) }
-            ?? OrbitLens(focal: Double(gh) * 1.2, fisheye: false, w: gw, h: gh) // the airliner's lens: 45° tall
+        lens = dome?.lens ?? OrbitLens(focal: Double(gh) * 1.2, fisheye: false, w: gw, h: gh) // the airliner's lens: 45° tall
         // Out of the left side as the airliner looks, nose to the right, tipped down until the Earth's edge lies where
-        // the airliner's horizon does; or the same tip looking ahead; or straight down, with the way we fly to the right.
-        let (yaw, pitch) = trial.map { ($0.yaw * .pi / 180, $0.pitch) } ?? [(Double.pi / 2, 25.0), (0, 25), (Double.pi / 2, 90)][looks]
+        // the airliner's horizon does; or the same tip looking ahead; or straight down, with the way we fly to the
+        // right, which is how both of the Cupola's views look too.
+        let (yaw, pitch) = [(Double.pi / 2, 25.0), (0, 25), (Double.pi / 2, 90)][min(looks, 2)]
         let tip = pitch * .pi / 180
         let ahead = Sky.Vector(cos(tip) * cos(yaw), cos(tip) * sin(yaw), -sin(tip)), right = Sky.Vector(sin(yaw), -cos(yaw), 0)
         eye = (ahead, right, cross(right, ahead))
@@ -157,6 +156,7 @@ final class PixelOrbit: SKScene {
                 let through = lens.ray(x, y), ray = normalize(eye.ahead * through.z + eye.right * through.x + eye.up * through.y)
                 let down = ray.z * far, reach = down * down - (far * far - radius * radius)
                 dither[i] = UInt8(bayer(x, y) * 16)
+                if dome?.sky[i] == false { continue } // the dome is in the way: no ground is laid for it
                 if down < 0, reach >= 0 {
                     let run = -down - reach.squareRoot(), ground = (Sky.Vector(0, 0, far) + ray * run) / radius
                     (along[i], across[i]) = (atan2(ground.x, ground.z), asin(ground.y))
@@ -293,7 +293,7 @@ final class PixelOrbit: SKScene {
     // the view as a slab. Model the truss and its joint if it should ever be true to the station.
     private func layWing() {
         wing = []
-        guard Self.array.value < 0.5, looks < 3 else { return }
+        guard Self.array.value < 0.5, dome == nil else { return } // (from the Cupola it is the station's hardware that Seat shows)
         let (gw, gh) = (glass.w, glass.h)
         // In the camera's own axes (right, up, ahead), in metres.
         let root: Sky.Vector = looks == 2 ? [24, -12.5, 30] : [-8.5, -6.5, 14], tip: Sky.Vector = looks == 2 ? [7.5, -4.5, 30] : [-2.2, 0.3, 48]
@@ -377,7 +377,7 @@ final class PixelOrbit: SKScene {
     }
 
     /// Paints the view: the ground and its cloud by the light that falls on each pixel, the air along the limb, the
-    /// stars, the Sun and the Moon, and the wing over it all.
+    /// stars, the Sun and the Moon, and the wing over it all; or, from the Cupola, the station's hardware and the dome.
     private func compose() {
         painted = clock
         let (gw, gh) = (glass.w, glass.h), orbit = Self.orbit, axes = orbit.axes
@@ -479,6 +479,17 @@ final class PixelOrbit: SKScene {
                 let tone = tones[Int(spot.part)]
                 out[spot.at] = blend(blend(tone.dark, tone.day, UInt32(lit * 255)), tone.low, UInt32(lit * low * 200))
             }
+            // The Cupola: the hardware outside in the wing's three lights, then the dome over everything, as painted
+            // while the station is in sunlight and dimmed in the Earth's shadow. A low Sun glints on the bezel across
+            // each window from it.
+            if let dome {
+                for spot in hardware { out[spot.at] = blend(blend(spot.dark, spot.day, UInt32(lit * 255)), spot.low, UInt32(lit * low * 200)) }
+                for spot in dome.inside { out[spot.at] = blend(spot.dark, spot.day, UInt32(lit * 256)) }
+                let glint = UInt32(lit * low * 256), from = normalize(SIMD2(Float(dot(sunHere, eye.right)), Float(dot(sunHere, eye.up))))
+                if glint > 0 {
+                    for spot in dome.bezels where spot.x * from.x + spot.y * from.y < -0.45 { out[spot.at] = blend(out[spot.at], PixelCupola.glint, glint) }
+                }
+            }
         }
         let shot = picture
         texture.modifyPixelData { data, length in
@@ -504,8 +515,9 @@ struct OrbitLens {
         return [px * turn, py * turn, cos(angle)]
     }
 
-    /// The pixel a unit direction falls in, or nil when that is outside the pane.
-    @inline(__always) func spot(_ v: Sky.Vector) -> (x: Int, y: Int)? {
+    /// Where a unit direction falls on the pane, in pixels from its lower left corner, or nil where the lens cannot
+    /// put it: beside or behind the rectilinear one, or straight behind the fisheye.
+    @inline(__always) func place(_ v: Sky.Vector) -> (x: Double, y: Double)? {
         let px: Double, py: Double
         if fisheye {
             let off = (v.x * v.x + v.y * v.y).squareRoot()
@@ -516,7 +528,13 @@ struct OrbitLens {
             guard v.z > 0.05 else { return nil }
             (px, py) = (v.x / v.z * focal, v.y / v.z * focal)
         }
-        let x = Int((px + Double(w) / 2).rounded(.down)), y = Int((py + Double(h) / 2).rounded(.down))
+        return (px + Double(w) / 2, py + Double(h) / 2)
+    }
+
+    /// The pixel a unit direction falls in, or nil when that is outside the pane.
+    @inline(__always) func spot(_ v: Sky.Vector) -> (x: Int, y: Int)? {
+        guard let at = place(v) else { return nil }
+        let x = Int(at.x.rounded(.down)), y = Int(at.y.rounded(.down))
         return x >= 0 && x < w && y >= 0 && y < h ? (x, y) : nil
     }
 }
