@@ -633,12 +633,28 @@ struct OrbitWorld {
         return cell
     }
 
+    /// Today's real cloud over a place, from the live map's small copy, smoothed between its pixels: they are 78 km
+    /// across, and taken one at a time they show as squares 30 pixels wide.
+    private static func live(latitude: Double, longitude: Double) -> Double? {
+        MainActor.assumeIsolated {
+            let step = 360.0 / 512, x = (longitude + 180) / step - 0.5, y = (90 - latitude) / step - 0.5
+            let (west, north) = (x.rounded(.down), y.rounded(.down))
+            var corners: [Double] = []
+            for (dx, dy) in [(0.0, 0.0), (1, 0), (0, 1), (1, 1)] {
+                guard let cover = Clouds.shared.cover(latitude: 90 - (north + dy + 0.5) * step, longitude: (west + dx + 0.5) * step - 180) else { return nil }
+                corners.append(cover)
+            }
+            let (fx, fy) = (x - west, y - north)
+            return (corners[0] + (corners[1] - corners[0]) * fx) * (1 - fy) + (corners[2] + (corners[3] - corners[2]) * fx) * fy
+        }
+    }
+
     /// How thick the cloud is over a place: none below a half, a solid deck by one. Weather systems a couple of
     /// thousand km across (made up, drifting east a little each day, or today's real ones), broken into puffs.
     func cloud(_ p: Sky.Vector, finest: Double, day: Date) -> Float {
         guard weather != 1 else { return 0 }
         var cover: Float
-        if real, let live = MainActor.assumeIsolated({ Clouds.shared.cover(latitude: asin(p.z) * 180 / .pi, longitude: atan2(p.y, p.x) * 180 / .pi) }) {
+        if real, let live = Self.live(latitude: asin(p.z) * 180 / .pi, longitude: atan2(p.y, p.x) * 180 / .pi) {
             cover = smoothstep(0.42, 0.95, Float(live))
         } else {
             let drift = day.timeIntervalSince1970 / 86400 * 0.14, q = Sky.Vector(p.x * cos(drift) - p.y * sin(drift), p.x * sin(drift) + p.y * cos(drift), p.z)
