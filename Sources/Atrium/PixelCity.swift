@@ -899,7 +899,7 @@ final class PixelCity: SKScene {
         hour = Double(parts.hour ?? 12) + Double(parts.minute ?? 0) / 60
         let el = Float(sun.elevation)
         night = smoothstep(4, -8, el)
-        let (top, sunward) = skyColours(el, morning: hour < 12)
+        let (top, sunward) = Self.skyColours(el, morning: hour < 12)
         // Around a low Sun the horizon changes with the compass: orange under the Sun, and opposite it the pink band
         // over the Earth's shadow.
         let facing = heading(spot.latitude), low = smoothstep(-10, -2, el) * smoothstep(12, 3, el)
@@ -963,7 +963,7 @@ final class PixelCity: SKScene {
         ambient = mix(mix(RGB(0.84, 0.86, 0.92), RGB(0.52, 0.48, 0.62), smoothstep(16, 0, el)), RGB(0.19, 0.2, 0.31), night)
         (self.facing, sunAt) = (facing, sun)
         moonKey = key(moon, rgb(120, 140, 200) * Float(1 - cos(2 * .pi * moonPhase)) * smoothstep(0, 10, Float(moon.elevation)) * night * 0.15)
-        let sunKey = key(sun, sunColour(el))
+        let sunKey = key(sun, Self.sunColour(el))
         (keyRight, keyLeft) = (sunKey.right + moonKey.right, sunKey.left + moonKey.left)
         (keyFront, keyTop) = (sunKey.front + moonKey.front, sunKey.top + moonKey.top)
         switch city {
@@ -1046,7 +1046,7 @@ final class PixelCity: SKScene {
     }
 
     /// The Sun's light on a wall at this elevation in degrees: orange and strong when low, paler when high, gone below the horizon.
-    private func sunColour(_ el: Float) -> RGB {
+    static func sunColour(_ el: Float) -> RGB {
         mix(rgb(255, 126, 54), rgb(255, 240, 214), smoothstep(0, 20, el)) * smoothstep(-1.5, 5, el) * mix(0.95, 0.62, smoothstep(0, 20, el))
     }
 
@@ -1060,7 +1060,7 @@ final class PixelCity: SKScene {
     }
 
     /// Sky colours (zenith, horizon) for a sun elevation in degrees, from deep night through twilight to day.
-    private func skyColours(_ el: Float, morning: Bool) -> (RGB, RGB) {
+    static func skyColours(_ el: Float, morning: Bool) -> (RGB, RGB) {
         let stops: [(Float, RGB, RGB)] = [
             (-18, rgb(6, 8, 22), rgb(28, 24, 50)),
             (-10, rgb(12, 14, 40), rgb(48, 36, 84)),
@@ -1738,7 +1738,7 @@ final class PixelCity: SKScene {
         let tallest = ridges[0].max() ?? 1, snowLine = Float(h - ground) * 0.47
         // What the Sun and Moon add to faces at each height above the ground.
         let light = (0...Int(tallest) + 1).map { row in
-            let lift = 5 * Double(row) / Double(tallest), sun = key((sunAt.elevation + lift, sunAt.azimuth), sunColour(Float(sunAt.elevation + lift)))
+            let lift = 5 * Double(row) / Double(tallest), sun = key((sunAt.elevation + lift, sunAt.azimuth), Self.sunColour(Float(sunAt.elevation + lift)))
             return (right: sun.right + moonKey.right, left: sun.left + moonKey.left, front: sun.front + moonKey.front)
         }
         let rock = [rgb(98, 106, 128), rgb(96, 106, 116), rgb(66, 90, 78)], haze: [Float] = [0.36, 0.28, 0.14]
@@ -3631,18 +3631,20 @@ private let widebody = [
 
 // MARK: - Pixel canvas
 
-private typealias RGB = SIMD3<Float>
+typealias RGB = SIMD3<Float>
 
+// Private, and repeated in PixelWindowSeat.swift: Fireflies has an `rgb` of CGFloats that makes a CGColor, and a call with
+// whole numbers anywhere else (`rgb(1, 1, 1)`) would quietly pick this one instead if it could see it.
 private func rgb(_ r: Int, _ g: Int, _ b: Int) -> RGB { RGB(Float(r), Float(g), Float(b)) / 255 }
-private func mix(_ a: RGB, _ b: RGB, _ t: Float) -> RGB { a + (b - a) * min(max(t, 0), 1) }
-private func mix(_ a: Float, _ b: Float, _ t: Float) -> Float { a + (b - a) * min(max(t, 0), 1) }
-private func smoothstep(_ edge0: Float, _ edge1: Float, _ x: Float) -> Float {
+func mix(_ a: RGB, _ b: RGB, _ t: Float) -> RGB { a + (b - a) * min(max(t, 0), 1) }
+func mix(_ a: Float, _ b: Float, _ t: Float) -> Float { a + (b - a) * min(max(t, 0), 1) }
+func smoothstep(_ edge0: Float, _ edge1: Float, _ x: Float) -> Float {
     let t = min(max((x - edge0) / (edge1 - edge0), 0), 1)
     return t * t * (3 - 2 * t)
 }
 
 /// 4×4 ordered-dither threshold in 0..<1, for banded pixel-art gradients.
-private func bayer(_ x: Int, _ y: Int) -> Float {
+func bayer(_ x: Int, _ y: Int) -> Float {
     let matrix: [Float] = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
     return (matrix[(y & 3) * 4 + (x & 3)] + 0.5) / 16
 }
@@ -3659,7 +3661,7 @@ private func picture(_ rows: [String], _ palette: [Character: RGB]) -> Pixels {
 private func art(_ rows: [String], _ palette: [Character: RGB]) -> SKTexture { picture(rows, palette).texture() }
 
 /// A small straight-alpha RGBA canvas, origin bottom-left like SpriteKit, that becomes a nearest-filtered texture.
-private struct Pixels {
+struct Pixels {
     let w: Int, h: Int
     private var rgba: [SIMD4<Float>]
 
@@ -3757,7 +3759,7 @@ private struct Bytes {
 }
 
 /// Seeded random numbers (SplitMix64), so the skyline comes out the same on every redraw and every display.
-private struct SeededRandom: RandomNumberGenerator {
+struct SeededRandom: RandomNumberGenerator {
     var state: UInt64
 
     mutating func next() -> UInt64 {
