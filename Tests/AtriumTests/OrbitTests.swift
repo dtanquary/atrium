@@ -85,8 +85,12 @@ import Testing
     defer { for key in keys { UserDefaults.standard.removeObject(forKey: key) } }
     func flown(follow: Bool) -> Double {
         for (key, value) in zip(keys, [1, follow ? 1 : 0, 10.0]) { UserDefaults.standard.set(value, forKey: key) }
-        let scene = pixelWindowSeat(size: CGSize(width: 1512, height: 982)), start = PixelOrbit.orbit.along
-        for frame in 0...60 { scene.update(2000 + Double(frame) / 30) }
+        let scene = pixelWindowSeat(size: CGSize(width: 1512, height: 982))
+        // The first frame only sets the clock: the flight's clock is shared, so after another test's scene it would
+        // count a tenth of a second of catching up, and 10× read as 10.5×.
+        scene.update(2000)
+        let start = PixelOrbit.orbit.along
+        for frame in 1...60 { scene.update(2000 + Double(frame) / 30) }
         return (PixelOrbit.orbit.along - start) / (Orbit.pace * 2) // in two seconds, as a multiple of the real pace
     }
     let (free, following) = (flown(follow: false), flown(follow: true))
