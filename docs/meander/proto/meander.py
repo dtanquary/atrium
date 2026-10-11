@@ -28,15 +28,14 @@ class River:
     """The river is periodic along the valley: its last node joins its first one valley-length further on. A pinned
     inlet lets the bends wash out downstream (see meander-pinned.py and lines-pinned-washout.png)."""
     def __init__(s, seed=1, sx=54.0, sy=35.07, tex=14, pad=10.0, ds=0.5, alpha=0.73, eps=0.04, cap=0.05,
-                 crdist=1.04, wall=1.5, wallw=5.0, noise=0.5, fields=True, lake_fill=0.006, plug=80.0, lake_life=16.0, start="noise"):
+                 crdist=1.04, wall=1.5, wallw=5.0, noise=0.5, fields=True, lake_life=16.0, start="noise"):
         s.rng = np.random.default_rng(seed)
         s.sx, s.sy, s.tex, s.pad, s.ds, s.alpha, s.eps, s.cap = sx, sy, tex, pad, ds, alpha, eps, cap
         s.L = sx + 2 * pad  # the valley's period; the screen shows x in 0..<sx
-        s.crdist, s.gap = crdist, int(6 / ds)
+        s.crdist = crdist
         s.yc, s.ywall, s.wallw, s.noise = sy / 2, sy / 2 - wall, wallw, noise
         s.scallop = (s.rng.normal(0, 1, (2, 6)), s.rng.uniform(0, 6.283, (2, 6)))  # each wall wanders in and out along the valley
-        s.fields, s.lake_fill, s.plug = fields, lake_fill, plug
-        s.lake_life, s.lake_close = lake_life, 40.0
+        s.fields, s.lake_life = fields, lake_life
         n = int(round(s.L / ds))
         s.x = -pad + s.L * np.arange(n) / n
         if start == "noise":  # a straight river with small wiggles: the instability does the rest
@@ -62,8 +61,8 @@ class River:
         s.egrid = s.rng.normal(0, 1, (int(sy / s.ecell) + 3, s.ecols))
         s.tw, s.th = int(round(sx * tex)), int(round(sy * tex))
         s.stamp = np.full((s.th, s.tw), -1e9, np.float32)
-        s.lake = np.full((s.th, s.tw), 1.0, np.float32)
-        s.lakes = []
+        s.hollow = np.full((s.th, s.tw), 1.0, np.float32)  # bank distance of old channels' footprints
+        s.lakes = []; s.trims = []
         s.cov = np.zeros((s.th, s.tw), np.float32)
         s.cross = np.linspace(-0.5 + 0.3 / tex, 0.5 - 0.3 / tex, int(tex * 2) + 1)
         s.lastR = (0, 0)
@@ -110,13 +109,13 @@ class River:
         # valley walls resist being cut into, and never hold a bank that is leaving them
         outward = (sg * ny) * (by - s.yc) > 0
         E = E * np.where(outward, smooth(s.ywall - s.wall_in(bx, by) - np.abs(by - s.yc), 0, s.wallw), 1.0)
-        d = np.clip(R * E * s.eps, -s.cap, s.cap)
+        d = np.clip(R * E * s.eps, -1.25 * s.eps, 1.25 * s.eps)  # no bank moves faster than 1.25 W a T
         on = s.onscreen()
         s.lastR = (float(np.abs(d[on]).max()) / s.eps, float(np.abs(d[on]).mean()) / s.eps) if on.any() else (0, 0)
         s.x = s.x + d * nx; s.y = s.y + d * ny
-        # the width eases toward 0.6 W where the river is straight and 1.7 W round its tightest bends
+        # the width eases toward 0.7 W where the river is straight and 1.5 W round its tightest bends
         bend = np.convolve(np.tile(np.abs(curv), 3), np.ones(7) / 7, "same")[len(curv):2 * len(curv)]
-        want = 0.5 * (0.6 + 1.1 * np.clip(bend / 0.4, 0, 1))
+        want = 0.5 * (0.7 + 0.8 * np.clip(bend / 0.4, 0, 1))
         s.hw += (want - s.hw) * (1 - np.exp(-s.eps / 1.5))
         s.t += s.eps; s.steps += 1
 
@@ -162,7 +161,7 @@ class River:
             if not len(pairs): return
             lo, hi = pairs.min(axis=1), pairs.max(axis=1)
             dist = np.hypot(x[lo] - x[hi], y[lo] - y[hi])
-            ok = (lo < n) & (hi - lo >= s.gap) & (hi - lo <= n - s.gap) & (dist < s.crdist * (h[lo] + h[hi]))
+            ok = (lo < n) & (hi - lo >= int(6 / s.ds)) & (hi - lo <= n - int(6 / s.ds)) & (dist < s.crdist * (h[lo] + h[hi]))
             if not ok.any(): return
             lo, hi, dist = lo[ok], hi[ok], dist[ok]
             k = np.argmin(dist - h[lo] - h[hi]); i, j = lo[k], hi[k]  # the pair whose banks are closest: straight across the neck
@@ -177,6 +176,19 @@ class River:
     def closed(s):
         """One period of the centreline with its closing node, and the half-widths, for drawing."""
         return np.append(s.x, s.x[0] + s.L), np.append(s.y, s.y[0]), np.append(s.hw, s.hw[0])
+
+    def curve(s, x, y, h, closed=False):
+        """A polyline with a point added half-way along each segment, on the Catmull-Rom curve through its nodes,
+        so banks drawn from it are not faceted. A closed one is a period of the river with its closing node."""
+        if closed:
+            px, py = np.concatenate([[x[-2] - s.L], x, [x[1] + s.L]]), np.concatenate([[y[-2]], y, [y[1]]])
+        else:
+            px, py = np.concatenate([[2 * x[0] - x[1]], x, [2 * x[-1] - x[-2]]]), np.concatenate([[2 * y[0] - y[1]], y, [2 * y[-1] - y[-2]]])
+        mid = lambda p: (-p[:-3] + 9 * p[1:-2] + 9 * p[2:-1] - p[3:]) / 16
+        def weave(a, m):
+            out = np.empty(2 * len(a) - 1, a.dtype); out[0::2] = a; out[1::2] = m
+            return out
+        return weave(x, mid(px)), weave(y, mid(py)), weave(h, 0.5 * (h[:-1] + h[1:]))
 
     def band(s, x, y, h, r, want_seg=False):
         """Bank distance for every texel within r of a channel's bank: the exact distance from the texel's centre
@@ -209,58 +221,85 @@ class River:
         d = out[P:-P, P:-P]; d[d > 0.5 + r] = FAR
         return (d, seg[P:-P, P:-P]) if want_seg else d
 
-    def stamp_now(s):
-        """Texels under the channel take the present time and stop being lakes. A texel the bank is only part-way
-        across takes that share of the way to the present, so the furthest line a bank reached is recorded to a
-        fraction of a texel (anti-aliased) and old scarps come out smooth, not stair-stepped."""
-        d = s.band(*s.closed(), 2.0 / s.tex)
-        cov = np.clip(0.5 + (0.5 - d) * s.tex, 0, 1)
-        full = cov >= 1
-        s.stamp[full] = s.t
-        rising = (cov > s.cov) & ~full
-        old = np.maximum(s.stamp[rising], s.t - 400.0)
-        s.stamp[rising] = old + (s.t - old) * (cov[rising] - s.cov[rising]) / (1 - s.cov[rising])
-        np.maximum(s.lake, 0.5 + 3 * (0.5 - d), out=s.lake, where=d < 1)  # the river eats any lake it crosses, to a fraction of a texel
+    def stamp_now(s, crude=False):
+        """Texels under the channel take the present time. A texel the bank is only part-way across takes that
+        share of the way to the present, so the furthest line a bank reached is recorded to a fraction of a texel
+        and old scarps come out smooth. (crude: just in or out, as a plain filled ribbon would stamp it; for the
+        distant past made at launch.) The river also wipes any hollow it crosses and trims any lake."""
+        d = s.band(*s.curve(*s.closed(), closed=True), 2.0 / s.tex)
+        if crude:
+            s.stamp[d < 0.5] = s.t
+            cov = (d < 0.5).astype(np.float32)
+        else:
+            cov = np.clip(0.5 + (0.5 - d) * s.tex, 0, 1)
+            full = cov >= 1
+            s.stamp[full] = s.t
+            rising = (cov > s.cov) & ~full
+            old = np.maximum(s.stamp[rising], s.t - 400.0)
+            s.stamp[rising] = old + (s.t - old) * (cov[rising] - s.cov[rising]) / (1 - s.cov[rising])
+        np.maximum(s.hollow, 0.5 + 3 * (0.5 - d), out=s.hollow, where=d < 1)
         s.cov = cov
+        s.trim_lakes(d)
 
     def make_lake(s, lx, ly, lh):
-        """The abandoned loop keeps the channel's own bank distances, so the water doesn't change at the cutoff.
-        From then on each texel's distance creeps up (the lake silts in from its banks), fastest by the two ends,
-        which plug first."""
-        d, seg = s.band(lx, ly, lh, 0.5, want_seg=True)
-        m = d < 1.0
-        if not m.any(): return
-        idx = np.nonzero(m.ravel())[0]
-        arc = np.concatenate([[0], np.cumsum(np.hypot(np.diff(lx), np.diff(ly)))])
-        pos = np.interp(seg[m], np.arange(len(lx)), arc)
-        end = np.minimum(pos, arc[-1] - pos)  # how far round the loop from its nearer end
-        rate = 1 + s.plug * np.exp(-end / 1.2)
-        lk = s.lake.ravel()
-        lk[idx] = np.minimum(lk[idx], d[m])
-        s.lakes.append([idx, rate.astype(np.float32), s.t, end.astype(np.float32), float(arc[-1] / 2)])
+        """A cut-off loop becomes a lake: its own nodes and half-widths, drawn from then on by the same routine
+        as the river, so on the cutoff frame the water is the same water. Its footprint is also kept as a hollow."""
+        d = s.band(*s.curve(lx, ly, lh), 0.5)
+        np.minimum(s.hollow, d, out=s.hollow)
+        s.lakes.append(dict(x=lx, y=ly, h=lh, born=s.t, a=s.t, b=s.t))  # a, b: when each end became an end
 
-    def fill_lakes(s, dT):
-        """Lakes silt in slowly from their banks, and dry out from both ends toward the middle: over the second
-        part of a lake's life a front moves in from each end, behind which it closes quickly."""
-        lk = s.lake.ravel()
-        for idx, rate, born, end, half in s.lakes:
-            front = (half + 2) * smooth(np.float32(s.t - born), s.lake_life * 0.3, s.lake_life) - 1.5
-            late = s.lake_close * smooth(front - end, -1.5, 0.5)
-            v = lk[idx]
-            lk[idx] = np.where(v < 0.56, np.minimum(v + (rate + late) * s.lake_fill * dT, 0.56), v)  # a dried lake stays a hollow
-        s.lakes = [L for L in s.lakes if s.t - L[2] < s.lake_life * 1.5]
+    def lake_widths(s, k):
+        """A lake's half-widths now. Each end silts up: a front moves in from it, quickly for the first 1.2 W (the
+        plug), then at 0.25 W a T, with the water tapering to nothing over the 2 W ahead of it. Over the second half
+        of its life the whole lake narrows to nothing. A dry stretch gets a negative width so nothing is drawn."""
+        arc = np.concatenate([[0], np.cumsum(np.hypot(np.diff(k["x"]), np.diff(k["y"])))])
+        def end(dist, since):
+            age = s.t - since
+            front = 3.2 * (1 - np.exp(-age / 0.6)) + 0.25 * age
+            return smooth((dist - front) / 2.0 + 1, 0, 1)
+        m = (1 - smooth(s.t - k["born"], 0.5 * s.lake_life, s.lake_life)) * end(arc, k["a"]) * end(arc[-1] - arc, k["b"])
+        return k["h"] * m - 0.15 * (1 - m), m
 
-    def live_band(s, r=0.5):
-        """Bank distance of the live channel out to r beyond its banks, FAR beyond: the app's per-step band."""
-        return s.band(*s.closed(), r)
+    def trim_lakes(s, d):
+        """Where the live channel has covered a lake's nodes, drop them: the lake ends at the outermost node still
+        under the river (so its water runs into the river's and nothing shows), and a lake the river cuts through
+        becomes two. A new end starts silting up from that moment. Dry and worn-out lakes are forgotten."""
+        out = []
+        for k in s.lakes:
+            if s.t - k["born"] > s.lake_life: continue
+            xm = (k["x"] + s.pad) % s.L - s.pad
+            ix, iy = np.floor(xm * s.tex).astype(int), np.floor(k["y"] * s.tex).astype(int)
+            on = (ix >= 0) & (ix < s.tw) & (iy >= 0) & (iy < s.th)
+            cov = np.zeros(len(xm), bool); cov[on] = d[iy[on], ix[on]] < 0.5
+            if not cov.any(): out.append(k); continue
+            n = len(cov); i = 0
+            while i < n:  # each run of nodes not under the river, with one covered node kept at either end of it
+                if cov[i]: i += 1; continue
+                j = i
+                while j + 1 < n and not cov[j + 1]: j += 1
+                lo, hi = max(i - 1, 0), min(j + 1, n - 1)
+                if hi - lo >= 1:
+                    out.append(dict(x=k["x"][lo:hi + 1], y=k["y"][lo:hi + 1], h=k["h"][lo:hi + 1], born=k["born"],
+                                    a=k["a"] if lo == 0 else s.t, b=k["b"] if hi == n - 1 else s.t))
+                    if lo != 0 or hi != n - 1: s.trims.append((s.t, float(xm[lo if lo != 0 else hi]), float(k["y"][lo if lo != 0 else hi]), s.t - k["born"]))
+                i = j + 1
+        s.lakes = out
 
-    def step(s, stamp_every=2, cut_every=2):
+    def water(s, r=0.5):
+        """The one water field the shader reads: bank distance of the live channel or of any lake, whichever is less."""
+        w = s.band(*s.curve(*s.closed(), closed=True), r)
+        for k in s.lakes:
+            if s.t - k["born"] > s.lake_life: continue
+            h, m = s.lake_widths(k)
+            if m.max() <= 0: continue
+            np.minimum(w, s.band(*s.curve(k["x"], k["y"], h), r), out=w)
+        return w
+
+    def step(s, stamp_every=2, cut_every=2, crude=False):
         s.migrate()
         if s.steps % cut_every == 0: s.cutoff()
         s.resample()
-        if s.fields and s.steps % stamp_every == 0:
-            s.stamp_now()
-            s.fill_lakes(s.eps * stamp_every)
+        if s.fields and s.steps % stamp_every == 0: s.stamp_now(crude)
 
     # --- measurements ---------------------------------------------------------------------------------------------
     def stats(s):

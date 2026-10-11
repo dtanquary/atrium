@@ -1,0 +1,15 @@
+river 28.0 pt wide: screen 54.0 x 35.07143 widths, texture 756 x 491
+distant past: T 300.0, 2500 steps of 0.12 T, nodes 1 W apart, ribbon every 4th: 135.4 ms total, 0.054 ms a step
+  nodes 180, sinuosity 2.389876, cutoffs 678, lakes 35
+then T 60: 1500 steps of 0.04 T, nodes 0.5 W apart, fields every 8th, lakes drawn once: 249.7 ms total, 0.166 ms a step
+every texel's bytes written once: 1.7 ms total, 1.655 ms a step
+LAUNCH: 387 ms
+  nodes 337, sinuosity 2.2402897, cutoffs 710, lakes 12, band 35904 texels, lake band 16250 texels
+live steps, fields and every lake redrawn each step: 2379.2 ms total, 1.190 ms a step
+  nodes 396, cutoffs 712, lakes 6, band 42682 texels, lake band 9815 texels
+live steps, lakes redrawn every 10th step: 1685.1 ms total, 0.843 ms a step
+live steps, river only: 86.6 ms total, 0.043 ms a step
+  slab band against whole boxes: 28611 and 28606 texels; where both have one, worst difference 0.046597242 W; 5 only in the whole-box band, the nearest of them 1.7066445 texels beyond the bank (the band is 2 wide)
+field update alone (river band, stamps, hollows, trim, lakes): 529.7 ms total, 0.530 ms a step
+  without redrawing lakes: 469.1 ms total, 0.469 ms a step
+copying the texture's bytes (1449 KB): 19.0 ms total, 0.019 ms a step

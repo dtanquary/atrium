@@ -5,7 +5,7 @@ A river slowly migrating across its floodplain: bends grow and shift down the va
 Dave picked the idea on 2026-10-10 ([ideas.md](ideas.md)). That day two agents researched it (one built and ran the simulation, one measured the real references) and two sheets went to Dave. **Nothing is built in the app.** This page is the plan, the measurements to build against and their sources.
 
 - **The two research reports in full:** [the simulation](meander/research-simulation.md) and [the look](meander/research-look.md).
-- **In `docs/meander/`:** `sheet1.jpg` (what Dave chose from) and `sheet2.jpg` (the same references above the prototype's second round, in the looks he chose), `reference-mississippi-relief.jpg` (the real river, our render of USGS elevation), the prototype's pictures (`proto-relief.jpg`, `proto-map-fisk.jpg`, `proto-cutoff.jpg`, `proto-first-frame.jpg`), `proto/` (the simulation: `python3 meander.py` is its self-check; `render.py` draws both looks) and `measure/` (the scorecard `busy.py`, the palettes, the relief and scroll-bar measurements). Research scripts, not reviewed line by line.
+- **In `docs/meander/`:** `sheet1.jpg` (what Dave chose from) and `sheet2.jpg` (the same references above the prototype's second round, in the looks he chose), `reference-mississippi-relief.jpg` (the real river, our render of USGS elevation), the prototype's pictures (round 2's `proto-relief.jpg`, `proto-map-fisk.jpg`, `proto-cutoff.jpg`, `proto-first-frame.jpg`; round 3's and round 4's are named in their sections), `proto/` (the simulation: `python3 meander.py` is its self-check; `render.py` draws both looks; the latest round has the plain names, earlier ones `-v2` and `-v3`) and `measure/` (the scorecard `busy.py`, the palettes, the relief and scroll-bar measurements). Research scripts, not reviewed line by line.
 
 ## Dave's decisions (2026-10-10)
 From sheet 1: the two real references (Fisk's sheet 6, and the same stretch of river as relief from USGS elevation) above the simulation's renders of that hour.
@@ -185,7 +185,7 @@ And what the look research saw in the second round beside the references (both l
 - **Old map:** the bands are thin stripes parallel to today's river. Fisk's are separate old courses that cross each other, because the Mississippi moved two to four channel widths between his stages (45–59 m a year over 55–64 years on a channel about a kilometre wide): longer stages would give his look. Hues alternate band by band, where his order keeps neighbours in one ink (four solids, then runs of four fading tints per ink). The river is even in width with a double line, which reads slightly as a road. The solid salmon areas are the loudest thing in it, which is the case for the single-ink palettes.
 
 ### A third round, and what it showed
-The simulation's agent took the look research's review into a third set of renders (`proto-round3-relief.jpg`, `proto-round3-map-fisk.jpg`; code `proto/meander.py` and `render.py`, with round 2's kept as `meander-v2.py` and `render-v2.py`). Dave has not seen these: they are an experiment, and round 2 is still what he chose from.
+The simulation's agent took the look research's review into a third set of renders (`proto-round3-relief.jpg`, `proto-round3-map-fisk.jpg`; code `proto/meander-v3.py` and `render-v3.py`, with round 2's kept as `meander-v2.py` and `render-v2.py`). Dave has not seen these: they are an experiment, and round 2 is still what he chose from.
 
 Better than round 2:
 - Relief's banks are lopsided, as real ones are: a clean step on the cut side, a gradual rise on the bar side (the land beside a bank is read two texels further from the water).
@@ -200,25 +200,53 @@ Worse, or newly visible:
 - The map is blotchier and louder: big solid salmon areas (one-family score 0.92, where round 2's was 1.0). It is truer to Fisk; round 2's thin stripes are calmer. Stage length is one constant, so it could be a setting: a choice for Dave once the lakes are clean enough to judge it by.
 - Colouring by how many stages old the land is means every band must change colour each stage. The round slides the whole sheet over the last third of each stage (about 90 s in every 4.6 minutes at 25 s per T): a slow change of every colour at once, which Dave hasn't seen. Round 2's rule, colour fixed to the land once laid, has none.
 
-**The lake redesign to build next (untested).** Keep each lake as a short polyline with a half-width per node, like the river, drawn with the same distance routine. Its widths shrink with age and taper to nothing at the ends, so every edge is as smooth as the river's. Where the live channel covers a lake's nodes, delete them, and the lake splits into two that taper: no per-texel erasing, so no scraps. River and lakes then share one water field (the river is the lake of age zero), which frees the texture's fourth byte for the hollow. About 15 lakes of 40 nodes is one more band the size of the river's, redrawn about once a second.
+**The lake redesign (built in round 4, below).** Keep each lake as a short polyline with a half-width per node, like the river, drawn with the same distance routine. Its widths shrink with age and taper to nothing at the ends, so every edge is as smooth as the river's. Where the live channel covers a lake's nodes, delete them, and the lake splits into two that taper: no per-texel erasing, so no scraps. River and lakes then share one water field (the river is the lake of age zero), which frees the texture's fourth byte for the hollow. About 15 lakes of 40 nodes is one more band the size of the river's, redrawn about once a second.
 
 Not done from the review: islands and bars in the channel, levees.
 
+### A fourth round: the lakes redone, and the launch timed
+2026-10-11, by the simulation's agent, in the prototype only (`proto/meander.py` and `render.py` are now this round; the scripts are `stills4.py`, `strip4.py`, `recross4.py`, `film4.py`, `launch4.py`; the Swift timing sketch is `bench4.swift`, its output `bench4-run.txt`). Its five messages, with every formula that changed, close [the simulation research](meander/research-simulation.md). Pictures: `proto-round4-relief.jpg`, `proto-round4-map-fixed.jpg` and `proto-round4-map-order.jpg` (the two colour rules below), `proto-round4-map-sage.jpg` and `proto-round4-map-dark.jpg`, `proto-round4-first-frame.jpg`, `proto-round4-cutoff.jpg`. Two 20 s films at 25 and 75 s a T were made for Dave and aren't kept here (`film4.py` makes them again).
+
+**The lakes work.** The jagged scraps are gone:
+- A cut-off loop is kept as its own nodes and half-widths and drawn by the river's own distance routine into one water field, so its edges are as smooth as the river's. On the cutoff frame it has the widths the channel had: the same water.
+- It silts up from each end behind a front that moves in (about 1.2 W in the first T, then 0.25 W a T), tapers to a point over the 2 W ahead of the front, and narrows to nothing over the second half of a 16 T life.
+- Where the live channel covers a lake's nodes they are dropped; a lake the river cuts through becomes two, and a new end starts silting from that moment.
+- River and lake differ in the shader only by the water's age. The old channel's footprint is kept apart as a hollow field in the texture's fourth byte.
+- Measured at 25 s a T, 15 frames a second, in a 14 W window, share of pixels changing by more than 20 levels: the cutoff frame 0.05% in relief and 0.22% in the old map (round 3: 0.03% and 0.24%); a frame where the river takes a node off a lake 0.02–0.09% and 0.07–0.15% (three frames, one lake). All under the 0.3% bar.
+- The run behind it: T 400, 351 cutoffs, no self-crossing, sinuosity 2.3 to 3.7, 9 to 26 lakes alive (median 17).
+
+Also better: banks are smooth at Retina (every channel is drawn with one point added half-way along each segment, on a cubic through its neighbours), and the channel's width is back to 0.7–1.5 W.
+
+**The cheap distant past works as a picture.** T 300 of old history is run coarse (nodes 1 W apart, steps three times the live one, the ribbon between the banks stamped every 4th step as whole texels), then T 60 exactly as the live river runs. The first frame's floodplain is then full of pale older courses, edge to edge of the belt: 0.72 of the screen has been visited, against a median 0.70 for the exact river over T 400. It is not the same history: the coarse river cuts off three times as often (649 in T 300 against about 220), its old scarps are stair-stepped, and in relief it barely shows, since land that old is already dark. It matters in the old map.
+
+**The launch is too slow, as timed** (`bench4.swift`, `swiftc -O`, an M3 Max, a 28 pt river with varying width, lakes, hollows and subdivided banks):
+- Distant past 135–142 ms, then the exact T 60 250–261 ms: 404 ms in all on the main thread. Without the distant past 283 ms; with fields every 16th step 304 ms; a 20 pt river 540 ms.
+- A live step is 0.8–1.2 ms with fields and lakes (round 1's 0.6 ms was a constant-width river with no lakes). At ten steps a second that is 0.15–0.2 ms a frame on average, but about 1 ms on the frame a step lands on.
+- Not tried: the sketch allocates five arrays a step and a bucket grid per cutoff search (tidying that is the first move, a guessed halving); fields every 16th step; or running the history off the main thread and fading in, as Rain on Glass's frost does.
+
+**Found on the way.** The respacing rule can loop for ever (dropping a node and splitting what is left can undo each other): it needs the cap of four passes the Python always had; the Swift sketch hung without it. With widths that vary, the fast distance routine no longer matches the exhaustive one everywhere: up to 0.05–0.09 W out at a fresh junction, where two widths meet.
+
+**The old map's two colour rules, both kept for Dave to choose** (`proto-round4-map-fixed.jpg` against `proto-round4-map-order.jpg`):
+- *Fixed:* a stage is 5 T and its ink is fixed to the land once laid, so the bands are thin stripes and nothing ever changes colour.
+- *Fisk's order:* a stage is 11 T, the four newest solid in Fisk's own order, so there are big solid areas (salmon most of all), and the whole sheet slides one colour on over the last third of each stage. The slide hasn't been seen in a film.
+
+**Still wrong, worst first:** the launch time; the 1 ms step frame; the distant past being a busier river than the live one; relief still soft beside real lidar (levees, islands and bars were left out); a fresh oxbow in the old map reads as a second river until its line thins (a tint would fix it); in my own look at the stills, a lake's stub can show as a small notched blob; a small step in the bank at a fresh junction for about 1.5 T; long straight chords after a big cutoff, which is the model. Still unverified: the shader as a shader, GPU cost, the texture upload, sameness at 15, 30 and 60 fps, the alpha byte as data.
+
 ## The plan
 One file, `Sources/Atrium/Meander.swift`: a `River` type with no SpriteKit in it (nodes, step, cutoff, fields, pixel bytes), the scene, its shader, knobs and palettes. Everything built in `sceneDidLoad`; steps owed at 10 a second in `update(_:)`; the texture uploaded only when a step ran.
-1. **The look first, in the prototype.** A second round is done (`sheet2.jpg`). A third round tried the review's points and showed the lakes need a redesign (above). Left, in this order: the lake redesign and the faceted banks; the cheap distant past for the first frame; then relief toward the reference (levees, bars and islands), and the old map's stage length as a choice for Dave. Then a film at two paces for Dave. No Swift before he has seen it move: it is the Crystals risk.
-2. **`River`** ported from `meander.py`, with its check: 6,000 coarse steps must cut off loops, never cross and stay in the valley; stepping by 1/15, 1/30 and 1/60 s for the same elapsed time must give identical nodes.
+1. **The look first, in the prototype.** Four rounds are done (above): the lakes, the banks and the cheap distant past are in, and two films at two paces are made. Left for Dave: the pace, the old map's colour rule, and whether the distant past is worth its time at launch. Left in the prototype: relief toward the reference (levees, bars and islands). No Swift before he has seen it move: it is the Crystals risk.
+2. **`River`** ported from `meander.py`, written to allocate nothing per step and with the respacing capped at four passes, and its launch timed first (the sketch took 0.3–0.4 s: too slow for the main thread at every load), with its check: 6,000 coarse steps must cut off loops, never cross and stay in the valley; stepping by 1/15, 1/30 and 1/60 s for the same elapsed time must give identical nodes.
 3. **The texture and shader,** matched to `render.py`'s stills. Finds out the unknowns: the alpha byte carrying data, a second dependent read, the uniform count, the upload's cost.
 4. **Motion,** in frame strips through a cutoff: no frame with more than about 0.3% of pixels changing over 20 levels.
 5. **Settings:** Look (Relief, Old map); Colors, a list per look (relief: Survey Blue, Rainforest, Garnet, Amethyst; old map: Fisk 1944, Sage, Salmon, Teal, each with a dark version), Random by default; Speed (0.25–4×); River size (the slider Dave picked, from 28 pt to about 56 pt: a rebuild, keeping 14 texels a width so the cost stays the same); how long old courses stay; scroll-bar strength; how long lakes last; the shared grade knobs.
 6. Left overnight: no drift in pace, no banding from rebasing. Then the doc, screenshots, README, site.
 
-Still Dave's to decide: the pace (from a film).
+Still Dave's to decide: the pace (from the two films), the old map's colour rule, and the distant past.
 
 ## Risks, worst first
 1. Pretty, not just correct. The old map is already striking; the relief, the default, is calm and in one family but soft beside the real thing.
 2. Pace: calm enough to be ambient is as still as a look Dave has called finished.
-3. The launch history on the main thread at every load, shuffle and Settings page.
+3. The launch history on the main thread at every load, shuffle and Settings page: 0.3–0.4 s as first timed (round 4).
 4. Shader unknowns (above).
 5. Lake leftovers and scarps at Retina.
 6. Odd displays: portrait or ultrawide change how many widths the valley is.

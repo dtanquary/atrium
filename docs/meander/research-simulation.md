@@ -2,7 +2,7 @@
 
 A research agent's report as it was sent on 2026-10-10, unedited, kept so its detail and sources aren't lost. The plan beside it is the summary and has Dave's decisions; where the two differ, the plan is later. `scratch/` was the session's temporary folder: the scripts and pictures worth keeping were copied into this folder, the rest (downloaded references, video clips) is gone and its source URLs are below.
 
-The first seven messages are round 1. The note and five messages after them are round 2, which fixes the looks and has the complete maths as that prototype runs it (`proto/meander-v2.py`, `render-v2.py`). The last four are round 3 (`proto/meander.py`, `render.py`): what the look research's review led to, the formulas that changed, and why the lakes need a different design. Two of the messages were sent to the look research's agent.
+The first seven messages are round 1. The note and five messages after them are round 2, which fixes the looks and has the complete maths as that prototype runs it (`proto/meander-v2.py`, `render-v2.py`). The four after those are round 3 (`proto/meander-v3.py`, `render-v3.py`): what the look research's review led to, the formulas that changed, and why the lakes need a different design. Two of the messages were sent to the look research's agent. The last five are round 4 (2026-10-11; `proto/meander.py`, `render.py`, `bench4.swift`): the lakes redone, the cheap distant past and its cost, and the formulas that changed.
 
 Meander 1/7: it works, and one simulation feeds both looks. Verdict, paths, and what is and isn't proven.
 
@@ -508,3 +508,171 @@ The changed-formulas message is already in your inbox, and I have stopped: it we
 Nothing is running. out2, out3, meander-v2.py, render-v2.py and the rest of the meander scratchpad folder are untouched and will stay so. No round 4, no lake redesign, and no further messages to meander-look until you say.
 
 For when Dave decides: the cheap distant past for the first frame is still untried (coarse nodes and steps for the river, plain filled quads for its stamps, then T 60 exactly), so its cost and look are guesses until someone runs it.
+
+---
+
+Meander round 4, 1/5: all five items are done; the lake redesign works, the distant past works as a picture but the launch is too slow as timed. Four more messages follow: lakes, the distant past and timings, the formulas that changed, and what is still wrong.
+
+Everything is under scratch/meander/proto/out4/ :
+
+Stills (1512 x 982, river 28 pt, T 400):
+- still-relief-survey-blue.png (also -rainforest, -garnet)
+- the old map with colours fixed to the land (round 2's rule): still-fisk-fisk-1944.png, still-fisk-sage.png, still-fisk-fisk-1944-dark.png (also -salmon, -sage-dark)
+- the old map in Fisk's order, sliding each stage (round 3's rule): still-fisk-order-fisk-1944.png, still-fisk-order-sage.png, still-fisk-order-fisk-1944-dark.png
+- retina-relief.png, retina-fisk.png, retina-fisk-order.png: 500 x 350 pt at 2x Retina
+- strip-minutes-relief.png, strip-minutes-fisk.png
+
+First frame after the cheap distant past: first-frame-relief.png, first-frame-fisk.png, first-frame-fisk-order.png
+
+Cutoff, at 25 s a T: cutoff/cutoff-relief.png, cutoff/cutoff-fisk.png, cutoff/cutoff-fisk-order.png (3 s before to 10 min after); cutoff/recross-1..3-*.png (before, after and difference on a frame where the river re-crosses a lake)
+
+Films, 20 s, 30 fps, real time, relief on the left and the fixed-colour map on the right, a cutoff 5 s in:
+- film-25s-a-T.mp4
+- film-75s-a-T.mp4
+film-25-two-frames.png is two frames of the first, to check it without playing it.
+Each half is 756 x 490, one pixel a texel, so the films are softer than the stills. They step the river every frame; the app would step it 10 times a second.
+
+Code: proto/meander.py and render.py are round 4; round 3's are meander-v3.py and render-v3.py; out2 and out3 are untouched. Scripts: stills4.py, strip4.py, recross4.py, film4.py, launch4.py. Swift: swift-bench/bench4.swift, its output in swift-bench/run4-28.txt.
+
+Verified by running:
+- the redesigned lakes over T 400 (351 cutoffs, no self-crossing at 10 checks, 9 to 26 lakes alive at once)
+- the cutoff frame and three re-crossing frames, measured (2/5)
+- the distant past as a picture (Python) and as a cost (Swift) (3/5)
+- banks drawn from the subdivided centreline (retina-*.png)
+- the Swift sketch with varying width, lakes, hollows and subdivision: timed, and its texture looked at (swift-bench/launch-28-300.png)
+
+Not verified:
+- the shader as a shader, GPU cost, the texture upload, sameness at 15, 30 and 60 fps: as before
+- the first-frame pictures come from the Python prototype, which stamps the distant past "texel in or out" by exact distance; the Swift sketch fills ribbons instead. Same idea, not the same pixels at joints, and I have not drawn the Swift texture through the looks.
+- one cutoff and one lake's re-crossings measured, not many
+
+Found on the way: the respacing rule can loop for ever (dropping a node, then splitting what is left, can undo each other). The Python prototype always stopped after four passes, which is what I wrote in round 2; the Swift sketch did not and hung. Four passes at most has to be part of the rule.
+
+---
+
+Meander round 4, 2/5: the lakes. The jagged scraps are gone: every lake edge is now as smooth as the river's, and ends taper to points (cutoff/cutoff-relief.png at 30 s to 2 min; still-fisk-fisk-1944.png).
+
+How it works now:
+- A cut-off loop is kept as its own nodes and half-widths, with the time it was cut off and the time each of its two ends became an end.
+- It is drawn by the same distance routine as the river, into the same field. The shader reads one water field: the bank distance of the live channel or of any lake, whichever is less. On the cutoff frame the lake has the widths the channel had, so the water is the same water.
+- Its widths shrink with age: each end silts up behind a front that moves in from it (1.2 W in the first T or so, then 0.25 W a T), tapering over the 2 W ahead of the front; over the second half of its 16 T life the whole lake narrows to nothing.
+- Where the live channel covers a lake's nodes they are dropped. The lake then ends at the outermost node still under the river, so its water runs into the river's and no end shows. A lake the river cuts through becomes two. A new end starts silting from that moment, not from the lake's birth, so nothing vanishes on the frame it is made.
+- River and lake differ in the shader only by the water's age (the stamp read from inside the water): a lake dulls 35% over its first 4 T in relief, and its bank line thins over 6 T in the map. So the seam of land that showed between a lake and the river is gone too.
+- The old channel's footprint is kept separately as a hollow field (the fourth byte), written once at the cutoff and wiped by the river as it passes.
+
+Measured, at 25 s a T, 15 frames a second, in a 14 W window, share of pixels changing by more than 20 levels:
+- the cutoff frame: relief 0.05%, old map 0.22% (both colour rules). The frame after: 0.001% and 0.04%.
+- a frame where the river takes a node off a lake 4.7 to 4.9 T old (three such frames, one lake): relief 0.09%, 0.04%, 0.02%; old map 0.15%, 0.08%, 0.07%. The frames after: 0.000% and 0.02 to 0.03%.
+- for scale, round 3's cutoff frame was 0.03% and 0.24%, so the redesign costs nothing there; what it buys is the minutes after.
+
+Why a re-crossing still changes anything: the lake's end hops back one node (0.3 to 0.7 W) as the river advances over it. The node it hops to is under the river, so most of the hop is hidden, but the old end's round cap can stick out past the river's far bank for a frame. It measured smaller than the cutoff itself.
+
+Channel width is back to 0.7 to 1.5 W.
+
+Run behind these: T 400, 351 cutoffs, sinuosity 2.3 to 3.7, 9 to 26 lakes alive (median 17).
+
+What I'd still watch:
+- In the map a lake is bare paper like the river, so a long fresh oxbow reads as a second river until its line thins. That is a drawing choice (a tint would fix it), not a fault of the fields.
+- Lakes off screen are never trimmed (there is no field there to test against); they just age out. Harmless, but a lake straddling the screen edge keeps its hidden part.
+
+---
+
+Meander round 4, 3/5: the cheap distant past, and the timings. The picture is good; the launch is 0.4 s as timed, which is too slow.
+
+What it is: T 300 of old history with nodes 1 W apart and steps of 0.12 T (three times the live step), stamping the ribbon between the banks every 4th step as "texel centre in or out" and nothing finer. Then nodes back to 0.5 W, and T 60 exactly as the live river runs it. Stamps are a maximum, so the crude old ones simply lie under the exact new ones.
+
+The picture (first-frame-relief.png, first-frame-fisk.png): the floodplain is full of pale older courses behind the river, edge to edge of the belt. Share of the screen ever visited: 0.72 to 0.73, against 0.56 to 0.73 (median 0.70) for the exact river over T 400. It does read as a river that has been running.
+
+Honestly, it is not the same as two hours of the real thing:
+- The coarse river is a different river: 649 cutoffs in T 300 where the fine one makes about 220, and banks moving 0.48 W a T on average against 0.3. Its old courses are smaller and more numerous. As pale background that is not obvious, and meander-look had asked for more small arcs, but it is not the same history.
+- The old scarps are stair-stepped (no part-covered texels) and the old hollows hard-edged. Paleness hides most of it.
+- In relief the distant past is nearly invisible: land that old is already dark. It matters far more in the map.
+
+Timings (swift-bench/bench4.swift, swiftc -O, M3 Max, river 28 pt, with varying width, lakes, hollows and subdivided banks):
+- distant past, T 300: 135 to 142 ms (2,500 river steps, 625 ribbons, 678 cut-off loops)
+- then T 60 exact, fields every 8th step, lakes drawn once at the end: 250 to 261 ms
+- launch in all: 404 ms. With fields every 16th step: 304 ms. With no distant past: 283 ms. With T 150 of it: 343 ms. River 40 pt: 415 ms. River 20 pt: 540 ms.
+- live, per step: river alone 0.043 ms; with fields and lakes redrawn every 10th step 0.84 ms; with every lake redrawn every step 1.19 ms. The field update alone ran 0.47 to 0.53 ms in a quiet state and about 1 ms in busier ones.
+- copying the texture's 1.45 MB: 0.019 ms
+
+Against round 1 (constant width, no lakes): the T 60 history was 200 ms and is now 250 to 260; a live step was 0.6 ms and is now 0.8 to 1.2. So ten steps a second is 8 to 12 ms a second, 0.15 to 0.2 ms a frame averaged at 60 fps, but the frame a step lands on carries about 1 ms more.
+
+What I'd do about the launch, none of it tried:
+- The sketch allocates five arrays per river step and a bucket grid per cutoff search, and keeps the fields in five separate arrays. Tidying that is the obvious first move; I'd guess it halves both phases.
+- Fields every 16th step in the exact T 60 already saves 100 ms; the look at that cadence is not checked.
+- Or run the history off the main thread and fade in. Rain on Glass's frost does that and, as docs/README.md says, never lands in the synchronous render test.
+
+One more caveat on the Swift routine: with widths that vary, the slab band no longer matches the exhaustive one everywhere. Where both have a value they differ by up to 0.05 W (28 pt) or 0.09 W (40 pt), at a fresh junction where two different widths meet; and 5 to 66 texels at the band's rim are in one and not the other. Elsewhere they agree. The exhaustive one costs about twice.
+
+---
+
+Meander round 4, 4/5: the formulas that changed, so they survive without the scripts. All mine, tuned by eye and by the runs; nothing here is from a source. They replace round 2's 3/5 lake rules and adjust 2/5 and 4/5; anything not named is unchanged.
+
+River:
+- Width: want = 0.5 (0.7 + 0.8 clamp(bend / 0.4, 0, 1)), as in round 2.
+- Respacing: four passes at most.
+- The 1.25 W a T cap and the 6 W cutoff gap follow the step and the node spacing: displacement capped at 1.25 eps; pairs must be at least 6 / ds nodes apart.
+- Valley walls: round 3's scalloped ones.
+
+Drawing: every channel, live or lake, is drawn from its nodes with one point added half-way along each segment at (-P0 + 9 P1 + 9 P2 - P3) / 16, its half-width the mean of the segment's two. Open ends use P0 = 2 P1 - P2.
+
+Fields (three per texel now):
+- stamp: as before.
+- water: the least of the live channel's bank distance and every lake's. Needed out to 2 texels beyond a bank.
+- hollow: starts at 1. At a cutoff, hollow = min(hollow, the loop's bank distance, out to 0.5 W beyond its banks). Every update, hollow = max(hollow, 0.5 + 3 (0.5 - live bank distance)).
+
+A lake: nodes, half-widths h_i as cut, born, and a, b: when its first and last node became ends (both = born at first).
+- arc_i = distance along the lake from its first node; total = its length.
+- end(dist, since) = smoothstep((dist - front) / 2 + 1), with front = 3.2 (1 - exp(-(now - since) / 0.6)) + 0.25 (now - since).
+- m_i = [1 - smoothstep(now - born; 8, 16)] x end(arc_i, a) x end(total - arc_i, b).
+- half-width now = h_i m_i - 0.15 (1 - m_i). Negative means dry: nothing is drawn.
+- forgotten 16 T after it was born.
+
+Trimming, every update: a lake node is under the river if the live bank distance at its texel is below 0.5. Each run of nodes not under the river, with the one under-river node next to it kept at either side, becomes a lake of its own (same born). An end that is new gets its time set to now. A run of fewer than two nodes is dropped.
+
+Shader:
+- water = smoothstep(0.5 - water field) over 0.6 px either side. lage = now - (the stamp read two texels inside the water).
+- relief: water colour = river, 35% toward the wet colour by smoothstep(lage; 0.3, 4). hollow = smoothstep(0.66 - hollow field; 0, 0.12) x smoothstep(lage; 2, 12) x exp(-lage / 140) x (1 - water). No light within 4 px of water.
+- old map: a thin line (|water field - 0.5| under 0.3 to 1.3 px, at 70%) on every bank, and the full line (0.5 to 1.5 px) times 1 - smoothstep(lage; 0.5, 6).
+- the outward stamp read of round 3 now keys on the water field alone.
+
+The two colour rules for the old map, both kept:
+- fixed: stage 5 T; ink by floor(S / 5) mod 4; coverage by age in stages through 0: 1, 1.5: 1, 3: 0.65, 6: 0.5, 12: 0.4, 30: 0.23, 90: 0.12, 120: 0 (round 2's 4/5).
+- order: stage 11 T; Fisk's order by stages old, sliding over the last third of each stage (round 3).
+
+Distant past: start with nodes 1 W apart (ds = 1: kept 0.6 to 1.4 apart, cutoff gap 6 nodes), eps = 0.12, for T 300. Every 4th step: every texel whose centre is inside the ribbon between the banks (corners P_i +- h_i n_i) gets stamp = now and hollow = 1; a lake node is under the river if its texel was just stamped. A loop cut off in this phase marks its ribbon hollow = 0.3. Then ds = 0.5, respace, eps = 0.04 for T 60 with the exact rules.
+
+---
+
+Meander round 4, 5/5: what is still wrong, and what the pictures are for. Then I stop: no round 5, nothing to meander-look.
+
+What Dave is choosing from this round:
+1. Pace: film-25s-a-T.mp4 against film-75s-a-T.mp4. Each has one cutoff, 5 s in. Measured in the 25 s strip, an ordinary frame changes 0.06 levels in relief and 0.10 in the map (a 14 W window, 1/15 s apart); I did not measure the 75 s one this round (round 1's was 0.026 and 0.035).
+2. The old map's colour rule: still-fisk-fisk-1944.png (thin stripes, colour fixed to the land) against still-fisk-order-fisk-1944.png (Fisk's order, long stages, the sheet sliding each stage). The slide itself is not in a film; the stills show only what each looks like at rest.
+3. The first frame: first-frame-*.png against the stills, for whether the distant past is worth its 0.14 s.
+
+Still wrong, worst first:
+- Launch time: 0.3 to 0.5 s on the main thread as timed (3/5). This is now the biggest open problem.
+- The step frame: about 1 ms of fields on the frame a step lands on. Inside the budget on average, close to it on that frame.
+- The distant past is a busier river than the live one (three times the cutoffs), with stair-stepped old scarps.
+- Relief is still soft beside real lidar; levees, islands and bars were left out as told. Scroll bars are still faint below Retina.
+- A fresh oxbow in the map reads as a second river until its line thins.
+- Fisk's-order rule: big solid areas of salmon, and the global slide every stage.
+- At a fresh junction two different widths meet, so the bank has a small step there until the widths ease (about 1.5 T).
+- The river sometimes runs in long straight chords after a big cutoff (still-fisk-fisk-1944.png, right of centre in some frames). That is the model, not the drawing.
+
+Things that held up:
+- No self-crossing in any run this round (T 400 exact; T 360 with the coarse distant past).
+- Banks are smooth at Retina (retina-fisk.png): the facets are gone. The cost is in the timings above; I did not time it separately.
+- The cutoff frame is no worse than round 3's.
+
+Corrections to earlier messages:
+- Round 1's "0.6 ms a live step" and "200 ms for T 60" were for a constant-width river with no lakes. With everything Dave has since chosen they are 0.8 to 1.2 ms and 250 to 260 ms.
+- Round 2's 5/5 guessed the distant past at "under 0.1 s extra". It measured 0.14 s.
+- Round 1 said the slab band matched the exhaustive one; with varying widths it does not quite (3/5).
+
+Unchanged and still unverified: the shader as a shader, GPU cost, the texture upload, 15/30/60 fps sameness, the alpha byte as data (it now carries the hollow), stamp rebasing over days.
+
+Sources: none new. The model is meanderpy's law (Apache-2.0, https://github.com/zsylvester/meanderpy) after Howard & Knutson 1984 (https://agupubs.onlinelibrary.wiley.com/doi/abs/10.1029/WR020i011p01659, not read); the colours and Fisk's order are meander-look's measurements; everything in 4/5 is mine.
+
+Nothing is running. I wrote only under the scratchpad's meander/ folder; out2, out3 and the v2 and v3 copies are as they were.
