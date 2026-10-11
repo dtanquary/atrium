@@ -85,6 +85,8 @@ struct Refresh {
                                                                                      [$0.colours[0], $0.colours[3], $0.colours[2]]) })),
     Wallpaper(name: "Black Hole", icon: "circle.circle.fill", tint: .orange, blurb: "A black hole's glowing disc, bent round it by gravity.",
               make: blackHole, knobs: BlackHole.knobs, palettes: BlackHole.palette, unfinished: true),
+    Wallpaper(name: "Meander", icon: "point.bottomleft.forward.to.point.topright.scurvepath", tint: .teal,
+              blurb: "A river wandering across its floodplain, leaving its old courses behind.", make: meander, unfinished: true),
     Wallpaper(name: "Live Sky", icon: "moon.stars.fill", tint: .blue, blurb: "The real sky above you, right now.",
               make: liveSky, knobs: LiveSky.knobs),
     Wallpaper(name: "Earth from Orbit", icon: "globe.americas.fill", tint: .cyan, blurb: "Day and night sweeping over the globe.",
