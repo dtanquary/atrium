@@ -158,14 +158,10 @@ extension TrainWorld {
     private func height(_ kind: TrainCountry, _ ring: Int, _ wx: Double, _ salt: UInt64) -> Double {
         let z = Self.rings[ring], top = kind.peaks[ring]
         guard top > 0 else { return 0 }
-        if kind == .snow, z >= 7000 { // fells with a ridge to them, a crest every hundred pixels or so, in massifs
-            let crest = ridged(wx / (z * 0.4), z / 9000, 4, salt), massif = clip((fbm(wx / (z * 2.0 + 8000), 3, 2, salt + 9) - 0.25) * 3)
-            return top * clip(crest * 1.25 - 0.45) * (0.5 + 0.5 * massif)
-        }
         if kind == .desert, z >= 7000 { // a low rounded range farthest off; nearer, mesas: flat tops, steep sides, the plain between
             return z >= 60000 ? top * clip(fbm(wx / (z * 0.9), z / 4000, 4, salt) * 1.5 - 0.28) : top * clip((fbm(wx / (z * 0.7 + 2500), z / 4000, 4, salt) - 0.50) * 10)
         }
-        if kind == .mountains, z >= 3500 {
+        if z >= 7000 || (kind == .mountains && z >= 3500) { // (the snow's far fells are the mountains' wall, at about half the height)
             let crest = ridged(wx / (z * 0.5 + 2500), z / 9000, 5, salt)
             let massif = clip((fbm(wx / (z * 1.6 + 5000), 3, 2, salt + 9) - 0.20) * 2.5)
             return top * clip(crest * 1.5 - 0.35) * (0.45 + 0.55 * massif)
@@ -200,20 +196,27 @@ extension TrainWorld {
         func high(_ n: Int) -> Int { Int((height(kind, ring, Double(n) / ppm, salt) * relief * ppm).rounded(.toNearestOrEven)) }
         let pace = when(n).pace, swollen = high(n), face = min(swollen, rows)
         let slope = Double((high(n + 4) - high(n - 4)) * when(n).sun) // above 0 where the land's face is turned to the Sun
-        if kind == .snow {
-            // A far fell is white on the flank turned to the Sun and in blue shadow on the other (by its broad shape
-            // alone, so a flank is one piece), with dark rock where it is steep and in bands where the wind has bared
-            // it. Nearer, snow over the swells, shadowed where they fall away, with rock and dwarf birch showing.
-            let wide = z * 0.4, sunward = Double(when(n).sun)
-            let lee = z >= 7000 && (ridged(Double(n + 4) / ppm / wide, z / 9000, 1, salt) - ridged(Double(n - 4) / ppm / wide, z / 9000, 1, salt)) * sunward < 0
+        if kind == .snow, z >= 7000 {
+            // A far fell is the mountains' wall under snow: dark crags where the mountains have theirs and more of them
+            // where it is steep, fir under snow at its foot, and the rest snow, in sunlight or in blue shadow. The
+            // shadow lies in long ragged drifts, as the crags do: nearly all of a slope turned from the Sun and little
+            // of one turned to it (the slope taken over sixteen columns, so that a flank is a piece and not stripes).
+            let turned = min(max(Double((high(n + 8) - high(n - 8)) * when(n).sun) / 6, -1), 1), steep = clip(abs(slope) / 8)
+            for up in 0..<face {
+                let alt = Double(up) / ppm, draw = unit(hash(n >> 1, up, salt + 7)) - 0.5
+                let crag = fbm(wx / (z * 0.05 + 300), alt / 110, 3, salt + 5)
+                if alt < 220 + draw * 80 + (crag - 0.5) * 600 {
+                    cells[up] = draw > 0.2 ? TrainMat.snow : TrainMat.fir0
+                } else if crag > 0.70 - 0.12 * steep {
+                    cells[up] = TrainMat.rockShade
+                } else {
+                    cells[up] = fbm(wx / (z * 0.08 + 500), alt / 160, 3, salt + 8) < 0.5 - 0.22 * turned ? TrainMat.snowShade : TrainMat.snow
+                }
+            }
+        } else if kind == .snow { // nearer, snow over the swells, shadowed where they fall away, with rock and dwarf birch showing
             for up in 0..<face {
                 let crust = fbm(wx / (z * 0.2 + 150), Double(up) / ppm / (z * 0.012 + 6), 3, salt + 62)
-                if z >= 7000 {
-                    let steep = abs(slope) >= 5 && unit(hash(n >> 1, up, salt + 6)) < 0.7 && up * 2 > swollen
-                    cells[up] = steep || crust > 0.64 ? TrainMat.rockShade : lee ? TrainMat.snowShade : TrainMat.snow
-                } else {
-                    cells[up] = crust > 0.64 ? TrainMat.rockShade : crust < 0.31 ? TrainMat.birch : slope > -2 ? TrainMat.snow : TrainMat.snowShade
-                }
+                cells[up] = crust > 0.64 ? TrainMat.rockShade : crust < 0.31 ? TrainMat.birch : slope > -2 ? TrainMat.snow : TrainMat.snowShade
             }
         } else if kind == .desert {
             let shade = clip(-slope / 4), banded = [1, 230.0, 120, 70, 1, 1, 1, 1, 1, 1, 1][ring] // how thick a mesa's bands are, in metres
