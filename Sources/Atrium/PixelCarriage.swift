@@ -59,10 +59,12 @@ struct PixelCarriage {
 
     /// The cabin's light once night has fallen `night` of the way, 0 to 1. `dim` is how bright its colours are:
     /// their own by day and 22% of them at night, as a camera set for the view outside sees it. `lamp` is how far
-    /// the table's lamp has come on, 0 to 1: from sunset until the Sun is 4° down. `ghost` is how much of the lamp's
-    /// ghost shows in the glass, which grows as the lamp does and as the dark outside deepens, to a half at night.
-    static func light(_ night: Double) -> (dim: Double, lamp: Double, ghost: Double) {
-        let on = min(max((night - 0.35) / 0.4, 0), 1), lamp = on * on * (3 - 2 * on)
+    /// the table's lamp has come on, 0 to 1: from sunset until the Sun is 4° down, or by day under weather that has
+    /// put the day out by `gloom` (`TrainWeather`: barely under a deck, a third in fog or snow, all but full in
+    /// rain, full in a thunderstorm). `ghost` is how much of the lamp's ghost shows in the glass, which grows as the
+    /// lamp does and as the dark outside deepens, to a half at night; a dark day is still too bright for one.
+    static func light(_ night: Double, gloom: Double = 0) -> (dim: Double, lamp: Double, ghost: Double) {
+        let on = min(max((max(night, gloom) - 0.35) / 0.4, 0), 1), lamp = on * on * (3 - 2 * on)
         return (0.22 + 0.78 * (1 - night), lamp, 0.5 * lamp * night * night)
     }
 
@@ -158,9 +160,10 @@ struct PixelCarriage {
         return bytes
     }
 
-    /// The cabin as the texture of the scene's sprite of it, once night has fallen `night` of the way.
-    func texture(night: Double) -> SKTexture {
-        let light = Self.light(night), bytes = picture(dim: light.dim, lamp: light.lamp)
+    /// The cabin as the texture of the scene's sprite of it, once night has fallen `night` of the way, under weather
+    /// that has put the day out by `gloom`.
+    func texture(night: Double, gloom: Double = 0) -> SKTexture {
+        let light = Self.light(night, gloom: gloom), bytes = picture(dim: light.dim, lamp: light.lamp)
         var canvas = Pixels(w, h)
         for i in 0..<w * h where bytes[i * 4 + 3] != 0 {
             // (Half a step up, so that `Pixels`' floats come back down to the same whole number.)

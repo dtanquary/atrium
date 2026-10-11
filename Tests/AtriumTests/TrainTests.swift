@@ -342,6 +342,9 @@ import Testing
         #expect(differing == 0 && moved > 10, "hour \(hour), scenery \(scenery): \(differing) pixels are not the plain window's under the ghost; the view moved on \(moved) frames")
         #expect((table.picture != plain.picture) == (night > 0), "the ghost shows after dark and not by day")
     }
+    // Under a dark day the lamp is lit as it is after sunset, and leaves no ghost; with no weather it goes by the Sun alone.
+    #expect(PixelCarriage.light(0).lamp == 0 && PixelCarriage.light(0, gloom: 1).lamp == 1 && PixelCarriage.light(0, gloom: 1).ghost == 0)
+    #expect(PixelCarriage.light(0, gloom: 0.4).lamp < 0.1 && PixelCarriage.light(0, gloom: 0.7).lamp > 0.8 && PixelCarriage.light(1, gloom: 1) == PixelCarriage.light(1))
 }
 
 /// Films the train for docs/pixel-window-seat/train_strips.py: steps a scene at a frame rate and writes each frame

@@ -306,7 +306,7 @@ final class PixelTrain: SKScene {
     var pane: (w: Int, h: Int) { (glass.w, glass.h) }
 
     /// The carriage round the pane (PixelCarriage.swift), in the light of the moment.
-    private func paintFrame() { cabin.texture = carriage.texture(night: Double(night)) }
+    private func paintFrame() { cabin.texture = carriage.texture(night: Double(night), gloom: weather?.gloom ?? 0) }
 
     // MARK: - Motion (every frame)
 
@@ -484,7 +484,7 @@ final class PixelTrain: SKScene {
                 out[y * gw + x] = standing ? pole : blend(out[y * gw + x], wire, 166)
             }
             // Last, what the carriage's lamp leaves in the glass: it lies in front of everything outside.
-            if windowSize < 3 { carriage.reflect(out, ghost: PixelCarriage.light(Double(night)).ghost) }
+            if windowSize < 3 { carriage.reflect(out, ghost: PixelCarriage.light(Double(night), gloom: weather?.gloom ?? 0).ghost) }
         }
         let shot = picture
         texture.modifyPixelData { data, length in
