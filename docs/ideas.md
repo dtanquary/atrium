@@ -7,7 +7,7 @@ When one is picked, it gets its own doc and leaves this list.
 ## Picked, being researched
 - **Black Hole.** A lensed accretion disc slowly turning, bending the stars behind it. The light bending and the brighter approaching side are real physics, and NASA Goddard's public-domain visualisation is a reference to match, the way Galaxy was matched to Hubble. One shader, beside Nebula and Galaxy. Dave picked it on 2026-10-10. Its plan, with his picks from the mock-ups: [black-hole.md](black-hole.md).
 - **Pixel Night Train.** A ground-level window seat: countryside sliding past on the real clock, with rain on the glass when it rains where you are. Dave picked it on 2026-10-10 as an addition to [Pixel Window Seat](pixel-window-seat.md) rather than a wallpaper of its own. Its plan: [pixel-window-seat/train.md](pixel-window-seat/train.md).
-- **Meander.** A river migrating across its floodplain, cutting off oxbows and leaving scroll bars, drawn like lidar relief or Harold Fisk's 1944 maps of the Mississippi (US Army Corps of Engineers, public domain). The simulation is simple (the bank moves by its curvature). A new river on each load, in one colour family. Dave picked it later the same day.
+- **Meander.** A river migrating across its floodplain, cutting off oxbows and leaving scroll bars, drawn like lidar relief or Harold Fisk's 1944 maps of the Mississippi (US Army Corps of Engineers, public domain). The simulation is simple (the bank moves by its curvature). A new river on each load, in one colour family. Dave picked it later the same day. Its plan: [meander.md](meander.md).
 
 ## Parked
 In the order they were proposed, most promising first.
