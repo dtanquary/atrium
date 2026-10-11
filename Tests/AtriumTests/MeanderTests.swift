@@ -1,5 +1,5 @@
 import Foundation
-import MeanderRiver
+@testable import MeanderRiver
 import Testing
 import simd
 
@@ -99,6 +99,17 @@ private func crossings(_ river: River) -> Int {
         try? Data(river.pixels).write(to: URL(fileURLWithPath: folder).appendingPathComponent("meander-\(river.columns)x\(river.rows).rgba"))
     }
     #expect(times.min()! < 150, "the past took \(times) ms")
+    // The banks in the ground against the long way, which splits each segment in two as the prototype did: near a
+    // bank (two texels either side), at every fifth texel
+    var off: [Float] = []
+    for i in stride(from: 0, to: texels, by: 5) where abs(river.ground[i].z - 0.5) < 2 / river.texels {
+        let point = SIMD2(Float(i % river.columns) + 0.5, Float(i / river.columns) + 0.5) / river.texels
+        off.append(abs(river.bankDistance(at: point) - river.ground[i].z) * river.texels)
+    }
+    off.sort()
+    print(String(format: "  its banks against the prototype's, at %d texels: half within %.3f of a texel, 99 in 100 within %.3f, the worst %.2f",
+                 off.count, off[off.count / 2], off[off.count * 99 / 100], off.last!))
+    #expect(off[off.count * 99 / 100] < 0.25 && off.last! < 1)
     // The recent past kept exactly instead, to compare; then a minute of live steps, ten a second
     let exact = River(seed: 13, across: 54, up: 35.07, texels: 14)
     print(String(format: "  with the recent past's ground kept exactly, every 12th step: %.0f ms", milliseconds { exact.age(exactEvery: 12) }))

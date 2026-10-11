@@ -317,14 +317,13 @@ public final class River {
 
     /// Leaves in `scratch` each texel's bank distance to the channel in `path`, for texels out to `reach` beyond its
     /// banks, and adds them to `list`. Each segment is bowed to pass through the middle of the cubic through its
-    /// neighbours, so banks aren't faceted, and its width runs evenly from one node's to the next's. A segment
-    /// visits only the slab of texels beside itself and a little past each end, enough to close the gap at the
-    /// joint; a sharp joint or an open end gets its own disc. It runs its inner loop across itself, along whichever
-    /// of the grid's axes is nearer to that, where the bank distance changes by the same amount from texel to texel.
-    /// Each segment is drawn in the period that puts it on screen. A stretch with no width (a dry lake) draws nothing.
-    // ponytail: where two stretches of different width meet, at a fresh cutoff, this is up to 0.05 to 0.09 widths
-    // off checking every segment against every texel (measured in the prototype's sketch), until the widths ease
-    // together (about 1.5 T). The exhaustive version costs twice; use it if that step in the bank ever shows.
+    /// neighbours, so banks aren't faceted. Its width runs evenly from one node's to the next's, and its banks are
+    /// the lines that touch the two nodes' circles, so where the width changes fast (a lake's silted end) the
+    /// joints still meet. A segment visits only the slab of texels beside itself and a little past each end, enough
+    /// to close the gap at the joint; a joint sharper than that allows for, or an open end, gets its own disc. It
+    /// runs its inner loop across itself, along whichever of the grid's axes is nearer to that, where the bank
+    /// distance changes by the same amount from texel to texel. Each segment is drawn in the period that puts it on
+    /// screen. A stretch with no width (a dry lake) draws nothing. `bankDistance(at:)` is the long way, to check it by.
     private func band(_ count: Int, closed: Bool, reach: Float, into list: inout Texels) {
         let tex = texels, columns = columns, rows = rows, L = period, margin = Self.margin, limit = 0.5 + reach
         var found = list.count
@@ -347,54 +346,63 @@ public final class River {
                 along -= along.rounded(.down)
                 let ax = a.x + along * L - margin - 0.5 * (a.x + b.x), ay = a.y // in the period that holds the screen
                 let turnIn = simd_dot(last, heading), turnOut = simd_dot(heading, next)
-                if (!closed && i == 0) || turnIn < 0.96 { // an end, or a turn of over 16 degrees: a disc round the node
-                    let wide = a.z + reach
-                    let x0 = max(Int(((ax - wide) * tex).rounded(.down)), 0), x1 = min(Int(((ax + wide) * tex).rounded(.up)), columns - 1)
-                    let y0 = max(Int(((ay - wide) * tex).rounded(.down)), 0), y1 = min(Int(((ay + wide) * tex).rounded(.up)), rows - 1)
-                    if x0 <= x1, y0 <= y1 {
-                        for ty in y0...y1 {
-                            let gy = (Float(ty) + 0.5) / tex - ay
-                            for tx in x0...x1 {
-                                let gx = (Float(tx) + 0.5) / tex - ax, distance = (gx * gx + gy * gy).squareRoot() - a.z + 0.5, at = ty * columns + tx
-                                if distance < limit, distance < scratch[at] {
-                                    if scratch[at] == .infinity { (items[found], found) = (Int32(at), found + 1) }
-                                    scratch[at] = distance
-                                }
+                // an end, or a turn of over 26 degrees, gets a disc round the node
+                for end in 0..<2 where end == 0 ? (!closed && i == 0) || turnIn < 0.9 : !closed && i == count - 2 {
+                    let cx = end == 0 ? ax : ax + ex, cy = end == 0 ? ay : ay + ey, half = end == 0 ? a.z : b.z, wide = half + reach
+                    let x0 = max(Int(((cx - wide) * tex).rounded(.down)), 0), x1 = min(Int(((cx + wide) * tex).rounded(.up)), columns - 1)
+                    let y0 = max(Int(((cy - wide) * tex).rounded(.down)), 0), y1 = min(Int(((cy + wide) * tex).rounded(.up)), rows - 1)
+                    guard x0 <= x1, y0 <= y1 else { continue }
+                    for ty in y0...y1 {
+                        let gy = (Float(ty) + 0.5) / tex - cy
+                        for tx in x0...x1 {
+                            let gx = (Float(tx) + 0.5) / tex - cx, distance = (gx * gx + gy * gy).squareRoot() - half + 0.5, at = ty * columns + tx
+                            if distance < limit, distance < scratch[at] {
+                                if scratch[at] == .infinity { (items[found], found) = (Int32(at), found + 1) }
+                                scratch[at] = distance
                             }
                         }
                     }
                 }
-                // past each end by the gap its joint leaves on the outside of the turn, and half a texel
-                let turn = min(max(min(turnIn, turnOut), 0.9), 1), past = (out * ((1 - turn) / (1 + turn)).squareRoot() + 0.5 / tex) / length
+                // The banks are the lines that touch both nodes' circles, so they lean in toward the narrower end, by
+                // `lean` across for `level` along (Inigo Quilez's uneven capsule, iquilezles.org/articles/distfunctions2d)
+                let lean = max(-0.9, min(0.9, (a.z - b.z) / length)), level = (1 - lean * lean).squareRoot()
+                // past each end by the gap its joint leaves on the outside of the turn, by as far as the leaning
+                // banks run on beyond the narrower end, and by half a texel
+                func gap(_ turn: Float, _ narrowing: Float) -> Float {
+                    let turn = min(max(turn, 0.9), 1)
+                    return (out * (((1 - turn) / (1 + turn)).squareRoot() + max(narrowing, 0) / level) + 0.5 / tex) / length
+                }
+                let before = gap(turnIn, -lean), past = gap(turnOut, lean)
                 // The inner loop runs down columns if the segment is nearer level, along rows if it is nearer upright
                 let upright = abs(ey) > abs(ex), outerEnd = upright ? rows - 1 : columns - 1, innerEnd = upright ? columns - 1 : rows - 1
                 let (o, t) = upright ? (ay, ax) : (ax, ay), (eo, et) = upright ? (ey, ex) : (ex, ey) // the outer and the inner axis
-                let reachO = abs(eo) * past + out * abs(et) / length
+                let reachO = abs(eo) * max(before, past) + out * abs(et) / length
                 let o0 = max(Int(((min(o, o + eo) - reachO) * tex).rounded(.down)), 0), o1 = min(Int(((max(o, o + eo) + reachO) * tex).rounded(.up)), outerEnd)
                 guard o0 <= o1 else { continue }
                 // along the segment (0 to 1) and off it to the right, at inner texel 0 of each outer line, and their steps
-                let shareStep = et / length2 / tex, offStep = (upright ? ey : -ex) / length / tex, stride = upright ? 1 : columns, rise = b.z - a.z
+                let shareStep = et / length2 / tex, offStep = (upright ? ey : -ex) / length / tex, stride = upright ? 1 : columns
                 for outer in o0...o1 {
                     let go = (Float(outer) + 0.5) / tex - o, gt = 0.5 / tex - t
                     let share0 = (go * eo + gt * et) / length2, off0 = upright ? (gt * ey - go * ex) / length : (go * ey - gt * ex) / length
                     var u = (-out - off0) / offStep, v = (out - off0) / offStep
                     var (from, to) = (min(u, v), max(u, v))
                     if abs(shareStep) > 1e-9 {
-                        (u, v) = ((-past - share0) / shareStep, (1 + past - share0) / shareStep)
+                        (u, v) = ((-before - share0) / shareStep, (1 + past - share0) / shareStep)
                         (from, to) = (max(from, min(u, v)), min(to, max(u, v)))
-                    } else if share0 < -past || share0 > 1 + past { continue }
+                    } else if share0 < -before || share0 > 1 + past { continue }
                     let first = max(Int(from.rounded(.up)), 0), final = min(Int(to.rounded(.down)), innerEnd)
                     guard first <= final else { continue }
                     var share = share0 + shareStep * Float(first), off = off0 + offStep * Float(first)
                     var at = upright ? outer * columns + first : first * columns + outer
                     for _ in first...final {
-                        let distance: Float
-                        if share < 0 {
-                            distance = (off * off + share * share * length2).squareRoot() - a.z + 0.5
-                        } else if share > 1 {
-                            distance = (off * off + (share - 1) * (share - 1) * length2).squareRoot() - b.z + 0.5
+                        let distance: Float, along = share * length, aside = abs(off - 4 * share * (1 - share) * bow)
+                        let place = level * along - lean * aside // which of the three it is nearest: a's circle, b's, or a bank
+                        if place < 0 {
+                            distance = (off * off + along * along).squareRoot() - a.z + 0.5
+                        } else if place > level * length {
+                            distance = (off * off + (along - length) * (along - length)).squareRoot() - b.z + 0.5
                         } else {
-                            distance = abs(off - 4 * share * (1 - share) * bow) - (a.z + share * rise) + 0.5
+                            distance = level * aside + lean * along - a.z + 0.5
                         }
                         if distance < limit, distance < scratch[at] {
                             if scratch[at] == .infinity { (items[found], found) = (Int32(at), found + 1) }
@@ -406,6 +414,35 @@ public final class River {
             }
         } } }
         list.count = found
+    }
+
+    /// The live channel's bank distance at a point on screen, the long way: every segment, each one split in two at
+    /// the middle of the cubic through its neighbours and drawn as two straight pieces, which is how the prototype
+    /// drew a bank. For the tests, to hold `band` and its bowed segments to.
+    func bankDistance(at point: SIMD2<Float>) -> Float {
+        let n = nodes.count, L = period
+        func node(_ k: Int) -> SIMD3<Float> {
+            let at = (k + n) % n
+            return SIMD3(nodes[at].x + (k < 0 ? -L : k >= n ? L : 0), nodes[at].y, nodes[at].half)
+        }
+        func piece(_ a: SIMD3<Float>, _ b: SIMD3<Float>, _ shift: Float) -> Float {
+            let e = SIMD2(b.x - a.x, b.y - a.y), length = simd_length(e) + 1e-9, p = point - SIMD2(a.x + shift, a.y)
+            let along = simd_dot(p, e) / length, aside = abs(p.x * e.y - p.y * e.x) / length
+            let lean = max(-0.9, min(0.9, (a.z - b.z) / length)), level = (1 - lean * lean).squareRoot(), place = level * along - lean * aside
+            if place < 0 { return simd_length(p) - a.z + 0.5 }
+            if place > level * length { return simd_length(p - e) - b.z + 0.5 }
+            return level * aside + lean * along - a.z + 0.5
+        }
+        var nearest = Float.infinity
+        for i in 0..<n {
+            let behind = node(i - 1), a = node(i), b = node(i + 1), ahead = node(i + 2)
+            let middle = (9 * (a + b) - behind - ahead) / 16
+            var along = (0.5 * (a.x + b.x) + Self.margin) / L
+            along -= along.rounded(.down)
+            let shift = along * L - Self.margin - 0.5 * (a.x + b.x) // the period that holds the screen, as `band` has it
+            nearest = min(nearest, piece(a, middle, shift), piece(middle, b, shift))
+        }
+        return nearest
     }
 
     /// Fills `banks` with the right bank (x, y) and the left bank (z, w) of each node of the channel in `path`, or
