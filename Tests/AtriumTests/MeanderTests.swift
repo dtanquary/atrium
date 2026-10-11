@@ -110,9 +110,19 @@ private func crossings(_ river: River) -> Int {
     print(String(format: "  its banks against the prototype's, at %d texels: half within %.3f of a texel, 99 in 100 within %.3f, the worst %.2f",
                  off.count, off[off.count / 2], off[off.count * 99 / 100], off.last!))
     #expect(off[off.count * 99 / 100] < 0.25 && off.last! < 1)
-    // The recent past kept exactly instead, to compare; then a minute of live steps, ten a second
-    let exact = River(seed: 13, across: 54, up: 35.07, texels: 14)
-    print(String(format: "  with the recent past's ground kept exactly, every 12th step: %.0f ms", milliseconds { exact.age(exactEvery: 12) }))
+    // No cracks in the ground a past leaves: land that is over 3 T older than the land on both sides of it, across
+    // or up, is a texel or two the sweep missed
+    var cracks = 0, land = 0
+    for y in 1..<river.rows - 1 { for x in 1..<river.columns - 1 {
+        let i = y * river.columns + x, here = river.ground[i]
+        guard min(here.z, here.w) > 0.5 + 2 / river.texels, here.x > 0 else { continue }
+        land += 1
+        func newer(_ a: Int, _ b: Int) -> Bool { river.ground[a].x > here.x + 3 && river.ground[b].x > here.x + 3 }
+        if newer(i - 1, i + 1) || newer(i - river.columns, i + river.columns) { cracks += 1 }
+    } }
+    print(String(format: "  cracks in its ground: %d of %d land texels (%.2f%%)", cracks, land, 100 * Double(cracks) / Double(land)))
+    #expect(Double(cracks) / Double(land) < 0.004)
+    // then a minute of live steps, ten a second
     var steps: [Double] = []
     for _ in 0..<600 { steps.append(milliseconds { river.advance(0.1) }) }
     steps.sort()

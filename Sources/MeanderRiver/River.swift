@@ -104,8 +104,9 @@ public final class River {
 
     public private(set) var nodes: [Node] = []
     public private(set) var lakes: [Lake] = []
-    /// The time in T, and what the stamps count from (see `rebase`).
-    public private(set) var now = 0.0, base = 0.0
+    /// The time in T, and what the stamps count from (see `rebase`): a little over the ground's memory back, so a
+    /// texel the river has never reached, whose stamp is none, reads as older than anything remembered.
+    public private(set) var now = 0.0, base = -(River.memory + 5)
     public private(set) var cutoffs = 0
     /// Nodes are kept 0.6 to 1.4 times this far apart.
     private var spacing: Float
@@ -129,6 +130,8 @@ public final class River {
     private var owed = 0.0
     /// When `sweep` last ran, as a stamp.
     private var sweptAt: Float = 0
+    /// Whether a past is being made by `sweep`, and the nodes a pass of `respace` is about to drop.
+    private var sweeping = false, dropped: [Int] = []
 
     /// A straight river with small wiggles, from which the bends grow, and the ground it will write on.
     public init(seed: UInt64, across: Float, up: Float, texels: Float, spacing: Float = 0.5) {
@@ -239,6 +242,7 @@ public final class River {
                 }
                 guard needed else { return false }
                 spare.removeAll(keepingCapacity: true)
+                dropped.removeAll(keepingCapacity: true)
                 i = 0
                 while i < n {
                     let q = (i + 1) % n, wrap: Float = i == n - 1 ? L : 0, here = p[i], there = p[q], reach = length(i)
@@ -250,6 +254,7 @@ public final class River {
                                           half: 0.5 * (here.half + there.half), right: 0.5 * (here.right + there.right + [wrap, 0]),
                                           left: 0.5 * (here.left + there.left + [wrap, 0])))
                     } else if reach < short && i < n - 1 {
+                        dropped.append(i)
                         i += 1
                     }
                     i += 1
@@ -257,6 +262,9 @@ public final class River {
                 return true
             }
             guard changed else { break }
+            // A node that goes takes a corner of the old bank line with it: sweep the two segments it ends first,
+            // or the ground inside that corner is never stamped (where a bank swings round, these made fans of gaps)
+            if sweeping { for i in dropped { sweep(loop: i..<i + 2) } }
             swap(&nodes, &spare)
         }
         // Keep the river in the period that holds the screen: the first node says where it is, near enough
@@ -473,31 +481,47 @@ public final class River {
     /// Stamps the texels whose centres lie in a quad, and wipes any hollow there, or with `hollow` makes them one.
     /// The quad's corners go round it, and the stamp runs from `from` on its first edge (a to b) to `to` on its
     /// third (c to d): the first is where a bank was, the third where it is now, and the ground between was left at
-    /// times in between. Whole texels, nothing finer, and drawn in the period that puts it on screen: the cheap way
-    /// to mark the ground, for a past nobody watched.
+    /// times in between. With `from` and `to` the same it is a channel's ribbon, its banks the first and third
+    /// edges. A `soft` edge is a bank the river may never come back to, the scarp the picture will show: texels up
+    /// to one beyond it take a share of the stamp, less the further out, so the scarp comes out as smooth as the
+    /// live river's and not in texel-sized stairs (it stands half a texel further out than it should, which
+    /// nobody can see). Drawn in the period that puts it on screen: the cheap way to mark the ground, for a past
+    /// nobody watched.
     private func fill(_ a: SIMD2<Float>, _ b: SIMD2<Float>, _ c: SIMD2<Float>, _ d: SIMD2<Float>, from: Float, to: Float, hollow: Bool = false,
-                      _ ground: UnsafeMutableBufferPointer<SIMD4<Float>>) {
-        let tex = texels, L = period
-        let top = min(a.y, b.y, c.y, d.y), bottom = max(a.y, b.y, c.y, d.y)
+                      soft: Bool = true, _ ground: UnsafeMutableBufferPointer<SIMD4<Float>>) {
+        let tex = texels, L = period, ribbon = from == to
+        // The first edge's line and the third's, as slopes in x and in y that give how far inside each a point is
+        var first = simd_normalize(SIMD2(a.y - b.y, b.x - a.x) + [1e-12, 0]), third = simd_normalize(SIMD2(c.y - d.y, d.x - c.x) + [1e-12, 0])
+        if simd_dot(c + d - a - b, first) < 0 { first = -first }
+        if simd_dot(a + b - c - d, third) < 0 { third = -third }
+        // what is scanned: the quad, and a texel beyond each soft edge
+        let reach = soft ? 1 / tex : 0
+        let (sa, sb) = (a - first * reach, b - first * reach), (sc, sd) = ribbon ? (c - third * reach, d - third * reach) : (c, d)
+        let top = min(min(sa.y, sb.y), min(sc.y, sd.y)), bottom = max(max(sa.y, sb.y), max(sc.y, sd.y)) // (min of four would make an array)
         let y0 = max(Int((top * tex - 0.5).rounded(.up)), 0), y1 = min(Int((bottom * tex - 0.5).rounded(.down)), rows - 1)
         guard y0 <= y1 else { return }
         let middle = 0.25 * (a.x + b.x + c.x + d.x) + Self.margin, shift = -(middle / L).rounded(.down) * L
-        // How far a point is from the first edge's line and from the third's, each a slope in x and in y
-        let first = simd_normalize(SIMD2(a.y - b.y, b.x - a.x) + [1e-12, 0]), third = simd_normalize(SIMD2(c.y - d.y, d.x - c.x) + [1e-12, 0])
         for ty in y0...y1 {
             let y = (Float(ty) + 0.5) / tex
-            let edges = (crossing(a, b, y), crossing(b, c, y), crossing(c, d, y), crossing(d, a, y)) // not numbers where the row misses an edge
+            let edges = (crossing(sa, sb, y), crossing(sb, sc, y), crossing(sc, sd, y), crossing(sd, sa, y)) // not numbers where the row misses an edge
             let left = Float.minimum(Float.minimum(edges.0, edges.1), Float.minimum(edges.2, edges.3))
             let right = Float.maximum(Float.maximum(edges.0, edges.1), Float.maximum(edges.2, edges.3))
             guard left <= right else { continue }
             let x0 = max(Int(((left + shift) * tex - 0.5).rounded(.up)), 0), x1 = min(Int(((right + shift) * tex - 0.5).rounded(.down)), columns - 1)
             guard x0 <= x1 else { continue }
             let x = (Float(x0) + 0.5) / tex - shift
-            var fromFirst = (x - a.x) * first.x + (y - a.y) * first.y, fromThird = (x - c.x) * third.x + (y - c.y) * third.y
+            // texels inside the first edge and inside the third
+            var inFirst = ((x - a.x) * first.x + (y - a.y) * first.y) * tex, inThird = ((x - c.x) * third.x + (y - c.y) * third.y) * tex
             for i in ty * columns + x0...ty * columns + x1 {
-                let share = from == to ? 0 : abs(fromFirst) / (abs(fromFirst) + abs(fromThird) + 1e-9)
-                (ground[i].x, ground[i].y) = (from + (to - from) * share, hollow ? min(ground[i].y, 0.3) : 1)
-                (fromFirst, fromThird) = (fromFirst + first.x / tex, fromThird + third.x / tex)
+                let cover = 1 + (ribbon ? min(inFirst, inThird) : inFirst), within = max(inFirst, 0)
+                let value = ribbon ? from : from + (to - from) * within / (within + abs(inThird) + 1e-9)
+                if cover >= 1 {
+                    (ground[i].x, ground[i].y) = (value, hollow ? min(ground[i].y, 0.3) : 1)
+                } else if cover > 0 {
+                    let old = max(ground[i].x, value - 400)
+                    ground[i].x = old + (value - old) * cover
+                }
+                (inFirst, inThird) = (inFirst + first.x, inThird + third.x)
             }
         }
     }
@@ -507,6 +531,34 @@ public final class River {
         bankLines(trace(), closed: true)
         for i in nodes.indices { (nodes[i].right, nodes[i].left) = (banks[i].lowHalf, banks[i].highHalf) }
         sweptAt = Float(now - base)
+    }
+
+    /// Fills the cracks a swept past leaves: a texel, or a line of them one or two wide, that every strip missed
+    /// and that is left older than the ground on both sides of it. Each stamp becomes the latest of the nine round
+    /// it, and then the earliest of the nine round that, which closes anything under three texels wide and moves no
+    /// scarp. (Where a bank swings round against a valley wall the strips, drawn between straight banks, leave fans
+    /// of such cracks: 1% of the ground, measured against the same past kept the exact way.)
+    private func closeCracks() {
+        let columns = columns, count = columns * rows
+        var stamps = [Float](repeating: 0, count: count), other = stamps
+        ground.withUnsafeMutableBufferPointer { ground in stamps.withUnsafeMutableBufferPointer { a in other.withUnsafeMutableBufferPointer { b in
+            for i in 0..<count { (a[i], b[i]) = (ground[i].x, ground[i].x) }
+            // across and then up, each time; a row's end takes the next row's start for its neighbour, and the top
+            // and bottom rows are left as they were, which only the screen's own edge can tell
+            for i in 1..<count - 1 { b[i] = max(max(a[i - 1], a[i]), a[i + 1]) }
+            for i in columns..<count - columns { a[i] = max(max(b[i - columns], b[i]), b[i + columns]) }
+            for i in 1..<count - 1 { b[i] = min(min(a[i - 1], a[i]), a[i + 1]) }
+            for i in columns..<count - columns { a[i] = min(min(b[i - columns], b[i]), b[i + columns]) }
+            for i in 0..<count { ground[i].x = max(ground[i].x, a[i]) }
+        } } }
+    }
+
+    /// After a cutoff the river's first and last nodes are the two sides of the neck, and their banks have swung
+    /// round to the new course: remembers them there, so the next `sweep` doesn't take the swing for ground left.
+    private func markNeck() {
+        let n = trace()
+        bankLines(n, closed: true, only: n - 1..<n + 1)
+        for i in [0, n - 1] { (nodes[i].right, nodes[i].left) = (banks[i].lowHalf, banks[i].highHalf) }
     }
 
     /// The cheap way to keep the stamps while a past is being made. Since the last sweep each bank has moved from
@@ -538,13 +590,13 @@ public final class River {
     }
 
     /// Gives the ribbon between the banks of the channel in `path` the present time, and makes it a hollow if
-    /// `hollow`: for a loop cut off in the distant past.
-    private func fillRibbon(_ count: Int, closed: Bool, hollow: Bool = false) {
+    /// `hollow`: for a loop cut off in the distant past, whose banks are `soft`, scarps from now on.
+    private func fillRibbon(_ count: Int, closed: Bool, hollow: Bool = false, soft: Bool = true) {
         bankLines(count, closed: closed)
         ground.withUnsafeMutableBufferPointer { ground in
             for i in 0..<(closed ? count : count - 1) {
                 let q = (i + 1) % count, wrap = SIMD2<Float>(closed && i == count - 1 ? period : 0, 0)
-                fill(banks[i].lowHalf, banks[q].lowHalf + wrap, banks[q].highHalf + wrap, banks[i].highHalf, from: Float(now - base), to: Float(now - base), hollow: hollow, ground)
+                fill(banks[i].lowHalf, banks[q].lowHalf + wrap, banks[q].highHalf + wrap, banks[i].highHalf, from: Float(now - base), to: Float(now - base), hollow: hollow, soft: soft, ground)
             }
         }
     }
@@ -737,12 +789,11 @@ public final class River {
     /// Brings the ground up to date with the river. Texels under the channel take the present time; one a bank is
     /// only part-way across takes that share of the way to it, so the furthest line a bank reached is recorded to
     /// a fraction of a texel and old scarps come out smooth, not stair-stepped. The river wipes any hollow it
-    /// crosses and trims any lake. `drawing` is false while a history is being made and nobody is looking: then
-    /// the band is only as wide as the stamps need, and no bytes are written.
-    private func updateGround(drawing: Bool = true) {
+    /// crosses and trims any lake.
+    private func updateGround() {
         swap(&touched, &before)
         touched.count = 0
-        band(trace(), closed: true, reach: (drawing ? 2 : 0.5) / texels, into: &touched)
+        band(trace(), closed: true, reach: 2 / texels, into: &touched)
         let tex = texels, stampNow = Float(now - base), far = Self.far
         // Over half the river's texels are deep water, a third of a width inside the bank or more, and all alike:
         // the present time, no hollow, and bytes that are the same for every one of them
@@ -750,7 +801,7 @@ public final class River {
         ground.withUnsafeMutableBufferPointer { ground in scratch.withUnsafeMutableBufferPointer { scratch in pixels.withUnsafeMutableBufferPointer { pixels in
             for raw in before.items[..<before.count] where scratch[Int(raw)] == .infinity {
                 ground[Int(raw)].z = far
-                if drawing { write(Int(raw), ground, pixels) }
+                write(Int(raw), ground, pixels)
             }
             let words = UnsafeMutableRawPointer(pixels.baseAddress!)
             for raw in touched.items[..<touched.count] {
@@ -770,11 +821,11 @@ public final class River {
                 }
                 ground[i].y = max(ground[i].y, 0.5 + 3 * (0.5 - distance))
                 ground[i].z = distance
-                if drawing { write(i, ground, pixels) }
+                write(i, ground, pixels)
             }
         } } }
         trimLakes { texel, _ in ground[texel].z < 0.5 ? now : nil }
-        if drawing { drawLakes() }
+        drawLakes()
         if now - base > 650 { rebase() }
     }
 
@@ -803,7 +854,10 @@ public final class River {
         ground.withUnsafeMutableBufferPointer { ground in scratch.withUnsafeMutableBufferPointer { scratch in pixels.withUnsafeMutableBufferPointer { pixels in
             for raw in lakeBefore.items[..<lakeBefore.count] {
                 let i = Int(raw)
-                if stamping, scratch[i] < 0.5 + 1 / texels { ground[i].x = Float(now - base) } // and a texel beyond, as at the end of `age`
+                if stamping { // out to a texel beyond its banks, less the further out, as `fill` stamps a soft edge
+                    let cover = 1 - (scratch[i] - 0.5) * texels, stamp = Float(now - base), old = max(ground[i].x, stamp - 400)
+                    if cover > 0 { ground[i].x = old + (stamp - old) * min(cover, 1) }
+                }
                 ground[i].y = min(ground[i].y, scratch[i])
                 scratch[i] = .infinity
                 write(i, ground, pixels)
@@ -841,22 +895,25 @@ public final class River {
     /// speed 1). The distant past is run cheaply: nodes a width apart and steps three times the coarse one. It's a
     /// busier river than the live one (it cuts off about three times as often), but what it leaves is old and pale.
     /// Then the recent past as the live river runs, in coarse steps. Necks are looked for and nodes respaced every
-    /// other step. The ground is kept by `sweep`; or, with `exactEvery`, the recent past's by `updateGround` every
-    /// so many steps, which is smoother at the scarps and costs half as much again.
-    public func age(distant: Double = 240, recent: Double = 60, exactEvery: Int = 0) {
+    /// other step, and the ground is kept by `sweep`, which stamps it as the river leaves it. (Bringing the ground
+    /// up to date the live river's way every 12th step of the recent past was tried in its place: it took 160 ms
+    /// where this takes 100, and left the bars in terraces, one to a visit, where they should be smooth.)
+    public func age(distant: Double = 240, recent: Double = 60) {
         let end = now + distant + recent
         if distant > 0 {
             let fresh = spacing
             spacing = 1
             respace()
             markBanks()
+            sweeping = true // from here a node `respace` drops has banks remembered, to sweep from
             for k in 1...Int(distant / 0.12) {
                 migrate(0.12)
                 while k % 2 == 0, let neck = neck() {
-                    sweep(loop: neck.lo..<neck.hi)
+                    sweep(loop: neck.lo + nodes.count - 1..<neck.hi + nodes.count + 1)
                     path.removeAll(keepingCapacity: true)
                     path.append(contentsOf: cut(neck.lo, neck.hi))
                     fillRibbon(path.count, closed: false, hollow: end - now < 200) // an older hollow has faded by the end
+                    markNeck()
                 }
                 if k % 2 == 0 { respace() }
                 if k % 8 == 0 { sweep() }
@@ -865,30 +922,29 @@ public final class River {
             respace()
         } else {
             markBanks()
+            sweeping = true
         }
         let steps = Int(recent / 0.04)
-        if exactEvery > 0 { updateGround(drawing: false) }
         for k in 1...max(steps, 1) where steps > 0 {
             migrate(0.04)
             while k % 2 == 0, let neck = neck() { // an older lake is dry by the end
-                if exactEvery == 0 { sweep(loop: neck.lo..<neck.hi) }
+                sweep(loop: neck.lo + nodes.count - 1..<neck.hi + nodes.count + 1)
                 strand(cut(neck.lo, neck.hi), lake: Double(steps - k) * 0.04 < Self.lakeLife, stamping: true)
+                markNeck()
             }
             if k % 2 == 0 { respace() }
-            if exactEvery > 0 {
-                if k % exactEvery == 0 { updateGround(drawing: false) }
-            } else if k % 12 == 0 { sweep() }
+            if k % 12 == 0 { sweep() }
         }
-        if exactEvery == 0 {
-            // `sweep` works from straight banks between the nodes and `updateGround` from bowed ones, so give the
-            // river's ribbon and a texel beyond it the present time, or a hairline of old ground is left between them
-            sweep()
-            path.removeAll(keepingCapacity: true)
-            for node in nodes { path.append([node.x, node.y, node.half + 1 / texels]) }
-            fillRibbon(path.count, closed: true)
-            // where the river has been since a lake was born, the lake is gone, and its end there has been silting up since
-            trimLakes { texel, lake in ground[texel].x > Float(lake.born - base) + 0.05 ? Double(ground[texel].x) + base : nil }
-        }
+        sweep()
+        closeCracks()
+        // `sweep` works from straight banks between the nodes and `updateGround` from bowed ones, so give the
+        // river's ribbon and a texel beyond it the present time, or a hairline of old ground is left between them
+        path.removeAll(keepingCapacity: true)
+        for node in nodes { path.append([node.x, node.y, node.half + 1 / texels]) }
+        fillRibbon(path.count, closed: true, soft: false)
+        // where the river has been since a lake was born, the lake is gone, and its end there has been silting up since
+        trimLakes { texel, lake in ground[texel].x > Float(lake.born - base) + 0.05 ? Double(ground[texel].x) + base : nil }
+        sweeping = false
         updateGround()
         ground.withUnsafeMutableBufferPointer { ground in pixels.withUnsafeMutableBufferPointer { pixels in
             for i in ground.indices { write(i, ground, pixels) }
