@@ -380,8 +380,8 @@ Meander has a Settings page (`Meander.knobs`, on its entry in `Scenes.swift`). I
 | Section | Row | What it is | Standard |
 |---|---|---|---|
 | Look | Look | Relief or Old map | Relief |
-| Look | Colors | relief's: Random, Survey Blue, Rainforest, Garnet. Shown for relief | Random |
-| Look | Colors | the old map's: Random, Fisk 1944, Sage. Shown for the old map | Random |
+| Look | (swatches) | relief's colours: Random, Survey Blue, Rainforest, Garnet. Shown for relief | Random |
+| Look | (swatches) | the old map's: Random, Fisk 1944, Sage. Shown for the old map | Random |
 | Look | Inks | Fixed to the land, or In Fisk's order. Shown for the old map | Fixed to the land |
 | Look | Scroll bars | their strength, 0 to 2×. Shown for relief | 1× |
 | River | River size | the channel's width, 28 to 56 pt | 28 pt |
@@ -415,7 +415,7 @@ Tests: `meanderDrawsEveryLook` draws every colourway of both looks, the map's in
 
 Not done, or not known:
 - **The Settings page itself has not been seen.** The test that opens it (`SETTINGS_SHOT`) puts a window on the screen, which this build was told not to do. The rows are plain `Knob`s of kinds other pages already use.
-- **Colours are menus, not the swatch grid** other wallpapers have: a wallpaper has one `PaletteChoice`, and this one needs a list for each look. The rows that belong to one look show while the Look menu is at it (`shownWhen` with `shownAt`, which came with the train).
+- **Colours were menus, not the swatch grid** other wallpapers have: a wallpaper has one `PaletteChoice`, and this one needs a list for each look. (Swatches since: "Colours as swatches", below.) The rows that belong to one look show while the Look menu is at it (`shownWhen` with `shownAt`, which came with the train).
 - **No relief for Light Mode,** no Amethyst, and of the single inks only Sage (Salmon and Teal have no dark sheet measured).
 - **No shared grade sliders** (brightness, contrast, saturation, hue).
 - **No screenshot:** `Resources/preview-meander.jpg` and `docs/images` have none, so its Settings page is blank behind the header until the live copy has built. No README entry, nothing on the site.
@@ -477,6 +477,18 @@ Not done, or not known:
 - Not seen on a real screen. The measure follows cut banks in relief only (the old map's banks are the same field).
 - A lake in the second half of its life narrows along its whole length, and does it on every second or third step, by under a quarter of a pixel a time; a fresh lake's ends move on every step.
 - A second texture of the ground: 1.5 MB more a scene.
+
+### Colours as swatches (2026-10-11)
+Dave asked for "a swatch grid for the colours where there are two menus". Under the Look menu the page now shows the swatches of the look that is picked, Random first and the standard: relief's (the river's colour running into two of its heights) or the old map's (its paper running into its inks, the Light sheet's in Light Mode and the Dark one's in Dark).
+
+- **What the app gained** (Settings.swift and Scenes.swift, the smallest change that does it): a `PaletteChoice` can name a menu and one of its picks (`shownWhen` and `shownAt`, read as a knob's are), and a `Wallpaper` has `looks`, a list of such palettes beside its one `palettes`. A page draws each of them as a row under the menu it names, while the menu is at that pick (`LookPalette`), and Reset clears them. Every other wallpaper's list is empty and its page draws what it drew.
+- **The scene follows a pick as it does a knob,** at once and on the same river (`Meander.wanted`, `dress`). Nothing is rebuilt for it, which is how `looks` differ from `palettes`: a rebuild would be a new river.
+- **The picks are stored by name** like every palette's, under `meander.colors` (relief) and `meander.inks` (the old map); no name, or one no swatch has, is Random. The two menus' keys (`meander.relief` and `meander.sheet`, which held a number) are no longer read, so a pick made with the menus is forgotten once.
+- **Tests:** `swatchesUnderAMenuHangTogether` checks, for every wallpaper with `looks`, that each names a menu of that wallpaper's and a pick the menu has, that no two share a pick or a key, and that every swatch has colours for both modes; and that Meander is the only wallpaper with any. `meanderFollowsItsSettings` picks swatches on a running scene, and a name no swatch has. `meanderDrawsEveryLook` draws every swatch.
+
+Not done, or not known:
+- **The page has still not been seen as a person sees it.** `SETTINGS_SHOT` puts a window on the screen. Drawn into a bitmap from a window that is never shown, the page's text and menus don't draw, but its swatches do: four for relief and three for the old map, each under the right look, in the Light sheets' colours in Light Mode. Whether the grid sits well under the menu with no title of its own is for an eye on the real page.
+- `Sources/CLAUDE.md` describes a wallpaper's settings and doesn't yet mention `looks`.
 
 ## Dave's feedback
 - **2026-10-11, the first build on his desktop** (both looks, the settings, 12.5 s a T): "Meander is looking great, we just need to keep improving the smoothness of it and add the rest of those features mentioned above". The features he means are the ones listed to him as still to build: a Light Mode relief, Amethyst and more single inks, a swatch grid for the colours where there are two menus, and the shared grade sliders.

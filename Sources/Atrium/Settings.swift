@@ -76,6 +76,9 @@ struct PaletteChoice {
     var photos: [String: (dark: String, light: String)] = [:]
     /// The Settings section it heads.
     var title = "Colors"
+    /// For one of a wallpaper's `looks`: the menu it goes with and that menu's pick, as a knob's `shownWhen` and `shownAt`.
+    var shownWhen: String?
+    var shownAt: Double?
 }
 
 /// The Settings window, laid out like System Settings: General, Power, Software Update and About, then the wallpapers, down the side,
@@ -498,6 +501,7 @@ struct WallpaperPage: View {
         ForEach(wallpaper.knobs.filter { $0.section == section }, id: \.key) { knob in
             KnobRow(knob: knob)
             if let status = wallpaper.status, status.below == knob.key { StatusRow(key: status.key, gate: knob) }
+            ForEach(wallpaper.looks.filter { $0.shownWhen == knob.key }, id: \.key) { LookPalette(choice: $0, menu: knob) }
         }
     }
 
@@ -542,7 +546,7 @@ struct WallpaperPage: View {
             }
             if !empty {
                 ResetSection {
-                    for key in wallpaper.knobs.map(\.key) + [wallpaper.palettes?.key].compactMap({ $0 }) {
+                    for key in wallpaper.knobs.map(\.key) + [wallpaper.palettes?.key].compactMap({ $0 }) + wallpaper.looks.map(\.key) {
                         UserDefaults.standard.removeObject(forKey: key)
                     }
                     rebuildIfShowing()
@@ -721,6 +725,22 @@ struct RandomOnly<Content: View>: View {
 
     var body: some View {
         if chosen.isEmpty { content }
+    }
+}
+
+/// The swatches of one of a wallpaper's `looks`, under the menu it goes with while that menu is at its pick. The
+/// scene follows the pick as it does a knob, so nothing is rebuilt.
+struct LookPalette: View {
+    let choice: PaletteChoice
+    @AppStorage private var pick: Double
+
+    init(choice: PaletteChoice, menu: Knob) {
+        self.choice = choice
+        _pick = AppStorage(wrappedValue: menu.standard, menu.key)
+    }
+
+    var body: some View {
+        if Knob.on(pick, at: choice.shownAt) { PalettePicker(choice: choice) {} }
     }
 }
 

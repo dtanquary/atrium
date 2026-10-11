@@ -13,11 +13,14 @@ import SpriteKit
 final class Meander: SKScene {
     /// The two looks, as a menu; the rows that belong to one of them show while it is picked.
     nonisolated static let look = Knob(key: "meander.look", label: "Look", range: 0...1, standard: 0, section: "Look", format: .choice(["Relief", "Old map"]))
-    /// Each look's colours, as a menu with Random first: the river picks one of them when it is built.
-    nonisolated static let colours = Knob(key: "meander.relief", label: "Colors", range: 0...Double(reliefs.count), standard: 0, section: "Look",
-                                          format: .choice(["Random"] + reliefs.map(\.name)), shownWhen: look.key, shownAt: 0)
-    nonisolated static let sheet = Knob(key: "meander.sheet", label: "Colors", range: 0...Double(maps.count), standard: 0, section: "Look",
-                                        format: .choice(["Random"] + maps.map(\.name)), shownWhen: look.key, shownAt: 1)
+    /// Each look's colours, as swatches under the Look menu with Random first: relief's, then the old map's. With
+    /// Random a scene picks one of them when it is built. A swatch is relief's river and two of its heights, or a
+    /// map's paper and its inks.
+    nonisolated static let palettes = [
+        PaletteChoice(key: "meander.colors", options: reliefs.map { ($0.name, [$0.river, $0.heights[2].colour, $0.heights[5].colour], [$0.river, $0.heights[2].colour, $0.heights[5].colour]) },
+                      shownWhen: look.key, shownAt: 0),
+        PaletteChoice(key: "meander.inks", options: maps.map { ($0.name, [$0.dark.paper] + $0.dark.inks, [$0.light.paper] + $0.light.inks) }, shownWhen: look.key, shownAt: 1),
+    ]
     /// The old map's two ways with its inks (see `map(rule:)`).
     nonisolated static let rule = Knob(key: "meander.rule", label: "Inks", range: 0...1, standard: 0, section: "Look",
                                        format: .choice(["Fixed to the land", "In Fisk's order"]), shownWhen: look.key, shownAt: 1)
@@ -32,7 +35,7 @@ final class Meander: SKScene {
     nonisolated static let lakes = Knob(key: "meander.lakes", label: "Lakes last", range: 1...10, standard: 16 / perMinute, section: "River", format: .minutes)
     /// T to a minute at speed 1.
     nonisolated private static let perMinute = 60 / River.pace
-    nonisolated static let knobs = [look, colours, sheet, rule, bars, width, speed, memory, lakes]
+    nonisolated static let knobs = [look, rule, bars, width, speed, memory, lakes]
 
     /// A colour from its three bytes.
     nonisolated private static func tone(_ r: Float, _ g: Float, _ b: Float) -> SIMD3<Float> { SIMD3(r, g, b) / 255 }
@@ -88,10 +91,10 @@ final class Meander: SKScene {
     private let clocks = SKUniform(name: "u_t", vectorFloat2: .zero), blend = SKUniform(name: "u_blend", float: 0)
     private let turns = SKUniform(name: "u_turns", vectorFloat4: .zero), settings = SKUniform(name: "u_knobs", vectorFloat4: .zero)
     private var lastTime: TimeInterval?
-    /// What it was built and dressed with: the river's size, the look's four settings, and the colours Random has
-    /// picked for each look, which hold for the scene's life.
+    /// What it was built and dressed with: the river's size, what Settings wanted the ground to wear, and the
+    /// colours Random has picked for each look, which hold for the scene's life.
     private let built = Meander.width.value.rounded()
-    private var dressed: [Double] = [], map = false, stage = stages[0]
+    private var dressed: [String] = [], map = false, stage = stages[0]
     private let lucky = (relief: Int.random(in: reliefs.indices), sheet: Int.random(in: maps.indices))
     /// Settings changes so far, so only the last of a quick run rebuilds; and whether it has handed over to a new scene.
     private var changes = 0, retired = false
@@ -115,23 +118,29 @@ final class Meander: SKScene {
         NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged), name: UserDefaults.didChangeNotification, object: nil)
     }
 
+    /// What Settings wants the ground to wear: the look, the old map's rule, and each look's colours by name (none
+    /// is Random).
+    private static var wanted: [String] {
+        [look, rule].map { "\($0.value)" } + palettes.map { UserDefaults.standard.string(forKey: $0.key) ?? "" }
+    }
+
     /// Gives the ground the look Settings asks for: a shader of its own for relief and for each of the old map's
     /// rules, with the colours picked. The river is the same river, so a look can be changed while it runs.
     private func dress() {
-        dressed = [Self.look, Self.colours, Self.sheet, Self.rule].map(\.value)
-        map = dressed[0] > 0.5
-        let rule = Int(dressed[3])
+        dressed = Self.wanted
+        map = Self.look.value > 0.5
+        let rule = Int(Self.rule.value)
         stage = Self.stages[rule]
         var uniforms = [SKUniform(name: "u_grid", vectorFloat2: [Float(river.columns), Float(river.rows)]), SKUniform(name: "u_other", texture: textures[1]),
                         clocks, blend, turns, settings]
         if map {
-            let sheets = Self.maps[dressed[2] < 0.5 ? lucky.sheet : Int(dressed[2]) - 1], sheet = systemIsDark ? sheets.dark : sheets.light
+            let sheets = Self.maps[Self.maps.firstIndex { $0.name == dressed[3] } ?? lucky.sheet], sheet = systemIsDark ? sheets.dark : sheets.light
             uniforms += [SKUniform(name: "u_paper", vectorFloat3: sheet.paper), SKUniform(name: "u_river", vectorFloat3: sheet.river),
                          SKUniform(name: "u_line", vectorFloat3: sheet.line), SKUniform(name: "u_stage", float: Float(stage))]
             // four inks; a sheet of two takes them in turn
             uniforms += (0..<4).map { SKUniform(name: "u_ink\($0)", vectorFloat3: sheet.inks[$0 % sheet.inks.count]) }
         } else {
-            let relief = Self.reliefs[dressed[1] < 0.5 ? lucky.relief : Int(dressed[1]) - 1]
+            let relief = Self.reliefs[Self.reliefs.firstIndex { $0.name == dressed[2] } ?? lucky.relief]
             // the land's colour by height, 256 across
             let ramp = (0..<256).flatMap { level -> [UInt8] in
                 let height = Float(level) / 255, above = relief.heights.firstIndex { $0.at >= height } ?? relief.heights.count - 1
@@ -164,7 +173,7 @@ final class Meander: SKScene {
     @objc private func settingsChanged() {
         guard !retired else { return }
         tune()
-        if [Self.look, Self.colours, Self.sheet, Self.rule].map(\.value) != dressed { dress() }
+        if Self.wanted != dressed { dress() }
         guard Self.width.value.rounded() != built else { return }
         changes += 1
         let change = changes

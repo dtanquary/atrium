@@ -11,6 +11,10 @@ struct Wallpaper {
     let make: @MainActor (CGSize) -> SKScene
     var knobs: [Knob] = []
     var palettes: PaletteChoice?
+    /// Palettes that each go with one pick of one of its menus (`PaletteChoice.shownWhen` and `shownAt`), their
+    /// swatches shown under that menu while it is at that pick: Meander's colours for relief and for the old map.
+    /// The scene follows a pick as it does a knob; unlike `palettes`, nothing is rebuilt for it.
+    var looks: [PaletteChoice] = []
     /// A line the scene keeps up to date in UserDefaults under `key` (what the live weather last said, say), shown
     /// under its knob `below` while that knob is 0, or on for a switch.
     var status: (key: String, below: String)?
@@ -86,7 +90,7 @@ struct Refresh {
     Wallpaper(name: "Black Hole", icon: "circle.circle.fill", tint: .orange, blurb: "A black hole's glowing disc, bent round it by gravity.",
               make: blackHole, knobs: BlackHole.knobs, palettes: BlackHole.palette, unfinished: true),
     Wallpaper(name: "Meander", icon: "point.bottomleft.forward.to.point.topright.scurvepath", tint: .teal,
-              blurb: "A river wandering across its floodplain, leaving its old courses behind.", make: meander, knobs: Meander.knobs, unfinished: true),
+              blurb: "A river wandering across its floodplain, leaving its old courses behind.", make: meander, knobs: Meander.knobs, looks: Meander.palettes, unfinished: true),
     Wallpaper(name: "Live Sky", icon: "moon.stars.fill", tint: .blue, blurb: "The real sky above you, right now.",
               make: liveSky, knobs: LiveSky.knobs),
     Wallpaper(name: "Earth from Orbit", icon: "globe.americas.fill", tint: .cyan, blurb: "Day and night sweeping over the globe.",

@@ -240,16 +240,17 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
 /// took several times as long and failed every suite that ran then.
 private let measuring = ProcessInfo.processInfo.environment["MEANDER_COSTS"] != nil
 
-/// Settings for a river and a picture the tests can make twice: its seed, and its colours, which Settings would
-/// otherwise pick at random for each scene (Survey Blue and Fisk 1944 here), with any others on top.
+/// Settings for a river the tests can make twice: its seed, with any others on top.
 private func seeded(_ seed: Double, _ others: [String: Double] = [:]) -> [String: Double] {
-    ["meander.seed": seed, "meander.relief": 1, "meander.sheet": 1].merging(others) { $1 }
+    ["meander.seed": seed].merging(others) { $1 }
 }
 
-/// With Settings values for the length of `body`, as the render test sets them.
-@MainActor private func with(_ settings: [String: Double], _ body: () throws -> Void) rethrows {
-    defer { settings.keys.forEach(UserDefaults.standard.removeObject) }
+/// With Settings values for the length of `body`, as the render test sets them, and each look's colours, which
+/// Settings would otherwise pick at random for each scene, so that a picture can be made twice.
+@MainActor private func with(_ settings: [String: Double], colours: [String] = ["Survey Blue", "Fisk 1944"], _ body: () throws -> Void) rethrows {
+    defer { (settings.keys + Meander.palettes.map(\.key)).forEach(UserDefaults.standard.removeObject) }
     for (key, value) in settings { UserDefaults.standard.set(value, forKey: key) }
+    for (palette, name) in zip(Meander.palettes, colours) { UserDefaults.standard.set(name, forKey: palette.key) }
     try body()
 }
 
@@ -290,36 +291,59 @@ private func seeded(_ seed: Double, _ others: [String: Double] = [:]) -> [String
 
 /// Each look is a shader of its own, put together as text that only the GPU's compiler ever checks. All three draw
 /// a picture, and not the same one: relief, the old map with each stage's ink fixed to its land, and in Fisk's
-/// order. So does every colourway in Settings' menus, relief's and the map's, the map's in Light Mode and in Dark.
+/// order. So does every colourway among Settings' swatches, relief's and the map's, the map's in Light Mode and in
+/// Dark.
 @MainActor @Test func meanderDrawsEveryLook() throws {
     var pictures: [[SIMD4<UInt8>]] = []
-    func draw(_ settings: [String: Double]) throws {
-        try with(seeded(7, settings)) {
+    func draw(_ settings: [String: Double], relief: String = "Survey Blue", sheet: String = "Fisk 1944") throws {
+        try with(seeded(7, settings), colours: [relief, sheet]) {
             let screen = try Offscreen(Meander(size: CGSize(width: 756, height: 491)), 756, 491)
             for _ in 0..<2 { try screen.frame() }
             pictures.append(screen.pixels)
         }
-        #expect(Set(stride(from: 0, to: pictures.last!.count, by: 97).map { pictures.last![$0] }).count > 20, "\(settings) drew a flat picture")
+        #expect(Set(stride(from: 0, to: pictures.last!.count, by: 97).map { pictures.last![$0] }).count > 20, "\(settings) in \(relief) and \(sheet) drew a flat picture")
         // A shader that didn't compile leaves the ground's own bytes on the screen, which are no flat picture: but
         // their blue is the water byte, full wherever there is no water near, as in the corner
-        #expect(pictures.last![756 * 5 + 5].z < 240, "\(settings) drew the ground's bytes, not a picture")
+        #expect(pictures.last![756 * 5 + 5].z < 240, "\(settings) in \(relief) and \(sheet) drew the ground's bytes, not a picture")
     }
     for look: [String: Double] in [[:], ["meander.look": 1], ["meander.look": 1, "meander.rule": 1]] { try draw(look) }
     #expect(pictures[0] != pictures[1] && pictures[1] != pictures[2])
     let before = NSApplication.shared.appearance
     defer { NSApplication.shared.appearance = before }
-    for relief in 1...Meander.reliefs.count { try draw(["meander.relief": Double(relief)]) }
+    for relief in Meander.reliefs { try draw([:], relief: relief.name) }
     for name in [NSAppearance.Name.aqua, .darkAqua] {
         NSApplication.shared.appearance = NSAppearance(named: name)
-        for sheet in 1...Meander.maps.count { for rule in 0...1 { try draw(["meander.look": 1, "meander.sheet": Double(sheet), "meander.rule": Double(rule)]) } }
+        for sheet in Meander.maps { for rule in 0...1 { try draw(["meander.look": 1, "meander.rule": Double(rule)], sheet: sheet.name) } }
     }
     #expect(Set(pictures.dropFirst(3).map { $0[$0.count / 2 + 378] }).count > 6) // the colourways differ, by the pixel in the middle
+}
+
+/// Swatches under a menu (`Wallpaper.looks`) hang together, for every wallpaper that has them: each set names a
+/// menu among its wallpaper's knobs and a pick that menu has, no two sets share a pick or a key (nor a knob's), and
+/// every swatch has colours for both modes. Only Meander has them so far: every other wallpaper's page is as it was.
+@MainActor @Test func swatchesUnderAMenuHangTogether() {
+    for wallpaper in allScenes where !wallpaper.looks.isEmpty {
+        for look in wallpaper.looks {
+            let menu = wallpaper.knobs.first { $0.key == look.shownWhen }, pick = look.shownAt ?? -1
+            if case .choice(let names)? = menu?.format {
+                #expect(names.indices.contains(Int(pick)) && pick == pick.rounded(), "\(look.key) hangs on pick \(pick) of \(names)")
+            } else {
+                Issue.record("\(look.key) hangs on \(look.shownWhen ?? "nothing"), which is no menu of \(wallpaper.name)'s")
+            }
+            #expect(!look.options.isEmpty && look.options.allSatisfy { !$0.dark.isEmpty && !$0.light.isEmpty } && Set(look.options.map(\.name)).count == look.options.count)
+            #expect(look.standard.isEmpty || look.options.contains { $0.name == look.standard })
+        }
+        let keys = wallpaper.looks.map(\.key) + wallpaper.knobs.map(\.key) + [wallpaper.palettes?.key].compactMap { $0 }
+        #expect(Set(keys).count == keys.count, "\(wallpaper.name) stores two settings under one key")
+        #expect(Set(wallpaper.looks.map { "\($0.shownWhen ?? "") \($0.shownAt ?? -1)" }).count == wallpaper.looks.count, "\(wallpaper.name) has two sets of swatches for one pick")
+    }
+    #expect(allScenes.filter { !$0.looks.isEmpty }.map(\.name) == ["Meander"]) // a new one: look at its Settings page, then add it here
 }
 
 /// Meander's settings hang together: a row that shows for one look hangs on a pick the Look menu has, and a menu's
 /// range is its list. And the scene follows them as it runs: a new look or new colours at once, on the same river; a new
 /// size of river by handing over to a new scene (which it does once the slider has rested; here it is told to at
-/// once, so that no other test runs while these settings are held).
+/// once, so that no other test runs while these settings are held). Colours that aren't a swatch's name are Random.
 @MainActor @Test func meanderFollowsItsSettings() throws {
     for knob in Meander.knobs {
         if let gate = knob.shownWhen {
@@ -329,21 +353,27 @@ private func seeded(_ seed: Double, _ others: [String: Double] = [:]) -> [String
         if case .choice(let names) = knob.format { #expect(knob.range == 0...Double(names.count - 1), "\(knob.key)'s menu") }
         #expect(knob.range.contains(knob.standard))
     }
-    let keys = Meander.knobs.map(\.key) + ["meander.seed"]
+    let keys = Meander.knobs.map(\.key) + Meander.palettes.map(\.key) + ["meander.seed"]
     defer { keys.forEach(UserDefaults.standard.removeObject) }
     for (key, value) in seeded(7) { UserDefaults.standard.set(value, forKey: key) }
+    for (palette, name) in zip(Meander.palettes, ["Survey Blue", "Fisk 1944"]) { UserDefaults.standard.set(name, forKey: palette.key) }
     let view = WallpaperView(frame: CGRect(x: 0, y: 0, width: 378, height: 245)), scene = Meander(size: view.frame.size)
     view.presentScene(scene)
     let screen = try Offscreen(scene, 756, 490), river = scene.river!
     for _ in 0..<2 { try screen.frame() }
     var pictures = [screen.pixels]
-    for (key, value) in [("meander.look", 1.0), ("meander.rule", 1.0), ("meander.sheet", 2.0), ("meander.look", 0.0), ("meander.relief", 3.0), ("meander.scroll", 0.0), ("meander.memory", 15.0)] {
+    let changes: [(String, Any)] = [("meander.look", 1.0), ("meander.rule", 1.0), ("meander.inks", "Sage"), ("meander.look", 0.0), ("meander.colors", "Garnet"), ("meander.scroll", 0.0), ("meander.memory", 15.0)]
+    for (key, value) in changes {
         UserDefaults.standard.set(value, forKey: key)
         for _ in 0..<2 { try screen.frame(rate: 1e9) } // the new shader's first frame, and no time gone by
         pictures.append(screen.pixels)
         #expect(pictures.last! != pictures[pictures.count - 2], "nothing changed when \(key) became \(value)")
     }
     #expect(scene.river === river && view.scene === scene)
+    // a name no swatch has, as an older version's might be, is Random: it draws, with one of relief's colours
+    UserDefaults.standard.set("Gone", forKey: "meander.colors")
+    for _ in 0..<2 { try screen.frame(rate: 1e9) }
+    #expect(screen.pixels[756 * 5 + 5].z < 240)
     UserDefaults.standard.set(56.0, forKey: "meander.size")
     #expect(view.scene === scene) // not while the slider may still be moving
     scene.handOver()
