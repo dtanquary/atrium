@@ -619,6 +619,34 @@ public final class River {
         }
     }
 
+    /// Closes the hairline a swept past leaves along a bank the river has been leaving. `sweep` works from
+    /// straight banks between the nodes and `updateGround` from bowed ones, so the bar a sweep built stops short
+    /// of the river's bank, and the texels between keep whatever time they had. A texel on a bank (the river
+    /// part-way across it, or within a texel beyond) takes the present time if the land next out from it is new
+    /// (left within 8 T) and it is itself over 3 T older: older ground between a new bar and the water, which no
+    /// river leaves. Taken from the outside in, so that a hairline two texels deep closes too. A bank the river
+    /// is cutting has land of its own age next out, and is left as it is. (Every texel within one of either
+    /// bank used to be given the present time for this. That made a texel of new land along each bank being cut
+    /// as well: unseen while relief took the land beside water from two texels out, a light fringe once it took
+    /// the land's own height, and a rim of the newest ink in the old map.)
+    private func joinBars() {
+        lakeBefore.count = 0 // a list to hand, as in `strand`
+        band(trace(), closed: true, reach: 1 / texels, into: &lakeBefore)
+        let stamp = Float(now - base), columns = columns, count = columns * rows, onBank = 0.5 - 0.5 / texels, out = 0.4 / texels
+        ground.withUnsafeMutableBufferPointer { ground in scratch.withUnsafeMutableBufferPointer { scratch in
+            let banks = lakeBefore.items[..<lakeBefore.count].map { Int($0) }.filter { scratch[$0] > onBank }.sorted { scratch[$0] > scratch[$1] }
+            /// Whether texel `other` lies out from texel `i`, and is new land where `i` is older.
+            func bar(_ other: Int, _ i: Int) -> Bool {
+                other >= 0 && other < count && scratch[other] - scratch[i] > out && ground[other].x > stamp - 8 && ground[other].x - ground[i].x > 3
+            }
+            for i in banks {
+                let column = i % columns
+                if (column > 0 && bar(i - 1, i)) || (column < columns - 1 && bar(i + 1, i)) || bar(i - columns, i) || bar(i + columns, i) { ground[i].x = stamp }
+            }
+            for raw in lakeBefore.items[..<lakeBefore.count] { scratch[Int(raw)] = .infinity }
+        } }
+    }
+
     /// Puts the live river's nodes in `path`.
     private func trace() -> Int {
         path.removeAll(keepingCapacity: true)
@@ -1052,11 +1080,12 @@ public final class River {
         }
         sweep()
         closeCracks()
-        // `sweep` works from straight banks between the nodes and `updateGround` from bowed ones, so give the
-        // river's ribbon and a texel beyond it the present time, or a hairline of old ground is left between them
+        // the river's ribbon takes the present time, less half a texel at each bank, which leaves out every
+        // texel with land in it: `trimLakes` reads those stamps, and `updateGround` sees to the banks
         path.removeAll(keepingCapacity: true)
-        for node in nodes { path.append([node.x, node.y, node.half + 1 / texels]) }
+        for node in nodes { path.append([node.x, node.y, node.half - 0.5 / texels]) }
         fillRibbon(path.count, closed: true, soft: false)
+        joinBars()
         // where the river has been since a lake was born, the lake is gone, and its end there has been silting up since
         trimLakes(gone: true) { texel, lake in ground[texel].x > Float(lake.born - base) + 0.05 ? Double(ground[texel].x) + base : nil }
         sweeping = false

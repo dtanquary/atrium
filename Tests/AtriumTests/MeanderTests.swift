@@ -103,6 +103,19 @@ private func crossings(_ river: River) -> Int {
         let at = Int(node.y * river.texels) * river.columns + Int(node.x * river.texels)
         #expect(river.pixels[at * 4 + 2] < 127, "the node at \(node.x), \(node.y) is dry")
     }
+    // No bank has new land stuck on old: a texel on a bank (the river part-way across it, or within a texel beyond)
+    // that has the present time while the land next out from it is over 20 T older. The past's last step used to
+    // give every texel within one of either bank the present time, which did that all along the banks being cut.
+    let present = Float(river.now - river.base), columns = river.columns, onBank = 0.5 - 0.5 / river.texels
+    var (banks, stuck) = (0, 0)
+    for i in columns..<texels - columns where river.ground[i].z > onBank && river.ground[i].z <= 0.5 + 1 / river.texels {
+        banks += 1
+        if present - river.ground[i].x < 0.05, [i - 1, i + 1, i - columns, i + columns].contains(where: {
+            river.ground[$0].z > river.ground[i].z + 0.4 / river.texels && present - river.ground[$0].x > 20
+        }) { stuck += 1 }
+    }
+    print("  of \(banks) texels on a bank, \(stuck) are new land with land over 20 T older next out")
+    #expect(stuck * 50 < banks, "\(stuck) of \(banks) texels on a bank are new land stuck on old")
     if let folder = ProcessInfo.processInfo.environment["MEANDER_DUMP"] { // the texture's bytes, to look at
         try? Data(river.pixels).write(to: URL(fileURLWithPath: folder).appendingPathComponent("meander-\(river.columns)x\(river.rows).rgba"))
     }
@@ -430,6 +443,18 @@ private func seeded(_ seed: Double, _ others: [String: Double] = [:]) -> [String
             #expect(stepped.count > 40)
             #expect(!measuring || middle(stepped.map(\.gpu)) < 3 && middle(stepped.map { $0.update + $0.draw }) < 5)
         }
+    }
+    // The first frame after a Look slider leaves its standard value, which is drawn by a new shader (`Meander.finish`),
+    // and the one after it: whether that first move is a hitch.
+    try with(seeded(13)) {
+        let scene = Meander(size: CGSize(width: 1512, height: 982)), screen = try Offscreen(scene, 3024, 1964)
+        defer { UserDefaults.standard.removeObject(forKey: Meander.grades[0].key) }
+        for _ in 0..<30 { try screen.frame(rate: 60) }
+        let clock = ContinuousClock()
+        let set = Double(clock.measure { UserDefaults.standard.set(1.2, forKey: Meander.grades[0].key) }.components.attoseconds) / 1e15
+        let first = try screen.frame(rate: 60), second = try screen.frame(rate: 60)
+        print(String(format: "Meander, a Look slider's first move off its standard value: %.1f ms to take the setting, then a frame of %.1f ms of CPU and %.1f of GPU; the next frame %.1f and %.1f",
+                     set, first.update + first.draw, first.gpu, second.update + second.draw, second.gpu))
     }
 }
 
