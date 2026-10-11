@@ -325,7 +325,24 @@ Still wrong or not known after this step:
 - Relief in Light Mode, the single-ink sheets, the River size slider and every other setting.
 
 ### Step 3: motion (2026-10-11)
-The real scene, through its shaders, watched moving. First the two things that must not show at all (`meanderShowsNothingWhenItsStampsMoveUp`, `meanderLooksTheSameAtAnyFrameRate`).
+The real scene, through its shaders, watched moving. Four tests do the watching: `meanderDoesNotPop`, `meanderLooksTheSameAtAnyFrameRate`, `meanderShowsNothingWhenItsStampsMoveUp`, and `meanderFilm`, which only runs when asked (`MEANDER_FILM=<folder> swift test --filter meanderFilm`; `MEANDER_STRIPS=<folder>` makes `meanderDoesNotPop` save its frames and try a second river, 30 fps and Fisk's order as well).
+
+**Nothing pops, by the prototype's measure:** the greatest share of a window 14 widths square that changes by over 20 levels from one frame to the next, from a second before to two seconds after. The bar is 0.3%. At 15 and at 30 frames a second the figures are the same, as they should be: the river is the same river.
+
+| | relief | old map | old map, Fisk's order |
+|---|---|---|---|
+| A cutoff, river 7 (27 s in) | 0.037% | 0.095% | 0.097% |
+| A cutoff, river 13 (55 s in) | 0.063% | 0.118% | 0.119% |
+| The river parts a lake, river 7 (16 s in) | 0.035% | 0.050% | 0.068% |
+| The river parts a lake, river 13 (6 min in) | 0.004% | 0.002% | 0.002% |
+
+A cutoff's own frame is its worst; the lake's figures for river 7 are a second and a half after, something else nearby. The events are the prototype's kind: a loop over 8 widths long cut off at a neck 6 widths inside the screen, and a lake over 2 T old parted where it still had over half its water.
+
+**What looking at the frames found, which the figures alone would have passed** ([build-step3-cutoff.jpg](meander/build-step3-cutoff.jpg), [build-step3-recrossing.jpg](meander/build-step3-recrossing.jpg): the frame before, the frame itself and a third of a second on, at full size):
+- **A lake's dry end came back as water.** Where the river ran over a stretch of lake that had already silted up, the lake was cut there and its new end began silting from nothing, so the dry stretch behind it was water again on that frame: 0.14 to 0.19% of the window, under the bar and plain to see. A new end is now never less silted than the lake already was there (`trimLakes`, `Lake.age(ofFront:)`): 0.007 to 0.02% on the same frame.
+- **A lake the river parted lost a bite of water.** The nodes under the river were dropped, and with them whatever of the lake's width stood out beyond the river's bank: a notch of land 15 to 20 px deep, at once. The live river now drops nothing. A parted lake's pieces each keep the covered stretch as far as its middle node, so everything is still drawn, and the new ends silt up as any lake's do: 0.09% became 0.004%. (A past still drops them: there the river has been and gone.) A lake that has dried from end to end is forgotten, so it stops taking a turn at being redrawn.
+- **Lake water against river water had a ragged edge,** blocky and speckled: the water's age was read without smoothing. Deep water now takes the smooth read, and a lake shades into the river it lies against.
+- **At a cutoff, what is left to see** is the neck opening in one frame, which is the event; a jog of 2 or 3 px in the bank beside it for a T or so, where two widths meet (known since round 4); and a spur of about 5 px on the bank across from the neck, where the lake's last segment and the river's first no longer bow as one bend. Not fixed: each is part of the 0.04 to 0.12%.
 
 **The stamps' base moves and the picture doesn't.** Step 2 moved the base by whatever was due and worked every byte out again, and a sixth of relief's pixels changed by a level or more on that frame (234,549 of 1,484,784; 7,404 of them by over 5 levels). Three causes, each fixed:
 - **The two bytes carried differently in neighbouring texels,** so the GPU's smoothing between them gave slightly other stamps. The base now moves by whole turns of the high byte (2.56 T each, 16 at once: 41 T, once in 17 minutes at 1x, as far as 16 bits allow beyond the memory), taken off the high bytes and nothing else.
@@ -336,14 +353,31 @@ What is left: of 1,484,784 pixels, 407 change by one level in relief, 263 in the
 
 **The picture is the same at 15, 30 and 60 frames a second:** after the same six seconds every pixel of both looks is identical (`meanderLooksTheSameAtAnyFrameRate`).
 
-The reworked shaders cost relief 0.90 ms of GPU on an ordinary frame and 0.99 on a step frame (it was 0.80 and 0.88); the old map 0.53 and Fisk's order 0.58 to 0.65, as before.
+**Timed.** A step frame that carries a cutoff: 0.91 to 1.15 ms in `update`, where a plain step's is 0.58 (the same runs, a 14" screen). One that parts a lake: 0.76 to 0.92. So the worst step frame is about 2 ms of CPU with SpriteKit's share, as step 2 guessed. The reworked shaders: relief 0.90 ms of GPU on an ordinary frame and 0.99 on a step frame (it was 0.80 and 0.88); the old map 0.53 and Fisk's order 0.58 to 0.65, as before. A live step is as it was (median 0.8 ms).
+
+**A lake silted down to a sliver** read as a highlight on a bead in relief. Lake water now dulls to the colour of a new bar within two texels of its banks, and all of it over the second half of its life, so a sliver is dull right through. A thin lake no longer shines; the fattest remnants (a lens 4 texels across) keep a small light middle. Better, not gone.
+
+**Half an hour from a fresh launch at 1x** ([relief](meander/build-step3-film-relief.jpg) and [the old map](meander/build-step3-film-map.jpg) at the start, 5 minutes and 10; river 13):
+- **The busy launch-made floodplain does give way.** The live river had worked over 7% of the land with a past after 1 minute, 28% after 5, 47% after 10 and 82% after 30; what it leaves is broad bars in long arcs, as the prototype's stills have. The small old loops last longest at the belt's edges.
+- **The pace, in numbers.** In 10 seconds the river's line moves a median 2.2 pt, and 9 nodes in 10 move under 7.7 pt; the model's limit is 14 pt. So in a glance of a few seconds nothing is seen to move; over ten seconds the liveliest bends creep by a quarter to a half of the channel's width.
+- **A loop is cut off on screen about once a minute** (28 in the 30 minutes, some in twos and threes seconds apart, the longest wait four and a half minutes), and there are 6 to 22 lakes at once.
+- At Speed 4x that would be four times as far, 9 pt and 31 pt in ten seconds, and a cutoff every 15 seconds: worked out, not measured. Dave found the Black Hole's first pace far too slow on his own screen; this one may want its 1x faster too, which only his screen can say.
+
+Still wrong or not known after this step:
+- The pace, above: whether 1x is lively enough.
+- A move of the base is a few hundred pixels by a level, not none.
+- At a cutoff, the jog and the spur beside the neck.
+- A stretch of lake the live river lies along for longer than its end takes to silt up would show again if the river moved off it sideways (a `ponytail:` note in `trimLakes` says what to do then). Not seen.
+- The fat remnant of a short lake still has a light middle.
+- A few blocky patches of launch-made ground in the bays at the valley walls, as after step 2.
+- Nothing has been left running overnight.
 
 ## The plan
 One file, `Sources/Atrium/Meander.swift`: a `River` type with no SpriteKit in it (nodes, step, cutoff, fields, pixel bytes), the scene, its shader, knobs and palettes. Everything built in `sceneDidLoad`; steps owed at 10 a second in `update(_:)`; the texture uploaded only when a step ran.
 1. **The look first, in the prototype.** Four rounds are done (above): the lakes, the banks and the cheap distant past are in, and two films at two paces are made. Left for Dave: the pace, the old map's colour rule, and whether the distant past is worth its time at launch. Left in the prototype: relief toward the reference (levees, bars and islands). No Swift before he has seen it move: it is the Crystals risk.
 2. **`River`** (done: [step 1](#step-1-the-river-2026-10-11)) ported from `meander.py`, written to allocate nothing per step and with the respacing capped at four passes, and its launch timed first (the sketch took 0.3–0.4 s: too slow for the main thread at every load), with its check: 6,000 coarse steps must cut off loops, never cross and stay in the valley; stepping by 1/15, 1/30 and 1/60 s for the same elapsed time must give identical nodes.
 3. **The texture and shader** (done: [step 2](#step-2-the-texture-and-the-shader-2026-10-11)), matched to `render.py`'s stills. Finds out the unknowns: the alpha byte carrying data, a second dependent read, the uniform count, the upload's cost.
-4. **Motion,** in frame strips through a cutoff: no frame with more than about 0.3% of pixels changing over 20 levels.
+4. **Motion** (done: [step 3](#step-3-motion-2026-10-11)), in frame strips through a cutoff: no frame with more than about 0.3% of pixels changing over 20 levels.
 5. **Settings:** Look (Relief, Old map); Colors, a list per look (relief: Survey Blue, Rainforest, Garnet, Amethyst; old map: Fisk 1944, Sage, Salmon, Teal, each with a dark version), Random by default; Speed (0.25–4×); River size (the slider Dave picked, from 28 pt to about 56 pt: a rebuild, keeping 14 texels a width so the cost stays the same); how long old courses stay; scroll-bar strength; how long lakes last; the shared grade knobs.
 6. Left overnight: no drift in pace, no banding from rebasing. Then the doc, screenshots, README, site.
 

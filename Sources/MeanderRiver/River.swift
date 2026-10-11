@@ -79,6 +79,13 @@ public final class River {
         /// How far a silting front has come in from an end that has been one for `age`: about 3 widths in the first
         /// T, then a quarter of a width a T.
         static func front(_ age: Float) -> Float { 3.2 * (1 - exp(-age / 0.6)) + 0.25 * age }
+
+        /// How long an end has been one for its front to have come `far` in: `front` the other way round.
+        static func age(ofFront far: Float) -> Float {
+            var (lo, hi) = (Float(0), 4 * max(far, 0) + 1)
+            for _ in 0..<24 { if front(0.5 * (lo + hi)) < far { lo = 0.5 * (lo + hi) } else { hi = 0.5 * (lo + hi) } }
+            return 0.5 * (lo + hi)
+        }
     }
 
     /// Howard & Knutson's Ω and Γ, and α in widths: the fastest-growing bend is 8.24/α long, 11.3 widths.
@@ -108,6 +115,8 @@ public final class River {
     /// texel the river has never reached, whose stamp is none, reads as older than anything remembered.
     public private(set) var now = 0.0, base = -(River.memory + 5)
     public private(set) var cutoffs = 0
+    /// How many times the river has run back over a lake and taken part of it.
+    public private(set) var trims = 0
     /// Nodes are kept 0.6 to 1.4 times this far apart.
     private var spacing: Float
 
@@ -632,12 +641,20 @@ public final class River {
         return wet ? path.count : 0
     }
 
-    /// Drops the lake nodes the river has covered: `covered` says when it covered a texel of a lake's, or nil. A lake
-    /// then ends at the outermost node the river covered, so its water runs into the river's and no end shows; a
-    /// lake the river cuts through becomes two. A new end starts silting up from when it was covered, which for the
-    /// live river is now, so nothing vanishes on the frame it is made. Worn-out lakes are forgotten. A lake that
-    /// goes is taken out of the ground here, and the pieces of a trimmed one are drawn by `drawLakes` in the same step.
-    private func trimLakes(covered: (Int, Lake) -> Double?) {
+    /// Parts a lake where the river has run over it: `covered` says when it covered a texel of a lake's, or nil. The
+    /// lake becomes one lake for each stretch the river hasn't covered, each keeping the covered stretch beside it
+    /// as far as that stretch's middle node, so on the frame it is made nothing is lost: what is under the river is
+    /// still drawn, unseen, and what stands out beyond the river's bank is still water. Each new end then silts up
+    /// from when it was covered, and the water beyond the bank goes as any lake's end goes. An end is never less
+    /// silted than the lake already was there, or water would come back: where the old end's front had passed the
+    /// new end, the new end's front starts as far in as the old one had reached. With `gone`, for a past being
+    /// made, the river has been over the covered stretches and left again, so they are dropped, all but the node
+    /// next to each stretch it never reached. Worn-out lakes are forgotten. A lake that goes is taken out of the
+    /// ground here, and the pieces of a parted one are drawn by `drawLakes` in the same step.
+    // ponytail: a stretch the live river lies along for longer than its end takes to silt up (3 widths in the first
+    // T, then a quarter of a width a T) would show again, as water, if the river moved off it sideways. Not seen;
+    // if it is, drop a covered node once the lake's whole width there is inside the river.
+    private func trimLakes(gone: Bool = false, covered: (Int, Lake) -> Double?) {
         let L = period
         var at = 0
         while at < lakes.count {
@@ -647,33 +664,52 @@ public final class River {
                 continue
             }
             under.removeAll(keepingCapacity: true)
+            var runs = 0 // of nodes the river hasn't covered
             for node in lake.nodes {
                 var along = (node.x + Self.margin) / L
                 along -= along.rounded(.down)
                 let tx = Int(((along * L - Self.margin) * texels).rounded(.down)), ty = Int((node.y * texels).rounded(.down))
                 under.append(tx >= 0 && tx < columns && ty >= 0 && ty < rows ? covered(ty * columns + tx, lake) ?? .nan : .nan)
+                if under[under.count - 1].isNaN, under.count == 1 || !under[under.count - 2].isNaN { runs += 1 }
             }
-            // an end under the river is where it was cut off or trimmed to: nothing changes unless more of it is
-            guard n < 3 ? under.allSatisfy({ !$0.isNaN }) : under[1..<n - 1].contains(where: { !$0.isNaN }) else {
+            // Nothing to do for one stretch with the river over its ends, where it was cut off or parted; nor, live,
+            // for a lake that is all under the river. A past drops what the river has been over, so it has more to do.
+            let parted = gone ? (n < 3 ? runs == 0 : under[1..<n - 1].contains { !$0.isNaN }) : runs > 1
+            guard parted else {
                 at += 1
                 continue
             }
+            trims += 1
             drop(at)
-            var i = 0
-            while i < n { // each run of nodes not under the river, with the covered node beside it kept at either end
+            // how far along the lake each node is, and how far in from each end the silt has come
+            arcs.removeAll(keepingCapacity: true)
+            var arc: Float = 0
+            for (i, node) in lake.nodes.enumerated() {
+                if i > 0 { arc += hypot(node.x - lake.nodes[i - 1].x, node.y - lake.nodes[i - 1].y) }
+                arcs.append(arc)
+            }
+            let silted = (Lake.front(Float(now - lake.first)), Lake.front(Float(now - lake.last)))
+            /// When an end covered at `since` became one, for its silting: then, or as much earlier as puts its front
+            /// where the old end's front, `past` beyond it already, has reached.
+            func began(_ since: Double, _ past: Float) -> Double { past > Lake.front(Float(now - since)) ? now - Double(Lake.age(ofFront: past)) : since }
+            var i = 0, from = 0 // where the next piece starts: the middle of the covered stretch before it
+            while i < n {
                 guard under[i].isNaN else {
                     i += 1
                     continue
                 }
-                var j = i
+                var j = i, next = i
                 while j + 1 < n, under[j + 1].isNaN { j += 1 }
-                let lo = max(i - 1, 0), hi = min(j + 1, n - 1)
+                next = j + 1
+                while next < n, !under[next].isNaN { next += 1 } // the next stretch the river hasn't covered, or the end
+                // this piece runs to the middle of the covered stretch after it, or to the lake's end if that stretch is the last
+                let lo = gone ? max(i - 1, 0) : from, hi = gone ? min(j + 1, n - 1) : next == n ? n - 1 : (j + next) / 2
                 if hi > lo {
-                    lakes.insert(Lake(nodes: Array(lake.nodes[lo...hi]), born: lake.born, first: lo == 0 ? lake.first : under[lo],
-                                      last: hi == n - 1 ? lake.last : under[hi]), at: at)
+                    lakes.insert(Lake(nodes: Array(lake.nodes[lo...hi]), born: lake.born, first: lo == 0 ? lake.first : began(under[lo], silted.0 - arcs[lo]),
+                                      last: hi == n - 1 ? lake.last : began(under[hi], silted.1 - (arc - arcs[hi]))), at: at)
                     at += 1
                 }
-                i = j + 1
+                (i, from) = (next, hi)
             }
         }
     }
@@ -722,6 +758,7 @@ public final class River {
         lakeTouched.count = 0
         let count = trace(lakes[k])
         if count > 1 { band(count, closed: false, reach: 2 / texels, into: &lakeTouched) }
+        if count == 0 { lakes[k].born = -.infinity } // dry from end to end: `trimLakes` forgets it on the next step
         let found = lakeTouched.count, columns = Int32(columns)
         var box = SIMD4<Int32>(.max, .max, -1, -1)
         // its lists are taken out while they are written, so they aren't copied, and keep their room
@@ -974,7 +1011,7 @@ public final class River {
         for node in nodes { path.append([node.x, node.y, node.half + 1 / texels]) }
         fillRibbon(path.count, closed: true, soft: false)
         // where the river has been since a lake was born, the lake is gone, and its end there has been silting up since
-        trimLakes { texel, lake in ground[texel].x > Float(lake.born - base) + 0.05 ? Double(ground[texel].x) + base : nil }
+        trimLakes(gone: true) { texel, lake in ground[texel].x > Float(lake.born - base) + 0.05 ? Double(ground[texel].x) + base : nil }
         sweeping = false
         updateGround()
         ground.withUnsafeMutableBufferPointer { ground in pixels.withUnsafeMutableBufferPointer { pixels in

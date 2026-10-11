@@ -221,8 +221,13 @@ final class Meander: SKScene {
         tilt *= -5.0;
         float shade = (dot(tilt, vec2(-0.55, 0.62)) + 0.56) / sqrt(dot(tilt, tilt) + 1.0) - 0.56;
         col *= clamp(1.0 + 0.9 * shade * smoothstep(0.5 * pt, 1.9, bank), 0.72, 1.3);
-        // water the river has left dulls a little over its first few T: a lake
-        col = mix(col, mix(u_river, u_wet, 0.35 * smoothstep(0.3, 4.0, wetAge)), water);
+        // Water the river has left dulls a little over its first few T: a lake. And it dulls to the colour of a new
+        // bar in its shallows, within two texels of its banks, and all of it over the second half of its life, so
+        // that a lake silted down to a sliver is dull right through and doesn't shine like a highlight. Where the
+        // water is deep its age is the smooth read's, so a lake shades into the river it lies against.
+        float still = mix(wetAge, past, smoothstep(0.8, 1.8, -bank)), lake = smoothstep(0.3, 4.0, still);
+        float dull = 0.35 * lake + 0.65 * max(smoothstep(8.0, 16.0, still), lake * (1.0 - smoothstep(0.5, 2.0, -bank)));
+        col = mix(col, mix(u_river, u_wet, dull), water);
         gl_FragColor = vec4(col * (1.0 - 0.44 * dot(middle, middle)) * 0.86, 1.0);
     }
     """

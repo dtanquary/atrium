@@ -207,6 +207,27 @@ private func crossings(_ river: River) -> Int {
     }
 }
 
+/// The share of pixels that differ by over 20 levels in any of red, green and blue between two pictures.
+private func popped(_ a: [UInt32], _ b: [UInt32]) -> Double {
+    var count = 0
+    a.withUnsafeBufferPointer { a in b.withUnsafeBufferPointer { b in
+        for i in 0..<a.count where a[i] != b[i] {
+            let (p, q) = (a[i], b[i])
+            if abs(Int(p & 255) - Int(q & 255)) > 20 || abs(Int(p >> 8 & 255) - Int(q >> 8 & 255)) > 20 || abs(Int(p >> 16 & 255) - Int(q >> 16 & 255)) > 20 { count += 1 }
+        }
+    } }
+    return Double(count) / Double(a.count)
+}
+
+private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
+    guard let image = CGImage(width: w, height: h, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: w * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                              bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue),
+                              provider: CGDataProvider(data: Data(bytes: pixels, count: w * h * 4) as CFData)!, decode: nil, shouldInterpolate: false, intent: .defaultIntent),
+          let to = CGImageDestinationCreateWithURL(url as CFURL, "public.png" as CFString, 1, nil) else { return }
+    CGImageDestinationAddImage(to, image, nil)
+    CGImageDestinationFinalize(to)
+}
+
 /// With Settings values for the length of `body`, as the render test sets them.
 @MainActor private func with(_ settings: [String: Double], _ body: () throws -> Void) rethrows {
     defer { settings.keys.forEach(UserDefaults.standard.removeObject) }
@@ -291,6 +312,118 @@ private func crossings(_ river: River) -> Int {
     }
 }
 
+/// Something the river does that could show as a jump: where on the screen (in widths), on which frame of a run,
+/// and what that frame's update cost.
+private struct Happening {
+    var cutoff: Bool, frame: Int, at: SIMD2<Float>, update: Double
+}
+
+/// How much of its width a lake still has at each node, from 1 to none, by the rule it silts up by (`River.trace`).
+private func wetness(_ lake: River.Lake, at now: Double) -> [Float] {
+    var arcs: [Float] = [0]
+    for (a, b) in zip(lake.nodes, lake.nodes.dropFirst()) { arcs.append(arcs.last! + hypot(b.x - a.x, b.y - a.y)) }
+    func smooth(_ x: Float) -> Float { let t = min(max(x, 0), 1); return t * t * (3 - 2 * t) }
+    let body = 1 - smooth(Float(now - lake.born - 0.5 * River.lakeLife) / Float(0.5 * River.lakeLife))
+    return arcs.map { body * smooth(($0 - River.Lake.front(Float(now - lake.first))) / 2 + 1) * smooth((arcs.last! - $0 - River.Lake.front(Float(now - lake.last))) / 2 + 1) }
+}
+
+/// A seeded Meander on a 14" screen run at `rate` frames a second with nothing drawn, until it has had both a
+/// cutoff and a re-crossing worth looking at, by the prototype's rules: a loop over 8 widths long cut off at a neck
+/// 6 widths inside the screen, and a lake over 2 T old parted by the river where it still had over half its water,
+/// 8 widths inside the screen, on a frame with no cutoff. Also the plain step frames' update times, to set the two
+/// beside.
+@MainActor private func happenings(_ settings: [String: Double], rate: Double, within seconds: Double) throws -> (found: [Happening], plain: [Double]) {
+    var found: [Happening] = [], plain: [Double] = []
+    try with(settings) {
+        let scene = Meander(size: CGSize(width: 1512, height: 982)), screen = try Offscreen(scene, 16, 16), river = scene.river!, clock = ContinuousClock()
+        func onScreen(_ node: SIMD3<Float>, inside: Float) -> SIMD2<Float>? {
+            var along = (node.x + 10) / river.period
+            along -= along.rounded(.down)
+            let x = along * river.period - 10
+            return x > inside && x < river.across - inside && node.y > inside && node.y < river.up - inside ? [x, node.y] : nil
+        }
+        for frame in 0..<Int(seconds * rate) where found.count < 2 {
+            let (cutoffs, trims, lakes, now) = (river.cutoffs, river.trims, river.lakes, river.now)
+            let update = Double(clock.measure { screen.advance(rate: rate) }.components.attoseconds) / 1e15
+            if river.cutoffs > cutoffs, !found.contains(where: \.cutoff), let lake = river.lakes.last {
+                let length = zip(lake.nodes, lake.nodes.dropFirst()).reduce(Float(0)) { $0 + simd_distance($1.0, $1.1) }
+                if length > 8, let at = onScreen(0.5 * (lake.nodes[0] + lake.nodes[lake.nodes.count - 1]), inside: 6) { found.append(Happening(cutoff: true, frame: frame, at: at, update: update)) }
+            } else if river.trims > trims, river.cutoffs == cutoffs, !found.contains(where: { !$0.cutoff }) {
+                // where a lake was parted, one piece ends on the node the next begins on, as none did before
+                func same(_ a: SIMD3<Float>, _ b: SIMD3<Float>) -> Bool { a.x == b.x && a.y == b.y }
+                func joints(_ lakes: [River.Lake]) -> [SIMD3<Float>] { lakes.map { $0.nodes[0] }.filter { start in lakes.contains { same($0.nodes[$0.nodes.count - 1], start) } } }
+                let already = joints(lakes)
+                if let joint = joints(river.lakes).first(where: { new in !already.contains { same($0, new) } }),
+                   let whole = lakes.first(where: { now - $0.born > 2 && $0.nodes.contains { same($0, joint) } }),
+                   wetness(whole, at: now)[whole.nodes.firstIndex { same($0, joint) }!] > 0.5, let at = onScreen(joint, inside: 8) {
+                    found.append(Happening(cutoff: false, frame: frame, at: at, update: update))
+                }
+            } else if river.now != now, river.cutoffs == cutoffs, river.trims == trims {
+                plain.append(update)
+            }
+        }
+    }
+    return (found, plain)
+}
+
+/// The same run again, drawn from a second before a happening to two seconds after: the greatest share
+/// of a window 14 widths square round it that changes by over 20 levels from one frame to the next, and on which
+/// frame after the happening's own (0) that was. With a folder, the window's frames from two before to five after
+/// are saved side by side, to look at.
+@MainActor private func pop(_ settings: [String: Double], rate: Double, at happening: Happening, saveTo folder: URL? = nil, named name: String = "") throws -> (share: Double, frame: Int) {
+    var worst = (share: 0.0, frame: 0)
+    try with(settings) {
+        let scene = Meander(size: CGSize(width: 1512, height: 982)), screen = try Offscreen(scene, 3024, 1964), side = 784 // 14 widths of 28 pt at 2x
+        let (x, y) = (Int(happening.at.x * 56) - side / 2, 1964 - Int(happening.at.y * 56) - side / 2)
+        let lead = Int(rate)
+        for _ in 0..<happening.frame - lead { screen.advance(rate: rate) }
+        var last: [UInt32] = [], strip = [UInt32](repeating: 0, count: side * 8 * side)
+        for frame in -lead...Int(2 * rate) {
+            try screen.frame(rate: rate)
+            let now = screen.piece(x: x, y: y, w: side, h: side)
+            if !last.isEmpty, frame > -lead + 2 { // the first frames can go by before the shader has compiled
+                let share = popped(last, now)
+                if share > worst.share { worst = (share, frame) }
+            }
+            if (-2...5).contains(frame) { for row in 0..<side { strip.replaceSubrange((row * 8 + frame + 2) * side..<(row * 8 + frame + 3) * side, with: now[row * side..<(row + 1) * side]) } }
+            last = now
+        }
+        if let folder { save(strip, side * 8, side, to: folder.appendingPathComponent("\(name).png")) }
+    }
+    return worst
+}
+
+/// Nothing pops. Through a cutoff and through the river running back over a lake, in both looks, no frame changes
+/// more than 0.3% of the pixels near it by over 20 levels: the loop goes on being drawn as the same water when it
+/// is cut off, and a lake the river parts loses nothing on that frame. At 15 frames a second, a river whose first
+/// of each comes within half a minute; with MEANDER_STRIPS set to a folder, another river too, at 30 as well and
+/// in Fisk's order, the frames round each are saved there, and what the cutoff's and the re-crossing's frames
+/// cost is printed beside an ordinary step's.
+@MainActor @Test func meanderDoesNotPop() throws {
+    let folder = ProcessInfo.processInfo.environment["MEANDER_STRIPS"].map { URL(fileURLWithPath: $0) }
+    var looks: [(name: String, settings: [String: Double])] = [("relief", [:]), ("old map", ["meander.look": 1])]
+    if folder != nil { looks.append(("old map in Fisk's order", ["meander.look": 1, "meander.rule": 1])) }
+    for seed in folder == nil ? [7.0] : [7.0, 13.0] {
+        for rate in folder == nil ? [15.0] : [15.0, 30.0] {
+            let (found, plain) = try happenings(["meander.seed": seed], rate: rate, within: seed == 7 ? 60 : 600)
+            #expect(found.count == 2, "at \(rate) frames a second river \(seed) had \(found.count) of a cutoff and a re-crossing to look at")
+            for happening in found {
+                let kind = happening.cutoff ? "a cutoff" : "a re-crossing"
+                if folder != nil {
+                    print(String(format: "Meander %.0f at %.0f fps, %@ %.0f s in at (%.1f, %.1f) widths: its frame's update took %.2f ms, a plain step's %.2f (median of %d)",
+                                 seed, rate, kind, Double(happening.frame) / rate, happening.at.x, happening.at.y, happening.update, plain.sorted()[plain.count / 2], plain.count))
+                }
+                for look in looks {
+                    let worst = try pop(look.settings.merging(["meander.seed": seed]) { $1 }, rate: rate, at: happening, saveTo: folder,
+                                        named: "\(kind.dropFirst(2))-\(Int(seed))-\(look.name.replacingOccurrences(of: " ", with: "-"))-\(Int(rate))fps")
+                    print(String(format: "Meander %.0f at %.0f fps, %@, %@: at most %.3f%% of the window changes by over 20 levels, on frame %+d", seed, rate, kind, look.name, 100 * worst.share, worst.frame))
+                    #expect(worst.share < 0.003, "\(kind) in \(look.name) at \(rate) fps, river \(seed)")
+                }
+            }
+        }
+    }
+}
+
 /// The picture is the same whatever the frame rate: after the same six seconds drawn at 15, 30 and 60 frames a
 /// second, every pixel of both looks is the same. (The river steps by the time gone by, and the shader is told
 /// nothing but what the river has done.)
@@ -333,6 +466,59 @@ private func crossings(_ river: River) -> Int {
             print("Meander, the stamps' base moved by \(river.base - base) T, look \(look): \(changed) of \(most.count) pixels changed, \(most.count { $0 > 1 }) by more than a level, the most by \(most.max()!)")
             #expect(river.base == base + River.turn && river.now == now, "the base moved from \(base) to \(river.base)")
             #expect(changed < most.count / 2000 && most.max()! <= 20, "\(changed) of \(most.count) pixels changed when the base moved, the most by \(most.max()!), in the look \(look)")
+        }
+    }
+}
+
+/// With MEANDER_FILM set to a folder: half an hour from a fresh launch at speed 1 on a 14" screen. A frame every
+/// 30 s of the first ten minutes is saved there in relief, and the old map at the start, five minutes and ten, to
+/// see the live river work over the ground its launch left. Printed, for docs/meander.md: how far the river's
+/// centreline moves in ten seconds, in points (each node on screen to the nearest of the river ten seconds on),
+/// how often a loop is cut off on screen, and how much of the land with a past the live river has worked over.
+@MainActor @Test func meanderFilm() throws {
+    guard let folder = ProcessInfo.processInfo.environment["MEANDER_FILM"].map({ URL(fileURLWithPath: $0) }) else { return }
+    for (name, look): (String, [String: Double]) in [("relief", [:]), ("old-map", ["meander.look": 1])] {
+        try with(look.merging(["meander.seed": 13]) { $1 }) {
+            let scene = Meander(size: CGSize(width: 1512, height: 982)), screen = try Offscreen(scene, 3024, 1964), river = scene.river!
+            var was: [SIMD2<Float>] = [], moved: [Float] = [], cuts: [Int] = [], lakes: [Int] = []
+            for second in 0...(name == "relief" ? 1800 : 600) {
+                if second <= 600, second % (name == "relief" ? 30 : 300) == 0 {
+                    for _ in 0..<(second == 0 ? 2 : 1) { try screen.frame(rate: 1e6) } // drawn with no time gone by
+                    save(screen.piece(x: 0, y: 0, w: 3024, h: 1964), 3024, 1964, to: folder.appendingPathComponent(String(format: "%@-%02dm%02d.png", name, second / 60, second % 60)))
+                }
+                if name == "relief", second % 10 == 0 {
+                    // every segment of the river now, in this period and the ones either side
+                    let n = river.nodes.count, points = (0...n).map { SIMD2(river.nodes[$0 % n].x + ($0 == n ? river.period : 0), river.nodes[$0 % n].y) }
+                    for p in was {
+                        var nearest = Float.infinity
+                        for shift in [-river.period, 0, river.period] { for i in 0..<n {
+                            let a = points[i] + [shift, 0], e = points[i + 1] + [shift, 0] - a, t = min(max(simd_dot(p - a, e) / simd_length_squared(e), 0), 1)
+                            nearest = min(nearest, simd_distance(p, a + t * e))
+                        } }
+                        moved.append(nearest * 28)
+                    }
+                    was = river.nodes.filter { $0.x > 0 && $0.x < river.across }.map { [$0.x, $0.y] }
+                    lakes.append(river.lakes.count)
+                    if [60, 300, 600, 1800].contains(second) {
+                        let launch = Float(300.05 - river.base), oldest = Float(river.now - river.base - River.memory - 5)
+                        let land = river.ground.filter { min($0.z, $0.w) > 0.5 && $0.x > oldest }
+                        print(String(format: "  after %2d min the live river has worked over %.0f%% of the land with a past", second / 60, 100 * Double(land.count { $0.x > launch }) / Double(land.count)))
+                    }
+                }
+                let before = river.cutoffs
+                for _ in 0..<10 { screen.advance(rate: 10) } // a second, a step at a time
+                if river.cutoffs > before, let lake = river.lakes.last {
+                    var along = (lake.nodes[0].x + 10) / river.period
+                    along -= along.rounded(.down)
+                    if along * river.period - 10 > 0, along * river.period - 10 < river.across { cuts.append(second) }
+                }
+            }
+            if name == "relief" {
+                moved.sort()
+                print(String(format: "Meander at 1x over half an hour: in 10 s the river moves a median %.1f pt, 9 nodes in 10 under %.1f, 99 in 100 under %.1f, the most %.1f (of %d)",
+                             moved[moved.count / 2], moved[moved.count * 9 / 10], moved[moved.count * 99 / 100], moved.last!, moved.count))
+                print("  cutoffs with a neck on screen: \(cuts.count) in 30 minutes, at \(cuts.map { "\($0 / 60):" + String(format: "%02d", $0 % 60) }); lakes at once: \(lakes.min()!) to \(lakes.max()!)")
+            }
         }
     }
 }
