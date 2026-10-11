@@ -1,8 +1,8 @@
-# Meander (planned, not built)
+# Meander (being built, hidden)
 
 A river slowly migrating across its floodplain: bends grow and shift down the valley, a neck narrows until the river cuts through and leaves an oxbow lake, and every former course stays written on the ground behind it. Drawn as lidar relief (height above the river, in one colour family) or as a map of old courses coloured by age, after Harold Fisk's 1944 maps of the Mississippi. A new river on each load.
 
-Dave picked the idea on 2026-10-10 ([ideas.md](ideas.md)). That day two agents researched it (one built and ran the simulation, one measured the real references) and two sheets went to Dave. **Nothing is built in the app.** This page is the plan, the measurements to build against and their sources.
+Dave picked the idea on 2026-10-10 ([ideas.md](ideas.md)). That day two agents researched it (one built and ran the simulation, one measured the real references) and two sheets went to Dave. **The build has begun, step by step and hidden:** [The build so far](#the-build-so-far) says what is in the app. The rest of this page is the plan, the measurements to build against and their sources.
 
 - **The two research reports in full:** [the simulation](meander/research-simulation.md) and [the look](meander/research-look.md).
 - **In `docs/meander/`:** `sheet1.jpg` (what Dave chose from) and `sheet2.jpg` (the same references above the prototype's second round, in the looks he chose), `reference-mississippi-relief.jpg` (the real river, our render of USGS elevation), the prototype's pictures (round 2's `proto-relief.jpg`, `proto-map-fisk.jpg`, `proto-cutoff.jpg`, `proto-first-frame.jpg`; round 3's and round 4's are named in their sections), `proto/` (the simulation: `python3 meander.py` is its self-check; `render.py` draws both looks; the latest round has the plain names, earlier ones `-v2` and `-v3`) and `measure/` (the scorecard `busy.py`, the palettes, the relief and scroll-bar measurements). Research scripts, not reviewed line by line.
@@ -232,10 +232,42 @@ Also better: banks are smooth at Retina (every channel is drawn with one point a
 
 **Still wrong, worst first:** the launch time; the 1 ms step frame; the distant past being a busier river than the live one; relief still soft beside real lidar (levees, islands and bars were left out); a fresh oxbow in the old map reads as a second river until its line thins (a tint would fix it); in my own look at the stills, a lake's stub can show as a small notched blob; a small step in the bank at a fresh junction for about 1.5 T; long straight chords after a big cutoff, which is the model. Still unverified: the shader as a shader, GPU cost, the texture upload, sameness at 15, 30 and 60 fps, the alpha byte as data.
 
+## The build so far
+On a branch of its own (`meander`), by the agent that wrote the prototype, a step at a time: each is reviewed before the next.
+
+### Step 1: the river (2026-10-11)
+`Sources/Atrium/Meander.swift` holds `River`, with no SpriteKit in it: the centreline, the cutoffs, the lakes, the ground's three fields and the four bytes a texel that a shader will read. There is no scene yet and no entry in `Scenes.swift`. Its checks are in `Tests/AtriumTests/MeanderTests.swift`.
+
+It is `proto/meander.py` with round 4's rules. Where it differs, and why:
+- **Banks.** The prototype added a point half-way along each segment, on the cubic through its neighbours, and drew straight pieces. `River` keeps the segments and bows each one to pass through that same middle point, so the distance routine runs once over half as many, longer segments, with its inner loop across the channel, where the bank distance changes by the same amount from texel to texel. Not yet compared with the prototype's banks pixel for pixel: that is step 2.
+- **The launch history is kept a cheaper way** (`sweep`). Between two sweeps each bank moves from one line to another; where it moved in toward the river, the ground between the lines is ground the river has left, and its texels take a stamp that runs from the last sweep's time at the old line to now at the new one. So a texel is written once, as the river leaves it, the sweeps can be far apart (every 8th step of the distant past, every 12th of the recent), and the stage bands still come out smooth. It works in whole texels, so the furthest line a bank reached is stair-stepped in ground made at launch; the live river's is recorded to a fraction of a texel as before. A loop's own strips are swept just before it is cut off, and at the end the river's ribbon and a texel beyond it take the present time, or hairlines of old ground are left (found by looking: 1.6% of texels before those two fixes).
+- **Two hours in all:** T 240 of distant past (it was 300) and T 60 of recent, 300 T, which at speed 1 is 2 h 5 min.
+- **Lakes in the history** are trimmed once, at the end: where the ground's stamp is later than a lake's birth the river has been there since, and that end of the lake has been silting up since then.
+- **Necks are looked for** every other coarse step while the history is made (every step live), and the pair cut is the one whose banks overlap most.
+- **Erodibility** is the same random field, but its exponential is taken at the grid's corners and read between them, where the prototype read between the corners and then took the exponential.
+- **A hollow's band** runs 0.3 W beyond the old banks, not 0.5: as far as the shader shows it, and its two texels.
+- **The stamps' base moves up** before 16 bits run out (after 650 T, down to 605), which the prototype never needed.
+
+Measured, `swift test -c release -Xswiftc -enable-testing --filter river`, an M3 Max, a 28 pt river (54 × 35.07 widths, 756 × 491 texels):
+- **6,000 coarse steps** (T 240, no distant past): loops are cut off, the river never crosses itself at any of 12 checks, and no bank leaves the valley.
+- **Stepped by 1/15, 1/30 and 1/60 s** for 12 s (8 at speed 1, 4 at speed 4, where it steps twenty times a second): the nodes and every byte of the texture are identical. A smaller valley, to keep a debug build quick.
+- **The launch: 81 to 94 ms** over five seeds, where the sketch took 404 ms. Timed in parts (which adds a little): the distant past about 45 ms (moving the river 7, looking for necks 9–10, respacing 3, sweeps 16–18, cut-off loops 8–10), the recent past about 41 ms (moving 9, necks 12, respacing 3.5, sweeps 8–10, cut-off loops 6–9), the last exact update and writing every byte 3 ms. Keeping the recent past's ground exactly instead (the live routine every 12th step, 74 ms where the sweeps take 9) makes it 153 to 158 ms.
+- **A live step** with the ground and every lake redrawn: a median 1.0 ms with 9 lakes and 1.5 ms with 26; the slowest of 600 was 1.3 to 2.5 ms. That is the frame a step lands on, ten times a second, before the texture's upload.
+- **The first frame's ground:** 72–73% of the screen has a past, as the prototype's had.
+- In a debug build the launch takes 3.4 s, and the whole suite (71 tests then) passed in 159 s.
+
+Still wrong or not known after this step:
+- **A step frame costs 1.0–1.5 ms** of CPU before SpriteKit's own and the upload, more than the plan's 0.6. Every lake is redrawn on every step; that is where to look first.
+- **Nothing has been drawn through a shader yet.** The texture has only been looked at as grey pictures of its bytes. Whether the sweep's stair-stepped scarps show, and whether the bowed banks match the prototype's, is for step 2. `age(exactEvery:)` keeps the exact way to compare with; one of the two goes after that.
+- About 0.4% of stamped texels are older than everything round them by more than 3 T: mostly slivers at the cusps where lobes meet, some of them real.
+- "Allocates nothing per step" is by reading the code (fixed buffers, lists with room for every texel), not measured. A cutoff and a trimmed lake do allocate.
+- **Debug builds:** 3.4 s to make a river's past, at every scene build in a debug `swift test`. `TreeGrowth` is a module of its own, always optimised, for this reason; `River` could be one too.
+- The distant past is still a busier river than the live one.
+
 ## The plan
 One file, `Sources/Atrium/Meander.swift`: a `River` type with no SpriteKit in it (nodes, step, cutoff, fields, pixel bytes), the scene, its shader, knobs and palettes. Everything built in `sceneDidLoad`; steps owed at 10 a second in `update(_:)`; the texture uploaded only when a step ran.
 1. **The look first, in the prototype.** Four rounds are done (above): the lakes, the banks and the cheap distant past are in, and two films at two paces are made. Left for Dave: the pace, the old map's colour rule, and whether the distant past is worth its time at launch. Left in the prototype: relief toward the reference (levees, bars and islands). No Swift before he has seen it move: it is the Crystals risk.
-2. **`River`** ported from `meander.py`, written to allocate nothing per step and with the respacing capped at four passes, and its launch timed first (the sketch took 0.3–0.4 s: too slow for the main thread at every load), with its check: 6,000 coarse steps must cut off loops, never cross and stay in the valley; stepping by 1/15, 1/30 and 1/60 s for the same elapsed time must give identical nodes.
+2. **`River`** (done: [step 1](#step-1-the-river-2026-10-11)) ported from `meander.py`, written to allocate nothing per step and with the respacing capped at four passes, and its launch timed first (the sketch took 0.3–0.4 s: too slow for the main thread at every load), with its check: 6,000 coarse steps must cut off loops, never cross and stay in the valley; stepping by 1/15, 1/30 and 1/60 s for the same elapsed time must give identical nodes.
 3. **The texture and shader,** matched to `render.py`'s stills. Finds out the unknowns: the alpha byte carrying data, a second dependent read, the uniform count, the upload's cost.
 4. **Motion,** in frame strips through a cutoff: no frame with more than about 0.3% of pixels changing over 20 levels.
 5. **Settings:** Look (Relief, Old map); Colors, a list per look (relief: Survey Blue, Rainforest, Garnet, Amethyst; old map: Fisk 1944, Sage, Salmon, Teal, each with a dark version), Random by default; Speed (0.25–4×); River size (the slider Dave picked, from 28 pt to about 56 pt: a rebuild, keeping 14 texels a width so the cost stays the same); how long old courses stay; scroll-bar strength; how long lakes last; the shared grade knobs.
