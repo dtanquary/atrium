@@ -84,7 +84,7 @@ def glow(path, wide=2048, high=1024):
     h, w, _ = points.shape
     spread = np.exp(-2 * np.pi ** 2 * 15.0 ** 2 * (np.fft.fftfreq(h)[:, None] ** 2 + np.fft.rfftfreq(w)[None, :] ** 2))
     haze = np.fft.irfft2(np.fft.rfft2(points, axes=(0, 1)) * spread[..., None], s=(h, w), axes=(0, 1))
-    a = np.asarray(opened.filter(ImageFilter.GaussianBlur(3)), dtype=np.float32) / 255 + np.clip(haze, 0, None).astype(np.float32)
+    a = np.asarray(opened.filter(ImageFilter.GaussianBlur(5)), dtype=np.float32) / 255 + np.clip(haze, 0, None).astype(np.float32)
     lon = ((np.arange(wide) + 0.5) / wide - 0.5) * 2 * np.pi
     lat = (0.5 - (np.arange(high) + 0.5) / high) * np.pi                      # the top row is straight up
     lon, lat = np.meshgrid(lon, lat)

@@ -6,7 +6,7 @@ Dave picked the idea on 2026-10-10 from a brainstorm ([ideas.md](ideas.md)). Tha
 
 - **Mock-ups and prototypes:** `docs/black-hole/` (see [Mock-ups](#mock-ups) and [Prototype](#the-prototype)).
 - **The two research reports in full:** [the method](black-hole/research-method.md) and [the look](black-hole/research-look.md), which has the reference list, eight real black holes' numbers and the palettes.
-- **Next step:** the disc's look (e), then the motion check (d).
+- **Where it stands:** steps (a) to (e) of the build order are done, the motion check (d) twice, the second time on the finished look. It is still hidden (`unfinished: true`). Next is Dave's eye on it, and what is listed under [Still open](#still-open).
 
 ## Dave's decisions (2026-10-10)
 From mock-up sheets, each choice with a recommendation beside it.
@@ -20,6 +20,8 @@ From mock-up sheets, each choice with a recommendation beside it.
 Still his to decide, once there is something running: how lopsided the disc's brightness should be (see Beaming), and whether the streaks' look is right once they match NASA's.
 
 ## How it will work
+This section is the plan as it stood before the build. Where the build went another way it says so in a line beginning **As built**, and [The build so far](#the-build-so-far) has the detail and the measurements.
+
 The method is Eric Bruneton's (2020), cut down for a camera that stays far from the hole. A prototype in numpy matched a brute-force ray tracer; the numbers are under [The prototype](#the-prototype).
 
 Units: the Schwarzschild radius `r_s = 2GM/c² = 1`, so `M = ½`. The horizon is at `r = 1`, the photon sphere at 1.5, the innermost stable orbit (the disc's inner edge) at 3, and the critical impact parameter is `√27/2 = 2.598`. `u = 1/r`, `e = 1/b` (b the impact parameter), `μ = 4/27`.
@@ -48,20 +50,20 @@ Size, tilt, distance, where the hole sits and how the sky is turned are all unif
 - **Temperature:** `T(r) = T_peak · F(r)^¼`, F the Novikov–Thorne flux: with `x = √(2r)`, `F ∝ (x − √6 + (√3/2) ln((x + √3)(√6 − √3)/((x − √3)(√6 + √3)))) / (x⁵(x² − 3))`. Zero at the inner edge, so the edge fades by itself; it peaks at `r = 4.8` (9.55 M).
 - **Colour:** a black body shifted by `g` is a black body at `gT`, so colour only ever slides along the black-body line. The three colours Dave picked are three values of `T_peak`.
 - **Beaming:** in visible light, true Doppler brightening is brutal for a cool disc: at 78° the approaching side of the hottest ring is 191 times the receding side at 4,500 K, 39 times at 6,500 K, 8.6 times at 12,000 K. The mock-ups Dave chose from used the gentler all-wavelengths law (brightness ∝ `(g·T)⁴`) under a soft tone curve. NASA's own picture comes to 1.6 times in display values, about 3.3 in linear light: between the first power of `g` (2.2 times at 85°) and the second (4.7), where the full fourth power is 22. So: a Beaming knob, with its default set by eye to match the mock-ups and NASA's 1.6.
-- **Turning without winding up:** cut the disc into narrow rings, even in `ln r` (9 per e-fold in the prototype). Each ring turns rigidly at its own Kepler rate, `√(1/(2r³))`; a point takes the patterns of the two rings it lies between, mixed by where it sits. Neighbours slide past each other and nothing stretches. Tileable noise sampled in (turns, ln r) with whole repeats round the disc: 4 fetches of `CloudNoise.texture`. **Not yet looked at moving.**
+- **Turning without winding up:** cut the disc into narrow rings, even in `ln r` (9 per e-fold in the prototype). Each ring turns rigidly at its own Kepler rate, `√(1/(2r³))`; a point takes the patterns of the two rings it lies between, mixed by where it sits. Neighbours slide past each other and nothing stretches. Tileable noise sampled in (turns, ln r) with whole repeats round the disc: 4 fetches of `CloudNoise.texture`. **As built:** not rings but three overlapping generations of the scene's own noise, each sheared by its age and reborn in turn (step b), with knots born three times as long as deep and their colour following their brightness (step e). Looked at moving twice (steps d and e).
 - **Speed:** 1× is the inner edge round in 3 minutes (Dave). For scale, the inner orbit of Sagittarius A* takes 33 minutes (92.3 GM/c³ for 4.3 million Suns), so real time for it is 0.09×: a marked stop on the slider, not the default.
 - **Streaks:** the mock-ups' texture is a placeholder, and it is the "vinyl record" the look research warns about: even concentric bands. NASA's are sheared arcs of uneven width that fork and fade.
 
 ### The sky
-- **Stars as points, not a picture.** For stars to stay sharp a sky map would need to be about 18,000 pixels wide. The plan: bake the catalogue into a 1024 × 512 grid of cells, one star a cell (its place in the cell, brightness, colour), and per pixel look at the 2 × 2 cells round the ray's sky direction and draw each star with the lens's stretch in closed form, brightened by the real magnification (capped, so a star passing dead behind the hole doesn't flash). Checked against 68 star images solved directly: within 0.09 px (first image) and 0.13 px (the second image, on the far side of the ring).
+- **Stars as points, not a picture.** For stars to stay sharp a sky map would need to be about 18,000 pixels wide. The plan: bake the catalogue into a 1024 × 512 grid of cells, one star a cell (its place in the cell, brightness, colour), and per pixel look at the 2 × 2 cells round the ray's sky direction and draw each star with the lens's stretch in closed form, brightened by the real magnification (capped, so a star passing dead behind the hole doesn't flash). **As built:** a 2048 × 1024 grid, in the scene's own frame with its poles straight up and down from the view, where the camera never looks. Checked in the prototype against 68 star images solved directly: within 0.09 px (first image) and 0.13 px (the second image, on the far side of the ring).
 - **Which stars.** The app's Yale catalogue (2,888 stars to V 5.5) puts only about 100 on screen. Dave's pick, tile K, used HYG v4.4: 119,614 real stars, **CC BY-SA 4.0**, which NOTICE's list of licences allows (it needs its credit in About, and the baked grid stays under the same licence).
-- **The Milky Way.** ESO/S. Brunier's panorama, **CC BY 4.0**, already credited for Deep Space Tour. It needs a fresh copy (the one in `Resources`, `deep-milky-way.heic`, was cropped and feathered for the tour and can't wrap). It is not an exact galactic map: its stars can't be lined up with the catalogue's (the best single shift left only 30% of bright stars within 0.12°). So it is blurred to a glow, about 1024 × 512 and a few hundred KB, and the catalogue supplies the stars.
+- **The Milky Way.** ESO/S. Brunier's panorama, **CC BY 4.0**, already credited for Deep Space Tour. It needs a fresh copy (the one in `Resources`, `deep-milky-way.heic`, was cropped and feathered for the tour and can't wrap). It is not an exact galactic map: its stars can't be lined up with the catalogue's (the best single shift left only 30% of bright stars within 0.12°). So it is blurred to a glow, about 1024 × 512 and a few hundred KB, and the catalogue supplies the stars. **As built:** 2048 × 1024 and 118 KB, with the photo's own stars taken out and their light spread back as a haze (step c).
 - **Why not NASA's.** NASA SVS's Deep Star Maps 2020 is the exact map, and the first two mock-up sheets were drawn over it. It is built from Gaia DR2, and ESA's licence page says "Gaia data are distributed under the CC BY-NC 3.0 IGO license". Non-commercial isn't among the licences this app accepts. I had told Dave it was public domain before checking; corrected the same day.
 
 ### Glow and stretch
-One `SKShader` pass can't blur. Start with Galaxy's stretch (`asinh(20·lum)/asinh(240)` on brightness, colour kept) and dither. NASA's picture has no bloom at all: the shadow, and the gap between the photon ring and the disc, are exactly black. A baked halo (the shader drawn small offscreen, blurred on the CPU, handed back as a texture, as `MoonBaker` does) is only for later, if the stretch alone looks hard.
+One `SKShader` pass can't blur. Start with Galaxy's stretch (`asinh(20·lum)/asinh(240)` on brightness, colour kept) and dither. NASA's picture has no bloom at all: the shadow, and the gap between the photon ring and the disc, are exactly black. A baked halo (the shader drawn small offscreen, blurred on the CPU, handed back as a texture, as `MoonBaker` does) is only for later, if the stretch alone looks hard. **As built:** `asinh(20·most)/asinh(165)` on the strongest channel, no halo (step e).
 
-### Cost (the estimate; the disc alone measured 0.4 ms of GPU, see [The build so far](#the-build-so-far))
+### Cost (the estimate; measured with everything in: GPU 0.75–0.77 ms, CPU 0.5–0.6 ms, six textures and 13 other uniforms)
 8 to 14 fetches from small textures a pixel, about 250–350 arithmetic operations. Expect 0.6–1.2 ms of GPU against the 2 ms budget; about 0.5 ms of CPU, as every shader scene. About 23 uniforms of roughly 30, 7 of them textures. Memory: 136 KB of tables, 2 MB star grid, 2 MB glow map.
 
 ## Acceptance numbers
@@ -88,6 +90,21 @@ Note: Dave's mock-ups drew the disc to 22 M (11 r_s), not NASA's 30 M. Match the
 - **Look:** Brightness (exposure before the stretch, Galaxy's way), then the shared grade knobs; Beaming 0–1; Streaks 0–1.
 - **Sky:** star brightness, Milky Way brightness.
 - Not planned: a view choice, a drift, spin (below), jewel palettes, a stars-only switch. Each was offered and not picked, or advised against.
+
+As built (all on the `Wallpaper` entry, from `BlackHole.knobs` and `BlackHole.palette`):
+
+| key | label | range | default | drives |
+|---|---|---|---|---|
+| `blackhole.heat` | Disc | Orange, White-gold, Blue-white (or Random) | Orange | the hottest ring's temperature: 3,300, 6,200 or 15,000 K; a new pick rebuilds the scene |
+| `blackhole.size` | Size | 0.65–1.5× | 1 | the field of view: 78° to 39°, 56° at 1× |
+| `blackhole.brightness` | Brightness | 0.4–1.8 | 1 | the disc's exposure before the stretch |
+| `blackhole.beaming` | Beaming | 0–1 | 1 | how much of the Doppler shift shows; 1 is the full `(g T)⁴` |
+| `blackhole.streaks` | Streaks | 0–1 | 0.7 | the streaks' contrast; 0 is a smooth disc |
+| `blackhole.speed` | Speed | 0–4× | 1 | the disc's clock; 1× is the inner edge round in 3 minutes, 0 holds it |
+| `blackhole.stars` | Stars | 0–2 | 1 | the stars' brightness |
+| `blackhole.milkyway` | Milky Way | 0–2 | 1 | the glow's brightness |
+
+The shared grade knobs (contrast, saturation, hue) were planned and not built: nothing asked for them, and each is another uniform.
 
 ## Deliberately left out
 - **Spin (Kerr).** Rays round a spinning hole don't stay in a plane, so the small tables don't exist; it needs a screen-sized map baked per view and gives up the free size slider. NASA's and Luminet's pictures are of non-spinning holes.
@@ -133,7 +150,7 @@ What the GPU's filter does, which nobody could know before building:
 
 **Step (b), the disc (2026-10-11).** The scene is in `allScenes` as Black Hole, hidden. What it draws:
 - **The disc's physics as planned:** Novikov-Thorne heat, the redshift `g` for every image, colour from a black-body table baked in Swift (`BlackBody`: Planck's spectrum through the CIE 1931 curves, in [Wyman, Sloan & Shirley's analytic fit](https://jcgt.org/published/0002/02/01/), to sRGB), brightness as `(g T)⁴`, the mock-up's opacity and outer fade, and both crossings of the disc composited front to back.
-- **Streaks as a flow map:** three generations of noise a third of a life apart, each read at its own Kepler turning since birth. Their weights are `(1 − cos)/3`, whose squares sum to a constant, so contrast can't pulse as generations cross. A generation lives 60 of the hole's time units (234 s at 1×), in which the inner edge laps 1.3 times and the rim 0.19. The noise is a 512 × 128 texture of four octaves, one a channel; each octave fades out as its cells shrink toward a pixel, so streaks seen edge on or wound tight melt into the glow.
+- **Streaks as a flow map:** three generations of noise a third of a life apart, each read at its own Kepler turning since birth. Their weights are `(1 − cos)/3`, whose squares sum to a constant, so contrast can't pulse as generations cross. A generation lives 60 of the hole's time units (234 s at 1×), in which the inner edge laps 1.3 times and the rim 0.19. The noise is a texture of four octaves, one a channel (512 × 128 at this step, 512 × 256 since step (e)); each octave fades out as its cells shrink toward a pixel, so streaks seen edge on or wound tight melt into the glow.
 - **A hairline at the shadow's edge.** Drawn one by one, the images of the disc thinner than a pixel came out as stray dots. Where a pixel spans more than about a radian of extra turn they give way to their average: 0.14 of the disc's light at 5 radii.
 - **Tone:** Galaxy's asinh on brightness with other constants, fitted to the mock-up's own curve. Galaxy's grey mix for highlights is left out, so red clips first, then green.
 - **Settings so far:** Disc (the three temperatures, Orange the standard), Size 0.7× to 1.5× (the field of view: 1× is 56°, the ends about 74° and 39°), Brightness, Beaming, Streaks, Speed 0 to 4×. Size and Speed never rebuild anything.
@@ -157,7 +174,7 @@ A gotcha found on the way, now in `Sources/CLAUDE.md`: SKShader has `fwidth` but
 **Step (c), the sky (2026-10-11).** The real stars and the Milky Way, both bent by the hole.
 - **Two files, baked by `docs/black-hole/sky.py`** in half a minute from HYG's `hyg_v44.csv` and ESO's 6000 × 3000 JPEG, both already turned to the scene's own frame (the sky as in tile K), so the app does no astronomy:
   - `blackhole-stars.lzfse`, 566 KB: HYG's 115,562 stars from magnitude −1.5 to 11, six bytes each (place, magnitude, B−V).
-  - `blackhole-glow.heic`, 151 KB: ESO's panorama as a 2048 × 1024 glow.
+  - `blackhole-glow.heic`, 151 KB (118 KB since step (e)): ESO's panorama as a 2048 × 1024 glow.
 - **Credits:** `blackhole-credits.tsv` (author, licence, source), a line in Settings → About, the README's Credits, and NOTICE for Bruneton's expressions. The star file is an adaptation of HYG and stays under CC BY-SA 4.0.
 - **HYG's own sources, checked at its README on 2026-10-11:** v4.4 combines the Hipparcos, Yale Bright Star and Gliese catalogues, CC BY-SA 4.0 since v4.0. It has no Gaia data: that is its sister set, AT-HYG, which this doesn't use.
 - **The glow is not the mock-up's plain blur.** Blurred, the photo's own stars stay as soft blobs degrees from the catalogue's sharp ones. So the bake takes them out (a 9-pixel opening: stars go, dust lanes stay) and spreads their light back over a degree. Display levels beside tile K (mock-up / build): the Milky Way's band 48 / 38, under the hole 43 / 30, empty sky 13 / 4. The build is darker partly because the mock-up's bloom isn't copied.
@@ -174,12 +191,36 @@ Open after step (c):
 - Stars read thinner than tile K's at a glance: about 10,600 peaks over 0.25 luma outside the disc at full size, 340 over 0.5. The default may want to be brighter.
 - The disc's look, as listed above. The dither is still on the shadow.
 
-**Step (d), a first motion check (2026-10-11), done on the soft disc before its look pass, so it has to be done again after it.** A test steps one scene frame by frame and saves strips: `BLACKHOLE_STRIPS=<dir> swift test --filter blackHoleMoves` (it does nothing without the variable).
+**Step (d), a first motion check (2026-10-11), done on the soft disc before its look pass; it was done again after it, see step (e).** A test steps one scene frame by frame and saves strips: `BLACKHOLE_STRIPS=<dir> swift test --filter blackHoleMoves` (it does nothing without the variable).
 - At full Retina size, default size and speed, eight frames in a row at 15 and at 30 fps, at three places (the thin ring over the shadow, the disc's near side seen edge on, the bright left end): no pixel changes by more than 1 of 255 between frames. The hairline and the ring hold still; nothing sparkles.
 - Over a whole life of the streaks (15 frames, 5 s apart at Speed 4×): the lit disc's mean stays between 131 and 138 of 255 and its spread between 36 and 39, so generations hand over without a pulse, and the pattern never winds up.
 - By construction: the inner edge turns 2° a second at 1× (about 3.7 pt/s on screen at the default size), Speed 0 holds it still, and the clock is a Double moved on by elapsed time, capped at 0.1 s a frame.
 - One or two stars close to the Einstein ring are drawn as short dashes: the correction that keeps stars round is exact only for small offsets, and right at the ring a star really is pulled into an arc. They are still.
 - **The catch:** a pixel changes by 0.02 of 255 a frame on average. The motion is calm to the point of being hard to see, because the streaks are soft. That is the look pass's job.
+
+**Step (e), the look (2026-10-11).** `black-hole/sheet4-app.jpg` puts the app's snapshots beside the mock-up tiles Dave chose from (A, D, E for the three colours; G, H, I for the sizes; K for the sky); `black-hole/compare.py` makes it from a folder of snapshots. What changed to get there:
+- **Streaks are sheared arcs now, not soft blobs.** The noise's cells start three times as long round the disc as they are deep (10 cells round and 6 up in the coarsest octave, a 512 × 256 texture), and a knot shines up to 12 times as bright as a lane between knots (it was 3). That is NASA's look: arcs of uneven width that fork where generations of different ages cross, and fade.
+- **A streak's colour follows its brightness.** Brightness goes as the fourth power of temperature, so a knot 12 times brighter than a lane is 1.9 times hotter: knots are a quarter hotter than the disc round them and whiter, lanes a third cooler and deep red. Colour still only slides along the black-body line. Without this the lanes were brown, a dim orange, where NASA's are red.
+- **Tone:** still asinh on brightness with the colour kept, but brightness is now the strongest channel, not Galaxy's weighted sum, so the three disc colours expose alike (the white and blue discs came out dull under the sum); the curve is `asinh(20·most)/asinh(165)`, which reaches full short of the brightest gas, so red clips first, then green, and the hot side goes yellow-white as in the mock-ups. Per-colour exposures: Orange 1, White-gold 2, Blue-white 1.6.
+- **The shadow is exactly black.** The dither is left off wherever nothing shines; measured, no pixel inside the shadow is above 0.
+- **Stars** are a little brighter and wider (a magnitude 9 star peaks at 0.22 before the stretch; the narrowest are 0.85 px in radius).
+- **The glow** is smoothed a little more in the bake (118 KB now), which took a faint mottling out of the empty sky.
+- **Size** runs 0.65× to 1.5×, so its small end reaches tile I's 78° field.
+
+Measured on the finished look, at full Retina size:
+- **Against tile H, both at 800 × 500** (`compare.py` prints these; mock-up / app): the disc's luma at its 10th, 50th, 90th and 99th percentile 0.22, 0.37, 0.77, 0.92 / 0.20, 0.31, 0.68, 0.93; fine contrast (luma less its 9 px blur) 0.048 / 0.077; the approaching side over the receding, in luma along the disc, 2.5 / 1.6 (NASA's is 1.6); empty sky's median luma 0.069 / 0.036.
+- **The faint arcs in the glow are the sky's own lumps stretched by the lens, not an artefact.** With the glow made a flat grey and the stars off, 99.94% of sky pixels came out within 1 of 255 of each other; the rest are where the disc's thin outer edge lies over the sky.
+- **Motion, again** (`blackHoleMoves`): at 15 fps no pixel changes by more than 2 of 255 between frames, at 30 fps by more than 1, at the thin ring, the near side and the bright end alike. Over two lives of the streaks (78 looks, 1.5 s apart at 4×) the disc's mean brightness runs 119 to 140 of 255 and its contrast 47 to 60: that is the streaks themselves coming and going over minutes. The part that keeps time with the generations handing over, which would be breathing, is ±1.9% of the mean and ±1.4% of the contrast.
+- **Stars still land where the lens puts them:** 568 of 568 found, 0.04 px off at the median, 0.16 px at the 90th percentile.
+- **Cost, release build, at sizes 1.5×, 1× and 0.65×:** GPU 0.75–0.77 ms a frame, CPU 0.5–0.6 ms (the machine was busy with other builds; Galaxy in the same run measured 0.58 and 1.91). Six textures, 13 other uniforms.
+- **Tests, seven:** the six above pass, and `blackHoleMoves` does nothing without its variable.
+
+### Still open
+- **Dave hasn't seen it.** Everything in step (e) was judged against the mock-up tiles and NASA's frames by the agent that built it. Streaks at 0.7 are livelier than "calm" may want; the slider is there.
+- **Stars read finer than tile K's.** They are points about 1.5 px across at Retina, the brightest a soft 8, where the mock-up's were blobs and dashes, so at a glance the sky looks emptier, though it holds the same 111,000 stars. The Stars slider goes to 2.
+- **The disc's mean brightness wanders ±8% over minutes** as knots come and go (±12% in a second run from another random start: 108 to 138 of 255). It doesn't beat, but nobody has watched it for an hour.
+- **One or two stars at the Einstein ring are short dashes**, as in the first motion check.
+- **Not done:** the Settings page's own screenshot and preview (`SETTINGS_SHOT` can't open a hidden wallpaper's page), an icon chosen on purpose (it has `circle.circle.fill`), the README and the site, and the baked halo (f), which the look didn't seem to need.
 
 ## Mock-ups
 In `docs/black-hole/`. They were rendered by `bh.py`, a brute-force tracer written for the purpose: every ray is integrated (`d²x/dλ² = −1.5 h² x / r⁵`, which gives a light ray's exact path), so the bending in them is real, not painted. Its disc texture, bloom and tone curve are stand-ins.
@@ -188,7 +229,7 @@ In `docs/black-hole/`. They were rendered by `bh.py`, a brute-force tracer writt
 - `sheet1.jpg`: six looks (view A–C, colour D–E, framing F).
 - `sheet2-sizes.jpg`: the size slider's range (G close, H medium, I small). A 14 s film of three speeds went with it (`python3 sheet2.py film`).
 - `sheet3-sky.jpg`: tile K, ESO's glow with HYG's stars. Tile J, NASA's map beside it, isn't kept. The stars near the hole smear into dashes: that is the picture-of-the-sky shortcut, which the build doesn't take.
-- **Credits for these pictures:** the Milky Way is ESO/S. Brunier's panorama (CC BY 4.0); the stars are drawn from the HYG catalogue v4.4 (CC BY-SA 4.0). As adaptations of HYG, the three sheets are under CC BY-SA 4.0, not the repo's MIT.
+- **Credits for these pictures:** the Milky Way is ESO/S. Brunier's panorama (CC BY 4.0); the stars are drawn from the HYG catalogue v4.4 (CC BY-SA 4.0). As adaptations of HYG, the three sheets are under CC BY-SA 4.0, not the repo's MIT; so is `sheet4-app.jpg`, the app's own pictures beside them, which shows the same stars and Milky Way.
 - To render them again: `sky_eso.py` builds the sky from the ESO panorama and HYG into `$BH_DATA` (raw float files); `sheet.py sheet1` and `sheet2.py stills` make the sheets into `$BH_OUT`. `exr2raw.swift` decodes an OpenEXR star map to the same raw form, which is how NASA's was tried.
 
 ## The prototype
@@ -207,7 +248,8 @@ Method
 - Page & Thorne 1974 (the disc's flux): https://ui.adsabs.harvard.edu/abs/1974ApJ...191..499P
 - James, von Tunzelmann, Franklin & Thorne 2015, the Interstellar paper (a uniform 4,500 K disc, Doppler left out as "too lopsided"): https://arxiv.org/abs/1502.03808
 - Beloborodov 2002: https://arxiv.org/abs/astro-ph/0201117
-- Wyman, Sloan & Shirley 2013, analytic CIE curves (check the constants against the paper before they go in Swift): https://jcgt.org/published/0002/02/01/
+- Wyman, Sloan & Shirley 2013, analytic CIE curves: https://jcgt.org/published/0002/02/01/. The constants in `BlackBody` were typed from memory, not from the paper; `blackBodyKeepsToTheLocus` checks what they produce against six points of the Planckian locus (those six from memory of the standard table too), to 0.004.
+- Ballesteros 2012, "New insights into black bodies" (a star's B−V to its temperature, for the stars' colours): https://arxiv.org/abs/1201.1809 (the formula came by way of `sky_eso.py`; the paper wasn't opened).
 - Bardeen, Press & Teukolsky 1972 (inner orbit with spin): https://ui.adsabs.harvard.edu/abs/1972ApJ...178..347B
 - Read only, nothing copied: rantonels/starless (GPL-3.0), https://github.com/rantonels/starless; oseiskar/black-hole (MIT), https://github.com/oseiskar/black-hole
 

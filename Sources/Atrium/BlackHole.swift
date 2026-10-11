@@ -155,7 +155,7 @@ final class BlackHole: SKScene {
         var distance = 40.0, tilt = 84.0, outer = 11.0, field = 56.0
     }
 
-    nonisolated static let size = Knob(key: "blackhole.size", label: "Size", range: 0.7...1.5, standard: 1, section: "Look", format: .times)
+    nonisolated static let size = Knob(key: "blackhole.size", label: "Size", range: 0.65...1.5, standard: 1, section: "Look", format: .times)
     nonisolated static let speed = Knob(key: "blackhole.speed", label: "Speed", range: 0...4, standard: 1, section: "Motion", format: .times)
     /// Brightness is the exposure before the stretch, as Galaxy's is. Beaming is how much of the Doppler shift
     /// shows: at 1 the side coming toward us is as much hotter and brighter as relativity makes it.
@@ -171,7 +171,7 @@ final class BlackHole: SKScene {
 
     /// The disc's colours, each the temperature of its hottest ring in kelvin, and the exposure that suits it.
     nonisolated static let heats: [(name: String, kelvin: Double, exposure: Double)] = [
-        ("Orange", 3300, 1), ("White-gold", 6200, 0.77), ("Blue-white", 15000, 0.68),
+        ("Orange", 3300, 1), ("White-gold", 6200, 2), ("Blue-white", 15000, 1.6),
     ]
     /// Their swatches: the gas's colour out in the disc, at its hottest ring, and on the side coming toward us.
     static let palette = PaletteChoice(key: "blackhole.heat", options: heats.map { heat in
@@ -183,7 +183,8 @@ final class BlackHole: SKScene {
     /// 2π√54 of them, and at speed 1 in three minutes (Dave's pick). For scale, the same orbit round the Milky Way's
     /// own black hole takes 33 minutes.
     private static let unitsPerSecond = 2 * Double.pi * 54.0.squareRoot() / 180
-    /// How long a generation of streaks lasts, in that unit. Three overlap, a third of a life apart.
+    /// How long a generation of streaks lasts, in that unit (3 minutes 54 at speed 1). Three overlap, a third of a
+    /// life apart. The shader's weights have the same 60 written in.
     private static let life = 60.0
 
     private static let rays = table(Bending.packed(Bending.rays, bytes: 2), Bending.raysSize.across, Bending.raysSize.up)
@@ -197,11 +198,12 @@ final class BlackHole: SKScene {
     }
 
     /// The gas's knots as they are born, before any shear: four octaves of noise, one in each channel from coarse
-    /// to fine, 512 across for one turn of the disc and 128 up for 0.4π in the log of the distance, so a cell is as
-    /// wide round the disc as it is deep. The coarsest has 10 cells round and 2 up, each next octave twice that. It
-    /// repeats both ways, with one more row and column that are the first again, so smoothing never meets a seam.
+    /// to fine, 512 across for one turn of the disc and 256 up for 0.4π in the log of the distance. The coarsest
+    /// has 10 cells round and 6 up, each next octave twice that, so a knot starts three times as long round the
+    /// disc as it is deep: with isotropic ones the streaks came out as soft blobs. It repeats both ways, with one
+    /// more row and column that are the first again, so smoothing never meets a seam.
     private static let gas: SKTexture = {
-        let (w, h) = (512, 128)
+        let (w, h) = (512, 256)
         func hash(_ x: Int, _ y: Int, _ octave: Int) -> Double {
             var n = UInt32(truncatingIfNeeded: x &* 374761393 &+ y &* 668265263 &+ octave &* 2246822519)
             n = (n ^ (n >> 13)) &* 1274126177
@@ -209,7 +211,7 @@ final class BlackHole: SKScene {
         }
         var bytes = [UInt8](repeating: 0, count: (w + 1) * (h + 1) * 4)
         for y in 0...h { for x in 0...w { for octave in 0..<4 {
-            let (round, deep) = (10 << octave, 2 << octave)
+            let (round, deep) = (10 << octave, 6 << octave)
             let (u, v) = (Double(x % w) / Double(w) * Double(round), Double(y % h) / Double(h) * Double(deep))
             let (i, j) = (Int(u), Int(v))
             let (s, t) = ((u - Double(i)) * (u - Double(i)) * (3 - 2 * (u - Double(i))), (v - Double(j)) * (v - Double(j)) * (3 - 2 * (v - Double(j))))
@@ -226,6 +228,8 @@ final class BlackHole: SKScene {
 
     /// The real stars (the HYG catalogue to magnitude 11, Resources/blackhole-stars.lzfse) as a grid the shader can
     /// find a star in: one cell every 0.18° of the sky, holding at most one star, the brightest that falls in it.
+    // ponytail: 4,589 of the 115,562 stars (4%) share a cell with a brighter one and are dropped, mostly faint ones
+    // in the Milky Way's crowds. A grid twice as fine would keep nearly all, for four times the 8 MB.
     /// A cell's bytes are where in it the star sits (across, up), how bright it is (0 for no star, then 255 for
     /// magnitude −1.5 down to 1 for 11) and where the black-body table keeps its colour.
     static let starCells: [UInt8] = {
@@ -358,7 +362,7 @@ final class BlackHole: SKScene {
 
     // Where the gas's noise is read: `round` in turns of the disc, `deep` in the log of the distance.
     vec2 gasAt(float round, float deep) {
-        return (fract(vec2(round, deep / 1.2566371)) * vec2(512.0, 128.0) + 0.5) / vec2(513.0, 129.0);
+        return (fract(vec2(round, deep / 1.2566371)) * vec2(512.0, 256.0) + 0.5) / vec2(513.0, 257.0);
     }
 
     // One generation's streaks, about ±0.3, from the noise's four octaves (coarse to fine). `cells` is how many of the
@@ -371,15 +375,20 @@ final class BlackHole: SKScene {
 
     // A star's light `off` pixels from where it's drawn. `code` is the grid's byte for its brightness (1 at magnitude
     // −1.5, falling to 0 at 11) and `gain` the Stars slider times how far the hole has magnified it. A magnitude 9
-    // star peaks at 0.18 before the stretch; brighter ones are wider as well as brighter. `room` is how far round a
+    // star peaks at 0.22 before the stretch; brighter ones are wider as well as brighter. `room` is how far round a
     // star the pixels are sure to find it in the grid: its light is gone by there, and where the hole squeezes the
     // sky so hard that there's no room for it, it shrinks and dims instead of showing as a cut-off square.
     float starLight(float off, float code, float room, float gain) {
-        float bright = 0.18 * exp(11.51 * code - 1.842) * gain;
-        float fits = min(0.75 * (1.0 + 0.25 * log(1.0 + bright)), room / 2.2);
+        float bright = 0.22 * exp(11.51 * code - 1.842) * gain;
+        float fits = min(0.85 * (1.0 + 0.25 * log(1.0 + bright)), room / 2.2);
         float drawn = max(fits, 0.55);
         return bright * (fits * fits / (drawn * drawn)) * exp(-off * off / (drawn * drawn)) * (1.0 - smoothstep(0.6 * room, room, off));
     }
+
+    // How much hotter or cooler a streak is than the disc round it (`gas` 0 to 1; no change at a half): a knot of
+    // gas shines up to 12 times as bright as a lane between knots, and since brightness goes as the fourth power of
+    // temperature, a knot is a quarter hotter than the disc round it and so whiter, a lane a third cooler and redder.
+    float streakHeat(float gas) { return sqrt(sqrt((0.1 + 1.1 * pow(gas, 1.6)) / 0.46)); }
 
     // The light of the disc where a ray meets it, already times its opacity, and that opacity. `hue` is the gas's
     // colour there, `seen` its temperature against the hottest ring's as it reaches us, `gas` its streaks (0 to 1).
@@ -388,7 +397,7 @@ final class BlackHole: SKScene {
         float fade = clamp((1.0 - outer / u) / 0.42, 0.0, 1.0);
         float there = clamp((1.0 / u - 3.0) / 0.12, 0.0, 1.0) * clamp(fade * sqrt(fade) * (1.6 + 1.2 * gas), 0.0, 1.0);
         float glow = seen * seen;
-        return vec4(hue * (glow * glow * (0.42 + 0.9 * pow(gas, 1.4)) * there), there);
+        return vec4(hue * (glow * glow * there), there);
     }
 
     void main() {
@@ -424,6 +433,9 @@ final class BlackHole: SKScene {
         // The ray can meet the disc once before its nearest point and once after: the second is found by mirroring
         // about the nearest point. The second holds the disc's far side arching over the hole (no half-turns), its
         // underside (one) and every finer ring.
+        // ponytail: table A is left to the GPU's own smoothing, which puts the disc about a 20th of a pixel out. Read
+        // its four entries and mix them here, as table B's two are, if the streaks ever look stepped (6 more reads).
+        // ponytail: the light is taken to cross the disc in no time; the delay would only warp the streaks a little.
         float turn0 = toCamera + cut;
         float u0 = inverseRadius(texture2D(u_rays, raysAt(e2, turn0)));
         bool hit0 = turn0 < furthest && (!escapes || turn0 < toNearest) && u0 <= 1.0 / 3.0 && u0 >= u_view.w;
@@ -479,19 +491,20 @@ final class BlackHole: SKScene {
                 float round = atan(on1.y, on1.x) / 6.2831853;
                 vec3 run = spin * u_age;                              // how far each generation's gas has run since birth
                 vec3 cells = 10.0 * (wide1 + 1.5 * run * grain1);
-                float pattern = dot(weight, vec3(streaks(texture2D(u_gas, gasAt(round + run.x + u_seedRound.x, deep1 + u_seedDeep.x)), max(cells.x, grain1 * 1.6)),
-                                                 streaks(texture2D(u_gas, gasAt(round + run.y + u_seedRound.y, deep1 + u_seedDeep.y)), max(cells.y, grain1 * 1.6)),
-                                                 streaks(texture2D(u_gas, gasAt(round + run.z + u_seedRound.z, deep1 + u_seedDeep.z)), max(cells.z, grain1 * 1.6))));
+                float pattern = dot(weight, vec3(streaks(texture2D(u_gas, gasAt(round + run.x + u_seedRound.x, deep1 + u_seedDeep.x)), max(cells.x, grain1 * 4.8)),
+                                                 streaks(texture2D(u_gas, gasAt(round + run.y + u_seedRound.y, deep1 + u_seedDeep.y)), max(cells.y, grain1 * 4.8)),
+                                                 streaks(texture2D(u_gas, gasAt(round + run.z + u_seedRound.z, deep1 + u_seedDeep.z)), max(cells.z, grain1 * 4.8))));
                 float gas = smoothstep(0.0, 1.0, 0.5 + pattern * 2.1 * u_streaks);
-                float seen = pow(sqrt(1.0 - 1.5 * u1) / (1.0 - sqrt(0.5 * u1 * u1 * u1) * lean / e), u_beaming) * discHeat(u1);
+                float seen = pow(sqrt(1.0 - 1.5 * u1) / (1.0 - sqrt(0.5 * u1 * u1 * u1) * lean / e), u_beaming) * discHeat(u1) * streakHeat(gas);
                 light = discLight(texture2D(u_heat, heatAt(seen * u_peak.x)).rgb, seen, gas, u1, u_view.w);
             }
             // At the shadow's edge the images of the disc pile up thinner than pixels. Drawn one by one they come out
             // as stray dots, so there they give way to what they average to: a quarter of every half-turn is lit,
             // and it comes to 0.14 of the disc's light at 5 radii. That is the hairline round the shadow.
+            // ponytail: 0.14 was worked out for a disc from 3 to 11 radii; a view with another outer edge needs its own.
             float piled = smoothstep(0.6, 1.4, crowding);
             if (escapes && piled > 0.0) {
-                float seen = pow(0.83666 / (1.0 - 0.063246 * lean / e), u_beaming) * 0.998;
+                float seen = pow(0.83666 / (1.0 - 0.063246 * lean / e), u_beaming) * 0.998 * streakHeat(0.5);
                 light = mix(light, vec4(0.14 * discLight(texture2D(u_heat, heatAt(seen * u_peak.x)).rgb, seen, 0.5, 0.2, u_view.w).rgb, 0.2), piled);
             }
             if (hit0) {
@@ -499,18 +512,15 @@ final class BlackHole: SKScene {
                 float round = atan(on0.y, on0.x) / 6.2831853;
                 vec3 run = spin * u_age;
                 vec3 cells = 10.0 * (wide0 + 1.5 * run * grain0);
-                float pattern = dot(weight, vec3(streaks(texture2D(u_gas, gasAt(round + run.x + u_seedRound.x, deep0 + u_seedDeep.x)), max(cells.x, grain0 * 1.6)),
-                                                 streaks(texture2D(u_gas, gasAt(round + run.y + u_seedRound.y, deep0 + u_seedDeep.y)), max(cells.y, grain0 * 1.6)),
-                                                 streaks(texture2D(u_gas, gasAt(round + run.z + u_seedRound.z, deep0 + u_seedDeep.z)), max(cells.z, grain0 * 1.6))));
+                float pattern = dot(weight, vec3(streaks(texture2D(u_gas, gasAt(round + run.x + u_seedRound.x, deep0 + u_seedDeep.x)), max(cells.x, grain0 * 4.8)),
+                                                 streaks(texture2D(u_gas, gasAt(round + run.y + u_seedRound.y, deep0 + u_seedDeep.y)), max(cells.y, grain0 * 4.8)),
+                                                 streaks(texture2D(u_gas, gasAt(round + run.z + u_seedRound.z, deep0 + u_seedDeep.z)), max(cells.z, grain0 * 4.8))));
                 float gas = smoothstep(0.0, 1.0, 0.5 + pattern * 2.1 * u_streaks);
-                float seen = pow(sqrt(1.0 - 1.5 * u0) / (1.0 - sqrt(0.5 * u0 * u0 * u0) * lean / e), u_beaming) * discHeat(u0);
+                float seen = pow(sqrt(1.0 - 1.5 * u0) / (1.0 - sqrt(0.5 * u0 * u0 * u0) * lean / e), u_beaming) * discHeat(u0) * streakHeat(gas);
                 vec4 front = discLight(texture2D(u_heat, heatAt(seen * u_peak.x)).rgb, seen, gas, u0, u_view.w);
                 light = vec4(front.rgb + (1.0 - front.a) * light.rgb, 1.0 - (1.0 - front.a) * (1.0 - light.a));
             }
 
-            // Galaxy's stretch: asinh on brightness, which lifts the disc's faint outer part, holds the bright side
-            // without bleaching its colour and leaves black black. Past full, red clips first, then green: the
-            // hottest gas goes yellow-white, as it did in the mock-ups Dave chose from.
             // Behind the disc, where the ray gets away: the Milky Way's glow (stored as its value to the 0.6) and the
             // catalogue's stars.
             vec3 behind = vec3(0.0);
@@ -537,6 +547,8 @@ final class BlackHole: SKScene {
                 vec2 northPx = vec2(dot(north, ring) * alongPx, (y.x * north.y - y.y * north.x) * roundPx) * 0.0030680;
                 float room = 0.5 * abs(eastPx.x * northPx.y - eastPx.y * northPx.x) / max(max(length(eastPx), length(northPx)), 1e-6);
                 // the four cells round this pixel's place on the sky: any star near enough to light it is in one
+                // ponytail: the stretch is taken at the pixel, which keeps a star round except right at the ring
+                // dead behind the hole, where one or two come out as short dashes. Fine while the sky stands still.
                 vec2 place = vec2(lon / 6.2831853 + 0.5, lat / 3.1415927 + 0.5) * vec2(2048.0, 1024.0);
                 vec2 corner = floor(place - 0.5);
                 for (int k = 0; k < 4; k++) {
@@ -549,11 +561,15 @@ final class BlackHole: SKScene {
                     }
                 }
             }
-            vec3 x = light.rgb * (u_brightness * u_peak.y * 11.7) + (1.0 - light.a) * behind;
-            float lum = dot(x, vec3(0.3, 0.5, 0.2)) + 0.0001;
-            float stretched = log(20.0 * lum + sqrt(400.0 * lum * lum + 1.0)) / 8.0; // asinh(20 lum) / asinh(1490)
-            col = min(x * stretched / lum, 1.0);
-            col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0;
+            // Galaxy's stretch, asinh on brightness with the colour kept: it lifts the disc's faint outer part, holds
+            // the bright side without bleaching it and leaves black black. Brightness here is the strongest channel,
+            // not Galaxy's weighted sum, so the three disc colours expose alike; and the curve reaches full short of
+            // the brightest gas, where red clips first, then green, so it goes yellow-white as in the mock-ups.
+            vec3 x = light.rgb * (u_brightness * u_peak.y * 8.0) + (1.0 - light.a) * behind;
+            float most = max(x.r, max(x.g, x.b)) + 0.0001;
+            col = min(x * (log(20.0 * most + sqrt(400.0 * most * most + 1.0)) / 5.8) / most, 1.0); // asinh(20 most) / asinh(165)
+            // dithered against banding, but not where nothing shines: the shadow stays exactly black
+            col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0 * step(0.0005, most);
         }
         gl_FragColor = vec4(col, 1.0);
     }

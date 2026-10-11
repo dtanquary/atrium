@@ -190,9 +190,10 @@ func blackBodyKeepsToTheLocus(kelvin: Double, x: Double, y: Double) {
 /// For looking at the Black Hole moving: `BLACKHOLE_STRIPS=<dir> swift test --filter blackHoleMoves` steps one scene
 /// frame by frame (not in real time) and saves, for 15 and 30 frames a second, eight frames in a row of three places
 /// where trouble would show (the thin ring over the shadow, the disc's near side seen edge on, the bright left end)
-/// with the change between each pair beside them, eight times over; then one frame in every 5 s through a whole
-/// life of the streaks at speed 4. It prints how much single pixels jump between frames, and whether the disc's
-/// brightness and contrast hold steady as the streak generations hand over.
+/// with the change between each pair beside them, eight times over; then fifteen frames 7.5 s apart through two
+/// lives of the streaks at speed 4. It prints how much single pixels jump between frames, and how far the disc's
+/// brightness and contrast wander over those two lives, with how much of that keeps time with the streak
+/// generations handing over (breathing) rather than being the streaks themselves coming and going.
 @MainActor @Test func blackHoleMoves() throws {
     guard let dir = ProcessInfo.processInfo.environment["BLACKHOLE_STRIPS"] else { return }
     try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
@@ -253,25 +254,31 @@ func blackBodyKeepsToTheLocus(kelvin: Double, x: Double, y: Double) {
         }
     }
 
-    // a whole life of the streaks, at speed 4: 60 units of the disc's time, 58 s
+    // Two lives of the streaks at speed 4: 120 units of the disc's time, 117 s, looked at every 1.5 s. A generation
+    // hands over every third of a life, 19.5 s here or 13 looks, so any breathing would beat at that.
     UserDefaults.standard.set(4.0, forKey: BlackHole.speed.key)
     defer { UserDefaults.standard.removeObject(forKey: BlackHole.speed.key) }
     let renderer = SKRenderer(device: device)
     renderer.scene = BlackHole(size: CGSize(width: w / 2, height: h / 2))
     let (cw, ch) = (1400, 700), (cx, cy) = (w / 2 - 700, h / 2 - 350)
-    var sheet = [UInt32](repeating: 0, count: cw / 2 * 3 * (ch / 2) * 5), levels = [(mean: Double, spread: Double)]()
-    for n in 0..<15 {
-        let pixels = try frame(of: renderer, after: 5, at: 30)
-        var lit = [Double]()
+    var sheet = [UInt32](repeating: 0, count: cw / 2 * 3 * (ch / 2) * 5), means = [Double](), spreads = [Double]()
+    for n in 0..<78 {
+        let pixels = try frame(of: renderer, after: 1.5, at: 30)
+        var (sum, squares, count) = (0.0, 0.0, 0.0)
         for y in stride(from: 0, to: ch, by: 2) { for x in stride(from: 0, to: cw, by: 2) {
             let p = pixels[(cy + y) * w + cx + x]
-            sheet[((n / 3) * (ch / 2) + y / 2) * (cw / 2 * 3) + (n % 3) * (cw / 2) + x / 2] = p
-            if luma(p) > 60 { lit.append(Double(luma(p))) }
+            if n % 5 == 0, n < 75 { sheet[((n / 15) * (ch / 2) + y / 2) * (cw / 2 * 3) + (n / 5 % 3) * (cw / 2) + x / 2] = p }
+            guard p >> 16 & 255 > (p & 255) + 40 else { continue } // the disc: red well over blue
+            (sum, squares, count) = (sum + Double(luma(p)), squares + Double(luma(p) * luma(p)), count + 1)
         } }
-        let mean = lit.reduce(0, +) / Double(lit.count)
-        levels.append((mean, (lit.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Double(lit.count)).squareRoot()))
+        means.append(sum / count)
+        spreads.append((squares / count - sum / count * (sum / count)).squareRoot())
     }
-    save(sheet, cw / 2 * 3, ch / 2 * 5, "a life of the streaks, every 5 s at speed 4.png")
-    print("Black Hole moving, over a life of the streaks: the lit disc's mean " + levels.map { String(format: "%.0f", $0.mean) }.joined(separator: " ")
-          + "; its spread " + levels.map { String(format: "%.0f", $0.spread) }.joined(separator: " "))
+    save(sheet, cw / 2 * 3, ch / 2 * 5, "two lives of the streaks, every 7.5 s at speed 4.png")
+    for (name, series) in [("mean", means), ("spread", spreads)] {
+        let average = series.reduce(0, +) / Double(series.count)
+        let beat = (0..<78).reduce(SIMD2<Double>.zero) { $0 + series[$1] * SIMD2(cos(2 * .pi * Double($1) / 13), sin(2 * .pi * Double($1) / 13)) }
+        print(String(format: "Black Hole moving, over two lives of the streaks: the disc's %@ runs %.1f to %.1f of 255 (average %.1f); the part of that which beats with the handover is ±%.1f%%",
+                     name, series.min()!, series.max()!, average, (beat.x * beat.x + beat.y * beat.y).squareRoot() * 2 / 78 / average * 100))
+    }
 }
