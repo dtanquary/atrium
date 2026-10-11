@@ -211,10 +211,13 @@ struct TrainWeather: Equatable {
     static let preview = Knob(key: "seat.previewWeather", label: "Preview the weather", range: 0...7, standard: 0, section: "Preview",
                               format: .choice(["Off", "Clear", "Hazy", "Fog", "Overcast", "Rain", "Snow", "A thunderstorm"]),
                               shownWhen: "seat.orbit", shownAt: 2)
+    /// Whether rain shows as water on the window (`TrainGlass`), while it rains.
+    static let glass = Knob(key: "seat.rain", label: "Rain on the glass", range: 0...1, standard: 1, section: "Flight",
+                            format: .toggle, shownWhen: "seat.orbit", shownAt: 2)
     /// What each pick of the preview's menu shows, from Clear on.
     static let previews = [TrainWeather(), TrainWeather(reach: 2000), TrainWeather(cover: 1, reach: 400, gloom: 0.5), TrainWeather(cover: 1, gloom: 0.4),
-                           TrainWeather(cover: 1, reach: 2000, gloom: 0.7), TrainWeather(cover: 1, reach: 1000, gloom: 0.5, snow: 2.0 / 3),
-                           TrainWeather(cover: 1, reach: 2000, gloom: 1, storm: true)]
+                           TrainWeather(cover: 1, reach: 2000, gloom: 0.7, wet: 0.75), TrainWeather(cover: 1, reach: 1000, gloom: 0.5, snow: 2.0 / 3),
+                           TrainWeather(cover: 1, reach: 2000, gloom: 1, wet: 1.5, storm: true)]
     /// The reaches a report is rounded to, so that the air is one of a few kinds and changes seldom.
     static let reaches = [400.0, 1000, 2000, 4000]
 
@@ -228,6 +231,9 @@ struct TrainWeather: Equatable {
     var gloom = 0.0
     /// Snow falling, 0 to 1.
     var snow = 0.0
+    /// Rain on the glass, in quarters: 1 is a steady rain's, as Rain on Glass counts it (`GlassWeather.rainAmount`),
+    /// a half the least a report gives and one and a half the most. None with Settings' Rain on the glass off.
+    var wet = 0.0
     /// A thunderstorm overhead.
     var storm = false
 
@@ -242,23 +248,25 @@ struct TrainWeather: Equatable {
         // (A report can say rain, snow or fog and still give the visibility of a clear day.)
         let seen = min(report.visibility, foggy ? 1500 : .infinity, snowing ? 5000 : .infinity, thunder ? 5000 : raining ? 12_000 : .infinity) / 3.9
         reach = seen >= 16_000 / 3.9 ? .infinity : Self.reaches.min { abs(log($0 / seen)) < abs(log($1 / seen)) }!
-        let wet = min(report.rain + report.showers, 1) // (in mm a quarter hour: 1 is 4 mm an hour, a steady rain)
-        gloom = thunder ? 1 : raining ? ((0.6 + 0.2 * wet) * 10).rounded() / 10 : snowing || foggy ? 0.5 : cover == 1 ? 0.4 : cover > 0.8 ? 0.2 : 0
+        let heavy = min(report.rain + report.showers, 1) // (in mm a quarter hour: 1 is 4 mm an hour, a steady rain)
+        gloom = thunder ? 1 : raining ? ((0.6 + 0.2 * heavy) * 10).rounded() / 10 : snowing || foggy ? 0.5 : cover == 1 ? 0.4 : cover > 0.8 ? 0.2 : 0
         snow = snowing ? min(max((report.snowfall * 6).rounded(.up), 1), 3) / 3 : 0 // (in thirds, of 2 cm an hour or more)
+        let falling = GlassWeather.rainAmount(mmPerHour: (report.rain + report.showers) * 4, wind: report.wind, code: code)
+        wet = raining ? max((falling * 4).rounded() / 4, thunder ? 1 : 0.5) : 0
         storm = thunder
     }
 
-    init(cover: Double = 0, reach: Double = .infinity, gloom: Double = 0, snow: Double = 0, storm: Bool = false) {
-        (self.cover, self.reach, self.gloom, self.snow, self.storm) = (cover, reach, gloom, snow, storm)
+    init(cover: Double = 0, reach: Double = .infinity, gloom: Double = 0, snow: Double = 0, wet: Double = 0, storm: Bool = false) {
+        (self.cover, self.reach, self.gloom, self.snow, self.wet, self.storm) = (cover, reach, gloom, snow, wet, storm)
     }
 
     /// The weather for a scene built now: the preview's; or the report's, with the switch on, Clouds left on
     /// Changing and a report in; or none, and then the sky is Settings' Clouds alone, as it was before weather.
     @MainActor static var now: TrainWeather? {
-        let pick = Int(preview.value)
-        if pick > 0 { return previews[pick - 1] }
-        guard follow.value > 0.5, PixelWindowSeat.clouds.value == 0, let report = LiveWeather.shared.latest else { return nil }
-        return TrainWeather(report)
+        let pick = Int(preview.value), following = follow.value > 0.5 && PixelWindowSeat.clouds.value == 0
+        guard var weather = pick > 0 ? previews[pick - 1] : following ? LiveWeather.shared.latest.map(TrainWeather.init) : nil else { return nil }
+        if glass.value < 0.5 { weather.wet = 0 }
+        return weather
     }
 
     /// A storm overhead's lightning at scene time `t`: how brightly it lights the cloud and the land just now, 0
@@ -331,6 +339,123 @@ struct TrainSnow {
                     let x = i * size + Int(draw & 255) % size - dx, y = j * size + Int(draw >> 8 & 255) % size - dy
                     if x >= 0, x < wide, y >= 0, y < high { plot(x, y, layer) }
                 }
+            }
+        }
+    }
+}
+
+/// Rain on the train's window, on the outside of the glass: the view softened, beads that sit where they landed,
+/// and a few long threads of water lying nearly level, as rain does on a moving train.
+///
+/// What it takes from Rain on Glass (docs/rain-on-glass.md), whose water was measured from footage:
+/// - a drop is a lens that shows the view upside down, so by day it is dark on top and bright below (measured over
+///   170 drops). A bead here is a dark pixel over a light one, and a thread a dark line over a light one: the
+///   mock-ups had them the other way up;
+/// - a bead lands whole at its own moment and stays where it landed for 40 to 160 s. Beads never move: what runs
+///   is water that has merged, which is the threads, and a thread takes up the beads it lies over;
+/// - running water keeps to a track. A thread holds one wavering path for as long as it lasts;
+/// - how much water there is for a rate of rain (`TrainWeather.wet`).
+/// Not taken: the lens's image of the view (a bead is two pixels), the drying when rain stops, mist, fog and frost.
+///
+/// A thread lies below level by the train's speed against a drop's own fall: 9 degrees at 1×, as measured on
+/// footage from trains, flatter the faster it goes and steeper as it slows. Its water runs back along it, the way
+/// the country slides, as fast as a thin thing may (`TrainWorld.thin`) or slower on a slower train. How far it has
+/// run is added up as the train goes, and a thread keeps the tilt it formed at, so a change of speed moves no water.
+struct TrainGlass {
+    /// How far the water has run along its threads, in pixels, and the tilt each of the four threads formed at.
+    private var ran = 0.0, tilts: [Double], turns = [Int](repeating: .min, count: 4)
+    private var behind: [UInt32] = [], across: [UInt32] = [] // the view before softening, and softened along its rows
+
+    /// How far below level a thread forming now lies, as a slope, on a train at `speed` metres a second.
+    // ponytail: a thread is drawn a pixel to a column, so it is never steeper than 45 degrees. A train that creeps
+    // (under 0.16×) would want it drawn by rows, and Speed stops at 0.5×.
+    static func tilt(_ speed: Double) -> Double { min(tan(9 * .pi / 180) * PixelTrain.pace / max(speed, 0.01), 1) }
+
+    init(speed: Double) { tilts = [Double](repeating: Self.tilt(speed), count: 4) }
+
+    /// Where thread `k` is in a pane `wide` across: which of its turns this is, and how far its head has come in
+    /// from the pane's leading edge, in pixels; and how long it is. One streak follows another down each of the
+    /// four places a thread can lie, with a dry spell between.
+    private func thread(_ k: Int, wide: Int) -> (turn: Int, head: Double, long: Double) {
+        let long = Double(wide) * (1.5 + unit(hash(k, 0, 980))), every = long + Double(wide) * (1.5 + 0.5 * unit(hash(k, 1, 980)))
+        let along = ran + every * unit(hash(k, 2, 980)), turn = Int(along / every)
+        return (turn, along - Double(turn) * every, long)
+    }
+
+    /// Carries the water on by `dt` seconds of a train at `speed` metres a second, in a pane `wide` across. A
+    /// thread that starts a new turn takes the tilt of the moment.
+    mutating func advance(by dt: Double, speed: Double, wide: Int) {
+        ran += dt * TrainWorld.thin * min(1, speed / PixelTrain.pace)
+        for k in 0..<4 {
+            let turn = thread(k, wide: wide).turn
+            if turn != turns[k] { (turns[k], tilts[k]) = (turn, Self.tilt(speed)) }
+        }
+    }
+
+    /// Lays the water over the pane's picture (`wide` by `high`, rows from the bottom) at scene time `clock`, as
+    /// wet as `wet` (`TrainWeather.wet`): the view softened and drawn a little toward `mist`, the air's colour;
+    /// then the beads and the threads, sharp, their bright side toward `light`.
+    mutating func paint(_ out: UnsafeMutableBufferPointer<UInt32>, wide: Int, high: Int, wet: Double, clock: Double, mist: UInt32, light: UInt32) {
+        guard wide > 4, high > 6, out.count == wide * high else { return }
+        // Wet glass blurs the view more than it decorates it: each pixel goes most of the way to the mean of itself
+        // and the eight round it (the nearer counting double), further the harder it rains, which takes the dither
+        // out of the sky and the edge off a roof and leaves a lamp a small round glow. In two passes, along the rows
+        // and then up the columns, in wrapping arithmetic on whole colours so that the compiler can do four at once:
+        // the pass over a whole pane 60 times a second is the dearest thing the weather does.
+        if behind.count != out.count { (behind, across) = ([UInt32](repeating: 0, count: out.count), [UInt32](repeating: 0, count: out.count)) }
+        let soft = UInt32(min(110 + 60 * wet, 180)), veil = UInt32(min(40 * wet, 56)), keep = 256 - soft - veil
+        let both: UInt32 = 0xFF00FF, green: UInt32 = 0xFF00, airBoth = (mist & both) &* veil, airGreen = (mist & green) &* veil
+        behind.withUnsafeMutableBufferPointer { was in
+            across.withUnsafeMutableBufferPointer { row in
+                let (was, row, out) = (was.baseAddress!, row.baseAddress!, out.baseAddress!)
+                was.update(from: out, count: wide * high)
+                /// A pixel between its two neighbours, counted twice.
+                @inline(__always) func mean(_ a: UInt32, _ b: UInt32, _ c: UInt32) -> UInt32 {
+                    (((a & both) &+ (b & both) &* 2 &+ (c & both)) &>> 2) & both | (((a & green) &+ (b & green) &* 2 &+ (c & green)) &>> 2) & green
+                }
+                for y in 0..<high {
+                    let at = y * wide
+                    (row[at], row[at + wide - 1]) = (mean(was[at], was[at], was[at + 1]), mean(was[at + wide - 2], was[at + wide - 1], was[at + wide - 1]))
+                    for i in at + 1..<at + wide - 1 { row[i] = mean(was[i - 1], was[i], was[i + 1]) }
+                }
+                for y in 0..<high {
+                    let at = y * wide, up = min(y + 1, high - 1) * wide - at, down = max(y - 1, 0) * wide - at
+                    for i in at..<at + wide {
+                        let round = mean(row[i + down], row[i], row[i + up]), own = was[i]
+                        out[i] = 0xFF00_0000 | (((own & both) &* keep &+ (round & both) &* soft &+ airBoth) &>> 8) & both
+                            | (((own & green) &* keep &+ (round & green) &* soft &+ airGreen) &>> 8) & green
+                    }
+                }
+            }
+        }
+        // The threads: for each, the row it lies on in each column it covers just now, or none.
+        var lies = [Int](repeating: -1000, count: 4 * wide)
+        for k in 0..<min(4, Int(4 * wet)) {
+            let (turn, head, long) = thread(k, wide: wide), tilt = turn == turns[k] ? tilts[k] : tilts[0]
+            let top = Double(high) * (0.92 - 0.2 * Double(k) - 0.1 * unit(hash(k, turn, 981)))
+            for x in max(0, wide - Int(head))..<max(0, min(wide, wide - Int(head - long))) {
+                let waver = 2.2 * sin(Double(x) / 23 + Double(turn) * 1.7) + 1.4 * sin(Double(x) / 7 + Double(k) * 2.1) * (unit(hash(x / 9, k &+ turn &* 4, 982)) - 0.3)
+                let y = Int((top - tilt * Double(wide - 1 - x) + waver).rounded())
+                guard y >= 1, y < high else { continue }
+                lies[k * wide + x] = y
+                // (Along it runs more water in stretches, a quarter as long as the dry track between them.)
+                let running = Int(Double(x) + ran + Double(k * 37)) % 120 < 26
+                (out[y * wide + x], out[(y - 1) * wide + x]) = (blend(out[y * wide + x], 0xFF00_0000, running ? 80 : 40), blend(out[(y - 1) * wide + x], light, running ? 200 : 110))
+            }
+        }
+        // The beads, each in its own slot: where it has landed this time, and gone for the last part of its turn.
+        for slot in 0..<Int(Double(wide * high) * wet / 470) {
+            let lasts = 40 + 120 * unit(hash(slot, 0, 983)), since = clock / lasts + unit(hash(slot, 1, 983)), turn = Int(since)
+            guard since - Double(turn) < 0.85 else { continue }
+            let draw = hash(slot, turn, 984), x = Int(draw & 0xFFFF) % (wide - 2), y = 1 + Int(draw >> 16 & 0xFFFF) % (high - 3)
+            // ponytail: a bead under a thread is only hidden while the thread lies there, and shows again behind its
+            // tail, which passes for the pearls a real thread leaves. To sweep it for good, date beads and threads
+            // by one clock and ask whether a thread has passed since the bead landed.
+            guard !(0..<4).contains(where: { abs(lies[$0 * wide + x] - y) <= 2 }) else { continue }
+            let big = draw >> 32 & 0xFF < 56 // (two in nine are big: two pixels wide and three tall)
+            for i in x...x + (big ? 1 : 0) {
+                (out[(y - 1) * wide + i], out[y * wide + i]) = (blend(out[(y - 1) * wide + i], light, 180), blend(out[y * wide + i], 0xFF00_0000, 110))
+                if big { out[(y + 1) * wide + i] = blend(out[(y + 1) * wide + i], 0xFF00_0000, 60) }
             }
         }
     }

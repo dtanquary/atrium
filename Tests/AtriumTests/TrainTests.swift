@@ -128,18 +128,27 @@ import Testing
     #expect(TrainWeather(Report(code: 1, cloudCover: 10, visibility: 8000)) == TrainWeather(cover: 0.125, reach: 2000))
     #expect(TrainWeather(Report(code: 3, cloudCover: 100, visibility: 14_000)) == TrainWeather(cover: 1, reach: 4000, gloom: 0.4))
     #expect(TrainWeather(Report(code: 45, cloudCover: 60, visibility: 200)) == TrainWeather(cover: 1, reach: 400, gloom: 0.5))
-    #expect(TrainWeather(Report(code: 63, cloudCover: 90, visibility: 20_000, rain: 0.6)) == TrainWeather(cover: 1, reach: 4000, gloom: 0.7))
+    // Rain wets the glass: a half in drizzle too fine for the report to measure, more by the rate and the wind
+    // that drives it, one and a half at most. Snow and fog leave it dry.
+    #expect(TrainWeather(Report(code: 51, cloudCover: 100, wind: 0)) == TrainWeather(cover: 1, reach: 4000, gloom: 0.6, wet: 0.5))
+    #expect(TrainWeather(Report(code: 63, cloudCover: 90, visibility: 20_000, rain: 0.6)) == TrainWeather(cover: 1, reach: 4000, gloom: 0.7, wet: 1.25))
+    #expect(TrainWeather(Report(code: 65, cloudCover: 100, wind: 30, visibility: 6000, rain: 3)) == TrainWeather(cover: 1, reach: 2000, gloom: 0.8, wet: 1.5))
     #expect(TrainWeather(Report(code: 73, cloudCover: 100, visibility: 3000, snowfall: 0.25)) == TrainWeather(cover: 1, reach: 1000, gloom: 0.5, snow: 2.0 / 3))
-    #expect(TrainWeather(Report(code: 95, cloudCover: 80, visibility: 20_000, rain: 2)) == TrainWeather(cover: 1, reach: 1000, gloom: 1, storm: true))
+    #expect(TrainWeather(Report(code: 95, cloudCover: 80, visibility: 20_000, rain: 2)) == TrainWeather(cover: 1, reach: 1000, gloom: 1, wet: 1.5, storm: true))
+    #expect(TrainWeather(Report(code: 95, cloudCover: 80)) == TrainWeather(cover: 1, reach: 1000, gloom: 1, wet: 1, storm: true), "a storm wets the glass whatever rain is reported")
 
-    let keys = [TrainWeather.preview.key, TrainWeather.follow.key, PixelWindowSeat.clouds.key]
+    let keys = [TrainWeather.preview.key, TrainWeather.follow.key, PixelWindowSeat.clouds.key, TrainWeather.glass.key]
     defer { for key in keys { UserDefaults.standard.removeObject(forKey: key) } }
     for key in keys { UserDefaults.standard.removeObject(forKey: key) }
     #expect(TrainWeather.follow.value == 1 && TrainWeather.now == nil, "with no report there is no weather")
     for pick in 1...7 {
         UserDefaults.standard.set(Double(pick), forKey: TrainWeather.preview.key)
         #expect(TrainWeather.now == TrainWeather.previews[pick - 1])
+        #expect((TrainWeather.previews[pick - 1].wet > 0) == (pick == 5 || pick == 7), "only rain and a storm wet the glass")
     }
+    // Settings' Rain on the glass off leaves the storm and takes the water.
+    UserDefaults.standard.set(0.0, forKey: TrainWeather.glass.key)
+    #expect(TrainWeather.glass.value == 0 && TrainWeather.now == TrainWeather(cover: 1, reach: 2000, gloom: 1, storm: true))
     #expect(TrainWeather.previews.count == Int(TrainWeather.preview.range.upperBound))
 }
 
@@ -268,9 +277,9 @@ import Testing
 @MainActor @Test func trainLooksTheSameAtAnyFrameRate() {
     let keys = [PixelWindowSeat.previewTime.key, PixelWindowSeat.previewHour.key, PixelTrain.scenery.key, TrainWeather.preview.key]
     defer { for key in keys { UserDefaults.standard.removeObject(forKey: key) } }
-    // Each country, then the weather that moves: snow falling on the snow country, and a storm over the city a
-    // fifth of a second into its first strike.
-    for (scenery, weather) in [(1.0, 0.0), (2, 0), (3, 0), (4, 0), (5, 0), (6, 0), (5, 6), (4, 7)] {
+    // Each country, then the weather that moves: snow falling on the snow country, rain running on the glass
+    // beside a lake, and a storm over the city a fifth of a second into its first strike.
+    for (scenery, weather) in [(1.0, 0.0), (2, 0), (3, 0), (4, 0), (5, 0), (6, 0), (5, 6), (2, 5), (4, 7)] {
         for (key, value) in zip(keys, [1, 13, scenery, weather]) { UserDefaults.standard.set(value, forKey: key) }
         var pictures: [[UInt32]] = []
         // (From an odd metre: 2.2 s at 1× is 29⅓ m, and from a whole one three rows of ground would end exactly on

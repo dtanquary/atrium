@@ -17,7 +17,7 @@ final class PixelTrain: SKScene {
     nonisolated static let poles = Knob(key: "seat.poles", label: "Poles and wires beside the line", range: 0...1, standard: 1, section: "Flight",
                                         format: .toggle, shownWhen: "seat.orbit", shownAt: 2)
     /// The train's own settings, listed among the airliner's (`PixelWindowSeat.rows`) while the train is offered.
-    nonisolated static let knobs = [scenery, poles, PixelCarriage.choice, TrainWeather.follow, TrainWeather.preview]
+    nonisolated static let knobs = [scenery, poles, PixelCarriage.choice, TrainWeather.follow, TrainWeather.glass, TrainWeather.preview]
 
     /// 1× on Settings' Speed, in metres a second: 48 km/h, a slow scenic train.
     nonisolated static let pace = 48 / 3.6
@@ -69,6 +69,7 @@ final class PixelTrain: SKScene {
     private let weather: TrainWeather?
     private var murk = 0.0, mist: UInt32 = 0, skyTones: [UInt32] = [], fog: [UInt32] = [], lampFog: [UInt32] = []
     private var snow = TrainSnow(), flake: [UInt32] = [], flash: Float = 0
+    private var rain: TrainGlass, wetLight: UInt32 = 0 // rain on the glass, and the colour of its bright side
     private let texture: SKMutableTexture
     private let canvas = SKNode(), outside = SKSpriteNode(), cabin = SKSpriteNode()
 
@@ -97,6 +98,7 @@ final class PixelTrain: SKScene {
         skyline = [Int](repeating: 0, count: gw)
         weather = TrainWeather.now
         cloud = TrainCloud(wide: gw, rows: gh - horizon, focal: Double(gh) * 1.2, clouds: Int(PixelWindowSeat.clouds.value), held: weather?.cover)
+        rain = TrainGlass(speed: world.speed)
         mirrored = [UInt32](repeating: 0, count: 15 * horizon)
         picture = [UInt32](repeating: 0, count: gw * gh)
         texture = SKMutableTexture(size: CGSize(width: gw, height: gh))
@@ -252,6 +254,7 @@ final class PixelTrain: SKScene {
         // Snow: the cloud's own white, the nearest flakes most and the farthest half way to the air's colour.
         let white = mix(unpack(cloudTones[2]), RGB(repeating: 1), 0.5 * (1 - night)) * mix(1, 1.6, night)
         flake = [0.95, 0.75, 0.5].map { pack(mix(air, white, $0)) }
+        wetLight = pack(mix(air, RGB(repeating: 1), 0.6 * (1 - 0.7 * night))) // water's bright side: the sky's light, turned over
         // The pole line, unless Settings has it off or it would cross the pane too fast to be calm. A change takes
         // hold two poles beyond the pane's leading edge, so every wire in view keeps both its poles.
         let poleSpace = world.focal / TrainWorld.poleAway, calm = polesOn && poleSpace * speed <= TrainWorld.poleLimit
@@ -318,6 +321,7 @@ final class PixelTrain: SKScene {
         Self.travelled += min(max(currentTime - (Self.travelledAt ?? currentTime), 0), 0.1) * world.speed
         Self.travelledAt = currentTime
         if weather?.snow ?? 0 > 0 { snow.advance(by: dt, speed: world.speed, focal: world.focal) }
+        if weather?.wet ?? 0 > 0 { rain.advance(by: dt, speed: world.speed, wide: glass.w) }
         // The near ground and the poles move several pixels a frame, so every frame is painted, 60 times a second at
         // most: at 30 a pole would step twice as far.
         if clock - painted >= 1 / 60.0 - 0.002 {
@@ -483,6 +487,8 @@ final class PixelTrain: SKScene {
             world.poleLine(at: Self.travelled, wide: gw, high: gh, horizon: horizon, where: { k in strung.last { $0.from <= k }?.on ?? false }) { x, y, standing in
                 out[y * gw + x] = standing ? pole : blend(out[y * gw + x], wire, 166)
             }
+            // Rain on the glass, over everything outside.
+            if let wet = weather?.wet, wet > 0 { rain.paint(out, wide: gw, high: gh, wet: wet, clock: clock, mist: mist, light: wetLight) }
             // Last, what the carriage's lamp leaves in the glass: it lies in front of everything outside.
             if windowSize < 3 { carriage.reflect(out, ghost: PixelCarriage.light(Double(night), gloom: weather?.gloom ?? 0).ghost) }
         }
