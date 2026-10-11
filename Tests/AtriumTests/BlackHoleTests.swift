@@ -186,3 +186,92 @@ func blackBodyKeepsToTheLocus(kelvin: Double, x: Double, y: Double) {
     print("Black Hole: \(kept) of 115,562 stars have a cell of their own")
     #expect(kept > 108_000)
 }
+
+/// For looking at the Black Hole moving: `BLACKHOLE_STRIPS=<dir> swift test --filter blackHoleMoves` steps one scene
+/// frame by frame (not in real time) and saves, for 15 and 30 frames a second, eight frames in a row of three places
+/// where trouble would show (the thin ring over the shadow, the disc's near side seen edge on, the bright left end)
+/// with the change between each pair beside them, eight times over; then one frame in every 5 s through a whole
+/// life of the streaks at speed 4. It prints how much single pixels jump between frames, and whether the disc's
+/// brightness and contrast hold steady as the streak generations hand over.
+@MainActor @Test func blackHoleMoves() throws {
+    guard let dir = ProcessInfo.processInfo.environment["BLACKHOLE_STRIPS"] else { return }
+    try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+    let device = try #require(MTLCreateSystemDefaultDevice()), queue = try #require(device.makeCommandQueue())
+    let (w, h) = (3024, 1964)
+    let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: w, height: h, mipmapped: false)
+    descriptor.usage = [.renderTarget, .shaderRead]
+    descriptor.storageMode = .shared
+    let texture = try #require(device.makeTexture(descriptor: descriptor)), pass = MTLRenderPassDescriptor()
+    pass.colorAttachments[0].texture = texture
+    pass.colorAttachments[0].loadAction = .clear
+    pass.colorAttachments[0].storeAction = .store
+    var clock = ProcessInfo.processInfo.systemUptime + 1
+    func frame(of renderer: SKRenderer, after seconds: Double, at fps: Double) throws -> [UInt32] {
+        for _ in 0..<max(Int((seconds * fps).rounded()), 1) {
+            clock += 1 / fps
+            renderer.update(atTime: clock)
+        }
+        let buffer = try #require(queue.makeCommandBuffer())
+        renderer.render(withViewport: CGRect(x: 0, y: 0, width: w, height: h), commandBuffer: buffer, renderPassDescriptor: pass)
+        buffer.commit()
+        buffer.waitUntilCompleted()
+        var pixels = [UInt32](repeating: 0, count: w * h)
+        texture.getBytes(&pixels, bytesPerRow: w * 4, from: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0)
+        return pixels
+    }
+    func save(_ pixels: [UInt32], _ w: Int, _ h: Int, _ name: String) {
+        let image = CGImage(width: w, height: h, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: w * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue),
+                            provider: CGDataProvider(data: Data(bytes: pixels, count: w * h * 4) as CFData)!, decode: nil, shouldInterpolate: false, intent: .defaultIntent)!
+        let to = CGImageDestinationCreateWithURL(URL(fileURLWithPath: dir).appendingPathComponent(name) as CFURL, "public.png" as CFString, 1, nil)!
+        CGImageDestinationAddImage(to, image, nil)
+        CGImageDestinationFinalize(to)
+    }
+    func luma(_ p: UInt32) -> Int { (Int(p >> 16 & 255) * 3 + Int(p >> 8 & 255) * 6 + Int(p & 255)) / 10 }
+
+    // frame to frame, at the default size and speed
+    let places = [("ring", w / 2 - 200, h / 2 - 260, 400, 150), ("near side", w / 2 - 700, h / 2 + 10, 400, 150), ("left end", w / 2 - 1050, h / 2 - 60, 400, 150)]
+    for fps in [15.0, 30.0] {
+        let renderer = SKRenderer(device: device)
+        renderer.scene = BlackHole(size: CGSize(width: w / 2, height: h / 2))
+        _ = try frame(of: renderer, after: 1, at: fps)
+        let frames = try (0..<8).map { _ in try frame(of: renderer, after: 1 / fps, at: fps) }
+        for (name, x0, y0, pw, ph) in places {
+            var strip = [UInt32](repeating: 0, count: pw * 2 * ph * 8), jumps = [Int]()
+            for (n, pixels) in frames.enumerated() { for y in 0..<ph { for x in 0..<pw {
+                let p = pixels[(y0 + y) * w + x0 + x]
+                strip[(n * ph + y) * pw * 2 + x] = p
+                guard n > 0 else { continue }
+                let change = abs(luma(p) - luma(frames[n - 1][(y0 + y) * w + x0 + x]))
+                jumps.append(change)
+                strip[(n * ph + y) * pw * 2 + pw + x] = UInt32(min(change * 8, 255)) * 0x010101
+            } } }
+            save(strip, pw * 2, ph * 8, "\(name) at \(Int(fps)) fps.png")
+            jumps.sort()
+            print(String(format: "Black Hole moving, %@ at %.0f fps: a pixel changes by %.2f of 255 a frame on average, 99.9%% of them by %d or less, the most %d",
+                         name, fps, Double(jumps.reduce(0, +)) / Double(jumps.count), jumps[jumps.count * 999 / 1000], jumps.last!))
+        }
+    }
+
+    // a whole life of the streaks, at speed 4: 60 units of the disc's time, 58 s
+    UserDefaults.standard.set(4.0, forKey: BlackHole.speed.key)
+    defer { UserDefaults.standard.removeObject(forKey: BlackHole.speed.key) }
+    let renderer = SKRenderer(device: device)
+    renderer.scene = BlackHole(size: CGSize(width: w / 2, height: h / 2))
+    let (cw, ch) = (1400, 700), (cx, cy) = (w / 2 - 700, h / 2 - 350)
+    var sheet = [UInt32](repeating: 0, count: cw / 2 * 3 * (ch / 2) * 5), levels = [(mean: Double, spread: Double)]()
+    for n in 0..<15 {
+        let pixels = try frame(of: renderer, after: 5, at: 30)
+        var lit = [Double]()
+        for y in stride(from: 0, to: ch, by: 2) { for x in stride(from: 0, to: cw, by: 2) {
+            let p = pixels[(cy + y) * w + cx + x]
+            sheet[((n / 3) * (ch / 2) + y / 2) * (cw / 2 * 3) + (n % 3) * (cw / 2) + x / 2] = p
+            if luma(p) > 60 { lit.append(Double(luma(p))) }
+        } }
+        let mean = lit.reduce(0, +) / Double(lit.count)
+        levels.append((mean, (lit.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Double(lit.count)).squareRoot()))
+    }
+    save(sheet, cw / 2 * 3, ch / 2 * 5, "a life of the streaks, every 5 s at speed 4.png")
+    print("Black Hole moving, over a life of the streaks: the lit disc's mean " + levels.map { String(format: "%.0f", $0.mean) }.joined(separator: " ")
+          + "; its spread " + levels.map { String(format: "%.0f", $0.spread) }.joined(separator: " "))
+}

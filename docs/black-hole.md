@@ -174,6 +174,13 @@ Open after step (c):
 - Stars read thinner than tile K's at a glance: about 10,600 peaks over 0.25 luma outside the disc at full size, 340 over 0.5. The default may want to be brighter.
 - The disc's look, as listed above. The dither is still on the shadow.
 
+**Step (d), a first motion check (2026-10-11), done on the soft disc before its look pass, so it has to be done again after it.** A test steps one scene frame by frame and saves strips: `BLACKHOLE_STRIPS=<dir> swift test --filter blackHoleMoves` (it does nothing without the variable).
+- At full Retina size, default size and speed, eight frames in a row at 15 and at 30 fps, at three places (the thin ring over the shadow, the disc's near side seen edge on, the bright left end): no pixel changes by more than 1 of 255 between frames. The hairline and the ring hold still; nothing sparkles.
+- Over a whole life of the streaks (15 frames, 5 s apart at Speed 4×): the lit disc's mean stays between 131 and 138 of 255 and its spread between 36 and 39, so generations hand over without a pulse, and the pattern never winds up.
+- By construction: the inner edge turns 2° a second at 1× (about 3.7 pt/s on screen at the default size), Speed 0 holds it still, and the clock is a Double moved on by elapsed time, capped at 0.1 s a frame.
+- One or two stars close to the Einstein ring are drawn as short dashes: the correction that keeps stars round is exact only for small offsets, and right at the ring a star really is pulled into an arc. They are still.
+- **The catch:** a pixel changes by 0.02 of 255 a frame on average. The motion is calm to the point of being hard to see, because the streaks are soft. That is the look pass's job.
+
 ## Mock-ups
 In `docs/black-hole/`. They were rendered by `bh.py`, a brute-force tracer written for the purpose: every ray is integrated (`d²x/dλ² = −1.5 h² x / r⁵`, which gives a light ray's exact path), so the bending in them is real, not painted. Its disc texture, bloom and tone curve are stand-ins.
 
