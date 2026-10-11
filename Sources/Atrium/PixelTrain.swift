@@ -17,7 +17,7 @@ final class PixelTrain: SKScene {
     nonisolated static let poles = Knob(key: "seat.poles", label: "Poles and wires beside the line", range: 0...1, standard: 1, section: "Flight",
                                         format: .toggle, shownWhen: "seat.orbit", shownAt: 2)
     /// The train's own settings, listed among the airliner's (`PixelWindowSeat.rows`) while the train is offered.
-    nonisolated static let knobs = [scenery, poles]
+    nonisolated static let knobs = [scenery, poles, PixelCarriage.choice]
 
     /// 1× on Settings' Speed, in metres a second: 48 km/h, a slow scenic train.
     nonisolated static let pace = 48 / 3.6
@@ -42,7 +42,7 @@ final class PixelTrain: SKScene {
     private var lamp: UInt32 = 0, lights: UInt8 = 0 // a lamp's colour, and how far the evening has got: each comes on at its own draw
     private var pole: UInt32 = 0, wire: UInt32 = 0 // the pole line's colours
     private let polesOn: Bool // Settings' Poles and wires, as the scene was built
-    private let carriage: PixelCarriage // the cabin round the pane
+    private let carriage: PixelCarriage // the cabin round the pane, by Settings' Carriage as the scene was built
     // From which pole on the line stands or doesn't: it is left out while it would slide too fast, and a change takes
     // hold beyond the pane's leading edge, so the line runs out or comes in at a pole and never blinks.
     private var strung: [(from: Int, on: Bool)] = []
@@ -70,7 +70,7 @@ final class PixelTrain: SKScene {
         (w, h, glass, windowSize) = PixelWindowSeat.pane(size)
         let (gw, gh) = (glass.w, glass.h)
         horizon = gh - Int((Double(gh) * (1 - Self.horizonUp)).rounded())
-        carriage = PixelCarriage(w: w, h: h, glass: glass)
+        carriage = PixelCarriage(w: w, h: h, glass: glass, kind: Int(PixelCarriage.choice.value))
         world = TrainWorld(focal: Double(gh) * 1.2, eye: Self.eye, speed: Self.pace * PixelWindowSeat.speed.value)
         (world.scenery, polesOn) = (Int(Self.scenery.value), Self.poles.value > 0.5)
         (land, dash) = ([UInt8](repeating: 0, count: gw * horizon), [UInt8](repeating: 0, count: gw * horizon))
@@ -110,7 +110,7 @@ final class PixelTrain: SKScene {
     override func didMove(to view: SKView) { Location.shared.start() }
 
     /// Repaints when one of the page's settings changes (the notification comes for every wallpaper's). Another
-    /// window, another size of this one, other scenery or the pole line put up or taken down is another scene: it
+    /// window, another size of this one, another carriage, other scenery or the pole line put up or taken down is another scene: it
     /// dissolves into it with both still running, as the airliner's changes do. A change of speed is not: the
     /// country carries on as it is, and only what comes into view from then on is laid by the new speed.
     @objc private func settingsChanged() {
@@ -118,7 +118,7 @@ final class PixelTrain: SKScene {
         guard picked != settings, !retired else { return }
         settings = picked
         let another = PixelOrbit.mode != windowOn || Int(PixelWindowSeat.window.value) != windowSize || Int(Self.scenery.value) != world.scenery
-            || (Self.poles.value > 0.5) != polesOn
+            || (Self.poles.value > 0.5) != polesOn || Int(PixelCarriage.choice.value) != carriage.kind
         guard another else { return redraw() }
         guard let view else { return } // (with no view to hand over in, as in the tests, it stays as built)
         let fade = SKTransition.crossFade(withDuration: 0.8)
