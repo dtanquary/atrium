@@ -6,14 +6,14 @@ import bh
 
 OUT = os.environ.get("BH_OUT", ".")
 FONT = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 22)
-SKY = "starmap_gal_8k"
+SKY = "sky_eso_hyg"
 SIZES = [("G  Close", dict(fov=40)), ("H  Medium", dict(fov=56)), ("I  Small, in a wide sky", dict(fov=78))]
 CENTRE = (0.57, 0.47)
 
 
 def size_tile(job):
     label, kw = job
-    return label, bh.render(800, 500, incl=84, centre=CENTRE, sky=SKY, sky_gain=0.5 if kw["fov"] > 50 else 0.4, **kw)
+    return label, bh.render(800, 500, incl=84, centre=CENTRE, sky=SKY, sky_gain=1.4 if kw["fov"] > 50 else 1.25, **kw)
 
 
 BUF = None
@@ -24,7 +24,7 @@ FPS, SECONDS = 20, 14
 def frame(n):
     panes = []
     for period, label in SPEEDS:
-        a = Image.fromarray(bh.shade(BUF, t=n / FPS, period=period, sky_gain=0.45))
+        a = Image.fromarray(bh.shade(BUF, t=n / FPS, period=period))
         ImageDraw.Draw(a).text((12, a.height - 34), label, fill=(230, 230, 235), font=FONT)
         panes.append(np.asarray(a))
     Image.fromarray(np.concatenate(panes, axis=1)).save(f"{OUT}/film/f{n:04d}.png")

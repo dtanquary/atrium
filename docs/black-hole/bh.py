@@ -80,7 +80,7 @@ def rot(axis, deg):
 
 
 def trace(W, H, incl=84.0, fov=40.0, D=40.0, centre=(0.5, 0.5), roll=0.0, r_in=3.0, r_out=11.0,
-          sky="starmap_gal_4k", sky_rot=(35.0, -55.0, 12.0), ss=2, K=3, log=None):
+          sky="sky_eso_hyg", sky_rot=(35.0, -55.0, 12.0), ss=2, K=3, log=None):
     """Follows every ray once and keeps what it met: up to K crossings of the disc (radius, angle) and the sky
     colour it ends on. incl is degrees between the line of sight and the disc's axis (90 = edge on); fov is the
     horizontal field; centre is where the hole sits in the frame (0…1, from top left)."""
@@ -165,7 +165,7 @@ def trace(W, H, incl=84.0, fov=40.0, D=40.0, centre=(0.5, 0.5), roll=0.0, r_in=3
 _tex = {}
 
 
-def shade(b, t=0.0, period=180.0, T_peak=3300.0, beam=4.0, spin=-1, exposure=2.2, sky_gain=0.35, sky_floor=0.006,
+def shade(b, t=0.0, period=180.0, T_peak=3300.0, beam=4.0, spin=-1, exposure=2.2, sky_gain=1.25, sky_floor=0.0003,
           bloom=1.0, seed=7, streak=0.65):
     """Paints a traced picture at time t (seconds). period is how long the disc's inner edge takes to go round;
     further out it turns as r^-1.5, as orbits do. T_peak is the hottest ring's temperature in kelvin."""

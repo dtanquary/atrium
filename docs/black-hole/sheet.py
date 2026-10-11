@@ -14,7 +14,7 @@ SHEETS = {
         ("C  From above (38°), orange", dict(incl=38, fov=44)),
         ("D  White-gold disc (a cooler, sunlike gas)", dict(incl=80, fov=40, T_peak=6200, exposure=1.7)),
         ("E  Blue-white disc (true colour of a quasar's)", dict(incl=80, fov=40, T_peak=15000, exposure=1.5)),
-        ("F  Small in a wide Milky Way, off centre", dict(incl=79, fov=78, centre=(0.63, 0.46), sky_gain=0.6, roll=-8)),
+        ("F  Small in a wide Milky Way, off centre", dict(incl=79, fov=78, centre=(0.63, 0.46), sky_gain=1.6, roll=-8)),
     ],
 }
 
