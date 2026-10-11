@@ -13,6 +13,12 @@ import Testing
             let scene = PixelTrain(size: size), start = PixelTrain.travelled
             for frame in 0...60 { scene.update(1000 + Double(frame) / 30) }
             #expect(PixelTrain.travelled - start > 25, "after two seconds at \(size) it has gone \(PixelTrain.travelled - start) m")
+            // And what a scene paints only after dark, whatever the hour is now: the lamp lit, and its ghost on the pane.
+            let (w, h, glass, _) = PixelWindowSeat.pane(size), cabin = PixelCarriage(w: w, h: h, glass: glass, kind: carriage)
+            var pane = [UInt32](repeating: 0xFF10_2030, count: glass.w * glass.h)
+            pane.withUnsafeMutableBufferPointer { cabin.reflect($0, ghost: 0.5) }
+            #expect(cabin.picture(dim: 0.22, lamp: 1).count == w * h * 4)
+            if glass.h >= 30 { #expect(pane.contains { $0 != 0xFF10_2030 } == (carriage == 2), "only the table's lamp leaves a ghost") }
         }
     } }
 }
@@ -236,6 +242,36 @@ import Testing
     #expect(scene.picture != before)
 }
 
+/// The lamp's ghost lies in the glass, in front of whatever passes behind it, and is the one thing the table changes
+/// in the view: at night every frame of the pane is the plain window's frame with the ghost laid over it, through
+/// four seconds in which a pole, the trees and lit windows go by behind it, and beside a lake with the far shore's
+/// lamps in the water; by day the two are the same picture.
+@MainActor @Test func trainLampGhostLiesOnTheGlass() {
+    let keys = [PixelWindowSeat.previewTime.key, PixelWindowSeat.previewHour.key, PixelTrain.scenery.key, PixelCarriage.choice.key]
+    defer { for key in keys { UserDefaults.standard.removeObject(forKey: key) } }
+    let size = CGSize(width: 1512, height: 982), (w, h, glass, _) = PixelWindowSeat.pane(size)
+    let ghost = PixelCarriage(w: w, h: h, glass: glass, kind: 2)
+    for (k, (hour, scenery, night)) in [(23.0, 1.0, 1.0), (23, 2, 1), (13, 1, 0)].enumerated() {
+        for (key, value) in zip(keys, [1, hour, scenery, 0]) { UserDefaults.standard.set(value, forKey: key) }
+        PixelTrain.travelled = 52_000
+        let plain = PixelTrain(size: size)
+        UserDefaults.standard.set(2.0, forKey: PixelCarriage.choice.key)
+        let table = PixelTrain(size: size) // (the two share the journey, as two displays' scenes do)
+        var differing = 0, moved = 0, last = plain.picture
+        for frame in 0...120 {
+            plain.update(8000 + Double(k) * 100 + Double(frame) / 30)
+            table.update(8000 + Double(k) * 100 + Double(frame) / 30)
+            var due = plain.picture
+            due.withUnsafeMutableBufferPointer { ghost.reflect($0, ghost: PixelCarriage.light(night).ghost) }
+            differing += zip(table.picture, due).count { $0 != $1 }
+            moved += plain.picture != last ? 1 : 0
+            last = plain.picture
+        }
+        #expect(differing == 0 && moved > 10, "hour \(hour), scenery \(scenery): \(differing) pixels are not the plain window's under the ghost; the view moved on \(moved) frames")
+        #expect((table.picture != plain.picture) == (night > 0), "the ghost shows after dark and not by day")
+    }
+}
+
 /// Films the train for docs/pixel-window-seat/train_strips.py: steps a scene at a frame rate and writes each frame
 /// as the pane's own art pixels. No GPU, and nothing on screen.
 ///
@@ -313,17 +349,26 @@ import Testing
 /// Writes the carriage as it is painted, for docs/pixel-window-seat/train_match.py to set against the mock-ups'
 /// painter and the saved sheets, byte for byte (the same two commands as `trainWritesItsCountry`). On a laptop's
 /// canvas, the mock-ups' own, at their four hours: with the pane where they had it, 12 rows from the top, and where
-/// the app puts it, a row lower.
+/// the app puts it, a row lower. And the lamp's ghost, laid over a pane of every colour in turn.
 @MainActor @Test(.enabled(if: ProcessInfo.processInfo.environment["TRAIN_MATCH"] != nil)) func trainWritesItsCarriage() throws {
     let folder = URL(fileURLWithPath: ProcessInfo.processInfo.environment["TRAIN_MATCH"]!)
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     let (w, h, glass, _) = PixelWindowSeat.pane(CGSize(width: 1512, height: 982))
     #expect((w, h) == (378, 246) && glass == (19, 12, 340, 221), "the Large window on a laptop is the mock-ups' pane, a row lower")
     for top in [12, h - glass.y - glass.h] {
-        for (kind, name) in ["plain", "sill"].enumerated() {
+        for (kind, name) in ["plain", "sill", "table"].enumerated() {
             let carriage = PixelCarriage(w: w, h: h, glass: (glass.x, h - top - glass.h, glass.w, glass.h), kind: kind)
-            for (hour, dim) in [("day", PixelCarriage.light(0)), ("sunset", 0.62), ("dusk", 0.34), ("night", PixelCarriage.light(1))] {
-                try Data(carriage.picture(dim: dim)).write(to: folder.appendingPathComponent("carriage-\(name)-\(hour)-\(top).bin"))
+            let hours: [(String, (dim: Double, lamp: Double, ghost: Double))] = [("day", PixelCarriage.light(0)), ("sunset", (0.62, 0, 0)), ("dusk", (0.34, 1, 0.32)), ("night", PixelCarriage.light(1))]
+            for (hour, light) in hours {
+                try Data(carriage.picture(dim: light.dim, lamp: light.lamp)).write(to: folder.appendingPathComponent("carriage-\(name)-\(hour)-\(top).bin"))
+                guard kind == 2, top == 12 else { continue } // (the ghost goes by the pane alone)
+                // A pane whose pixels run through every level of each colour, its rows from the bottom as the scene's are.
+                var pane = (0..<glass.w * glass.h).map { i -> UInt32 in
+                    let x = i % glass.w, y = glass.h - 1 - i / glass.w
+                    return 0xFF00_0000 | UInt32((x + y * 11 + 50) % 256) << 16 | UInt32((x * 3 + y * 5 + 100) % 256) << 8 | UInt32((x * 7 + y * 13) % 256)
+                }
+                pane.withUnsafeMutableBufferPointer { carriage.reflect($0, ghost: light.ghost) }
+                try pane.withUnsafeBytes { try Data($0).write(to: folder.appendingPathComponent("ghost-\(hour).bin")) }
             }
         }
     }

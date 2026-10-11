@@ -399,6 +399,8 @@ final class PixelTrain: SKScene {
             world.poleLine(at: Self.travelled, wide: gw, high: gh, horizon: horizon, where: { k in strung.last { $0.from <= k }?.on ?? false }) { x, y, standing in
                 out[y * gw + x] = standing ? pole : blend(out[y * gw + x], wire, 166)
             }
+            // Last, what the carriage's lamp leaves in the glass: it lies in front of everything outside.
+            if windowSize < 3 { carriage.reflect(out, ghost: PixelCarriage.light(Double(night)).ghost) }
         }
         let shot = picture
         texture.modifyPixelData { data, length in

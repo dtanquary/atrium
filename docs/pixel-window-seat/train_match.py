@@ -13,6 +13,9 @@ for: 12, where the mock-ups had it, and 13, where the app puts it. Each is set a
 pane on that row, and those at 12 against the tiles of the saved sheets too, wherever the carriage covers them: all
 but the 22 pixels where the sheets' light along the frame's top edge ran past the frame's corners, which were
 rounded off after Dave saw them. Those must differ, and are counted apart.
+
+It also writes the lamp's ghost, laid over a pane whose pixels run through every level of each colour (the bytes of
+the scene's picture, rows from the bottom), which is set against `train.reflections` over the same pane.
 """
 import glob
 import os
@@ -78,6 +81,15 @@ def tiles(name, cols, which):
 
 saved = tiles("train-sheet1", 3, [(kind, hour, f"{letter} by {hour}") for hour in ("day", "night") for kind, letter in (("plain", "A"), ("sill", "B"), ("table", "C"))])
 saved += tiles("train-sheet2", 2, [("sill", "day", "D"), ("table", "night", "E"), ("sill", "day", "F"), ("table", "dusk", "G")])
+for path in sorted(glob.glob(f"{folder}/ghost-*.bin")):
+    hour = os.path.basename(path)[6:-4]
+    ours = np.fromfile(path, dtype=np.uint8).reshape(train.PH, train.PW, 4)[::-1, :, :3]
+    yy, xx = np.mgrid[0:train.PH, 0:train.PW]
+    pane = np.stack([(xx * 7 + yy * 13) % 256, (xx * 3 + yy * 5 + 100) % 256, (xx + yy * 11 + 50) % 256], -1).astype(np.float64)
+    theirs = np.clip(train.reflections(pane.copy(), hour, "table"), 0, 255).astype(np.uint8)
+    wrong = int((ours != theirs).sum())
+    compared, differed = compared + ours.size, differed + wrong
+    print(f"the lamp's ghost at {hour:>6}: {ours.size} bytes, {int((theirs != pane).any(-1).sum())} pixels of them ghost, {wrong} differ")
 for path in sorted(glob.glob(f"{folder}/carriage-*.bin")):
     _, kind, hour, top = os.path.basename(path)[:-4].split("-")
     ours = np.fromfile(path, dtype=np.uint8).reshape(train.CH, train.CW, 4)
