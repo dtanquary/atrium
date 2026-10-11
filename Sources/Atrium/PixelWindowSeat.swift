@@ -30,11 +30,10 @@ final class PixelWindowSeat: SKScene {
     nonisolated static let scenery = Knob(key: "seat.scenery", label: "Scenery", range: 0...6, standard: 0, section: "Flight",
                                           format: .choice(["Changing", "Ocean", "City", "Countryside", "Mountains", "Desert", "Snow"]),
                                           shownWhen: "seat.orbit", shownAt: 0)
-    // ponytail: the train has no cloud yet, so these two hide for it; they are for it too once cloud is painted from below.
     nonisolated static let clouds = Knob(key: "seat.clouds", label: "Clouds", range: 0...4, standard: 0, section: "Flight",
-                                         format: .choice(["Changing", "Clear", "Scattered", "Broken", "Overcast"]), hiddenWhen: "seat.orbit", hiddenAt: 2)
+                                         format: .choice(["Changing", "Clear", "Scattered", "Broken", "Overcast"]))
     nonisolated static let lightning = Knob(key: "seat.lightning", label: "Lightning in far-off storms", range: 0...1, standard: 1,
-                                            section: "Flight", format: .toggle, hiddenWhen: "seat.orbit", hiddenAt: 2)
+                                            section: "Flight", format: .toggle)
     nonisolated static let previewTime = Knob(key: "seat.previewTime", label: "Preview a time of day", range: 0...1, standard: 0,
                                               section: "Preview", format: .toggle, hiddenWhen: "seat.orbit", hiddenAt: 1)
     nonisolated static let previewHour = Knob(key: "seat.previewHour", label: "Time", range: 0...24, standard: 19, section: "Preview",

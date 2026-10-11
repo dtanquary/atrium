@@ -153,6 +153,34 @@ import Testing
     #expect(most == 1)
 }
 
+/// Left to change, the sky is clear, scattered, broken and overcast by turns in something like the airliner's
+/// shares, and under a deck there is now and then a thunderstorm in view, always far off.
+@Test func trainSkyChanges() {
+    let changing = TrainCloud(wide: 340, rows: 155, focal: 265.2, clouds: 0)
+    var shares = [0, 0, 0, 0]
+    for step in 0..<10_000 { // 2,000 km of line, a sample every 200 m, of the sky 5 km out
+        let cover = changing.cover(Double(step) * 200, 5000)
+        shares[cover < 0.05 ? 0 : cover < 0.45 ? 1 : cover < 0.9 ? 2 : 3] += 1
+    }
+    print("train sky: clear \(shares[0] / 100)% of the line, scattered \(shares[1] / 100)%, broken \(shares[2] / 100)%, overcast \(shares[3] / 100)%")
+    #expect(shares[0] > 2000 && shares[1] > 2000 && shares[2] > 1500 && shares[3] > 250, "a kind of sky is too rare: \(shares)")
+
+    // A storm's light where it can be seen, above most hills and woods: from the fifteenth row over the horizon up.
+    let deck = TrainCloud(wide: 340, rows: 155, focal: 265.2, clouds: 4)
+    var views = 0
+    for view in 0..<120 { // a view every 5 km
+        let x = Double(view) * 5000
+        func lit(_ ups: ClosedRange<Int>) -> Bool {
+            ups.contains { up in (0..<340).contains { deck.cell(up, Int(((x * Double(up)) / TrainCloud.base).rounded(.down)) - 170 + $0) >> 25 != 0 } }
+        }
+        views += lit(15...26) ? 1 : 0
+        #expect(!lit(27...60), "a storm's light reaches nearer than 12 km, twenty-seven rows up and more")
+    }
+    print("train sky: under a deck a storm's light shows from \(views) of 120 places")
+    #expect(views > 20 && views < 100)
+    #expect((0..<4000).allSatisfy { TrainCloud(wide: 340, rows: 155, focal: 265.2, clouds: 2).storm(10, $0 * 50) == 0 }, "a scattered sky has no storms")
+}
+
 /// The same picture whatever the frame rate: after the same time from the same place, a scene stepped 15, 30 and
 /// 60 times a second has painted the same pixels. Through countryside, and beside a lake, whose water goes by the
 /// scene's clock.
@@ -266,6 +294,12 @@ import Testing
             var line = [UInt8](repeating: 0, count: wide * 221) // the pole line: 1 for a wire, 2 for a pole, rows from the bottom
             world.poleLine(at: x, wide: wide, high: 221, horizon: ground) { line[$1 * wide + $0] = $2 ? 2 : max(line[$1 * wide + $0], 1) }
             try Data(line).write(to: folder.appendingPathComponent("poles-\(x).bin"))
+            for clouds in [2, 3] { // the cloud of the mock-ups' two skies, as the pane's dither shows it: 0, or a tone and one
+                var cloud = TrainCloud(wide: wide, rows: 221 - ground, focal: 265, clouds: clouds)
+                cloud.advance(to: x)
+                let shown = (0..<cloud.rows).flatMap { row in (0..<wide).map { UInt8(cloud.tone(row, $0) + 1) } }
+                try Data(shown).write(to: folder.appendingPathComponent("cloud-\(TrainCloud.covers[clouds]!)-\(x).bin"))
+            }
         }
     }
 }

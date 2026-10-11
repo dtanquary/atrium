@@ -98,5 +98,15 @@ for path in sorted(glob.glob(f"{folder}/carriage-*.bin")):
             wrong, old = int((ours[..., :3] != tile)[keep].sum()), int((ours[..., :3] != tile).any(-1)[ledge].sum())
             compared, differed = compared + 3 * int(keep.sum()), differed + wrong + (old != ledge.sum())
             print(f"    and the saved sheet's tile {letter}: {3 * int(keep.sum())} bytes of carriage, {wrong} differ; of the {int(ledge.sum())} pixels rounded off since, {old} differ")
+for path in sorted(glob.glob(f"{folder}/cloud-*.bin")):
+    _, cover, x = os.path.basename(path)[:-4].split("-")
+    hy = round(train.PH * 0.7)
+    ours = np.fromfile(path, dtype=np.uint8).reshape(hy, train.PW)[::-1]  # the sky's rows from the top, as theirs: 0, or a tone and one
+    ours = np.minimum(ours, 3)  # (the build's two greys of a deep cloud's belly are the mock-up's white body)
+    mask, level = train.cloud_layer(hy, float(x), float(cover), 9)
+    theirs = np.where(mask, level + 1, 0)
+    wrong = int((ours != theirs).sum())
+    compared, differed = compared + ours.size, differed + wrong
+    print(f"cloud, cover {cover}, at {float(x):>10}: {ours.size} bytes, {int(mask.sum())} of them cloud, {wrong} differ")
 print(f"{compared} bytes compared, {differed} differ")
 sys.exit(1 if differed else 0)

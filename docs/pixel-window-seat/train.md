@@ -232,6 +232,30 @@ The team lead accepted sheet 3 on Dave's standing word that all four be built (D
   - **Mountains are half the line** left to change, until the other three countries are in.
   - **Not looked at:** motion (no strip of frames one after another was made for the mountains: nothing in them moves in a way farmland's rings don't, and the frame-rate and lamp tests cover them); any Speed but 1×; any window but Large; Settings' page with its new pick; the app.
 
+### Step 6, cloud from below (2026-10-11, on the branch `train-sky`)
+- **In:** `Sources/Atrium/PixelTrainSky.swift`, `TrainCloud`: one layer of cloud 1.2 km up seen from under it. Each row of sky above the horizon looks at the layer at one distance (the top of the pane 2 km off, the lowest rows sixty), so each is a strip a pane wide that slides by whole pixels: 1.7 px a second at the top at 1×, a tenth of that near the horizon. It is the mock-ups' own cloud (`sky` in `train.py`, now `cloud_layer`), not the airliner's cloud world: their noise, their three tones (an edge, a middle, a white body) and the pane's own 4 × 4 dither, so a cloud's edge is a clean dither wherever it has slid to.
+- **Settings:** Clouds and Lightning in far-off storms are back on the train's page, shared with the airliner. Scattered is the sheets' sky (cover 0.30), Broken the sky of their rain tile (0.62), Overcast a deck; Changing, the default, is weather 14 km across that the train runs into and out of: clear along 32% of the line, scattered 39%, broken 24%, a deck 4%. A change of Clouds dissolves into a new scene.
+- **Through the day:** the cloud's tones are the mock-ups' at the four hours they were painted for (white by day, pink and gold lit from under at sunset, mauve at dusk, a little paler than the sky at night), mixed between by the Sun's height. Cloud hides the Sun, the Moon and the stars behind it.
+- **Added to the mock-ups' cloud:**
+  - **Grey bellies.** From below a big cloud is grey where it is deep: not at all in a scattered sky; at the heart of each mass in a broken one; everywhere under a deck, which has no white left once it is whole. Two greys, dithered. The sheets had no overcast day; the first try at one was white blotches on grey.
+  - **Cloud over the Sun dims the land.** The Sun's share of the light is cut by up to three fifths by how much of its disc, as drawn, is behind cloud, a step each quarter second, and a lake loses its glitter with it. One light for the whole land, not patches of shadow: a patch would be a kilometre across, far bigger than the near field. Under a broken sky the near field runs from 126 to 99 over ten seconds as a cloud comes over.
+  - **A lake mirrors the cloud** above it, in the cloud's own tones.
+  - **Far-off storms.** One corner in four of a 20 km grid has a storm where the cloud there is thick, none nearer than 40 km. The storm's own cloud is down in the last rows above the horizon, behind any hill or wood, so what shows is its light on the underside of the layer toward us: a low, wide, dithered glow in the lowest sixth of the sky, to the airliner's rhythm (lit about 3% of the time), gentler by day.
+- **Checked by running** (release, in the worktree, every test run behind the shared lock):
+  - **Against the mock-ups:** the cloud as the pane's dither shows it, at the sheets' two covers and four places, 421,600 bytes: where it shows and which of the three tones, 0 differ (the build's two greys count as the mock-up's white body). With the rest, 1,383,120 bytes compared, 0 differ.
+  - **The slide:** in a 12 s film the cloud 95 rows up moved 12 px (12.6 by `speed × rows / 1200`), 80 rows up 10 (10.6), 65 rows up 8 (8.6). After those 12 s the sky is the same pixels at 15, 30 and 60 frames a second, and `trainLooksTheSameAtAnyFrameRate` holds with cloud, its shade and the lake's mirror in the picture.
+  - **Storms:** under a deck a storm's light is where it can be seen, fifteen rows up and more, from 73 of 120 places 5 km apart; none reaches nearer than 12 km (`trainSkyChanges`). In a 30 s film at night at metre 90,000, lightning showed in 17 of 450 frames, four bursts.
+  - **Cost,** Large window, three runs in turn with the airliner on a Mac four builders were sharing: a clear sky 0.80 to 0.81 ms of CPU a frame (0.70 to 0.74 in step 5's quieter runs, with no cloud to paint either time), scattered 0.89 to 0.97, a deck 0.92 to 1.03, the lake under a broken sky at night 0.92 to 1.07, a deck with no window 0.98 to 1.10; the airliner 1.04 to 1.22. GPU 0.16 to 0.59, noisy.
+  - **What ships:** the 25 pictures of `shots.sh` are the same files as before step 1. 95 tests pass in release; the train's twelve and the settings test in debug.
+- **Looked at,** as art pixels: scattered, broken and overcast by day; broken at dusk (the rain tile's sky); scattered at sunset and at night over the lake; the lake under scattered and broken cloud, by day and at night; two places left to change; five frames three seconds apart; a storm's flash beside the frame without it.
+- **Wrong, or not done:**
+  - **A far storm is easy to miss:** a faint low glow, and nothing where hills stand in front. There are no storm towers.
+  - **The cloud is fixed to the country:** it slides only as the train moves. No wind.
+  - **The Moon neither lights the cloud nor is dimmed by it** on the land; the night's tones are fixed.
+  - **A lake does not mirror lightning.**
+  - **Broken and Overcast by day are mine:** no sheet shows either.
+  - **Not looked at:** any window but Large, a portrait display, the hours between the four the tones were painted for, Settings' page, the app.
+
 ## Research for the next mock-ups
 - **The window.** Real glass, width to height: a TGV bar car 1.94:1, a EuroNight sleeper 1.46:1, a British Mark 1 bay 1.2:1 with top-lights, an Amtrak Superliner coach 2.75:1, a Shinkansen N700 0.96:1 (520 × 500 mm: an airliner's window again). The mock-ups' pane is the airliner's, 1.54:1. A wide picture window (about 1.9:1) fills a 16:10 screen best.
 - **The eye:** about 2.5 m above the rail on a European intercity, 3.85 m upstairs in a Superliner; add 0.5–1 m of track bed.

@@ -63,7 +63,7 @@ private func listed(_ knobs: [Knob], window: Double) -> [String] {
     #expect(offered[0].format == .choice(["An airliner", "The space station", "A train"]) && offered[0].order == [0, 2, 1])
     #expect(listed(offered, window: 0) == airliner)
     #expect(listed(offered, window: 1) == station)
-    #expect(listed(offered, window: 2) == ["seat.orbit", "seat.window", "seat.looking", "seat.speed", "seat.country", "seat.poles", "seat.carriage", "seat.previewTime"])
+    #expect(listed(offered, window: 2) == ["seat.orbit", "seat.window", "seat.looking", "seat.speed", "seat.country", "seat.poles", "seat.carriage", "seat.clouds", "seat.lightning", "seat.previewTime"])
     // Carriage is the train's alone, and with no window there is no carriage to choose.
     let carriage = PixelCarriage.choice
     #expect((carriage.shownWhen, carriage.hiddenWhen) == (PixelOrbit.on.key, PixelWindowSeat.window.key) && !shipped.contains { $0.key == carriage.key })

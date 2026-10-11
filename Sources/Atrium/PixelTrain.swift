@@ -50,6 +50,14 @@ final class PixelTrain: SKScene {
     // colours (flat, a ripple's light and its dark, the Sun's glitter), and how likely the glitter is there.
     private var water: [UInt32], glint: [UInt8]
     private var reflected: [Int] = [] // the columns of the far shore's lamps as last painted, for their streaks in the water
+    // The cloud (PixelTrainSky.swift): its five tones in this light, lightning's colour and how strongly it lights a
+    // storm (0 with Settings' Lightning off), and a lake's water under a cloud's image, each row in the five tones.
+    private var cloud: TrainCloud
+    private var cloudTones: [UInt32] = [], bolt: UInt32 = 0, storms: Float = 0, mirrored: [UInt32] = []
+    // The light as last worked out, and where the Sun is drawn in the sky while it is up. Cloud over the Sun cuts
+    // its share of the light on the land, in eighths (`shade`), a step each quarter second (`shadeTick`).
+    private var daylight = (ambient: RGB.zero, key: RGB.zero, glow: RGB.zero, haze: RGB.zero)
+    private var sunSpot: (x: Int, row: Int)?, shade = 0, shadeTick = 0
     private let texture: SKMutableTexture
     private let canvas = SKNode(), outside = SKSpriteNode(), cabin = SKSpriteNode()
 
@@ -75,6 +83,8 @@ final class PixelTrain: SKScene {
         (world.scenery, polesOn) = (Int(Self.scenery.value), Self.poles.value > 0.5)
         (land, dash) = ([UInt8](repeating: 0, count: gw * horizon), [UInt8](repeating: 0, count: gw * horizon))
         (water, glint) = ([UInt32](repeating: 0, count: 4 * gw * horizon), [UInt8](repeating: 0, count: gw * horizon))
+        cloud = TrainCloud(wide: gw, rows: gh - horizon, focal: Double(gh) * 1.2, clouds: Int(PixelWindowSeat.clouds.value))
+        mirrored = [UInt32](repeating: 0, count: 15 * horizon)
         picture = [UInt32](repeating: 0, count: gw * gh)
         texture = SKMutableTexture(size: CGSize(width: gw, height: gh))
         super.init(size: size)
@@ -119,6 +129,7 @@ final class PixelTrain: SKScene {
         settings = picked
         let another = PixelOrbit.mode != windowOn || Int(PixelWindowSeat.window.value) != windowSize || Int(Self.scenery.value) != world.scenery
             || (Self.poles.value > 0.5) != polesOn || Int(PixelCarriage.choice.value) != carriage.kind
+            || Int(PixelWindowSeat.clouds.value) != cloud.clouds
         guard another else { return redraw() }
         guard let view else { return } // (with no view to hand over in, as in the tests, it stays as built)
         let fade = SKTransition.crossFade(withDuration: 0.8)
@@ -158,20 +169,15 @@ final class PixelTrain: SKScene {
         // glow along the horizon lights the land too, two fifths of its colour: by the sky's light and the Sun's
         // alone the land went a dull green under the best sky of the day.
         let low = smoothstep(-10, -2, above.el) * smoothstep(12, 3, above.el)
-        let light = (above.ambient + above.key) * 0.78 * mix(1, 3.9, night) + above.haze * (0.4 * low), floor = rgb(9, 13, 27) * night
-        let mats = TrainMat.day.count
-        for (k, ring) in rings.enumerated() {
-            let far = Float(1 - exp(-ring.away / world.haze(Self.travelled)))
-            for (m, base) in TrainMat.day.enumerated() { ringColours[k * mats + m] = pack(mix(pointwiseMin(base * light + floor, .one), above.haze, far)) }
-        }
-        // The ground, in the five tones a dash can take in each of a row's kinds: the far fields, which have no
-        // dashes unless they slide too fast to show as fields, and the four kinds of near field.
-        for tones in 0..<5 {
-            for level in 0..<5 {
-                let lift = Float(level - 2) * (tones < 3 ? 0.03 : 0.045) + (tones > 0 && tones % 2 == 0 ? 0.022 : 0)
-                for (m, base) in TrainMat.day.enumerated() { groundColours[((tones * 5) + level) * mats + m] = pack(base * (1 + lift) * light + floor) }
-            }
-        }
+        daylight = (above.ambient, above.key, above.haze * (0.4 * low), above.haze)
+        // Where the Sun is drawn, for the cloud that passes over it; or, with the Sun up but behind the train, the
+        // sky overhead. A scene starts in whatever shade its sky gives it.
+        let drawn = above.sunSpot, inPane = drawn.x >= 0 && drawn.x < glass.w && drawn.y >= horizon && drawn.y < glass.h
+        sunSpot = above.sun.elevation <= 0 ? nil : inPane ? (drawn.x, drawn.y - horizon) : (glass.w / 2, glass.h - horizon - 1)
+        if clock == 0 { shade = shadeWanted(with: Self.travelled) }
+        relight()
+        cloudTones = TrainCloud.tones(above.el).map(pack)
+        (bolt, storms) = (pack(rgb(214, 224, 255)), PixelWindowSeat.lightning.value > 0.5 ? mix(0.22, 0.8, night) : 0) // by day a flash hardly shows
         // The lake: each row of water is the sky that many rows above the horizon turned over (three parts in five
         // the row's middle tone, the rest its own pixel, so a breath of what is up there shows), deepened toward its
         // own blue as it nears us. Under the Sun, while its disc is in the sky, lies a path of its glitter.
@@ -182,6 +188,10 @@ final class PixelTrain: SKScene {
         for d in 1...horizon {
             let from = min(gh - 1, horizon + Int(Double(d) * 1.6)) * gw, above = (0..<gw).map { unpack(sky[from + $0]) }
             let middle = RGB(above.map(\.x).sorted()[gw / 2], above.map(\.y).sorted()[gw / 2], above.map(\.z).sorted()[gw / 2])
+            for (tone, colour) in cloudTones.enumerated() { // and the same water with cloud up there, of each tone
+                let c = mix(middle * 0.6 + unpack(colour) * 0.4, deep, 0.30 + 0.35 * min(1, Float(d) / Float(horizon)))
+                for (ripple, brighter) in [Float(1), 1.1, 0.9].enumerated() { mirrored[(d - 1) * 15 + tone * 3 + ripple] = pack(c * brighter) }
+            }
             for x in 0..<gw {
                 let c = mix(middle * 0.6 + above[x] * 0.4, deep, 0.30 + 0.35 * min(1, Float(d) / Float(horizon))), at = (d - 1) * gw + x
                 (water[at], water[flat + at], water[2 * flat + at], water[3 * flat + at]) = (pack(c), pack(c * 1.1), pack(c * 0.9), pack(c * 0.25 + sunlight * 0.75))
@@ -196,11 +206,34 @@ final class PixelTrain: SKScene {
         let ahead = Int(((Self.travelled + Double(gw / 2 + 8) / poleSpace) / TrainWorld.poleGap).rounded(.up)) + 1
         if strung.isEmpty { strung = [(.min, calm)] } else if strung.last!.on != calm { strung.append((ahead, calm)) }
         if strung.count > 1, strung[1].from < ahead - 4 - gw / Int(poleSpace * TrainWorld.poleGap) { strung.removeFirst() }
-        (pole, wire) = (pack(rgb(52, 44, 40) * light + floor), pack(rgb(44, 40, 40) * light + floor))
         if windowSize < 3 { paintFrame() }
         advance()
         compose()
     }
+
+    /// The colours the country takes in the light as last worked out: the sky's light, the Sun's less what cloud
+    /// hides of it (three fifths, with the Sun quite hidden), and the horizon's glow.
+    private func relight() {
+        let sun = daylight.key * (1 - 0.6 * Float(shade) / 8)
+        let light = (daylight.ambient + sun) * 0.78 * mix(1, 3.9, night) + daylight.glow, floor = rgb(9, 13, 27) * night
+        let mats = TrainMat.day.count
+        for (k, ring) in rings.enumerated() {
+            let far = Float(1 - exp(-ring.away / world.haze(Self.travelled)))
+            for (m, base) in TrainMat.day.enumerated() { ringColours[k * mats + m] = pack(mix(pointwiseMin(base * light + floor, .one), daylight.haze, far)) }
+        }
+        // The ground, in the five tones a dash can take in each of a row's kinds: the far fields, which have no
+        // dashes unless they slide too fast to show as fields, and the four kinds of near field.
+        for tones in 0..<5 {
+            for level in 0..<5 {
+                let lift = Float(level - 2) * (tones < 3 ? 0.03 : 0.045) + (tones > 0 && tones % 2 == 0 ? 0.022 : 0)
+                for (m, base) in TrainMat.day.enumerated() { groundColours[((tones * 5) + level) * mats + m] = pack(base * (1 + lift) * light + floor) }
+            }
+        }
+        (pole, wire) = (pack(rgb(52, 44, 40) * light + floor), pack(rgb(44, 40, 40) * light + floor))
+    }
+
+    /// How far cloud should be dimming the Sun's light, in eighths, with the train `x` metres along.
+    private func shadeWanted(with x: Double) -> Int { sunSpot.map { Int((cloud.hides($0, with: x) * 8).rounded()) } ?? 0 }
 
     /// How many pixels of the picture are lamps, and how big the picture is, for the tests: the night must never be
     /// without a lamp.
@@ -230,6 +263,7 @@ final class PixelTrain: SKScene {
     /// Slides each ring and each row of ground on to where the train has got to, laying what comes into view.
     private func advance() {
         let gw = glass.w
+        cloud.advance(to: Self.travelled)
         /// The columns to lay for a strip whose left edge was at `old` and is now at `first`: the new ones at its
         /// leading edge, or all of them if it is new or has jumped.
         func entering(_ old: Int, _ first: Int) -> Range<Int> { (old != .min && first > old && first - old < gw ? old + gw : first)..<first + gw }
@@ -270,8 +304,21 @@ final class PixelTrain: SKScene {
     private func compose() {
         painted = clock
         let (gw, gh) = (glass.w, glass.h), mats = TrainMat.day.count
+        // Cloud passing over the Sun dims the land, and gives it back, a step each quarter second: by where the
+        // train was at that quarter, so that it goes the same at any frame rate.
+        while shadeTick < Int(clock * 4) {
+            shadeTick += 1
+            let wanted = shadeWanted(with: Self.travelled - (clock - Double(shadeTick) / 4) * world.speed)
+            if wanted != shade {
+                shade += wanted > shade ? 1 : -1
+                relight()
+            }
+        }
+        let flashes = (0..<16).map { storms > 0 ? SeatWorld.lightning($0, at: clock) * storms : 0 }
+        var above = [Int8](repeating: -1, count: gw) // the cloud's tones along the row of sky a row of water mirrors
         picture.withUnsafeMutableBufferPointer { out in
             for i in horizon * gw..<gh * gw { out[i] = sky[i] }
+            cloud.paint(into: out, horizon: horizon, tones: cloudTones, bolt: bolt, flashes: flashes)
             // The ground, and where a lake lies, its water: ripples a few pixels long that shimmer where they are and
             // don't slide (water has nothing in it to follow), each lighter, darker or plain for about a second, and
             // the Sun's glitter, reshuffled five times in two seconds.
@@ -279,15 +326,18 @@ final class PixelTrain: SKScene {
             for r in rows.indices {
                 let row = rows[r], y = (horizon - 1 - r) * gw, at = r * gw, tones = row.tones * 5
                 let d = r + 1, long = 3 + d / 5, lead = (d * 7) % long
-                var s = ((row.first % gw) + gw) % gw, ripple = -1, tone = 0, sparkle: UInt8 = 0
+                var s = ((row.first % gw) + gw) % gw, ripple = -1, tone = 0, sparkle: UInt8 = 0, mirrors = false
                 for i in 0..<gw {
                     if land[at + s] == TrainMat.water {
+                        // (What the water mirrors is the sky eight rows up for every five down: cloud, if cloud is there.)
+                        if !mirrors { (mirrors, _) = (true, cloud.tones(min(d * 8 / 5, cloud.rows - 1), into: &above)) }
                         if (i + lead) / long != ripple {
                             ripple = (i + lead) / long
                             let draw = chance(ripple, d * 131 + (tick + ripple) / 3, 60)
                             (tone, sparkle) = (draw < 0.16 ? 1 : draw > 0.90 ? 2 : 0, scatter(ripple, d * 17 + tick, 61))
                         }
-                        out[y + i] = water[(sparkle < glint[at + i] ? 3 : tone) * flat + at + i]
+                        let shines = Int(sparkle) * 8 < Int(glint[at + i]) * (8 - shade) // (no glitter from a Sun behind cloud)
+                        out[y + i] = shines || above[i] < 0 ? water[(shines ? 3 : tone) * flat + at + i] : mirrored[r * 15 + Int(above[i]) * 3 + tone]
                     } else {
                         out[y + i] = groundColours[(tones + Int(dash[at + s])) * mats + Int(land[at + s])]
                     }

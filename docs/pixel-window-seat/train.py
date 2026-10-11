@@ -193,6 +193,22 @@ def light(time):
     return tint, np.array(floor, dtype=np.float64)
 
 
+def cloud_layer(rows, X=0.0, cover=0.34, cloud_seed=3):
+    """The cloud over `rows` rows of sky, the top one first: where it shows, and in which of its three tones. A layer
+    1.2 km up, each row above the horizon one distance, sliding by whole pixels."""
+    j = (rows - np.arange(rows))[:, None].astype(np.float64)  # rows above the horizon, 1 at the bottom
+    dist = 1200.0 * FOCAL / j
+    cols = np.arange(PW)[None, :]
+    n_x = np.floor(X * j / 1200.0) + cols - CX  # slides by whole pixels
+    wx = n_x * 1200.0 / j
+    f = fbm(wx / 2600.0 + 40, dist / 2600.0, 4, 900 + cloud_seed)
+    thick = np.clip((f - (1 - cover) * 0.74) / 0.16, 0, 1)
+    thick *= np.clip((j - 2) / 10, 0, 1)  # none on the horizon itself, where hills stand
+    d = BAYER[np.arange(rows)[:, None] % 4, cols % 4]
+    level = np.clip(thick * 2.6 + (d - 0.5) * 0.5, 0, 2.999).astype(int)
+    return thick > 0.02 + d * 0.10, level
+
+
 def sky(time, horizon_y, X=0.0, cover=0.34, cloud_seed=3):
     """The pane's sky down to the horizon row: the app's own bands, Sun, Moon and stars, with cloud seen from below."""
     b = base(time)
@@ -217,24 +233,13 @@ def sky(time, horizon_y, X=0.0, cover=0.34, cloud_seed=3):
             out[:rows - have][star] = cols[pick[star]]
     # cloud: a layer 1.2 km up, each row above the horizon one distance
     if cover > 0:
-        j = (rows - np.arange(rows))[:, None].astype(np.float64)  # rows above the horizon, 1 at the bottom
-        dist = 1200.0 * FOCAL / j
-        cols = np.arange(PW)[None, :]
-        n_x = np.floor(X * j / 1200.0) + cols - CX  # slides by whole pixels
-        wx = n_x * 1200.0 / j
-        f = fbm(wx / 2600.0 + 40, dist / 2600.0, 4, 900 + cloud_seed)
-        thick = np.clip((f - (1 - cover) * 0.74) / 0.16, 0, 1)
-        thick *= np.clip((j - 2) / 10, 0, 1)  # none on the horizon itself, where hills stand
+        mask, level = cloud_layer(rows, X, cover, cloud_seed)
         ctone = {"day": [(168, 184, 212), (206, 218, 236), (244, 247, 252)],
                  "sunset": [(120, 92, 122), (206, 128, 112), (252, 186, 132)],
                  "dusk": [(58, 54, 88), (86, 74, 110), (128, 100, 128)],
                  "night": [(20, 22, 38), (28, 30, 50), (40, 42, 66)]}[time]
         ctone = np.array(ctone, dtype=np.float64)
-        d = BAYER[np.arange(rows)[:, None] % 4, cols % 4]
-        level = np.clip(thick * 2.6 + (d - 0.5) * 0.5, 0, 2.999)
-        shade = ctone[level.astype(int)]
-        # lit from above by day: the thin edges are the brightest; from below at sunset: the same table reversed
-        mask = thick > 0.02 + d * 0.10
+        shade = ctone[level]
         sk = out[:rows]
         sk[mask] = shade[mask]
         out[:rows] = sk
