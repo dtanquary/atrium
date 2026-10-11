@@ -731,7 +731,7 @@ struct TrainWorld {
         let lane = Int((eye * focal / Self.lane).rounded(.toNearestOrEven))
         // Where two countries meet, the near field's crops change dash by dash over a hundred metres: changing at one
         // column, they swept the near field as a hard-edged wedge. (Held to one scenery, both are the same country.)
-        let crops = country(wx + (tone - 0.5) * 160).kind.ground
+        let place = country(wx), crops = country(wx + (tone - 0.5) * min(look.mixing, place.beside?.ground.mixing ?? look.mixing)).kind.ground
         let land = d == lane - 2 ? look.lines.0 : d == lane - 1 ? look.lines.1 : d == lane ? look.lines.2
             : look.rails.contains { Int((eye * focal / $0).rounded(.toNearestOrEven)) == d } ? look.rail
             : z > Self.lane ? (fbm(wx / (1500 * faster), 0.5, 2, 4200 + crops.salt) + soft > 0.5 ? crops.far.0 : crops.far.1)

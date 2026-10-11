@@ -31,7 +31,7 @@ enum TrainCountry {
                                                     TrainMat.tar, TrainMat.concreteShade, TrainMat.slateShade, TrainMat.tar],
                                            hedge: nil, lines: (TrainMat.brickShade, TrainMat.brick, TrainMat.tar),
                                            far: (TrainMat.tar, TrainMat.ballast), near: (TrainMat.ballast, TrainMat.ballast), verge: TrainMat.ballast,
-                                           rails: [19.0, 20.435, 33.0, 34.435], salt: 400_000)
+                                           rails: [19.0, 20.435, 33.0, 34.435], mixing: 50, salt: 400_000)
 }
 
 /// What a country's rows of ground are made of: the crops of its far fields and what divides them, if anything; its
@@ -41,6 +41,10 @@ enum TrainCountry {
 struct TrainGround {
     let fields: [UInt8], hedge: UInt8?, lines: (UInt8, UInt8, UInt8), far: (UInt8, UInt8), near: (UInt8, UInt8), verge: UInt8
     var rails: [Double] = [], rail = TrainMat.rail
+    /// Over how many metres its near crops change into a neighbour's, dash by dash, where two countries meet: a
+    /// hundred or so between two greens, a third of that where a city's ballast gives way to a field, which mixed
+    /// as blotches of grey and green for six seconds.
+    var mixing = 160.0
     let salt: UInt64
 }
 
@@ -48,6 +52,7 @@ struct TrainGround {
 /// while Settings holds the line to one scenery).
 struct TrainPlace {
     let kind: TrainCountry, edge: Double
+    var beside: TrainCountry? // the country beyond the nearer end of its stretch, if the line is left to change
 
     /// How far the land has risen there, 0 to 1, on a ring `z` metres off: toward each end of a stretch the land
     /// sinks to the level of the track, so that one country gives way to the next with no seam, over 3 km beside
@@ -73,8 +78,9 @@ extension TrainWorld {
         guard scenery == 0 else { return TrainPlace(kind: scenery == 3 ? .mountains : scenery == 4 ? .city : .farmland, edge: .infinity) }
         func begins(_ k: Int) -> Double { (Double(k) + 0.2 + 0.6 * unit(hash(k, 0, 7171))) * Self.stretch }
         let near = Int((wx / Self.stretch).rounded(.down)), k = wx >= begins(near) ? near : near - 1
-        let kind = k & 1 == 0 ? TrainCountry.farmland : Self.passing[Int(unit(hash(k, 1, 7171)) * Double(Self.passing.count))]
-        return TrainPlace(kind: kind, edge: min(wx - begins(k), begins(k + 1) - wx))
+        func kind(_ k: Int) -> TrainCountry { k & 1 == 0 ? .farmland : Self.passing[Int(unit(hash(k, 1, 7171)) * Double(Self.passing.count))] }
+        let back = wx - begins(k), on = begins(k + 1) - wx
+        return TrainPlace(kind: kind(k), edge: min(back, on), beside: kind(back < on ? k - 1 : k + 1))
     }
 
     /// Whether something can stand in a plot of track `at` metres along in the country `kind`: not in another
