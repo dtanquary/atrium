@@ -26,10 +26,12 @@ final class Meander: SKScene {
     /// Points to a channel's width. The ground keeps 14 texels to it, so a bigger river costs less, not more.
     nonisolated static let width = Knob(key: "meander.size", label: "River size", range: 28...56, standard: 28, section: "River", format: .points)
     nonisolated static let speed = Knob(key: "meander.speed", label: "Speed", range: 0.25...4, standard: 1, section: "River", format: .times)
-    /// How long the ground shows where the river has been, and how long a lake lasts, in minutes at speed 1 (2.4 T
+    /// How long the ground shows where the river has been, and how long a lake lasts, in minutes at speed 1 (4.8 T
     /// to the minute): 600 T, all the ground can remember, and 16 T.
-    nonisolated static let memory = Knob(key: "meander.memory", label: "Old courses stay", range: 30...250, standard: 250, section: "River", format: .minutes)
-    nonisolated static let lakes = Knob(key: "meander.lakes", label: "Lakes last", range: 2...20, standard: 16 / 2.4, section: "River", format: .minutes)
+    nonisolated static let memory = Knob(key: "meander.memory", label: "Old courses stay", range: 15...125, standard: 125, section: "River", format: .minutes)
+    nonisolated static let lakes = Knob(key: "meander.lakes", label: "Lakes last", range: 1...10, standard: 16 / perMinute, section: "River", format: .minutes)
+    /// T to a minute at speed 1.
+    nonisolated private static let perMinute = 60 / River.pace
     nonisolated static let knobs = [look, colours, sheet, rule, bars, width, speed, memory, lakes]
 
     /// A colour from its three bytes.
@@ -95,7 +97,7 @@ final class Meander: SKScene {
         // ("meander.seed" is for the tests, which want the same river twice; nothing else sets it.)
         let seed = UInt64(max(UserDefaults.standard.integer(forKey: "meander.seed"), 0))
         river = River(seed: seed > 0 ? seed : .random(in: 1...UInt64.max), across: Float(size.width / built), up: Float(size.height / built), texels: Self.texels)
-        river.lakeLife = Self.lakes.value * 2.4
+        river.lakeLife = Self.lakes.value * Self.perMinute
         river.age()
         texture = SKMutableTexture(size: CGSize(width: river.columns, height: river.rows))
         texture.filteringMode = .linear
@@ -143,8 +145,8 @@ final class Meander: SKScene {
     /// The sliders a shader or the river follows as they move: texels to a point of the screen (the river's size),
     /// how long old courses stay in T, the scroll bars' strength, and a lake's life in T.
     private func tune() {
-        river.lakeLife = Self.lakes.value * 2.4
-        settings.vectorFloat4Value = [Float(Double(river.columns) / size.width), Float(min(Self.memory.value * 2.4, River.memory)), Float(Self.bars.value), Float(river.lakeLife)]
+        river.lakeLife = Self.lakes.value * Self.perMinute
+        settings.vectorFloat4Value = [Float(Double(river.columns) / size.width), Float(min(Self.memory.value * Self.perMinute, River.memory)), Float(Self.bars.value), Float(river.lakeLife)]
     }
 
     /// When Settings changes: the sliders at once, a new look as soon as it is asked for, and a new size of river,

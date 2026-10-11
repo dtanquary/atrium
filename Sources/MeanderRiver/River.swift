@@ -867,20 +867,23 @@ public final class River {
         } } }
         trimLakes { texel, _ in ground[texel].z < 0.5 ? now : nil }
         drawLakes()
-        // a little after a move is due: by then `forget` has been round every row since (50 steps, 0.4 T at the most)
-        if now - base > Self.memory + 5 + Self.turn + 0.6 { rebase() }
+        // a little after a move is due: by then `forget` has been round every row since
+        if now - base > Self.memory + 5 + Self.turn + Self.slack { rebase() }
         forget()
     }
 
     /// How far the stamps' base moves at a time, in T: sixteen turns of a stamp's high byte (a turn is 256 of the
     /// bytes' levels, 2.56 T), which is as far as 16 bits leave room for beyond the ground's memory. At speed 1
-    /// that is once in 17 minutes.
+    /// that is once in eight and a half minutes.
     static let turn = 16 * 2.56
+    /// How long after a move is due the base waits, in T: `forget` sees to every row in fifty steps, 0.8 T of the
+    /// longest, and no stamp may be under the move when it comes.
+    static let slack = 1.0
 
     /// The oldest stamp there is now: `memory` and a little back. Ground the river left before then, or never
     /// reached, is kept at it, so such ground is all of one age and stays that age. Each step brings a fiftieth of
     /// the rows up to it (or all of them, with `everyRow`), so a texel is seen to every fifty steps, and its
-    /// stamp rises by 0.4 T at most: where old ground meets ground with a past that is under a thousandth of the
+    /// stamp rises by 0.8 T at most: where old ground meets ground with a past that is under a thousandth of the
     /// way from one colour to the other, and inside old ground a shader takes anything this old as the same.
     private func forget(everyRow: Bool = false) {
         let oldest = Float(now - base - Self.memory - 5), level = Int(oldest * 100)
@@ -946,8 +949,15 @@ public final class River {
         updateGround()
     }
 
-    /// Moves the river on by `seconds` of wallpaper time. At speed 1 a T takes 25 seconds. It steps ten times a
-    /// second (twenty above speed 2, so a step stays under a pixel), counted from the time gone by, so the river is
+    /// Seconds to a T at speed 1. (It was 25 until Dave's own screen was thought of: he found the Black Hole's first
+    /// pace far too slow, and at 25 a glance at this river showed nothing moving.)
+    public static let pace = 12.5
+    /// The longest step, in T: at speeds 2 and 4. It moves the fastest bank a fiftieth of a width, a little over a
+    /// pixel of the narrowest river on a 2x screen, and most banks a tenth of that.
+    static let longest = 0.016
+
+    /// Moves the river on by `seconds` of wallpaper time. It steps ten times a second, and twenty above speed 2 so
+    /// that a step is never longer than `longest`; the steps are counted from the time gone by, so the river is
     /// the same whatever the frame rate. Returns whether it stepped: only then have `pixels` changed.
     @discardableResult public func advance(_ seconds: Double, speed: Double = 1) -> Bool {
         let rate = speed > 2 ? 20.0 : 10.0
@@ -955,13 +965,13 @@ public final class River {
         var stepped = false
         while owed >= 1 - 1e-6 {
             owed -= 1
-            step(Float(speed / 25 / rate))
+            step(Float(speed / Self.pace / rate))
             stepped = true
         }
         return stepped
     }
 
-    /// Gives a new river a past, so the first frame is of a floodplain it has been working for two hours (300 T, at
+    /// Gives a new river a past, so the first frame is of a floodplain it has been working for an hour (300 T, at
     /// speed 1). The distant past is run cheaply: nodes a width apart and steps three times the coarse one. It's a
     /// busier river than the live one (it cuts off about three times as often), but what it leaves is old and pale.
     /// Then the recent past as the live river runs, in coarse steps. Necks are looked for and nodes respaced every

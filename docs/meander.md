@@ -325,6 +325,8 @@ Still wrong or not known after this step:
 - Relief in Light Mode, the single-ink sheets, the River size slider and every other setting.
 
 ### Step 3: motion (2026-10-11)
+*Every figure in this step was taken at the pace of the time, 25 s a T at 1×. Step 4 doubled the pace and measured again; the four pictures linked here were remade at the new pace, and show the same things.*
+
 The real scene, through its shaders, watched moving. Four tests do the watching: `meanderDoesNotPop`, `meanderLooksTheSameAtAnyFrameRate`, `meanderShowsNothingWhenItsStampsMoveUp`, and `meanderFilm`, which only runs when asked (`MEANDER_FILM=<folder> swift test --filter meanderFilm`; `MEANDER_STRIPS=<folder>` makes `meanderDoesNotPop` save its frames and try a second river, 30 fps and Fisk's order as well).
 
 **Nothing pops, by the prototype's measure:** the greatest share of a window 14 widths square that changes by over 20 levels from one frame to the next, from a second before to two seconds after. The bar is 0.3%. At 15 and at 30 frames a second the figures are the same, as they should be: the river is the same river.
@@ -384,21 +386,30 @@ Meander has a Settings page (`Meander.knobs`, on its entry in `Scenes.swift`). I
 | Look | Scroll bars | their strength, 0 to 2×. Shown for relief | 1× |
 | River | River size | the channel's width, 28 to 56 pt | 28 pt |
 | River | Speed | 0.25 to 4× | 1× |
-| River | Old courses stay | 30 to 250 min, at speed 1 | 250 min (600 T, all the ground remembers) |
-| River | Lakes last | 2 to 20 min, at speed 1 | 6.7 min (16 T) |
+| River | Old courses stay | 15 to 125 min, at speed 1 | 125 min (600 T, all the ground remembers) |
+| River | Lakes last | 1 to 10 min, at speed 1 | 3.3 min (16 T) |
 
 How the scene follows them (`settingsChanged`):
 - **The look, its colours and the map's rule change at once, on the same river:** the ground is given a new shader (`dress`), nothing else is touched, so two looks can be compared on one river as it runs. The old map takes its Light or Dark sheet from the system, as before.
 - **Random picks one colourway for each look when the scene is built,** and holds to it for the scene's life.
 - **The sliders are followed as they move** (`tune`): scroll bars, how long old courses stay and how long lakes last go to the shader in one uniform, and a lake's life to the river.
 - **A new size of river is a new river.** Once the slider has rested for 0.3 s the scene hands over to a new one built to it, with a 0.8 s dissolve, as Fish Tank does for its lighting. The ground keeps 14 texels to a width, so a 56 pt river has a quarter of the texels and costs less: the render test's CPU falls from 0.9 to 0.7 ms a frame. The shaders are told how many texels a point of the screen is: lines and the paper's grain keep their size, and the mottling is laid out in points.
-- **Old courses stay** is the age at which ground turns to the rough ground of nowhere (relief) or bare paper (the old map), and what the river made there fades out with it. It is in the river's own time, so at Speed 4× the same setting is a quarter as long by the clock; the row says minutes, which is only true at 1×. On a fresh launch little ground is over 100 T old (the river reworks its belt fast), so settings above about 40 minutes change little for the first hour.
+- **Old courses stay** is the age at which ground turns to the rough ground of nowhere (relief) or bare paper (the old map), and what the river made there fades out with it. It is in the river's own time, so at Speed 4× the same setting is a quarter as long by the clock; the row says minutes, which is only true at 1×. On a fresh launch little ground is over 100 T old (the river reworks its belt fast), so settings above about 20 minutes change little for the first half hour.
 
 **The old map's inks are mixed across a stage's edge,** over one pixel, under the line that is drawn there. A spot on such an edge could turn from one ink to the other on the last bits of its age, which is what moved half a dozen pixels by up to 15 levels when the stamps' base moved (step 3). Now a move of the base changes 397 pixels of 1,484,784 in relief, 344 in the old map and 138 in Fisk's order, every one by a single level; the test holds it to 2. (Snapping the edge to the stamp's own steps would not have done it: between texels the age is smooth, not in steps, and any hard edge on a smooth number can flip on its last bits.)
 
+**The pace: a T takes 12.5 s at 1×, where it took 25** (the lead's decision, 2026-10-11, on step 3's figures). Dave found the Black Hole's first pace far too slow on his own screen, and at 25 s a T a glance at this river showed nothing moving. A river can't move at the 15 pt a second he needed from the Black Hole: its channel is 28 pt wide. So Meander is a picture that is different each time you look and has an event about every half minute, with a Speed slider up to four times that.
+- **Stepping** (`River.advance`): ten steps a second up to 2×, twenty above, so a step is 0.016 T at the most (at 2× and at 4×). That moves the fastest bank a fiftieth of a width: 1.1 px of a 28 pt river on a 2x screen, and most banks a tenth of that. `forget`'s margin before the base moves is 1 T now (`River.slack`), for the longer step; the base moves once in eight and a half minutes at 1×.
+- **In ten seconds at 1×** the river's line moves a median 5.4 pt, and 9 nodes in 10 under 19.6 pt (the ceiling is 28). **A loop is cut off on screen every 23 seconds** on average (79 in half an hour). The live river has worked over 11% of the land with a past after a minute, 47% after 5, 77% after 10 and 93% after 30. River 13, half an hour.
+- **At 4×** the median is 21 pt in ten seconds and a loop is cut off every 5 seconds (166 in a quarter of an hour); 88% of the land is reworked in 5 minutes.
+- **The 0.3% bar at 1×: met.** Worst frame, a second before to two after, 15 or 30 fps alike: a cutoff 0.14 to 0.18% (river 7) and 0.10 to 0.12% (river 13); the river parting a lake 0.12 to 0.23% (river 7) and 0.01 to 0.02% (river 13). River 13's cutoff is its own worst frame. For river 7 the worst frames are a second and a half after the event, whose own frame is 0.08 to 0.14%: at this pace an ordinary step moves the fastest banks half a pixel, which is 0.01 to 0.13% of the window by itself.
+- **At 4× the bar is not met and can't be, by plain motion:** a bank moving over a pixel a frame changes every pixel along it, and an ordinary frame is 0.11 to 0.47% of the window, the worst in three seconds 0.3 to 1.1%. In all twelve runs (two rivers, a cutoff and a re-crossing, three looks) the event's own frame was not the worst of its three seconds. The test holds 4× to that, and 1× to the bar.
+- **The picture is the same at 15, 30 and 60 fps** after six seconds at 1× and three more at 4×, every pixel, both looks.
+- **Cost at 4×,** relief: at 60 fps one frame in three carries a step and costs what a step frame costs at 1× (0.65 ms in `update`, 0.73 drawing). At 15 fps every frame carries one step or two: 1.36 ms of CPU with one, 2.46 with two (one frame in three), 1.7 ms on average, and 1.0 ms of GPU. A step frame with a cutoff at 4× is 1.2 to 1.6 ms in `update`.
+
 Sage came for nearly nothing: a sheet of two inks takes them in turn where Fisk's takes four. Checked by eye in both rules and in Dark Mode.
 
-Cost with the settings in, a 14" screen at 2x, medians as in step 2: relief 0.92 ms of GPU on an ordinary frame and 1.00 on a step frame; the old map 0.56 and 0.64; Fisk's order 0.64 and 0.74 (it mixes three stages' tints now, not two). CPU as before: 0.47 ms an ordinary frame, 1.3 to 1.35 a step frame.
+Cost with the settings in at 1×, a 14" screen at 2x, medians as in step 2: relief 0.92 ms of GPU on an ordinary frame and 1.00 on a step frame; the old map 0.56 and 0.64; Fisk's order 0.64 and 0.74 (it mixes three stages' tints now, not two). CPU as before: 0.47 ms an ordinary frame, 1.3 to 1.35 a step frame.
 
 Tests: `meanderDrawsEveryLook` draws every colourway of both looks, the map's in Light and in Dark Mode and both rules; `meanderFollowsItsSettings` checks that the rows hang together (a row shown for one look hangs on a pick the Look menu has, a menu's range is its list) and that a running scene follows each setting: the look and colours on the same river, a new size by handing over.
 
