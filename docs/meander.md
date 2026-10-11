@@ -662,6 +662,19 @@ What is known to be wrong with the picture as built, in one place.
 3. **The patchwork at the valley walls,** made by the launch's sweeps where a bank swung round against the wall: straight-edged patches a little older or newer than the next, outlines a texel to the step. (The pockets among them, Light Mode's white blocks, are filled: "The pockets a swept past leaves", above, which lists what that leaves.) The same stepped outline shows inside a neck's land in the old map.
 4. **Old lakes** (the bead in relief and the white crescent in the old map are mended: "Old lakes", above): a tight loop's bed is a disc of the newest ink in the old map, and a launch-made lake's bed has a stepped outline there in a fringe of other inks.
 5. **A lake in the second half of its life** narrows on every second or third step, under a quarter of a pixel a time.
+6. **Relief is soft beside the real thing:** no levees, no bars or islands in the channel, the water one flat tone ("Risks", 1; the prototype's leftovers).
+7. **The launch's past is not the live river's.** Made coarsely, it cut off about three times as often, so the first picture's floodplain is busier and more angular than what the river then makes of it.
+8. **Cost.** At the top of the Speed slider and 15 frames a second, a frame with two steps is 2.9 to 3.2 ms of CPU, over the 2 ms a wallpaper is asked to keep (accepted as it is). The launch is 101 to 110 ms on the main thread, at every load, shuffle and Settings page.
+
+**"River 13" is two rivers.** The tests that make a river themselves use `River(seed: 13, across: 54, up: 35.07, texels: 14)`; the scene on a 14" screen makes its own with `up` 982 / 28, which is 35.0714, and a river that different to begin with is another river after a 300 T past. So a figure for "river 13" from a river test and one from a scene test are not of the same river. `riverLeavesNoGroundWalledIn` uses the scene's.
+
+### Before it is unhidden (2026-10-11)
+What stands between this and taking `unfinished` off, as its builder sees it.
+- **Dave's eyes on a real screen.** Everything since the first build was judged on pictures drawn offscreen: Light Mode relief, the Look sliders, and all of step 5. The transitions at the top of the Speed slider, which are his complaint, have been seen by nobody as he will see them.
+- **His choices:** the first second after a cutoff (A as built, or C: "Still wrong", 1); the pace (12.5 s a T); and lakes in relief now having crisp edges ("Old lakes"), which changes more of the first picture than anything else in step 5.
+- **Not run:** overnight (the stamps' move up is tested, but hours of it have not been watched for a drift in pace or for banding); a portrait or an ultrawide display, or two displays; the live app under `sample`, which the render test's costs don't stand in for; the river in motion at sizes other than 28 pt, and "Old courses stay" and "Lakes last" away from their standard values, beyond what the tests draw.
+- **What every wallpaper needs:** its screenshot and its Settings preview (`docs/README.md`), the README and site entries, the version bump, and the lines drafted for the two CLAUDE.md files, which are Dave's.
+
 
 ## Dave's feedback
 - **2026-10-11, the first build on his desktop** (both looks, the settings, 12.5 s a T): "Meander is looking great, we just need to keep improving the smoothness of it and add the rest of those features mentioned above". The features he means are the ones listed to him as still to build: a Light Mode relief, Amethyst and more single inks, a swatch grid for the colours where there are two menus, and the shared grade sliders.
