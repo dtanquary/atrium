@@ -169,6 +169,25 @@ private func crossings(_ river: River) -> Int {
     #expect(born > 3 && worst < 0.5)
 }
 
+/// A cutoff opens as a breach and widens. On the step the river cuts through a neck the way through is a sixth of a
+/// width across, where it used to open at its full width at once and take the neck's last land with it for half a
+/// width either side: two tips of land gone in one frame. Half a T later (1.5 s at this speed) it is nearly as wide
+/// as the narrowest reach. Fifty seconds at the top of the Speed slider, a step to a call.
+@Test func riverOpensACutoffAsABreach() {
+    let river = River(seed: 13, across: 54, up: 35.07, texels: 14)
+    river.age()
+    var born = 0, since = 0, widest: Float = 0, slowest: Float = 1
+    for _ in 0..<1000 {
+        let cutoffs = river.cutoffs
+        river.advance(0.05, speed: 4)
+        let narrowest = river.nodes.lazy.map(\.half).min()!
+        if river.cutoffs > cutoffs { (born, since, widest) = (born + 1, 0, max(widest, narrowest)) } else { since += 1 }
+        if since == 31 { slowest = min(slowest, narrowest) }
+    }
+    print(String(format: "Meander at 4x, %d cutoffs: the way through is at most %.2f widths across on its first step and at least %.2f half a T on", born, 2 * widest, 2 * slowest))
+    #expect(born > 8 && widest < 0.15 && slowest > 0.28)
+}
+
 /// Draws a scene offscreen as SpriteKit would on a display `w` by `h` pixels, and times each frame.
 @MainActor private final class Offscreen {
     let renderer: SKRenderer, queue: MTLCommandQueue, target: MTLTexture, pass = MTLRenderPassDescriptor()
@@ -936,7 +955,10 @@ private func ripple(_ picture: [UInt32], side: Int, texel: Int, counts: (_ x: In
                         return ground(x, y, 0, 0).dry && min(one, other) < 5 && abs(one - other) > 10
                     }
                     if measured.points > 0 { (points, squares, worst) = (points + measured.points, squares + measured.rms * measured.rms * Double(measured.points), max(worst, measured.worst)) }
-                    if let folder { save(picture, side, side, to: folder.appendingPathComponent(String(format: "scarp-%.0fpt-%d-%ds.png", size, cutoff, seconds))) }
+                    if let folder {
+                        print(String(format: "  cutoff %d, %d s on: %d points, %.2f px, %.2f at the most", cutoff, seconds, measured.points, measured.rms, measured.worst))
+                        save(picture, side, side, to: folder.appendingPathComponent(String(format: "scarp-%.0fpt-%d-%ds.png", size, cutoff, seconds)))
+                    }
                 }
             }
             let rms = (squares / Double(max(points, 1))).squareRoot()

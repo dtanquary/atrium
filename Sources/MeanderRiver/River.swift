@@ -94,6 +94,10 @@ public final class River {
     static let fastest: Float = 1.25
     /// Two stretches cut through when their centrelines are within this times their half-widths: banks touching.
     static let touching: Float = 1.04
+    /// Half the width of the way through a neck when it is first cut, in widths, and how fast it opens toward the
+    /// width the river asks for, in T: three seconds at speed 1 to two thirds of the full width, then at the
+    /// river's own pace.
+    static let breach: Float = 0.08, opens: Float = 0.25
     /// Valley out of sight beyond each end of the screen, in widths.
     static let margin: Float = 10
     /// How long the ground remembers the river, in T.
@@ -196,7 +200,7 @@ public final class River {
     /// curvature upstream, slowed or sped by the ground it is cutting into and stopped by the valley's walls.
     /// The channel's width eases toward 0.7 widths on straight reaches and 1.5 round the tightest bends.
     private func migrate(_ eps: Float) {
-        let n = nodes.count, L = period, middle = up / 2, cap = Self.fastest * eps, ease = 1 - exp(-eps / 1.5)
+        let n = nodes.count, L = period, middle = up / 2, cap = Self.fastest * eps, ease = 1 - exp(-eps / 1.5), opening = 1 - exp(-eps / Self.opens)
         let alpha = Self.alpha, runUp = max(n - Int(16 / alpha / spacing), 0), margin = Self.margin
         let cell = erosionCell, across = erosionColumns, down = erosionRows
         erosion.withUnsafeBufferPointer { erosion in walls.withUnsafeBufferPointer { walls in nodes.withUnsafeMutableBufferPointer { p in
@@ -230,7 +234,8 @@ public final class River {
                     let standsIn = walls[(bankY > middle ? 0 : 256) + min(Int(along * 256), 255)]
                     soft *= smoothstep(0, 5, middle - 1.5 - standsIn - abs(bankY - middle))
                 }
-                p[i].half += (0.5 * (0.7 + 0.8 * min(bend / 2.8, 1)) - p[i].half) * ease // bend is seven nodes' curvature
+                // bend is seven nodes' curvature; a node narrower than that ever asks for is a breach, which opens fast
+                p[i].half += (0.5 * (0.7 + 0.8 * min(bend / 2.8, 1)) - p[i].half) * (p[i].half < 0.34 ? opening : ease)
                 bend += abs(p[i + 4 < n ? i + 4 : i + 4 - n].curl) - abs(p[i < 3 ? i + n - 3 : i - 3].curl)
                 let move = max(-cap, min(cap, rate * soft * eps))
                 p[i].x += move * p[i].nx
@@ -333,8 +338,14 @@ public final class River {
     }
 
     /// Cuts through a neck: drops the loop, which it returns. The river goes on from `hi` round to `lo` a period
-    /// later, and its closing segment is then the way through the neck.
-    private func cut(_ lo: Int, _ hi: Int) -> [SIMD3<Float>] {
+    /// later, and its closing segment is then the way through the neck. With `breach` that way starts as a breach
+    /// and widens: two nodes go in a third and two thirds of the way across, `Self.breach` wide, and `migrate`
+    /// opens them out. (Two, each inside the channel it leaves: one in the middle made a waist with long flanks
+    /// that was a third of a width across at the neck from the start.) At its full width from the first step,
+    /// the way through took the neck's last land with it for half a width either side, two tapered tips 20 px
+    /// long gone in one frame; now they wear back as the breach widens. (Not for a past being made, where nobody
+    /// is watching and `markNeck` wants the neck's two sides to be the first node and the last.)
+    private func cut(_ lo: Int, _ hi: Int, breach: Bool = false) -> [SIMD3<Float>] {
         let n = nodes.count, L = period
         let loop = (lo...hi).map { SIMD3(nodes[$0 % n].x + Float($0 / n) * L, nodes[$0 % n].y, nodes[$0 % n].half) }
         spare.removeAll(keepingCapacity: true)
@@ -342,6 +353,11 @@ public final class River {
             var node = nodes[k % n]
             node.slide(Float(k / n) * L - (hi >= n ? L : 0))
             spare.append(node)
+        }
+        if breach, let near = spare.last, let far = spare.first { // the neck's two sides, the far one a period on
+            for third: Float in [1 / 3, 2 / 3] {
+                spare.append(Node(x: near.x + (far.x + L - near.x) * third, y: near.y + (far.y - near.y) * third, half: Self.breach))
+            }
         }
         swap(&nodes, &spare)
         cutoffs += 1
@@ -1005,7 +1021,7 @@ public final class River {
     /// One live step: move, cut through any neck that has closed, respace, and bring the ground up to date.
     private func step(_ eps: Float) {
         migrate(eps)
-        while let neck = neck() { strand(cut(neck.lo, neck.hi)) }
+        while let neck = neck() { strand(cut(neck.lo, neck.hi, breach: true)) }
         respace()
         updateGround()
     }
