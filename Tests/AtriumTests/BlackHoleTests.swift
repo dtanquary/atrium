@@ -300,3 +300,23 @@ func blackBodyKeepsToTheLocus(kelvin: Double, x: Double, y: Double) {
                      name, series.min()!, series.max()!, average, (beat.x * beat.x + beat.y * beat.y).squareRoot() * 2 / 78 / average * 100))
     }
 }
+
+/// One still of the Black Hole that comes out the same every time, for comparing a change with what went before:
+/// `BLACKHOLE_STILL=<file.png> swift test --filter blackHoleStill`, with `BLACKHOLE_DEFAULTS="blackhole.size=1.5,…"`
+/// for Settings values as the render test takes them. The disc is held still at a fixed start, at full Retina size.
+@MainActor @Test func blackHoleStill() throws {
+    let env = ProcessInfo.processInfo.environment
+    guard let file = env["BLACKHOLE_STILL"] else { return }
+    let settings = ((env["BLACKHOLE_DEFAULTS"] ?? "") + ",blackhole.speed=0").split(separator: ",").map { $0.split(separator: "=") }.filter { $0.count == 2 }
+    for pair in settings { UserDefaults.standard.set(Double(pair[1]).map { $0 as Any } ?? String(pair[1]), forKey: String(pair[0])) }
+    defer { for pair in settings { UserDefaults.standard.removeObject(forKey: String(pair[0])) } }
+    let (w, h) = (3024, 1964)
+    let pixels = try drawn(BlackHole(size: CGSize(width: w / 2, height: h / 2), start: (time: 20, generation: 7)), w, h)
+    let bytes = pixels.flatMap { [$0.x, $0.y, $0.z] }
+    let image = try #require(CGImage(width: w, height: h, bitsPerComponent: 8, bitsPerPixel: 24, bytesPerRow: w * 3, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                     bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue), provider: CGDataProvider(data: Data(bytes) as CFData)!,
+                                     decode: nil, shouldInterpolate: false, intent: .defaultIntent))
+    let to = try #require(CGImageDestinationCreateWithURL(URL(fileURLWithPath: file) as CFURL, "public.png" as CFString, 1, nil))
+    CGImageDestinationAddImage(to, image, nil)
+    #expect(CGImageDestinationFinalize(to))
+}

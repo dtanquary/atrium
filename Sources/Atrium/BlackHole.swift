@@ -270,19 +270,23 @@ final class BlackHole: SKScene {
     private let seedRound = SKUniform(name: "u_seedRound", vectorFloat3: .zero), seedDeep = SKUniform(name: "u_seedDeep", vectorFloat3: .zero)
     private let field: Double?
     /// Where the disc's clock stands, and where in the endless run of streak generations this scene began.
-    private var discTime = Double.random(in: 0..<life)
-    private let firstGeneration = Int.random(in: 0..<10000)
+    private var discTime: Double
+    private let firstGeneration: Int
     private var lastUpdate: TimeInterval?
 
     /// `checks` draws the prototype's test pattern in place of the picture, for the test that compares the two:
     /// checks on the disc in distance and angle, and 5° squares on the sky (docs/black-hole/proto/render.py). With
-    /// a `view` the picture holds to it; without, it's Dave's view at the size Settings gives.
-    init(size: CGSize, view: View? = nil, checks: Bool = false) {
+    /// a `view` the picture holds to it; without, it's Dave's view at the size Settings gives. With a `start` the
+    /// streaks begin there (the disc's clock, and which generation of them), so two scenes can show the same
+    /// picture; without, each begins at random.
+    init(size: CGSize, view: View? = nil, checks: Bool = false, start: (time: Double, generation: Int)? = nil) {
         // Size and Speed are worked out here, not in the shader (and "u_size" is the scene's own).
         knobUniforms = Dictionary(uniqueKeysWithValues: Self.knobs.filter { $0.key != Self.size.key && $0.key != Self.speed.key }.map {
             ($0.key, SKUniform(name: "u_" + $0.key.split(separator: ".").last!, float: Float($0.standard)))
         })
         field = view?.field
+        discTime = start?.time ?? .random(in: 0..<Self.life)
+        firstGeneration = start?.generation ?? .random(in: 0..<10000)
         super.init(size: size)
         let view = view ?? View(), tilt = Float(view.tilt * .pi / 180)
         let picked = UserDefaults.standard.string(forKey: Self.palette.key) ?? Self.palette.standard
