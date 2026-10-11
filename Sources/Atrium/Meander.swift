@@ -107,10 +107,11 @@ final class Meander: SKScene {
         if river.advance(frameTime(currentTime, &lastTime), speed: Self.speed.value) { upload() }
     }
 
-    /// Sends the ground's bytes to the texture, and tells the shader the time and where in each of its cycles the
-    /// stamps' base falls. A stamp counts from the base, which moves up now and then (`River.rebase`); the scroll
-    /// bars and the map's stages are cycles in the time itself, so each needs to know how far through one of its
-    /// cycles the base is, or they would all jump when it moved.
+    /// Sends the ground's bytes to the texture, and tells the shader the time since the stamps' base, from which it
+    /// works out ages, and how far through each of its cycles the present is: relief's two scroll-bar spacings and
+    /// the sets of them, or the map's swales and its stages, counted in fours for its four inks (and from 160, so
+    /// a stage's number is never below nothing). The cycles are in the time itself, not the time since the base,
+    /// so nothing in the picture moves when the base does (`River.rebase`).
     func upload() {
         // The river's own buffer, not a copy of it: SpriteKit takes the bytes before `modifyPixelData` returns
         // (meanderGroundReachesTheShader checks that it does), and the river next writes on them a step later
@@ -118,11 +119,9 @@ final class Meander: SKScene {
             nonisolated(unsafe) let bytes = buffer
             texture.modifyPixelData { data, length in data?.copyMemory(from: bytes.baseAddress!, byteCount: min(length, bytes.count)) }
         }
-        func turn(_ period: Double) -> Float { Float(river.base / period - (river.base / period).rounded(.down)) }
+        func turn(_ period: Double) -> Float { Float(river.now / period - (river.now / period).rounded(.down)) }
         clock.floatValue = Float(river.now - river.base)
-        // relief's two scroll-bar spacings and the sets of them; or the map's swales, and its stages counted in fours
-        // for its four inks
-        turns.vectorFloat4Value = map ? [turn(1.4), 0, 0, turn(stage * 4) * 4] : [turn(0.7), turn(1.1326), turn(2.9), 0]
+        turns.vectorFloat4Value = map ? [turn(1.4), 0, 0, turn(stage * 4) * 4 + 160] : [turn(0.7), turn(1.1326), turn(2.9), 0]
     }
 
     /// The start of both shaders: the ground read smoothly, and what both looks need from it.
@@ -160,15 +159,19 @@ final class Meander: SKScene {
         // and its slopes a texel, across and up, from the same four taps: the taps are that far apart
         vec2 apart = (h1 - h0) * u_grid;
         vec4 across = (g0.y * (t10 - t00) + g1.y * (t11 - t01)) / apart.x, up = (g0.x * (t01 - t00) + g1.x * (t11 - t10)) / apart.y;
-        float stamp = (t.r * 65280.0 + t.g * 255.0) / 100.0; // when the river last left here, in T since the base
-        float bank = (t.b - 0.5) * 4.0;                      // texels from the nearest bank, below 0 in the water
-        float low = 0.25 + 0.75 * t.a;                       // an old channel's bank distance, in widths
-
-        vec2 slope = vec2(across.r * 65280.0 + across.g * 255.0, up.r * 65280.0 + up.g * 255.0) / 100.0; // the stamp's, in T a texel
+        float bank = (t.b - 0.5) * 4.0;  // texels from the nearest bank, below 0 in the water
+        float low = 0.25 + 0.75 * t.a;   // an old channel's bank distance, in widths
+        // How long ago the river left here, in T, and that time's slope a texel. Ground it left longer ago than it
+        // remembers, or never reached, is all one age and dead flat. From here on the shader works in ages only,
+        // and in where the present falls in each cycle (`u_turns`): the stamps themselves count from a base that
+        // moves, and nothing may change when it does.
+        float past = u_t - (t.r * 65280.0 + t.g * 255.0) / 100.0;
+        vec2 slope = vec2(across.r * 65280.0 + across.g * 255.0, up.r * 65280.0 + up.g * 255.0) / 100.0 * (1.0 - smoothstep(604.5, 605.0, past));
+        past = min(past, 605.0);
         vec2 shore = vec2(across.b, up.b); // points away from the water
         shore /= max(length(shore), 0.0001);
-        // texels to a pixel, across and up (the GPU's own slopes, which are one value to a block of four pixels:
-        // good enough for this, and for the light on ground that is already smooth). `pt` is a point of the screen.
+        // texels to a pixel, across and up, from the GPU's own slopes, which are one value to a block of four pixels:
+        // good enough for this. `pt` is a point of the screen.
         vec2 perPixel = vec2(dfdx(p.x), dfdy(p.y));
         float pixel = abs(perPixel.x), pt = 0.5;
 
@@ -176,8 +179,11 @@ final class Meander: SKScene {
         // two texels into the water, for the water's own age (none for the river, a lake's for a lake), and two
         // texels out, for the land beside a bank, so a cut bank is a clean step up to old ground.
         vec4 in2 = texture2D(u_texture, v_tex_coord - 2.0 * shore / u_grid), out2 = texture2D(u_texture, v_tex_coord + 2.0 * shore / u_grid);
-        float wetAge = max(u_t - (in2.r * 65280.0 + in2.g * 255.0) / 100.0, 0.0);
-        float age = u_t - mix(stamp, (out2.r * 65280.0 + out2.g * 255.0) / 100.0, 1.0 - smoothstep(0.5, 1.9, bank));
+        float wetAge = clamp(u_t - (in2.r * 65280.0 + in2.g * 255.0) / 100.0, 0.0, 605.0);
+        float beside = min(u_t - (out2.r * 65280.0 + out2.g * 255.0) / 100.0, 605.0), nearing = clamp((bank - 0.5) / 1.4, 0.0, 1.0);
+        float near = 1.0 - nearing * nearing * (3.0 - 2.0 * nearing), age = mix(past, beside, near);
+        // the age's slope a texel, taking the land beside a bank as level
+        vec2 older = (near - 1.0) * slope - (beside - past) * 6.0 * nearing * (1.0 - nearing) / 1.4 * 4.0 * vec2(across.b, up.b);
         float water = 1.0 - smoothstep(-0.6 * pixel, 0.6 * pixel, bank);
         vec2 middle = v_tex_coord - 0.5;
 
@@ -189,24 +195,30 @@ final class Meander: SKScene {
         // height above the river, 0 to 1: a bar is up out of the water within a couple of T, then silts up for ages
         float height = 0.25 * (1.0 - exp(-age / 2.5)) + 0.75 * (1.0 - exp(-age / 90.0));
         // an old channel stays low for a long while, but never at once: a lake first
-        float hollow = smoothstep(0.0, 0.12, 0.66 - low) * smoothstep(2.0, 12.0, wetAge) * exp(-wetAge / 140.0);
-        height -= 0.14 * hollow * smoothstep(0.1, 0.4, height) * (1.0 - water);
+        float dip = clamp((0.66 - low) / 0.12, 0.0, 1.0), settled = smoothstep(2.0, 12.0, wetAge) * exp(-wetAge / 140.0);
+        float sunk = 0.14 * smoothstep(0.1, 0.4, height) * (1.0 - water) * settled;
+        // The ground's slope a texel is worked out beside each part of its height, not taken from the GPU's slopes
+        // of the height: those are one value to a block of four pixels, which dotted every scarp, and they made a
+        // sixth of the picture flicker by a level whenever the stamps' base moved.
+        vec2 tilt = 0.35 * ((0.1 * exp(-age / 2.5) + 0.75 / 90.0 * exp(-age / 90.0)) * older + sunk * 6.0 * dip * (1.0 - dip) / 0.12 * 0.75 * vec2(across.a, up.a));
+        height -= sunk * dip * dip * (3.0 - 2.0 * dip);
         // Scroll bars: old bank lines, so contours of the stamp. Two spacings beating, uneven in strength, and low;
         // and sets of them, arcs that show at a glance. Where the lines would be too fine to draw, or across a
         // scarp, the ground is flat.
         float steep = 6.2832 * length(slope) * pt; // how far a point of the screen takes the stamp, as an angle for a period of 1 T
-        float mottle = 0.55 + 0.34 * lumps(p / 35.0 + 5.0);
-        float scroll = (0.6 * cos(6.2832 * fract(stamp / 0.7 + u_turns.x)) + 0.4 * cos(6.2832 * fract(stamp / 1.1326 + u_turns.y) + 1.3))
-            * (1.0 - smoothstep(0.7, 1.5, steep / 0.7)) * mottle * (0.35 + 0.65 * exp(-age / 150.0));
-        scroll += 0.9 * cos(6.2832 * fract(stamp / 2.9 + u_turns.z) + 0.7) * (1.0 - smoothstep(0.7, 1.5, steep / 2.9)) * (0.5 + 0.5 * exp(-age / 200.0));
+        float bars = (1.0 - smoothstep(0.7, 1.5, steep / 0.7)) * (0.55 + 0.34 * lumps(p / 35.0 + 5.0)) * (0.35 + 0.65 * exp(-age / 150.0));
+        float sets = 0.9 * (1.0 - smoothstep(0.7, 1.5, steep / 2.9)) * (0.5 + 0.5 * exp(-age / 200.0));
+        vec3 turn = 6.2832 * fract(u_turns.xyz - past / vec3(0.7, 1.1326, 2.9)) + vec3(0.0, 1.3, 0.7);
+        float scroll = bars * (0.6 * cos(turn.x) + 0.4 * cos(turn.y)) + sets * cos(turn.z);
+        tilt -= 0.03 * (bars * (0.6 * sin(turn.x) / 0.7 + 0.4 * sin(turn.y) / 1.1326) + sets * sin(turn.z) / 2.9) * 6.2832 * slope;
         // ground the river has not reached in memory: not flat, but nothing like a river's work either
-        float wild = smoothstep(480.0, 588.0, age);
+        float gone = clamp((age - 480.0) / 108.0, 0.0, 1.0), wild = gone * gone * (3.0 - 2.0 * gone);
         float rough = 0.75 * (0.6 * lumps(p / 30.0) + 0.3 * lumps(p / 11.0 + 9.0) + 0.1 * lumps(p / 4.0 + 17.0));
+        tilt += 0.05 * (rough * 6.0 * gone * (1.0 - gone) / 108.0 * older + wild * vec2(dfdx(rough), dfdy(rough)) / perPixel);
         vec3 col = texture2D(u_heights, vec2((clamp(height + 0.02 * scroll, 0.0, 1.0) * 255.0 + 0.5) / 256.0, 0.5)).rgb;
         col = mix(col, mix(u_ground, u_oldest, smoothstep(-0.1, 0.55, rough)), wild);
         // light from the upper left on the fine relief only, and none within a few pixels of water: no rims
-        float lit = 0.35 * height + 0.03 * scroll + 0.05 * wild * rough;
-        vec2 tilt = -5.0 * vec2(dfdx(lit), dfdy(lit)) / perPixel;
+        tilt *= -5.0;
         float shade = (dot(tilt, vec2(-0.55, 0.62)) + 0.56) / sqrt(dot(tilt, tilt) + 1.0) - 0.56;
         col *= clamp(1.0 + 0.9 * shade * smoothstep(0.5 * pt, 1.9, bank), 0.72, 1.3);
         // water the river has left dulls a little over its first few T: a lake
@@ -226,23 +238,24 @@ final class Meander: SKScene {
                 - 0.17 * clamp((old - 12.0) / 18.0, 0.0, 1.0) - 0.11 * clamp((old - 30.0) / 60.0, 0.0, 1.0) - 0.12 * clamp((old - 90.0) / 30.0, 0.0, 1.0);
             vec3 col = mix(paper, pick(mod(number, 4.0), u_ink0, u_ink1, u_ink2, u_ink3) * grain, cover);
         """ : """
-            float present = u_t / u_stage + u_turns.w, slide = smoothstep(0.67, 1.0, fract(present));
-            vec2 was = inked(floor(present) - number), next = inked(floor(present) - number + 1.0);
+            float slide = smoothstep(0.67, 1.0, fract(u_turns.w));
+            vec2 was = inked(floor(u_turns.w) - number), next = inked(floor(u_turns.w) - number + 1.0);
             float cover = mix(was.y, next.y, slide);
             vec3 col = mix(mix(paper, pick(was.x, u_ink0, u_ink1, u_ink2, u_ink3) * grain, was.y),
                            mix(paper, pick(next.x, u_ink0, u_ink1, u_ink2, u_ink3) * grain, next.y), slide);
         """
         return """
-            // which stage the river left here in, and how many stages ago
-            float staged = stamp / u_stage + u_turns.w, number = floor(staged), old = (u_t - stamp) / u_stage;
+            // how many stages ago the river left here, and in which stage, counted so that the present is `u_turns.w`
+            float old = past / u_stage, staged = u_turns.w - old, number = floor(staged);
             float grain = 1.0 + 0.023 * lumps(p / 1.5) + 0.019 * lumps(p / 20.0 + 3.0);
             vec3 paper = u_paper * grain;
         \(inks)
             // thin lines where one stage meets the next and along old scarps; faint ridge-and-swale lines inside a stage
-            float rise = length(slope) * pt / u_stage + 1e-9, part = staged - number;
-            float edge = max(1.0 - smoothstep(0.2, 0.8, min(part, 1.0 - part) / rise), smoothstep(1.75, 4.0, rise * u_stage)) * (0.25 + 0.75 * smoothstep(0.0, 0.5, cover));
-            float swale = fract(stamp / 1.4 + u_turns.x), fine = rise * u_stage / 1.4;
-            float hatch = (1.0 - smoothstep(0.15, 0.6, min(swale, 1.0 - swale) / fine)) * (1.0 - smoothstep(0.22, 0.4, fine)) * cover;
+            // (none on ground that is dead flat, a cut-off loop's bed say: left all at once, it might be all on a line)
+            float rise = length(slope) * pt / u_stage + 1e-9, part = staged - number, sloping = min(rise * 1e4, 1.0);
+            float edge = max(1.0 - smoothstep(0.2, 0.8, min(part, 1.0 - part) / rise), smoothstep(1.75, 4.0, rise * u_stage)) * sloping * (0.25 + 0.75 * smoothstep(0.0, 0.5, cover));
+            float swale = fract(u_turns.x - past / 1.4), fine = rise * u_stage / 1.4;
+            float hatch = (1.0 - smoothstep(0.15, 0.6, min(swale, 1.0 - swale) / fine)) * (1.0 - smoothstep(0.22, 0.4, fine)) * cover * sloping;
             col = mix(col, u_line, clamp(0.45 * edge + 0.12 * hatch, 0.0, 1.0));
             col = mix(col, u_river * grain, water);
             // the river, and a lake for its first few T, wear the full bank line

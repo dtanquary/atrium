@@ -54,16 +54,18 @@ private func crossings(_ river: River) -> Int {
     }
 }
 
-/// The stamps are 16 bits counted from a base that has to move up before they run out, after about 650 T. When
-/// it does, ground the river has just left still reads as just left, and nothing reads as later than now.
+/// The stamps are 16 bits counted from a base that moves up with the time, a turn of the high byte at once, so
+/// that they never run out. After 660 T it has moved; ground the river has just left still reads as just left,
+/// nothing reads as later than now, and no stamp is older than the ground's memory and a turn.
 @Test func riverMovesItsStampsUpBeforeTheyRunOut() {
     let river = River(seed: 9, across: 27, up: 17.5, texels: 8)
     river.age(distant: 640, recent: 20)
-    #expect(river.base > 0 && river.now - river.base < 650, "base \(river.base) at T \(river.now)")
+    let sinceBase = river.now - river.base, oldest = sinceBase - River.memory - 5
+    #expect(river.base > 0 && oldest >= 0 && oldest < River.turn + 0.5, "base \(river.base) at T \(river.now)")
     let stamps = (0..<river.columns * river.rows).map { Double(Int(river.pixels[$0 * 4]) << 8 | Int(river.pixels[$0 * 4 + 1])) / 100 }
-    let latest = stamps.max()!, sinceBase = river.now - river.base
+    let latest = stamps.max()!
     #expect(latest <= sinceBase + 0.01 && latest > sinceBase - 0.5, "the latest stamp is \(latest), and now is \(sinceBase)")
-    #expect(stamps.count { $0 > 0 } > stamps.count / 3)
+    #expect(stamps.min()! >= oldest - 0.011 && stamps.count { $0 > oldest + 0.011 } > stamps.count / 3)
 }
 
 /// A new river's past: by the first frame the ground has been worked edge to edge of the belt, the river and its
@@ -83,7 +85,8 @@ private func crossings(_ river: River) -> Int {
         times.append(milliseconds { river.age() })
     }
     let texels = river.columns * river.rows
-    let stamped = (0..<texels).count { river.pixels[$0 * 4] != 0 || river.pixels[$0 * 4 + 1] != 0 }
+    let oldest = Float(river.now - river.base - River.memory - 5) // ground never reached is kept at this
+    let stamped = river.ground.count { $0.x > oldest }
     let water = (0..<texels).count { river.pixels[$0 * 4 + 2] < 127 }, hollow = (0..<texels).count { river.pixels[$0 * 4 + 3] < 140 }
     let lakeWater = river.ground.count { $0.w < 0.5 }, width = 2 * river.nodes.reduce(0) { $0 + $1.half } / Float(river.nodes.count)
     print("Meander's past, T 240 coarse then T 60, for a 28 pt river: \(times.map { String(format: "%.0f", $0) }.joined(separator: ", ")) ms")
@@ -119,7 +122,7 @@ private func crossings(_ river: River) -> Int {
     var cracks = 0, land = 0
     for y in 1..<river.rows - 1 { for x in 1..<river.columns - 1 {
         let i = y * river.columns + x, here = river.ground[i]
-        guard min(here.z, here.w) > 0.5 + 2 / river.texels, here.x > 0 else { continue }
+        guard min(here.z, here.w) > 0.5 + 2 / river.texels, here.x > oldest else { continue }
         land += 1
         func newer(_ a: Int, _ b: Int) -> Bool { river.ground[a].x > here.x + 3 && river.ground[b].x > here.x + 3 }
         if newer(i - 1, i + 1) || newer(i - river.columns, i + river.columns) { cracks += 1 }
@@ -187,11 +190,20 @@ private func crossings(_ river: River) -> Int {
         return (ms(updated - began), ms(clock.now - updated) - gpu, gpu)
     }
 
+    /// The next frame's update with nothing drawn, for running a scene on to where something happens.
+    func advance(rate: Double = 30) {
+        renderer.update(atTime: start + Double(frames) / rate)
+        frames += 1
+    }
+
     /// What was drawn: each pixel's red, green, blue and alpha, top row first.
-    var pixels: [SIMD4<UInt8>] {
+    var pixels: [SIMD4<UInt8>] { piece(x: 0, y: 0, w: w, h: h).map { [UInt8($0 >> 16 & 255), UInt8($0 >> 8 & 255), UInt8($0 & 255), UInt8($0 >> 24)] } }
+
+    /// A piece of what was drawn, a pixel to a word (blue lowest), top row first; the piece is kept on the screen.
+    func piece(x: Int, y: Int, w: Int, h: Int) -> [UInt32] {
         var raw = [UInt32](repeating: 0, count: w * h)
-        target.getBytes(&raw, bytesPerRow: w * 4, from: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0)
-        return raw.map { [UInt8($0 >> 16 & 255), UInt8($0 >> 8 & 255), UInt8($0 & 255), UInt8($0 >> 24)] }
+        target.getBytes(&raw, bytesPerRow: w * 4, from: MTLRegionMake2D(min(max(x, 0), self.w - w), min(max(y, 0), self.h - h), w, h), mipmapLevel: 0)
+        return raw
     }
 }
 
@@ -275,6 +287,52 @@ private func crossings(_ river: River) -> Int {
             }
             print(String(format: "  the ground's %d bytes copied to the texture in %.3f ms", scene.river.pixels.count, middle(copies)))
             #expect(costs[true]!.count > 40 && middle(costs[true]!.map(\.gpu)) < 3 && middle(costs[true]!.map { $0.update + $0.draw }) < 4)
+        }
+    }
+}
+
+/// The picture is the same whatever the frame rate: after the same six seconds drawn at 15, 30 and 60 frames a
+/// second, every pixel of both looks is the same. (The river steps by the time gone by, and the shader is told
+/// nothing but what the river has done.)
+@MainActor @Test func meanderLooksTheSameAtAnyFrameRate() throws {
+    for look: [String: Double] in [[:], ["meander.look": 1]] {
+        try with(look.merging(["meander.seed": 7]) { $1 }) {
+            var pictures: [[SIMD4<UInt8>]] = [], times: [Double] = []
+            for rate in [15.0, 30.0, 60.0] {
+                let scene = Meander(size: CGSize(width: 756, height: 491)), screen = try Offscreen(scene, 1512, 982)
+                for _ in 0...Int(6 * rate) { screen.advance(rate: rate) }
+                for _ in 0..<2 { try screen.frame(rate: 1e9) } // drawn at the end only, with no more time gone by, and twice for the shader's sake
+                pictures.append(screen.pixels)
+                times.append(scene.river.now)
+            }
+            #expect(times[0] > 300.2 && times[1] == times[0] && times[2] == times[0], "T \(times)")
+            #expect(pictures[1] == pictures[0] && pictures[2] == pictures[0], "the look \(look) differs with the frame rate")
+        }
+    }
+}
+
+/// When the stamps' base moves up, the picture stays as it was. The scene is run at four times its pace until a
+/// move is nearly due, drawn, the base moved with the river standing still, and drawn again, in all three looks.
+/// Every age the shader works out is the same number as before but for its last bits, so a pixel in a few thousand
+/// rounds the other way, by one level: measured 2026-10-11 on a picture of 1,484,784 pixels, 407 in relief, 263
+/// and 118 in the old map's two rules (six of those by 2 to 15 levels, on a stage's line), where an ordinary step
+/// of the river changes 20,000 to 49,000; on this test's smaller picture, 4 to 14. Before the shader worked in
+/// ages, and the base moved by whole turns of the high byte, it was a sixth of them.
+@MainActor @Test func meanderShowsNothingWhenItsStampsMoveUp() throws {
+    for look: [String: Double] in [[:], ["meander.look": 1], ["meander.look": 1, "meander.rule": 1]] {
+        try with(look.merging(["meander.seed": 7, "meander.speed": 4]) { $1 }) {
+            let scene = Meander(size: CGSize(width: 504, height: 328)), screen = try Offscreen(scene, 1008, 656), river = scene.river! // a small screen, to get there quickly
+            while river.now - river.base < River.memory + 5 + River.turn + 0.5 { screen.advance(rate: 10) }
+            for _ in 0..<2 { try screen.frame(rate: 1e6) } // twice for the shader's sake, with no time gone by
+            let before = screen.pixels, base = river.base, now = river.now
+            river.rebase()
+            scene.upload()
+            try screen.frame(rate: 1e6)
+            let most = zip(before, screen.pixels).map { pair in (0..<3).map { abs(Int(pair.0[$0]) - Int(pair.1[$0])) }.max()! }
+            let changed = most.count { $0 > 0 }
+            print("Meander, the stamps' base moved by \(river.base - base) T, look \(look): \(changed) of \(most.count) pixels changed, \(most.count { $0 > 1 }) by more than a level, the most by \(most.max()!)")
+            #expect(river.base == base + River.turn && river.now == now, "the base moved from \(base) to \(river.base)")
+            #expect(changed < most.count / 2000 && most.max()! <= 20, "\(changed) of \(most.count) pixels changed when the base moved, the most by \(most.max()!), in the look \(look)")
         }
     }
 }

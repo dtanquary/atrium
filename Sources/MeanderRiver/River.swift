@@ -132,6 +132,8 @@ public final class River {
     private var sweptAt: Float = 0
     /// Whether a past is being made by `sweep`, and the nodes a pass of `respace` is about to drop.
     private var sweeping = false, dropped: [Int] = []
+    /// The next row `forget` will see to.
+    private var forgetting = 0
 
     /// A straight river with small wiggles, from which the bends grow, and the ground it will write on.
     public init(seed: UInt64, across: Float, up: Float, texels: Float, spacing: Float = 0.5) {
@@ -826,19 +828,48 @@ public final class River {
         } } }
         trimLakes { texel, _ in ground[texel].z < 0.5 ? now : nil }
         drawLakes()
-        if now - base > 650 { rebase() }
+        // a little after a move is due: by then `forget` has been round every row since (50 steps, 0.4 T at the most)
+        if now - base > Self.memory + 5 + Self.turn + 0.6 { rebase() }
+        forget()
     }
 
-    /// The stamps are counted from `base`, and 16 bits at 0.01 T a level hold 655 T of them. So before they run
-    /// out the base moves up and every stamp down by the same amount, older ones than the ground remembers
-    /// stopping at none. A shader that draws anything periodic in the stamp has to be told the base.
-    private func rebase() {
-        let shift = Float(now - base - Self.memory - 5)
-        base += Double(shift)
+    /// How far the stamps' base moves at a time, in T: sixteen turns of a stamp's high byte (a turn is 256 of the
+    /// bytes' levels, 2.56 T), which is as far as 16 bits leave room for beyond the ground's memory. At speed 1
+    /// that is once in 17 minutes.
+    static let turn = 16 * 2.56
+
+    /// The oldest stamp there is now: `memory` and a little back. Ground the river left before then, or never
+    /// reached, is kept at it, so such ground is all of one age and stays that age. Each step brings a fiftieth of
+    /// the rows up to it (or all of them, with `everyRow`), so a texel is seen to every fifty steps, and its
+    /// stamp rises by 0.4 T at most: where old ground meets ground with a past that is under a thousandth of the
+    /// way from one colour to the other, and inside old ground a shader takes anything this old as the same.
+    private func forget(everyRow: Bool = false) {
+        let oldest = Float(now - base - Self.memory - 5), level = Int(oldest * 100)
+        guard level > 0 else { return }
+        let from = everyRow ? 0 : forgetting, to = everyRow ? rows : min(from + (rows + 49) / 50, rows), columns = columns
+        ground.withUnsafeMutableBufferPointer { ground in pixels.withUnsafeMutableBufferPointer { pixels in
+            for i in from * columns..<to * columns where ground[i].x < oldest {
+                (ground[i].x, pixels[i * 4], pixels[i * 4 + 1]) = (oldest, UInt8(level >> 8), UInt8(level & 255))
+            }
+        } }
+        if !everyRow { forgetting = to == rows ? 0 : to }
+    }
+
+    /// The stamps are counted from `base`, which moves up with the time so that 16 bits at 0.01 T a level always
+    /// hold the ground's memory. A move takes every stamp down by the same amount, whole turns of the high byte,
+    /// off the bytes themselves and nothing else: the low bytes stay, and neighbouring texels' high bytes differ
+    /// as they did, so the GPU's smoothing between texels gives what it gave, less the move. (Moved by any other
+    /// amount, the two bytes of neighbouring texels carry differently, and a sixth of relief's pixels shifted by a
+    /// level or more: measured.) No stamp is under the move when it comes: `forget` has brought the oldest up by
+    /// then. A shader has to work in ages, and take its cycles from the time itself, not from the stamps.
+    func rebase() {
+        let moves = Int((now - base - Self.memory - 5) / Self.turn), turns = moves * 16, shift = Float(Self.turn * Double(moves))
+        guard moves > 0 else { return }
+        base += Self.turn * Double(moves)
         ground.withUnsafeMutableBufferPointer { ground in pixels.withUnsafeMutableBufferPointer { pixels in
             for i in ground.indices {
                 ground[i].x = ground[i].x == Self.never ? Self.never : max(ground[i].x - shift, 0)
-                write(i, ground, pixels)
+                if Int(pixels[i * 4]) >= turns { pixels[i * 4] -= UInt8(turns) } else { (pixels[i * 4], pixels[i * 4 + 1]) = (0, 0) }
             }
         } }
     }
@@ -949,6 +980,7 @@ public final class River {
         ground.withUnsafeMutableBufferPointer { ground in pixels.withUnsafeMutableBufferPointer { pixels in
             for i in ground.indices { write(i, ground, pixels) }
         } }
+        forget(everyRow: true)
     }
 
     /// The river's length over the valley's.
