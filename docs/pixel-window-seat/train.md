@@ -16,6 +16,9 @@ That day two agents researched it (one read the code and worked the geometry, on
 
 Not asked yet: stations, tunnels and passing trains; which railway (overhead wires, telegraph poles, the steam age: the mock-up drew telegraph poles); a line running high above a valley.
 
+## Dave's feedback
+- **2026-10-11, the first build on his desktop** (countryside and the lake, the plain window, a clear sky): "night train has potential, please spin up developer agents to work on all the pending 'still to build' items and get them integrated". Those items, as listed to him: clouds, weather and rain on the glass, the three carriage interiors, and mock-ups then builds of mountains, snow, desert and the city. They are being built in three streams, each on a branch of its own: the sky and weather, the carriages, the four sceneries.
+
 ## The finding that shapes it
 A thing `Z` metres from the track slides `focal × speed / Z` pixels a second, whatever its height and whatever the eye's height. With the airliner's lens (focal 265 art pixels):
 

@@ -421,6 +421,10 @@ Not done, or not known:
 - **No screenshot:** `Resources/preview-meander.jpg` and `docs/images` have none, so its Settings page is blank behind the header until the live copy has built. No README entry, nothing on the site.
 - With Random, two displays (or the desktop and the Settings page) pick their colours separately.
 
+## Dave's feedback
+- **2026-10-11, the first build on his desktop** (both looks, the settings, 12.5 s a T): "Meander is looking great, we just need to keep improving the smoothness of it and add the rest of those features mentioned above". The features he means are the ones listed to him as still to build: a Light Mode relief, Amethyst and more single inks, a swatch grid for the colours where there are two menus, and the shared grade sliders.
+  - **"Smoothness" is read two ways until he says otherwise,** motion first: the river steps ten or twenty times a second while the screen draws sixty, so banks move in small jumps and hold still between; and the rough spots left from the build (the jog and spur at a cutoff, blocky patches of launch-made ground at the valley walls, old lakes' light middles and dull rims).
+
 ## The plan
 One file, `Sources/Atrium/Meander.swift`: a `River` type with no SpriteKit in it (nodes, step, cutoff, fields, pixel bytes), the scene, its shader, knobs and palettes. Everything built in `sceneDidLoad`; steps owed at 10 a second in `update(_:)`; the texture uploaded only when a step ran.
 1. **The look first, in the prototype.** Four rounds are done (above): the lakes, the banks and the cheap distant past are in, and two films at two paces are made. Left for Dave: the pace, the old map's colour rule, and whether the distant past is worth its time at launch. Left in the prototype: relief toward the reference (levees, bars and islands). No Swift before he has seen it move: it is the Crystals risk.
