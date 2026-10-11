@@ -582,7 +582,7 @@ final class BlackHole: SKScene {
         float toNearest = mix(before, after, column - entry);
         // How much further round a ray one pixel over goes, in radians. Toward the shadow's edge it grows without
         // end, and with every half-turn more comes another, thinner image of the disc.
-        // (fwidth is the only slope SKShader has, the sum across and up: 4/π too much on average, taken off here.)
+        // (fwidth is the sum of the slopes across and up: 4/π too much on average, taken off here.)
         float crowding = 2.0 * abs(after - before) * fwidth(column) * 0.785;
         float furthest = (1.0 + e2) / (1.0 / 3.0 + 2.0 * e2 * sqrt(e2));
         // The disc's plane cuts the ray's plane along a line this far round from the camera.
