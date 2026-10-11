@@ -96,8 +96,10 @@ public final class River {
     static let touching: Float = 1.04
     /// Valley out of sight beyond each end of the screen, in widths.
     static let margin: Float = 10
-    /// A lake's life, and how long the ground remembers the river, in T.
-    public static let lakeLife = 16.0, memory = 600.0
+    /// How long the ground remembers the river, in T.
+    public static let memory = 600.0
+    /// A lake's life, in T: over its second half it narrows to nothing. A setting, so it can change as the river runs.
+    public var lakeLife = 16.0
     /// A stamp for ground the river has never covered.
     static let never: Float = -1e9
     /// A lake is drawn again once a front of its has moved this far since it last was, in texels.
@@ -632,7 +634,7 @@ public final class River {
             arcs.append(arc)
         }
         func silted(_ from: Float, _ since: Double) -> Float { smoothstep(0, 1, (from - Lake.front(Float(now - since))) / 2 + 1) }
-        let body = 1 - smoothstep(Float(0.5 * Self.lakeLife), Float(Self.lakeLife), Float(now - lake.born))
+        let body = 1 - smoothstep(Float(0.5 * lakeLife), Float(lakeLife), Float(now - lake.born))
         for (i, node) in lake.nodes.enumerated() {
             let share = body * silted(arcs[i], lake.first) * silted(arc - arcs[i], lake.last)
             path.append([node.x, node.y, node.z * share - 0.15 * (1 - share)])
@@ -659,7 +661,7 @@ public final class River {
         var at = 0
         while at < lakes.count {
             let lake = lakes[at], n = lake.nodes.count
-            if now - lake.born > Self.lakeLife {
+            if now - lake.born > lakeLife {
                 drop(at)
                 continue
             }
@@ -997,7 +999,7 @@ public final class River {
             migrate(0.04)
             while k % 2 == 0, let neck = neck() { // an older lake is dry by the end
                 sweep(loop: neck.lo + nodes.count - 1..<neck.hi + nodes.count + 1)
-                strand(cut(neck.lo, neck.hi), lake: Double(steps - k) * 0.04 < Self.lakeLife, stamping: true)
+                strand(cut(neck.lo, neck.hi), lake: Double(steps - k) * 0.04 < lakeLife, stamping: true)
                 markNeck()
             }
             if k % 2 == 0 { respace() }

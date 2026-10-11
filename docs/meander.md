@@ -373,9 +373,42 @@ Still wrong or not known after this step:
 - Nothing has been left running overnight.
 
 ### Step 4: settings (2026-10-11)
-First, one thing left from step 3.
+Meander has a Settings page (`Meander.knobs`, on its entry in `Scenes.swift`). It is still flagged `unfinished`.
+
+| Section | Row | What it is | Standard |
+|---|---|---|---|
+| Look | Look | Relief or Old map | Relief |
+| Look | Colors | relief's: Random, Survey Blue, Rainforest, Garnet. Shown for relief | Random |
+| Look | Colors | the old map's: Random, Fisk 1944, Sage. Shown for the old map | Random |
+| Look | Inks | Fixed to the land, or In Fisk's order. Shown for the old map | Fixed to the land |
+| Look | Scroll bars | their strength, 0 to 2×. Shown for relief | 1× |
+| River | River size | the channel's width, 28 to 56 pt | 28 pt |
+| River | Speed | 0.25 to 4× | 1× |
+| River | Old courses stay | 30 to 250 min, at speed 1 | 250 min (600 T, all the ground remembers) |
+| River | Lakes last | 2 to 20 min, at speed 1 | 6.7 min (16 T) |
+
+How the scene follows them (`settingsChanged`):
+- **The look, its colours and the map's rule change at once, on the same river:** the ground is given a new shader (`dress`), nothing else is touched, so two looks can be compared on one river as it runs. The old map takes its Light or Dark sheet from the system, as before.
+- **Random picks one colourway for each look when the scene is built,** and holds to it for the scene's life.
+- **The sliders are followed as they move** (`tune`): scroll bars, how long old courses stay and how long lakes last go to the shader in one uniform, and a lake's life to the river.
+- **A new size of river is a new river.** Once the slider has rested for 0.3 s the scene hands over to a new one built to it, with a 0.8 s dissolve, as Fish Tank does for its lighting. The ground keeps 14 texels to a width, so a 56 pt river has a quarter of the texels and costs less: the render test's CPU falls from 0.9 to 0.7 ms a frame. The shaders are told how many texels a point of the screen is: lines and the paper's grain keep their size, and the mottling is laid out in points.
+- **Old courses stay** is the age at which ground turns to the rough ground of nowhere (relief) or bare paper (the old map), and what the river made there fades out with it. It is in the river's own time, so at Speed 4× the same setting is a quarter as long by the clock; the row says minutes, which is only true at 1×. On a fresh launch little ground is over 100 T old (the river reworks its belt fast), so settings above about 40 minutes change little for the first hour.
 
 **The old map's inks are mixed across a stage's edge,** over one pixel, under the line that is drawn there. A spot on such an edge could turn from one ink to the other on the last bits of its age, which is what moved half a dozen pixels by up to 15 levels when the stamps' base moved (step 3). Now a move of the base changes 397 pixels of 1,484,784 in relief, 344 in the old map and 138 in Fisk's order, every one by a single level; the test holds it to 2. (Snapping the edge to the stamp's own steps would not have done it: between texels the age is smooth, not in steps, and any hard edge on a smooth number can flip on its last bits.)
+
+Sage came for nearly nothing: a sheet of two inks takes them in turn where Fisk's takes four. Checked by eye in both rules and in Dark Mode.
+
+Cost with the settings in, a 14" screen at 2x, medians as in step 2: relief 0.92 ms of GPU on an ordinary frame and 1.00 on a step frame; the old map 0.56 and 0.64; Fisk's order 0.64 and 0.74 (it mixes three stages' tints now, not two). CPU as before: 0.47 ms an ordinary frame, 1.3 to 1.35 a step frame.
+
+Tests: `meanderDrawsEveryLook` draws every colourway of both looks, the map's in Light and in Dark Mode and both rules; `meanderFollowsItsSettings` checks that the rows hang together (a row shown for one look hangs on a pick the Look menu has, a menu's range is its list) and that a running scene follows each setting: the look and colours on the same river, a new size by handing over.
+
+Not done, or not known:
+- **The Settings page itself has not been seen.** The test that opens it (`SETTINGS_SHOT`) puts a window on the screen, which this build was told not to do. The rows are plain `Knob`s of kinds other pages already use.
+- **Colours are menus, not the swatch grid** other wallpapers have: a wallpaper has one `PaletteChoice`, and this one needs a list for each look. The rows that belong to one look show while the Look menu is at it (`shownWhen` with `shownAt`, which came with the train).
+- **No relief for Light Mode,** no Amethyst, and of the single inks only Sage (Salmon and Teal have no dark sheet measured).
+- **No shared grade sliders** (brightness, contrast, saturation, hue).
+- **No screenshot:** `Resources/preview-meander.jpg` and `docs/images` have none, so its Settings page is blank behind the header until the live copy has built. No README entry, nothing on the site.
+- With Random, two displays (or the desktop and the Settings page) pick their colours separately.
 
 ## The plan
 One file, `Sources/Atrium/Meander.swift`: a `River` type with no SpriteKit in it (nodes, step, cutoff, fields, pixel bytes), the scene, its shader, knobs and palettes. Everything built in `sceneDidLoad`; steps owed at 10 a second in `update(_:)`; the texture uploaded only when a step ran.
@@ -383,7 +416,7 @@ One file, `Sources/Atrium/Meander.swift`: a `River` type with no SpriteKit in it
 2. **`River`** (done: [step 1](#step-1-the-river-2026-10-11)) ported from `meander.py`, written to allocate nothing per step and with the respacing capped at four passes, and its launch timed first (the sketch took 0.3–0.4 s: too slow for the main thread at every load), with its check: 6,000 coarse steps must cut off loops, never cross and stay in the valley; stepping by 1/15, 1/30 and 1/60 s for the same elapsed time must give identical nodes.
 3. **The texture and shader** (done: [step 2](#step-2-the-texture-and-the-shader-2026-10-11)), matched to `render.py`'s stills. Finds out the unknowns: the alpha byte carrying data, a second dependent read, the uniform count, the upload's cost.
 4. **Motion** (done: [step 3](#step-3-motion-2026-10-11)), in frame strips through a cutoff: no frame with more than about 0.3% of pixels changing over 20 levels.
-5. **Settings:** Look (Relief, Old map); Colors, a list per look (relief: Survey Blue, Rainforest, Garnet, Amethyst; old map: Fisk 1944, Sage, Salmon, Teal, each with a dark version), Random by default; Speed (0.25–4×); River size (the slider Dave picked, from 28 pt to about 56 pt: a rebuild, keeping 14 texels a width so the cost stays the same); how long old courses stay; scroll-bar strength; how long lakes last; the shared grade knobs.
+5. **Settings** (done, less what [step 4](#step-4-settings-2026-10-11) lists as missing): Look (Relief, Old map); Colors, a list per look (relief: Survey Blue, Rainforest, Garnet, Amethyst; old map: Fisk 1944, Sage, Salmon, Teal, each with a dark version), Random by default; Speed (0.25–4×); River size (the slider Dave picked, from 28 pt to about 56 pt: a rebuild, keeping 14 texels a width so the cost stays the same); how long old courses stay; scroll-bar strength; how long lakes last; the shared grade knobs.
 6. Left overnight: no drift in pace, no banding from rebasing. Then the doc, screenshots, README, site.
 
 Still Dave's to decide: the pace (from the two films), the old map's colour rule, and the distant past.

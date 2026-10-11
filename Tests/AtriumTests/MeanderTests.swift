@@ -228,6 +228,12 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
     CGImageDestinationFinalize(to)
 }
 
+/// Settings for a river and a picture the tests can make twice: its seed, and its colours, which Settings would
+/// otherwise pick at random for each scene (Survey Blue and Fisk 1944 here), with any others on top.
+private func seeded(_ seed: Double, _ others: [String: Double] = [:]) -> [String: Double] {
+    ["meander.seed": seed, "meander.relief": 1, "meander.sheet": 1].merging(others) { $1 }
+}
+
 /// With Settings values for the length of `body`, as the render test sets them.
 @MainActor private func with(_ settings: [String: Double], _ body: () throws -> Void) rethrows {
     defer { settings.keys.forEach(UserDefaults.standard.removeObject) }
@@ -271,18 +277,63 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
 }
 
 /// Each look is a shader of its own, put together as text that only the GPU's compiler ever checks. All three draw
-/// a picture, and not the same one: relief, the old map with each stage's ink fixed to its land, and in Fisk's order.
+/// a picture, and not the same one: relief, the old map with each stage's ink fixed to its land, and in Fisk's
+/// order. So does every colourway in Settings' menus, relief's and the map's, the map's in Light Mode and in Dark.
 @MainActor @Test func meanderDrawsEveryLook() throws {
     var pictures: [[SIMD4<UInt8>]] = []
-    for look: [String: Double] in [[:], ["meander.look": 1], ["meander.look": 1, "meander.rule": 1]] {
-        try with(look.merging(["meander.seed": 7]) { $1 }) {
+    func draw(_ settings: [String: Double]) throws {
+        try with(seeded(7, settings)) {
             let screen = try Offscreen(Meander(size: CGSize(width: 756, height: 491)), 756, 491)
             for _ in 0..<2 { try screen.frame() }
             pictures.append(screen.pixels)
         }
-        #expect(Set(stride(from: 0, to: pictures.last!.count, by: 97).map { pictures.last![$0] }).count > 20, "the look \(look) drew a flat picture")
+        #expect(Set(stride(from: 0, to: pictures.last!.count, by: 97).map { pictures.last![$0] }).count > 20, "\(settings) drew a flat picture")
     }
+    for look: [String: Double] in [[:], ["meander.look": 1], ["meander.look": 1, "meander.rule": 1]] { try draw(look) }
     #expect(pictures[0] != pictures[1] && pictures[1] != pictures[2])
+    let before = NSApplication.shared.appearance
+    defer { NSApplication.shared.appearance = before }
+    for relief in 1...Meander.reliefs.count { try draw(["meander.relief": Double(relief)]) }
+    for name in [NSAppearance.Name.aqua, .darkAqua] {
+        NSApplication.shared.appearance = NSAppearance(named: name)
+        for sheet in 1...Meander.maps.count { for rule in 0...1 { try draw(["meander.look": 1, "meander.sheet": Double(sheet), "meander.rule": Double(rule)]) } }
+    }
+    #expect(Set(pictures.dropFirst(3).map { $0[$0.count / 2 + 378] }).count > 6) // the colourways differ, by the pixel in the middle
+}
+
+/// Meander's settings hang together: a row that shows for one look hangs on a pick the Look menu has, and a menu's
+/// range is its list. And the scene follows them as it runs: a new look or new colours at once, on the same river; a new
+/// size of river by handing over to a new scene (which it does once the slider has rested; here it is told to at
+/// once, so that no other test runs while these settings are held).
+@MainActor @Test func meanderFollowsItsSettings() throws {
+    for knob in Meander.knobs {
+        if let gate = knob.shownWhen {
+            let menu = Meander.knobs.first { $0.key == gate }, pick = knob.shownAt ?? -1
+            #expect(menu?.range.contains(pick) == true && pick == pick.rounded(), "\(knob.key) hangs on \(gate) at \(pick)")
+        }
+        if case .choice(let names) = knob.format { #expect(knob.range == 0...Double(names.count - 1), "\(knob.key)'s menu") }
+        #expect(knob.range.contains(knob.standard))
+    }
+    let keys = Meander.knobs.map(\.key) + ["meander.seed"]
+    defer { keys.forEach(UserDefaults.standard.removeObject) }
+    for (key, value) in seeded(7) { UserDefaults.standard.set(value, forKey: key) }
+    let view = WallpaperView(frame: CGRect(x: 0, y: 0, width: 378, height: 245)), scene = Meander(size: view.frame.size)
+    view.presentScene(scene)
+    let screen = try Offscreen(scene, 756, 490), river = scene.river!
+    for _ in 0..<2 { try screen.frame() }
+    var pictures = [screen.pixels]
+    for (key, value) in [("meander.look", 1.0), ("meander.rule", 1.0), ("meander.sheet", 2.0), ("meander.look", 0.0), ("meander.relief", 3.0), ("meander.scroll", 0.0), ("meander.memory", 30.0)] {
+        UserDefaults.standard.set(value, forKey: key)
+        for _ in 0..<2 { try screen.frame(rate: 1e9) } // the new shader's first frame, and no time gone by
+        pictures.append(screen.pixels)
+        #expect(pictures.last! != pictures[pictures.count - 2], "nothing changed when \(key) became \(value)")
+    }
+    #expect(scene.river === river && view.scene === scene)
+    UserDefaults.standard.set(56.0, forKey: "meander.size")
+    #expect(view.scene === scene) // not while the slider may still be moving
+    scene.handOver()
+    let next = try #require(view.scene as? Meander)
+    #expect(next !== scene && abs(next.river.columns * 2 - river.columns) <= 1, "\(next.river.columns) columns after \(river.columns)")
 }
 
 /// What Meander costs a frame on a 14" MacBook Pro's screen at 60 frames a second, for docs/meander.md: a frame the
@@ -291,7 +342,7 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
 @MainActor @Test func meanderFrameCosts() throws {
     func middle(_ times: [Double]) -> Double { times.sorted()[times.count / 2] }
     for (name, look): (String, [String: Double]) in [("relief", [:]), ("old map", ["meander.look": 1]), ("old map in Fisk's order", ["meander.look": 1, "meander.rule": 1])] {
-        try with(look.merging(["meander.seed": 13]) { $1 }) {
+        try with(seeded(13, look)) {
             let scene = Meander(size: CGSize(width: 1512, height: 982)), screen = try Offscreen(scene, 3024, 1964)
             for _ in 0..<60 { try screen.frame(rate: 60) }
             var costs: [Bool: [(update: Double, draw: Double, gpu: Double)]] = [true: [], false: []]
@@ -319,11 +370,11 @@ private struct Happening {
 }
 
 /// How much of its width a lake still has at each node, from 1 to none, by the rule it silts up by (`River.trace`).
-private func wetness(_ lake: River.Lake, at now: Double) -> [Float] {
+private func wetness(_ lake: River.Lake, at now: Double, life: Double) -> [Float] {
     var arcs: [Float] = [0]
     for (a, b) in zip(lake.nodes, lake.nodes.dropFirst()) { arcs.append(arcs.last! + hypot(b.x - a.x, b.y - a.y)) }
     func smooth(_ x: Float) -> Float { let t = min(max(x, 0), 1); return t * t * (3 - 2 * t) }
-    let body = 1 - smooth(Float(now - lake.born - 0.5 * River.lakeLife) / Float(0.5 * River.lakeLife))
+    let body = 1 - smooth(Float(now - lake.born - 0.5 * life) / Float(0.5 * life))
     return arcs.map { body * smooth(($0 - River.Lake.front(Float(now - lake.first))) / 2 + 1) * smooth((arcs.last! - $0 - River.Lake.front(Float(now - lake.last))) / 2 + 1) }
 }
 
@@ -355,7 +406,7 @@ private func wetness(_ lake: River.Lake, at now: Double) -> [Float] {
                 let already = joints(lakes)
                 if let joint = joints(river.lakes).first(where: { new in !already.contains { same($0, new) } }),
                    let whole = lakes.first(where: { now - $0.born > 2 && $0.nodes.contains { same($0, joint) } }),
-                   wetness(whole, at: now)[whole.nodes.firstIndex { same($0, joint) }!] > 0.5, let at = onScreen(joint, inside: 8) {
+                   wetness(whole, at: now, life: river.lakeLife)[whole.nodes.firstIndex { same($0, joint) }!] > 0.5, let at = onScreen(joint, inside: 8) {
                     found.append(Happening(cutoff: false, frame: frame, at: at, update: update))
                 }
             } else if river.now != now, river.cutoffs == cutoffs, river.trims == trims {
@@ -405,7 +456,7 @@ private func wetness(_ lake: River.Lake, at now: Double) -> [Float] {
     if folder != nil { looks.append(("old map in Fisk's order", ["meander.look": 1, "meander.rule": 1])) }
     for seed in folder == nil ? [7.0] : [7.0, 13.0] {
         for rate in folder == nil ? [15.0] : [15.0, 30.0] {
-            let (found, plain) = try happenings(["meander.seed": seed], rate: rate, within: seed == 7 ? 60 : 600)
+            let (found, plain) = try happenings(seeded(seed), rate: rate, within: seed == 7 ? 60 : 600)
             #expect(found.count == 2, "at \(rate) frames a second river \(seed) had \(found.count) of a cutoff and a re-crossing to look at")
             for happening in found {
                 let kind = happening.cutoff ? "a cutoff" : "a re-crossing"
@@ -414,7 +465,7 @@ private func wetness(_ lake: River.Lake, at now: Double) -> [Float] {
                                  seed, rate, kind, Double(happening.frame) / rate, happening.at.x, happening.at.y, happening.update, plain.sorted()[plain.count / 2], plain.count))
                 }
                 for look in looks {
-                    let worst = try pop(look.settings.merging(["meander.seed": seed]) { $1 }, rate: rate, at: happening, saveTo: folder,
+                    let worst = try pop(seeded(seed, look.settings), rate: rate, at: happening, saveTo: folder,
                                         named: "\(kind.dropFirst(2))-\(Int(seed))-\(look.name.replacingOccurrences(of: " ", with: "-"))-\(Int(rate))fps")
                     print(String(format: "Meander %.0f at %.0f fps, %@, %@: at most %.3f%% of the window changes by over 20 levels, on frame %+d", seed, rate, kind, look.name, 100 * worst.share, worst.frame))
                     #expect(worst.share < 0.003, "\(kind) in \(look.name) at \(rate) fps, river \(seed)")
@@ -429,7 +480,7 @@ private func wetness(_ lake: River.Lake, at now: Double) -> [Float] {
 /// nothing but what the river has done.)
 @MainActor @Test func meanderLooksTheSameAtAnyFrameRate() throws {
     for look: [String: Double] in [[:], ["meander.look": 1]] {
-        try with(look.merging(["meander.seed": 7]) { $1 }) {
+        try with(seeded(7, look)) {
             var pictures: [[SIMD4<UInt8>]] = [], times: [Double] = []
             for rate in [15.0, 30.0, 60.0] {
                 let scene = Meander(size: CGSize(width: 756, height: 491)), screen = try Offscreen(scene, 1512, 982)
@@ -454,7 +505,7 @@ private func wetness(_ lake: River.Lake, at now: Double) -> [Float] {
 /// half a dozen pixels on such an edge turned from one ink to the other, by up to 15 levels.
 @MainActor @Test func meanderShowsNothingWhenItsStampsMoveUp() throws {
     for look: [String: Double] in [[:], ["meander.look": 1], ["meander.look": 1, "meander.rule": 1]] {
-        try with(look.merging(["meander.seed": 7, "meander.speed": 4]) { $1 }) {
+        try with(seeded(7, look.merging(["meander.speed": 4]) { $1 })) {
             let scene = Meander(size: CGSize(width: 504, height: 328)), screen = try Offscreen(scene, 1008, 656), river = scene.river! // a small screen, to get there quickly
             while river.now - river.base < River.memory + 5 + River.turn + 0.5 { screen.advance(rate: 10) }
             for _ in 0..<2 { try screen.frame(rate: 1e6) } // twice for the shader's sake, with no time gone by
@@ -479,7 +530,7 @@ private func wetness(_ lake: River.Lake, at now: Double) -> [Float] {
 @MainActor @Test func meanderFilm() throws {
     guard let folder = ProcessInfo.processInfo.environment["MEANDER_FILM"].map({ URL(fileURLWithPath: $0) }) else { return }
     for (name, look): (String, [String: Double]) in [("relief", [:]), ("old-map", ["meander.look": 1])] {
-        try with(look.merging(["meander.seed": 13]) { $1 }) {
+        try with(seeded(13, look)) {
             let scene = Meander(size: CGSize(width: 1512, height: 982)), screen = try Offscreen(scene, 3024, 1964), river = scene.river!
             var was: [SIMD2<Float>] = [], moved: [Float] = [], cuts: [Int] = [], lakes: [Int] = []
             for second in 0...(name == "relief" ? 1800 : 600) {
