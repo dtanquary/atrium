@@ -236,7 +236,7 @@ Also better: banks are smooth at Retina (every channel is drawn with one point a
 On a branch of its own (`meander`), by the agent that wrote the prototype, a step at a time: each is reviewed before the next.
 
 ### Step 1: the river (2026-10-11)
-`Sources/Atrium/Meander.swift` holds `River`, with no SpriteKit in it: the centreline, the cutoffs, the lakes, the ground's three fields and the four bytes a texel that a shader will read. There is no scene yet and no entry in `Scenes.swift`. Its checks are in `Tests/AtriumTests/MeanderTests.swift`.
+`Sources/MeanderRiver/River.swift` (in `Sources/Atrium/Meander.swift` until step 2 moved it) holds `River`, with no SpriteKit in it: the centreline, the cutoffs, the lakes, the ground's three fields and the four bytes a texel that a shader will read. There is no scene yet and no entry in `Scenes.swift`. Its checks are in `Tests/AtriumTests/MeanderTests.swift`.
 
 It is `proto/meander.py` with round 4's rules. Where it differs, and why:
 - **Banks.** The prototype added a point half-way along each segment, on the cubic through its neighbours, and drew straight pieces. `River` keeps the segments and bows each one to pass through that same middle point, so the distance routine runs once over half as many, longer segments, with its inner loop across the channel, where the bank distance changes by the same amount from texel to texel. Not yet compared with the prototype's banks pixel for pixel: that is step 2.
@@ -254,15 +254,18 @@ Measured, `swift test -c release -Xswiftc -enable-testing --filter river`, an M3
 - **The launch: 81 to 94 ms** over five seeds, where the sketch took 404 ms. Timed in parts (which adds a little): the distant past about 45 ms (moving the river 7, looking for necks 9–10, respacing 3, sweeps 16–18, cut-off loops 8–10), the recent past about 41 ms (moving 9, necks 12, respacing 3.5, sweeps 8–10, cut-off loops 6–9), the last exact update and writing every byte 3 ms. Keeping the recent past's ground exactly instead (the live routine every 12th step, 74 ms where the sweeps take 9) makes it 153 to 158 ms.
 - **A live step** with the ground and every lake redrawn: a median 1.0 ms with 9 lakes and 1.5 ms with 26; the slowest of 600 was 1.3 to 2.5 ms. That is the frame a step lands on, ten times a second, before the texture's upload.
 - **The first frame's ground:** 72–73% of the screen has a past, as the prototype's had.
-- In a debug build the launch takes 3.4 s, and the whole suite (71 tests then) passed in 159 s.
+- In a debug build the launch took 3.4 s (until step 2 gave the river its own module), and the whole suite (71 tests then) passed in 159 s.
 
 Still wrong or not known after this step:
 - **A step frame costs 1.0–1.5 ms** of CPU before SpriteKit's own and the upload, more than the plan's 0.6. Every lake is redrawn on every step; that is where to look first.
 - **Nothing has been drawn through a shader yet.** The texture has only been looked at as grey pictures of its bytes. Whether the sweep's stair-stepped scarps show, and whether the bowed banks match the prototype's, is for step 2. `age(exactEvery:)` keeps the exact way to compare with; one of the two goes after that.
 - About 0.4% of stamped texels are older than everything round them by more than 3 T: mostly slivers at the cusps where lobes meet, some of them real.
 - "Allocates nothing per step" is by reading the code (fixed buffers, lists with room for every texel), not measured. A cutoff and a trimmed lake do allocate.
-- **Debug builds:** 3.4 s to make a river's past, at every scene build in a debug `swift test`. `TreeGrowth` is a module of its own, always optimised, for this reason; `River` could be one too.
+- **Debug builds:** 3.4 s to make a river's past, at every scene build in a debug `swift test`. Fixed in step 2.
 - The distant past is still a busier river than the live one.
+
+### Step 2: the texture and the shader (2026-10-11)
+**The river has a module of its own,** `MeanderRiver` (`Sources/MeanderRiver/River.swift`), built with `-O` even in a debug build, as `TreeGrowth` is and for the same reason: a river's past is made on the main thread whenever its scene is built, and unoptimised that was 3.4 s at every scene build in a debug `swift test`. It is Foundation and simd only, with its own seeded generator and `smoothstep`, so the type and what the scene and the tests read of it are `public`. In a debug build the launch now takes **85 to 95 ms** over five seeds, the same as in release (84 to 95 ms in the same run), and the four river tests take 1.8 s where they took most of a minute. The root `CLAUDE.md`'s Layout section lists `TreeGrowth` and not yet this one.
 
 ## The plan
 One file, `Sources/Atrium/Meander.swift`: a `River` type with no SpriteKit in it (nodes, step, cutoff, fields, pixel bytes), the scene, its shader, knobs and palettes. Everything built in `sceneDidLoad`; steps owed at 10 a second in `update(_:)`; the texture uploaded only when a step ran.

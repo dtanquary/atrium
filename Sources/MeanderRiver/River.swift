@@ -1,6 +1,27 @@
 import Foundation
 import simd
 
+// Meander's river: a module of its own, built with -O even in a debug build, where its launch history would
+// otherwise take seconds at every scene build. Foundation and simd only.
+
+/// 0 below `edge0`, 1 above `edge1`, and a smooth S between.
+@inline(__always) private func smoothstep(_ edge0: Float, _ edge1: Float, _ x: Float) -> Float {
+    let t = min(max((x - edge0) / (edge1 - edge0), 0), 1)
+    return t * t * (3 - 2 * t)
+}
+
+/// A seeded generator (SplitMix64), so a seed gives the same river every time.
+private struct Seeded: RandomNumberGenerator {
+    var state: UInt64
+    mutating func next() -> UInt64 {
+        state &+= 0x9E37_79B9_7F4A_7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+        return z ^ (z >> 31)
+    }
+}
+
 /// Where the edge from `p` to `q` crosses the row at `y`, or not a number if it doesn't.
 @inline(__always) private func crossing(_ p: SIMD2<Float>, _ q: SIMD2<Float>, _ y: Float) -> Float {
     (p.y - y) * (q.y - y) <= 0 && p.y != q.y ? p.x + (y - p.y) / (q.y - p.y) * (q.x - p.x) : .nan
@@ -22,7 +43,7 @@ import simd
 /// of any old channel it lay in (the hollow), and the bank distance of the live channel and of any lake (the
 /// water). A bank distance is the distance to a channel's centreline, less half its width there, plus a half: so
 /// 0.5 is the bank and less is water. `pixels` holds what a shader reads.
-final class River {
+public final class River {
     /// A list of texels, as indexes into the ground. Room for every texel, so the loop that fills it never has to
     /// grow it.
     private struct Texels {
@@ -32,8 +53,8 @@ final class River {
 
     /// A node of the centreline: where it is and half the channel's width there. The rest is one step's working:
     /// the curvature at the node, the right-hand normal, and its part in the upstream average.
-    struct Node {
-        var x: Float, y: Float, half: Float
+    public struct Node {
+        public var x: Float, y: Float, half: Float
         var curl: Float = 0, nx: Float = 0, ny: Float = 0, carry: Float = 0, share: Float = 0
         /// Where its right and left banks were at the last `sweep`, while a past is being made.
         var right = SIMD2<Float>.zero, left = SIMD2<Float>.zero
@@ -48,9 +69,9 @@ final class River {
 
     /// A cut-off loop: its nodes (x, y, half-width) as they were, when it was cut off, and when its first and last
     /// node each became an end. It's drawn by the routine that draws the river, so its edges are as smooth.
-    struct Lake {
-        var nodes: [SIMD3<Float>]
-        var born: Double, first: Double, last: Double
+    public struct Lake {
+        public var nodes: [SIMD3<Float>]
+        public var born: Double, first: Double, last: Double
     }
 
     /// Howard & Knutson's Ω and Γ, and α in widths: the fastest-growing bend is 8.24/α long, 11.3 widths.
@@ -62,30 +83,30 @@ final class River {
     /// Valley out of sight beyond each end of the screen, in widths.
     static let margin: Float = 10
     /// A lake's life, and how long the ground remembers the river, in T.
-    static let lakeLife = 16.0, memory = 600.0
+    public static let lakeLife = 16.0, memory = 600.0
     /// A stamp for ground the river has never covered.
     static let never: Float = -1e9
 
     /// The screen in widths, and texels a width.
-    let across: Float, up: Float, texels: Float
+    public let across: Float, up: Float, texels: Float
     /// The ground's grid.
-    let columns: Int, rows: Int
-    var period: Float { across + 2 * Self.margin }
+    public let columns: Int, rows: Int
+    public var period: Float { across + 2 * Self.margin }
 
-    private(set) var nodes: [Node] = []
-    private(set) var lakes: [Lake] = []
+    public private(set) var nodes: [Node] = []
+    public private(set) var lakes: [Lake] = []
     /// The time in T, and what the stamps count from (see `rebase`).
-    private(set) var now = 0.0, base = 0.0
-    private(set) var cutoffs = 0
+    public private(set) var now = 0.0, base = 0.0
+    public private(set) var cutoffs = 0
     /// Nodes are kept 0.6 to 1.4 times this far apart.
     private var spacing: Float
 
     /// Per texel: the stamp (T since `base`), the hollow, the live channel's bank distance and the lakes'.
-    private(set) var ground: [SIMD4<Float>]
+    public private(set) var ground: [SIMD4<Float>]
     /// Four bytes a texel for a shader: the stamp in 16 bits at 0.01 T a level, then the water (the live channel or
     /// a lake, whichever is nearer; its bank at mid-range, two texels either side filling the byte), then the hollow
     /// over 0.25 to 1.
-    private(set) var pixels: [UInt8]
+    public private(set) var pixels: [UInt8]
 
     /// A bank distance for texels nowhere near a channel.
     private static let far: Float = 9
@@ -101,7 +122,7 @@ final class River {
     private var sweptAt: Float = 0
 
     /// A straight river with small wiggles, from which the bends grow, and the ground it will write on.
-    init(seed: UInt64, across: Float, up: Float, texels: Float, spacing: Float = 0.5) {
+    public init(seed: UInt64, across: Float, up: Float, texels: Float, spacing: Float = 0.5) {
         (self.across, self.up, self.texels, self.spacing) = (across, up, texels, spacing)
         columns = Int((across * texels).rounded())
         rows = Int((up * texels).rounded())
@@ -109,7 +130,7 @@ final class River {
         scratch = Array(repeating: .infinity, count: columns * rows)
         pixels = Array(repeating: 255, count: columns * rows * 4)
         (touched, before, lakeTouched, lakeBefore) = (Texels(room: columns * rows), Texels(room: columns * rows), Texels(room: columns * rows), Texels(room: columns * rows))
-        var rng = SplitMix(state: seed)
+        var rng = Seeded(state: seed)
         func unit() -> Float { Float.random(in: 0..<1, using: &rng) }
         func normal() -> Float { (unit() + unit() + unit() + unit() - 2) * 1.732 } // near enough a bell curve
 
@@ -668,7 +689,7 @@ final class River {
     /// Moves the river on by `seconds` of wallpaper time. At speed 1 a T takes 25 seconds. It steps ten times a
     /// second (twenty above speed 2, so a step stays under a pixel), counted from the time gone by, so the river is
     /// the same whatever the frame rate. Returns whether it stepped: only then have `pixels` changed.
-    @discardableResult func advance(_ seconds: Double, speed: Double = 1) -> Bool {
+    @discardableResult public func advance(_ seconds: Double, speed: Double = 1) -> Bool {
         let rate = speed > 2 ? 20.0 : 10.0
         owed += seconds * rate
         var stepped = false
@@ -686,7 +707,7 @@ final class River {
     /// Then the recent past as the live river runs, in coarse steps. Necks are looked for and nodes respaced every
     /// other step. The ground is kept by `sweep`; or, with `exactEvery`, the recent past's by `updateGround` every
     /// so many steps, which is smoother at the scarps and costs half as much again.
-    func age(distant: Double = 240, recent: Double = 60, exactEvery: Int = 0) {
+    public func age(distant: Double = 240, recent: Double = 60, exactEvery: Int = 0) {
         let end = now + distant + recent
         if distant > 0 {
             let fresh = spacing
@@ -739,7 +760,7 @@ final class River {
     }
 
     /// The river's length over the valley's.
-    var sinuosity: Float {
+    public var sinuosity: Float {
         nodes.indices.reduce(0) { sum, i in
             let q = (i + 1) % nodes.count
             return sum + hypot(nodes[q].x + (q == 0 ? period : 0) - nodes[i].x, nodes[q].y - nodes[i].y)

@@ -1,7 +1,7 @@
 import Foundation
+import MeanderRiver
 import Testing
 import simd
-@testable import Atrium
 
 /// How many times a river's centreline crosses itself, every segment against every other but its neighbours.
 private func crossings(_ river: River) -> Int {
@@ -64,18 +64,15 @@ private func crossings(_ river: River) -> Int {
 
 /// A new river's past: by the first frame the ground has been worked edge to edge of the belt, the river and its
 /// lakes are drawn as water, and hollows mark old channels. And how long that takes, which every load, shuffle and
-/// Settings page waits for on the main thread, and what a live step costs after it: timed in an optimised build only.
+/// Settings page waits for on the main thread, and what a live step costs after it. (The river's module is built
+/// optimised even in a debug build, so the times mean the same in both.)
 @Test func riverGetsAPastQuickly() {
     func milliseconds(_ body: () -> Void) -> Double {
         let start = DispatchTime.now().uptimeNanoseconds
         body()
         return Double(DispatchTime.now().uptimeNanoseconds - start) / 1e6
     }
-    #if DEBUG
-    let seeds: [UInt64] = [13]
-    #else
     let seeds: [UInt64] = [11, 12, 13, 14, 15, 13] // the last one is looked at below
-    #endif
     var river = River(seed: 1, across: 54, up: 35.07, texels: 14), times: [Double] = []
     for seed in seeds {
         river = River(seed: seed, across: 54, up: 35.07, texels: 14)
@@ -101,7 +98,6 @@ private func crossings(_ river: River) -> Int {
     if let folder = ProcessInfo.processInfo.environment["MEANDER_DUMP"] { // the texture's bytes, to look at
         try? Data(river.pixels).write(to: URL(fileURLWithPath: folder).appendingPathComponent("meander-\(river.columns)x\(river.rows).rgba"))
     }
-    #if !DEBUG
     #expect(times.min()! < 150, "the past took \(times) ms")
     // The recent past kept exactly instead, to compare; then a minute of live steps, ten a second
     let exact = River(seed: 13, across: 54, up: 35.07, texels: 14)
@@ -111,5 +107,4 @@ private func crossings(_ river: River) -> Int {
     steps.sort()
     print(String(format: "  a live step with the ground and %d lakes: median %.2f ms, slowest of 600 %.2f ms", river.lakes.count, steps[300], steps[599]))
     #expect(steps[300] < 2)
-    #endif
 }
