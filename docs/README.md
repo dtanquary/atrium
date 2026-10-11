@@ -38,6 +38,7 @@ One file per wallpaper, recording what the code can't: how each scene works, why
 ## Not a wallpaper
 - [app-store.md](app-store.md): the plan for the Mac App Store, what the sandboxed build did when tried, and the steps left.
 - [updates.md](updates.md): how the app updates itself by fetching only the files that changed, why it's built that way, what was measured and what isn't proven yet.
+- [ideas.md](ideas.md): wallpaper ideas not built yet, from the 2026-10-10 brainstorm: the two being researched, the parked ones, and the ones left out on purpose and why.
 
 ## Screenshots
 
