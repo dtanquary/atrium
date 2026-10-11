@@ -380,8 +380,8 @@ Meander has a Settings page (`Meander.knobs`, on its entry in `Scenes.swift`). I
 | Section | Row | What it is | Standard |
 |---|---|---|---|
 | Look | Look | Relief or Old map | Relief |
-| Look | (swatches) | relief's colours: Random, Survey Blue, Rainforest, Garnet. Shown for relief | Random |
-| Look | (swatches) | the old map's: Random, Fisk 1944, Sage. Shown for the old map | Random |
+| Look | (swatches) | relief's colours: Random, Survey Blue, Rainforest, Garnet, Amethyst. Shown for relief | Random |
+| Look | (swatches) | the old map's: Random, Fisk 1944, Sage, Salmon, Teal. Shown for the old map | Random |
 | Look | Inks | Fixed to the land, or In Fisk's order. Shown for the old map | Fixed to the land |
 | Look | Scroll bars | their strength, 0 to 2×. Shown for relief | 1× |
 | River | River size | the channel's width, 28 to 56 pt | 28 pt |
@@ -416,7 +416,7 @@ Tests: `meanderDrawsEveryLook` draws every colourway of both looks, the map's in
 Not done, or not known:
 - **The Settings page itself has not been seen.** The test that opens it (`SETTINGS_SHOT`) puts a window on the screen, which this build was told not to do. The rows are plain `Knob`s of kinds other pages already use.
 - **Colours were menus, not the swatch grid** other wallpapers have: a wallpaper has one `PaletteChoice`, and this one needs a list for each look. (Swatches since: "Colours as swatches", below.) The rows that belong to one look show while the Look menu is at it (`shownWhen` with `shownAt`, which came with the train).
-- **No relief for Light Mode,** no Amethyst, and of the single inks only Sage (Salmon and Teal have no dark sheet measured).
+- **No relief for Light Mode.** (Amethyst, Salmon and Teal came later: "More colours", below.)
 - **No shared grade sliders** (brightness, contrast, saturation, hue).
 - **No screenshot:** `Resources/preview-meander.jpg` and `docs/images` have none, so its Settings page is blank behind the header until the live copy has built. No README entry, nothing on the site.
 - With Random, two displays (or the desktop and the Settings page) pick their colours separately.
@@ -522,6 +522,25 @@ Not done, or not known:
 - Not seen on a real screen, nor in motion: stills only, at 1, 2, 3 and 4 s after three cutoffs.
 - Scarps between two old grounds are not touched, by the rule. They are drawn from mixed ages still, and where one side is very much older they are soft, not sharp.
 - The blocky patches at the valley walls and the jog at a cutoff (B) are in the ground itself and are as they were.
+
+### More colours (2026-10-11)
+Amethyst for relief, and Salmon and Teal for the old map, each a swatch under the Look menu. ([build-colours-relief.jpg](meander/build-colours-relief.jpg): Garnet beside Amethyst. [build-colours-maps.jpg](meander/build-colours-maps.jpg): Sage, Salmon and Teal, the Light sheets above the Dark, each stage's ink fixed to its land.)
+
+Where each number comes from:
+- **Measured:** Survey Blue (the Survey's relative elevation model of the Sauk), and the old map's Light sheet: Fisk's paper, his line ink and his four inks, from the legend of his plates. Salmon (215,114,97) and Teal (154,180,159) are two of those four, as Sage is a third.
+- **Made, not measured:** Amethyst, like Rainforest and Garnet, is Survey Blue's lightness in another hue ("Palettes proposed", above: the river, the ground and five ages; the colour of a bar at river level is put 0.65 of the way from the youngest land to the river, and the highest ground 0.66 of the way from the oldest to the ground the river never made, as the other three have them). The second shade of each single ink, a touch darker so that its stages still show (0.92 of the first on the Light sheet, 0.86 on the Dark). And every Dark sheet: Fisk drew none. Its ground, river and line are "Palettes proposed"'s, and its inks are his brought to one lightness, so that Sage (100,106,74), Salmon (163,87,74) and Teal (91,106,94) weigh the same on it.
+
+Seen in both rules, Light and Dark, river 13. Salmon is the loud one, most of all in Fisk's order, where the newest stages are solid ink: that is his salmon. Fisk 1944's own Dark sheet has a quieter one, (123,65,55), if it wants toning down.
+
+Tests: `meanderDrawsEveryLook` draws every swatch of both looks, the map's in both modes and both rules; `swatchesUnderAMenuHangTogether` checks the new ones have colours for both modes.
+
+### Still wrong, worst first (2026-10-11)
+What is known to be wrong with the picture as built, in one place.
+1. **The first second after a cutoff, in relief.** New land within a texel and a half of water is drawn the old way, so until the river has drawn two texels off the bank it was cutting, the scarp shows as a stepped band beside the water: there 0.8 s after the cutoff at 4×, gone by 1.6 s ("The scarp above new land"). What it would take: mix only the land's heights, leaving the water's share out, which is right at every bank the live river has made and is built (it is not in). But the launch's last step gives a texel beyond each bank the present time, to close a hairline its sweeps leave between their straight banks and the river's bowed ones, and with that mix every bank of the launch picture gets a light fringe. So the launch's last step has to stamp only the ground the river has really left, and then the launch picture's banks change by that much.
+2. **The jog and the spur at a cutoff:** the two ends the cut leaves in the river's bank, still there in the frames after it (how long they stand has not been timed).
+3. **Blocky patches at the valley walls,** made by the launch's sweeps where a bank swung round against the wall: outlines a texel to the step.
+4. **Old lakes:** a light middle and a dull rim in relief; in the old map a teardrop with a white crescent.
+5. **A lake in the second half of its life** narrows on every second or third step, under a quarter of a pixel a time.
 
 ## Dave's feedback
 - **2026-10-11, the first build on his desktop** (both looks, the settings, 12.5 s a T): "Meander is looking great, we just need to keep improving the smoothness of it and add the rest of those features mentioned above". The features he means are the ones listed to him as still to build: a Light Mode relief, Amethyst and more single inks, a swatch grid for the colours where there are two menus, and the shared grade sliders.

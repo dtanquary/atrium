@@ -54,6 +54,9 @@ final class Meander: SKScene {
         ("Garnet", tone(210, 187, 173), tone(143, 108, 101), tone(30, 9, 13),
          [(0, tone(186, 156, 145)), (0.10, tone(143, 108, 101)), (0.32, tone(112, 70, 71)), (0.52, tone(100, 54, 59)),
           (0.72, tone(92, 42, 51)), (0.90, tone(81, 25, 38)), (1, tone(48, 14, 21))]),
+        ("Amethyst", tone(217, 184, 172), tone(165, 100, 111), tone(25, 14, 28),
+         [(0, tone(199, 155, 151)), (0.10, tone(165, 100, 111)), (0.32, tone(115, 65, 96)), (0.52, tone(92, 51, 79)),
+          (0.72, tone(78, 44, 73)), (0.90, tone(58, 33, 63)), (1, tone(36, 20, 40))]),
     ]
 
     /// An old map's sheet: its paper, the river (bare paper, a touch lighter), its line ink and the four inks of
@@ -62,8 +65,10 @@ final class Meander: SKScene {
         var paper: SIMD3<Float>, river: SIMD3<Float>, line: SIMD3<Float>, inks: [SIMD3<Float>]
     }
 
-    /// The old map's colours, in Light and in Dark Mode. Fisk 1944 is measured from the legend of his plates:
-    /// sage, salmon, grey-teal and straw on cream, and a brown line ink, not black.
+    /// The old map's colours, in Light and in Dark Mode. Fisk 1944's Light sheet is measured from the legend of his
+    /// plates: sage, salmon, grey-teal and straw on cream, and a brown line ink, not black. Sage, Salmon and Teal are
+    /// one of those inks each, with a second shade a touch darker so that the stages still show. The Dark sheets are
+    /// not his: a dark ground, and his inks brought to one lightness on it (docs/meander.md, "Palettes proposed").
     nonisolated static let maps: [(name: String, light: Sheet, dark: Sheet)] = [
         ("Fisk 1944",
          Sheet(paper: tone(235, 224, 196), river: tone(244, 237, 216), line: tone(89, 75, 59),
@@ -74,6 +79,12 @@ final class Meander: SKScene {
         ("Sage",
          Sheet(paper: tone(235, 224, 196), river: tone(244, 237, 216), line: tone(89, 75, 59), inks: [tone(188, 199, 139), tone(172, 186, 124)]),
          Sheet(paper: tone(27, 24, 20), river: tone(166, 158, 138), line: tone(80, 76, 67), inks: [tone(100, 106, 74), tone(86, 92, 62)])),
+        ("Salmon",
+         Sheet(paper: tone(235, 224, 196), river: tone(244, 237, 216), line: tone(89, 75, 59), inks: [tone(215, 114, 97), tone(198, 105, 89)]),
+         Sheet(paper: tone(27, 24, 20), river: tone(166, 158, 138), line: tone(80, 76, 67), inks: [tone(163, 87, 74), tone(140, 75, 64)])),
+        ("Teal",
+         Sheet(paper: tone(235, 224, 196), river: tone(244, 237, 216), line: tone(89, 75, 59), inks: [tone(154, 180, 159), tone(142, 166, 146)]),
+         Sheet(paper: tone(27, 24, 20), river: tone(166, 158, 138), line: tone(80, 76, 67), inks: [tone(91, 106, 94), tone(78, 91, 81)])),
     ]
 
     /// Texels to a channel's width: at the smallest river a texel is 2 points.
