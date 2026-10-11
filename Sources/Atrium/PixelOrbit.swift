@@ -11,17 +11,34 @@ import SpriteKit
 /// Each pixel of the pane is given its strip and its place along it once, when the scene is built (`lay`), and a
 /// cell of ground is worked out once, as it slides into view (`advance`).
 final class PixelOrbit: SKScene {
-    nonisolated static let on = Knob(key: "seat.orbit", label: "Earth orbit", range: 0...1, standard: 0, section: "View", format: .toggle)
+    /// Whether Settings offers the train, which isn't ready to be seen: only with `unfinished` set, as for a wallpaper
+    /// hidden as unfinished (Scenes.swift). Without it the page and what it stores are as they were before the train.
+    nonisolated static let offersTrain = UserDefaults.standard.bool(forKey: "unfinished")
+    nonisolated static let on = picker(train: offersTrain)
     nonisolated static let array = Knob(key: "seat.array", label: "Seat", range: 0...1, standard: 0, section: "View",
-                                        format: .choice(["By the solar array", "Clear of it"]), shownWhen: "seat.orbit")
+                                        format: .choice(["By the solar array", "Clear of it"]), shownWhen: "seat.orbit", shownAt: 1)
     nonisolated static let looking = Knob(key: "seat.orbitLooking", label: "Looking", range: 0...4, standard: 0, section: "View",
                                           format: .choice(["Out the side", "Ahead", "Straight down", "Into the Cupola", "From the Cupola"]),
-                                          shownWhen: "seat.orbit")
+                                          shownWhen: "seat.orbit", shownAt: 1)
     nonisolated static let realClouds = Knob(key: "seat.realClouds", label: "Today's real clouds", range: 0...1, standard: 0,
-                                             section: "Flight", format: .toggle, shownWhen: "seat.orbit")
+                                             section: "Flight", format: .toggle, shownWhen: "seat.orbit", shownAt: 1)
     nonisolated static let follow = Knob(key: "seat.follow", label: "Follow the real ISS", range: 0...1, standard: 0,
-                                         section: "Flight", format: .toggle, shownWhen: "seat.orbit")
+                                         section: "Flight", format: .toggle, shownWhen: "seat.orbit", shownAt: 1)
     nonisolated static let knobs = [on, array, looking, realClouds, follow]
+
+    /// Which window this is: the Earth orbit switch, or with the train a menu of three under the switch's own key,
+    /// so that a stored 1 is still the station: 0 the airliner, 1 the space station, 2 the train.
+    // ponytail: with `unfinished` taken away again after the train was picked, the stored 2 reads as the switch on
+    // and flies the station with the station's own rows hidden, until the switch is next touched. The switch, and
+    // this, go when the train is shown to everyone.
+    nonisolated static func picker(train: Bool) -> Knob {
+        guard train else { return Knob(key: "seat.orbit", label: "Earth orbit", range: 0...1, standard: 0, section: "View", format: .toggle) }
+        return Knob(key: "seat.orbit", label: "Window on", range: 0...2, standard: 0, section: "View",
+                    format: .choice(["An airliner", "The space station", "A train"]), order: [0, 2, 1])
+    }
+
+    /// Settings' pick of window: 0 the airliner, 1 the space station, 2 the train.
+    nonisolated static var mode: Int { on.value > 1.5 ? 2 : on.value > 0.5 ? 1 : 0 }
 
     /// Where the station is and what moment it is there. Every copy of the scene shares it, as the airliner's
     /// copies share their flight, so each display's window looks out over the same ground.

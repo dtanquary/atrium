@@ -4,7 +4,7 @@ For work on the app's Swift code: how a wallpaper's settings are declared, addin
 
 ## A wallpaper's settings
 A wallpaper's settings are plain data on its `Wallpaper` entry in Scenes.swift:
-- `knobs`: sliders, switches with `format: .toggle`, or menus with `format: .choice([names])` (stored as the index), or multipliers with `format: .times`, grouped by `section`. A knob can depend on a switch with `shownWhen`, hide behind one with `hiddenWhen`, or (a slider) be held at its standard value by one with `lockedWhen`.
+- `knobs`: sliders, switches with `format: .toggle`, or menus with `format: .choice([names])` (stored as the index), or multipliers with `format: .times`, grouped by `section`. A knob can depend on a switch with `shownWhen`, hide behind one with `hiddenWhen`, or (a slider) be held at its standard value by one with `lockedWhen`. Where the knob it names is a menu and not a switch, `shownAt` and `hiddenAt` give the pick that counts as on (Pixel Window Seat's rows by which window it is), and `order` lists a menu's picks in another order than they are stored by.
 - `palettes`: a `PaletteChoice` of named swatches. The pick is stored by name, and an empty value means Random.
 - `status`: a UserDefaults key the scene keeps a line of text in (Weather's last live report), shown under a knob while that knob is 0.
 - `refresh`: a `Refresh` (Scenes.swift) for Refresh Now on its page: fetch its live data now, within the source's own cooldown. Open-Meteo counts every point in a request as a call, so shrink grids and fetch longer forecasts less often rather than polling faster.

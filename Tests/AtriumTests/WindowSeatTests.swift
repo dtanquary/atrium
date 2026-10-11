@@ -42,3 +42,39 @@ import Testing
         #expect(lit > 20 && lit < 900, "storm \(storm) is lit \(lit * 100 / 9000)% of the time")
     }
 }
+
+/// The rows Settings lists for a stored `seat.orbit`, by key, with every other switch as it comes.
+private func listed(_ knobs: [Knob], window: Double) -> [String] {
+    func held(_ key: String?) -> Double { key == PixelOrbit.on.key ? window : knobs.first { $0.key == key }?.standard ?? 0 }
+    return knobs.filter { $0.shows(gate: held($0.shownWhen), hide: held($0.hiddenWhen)) }.map(\.key)
+}
+
+/// Until the train is ready to be seen, the page is the one people have: the Earth orbit switch, and under it the
+/// airliner's rows or the station's. With `unfinished` set the switch is a menu of three under the same key, so a
+/// stored 1 is still the station, and the train lists the rows it shares with the airliner.
+@MainActor @Test func windowSeatOffersTheTrainOnlyUnfinished() {
+    let shipped = PixelWindowSeat.rows(train: false), offered = PixelWindowSeat.rows(train: true)
+    let airliner = ["seat.orbit", "seat.wing", "seat.window", "seat.looking", "seat.speed", "seat.scenery", "seat.clouds", "seat.lightning", "seat.previewTime"]
+    let station = ["seat.orbit", "seat.array", "seat.window", "seat.orbitLooking", "seat.speed", "seat.follow", "seat.clouds", "seat.realClouds", "seat.lightning"]
+    #expect(shipped[0].label == "Earth orbit" && shipped[0].format == .toggle && shipped[0].range == 0...1)
+    #expect(listed(shipped, window: 0) == airliner)
+    #expect(listed(shipped, window: 1) == station)
+    #expect(offered[0].format == .choice(["An airliner", "The space station", "A train"]) && offered[0].order == [0, 2, 1])
+    #expect(listed(offered, window: 0) == airliner)
+    #expect(listed(offered, window: 1) == station)
+    #expect(listed(offered, window: 2) == airliner.filter { $0 != "seat.wing" })
+    #expect(zip(shipped, offered).dropFirst().allSatisfy { $0.key == $1.key && $0.label == $1.label && $0.format == $1.format })
+
+    // What is stored: 1 is the station either way, and 2 the train only where the train is offered.
+    let key = PixelOrbit.on.key, size = CGSize(width: 1512, height: 982)
+    defer { UserDefaults.standard.removeObject(forKey: key) }
+    for (stored, switched, picked) in [(0.0, 0.0, 0.0), (1, 1, 1), (2, 1, 2)] {
+        UserDefaults.standard.set(stored, forKey: key)
+        #expect(shipped[0].value == switched && offered[0].value == picked)
+        #expect(pixelWindowSeat(size: size) is PixelOrbit == (PixelOrbit.mode == 1), "a stored \(stored) opened the wrong window")
+    }
+    UserDefaults.standard.set(1.0, forKey: key)
+    #expect(pixelWindowSeat(size: size) is PixelOrbit)
+    // The slider that Follow the real ISS holds is held only while the station is the window.
+    #expect(Knob.on(1, at: PixelOrbit.follow.shownAt) && !Knob.on(2, at: PixelOrbit.follow.shownAt) && !Knob.on(0, at: PixelOrbit.follow.shownAt))
+}

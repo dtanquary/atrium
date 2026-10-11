@@ -1,8 +1,8 @@
-# Pixel Window Seat: a train (planned, not built)
+# Pixel Window Seat: a train (being built, hidden)
 
 A third window for [Pixel Window Seat](../pixel-window-seat.md): a seat on a slow train, the country sliding past under the real Sun, Moon and stars for your clock and place, with rain on the glass when it rains where you are. It began as "Pixel Night Train" in the 2026-10-10 brainstorm ([ideas.md](../ideas.md)); Dave picked it as "an addition to pixel window seat, doesn't have to be its own wallpaper".
 
-That day two agents researched it (one read the code and worked the geometry, one measured real footage) and one round of mock-ups went to Dave. **Nothing is built.** This page is the plan, the findings and their sources. The two reports in full: [the engine](train-research-engine.md) and [the footage and scenery](train-research-footage.md). When it is built, it becomes a part of `pixel-window-seat.md`.
+That day two agents researched it (one read the code and worked the geometry, one measured real footage) and one round of mock-ups went to Dave. It is being built on the branch `night-train`, hidden from everyone until Dave has seen it move: [The build so far](#the-build-so-far) says what is in. This page is the plan, the findings and their sources. The two reports in full: [the engine](train-research-engine.md) and [the footage and scenery](train-research-footage.md). When it is built, it becomes a part of `pixel-window-seat.md`.
 
 ## Dave's decisions (2026-10-10)
 - **Where it lives:** inside Pixel Window Seat, not its own wallpaper.
@@ -50,6 +50,17 @@ A third scene, `PixelTrain` in `Sources/Atrium/PixelTrain.swift`, picked in `pix
 - **Doesn't carry over:** the airliner's flat-ground world, a map seen from above.
 - **Cost (estimated):** 1.0–1.4 ms of CPU a frame at Large, against the airliner's 0.77–1.18, since the near ground moves every frame. About 100 KB of rings. No data files.
 
+## The build so far
+Hidden: Settings offers the train only with `unfinished` set (`defaults write com.dtanquary.atrium unfinished -bool true`, then relaunch), the switch that shows a wallpaper hidden as unfinished. Without it the page, what it stores and every picture are as they were. In a test or a snapshot, which read their own defaults: `SNAPSHOT_DEFAULTS="unfinished=1,seat.orbit=2"`.
+
+### Step 1, the mode menu (2026-10-11)
+- **In:** `seat.orbit` keeps its key and now says which window: 0 the airliner, 1 the space station, 2 the train (`PixelOrbit.mode`). Without `unfinished` it is the Earth orbit switch it was. With it, it is a menu, "Window on: An airliner, A train, The space station", listed in that order and stored 0, 2, 1 (`Knob.order`), so a stored 1 is still the station.
+- **Gates on a menu's pick:** `Knob.shownAt` and `hiddenAt` (Settings.swift). The airliner's Seat shows at 0 and the orbit's five rows at 1; Looking, Scenery and the time preview hide at 1 only, so the train has them.
+- **The train's rows for now:** Window on, Window, Looking, Speed, Scenery, Clouds, Lightning, the time preview. Its own (the carriage, poles, rain) come with their steps.
+- **Checked by running:** `windowSeatOffersTheTrainOnlyUnfinished` (the switch's page lists the same rows as before for the airliner and the station; the menu's page lists each window's own; a stored 1 opens the station; the Speed slider is held by Follow the real ISS only at the station). The 25 pictures of `shots.sh` (the airliner's fourteen documented screenshots and one with the Medium window; the orbit's nine and one with no window) are the same files before and after, byte for byte, and two runs of one build are the same too. All 69 tests pass in a release build.
+- **Not checked:** the Settings window itself, which the test can only photograph by opening it on screen: `SETTINGS_SHOT="Pixel Window Seat" swift test --filter settingsWindow`, then with `SNAPSHOT_DEFAULTS="seat.orbit=1"`, and for the menu with `SNAPSHOT_DEFAULTS="unfinished=1,seat.orbit=2"`. The app was not run.
+- **Wrong, or a shortcut:** picking the train still flies the airliner, until step 3. If `unfinished` is taken away again after the train was picked, the stored 2 reads as the switch on and flies the station with the station's rows hidden, until the switch is touched (a `ponytail:` on `PixelOrbit.picker`).
+
 ## Research for the next mock-ups
 - **The window.** Real glass, width to height: a TGV bar car 1.94:1, a EuroNight sleeper 1.46:1, a British Mark 1 bay 1.2:1 with top-lights, an Amtrak Superliner coach 2.75:1, a Shinkansen N700 0.96:1 (520 × 500 mm: an airliner's window again). The mock-ups' pane is the airliner's, 1.54:1. A wide picture window (about 1.9:1) fills a 16:10 screen best.
 - **The eye:** about 2.5 m above the rail on a European intercity, 3.85 m upstairs in a Superliner; add 0.5–1 m of track bed.
@@ -88,6 +99,7 @@ In this folder, painted by `train.py` as geometry (the lens, the rings, the hash
 - `train-sheet2.png` (`python3 train.py 52000 sheet2`): a lake beside the line by day (D) and at night from the table (E), the pole line (F), rain at dusk (G). Its film, the lake, the poles and the rain side by side at 48 km/h: `python3 train_film2.py`.
 - In the mock-up the lake's ripples shimmer in place and don't slide (water has nothing in it to follow); the Sun's glitter is a path of dashes under it; each lamp on the far shore leaves a broken streak in the water. The rain is about 120 still beads, a light pixel over a dark one, kept faint so they don't read as stray white specks, and four threads 9° below level with water running along them.
 - `train_geometry.py` and `train_plan.py`: the arithmetic behind the tables above, by the engine research agent.
+- `shots.sh`: Pixel Window Seat's documented screenshots, the airliner's and the orbit's, rendered into a folder, for checking byte for byte that a step of the build left them alone.
 - Light at dusk and night is the ratio of the airliner's own ground at that hour to noon's, with the night lifted (×2.1 and a blue floor), so it is a guess at the engine's light, not the engine's.
 
 ## Sources

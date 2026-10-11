@@ -1,7 +1,8 @@
 import SpriteKit
 
 /// The airliner, or the space station while Settings' Earth orbit is on (PixelOrbit.swift).
-@MainActor func pixelWindowSeat(size: CGSize) -> SKScene { PixelOrbit.on.value > 0.5 ? PixelOrbit(size: size) : PixelWindowSeat(size: size) }
+// ponytail: the train (`PixelOrbit.mode` 2) is the airliner still, until its own scene is built.
+@MainActor func pixelWindowSeat(size: CGSize) -> SKScene { PixelOrbit.mode == 1 ? PixelOrbit(size: size) : PixelWindowSeat(size: size) }
 
 /// The view from a window seat of an airliner that never lands, in Pixel City's pixel art. Outside is an endless
 /// land made up as we go (`SeatWorld`): ocean, coast, city, farmland, mountains, desert and snow, under cloud that
@@ -11,29 +12,35 @@ import SpriteKit
 /// the cloud layer, a second set of strips nearer to us.
 final class PixelWindowSeat: SKScene {
     nonisolated static let seat = Knob(key: "seat.wing", label: "Seat", range: 0...1, standard: 0, section: "View",
-                                       format: .choice(["Over the wing", "Ahead of the wing"]), hiddenWhen: "seat.orbit")
+                                       format: .choice(["Over the wing", "Ahead of the wing"]), shownWhen: "seat.orbit", shownAt: 0)
     /// How much of the screen the window takes, or no window at all: the view alone, edge to edge.
     nonisolated static let window = Knob(key: "seat.window", label: "Window", range: 0...3, standard: 2, section: "View",
                                          format: .choice(["Small", "Medium", "Large", "None, just the view"]))
     nonisolated static let looking = Knob(key: "seat.looking", label: "Looking", range: 0...8, standard: 0, section: "View",
                                           format: .choice(["Toward the midday Sun", "North", "North-east", "East", "South-east", "South", "South-west", "West", "North-west"]),
-                                          hiddenWhen: "seat.orbit")
+                                          hiddenWhen: "seat.orbit", hiddenAt: 1)
     /// 1× is a real airliner, whose ground takes a minute and a half to cross the window.
     nonisolated static let speed = Knob(key: "seat.speed", label: "Speed", range: 0.5...10, standard: 1, section: "Flight", format: .times,
                                         lockedWhen: "seat.follow") // in orbit, following the real station means flying at its pace
     nonisolated static let scenery = Knob(key: "seat.scenery", label: "Scenery", range: 0...6, standard: 0, section: "Flight",
-                                          format: .choice(["Changing", "Ocean", "City", "Countryside", "Mountains", "Desert", "Snow"]), hiddenWhen: "seat.orbit")
+                                          format: .choice(["Changing", "Ocean", "City", "Countryside", "Mountains", "Desert", "Snow"]),
+                                          hiddenWhen: "seat.orbit", hiddenAt: 1)
     nonisolated static let clouds = Knob(key: "seat.clouds", label: "Clouds", range: 0...4, standard: 0, section: "Flight",
                                          format: .choice(["Changing", "Clear", "Scattered", "Broken", "Overcast"]))
     nonisolated static let lightning = Knob(key: "seat.lightning", label: "Lightning in far-off storms", range: 0...1, standard: 1,
                                             section: "Flight", format: .toggle)
     nonisolated static let previewTime = Knob(key: "seat.previewTime", label: "Preview a time of day", range: 0...1, standard: 0,
-                                              section: "Preview", format: .toggle, hiddenWhen: "seat.orbit")
+                                              section: "Preview", format: .toggle, hiddenWhen: "seat.orbit", hiddenAt: 1)
     nonisolated static let previewHour = Knob(key: "seat.previewHour", label: "Time", range: 0...24, standard: 19, section: "Preview",
-                                              format: .clock, shownWhen: "seat.previewTime", hiddenWhen: "seat.orbit")
+                                              format: .clock, shownWhen: "seat.previewTime", hiddenWhen: "seat.orbit", hiddenAt: 1)
     /// The airliner's settings and the orbit's (PixelOrbit.swift), each kind hidden while the other is flying.
-    nonisolated static let knobs = [PixelOrbit.on, seat, PixelOrbit.array, window, looking, PixelOrbit.looking, speed, PixelOrbit.follow, scenery,
-                                    clouds, PixelOrbit.realClouds, lightning, previewTime, previewHour]
+    nonisolated static let knobs = rows(train: PixelOrbit.offersTrain)
+
+    /// The page's rows, with the menu that offers the train or with the Earth orbit switch it had before.
+    nonisolated static func rows(train: Bool) -> [Knob] {
+        [PixelOrbit.picker(train: train), seat, PixelOrbit.array, window, looking, PixelOrbit.looking, speed, PixelOrbit.follow, scenery, clouds,
+         PixelOrbit.realClouds, lightning, previewTime, previewHour]
+    }
 
     /// How high we fly and where the cloud layer's base is, in km, and how fast, in km a second (Mach 0.78 or so).
     nonisolated static let cruise = 11.0, deck = 2.4, pace = 0.25
@@ -145,7 +152,7 @@ final class PixelWindowSeat: SKScene {
         let another = Int(Self.scenery.value) != world.scenery || Int(Self.clouds.value) != world.weather
         let resized = Int(Self.window.value) != windowSize // every buffer is the pane's size, so that takes a new scene
         settings = picked
-        let orbit = PixelOrbit.on.value > 0.5 // up to the space station, which is another scene altogether
+        let orbit = PixelOrbit.mode == 1 // up to the space station, which is another scene altogether
         guard !(resized || orbit) || view != nil else { return } // (with no view to hand over in, as in the tests, it stays as built)
         if another || resized || orbit, let view { // a different world or window: dissolve into a new scene with both still running, never a cut
             let fade = SKTransition.crossFade(withDuration: 0.8)

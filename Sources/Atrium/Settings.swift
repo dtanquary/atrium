@@ -15,10 +15,14 @@ struct Knob {
     /// The Settings section it's grouped under.
     var section = "Settings"
     var format = Format.number
-    /// Only shown while this toggle knob is on.
+    /// The order a menu lists its picks in, where that isn't the order they are stored by.
+    var order: [Int]?
+    /// Only shown while this toggle knob is on; or, where it names a menu, while that menu's pick is `shownAt`.
     var shownWhen: String?
-    /// Hidden while this toggle knob is on.
+    var shownAt: Double?
+    /// Hidden while this toggle knob is on; or, where it names a menu, while that menu's pick is `hiddenAt`.
     var hiddenWhen: String?
+    var hiddenAt: Double?
     /// A slider held at its standard value, greyed out, while this toggle knob is on (and showing, if it's gated itself).
     var lockedWhen: String?
 
@@ -27,6 +31,14 @@ struct Knob {
     var value: Double {
         guard let stored = KnobValues.read(key), !stored.isNaN else { return standard }
         return min(max(stored, range.lowerBound), range.upperBound)
+    }
+
+    /// Whether a knob that others depend on counts as on, holding `value`: a switch that is on, or a menu at `pick`.
+    static func on(_ value: Double, at pick: Double?) -> Bool { pick.map { value == $0 } ?? (value > 0.5) }
+
+    /// Whether Settings lists it, given what the knobs named by `shownWhen` and `hiddenWhen` hold.
+    func shows(gate: Double, hide: Double) -> Bool {
+        (shownWhen == nil || Self.on(gate, at: shownAt)) && (hiddenWhen == nil || !Self.on(hide, at: hiddenAt))
     }
 }
 
@@ -635,12 +647,12 @@ struct KnobRow: View {
     }
 
     var body: some View {
-        if (knob.shownWhen == nil || gate > 0.5) && (knob.hiddenWhen == nil || hide < 0.5) {
+        if knob.shows(gate: gate, hide: hide) {
             if knob.format == .toggle {
                 Toggle(knob.label, isOn: Binding(get: { value > 0.5 }, set: { value = $0 ? 1 : 0 }))
             } else if case .choice(let names) = knob.format {
                 Picker(knob.label, selection: Binding(get: { Int(value) }, set: { value = Double($0) })) {
-                    ForEach(names.indices, id: \.self) { Text(names[$0]).tag($0) }
+                    ForEach(knob.order ?? Array(names.indices), id: \.self) { Text(names[$0]).tag($0) }
                 }
             } else {
                 LabeledContent(knob.label) {
@@ -660,7 +672,7 @@ struct KnobRow: View {
     private static let day = { let f = DateFormatter(); f.setLocalizedDateFormatFromTemplate("MMMd"); f.timeZone = .gmt; return f }()
 
     /// Whether another switch is holding this slider at its standard value: the switch is on, and showing itself.
-    private var locked: Bool { locker != nil && lock > 0.5 && (locker?.shownWhen == nil || lockGate > 0.5) }
+    private var locked: Bool { locker != nil && lock > 0.5 && (locker?.shownWhen == nil || Knob.on(lockGate, at: locker?.shownAt)) }
 
     private var formatted: String {
         let value = locked ? knob.standard : value
