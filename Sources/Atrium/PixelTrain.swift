@@ -10,6 +10,11 @@ import SpriteKit
 /// airliner's rows do; under them the ground is drawn a row at a time. It is painted far to near, the near over
 /// the far.
 final class PixelTrain: SKScene {
+    nonisolated static let poles = Knob(key: "seat.poles", label: "Poles and wires beside the line", range: 0...1, standard: 1, section: "Flight",
+                                        format: .toggle, shownWhen: "seat.orbit", shownAt: 2)
+    /// The train's own settings, listed among the airliner's (`PixelWindowSeat.rows`) while the train is offered.
+    nonisolated static let knobs = [poles]
+
     /// 1× on Settings' Speed, in metres a second: 48 km/h, a slow scenic train.
     nonisolated static let pace = 48 / 3.6
     /// How high the eye is above the ground, in metres, and how far up the pane the horizon lies.
@@ -29,6 +34,7 @@ final class PixelTrain: SKScene {
     private var sky: [UInt32] = [], picture: [UInt32]
     private var ringColours: [UInt32] = [], groundColours: [UInt32] = [] // the colours of the moment, ready to copy
     private var lamp: UInt32 = 0, lights: UInt8 = 0 // a lamp's colour, and how far the evening has got: each comes on at its own draw
+    private var strung = false, pole: UInt32 = 0, wire: UInt32 = 0 // whether the pole line shows, and its colours
     private let texture: SKMutableTexture
     private let canvas = SKNode(), outside = SKSpriteNode(), cabin = SKSpriteNode()
 
@@ -75,7 +81,7 @@ final class PixelTrain: SKScene {
         rows = (1...horizon).map { GroundRow(perMetre: Double($0) / Self.eye, tones: world.tones($0)) }
         ringColours = [UInt32](repeating: 0, count: rings.count * TrainMat.day.count)
         groundColours = [UInt32](repeating: 0, count: 25 * TrainMat.day.count)
-        settings = PixelWindowSeat.knobs.map(\.value)
+        settings = (PixelWindowSeat.knobs + Self.knobs).map(\.value)
         redraw()
         NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged),
                                                name: UserDefaults.didChangeNotification, object: nil)
@@ -89,7 +95,7 @@ final class PixelTrain: SKScene {
     /// window, or another size of this one, is another scene: it dissolves into it with both still running, as the
     /// airliner's changes do.
     @objc private func settingsChanged() {
-        let picked = PixelWindowSeat.knobs.map(\.value)
+        let picked = (PixelWindowSeat.knobs + Self.knobs).map(\.value)
         guard picked != settings, !retired else { return }
         settings = picked
         let another = PixelOrbit.mode != 2 || Int(PixelWindowSeat.window.value) != windowSize
@@ -149,6 +155,9 @@ final class PixelTrain: SKScene {
         }
         // Lamps come on through dusk, each when the evening passes its own draw, as the airliner's do.
         (lamp, lights) = (pack(mix(rgb(255, 214, 150), rgb(255, 204, 128), night)), UInt8(min(255, night * 300)))
+        // The pole line, unless Settings has it off or it would cross the pane too fast to be calm.
+        strung = Self.poles.value > 0.5 && world.focal / TrainWorld.poleAway * speed <= TrainWorld.poleLimit
+        (pole, wire) = (pack(rgb(52, 44, 40) * light + floor), pack(rgb(44, 40, 40) * light + floor))
         if windowSize < 3 { paintFrame() }
         advance()
         compose()
@@ -253,6 +262,12 @@ final class PixelTrain: SKScene {
                     if s == gw { s = 0 }
                 }
             }
+            // The pole line, in front of it all: its wires let two thirds of themselves show.
+            if strung {
+                world.poleLine(at: Self.travelled, wide: gw, high: gh, horizon: horizon) { x, y, standing in
+                    out[y * gw + x] = standing ? pole : blend(out[y * gw + x], wire, 166)
+                }
+            }
         }
         let shot = picture
         texture.modifyPixelData { data, length in
@@ -324,6 +339,12 @@ struct TrainWorld {
     /// are laid only where they slide no faster than `thin`, and broad ones (a tree, a house) no faster than `broad`.
     /// At 1× the fastest thin thing is a field's hedge 103 m out, at 34, and the nearest ring's trees are at 32.
     static let thin = 36.0, broad = 60.0
+
+    /// The line of telegraph poles beside the track, which Dave picked from the mock-ups' film: `poleAway` metres
+    /// out, a pole every `poleGap` metres and `poleTall` high. It is nearer than anything a ring holds, the one near
+    /// thing with a shape: at 1× a pole crosses the pane in 2.7 s, one every 3.75 s. It is left out where it would
+    /// slide faster than `poleLimit` pixels a second (from 1.8×), when a pole would cross in under a second and a half.
+    static let poleAway = 28.0, poleGap = 50.0, poleTall = 8.2, poleLimit = 230.0
 
     /// The lens, in pixels per unit of tangent; the eye's height above the ground, in metres; and the train's speed
     /// in metres a second, which sets how long the near ground's dashes are and what is too fast to lay.
@@ -451,6 +472,29 @@ struct TrainWorld {
             }
         }
         return UInt8(top)
+    }
+
+    /// Draws the pole line for a pane `wide` by `high` whose horizon is on its row `horizon`, with the train `x`
+    /// metres along: `plot` is given each pixel by its column and its row (from the bottom), and whether it is a
+    /// pole's or a wire's. Two wires, one on the cross-arm and one under it, rise to each pole and sag between.
+    func poleLine(at x: Double, wide: Int, high: Int, horizon: Int, _ plot: (Int, Int, Bool) -> Void) {
+        let ppm = focal / Self.poleAway, gap = Self.poleGap * ppm, first = Int((x * ppm).rounded(.down)) - wide / 2
+        // (In rows down from the pane's top, as the mock-ups count them, so that a wire rounds the way theirs does.)
+        let foot = high - horizon + Int((eye * ppm).rounded(.toNearestOrEven)), top = foot - Int((Self.poleTall * ppm).rounded(.toNearestOrEven))
+        for i in 0..<wide {
+            let spans = Double(first + i) / gap, along = spans - spans.rounded(.down), sag = 4 * along * (1 - along)
+            for (under, drop) in [(3.0, 5.0), (9.0, 6.0)] {
+                let y = Int((Double(top) + under + drop * sag).rounded(.toNearestOrEven))
+                if y >= 0, y < high { plot(i, high - 1 - y, false) }
+            }
+        }
+        for k in Int((Double(first) / gap).rounded(.down)) - 1...Int((Double(first + wide) / gap).rounded(.down)) + 1 {
+            let at = Int((Double(k) * gap).rounded(.toNearestOrEven)) - first
+            for y in top..<foot where y >= 0 && y < high {
+                let arm = y == top + 2 || y == top + 3 // the cross-arm, twelve pixels across
+                for x in at - (arm ? 5 : 0)..<at + (arm ? 7 : 2) where x >= 0 && x < wide { plot(x, high - 1 - y, true) }
+            }
+        }
     }
 
     /// Which tones the dashes of the ground row `d` rows under the horizon take: 0 beyond 100 m, where there are
@@ -600,6 +644,12 @@ private func fbm(_ x: Double, _ z: Double, _ layers: Int, _ salt: UInt64) -> Dou
         (strength, x, z) = (strength / 2, x * 2.03, z * 2.03)
     }
     return sum / (1 - strength * 2)
+}
+
+/// One packed colour moved toward another by `t` parts in 256.
+@inline(__always) private func blend(_ a: UInt32, _ b: UInt32, _ t: UInt32) -> UInt32 {
+    let redBlue = ((a & 0xFF00FF) * (256 - t) + (b & 0xFF00FF) * t) >> 8 & 0xFF00FF
+    return 0xFF00_0000 | redBlue | ((a & 0xFF00) * (256 - t) + (b & 0xFF00) * t) >> 8 & 0xFF00
 }
 
 private func rgb(_ r: Int, _ g: Int, _ b: Int) -> RGB { RGB(Float(r), Float(g), Float(b)) / 255 } // as in PixelCity.swift, which says why

@@ -95,5 +95,8 @@ import Testing
             for i in 0..<wide { (rows[(d - 1) * wide + i], rows[(ground + d - 1) * wide + i]) = world.ground(d, first + i) }
         }
         try Data(rows).write(to: folder.appendingPathComponent("ground-\(x).bin"))
+        var line = [UInt8](repeating: 0, count: wide * 221) // the pole line: 1 for a wire, 2 for a pole, rows from the bottom
+        world.poleLine(at: x, wide: wide, high: 221, horizon: ground) { line[$1 * wide + $0] = $2 ? 2 : max(line[$1 * wide + $0], 1) }
+        try Data(line).write(to: folder.appendingPathComponent("poles-\(x).bin"))
     }
 }

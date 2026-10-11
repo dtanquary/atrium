@@ -29,11 +29,12 @@ final class PixelWindowSeat: SKScene {
                                         lockedWhen: "seat.follow") // in orbit, following the real station means flying at its pace
     nonisolated static let scenery = Knob(key: "seat.scenery", label: "Scenery", range: 0...6, standard: 0, section: "Flight",
                                           format: .choice(["Changing", "Ocean", "City", "Countryside", "Mountains", "Desert", "Snow"]),
-                                          hiddenWhen: "seat.orbit", hiddenAt: 1)
+                                          shownWhen: "seat.orbit", shownAt: 0)
+    // ponytail: the train has no cloud yet, so these two hide for it; they are for it too once cloud is painted from below.
     nonisolated static let clouds = Knob(key: "seat.clouds", label: "Clouds", range: 0...4, standard: 0, section: "Flight",
-                                         format: .choice(["Changing", "Clear", "Scattered", "Broken", "Overcast"]))
+                                         format: .choice(["Changing", "Clear", "Scattered", "Broken", "Overcast"]), hiddenWhen: "seat.orbit", hiddenAt: 2)
     nonisolated static let lightning = Knob(key: "seat.lightning", label: "Lightning in far-off storms", range: 0...1, standard: 1,
-                                            section: "Flight", format: .toggle)
+                                            section: "Flight", format: .toggle, hiddenWhen: "seat.orbit", hiddenAt: 2)
     nonisolated static let previewTime = Knob(key: "seat.previewTime", label: "Preview a time of day", range: 0...1, standard: 0,
                                               section: "Preview", format: .toggle, hiddenWhen: "seat.orbit", hiddenAt: 1)
     nonisolated static let previewHour = Knob(key: "seat.previewHour", label: "Time", range: 0...24, standard: 19, section: "Preview",
@@ -41,10 +42,11 @@ final class PixelWindowSeat: SKScene {
     /// The airliner's settings and the orbit's (PixelOrbit.swift), each kind hidden while the other is flying.
     nonisolated static let knobs = rows(train: PixelOrbit.offersTrain)
 
-    /// The page's rows, with the menu that offers the train or with the Earth orbit switch it had before.
+    /// The page's rows: with the Earth orbit switch it had before; or with the menu that offers the train, and
+    /// then the train's own rows too.
     nonisolated static func rows(train: Bool) -> [Knob] {
-        [PixelOrbit.picker(train: train), seat, PixelOrbit.array, window, looking, PixelOrbit.looking, speed, PixelOrbit.follow, scenery, clouds,
-         PixelOrbit.realClouds, lightning, previewTime, previewHour]
+        [PixelOrbit.picker(train: train), seat, PixelOrbit.array, window, looking, PixelOrbit.looking, speed, PixelOrbit.follow, scenery]
+            + (train ? PixelTrain.knobs : []) + [clouds, PixelOrbit.realClouds, lightning, previewTime, previewHour]
     }
 
     /// How high we fly and where the cloud layer's base is, in km, and how fast, in km a second (Mach 0.78 or so).
