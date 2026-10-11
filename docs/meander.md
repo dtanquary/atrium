@@ -4,6 +4,7 @@ A river slowly migrating across its floodplain: bends grow and shift down the va
 
 Dave picked the idea on 2026-10-10 ([ideas.md](ideas.md)). That day two agents researched it (one built and ran the simulation, one measured the real references) and one sheet went to Dave. **Nothing is built in the app.** This page is the plan, the measurements to build against and their sources.
 
+- **The two research reports in full:** [the simulation](meander/research-simulation.md) and [the look](meander/research-look.md).
 - **In `docs/meander/`:** `sheet1.jpg` (what Dave chose from), `reference-mississippi-relief.jpg` (the real river, our render of USGS elevation), the prototype's pictures, `proto/` (the simulation: `python3 meander.py` is its self-check; `render.py` draws both looks) and `measure/` (the scorecard `busy.py`, the palettes, the relief and scroll-bar measurements). Research scripts, not reviewed line by line.
 
 ## Dave's decisions (2026-10-10)

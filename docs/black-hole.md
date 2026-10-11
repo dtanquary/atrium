@@ -5,6 +5,7 @@ A black hole with a thin disc of glowing gas turning round it, in front of the r
 Dave picked the idea on 2026-10-10 from a brainstorm ([ideas.md](ideas.md)). That day it was researched by two agents and mocked up in three rounds, and he made the choices below. **Nothing is built: there is no Swift, and no shader has been compiled.** This page is the plan, the measurements to build against and their sources.
 
 - **Mock-ups and prototypes:** `docs/black-hole/` (see [Mock-ups](#mock-ups) and [Prototype](#the-prototype)).
+- **The two research reports in full:** [the method](black-hole/research-method.md) and [the look](black-hole/research-look.md), which has the reference list, eight real black holes' numbers and the palettes.
 - **Next step:** build order step (a) below, which also settles the two things nobody could test without building.
 
 ## Dave's decisions (2026-10-10)

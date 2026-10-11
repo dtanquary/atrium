@@ -2,7 +2,7 @@
 
 A third window for [Pixel Window Seat](../pixel-window-seat.md): a seat on a slow train, the country sliding past under the real Sun, Moon and stars for your clock and place, with rain on the glass when it rains where you are. It began as "Pixel Night Train" in the 2026-10-10 brainstorm ([ideas.md](../ideas.md)); Dave picked it as "an addition to pixel window seat, doesn't have to be its own wallpaper".
 
-That day two agents researched it (one read the code and worked the geometry, one measured real footage) and one round of mock-ups went to Dave. **Nothing is built.** This page is the plan, the findings and their sources. When it is built, it becomes a part of `pixel-window-seat.md`.
+That day two agents researched it (one read the code and worked the geometry, one measured real footage) and one round of mock-ups went to Dave. **Nothing is built.** This page is the plan, the findings and their sources. The two reports in full: [the engine](train-research-engine.md) and [the footage and scenery](train-research-footage.md). When it is built, it becomes a part of `pixel-window-seat.md`.
 
 ## Dave's decisions (2026-10-10)
 - **Where it lives:** inside Pixel Window Seat, not its own wallpaper.
