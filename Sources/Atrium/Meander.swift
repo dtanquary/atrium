@@ -80,9 +80,13 @@ final class Meander: SKScene {
     private static let stages = [5.0, 11.0]
 
     private(set) var river: River!
-    private var texture: SKMutableTexture!
+    /// The ground as it was at the river's last two steps, and when each was: the picture is mixed from the two by
+    /// how far the river is toward its next step, so a bank moves on every frame and not only when the river
+    /// steps. Each step's bytes go to whichever holds the older.
+    private var textures: [SKMutableTexture] = [], times = [0.0, 0.0], newest = 0
     private var ground: SKSpriteNode!
-    private let clock = SKUniform(name: "u_t", float: 0), turns = SKUniform(name: "u_turns", vectorFloat4: .zero), settings = SKUniform(name: "u_knobs", vectorFloat4: .zero)
+    private let clocks = SKUniform(name: "u_t", vectorFloat2: .zero), blend = SKUniform(name: "u_blend", float: 0)
+    private let turns = SKUniform(name: "u_turns", vectorFloat4: .zero), settings = SKUniform(name: "u_knobs", vectorFloat4: .zero)
     private var lastTime: TimeInterval?
     /// What it was built and dressed with: the river's size, the look's four settings, and the colours Random has
     /// picked for each look, which hold for the scene's life.
@@ -99,9 +103,12 @@ final class Meander: SKScene {
         river = River(seed: seed > 0 ? seed : .random(in: 1...UInt64.max), across: Float(size.width / built), up: Float(size.height / built), texels: Self.texels)
         river.lakeLife = Self.lakes.value * Self.perMinute
         river.age()
-        texture = SKMutableTexture(size: CGSize(width: river.columns, height: river.rows))
-        texture.filteringMode = .linear
-        ground = SKSpriteNode(texture: texture, size: size)
+        textures = (0..<2).map { _ in
+            let texture = SKMutableTexture(size: CGSize(width: river.columns, height: river.rows))
+            texture.filteringMode = .linear
+            return texture
+        }
+        ground = SKSpriteNode(texture: textures[0], size: size)
         ground.position = CGPoint(x: size.width / 2, y: size.height / 2)
         addChild(ground)
         dress()
@@ -115,7 +122,8 @@ final class Meander: SKScene {
         map = dressed[0] > 0.5
         let rule = Int(dressed[3])
         stage = Self.stages[rule]
-        var uniforms = [SKUniform(name: "u_grid", vectorFloat2: [Float(river.columns), Float(river.rows)]), clock, turns, settings]
+        var uniforms = [SKUniform(name: "u_grid", vectorFloat2: [Float(river.columns), Float(river.rows)]), SKUniform(name: "u_other", texture: textures[1]),
+                        clocks, blend, turns, settings]
         if map {
             let sheets = Self.maps[dressed[2] < 0.5 ? lucky.sheet : Int(dressed[2]) - 1], sheet = systemIsDark ? sheets.dark : sheets.light
             uniforms += [SKUniform(name: "u_paper", vectorFloat3: sheet.paper), SKUniform(name: "u_river", vectorFloat3: sheet.river),
@@ -139,7 +147,8 @@ final class Meander: SKScene {
         }
         ground.shader = SKShader(source: shaderCommon + Self.reads + (map ? Self.map(rule: rule) : Self.relief), uniforms: uniforms)
         tune()
-        upload()
+        if times == [0, 0] { for _ in 0..<2 { upload() } } // a new scene: both grounds are the river's first
+        show()
     }
 
     /// The sliders a shader or the river follows as they move: texels to a point of the screen (the river's size),
@@ -177,23 +186,37 @@ final class Meander: SKScene {
     }
 
     override func update(_ currentTime: TimeInterval) {
-        if river.advance(frameTime(currentTime, &lastTime), speed: Self.speed.value) { upload() }
+        river.advance(frameTime(currentTime, &lastTime), speed: Self.speed.value) { upload() }
+        show()
     }
 
-    /// Sends the ground's bytes to the texture, and tells the shader the time since the stamps' base, from which it
-    /// works out ages, and how far through each of its cycles the present is: relief's two scroll-bar spacings and
-    /// the sets of them, or the map's swales and its stages, counted in fours for its four inks (and from 160, so
-    /// a stage's number is never below nothing). The cycles are in the time itself, not the time since the base,
-    /// so nothing in the picture moves when the base does (`River.rebase`).
+    /// Sends the ground's bytes to the texture holding the older of the last two steps, with the time since the
+    /// stamps' base as it now is, from which the shader works out that ground's ages. (Each ground has its own, so
+    /// the two can be mixed across a move of the base, `River.rebase`.)
     func upload() {
+        newest = 1 - newest
         // The river's own buffer, not a copy of it: SpriteKit takes the bytes before `modifyPixelData` returns
         // (meanderGroundReachesTheShader checks that it does), and the river next writes on them a step later
         river.pixels.withUnsafeBytes { buffer in
             nonisolated(unsafe) let bytes = buffer
-            texture.modifyPixelData { data, length in data?.copyMemory(from: bytes.baseAddress!, byteCount: min(length, bytes.count)) }
+            textures[newest].modifyPixelData { data, length in data?.copyMemory(from: bytes.baseAddress!, byteCount: min(length, bytes.count)) }
         }
-        func turn(_ period: Double) -> Float { Float(river.now / period - (river.now / period).rounded(.down)) }
-        clock.floatValue = Float(river.now - river.base)
+        times[newest] = river.now
+        var since = clocks.vectorFloat2Value
+        since[newest] = Float(river.now - river.base)
+        clocks.vectorFloat2Value = since
+    }
+
+    /// Tells the shader, on every frame, how to mix the two grounds: by how far the river is toward its next step,
+    /// so the picture is of the river a step ago moving on to where it is now. And how far through each of its
+    /// cycles that moment is: relief's two scroll-bar spacings and the sets of them, or the map's swales and its
+    /// stages, counted in fours for its four inks (and from 160, so a stage's number is never below nothing). The
+    /// cycles are in the time itself, not the time since the base, so nothing moves when the base does.
+    private func show() {
+        // in 256ths, so the frame rate's own way of adding the time up can't show in the last bits of the picture
+        let toward = (min(max(river.owed, 0), 1) * 256).rounded(.down) / 256, now = times[1 - newest] + toward * (times[newest] - times[1 - newest])
+        blend.floatValue = Float(newest == 1 ? toward : 1 - toward)
+        func turn(_ period: Double) -> Float { Float(now / period - (now / period).rounded(.down)) }
         turns.vectorFloat4Value = map ? [turn(1.4), 0, 0, turn(stage * 4) * 4 + 160] : [turn(0.7), turn(1.1326), turn(2.9), 0]
     }
 
@@ -226,19 +249,27 @@ final class Meander: SKScene {
         vec2 w1 = (4.0 - 6.0 * s * s + 3.0 * s * s * s) / 6.0, w2 = 1.0 - w0 - w1 - w3;
         vec2 g0 = w0 + w1, g1 = w2 + w3;
         vec2 h0 = (i - 0.5 + w1 / g0) / u_grid, h1 = (i + 1.5 + w3 / g1) / u_grid;
-        vec4 t00 = texture2D(u_texture, h0), t10 = texture2D(u_texture, vec2(h1.x, h0.y));
-        vec4 t01 = texture2D(u_texture, vec2(h0.x, h1.y)), t11 = texture2D(u_texture, h1);
-        vec4 t = g0.y * (g0.x * t00 + g1.x * t10) + g1.y * (g0.x * t01 + g1.x * t11);
+        vec4 a00 = texture2D(u_texture, h0), a10 = texture2D(u_texture, vec2(h1.x, h0.y));
+        vec4 a01 = texture2D(u_texture, vec2(h0.x, h1.y)), a11 = texture2D(u_texture, h1);
+        vec4 b00 = texture2D(u_other, h0), b10 = texture2D(u_other, vec2(h1.x, h0.y));
+        vec4 b01 = texture2D(u_other, vec2(h0.x, h1.y)), b11 = texture2D(u_other, h1);
+        // Two grounds, the river's last two steps, read alike and mixed by how far the river is toward its next
+        // (`u_blend` is the second's share), so every frame is a new picture. Bank distances mix into a bank part
+        // of the way; ages are mixed as ages, each ground's from its own time since the base.
+        vec4 ground1 = g0.y * (g0.x * a00 + g1.x * a10) + g1.y * (g0.x * a01 + g1.x * a11);
+        vec4 ground2 = g0.y * (g0.x * b00 + g1.x * b10) + g1.y * (g0.x * b01 + g1.x * b11);
+        vec4 t = mix(ground1, ground2, u_blend);
         // and its slopes a texel, across and up, from the same four taps: the taps are that far apart
         vec2 apart = (h1 - h0) * u_grid;
-        vec4 across = (g0.y * (t10 - t00) + g1.y * (t11 - t01)) / apart.x, up = (g0.x * (t01 - t00) + g1.x * (t11 - t10)) / apart.y;
+        vec4 across = mix(g0.y * (a10 - a00) + g1.y * (a11 - a01), g0.y * (b10 - b00) + g1.y * (b11 - b01), u_blend) / apart.x;
+        vec4 up = mix(g0.x * (a01 - a00) + g1.x * (a11 - a10), g0.x * (b01 - b00) + g1.x * (b11 - b10), u_blend) / apart.y;
         float bank = (t.b - 0.5) * 4.0;  // texels from the nearest bank, below 0 in the water
         float low = 0.25 + 0.75 * t.a;   // an old channel's bank distance, in widths
         // How long ago the river left here, in T, and that time's slope a texel. Ground it left longer ago than it
-        // remembers, or never reached, is all one age and dead flat. From here on the shader works in ages only,
+        // remembers, or never reached, is all ground1 age and dead flat. From here on the shader works in ages only,
         // and in where the present falls in each cycle (`u_turns`): the stamps themselves count from a base that
         // moves, and nothing may change when it does.
-        float past = u_t - (t.r * 65280.0 + t.g * 255.0) / 100.0;
+        float past = mix(u_t.x - (ground1.r * 65280.0 + ground1.g * 255.0) / 100.0, u_t.y - (ground2.r * 65280.0 + ground2.g * 255.0) / 100.0, u_blend);
         vec2 slope = vec2(across.r * 65280.0 + across.g * 255.0, up.r * 65280.0 + up.g * 255.0) / 100.0 * (1.0 - smoothstep(604.5, 605.0, past));
         past = min(past, 605.0);
         vec2 shore = vec2(across.b, up.b); // points away from the water
@@ -253,9 +284,11 @@ final class Meander: SKScene {
         // At a bank the smooth read is a blend of the water's stamp and the land's. So the stamp is read twice more:
         // two texels into the water, for the water's own age (none for the river, a lake's for a lake), and two
         // texels out, for the land beside a bank, so a cut bank is a clean step up to old ground.
-        vec4 in2 = texture2D(u_texture, v_tex_coord - 2.0 * shore / u_grid), out2 = texture2D(u_texture, v_tex_coord + 2.0 * shore / u_grid);
-        float wetAge = clamp(u_t - (in2.r * 65280.0 + in2.g * 255.0) / 100.0, 0.0, 605.0);
-        float beside = min(u_t - (out2.r * 65280.0 + out2.g * 255.0) / 100.0, 605.0), nearing = clamp((bank - 0.5) / 1.4, 0.0, 1.0);
+        vec2 inward = v_tex_coord - 2.0 * shore / u_grid, outward = v_tex_coord + 2.0 * shore / u_grid;
+        vec4 in1 = texture2D(u_texture, inward), in2 = texture2D(u_other, inward), out1 = texture2D(u_texture, outward), out2 = texture2D(u_other, outward);
+        float wetAge = clamp(mix(u_t.x - (in1.r * 65280.0 + in1.g * 255.0) / 100.0, u_t.y - (in2.r * 65280.0 + in2.g * 255.0) / 100.0, u_blend), 0.0, 605.0);
+        float beside = min(mix(u_t.x - (out1.r * 65280.0 + out1.g * 255.0) / 100.0, u_t.y - (out2.r * 65280.0 + out2.g * 255.0) / 100.0, u_blend), 605.0);
+        float nearing = clamp((bank - 0.5) / 1.4, 0.0, 1.0);
         float near = 1.0 - nearing * nearing * (3.0 - 2.0 * nearing), age = mix(past, beside, near);
         // the age's slope a texel, taking the land beside a bank as level
         vec2 older = (near - 1.0) * slope - (beside - past) * 6.0 * nearing * (1.0 - nearing) / 1.4 * 4.0 * vec2(across.b, up.b);

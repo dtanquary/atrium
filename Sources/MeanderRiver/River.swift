@@ -138,7 +138,9 @@ public final class River {
     private var erosion: [Float] = [], erosionColumns = 0, erosionRows = 0, erosionCell: Float = 8
     private var walls: [Float] = []
     private var head: [Int32] = [], next: [Int32] = [], cell: [Int32] = []
-    private var owed = 0.0
+    /// How far the river is toward its next step, from 0 to 1 (see `advance`): a picture drawn between two steps
+    /// can be mixed from them by it.
+    public private(set) var owed = 0.0
     /// When `sweep` last ran, as a stamp.
     private var sweptAt: Float = 0
     /// Whether a past is being made by `sweep`, and the nodes a pass of `respace` is about to drop.
@@ -958,14 +960,16 @@ public final class River {
 
     /// Moves the river on by `seconds` of wallpaper time. It steps ten times a second, and twenty above speed 2 so
     /// that a step is never longer than `longest`; the steps are counted from the time gone by, so the river is
-    /// the same whatever the frame rate. Returns whether it stepped: only then have `pixels` changed.
-    @discardableResult public func advance(_ seconds: Double, speed: Double = 1) -> Bool {
+    /// the same whatever the frame rate. Returns whether it stepped: only then have `pixels` changed. `afterEach`
+    /// is called after every step, for a caller that wants each step's ground and not only the last.
+    @discardableResult public func advance(_ seconds: Double, speed: Double = 1, afterEach: () -> Void = {}) -> Bool {
         let rate = speed > 2 ? 20.0 : 10.0
         owed += seconds * rate
         var stepped = false
         while owed >= 1 - 1e-6 {
             owed -= 1
             step(Float(speed / Self.pace / rate))
+            afterEach()
             stepped = true
         }
         return stepped

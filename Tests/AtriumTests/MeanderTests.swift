@@ -288,6 +288,9 @@ private func seeded(_ seed: Double, _ others: [String: Double] = [:]) -> [String
             pictures.append(screen.pixels)
         }
         #expect(Set(stride(from: 0, to: pictures.last!.count, by: 97).map { pictures.last![$0] }).count > 20, "\(settings) drew a flat picture")
+        // A shader that didn't compile leaves the ground's own bytes on the screen, which are no flat picture: but
+        // their blue is the water byte, full wherever there is no water near, as in the corner
+        #expect(pictures.last![756 * 5 + 5].z < 240, "\(settings) drew the ground's bytes, not a picture")
     }
     for look: [String: Double] in [[:], ["meander.look": 1], ["meander.look": 1, "meander.rule": 1]] { try draw(look) }
     #expect(pictures[0] != pictures[1] && pictures[1] != pictures[2])
@@ -472,17 +475,17 @@ private func wetness(_ lake: River.Lake, at now: Double, life: Double) -> [Float
 /// more than 0.3% of the pixels near it by over 20 levels: the loop goes on being drawn as the same water when it
 /// is cut off, and a lake the river parts loses nothing on that frame. At speed 1 and 15 frames a second, a river
 /// whose first of each comes within half a minute. With MEANDER_STRIPS set to a folder: another river too, the top
-/// of the Speed slider, 30 frames a second and Fisk's order; the frames round each are saved there, and what the
+/// of the Speed slider, 30 and 60 frames a second and Fisk's order; the frames round each are saved there, and what the
 /// cutoff's and the re-crossing's frames cost is printed beside an ordinary step's. At the top of the slider a
 /// bank can move over a pixel a frame, so the river's ordinary motion is past 0.3% on its own: there the
-/// happening's own frame has to be no worse than the worst of the frames round it.
+/// happening's own frame has to be within 0.3% of a middling frame's.
 @MainActor @Test func meanderDoesNotPop() throws {
     let folder = ProcessInfo.processInfo.environment["MEANDER_STRIPS"].map { URL(fileURLWithPath: $0) }
     var looks: [(name: String, settings: [String: Double])] = [("relief", [:]), ("old map", ["meander.look": 1])]
     var runs: [(seed: Double, speed: Double, rate: Double)] = [(7, 1, 15)]
     if folder != nil {
         looks.append(("old map in Fisk's order", ["meander.look": 1, "meander.rule": 1]))
-        runs += [(7, 1, 30), (7, 4, 15), (13, 1, 15), (13, 4, 15)]
+        runs += [(7, 1, 30), (7, 1, 60), (7, 4, 15), (13, 1, 15), (13, 4, 15)]
     }
     for run in runs {
         let river = String(format: "Meander %.0f at %.0fx and %.0f fps", run.seed, run.speed, run.rate), pace = ["meander.speed": run.speed]
@@ -499,7 +502,7 @@ private func wetness(_ lake: River.Lake, at now: Double, life: Double) -> [Float
                                     named: "\(kind.dropFirst(2))-\(Int(run.seed))-\(Int(run.speed))x-\(look.name.replacingOccurrences(of: " ", with: "-"))-\(Int(run.rate))fps")
                 print(String(format: "%@, %@, %@: at most %.3f%% of the window changes by over 20 levels, on frame %+d; on its own frame %.3f%%, on a middling frame %.3f%%",
                              river, kind, look.name, 100 * worst.share, worst.frame, 100 * worst.own, 100 * worst.middling))
-                #expect(run.speed > 1 ? worst.own < 0.003 || worst.frame != 0 : worst.share < 0.003, "\(kind) in \(look.name), \(river)")
+                #expect(run.speed > 1 ? worst.own - worst.middling < 0.003 : worst.share < 0.003, "\(kind) in \(look.name), \(river)")
             }
         }
     }
@@ -530,7 +533,8 @@ private func wetness(_ lake: River.Lake, at now: Double, life: Double) -> [Float
 }
 
 /// When the stamps' base moves up, the picture stays as it was. The scene is run at four times its pace until a
-/// move is nearly due, drawn, the base moved with the river standing still, and drawn again, in all three looks.
+/// move is nearly due, drawn, the base moved with the river standing still, and drawn again, in all three looks:
+/// the second picture is mixed from one ground that counts from the old base and one that counts from the new.
 /// Every age the shader works out is the same number as before but for its last bits, so a pixel in a few thousand
 /// rounds the other way, by one level and never more: measured 2026-10-11 on a picture of 1,484,784 pixels, 397
 /// in relief, 344 and 138 in the old map's two rules, where an ordinary step of the river changes 20,000 to
@@ -542,6 +546,7 @@ private func wetness(_ lake: River.Lake, at now: Double, life: Double) -> [Float
         try with(seeded(7, look.merging(["meander.speed": 4]) { $1 })) {
             let scene = Meander(size: CGSize(width: 504, height: 328)), screen = try Offscreen(scene, 1008, 656), river = scene.river! // a small screen, to get there quickly
             while river.now - river.base < River.memory + 5 + River.turn + River.slack - 0.05 { screen.advance(rate: 10) }
+            scene.upload() // both of the grounds the picture is mixed from are now the river as it stands
             for _ in 0..<2 { try screen.frame(rate: 1e6) } // twice for the shader's sake, with no time gone by
             let before = screen.pixels, base = river.base, now = river.now
             river.rebase()
@@ -605,6 +610,92 @@ private func wetness(_ lake: River.Lake, at now: Double, life: Double) -> [Float
                 print(String(format: "Meander, %@, over %d minutes: in 10 s the river moves a median %.1f pt, 9 nodes in 10 under %.1f, 99 in 100 under %.1f, the most %.1f (of %d)",
                              name, seconds / 60, moved[moved.count / 2], moved[moved.count * 9 / 10], moved[moved.count * 99 / 100], moved.last!, moved.count))
                 print("  cutoffs with a neck on screen: \(cuts.count), at \(cuts.map { "\($0 / 60):" + String(format: "%02d", $0 % 60) }); lakes at once: \(lakes.min()!) to \(lakes.max()!)")
+            }
+        }
+    }
+}
+
+/// A bank moves on every frame, not only on the frames the river steps on: the picture is mixed from the river's
+/// last two steps by how far it is toward the next. Over a fifth of a second at 60 frames a second, where the
+/// river steps twice, every frame differs from the one before it.
+///
+/// And how smoothly, on the picture itself, with MEANDER_SMOOTH set to a folder: four seconds at 60 frames a
+/// second on a 14" screen, in relief, at speed 1 and at the top of the Speed slider. On every 24th row of the
+/// picture each cut bank is found to a fraction of a pixel (where the green of the picture crosses from the
+/// river's to old land's within a few pixels) and followed from frame to frame. Printed, for the banks that move
+/// at least two pixels in that time: on what share of frames a bank doesn't move (under a tenth of its own average
+/// move), its greatest jump in one frame, and that jump over its average move. Twelve frames round the fastest
+/// bank are saved.
+@MainActor @Test func meanderMovesSmoothly() throws {
+    try with(seeded(13)) {
+        let screen = try Offscreen(Meander(size: CGSize(width: 756, height: 491)), 1512, 982)
+        for _ in 0..<6 { try screen.frame(rate: 60) }
+        var last = screen.piece(x: 0, y: 0, w: 1512, h: 982), moved = 0
+        for _ in 0..<12 {
+            try screen.frame(rate: 60)
+            let now = screen.piece(x: 0, y: 0, w: 1512, h: 982)
+            if now != last { moved += 1 }
+            last = now
+        }
+        #expect(moved == 12, "the picture changed on \(moved) of 12 frames")
+    }
+    guard let folder = ProcessInfo.processInfo.environment["MEANDER_SMOOTH"].map({ URL(fileURLWithPath: $0) }) else { return }
+    for speed in [1.0, 4.0] {
+        try with(seeded(13, ["meander.speed": speed])) {
+            let (w, h) = (3024, 1964), scene = Meander(size: CGSize(width: w / 2, height: h / 2)), screen = try Offscreen(scene, w, h)
+            for _ in 0..<60 { try screen.frame(rate: 60) }
+            let rows = Array(stride(from: 12, to: h, by: 24))
+            var tracks: [(row: Int, at: [Double])] = [], pictures: [[UInt32]] = []
+            for frame in 0..<240 {
+                try screen.frame(rate: 60)
+                let picture = screen.piece(x: 0, y: 0, w: w, h: h)
+                if frame < 12 { pictures.append(picture) }
+                var found: [Int: [Double]] = [:] // each row's banks
+                picture.withUnsafeBufferPointer { p in
+                    for row in rows {
+                        func green(_ x: Int) -> Int { Int(p[row * w + x] >> 8 & 255) }
+                        var x = 4
+                        while x < w - 5 {
+                            let (a, b) = (green(x), green(x + 1))
+                            // the river is over 150 and old land under 85; a cut bank goes from one to the other in a few pixels
+                            if (a - 115) * (b - 115) <= 0, a != b, max(green(x - 3), green(x + 4)) > 150, min(green(x - 3), green(x + 4)) < 85 {
+                                found[row, default: []].append(Double(x) + Double(a - 115) / Double(a - b))
+                                x += 6
+                            }
+                            x += 1
+                        }
+                    }
+                }
+                if frame == 0 {
+                    tracks = found.flatMap { row, places in places.map { (row, [$0]) } }
+                } else {
+                    tracks = tracks.compactMap { track in
+                        guard let next = found[track.row]?.min(by: { abs($0 - track.at.last!) < abs($1 - track.at.last!) }), abs(next - track.at.last!) < 4 else { return nil }
+                        return (track.row, track.at + [next])
+                    }
+                }
+            }
+            let moving = tracks.filter { abs($0.at.last! - $0.at[0]) >= 2 }
+            var still: [Double] = [], jumps: [Double] = [], against: [Double] = []
+            for track in moving {
+                let moves = zip(track.at, track.at.dropFirst()).map { abs($1 - $0) }
+                let average = moves.reduce(0, +) / Double(moves.count)
+                still.append(Double(moves.count { $0 < 0.1 * average }) / Double(moves.count))
+                jumps.append(moves.max()!)
+                against.append(moves.max()! / average)
+            }
+            func middle(_ values: [Double]) -> Double { values.isEmpty ? .nan : values.sorted()[values.count / 2] }
+            print(String(format: "Meander at %.0fx, 60 fps, %d banks that moved 2 px or more in 4 s (of %d followed): a bank holds still on %.0f%% of frames (the middle one; from %.0f%% to %.0f%%); its greatest jump is %.2f px (the middle one) and %.2f at the most; the greatest jump is %.1f times its average move (the middle one)",
+                         speed, moving.count, tracks.count, 100 * middle(still), 100 * (still.min() ?? .nan), 100 * (still.max() ?? .nan), middle(jumps), jumps.max() ?? .nan, middle(against)))
+            // the fastest of them, twelve frames, 96 px square, three times life size
+            if let fastest = moving.max(by: { abs($0.at.last! - $0.at[0]) < abs($1.at.last! - $1.at[0]) }) {
+                let side = 96, x0 = min(max(Int(fastest.at[0]) - side / 2, 0), w - side), y0 = min(max(fastest.row - side / 2, 0), h - side)
+                var strip = [UInt32](repeating: 0, count: side * 3 * 12 * side * 3)
+                for (k, picture) in pictures.enumerated() { for y in 0..<side * 3 { for x in 0..<side * 3 {
+                    strip[y * side * 3 * 12 + k * side * 3 + x] = picture[(y0 + y / 3) * w + x0 + x / 3]
+                } } }
+                save(strip, side * 3 * 12, side * 3, to: folder.appendingPathComponent(String(format: "bank-%.0fx.png", speed)))
+                print("  the fastest: row \(fastest.row), from \(fastest.at[0]) by", zip(fastest.at, fastest.at.dropFirst()).prefix(13).map { String(format: "%+.2f", $1 - $0) }.joined(separator: " "))
             }
         }
     }

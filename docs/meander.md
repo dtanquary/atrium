@@ -421,6 +421,39 @@ Not done, or not known:
 - **No screenshot:** `Resources/preview-meander.jpg` and `docs/images` have none, so its Settings page is blank behind the header until the live copy has built. No README entry, nothing on the site.
 - With Random, two displays (or the desktop and the Settings page) pick their colours separately.
 
+### Smoothness, A: a bank moves on every frame (2026-10-11)
+Dave, on the first build: "we just need to keep improving the smoothness of it". The first reading of that is motion. The river steps ten times a second (twenty above 2×) and the screen draws sixty, so a bank stood still for five frames and moved on the sixth.
+
+**Now the picture is mixed from the river's last two steps.** The scene keeps two textures, the ground as it was at each of the last two steps, and each new step's bytes go to whichever holds the older. On every frame the shader is told how far the river is toward its next step (`River.owed`, in 256ths, as `u_blend`) and mixes the two grounds by it. Bank distances mix into a bank part of the way between, which is a clean edge, not two faint ones. So the picture is of the river one step ago moving on to where it is now: a tenth of a second behind, and continuous.
+- **Ages are mixed as ages.** Each ground's stamps are read against its own time since the base (`u_t` is the two of them), so the two mix rightly even across a move of the base, when one counts from the old base and one from the new.
+- **The cycles** (scroll bars, the map's stages) are told where the moment being drawn falls in them, which is between the two steps' times.
+- The two reads beside a bank (two texels into the water, two out) are made of both grounds too: twelve reads of the ground a pixel, where there were six.
+- `River.advance` calls back after each step, so on a frame that carries two steps both grounds are sent.
+
+**Measured on the picture itself** (`MEANDER_SMOOTH=<folder> swift test --filter meanderMovesSmoothly`): four seconds at 60 frames a second on a 14" screen at 2x, relief, river 13. On every 24th row each cut bank is found to a fraction of a pixel and followed from frame to frame; these are the banks that moved 2 px or more in the four seconds (142 of them at 1×, 162 at 4×).
+
+| | before, 1× | after, 1× | before, 4× | after, 4× |
+|---|---|---|---|---|
+| Frames on which a bank doesn't move (the middle bank) | 83% | 0% | 67% | 0% |
+| A bank's greatest jump in one frame (the middle bank) | 0.27 px | 0.06 px | 0.38 px | 0.15 px |
+| The greatest jump of any bank | 1.18 px | 0.24 px | 3.67 px | 1.10 px |
+| A bank's greatest jump over its average move | 11.7 | 2.7 | 6.1 | 2.5 |
+
+The fastest bank at 1× went from +0.96 px on one frame and nothing on the next five to +0.16 to +0.21 px on every frame.
+
+**A cutoff is not smeared, and not one frame either:** at 60 frames a second the neck's last sliver of land thins, breaks and draws back into two rounded ends over about five frames, a twelfth of a second ([build-smooth-cutoff.jpg](meander/build-smooth-cutoff.jpg), eight frames in a row, three times life size, the old map).
+
+What else it changed:
+- **The 0.3% measure** at 1× and 15 fps: 0.04 to 0.11% for a cutoff and 0.005 to 0.11% for a parted lake, both rivers and all three looks (they were 0.10 to 0.18% and 0.01 to 0.23%); under 0.07% at 30 and at 60. At 4× and 15 fps an ordinary frame is still 0.14 to 0.53% by plain motion, and the test there now holds a happening's own frame to within 0.3% of a middling one.
+- **The picture is still the same at 15, 30 and 60 frames a second** after the same time, every pixel, both looks (the mix is by the river's own count of the time, cut to 256ths so that the frame rate's way of adding it up can't show).
+- **A move of the base** still changes 6 to 16 pixels of 661,248 by one level, now with the picture mixed from a ground on each base.
+- **Cost:** 0.1 ms more of GPU: relief 1.02 ms on an ordinary frame and 1.11 on a step frame, the old map 0.64 and 0.73, Fisk's order 0.72 and 0.74. CPU as it was (0.45 ms an ordinary frame, 1.4 to 1.5 a step frame). At 4× and 15 fps a frame that carries two steps sends two grounds, 2.9 ms of CPU where it was 2.5; that is one frame in three, there only.
+
+Not done, or not known:
+- Not seen on a real screen. The measure follows cut banks in relief only (the old map's banks are the same field).
+- A lake's bank still moves when the lake comes round to be redrawn (every second or two), now over a step and not at once.
+- A second texture of the ground: 1.5 MB more a scene.
+
 ## Dave's feedback
 - **2026-10-11, the first build on his desktop** (both looks, the settings, 12.5 s a T): "Meander is looking great, we just need to keep improving the smoothness of it and add the rest of those features mentioned above". The features he means are the ones listed to him as still to build: a Light Mode relief, Amethyst and more single inks, a swatch grid for the colours where there are two menus, and the shared grade sliders.
   - **"Smoothness" is read two ways until he says otherwise,** motion first: the river steps ten or twenty times a second while the screen draws sixty, so banks move in small jumps and hold still between; and the rough spots left from the build (the jog and spur at a cutoff, blocky patches of launch-made ground at the valley walls, old lakes' light middles and dull rims).
