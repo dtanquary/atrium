@@ -291,8 +291,8 @@ private func seeded(_ seed: Double, _ others: [String: Double] = [:]) -> [String
 
 /// Each look is a shader of its own, put together as text that only the GPU's compiler ever checks. All three draw
 /// a picture, and not the same one: relief, the old map with each stage's ink fixed to its land, and in Fisk's
-/// order. So does every colourway among Settings' swatches, relief's and the map's, the map's in Light Mode and in
-/// Dark.
+/// order. So does every colourway among Settings' swatches, relief's and the map's, in Light Mode and in Dark; and
+/// relief in Light is on paper, where in Dark its unworked ground is the darkest thing.
 @MainActor @Test func meanderDrawsEveryLook() throws {
     var pictures: [[SIMD4<UInt8>]] = []
     func draw(_ settings: [String: Double], relief: String = "Survey Blue", sheet: String = "Fisk 1944") throws {
@@ -310,12 +310,16 @@ private func seeded(_ seed: Double, _ others: [String: Double] = [:]) -> [String
     #expect(pictures[0] != pictures[1] && pictures[1] != pictures[2])
     let before = NSApplication.shared.appearance
     defer { NSApplication.shared.appearance = before }
-    for relief in Meander.reliefs { try draw([:], relief: relief.name) }
     for name in [NSAppearance.Name.aqua, .darkAqua] {
         NSApplication.shared.appearance = NSAppearance(named: name)
+        for relief in Meander.reliefs {
+            try draw([:], relief: relief.name)
+            let corner = pictures.last![756 * 5 + 5] // ground the river never reached
+            #expect(name == .aqua ? corner.y > 200 : corner.y < 60, "\(relief.name) in \(name.rawValue): its unworked ground is \(corner)")
+        }
         for sheet in Meander.maps { for rule in 0...1 { try draw(["meander.look": 1, "meander.rule": Double(rule)], sheet: sheet.name) } }
     }
-    #expect(Set(pictures.dropFirst(3).map { $0[$0.count / 2 + 378] }).count > 6) // the colourways differ, by the pixel in the middle
+    #expect(Set(pictures.dropFirst(3).map { $0[$0.count / 2 + 378] }).count > 12) // the colourways differ, by the pixel in the middle
 }
 
 /// Swatches under a menu (`Wallpaper.looks`) hang together, for every wallpaper that has them: each set names a

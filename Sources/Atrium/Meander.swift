@@ -15,9 +15,10 @@ final class Meander: SKScene {
     nonisolated static let look = Knob(key: "meander.look", label: "Look", range: 0...1, standard: 0, section: "Look", format: .choice(["Relief", "Old map"]))
     /// Each look's colours, as swatches under the Look menu with Random first: relief's, then the old map's. With
     /// Random a scene picks one of them when it is built. A swatch is relief's river and two of its heights, or a
-    /// map's paper and its inks.
+    /// map's paper and its inks, in Dark Mode's colours or Light's.
     nonisolated static let palettes = [
-        PaletteChoice(key: "meander.colors", options: reliefs.map { ($0.name, [$0.river, $0.heights[2].colour, $0.heights[5].colour], [$0.river, $0.heights[2].colour, $0.heights[5].colour]) },
+        PaletteChoice(key: "meander.colors", options: reliefs.map { ($0.name, [$0.dark.river, $0.dark.heights[2].colour, $0.dark.heights[5].colour],
+                                                                     [$0.light.river, $0.light.heights[2].colour, $0.light.heights[5].colour]) },
                       shownWhen: look.key, shownAt: 0),
         PaletteChoice(key: "meander.inks", options: maps.map { ($0.name, [$0.dark.paper] + $0.dark.inks, [$0.light.paper] + $0.light.inks) }, shownWhen: look.key, shownAt: 1),
     ]
@@ -40,23 +41,45 @@ final class Meander: SKScene {
     /// A colour from its three bytes.
     nonisolated private static func tone(_ r: Float, _ g: Float, _ b: Float) -> SIMD3<Float> { SIMD3(r, g, b) / 255 }
 
-    /// Relief's colours: the river, a lake once it has dulled, ground the river hasn't reached in memory, and the
-    /// land's by its height above the river, from a new bar (0) to the oldest floodplain (1). Survey Blue is
-    /// measured from a relative elevation model of the Sauk (Washington Geological Survey); the others are its
-    /// lightness in another hue (docs/meander.md).
-    nonisolated static let reliefs: [(name: String, river: SIMD3<Float>, wet: SIMD3<Float>, ground: SIMD3<Float>, heights: [(at: Float, colour: SIMD3<Float>)])] = [
-        ("Survey Blue", tone(153, 200, 211), tone(52, 130, 151), tone(0, 22, 31),
-         [(0, tone(120, 178, 192)), (0.10, tone(52, 130, 151)), (0.32, tone(24, 93, 115)), (0.52, tone(14, 76, 97)),
-          (0.72, tone(10, 64, 83)), (0.90, tone(4, 46, 63)), (1, tone(1, 30, 42))]),
-        ("Rainforest", tone(151, 202, 192), tone(52, 132, 113), tone(2, 21, 15),
-         [(0, tone(118, 180, 166)), (0.10, tone(52, 132, 113)), (0.32, tone(24, 97, 80)), (0.52, tone(14, 80, 65)),
-          (0.72, tone(8, 67, 54)), (0.90, tone(0, 47, 37)), (1, tone(1, 30, 22))]),
-        ("Garnet", tone(210, 187, 173), tone(143, 108, 101), tone(30, 9, 13),
-         [(0, tone(186, 156, 145)), (0.10, tone(143, 108, 101)), (0.32, tone(112, 70, 71)), (0.52, tone(100, 54, 59)),
-          (0.72, tone(92, 42, 51)), (0.90, tone(81, 25, 38)), (1, tone(48, 14, 21))]),
-        ("Amethyst", tone(217, 184, 172), tone(165, 100, 111), tone(25, 14, 28),
-         [(0, tone(199, 155, 151)), (0.10, tone(165, 100, 111)), (0.32, tone(115, 65, 96)), (0.52, tone(92, 51, 79)),
-          (0.72, tone(78, 44, 73)), (0.90, tone(58, 33, 63)), (1, tone(36, 20, 40))]),
+    /// Relief's colours in one mode: the river, a lake once it has dulled, ground the river hasn't reached in
+    /// memory, and the land's by its height above the river, from a new bar (0) to the oldest floodplain (1).
+    typealias Relief = (river: SIMD3<Float>, wet: SIMD3<Float>, ground: SIMD3<Float>, heights: [(at: Float, colour: SIMD3<Float>)])
+
+    /// Relief's colours, in Dark Mode and in Light. Dark: the river and the bars at its level are the lightest
+    /// thing and land darkens as it builds up. Survey Blue is measured from a relative elevation model of the Sauk
+    /// (Washington Geological Survey); the others are its lightness in another hue. Light is that turned over, ink
+    /// on paper: ground the river never reached is the paper, old land a pale tint, newer land deeper and the
+    /// river the darkest thing. None of Light is measured (docs/meander.md, "Palettes proposed" and "Light Mode").
+    nonisolated static let reliefs: [(name: String, dark: Relief, light: Relief)] = [
+        ("Survey Blue",
+         (tone(153, 200, 211), tone(52, 130, 151), tone(0, 22, 31),
+          [(0, tone(120, 178, 192)), (0.10, tone(52, 130, 151)), (0.32, tone(24, 93, 115)), (0.52, tone(14, 76, 97)),
+           (0.72, tone(10, 64, 83)), (0.90, tone(4, 46, 63)), (1, tone(1, 30, 42))]),
+         (tone(30, 104, 127), tone(115, 178, 193), tone(240, 244, 242),
+          [(0, tone(60, 130, 150)), (0.10, tone(115, 178, 193)), (0.32, tone(130, 187, 200)), (0.52, tone(153, 200, 211)),
+           (0.72, tone(169, 209, 218)), (0.90, tone(192, 222, 229)), (1, tone(224, 237, 238))])),
+        ("Rainforest",
+         (tone(151, 202, 192), tone(52, 132, 113), tone(2, 21, 15),
+          [(0, tone(118, 180, 166)), (0.10, tone(52, 132, 113)), (0.32, tone(24, 97, 80)), (0.52, tone(14, 80, 65)),
+           (0.72, tone(8, 67, 54)), (0.90, tone(0, 47, 37)), (1, tone(1, 30, 22))]),
+         (tone(31, 109, 90), tone(114, 181, 166), tone(240, 244, 240),
+          [(0, tone(60, 134, 117)), (0.10, tone(114, 181, 166)), (0.32, tone(129, 189, 176)), (0.52, tone(151, 202, 192)),
+           (0.72, tone(167, 211, 202)), (0.90, tone(190, 224, 217)), (1, tone(223, 237, 232))])),
+        ("Garnet",
+         (tone(210, 187, 173), tone(143, 108, 101), tone(30, 9, 13),
+          [(0, tone(186, 156, 145)), (0.10, tone(143, 108, 101)), (0.32, tone(112, 70, 71)), (0.52, tone(100, 54, 59)),
+           (0.72, tone(92, 42, 51)), (0.90, tone(81, 25, 38)), (1, tone(48, 14, 21))]),
+         (tone(120, 81, 79), tone(189, 160, 149), tone(245, 241, 232),
+          [(0, tone(144, 109, 103)), (0.10, tone(189, 160, 149)), (0.32, tone(197, 171, 159)), (0.52, tone(210, 187, 173)),
+           (0.72, tone(218, 197, 183)), (0.90, tone(230, 213, 199)), (1, tone(240, 231, 221))])),
+        // (Light: the proposal's land was peach, hard to tell from Garnet's; this is lilac at the same lightness)
+        ("Amethyst",
+         (tone(217, 184, 172), tone(165, 100, 111), tone(25, 14, 28),
+          [(0, tone(199, 155, 151)), (0.10, tone(165, 100, 111)), (0.32, tone(115, 65, 96)), (0.52, tone(92, 51, 79)),
+           (0.72, tone(78, 44, 73)), (0.90, tone(58, 33, 63)), (1, tone(36, 20, 40))]),
+         (tone(131, 74, 107), tone(182, 154, 194), tone(247, 244, 247),
+          [(0, tone(149, 102, 137)), (0.10, tone(182, 154, 194)), (0.32, tone(190, 164, 201)), (0.52, tone(203, 181, 211)),
+           (0.72, tone(213, 194, 219)), (0.90, tone(226, 212, 229)), (1, tone(240, 233, 241))])),
     ]
 
     /// An old map's sheet: its paper, the river (bare paper, a touch lighter), its line ink and the four inks of
@@ -151,7 +174,7 @@ final class Meander: SKScene {
             // four inks; a sheet of two takes them in turn
             uniforms += (0..<4).map { SKUniform(name: "u_ink\($0)", vectorFloat3: sheet.inks[$0 % sheet.inks.count]) }
         } else {
-            let relief = Self.reliefs[Self.reliefs.firstIndex { $0.name == dressed[2] } ?? lucky.relief]
+            let both = Self.reliefs[Self.reliefs.firstIndex { $0.name == dressed[2] } ?? lucky.relief], relief = systemIsDark ? both.dark : both.light
             // the land's colour by height, 256 across
             let ramp = (0..<256).flatMap { level -> [UInt8] in
                 let height = Float(level) / 255, above = relief.heights.firstIndex { $0.at >= height } ?? relief.heights.count - 1
@@ -161,11 +184,14 @@ final class Meander: SKScene {
             }
             let heights = SKTexture(data: Data(ramp), size: CGSize(width: 256, height: 1))
             heights.filteringMode = .linear
+            // The ground the river never reached is mottled with its oldest land's colour: in Light with a quarter
+            // of it, or it reads as stains on the paper.
+            let oldest = relief.heights[relief.heights.count - 2].colour, wilds = systemIsDark ? oldest : simd_mix(relief.ground, oldest, SIMD3(repeating: 0.25))
             uniforms += [SKUniform(name: "u_heights", texture: heights), SKUniform(name: "u_river", vectorFloat3: relief.river),
                          SKUniform(name: "u_wet", vectorFloat3: relief.wet), SKUniform(name: "u_ground", vectorFloat3: relief.ground),
-                         SKUniform(name: "u_oldest", vectorFloat3: relief.heights[relief.heights.count - 2].colour)]
+                         SKUniform(name: "u_wilds", vectorFloat3: wilds)]
         }
-        ground.shader = SKShader(source: shaderCommon + Self.reads + (map ? Self.map(rule: rule) : Self.relief), uniforms: uniforms)
+        ground.shader = SKShader(source: shaderCommon + Self.reads + (map ? Self.map(rule: rule) : Self.relief(light: !systemIsDark)), uniforms: uniforms)
         tune()
         if times == [0, 0] { for _ in 0..<2 { upload() } } // a new scene: both grounds are the river's first
         show()
@@ -326,8 +352,14 @@ final class Meander: SKScene {
     """
 
     /// Lidar relief, coloured by height above the river: the river and the bars at its level are the lightest
-    /// thing, land darkens as it builds up, and there are no outlines.
-    private static let relief = """
+    /// thing, land darkens as it builds up, and there are no outlines. Or with `light`, on paper: the same shader
+    /// with Light's colours and four numbers changed, since on a pale ground the light on the fine relief at the
+    /// dark look's strength made corduroy of the scroll bars, a lit side has little room to get lighter, and the
+    /// dark look's vignette and gain would grey the paper. A second source and not a uniform, so that the dark
+    /// picture is the same to the byte.
+    private static func relief(light: Bool) -> String {
+        let (strength, lit, vignette, gain) = light ? ("0.45", "1.05", "0.16", "0.98") : ("0.9", "1.3", "0.44", "0.86")
+        return """
         // height above the river, 0 to 1: a bar is up out of the water within a couple of T, then silts up for ages
         float height = 0.25 * (1.0 - exp(-age / 2.5)) + 0.75 * (1.0 - exp(-age / 90.0));
         vec2 rise = (0.1 * exp(-age / 2.5) + 0.75 / 90.0 * exp(-age / 90.0)) * older; // its slope a texel
@@ -396,11 +428,11 @@ final class Meander: SKScene {
         float rough = 0.75 * (0.6 * lumps(pts / 60.0) + 0.3 * lumps(pts / 22.0 + 9.0) + 0.1 * lumps(pts / 8.0 + 17.0));
         tilt += 0.05 * (rough * fading + wild * vec2(dfdx(rough), dfdy(rough)) / perPixel);
         vec3 col = texture2D(u_heights, vec2((clamp(height + 0.02 * scroll, 0.0, 1.0) * 255.0 + 0.5) / 256.0, 0.5)).rgb;
-        col = mix(col, mix(u_ground, u_oldest, smoothstep(-0.1, 0.55, rough)), wild);
+        col = mix(col, mix(u_ground, u_wilds, smoothstep(-0.1, 0.55, rough)), wild);
         // light from the upper left on the fine relief only, and none within a few pixels of water: no rims
         tilt *= -5.0;
         float shade = (dot(tilt, vec2(-0.55, 0.62)) + 0.56) / sqrt(dot(tilt, tilt) + 1.0) - 0.56;
-        col *= clamp(1.0 + 0.9 * shade * smoothstep(0.25, 1.9, bank), 0.72, 1.3);
+        col *= clamp(1.0 + \(strength) * shade * smoothstep(0.25, 1.9, bank), 0.72, \(lit));
         // Water the river has left dulls a little over its first few T: a lake. And it dulls to the colour of a new
         // bar in its shallows, within two texels of its banks, and all of it over the second half of its life, so
         // that a lake silted down to a sliver is dull right through and doesn't shine like a highlight. Where the
@@ -408,9 +440,10 @@ final class Meander: SKScene {
         float still = mix(wetAge, past, smoothstep(0.8, 1.8, -bank)), lake = smoothstep(0.3, 4.0, still);
         float dull = 0.35 * lake + 0.65 * max(smoothstep(0.5 * u_knobs.w, u_knobs.w, still), lake * (1.0 - smoothstep(0.5, 2.0, -bank)));
         col = mix(col, mix(u_river, u_wet, dull), water);
-        gl_FragColor = vec4(col * (1.0 - 0.44 * dot(middle, middle)) * 0.86, 1.0);
+        gl_FragColor = vec4(col * (1.0 - \(vignette) * dot(middle, middle)) * \(gain), 1.0);
     }
     """
+    }
 
     /// A map of the river's old courses: each spot is inked for the stage in which the river last left it. The
     /// live river is bare paper between two bank lines; a lake keeps that line when new, and it thins. With `rule`

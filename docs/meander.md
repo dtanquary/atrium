@@ -84,7 +84,7 @@ Each: ground; five ages, oldest to youngest; river. Dark grounds sit at 0.05–0
 - **Survey Blue** (from the Survey's Sauk River picture). Dark: (0,22,31) | (4,46,63) (10,64,83) (14,76,97) (24,93,115) (52,130,151) | (153,200,211). Light: (240,244,242) | (192,222,229) (169,209,218) (153,200,211) (130,187,200) (115,178,193) | (30,104,127).
 - **Rainforest** (the Quinault). Dark: (2,21,15) | (0,47,37) (8,67,54) (14,80,65) (24,97,80) (52,132,113) | (151,202,192). Light: (240,244,240) | (190,224,217) (167,211,202) (151,202,192) (129,189,176) (114,181,166) | (31,109,90).
 - **Garnet** (the Chehalis). Dark: (30,9,13) | (81,25,38) (92,42,51) (100,54,59) (112,70,71) (143,108,101) | (210,187,173). Light: (245,241,232) | (230,213,199) (218,197,183) (210,187,173) (197,171,159) (189,160,149) | (120,81,79).
-- **Amethyst** (the Okanogan). Dark: (25,14,28) | (58,33,63) (78,44,73) (92,51,79) (115,65,96) (165,100,111) | (217,184,172). Light: (248,244,242) | (237,212,209) (225,195,187) (217,184,172) (207,168,152) (201,157,138) | (131,74,107).
+- **Amethyst** (the Okanogan). Dark: (25,14,28) | (58,33,63) (78,44,73) (92,51,79) (115,65,96) (165,100,111) | (217,184,172). Light: (248,244,242) | (237,212,209) (225,195,187) (217,184,172) (207,168,152) (201,157,138) | (131,74,107). (As built, Light's land is lilac, not this peach: (226,212,229) (213,194,219) (203,181,211) (190,164,201) (182,154,194), on (247,244,247). See "Light Mode relief".)
 - **Fisk Sage, Salmon, Teal:** one of his inks on his paper. Light: paper (235,224,196), river (244,237,216), and for salmon (230,199,173) (227,180,156) (225,169,146) (222,152,132) (215,114,97). Dark: ground (27,24,20), river (166,158,138), lines (80,76,67); sage (44,43,32) (56,57,42) (64,65,47) (74,77,55) (100,106,74); salmon (58,38,32) (81,49,42) (95,56,47) (115,65,55) (163,87,74); teal (42,43,37) (53,57,50) (59,65,57) (69,77,68) (91,106,94).
 - **Fisk 1944:** his four inks together, the one palette outside one family. Dark: straw (110,104,61), teal (82,96,84), salmon (123,65,55), sage (100,106,74).
 - **Landsat,** if a true-colour feel is wanted, from NASA's Mamoré and Ucayali pictures: forest (48,63,52) and (59,85,61), young growth (79,104,75) and (112,130,93), fresh bars (168,172,125) to (220,208,171), river tan (209,170,103), black-water oxbow (30,29,46). A true-colour satellite look of its own was judged not worth it: it only convinces with photographic canopy texture, which a simulation can't migrate.
@@ -416,7 +416,7 @@ Tests: `meanderDrawsEveryLook` draws every colourway of both looks, the map's in
 Not done, or not known:
 - **The Settings page itself has not been seen.** The test that opens it (`SETTINGS_SHOT`) puts a window on the screen, which this build was told not to do. The rows are plain `Knob`s of kinds other pages already use.
 - **Colours were menus, not the swatch grid** other wallpapers have: a wallpaper has one `PaletteChoice`, and this one needs a list for each look. (Swatches since: "Colours as swatches", below.) The rows that belong to one look show while the Look menu is at it (`shownWhen` with `shownAt`, which came with the train).
-- **No relief for Light Mode.** (Amethyst, Salmon and Teal came later: "More colours", below.)
+- **No relief for Light Mode.** (Built since: "Light Mode relief", below. Amethyst, Salmon and Teal too: "More colours".)
 - **No shared grade sliders** (brightness, contrast, saturation, hue).
 - **No screenshot:** `Resources/preview-meander.jpg` and `docs/images` have none, so its Settings page is blank behind the header until the live copy has built. No README entry, nothing on the site.
 - With Random, two displays (or the desktop and the Settings page) pick their colours separately.
@@ -534,11 +534,26 @@ Seen in both rules, Light and Dark, river 13. Salmon is the loud one, most of al
 
 Tests: `meanderDrawsEveryLook` draws every swatch of both looks, the map's in both modes and both rules; `swatchesUnderAMenuHangTogether` checks the new ones have colours for both modes.
 
+### Light Mode relief (2026-10-11)
+Relief had one look, a dark one. In Light Mode it is now ink on paper ([build-light.jpg](meander/build-light.jpg): Survey Blue, Rainforest, Garnet and Amethyst, river 13's launch picture). Ground the river never reached is the paper; old floodplain is a pale tint; newer land is deeper; the river is the darkest thing on it, where in the dark look it is the lightest. Three ways were put to the lead on one sheet (this one; "embossed paper", with the tints pulled most of the way to the paper and the form carried by the light; and a high-key one that kept the river the lightest thing). This one reads as a print and keeps the floodplain's ages.
+
+- **The colours** (`Meander.reliefs`, a Dark and a Light for each, as the old map's sheets are) are "Palettes proposed"'s Light figures, with a bar at river level and the highest ground placed between them as the Dark ones are. None is measured. Amethyst's land is not the proposal's: that was peach, hard to tell from Garnet's, and is lilac now at the same lightness, under the same plum river.
+- **Four numbers differ from the dark look's,** in a second copy of the shader's source (`relief(light:)`), not a uniform, so that the dark picture is the same to the byte: 0 of 5,939,136 pixels differ in river 13's launch picture. The light on the fine relief is at half strength (at the dark look's it made corduroy of the scroll bars on a pale ground); a lit side may go 5% lighter, not 30% (there is little room above paper); and the vignette and gain are 0.16 and 0.98 for 0.44 and 0.86, which greyed the paper.
+- **The unworked ground's mottling** takes a quarter of the oldest land's tint, where the dark look takes all of it: at full strength it read as stains on the paper.
+- **Following the system:** the scene takes its sheet from `systemIsDark` when it dresses, as the old map does, and the app builds the scene afresh when the system's appearance changes (`main.swift` watches `effectiveAppearance`). So a change of appearance is a new scene, which for Meander is a new river: as it already was for the old map. Checked as far as a test can: `meanderDrawsEveryLook` builds every relief palette under each appearance and looks at a corner of unworked ground (over 200 of 255 in Light, under 60 in Dark). The app's own rebuild was read, not run.
+- **The swatches** show Light's colours in Light Mode (the river's ink running into two of the land's tints).
+- **A cutoff in Light** ([build-light-cutoff.jpg](meander/build-light-cutoff.jpg): the scarp strip's seven moments, Dark above and Light below): the first second's stepped band is there as it is in Dark, pale blocks against the dark river 0.8 s after, and about as plain; from 1.6 s the scarp is smooth in both.
+
+Not done, or not known:
+- Not seen on a real screen, in motion, or at the largest river. The page's swatches in Light Mode have not been seen at all.
+- Cost not measured apart: the Light source is the dark one with four numbers changed.
+- With Random, relief in Light and in Dark are the same family only by chance, since a change of appearance is a new scene and picks again.
+
 ### Still wrong, worst first (2026-10-11)
 What is known to be wrong with the picture as built, in one place.
 1. **The first second after a cutoff, in relief.** New land within a texel and a half of water is drawn the old way, so until the river has drawn two texels off the bank it was cutting, the scarp shows as a stepped band beside the water: there 0.8 s after the cutoff at 4×, gone by 1.6 s ("The scarp above new land"). What it would take: mix only the land's heights, leaving the water's share out, which is right at every bank the live river has made and is built (it is not in). But the launch's last step gives a texel beyond each bank the present time, to close a hairline its sweeps leave between their straight banks and the river's bowed ones, and with that mix every bank of the launch picture gets a light fringe. So the launch's last step has to stamp only the ground the river has really left, and then the launch picture's banks change by that much.
 2. **The jog and the spur at a cutoff:** the two ends the cut leaves in the river's bank, still there in the frames after it (how long they stand has not been timed).
-3. **Blocky patches at the valley walls,** made by the launch's sweeps where a bank swung round against the wall: outlines a texel to the step.
+3. **Blocky patches at the valley walls,** made by the launch's sweeps where a bank swung round against the wall: outlines a texel to the step. Light Mode shows them more: in river 13's launch picture one is a white block on pale land beside the wall.
 4. **Old lakes:** a light middle and a dull rim in relief; in the old map a teardrop with a white crescent.
 5. **A lake in the second half of its life** narrows on every second or third step, under a quarter of a pixel a time.
 
