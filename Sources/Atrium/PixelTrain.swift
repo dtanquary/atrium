@@ -12,8 +12,8 @@ import SpriteKit
 final class PixelTrain: SKScene {
     /// What country the line runs through: whatever comes, or held on one kind. (A menu of the train's own: the
     /// airliner's has sceneries the train hasn't got yet, and its ocean is the train's lake.)
-    nonisolated static let scenery = Knob(key: "seat.country", label: "Scenery", range: 0...4, standard: 0, section: "Flight",
-                                          format: .choice(["Changing", "Countryside", "A lake beside the line", "Mountains", "A city"]), shownWhen: "seat.orbit", shownAt: 2)
+    nonisolated static let scenery = Knob(key: "seat.country", label: "Scenery", range: 0...5, standard: 0, section: "Flight",
+                                          format: .choice(["Changing", "Countryside", "A lake beside the line", "Mountains", "A city", "Snow"]), shownWhen: "seat.orbit", shownAt: 2)
     nonisolated static let poles = Knob(key: "seat.poles", label: "Poles and wires beside the line", range: 0...1, standard: 1, section: "Flight",
                                         format: .toggle, shownWhen: "seat.orbit", shownAt: 2)
     /// The train's own settings, listed among the airliner's (`PixelWindowSeat.rows`) while the train is offered.
@@ -515,7 +515,7 @@ struct TrainWorld {
     /// Which side things are lit from: 1 from the right of the picture, -1 from the left.
     var sun = 1
     /// Settings' Scenery: 0 for whatever comes, 1 for countryside, 2 for a lake beside the line, 3 for mountains,
-    /// 4 for a city.
+    /// 4 for a city, 5 for snow.
     var scenery = 0
     /// A lake's far shore is the ring this far off, and those beyond it: nearer rings stand on our side of the water.
     static let farShore = 1800.0

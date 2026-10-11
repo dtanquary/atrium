@@ -41,11 +41,11 @@ import Testing
 /// What keeps it calm at any speed: no lamp is laid on a ring that slides faster than `TrainWorld.bright` pixels a
 /// second, none of the lane's poles on one faster than `thin`, and nothing that stands (a tree, a house) on one
 /// faster than `broad`. In each country held, and left to change.
-@Test(arguments: [0, 1, 3, 4]) func trainNothingThinIsFast(scenery: Int) {
+@Test(arguments: [0, 1, 3, 4, 5]) func trainNothingThinIsFast(scenery: Int) {
     var standing = 0, lamps = 0
     // What only a thing that stands is made of: a trunk, a window, a wall. (In the mountains fir is also the forest
     // on the land's face, which is land; a fir that stands has a trunk.)
-    let stood = [TrainMat.trunk, TrainMat.glass, TrainMat.white, TrainMat.brick, TrainMat.roof, TrainMat.chalet, TrainMat.concrete, TrainMat.tower, TrainMat.glassCool]
+    let stood = [TrainMat.trunk, TrainMat.glass, TrainMat.white, TrainMat.brick, TrainMat.roof, TrainMat.chalet, TrainMat.falu, TrainMat.concrete, TrainMat.tower, TrainMat.glassCool]
         + (scenery == 1 ? [TrainMat.fir0, TrainMat.fir1] : [])
     for times in [0.5, 1, 1.5, 2, 3, 4, 6, 8, 10] {
         var world = TrainWorld(focal: 265.2, eye: 3.5, speed: PixelTrain.pace * times)
@@ -73,7 +73,7 @@ import Testing
 @MainActor @Test func trainNightIsNeverBlack() {
     let keys = [PixelWindowSeat.previewTime.key, PixelWindowSeat.previewHour.key, PixelTrain.scenery.key, PixelCarriage.choice.key]
     defer { for key in keys { UserDefaults.standard.removeObject(forKey: key) } }
-    for (scenery, name) in [(1.0, "countryside"), (2, "a lake"), (3, "the mountains"), (4, "a city")] {
+    for (scenery, name) in [(1.0, "countryside"), (2, "a lake"), (3, "the mountains"), (4, "a city"), (5, "snow")] {
         for (key, value) in zip(keys, [1, 23, scenery, 0]) { UserDefaults.standard.set(value, forKey: key) }
         let scene = PixelTrain(size: CGSize(width: 1512, height: 982))
         var seen: [Int] = []
@@ -200,7 +200,7 @@ import Testing
 @MainActor @Test func trainLooksTheSameAtAnyFrameRate() {
     let keys = [PixelWindowSeat.previewTime.key, PixelWindowSeat.previewHour.key, PixelTrain.scenery.key]
     defer { for key in keys { UserDefaults.standard.removeObject(forKey: key) } }
-    for scenery in [1.0, 2, 3, 4] {
+    for scenery in [1.0, 2, 3, 4, 5] {
         for (key, value) in zip(keys, [1, 13, scenery]) { UserDefaults.standard.set(value, forKey: key) }
         var pictures: [[UInt32]] = []
         // (From an odd metre: 2.2 s at 1× is 29⅓ m, and from a whole one three rows of ground would end exactly on
@@ -222,7 +222,7 @@ import Testing
 /// Moving the Speed slider lays nothing again: at the moment it moves the picture stays as it was, pole line
 /// and all, though at 3× the line and the nearest trees are too fast to be laid. Only what comes into view from
 /// then on goes by the new speed.
-@MainActor @Test(arguments: [1.0, 3, 4]) func trainKeepsItsCountryAsTheSpeedChanges(scenery: Double) {
+@MainActor @Test(arguments: [1.0, 3, 4, 5]) func trainKeepsItsCountryAsTheSpeedChanges(scenery: Double) {
     let keys = [PixelWindowSeat.previewTime.key, PixelWindowSeat.previewHour.key, PixelTrain.scenery.key, PixelWindowSeat.speed.key]
     defer { for key in keys { UserDefaults.standard.removeObject(forKey: key) } }
     for (key, value) in zip(keys, [1, 13, scenery, 1.0]) { UserDefaults.standard.set(value, forKey: key) }
@@ -316,7 +316,7 @@ import Testing
     var world = TrainWorld(focal: 265, eye: 3.5, speed: 13.3) // the Large pane, its horizon 30% up
     let wide = 340, ground = 66
     // Countryside, as the first sheets' was, and then each of the other sceneries held, its files under its name.
-    for (scenery, name) in [(1, ""), (3, "mountains-"), (4, "city-")] {
+    for (scenery, name) in [(1, ""), (3, "mountains-"), (4, "city-"), (5, "snow-")] {
         world.scenery = scenery
         for x in [52000.0, 52137.25, 3.0, 1_234_567.5] {
             for ring in TrainWorld.rings.indices {

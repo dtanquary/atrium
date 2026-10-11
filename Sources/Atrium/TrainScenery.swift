@@ -4,23 +4,34 @@ import Foundation
 /// are laid here, each the mock-ups' painter line for line (docs/pixel-window-seat/train_scenery.py), as farmland is
 /// train.py's, so that what they lay can be checked against the sheet Dave picked from byte for byte.
 enum TrainCountry {
-    case farmland, mountains, city
+    case farmland, mountains, city, snow
 
     /// What sets one country's hashes apart from another's, as in the mock-ups.
-    var salt: UInt64 { [.farmland: 0, .mountains: 100_000, .city: 400_000][self]! }
+    var salt: UInt64 { [.farmland: 0, .mountains: 100_000, .snow: 200_000, .city: 400_000][self]! }
 
     /// How far off things have faded most of the way to the horizon's colour, in metres: mountain air is clear,
     /// and a city's is not.
-    var haze: Double { [.farmland: TrainWorld.haze, .mountains: 60_000, .city: 16_000][self]! }
+    var haze: Double { [.farmland: TrainWorld.haze, .mountains: 60_000, .snow: 40_000, .city: 16_000][self]! }
 
     /// For each ring, how high the land can stand above the track, in metres (farmland's are `TrainWorld.rise`,
     /// and a city is level). The mountains' are the Alps' at their steepest, held all along the line.
-    var peaks: [Double] { self == .mountains ? [4800, 4500, 4200, 2600, 450, 130, 30, 9, 0, 0, 0] : [Double](repeating: 0, count: 11) }
+    /// Snow's are the fells of a high plateau, twice life size.
+    var peaks: [Double] {
+        self == .mountains ? [4800, 4500, 4200, 2600, 450, 130, 30, 9, 0, 0, 0] : self == .snow ? [2600, 2400, 2200, 1300, 300, 80, 26, 9, 0, 0, 0]
+            : [Double](repeating: 0, count: 11)
+    }
 
     /// What its rows of ground are made of. Mountains: alpine meadows, and a milky river with its gravel bank where
     /// farmland has a lane. A city: roofs and yards far off; nearer, the railway's own ground, ballast with the next
     /// lines' rails as level lines 19 to 34 m out and a brick wall where the lane was.
-    var ground: TrainGround { self == .farmland ? Self.farm : self == .mountains ? Self.valley : Self.yards }
+    /// Snow: a snowfield, drifted and wind-scoured, with frozen tarns far off, a ploughed road where the lane was and a
+    /// snow fence 38 m out.
+    var ground: TrainGround { [.farmland: Self.farm, .mountains: Self.valley, .city: Self.yards, .snow: Self.snowfield][self]! }
+    private static let snowfield = TrainGround(fields: [TrainMat.snow, TrainMat.snow, TrainMat.snowShade, TrainMat.snow, TrainMat.ice, TrainMat.snow,
+                                                        TrainMat.snowShade, TrainMat.snow, TrainMat.snow, TrainMat.ice],
+                                               hedge: nil, lines: (TrainMat.snowShade, TrainMat.snowShade, TrainMat.road),
+                                               far: (TrainMat.snow, TrainMat.snowShade), near: (TrainMat.snow, TrainMat.snow), verge: TrainMat.snowShade,
+                                               rails: [38.0], rail: TrainMat.birch, mixing: 50, salt: 200_000)
     private static let farm = TrainGround(fields: TrainWorld.fields, hedge: TrainMat.hedge, lines: (TrainMat.hedge, TrainMat.hedgeLit, TrainMat.road),
                                           far: (TrainMat.ley, TrainMat.wheat), near: (TrainMat.pasture, TrainMat.crop), verge: TrainMat.verge, salt: 0)
     private static let valley = TrainGround(fields: [TrainMat.alp, TrainMat.pasture, TrainMat.alp, TrainMat.ley, TrainMat.alp, TrainMat.pasture,
@@ -69,13 +80,13 @@ extension TrainWorld {
     /// so from 11 minutes to three quarters of an hour at 1×.
     static let stretch = 22_000.0
     /// The countries Changing passes through between its stretches of farmland.
-    static let passing: [TrainCountry] = [.mountains, .city]
+    static let passing: [TrainCountry] = [.mountains, .city, .snow]
 
     /// Where a place along the line lies. Held on a scenery by Settings, the line is all one country. Left to
     /// change, it is cut into stretches at uneven places: every other one is farmland, and each between draws its
     /// country, so the line always comes back to farmland and no country runs on into another of its kind.
     func country(_ wx: Double) -> TrainPlace {
-        guard scenery == 0 else { return TrainPlace(kind: scenery == 3 ? .mountains : scenery == 4 ? .city : .farmland, edge: .infinity) }
+        guard scenery == 0 else { return TrainPlace(kind: [3: .mountains, 4: .city, 5: .snow][scenery] ?? .farmland, edge: .infinity) }
         func begins(_ k: Int) -> Double { (Double(k) + 0.2 + 0.6 * unit(hash(k, 0, 7171))) * Self.stretch }
         let near = Int((wx / Self.stretch).rounded(.down)), k = wx >= begins(near) ? near : near - 1
         func kind(_ k: Int) -> TrainCountry { k & 1 == 0 ? .farmland : Self.passing[Int(unit(hash(k, 1, 7171)) * Double(Self.passing.count))] }
@@ -100,7 +111,8 @@ extension TrainWorld {
     /// How many rows a ring's strip needs for the tallest thing any other country stands there.
     func otherRows(_ ring: Int) -> Int {
         let ppm = perMetre(ring)
-        return max(Int((34 * ppm).rounded(.up)) + 4 + Int((TrainCountry.mountains.peaks[ring] * ppm).rounded(.up)), Int((max(Self.towers[ring], 17) * ppm).rounded(.up)) + 4)
+        let tallest = max(TrainCountry.mountains.peaks[ring], TrainCountry.snow.peaks[ring])
+        return max(Int((34 * ppm).rounded(.up)) + 4 + Int((tallest * ppm).rounded(.up)), Int((max(Self.towers[ring], 17) * ppm).rounded(.up)) + 4)
     }
 
     /// How high a country's land stands above the track `wx` metres along, on a ring, in metres. Mountains: from
@@ -109,7 +121,11 @@ extension TrainWorld {
     private func height(_ kind: TrainCountry, _ ring: Int, _ wx: Double, _ salt: UInt64) -> Double {
         let z = Self.rings[ring], top = kind.peaks[ring]
         guard top > 0 else { return 0 }
-        if z >= 3500 {
+        if kind == .snow, z >= 7000 { // fells with a ridge to them, a crest every hundred pixels or so, in massifs
+            let crest = ridged(wx / (z * 0.4), z / 9000, 4, salt), massif = clip((fbm(wx / (z * 2.0 + 8000), 3, 2, salt + 9) - 0.25) * 3)
+            return top * clip(crest * 1.25 - 0.45) * (0.5 + 0.5 * massif)
+        }
+        if kind == .mountains, z >= 3500 {
             let crest = ridged(wx / (z * 0.5 + 2500), z / 9000, 5, salt)
             let massif = clip((fbm(wx / (z * 1.6 + 5000), 3, 2, salt + 9) - 0.20) * 2.5)
             return top * clip(crest * 1.5 - 0.35) * (0.45 + 0.55 * massif)
@@ -138,7 +154,22 @@ extension TrainWorld {
         func high(_ n: Int) -> Int { Int((height(kind, ring, Double(n) / ppm, salt) * relief * ppm).rounded(.toNearestOrEven)) }
         let pace = when(n).pace, swollen = high(n), face = min(swollen, rows)
         let slope = Double((high(n + 4) - high(n - 4)) * when(n).sun) // above 0 where the land's face is turned to the Sun
-        if z >= 3500 {
+        if kind == .snow {
+            // A far fell is white on the flank turned to the Sun and in blue shadow on the other (by its broad shape
+            // alone, so a flank is one piece), with dark rock where it is steep and in bands where the wind has bared
+            // it. Nearer, snow over the swells, shadowed where they fall away, with rock and dwarf birch showing.
+            let wide = z * 0.4, sunward = Double(when(n).sun)
+            let lee = z >= 7000 && (ridged(Double(n + 4) / ppm / wide, z / 9000, 1, salt) - ridged(Double(n - 4) / ppm / wide, z / 9000, 1, salt)) * sunward < 0
+            for up in 0..<face {
+                let crust = fbm(wx / (z * 0.2 + 150), Double(up) / ppm / (z * 0.012 + 6), 3, salt + 62)
+                if z >= 7000 {
+                    let steep = abs(slope) >= 5 && unit(hash(n >> 1, up, salt + 6)) < 0.7 && up * 2 > swollen
+                    cells[up] = steep || crust > 0.64 ? TrainMat.rockShade : lee ? TrainMat.snowShade : TrainMat.snow
+                } else {
+                    cells[up] = crust > 0.64 ? TrainMat.rockShade : crust < 0.31 ? TrainMat.birch : slope > -2 ? TrainMat.snow : TrainMat.snowShade
+                }
+            }
+        } else if z >= 3500 {
             let snowline = [2300.0, 2100, 1900, 1500, 99999][ring], shade = clip(-slope / 4), sunny = clip(0.30 + slope * 0.06)
             for up in 0..<face {
                 // (Speckle is drawn two pixels at a time along a row, so that a ring sliding a pixel changes half as much of it.)
@@ -163,11 +194,13 @@ extension TrainWorld {
             }
         }
         var top = face
-        if z >= 500, z <= 1800 { // fir woods along the land's top, where the valley is wooded
-            let wooded = fbm(wx / 900, z / 300, 3, salt + 1)
-            let tall = Int(((10 + 14 * fbm(wx / 60, 1, 3, salt + 2)) * ppm * clip((wooded - 0.50) * 9) * relief).rounded(.toNearestOrEven))
+        if z >= 500, z <= 1800 { // fir woods along the land's top, where it is wooded: a plateau is bare but for its sheltered hollows
+            let wooded = fbm(wx / 900, z / 300, 3, salt + 1), share = kind == .snow ? clip((wooded - 0.50 - 0.08) * 14) : clip((wooded - 0.50) * 9)
+            let tall = Int(((10 + 14 * fbm(wx / 60, 1, 3, salt + 2)) * ppm * share * relief).rounded(.toNearestOrEven))
             top = min(face + tall, rows)
-            for up in face..<top { cells[up] = unit(hash(n >> 1, up, salt + 3)) >= 0.35 ? TrainMat.fir0 : TrainMat.fir1 }
+            for up in face..<top {
+                cells[up] = kind == .snow ? (up < face + tall - 1 ? TrainMat.fir0 : TrainMat.snow) : unit(hash(n >> 1, up, salt + 3)) >= 0.35 ? TrainMat.fir0 : TrainMat.fir1
+            }
         }
         guard z <= 7000 else { return UInt8(top) } // (the ranges beyond have no plots, and nothing lit)
         let plot = Self.plot[ring], here = Int((wx / plot).rounded(.down))
@@ -176,8 +209,18 @@ extension TrainWorld {
                 let draw = unit(hash(c, 1, salt + 30)), at = (Double(c) + unit(hash(c, 2, salt + 31))) * plot
                 guard z >= Self.farShore || z <= shore(at), stands(at, in: kind) else { continue }
                 let village = noise(at / 1400, 2, 4242), seed = Int(hash(c, 3, salt + 32) % (1 << 30)), size = unit(hash(c, 4, salt + 33))
-                let stamp: Stamp, spired = z == 900 && village > 0.70 && draw < 0.2
-                if spired {
+                let stamp: Stamp, spired = kind == .mountains && z == 900 && village > 0.70 && draw < 0.2
+                if kind == .snow { // cabins under snow, a few together or one alone, and snow-laden firs where it is sheltered
+                    if village > 0.66, z >= 300, draw < [0, 0, 0, 0, 0, 0.6, 0.6, 0.55, 0.4, 0, 0][ring] {
+                        stamp = Stamp.house(max(2, 4.5 * ppm), seed).recast(Self.cabin)
+                    } else if z <= 500, draw < [0, 0, 0, 0, 0, 0, 0, 0.05, 0.06, 0.05, 0][ring] {
+                        stamp = Stamp.house(max(2, 4.5 * ppm), seed).recast(Self.cabin)
+                    } else if z <= 900, draw > 1 - min(max(0.03 + (fbm(at / 900, z / 300, 3, salt + 1) - 0.52) * 2.6, 0.02), 0.6) {
+                        stamp = Stamp.fir((10 + 10 * size) * ppm).snowed
+                    } else {
+                        continue
+                    }
+                } else if spired {
                     stamp = .church(30 * ppm)
                 } else if village > 0.64, z >= 300, draw < Self.housed[ring] {
                     stamp = Stamp.house(max(2, 5.0 * ppm), seed).recast(Self.chalet)
@@ -207,15 +250,16 @@ extension TrainWorld {
         // Lights that show only after dark: far off, the windows of farms and huts low on the land's face; nearer, a
         // lamp in a yard.
         guard pace <= Self.bright else { return UInt8(top) }
+        let (far, near, reach) = kind == .snow ? (0.7, 0.2, 1e9) : (1.0, 0.3, 620.0) // how many far off and nearer, and how high up the land
         if z >= 1800, z <= 7000 {
-            if unit(hash(n, 1, salt + 65)) < 0.06 * clip((noise(wx / 420, 6, salt + 64) - 0.5) * 4) {
-                let up = Int(Double(min(swollen, Int(620 * ppm))) * unit(hash(n, 2, salt + 66)))
+            if unit(hash(n, 1, salt + 65)) < 0.06 * far * clip((noise(wx / 420, 6, salt + 64) - 0.5) * 4) {
+                let up = Int(Double(min(swollen, Int(reach * ppm))) * unit(hash(n, 2, salt + 66)))
                 if up < rows { (cells[up], top) = (cells[up] | 128, max(top, up + 1)) }
             }
         } else if z >= 180, z <= 900 {
             for c in here - 1...here + 1 where Int(((Double(c) + unit(hash(c, 8, salt + 37))) * plot * ppm).rounded(.toNearestOrEven)) == n {
                 let up = swollen + Int(((4.0 + 3.0 * unit(hash(c, 9, salt + 38))) * ppm).rounded(.toNearestOrEven))
-                if unit(hash(c, 7, salt + 36)) < 0.3, up < rows { (cells[up], top) = (cells[up] | 128, max(top, up + 1)) }
+                if unit(hash(c, 7, salt + 36)) < near, up < rows { (cells[up], top) = (cells[up] | 128, max(top, up + 1)) }
             }
         }
         return UInt8(top)
@@ -293,6 +337,10 @@ extension TrainWorld {
         return UInt8(top)
     }
 
+    /// A cabin is farmland's house in red or tarred timber under a snowed roof.
+    private static let cabin = [TrainMat.white: TrainMat.falu, TrainMat.whiteShade: TrainMat.faluShade, TrainMat.stone: TrainMat.falu,
+                                TrainMat.stoneShade: TrainMat.faluShade, TrainMat.brick: TrainMat.chalet, TrainMat.brickShade: TrainMat.chaletShade,
+                                TrainMat.roof: TrainMat.snow, TrainMat.roofShade: TrainMat.snowShade, TrainMat.slate: TrainMat.snow, TrainMat.slateShade: TrainMat.snowShade]
     /// A chalet is farmland's house in dark timber under grey shingles.
     private static let chalet = [TrainMat.brick: TrainMat.chalet, TrainMat.brickShade: TrainMat.chaletShade,
                                  TrainMat.roof: TrainMat.slate, TrainMat.roofShade: TrainMat.slateShade]
@@ -321,6 +369,13 @@ extension Stamp {
             }
             if light, x == w / 2 { column[0] = TrainMat.lampRed | 128 }
             return column
+        }
+    }
+
+    /// A fir with snow lying on its boughs: on its lit side all but every third row, and its tip.
+    var snowed: Stamp {
+        Stamp(w: w, h: h) { x, sun in
+            column(x, sun).enumerated().map { y, cell in cell != 0 && (y < 2 || (cell == TrainMat.fir1 && y % 3 != 2)) ? TrainMat.snow : cell }
         }
     }
 

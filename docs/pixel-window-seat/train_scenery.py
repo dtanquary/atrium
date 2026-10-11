@@ -52,6 +52,10 @@ def heights(kind, Z, wx, salt):
         crest = ridged(wx / (Z * 0.5 + 2500.0), Z / 9000.0, 5, salt)
         massif = clip((fbm(wx / (Z * 1.6 + 5000.0), 3.0, 2, salt + 9) - 0.20) * 2.5)
         return top * clip(crest * 1.5 - 0.35) * (0.45 + 0.55 * massif)
+    if kind == "snow" and Z >= 7000:  # fells with a ridge to them, in massifs with low ground between
+        crest = ridged(wx / (Z * 0.4), Z / 9000.0, 4, salt)  # (a crest every hundred pixels or so, at any ring)
+        massif = clip((fbm(wx / (Z * 2.0 + 8000.0), 3.0, 2, salt + 9) - 0.25) * 3)
+        return top * clip(crest * 1.25 - 0.45) * (0.5 + 0.5 * massif)
     if kind == "desert" and 7000 <= Z <= 30000:  # mesas: flat tops, steep sides, the plain between
         return top * clip((fbm(wx / (Z * 0.7 + 2500.0), Z / 4000.0, 4, salt) - 0.50) * 10)
     if Z >= 15000:  # rounded: fells, a low far range
@@ -199,10 +203,16 @@ def ring_strip(kind, Z, n0, width, sun):
             a[body] = np.where(fbm(wx[None, :] / (Z * 0.2), up / 3.0, 3, salt + 62) > 0.63, I["fir0"], fields)[body]
     elif kind == "snow":
         crust = fbm(wx[None, :] / (Z * 0.2 + 150.0), alt / (Z * 0.012 + 6.0), 3, salt + 62)  # where the wind has bared it
-        # A far fell is white only where it is turned to the Sun; the rest of it lies in blue shadow, which is what
-        # shows it against a pale sky.
-        sunlit = slope[None, :] >= 2 if Z >= 7000 else lit
-        m = np.where(crust > 0.64, I["rockS"], np.where((crust < 0.31) & (Z <= 3500), I["birch"], np.where(sunlit, I["snow"], I["snowS"])))
+        # A far fell is white on the flank turned to the Sun and in blue shadow on the other, with dark rock where it
+        # is steep and in bands where the wind has bared it: that is what gives it a shape against a pale sky. Which
+        # flank a column is on goes by the fell's broad shape alone (its ridge's first layer), so a flank is one piece.
+        if Z >= 7000:
+            wide = Z * 0.4
+            lee = (ridged((n + 4) / ppm / wide, Z / 9000.0, 1, salt) - ridged((n - 4) / ppm / wide, Z / 9000.0, 1, salt)) * sun < 0
+            steep = (np.abs(slope[None, :]) >= 5) & (jit < 0.7) & (up * 2 > sp[None, :])
+            m = np.where(steep | (crust > 0.64), I["rockS"], np.where(lee[None, :], I["snowS"], I["snow"]))
+        else:
+            m = np.where(crust > 0.64, I["rockS"], np.where((crust < 0.31) & (Z <= 3500), I["birch"], np.where(slope[None, :] > -2, I["snow"], I["snowS"])))
         a[body] = m[body]
     elif kind == "desert":
         if Z >= 60000:

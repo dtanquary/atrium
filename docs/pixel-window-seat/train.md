@@ -352,6 +352,26 @@ The team lead accepted sheet 3 on Dave's standing word that all four be built (D
 ### A city's edge, narrowed (2026-10-11)
 - **Where a city meets farmland the near field now changes over a third of the distance** (`TrainGround.mixing`: 50 m for a city's ballast, 160 between two greens; the narrower of the two countries' counts). Filmed again across the meeting at metre 49,173: the blotches of grey and green are a ragged band that passes in three to four seconds, where they filled the near field for six.
 
+### The four more sceneries: snow (2026-10-11)
+- **The mock-up was changed first,** on the team lead's note that the far fells were one pale band, and sheet 3 painted again: from 7 km out the fells have a ridge to them, a crest every hundred pixels or so at any ring, in massifs with low ground between; a fell is white on the flank turned to the Sun and in blue shadow on the other, which flank going by its broad shape alone so that a flank is one piece; and it is dark rock where it is steep, as well as in the bands the wind has bared. (Three other ways were painted and looked at first: a white cap over a shadowed foot stippled; a column's own slope made bars; flanks of fells a pane wide made slabs.) Nearer, snow lies white over the swells and in shadow where they fall away, with no speckle.
+- **In:** `TrainCountry.snow`, in `TrainScenery.swift`, `train_scenery.py` line for line: the fells, the cover of the nearer swells (snow, rock, dwarf birch), fir woods under snow in sheltered stretches only, cabins in red or tarred timber under snowed roofs where farmland has villages and here and there alone, snow-laden firs (`Stamp.snowed`), a winter road's poles 300 m off, and the lights after dark. Its ground is a snowfield in soft dashes, with frozen tarns far off, a ploughed road where the lane was and a snow fence 38 m out, both level lines. It fades over 40 km. Settings: Scenery gains **Snow** (`seat.country` 5). Left to change, the stretches between farmland are mountains, a city or snow, each as likely.
+- **Falling snow is the weather's, not this:** what is here is snow lying.
+- **Checked by running** (release, in the worktree, each test run through the lock):
+  - **Against the mock-ups:** 10,959,692 bytes compared, 0 differ, on the first run: all that was there before, and the snow's eleven rings and 66 ground rows at the four places, 965,600.
+  - **The whole suite,** 100 tests, passes: the cull at nine speeds, the same picture at 15, 30 and 60 frames a second, and not a pixel changing as Speed moves, all for snow held too.
+  - **An hour of night over snow,** lamp pixels showing a minute apart: 5 at the least, 11 at the median, 30 at the most. It is a bare plateau; what carries the night is the snow itself, which the lifted night leaves lighter than the sky.
+  - **Left to change:** farmland 51% of the line, a city 16%, snow 16%, mountains 15%; a lake still lies beside a city for 142 km in 4,000, in 42 stretches.
+  - **Filmed,** the plain Large window, a clear sky, metre 74,000: at night at 30 frames a second a lamp is in the same pixel a frame later 74.7% of the time and a pixel on 24.9% (one of 1,947 counted two on); the pole steps 4 to 5 px a frame; and round the horizon 2.7% of pixels change from a frame to the next, 5.9% at the most, so the fells do not tick as the forest did.
+  - **Cost,** three runs in turn, a clear sky (main's cloud layer is in all of them now): snow 1.05 to 1.19 ms of CPU a frame by day and 1.07 to 1.11 by night, countryside 1.05 to 1.19, the airliner 0.98 to 1.11. GPU 0.14 to 0.21 ms.
+  - **What ships:** `shots.sh`, 25 of 25 the same files as before step 1.
+- **Looked at,** as art pixels: snow held at metre 74,000 at 13:00, at 18:18 under scattered cloud and at 23:00 (white and blue fells with dark crags over a snowfield, firs and two cabins; pink snow under a peach sky at dusk; at night the land a lighter blue than the sky, with the cabins' lights), and at metre 120,000 under cloud; left to change, a lake in the snow at metre 44,900, open water with the fells dark in it; and six frames a second apart across the meeting at 49,173, where snow gives way to field through patches of snow on grass for about four seconds.
+- **Wrong, or not done:**
+  - **The fells are still blocky:** a shadowed flank is a flat blue shape with an upright edge at its crest. They have ridges and sides now, not modelling.
+  - **A lake in the snow is open water,** not ice, with ripples and the Sun's glitter.
+  - **The far fields' snow ends at a line** where it meets farmland; only the near field changes in patches.
+  - **Nothing lies on the pole line or the fence,** and the carriage's frame is as in any other country.
+  - **Not looked at:** any Speed but 1×; any window but Large; Settings' page; the app.
+
 ## Research for the next mock-ups
 - **The window.** Real glass, width to height: a TGV bar car 1.94:1, a EuroNight sleeper 1.46:1, a British Mark 1 bay 1.2:1 with top-lights, an Amtrak Superliner coach 2.75:1, a Shinkansen N700 0.96:1 (520 × 500 mm: an airliner's window again). The mock-ups' pane is the airliner's, 1.54:1. A wide picture window (about 1.9:1) fills a 16:10 screen best.
 - **The eye:** about 2.5 m above the rail on a European intercity, 3.85 m upstairs in a Superliner; add 0.5–1 m of track bed.
