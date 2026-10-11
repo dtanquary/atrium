@@ -357,7 +357,7 @@ What is left: of 1,484,784 pixels, 407 change by one level in relief, 263 in the
 
 **Timed.** A step frame that carries a cutoff: 0.91 to 1.15 ms in `update`, where a plain step's is 0.58 (the same runs, a 14" screen). One that parts a lake: 0.76 to 0.92. So the worst step frame is about 2 ms of CPU with SpriteKit's share, as step 2 guessed. The reworked shaders: relief 0.90 ms of GPU on an ordinary frame and 0.99 on a step frame (it was 0.80 and 0.88); the old map 0.53 and Fisk's order 0.58 to 0.65, as before. A live step is as it was (median 0.8 ms).
 
-**A lake silted down to a sliver** read as a highlight on a bead in relief. Lake water now dulls to the colour of a new bar within two texels of its banks, and all of it over the second half of its life, so a sliver is dull right through. A thin lake no longer shines; the fattest remnants (a lens 4 texels across) keep a small light middle. Better, not gone.
+**A lake silted down to a sliver** read as a highlight on a bead in relief. Lake water now dulls to the colour of a new bar within two texels of its banks, and all of it over the second half of its life, so a sliver is dull right through. A thin lake no longer shines; the fattest remnants (a lens 4 texels across) keep a small light middle. Better, not gone. (The rim is gone since, and with it the light middle: "Old lakes", below.)
 
 **Half an hour from a fresh launch at 1x** ([relief](meander/build-step3-film-relief.jpg) and [the old map](meander/build-step3-film-map.jpg) at the start, 5 minutes and 10; river 13):
 - **The busy launch-made floodplain does give way.** The live river had worked over 7% of the land with a past after 1 minute, 28% after 5, 47% after 10 and 82% after 30; what it leaves is broad bars in long arcs, as the prototype's stills have. The small old loops last longest at the belt's edges.
@@ -634,6 +634,24 @@ Step 5c, "the blocky launch patches at the valley walls". Looked at in the launc
 - Blocks newer than all round them, three texels square, a few a launch: plain only in the old map. They would take the same done the other way up.
 - Where a filled pocket was part of a larger shallow hollow, the rest of the hollow keeps a small outlined shape in the old map (one in river 2, one in river 13).
 
+### Old lakes (2026-10-11)
+Step 5d. Two faults, one in each look, both in the shaders (`Meander.swift`; the river is not touched and no byte of the ground changes).
+
+**Relief: the light middle and the dull rim.** A lake over 4 T old dulled to the colour of a new bar within two texels of its banks, to keep a sliver from shining. On a remnant a few texels across that left a light middle in a dull rim, a bead; and it gave every lake a soft edge beside the river's crisp one. The rim is gone. A lake is one tone from bank to bank, a little duller than the river, and dulls as a whole as it narrows: from half-way through its life to nine tenths of it (it was from half to the end).
+
+**The old map: the teardrop with a white crescent.** A lake stayed bare paper inside a full bank line until it was gone, so a nearly dry one was a white crescent in a patch of the newest ink. Now it is paper until it has narrowed to two thirds of its width (0.7 of its life), then takes its bed's ink as it goes (85% of it by 0.95 of its life) while its line thins to half. Starting that at half its life was tried and dropped: a lake still nine tenths of its width turned pink and stopped reading as water.
+
+[build-lakes.jpg](meander/build-lakes.jpg): five lakes from the launch pictures of rivers 13, 2 and 7, before above after, twice life size, in relief Dark, relief Light and the old map (Light). From the left: a thread 13 T old, a crescent 12.5 T old, a lens 8.6 T old, a lens 5 T old and a dome 7.5 T old, where a lake lasts 16 T.
+
+- **What moved in the launch picture, pixel by pixel** (rivers 13, 2 and 7, five pictures each). Relief: 0.33 to 0.73% of pixels by over 20 levels, 56 levels at the most, Dark and Light alike. That is the rim going from every lake over 4 T old, which is most of them, so every such lake's edge is crisper than it was: more of the first picture than any step since the scarp has changed. The old map: none in river 7, 0.02% in river 2, 0.08 to 0.12% in river 13, all in its two oldest lakes. Changed pixels on texels with no water in them: under 0.03%, the lakes' own edges.
+- **In motion:** a lake beside river 13's first cutoff at 4×, a frame every 1.5 T for 18 T, old shaders and new, in relief Dark and Light and the old map Dark and Light. In relief it is crisp-edged and one tone all the way down to a point. That lake is run over by the river before it is half-way through its life, so the film does not show a lake dulling or taking its bed's ink; those were seen only in the launch pictures' old lakes.
+- Tests: Meander's, as they were. Nothing new holds the look itself: `meanderDrawsEveryLook` holds that the shaders still compile and draw.
+
+**Left:**
+- The bed a narrowing lake leaves is still a patch of one ink (the newest, in Fisk's order) the shape of the loop, a disc where the loop was tight. Without the white crescent it reads as a new bar, which is what it is.
+- A launch-made lake's bed has a stepped outline in the old map, in a fringe of other inks: the soft edge its ribbon is stamped with gives the texels on it ages between the bed's and the old ground's, and each age is an ink. Every soft scarp the launch makes has it.
+- A lake in the second half of its life still narrows on every second or third step (number 5 below): not touched.
+
 ### Still wrong, worst first (2026-10-11)
 What is known to be wrong with the picture as built, in one place.
 1. **The first second after a cutoff, in relief.** New land within a texel and a half of water is drawn the old way, so until the river has drawn two texels off the bank it was cutting, the scarp shows as a stepped band beside the water: there from about 0.5 s after the cutoff at 4×, gone by 1.2 s. It stays as it is (the lead, 2026-10-11), and one of the other ways goes to Dave as a choice. The three, in "The launch's last step, and the first second again" above, with a strip of each from 0.3 to 0.9 s after the cutoff ([build-first-second.jpg](meander/build-first-second.jpg), Dark; A above, then B, then C). B and C are kept as patches against `Sources/Atrium/Meander.swift`, each headed with the commit it applies to (`git apply docs/meander/first-second-C.patch`):
@@ -642,7 +660,7 @@ What is known to be wrong with the picture as built, in one place.
    - **C, not in, and the one put to Dave** ([first-second-C.patch](meander/first-second-C.patch)): the land's own heights at every bank. The cleanest first second. But every bank whose edge is new land turns from a crisp bank to a pale soft fringe (0.10% of the launch picture by over 20 levels), and "the initial drawing is perfect" is his to trade. Putting C in is applying its patch and running Meander's tests.
 2. **What a cutoff leaves** ("A cutoff opens as a breach", above, which mended the neck's land going in one frame): the lake-side tip of the neck hanging on as a stalk 2 to 3 px wide, for under a second at 4× and over two at 1×, and streaky where it meets new land; a spur of about 5 px growing out of the bank across from the neck as the loop's mouth silts shut; a speck of land in the gap for two frames.
 3. **The patchwork at the valley walls,** made by the launch's sweeps where a bank swung round against the wall: straight-edged patches a little older or newer than the next, outlines a texel to the step. (The pockets among them, Light Mode's white blocks, are filled: "The pockets a swept past leaves", above, which lists what that leaves.) The same stepped outline shows inside a neck's land in the old map.
-4. **Old lakes:** a light middle and a dull rim in relief; in the old map a teardrop with a white crescent.
+4. **Old lakes** (the bead in relief and the white crescent in the old map are mended: "Old lakes", above): a tight loop's bed is a disc of the newest ink in the old map, and a launch-made lake's bed has a stepped outline there in a fringe of other inks.
 5. **A lake in the second half of its life** narrows on every second or third step, under a quarter of a pixel a time.
 
 ## Dave's feedback

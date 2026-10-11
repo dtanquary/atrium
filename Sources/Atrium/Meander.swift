@@ -449,12 +449,14 @@ final class Meander: SKScene {
         tilt *= -5.0;
         float shade = (dot(tilt, vec2(-0.55, 0.62)) + 0.56) / sqrt(dot(tilt, tilt) + 1.0) - 0.56;
         col *= clamp(1.0 + \(strength) * shade * smoothstep(0.25, 1.9, bank), 0.72, \(lit));
-        // Water the river has left dulls a little over its first few T: a lake. And it dulls to the colour of a new
-        // bar in its shallows, within two texels of its banks, and all of it over the second half of its life, so
-        // that a lake silted down to a sliver is dull right through and doesn't shine like a highlight. Where the
-        // water is deep its age is the smooth read's, so a lake shades into the river it lies against.
+        // Water the river has left dulls a little over its first few T: a lake. Over the second half of its life
+        // a lake narrows to nothing (`River.trace`), and as it does it dulls to the colour of a new bar, all of
+        // it at once, so that by the time it is a sliver it doesn't shine like a highlight. (Its shallows used to
+        // dull first, within two texels of its banks: a light middle in a dull rim, which made a bead of a small
+        // lake and left every lake's edge soft beside the river's.) Where the water is deep its age is the
+        // smooth read's, so a lake shades into the river it lies against.
         float still = mix(wetAge, past, smoothstep(0.8, 1.8, -bank)), lake = smoothstep(0.3, 4.0, still);
-        float dull = 0.35 * lake + 0.65 * max(smoothstep(0.5 * u_knobs.w, u_knobs.w, still), lake * (1.0 - smoothstep(0.5, 2.0, -bank)));
+        float dull = lake * mix(0.35, 1.0, smoothstep(0.5 * u_knobs.w, 0.9 * u_knobs.w, still));
         col = mix(col, mix(u_river, u_wet, dull), water);
         \(last)
     }
@@ -502,10 +504,14 @@ final class Meander: SKScene {
             float swale = fract(u_turns.x - past / 1.4), fine = rise * u_stage / 1.4;
             float hatch = (1.0 - smoothstep(0.15, 0.6, min(swale, 1.0 - swale) / fine)) * (1.0 - smoothstep(0.22, 0.4, fine)) * cover * sloping;
             col = mix(col, u_line, clamp(0.45 * edge + 0.12 * hatch, 0.0, 1.0));
-            col = mix(col, u_river * grain, water);
+            // A lake is bare paper like the river for most of its life. Once it has narrowed to two thirds of
+            // its width (`River.trace`) it takes its bed's ink as it goes, and its line thins: it closes up,
+            // where it was a white crescent in a patch of the newest ink to the last.
+            float going = smoothstep(0.7 * u_knobs.w, 0.95 * u_knobs.w, wetAge);
+            col = mix(col, u_river * grain, water * (1.0 - 0.85 * going));
             // the river, and a lake for its first few T, wear the full bank line
             float off = abs(bank) / pt, fresh = 1.0 - smoothstep(0.5, 6.0, wetAge);
-            col = mix(col, u_line, max((1.0 - smoothstep(0.3, 1.3, off)) * 0.7, (1.0 - smoothstep(0.5, 1.5, off)) * fresh));
+            col = mix(col, u_line, max((1.0 - smoothstep(0.3, 1.3, off)) * (0.7 - 0.35 * going), (1.0 - smoothstep(0.5, 1.5, off)) * fresh));
             \(last)
         }
         """
