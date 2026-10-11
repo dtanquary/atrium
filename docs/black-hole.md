@@ -37,6 +37,7 @@ Per pixel, with `c` the unit vector from hole to camera, `d` the pixel's ray, `n
 4. `φ_A` from table B. `α = mod(atan2(−c·n, y·n), π)`: where the disc's plane cuts the ray's plane.
 5. First crossing of the disc, on the way in: `ψ₀ = φ_C + α`, good if `ψ₀ < φ_A` or the ray is swallowed; `u₀` from table A at `(e, ψ₀)`.
 6. Second crossing, on the way out: `s = 2φ_A − φ_C − α`, `ψ₁ = mod(s, π)`, `k = floor(s/π)`; good if `e² < μ`, `s > 0`, `ψ₁ < φ_A`. This one lookup holds the underside image and every order of photon ring.
+   - **The two lookups are "before closest approach" and "after closest approach", not "first image" and "second image".** The disc's far side, the hump over the hole, is the direct image, but it comes from this second lookup with `k = 0`. Only `k = 1` and up are the underside and the rings. Both lookups are needed for the plain disc.
 7. A hit if `1/r_out ≤ u ≤ ⅓`. The point is `(cos t · c + sin t · y)/u`, `t = α` for the first and `α + kπ` for the second.
 8. The sky direction for a ray that escapes: `φ_∞ = 2φ_A − φ_C`, `cos φ_∞ · c + sin φ_∞ · y`.
 
@@ -46,7 +47,7 @@ Size, tilt, distance, where the hole sits and how the sky is turned are all unif
 - **Redshift:** `g = √(1 − 1.5u) / (1 − √(u³/2) · cos_n / e)`, with `cos_n = (y × c)·n`. Doppler and gravity together, right for every image order. At the inner edge, edge on, coming toward us, it is √2.
 - **Temperature:** `T(r) = T_peak · F(r)^¼`, F the Novikov–Thorne flux: with `x = √(2r)`, `F ∝ (x − √6 + (√3/2) ln((x + √3)(√6 − √3)/((x − √3)(√6 + √3)))) / (x⁵(x² − 3))`. Zero at the inner edge, so the edge fades by itself; it peaks at `r = 4.8` (9.55 M).
 - **Colour:** a black body shifted by `g` is a black body at `gT`, so colour only ever slides along the black-body line. The three colours Dave picked are three values of `T_peak`.
-- **Beaming:** in visible light, true Doppler brightening is brutal for a cool disc: at 78° the approaching side of the hottest ring is 191 times the receding side at 4,500 K, 39 times at 6,500 K, 8.6 times at 12,000 K. The mock-ups Dave chose from used the gentler all-wavelengths law (brightness ∝ `(g·T)⁴`) under a soft tone curve. NASA's own picture comes to 1.6 times in display values. So: a Beaming knob, with its default set by eye to match the mock-ups and NASA's 1.6.
+- **Beaming:** in visible light, true Doppler brightening is brutal for a cool disc: at 78° the approaching side of the hottest ring is 191 times the receding side at 4,500 K, 39 times at 6,500 K, 8.6 times at 12,000 K. The mock-ups Dave chose from used the gentler all-wavelengths law (brightness ∝ `(g·T)⁴`) under a soft tone curve. NASA's own picture comes to 1.6 times in display values, about 3.3 in linear light: between the first power of `g` (2.2 times at 85°) and the second (4.7), where the full fourth power is 22. So: a Beaming knob, with its default set by eye to match the mock-ups and NASA's 1.6.
 - **Turning without winding up:** cut the disc into narrow rings, even in `ln r` (9 per e-fold in the prototype). Each ring turns rigidly at its own Kepler rate, `√(1/(2r³))`; a point takes the patterns of the two rings it lies between, mixed by where it sits. Neighbours slide past each other and nothing stretches. Tileable noise sampled in (turns, ln r) with whole repeats round the disc: 4 fetches of `CloudNoise.texture`. **Not yet looked at moving.**
 - **Speed:** 1× is the inner edge round in 3 minutes (Dave). For scale, the inner orbit of Sagittarius A* takes 33 minutes (92.3 GM/c³ for 4.3 million Suns), so real time for it is 0.09×: a marked stop on the slider, not the default.
 - **Streaks:** the mock-ups' texture is a placeholder, and it is the "vinyl record" the look research warns about: even concentric bands. NASA's are sheared arcs of uneven width that fork and fade.
@@ -71,7 +72,7 @@ At about 85°, distances from the centre along the vertical:
 - The near side: 0.11 to 0.48 R below, and it stays opaque to 0.66 R, cutting the under-arc off flat. That dark strip is a signature of the real thing.
 - The under-arc: 1.24 to 2.16 R below.
 - The dark gap between the photon ring (1.00) and the disc's inner edge (1.27): 0.27 R wide, exactly black.
-- Half-width 5.97 R (left) and 5.72 R (right).
+- Half-width 5.97 R on the bright side (5.72 measured on the dim side, where a fixed brightness threshold pulls the faint edge in; the geometry gives 5.96 on both, for a disc to 30 M).
 - The photon ring's hairline sits at 0.998 R and is at most 0.004 R wide. The next ring out thins to 1.010–1.022 R over the top.
 - Approaching side to receding: 1.59–1.63 in display values. The brightest pixel is always on the approaching side, 1.8–2.2 R out.
 - No glow: every pixel beyond 6.8 R, and inside 0.98 R, is 0.
@@ -125,6 +126,7 @@ In `docs/black-hole/`. They were rendered by `bh.py`, a brute-force tracer writt
 - Tables against the brute-force tracer at 960 × 600: 152 of 576,000 pixels differ, all on edges of the test pattern. Tried at 15° to 88° and cameras 50 to 300 M out, with one pair of tables.
 - Disc hit points within 0.013 r_s (0.4–0.9 px at 3024 wide); sky directions within 0.87 px (median 0.004).
 - The tables were held to what SpriteKit offers: 8-bit RGBA, bilinear weights to 1/256, float32 set-up.
+- Against a second, independent integrator (the look research's `schwarz.py`): every edge at 0°, 56°, 65° and 85° agrees to 0.003 shadow radii (`proto/nasa_check.py`). Against NASA's frames: inner edges and rings within 0.05; three faint outer edges miss by 0.05–0.08, which is the measurement's brightness threshold pulling a dim edge in, not the geometry.
 - Beloborodov's closed form alone is not enough: within 0.1% for bends up to 105°, but 19–24% out at 165–180°, where the hump is, and it has no second image.
 - Not verified: anything on a GPU.
 
