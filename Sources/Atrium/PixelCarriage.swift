@@ -14,9 +14,10 @@ import SpriteKit
 /// or a loop clamped as theirs are, the ghost through `mark`. A pane can overhang a very small canvas, and a write
 /// off the end stops the app.
 struct PixelCarriage {
-    /// Settings' Carriage, one of the train's own rows: what there is round the window. With no window there is
-    /// no carriage to choose.
-    static let choice = Knob(key: "seat.carriage", label: "Carriage", range: 0...2, standard: 0, section: "View",
+    /// Settings' Carriage, one of the train's own rows: what there is round the window. A train starts with the
+    /// table and its lamp, which is what makes it a train and not the airliner's window on other country. With no
+    /// window there is no carriage to choose.
+    static let choice = Knob(key: "seat.carriage", label: "Carriage", range: 0...2, standard: 2, section: "View",
                              format: .choice(["A plain window", "A sill and a curtain", "A table and its lamp"]),
                              shownWhen: "seat.orbit", shownAt: 2, hiddenWhen: "seat.window", hiddenAt: 3)
 

@@ -68,12 +68,13 @@ import Testing
 }
 
 /// The night must never be a black pane: along an hour of track, every minute's view has lamps in it, as the
-/// painter shows it, with what stands in front hiding what is behind. Through each scenery held.
+/// painter shows it, with what stands in front hiding what is behind. Through each scenery held. (Through the plain
+/// window: the table's lamp leaves a ghost over some of the country's lamps, which are counted by their colour.)
 @MainActor @Test func trainNightIsNeverBlack() {
-    let keys = [PixelWindowSeat.previewTime.key, PixelWindowSeat.previewHour.key, PixelTrain.scenery.key]
+    let keys = [PixelWindowSeat.previewTime.key, PixelWindowSeat.previewHour.key, PixelTrain.scenery.key, PixelCarriage.choice.key]
     defer { for key in keys { UserDefaults.standard.removeObject(forKey: key) } }
     for (scenery, name) in [(1.0, "countryside"), (2, "a lake"), (3, "the mountains"), (4, "a city")] {
-        for (key, value) in zip(keys, [1, 23, scenery]) { UserDefaults.standard.set(value, forKey: key) }
+        for (key, value) in zip(keys, [1, 23, scenery, 0]) { UserDefaults.standard.set(value, forKey: key) }
         let scene = PixelTrain(size: CGSize(width: 1512, height: 982))
         var seen: [Int] = []
         for minute in 0...60 {
@@ -279,6 +280,8 @@ import Testing
 ///       TRAIN_FILM_DEFAULTS="seat.previewTime=1,seat.previewHour=23,seat.country=2,seat.speed=2" swift test --filter trainFilmsItself
 ///     TRAIN_FILM_SIZE=1080x1920 …   # a display of another size, in points (a 14-inch laptop's if not given)
 ///     TRAIN_FILM_THEN="seat.speed=3@2" …   # and a setting moved part way through, here the Speed slider after 2 s
+/// The carriage is Settings' own, the table, unless the defaults name one: after dark its lamp's ghost lies over
+/// some of the lamps train_strips.py counts, so add `seat.carriage=0` to film the country through the plain window.
 @MainActor @Test(.enabled(if: ProcessInfo.processInfo.environment["TRAIN_FILM"] != nil)) func trainFilmsItself() throws {
     let env = ProcessInfo.processInfo.environment
     let settings = (env["TRAIN_FILM_DEFAULTS"] ?? "").split(separator: ",").map { $0.split(separator: "=") }.filter { $0.count == 2 }
