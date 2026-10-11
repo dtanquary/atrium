@@ -116,6 +116,24 @@ private func crossings(_ river: River) -> Int {
     var steps: [Double] = []
     for _ in 0..<600 { steps.append(milliseconds { river.advance(0.1) }) }
     steps.sort()
-    print(String(format: "  a live step with the ground and %d lakes: median %.2f ms, slowest of 600 %.2f ms", river.lakes.count, steps[300], steps[599]))
-    #expect(steps[300] < 2)
+    print(String(format: "  a live step with the ground and %d lakes: median %.2f ms, 99 in 100 under %.2f, the slowest of 600 %.2f; the lakes are at most %.2f texels out of date",
+                 river.lakes.count, steps[300], steps[594], steps[599], river.lakesAdrift() * river.texels))
+    #expect(steps[300] < 1.5)
+}
+
+/// Only a couple of lakes are drawn again on each step. Over 24 T at speed 4, long enough for every lake there at
+/// the start to dry up and for others to be cut off, trimmed and run into each other, the lakes' water in the
+/// ground is never half a texel from where drawing every lake afresh would put it: none is left behind when a lake
+/// goes, and none is lost where two overlap.
+@Test func riverKeepsItsLakesUpToDate() {
+    let river = River(seed: 7, across: 27, up: 17.5, texels: 8)
+    river.age(distant: 40, recent: 30)
+    var worst: Float = 0, most = 0, born = river.cutoffs
+    for _ in 0..<60 {
+        for _ in 0..<50 { river.advance(0.05, speed: 4) }
+        (worst, most) = (max(worst, river.lakesAdrift() * river.texels), max(most, river.lakes.count))
+    }
+    born = river.cutoffs - born
+    print(String(format: "Meander's lakes over T 24 at speed 4: %d cut off, %d at once at most, never more than %.2f texels out of date", born, most, worst))
+    #expect(born > 3 && worst < 0.5)
 }

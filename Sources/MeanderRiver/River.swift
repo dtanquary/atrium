@@ -72,6 +72,13 @@ public final class River {
     public struct Lake {
         public var nodes: [SIMD3<Float>]
         public var born: Double, first: Double, last: Double
+        /// The texels it was last drawn on and its bank distance at each, the box round them (the least column and
+        /// row, then the greatest), and when that was.
+        var texels: [Int32] = [], distances: [Float] = [], box = SIMD4<Int32>(.max, .max, -1, -1), drawn = -Double.infinity
+
+        /// How far a silting front has come in from an end that has been one for `age`: about 3 widths in the first
+        /// T, then a quarter of a width a T.
+        static func front(_ age: Float) -> Float { 3.2 * (1 - exp(-age / 0.6)) + 0.25 * age }
     }
 
     /// Howard & Knutson's Ω and Γ, and α in widths: the fastest-growing bend is 8.24/α long, 11.3 widths.
@@ -86,6 +93,8 @@ public final class River {
     public static let lakeLife = 16.0, memory = 600.0
     /// A stamp for ground the river has never covered.
     static let never: Float = -1e9
+    /// A lake is drawn again once a front of its has moved this far since it last was, in texels.
+    static let adrift: Float = 0.15
 
     /// The screen in widths, and texels a width.
     public let across: Float, up: Float, texels: Float
@@ -547,10 +556,10 @@ public final class River {
         return path.count
     }
 
-    /// Puts a lake's nodes in `path` at their widths now. Each end silts up behind a front that moves in from it,
-    /// 1.2 widths in the first T or so and then a quarter of a width a T, the water tapering to nothing over the 2
-    /// widths ahead of the front; and over the second half of its life the whole lake narrows to nothing. A dry
-    /// stretch gets a negative width, so nothing is drawn. Returns how many nodes, or 0 if the lake is all dry.
+    /// Puts a lake's nodes in `path` at their widths now. Each end silts up behind a front that moves in from it
+    /// (`Lake.front`), the water tapering to nothing over the 2 widths ahead of the front; and over the second half
+    /// of its life the whole lake narrows to nothing. A dry stretch gets a negative width, so nothing is drawn.
+    /// Returns how many nodes, or 0 if the lake is all dry.
     private func trace(_ lake: Lake) -> Int {
         arcs.removeAll(keepingCapacity: true)
         path.removeAll(keepingCapacity: true)
@@ -559,10 +568,7 @@ public final class River {
             if i > 0 { arc += hypot(node.x - lake.nodes[i - 1].x, node.y - lake.nodes[i - 1].y) }
             arcs.append(arc)
         }
-        func silted(_ from: Float, _ since: Double) -> Float {
-            let age = Float(now - since)
-            return smoothstep(0, 1, (from - 3.2 * (1 - exp(-age / 0.6)) - 0.25 * age) / 2 + 1)
-        }
+        func silted(_ from: Float, _ since: Double) -> Float { smoothstep(0, 1, (from - Lake.front(Float(now - since))) / 2 + 1) }
         let body = 1 - smoothstep(Float(0.5 * Self.lakeLife), Float(Self.lakeLife), Float(now - lake.born))
         for (i, node) in lake.nodes.enumerated() {
             let share = body * silted(arcs[i], lake.first) * silted(arc - arcs[i], lake.last)
@@ -575,14 +581,15 @@ public final class River {
     /// Drops the lake nodes the river has covered: `covered` says when it covered a texel of a lake's, or nil. A lake
     /// then ends at the outermost node the river covered, so its water runs into the river's and no end shows; a
     /// lake the river cuts through becomes two. A new end starts silting up from when it was covered, which for the
-    /// live river is now, so nothing vanishes on the frame it is made. Worn-out lakes are forgotten.
+    /// live river is now, so nothing vanishes on the frame it is made. Worn-out lakes are forgotten. A lake that
+    /// goes is taken out of the ground here, and the pieces of a trimmed one are drawn by `drawLakes` in the same step.
     private func trimLakes(covered: (Int, Lake) -> Double?) {
         let L = period
         var at = 0
         while at < lakes.count {
             let lake = lakes[at], n = lake.nodes.count
             if now - lake.born > Self.lakeLife {
-                lakes.remove(at: at)
+                drop(at)
                 continue
             }
             under.removeAll(keepingCapacity: true)
@@ -592,11 +599,12 @@ public final class River {
                 let tx = Int(((along * L - Self.margin) * texels).rounded(.down)), ty = Int((node.y * texels).rounded(.down))
                 under.append(tx >= 0 && tx < columns && ty >= 0 && ty < rows ? covered(ty * columns + tx, lake) ?? .nan : .nan)
             }
-            guard under.contains(where: { !$0.isNaN }) else {
+            // an end under the river is where it was cut off or trimmed to: nothing changes unless more of it is
+            guard n < 3 ? under.allSatisfy({ !$0.isNaN }) : under[1..<n - 1].contains(where: { !$0.isNaN }) else {
                 at += 1
                 continue
             }
-            lakes.remove(at: at)
+            drop(at)
             var i = 0
             while i < n { // each run of nodes not under the river, with the covered node beside it kept at either end
                 guard under[i].isNaN else {
@@ -625,23 +633,105 @@ public final class River {
         pixels[i * 4 + 3] = UInt8(max(0, min(255, (texel.y - 0.25) / 0.75 * 255)))
     }
 
-    /// Redraws every lake into the ground with the river's own routine.
-    private func drawLakes() {
-        swap(&lakeTouched, &lakeBefore)
+    /// Takes lake `k`'s water out of the ground, leaving any other lake's that it lay over, and lists the texels it
+    /// was on in `lakeBefore` for their bytes to be written.
+    private func lift(_ k: Int) {
+        let count = lakes[k].texels.count, box = lakes[k].box
+        lakeBefore.count = count
+        guard count > 0 else { return }
+        ground.withUnsafeMutableBufferPointer { ground in
+            lakes[k].texels.withUnsafeBufferPointer { old in lakeBefore.items.withUnsafeMutableBufferPointer { list in
+                for j in 0..<count { (list[j], ground[Int(old[j])].w) = (old[j], Self.far) }
+            } }
+            for other in lakes.indices where other != k {
+                let its = lakes[other].box
+                guard its.x <= box.z, box.x <= its.z, its.y <= box.w, box.y <= its.w else { continue }
+                lakes[other].texels.withUnsafeBufferPointer { at in lakes[other].distances.withUnsafeBufferPointer { distance in
+                    for j in 0..<at.count { ground[Int(at[j])].w = min(ground[Int(at[j])].w, distance[j]) }
+                } }
+            }
+        }
+    }
+
+    /// Takes lake `k` out of the ground and forgets it.
+    private func drop(_ k: Int) {
+        lift(k)
+        ground.withUnsafeMutableBufferPointer { ground in pixels.withUnsafeMutableBufferPointer { pixels in
+            for raw in lakeBefore.items[..<lakeBefore.count] { write(Int(raw), ground, pixels) }
+        } }
+        lakes.remove(at: k)
+    }
+
+    /// Draws lake `k` into the ground as it is now, with the river's own routine, in place of how it was last drawn.
+    private func draw(_ k: Int) {
+        lift(k)
         lakeTouched.count = 0
-        ground.withUnsafeMutableBufferPointer { ground in for raw in lakeBefore.items[..<lakeBefore.count] { ground[Int(raw)].w = Self.far } }
+        let count = trace(lakes[k])
+        if count > 1 { band(count, closed: false, reach: 2 / texels, into: &lakeTouched) }
+        let found = lakeTouched.count, columns = Int32(columns)
+        var box = SIMD4<Int32>(.max, .max, -1, -1)
+        // its lists are taken out while they are written, so they aren't copied, and keep their room
+        var (at, distances) = (lakes[k].texels, lakes[k].distances)
+        (lakes[k].texels, lakes[k].distances) = ([], [])
+        at.removeAll(keepingCapacity: true)
+        at.append(contentsOf: lakeTouched.items[..<found])
+        distances.removeAll(keepingCapacity: true)
+        distances.append(contentsOf: repeatElement(0, count: found))
+        ground.withUnsafeMutableBufferPointer { ground in scratch.withUnsafeMutableBufferPointer { scratch in pixels.withUnsafeMutableBufferPointer { pixels in
+            at.withUnsafeBufferPointer { at in distances.withUnsafeMutableBufferPointer { distances in
+                for j in 0..<found {
+                    let raw = at[j], i = Int(raw), x = raw % columns, y = raw / columns
+                    box = SIMD4(min(box.x, x), min(box.y, y), max(box.z, x), max(box.w, y))
+                    distances[j] = scratch[i]
+                    ground[i].w = min(ground[i].w, scratch[i])
+                    scratch[i] = .infinity
+                }
+            } }
+            for raw in lakeBefore.items[..<lakeBefore.count] { write(Int(raw), ground, pixels) }
+            for raw in at { write(Int(raw), ground, pixels) }
+        } } }
+        (lakes[k].texels, lakes[k].distances, lakes[k].box, lakes[k].drawn) = (at, distances, box, now)
+    }
+
+    /// Keeps the lakes in the ground up to date, a few at a time: a lake changes slowly, so drawing every one on
+    /// every step was most of a step's cost. A new lake, or a piece of one just trimmed, is drawn at once. Of the
+    /// rest, the ones whose silting fronts have moved furthest since they were drawn go first, so none is ever far
+    /// behind: a fresh lake is drawn every step, an old one every two seconds or so.
+    private func drawLakes() {
+        var due = (-1, -1), moved = (Self.adrift, Self.adrift) // the two furthest behind, the further first
+        for k in lakes.indices {
+            let drawn = lakes[k].drawn
+            guard drawn > -.infinity else {
+                draw(k)
+                continue
+            }
+            let since = Float(drawn - max(lakes[k].first, lakes[k].last)) // its newer end has the faster front
+            let adrift = (Lake.front(since + Float(now - drawn)) - Lake.front(since)) * texels
+            if adrift > moved.0 {
+                (due, moved) = ((k, due.0), (adrift, moved.0))
+            } else if adrift > moved.1 {
+                (due.1, moved.1) = (k, adrift)
+            }
+        }
+        if due.0 >= 0 { draw(due.0) }
+        if due.1 >= 0 { draw(due.1) }
+    }
+
+    /// How far out the lakes' water in the ground is, at worst, from every lake drawn afresh, in widths: the check
+    /// on `drawLakes`, for the tests.
+    func lakesAdrift() -> Float {
+        lakeTouched.count = 0
         for lake in lakes {
             let count = trace(lake)
             if count > 1 { band(count, closed: false, reach: 2 / texels, into: &lakeTouched) }
         }
-        ground.withUnsafeMutableBufferPointer { ground in scratch.withUnsafeMutableBufferPointer { scratch in pixels.withUnsafeMutableBufferPointer { pixels in
-            for raw in lakeTouched.items[..<lakeTouched.count] {
-                ground[Int(raw)].w = scratch[Int(raw)]
-                scratch[Int(raw)] = .infinity
-            }
-            for raw in lakeBefore.items[..<lakeBefore.count] { write(Int(raw), ground, pixels) }
-            for raw in lakeTouched.items[..<lakeTouched.count] { write(Int(raw), ground, pixels) }
-        } } }
+        let limit = 0.5 + 1 / texels // a texel beyond the bank: further out a dry stretch still leaves its mark
+        var worst: Float = 0
+        for i in ground.indices {
+            worst = max(worst, abs(min(scratch[i], limit) - min(ground[i].w, limit)))
+            scratch[i] = .infinity
+        }
+        return worst
     }
 
     /// Brings the ground up to date with the river. Texels under the channel take the present time; one a bank is
@@ -654,13 +744,23 @@ public final class River {
         touched.count = 0
         band(trace(), closed: true, reach: (drawing ? 2 : 0.5) / texels, into: &touched)
         let tex = texels, stampNow = Float(now - base), far = Self.far
+        // Over half the river's texels are deep water, a third of a width inside the bank or more, and all alike:
+        // the present time, no hollow, and bytes that are the same for every one of them
+        let level = UInt32(max(0, min(65535, stampNow * 100))), deep = (level >> 8 | (level & 255) << 8 | 255 << 24).littleEndian
         ground.withUnsafeMutableBufferPointer { ground in scratch.withUnsafeMutableBufferPointer { scratch in pixels.withUnsafeMutableBufferPointer { pixels in
             for raw in before.items[..<before.count] where scratch[Int(raw)] == .infinity {
                 ground[Int(raw)].z = far
                 if drawing { write(Int(raw), ground, pixels) }
             }
+            let words = UnsafeMutableRawPointer(pixels.baseAddress!)
             for raw in touched.items[..<touched.count] {
                 let i = Int(raw), distance = scratch[i]
+                scratch[i] = .infinity
+                if distance < 1 / 3 {
+                    (ground[i].x, ground[i].y, ground[i].z) = (stampNow, 2, distance)
+                    words.storeBytes(of: deep, toByteOffset: i * 4, as: UInt32.self)
+                    continue
+                }
                 let covered = max(0, min(1, 0.5 + (0.5 - distance) * tex)), was = max(0, min(1, 0.5 + (0.5 - ground[i].z) * tex))
                 if covered >= 1 {
                     ground[i].x = stampNow
@@ -670,7 +770,6 @@ public final class River {
                 }
                 ground[i].y = max(ground[i].y, 0.5 + 3 * (0.5 - distance))
                 ground[i].z = distance
-                scratch[i] = .infinity
                 if drawing { write(i, ground, pixels) }
             }
         } } }
