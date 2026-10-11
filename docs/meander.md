@@ -57,7 +57,7 @@ The pictures of rivers as height above the water, made famous by Daniel Coe. His
 | The simulation's first relief | 0.19 | 3.3% | 1.0 |
 | The simulation's first bands | 0.64 | 10.3% | 0.44 |
 | Its second relief (Survey Blue) | 0.25 | 1.1% | 1.0 |
-| Its second map (Fisk's four inks) | 0.73 | – | 1.0 |
+| Its second map (Fisk's four inks) | 0.73 | 6.8% | 1.0 |
 
 Targets: Dark relief at 0.15–0.20, edges 2–5%, one family 1.0. Bands in Light at 0.80–0.88, edges under 10%, one family above 0.9 (Fisk's four inks apart).
 
@@ -179,6 +179,10 @@ Still wrong:
 - **The first frame** after the launch history is a young belt on empty ground (`proto-first-frame.jpg`), not the edge-to-edge floodplain of a river that has run two hours.
 - Relief is soft beside real lidar: no levees, no bars or islands in the channel, width varying two times and not two to three, scroll bars invisible below Retina.
 - In the old map lakes are bare paper like the river, so a fresh oxbow reads as a second river until its line thins.
+
+And what the look research saw in the second round beside the references (both looks now score inside its targets and read as calm):
+- **Relief:** banks are soft on both sides, where real ones are lopsided, a crisp step on the outer bank and a gradual ramp on the inner. Each bend leaves one broad smooth petal, where real ground is many smaller arcs cutting across each other. The belt's straight dark margins make it read as a corridor.
+- **Old map:** the bands are thin stripes parallel to today's river. Fisk's are separate old courses that cross each other, because the Mississippi moved two to four channel widths between his stages (45–59 m a year over 55–64 years on a channel about a kilometre wide): longer stages would give his look. Hues alternate band by band, where his order keeps neighbours in one ink (four solids, then runs of four fading tints per ink). The river is even in width with a double line, which reads slightly as a road. The solid salmon areas are the loudest thing in it, which is the case for the single-ink palettes.
 
 ## The plan
 One file, `Sources/Atrium/Meander.swift`: a `River` type with no SpriteKit in it (nodes, step, cutoff, fields, pixel bytes), the scene, its shader, knobs and palettes. Everything built in `sceneDidLoad`; steps owed at 10 a second in `update(_:)`; the texture uploaded only when a step ran.

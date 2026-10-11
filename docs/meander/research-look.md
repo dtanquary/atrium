@@ -2,6 +2,8 @@
 
 A research agent's report as it was sent on 2026-10-10, unedited, kept so its detail and sources aren't lost. The plan beside it is the summary and has Dave's decisions; where the two differ, the plan is later. `scratch/` was the session's temporary folder: the scripts and pictures worth keeping were copied into this folder, the rest (downloaded references, video clips) is gone and its source URLs are below.
 
+The first message went to the simulation's agent after its first renders, and its "channel too wide" finding was wrong: the last message here corrects it and reviews the second round.
+
 Measured targets from the real references, for your Meander renders (from meander-look; full report goes to team-lead).
 I scored your proto/t1-relief.png and t1-fisk.png against real pictures with scratchpad/meander/scripts/busy.py (run: python3 -I scripts/busy.py <img>). Side by side: scratchpad/meander/work/proto-vs-ref.jpg.
 
@@ -352,3 +354,42 @@ All under scratch/meander/refs/
 - lidar-sheet.jpg: the seven Coe pictures on one sheet.
 - mamore-change.png: 1985 in red, 2014 in cyan.
 - ms-helena-rem-dark.npy: relative heights in metres for the Helena window.
+
+---
+
+You're right about the width, and the new stills are much closer; here are the three gaps I'd close next on each look.
+My "3.5-4%" was an eyeball of the whole pale band on a thumbnail, not the water, so it measured the look fault you describe. I've corrected it with team-lead. Sheet of your new stills beside the references: scratchpad/meander/work/out2-vs-ref.jpg. My scores agree with yours (relief 0.25 / 1.1% / 1.00; Fisk 0.73 / 6.8% / 1.00).
+
+**Relief** (against refs/usgs3dep-mississippi-helena-rem-2400.jpg and the point-bar close-up)
+1. Banks are symmetric and soft on both sides. Real banks are lopsided: the outer (cut) bank is a crisp step straight up to old high ground, and the inner (point-bar) side ramps up gradually from the water. That asymmetry is the strongest "real" cue in the close-up.
+2. Each bend leaves one broad airbrushed petal. Real ground is many smaller arcs that cut across each other, plus bright oxbow crescents at river level. Yours has the lobes but little truncation and no lakes at river brightness in this frame.
+3. The belt has straight dark margins top and bottom, and loops flatten against them, so it reads as a corridor. Real belt edges are scalloped by old loops of mixed sizes.
+
+**Fisk** (against work/fisk06-screen-crop.jpg, sheet 6 cut to a screen shape at a similar scale)
+1. Your bands are thin stripes running parallel to today's river, like contour lines around it. Fisk's are separate old courses, each about a channel wide, that cross and cut each other at angles. The reason is the stage length: at 45-59 m a year and 55-64 years a stage, the Mississippi moved 2 to 4 channel widths between his stages. A stage that spans 2-4 widths of movement gives his look; yours looks like under one.
+2. Your hues alternate band by band. His order is four solids for the newest (sage, salmon, teal, straw), then runs of four stages in ONE ink fading out (teal 15-12, salmon 11-8, sage 7-4). So neighbours in age usually share a hue, and big areas stay in one family.
+3. The river reads slightly as a road: even width with a double line. His is bare paper with a single bank line each side, varying in width, with islands.
+
+None of this needs levees or lidar-sharp texture to land. I'd take the bank asymmetry and the stage length first.
+
+---
+
+Correction to my messages 1 and 9: the first render's channel was not twice too wide. meander-sim is right.
+My "3.5-4% of the frame width" was an eyeball of the whole pale band on a thumbnail. That band was the water plus pale new ground beside it. meander-sim measured the water itself at 1.06% in the first render and 1.84% now (54 widths across), which is inside the references' 1.8-2.5%. So the scale was never the fault; the pale ground reading as a fat pipe was, and that is fixed. Please disregard the "channel too wide" line in the scorecard notes. scripts/width.py reads unreliably either way; I had already flagged it as one to ignore.
+
+**The new stills against the references** (proto/out2/, sheet in scratchpad/meander/work/out2-vs-ref.jpg)
+- Scores, mine and meander-sim's agree: relief brightness 0.25, edges 1.1%, one-family 1.00; Fisk 1944 brightness 0.73, edges 6.8%, one-family 1.00. Both are inside the targets I suggested and both now read as calm.
+- Relief uses the measured Survey Blue ramp with no outline. The Fisk still uses his four measured inks on cream with a bare-paper river.
+
+**What still separates them from the real thing** (sent to meander-sim)
+Relief:
+1. Banks are soft on both sides. Real ones are lopsided: a crisp step on the outer bank, a gradual ramp on the inner one.
+2. Each bend leaves one broad smooth petal. Real ground is many smaller arcs cutting across each other, with oxbow crescents at river brightness.
+3. The belt has straight dark margins, so it reads as a corridor.
+
+Fisk:
+1. The bands are thin stripes parallel to today's river. Fisk's are separate old courses that cross each other, because the river moved 2 to 4 channel widths between his stages (45-59 m a year over 55-64 years, on a channel 0.9-1.2 km wide; my arithmetic from the figures in messages 2 and 6). Longer stages would give his look.
+2. Hues alternate band by band. His order keeps neighbours in one ink: four solids, then runs of four fading tints per ink.
+3. The river is even in width with a double line, which reads slightly as a road.
+
+My recommendation and the three mock-up choices stand. If anything the new stills strengthen the case for showing Dave the single-ink Fisk bands beside the four-ink one: the four-ink still is calm by the numbers, but the solid salmon areas are the loudest thing in it.
