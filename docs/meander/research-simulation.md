@@ -2,7 +2,7 @@
 
 A research agent's report as it was sent on 2026-10-10, unedited, kept so its detail and sources aren't lost. The plan beside it is the summary and has Dave's decisions; where the two differ, the plan is later. `scratch/` was the session's temporary folder: the scripts and pictures worth keeping were copied into this folder, the rest (downloaded references, video clips) is gone and its source URLs are below.
 
-The first seven messages are round 1; the note and five messages after them are round 2, which fixes the looks and has the complete maths as the final prototype runs it. The last message was sent to the look research's agent.
+The first seven messages are round 1. The note and five messages after them are round 2, which fixes the looks and has the complete maths as that prototype runs it (`proto/meander-v2.py`, `render-v2.py`). The last four are round 3 (`proto/meander.py`, `render.py`): what the look research's review led to, the formulas that changed, and why the lakes need a different design. Two of the messages were sent to the look research's agent.
 
 Meander 1/7: it works, and one simulation feeds both looks. Verdict, paths, and what is and isn't proven.
 
@@ -424,3 +424,87 @@ Your busy.py on the new stills: relief luma 0.25, edges 1.1%, hues 1.00; Fisk 19
 Stills, if you want to put them beside the references: scratch/meander/proto/out2/still-relief-survey-blue.png, still-fisk-fisk-1944.png, retina-relief.png, retina-fisk.png.
 
 Still short of your references: no levees, no bars or islands in the channel, width varying 2x not 2 to 3x, and the relief is much softer than real lidar.
+
+---
+
+Meander round 3: I closed meander-look's first gaps on each look in a third set of renders, and it shows that lakes are now the weak point and need a different design. Nothing here changes Dave's picks.
+
+New pictures, under scratch/meander/proto/out3/ (same names as out2):
+- still-relief-survey-blue.png, still-fisk-fisk-1944.png, retina-relief.png, retina-fisk.png, first-frame-*.png, strip-minutes-*.png
+- cutoff/cutoff-relief.png, cutoff/cutoff-fisk.png
+Round 2's code is kept as meander-v2.py and render-v2.py; out2 is unchanged, so the two rounds can be compared.
+
+Better than out2:
+- Relief banks are lopsided now, as real ones are: a clean step up on the cut side, a gradual rise on the bar side. The land beside a bank is read two texels further from the water, so it no longer blends with the channel.
+- The belt's edge is scalloped: each valley wall wanders in and out by up to 5 W along the valley, so the dark margins are no longer straight.
+- Relief has arcs that show at a glance: a broader set of scrolls every 2.9 T, cut across by later ones.
+- The old map follows Fisk's own order: stages of 11 T (the river moves 2 to 4 widths in one, as between his), the four newest solid in sage, salmon, grey-teal and straw, then runs of four stages in one ink at 65, 50, 40 and 23%.
+- Cutoff frame, one cutoff measured: relief 0.03% of the window over 20 levels, old map 0.24%.
+
+Worse, or newly visible:
+- Lakes. In cutoff/cutoff-relief.png the frames at 1 and 2 minutes show a cut-off loop breaking into jagged scraps after a second cutoff beside it, and in still-fisk-fisk-1944.png the scraps are bare paper on solid salmon. This is the first thing the eye lands on.
+- I widened the channel's range to 0.6 to 1.7 W; tight bends now swell into blobs (same strip). I'd go back to 0.7 to 1.5.
+- The old map is blotchier and louder than out2's: big solid salmon areas (busy.py hues 0.92, was 1.00). It is truer to Fisk; out2's thin stripes are calmer. Stage length is one constant, so it could be a setting.
+- Fisk colours land by how many stages old it is, so every band must change colour each stage. I slide the whole sheet over the last third of each stage (about 90 s in every 4.6 min at 25 s a T). That is a slow global colour change Dave hasn't seen; out2's rule (colour fixed to the land) has none.
+
+The lake redesign I'd build instead (not tested):
+- Keep each lake as a short polyline with per-node half-widths, like the river, and draw it with the same distance routine. Its widths shrink with age and taper to nothing at the ends, so every edge is as smooth as the river's.
+- Where the live channel covers a lake's nodes, delete them; the lake splits into two that taper. No per-texel erasing, so no scraps.
+- River and lakes then share one water field (the river is just the lake of age zero), which frees the fourth texture byte for the hollow.
+- Cost: about 15 lakes of 40 nodes is one more band the size of the river's, and it only needs redrawing about once a second.
+
+Run behind these: T 400, 318 cutoffs, no self-crossing at 10 checks.
+
+The formulas that changed, so they survive without the scripts, are in the next message.
+
+---
+
+Meander round 3, the formulas that changed from round 2's messages 2/5 to 4/5. All mine, tuned by eye against meander-look's references; Fisk's order of inks and his coverage steps are meander-look's reading of his legend.
+
+River (replaces steps 7 and 9 of 2/5):
+- Valley wall. Each wall stands in from its outermost line by in(x) = 2.5 (1 + tanh(wave(x))), wave(x) = sum over k = 2..7 of a_k / sqrt(k) sin(2 pi k (x + 10) / L + phase_k), a_k standard normal, a separate set for the top and bottom walls. A bank moving outward has its erodibility multiplied by smoothstep((sy/2 - 1.5 - in(B_x) - |B_y - sy/2|) / 5).
+- Width: want = 0.5 (0.6 + 1.1 clamp(bend / 0.4, 0, 1)). Too wide at tight bends; I recommend round 2's 0.5 (0.7 + 0.8 clamp(...)).
+
+Shader reads (adds to 3/5): a third read of the stamp, two texels further from the nearest water, the river's or a lake's. Use it in place of the plain read fully within one texel of a bank, not at all by three texels, sliding between. The prototype stands in with "the oldest stamp within two texels". A lake's bank has to count as well as the river's, or the land beside a loop changes on the frame the loop is cut off (it did: 0.20% of the window, against 0.03% once fixed).
+
+Relief (changes to 4/5):
+- age for the height comes from that outward read; the scroll phases still use the plain read.
+- h = 0.25 (1 - exp(-age / 2.5)) + 0.75 (1 - exp(-age / 90)).
+- add to scroll: 0.9 cos(2 pi S / 2.9 + 0.7) x [1 - smoothstep(2 pi |grad S| / 2.9; 0.7, 1.5)] x (0.5 + 0.5 exp(-age / 200)).
+
+Old map (replaces the colour rule in 4/5):
+- stage length 11 T. k = floor(S / 11); the present stage K = floor(now / 11); stages old j = K - k.
+- land j stages old: j = 0, 1, 2, 3: sage, salmon, grey-teal, straw, solid. j = 4..7: grey-teal at 0.65, 0.5, 0.4, 0.23 of the ink over paper. j = 8..11: salmon, the same four. j = 12..15: sage. j = 16..19: straw. Older: straw at 0.23 falling to nothing over 34 more stages.
+- colour = the j colour sliding to the j + 1 colour by smoothstep(fraction of now / 11; 0.67, 1). Every band slides together, so nothing steps when a stage ends.
+- single ink: coverage by j through 0: 1, 3: 1, 4: 0.65, 8: 0.5, 12: 0.4, 16: 0.23, 30: 0.12, 54: 0, two near shades alternating by stage.
+- scarp lines where S / 11 changes by more than about 0.16 to 0.36 a pixel; bank lines where |DA - 0.5| is under 0.5 to 1.5 px (lighter than round 2's).
+
+Unchanged: everything else in 2/5 to 4/5, including the lake rules, which are the part I would now replace.
+
+What I have not done from meander-look's list: islands and bars in the channel, levees, and making old courses cross each other more (that is the river's own behaviour, not a drawing choice).
+
+---
+
+Your bank asymmetry and stage length are in a third set of renders, and they exposed the lakes as the weak point.
+
+Pictures: scratch/meander/proto/out3/ (still-relief-survey-blue.png, still-fisk-fisk-1944.png, retina-*.png, cutoff/cutoff-*.png). out2 is unchanged for comparison.
+
+Done from your list:
+- Relief 1: the cut bank is a clean step and only the bar side ramps (the land beside a bank is read two texels further from the water).
+- Relief 3: the valley walls wander in and out by up to 5 W, so the belt's edge is scalloped.
+- Relief 2, in part: a broader set of scrolls every 2.9 T gives arcs that cut across each other at a glance.
+- Fisk 1: stages are 11 T, so the river moves 2 to 4 widths in one.
+- Fisk 2: your order: four solids, then runs of four in one ink at 65, 50, 40, 23%. Because that colours land by how many stages old it is, the whole sheet slides to the next colours over the last third of each stage; team-lead knows that is a choice for Dave.
+- Fisk 3, in part: one lighter bank line each side; width 0.6 to 1.7 W (too much: tight bends swell, I'd go back to 0.7 to 1.5).
+
+Not done: islands and bars, levees, more crossing of old courses.
+
+What got worse: cut-off loops break into jagged scraps when a second cutoff or the river crosses them (cutoff/cutoff-relief.png at 1 and 2 min), and in the map they are bare paper on solid salmon. I've proposed to team-lead drawing lakes as shrinking, tapering polylines with the river's own routine instead of per-texel erasing. Your busy.py on out3: relief luma 0.23, edges 1.1%, hues 1.00; Fisk 1944 luma 0.72, edges 5.2%, hues 0.92.
+
+---
+
+The changed-formulas message is already in your inbox, and I have stopped: it went out straight after the round 3 message, titled "Meander round 3: the formulas that changed" (wall scallop, width, the outward stamp read, relief height and broad scrolls, the old map's stage length and order of inks).
+
+Nothing is running. out2, out3, meander-v2.py, render-v2.py and the rest of the meander scratchpad folder are untouched and will stay so. No round 4, no lake redesign, and no further messages to meander-look until you say.
+
+For when Dave decides: the cheap distant past for the first frame is still untried (coarse nodes and steps for the river, plain filled quads for its stamps, then T 60 exactly), so its cost and look are guesses until someone runs it.

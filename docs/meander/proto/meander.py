@@ -34,6 +34,7 @@ class River:
         s.L = sx + 2 * pad  # the valley's period; the screen shows x in 0..<sx
         s.crdist, s.gap = crdist, int(6 / ds)
         s.yc, s.ywall, s.wallw, s.noise = sy / 2, sy / 2 - wall, wallw, noise
+        s.scallop = (s.rng.normal(0, 1, (2, 6)), s.rng.uniform(0, 6.283, (2, 6)))  # each wall wanders in and out along the valley
         s.fields, s.lake_fill, s.plug = fields, lake_fill, plug
         s.lake_life, s.lake_close = lake_life, 40.0
         n = int(round(s.L / ds))
@@ -108,16 +109,25 @@ class River:
         E = s.erod(bx, by)
         # valley walls resist being cut into, and never hold a bank that is leaving them
         outward = (sg * ny) * (by - s.yc) > 0
-        E = E * np.where(outward, smooth(s.ywall - np.abs(by - s.yc), 0, s.wallw), 1.0)
+        E = E * np.where(outward, smooth(s.ywall - s.wall_in(bx, by) - np.abs(by - s.yc), 0, s.wallw), 1.0)
         d = np.clip(R * E * s.eps, -s.cap, s.cap)
         on = s.onscreen()
         s.lastR = (float(np.abs(d[on]).max()) / s.eps, float(np.abs(d[on]).mean()) / s.eps) if on.any() else (0, 0)
         s.x = s.x + d * nx; s.y = s.y + d * ny
-        # the width eases toward 0.7 W where the river is straight and 1.5 W round its tightest bends
+        # the width eases toward 0.6 W where the river is straight and 1.7 W round its tightest bends
         bend = np.convolve(np.tile(np.abs(curv), 3), np.ones(7) / 7, "same")[len(curv):2 * len(curv)]
-        want = 0.5 * (0.7 + 0.8 * np.clip(bend / 0.4, 0, 1))
+        want = 0.5 * (0.6 + 1.1 * np.clip(bend / 0.4, 0, 1))
         s.hw += (want - s.hw) * (1 - np.exp(-s.eps / 1.5))
         s.t += s.eps; s.steps += 1
+
+    def wall_in(s, x, y):
+        """How far the valley wall on a point's side stands in from its outermost line there: 0 to about 5 W,
+        in bays 12 to 37 W long, so the belt's edge is scalloped, not a straight corridor."""
+        side = (y > s.yc).astype(int)
+        k = np.arange(2, 8)[None, :]
+        amp, ph = s.scallop[0][side], s.scallop[1][side]
+        wave = (amp / np.sqrt(k) * np.sin(2 * np.pi * k * ((x + s.pad) / s.L)[:, None] + ph)).sum(axis=1)
+        return 2.5 * (1 + np.tanh(wave))
 
     def onscreen(s):
         xm = (s.x + s.pad) % s.L - s.pad

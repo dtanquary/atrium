@@ -184,9 +184,29 @@ And what the look research saw in the second round beside the references (both l
 - **Relief:** banks are soft on both sides, where real ones are lopsided, a crisp step on the outer bank and a gradual ramp on the inner. Each bend leaves one broad smooth petal, where real ground is many smaller arcs cutting across each other. The belt's straight dark margins make it read as a corridor.
 - **Old map:** the bands are thin stripes parallel to today's river. Fisk's are separate old courses that cross each other, because the Mississippi moved two to four channel widths between his stages (45–59 m a year over 55–64 years on a channel about a kilometre wide): longer stages would give his look. Hues alternate band by band, where his order keeps neighbours in one ink (four solids, then runs of four fading tints per ink). The river is even in width with a double line, which reads slightly as a road. The solid salmon areas are the loudest thing in it, which is the case for the single-ink palettes.
 
+### A third round, and what it showed
+The simulation's agent took the look research's review into a third set of renders (`proto-round3-relief.jpg`, `proto-round3-map-fisk.jpg`; code `proto/meander.py` and `render.py`, with round 2's kept as `meander-v2.py` and `render-v2.py`). Dave has not seen these: they are an experiment, and round 2 is still what he chose from.
+
+Better than round 2:
+- Relief's banks are lopsided, as real ones are: a clean step on the cut side, a gradual rise on the bar side (the land beside a bank is read two texels further from the water).
+- The belt's edge is scalloped: each valley wall wanders in and out by up to 5 W, so the dark margins are no longer straight.
+- Relief has arcs that show at a glance: a broader set of scrolls every 2.9 T, cut across by later ones.
+- The old map follows Fisk's own order: stages of 11 T (the river moves two to four widths in one, as between his), the four newest solid in sage, salmon, grey-teal and straw, then runs of four stages in one ink at 65, 50, 40 and 23%.
+- The cutoff frame: 0.03% of nearby pixels over 20 levels in relief, 0.24% in the map (one cutoff measured).
+
+Worse, or newly visible:
+- **Lakes are the weak point.** A cut-off loop breaks into jagged scraps when a second cutoff or the river crosses it, and in the map the scraps are bare paper on solid salmon: the first thing the eye lands on.
+- The channel's width was widened to 0.6–1.7 W and tight bends swell into blobs. Go back to 0.7–1.5.
+- The map is blotchier and louder: big solid salmon areas (one-family score 0.92, where round 2's was 1.0). It is truer to Fisk; round 2's thin stripes are calmer. Stage length is one constant, so it could be a setting: a choice for Dave once the lakes are clean enough to judge it by.
+- Colouring by how many stages old the land is means every band must change colour each stage. The round slides the whole sheet over the last third of each stage (about 90 s in every 4.6 minutes at 25 s per T): a slow change of every colour at once, which Dave hasn't seen. Round 2's rule, colour fixed to the land once laid, has none.
+
+**The lake redesign to build next (untested).** Keep each lake as a short polyline with a half-width per node, like the river, drawn with the same distance routine. Its widths shrink with age and taper to nothing at the ends, so every edge is as smooth as the river's. Where the live channel covers a lake's nodes, delete them, and the lake splits into two that taper: no per-texel erasing, so no scraps. River and lakes then share one water field (the river is the lake of age zero), which frees the texture's fourth byte for the hollow. About 15 lakes of 40 nodes is one more band the size of the river's, redrawn about once a second.
+
+Not done from the review: islands and bars in the channel, levees.
+
 ## The plan
 One file, `Sources/Atrium/Meander.swift`: a `River` type with no SpriteKit in it (nodes, step, cutoff, fields, pixel bytes), the scene, its shader, knobs and palettes. Everything built in `sceneDidLoad`; steps owed at 10 a second in `update(_:)`; the texture uploaded only when a step ran.
-1. **The look first, in the prototype.** A second round is done (`sheet2.jpg`). Left, in this order: the lakes and the faceted banks; the cheap distant past for the first frame; then relief toward the reference (levees, bars and islands, crisper scrolls). Then a film at two paces for Dave. No Swift before he has seen it move: it is the Crystals risk.
+1. **The look first, in the prototype.** A second round is done (`sheet2.jpg`). A third round tried the review's points and showed the lakes need a redesign (above). Left, in this order: the lake redesign and the faceted banks; the cheap distant past for the first frame; then relief toward the reference (levees, bars and islands), and the old map's stage length as a choice for Dave. Then a film at two paces for Dave. No Swift before he has seen it move: it is the Crystals risk.
 2. **`River`** ported from `meander.py`, with its check: 6,000 coarse steps must cut off loops, never cross and stay in the valley; stepping by 1/15, 1/30 and 1/60 s for the same elapsed time must give identical nodes.
 3. **The texture and shader,** matched to `render.py`'s stills. Finds out the unknowns: the alpha byte carrying data, a second dependent read, the uniform count, the upload's cost.
 4. **Motion,** in frame strips through a cutoff: no frame with more than about 0.3% of pixels changing over 20 levels.
