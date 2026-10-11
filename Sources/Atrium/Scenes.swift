@@ -16,9 +16,17 @@ struct Wallpaper {
     var status: (key: String, below: String)?
     /// A Refresh Now button for its live data, if it has any.
     var refresh: Refresh?
+    /// A section of its settings that goes by another title while one of its menus is at one pick: Pixel Window
+    /// Seat's Flight is the train's Journey.
+    var retitled: (section: String, title: String, when: String, at: Double)?
     /// Not good enough to show yet: left out of the menu, Settings, Shuffle and the welcome unless `unfinished` is set
     /// (`defaults write com.dtanquary.atrium unfinished -bool true`, then relaunch), but still built and render-tested.
     var unfinished = false
+
+    /// The title a section of its settings goes by, given what the menu that can retitle it holds.
+    func title(of section: String, holding pick: Double) -> String {
+        retitled.map { $0.section == section && pick == $0.at ? $0.title : section } ?? section
+    }
 }
 
 /// Refresh Now on a wallpaper's Settings page: `run` fetches its live data now, `available` says when it can next
@@ -88,7 +96,7 @@ struct Refresh {
     Wallpaper(name: "Pixel Spaceport", icon: "location.north.fill", tint: .orange, blurb: "A pixel-art launch site that never stops.",
               make: pixelSpaceport, knobs: PixelCity.spaceportKnobs, status: (key: "spaceport.status", below: "spaceport.live"), refresh: .launches),
     Wallpaper(name: "Pixel Window Seat", icon: "airplane", tint: .blue, blurb: "A pixel-art window seat on a flight that never lands, or on the space station.",
-              make: pixelWindowSeat, knobs: PixelWindowSeat.knobs),
+              make: pixelWindowSeat, knobs: PixelWindowSeat.knobs, retitled: PixelOrbit.offersTrain ? PixelWindowSeat.journey : nil),
     Wallpaper(name: "Fireflies", icon: "sparkle", tint: .yellow, blurb: "A meadow at blue hour, twinkling with fireflies.",
               make: fireflies, knobs: Fireflies.knobs),
     Wallpaper(name: "Murmuration", icon: "bird.fill", tint: .brown, blurb: "Starlings swirling over a sunset.",

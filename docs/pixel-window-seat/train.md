@@ -167,6 +167,12 @@ Hidden: Settings offers the train only with `unfinished` set (`defaults write co
   - **Not done here:** cloud, weather, the carriages, stations (steps 6 to 9).
   - **Not looked at:** dusk with the lamps half on, beyond one picture at 18:18; Settings' page; the app.
 
+### After step 5: the train's rows under their own title (2026-10-11)
+- **In:** with the train picked, Speed, Scenery and Poles and wires sit under **Journey**, not Flight. They are still rows of the page's Flight section; the section goes by another title while the menu is at the train (`Wallpaper.retitled`, Scenes.swift; `SectionTitle`, Settings.swift; `PixelWindowSeat.journey`). So no section is added or left empty, and nothing is retitled unless the train is offered: for the airliner and the station, with `unfinished` on or off, every row and section is as it was. The train's page reads View (Window on, Window, Looking), Journey (Speed, Scenery, Poles and wires), Preview.
+- **Why not a section of the train's own:** Settings draws a section for every name among a page's knobs, shown or not, so a Journey section would have stood empty on the airliner's and the station's pages, and Flight empty on the train's.
+- **Checked by running:** `windowSeatOffersTheTrainOnlyUnfinished` (Flight is titled Journey at the train and Flight at the airliner and the station; View and Preview keep their names; without the train the wallpaper retitles nothing). The whole suite, 79 tests, twice; the byte check, 961,520 compared, 0 differ; `shots.sh` twice, the two runs the same 25 files and the same as before step 1.
+- **Not checked:** the Settings window itself, which was not opened: the title is read from the same stored pick the rows go by, but it has not been seen. The blurb and the preview picture are still the airliner's, until the train ships.
+
 ## Research for the next mock-ups
 - **The window.** Real glass, width to height: a TGV bar car 1.94:1, a EuroNight sleeper 1.46:1, a British Mark 1 bay 1.2:1 with top-lights, an Amtrak Superliner coach 2.75:1, a Shinkansen N700 0.96:1 (520 × 500 mm: an airliner's window again). The mock-ups' pane is the airliner's, 1.54:1. A wide picture window (about 1.9:1) fills a 16:10 screen best.
 - **The eye:** about 2.5 m above the rail on a European intercity, 3.85 m upstairs in a Superliner; add 0.5–1 m of track bed.

@@ -42,6 +42,10 @@ final class PixelWindowSeat: SKScene {
     /// The airliner's settings and the orbit's (PixelOrbit.swift), each kind hidden while the other is flying.
     nonisolated static let knobs = rows(train: PixelOrbit.offersTrain)
 
+    /// The train's Speed, Scenery and Poles and wires are rows of the Flight section, which a train hasn't got: while
+    /// the train is the window the section is titled Journey (`Wallpaper.retitled`).
+    nonisolated static let journey = (section: "Flight", title: "Journey", when: "seat.orbit", at: 2.0)
+
     /// The page's rows: with the Earth orbit switch it had before; or with the menu that offers the train, and
     /// then the train's own rows too.
     nonisolated static func rows(train: Bool) -> [Knob] {

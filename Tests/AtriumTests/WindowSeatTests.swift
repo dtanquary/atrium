@@ -1,4 +1,5 @@
 import SpriteKit
+import SwiftUI
 import Testing
 @testable import Atrium
 
@@ -65,6 +66,13 @@ private func listed(_ knobs: [Knob], window: Double) -> [String] {
     #expect(listed(offered, window: 2) == ["seat.orbit", "seat.window", "seat.looking", "seat.speed", "seat.country", "seat.poles", "seat.previewTime"])
     let shared = offered.filter { knob in !PixelTrain.knobs.contains { $0.key == knob.key } } // all but the train's own rows are the page's as it was
     #expect(shared.count == shipped.count && zip(shipped, shared).dropFirst().allSatisfy { $0.key == $1.key && $0.label == $1.label && $0.format == $1.format })
+
+    // The train's rows are in the page's own sections, and Flight goes by Journey only while the train is the window.
+    #expect(Set(offered.filter { listed(offered, window: 2).contains($0.key) }.map(\.section)) == ["View", "Flight", "Preview"])
+    let page = Wallpaper(name: "", icon: "", tint: .blue, blurb: "", make: pixelWindowSeat, retitled: PixelWindowSeat.journey)
+    #expect([0.0, 1, 2].map { page.title(of: "Flight", holding: $0) } == ["Flight", "Flight", "Journey"])
+    #expect(["View", "Preview"].allSatisfy { page.title(of: $0, holding: 2) == $0 })
+    #expect(PixelOrbit.offersTrain || allScenes.first { $0.name == "Pixel Window Seat" }?.retitled == nil, "without the train, no section is retitled")
 
     // What is stored: 1 is the station either way, and 2 the train only where the train is offered.
     let key = PixelOrbit.on.key, size = CGSize(width: 1512, height: 982)

@@ -493,6 +493,14 @@ struct WallpaperPage: View {
         wallpaper.knobs.map(\.section).reduce(into: []) { if !$0.contains($1) && $1 != "Colors" { $0.append($1) } }
     }
 
+    /// A section's rows: its knobs, and the wallpaper's status line under the knob it belongs to.
+    @ViewBuilder private func rows(_ section: String) -> some View {
+        ForEach(wallpaper.knobs.filter { $0.section == section }, id: \.key) { knob in
+            KnobRow(knob: knob)
+            if let status = wallpaper.status, status.below == knob.key { StatusRow(key: status.key, gate: knob) }
+        }
+    }
+
     var body: some View {
         Form {
             Section {} footer: { // a footer has no card behind it, and unlike a header leaves the next section's title alone
@@ -523,11 +531,10 @@ struct WallpaperPage: View {
                 }
             }
             ForEach(sections, id: \.self) { section in
-                Section(section) {
-                    ForEach(wallpaper.knobs.filter { $0.section == section }, id: \.key) { knob in
-                        KnobRow(knob: knob)
-                        if let status = wallpaper.status, status.below == knob.key { StatusRow(key: status.key, gate: knob) }
-                    }
+                if let retitled = wallpaper.retitled, retitled.section == section {
+                    Section { rows(section) } header: { SectionTitle(wallpaper: wallpaper, section: section, menu: retitled.when) }
+                } else {
+                    Section(section) { rows(section) }
                 }
             }
             if let refresh = wallpaper.refresh {
@@ -602,6 +609,20 @@ struct LivePreview: NSViewRepresentable {
     }
 
     func updateNSView(_ view: WallpaperView, context: Context) {}
+}
+
+/// The title of a section that goes by another name while the wallpaper's menu `menu` is at one pick
+/// (`Wallpaper.retitled`).
+struct SectionTitle: View {
+    let wallpaper: Wallpaper, section: String
+    @AppStorage private var pick: Double
+
+    init(wallpaper: Wallpaper, section: String, menu: String) {
+        (self.wallpaper, self.section) = (wallpaper, section)
+        _pick = AppStorage(wrappedValue: 0, menu)
+    }
+
+    var body: some View { Text(wallpaper.title(of: section, holding: pick)) }
 }
 
 /// A scene's own status line from UserDefaults, shown while the knob `gate` is live and there's something to say:
