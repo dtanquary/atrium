@@ -587,6 +587,59 @@ public final class River {
         } } }
     }
 
+    /// Fills the pockets a swept past leaves: patches a few texels across that every strip missed, most of them in
+    /// the bays where a bank swung round against a valley wall. They are left as blocks of older ground inside
+    /// newer, or of ground the river never reached, which Light Mode draws as paper: a white block in the belt.
+    /// They are too wide for `closeCracks`, whose way of closing squares off whatever it doesn't fill. Here each
+    /// stamp is first made the latest within `reach` texels, and then brought back down as far as the ground lets
+    /// it, a texel taking the earliest of the eight round it but never earlier than its own. Ground that joins,
+    /// through ground as old, anything too wide for the first step to cover comes back exactly as it was, every
+    /// scarp where it stood; what newer ground walls in on every side stays up, at the oldest of that wall. (A
+    /// closing by reconstruction.)
+    // ponytail: a pocket is filled level, where a real bar would slope, and only pockets older than their wall are
+    // found. A block newer than all round it (a few a launch, three texels square, plain only in the old map)
+    // would take the same done the other way up.
+    private func fillPockets(reach: Int = 5) {
+        let columns = columns, count = columns * rows, present = Float(now - base)
+        var stamps = [Float](repeating: 0, count: count), other = stamps
+        ground.withUnsafeMutableBufferPointer { ground in stamps.withUnsafeMutableBufferPointer { a in other.withUnsafeMutableBufferPointer { own in
+            for i in 0..<count { (a[i], own[i]) = (ground[i].x, ground[i].x) }
+            for _ in 0..<reach { // across and then up, as in `closeCracks`
+                for i in 1..<count - 1 { own[i] = max(max(a[i - 1], a[i]), a[i + 1]) }
+                for i in columns..<count - columns { a[i] = max(max(own[i - columns], own[i]), own[i + columns]) }
+            }
+            for i in 0..<count { own[i] = ground[i].x }
+            // the ground's own edge is no wall: a pocket against it is open, and stays as it was
+            for i in 0..<columns { (a[i], a[count - 1 - i]) = (own[i], own[count - 1 - i]) }
+            for i in stride(from: 0, to: count, by: columns) { (a[i], a[i + columns - 1]) = (own[i], own[i + columns - 1]) }
+            // down from the top and back up from the bottom until nothing moves: a stamp runs any distance along
+            // the way a pass is going, so a few passes do it
+            var moved = true
+            while moved {
+                moved = false
+                for i in columns + 1..<count - columns - 1 where a[i] > own[i] {
+                    let least = min(min(a[i - 1], a[i - columns]), min(a[i - columns - 1], a[i - columns + 1]))
+                    if least < a[i] { (a[i], moved) = (max(least, own[i]), true) }
+                }
+                for i in stride(from: count - columns - 2, through: columns + 1, by: -1) where a[i] > own[i] {
+                    let least = min(min(a[i + 1], a[i + columns]), min(a[i + columns - 1], a[i + columns + 1]))
+                    if least < a[i] { (a[i], moved) = (max(least, own[i]), true) }
+                }
+            }
+            // What is filled: ground the river never reached, or over twice as old as it would be raised to, which
+            // is plainly of another time than its wall; and out from there the raised ground that touches it and
+            // stands lower at all. So a block goes with its soft rim, and a hollow that is only a little older
+            // than its wall is left whole: filled level, the shore of one with a sloping floor would be ragged
+            // where there was none.
+            var next = (0..<count).filter { a[$0] > own[$0] && (own[$0] == Self.never || present - own[$0] > 2 * (present - a[$0]) + 5) }
+            while let i = next.popLast() {
+                guard a[i] > own[i], own[i] == Self.never || Self.height(present - own[i]) - Self.height(present - a[i]) > 0.02 else { continue }
+                (ground[i].x, own[i]) = (a[i], a[i])
+                for step in [-columns - 1, -columns, -columns + 1, -1, 1, columns - 1, columns, columns + 1] { next.append(i + step) }
+            }
+        } } }
+    }
+
     /// After a cutoff the river's first and last nodes are the two sides of the neck, and their banks have swung
     /// round to the new course: remembers them there, so the next `sweep` doesn't take the swing for ground left.
     private func markNeck() {
@@ -1096,6 +1149,8 @@ public final class River {
         }
         sweep()
         closeCracks()
+        fillPockets()
+        closeCracks() // the crumbs a pocket leaves where it was only part filled
         // the river's ribbon takes the present time, less half a texel at each bank, which leaves out every
         // texel with land in it: `trimLakes` reads those stamps, and `updateGround` sees to the banks
         path.removeAll(keepingCapacity: true)

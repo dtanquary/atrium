@@ -152,6 +152,27 @@ private func crossings(_ river: River) -> Int {
     #expect(steps[300] < 1.5)
 }
 
+/// A swept past leaves no pocket of ground the river never reached inside the belt, where Light Mode drew it as a
+/// white block: every never-reached texel can be walked to from the ground's edge over never-reached ground. The
+/// river is the one a 14" screen gets from seed 13, which had 52 texels that couldn't be, in two pockets the
+/// sweeps had missed.
+@Test func riverLeavesNoGroundWalledIn() {
+    let river = River(seed: 13, across: 54, up: Float(982.0 / 28), texels: 14)
+    river.age()
+    let texels = river.columns * river.rows, columns = river.columns, oldest = Float(river.now - river.base - River.memory - 5)
+    var open = [Bool](repeating: false, count: texels)
+    var walk = (0..<texels).filter { $0 < columns || $0 >= texels - columns || $0 % columns == 0 || $0 % columns == columns - 1 }
+    while let i = walk.popLast() {
+        guard !open[i], river.ground[i].x <= oldest else { continue }
+        open[i] = true
+        for step in [-columns - 1, -columns, -columns + 1, -1, 1, columns - 1, columns, columns + 1] where i + step >= 0 && i + step < texels && abs((i + step) % columns - i % columns) <= 1 {
+            walk.append(i + step)
+        }
+    }
+    let walled = (0..<texels).count { river.ground[$0].x <= oldest && !open[$0] }
+    #expect(walled == 0, "\(walled) texels the river never reached are walled in by ground it has worked")
+}
+
 /// Only a couple of lakes are drawn again on each step. Over 24 T at speed 4, long enough for every lake there at
 /// the start to dry up and for others to be cut off, trimmed and run into each other, the lakes' water in the
 /// ground is never half a texel from where drawing every lake afresh would put it: none is left behind when a lake
