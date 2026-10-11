@@ -44,19 +44,22 @@ sheet.save(sys.argv[2], quality=88)
 print(sheet.size)
 
 
-# The look in numbers, tile H beside the app's default, both 800 x 500.
+# The look in numbers, tile H beside the app's default, both 800 x 500, as the step (b) review measured it: over the
+# pixels with luma above 0.3, the luma's percentiles, the share that is near white (every channel over 0.75) and the
+# fine contrast (the spread of luma less its 9 px box blur). Then the side coming toward us over the side going away,
+# in luma along the disc's widest row, and the luma of the sky far from the hole.
 for name, pic in [("mock-up H", tile('H')), ("the app", mine(sys.argv[1] + '/Orange-1.0.png'))]:
     a = np.asarray(pic).astype(float) / 255
     luma = a @ [0.2126, 0.7152, 0.0722]
+    lit = luma > 0.3
+    fine = luma - np.asarray(Image.fromarray((luma * 255).round().astype(np.uint8)).filter(ImageFilter.BoxBlur(4))).astype(float) / 255
     disc = (a[..., 0] > 0.25) & (a[..., 0] > a[..., 2] * 1.25)                      # the orange disc: red well over blue
-    fine = luma - np.asarray(Image.fromarray((luma * 255).astype(np.uint8)).filter(ImageFilter.BoxBlur(4))).astype(float) / 255
     ys, xs = disc.nonzero()
     far = ~disc & (np.hypot(*np.meshgrid(np.arange(800) - xs.mean(), np.arange(500) - ys.mean())) > 260)
-    # the disc's widest row, and boxes along it either side of the hole: the side coming toward us over the side going away
     row = int(ys.mean()) - 40 + int(a[int(ys.mean()) - 40:int(ys.mean()) + 40].max(axis=2).mean(axis=1).argmax())
-    lit = np.nonzero(a[row - 3:row + 4].mean(axis=0).max(axis=1) > 0.43)[0]
-    mid, half = (lit.min() + lit.max()) / 2, (lit.max() - lit.min()) / 2
+    wide = np.nonzero(a[row - 3:row + 4].mean(axis=0).max(axis=1) > 0.43)[0]
+    mid, half = (wide.min() + wide.max()) / 2, (wide.max() - wide.min()) / 2
     left = luma[row - 3:row + 4, int(mid - 0.85 * half):int(mid - 0.3 * half)].mean()
     right = luma[row - 3:row + 4, int(mid + 0.3 * half):int(mid + 0.85 * half)].mean()
-    print(f"{name}: the disc's luma at its 10th, 50th, 90th, 99th percentile {np.percentile(luma[disc], [10, 50, 90, 99]).round(2)}; "
-          f"fine contrast {fine[disc].std():.3f}; approaching over receding {left / right:.2f}; empty sky's median luma {np.median(luma[far]):.3f}")
+    print(f"{name}: luma at its 10th, 50th, 90th, 99th percentile {np.percentile(luma[lit], [10, 50, 90, 99]).round(2)}; near white {(a[lit].min(axis=1) > 0.75).mean():.1%}; "
+          f"fine contrast {fine[lit].std():.3f}; approaching over receding {left / right:.2f}; far sky's median luma {np.median(luma[far]):.3f}")

@@ -254,6 +254,26 @@ func blackBodyKeepsToTheLocus(kelvin: Double, x: Double, y: Double) {
         }
     }
 
+    // Is the turning plain to see at speed 1? Two frames 5 s apart, the whole disc: before, after, and the change.
+    do {
+        let renderer = SKRenderer(device: device)
+        renderer.scene = BlackHole(size: CGSize(width: w / 2, height: h / 2))
+        let first = try frame(of: renderer, after: 1, at: 30), second = try frame(of: renderer, after: 5, at: 30)
+        let (pw, ph) = (2000, 900), (x0, y0) = (w / 2 - 1000, h / 2 - 470)
+        var strip = [UInt32](repeating: 0, count: pw / 2 * (ph / 2) * 3), changes = [Int]()
+        for y in stride(from: 0, to: ph, by: 2) { for x in stride(from: 0, to: pw, by: 2) {
+            let (a, b) = (first[(y0 + y) * w + x0 + x], second[(y0 + y) * w + x0 + x]), change = abs(luma(a) - luma(b))
+            strip[(y / 2) * (pw / 2) + x / 2] = a
+            strip[(ph / 2 + y / 2) * (pw / 2) + x / 2] = b
+            strip[(ph + y / 2) * (pw / 2) + x / 2] = UInt32(min(change * 4, 255)) * 0x010101
+            if a >> 16 & 255 > (a & 255) + 40 { changes.append(change) } // the disc: red well over blue
+        } }
+        save(strip, pw / 2, ph / 2 * 3, "5 s apart at speed 1.png")
+        print(String(format: "Black Hole moving, 5 s apart at speed 1: the disc's pixels change by %.1f of 255 on average; %.0f%% of them by 8 or more, %.0f%% by 25 or more",
+                     Double(changes.reduce(0, +)) / Double(changes.count), Double(changes.count { $0 >= 8 }) / Double(changes.count) * 100,
+                     Double(changes.count { $0 >= 25 }) / Double(changes.count) * 100))
+    }
+
     // Two lives of the streaks at speed 4: 120 units of the disc's time, 117 s, looked at every 1.5 s. A generation
     // hands over every third of a life, 19.5 s here or 13 looks, so any breathing would beat at that.
     UserDefaults.standard.set(4.0, forKey: BlackHole.speed.key)

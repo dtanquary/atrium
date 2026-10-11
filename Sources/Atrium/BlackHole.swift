@@ -198,12 +198,13 @@ final class BlackHole: SKScene {
     }
 
     /// The gas's knots as they are born, before any shear: four octaves of noise, one in each channel from coarse
-    /// to fine, 512 across for one turn of the disc and 256 up for 0.4π in the log of the distance. The coarsest
-    /// has 10 cells round and 6 up, each next octave twice that, so a knot starts three times as long round the
-    /// disc as it is deep: with isotropic ones the streaks came out as soft blobs. It repeats both ways, with one
-    /// more row and column that are the first again, so smoothing never meets a seam.
+    /// to fine, 512 across for one turn of the disc and 512 up for 0.4π in the log of the distance. The coarsest
+    /// has 10 cells round and 12 up, each next octave twice that, so a knot is born six times as long round the
+    /// disc as it is deep, a streak already: no frame shows round blobs, and the outer edge, where shear is seven
+    /// times slower than at the inner, still reads as streaks. It repeats both ways, with one more row and column
+    /// that are the first again, so smoothing never meets a seam.
     private static let gas: SKTexture = {
-        let (w, h) = (512, 256)
+        let (w, h) = (512, 512)
         func hash(_ x: Int, _ y: Int, _ octave: Int) -> Double {
             var n = UInt32(truncatingIfNeeded: x &* 374761393 &+ y &* 668265263 &+ octave &* 2246822519)
             n = (n ^ (n >> 13)) &* 1274126177
@@ -211,7 +212,7 @@ final class BlackHole: SKScene {
         }
         var bytes = [UInt8](repeating: 0, count: (w + 1) * (h + 1) * 4)
         for y in 0...h { for x in 0...w { for octave in 0..<4 {
-            let (round, deep) = (10 << octave, 6 << octave)
+            let (round, deep) = (10 << octave, 12 << octave)
             let (u, v) = (Double(x % w) / Double(w) * Double(round), Double(y % h) / Double(h) * Double(deep))
             let (i, j) = (Int(u), Int(v))
             let (s, t) = ((u - Double(i)) * (u - Double(i)) * (3 - 2 * (u - Double(i))), (v - Double(j)) * (v - Double(j)) * (3 - 2 * (v - Double(j))))
@@ -362,7 +363,7 @@ final class BlackHole: SKScene {
 
     // Where the gas's noise is read: `round` in turns of the disc, `deep` in the log of the distance.
     vec2 gasAt(float round, float deep) {
-        return (fract(vec2(round, deep / 1.2566371)) * vec2(512.0, 256.0) + 0.5) / vec2(513.0, 257.0);
+        return (fract(vec2(round, deep / 1.2566371)) * vec2(512.0, 512.0) + 0.5) / vec2(513.0, 513.0);
     }
 
     // One generation's streaks, about ±0.3, from the noise's four octaves (coarse to fine). `cells` is how many of the
@@ -392,10 +393,11 @@ final class BlackHole: SKScene {
 
     // The light of the disc where a ray meets it, already times its opacity, and that opacity. `hue` is the gas's
     // colour there, `seen` its temperature against the hottest ring's as it reaches us, `gas` its streaks (0 to 1).
-    // The disc thins out over the last 42% of its radius, and stops short at the innermost orbit.
+    // The disc thins out over the last 42% of its radius, lanes sooner than knots, so its rim is broken into wisps and
+    // not feathered; and it stops short at the innermost orbit.
     vec4 discLight(vec3 hue, float seen, float gas, float u, float outer) {
         float fade = clamp((1.0 - outer / u) / 0.42, 0.0, 1.0);
-        float there = clamp((1.0 / u - 3.0) / 0.12, 0.0, 1.0) * clamp(fade * sqrt(fade) * (1.6 + 1.2 * gas), 0.0, 1.0);
+        float there = clamp((1.0 / u - 3.0) / 0.12, 0.0, 1.0) * clamp(fade * sqrt(fade) * (0.7 + 2.6 * gas), 0.0, 1.0);
         float glow = seen * seen;
         return vec4(hue * (glow * glow * there), there);
     }
@@ -491,9 +493,9 @@ final class BlackHole: SKScene {
                 float round = atan(on1.y, on1.x) / 6.2831853;
                 vec3 run = spin * u_age;                              // how far each generation's gas has run since birth
                 vec3 cells = 10.0 * (wide1 + 1.5 * run * grain1);
-                float pattern = dot(weight, vec3(streaks(texture2D(u_gas, gasAt(round + run.x + u_seedRound.x, deep1 + u_seedDeep.x)), max(cells.x, grain1 * 4.8)),
-                                                 streaks(texture2D(u_gas, gasAt(round + run.y + u_seedRound.y, deep1 + u_seedDeep.y)), max(cells.y, grain1 * 4.8)),
-                                                 streaks(texture2D(u_gas, gasAt(round + run.z + u_seedRound.z, deep1 + u_seedDeep.z)), max(cells.z, grain1 * 4.8))));
+                float pattern = dot(weight, vec3(streaks(texture2D(u_gas, gasAt(round + run.x + u_seedRound.x, deep1 + u_seedDeep.x)), max(cells.x, grain1 * 9.6)),
+                                                 streaks(texture2D(u_gas, gasAt(round + run.y + u_seedRound.y, deep1 + u_seedDeep.y)), max(cells.y, grain1 * 9.6)),
+                                                 streaks(texture2D(u_gas, gasAt(round + run.z + u_seedRound.z, deep1 + u_seedDeep.z)), max(cells.z, grain1 * 9.6))));
                 float gas = smoothstep(0.0, 1.0, 0.5 + pattern * 2.1 * u_streaks);
                 float seen = pow(sqrt(1.0 - 1.5 * u1) / (1.0 - sqrt(0.5 * u1 * u1 * u1) * lean / e), u_beaming) * discHeat(u1) * streakHeat(gas);
                 light = discLight(texture2D(u_heat, heatAt(seen * u_peak.x)).rgb, seen, gas, u1, u_view.w);
@@ -512,9 +514,9 @@ final class BlackHole: SKScene {
                 float round = atan(on0.y, on0.x) / 6.2831853;
                 vec3 run = spin * u_age;
                 vec3 cells = 10.0 * (wide0 + 1.5 * run * grain0);
-                float pattern = dot(weight, vec3(streaks(texture2D(u_gas, gasAt(round + run.x + u_seedRound.x, deep0 + u_seedDeep.x)), max(cells.x, grain0 * 4.8)),
-                                                 streaks(texture2D(u_gas, gasAt(round + run.y + u_seedRound.y, deep0 + u_seedDeep.y)), max(cells.y, grain0 * 4.8)),
-                                                 streaks(texture2D(u_gas, gasAt(round + run.z + u_seedRound.z, deep0 + u_seedDeep.z)), max(cells.z, grain0 * 4.8))));
+                float pattern = dot(weight, vec3(streaks(texture2D(u_gas, gasAt(round + run.x + u_seedRound.x, deep0 + u_seedDeep.x)), max(cells.x, grain0 * 9.6)),
+                                                 streaks(texture2D(u_gas, gasAt(round + run.y + u_seedRound.y, deep0 + u_seedDeep.y)), max(cells.y, grain0 * 9.6)),
+                                                 streaks(texture2D(u_gas, gasAt(round + run.z + u_seedRound.z, deep0 + u_seedDeep.z)), max(cells.z, grain0 * 9.6))));
                 float gas = smoothstep(0.0, 1.0, 0.5 + pattern * 2.1 * u_streaks);
                 float seen = pow(sqrt(1.0 - 1.5 * u0) / (1.0 - sqrt(0.5 * u0 * u0 * u0) * lean / e), u_beaming) * discHeat(u0) * streakHeat(gas);
                 vec4 front = discLight(texture2D(u_heat, heatAt(seen * u_peak.x)).rgb, seen, gas, u0, u_view.w);
@@ -564,10 +566,12 @@ final class BlackHole: SKScene {
             // Galaxy's stretch, asinh on brightness with the colour kept: it lifts the disc's faint outer part, holds
             // the bright side without bleaching it and leaves black black. Brightness here is the strongest channel,
             // not Galaxy's weighted sum, so the three disc colours expose alike; and the curve reaches full short of
-            // the brightest gas, where red clips first, then green, so it goes yellow-white as in the mock-ups.
+            // the brightest gas, where red clips first, then green, and past that it burns out to white, as the
+            // hot side did in the mock-ups (about 6% of the disc there).
             vec3 x = light.rgb * (u_brightness * u_peak.y * 8.0) + (1.0 - light.a) * behind;
             float most = max(x.r, max(x.g, x.b)) + 0.0001;
-            col = min(x * (log(20.0 * most + sqrt(400.0 * most * most + 1.0)) / 5.8) / most, 1.0); // asinh(20 most) / asinh(165)
+            float stretched = log(20.0 * most + sqrt(400.0 * most * most + 1.0)) / 5.8; // asinh(20 most) / asinh(165)
+            col = mix(min(x * stretched / most, 1.0), vec3(1.0), smoothstep(0.88, 1.2, stretched));
             // dithered against banding, but not where nothing shines: the shadow stays exactly black
             col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0 * step(0.0005, most);
         }
