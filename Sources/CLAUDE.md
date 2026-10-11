@@ -23,6 +23,7 @@ Knobs are stored in UserDefaults. `knob.value` is cached (emptied on any default
 
 ## Gotchas
 - SKShader is GLSL-like and gets translated to Metal. There's no `inout`, no early `return` from `main()` (it won't compile), and no `sampler2D` parameters (keep texture reads in `main()`).
+- SKShader has `fwidth` but not `dFdx` or `dFdy`: they fail at run time ("use of undeclared identifier 'dFdx'"), which `swift build` won't catch. `fwidth` is the sum of the two slopes, so it runs about 4/π high for a slope in any direction (Black Hole takes that off).
 - Animate shaders by `u_now`, never SpriteKit's `u_time`. `u_time` counts from app launch and nothing resets it, so as a Float it goes choppy after a week or two of running, and sines of it turn to noise within a month. `u_now` (`WallpaperTime` in Scenes.swift) restarts when the app rebuilds a long-running wallpaper, and in the render tests it moves with `SNAPSHOT_SECONDS`. `shaderScene` adds it when the source uses it; other shaders list `WallpaperTime.now` in their uniforms. Wrap anything a jump can't hurt, like a twinkle, with `mod(t, 3600.0)`: `starField` and `brightStar` already do.
 - A transition never advances in an `SKView` that isn't drawing (paused, covered, display asleep), and `view.scene` stays the old scene until it does. `WallpaperView` swaps straight when its window is covered, so the lock screen's still is never of the wallpaper before.
 - Globals in `main.swift` are set up by top-level code and aren't safe to use from tests. Put shared state in other files.

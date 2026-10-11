@@ -2,11 +2,11 @@
 
 A black hole with a thin disc of glowing gas turning round it, in front of the real Milky Way, all of it bent by the hole's gravity: the far side of the disc lifts into a hump over the shadow, its underside shows as a ring below, the side turning toward us is brighter, and the stars behind slide and double round the edge. One shader, beside Nebula and Galaxy.
 
-Dave picked the idea on 2026-10-10 from a brainstorm ([ideas.md](ideas.md)). That day it was researched by two agents and mocked up in three rounds, and he made the choices below. The build began on 2026-10-11: [The build so far](#the-build-so-far) says what exists. It isn't in the menu yet. The rest of this page is the plan, the measurements to build against and their sources.
+Dave picked the idea on 2026-10-10 from a brainstorm ([ideas.md](ideas.md)). That day it was researched by two agents and mocked up in three rounds, and he made the choices below. The build began on 2026-10-11: [The build so far](#the-build-so-far) says what exists. It is in the app as a hidden wallpaper (`unfinished: true`): the bending and the disc, with no sky yet and a first pass at the look. The rest of this page is the plan, the measurements to build against and their sources.
 
 - **Mock-ups and prototypes:** `docs/black-hole/` (see [Mock-ups](#mock-ups) and [Prototype](#the-prototype)).
 - **The two research reports in full:** [the method](black-hole/research-method.md) and [the look](black-hole/research-look.md), which has the reference list, eight real black holes' numbers and the palettes.
-- **Next step:** build order step (b) below, the disc.
+- **Next step:** build order step (c) below, the sky, then the disc's look (e) before the motion check (d).
 
 ## Dave's decisions (2026-10-10)
 From mock-up sheets, each choice with a recommendation beside it.
@@ -61,7 +61,7 @@ Size, tilt, distance, where the hole sits and how the sky is turned are all unif
 ### Glow and stretch
 One `SKShader` pass can't blur. Start with Galaxy's stretch (`asinh(20·lum)/asinh(240)` on brightness, colour kept) and dither. NASA's picture has no bloom at all: the shadow, and the gap between the photon ring and the disc, are exactly black. A baked halo (the shader drawn small offscreen, blurred on the CPU, handed back as a texture, as `MoonBaker` does) is only for later, if the stretch alone looks hard.
 
-### Cost (estimated, not measured)
+### Cost (the estimate; the disc alone measured 0.4 ms of GPU, see [The build so far](#the-build-so-far))
 8 to 14 fetches from small textures a pixel, about 250–350 arithmetic operations. Expect 0.6–1.2 ms of GPU against the 2 ms budget; about 0.5 ms of CPU, as every shader scene. About 23 uniforms of roughly 30, 7 of them textures. Memory: 136 KB of tables, 2 MB star grid, 2 MB glow map.
 
 ## Acceptance numbers
@@ -130,6 +130,29 @@ What the GPU's filter does, which nobody could know before building:
 - Table A's last two columns (rays aimed more than 16 radii out) are coarse, off by up to 0.004 in 1/r. No disc is out there, and the error can't make a false hit.
 
 **A change from the plan for step (b).** The disc's streaks will be three overlapping generations of noise, each sheared by its own age and reborn in turn (a flow map), not rings turning rigidly. Rigid rings can only draw concentric bands, the even "vinyl record" look of the mock-ups' stand-in texture, which the build isn't to copy; NASA's arcs are knots sheared by age. The conditions it has to meet: no breathing as generations cross (mean and contrast of a patch flat within about 2% over a cycle), streaks from the moment a generation is born, the inner edge still round once in 3 minutes, and a clock that Speed can stop or change without a jump.
+
+**Step (b), the disc (2026-10-11).** The scene is in `allScenes` as Black Hole, hidden. What it draws:
+- **The disc's physics as planned:** Novikov-Thorne heat, the redshift `g` for every image, colour from a black-body table baked in Swift (`BlackBody`: Planck's spectrum through the CIE 1931 curves, in [Wyman, Sloan & Shirley's analytic fit](https://jcgt.org/published/0002/02/01/), to sRGB), brightness as `(g T)⁴`, the mock-up's opacity and outer fade, and both crossings of the disc composited front to back.
+- **Streaks as a flow map:** three generations of noise a third of a life apart, each read at its own Kepler turning since birth. Their weights are `(1 − cos)/3`, whose squares sum to a constant, so contrast can't pulse as generations cross. A generation lives 60 of the hole's time units (234 s at 1×), in which the inner edge laps 1.3 times and the rim 0.19. The noise is a 512 × 128 texture of four octaves, one a channel; each octave fades out as its cells shrink toward a pixel, so streaks seen edge on or wound tight melt into the glow.
+- **A hairline at the shadow's edge.** Drawn one by one, the images of the disc thinner than a pixel came out as stray dots. Where a pixel spans more than about a radian of extra turn they give way to their average: 0.14 of the disc's light at 5 radii.
+- **Tone:** Galaxy's asinh on brightness with other constants, fitted to the mock-up's own curve. Galaxy's grey mix for highlights is left out, so red clips first, then green.
+- **Settings so far:** Disc (the three temperatures, Orange the standard), Size 0.7× to 1.5× (the field of view: 1× is 56°, the ends about 74° and 39°), Brightness, Beaming, Streaks, Speed 0 to 4×. Size and Speed never rebuild anything.
+
+Measured:
+- **Cost:** GPU 0.38–0.47 ms a frame at 3024 × 1964 (0.41 in my own run), CPU 0.42 ms in a release build. The estimate of 0.6–1.2 ms for the whole picture was high; stars and glow are still to come. 15 uniforms so far, 4 of them textures.
+- **Tests:** the three from step (a) still pass (355 pixels differ now: the hit point is worked out another way).
+- **Motion, checked on 90 frames at Speed 4×:** no pixel changes by more than 0.008 between frames, no dots, no shimmer on the thin rings, and a patch's mean and contrast stay flat. But see below: it is calm because it is soft.
+- **Beaming:** at 1 (the full law) the approaching side is 1.6–1.7 times the receding in luma after the stretch, which is NASA's displayed ratio, so 1 is the default.
+
+**What is wrong with the look at step (b)**, against mock-up tile H (the same boxes on both):
+- Its range is squeezed: luma at the 10th, 50th, 90th and 99th percentile of the disc is 0.36, 0.50, 0.72, 0.82 against the mock-up's 0.31, 0.40, 0.83, 0.99.
+- The hot side never goes yellow-white: no pixel is near white, against 6.3% of the mock-up's disc.
+- Fine contrast (luma less its 9 px blur) is 0.041 against 0.088. It reads as airbrushed, with a wide feathered rim.
+- Frames 2 s apart at 4× are hard to tell apart, so at 1× it would read as a still. The streaks have to carry the motion: finer, crisper, with dark gaps.
+- Empty sky isn't quite black: the dither leaves 1/255 on a quarter of its pixels.
+The look pass (e) is to fix these before the motion strips (d), since shimmer only shows at high contrast.
+
+A gotcha found on the way, now in `Sources/CLAUDE.md`: SKShader has `fwidth` but not `dFdx` or `dFdy`.
 
 ## Mock-ups
 In `docs/black-hole/`. They were rendered by `bh.py`, a brute-force tracer written for the purpose: every ray is integrated (`d²x/dλ² = −1.5 h² x / r⁵`, which gives a light ray's exact path), so the bending in them is real, not painted. Its disc texture, bloom and tone curve are stand-ins.
