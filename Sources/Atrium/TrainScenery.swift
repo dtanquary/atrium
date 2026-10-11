@@ -7,26 +7,52 @@ enum TrainCountry {
     case farmland, mountains, city, snow
 
     /// What sets one country's hashes apart from another's, as in the mock-ups.
-    var salt: UInt64 { [.farmland: 0, .mountains: 100_000, .snow: 200_000, .city: 400_000][self]! }
+    var salt: UInt64 {
+        switch self {
+        case .farmland: 0
+        case .mountains: 100_000
+        case .snow: 200_000
+        case .city: 400_000
+        }
+    }
 
     /// How far off things have faded most of the way to the horizon's colour, in metres: mountain air is clear,
     /// and a city's is not.
-    var haze: Double { [.farmland: TrainWorld.haze, .mountains: 60_000, .snow: 40_000, .city: 16_000][self]! }
+    var haze: Double {
+        switch self {
+        case .farmland: TrainWorld.haze
+        case .mountains: 60_000
+        case .snow: 40_000
+        case .city: 16_000
+        }
+    }
 
     /// For each ring, how high the land can stand above the track, in metres (farmland's are `TrainWorld.rise`,
-    /// and a city is level). The mountains' are the Alps' at their steepest, held all along the line.
-    /// Snow's are the fells of a high plateau, twice life size.
+    /// and a city is level). The mountains' are the Alps' at their steepest, held all along the line; snow's are
+    /// the fells of a high plateau, twice life size.
     var peaks: [Double] {
-        self == .mountains ? [4800, 4500, 4200, 2600, 450, 130, 30, 9, 0, 0, 0] : self == .snow ? [2600, 2400, 2200, 1300, 300, 80, 26, 9, 0, 0, 0]
-            : [Double](repeating: 0, count: 11)
+        switch self {
+        case .mountains: Self.alps
+        case .snow: Self.fells
+        case .farmland, .city: Self.level
+        }
     }
+    private static let alps: [Double] = [4800, 4500, 4200, 2600, 450, 130, 30, 9, 0, 0, 0], fells: [Double] = [2600, 2400, 2200, 1300, 300, 80, 26, 9, 0, 0, 0]
+    private static let level = [Double](repeating: 0, count: 11)
 
     /// What its rows of ground are made of. Mountains: alpine meadows, and a milky river with its gravel bank where
     /// farmland has a lane. A city: roofs and yards far off; nearer, the railway's own ground, ballast with the next
     /// lines' rails as level lines 19 to 34 m out and a brick wall where the lane was.
     /// Snow: a snowfield, drifted and wind-scoured, with frozen tarns far off, a ploughed road where the lane was and a
     /// snow fence 38 m out.
-    var ground: TrainGround { [.farmland: Self.farm, .mountains: Self.valley, .city: Self.yards, .snow: Self.snowfield][self]! }
+    var ground: TrainGround {
+        switch self {
+        case .farmland: Self.farm
+        case .mountains: Self.valley
+        case .city: Self.yards
+        case .snow: Self.snowfield
+        }
+    }
     private static let snowfield = TrainGround(fields: [TrainMat.snow, TrainMat.snow, TrainMat.snowShade, TrainMat.snow, TrainMat.ice, TrainMat.snow,
                                                         TrainMat.snowShade, TrainMat.snow, TrainMat.snow, TrainMat.ice],
                                                hedge: nil, lines: (TrainMat.snowShade, TrainMat.snowShade, TrainMat.road),
@@ -81,12 +107,14 @@ extension TrainWorld {
     static let stretch = 22_000.0
     /// The countries Changing passes through between its stretches of farmland.
     static let passing: [TrainCountry] = [.mountains, .city, .snow]
+    /// The country Settings' Scenery holds the line to, by its pick (a lake's is farmland).
+    private static let held: [TrainCountry] = [.farmland, .farmland, .farmland, .mountains, .city, .snow]
 
     /// Where a place along the line lies. Held on a scenery by Settings, the line is all one country. Left to
     /// change, it is cut into stretches at uneven places: every other one is farmland, and each between draws its
     /// country, so the line always comes back to farmland and no country runs on into another of its kind.
     func country(_ wx: Double) -> TrainPlace {
-        guard scenery == 0 else { return TrainPlace(kind: [3: .mountains, 4: .city, 5: .snow][scenery] ?? .farmland, edge: .infinity) }
+        guard scenery == 0 else { return TrainPlace(kind: Self.held.indices.contains(scenery) ? Self.held[scenery] : .farmland, edge: .infinity) }
         func begins(_ k: Int) -> Double { (Double(k) + 0.2 + 0.6 * unit(hash(k, 0, 7171))) * Self.stretch }
         let near = Int((wx / Self.stretch).rounded(.down)), k = wx >= begins(near) ? near : near - 1
         func kind(_ k: Int) -> TrainCountry { k & 1 == 0 ? .farmland : Self.passing[Int(unit(hash(k, 1, 7171)) * Double(Self.passing.count))] }
