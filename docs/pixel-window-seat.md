@@ -455,6 +455,7 @@ Nothing here is copied or shipped: the frames were looked at and measured, and e
   - A 50 inch square hatchway, for an early concept only: [Wikipedia, Common Berthing Mechanism](https://en.wikipedia.org/wiki/Common_Berthing_Mechanism).
 
 ## Ideas / next steps
+- **A train:** a third window, on a slow train at ground level, picked by Dave on 2026-10-10. Researched and mocked up, not built: [its plan](pixel-window-seat/train.md).
 - **More kinds of country:** islands and reefs, Europe's irregular fields, river mouths with lagoons, lakes in the mountains, a glacier down a cold valley, volcanoes, the seasons (snow over the temperate fields in the user's own winter).
 - **Mountains taller than the cloud's base,** drawn properly: paint ground and cloud together in order of distance, with the depth of what is already there kept per pixel, so a high crest hides the cloud beyond it.
 - **More sky:** thin cirrus above us as bands near the horizon; a second, higher deck, which by the same law would slide 2.2 times as fast as the ground.
