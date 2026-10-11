@@ -546,7 +546,11 @@ def view(time="day", X=0.0, speed=13.3, horizon_up=0.30, cover=0.30, spill=False
 # ---- the carriage round the pane
 def carriage(time, kind="plain", horizon_up=0.30):
     """The cabin as an RGBA picture laid over the canvas: wall, frame, and for the fuller ones a sill and curtain,
-    or a table with its lamp. Alpha 0 is glass."""
+    or a table with its lamp. Alpha 0 is glass.
+
+    The light along the frame's top edge keeps to the frame. On the sheets Dave picked from it was a box of its own
+    with small corners, so its ends ran past the frame's rounded corners, 22 pixels of them: an accident of this
+    painter, rounded off since."""
     tint, floor = light(time)
     dim = {"day": 1.0, "sunset": 0.62, "dusk": 0.34, "night": 0.22}[time]
     def c(rgb, glow=0.0):
@@ -564,8 +568,9 @@ def carriage(time, kind="plain", horizon_up=0.30):
         inside = (xx >= x0) & (xx < x1) & (yy >= y0) & (yy < y1)
         corner = (inx < r) & (iny < r) & ((r - inx - 0.5) ** 2 + (r - iny - 0.5) ** 2 > r * r)
         return inside & ~corner
-    out[rr(PX0 - 5, PY0 - 5, PX0 + PW + 5, PY0 + PH + 5, 11)] = np.append(frame, 255)
-    out[rr(PX0 - 5, PY0 - 5, PX0 + PW + 5, PY0 - 3, 2)] = np.append(c((150, 154, 168)), 255)  # light on the frame's top edge
+    edge = rr(PX0 - 5, PY0 - 5, PX0 + PW + 5, PY0 + PH + 5, 11)
+    out[edge] = np.append(frame, 255)
+    out[edge & (yy < PY0 - 3)] = np.append(c((150, 154, 168)), 255)  # light on the frame's top edge
     out[rr(PX0 - 1, PY0 - 1, PX0 + PW + 1, PY0 + PH + 1, 7)] = np.append(gasket, 255)
     glass = rr(PX0, PY0, PX0 + PW, PY0 + PH, 6)
     out[glass] = 0

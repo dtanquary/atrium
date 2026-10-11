@@ -10,7 +10,9 @@ eye 3.5 m up, the horizon 30% up, 13.3 m/s) at a few places along the line. A st
 `trainWritesItsCarriage` writes the carriage round the pane as the bytes of its picture (red, green, blue, alpha;
 alpha 0 is glass) on the mock-ups' canvas at their four hours, with the pane's top on the row its file is named
 for: 12, where the mock-ups had it, and 13, where the app puts it. Each is set against `train.carriage` with the
-pane on that row, and those at 12 against the tiles of the saved sheets too, wherever the carriage covers them.
+pane on that row, and those at 12 against the tiles of the saved sheets too, wherever the carriage covers them: all
+but the 22 pixels where the sheets' light along the frame's top edge ran past the frame's corners, which were
+rounded off after Dave saw them. Those must differ, and are counted apart.
 """
 import glob
 import os
@@ -84,10 +86,14 @@ for path in sorted(glob.glob(f"{folder}/carriage-*.bin")):
     wrong = int((ours != theirs).sum())
     compared, differed = compared + ours.size, differed + wrong
     print(f"carriage {kind:>5} at {hour:>6}, the pane {top} rows down: {ours.size} bytes, {int(solid.sum())} pixels of them carriage, {wrong} differ")
+    ledge = np.zeros(solid.shape[:2], bool)  # the wall beside the frame's top two rows, where the sheets' light ran on
+    span = slice(int(top) - 5, int(top) - 3), slice(train.PX0 - 4, train.PX0 + train.PW + 4)
+    ledge[span] = (theirs[span][..., :3] == theirs[0, 0, :3]).all(-1)
     for tiled, at, letter, tile in saved:
         if int(top) == 12 and (tiled, at) == (kind, hour):
-            wrong = int((ours[..., :3] != tile)[solid[..., 0]].sum())
-            compared, differed = compared + 3 * int(solid.sum()), differed + wrong
-            print(f"    and the saved sheet's tile {letter}: {3 * int(solid.sum())} bytes of carriage, {wrong} differ")
+            keep = solid[..., 0] & ~ledge
+            wrong, old = int((ours[..., :3] != tile)[keep].sum()), int((ours[..., :3] != tile).any(-1)[ledge].sum())
+            compared, differed = compared + 3 * int(keep.sum()), differed + wrong + (old != ledge.sum())
+            print(f"    and the saved sheet's tile {letter}: {3 * int(keep.sum())} bytes of carriage, {wrong} differ; of the {int(ledge.sum())} pixels rounded off since, {old} differ")
 print(f"{compared} bytes compared, {differed} differ")
 sys.exit(1 if differed else 0)

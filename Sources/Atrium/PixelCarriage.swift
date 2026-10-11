@@ -37,8 +37,8 @@ struct PixelCarriage {
             }
         }
         let (x0, y0, x1, y1) = (pane.x, pane.y, pane.x + pane.w, pane.y + pane.h)
-        box(x0 - 5, y0 - 5, x1 + 5, y1 + 5, 11) { out[$0] = Tone(122, 126, 142) * dim } // the frame
-        box(x0 - 5, y0 - 5, x1 + 5, y0 - 3, 2) { out[$0] = Tone(150, 154, 168) * dim } // the light along its top edge
+        // The frame, with the light along its top two rows.
+        box(x0 - 5, y0 - 5, x1 + 5, y1 + 5, 11) { out[$0] = ($0 / w < y0 - 3 ? Tone(150, 154, 168) : Tone(122, 126, 142)) * dim }
         box(x0 - 1, y0 - 1, x1 + 1, y1 + 1, 7) { out[$0] = Tone(20, 22, 30) * dim } // the gasket
         box(x0, y0, x1, y1, 6) { glass[$0] = true }
 
