@@ -191,7 +191,7 @@ func blackBodyKeepsToTheLocus(kelvin: Double, x: Double, y: Double) {
 /// frame by frame (not in real time) and saves, for 15 and 30 frames a second, eight frames in a row of three places
 /// where trouble would show (the thin ring over the shadow, the disc's near side seen edge on, the bright left end)
 /// with the change between each pair beside them, eight times over; then fifteen frames 7.5 s apart through two
-/// lives of the streaks at speed 4. It prints how much single pixels jump between frames, and how far the disc's
+/// lives of the streaks. It prints how much single pixels jump between frames, and how far the disc's
 /// brightness and contrast wander over those two lives, with how much of that keeps time with the streak
 /// generations handing over (breathing) rather than being the streaks themselves coming and going.
 @MainActor @Test func blackHoleMoves() throws {
@@ -274,10 +274,8 @@ func blackBodyKeepsToTheLocus(kelvin: Double, x: Double, y: Double) {
                      Double(changes.count { $0 >= 25 }) / Double(changes.count) * 100))
     }
 
-    // Two lives of the streaks at speed 4: 120 units of the disc's time, 117 s, looked at every 1.5 s. A generation
-    // hands over every third of a life, 19.5 s here or 13 looks, so any breathing would beat at that.
-    UserDefaults.standard.set(4.0, forKey: BlackHole.speed.key)
-    defer { UserDefaults.standard.removeObject(forKey: BlackHole.speed.key) }
+    // Two lives of the streaks: 120 units of the disc's time, 117 s at speed 1, looked at every 1.5 s. A generation
+    // hands over every third of a life, 19.5 s or 13 looks, so any breathing would beat at that.
     let renderer = SKRenderer(device: device)
     renderer.scene = BlackHole(size: CGSize(width: w / 2, height: h / 2))
     let (cw, ch) = (1400, 700), (cx, cy) = (w / 2 - 700, h / 2 - 350)
@@ -294,7 +292,7 @@ func blackBodyKeepsToTheLocus(kelvin: Double, x: Double, y: Double) {
         means.append(sum / count)
         spreads.append((squares / count - sum / count * (sum / count)).squareRoot())
     }
-    save(sheet, cw / 2 * 3, ch / 2 * 5, "two lives of the streaks, every 7.5 s at speed 4.png")
+    save(sheet, cw / 2 * 3, ch / 2 * 5, "two lives of the streaks, every 7.5 s.png")
     for (name, series) in [("mean", means), ("spread", spreads)] {
         let average = series.reduce(0, +) / Double(series.count)
         let beat = (0..<78).reduce(SIMD2<Double>.zero) { $0 + series[$1] * SIMD2(cos(2 * .pi * Double($1) / 13), sin(2 * .pi * Double($1) / 13)) }

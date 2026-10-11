@@ -180,10 +180,11 @@ final class BlackHole: SKScene {
     }, standard: "Orange", title: "Disc")
 
     /// Disc time is in the hole's own unit, the time light takes to cross its radius. The inner edge goes round in
-    /// 2π√54 of them, and at speed 1 in three minutes (Dave's pick). For scale, the same orbit round the Milky Way's
-    /// own black hole takes 33 minutes.
-    private static let unitsPerSecond = 2 * Double.pi * 54.0.squareRoot() / 180
-    /// How long a generation of streaks lasts, in that unit (3 minutes 54 at speed 1). Three overlap, a third of a
+    /// 2π√54 of them, and at speed 1 in 45 seconds: Dave picked three minutes from a mock-up's film, and on his
+    /// desktop only noticed it turning at four times that. For scale, the same orbit round the Milky Way's own
+    /// black hole takes 33 minutes.
+    private static let unitsPerSecond = 2 * Double.pi * 54.0.squareRoot() / 45
+    /// How long a generation of streaks lasts, in that unit (58 seconds at speed 1). Three overlap, a third of a
     /// life apart. The shader's weights have the same 60 written in.
     private static let life = 60.0
 

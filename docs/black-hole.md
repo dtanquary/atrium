@@ -14,7 +14,7 @@ From mock-up sheets, each choice with a recommendation beside it.
 - **Disc colour:** three, as a setting: orange (the default, gas at about 3,300 K), white-gold (about 6,200 K) and blue-white (about 15,000 K). He did not pick jewel palettes.
 - **Size:** a slider, starting at medium (the disc about half the screen's width; a 56° field in the mock-up).
 - **Position:** centred.
-- **Speed:** the disc's inner edge goes round every 3 minutes, "but speed should be adjustable in a setting".
+- **Speed:** the disc's inner edge goes round every 3 minutes, "but speed should be adjustable in a setting". Changed on 2026-10-11 once he saw it on his desktop: 1× is now a lap in 45 seconds (see [Dave's feedback](#daves-feedback)).
 - **Sky:** ESO's Milky Way photograph as the glow, with real catalogue stars as sharp points (sheet 3, tile K). He first picked NASA's star map, on my word that it was public domain. It isn't clear of restrictions: see [The sky](#the-sky).
 
 Still his to decide, once there is something running: how lopsided the disc's brightness should be (see Beaming), and whether the streaks' look is right once they match NASA's.
@@ -51,7 +51,7 @@ Size, tilt, distance, where the hole sits and how the sky is turned are all unif
 - **Colour:** a black body shifted by `g` is a black body at `gT`, so colour only ever slides along the black-body line. The three colours Dave picked are three values of `T_peak`.
 - **Beaming:** in visible light, true Doppler brightening is brutal for a cool disc: at 78° the approaching side of the hottest ring is 191 times the receding side at 4,500 K, 39 times at 6,500 K, 8.6 times at 12,000 K. The mock-ups Dave chose from used the gentler all-wavelengths law (brightness ∝ `(g·T)⁴`) under a soft tone curve. NASA's own picture comes to 1.6 times in display values, about 3.3 in linear light: between the first power of `g` (2.2 times at 85°) and the second (4.7), where the full fourth power is 22. So: a Beaming knob, with its default set by eye to match the mock-ups and NASA's 1.6.
 - **Turning without winding up:** cut the disc into narrow rings, even in `ln r` (9 per e-fold in the prototype). Each ring turns rigidly at its own Kepler rate, `√(1/(2r³))`; a point takes the patterns of the two rings it lies between, mixed by where it sits. Neighbours slide past each other and nothing stretches. Tileable noise sampled in (turns, ln r) with whole repeats round the disc: 4 fetches of `CloudNoise.texture`. **As built:** not rings but three overlapping generations of the scene's own noise, each sheared by its age and reborn in turn (step b), with knots born six times as long as deep and their colour following their brightness (step e). Looked at moving twice (steps d and e).
-- **Speed:** 1× is the inner edge round in 3 minutes (Dave). For scale, the inner orbit of Sagittarius A* takes 33 minutes (92.3 GM/c³ for 4.3 million Suns), so real time for it is 0.09×: a marked stop on the slider, not the default.
+- **Speed:** 1× is the inner edge round in 3 minutes (Dave). **As built:** 45 seconds, after his feedback. For scale, the inner orbit of Sagittarius A* takes 33 minutes (92.3 GM/c³ for 4.3 million Suns), so real time for it is 0.09× (0.02× as built): a marked stop on the slider, not the default.
 - **Streaks:** the mock-ups' texture is a placeholder, and it is the "vinyl record" the look research warns about: even concentric bands. NASA's are sheared arcs of uneven width that fork and fade.
 
 ### The sky
@@ -86,7 +86,7 @@ Note: Dave's mock-ups drew the disc to 22 M (11 r_s), not NASA's 30 M. Match the
 ## Settings (the plan)
 - **Disc** (`blackhole.heat`): Orange, White-gold, Blue-white. Swatches from the black-body table.
 - **Size:** a slider, close to small in a wide sky; medium by default.
-- **Motion:** Speed, 0 to 4×; 1× is the inner edge in 3 minutes.
+- **Motion:** Speed, 0 to 4×; 1× is the inner edge in 3 minutes (45 seconds as built).
 - **Look:** Brightness (exposure before the stretch, Galaxy's way), then the shared grade knobs; Beaming 0–1; Streaks 0–1.
 - **Sky:** star brightness, Milky Way brightness.
 - Not planned: a view choice, a drift, spin (below), jewel palettes, a stars-only switch. Each was offered and not picked, or advised against.
@@ -100,7 +100,7 @@ As built (all on the `Wallpaper` entry, from `BlackHole.knobs` and `BlackHole.pa
 | `blackhole.brightness` | Brightness | 0.4–1.8 | 1 | the disc's exposure before the stretch |
 | `blackhole.beaming` | Beaming | 0–1 | 1 | how much of the Doppler shift shows; 1 is the full `(g T)⁴` |
 | `blackhole.streaks` | Streaks | 0–1 | 0.7 | the streaks' contrast; 0 is a smooth disc |
-| `blackhole.speed` | Speed | 0–4× | 1 | the disc's clock; 1× is the inner edge round in 3 minutes, 0 holds it |
+| `blackhole.speed` | Speed | 0–4× | 1 | the disc's clock; 1× is the inner edge round in 45 seconds, 0 holds it |
 | `blackhole.stars` | Stars | 0–2 | 1 | the stars' brightness |
 | `blackhole.milkyway` | Milky Way | 0–2 | 1 | the glow's brightness |
 
@@ -216,8 +216,15 @@ Measured on the finished look, at full Retina size:
 - **Cost, release build, at sizes 1.5×, 1× and 0.65×:** GPU 0.70–0.74 ms a frame; CPU 0.4–0.8 ms on a machine busy with other builds (Galaxy, in one of the same runs, 0.58 and 1.91). Six textures, 13 other uniforms.
 - **Tests, seven:** the six above pass, and `blackHoleMoves` does nothing without its variable.
 
+## Dave's feedback
+- **2026-10-11, the first build on his desktop:** "it looks cool but we should adjust speed slider, only when I had it at 4x did even really notice motion". He had picked a lap of the inner edge in 3 minutes from a mock-up's film, where it was plain to see; on the desktop, at the real size and with nothing else moving, it wasn't.
+  - **Changed:** 1× is four times faster, a lap in 45 seconds, which is the speed he had it at. The slider still runs 0 to 4×, so it now reaches a lap in 11 seconds. A streak generation's life follows the disc's clock, so it is 58 seconds at 1× where it was 3 minutes 54.
+  - **Checked at the new 1×** (`blackHoleMoves`): two frames 5 s apart differ by 28 of 255 on average over the disc (it was 9), 77% of its pixels by 8 or more; at 15 fps no pixel changes by more than 8 of 255 a frame, at 30 fps by more than 4; the handover between generations beats by 0.9% of the mean and 1.4% of the contrast.
+  - **Checked at the new top, 4×,** in a 4 s film at 15 fps: a disc pixel changes by 1.8 of 255 a frame on average. 0.04% of pixels step by more than 15 in a frame, all at the inner edge left of the hole, where a bright knot's edge passes; each steps once and stays, so it is fast motion and not sparkle.
+  - He had Size at its top (1.5×) and Milky Way at half while he tried it. Not asked for as defaults, so they stay.
+
 ### Still open
-- **Dave hasn't seen it.** Everything in step (e) was judged against the mock-up tiles, NASA's frames and the review's numbers by the agent that built it. To meet those numbers the disc is crisp and has a white-hot side; "calm, soft, dim" may want Streaks below its 0.7 and Brightness below 1. The sliders are there.
+- **Dave has seen it once** ("it looks cool", and the speed: above). Everything else in step (e) was judged against the mock-up tiles, NASA's frames and the review's numbers by the agent that built it. To meet those numbers the disc is crisp and has a white-hot side; "calm, soft, dim" may want Streaks below its 0.7 and Brightness below 1. The sliders are there.
 - **Stars read finer than tile K's.** They are points about 1.5 px across at Retina, the brightest a soft 8, where the mock-up's were blobs and dashes, so at a glance the sky looks emptier, though it holds the same 111,000 stars. The Stars slider goes to 2.
 - **The disc's mean brightness wanders about ±5% over minutes** as knots come and go. It doesn't beat, but nobody has watched it for an hour.
 - **Whether the turning is "plain to see" at 1×** is a number here (above), not yet somebody watching the desktop.
