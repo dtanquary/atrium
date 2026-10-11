@@ -102,8 +102,9 @@ public final class River {
     public var lakeLife = 16.0
     /// A stamp for ground the river has never covered.
     static let never: Float = -1e9
-    /// A lake is drawn again once a front of its has moved this far since it last was, in texels.
-    static let adrift: Float = 0.15
+    /// A lake is drawn again once a front of its has moved this far since it last was, in texels; and how many
+    /// lakes at the most are drawn again in one step.
+    static let adrift: Float = 0.04, lakesAStep = 6
 
     /// The screen in widths, and texels a width.
     public let across: Float, up: Float, texels: Float
@@ -145,6 +146,8 @@ public final class River {
     private var sweptAt: Float = 0
     /// Whether a past is being made by `sweep`, and the nodes a pass of `respace` is about to drop.
     private var sweeping = false, dropped: [Int] = []
+    /// How far each lake's faster front has moved since the lake was drawn, in texels, for `drawLakes`.
+    private var behind: [Float] = []
     /// The next row `forget` will see to.
     private var forgetting = 0
 
@@ -789,27 +792,24 @@ public final class River {
     }
 
     /// Keeps the lakes in the ground up to date, a few at a time: a lake changes slowly, so drawing every one on
-    /// every step was most of a step's cost. A new lake, or a piece of one just trimmed, is drawn at once. Of the
-    /// rest, the ones whose silting fronts have moved furthest since they were drawn go first, so none is ever far
-    /// behind: a fresh lake is drawn every step, an old one every two seconds or so.
+    /// every step was most of a step's cost. A new lake, or a piece of one just parted, is drawn at once. Of the
+    /// rest, the ones whose silting fronts have moved furthest since they were drawn go first, six a step at the
+    /// most: a fresh lake is drawn every step, and with twenty lakes at the top of the Speed slider an old one
+    /// every third or fourth, a quarter of a texel behind at the most. (Two a step was 0.2 ms cheaper, and an old
+    /// lake's end then stood still for a second or two and moved at once.)
     private func drawLakes() {
-        var due = (-1, -1), moved = (Self.adrift, Self.adrift) // the two furthest behind, the further first
+        behind.removeAll(keepingCapacity: true)
         for k in lakes.indices {
             let drawn = lakes[k].drawn
-            guard drawn > -.infinity else {
-                draw(k)
-                continue
-            }
+            if drawn == -.infinity { draw(k) }
             let since = Float(drawn - max(lakes[k].first, lakes[k].last)) // its newer end has the faster front
-            let adrift = (Lake.front(since + Float(now - drawn)) - Lake.front(since)) * texels
-            if adrift > moved.0 {
-                (due, moved) = ((k, due.0), (adrift, moved.0))
-            } else if adrift > moved.1 {
-                (due.1, moved.1) = (k, adrift)
-            }
+            behind.append(drawn == -.infinity ? 0 : (Lake.front(since + Float(now - drawn)) - Lake.front(since)) * texels)
         }
-        if due.0 >= 0 { draw(due.0) }
-        if due.1 >= 0 { draw(due.1) }
+        for _ in 0..<Self.lakesAStep {
+            guard let furthest = behind.indices.max(by: { behind[$0] < behind[$1] }), behind[furthest] > Self.adrift else { break }
+            draw(furthest)
+            behind[furthest] = 0
+        }
     }
 
     /// How far out the lakes' water in the ground is, at worst, from every lake drawn afresh, in widths: the check

@@ -208,15 +208,21 @@ private func crossings(_ river: River) -> Int {
 }
 
 /// The share of pixels that differ by over 20 levels in any of red, green and blue between two pictures.
-private func popped(_ a: [UInt32], _ b: [UInt32]) -> Double {
-    var count = 0
+private func popped(_ a: [UInt32], _ b: [UInt32]) -> Double { changed(a, b).share }
+
+/// That share, and how much the two pictures differ in all: the levels a pixel changes by (the most of its red,
+/// green and blue), averaged over every pixel.
+private func changed(_ a: [UInt32], _ b: [UInt32]) -> (share: Double, levels: Double) {
+    var (count, sum) = (0, 0)
     a.withUnsafeBufferPointer { a in b.withUnsafeBufferPointer { b in
         for i in 0..<a.count where a[i] != b[i] {
             let (p, q) = (a[i], b[i])
-            if abs(Int(p & 255) - Int(q & 255)) > 20 || abs(Int(p >> 8 & 255) - Int(q >> 8 & 255)) > 20 || abs(Int(p >> 16 & 255) - Int(q >> 16 & 255)) > 20 { count += 1 }
+            let most = max(abs(Int(p & 255) - Int(q & 255)), abs(Int(p >> 8 & 255) - Int(q >> 8 & 255)), abs(Int(p >> 16 & 255) - Int(q >> 16 & 255)))
+            sum += most
+            if most > 20 { count += 1 }
         }
     } }
-    return Double(count) / Double(a.count)
+    return (Double(count) / Double(a.count), Double(sum) / Double(a.count))
 }
 
 private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
@@ -620,12 +626,12 @@ private func wetness(_ lake: River.Lake, at now: Double, life: Double) -> [Float
 /// river steps twice, every frame differs from the one before it.
 ///
 /// And how smoothly, on the picture itself, with MEANDER_SMOOTH set to a folder: four seconds at 60 frames a
-/// second on a 14" screen, in relief, at speed 1 and at the top of the Speed slider. On every 24th row of the
+/// second on a 14" screen, in relief, at the top of the Speed slider and at speed 1. On every 24th row of the
 /// picture each cut bank is found to a fraction of a pixel (where the green of the picture crosses from the
 /// river's to old land's within a few pixels) and followed from frame to frame. Printed, for the banks that move
 /// at least two pixels in that time: on what share of frames a bank doesn't move (under a tenth of its own average
 /// move), its greatest jump in one frame, and that jump over its average move. Twelve frames round the fastest
-/// bank are saved.
+/// bank are saved. Before those, for both looks: how sharp twelve frames running are, mixed and not.
 @MainActor @Test func meanderMovesSmoothly() throws {
     try with(seeded(13)) {
         let screen = try Offscreen(Meander(size: CGSize(width: 756, height: 491)), 1512, 982)
@@ -640,7 +646,27 @@ private func wetness(_ lake: River.Lake, at now: Double, life: Double) -> [Float
         #expect(moved == 12, "the picture changed on \(moved) of 12 frames")
     }
     guard let folder = ProcessInfo.processInfo.environment["MEANDER_SMOOTH"].map({ URL(fileURLWithPath: $0) }) else { return }
-    for speed in [1.0, 4.0] {
+    // Whether mixing two steps softens anything: how sharp the whole picture is on twelve frames running, as the
+    // levels a pixel's green differs by from the pixel beside it, averaged. At 4x one frame in three is of a single
+    // step, unmixed, and at 1x one in six: if a mix were softer, the others would come out lower than those.
+    for (look, settings): (String, [String: Double]) in [("relief", [:]), ("old map", ["meander.look": 1])] {
+        for speed in [4.0, 1.0] {
+            try with(seeded(13, settings.merging(["meander.speed": speed]) { $1 })) {
+                let (w, h) = (3024, 1964), scene = Meander(size: CGSize(width: w / 2, height: h / 2)), screen = try Offscreen(scene, w, h)
+                for _ in 0..<60 { try screen.frame(rate: 60) }
+                var sharp: [String] = []
+                for _ in 0..<12 {
+                    try screen.frame(rate: 60)
+                    let picture = screen.piece(x: 0, y: 0, w: w, h: h)
+                    var sum = 0
+                    picture.withUnsafeBufferPointer { p in for i in 1..<w * h where i % w != 0 { sum += abs(Int(p[i] >> 8 & 255) - Int(p[i - 1] >> 8 & 255)) } }
+                    sharp.append(String(format: "%.4f", Double(sum) / Double((w - 1) * h)))
+                }
+                print("Meander, \(look) at \(Int(speed))x and 60 fps, how sharp twelve frames running are:", sharp.joined(separator: " "))
+            }
+        }
+    }
+    for speed in [4.0, 1.0] {
         try with(seeded(13, ["meander.speed": speed])) {
             let (w, h) = (3024, 1964), scene = Meander(size: CGSize(width: w / 2, height: h / 2)), screen = try Offscreen(scene, w, h)
             for _ in 0..<60 { try screen.frame(rate: 60) }
@@ -696,6 +722,44 @@ private func wetness(_ lake: River.Lake, at now: Double, life: Double) -> [Float
                 } } }
                 save(strip, side * 3 * 12, side * 3, to: folder.appendingPathComponent(String(format: "bank-%.0fx.png", speed)))
                 print("  the fastest: row \(fastest.row), from \(fastest.at[0]) by", zip(fastest.at, fastest.at.dropFirst()).prefix(13).map { String(format: "%+.2f", $1 - $0) }.joined(separator: " "))
+            }
+        }
+    }
+}
+
+/// The transitions, frame by frame, at the top of the Speed slider and at speed 1: with MEANDER_TRANSITIONS set to a
+/// folder, a cutoff and a lake being parted are filmed at 60 frames a second from a fifth of a second before to two
+/// seconds after, in relief and the old map. Printed for each: how much the window round it changes from every
+/// frame to the next (the levels a pixel changes by, averaged over the window, times a thousand), so that a jerk
+/// shows as one frame far above its neighbours; and the greatest of those over the middle one. Saved: the middle
+/// of the window on every sixth frame, twice life size, to look at.
+@MainActor @Test func meanderTransitions() throws {
+    guard let folder = ProcessInfo.processInfo.environment["MEANDER_TRANSITIONS"].map({ URL(fileURLWithPath: $0) }) else { return }
+    for speed in [4.0, 1.0] {
+        let (found, _) = try happenings(seeded(13, ["meander.speed": speed]), rate: 60, within: 600)
+        for happening in found {
+            for (look, settings): (String, [String: Double]) in [("relief", [:]), ("old-map", ["meander.look": 1])] {
+                try with(seeded(13, settings.merging(["meander.speed": speed]) { $1 })) {
+                    let scene = Meander(size: CGSize(width: 1512, height: 982)), screen = try Offscreen(scene, 3024, 1964), side = 784, crop = 300
+                    let (x, y) = (Int(happening.at.x * 56) - side / 2, 1964 - Int(happening.at.y * 56) - side / 2)
+                    for _ in 0..<happening.frame - 24 { screen.advance(rate: 60) }
+                    var last: [UInt32] = [], series: [Double] = [], tiles: [[UInt32]] = []
+                    for frame in -24...120 {
+                        try screen.frame(rate: 60)
+                        let now = screen.piece(x: x, y: y, w: side, h: side)
+                        if frame >= -11 { series.append(changed(last, now).levels * 1000) }
+                        if frame >= -12, (frame + 12) % 6 == 0 { tiles.append(now) }
+                        last = now
+                    }
+                    let kind = happening.cutoff ? "cutoff" : "parting", middle = series.sorted()[series.count / 2], most = series.max()!
+                    print(String(format: "Meander at %.0fx and 60 fps, a %@ in %@: a frame changes the window by %.0f at the most (frame %+d) and %.0f on a middling frame, %.1f times; from 11 frames before: %@",
+                                 speed, kind, look, most, series.firstIndex(of: most)! - 11, middle, most / middle, series.prefix(48).map { String(format: "%.0f", $0) }.joined(separator: " ")))
+                    var strip = [UInt32](repeating: 0, count: crop * 2 * tiles.count * crop * 2), from = (side - crop) / 2
+                    for (k, tile) in tiles.enumerated() { for row in 0..<crop * 2 { for column in 0..<crop * 2 {
+                        strip[row * crop * 2 * tiles.count + k * crop * 2 + column] = tile[(from + row / 2) * side + from + column / 2]
+                    } } }
+                    save(strip, crop * 2 * tiles.count, crop * 2, to: folder.appendingPathComponent(String(format: "%@-%@-%.0fx.png", kind, look, speed)))
+                }
             }
         }
     }
