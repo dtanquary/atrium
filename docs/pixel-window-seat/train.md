@@ -435,6 +435,11 @@ The team lead accepted sheet 3 on Dave's standing word that all four be built (D
 - **Checked by running** (release, under the lock): the whole suite, 101 tests pass; the byte check for everything, 15,313,976 bytes compared, 0 differ.
 - **Cost,** three runs in turn, a clear sky, on a Mac busy with other work: countryside 0.76 to 1.00 ms of CPU a frame, snow 0.78 to 0.87 by day and 0.88 to 1.08 by night, the airliner 0.97 to 1.22. Before it, at the snow step: countryside 1.05 to 1.19, snow 1.05 to 1.19, the airliner 0.98 to 1.11. So the train is back to about four fifths of the airliner's cost, where it had been a little over it.
 
+### Far fields at a meeting (2026-10-11)
+- **The far fields end at their own edges where two countries meet.** A far field (beyond 100 m) is all one country's, the one its middle lies in, so each belt of fields changes at another place. Before, all of them changed along one line square to the track, which a film across a city's edge showed as a dark slanted wedge of tar against the green, turning as it passed. Held to one scenery nothing changes.
+- **Checked by running** (release, under the lock): the whole suite, 101 tests pass; the byte check for everything, 15,313,976 bytes compared, 0 differ.
+- **Looked at:** films across a city's edge and across the snow's on dry land, the far rows enlarged: a city's dark yards and the snow's white fields begin belt by belt, as fields do.
+
 ## Research for the next mock-ups
 - **The window.** Real glass, width to height: a TGV bar car 1.94:1, a EuroNight sleeper 1.46:1, a British Mark 1 bay 1.2:1 with top-lights, an Amtrak Superliner coach 2.75:1, a Shinkansen N700 0.96:1 (520 × 500 mm: an airliner's window again). The mock-ups' pane is the airliner's, 1.54:1. A wide picture window (about 1.9:1) fills a 16:10 screen best.
 - **The eye:** about 2.5 m above the rail on a European intercity, 3.85 m upstairs in a Superliner; add 0.5–1 m of track bed.

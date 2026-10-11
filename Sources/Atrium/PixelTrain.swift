@@ -801,6 +801,9 @@ struct TrainWorld {
         if z > 100, pace <= Self.broad {
             let belt = d <= 1 ? 0 : d <= 2 ? 1 : d <= 4 ? 2 : 3, long = 230.0 + 60 * Double(belt)
             let along = wx / long + Double(belt) * 0.37, field = Int(along.rounded(.down))
+            // A field is all one country's, the one its middle lies in: where two countries meet, the far fields end at
+            // their own edges, each belt at another place, and not along one line square to the track.
+            let look = scenery == 0 ? country((Double(field) + 0.5 - Double(belt) * 0.37) * long).kind.ground : look
             if let hedge = look.hedge, pace <= Self.thin, abs(along - along.rounded(.toNearestOrEven)) * long < max(1.5, 1.2 / ppm),
                unit(hash(field, belt, 4101 + look.salt)) < 0.6 { return (hedge, 2) }
             return (look.fields[Int(unit(hash(field, belt, 4100 + look.salt)) * Double(look.fields.count))], 2)
