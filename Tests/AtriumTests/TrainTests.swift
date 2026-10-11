@@ -53,20 +53,38 @@ import Testing
 }
 
 /// The night must never be a black pane: along an hour of track, every minute's view has lamps in it, as the
-/// painter shows it, with what stands in front hiding what is behind.
+/// painter shows it, with what stands in front hiding what is behind. Through countryside, and beside a lake.
 @MainActor @Test func trainNightIsNeverBlack() {
-    let keys = [PixelWindowSeat.previewTime.key, PixelWindowSeat.previewHour.key]
-    for (key, value) in zip(keys, [1.0, 23]) { UserDefaults.standard.set(value, forKey: key) }
+    let keys = [PixelWindowSeat.previewTime.key, PixelWindowSeat.previewHour.key, PixelTrain.scenery.key]
     defer { for key in keys { UserDefaults.standard.removeObject(forKey: key) } }
-    let scene = PixelTrain(size: CGSize(width: 1512, height: 982))
-    var seen: [Int] = []
-    for minute in 0..<60 {
-        PixelTrain.travelled = 52_000 + Double(minute) * PixelTrain.pace * 60
-        scene.update(5000 + Double(minute))
-        seen.append(scene.lit)
+    for (scenery, name) in [(1.0, "countryside"), (2, "a lake")] {
+        for (key, value) in zip(keys, [1, 23, scenery]) { UserDefaults.standard.set(value, forKey: key) }
+        let scene = PixelTrain(size: CGSize(width: 1512, height: 982))
+        var seen: [Int] = []
+        for minute in 0...60 {
+            PixelTrain.travelled = 52_000 + Double(minute) * PixelTrain.pace * 60
+            scene.update(5000 + Double(minute))
+            if minute > 0 { seen.append(scene.lit) } // (the first frame only sets the clocks)
+        }
+        print("train night, \(name): lamp pixels in view, a minute apart: \(seen)")
+        #expect(seen.allSatisfy { $0 > 0 }, "through \(name), \(seen.count { $0 == 0 }) of an hour's minutes have no lamp in view")
     }
-    print("train night: lamp pixels in view, a minute apart: \(seen)")
-    #expect(seen.allSatisfy { $0 > 0 }, "\(seen.count { $0 == 0 }) of an hour's minutes have no lamp in view")
+}
+
+/// Left to change, the country has lakes beside the line for a fair share of it, and neither they nor the country
+/// between go on so long that the wallpaper seems stuck: at 1× the train covers 800 m a minute.
+@Test func trainPassesLakes() {
+    let world = TrainWorld(focal: 265.2, eye: 3.5, speed: PixelTrain.pace)
+    var beside = 0, runs: [Bool: [Int]] = [true: [], false: []], last = false, run = 0
+    for step in 0..<20_000 { // 2,000 km, a sample every 100 m
+        let lake = world.shore(Double(step) * 100) < 20
+        beside += lake ? 1 : 0
+        if lake == last { run += 1 } else { runs[last]!.append(run); (last, run) = (lake, 1) }
+    }
+    let lakes = runs[true]!.sorted(), country = runs[false]!.sorted()
+    print("train lakes: beside \(beside / 200)% of the line; a lake is \(lakes[lakes.count / 2] / 10) km at the median and \(lakes[lakes.count * 9 / 10] / 10) at the ninetieth percentile; the country between \(country[country.count / 2] / 10) and \(country[country.count * 9 / 10] / 10)")
+    #expect(beside > 3000 && beside < 9000, "a lake lies beside \(beside / 200)% of the line")
+    #expect(lakes[lakes.count * 9 / 10] < 200 && country[country.count * 9 / 10] < 400, "a stretch often runs on too long")
 }
 
 /// Writes what the world lays at the mock-ups' own lens and places, for docs/pixel-window-seat/train_match.py to
@@ -77,7 +95,9 @@ import Testing
 @Test(.enabled(if: ProcessInfo.processInfo.environment["TRAIN_MATCH"] != nil)) func trainWritesItsCountry() throws {
     let folder = URL(fileURLWithPath: ProcessInfo.processInfo.environment["TRAIN_MATCH"]!)
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-    let world = TrainWorld(focal: 265, eye: 3.5, speed: 13.3), wide = 340, ground = 66 // the Large pane, its horizon 30% up
+    var world = TrainWorld(focal: 265, eye: 3.5, speed: 13.3) // the Large pane, its horizon 30% up
+    world.scenery = 1 // countryside, as the sheets' was
+    let wide = 340, ground = 66
     for x in [52000.0, 52137.25, 3.0, 1_234_567.5] {
         for ring in TrainWorld.rings.indices {
             let rows = world.rows(ring), first = Int((x * world.perMetre(ring)).rounded(.down)) - wide / 2

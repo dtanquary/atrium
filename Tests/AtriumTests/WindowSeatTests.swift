@@ -62,7 +62,7 @@ private func listed(_ knobs: [Knob], window: Double) -> [String] {
     #expect(offered[0].format == .choice(["An airliner", "The space station", "A train"]) && offered[0].order == [0, 2, 1])
     #expect(listed(offered, window: 0) == airliner)
     #expect(listed(offered, window: 1) == station)
-    #expect(listed(offered, window: 2) == ["seat.orbit", "seat.window", "seat.looking", "seat.speed", "seat.poles", "seat.previewTime"])
+    #expect(listed(offered, window: 2) == ["seat.orbit", "seat.window", "seat.looking", "seat.speed", "seat.country", "seat.poles", "seat.previewTime"])
     let shared = offered.filter { knob in !PixelTrain.knobs.contains { $0.key == knob.key } } // all but the train's own rows are the page's as it was
     #expect(shared.count == shipped.count && zip(shipped, shared).dropFirst().allSatisfy { $0.key == $1.key && $0.label == $1.label && $0.format == $1.format })
 
