@@ -721,6 +721,38 @@ public final class River {
         }
     }
 
+    /// How high relief draws land of an age above the river, 0 to 1: a bar is up out of the water within a couple
+    /// of T, then silts up for ages. (Relief's shader has the same curve, `stands` in Meander.swift: keep the two
+    /// in step.)
+    static func height(_ age: Float) -> Float { 0.25 * (1 - exp(-age / 2.5)) + 0.75 * (1 - exp(-age / 90)) }
+
+    /// The age at which land stands each 1,024th of the way up, by halving; and so the age for any height.
+    private static let ages: [Float] = (0...1024).map { level in
+        var (younger, older): (Float, Float) = (0, 2000)
+        for _ in 0..<30 {
+            let age = (younger + older) / 2
+            if height(age) < Float(level) / 1024 { younger = age } else { older = age }
+        }
+        return older
+    }
+    static func age(standing height: Float) -> Float {
+        let at = max(0, min(1023.999, height * 1024)), level = Int(at)
+        return ages[level] + (ages[level + 1] - ages[level]) * (at - Float(level))
+    }
+
+    /// The stamp for a texel last left at `old`, a `share` of which is left again at `new`. Not that share of the
+    /// way from one time to the other, as it was: land rises fast when it is new, so a texel a sixth of the way to
+    /// old ground's age was drawn half as high as the old ground already, and a scarp above new land came out in
+    /// texel-sized stairs. It is the time that leaves the texel standing as high as its two parts do between
+    /// them, so that along a bank's furthest reach the height goes by how much of each texel the river covered.
+    // ponytail: only the live river stamps this way. The swept past (`fill`, `strand`) still takes the share of
+    // the time: its scarps are old by the first frame or soon worked over, and stamping them like this moved the
+    // lines of the old map's settled scarps (a pixel in 300 of the launch picture by over 20 levels, in Fisk's
+    // order). If a scarp made by the past shows in stairs beside new land, stamp those this way too.
+    @inline(__always) private static func shared(_ old: Float, _ new: Float, _ share: Float) -> Float {
+        max(old, new - age(standing: (1 - share) * height(new - old)))
+    }
+
     /// Writes one texel's bytes.
     @inline(__always) private func write(_ i: Int, _ ground: UnsafeMutableBufferPointer<SIMD4<Float>>, _ pixels: UnsafeMutableBufferPointer<UInt8>) {
         let texel = ground[i], stamp = Int(max(0, min(65535, texel.x * 100)))
@@ -830,7 +862,7 @@ public final class River {
     }
 
     /// Brings the ground up to date with the river. Texels under the channel take the present time; one a bank is
-    /// only part-way across takes that share of the way to it, so the furthest line a bank reached is recorded to
+    /// only part-way across takes its share of it (`shared`), so the furthest line a bank reached is recorded to
     /// a fraction of a texel and old scarps come out smooth, not stair-stepped. The river wipes any hollow it
     /// crosses and trims any lake.
     private func updateGround() {
@@ -859,8 +891,7 @@ public final class River {
                 if covered >= 1 {
                     ground[i].x = stampNow
                 } else if covered > was {
-                    let old = max(ground[i].x, stampNow - 400)
-                    ground[i].x = old + (stampNow - old) * (covered - was) / (1 - was)
+                    ground[i].x = Self.shared(ground[i].x, stampNow, (covered - was) / (1 - was))
                 }
                 ground[i].y = max(ground[i].y, 0.5 + 3 * (0.5 - distance))
                 ground[i].z = distance

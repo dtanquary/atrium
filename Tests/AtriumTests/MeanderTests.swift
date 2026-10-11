@@ -802,3 +802,105 @@ private func wetness(_ lake: River.Lake, at now: Double, life: Double) -> [Float
         }
     }
 }
+
+/// How far edges in a picture stray from smooth lines, in pixels: the measure of a scarp drawn in texel-sized
+/// stairs. `picture` is `side` pixels square and `texel` pixels to a texel. Along every row, and then every column,
+/// an edge is where the green of the picture differs by 20 levels or more between three texels one way and three
+/// the other, placed to a fraction of a pixel where it is half-way between the two; `counts` says whether an edge
+/// at a pixel is one to measure, given whether it was found along a row. Edges are followed from line to line,
+/// and each point is held against the parabola that best fits the six texels of edge round it. Returns how many
+/// points, how far off they are (root mean square) and the furthest.
+private func ripple(_ picture: [UInt32], side: Int, texel: Int, counts: (_ x: Int, _ y: Int, _ alongRow: Bool) -> Bool) -> (points: Int, rms: Double, worst: Double) {
+    let reach = 3 * texel
+    // a parabola fitted by least squares to evenly spaced points has, at their middle, this weighted sum of them
+    let places = (-reach...reach).map(Double.init), squares = places.map { $0 * $0 }.reduce(0, +), fourths = places.map { $0 * $0 * $0 * $0 }.reduce(0, +)
+    let weights = places.map { (fourths - squares * $0 * $0) / (Double(places.count) * fourths - squares * squares) }
+    var (count, sum, worst) = (0, 0.0, 0.0)
+    for turned in [false, true] {
+        func green(_ along: Int, _ line: Int) -> Int { Int(picture[turned ? along * side + line : line * side + along] >> 8 & 255) }
+        var edges: [[Double]] = [], open: [Int] = [] // every edge so far, and the ones the last line was on
+        for line in 0..<side {
+            var reached: [Int] = [], along = reach
+            while along < side - reach - 1 {
+                let (before, after) = (green(along - reach, line), green(along + reach, line)), middle = Double(before + after) / 2
+                let (here, next) = (Double(green(along, line)), Double(green(along + 1, line)))
+                if abs(after - before) >= 20, (here - middle) * (next - middle) <= 0, here != next, turned ? counts(line, along, false) : counts(along, line, true) {
+                    let place = Double(along) + (here - middle) / (here - next)
+                    if let edge = open.first(where: { abs(edges[$0].last! - place) <= Double(texel) && !reached.contains($0) }) {
+                        edges[edge].append(place)
+                        reached.append(edge)
+                    } else {
+                        edges.append([place])
+                        reached.append(edges.count - 1)
+                    }
+                    along += texel
+                }
+                along += 1
+            }
+            open = reached
+        }
+        for edge in edges where edge.count > 2 * reach {
+            for middle in reach..<edge.count - reach {
+                let off = abs(edge[middle] - zip(weights, edge[middle - reach...middle + reach]).reduce(0) { $0 + $1.0 * $1.1 })
+                (count, sum, worst) = (count + 1, sum + off * off, max(worst, off))
+            }
+        }
+    }
+    return (count, count > 0 ? (sum / Double(count)).squareRoot() : .nan, worst)
+}
+
+/// A scarp with new land at its foot is a smooth line and not texel-sized stairs. After a cutoff the river draws
+/// back fast from the bank it was cutting at the neck, and leaves land a few seconds old against the old ground it
+/// had been cutting into: the place where relief's stairs showed. At the top of the Speed slider, the edges of
+/// such scarps in the window round each of river 13's first three cutoffs, two, three and four seconds after it,
+/// stray from smooth lines by under 0.4 of a pixel (`ripple`; a scarp here is an edge with no water within two
+/// texels, land under 5 T old two texels to one side of it and land over 10 T older two texels to the other). They
+/// strayed by 0.7. With MEANDER_SCARP set to a folder: the same at the largest river too, and the windows saved.
+@MainActor @Test func meanderScarpIsSmooth() throws {
+    let folder = ProcessInfo.processInfo.environment["MEANDER_SCARP"].map { URL(fileURLWithPath: $0) }
+    for size in folder == nil ? [28.0] : [28.0, 56.0] {
+        try with(seeded(13, ["meander.speed": 4, "meander.size": size])) {
+            let scene = Meander(size: CGSize(width: 1512, height: 982)), screen = try Offscreen(scene, 3024, 1964), river = scene.river!
+            let side = 784, texel = 3024 / river.columns
+            var (points, squares, worst) = (0, 0.0, 0.0)
+            for cutoff in 1...3 {
+                // on to the next loop cut off well inside the screen: `neck` is the middle of where it was cut, in widths
+                var neck: SIMD2<Float>?
+                for _ in 0..<36000 where neck == nil {
+                    let cutoffs = river.cutoffs
+                    screen.advance(rate: 60)
+                    guard river.cutoffs > cutoffs, let lake = river.lakes.last else { continue }
+                    let middle = 0.5 * (lake.nodes[0] + lake.nodes[lake.nodes.count - 1])
+                    var along = (middle.x + 10) / river.period
+                    along -= along.rounded(.down)
+                    let x = along * river.period - 10
+                    if x > 4, x < river.across - 4, middle.y > 4, middle.y < river.up - 4 { neck = [x, middle.y] }
+                }
+                let at = try #require(neck)
+                let x0 = min(max(Int(at.x * Float(size * 2)) - side / 2, 0), 3024 - side), y0 = min(max(1964 - Int(at.y * Float(size * 2)) - side / 2, 0), 1964 - side)
+                for seconds in 2...4 {
+                    for _ in 0..<(seconds == 2 ? 119 : 59) { screen.advance(rate: 60) }
+                    try screen.frame(rate: 60)
+                    let picture = screen.piece(x: x0, y: y0, w: side, h: side), pixels = river.pixels, since = Float(river.now - river.base)
+                    /// The ground's texel under a pixel of the window and `columns`, `rows` texels on: whether it is dry
+                    /// for two texels round, and its age.
+                    func ground(_ x: Int, _ y: Int, _ columns: Int, _ rows: Int) -> (dry: Bool, age: Float) {
+                        let column = min(max((x0 + x) / texel + columns, 0), river.columns - 1), row = min(max(river.rows - 1 - (y0 + y) / texel + rows, 0), river.rows - 1)
+                        let texel = (row * river.columns + column) * 4
+                        return (pixels[texel + 2] >= 248, since - Float(Int(pixels[texel]) << 8 | Int(pixels[texel + 1])) / 100)
+                    }
+                    let measured = ripple(picture, side: side, texel: texel) { x, y, alongRow in
+                        let (one, other) = (ground(x, y, alongRow ? -2 : 0, alongRow ? 0 : -2).age, ground(x, y, alongRow ? 2 : 0, alongRow ? 0 : 2).age)
+                        return ground(x, y, 0, 0).dry && min(one, other) < 5 && abs(one - other) > 10
+                    }
+                    if measured.points > 0 { (points, squares, worst) = (points + measured.points, squares + measured.rms * measured.rms * Double(measured.points), max(worst, measured.worst)) }
+                    if let folder { save(picture, side, side, to: folder.appendingPathComponent(String(format: "scarp-%.0fpt-%d-%ds.png", size, cutoff, seconds))) }
+                }
+            }
+            let rms = (squares / Double(max(points, 1))).squareRoot()
+            print(String(format: "Meander at 4x, a %.0f pt river, 2 to 4 s after each of three cutoffs: %d points of scarp above new land stray from a smooth line by %.2f px (root mean square), %.2f at the most",
+                         size, points, rms, worst))
+            if size == 28 { #expect(points > 300 && rms < 0.4, "\(points) points, \(rms) px") }
+        }
+    }
+}

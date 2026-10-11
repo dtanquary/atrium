@@ -249,6 +249,14 @@ final class Meander: SKScene {
         return vec2(run < 0.5 ? 2.0 : run < 1.5 ? 1.0 : run < 2.5 ? 0.0 : 3.0, within < 0.5 ? 0.65 : within < 1.5 ? 0.5 : within < 2.5 ? 0.4 : 0.23);
     }
 
+    // How high land of an age stands above the river, 0 to 1 (a bar is up out of the water within a couple of T,
+    // then silts up for ages), and how far it is gone back to ground the river never made, given how long old
+    // courses stay: relief's two readings of an age, as its shader works them out for the smooth read.
+    vec2 stands(float age, float memory) {
+        float gone = clamp((age - 0.8 * memory) / (0.18 * memory), 0.0, 1.0);
+        return vec2(0.25 * (1.0 - exp(-age / 2.5)) + 0.75 * (1.0 - exp(-age / 90.0)), gone * gone * (3.0 - 2.0 * gone));
+    }
+
     vec3 pick(float which, vec3 a, vec3 b, vec3 c, vec3 d) { return which < 0.5 ? a : which < 1.5 ? b : which < 2.5 ? c : d; }
 
     void main() {
@@ -311,16 +319,59 @@ final class Meander: SKScene {
     private static let relief = """
         // height above the river, 0 to 1: a bar is up out of the water within a couple of T, then silts up for ages
         float height = 0.25 * (1.0 - exp(-age / 2.5)) + 0.75 * (1.0 - exp(-age / 90.0));
+        vec2 rise = (0.1 * exp(-age / 2.5) + 0.75 / 90.0 * exp(-age / 90.0)) * older; // its slope a texel
         // Ground the river has not reached in memory (as long as Settings has old courses stay): not flat, but
         // nothing like a river's work either, and what the river made there fades out of it.
         float gone = clamp((age - 0.8 * u_knobs.y) / (0.18 * u_knobs.y), 0.0, 1.0), wild = gone * gone * (3.0 - 2.0 * gone);
+        vec2 fading = 6.0 * gone * (1.0 - gone) / (0.18 * u_knobs.y) * older; // and that's slope a texel
+        // A scarp with new land at its foot, where the river has drawn back from a bank it was cutting (as it does
+        // in the seconds after a cutoff). The height is steep in age at first, so the smooth read's mix of ages came
+        // out nearly as high as the old ground wherever it had any old ground in it: the scarp in texel-sized
+        // stairs. There the height is mixed from the sixteen texels' own heights instead, by the same weights, and
+        // its slope from them. Only on a slope with new land among the sixteen, and not within a texel and a half
+        // of water (all of it from two texels off): settled ground is drawn as it was, and so is every bank, where the
+        // water's own texels would come into the mix as land at the river's level and show as a light rim.
+        // (Everything that decides it is mixed by those weights too, which fall to nothing as a texel goes out of
+        // reach: the least or the most of the four reads changes at once there, and that showed as a chequerboard.)
+        float drop = length(slope), scarp = smoothstep(0.25, 1.0, drop) * smoothstep(1.4, 2.0, bank);
+        if (scarp > 0.0 && past - 3.0 * drop < 20.0) {
+            vec4 wx = vec4(w0.x, w1.x, w2.x, w3.x), wy = vec4(w0.y, w1.y, w2.y, w3.y);
+            vec2 d0 = -0.5 * (1.0 - s) * (1.0 - s), d1 = 1.5 * s * s - 2.0 * s, d3 = 0.5 * s * s, d2 = -d0 - d1 - d3; // the weights' slopes
+            vec4 dx = vec4(d0.x, d1.x, d2.x, d3.x), dy = vec4(d0.y, d1.y, d2.y, d3.y);
+            float mixed = 0.0;
+            vec2 sloped = vec2(0.0);
+            vec4 ends = vec4(0.0); // for the lowest, the highest, the furthest gone and the youngest of them, softly
+            for (int row = 0; row < 4; row++) {
+                for (int column = 0; column < 4; column++) {
+                    vec2 texel = (i + vec2(float(column), float(row)) - 0.5) / u_grid;
+                    vec4 one = texture2D(u_texture, texel), other = texture2D(u_other, texel);
+                    float aged = clamp(mix(u_t.x - (one.r * 65280.0 + one.g * 255.0) / 100.0, u_t.y - (other.r * 65280.0 + other.g * 255.0) / 100.0, u_blend), 0.0, 605.0);
+                    vec2 its = stands(aged, u_knobs.y);
+                    mixed += wx[column] * wy[row] * its.x;
+                    sloped += vec2(dx[column] * wy[row], wx[column] * dy[row]) * its.x;
+                    ends += wx[column] * wy[row] * exp(vec4(-30.0 * its.x, 30.0 * (its.x - 1.0), 30.0 * (its.y - 1.0), -0.5 * aged));
+                }
+            }
+            scarp *= 1.0 - smoothstep(8.0, 20.0, -2.0 * log(ends.w)); // all of it where the youngest is under 8 T old, none over 20
+            // The ground is as far gone as the furthest gone of the sixteen, by how far the height is from the
+            // lowest of them to the highest: mixed from the texels' own, which are gone or not, the edge of ground
+            // the river never made came out in stairs too.
+            float lowest = -log(ends.x) / 30.0, share = (1.0 + log(ends.z) / 30.0) / max(1.0 + log(ends.y) / 30.0 - lowest, 0.02);
+            float lost = clamp((mixed - lowest) * share, 0.0, 1.0);
+            // beside water the land is still the land two texels out, as a cut bank's is
+            vec2 land = stands(beside, u_knobs.y), stepped = 6.0 * nearing * (1.0 - nearing) / 1.4 * 4.0 * vec2(across.b, up.b);
+            height = mix(height, mix(mixed, land.x, near), scarp);
+            wild = mix(wild, mix(lost, land.y, near), scarp);
+            rise = mix(rise, (1.0 - near) * sloped - (land.x - mixed) * stepped, scarp);
+            fading = mix(fading, (1.0 - near) * share * sloped - (land.y - lost) * stepped, scarp);
+        }
         // an old channel stays low for a long while, but never at once: a lake first
         float dip = clamp((0.66 - low) / 0.12, 0.0, 1.0), settled = smoothstep(2.0, 12.0, wetAge) * exp(-wetAge / 140.0);
         float sunk = 0.14 * smoothstep(0.1, 0.4, height) * (1.0 - water) * settled;
         // The ground's slope a texel is worked out beside each part of its height, not taken from the GPU's slopes
         // of the height: those are one value to a block of four pixels, which dotted every scarp, and they made a
         // sixth of the picture flicker by a level whenever the stamps' base moved.
-        vec2 tilt = 0.35 * (1.0 - wild) * ((0.1 * exp(-age / 2.5) + 0.75 / 90.0 * exp(-age / 90.0)) * older + sunk * 6.0 * dip * (1.0 - dip) / 0.12 * 0.75 * vec2(across.a, up.a));
+        vec2 tilt = 0.35 * (1.0 - wild) * (rise + sunk * 6.0 * dip * (1.0 - dip) / 0.12 * 0.75 * vec2(across.a, up.a));
         height -= sunk * dip * dip * (3.0 - 2.0 * dip);
         // Scroll bars: old bank lines, so contours of the stamp. Two spacings beating, uneven in strength, and low;
         // and sets of them, arcs that show at a glance. Where the lines would be too fine to draw, or across a
@@ -332,7 +383,7 @@ final class Meander: SKScene {
         float scroll = bars * (0.6 * cos(turn.x) + 0.4 * cos(turn.y)) + sets * cos(turn.z);
         tilt -= 0.03 * (bars * (0.6 * sin(turn.x) / 0.7 + 0.4 * sin(turn.y) / 1.1326) + sets * sin(turn.z) / 2.9) * 6.2832 * slope;
         float rough = 0.75 * (0.6 * lumps(pts / 60.0) + 0.3 * lumps(pts / 22.0 + 9.0) + 0.1 * lumps(pts / 8.0 + 17.0));
-        tilt += 0.05 * (rough * 6.0 * gone * (1.0 - gone) / (0.18 * u_knobs.y) * older + wild * vec2(dfdx(rough), dfdy(rough)) / perPixel);
+        tilt += 0.05 * (rough * fading + wild * vec2(dfdx(rough), dfdy(rough)) / perPixel);
         vec3 col = texture2D(u_heights, vec2((clamp(height + 0.02 * scroll, 0.0, 1.0) * 255.0 + 0.5) / 256.0, 0.5)).rgb;
         col = mix(col, mix(u_ground, u_oldest, smoothstep(-0.1, 0.55, rough)), wild);
         // light from the upper left on the fine relief only, and none within a few pixels of water: no rims
