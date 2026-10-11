@@ -47,10 +47,7 @@ Every image comes from the app's own renderer, never a screen recording, so the 
 - Other Claude sessions share this working tree (see `.git/atrium-claims.md`). Commit only site files, by explicit path. The site has no version number, and never bumps the app's.
 
 ## Plan
-1. ~~Pick a direction~~: 2b, One Endless Canvas (2026-10-01).
-2. ~~Build it~~, with every wallpaper on a Liquid Glass pane, and a laptop that opens the page and closes it.
-3. **Polish:** a social card (`og:image`), page weights, and a pass on a real iPhone and in Safari.
-4. **Launch:** a production deploy (`--branch main`), with atrium.show attached as the project's custom domain. Done 2026-10-02.
+**Polish:** a social card (`og:image`), page weights, and a pass on a real iPhone and in Safari.
 
 ## Dave's direction so far
 - 2026-09-30: art first, above everything: "ultra modern, but just as much if not more so artistic". Domain atrium.show, video loops rendered by the app, three directions to compare, and the site kept in `site/` in this repo.
