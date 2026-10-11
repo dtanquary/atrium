@@ -187,13 +187,36 @@ func blackBodyKeepsToTheLocus(kelvin: Double, x: Double, y: Double) {
     #expect(kept > 108_000)
 }
 
+/// The glow, with the sky off so that only the disc shines. At Glow 0 there is none: the sky just over the hump is
+/// exactly black, as the shadow's middle is. At 1 that sky is lit, the glow has died away by the picture's corner,
+/// and no pixel is darker for it (but for the dither's one step).
+@MainActor @Test func blackHoleGlows() throws {
+    let defaults = UserDefaults.standard, held = ["blackhole.stars", "blackhole.milkyway", BlackHole.speed.key]
+    for key in held { defaults.set(0, forKey: key) }
+    defer { for key in held + [BlackHole.glow.key] { defaults.removeObject(forKey: key) } }
+    let (w, h) = (756, 492)
+    func picture(glow: Double) throws -> [SIMD3<UInt8>] {
+        defaults.set(glow, forKey: BlackHole.glow.key)
+        return try drawn(BlackHole(size: CGSize(width: w / 2, height: h / 2), start: (time: 20, generation: 7)), w, h)
+    }
+    let none = try picture(glow: 0), some = try picture(glow: 1)
+    let hump = try #require((0..<h / 2).first { none[$0 * w + w / 2].x > 0 }), over = (hump - 5) * w + w / 2, shadow = (h / 2 - 24) * w + w / 2
+    #expect(none[over] == .zero && none[shadow] == .zero)
+    #expect(some[over].x > 25, "no glow over the hump: \(some[over])")
+    #expect(some[0] == .zero, "the glow reaches the corner: \(some[0])")
+    let darker = zip(none, some).map { Int($0.x) - Int($1.x) }.max() ?? 0
+    #expect(darker <= 1, "a pixel is \(darker) of 255 darker for the glow")
+}
+
 /// For looking at the Black Hole moving: `BLACKHOLE_STRIPS=<dir> swift test --filter blackHoleMoves` steps one scene
 /// frame by frame (not in real time) and saves, for 15 and 30 frames a second, eight frames in a row of three places
 /// where trouble would show (the thin ring over the shadow, the disc's near side seen edge on, the bright left end)
-/// with the change between each pair beside them, eight times over; then fifteen frames 7.5 s apart through two
-/// lives of the streaks. It prints how much single pixels jump between frames, and how far the disc's
-/// brightness and contrast wander over those two lives, with how much of that keeps time with the streak
-/// generations handing over (breathing) rather than being the streaks themselves coming and going.
+/// with the change between each pair beside them, eight times over; then one frame with the glow a dragged slider
+/// has left behind and the same frame with the glow made for it, for three sliders; then fifteen frames 7.5 s apart
+/// through two lives of the streaks. It prints how much single pixels jump between frames, how much they step when
+/// the fresh glow comes, and how far the disc's brightness and contrast wander over those two lives, with how much
+/// of that keeps time with the streak generations handing over (breathing) rather than being the streaks
+/// themselves coming and going.
 @MainActor @Test func blackHoleMoves() throws {
     guard let dir = ProcessInfo.processInfo.environment["BLACKHOLE_STRIPS"] else { return }
     try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
@@ -274,6 +297,34 @@ func blackBodyKeepsToTheLocus(kelvin: Double, x: Double, y: Double) {
                      Double(changes.count { $0 >= 25 }) / Double(changes.count) * 100))
     }
 
+    // A slider dragged. The glow is made again at most every 0.15 s, so between times it is the last one (stretched
+    // to fit, for Size). Does the picture step when the fresh one comes? The disc is held still, the slider is put
+    // where 0.15 s of a drag across its whole range in 2 s would have taken it, and the same frame is drawn with
+    // the glow as it was and then with the one made for it.
+    for (key, moved) in [(BlackHole.size.key, 0.064), ("blackhole.brightness", 0.105), ("blackhole.streaks", 0.075)] {
+        let defaults = UserDefaults.standard
+        defaults.set(0, forKey: BlackHole.speed.key)
+        defer { for key in [key, BlackHole.speed.key] { defaults.removeObject(forKey: key) } }
+        let renderer = SKRenderer(device: device)
+        renderer.scene = BlackHole(size: CGSize(width: w / 2, height: h / 2), start: (time: 20, generation: 7))
+        defaults.set(0.8, forKey: key)
+        _ = try frame(of: renderer, after: 1 / 30, at: 30)           // its glow is made again, for 0.8
+        defaults.set(0.8 + moved, forKey: key)
+        let stale = try frame(of: renderer, after: 1 / 30, at: 30)   // too soon for another
+        let fresh = try frame(of: renderer, after: 0.2, at: 30)
+        let (pw, ph) = (700, 300), (x0, y0) = (w / 2 - 350, h / 2 - 520)
+        var strip = [UInt32](repeating: 0, count: pw * ph * 3), steps = [Int]()
+        for i in 0..<w * h { steps.append(abs(luma(stale[i]) - luma(fresh[i]))) }
+        for y in 0..<ph { for x in 0..<pw {
+            let at = (y0 + y) * w + x0 + x
+            (strip[y * pw + x], strip[(ph + y) * pw + x], strip[(2 * ph + y) * pw + x]) = (stale[at], fresh[at], UInt32(min(steps[at] * 32, 255)) * 0x010101)
+        } }
+        save(strip, pw, ph * 3, "a fresh glow after \(key) moved.png")
+        steps.sort()
+        print(String(format: "Black Hole moving, a fresh glow after 0.15 s of dragging %@: %.1f%% of pixels change at all, 99.9%% of them by %d of 255 or less, the most %d",
+                     key, Double(steps.count { $0 > 0 }) / Double(steps.count) * 100, steps[steps.count * 999 / 1000], steps.last!))
+    }
+
     // Two lives of the streaks: 120 units of the disc's time, 117 s at speed 1, looked at every 1.5 s. A generation
     // hands over every third of a life, 19.5 s or 13 looks, so any breathing would beat at that.
     let renderer = SKRenderer(device: device)
@@ -303,7 +354,8 @@ func blackBodyKeepsToTheLocus(kelvin: Double, x: Double, y: Double) {
 
 /// One still of the Black Hole that comes out the same every time, for comparing a change with what went before:
 /// `BLACKHOLE_STILL=<file.png> swift test --filter blackHoleStill`, with `BLACKHOLE_DEFAULTS="blackhole.size=1.5,…"`
-/// for Settings values as the render test takes them. The disc is held still at a fixed start, at full Retina size.
+/// for Settings values as the render test takes them. The disc is held still at a fixed start, at full Retina size;
+/// `BLACKHOLE_START="<disc time>,<generation>"` starts its streaks somewhere else.
 @MainActor @Test func blackHoleStill() throws {
     let env = ProcessInfo.processInfo.environment
     guard let file = env["BLACKHOLE_STILL"] else { return }
@@ -311,7 +363,8 @@ func blackBodyKeepsToTheLocus(kelvin: Double, x: Double, y: Double) {
     for pair in settings { UserDefaults.standard.set(Double(pair[1]).map { $0 as Any } ?? String(pair[1]), forKey: String(pair[0])) }
     defer { for pair in settings { UserDefaults.standard.removeObject(forKey: String(pair[0])) } }
     let (w, h) = (3024, 1964)
-    let pixels = try drawn(BlackHole(size: CGSize(width: w / 2, height: h / 2), start: (time: 20, generation: 7)), w, h)
+    let start = (env["BLACKHOLE_START"] ?? "20,7").split(separator: ",").compactMap { Double($0) }
+    let pixels = try drawn(BlackHole(size: CGSize(width: w / 2, height: h / 2), start: (time: start[0], generation: Int(start[1]))), w, h)
     let bytes = pixels.flatMap { [$0.x, $0.y, $0.z] }
     let image = try #require(CGImage(width: w, height: h, bitsPerComponent: 8, bitsPerPixel: 24, bytesPerRow: w * 3, space: CGColorSpace(name: CGColorSpace.sRGB)!,
                                      bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue), provider: CGDataProvider(data: Data(bytes) as CFData)!,

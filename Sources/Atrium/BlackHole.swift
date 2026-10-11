@@ -1,3 +1,5 @@
+import Accelerate
+import Metal
 import SpriteKit
 
 @MainActor func blackHole(size: CGSize) -> SKScene { BlackHole(size: size) }
@@ -157,11 +159,15 @@ final class BlackHole: SKScene {
 
     nonisolated static let size = Knob(key: "blackhole.size", label: "Size", range: 0.65...1.5, standard: 1, section: "Look", format: .times)
     nonisolated static let speed = Knob(key: "blackhole.speed", label: "Speed", range: 0...4, standard: 1, section: "Motion", format: .times)
+    /// The disc's light spread round it, as a lens spreads anything this bright: 1 is the soft glow Dave picked from
+    /// a sheet (tile M), 0 none at all, and then the picture is to the byte what it was before there was one.
+    nonisolated static let glow = Knob(key: "blackhole.glow", label: "Glow", range: 0...2, standard: 1, section: "Look")
     /// Brightness is the exposure before the stretch, as Galaxy's is. Beaming is how much of the Doppler shift
     /// shows: at 1 the side coming toward us is as much hotter and brighter as relativity makes it.
     nonisolated static let knobs = [
         size,
         Knob(key: "blackhole.brightness", label: "Brightness", range: 0.4...1.8, standard: 1, section: "Look"),
+        glow,
         Knob(key: "blackhole.beaming", label: "Beaming", range: 0...1, standard: 1, section: "Look"),
         Knob(key: "blackhole.streaks", label: "Streaks", range: 0...1, standard: 0.7, section: "Look"),
         speed,
@@ -196,6 +202,92 @@ final class BlackHole: SKScene {
         let texture = SKTexture(data: Data(bytes), size: CGSize(width: across, height: up))
         texture.filteringMode = .linear
         return texture
+    }
+
+    /// No glow: one black texel.
+    private static let noHalo = table([0, 0, 0, 255], 1, 1)
+    private static let device = MTLCreateSystemDefaultDevice(), queue = device?.makeCommandQueue()
+    private static let renderer = device.map { SKRenderer(device: $0) }
+
+    /// The picture of a disc alone that every scene's glow is made from. There is one for all of them, since a
+    /// scene of its own for each would compile the shader again each time (0.15 s).
+    private static let disc = BlackHole(size: CGSize(width: 756, height: 492), alone: true)
+
+    /// `whole`'s disc's own light, spread as a lens spreads anything this bright: the glow Dave picked from a sheet
+    /// (docs/black-hole/glow.py is that picture as numbers). The disc is drawn alone and small, offscreen, by the
+    /// desktop's own shader, so there is one account of its light. What that shows is taken as light (its values to
+    /// the 2.2), blurred at two widths (60% at 14 px in radius on a 3,024 px picture, 40% at 60 px) and handed back
+    /// 378 across, as cube roots so the faint end keeps its steps; the shader adds it at 0.45.
+    ///
+    /// The glow doesn't follow the streaks, which would mean making it every frame. It is made from the disc with
+    /// its streaks shuffled (each pixel reads them somewhere of its own), at four moments of them, each drawn half
+    /// a pixel aside from the last: sixteen looks at the disc for each texel, so knots and lanes even out to what
+    /// they average and the disc's edge is placed finer than the grid.
+    // ponytail: so a knot gets no more glow than the lane beside it, where the recipe's, made from one frame, gave
+    // it a little more; the turning shows about a seventh less for it (two frames 5 s apart differ by 19.5 of 255
+    // on the disc, against 22.8). If that is missed, scale the glow by the pixel's own light over the average there.
+    // ponytail: the recipe's glow stops dead about 130 px out, because it was blurred in whole bytes. This one
+    // fades out by there (half a byte of light is taken off, softly), so it reaches as far and no further.
+    private static func spread(_ whole: BlackHole) -> SKTexture {
+        guard let device, let queue, let renderer else { return noHalo }
+        let (w, h) = (378, max(Int((378 * whole.size.height / whole.size.width).rounded()), 1)), (pw, ph) = (2 * w, 2 * h), moments = 4
+        disc.show(whole, across: pw, up: ph)
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: pw, height: ph, mipmapped: false)
+        descriptor.usage = [.renderTarget, .shaderRead]
+        descriptor.storageMode = .shared
+        guard let target = device.makeTexture(descriptor: descriptor) else { return noHalo }
+        let pass = MTLRenderPassDescriptor()
+        pass.colorAttachments[0].texture = target
+        pass.colorAttachments[0].loadAction = .clear
+        pass.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
+        pass.colorAttachments[0].storeAction = .store
+        renderer.scene = disc
+
+        // red, green and blue planes of light, top row first
+        var light = [Float](repeating: 0, count: 3 * w * h), pixels = [UInt8](repeating: 0, count: pw * ph * 4)
+        let toLight = (0..<256).map { Float(pow(Double($0) / 255, 2.2)) / Float(4 * moments) }
+        for moment in 0..<moments {
+            disc.hold(moment)
+            disc.children.first?.position = CGPoint(x: Double(moment % 2) / 2 - 0.25, y: Double(moment / 2) / 2 - 0.25)
+            renderer.update(atTime: CACurrentMediaTime())
+            guard let buffer = queue.makeCommandBuffer() else { return noHalo }
+            renderer.render(withViewport: CGRect(x: 0, y: 0, width: pw, height: ph), commandBuffer: buffer, renderPassDescriptor: pass)
+            buffer.commit()
+            buffer.waitUntilCompleted()
+            target.getBytes(&pixels, bytesPerRow: pw * 4, from: MTLRegionMake2D(0, 0, pw, ph), mipmapLevel: 0)
+            light.withUnsafeMutableBufferPointer { light in
+                for y in 0..<ph { for x in 0..<pw {
+                    let from = (y * pw + x) * 4, to = y / 2 * w + x / 2   // the target's bytes run blue, green, red
+                    light[to] += toLight[Int(pixels[from + 2])]
+                    light[w * h + to] += toLight[Int(pixels[from + 1])]
+                    light[2 * w * h + to] += toLight[Int(pixels[from])]
+                } }
+            }
+        }
+        renderer.scene = nil
+
+        func blurred(_ radius: Double) -> [Float] {
+            let reach = Int((3 * radius).rounded(.up)), bell = (-reach...reach).map { Float(exp(-Double($0 * $0) / (2 * radius * radius))) }
+            let kernel = bell.map { $0 / bell.reduce(0, +) }
+            var out = [Float](repeating: 0, count: 3 * w * h)
+            light.withUnsafeMutableBufferPointer { from in out.withUnsafeMutableBufferPointer { to in
+                for plane in 0..<3 {
+                    var a = vImage_Buffer(data: from.baseAddress! + plane * w * h, height: vImagePixelCount(h), width: vImagePixelCount(w), rowBytes: w * 4)
+                    var b = vImage_Buffer(data: to.baseAddress! + plane * w * h, height: vImagePixelCount(h), width: vImagePixelCount(w), rowBytes: w * 4)
+                    vImageSepConvolve_PlanarF(&a, &b, nil, 0, 0, kernel, UInt32(kernel.count), kernel, UInt32(kernel.count), 0, 0, vImage_Flags(kvImageEdgeExtend))
+                }
+            } }
+            return out
+        }
+        let near = blurred(14.0 / 3024 * Double(w)), far = blurred(60.0 / 3024 * Double(w))
+        var bytes = [UInt8](repeating: 255, count: w * h * 4)
+        for y in 0..<h { for x in 0..<w {
+            let at = y * w + x, to = ((h - 1 - y) * w + x) * 4   // a texture's rows run from the bottom
+            var glow = SIMD3<Float>(0.6 * near[at] + 0.4 * far[at], 0.6 * near[w * h + at] + 0.4 * far[w * h + at], 0.6 * near[2 * w * h + at] + 0.4 * far[2 * w * h + at])
+            glow *= glow.max() / (glow.max() + 0.5 / 255)
+            for c in 0..<3 { bytes[to + c] = UInt8(min(max(cbrt(glow[c]) * 255 + 0.5, 0), 255)) }
+        } }
+        return table(bytes, w, h)
     }
 
     /// The gas's knots as they are born, before any shear: four octaves of noise, one in each channel from coarse
@@ -258,56 +350,72 @@ final class BlackHole: SKScene {
 
     /// The Milky Way with its own stars taken out (ESO/S. Brunier's panorama, Resources/blackhole-glow.heic), stored
     /// lighter than it is. It has smaller copies of itself for where the hole squeezes the whole sky into a few pixels.
-    private static let glow: SKTexture = {
+    private static let galaxy: SKTexture = {
         let texture = SKTexture(image: NSImage(contentsOf: resource("blackhole-glow.heic")) ?? NSImage())
         texture.usesMipmaps = true
         return texture
     }()
 
     private let knobUniforms: [String: SKUniform]
+    /// The picture's size, the view and the disc's colour, as the shader takes them ("u_size", "u_view", "u_peak").
+    private let extent: SKUniform, aim: SKUniform, peak: SKUniform
     private let lens = SKUniform(name: "u_lens", float: 0.5)
     private let age = SKUniform(name: "u_age", vectorFloat3: .zero)
     private let seedRound = SKUniform(name: "u_seedRound", vectorFloat3: .zero), seedDeep = SKUniform(name: "u_seedDeep", vectorFloat3: .zero)
+    /// The glow: the disc's light, spread (see `spread`), and how much that texture must be stretched to fit when
+    /// Size has changed since it was made.
+    private let halo = SKUniform(name: "u_halo", texture: BlackHole.noHalo), haloFit = SKUniform(name: "u_haloFit", float: 1)
+    /// What the glow was made for (the lens, Brightness, Beaming and Streaks), and when on the scene's clock; and
+    /// when any scene last made one, so that two of them (the desktop's and the one behind Settings) take turns.
+    private var haloFor: [Float] = [], haloMade: TimeInterval = 0
+    private static var glowMade: TimeInterval = 0
     private let field: Double?
+    /// Whether this is the picture of a disc alone, drawn offscreen for a scene's glow (`disc`), or the test pattern.
+    private let alone: Bool, checks: Bool
     /// Where the disc's clock stands, and where in the endless run of streak generations this scene began.
     private var discTime: Double
-    private let firstGeneration: Int
+    private var firstGeneration: Int
     private var lastUpdate: TimeInterval?
 
     /// `checks` draws the prototype's test pattern in place of the picture, for the test that compares the two:
     /// checks on the disc in distance and angle, and 5° squares on the sky (docs/black-hole/proto/render.py). With
     /// a `view` the picture holds to it; without, it's Dave's view at the size Settings gives. With a `start` the
     /// streaks begin there (the disc's clock, and which generation of them), so two scenes can show the same
-    /// picture; without, each begins at random.
-    init(size: CGSize, view: View? = nil, checks: Bool = false, start: (time: Double, generation: Int)? = nil) {
+    /// picture; without, each begins at random. `alone` makes this the picture of a disc alone, for a glow: whichever
+    /// scene's `show` last gave it, with no sky and no glow of its own, its fine streaks left as they are however
+    /// small it is drawn, and standing still wherever `hold` puts them.
+    init(size: CGSize, view: View? = nil, checks: Bool = false, start: (time: Double, generation: Int)? = nil, alone: Bool = false) {
         // Size and Speed are worked out here, not in the shader (and "u_size" is the scene's own).
         knobUniforms = Dictionary(uniqueKeysWithValues: Self.knobs.filter { $0.key != Self.size.key && $0.key != Self.speed.key }.map {
             ($0.key, SKUniform(name: "u_" + $0.key.split(separator: ".").last!, float: Float($0.standard)))
         })
         field = view?.field
+        (self.alone, self.checks) = (alone, checks)
+        let picked = UserDefaults.standard.string(forKey: Self.palette.key) ?? Self.palette.standard
+        let heat = Self.heats.first { $0.name == picked } ?? Self.heats.randomElement()!
+        let view = view ?? View(), tilt = Float(view.tilt * .pi / 180)
+        extent = SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)])
+        aim = SKUniform(name: "u_view", vectorFloat4: [Float(1 / view.distance), sin(tilt), cos(tilt), Float(1 / view.outer)])
+        peak = SKUniform(name: "u_peak", vectorFloat2: [Float(heat.kelvin), Float(heat.exposure)])
         discTime = start?.time ?? .random(in: 0..<Self.life)
         firstGeneration = start?.generation ?? .random(in: 0..<10000)
         super.init(size: size)
-        let view = view ?? View(), tilt = Float(view.tilt * .pi / 180)
-        let picked = UserDefaults.standard.string(forKey: Self.palette.key) ?? Self.palette.standard
-        let heat = Self.heats.first { $0.name == picked } ?? Self.heats.randomElement()!
 
         let sprite = SKSpriteNode(color: .black, size: size)
         sprite.anchorPoint = .zero
-        sprite.shader = SKShader(source: shaderCommon + Self.source, uniforms: [
-            SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]),
+        sprite.shader = SKShader(source: shaderCommon + Self.source(alone: alone), uniforms: [
             SKUniform(name: "u_rays", texture: Self.rays), SKUniform(name: "u_turns", texture: Self.turns),
             SKUniform(name: "u_heat", texture: Self.heat), SKUniform(name: "u_gas", texture: Self.gas),
-            SKUniform(name: "u_catalogue", texture: Self.catalogue), SKUniform(name: "u_glow", texture: Self.glow),
-            SKUniform(name: "u_view", vectorFloat4: [Float(1 / view.distance), sin(tilt), cos(tilt), Float(1 / view.outer)]),
-            SKUniform(name: "u_peak", vectorFloat2: [Float(heat.kelvin), Float(heat.exposure)]),
+            SKUniform(name: "u_catalogue", texture: Self.catalogue), SKUniform(name: "u_galaxy", texture: Self.galaxy), halo,
             SKUniform(name: "u_checks", float: checks ? 1 : 0),
-            lens, age, seedRound, seedDeep,
+            extent, aim, peak, lens, age, seedRound, seedDeep, haloFit,
         ] + knobUniforms.values)
         addChild(sprite)
 
+        guard !alone else { return }
         applySettings()
         turnDisc(by: 0)
+        makeGlow()
         NotificationCenter.default.addObserver(self, selector: #selector(applySettings),
                                                name: UserDefaults.didChangeNotification, object: nil)
     }
@@ -315,7 +423,14 @@ final class BlackHole: SKScene {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     override func update(_ currentTime: TimeInterval) {
+        guard !alone else { return }
         turnDisc(by: frameTime(currentTime, &lastUpdate) * Self.speed.value)
+        // The glow is made again when a slider that changes the disc has moved, but no more than seven times a
+        // second, and never two scenes' in one frame, so dragging one never waits on it (it takes 10 ms).
+        if glowSettings != haloFor, abs(currentTime - haloMade) > 0.15, abs(currentTime - Self.glowMade) > 0.05 {
+            makeGlow()
+            (haloMade, Self.glowMade) = (currentTime, currentTime)
+        }
     }
 
     /// Moves the disc's clock on by `seconds` at speed 1, and tells the shader each streak generation's age and
@@ -338,9 +453,45 @@ final class BlackHole: SKScene {
     @objc private func applySettings() {
         for knob in Self.knobs { knobUniforms[knob.key]?.floatValue = Float(knob.value) }
         lens.floatValue = Float(tan((field ?? View().field) * .pi / 360) / (field == nil ? Self.size.value : 1))
+        // Until the glow is made again for a new Size, the one there is stretched to fit: it follows the disc at once.
+        if let made = haloFor.first { haloFit.floatValue = lens.floatValue / made }
     }
 
-    private static let source = """
+    /// The sliders the glow depends on, with the lens. (A new disc colour rebuilds the scene.)
+    private static let glowKeys = ["blackhole.brightness", "blackhole.beaming", "blackhole.streaks"]
+    private var glowSettings: [Float] { [lens.floatValue] + Self.glowKeys.map { knobUniforms[$0]?.floatValue ?? 0 } }
+
+    /// Makes the glow for the settings as they stand, unless Glow is off: then it waits until it is wanted.
+    private func makeGlow() {
+        guard !checks, Self.glow.value > 0 else { return }
+        halo.textureValue = Self.spread(self)
+        haloFor = glowSettings
+        haloFit.floatValue = 1
+    }
+
+    /// Makes this picture of a disc alone a picture of `whole`'s, so many pixels across and up: its view, its
+    /// colour and the sliders its glow depends on, everything else at nothing (no sky, no glow of its own).
+    private func show(_ whole: BlackHole, across: Int, up: Int) {
+        size = CGSize(width: across, height: up)
+        (children.first as? SKSpriteNode)?.size = size
+        // the whole picture's own shape, which this one's may miss by a pixel
+        (extent.vectorFloat2Value, aim.vectorFloat4Value, peak.vectorFloat2Value) = (whole.extent.vectorFloat2Value, whole.aim.vectorFloat4Value, whole.peak.vectorFloat2Value)
+        lens.floatValue = whole.lens.floatValue
+        for (key, uniform) in knobUniforms { uniform.floatValue = Self.glowKeys.contains(key) ? whole.knobUniforms[key]?.floatValue ?? 0 : 0 }
+    }
+
+    /// Holds a picture of a disc alone at one of a few fixed moments of its streaks, each of the three generations
+    /// at another age and from another stretch of the noise.
+    private func hold(_ moment: Int) {
+        (discTime, firstGeneration) = (Self.life * (Double(moment) * 0.6180339887).truncatingRemainder(dividingBy: 1), moment * 37)
+        turnDisc(by: 0)
+    }
+
+    /// The shader. `alone` gives the one that draws the disc for its glow (see `spread`), which differs in two lines:
+    /// they are written in here, not switched by a uniform, so that the desktop's shader is to the letter what it
+    /// would be without them. (A line that never runs still changed how the rest was compiled, and with it the
+    /// last bit of a few pixels.)
+    private static func source(alone: Bool) -> String { """
     // Where table A keeps a ray's distance: its e across, how far it has turned up (see Bending in BlackHole.swift).
     vec2 raysAt(float e2, float turn) {
         float furthest = (1.0 + e2) / (1.0 / 3.0 + 2.0 * e2 * sqrt(e2));
@@ -474,7 +625,7 @@ final class BlackHole: SKScene {
         // (Read for every pixel: a texture with smaller copies of itself can't be read inside a branch either.)
         float lon = atan(sky.x, sky.z);
         float lat = asin(clamp(sky.y, -1.0, 1.0));
-        vec3 glow = texture2D(u_glow, vec2(lon / 6.2831853 + 0.5, lat / 3.1415927 + 0.5)).rgb;
+        vec3 galaxy = texture2D(u_galaxy, vec2(lon / 6.2831853 + 0.5, lat / 3.1415927 + 0.5)).rgb;
         float pixel = fwidth(q.x);   // one pixel, in the units of q
 
         vec3 col = vec3(0.0);
@@ -492,15 +643,24 @@ final class BlackHole: SKScene {
             // each streak generation's weight: none at birth and at the end, most at half its life
             vec3 weight = (1.0 - cos(u_age * (6.2831853 / 60.0))) / 3.0;
             vec4 light = vec4(0.0);   // rgb, and how much of what lies behind is hidden
+            // Drawn alone and small for the glow, the disc keeps its fine streaks however many a pixel spans (`fine`
+            // is 0 then): melted into their middle they would lose the knots, which is most of their light. And
+            // each pixel then reads the streaks at a place of its own, picked at random: the streaks are the same
+            // kind of thing all round the disc, so that is a fair sample of them, and the blur sees their average
+            // with no knot left in it to leave its mark on the glow.
+            float fine = \(alone ? "0.0" : "1.0");
+            \(alone ? "vec2 astray = hash42(v_tex_coord * 7919.0 + u_age.xy).xy * vec2(1.0, 1.2566371);" : "")
 
             if (hit1) {
                 float spin = sqrt(0.5 * u1 * u1 * u1) / 6.2831853;   // turns a unit of time, by Kepler
                 float round = atan(on1.y, on1.x) / 6.2831853;
+                float deep = deep1;
+                \(alone ? "round += astray.x; deep += astray.y;" : "")
                 vec3 run = spin * u_age;                              // how far each generation's gas has run since birth
-                vec3 cells = 10.0 * (wide1 + 1.5 * run * grain1);
-                float pattern = dot(weight, vec3(streaks(texture2D(u_gas, gasAt(round + run.x + u_seedRound.x, deep1 + u_seedDeep.x)), max(cells.x, grain1 * 9.6)),
-                                                 streaks(texture2D(u_gas, gasAt(round + run.y + u_seedRound.y, deep1 + u_seedDeep.y)), max(cells.y, grain1 * 9.6)),
-                                                 streaks(texture2D(u_gas, gasAt(round + run.z + u_seedRound.z, deep1 + u_seedDeep.z)), max(cells.z, grain1 * 9.6))));
+                vec3 cells = 10.0 * (wide1 + 1.5 * run * grain1) * fine;
+                float pattern = dot(weight, vec3(streaks(texture2D(u_gas, gasAt(round + run.x + u_seedRound.x, deep + u_seedDeep.x)), max(cells.x, grain1 * 9.6 * fine)),
+                                                 streaks(texture2D(u_gas, gasAt(round + run.y + u_seedRound.y, deep + u_seedDeep.y)), max(cells.y, grain1 * 9.6 * fine)),
+                                                 streaks(texture2D(u_gas, gasAt(round + run.z + u_seedRound.z, deep + u_seedDeep.z)), max(cells.z, grain1 * 9.6 * fine))));
                 float gas = smoothstep(0.0, 1.0, 0.5 + pattern * 2.1 * u_streaks);
                 float seen = pow(sqrt(1.0 - 1.5 * u1) / (1.0 - sqrt(0.5 * u1 * u1 * u1) * lean / e), u_beaming) * discHeat(u1) * streakHeat(gas);
                 light = discLight(texture2D(u_heat, heatAt(seen * u_peak.x)).rgb, seen, gas, u1, u_view.w);
@@ -517,11 +677,13 @@ final class BlackHole: SKScene {
             if (hit0) {
                 float spin = sqrt(0.5 * u0 * u0 * u0) / 6.2831853;
                 float round = atan(on0.y, on0.x) / 6.2831853;
+                float deep = deep0;
+                \(alone ? "round += astray.x; deep += astray.y;" : "")
                 vec3 run = spin * u_age;
-                vec3 cells = 10.0 * (wide0 + 1.5 * run * grain0);
-                float pattern = dot(weight, vec3(streaks(texture2D(u_gas, gasAt(round + run.x + u_seedRound.x, deep0 + u_seedDeep.x)), max(cells.x, grain0 * 9.6)),
-                                                 streaks(texture2D(u_gas, gasAt(round + run.y + u_seedRound.y, deep0 + u_seedDeep.y)), max(cells.y, grain0 * 9.6)),
-                                                 streaks(texture2D(u_gas, gasAt(round + run.z + u_seedRound.z, deep0 + u_seedDeep.z)), max(cells.z, grain0 * 9.6))));
+                vec3 cells = 10.0 * (wide0 + 1.5 * run * grain0) * fine;
+                float pattern = dot(weight, vec3(streaks(texture2D(u_gas, gasAt(round + run.x + u_seedRound.x, deep + u_seedDeep.x)), max(cells.x, grain0 * 9.6 * fine)),
+                                                 streaks(texture2D(u_gas, gasAt(round + run.y + u_seedRound.y, deep + u_seedDeep.y)), max(cells.y, grain0 * 9.6 * fine)),
+                                                 streaks(texture2D(u_gas, gasAt(round + run.z + u_seedRound.z, deep + u_seedDeep.z)), max(cells.z, grain0 * 9.6 * fine))));
                 float gas = smoothstep(0.0, 1.0, 0.5 + pattern * 2.1 * u_streaks);
                 float seen = pow(sqrt(1.0 - 1.5 * u0) / (1.0 - sqrt(0.5 * u0 * u0 * u0) * lean / e), u_beaming) * discHeat(u0) * streakHeat(gas);
                 vec4 front = discLight(texture2D(u_heat, heatAt(seen * u_peak.x)).rgb, seen, gas, u0, u_view.w);
@@ -532,7 +694,7 @@ final class BlackHole: SKScene {
             // catalogue's stars.
             vec3 behind = vec3(0.0);
             if (escapes && light.a < 0.996) {
-                behind = pow(glow, vec3(3.667)) * (3.2 * u_milkyway);
+                behind = pow(galaxy, vec3(3.667)) * (3.2 * u_milkyway);
                 // How the hole stretches the sky here. Leaving at an angle `away` round the hole, a ray one step
                 // further out on screen leaves `outward` times that step further round; so a step on the sky along
                 // the ring's radius, or round the ring, is this many pixels on screen.
@@ -577,10 +739,19 @@ final class BlackHole: SKScene {
             float most = max(x.r, max(x.g, x.b)) + 0.0001;
             float stretched = log(20.0 * most + sqrt(400.0 * most * most + 1.0)) / 5.8; // asinh(20 most) / asinh(165)
             col = mix(min(x * stretched / most, 1.0), vec3(1.0), smoothstep(0.88, 1.2, stretched));
+            // The glow: the disc's own light, spread (`spread` in BlackHole.swift makes u_halo from this same shader,
+            // and keeps it as cube roots). It is light, so it is added as light: the picture's values to the 2.2.
+            float shines = step(0.0005, most);
+            if (u_glow > 0.0) {
+                vec3 halo = texture2D(u_halo, (v_tex_coord - 0.5) * u_haloFit + 0.5).rgb;
+                vec3 spread = 0.45 * u_glow * halo * halo * halo;
+                col = pow(pow(col, vec3(2.2)) + spread, vec3(1.0 / 2.2));
+                shines = max(shines, step(5e-6, max(spread.r, max(spread.g, spread.b))));
+            }
             // dithered against banding, but not where nothing shines: the shadow stays exactly black
-            col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0 * step(0.0005, most);
+            col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0 * shines;
         }
         gl_FragColor = vec4(col, 1.0);
     }
-    """
+    """ }
 }
