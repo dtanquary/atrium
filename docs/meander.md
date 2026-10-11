@@ -372,6 +372,11 @@ Still wrong or not known after this step:
 - A few blocky patches of launch-made ground in the bays at the valley walls, as after step 2.
 - Nothing has been left running overnight.
 
+### Step 4: settings (2026-10-11)
+First, one thing left from step 3.
+
+**The old map's inks are mixed across a stage's edge,** over one pixel, under the line that is drawn there. A spot on such an edge could turn from one ink to the other on the last bits of its age, which is what moved half a dozen pixels by up to 15 levels when the stamps' base moved (step 3). Now a move of the base changes 397 pixels of 1,484,784 in relief, 344 in the old map and 138 in Fisk's order, every one by a single level; the test holds it to 2. (Snapping the edge to the stamp's own steps would not have done it: between texels the age is smooth, not in steps, and any hard edge on a smooth number can flip on its last bits.)
+
 ## The plan
 One file, `Sources/Atrium/Meander.swift`: a `River` type with no SpriteKit in it (nodes, step, cutoff, fields, pixel bytes), the scene, its shader, knobs and palettes. Everything built in `sceneDidLoad`; steps owed at 10 a second in `update(_:)`; the texture uploaded only when a step ran.
 1. **The look first, in the prototype.** Four rounds are done (above): the lakes, the banks and the cheap distant past are in, and two films at two paces are made. Left for Dave: the pace, the old map's colour rule, and whether the distant past is worth its time at launch. Left in the prototype: relief toward the reference (levees, bars and islands). No Swift before he has seen it move: it is the Crystals risk.

@@ -239,25 +239,33 @@ final class Meander: SKScene {
     /// third of every stage.
     private static func map(rule: Int) -> String {
         let inks = rule == 0 ? """
-            float cover = 1.0 - 0.35 * clamp((old - 1.5) / 1.5, 0.0, 1.0) - 0.15 * clamp((old - 3.0) / 3.0, 0.0, 1.0) - 0.1 * clamp((old - 6.0) / 6.0, 0.0, 1.0)
-                - 0.17 * clamp((old - 12.0) / 18.0, 0.0, 1.0) - 0.11 * clamp((old - 30.0) / 60.0, 0.0, 1.0) - 0.12 * clamp((old - 90.0) / 30.0, 0.0, 1.0);
-            vec3 col = mix(paper, pick(mod(number, 4.0), u_ink0, u_ink1, u_ink2, u_ink3) * grain, cover);
+            float cover = (1.0 - 0.35 * clamp((old - 1.5) / 1.5, 0.0, 1.0) - 0.15 * clamp((old - 3.0) / 3.0, 0.0, 1.0) - 0.1 * clamp((old - 6.0) / 6.0, 0.0, 1.0)
+                - 0.17 * clamp((old - 12.0) / 18.0, 0.0, 1.0) - 0.11 * clamp((old - 30.0) / 60.0, 0.0, 1.0) - 0.12 * clamp((old - 90.0) / 30.0, 0.0, 1.0));
+            vec3 col = mix(paper, mix(pick(mod(number - 1.0, 4.0), u_ink0, u_ink1, u_ink2, u_ink3), pick(mod(number, 4.0), u_ink0, u_ink1, u_ink2, u_ink3), newer) * grain, cover);
         """ : """
-            float slide = smoothstep(0.67, 1.0, fract(u_turns.w));
-            vec2 was = inked(floor(u_turns.w) - number), next = inked(floor(u_turns.w) - number + 1.0);
-            float cover = mix(was.y, next.y, slide);
-            vec3 col = mix(mix(paper, pick(was.x, u_ink0, u_ink1, u_ink2, u_ink3) * grain, was.y),
-                           mix(paper, pick(next.x, u_ink0, u_ink1, u_ink2, u_ink3) * grain, next.y), slide);
+            // land in this stage, and in the one before it and the one before that, as Fisk inks land that old
+            float slide = smoothstep(0.67, 1.0, fract(u_turns.w)), ago = floor(u_turns.w) - number;
+            vec2 one = inked(ago), two = inked(ago + 1.0), three = inked(ago + 2.0);
+            vec3 first = mix(paper, pick(one.x, u_ink0, u_ink1, u_ink2, u_ink3) * grain, one.y);
+            vec3 second = mix(paper, pick(two.x, u_ink0, u_ink1, u_ink2, u_ink3) * grain, two.y);
+            vec3 third = mix(paper, pick(three.x, u_ink0, u_ink1, u_ink2, u_ink3) * grain, three.y);
+            float cover = mix(mix(two.y, three.y, slide), mix(one.y, two.y, slide), newer);
+            vec3 col = mix(mix(second, third, slide), mix(first, second, slide), newer);
         """
         return """
             // how many stages ago the river left here, and in which stage, counted so that the present is `u_turns.w`
-            float old = past / u_stage, staged = u_turns.w - old, number = floor(staged);
+            float old = past / u_stage, staged = u_turns.w - old;
             float grain = 1.0 + 0.023 * lumps(p / 1.5) + 0.019 * lumps(p / 20.0 + 3.0);
             vec3 paper = u_paper * grain;
+            // Where one stage meets the next its ink is mixed with the last one's across a pixel (`newer` is this
+            // stage's share), so the edge is smooth under its line, and a spot on it can't turn from one ink to
+            // the other on the last bits of its age. `rise` is stages to a point of the screen.
+            float rise = length(slope) * pt / u_stage + 1e-9, mixed = staged + 0.5 * rise * pixel / pt;
+            float number = floor(mixed), newer = clamp((mixed - number) / (rise * pixel / pt), 0.0, 1.0);
         \(inks)
             // thin lines where one stage meets the next and along old scarps; faint ridge-and-swale lines inside a stage
             // (none on ground that is dead flat, a cut-off loop's bed say: left all at once, it might be all on a line)
-            float rise = length(slope) * pt / u_stage + 1e-9, part = staged - number, sloping = min(rise * 1e4, 1.0);
+            float part = staged - floor(staged), sloping = min(rise * 1e4, 1.0);
             float edge = max(1.0 - smoothstep(0.2, 0.8, min(part, 1.0 - part) / rise), smoothstep(1.75, 4.0, rise * u_stage)) * sloping * (0.25 + 0.75 * smoothstep(0.0, 0.5, cover));
             float swale = fract(u_turns.x - past / 1.4), fine = rise * u_stage / 1.4;
             float hatch = (1.0 - smoothstep(0.15, 0.6, min(swale, 1.0 - swale) / fine)) * (1.0 - smoothstep(0.22, 0.4, fine)) * cover * sloping;

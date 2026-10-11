@@ -447,10 +447,11 @@ private func wetness(_ lake: River.Lake, at now: Double) -> [Float] {
 /// When the stamps' base moves up, the picture stays as it was. The scene is run at four times its pace until a
 /// move is nearly due, drawn, the base moved with the river standing still, and drawn again, in all three looks.
 /// Every age the shader works out is the same number as before but for its last bits, so a pixel in a few thousand
-/// rounds the other way, by one level: measured 2026-10-11 on a picture of 1,484,784 pixels, 407 in relief, 263
-/// and 118 in the old map's two rules (six of those by 2 to 15 levels, on a stage's line), where an ordinary step
-/// of the river changes 20,000 to 49,000; on this test's smaller picture, 4 to 14. Before the shader worked in
-/// ages, and the base moved by whole turns of the high byte, it was a sixth of them.
+/// rounds the other way, by one level and never more: measured 2026-10-11 on a picture of 1,484,784 pixels, 397
+/// in relief, 344 and 138 in the old map's two rules, where an ordinary step of the river changes 20,000 to
+/// 49,000; on this test's smaller picture, 9 to 14. Before the shader worked in ages, and the base moved by whole
+/// turns of the high byte, it was a sixth of them; and before the old map mixed its inks across a stage's edge,
+/// half a dozen pixels on such an edge turned from one ink to the other, by up to 15 levels.
 @MainActor @Test func meanderShowsNothingWhenItsStampsMoveUp() throws {
     for look: [String: Double] in [[:], ["meander.look": 1], ["meander.look": 1, "meander.rule": 1]] {
         try with(look.merging(["meander.seed": 7, "meander.speed": 4]) { $1 }) {
@@ -465,7 +466,7 @@ private func wetness(_ lake: River.Lake, at now: Double) -> [Float] {
             let changed = most.count { $0 > 0 }
             print("Meander, the stamps' base moved by \(river.base - base) T, look \(look): \(changed) of \(most.count) pixels changed, \(most.count { $0 > 1 }) by more than a level, the most by \(most.max()!)")
             #expect(river.base == base + River.turn && river.now == now, "the base moved from \(base) to \(river.base)")
-            #expect(changed < most.count / 2000 && most.max()! <= 20, "\(changed) of \(most.count) pixels changed when the base moved, the most by \(most.max()!), in the look \(look)")
+            #expect(changed < most.count / 2000 && most.max()! <= 2, "\(changed) of \(most.count) pixels changed when the base moved, the most by \(most.max()!), in the look \(look)")
         }
     }
 }
