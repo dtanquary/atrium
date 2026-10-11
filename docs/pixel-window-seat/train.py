@@ -74,6 +74,18 @@ M = {
     "wheat": (208, 190, 116), "pasture": (118, 164, 88), "crop": (90, 144, 76), "fallow": (152, 124, 94),
     "rape": (214, 200, 96), "ley": (150, 180, 108), "stubble": (190, 170, 124),
     "verge": (86, 128, 70), "ballast": (120, 112, 104),
+    "water": (0, 0, 0),  # a lake's water, in the ground rows only: it takes the sky's colours (number 32 in the build)
+    # the four more sceneries (train_scenery.py): mountains, snow, desert and steppe, a city
+    "rock": (140, 136, 140), "rockS": (98, 98, 114), "snow": (236, 240, 250), "snowS": (160, 180, 222), "ice": (200, 222, 238),
+    "alp": (134, 172, 84), "chalet": (118, 82, 58), "chaletS": (86, 62, 48), "river": (150, 196, 200),
+    "falu": (150, 52, 46), "faluS": (108, 42, 42), "birch": (128, 116, 118),
+    "sand": (218, 188, 136), "sandS": (178, 146, 110), "steppe": (192, 170, 106), "steppe1": (168, 152, 98),
+    "scrub": (122, 128, 88), "scrubS": (94, 102, 76), "mesa": (178, 110, 82), "mesaS": (136, 84, 74), "mesa2": (200, 140, 98),
+    "track": (200, 176, 136),
+    "conc": (152, 152, 158), "concS": (114, 116, 126), "glassT": (90, 116, 146), "glassTS": (62, 84, 114), "tar": (72, 74, 82),
+    "rail": (156, 156, 166), "glassW": (58, 66, 88),
+    # lights with nothing drawn under them by day: a street lamp, a red light on a tower, a sign, a white lamp
+    "lampO": (0, 0, 0), "lampR": (0, 0, 0), "lampT": (0, 0, 0), "lampW": (0, 0, 0),
 }
 NAMES = list(M)
 COL = np.array([M[n] for n in NAMES], dtype=np.float64)
