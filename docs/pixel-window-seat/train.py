@@ -283,7 +283,7 @@ def ring_strip(Z, n0, width, sun):
         a[hedge] = I["hedge"]
         if Z >= 1800:
             town = noise(wx[None, :] / 1400.0, 2.0, 4242) > 0.62
-            lamps |= body & town & (rnd(n[None, :], up, salt + 63) < 0.10)
+            lamps |= body & town & (rnd(n[None, :], up, salt + 63) < 0.035)
     wooded = fbm(wx / 900.0, Z / 300.0, 3, salt + 1)
     if Z >= 500:
         th = np.round((10 + 14 * fbm(wx / 60.0, 1.0, 3, salt + 2)) * ppm * np.clip((wooded - 0.50) * 9, 0, 1)).astype(int)
@@ -385,16 +385,105 @@ def shade(mat, time, Z=None, lift=None, lamps=None, horizon_rgb=None):
     return rgb
 
 
-def view(time="day", X=0.0, speed=13.3, horizon_up=0.30, cover=0.30, spill=False, cloud_seed=9):
+def water(pic, hy, time, t=0.0):
+    """The lake under the horizon: the sky's own colours turned over and deepened, small ripples that shimmer in
+    place (water has nothing in it to follow, so nothing slides), and a path of glitter under the Sun."""
+    rows = PH - hy
+    deep = {"day": (34, 78, 118), "sunset": (70, 56, 92), "dusk": (30, 34, 66), "night": (10, 14, 32)}[time]
+    out = np.zeros((rows, PW, 3))
+    sky_part = pic[:hy]
+    warm = sky_part[..., 0] + sky_part[..., 1] - sky_part[..., 2]  # the Sun or Moon is warm white; cloud is not
+    sun = np.unravel_index(np.argmax(warm), warm.shape) if warm.max() > 285 and sky_part.sum(-1)[np.unravel_index(np.argmax(warm), warm.shape)] > 650 else None
+    cols = np.arange(PW)
+    tick = int(t * 2.5)
+    for d in range(1, rows + 1):
+        src = sky_part[max(0, hy - 1 - int(d * 1.6))]
+        mirror = np.median(src, axis=0) * 0.6 + src * 0.4  # a breath of the clouds, softened
+        k = 0.30 + 0.35 * min(1.0, d / rows)
+        row = mirror * (1 - k) + np.array(deep) * k
+        L = 3 + d // 5
+        cell = (cols + (d * 7) % L) // L
+        r = rnd(cell, d * 131 + (tick + cell) // 3, 60)
+        row = row * np.where(r < 0.16, 1.10, np.where(r > 0.90, 0.90, 1.0))[:, None]
+        if sun is not None:
+            glint = np.exp(-np.abs(cols - sun[1]) / (5.0 + d * 0.45)) * (0.75 if time == "day" else 0.9)
+            on = rnd(cell, d * 17 + tick, 61) < glint
+            row[on] = row[on] * 0.25 + pic[sun] * 0.75
+        out[d - 1] = row
+    return out
+
+
+def pole_line(pic, hy, X, time, Z=28.0, spacing=50.0, height=8.2):
+    """A line of telegraph poles beside the track, far enough out to cross the window in a few seconds, with two
+    wires that rise to each pole and sag between: the one near thing, and a level rhythm."""
+    ppm = FOCAL / Z
+    tint, floor = light(time)
+    ink = np.array([52, 44, 40]) * tint + floor
+    wire = np.array([44, 40, 40]) * tint + floor
+    foot = hy + int(round(EYE * ppm))
+    top = foot - int(round(height * ppm))
+    n0 = int(np.floor(X * ppm)) - CX
+    cols = np.arange(PW) + n0
+    period = spacing * ppm
+    phase = (cols / period) % 1.0
+    sag = 4.0 * phase * (1 - phase)  # 0 at a pole, 1 mid-span
+    for off, drop in ((3, 5.0), (9, 6.0)):  # two wires, on the arm and under it
+        y = np.round(top + off + drop * sag).astype(int)
+        ok = (y >= 0) & (y < PH)
+        pic[y[ok], np.arange(PW)[ok]] = pic[y[ok], np.arange(PW)[ok]] * 0.35 + wire * 0.65
+    for k in range(int(np.floor(cols[0] / period)) - 1, int(np.floor(cols[-1] / period)) + 2):
+        x = int(round(k * period)) - n0
+        if 0 <= x < PW - 1:
+            pic[max(0, top): min(PH, foot), x: x + 2] = ink
+            pic[max(0, top + 2): top + 4, max(0, x - 5): x + 7] = ink  # the cross-arm
+    return pic
+
+
+def wet_glass(pic, rain, time, t, speed):
+    """Rain on the pane: the view softens, beads sit still, and a few long threads lie nearly level, as water does
+    on a moving train (about 9 degrees below level at speed; straight down at a stand)."""
+    soft = (np.roll(pic, 1, 1) + pic * 2 + np.roll(pic, -1, 1) + np.roll(pic, 1, 0) + np.roll(pic, -1, 0)) / 6
+    grey = soft.mean(axis=(0, 1))
+    out = soft * (1 - 0.22 * rain) + grey * 0.22 * rain
+    hi = np.clip(out.max(axis=(0, 1)) * 1.05 + 18, 0, 255)
+    n = int(120 * rain)
+    for k in range(n):  # beads: a light pixel over a dark one
+        x, y = int(rnd(k, 1, 90) * (PW - 2)), int(rnd(k, 2, 90) * (PH - 3))
+        big = rnd(k, 3, 90) < 0.22
+        out[y, x: x + 1 + big] = out[y, x: x + 1 + big] * 0.6 + hi * 0.4
+        out[y + 1, x: x + 1 + big] *= 0.7
+        if big:
+            out[y + 2, x: x + 2] *= 0.8
+    slope = np.tan(np.radians(9.0)) * min(1.0, speed / 10.0) + (0 if speed > 1 else 4.0)
+    xs = np.arange(PW)
+    for k in range(int(2 + 2 * rain)):  # threads
+        y0 = PH * (0.14 + 0.24 * k + 0.07 * rnd(k, 5, 91))
+        y = np.round(y0 + slope * xs + 1.4 * np.sin(xs / 7.0 + k * 2.1) * (rnd(xs // 9, k, 92) - 0.3)).astype(int)
+        ok = (y >= 1) & (y < PH - 1)
+        run = ((xs - t * 46 + k * 37) % 120) < 26  # water running along it
+        a = np.where(run, 0.5, 0.22)[ok][:, None]
+        out[y[ok], xs[ok]] = out[y[ok], xs[ok]] * (1 - a) + hi * a
+        out[y[ok] + 1, xs[ok]] *= 0.7
+    return out
+
+
+def view(time="day", X=0.0, speed=13.3, horizon_up=0.30, cover=0.30, spill=False, cloud_seed=9, scenery="country",
+         poles=False, rain=0.0, t=0.0):
     """The whole view through the pane, PH × PW × 3, with the train X metres along at `speed` m/s."""
     hy = round(PH * (1 - horizon_up))
     b = base(time)
     out = sky(time, hy, X, cover, cloud_seed)
     horizon_rgb = np.median(b[84:90, PX0:PX0 + PW].reshape(-1, 3), axis=0)
     sun = 1
-    gm, lift = ground(hy, X, speed)
-    out[hy:] = shade(gm, time, lift=lift)
+    if scenery == "lake":
+        out[hy:] = water(out, hy, time, t)
+    else:
+        gm, lift = ground(hy, X, speed)
+        out[hy:] = shade(gm, time, lift=lift)
+    lit = []
     for Z in RINGS:
+        if scenery == "lake" and Z < 1800:
+            continue  # the lake lies between us and the far shore
         ppm = FOCAL / Z
         n0 = int(np.floor(X * ppm)) - CX
         strip, lamps = ring_strip(Z, n0, PW, sun)
@@ -408,6 +497,18 @@ def view(time="day", X=0.0, speed=13.3, horizon_up=0.30, cover=0.30, spill=False
         region = out[ys]
         region[m[sub]] = rgb[sub][m[sub]]
         out[ys] = region
+        if time in ("night", "dusk"):
+            yy, xx = np.nonzero(lamps[sub])
+            lit += [(int(y) + max(0, y0), int(x)) for y, x in zip(yy, xx)]
+    if scenery == "lake" and lit:  # each lamp on the far shore leaves a broken streak in the water
+        for y, x in lit:
+            for k in range(1, 14):
+                if hy + k < PH and rnd(x, k + int(t * 2) * 31, 71) < 0.5 - k * 0.055:
+                    out[hy + k, x] = out[hy + k, x] * 0.45 + np.array([255, 204, 128]) * 0.55 * (1 - k / 16)
+    if poles:
+        out = pole_line(out, hy, X, time)
+    if rain > 0:
+        out = wet_glass(out, rain, time, t, speed)
     if spill and time in ("night", "dusk"):  # the carriage's own windows light the grass beside the line, and ride with us
         rows = PH - hy
         yy, xx = np.mgrid[0:rows, 0:PW]
@@ -521,9 +622,9 @@ def reflections(pic, time, kind):
     return pic
 
 
-def compose(time="day", kind="plain", X=5200.0, speed=13.3, horizon_up=0.30, cover=0.30):
+def compose(time="day", kind="plain", X=5200.0, speed=13.3, horizon_up=0.30, cover=0.30, **kw):
     """One finished frame of the canvas, CH × CW × 3 uint8."""
-    pic = reflections(view(time, X, speed, horizon_up, cover), time, kind)
+    pic = reflections(view(time, X, speed, horizon_up, cover, **kw), time, kind)
     cab = carriage(time, kind, horizon_up)
     out = np.zeros((CH, CW, 3))
     out[PY0: PY0 + PH, PX0: PX0 + PW] = pic
@@ -549,8 +650,15 @@ def sheet(name, tiles, cols=3, scale=3):
 if __name__ == "__main__":
     import sys
     X = float(sys.argv[1]) if len(sys.argv) > 1 else 52000.0
-    tiles = []
-    for time in ("day", "night"):
-        for kind, label in (("plain", "A  A plain window"), ("sill", "B  A sill and a curtain"), ("table", "C  A table and its lamp")):
-            tiles.append((f"{label}, by {time}", compose(time, kind, X)))
-    sheet("train-sheet1", tiles)
+    if "sheet2" in sys.argv:
+        tiles = [("D  A lake beside the line, by day", compose("day", "sill", X, scenery="lake")),
+                 ("E  The lake at night, from the table", compose("night", "table", X, scenery="lake")),
+                 ("F  A line of poles and wires 28 m out", compose("day", "sill", X, poles=True)),
+                 ("G  Rain on the glass at dusk", compose("dusk", "table", X, cover=0.62, rain=1.0))]
+        sheet("train-sheet2", tiles, cols=2)
+    else:
+        tiles = []
+        for time in ("day", "night"):
+            for kind, label in (("plain", "A  A plain window"), ("sill", "B  A sill and a curtain"), ("table", "C  A table and its lamp")):
+                tiles.append((f"{label}, by {time}", compose(time, kind, X)))
+        sheet("train-sheet1", tiles)

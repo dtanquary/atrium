@@ -9,8 +9,12 @@ That day two agents researched it (one read the code and worked the geometry, on
 - **Settings switch:** one menu of three, "Window on: An airliner, A train, The space station", in place of today's Earth orbit switch. Anyone with Earth orbit on must keep it (`seat.orbit` shipped in v0.107.0-beta).
 - **Carriage:** all three as a Settings choice: a plain window, a sill and a curtain, a table and its lamp (sheet 1, tiles A, B, C). I recommended the table; he took all three.
 - **1× on the Speed slider:** 48 km/h, a slow scenic train.
+- **Poles and wires:** yes, with a Settings switch, on by default: a line of telegraph poles 28 m out, 50 m apart, with two wires that rise to each pole and sag between (sheet 2, tile F, and its film).
+- **Rain on the glass** when it rains where you are: yes, on by default, with a switch and a preview menu (tile G).
+- **Scenery in the first version,** besides countryside: lake and coast (tiles D and E), mountains, snow, desert and city. He ticked all four offered.
+- **The glass after dark:** the lamp's ghost only, with the table; no ghost of the whole cabin.
 
-Not asked yet: the near ground (below), poles, rain on the glass, the night's reflection, stations, coast and mountain scenery, whether following the weather is on by default.
+Not asked yet: stations, tunnels and passing trains; which railway (overhead wires, telegraph poles, the steam age: the mock-up drew telegraph poles); a line running high above a valley.
 
 ## The finding that shapes it
 A thing `Z` metres from the track slides `focal × speed / Z` pixels a second, whatever its height and whatever the eye's height. With the airliner's lens (focal 265 art pixels):
@@ -57,7 +61,7 @@ A third scene, `PixelTrain` in `Sources/Atrium/PixelTrain.swift`, picked in `pix
 - **The genre** (ambience videos and pixel loops, all copyrighted, reference only): one warm light inside against one cool family outside; a flat, head-on window; at most three depths outside and nothing between the track and the middle distance (they dodge the blur by leaving the near field out); rain doing the moving; something still to rest the eye on (a lamp, a cup, a cat).
 
 ## Step plan
-0. **Mock-ups** (begun). Still to show Dave: a line running high above a lake or a valley against the flat country he has seen; a far pole line with its wires; rain; the night's reflection.
+0. **Mock-ups** (two rounds done). Still to show Dave before their steps: mountains, snow, desert and a city by night, each as geometry.
 1. **The mode menu.** `Settings.swift` (`Knob`, `KnobRow`: about ten lines so a gate can test a menu's value), the knobs in `PixelWindowSeat.swift` and `PixelOrbit.swift`, `OrbitTests.swift`. Accept: each mode's Settings shot shows only its own rows; a stored `seat.orbit=1` still opens the station; the orbit's documented shots come out the same byte for byte. Its own commit, before the train.
 2. **Lift the sky and the pane's outline out of the airliner.** Accept: the airliner's screenshots the same before and after, byte for byte.
 3. **`PixelTrain`:** rings, the slide, far-to-near painting. Accept: silhouettes match the mock-up to the pixel; each ring moves `focal × speed / Z` in two seconds, to a pixel; runs at any size; under 1.5 ms.
@@ -81,6 +85,8 @@ A third scene, `PixelTrain` in `Sources/Atrium/PixelTrain.swift`, picked in `pix
 In this folder, painted by `train.py` as geometry (the lens, the rings, the hashes are the ones a build would use, so a build can be matched to it):
 - `train-sheet1.png`: a plain window, a sill and a curtain, a table and its lamp, each by day and by night. Eye 3.5 m, horizon 30% up the pane, 48 km/h. The sky, Sun and stars are the app's own, from renders of the airliner (`train-base/`: `SNAPSHOT_DEFAULTS="seat.wing=1,seat.window=3,seat.previewTime=1,seat.previewHour=13,seat.clouds=1,seat.scenery=3"`, and hours 18.6, 19.6 and 23), reduced to art pixels.
 - A 14 s film of 48 km/h against 80 km/h went with it: `python3 train_film.py`.
+- `train-sheet2.png` (`python3 train.py 52000 sheet2`): a lake beside the line by day (D) and at night from the table (E), the pole line (F), rain at dusk (G). Its film, the lake, the poles and the rain side by side at 48 km/h: `python3 train_film2.py`.
+- In the mock-up the lake's ripples shimmer in place and don't slide (water has nothing in it to follow); the Sun's glitter is a path of dashes under it; each lamp on the far shore leaves a broken streak in the water. The rain is about 120 still beads, a light pixel over a dark one, kept faint so they don't read as stray white specks, and four threads 9° below level with water running along them.
 - `train_geometry.py` and `train_plan.py`: the arithmetic behind the tables above, by the engine research agent.
 - Light at dusk and night is the ratio of the airliner's own ground at that hour to noon's, with the night lifted (×2.1 and a blue floor), so it is a guess at the engine's light, not the engine's.
 
