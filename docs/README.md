@@ -39,7 +39,7 @@ One file per wallpaper, recording what the code can't: how each scene works, why
 - [app-store.md](app-store.md): the plan for the Mac App Store, what the sandboxed build did when tried, and the steps left.
 - [updates.md](updates.md): how the app updates itself by fetching only the files that changed, why it's built that way, what was measured and what isn't proven yet.
 - [ideas.md](ideas.md): wallpaper ideas not built yet, from the 2026-10-10 brainstorm: the two being researched, the parked ones, and the ones left out on purpose and why.
-- [black-hole.md](black-hole.md): the plan for a Black Hole wallpaper (not built): Dave's picks from the mock-ups, the method and its prototype, the numbers to build against, and the sources.
+- [black-hole.md](black-hole.md): Black Hole, built and in the app but hidden (`unfinished: true`) until Dave has judged it: his picks from the mock-ups, the method and its prototype, each build step with what was measured, and the sources.
 - [pixel-window-seat/train.md](pixel-window-seat/train.md): the plan for a train window in Pixel Window Seat (not built): the geometry, the real footage measured, Dave's picks and the step plan.
 - [meander.md](meander.md): the plan for Meander, a migrating river (not built): Dave's picks, Fisk's maps and lidar relief measured, the model and its prototype, and the sources.
 
