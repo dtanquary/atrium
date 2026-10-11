@@ -13,7 +13,12 @@ From sheet 1: the two real references (Fisk's sheet 6, and the same stretch of r
 - **Band colours:** palettes. Fisk's own four muted inks on cream, and single-ink palettes where older is simply paler.
 - **River size:** a slider, true to life by default (the channel about 2% of the screen's width), zooming in toward a bold river. The prototype's river was already that size (28 pt on a 1512 pt screen, 1.85%, 54 widths across), so the default is the small end and the slider zooms in from there, to about 56 pt. When he chose, I had told him the prototype's river was twice too wide; that was wrong (see [What is still wrong](#what-is-still-wrong-with-the-prototypes-pictures)).
 
-Not asked yet: the pace (it needs a film), Light and Dark Mode (the plan follows the system, as Wind does), and rivers "after a real one".
+From sheet 2 (2026-10-11), the same references above the second round:
+- **The next pass on relief:** "Keep refining toward M but all are amazing do them all." Keep refining relief toward the real lidar picture (M): the lake scraps and faceted banks first, then levees, bars and islands, crisper scroll bars. My reading of "do them all": keep every look on the sheet, the map in Fisk's four inks, the single inks and the dark versions, as well as relief. That is already the plan.
+- **The first frame:** try the cheap distant past, so a new river opens on a full floodplain: the older history drawn roughly in big coarse steps, then the recent past exactly. Untried; if it can't be done in about 0.3 s, fall back to the young belt.
+- **Light and Dark Mode:** the look is the user's choice and stays; its shade follows the system (the palette's paper version in Light Mode, its dark version in Dark Mode), as Wind does.
+
+Not asked yet: the pace (it needs a film), and rivers "after a real one".
 
 ## What the real things look like
 Measured on the downloaded references; these are the numbers to judge renders against.
@@ -177,14 +182,14 @@ Still wrong:
 
 ## The plan
 One file, `Sources/Atrium/Meander.swift`: a `River` type with no SpriteKit in it (nodes, step, cutoff, fields, pixel bytes), the scene, its shader, knobs and palettes. Everything built in `sceneDidLoad`; steps owed at 10 a second in `update(_:)`; the texture uploaded only when a step ran.
-1. **The look first, in the prototype.** A second round is done (`sheet2.jpg`). Left: the lakes, the faceted banks, the first frame, and whether relief needs levees and bars to hold up beside the reference. Then a film at two paces for Dave. No Swift before he has seen it move: it is the Crystals risk.
+1. **The look first, in the prototype.** A second round is done (`sheet2.jpg`). Left, in this order: the lakes and the faceted banks; the cheap distant past for the first frame; then relief toward the reference (levees, bars and islands, crisper scrolls). Then a film at two paces for Dave. No Swift before he has seen it move: it is the Crystals risk.
 2. **`River`** ported from `meander.py`, with its check: 6,000 coarse steps must cut off loops, never cross and stay in the valley; stepping by 1/15, 1/30 and 1/60 s for the same elapsed time must give identical nodes.
 3. **The texture and shader,** matched to `render.py`'s stills. Finds out the unknowns: the alpha byte carrying data, a second dependent read, the uniform count, the upload's cost.
 4. **Motion,** in frame strips through a cutoff: no frame with more than about 0.3% of pixels changing over 20 levels.
 5. **Settings:** Look (Relief, Old map); Colors, a list per look (relief: Survey Blue, Rainforest, Garnet, Amethyst; old map: Fisk 1944, Sage, Salmon, Teal, each with a dark version), Random by default; Speed (0.25–4×); River size (the slider Dave picked, from 28 pt to about 56 pt: a rebuild, keeping 14 texels a width so the cost stays the same); how long old courses stay; scroll-bar strength; how long lakes last; the shared grade knobs.
 6. Left overnight: no drift in pace, no banding from rebasing. Then the doc, screenshots, README, site.
 
-Still Dave's to decide: the pace (from a film); the first frame (leave the young belt at about 0.2 s to load; a longer history, about 0.45 s; or the distant past drawn cheaply with coarse steps, untried, perhaps 0.1 s more); Light Mode (paper map by day, or leave it to the Look setting).
+Still Dave's to decide: the pace (from a film).
 
 ## Risks, worst first
 1. Pretty, not just correct. The old map is already striking; the relief, the default, is calm and in one family but soft beside the real thing.
