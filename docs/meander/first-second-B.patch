@@ -1,0 +1,81 @@
+The first second after a cutoff, way B (docs/meander.md, "Still wrong", 1): near water, the land's own heights where most of the land in reach is new. Not in the app. Applies to Sources/Atrium/Meander.swift as of e156f13, the last commit to change it: git apply docs/meander/first-second-B.patch
+
+--- a/Sources/Atrium/Meander.swift
++++ b/Sources/Atrium/Meander.swift
+@@ -387,42 +387,53 @@
+         // in the seconds after a cutoff). The height is steep in age at first, so the smooth read's mix of ages came
+         // out nearly as high as the old ground wherever it had any old ground in it: the scarp in texel-sized
+         // stairs. There the height is mixed from the sixteen texels' own heights instead, by the same weights, and
+-        // its slope from them. Only on a slope with new land among the sixteen, and not within a texel and a half
+-        // of water (all of it from two texels off): settled ground is drawn as it was, and so is every bank, where the
+-        // water's own texels would come into the mix as land at the river's level and show as a light rim.
+-        // (Everything that decides it is mixed by those weights too, which fall to nothing as a texel goes out of
+-        // reach: the least or the most of the four reads changes at once there, and that showed as a chequerboard.)
+-        float drop = length(slope), scarp = smoothstep(0.25, 1.0, drop) * smoothstep(1.4, 2.0, bank);
+-        if (scarp > 0.0 && past - 3.0 * drop < 20.0) {
++        // its slope from them: their land's heights, with the water's share of each left out. Only on a slope
++        // with new land among the sixteen; and within two texels of water, only where that land stands well
++        // below the land two texels out, which is the strip the river leaves as it draws back. Settled ground is
++        // drawn as it was, and so is a bank, cut or built. (Everything that decides it is mixed by those weights
++        // too, which fall to nothing as a texel goes out of reach: the least or the most of the four reads changes
++        // at once there, and that showed as a chequerboard.)
++        float drop = length(slope), sloping = smoothstep(0.25, 1.0, drop) * smoothstep(1.4, 2.0, bank), stepped = smoothstep(2.0, 6.0, beside - 2.0 * past);
++        float scarp = max(sloping, stepped);
++        if (scarp > 0.0 && past - 3.0 * drop < 20.0 && water < 1.0) {
+             vec4 wx = vec4(w0.x, w1.x, w2.x, w3.x), wy = vec4(w0.y, w1.y, w2.y, w3.y);
+             vec2 d0 = -0.5 * (1.0 - s) * (1.0 - s), d1 = 1.5 * s * s - 2.0 * s, d3 = 0.5 * s * s, d2 = -d0 - d1 - d3; // the weights' slopes
+             vec4 dx = vec4(d0.x, d1.x, d2.x, d3.x), dy = vec4(d0.y, d1.y, d2.y, d3.y);
+-            float mixed = 0.0;
+-            vec2 sloped = vec2(0.0);
+-            vec4 ends = vec4(0.0); // for the lowest, the highest, the furthest gone and the youngest of them, softly
++            vec2 mixed = vec2(0.0), eastward = vec2(0.0), northward = vec2(0.0); // each the height, and the share under water
++            vec4 ends = vec4(0.0); // for the lowest, the highest, the furthest gone and the youngest of the land, softly
+             for (int row = 0; row < 4; row++) {
+                 for (int column = 0; column < 4; column++) {
+                     vec2 texel = (i + vec2(float(column), float(row)) - 0.5) / u_grid;
+                     vec4 one = texture2D(u_texture, texel), other = texture2D(u_other, texel);
+                     float aged = clamp(mix(u_t.x - (one.r * 65280.0 + one.g * 255.0) / 100.0, u_t.y - (other.r * 65280.0 + other.g * 255.0) / 100.0, u_blend), 0.0, 605.0);
+-                    vec2 its = stands(aged, u_knobs.y);
+-                    mixed += wx[column] * wy[row] * its.x;
+-                    sloped += vec2(dx[column] * wy[row], wx[column] * dy[row]) * its.x;
+-                    ends += wx[column] * wy[row] * exp(vec4(-30.0 * its.x, 30.0 * (its.x - 1.0), 30.0 * (its.y - 1.0), -0.5 * aged));
++                    float dry = clamp((mix(one.b, other.b, u_blend) - 0.5) * 4.0 + 0.5, 0.0, 1.0); // as the river counts a texel covered
++                    vec2 its = stands(aged, u_knobs.y), both = vec2(its.x, 1.0 - dry);
++                    mixed += wx[column] * wy[row] * both;
++                    eastward += dx[column] * wy[row] * both;
++                    northward += wx[column] * dy[row] * both;
++                    ends += wx[column] * wy[row] * dry * exp(vec4(-30.0 * its.x, 30.0 * (its.x - 1.0), 30.0 * (its.y - 1.0), -0.5 * aged));
+                 }
+             }
+-            scarp *= 1.0 - smoothstep(8.0, 20.0, -2.0 * log(ends.w)); // all of it where the youngest is under 8 T old, none over 20
++            // The land's own height: the mix less the water's part of it, which stands as high as its bed, over the
++            // land's share. (The river stamps a texel it is part-way across to stand as high as its land's share
++            // of it, `River.shared`, so this is the land's height right up to a bank.)
++            float ashore = max(1.0 - mixed.y, 0.05), bed = stands(wetAge, u_knobs.y).x, stood = (mixed.x - mixed.y * bed) / ashore;
++            vec2 sloped = (vec2(eastward.x, northward.x) + (stood - bed) * vec2(eastward.y, northward.y)) / ashore;
++            ends = max(ends / ashore, vec4(1e-30));
++            // Near water only where most of the land in reach is new land well below the land two texels out: the
++            // strip the river leaves as it draws back, once it is a texel or two wide. A bank whose edge alone is
++            // new is drawn as it was, crisp, and not with that edge as a pale fringe.
++            float lowest = -log(ends.x) / 30.0, outer = stands(beside, u_knobs.y).x;
++            scarp = max(sloping, stepped * smoothstep(0.55, 0.8, (outer - stood) / max(outer - lowest, 0.02)));
++            scarp *= 1.0 - smoothstep(8.0, 20.0, -2.0 * log(ends.w)); // all of it where the youngest land is under 8 T old, none over 20
+             // The ground is as far gone as the furthest gone of the sixteen, by how far the height is from the
+             // lowest of them to the highest: mixed from the texels' own, which are gone or not, the edge of ground
+             // the river never made came out in stairs too.
+-            float lowest = -log(ends.x) / 30.0, share = (1.0 + log(ends.z) / 30.0) / max(1.0 + log(ends.y) / 30.0 - lowest, 0.02);
+-            float lost = clamp((mixed - lowest) * share, 0.0, 1.0);
+-            // beside water the land is still the land two texels out, as a cut bank's is
+-            vec2 land = stands(beside, u_knobs.y), stepped = 6.0 * nearing * (1.0 - nearing) / 1.4 * 4.0 * vec2(across.b, up.b);
+-            height = mix(height, mix(mixed, land.x, near), scarp);
+-            wild = mix(wild, mix(lost, land.y, near), scarp);
+-            rise = mix(rise, (1.0 - near) * sloped - (land.x - mixed) * stepped, scarp);
+-            fading = mix(fading, (1.0 - near) * share * sloped - (land.y - lost) * stepped, scarp);
++            float share = (1.0 + log(ends.z) / 30.0) / max(1.0 + log(ends.y) / 30.0 - lowest, 0.02);
++            height = mix(height, stood, scarp);
++            wild = mix(wild, clamp((stood - lowest) * share, 0.0, 1.0), scarp);
++            rise = mix(rise, sloped, scarp);
++            fading = mix(fading, share * sloped, scarp);
+         }
+         // an old channel stays low for a long while, but never at once: a lake first
+         float dip = clamp((0.66 - low) / 0.12, 0.0, 1.0), settled = smoothstep(2.0, 12.0, wetAge) * exp(-wetAge / 140.0);
