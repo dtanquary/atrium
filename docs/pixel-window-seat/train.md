@@ -372,6 +372,11 @@ The team lead accepted sheet 3 on Dave's standing word that all four be built (D
   - **Nothing lies on the pole line or the fence,** and the carriage's frame is as in any other country.
   - **Not looked at:** any Speed but 1×; any window but Large; Settings' page; the app.
 
+### After snow: onto main's table and lamp (2026-10-11)
+- **The branch was rebased onto main again** (the table and its lamp, the lamp's ghost in the glass, the table as the carriage a train starts with). One collision, in `trainNightIsNeverBlack`: main's line that holds the test to the plain window, and this branch's that adds snow to its sceneries. Both kept. Nothing in `PixelTrain.swift` collided.
+- **Checked by running** after it, in release, under the lock: the whole suite, 101 tests pass; the byte check for everything, 15,313,976 bytes compared, 0 differ; `shots.sh`, 25 of 25 the same files as before step 1.
+- **Looked at:** the whole canvas with the table, snow at 18:18 under scattered cloud and at 23:00: the curtain, the table and the lamp before the fells; at night the lamp's ghost and its glow lie over the snow at the right of the pane.
+
 ## Research for the next mock-ups
 - **The window.** Real glass, width to height: a TGV bar car 1.94:1, a EuroNight sleeper 1.46:1, a British Mark 1 bay 1.2:1 with top-lights, an Amtrak Superliner coach 2.75:1, a Shinkansen N700 0.96:1 (520 × 500 mm: an airliner's window again). The mock-ups' pane is the airliner's, 1.54:1. A wide picture window (about 1.9:1) fills a 16:10 screen best.
 - **The eye:** about 2.5 m above the rail on a European intercity, 3.85 m upstairs in a Superliner; add 0.5–1 m of track bed.
