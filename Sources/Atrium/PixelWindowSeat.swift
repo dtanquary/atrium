@@ -183,18 +183,12 @@ final class PixelWindowSeat: SKScene {
         // 15 to 30 times a second. Painting is most of the scene's cost.
         paintEvery = 1 / min(30, max(15, kmPerSecond / rows[0].cloudAcross * 1.5))
         let (gw, gh) = (glass.w, glass.h)
-        let spot = Location.shared.coordinate, jd = Sky.julianDate(now)
-        let turn = Sky.horizonMatrix(jd: jd, latitude: spot.latitude, longitude: spot.longitude)
-        func seen(_ v: Sky.Vector) -> (elevation: Double, azimuth: Double) {
-            let v = turn * v // east, north, up
-            return (asin(v.z) * 180 / .pi, (atan2(v.x, v.y) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360))
-        }
-        let sun = seen(Sky.sun(jd)), moon = seen(Sky.moon(jd, latitude: spot.latitude, longitude: spot.longitude).direction)
-        let phase = Sky.moonPhase(jd)
-        let el = Float(sun.elevation)
-        night = smoothstep(4, -8, el)
-        sunUp = smoothstep(-1, 6, el)
-        let pick = Int(Self.looking.value), facing = pick == 0 ? (spot.latitude >= 0 ? 180.0 : 0) : Double(pick - 1) * 45
+        let spot = Location.shared.coordinate
+        let above = SeatSky(now, latitude: spot.latitude, longitude: spot.longitude, looking: Int(Self.looking.value), w: gw, h: gh, horizon: horizon)
+        let (sun, moon, phase, el, facing) = (above.sun, above.moon, above.phase, above.el, above.facing)
+        let (sunSpot, moonSpot) = (above.sunSpot, above.moonSpot)
+        let (moonlight, ambient, key, haze, veil) = (above.moonlight, above.ambient, above.key, above.haze, above.veil)
+        (night, sunUp, sky) = (above.night, above.sunUp, above.picture)
 
         // A change of scenery or cloud is a different world: every row is laid again.
         let (scenery, weather) = (Int(Self.scenery.value), Int(Self.clouds.value))
@@ -207,70 +201,6 @@ final class PixelWindowSeat: SKScene {
         world.sun = el > 5 ? (SIMD2(sin(toSun), cos(toSun)), tan(Double(el) * .pi / 180)) : nil
         let sunSide = sunUp > 0.2 ? (sin(toSun) > 0.25 ? 1 : sin(toSun) < -0.25 ? -1 : 0) : 0
 
-        // The sky, banded and dithered as Pixel City's is, and deeper overhead: there's less air above us.
-        let (zenith, sunward) = PixelCity.skyColours(el, morning: sun.azimuth < 180)
-        let top = zenith * mix(0.78, 1, night), low = smoothstep(-10, -2, el) * smoothstep(12, 3, el)
-        let lilac = mix(top, rgb(226, 156, 176), 0.5)
-        let span = 250.0 // degrees of compass across the pane: wide, so sunrise and sunset stay in view all year
-        let horizons = (0..<gw).map { x -> RGB in
-            let azimuth = facing + (Double(x) / Double(gw) - 0.5) * span
-            return mix(sunward, lilac, Float(1 - cos((azimuth - sun.azimuth) * .pi / 180)) / 2 * low * 0.85)
-        }
-        func place(_ p: (elevation: Double, azimuth: Double)) -> (x: Int, y: Int) {
-            let dx = (p.azimuth - facing + 540).truncatingRemainder(dividingBy: 360) - 180
-            let rise = p.elevation < 0 ? p.elevation * 4 : pow(p.elevation / 60, 0.75) * Double(gh - horizon)
-            return (Int(Double(gw) * (0.5 + dx / span)), horizon + Int(rise))
-        }
-        var px = Pixels(gw, gh)
-        let sunSpot = place(sun), band: Float = 0.4
-        let glare = smoothstep(-10, 0, el) * (1 - smoothstep(6, 20, el)) * 0.7 + 0.15 * smoothstep(0, 10, el)
-        let glareColour = mix(rgb(255, 128, 64), rgb(255, 214, 150), smoothstep(-2, 10, el))
-        let reach = mix(1, 0.35, smoothstep(4, 20, el))
-        for y in horizon..<gh {
-            let t = Float(y - horizon) / Float(gh - horizon)
-            for x in 0..<gw {
-                let d = bayer(x, y)
-                var c = mix(horizons[x], top, pow(min(1, (t * 14 + (1 - band) / 2 + d * band).rounded(.down) / 14), 0.6))
-                if glare > 0 {
-                    let gx = Float(x - sunSpot.x) / (90 * reach), gy = Float(y - sunSpot.y) / (40 * reach)
-                    c = mix(c, glareColour, (glare * exp(-(gx * gx + gy * gy)) * 5 + 0.3 + d * 0.4).rounded(.down) / 5)
-                }
-                px.plot(x, y, pointwiseMin(c, .one))
-            }
-        }
-        var stars = SeededRandom(state: 1903)
-        let starlight = smoothstep(-5, -12, el)
-        for _ in 0..<(gw * (gh - horizon) / 110) {
-            let x = Int.random(in: 0..<gw, using: &stars), y = Int.random(in: horizon + 2..<gh, using: &stars)
-            let brightness = Float.random(in: 0.25...1, using: &stars)
-            let a = starlight * brightness * smoothstep(0, 0.35, Float(y - horizon) / Float(gh - horizon))
-            px.plot(x, y, rgb(255, 248, 232), a)
-            if brightness > 0.93 { for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] { px.plot(x + dx, y + dy, rgb(200, 210, 255), a * 0.35) } }
-        }
-        let moonSpot = place(moon)
-        if moon.elevation > -2 {
-            // The Moon's disc, lit on the right while waxing as the northern hemisphere sees it.
-            let r = 6, k = Float(1 - 2 * phase.lit), right = phase.waxing == (spot.latitude >= 0)
-            for dy in -r...r {
-                for dx in -r...r where dx * dx + dy * dy <= r * r + 2 {
-                    let edge = k * max(0, 1 - Float(dy * dy) / Float(r * r)).squareRoot() * Float(r)
-                    let lit = right ? Float(dx) > edge : Float(dx) < -edge
-                    px.plot(moonSpot.x + dx, moonSpot.y + dy, lit ? rgb(242, 240, 222) : rgb(40, 46, 72), lit ? mix(0.5, 1, night) : 0.5 * night * night)
-                }
-            }
-        }
-        if sun.elevation > -3 {
-            let colour = mix(rgb(255, 150, 80), rgb(255, 246, 214), smoothstep(0, 12, el))
-            for dy in -5...5 { for dx in -5...5 where dx * dx + dy * dy <= 27 { px.plot(sunSpot.x + dx, sunSpot.y + dy, colour) } }
-        }
-        let skyBytes = px.bytes(topDown: false)
-        skyBytes.withUnsafeBytes { sky = Array($0.bindMemory(to: UInt32.self)) }
-
-        // Light on the land: what the sky gives it, plus the Sun from above, or the Moon by how much of it is lit.
-        let moonlight = rgb(120, 140, 200) * Float(phase.lit) * smoothstep(0, 10, Float(moon.elevation)) * night
-        let ambient = mix(mix(RGB(0.8, 0.84, 0.92), RGB(0.4, 0.4, 0.56), smoothstep(16, 0, el)), RGB(0.035, 0.045, 0.085), night)
-        let key = PixelCity.sunColour(el) * (0.3 + 0.7 * sin(max(el, 0) * .pi / 180)) + moonlight * 0.1
-        let haze = mix(horizons[gw / 2], top, 0.12), veil = mix(top, haze, 0.35) * mix(0.8, 0.25, night)
         paint = Paint(mats: Mat.day.count)
         paint.sunSide = sunSide
         for step in 0..<Paint.steps {
@@ -333,9 +263,10 @@ final class PixelWindowSeat: SKScene {
 
     // MARK: - The cabin and the wing
 
-    /// How far a canvas pixel is outside the pane's rounded outline, in pixels (negative inside it).
-    private func outsidePane(_ x: Int, _ y: Int) -> Float {
-        let a = Float(glass.w) / 2, b = Float(glass.h) / 2, round = min(a, b) * 0.58
+    /// How far a canvas pixel is outside a pane's rounded outline, in pixels (negative inside it). `round` is its
+    /// corners' radius: the airliner's are 58% of the pane's shorter half.
+    static func outside(_ glass: (x: Int, y: Int, w: Int, h: Int), _ x: Int, _ y: Int, round: Float? = nil) -> Float {
+        let a = Float(glass.w) / 2, b = Float(glass.h) / 2, round = round ?? min(a, b) * 0.58
         let qx = abs(Float(x) + 0.5 - (Float(glass.x) + a)) - a + round, qy = abs(Float(y) + 0.5 - (Float(glass.y) + b)) - b + round
         return (max(qx, 0) * max(qx, 0) + max(qy, 0) * max(qy, 0)).squareRoot() + min(max(qx, qy), 0) - round
     }
@@ -349,7 +280,7 @@ final class PixelWindowSeat: SKScene {
         let glow = mix(light, haze, 0.35) // the daylight on the reveal
         for y in 0..<h {
             for x in 0..<w {
-                let d = outsidePane(x, y)
+                let d = Self.outside(glass, x, y)
                 if d < 0 {
                     if y >= shadeEnd { px.plot(x, y, y == shadeEnd ? shade * 0.72 : mix(shade, shade * 1.12, bayer(x, y) > Float(y - shadeEnd) / 14 ? 0 : 1)) }
                 } else if d < 1.5 {
@@ -576,6 +507,106 @@ final class PixelWindowSeat: SKScene {
 }
 
 // MARK: - Supporting types
+
+/// The sky through a window seat's pane at a moment and a place, which the airliner and the train share: where the
+/// Sun and Moon stand, the sky banded and dithered as Pixel City's is, with its glare, stars, Moon and Sun, and the
+/// light all of it gives the land.
+struct SeatSky {
+    /// The Sun and the Moon, in degrees, and how much of the Moon is lit.
+    let sun: (elevation: Double, azimuth: Double), moon: (elevation: Double, azimuth: Double), phase: (lit: Double, waxing: Bool)
+    /// The compass bearing straight out of the window, and where the Sun and the Moon are drawn on the pane.
+    let facing: Double, sunSpot: (x: Int, y: Int), moonSpot: (x: Int, y: Int)
+    /// The Sun's height in degrees, how far night has fallen and how far the Sun is up, each 0 to 1.
+    let el: Float, night: Float, sunUp: Float
+    /// The pane, with its sky painted from the horizon's row up. Its rows run from the bottom, as a mutable texture's do.
+    let picture: [UInt32]
+    /// Light on the land: the Moon's, the sky's, and the Sun's with a little of the Moon's. Then the colour distance
+    /// fades toward, and the colour of the air's own veil.
+    let moonlight: RGB, ambient: RGB, key: RGB, haze: RGB, veil: RGB
+
+    /// `pick` is Settings' Looking: 0 toward the midday Sun, then the eight compass points from north. `horizon` is
+    /// the row of a pane `gw` by `gh` that the horizon lies on, counted from its bottom.
+    @MainActor init(_ now: Date, latitude: Double, longitude: Double, looking pick: Int, w gw: Int, h gh: Int, horizon: Int) {
+        let jd = Sky.julianDate(now)
+        let turn = Sky.horizonMatrix(jd: jd, latitude: latitude, longitude: longitude)
+        func seen(_ v: Sky.Vector) -> (elevation: Double, azimuth: Double) {
+            let v = turn * v // east, north, up
+            return (asin(v.z) * 180 / .pi, (atan2(v.x, v.y) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360))
+        }
+        let sun = seen(Sky.sun(jd)), moon = seen(Sky.moon(jd, latitude: latitude, longitude: longitude).direction)
+        let phase = Sky.moonPhase(jd)
+        let el = Float(sun.elevation)
+        let night = smoothstep(4, -8, el)
+        let facing = pick == 0 ? (latitude >= 0 ? 180.0 : 0) : Double(pick - 1) * 45
+
+        // The sky, banded and dithered as Pixel City's is, and deeper overhead: there's less air above us.
+        let (zenith, sunward) = PixelCity.skyColours(el, morning: sun.azimuth < 180)
+        let top = zenith * mix(0.78, 1, night), low = smoothstep(-10, -2, el) * smoothstep(12, 3, el)
+        let lilac = mix(top, rgb(226, 156, 176), 0.5)
+        let span = 250.0 // degrees of compass across the pane: wide, so sunrise and sunset stay in view all year
+        let horizons = (0..<gw).map { x -> RGB in
+            let azimuth = facing + (Double(x) / Double(gw) - 0.5) * span
+            return mix(sunward, lilac, Float(1 - cos((azimuth - sun.azimuth) * .pi / 180)) / 2 * low * 0.85)
+        }
+        func place(_ p: (elevation: Double, azimuth: Double)) -> (x: Int, y: Int) {
+            let dx = (p.azimuth - facing + 540).truncatingRemainder(dividingBy: 360) - 180
+            let rise = p.elevation < 0 ? p.elevation * 4 : pow(p.elevation / 60, 0.75) * Double(gh - horizon)
+            return (Int(Double(gw) * (0.5 + dx / span)), horizon + Int(rise))
+        }
+        var px = Pixels(gw, gh)
+        let sunSpot = place(sun), band: Float = 0.4
+        let glare = smoothstep(-10, 0, el) * (1 - smoothstep(6, 20, el)) * 0.7 + 0.15 * smoothstep(0, 10, el)
+        let glareColour = mix(rgb(255, 128, 64), rgb(255, 214, 150), smoothstep(-2, 10, el))
+        let reach = mix(1, 0.35, smoothstep(4, 20, el))
+        for y in horizon..<gh {
+            let t = Float(y - horizon) / Float(gh - horizon)
+            for x in 0..<gw {
+                let d = bayer(x, y)
+                var c = mix(horizons[x], top, pow(min(1, (t * 14 + (1 - band) / 2 + d * band).rounded(.down) / 14), 0.6))
+                if glare > 0 {
+                    let gx = Float(x - sunSpot.x) / (90 * reach), gy = Float(y - sunSpot.y) / (40 * reach)
+                    c = mix(c, glareColour, (glare * exp(-(gx * gx + gy * gy)) * 5 + 0.3 + d * 0.4).rounded(.down) / 5)
+                }
+                px.plot(x, y, pointwiseMin(c, .one))
+            }
+        }
+        var stars = SeededRandom(state: 1903)
+        let starlight = smoothstep(-5, -12, el)
+        for _ in 0..<(gw * (gh - horizon) / 110) {
+            let x = Int.random(in: 0..<gw, using: &stars), y = Int.random(in: horizon + 2..<gh, using: &stars)
+            let brightness = Float.random(in: 0.25...1, using: &stars)
+            let a = starlight * brightness * smoothstep(0, 0.35, Float(y - horizon) / Float(gh - horizon))
+            px.plot(x, y, rgb(255, 248, 232), a)
+            if brightness > 0.93 { for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] { px.plot(x + dx, y + dy, rgb(200, 210, 255), a * 0.35) } }
+        }
+        let moonSpot = place(moon)
+        if moon.elevation > -2 {
+            // The Moon's disc, lit on the right while waxing as the northern hemisphere sees it.
+            let r = 6, k = Float(1 - 2 * phase.lit), right = phase.waxing == (latitude >= 0)
+            for dy in -r...r {
+                for dx in -r...r where dx * dx + dy * dy <= r * r + 2 {
+                    let edge = k * max(0, 1 - Float(dy * dy) / Float(r * r)).squareRoot() * Float(r)
+                    let lit = right ? Float(dx) > edge : Float(dx) < -edge
+                    px.plot(moonSpot.x + dx, moonSpot.y + dy, lit ? rgb(242, 240, 222) : rgb(40, 46, 72), lit ? mix(0.5, 1, night) : 0.5 * night * night)
+                }
+            }
+        }
+        if sun.elevation > -3 {
+            let colour = mix(rgb(255, 150, 80), rgb(255, 246, 214), smoothstep(0, 12, el))
+            for dy in -5...5 { for dx in -5...5 where dx * dx + dy * dy <= 27 { px.plot(sunSpot.x + dx, sunSpot.y + dy, colour) } }
+        }
+        picture = px.bytes(topDown: false).withUnsafeBytes { Array($0.bindMemory(to: UInt32.self)) }
+
+        // Light on the land: what the sky gives it, plus the Sun from above, or the Moon by how much of it is lit.
+        let moonlight = rgb(120, 140, 200) * Float(phase.lit) * smoothstep(0, 10, Float(moon.elevation)) * night
+        let ambient = mix(mix(RGB(0.8, 0.84, 0.92), RGB(0.4, 0.4, 0.56), smoothstep(16, 0, el)), RGB(0.035, 0.045, 0.085), night)
+        let key = PixelCity.sunColour(el) * (0.3 + 0.7 * sin(max(el, 0) * .pi / 180)) + moonlight * 0.1
+        let haze = mix(horizons[gw / 2], top, 0.12), veil = mix(top, haze, 0.35) * mix(0.8, 0.25, night)
+        (self.sun, self.moon, self.phase, self.facing, self.sunSpot, self.moonSpot) = (sun, moon, phase, facing, sunSpot, moonSpot)
+        (self.el, self.night, sunUp) = (el, night, smoothstep(-1, 6, el))
+        (self.moonlight, self.ambient, self.key, self.haze, self.veil) = (moonlight, ambient, key, haze, veil)
+    }
+}
 
 /// One row of ground and the strip of cloud layer the same row of the picture looks at: how many km of each a pixel
 /// spans along the track, how far off it is and how many km deep the row is, how many pixels a km of height stands

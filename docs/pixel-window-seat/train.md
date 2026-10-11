@@ -61,6 +61,12 @@ Hidden: Settings offers the train only with `unfinished` set (`defaults write co
 - **Not checked:** the Settings window itself, which the test can only photograph by opening it on screen: `SETTINGS_SHOT="Pixel Window Seat" swift test --filter settingsWindow`, then with `SNAPSHOT_DEFAULTS="seat.orbit=1"`, and for the menu with `SNAPSHOT_DEFAULTS="unfinished=1,seat.orbit=2"`. The app was not run.
 - **Wrong, or a shortcut:** picking the train still flies the airliner, until step 3. If `unfinished` is taken away again after the train was picked, the stored 2 reads as the switch on and flies the station with the station's rows hidden, until the switch is touched (a `ponytail:` on `PixelOrbit.picker`).
 
+### Step 2, the sky and the pane's outline lifted out (2026-10-11)
+- **In:** `SeatSky` (PixelWindowSeat.swift): the airliner's own lines for where the Sun and Moon stand, the banded sky with its glare, stars, Moon and Sun, and the light on the land (the Moon's, the sky's, the Sun's, the haze's colour and the veil's), moved out of `redraw` into a type that takes a moment, a place, Settings' Looking, a pane's size and the row of its horizon. The airliner builds one every 30 s and reads it. `PixelWindowSeat.outside(_:_:_:round:)` is the pane's outline for any pane and any corner radius; the airliner's own is its default.
+- **Left alone:** the orbit's frame keeps its own copy of the outline (PixelOrbit.swift, `paintFrame`), since it also needs the two half-measures the outline is made from, for its bolts.
+- **Checked by running:** the 25 pictures of `shots.sh` are the same files as before step 1, byte for byte. All 69 tests pass in a release build. No new compiler warnings.
+- **Not checked:** a sky for any horizon but the airliner's (62% up the pane); the train's is lower, and step 3 is the first to build one. The app was not run.
+
 ## Research for the next mock-ups
 - **The window.** Real glass, width to height: a TGV bar car 1.94:1, a EuroNight sleeper 1.46:1, a British Mark 1 bay 1.2:1 with top-lights, an Amtrak Superliner coach 2.75:1, a Shinkansen N700 0.96:1 (520 × 500 mm: an airliner's window again). The mock-ups' pane is the airliner's, 1.54:1. A wide picture window (about 1.9:1) fills a 16:10 screen best.
 - **The eye:** about 2.5 m above the rail on a European intercity, 3.85 m upstairs in a Superliner; add 0.5–1 m of track bed.
