@@ -19,33 +19,36 @@ import os
 import sys
 import numpy as np
 import train
+import train_scenery
 
 folder = sys.argv[1]
 compared = differed = 0
-for path in sorted(glob.glob(f"{folder}/ring-*.bin")):
-    _, z, x = os.path.basename(path)[:-4].split("-")
-    Z, X = int(z), float(x)
+# The other sceneries' files carry their names in front ("mountains-ring-…"), and are set against train_scenery.py.
+for path in sorted(glob.glob(f"{folder}/*ring-*.bin")):
+    *kind, _, z, x = os.path.basename(path)[:-4].split("-")
+    kind, Z, X = (kind or ["country"])[0], int(z), float(x)
     ours = np.fromfile(path, dtype=np.uint8).reshape(-1, train.PW)  # rows up from the foot
-    theirs, lamps = train.ring_strip(Z, int(np.floor(X * train.FOCAL / Z)) - train.CX, train.PW, 1)
+    theirs, lamps = train_scenery.ring_strip(kind, Z, int(np.floor(X * train.FOCAL / Z)) - train.CX, train.PW, 1)
     theirs = (theirs + 128 * lamps)[::-1].astype(np.uint8)
     tall = max(len(ours), len(theirs))
     a, b = np.zeros((tall, train.PW), np.uint8), np.zeros((tall, train.PW), np.uint8)
     a[:len(ours)], b[:len(theirs)] = ours, theirs
     wrong = int((a != b).sum())
     compared, differed = compared + a.size, differed + wrong
-    print(f"ring {Z:>6} m at {X:>10}: {a.size:>6} bytes, {int((b > 0).sum()):>5} of them land, {int((b > 127).sum()):>3} lamps, {wrong} differ")
-for path in sorted(glob.glob(f"{folder}/ground-*.bin")):
-    X = float(os.path.basename(path)[7:-4])
+    print(f"{kind} ring {Z:>6} m at {X:>10}: {a.size:>6} bytes, {int((b > 0).sum()):>5} of them land, {int((b > 127).sum()):>3} lamps, {wrong} differ")
+for path in sorted(glob.glob(f"{folder}/*ground-*.bin")):
+    *kind, _, x = os.path.basename(path)[:-4].split("-")
+    kind, X = (kind or ["country"])[0], float(x)
     hy = round(train.PH * 0.7)
     rows = train.PH - hy
     ours = np.fromfile(path, dtype=np.uint8).reshape(2, rows, train.PW)
-    theirs, lift = train.ground(hy, X, 13.3)
+    theirs, lift = train_scenery.ground(hy, X, 13.3, kind)
     d = np.arange(1, rows + 1)[:, None]
     away = train.EYE * train.FOCAL / d
     ours_lift = np.where(away > 100, 0.0, (ours[1].astype(float) - 2) * np.where(away > train.VERGE_M, 0.03, 0.045) + ((d // 3) % 2) * 0.022)
     wrong = int((ours[0] != theirs).sum()) + int((np.abs(ours_lift - lift) > 1e-12).sum())
     compared, differed = compared + ours.size, differed + wrong
-    print(f"ground at {X:>10}: {ours.size} bytes (materials, and the dashes' tones), {wrong} differ")
+    print(f"{kind} ground at {X:>10}: {ours.size} bytes (materials, and the dashes' tones), {wrong} differ")
 for path in sorted(glob.glob(f"{folder}/poles-*.bin")):
     X = float(os.path.basename(path)[6:-4])
     ours = np.fromfile(path, dtype=np.uint8).reshape(train.PH, train.PW)[::-1]  # rows from the top, as theirs

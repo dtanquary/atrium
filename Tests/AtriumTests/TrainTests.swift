@@ -32,18 +32,22 @@ import Testing
 
 /// What keeps it calm at any speed: no lamp is laid on a ring that slides faster than `TrainWorld.bright` pixels a
 /// second, none of the lane's poles on one faster than `thin`, and nothing that stands (a tree, a house) on one
-/// faster than `broad`.
-@Test func trainNothingThinIsFast() {
+/// faster than `broad`. In each country held, and left to change.
+@Test(arguments: [0, 1, 3]) func trainNothingThinIsFast(scenery: Int) {
     var standing = 0, lamps = 0
+    // What only a thing that stands is made of: a trunk, a window, a wall. (In the mountains fir is also the forest
+    // on the land's face, which is land; a fir that stands has a trunk.)
+    let stood = [TrainMat.trunk, TrainMat.glass, TrainMat.white, TrainMat.brick, TrainMat.roof, TrainMat.chalet] + (scenery == 1 ? [TrainMat.fir0, TrainMat.fir1] : [])
     for times in [0.5, 1, 1.5, 2, 3, 4, 6, 8, 10] {
-        let world = TrainWorld(focal: 265.2, eye: 3.5, speed: PixelTrain.pace * times)
+        var world = TrainWorld(focal: 265.2, eye: 3.5, speed: PixelTrain.pace * times)
+        world.scenery = scenery
         for ring in 3..<TrainWorld.rings.count {
             let rows = world.rows(ring), pace = world.perMetre(ring) * world.speed
             var column = [UInt8](repeating: 0, count: rows)
             for n in stride(from: 100_000, to: 106_000, by: 1) {
                 _ = column.withUnsafeMutableBufferPointer { world.column(ring, n, into: $0.baseAddress!) }
                 let lit = column.contains { $0 > 127 }, pole = column.contains { $0 & 127 == TrainMat.pole }
-                let stands = column.contains { [TrainMat.trunk, TrainMat.fir0, TrainMat.fir1, TrainMat.glass, TrainMat.white, TrainMat.brick, TrainMat.roof].contains($0 & 127) }
+                let stands = column.contains { stood.contains($0 & 127) }
                 (standing, lamps) = (standing + (stands ? 1 : 0), lamps + (lit ? 1 : 0))
                 if pace > TrainWorld.bright { #expect(!lit, "at \(times)× the ring \(TrainWorld.rings[ring]) m off slides \(pace) px/s and holds a lamp") }
                 if pace > TrainWorld.thin { #expect(!pole, "at \(times)× the ring \(TrainWorld.rings[ring]) m off slides \(pace) px/s and holds a pole") }
@@ -55,11 +59,11 @@ import Testing
 }
 
 /// The night must never be a black pane: along an hour of track, every minute's view has lamps in it, as the
-/// painter shows it, with what stands in front hiding what is behind. Through countryside, and beside a lake.
+/// painter shows it, with what stands in front hiding what is behind. Through each scenery held.
 @MainActor @Test func trainNightIsNeverBlack() {
     let keys = [PixelWindowSeat.previewTime.key, PixelWindowSeat.previewHour.key, PixelTrain.scenery.key]
     defer { for key in keys { UserDefaults.standard.removeObject(forKey: key) } }
-    for (scenery, name) in [(1.0, "countryside"), (2, "a lake")] {
+    for (scenery, name) in [(1.0, "countryside"), (2, "a lake"), (3, "the mountains")] {
         for (key, value) in zip(keys, [1, 23, scenery]) { UserDefaults.standard.set(value, forKey: key) }
         let scene = PixelTrain(size: CGSize(width: 1512, height: 982))
         var seen: [Int] = []
@@ -87,6 +91,41 @@ import Testing
     print("train lakes: beside \(beside / 200)% of the line; a lake is \(lakes[lakes.count / 2] / 10) km at the median and \(lakes[lakes.count * 9 / 10] / 10) at the ninetieth percentile; the country between \(country[country.count / 2] / 10) and \(country[country.count * 9 / 10] / 10)")
     #expect(beside > 3000 && beside < 9000, "a lake lies beside \(beside / 200)% of the line")
     #expect(lakes[lakes.count * 9 / 10] < 200 && country[country.count * 9 / 10] < 400, "a stretch often runs on too long")
+}
+
+/// Left to change, the line passes through each country for a fair share of it, in stretches neither so short
+/// that the wallpaper is restless nor so long that it seems stuck (at 1× the train covers 800 m a minute). And where
+/// one country meets the next there is no seam: the land on every ring has sunk to within a pixel of the track's
+/// level on both sides.
+@Test func trainPassesThroughCountries() {
+    var world = TrainWorld(focal: 265.2, eye: 3.5, speed: PixelTrain.pace)
+    world.scenery = 0
+    var share: [TrainCountry: Int] = [:], runs: [Int] = [], run = 0, last = world.country(0).kind, meets: [Double] = []
+    for step in 1...40_000 { // 4,000 km, a sample every 100 m
+        let kind = world.country(Double(step) * 100).kind
+        share[kind, default: 0] += 1
+        if kind == last { run += 1 } else { runs.append(run); meets.append(Double(step) * 100); (last, run) = (kind, 1) }
+    }
+    runs.sort()
+    print("train countries: \(share.map { "\($0.key) \($0.value / 400)%" }.sorted().joined(separator: ", ")); a stretch is \(runs[runs.count / 10] / 10) km at the tenth percentile, \(runs[runs.count / 2] / 10) at the median, \(runs[runs.count * 9 / 10] / 10) at the ninetieth; the first meet near metres \(meets.prefix(4).map { Int($0) })")
+    #expect(share.count == TrainWorld.passing.count + 1 && share.values.allSatisfy { $0 > 2000 }, "a country has under a twentieth of the line: \(share)")
+    #expect(runs[runs.count / 10] >= 80 && runs[runs.count * 9 / 10] <= 800, "stretches run from \(runs.first!) to \(runs.last!) hundred metres")
+    var tallest = 0
+    for meet in meets.prefix(40) {
+        // (to the metre the countries meet at, from the samples either side of it)
+        var (low, high) = (meet - 100, meet)
+        while high - low > 0.01 { let mid = (low + high) / 2; if world.country(mid).kind == world.country(meet - 100).kind { low = mid } else { high = mid } }
+        for ring in TrainWorld.rings.indices where ring < 8 { // (the three nearest rings have no swell: all they hold stands on them)
+            var column = [UInt8](repeating: 0, count: world.rows(ring))
+            for side in [-1.0, 1] {
+                let n = Int((low + side * 2) * world.perMetre(ring))
+                let top = Int(column.withUnsafeMutableBufferPointer { world.column(ring, n, into: $0.baseAddress!) })
+                tallest = max(tallest, top)
+                #expect(top <= 1, "where two countries meet at metre \(Int(low)), the ring \(TrainWorld.rings[ring]) m off stands \(top) px high")
+            }
+        }
+    }
+    #expect(tallest <= 1)
 }
 
 /// No lamp jumps more than its own width between frames: at 30 frames a second and at 60, at any Speed, a ring slow
@@ -118,7 +157,7 @@ import Testing
 @MainActor @Test func trainLooksTheSameAtAnyFrameRate() {
     let keys = [PixelWindowSeat.previewTime.key, PixelWindowSeat.previewHour.key, PixelTrain.scenery.key]
     defer { for key in keys { UserDefaults.standard.removeObject(forKey: key) } }
-    for scenery in [1.0, 2] {
+    for scenery in [1.0, 2, 3] {
         for (key, value) in zip(keys, [1, 13, scenery]) { UserDefaults.standard.set(value, forKey: key) }
         var pictures: [[UInt32]] = []
         // (From an odd metre: 2.2 s at 1× is 29⅓ m, and from a whole one three rows of ground would end exactly on
@@ -140,14 +179,15 @@ import Testing
 /// Moving the Speed slider lays nothing again: at the moment it moves the picture stays as it was, pole line
 /// and all, though at 3× the line and the nearest trees are too fast to be laid. Only what comes into view from
 /// then on goes by the new speed.
-@MainActor @Test func trainKeepsItsCountryAsTheSpeedChanges() {
+@MainActor @Test(arguments: [1.0, 3]) func trainKeepsItsCountryAsTheSpeedChanges(scenery: Double) {
     let keys = [PixelWindowSeat.previewTime.key, PixelWindowSeat.previewHour.key, PixelTrain.scenery.key, PixelWindowSeat.speed.key]
     defer { for key in keys { UserDefaults.standard.removeObject(forKey: key) } }
-    for (key, value) in zip(keys, [1, 13, 1, 1.0]) { UserDefaults.standard.set(value, forKey: key) }
+    for (key, value) in zip(keys, [1, 13, scenery, 1.0]) { UserDefaults.standard.set(value, forKey: key) }
     PixelTrain.travelled = 52_000
     let scene = PixelTrain(size: CGSize(width: 1512, height: 982))
-    scene.update(6000)
-    scene.update(6000 + 1 / 30.0)
+    let from = 6000 + scenery * 100
+    scene.update(from)
+    scene.update(from + 1 / 30.0)
     let before = scene.picture
     for speed in [3.0, 10, 0.5, 1] {
         UserDefaults.standard.set(speed, forKey: PixelWindowSeat.speed.key)
@@ -156,7 +196,7 @@ import Testing
     // Then, at 3×, the nearest ring empties from its leading edge as it slides, and no tree is left half laid: its
     // trees and firs come whole or not at all, so every column of the ring is either empty or as 1× would lay it.
     UserDefaults.standard.set(3.0, forKey: PixelWindowSeat.speed.key)
-    for frame in 2...40 { scene.update(6000 + Double(frame) / 30) }
+    for frame in 2...40 { scene.update(from + Double(frame) / 30) }
     #expect(scene.picture != before)
 }
 
@@ -199,28 +239,32 @@ import Testing
     let folder = URL(fileURLWithPath: ProcessInfo.processInfo.environment["TRAIN_MATCH"]!)
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     var world = TrainWorld(focal: 265, eye: 3.5, speed: 13.3) // the Large pane, its horizon 30% up
-    world.scenery = 1 // countryside, as the sheets' was
     let wide = 340, ground = 66
-    for x in [52000.0, 52137.25, 3.0, 1_234_567.5] {
-        for ring in TrainWorld.rings.indices {
-            let rows = world.rows(ring), first = Int((x * world.perMetre(ring)).rounded(.down)) - wide / 2
-            var strip = [UInt8](repeating: 0, count: rows * wide), column = [UInt8](repeating: 0, count: rows)
-            for i in 0..<wide {
-                let top = Int(column.withUnsafeMutableBufferPointer { world.column(ring, first + i, into: $0.baseAddress!) })
-                #expect(column[top...].allSatisfy { $0 == 0 }, "column \(first + i) of the ring \(TrainWorld.rings[ring]) m off stands above its top")
-                for up in 0..<rows { strip[up * wide + i] = column[up] }
+    // Countryside, as the first sheets' was, and then each of the other sceneries held, its files under its name.
+    for (scenery, name) in [(1, ""), (3, "mountains-")] {
+        world.scenery = scenery
+        for x in [52000.0, 52137.25, 3.0, 1_234_567.5] {
+            for ring in TrainWorld.rings.indices {
+                let rows = world.rows(ring), first = Int((x * world.perMetre(ring)).rounded(.down)) - wide / 2
+                var strip = [UInt8](repeating: 0, count: rows * wide), column = [UInt8](repeating: 0, count: rows)
+                for i in 0..<wide {
+                    let top = Int(column.withUnsafeMutableBufferPointer { world.column(ring, first + i, into: $0.baseAddress!) })
+                    #expect(column[top...].allSatisfy { $0 == 0 }, "column \(first + i) of the ring \(TrainWorld.rings[ring]) m off stands above its top")
+                    for up in 0..<rows { strip[up * wide + i] = column[up] }
+                }
+                try Data(strip).write(to: folder.appendingPathComponent("\(name)ring-\(Int(TrainWorld.rings[ring]))-\(x).bin"))
             }
-            try Data(strip).write(to: folder.appendingPathComponent("ring-\(Int(TrainWorld.rings[ring]))-\(x).bin"))
+            var rows = [UInt8](repeating: 0, count: 2 * ground * wide) // the materials, then the dashes' tones
+            for d in 1...ground {
+                let first = Int((x * (Double(d) / world.eye)).rounded(.down)) - wide / 2
+                for i in 0..<wide { (rows[(d - 1) * wide + i], rows[(ground + d - 1) * wide + i]) = world.ground(d, first + i) }
+            }
+            try Data(rows).write(to: folder.appendingPathComponent("\(name)ground-\(x).bin"))
+            guard scenery == 1 else { continue } // (the pole line is the same in every country)
+            var line = [UInt8](repeating: 0, count: wide * 221) // the pole line: 1 for a wire, 2 for a pole, rows from the bottom
+            world.poleLine(at: x, wide: wide, high: 221, horizon: ground) { line[$1 * wide + $0] = $2 ? 2 : max(line[$1 * wide + $0], 1) }
+            try Data(line).write(to: folder.appendingPathComponent("poles-\(x).bin"))
         }
-        var rows = [UInt8](repeating: 0, count: 2 * ground * wide) // the materials, then the dashes' tones
-        for d in 1...ground {
-            let first = Int((x * (Double(d) / world.eye)).rounded(.down)) - wide / 2
-            for i in 0..<wide { (rows[(d - 1) * wide + i], rows[(ground + d - 1) * wide + i]) = world.ground(d, first + i) }
-        }
-        try Data(rows).write(to: folder.appendingPathComponent("ground-\(x).bin"))
-        var line = [UInt8](repeating: 0, count: wide * 221) // the pole line: 1 for a wire, 2 for a pole, rows from the bottom
-        world.poleLine(at: x, wide: wide, high: 221, horizon: ground) { line[$1 * wide + $0] = $2 ? 2 : max(line[$1 * wide + $0], 1) }
-        try Data(line).write(to: folder.appendingPathComponent("poles-\(x).bin"))
     }
 }
 

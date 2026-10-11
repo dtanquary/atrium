@@ -12,8 +12,8 @@ import SpriteKit
 final class PixelTrain: SKScene {
     /// What country the line runs through: whatever comes, or held on one kind. (A menu of the train's own: the
     /// airliner's has sceneries the train hasn't got yet, and its ocean is the train's lake.)
-    nonisolated static let scenery = Knob(key: "seat.country", label: "Scenery", range: 0...2, standard: 0, section: "Flight",
-                                          format: .choice(["Changing", "Countryside", "A lake beside the line"]), shownWhen: "seat.orbit", shownAt: 2)
+    nonisolated static let scenery = Knob(key: "seat.country", label: "Scenery", range: 0...3, standard: 0, section: "Flight",
+                                          format: .choice(["Changing", "Countryside", "A lake beside the line", "Mountains"]), shownWhen: "seat.orbit", shownAt: 2)
     nonisolated static let poles = Knob(key: "seat.poles", label: "Poles and wires beside the line", range: 0...1, standard: 1, section: "Flight",
                                         format: .toggle, shownWhen: "seat.orbit", shownAt: 2)
     /// The train's own settings, listed among the airliner's (`PixelWindowSeat.rows`) while the train is offered.
@@ -161,7 +161,7 @@ final class PixelTrain: SKScene {
         let light = (above.ambient + above.key) * 0.78 * mix(1, 3.9, night) + above.haze * (0.4 * low), floor = rgb(9, 13, 27) * night
         let mats = TrainMat.day.count
         for (k, ring) in rings.enumerated() {
-            let far = Float(1 - exp(-ring.away / TrainWorld.haze))
+            let far = Float(1 - exp(-ring.away / world.haze(Self.travelled)))
             for (m, base) in TrainMat.day.enumerated() { ringColours[k * mats + m] = pack(mix(pointwiseMin(base * light + floor, .one), above.haze, far)) }
         }
         // The ground, in the five tones a dash can take in each of a row's kinds: the far fields, which have no
@@ -369,6 +369,16 @@ enum TrainMat {
     static let verge: UInt8 = 30, ballast: UInt8 = 31
     /// A lake's water, in the ground rows only: it has no colour of its own, and takes the sky's (`PixelTrain.water`).
     static let water: UInt8 = 32
+    /// The other countries' (TrainScenery.swift): rock, snow and ice, an alp's grass, a chalet's timber, a glacier's
+    /// river; a cabin's red paint and a dwarf birch's twigs; sand, steppe grass, scrub, a mesa's bands and a dirt
+    /// track; a city's concrete, glass towers, tar and rails. `glassCool` is a window that lights white. The last four
+    /// are lights with nothing drawn under them by day: a street lamp, a red light on a tower, a green sign, a white lamp.
+    static let rock: UInt8 = 33, rockShade: UInt8 = 34, snow: UInt8 = 35, snowShade: UInt8 = 36, ice: UInt8 = 37, alp: UInt8 = 38
+    static let chalet: UInt8 = 39, chaletShade: UInt8 = 40, river: UInt8 = 41, falu: UInt8 = 42, faluShade: UInt8 = 43, birch: UInt8 = 44
+    static let sand: UInt8 = 45, sandShade: UInt8 = 46, steppe: UInt8 = 47, steppeDry: UInt8 = 48, scrub: UInt8 = 49, scrubShade: UInt8 = 50
+    static let mesa: UInt8 = 51, mesaShade: UInt8 = 52, mesaPale: UInt8 = 53, track: UInt8 = 54
+    static let concrete: UInt8 = 55, concreteShade: UInt8 = 56, tower: UInt8 = 57, towerShade: UInt8 = 58, tar: UInt8 = 59, rail: UInt8 = 60
+    static let glassCool: UInt8 = 61, lampSodium: UInt8 = 62, lampRed: UInt8 = 63, lampGreen: UInt8 = 64, lampWhite: UInt8 = 65
     /// Each one's colour in full daylight, before the haze.
     static let day: [RGB] = [
         .zero, rgb(40, 78, 50), rgb(60, 106, 58), rgb(94, 138, 68), rgb(64, 52, 46), rgb(32, 64, 54), rgb(48, 88, 66),
@@ -377,6 +387,12 @@ enum TrainMat {
         rgb(50, 90, 48), rgb(70, 112, 56), rgb(128, 126, 126), rgb(58, 50, 46),
         rgb(208, 190, 116), rgb(118, 164, 88), rgb(90, 144, 76), rgb(152, 124, 94), rgb(214, 200, 96), rgb(150, 180, 108), rgb(190, 170, 124),
         rgb(86, 128, 70), rgb(120, 112, 104), .zero,
+        rgb(140, 136, 140), rgb(98, 98, 114), rgb(236, 240, 250), rgb(160, 180, 222), rgb(200, 222, 238), rgb(134, 172, 84),
+        rgb(118, 82, 58), rgb(86, 62, 48), rgb(150, 196, 200), rgb(150, 52, 46), rgb(108, 42, 42), rgb(128, 116, 118),
+        rgb(218, 188, 136), rgb(178, 146, 110), rgb(192, 170, 106), rgb(168, 152, 98), rgb(122, 128, 88), rgb(94, 102, 76),
+        rgb(178, 110, 82), rgb(136, 84, 74), rgb(200, 140, 98), rgb(200, 176, 136),
+        rgb(152, 152, 158), rgb(114, 116, 126), rgb(90, 116, 146), rgb(62, 84, 114), rgb(72, 74, 82), rgb(156, 156, 166),
+        rgb(58, 66, 88), .zero, .zero, .zero, .zero,
     ]
 }
 
@@ -424,7 +440,7 @@ struct TrainWorld {
     var speed: Double
     /// Which side things are lit from: 1 from the right of the picture, -1 from the left.
     var sun = 1
-    /// Settings' Scenery: 0 for whatever comes, 1 for countryside, 2 for a lake beside the line.
+    /// Settings' Scenery: 0 for whatever comes, 1 for countryside, 2 for a lake beside the line, 3 for mountains.
     var scenery = 0
     /// A lake's far shore is the ring this far off, and those beyond it: nearer rings stand on our side of the water.
     static let farShore = 1800.0
@@ -448,7 +464,7 @@ struct TrainWorld {
     func rows(_ ring: Int) -> Int {
         let z = Self.rings[ring], ppm = focal / z
         let most = z >= 15000 ? (z >= 30000 ? 2600 : 950) * ppm + 1 : (34 * ppm).rounded(.up) + 3 + Self.rise[ring] * ppm
-        return min(max(Int(most.rounded(.up)), 2), 255)
+        return min(max(Int(most.rounded(.up)), 2, otherRows(ring)), 255)
     }
 
     /// Lays column `n` of a ring into `cells`, its foot first: far off, a hill or a range as a line of heights,
@@ -460,6 +476,8 @@ struct TrainWorld {
     func column(_ ring: Int, _ n: Int, into cells: UnsafeMutablePointer<UInt8>, by laid: [Laying] = []) -> UInt8 {
         let z = Self.rings[ring], ppm = focal / z, wx = Double(n) / ppm, salt = UInt64(z), rows = rows(ring)
         cells.update(repeating: 0, count: rows)
+        let land = country(wx), relief = land.relief(z) // (1 unless Scenery is left to change: the land sinks where one country meets the next)
+        if land.kind != .farmland { return otherColumn(land.kind, ring, n, into: cells, by: laid, relief: relief) }
         if z >= 15000 {
             let high: Double
             if z >= 30000 {
@@ -468,7 +486,7 @@ struct TrainWorld {
             } else {
                 high = 950 * clip(fbm(wx / (z * 0.9), z / 4000, 4, salt) * 1.5 - 0.28)
             }
-            let top = min(Int((high * ppm).rounded(.toNearestOrEven)), rows)
+            let top = min(Int((high * relief * ppm).rounded(.toNearestOrEven)), rows)
             guard top > 0 else { return 0 }
             let wooded = fbm(wx / (z * 0.12), 7, 3, salt + 5)
             for up in 0..<top {
@@ -491,7 +509,7 @@ struct TrainWorld {
             return (ppm * (by?.speed ?? speed), by?.sun ?? sun)
         }
         let pace = when(n).pace
-        let rise = Self.rise[ring], swell = rise == 0 ? 0 : rise * clip(fbm(wx / (z * 1.3) + 3, z / 2000, 3, salt + 60) * 1.7 - 0.42)
+        let rise = Self.rise[ring], swell = rise == 0 ? 0 : rise * clip(fbm(wx / (z * 1.3) + 3, z / 2000, 3, salt + 60) * 1.7 - 0.42) * relief
         let swollen = Int((swell * ppm).rounded(.toNearestOrEven)), face = min(swollen, rows)
         if face > 0 {
             let long = Self.fieldLength[ring], deep = max(2, Double(swollen) / 3 + 0.5)
@@ -508,7 +526,7 @@ struct TrainWorld {
         // Woods along its top, where the country is wooded: a ragged line too far off to tell one tree from the next.
         if z >= 500 {
             let wooded = fbm(wx / 900, z / 300, 3, salt + 1)
-            let tall = Int(((10 + 14 * fbm(wx / 60, 1, 3, salt + 2)) * ppm * clip((wooded - 0.50) * 9)).rounded(.toNearestOrEven))
+            let tall = Int(((10 + 14 * fbm(wx / 60, 1, 3, salt + 2)) * ppm * clip((wooded - 0.50) * 9) * relief).rounded(.toNearestOrEven))
             top = min(face + tall, rows)
             for up in face..<top { cells[up] = unit(hash(n, up, salt + 3)) < 0.35 ? TrainMat.leaf1 : TrainMat.leaf0 }
         }
@@ -520,6 +538,7 @@ struct TrainWorld {
             for c in here - 2...here + 2 {
                 let draw = unit(hash(c, 1, salt + 30)), at = (Double(c) + unit(hash(c, 2, salt + 31))) * plot
                 guard z >= Self.farShore || z <= shore(at) else { continue } // its plot is in the water, though this column isn't
+                guard stands(at, in: .farmland) else { continue } // or in another country, or astride the two
                 let village = noise(at / 1400, 2, 4242), seed = Int(hash(c, 3, salt + 32) % (1 << 30))
                 let stamp: Stamp, spired = z == 900 && village > 0.70 && draw < 0.2
                 if spired {
@@ -617,12 +636,13 @@ struct TrainWorld {
     func ground(_ d: Int, _ n: Int, dashed: Double? = nil) -> (land: UInt8, dash: UInt8) {
         let z = eye * focal / Double(d), ppm = Double(d) / eye, wx = Double(n) / ppm, pace = ppm * speed
         if z > shore(wx) { return (TrainMat.water, 0) }
+        let look = country(wx).kind.ground // what this country's rows are made of
         if z > 100, pace <= Self.broad {
             let belt = d <= 1 ? 0 : d <= 2 ? 1 : d <= 4 ? 2 : 3, long = 230.0 + 60 * Double(belt)
             let along = wx / long + Double(belt) * 0.37, field = Int(along.rounded(.down))
-            if pace <= Self.thin, abs(along - along.rounded(.toNearestOrEven)) * long < max(1.5, 1.2 / ppm),
-               unit(hash(field, belt, 4101)) < 0.6 { return (TrainMat.hedge, 2) }
-            return (Self.fields[Int(unit(hash(field, belt, 4100)) * Double(Self.fields.count))], 2)
+            if let hedge = look.hedge, pace <= Self.thin, abs(along - along.rounded(.toNearestOrEven)) * long < max(1.5, 1.2 / ppm),
+               unit(hash(field, belt, 4101 + look.salt)) < 0.6 { return (hedge, 2) }
+            return (look.fields[Int(unit(hash(field, belt, 4100 + look.salt)) * Double(look.fields.count))], 2)
         }
         let tone = fbm(dashed ?? Double(n) / dashLength(d), Double(d) / 3, 2, 4300)
         // One crop for a long way means for a long time: above 1× a crop is as many times longer as the train is
@@ -632,9 +652,10 @@ struct TrainWorld {
         // tick: each change can start a new crop at the leading edge.)
         let faster = pow(1.5, (log(max(1, speed / PixelTrain.pace)) / log(1.5)).rounded()), soft = faster > 1 ? (tone - 0.5) * 0.06 : 0
         let lane = Int((eye * focal / Self.lane).rounded(.toNearestOrEven))
-        let land = d == lane - 2 ? TrainMat.hedge : d == lane - 1 ? TrainMat.hedgeLit : d == lane ? TrainMat.road
-            : z > Self.lane ? (fbm(wx / (1500 * faster), 0.5, 2, 4200) + soft > 0.5 ? TrainMat.ley : TrainMat.wheat)
-            : z > Self.verge ? (fbm(wx / (1900 * faster), 1.5, 2, 4201) + soft > 0.5 ? TrainMat.pasture : TrainMat.crop) : TrainMat.verge
+        let land = d == lane - 2 ? look.lines.0 : d == lane - 1 ? look.lines.1 : d == lane ? look.lines.2
+            : look.rails.contains { Int((eye * focal / $0).rounded(.toNearestOrEven)) == d } ? look.rail
+            : z > Self.lane ? (fbm(wx / (1500 * faster), 0.5, 2, 4200 + look.salt) + soft > 0.5 ? look.far.0 : look.far.1)
+            : z > Self.verge ? (fbm(wx / (1900 * faster), 1.5, 2, 4201 + look.salt) + soft > 0.5 ? look.near.0 : look.near.1) : look.verge
         return (land, UInt8(min(max((tone * 5).rounded(.down), 0), 4)))
     }
 }
@@ -642,7 +663,7 @@ struct TrainWorld {
 /// A small drawn thing that stands on a ring, `w` pixels wide and `h` tall: `column` gives one of its columns, its
 /// top first, 0 where it is see-through. They are the mock-ups' own (train.py), and lit from the side `sun` says:
 /// 1 from the right.
-private struct Stamp {
+struct Stamp {
     let w: Int, h: Int, column: (_ x: Int, _ sun: Int) -> [UInt8]
 
     /// A broadleaf tree `tall` pixels high: a ragged round crown in three tones over a trunk.
