@@ -135,7 +135,8 @@ extension TrainWorld {
         if z >= 3500 {
             let snowline = [2300.0, 2100, 1900, 1500, 99999][ring], shade = clip(-slope / 4), sunny = clip(0.30 + slope * 0.06)
             for up in 0..<face {
-                let alt = Double(up) / ppm, lit = unit(hash(n, up, salt + 6)) >= shade, draw = unit(hash(n, up, salt + 7)) - 0.5
+                // (Speckle is drawn two pixels at a time along a row, so that a ring sliding a pixel changes half as much of it.)
+                let alt = Double(up) / ppm, lit = unit(hash(n >> 1, up, salt + 6)) >= shade, draw = unit(hash(n >> 1, up, salt + 7)) - 0.5
                 let crag = fbm(wx / (z * 0.05 + 300), alt / 110, 3, salt + 5) // cliffs, clearings and gullies
                 if alt > snowline + draw * 260 - (crag - 0.5) * 700 {
                     cells[up] = crag > 0.70 ? TrainMat.rockShade : lit ? TrainMat.snow : TrainMat.snowShade
@@ -160,7 +161,7 @@ extension TrainWorld {
             let wooded = fbm(wx / 900, z / 300, 3, salt + 1)
             let tall = Int(((10 + 14 * fbm(wx / 60, 1, 3, salt + 2)) * ppm * clip((wooded - 0.50) * 9) * relief).rounded(.toNearestOrEven))
             top = min(face + tall, rows)
-            for up in face..<top { cells[up] = unit(hash(n, up, salt + 3)) >= 0.35 ? TrainMat.fir0 : TrainMat.fir1 }
+            for up in face..<top { cells[up] = unit(hash(n >> 1, up, salt + 3)) >= 0.35 ? TrainMat.fir0 : TrainMat.fir1 }
         }
         guard z <= 7000 else { return UInt8(top) } // (the ranges beyond have no plots, and nothing lit)
         let plot = Self.plot[ring], here = Int((wx / plot).rounded(.down))

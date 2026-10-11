@@ -173,13 +173,14 @@ def ring_strip(kind, Z, n0, width, sun):
     up = H - 1 - yy
     alt = up / ppm  # metres above the track
     body = up < sp[None, :]
-    jit = rnd(n[None, :], up, salt + 6)
+    # (Speckle is drawn two pixels at a time along a row, so that a ring sliding a pixel changes half as much of it.)
+    jit = rnd(n[None, :] // 2, up, salt + 6)
     lit = jit >= np.clip(-slope[None, :] / 4.0, 0, 1)  # level ground is lit; a face turned away is in shade, raggedly
 
     # the land's face
     if kind == "mountains" and Z >= 3500:
         snowline = {60000: 2300.0, 30000: 2100.0, 15000: 1900.0, 7000: 1500.0, 3500: 99999.0}[Z]
-        j2 = rnd(n[None, :], up, salt + 7) - 0.5
+        j2 = rnd(n[None, :] // 2, up, salt + 7) - 0.5
         crag = fbm(wx[None, :] / (Z * 0.05 + 300.0), alt / 110.0, 3, salt + 5)  # cliffs, clearings and gullies
         forest = alt < 1050.0 + j2 * 160 + (crag - 0.5) * 500
         meadow = alt < 1400.0 + j2 * 200 + (crag - 0.5) * 300
@@ -220,7 +221,7 @@ def ring_strip(kind, Z, n0, width, sun):
         most = 9.0 if kind == "mountains" else 14.0  # (a plateau is bare but for its sheltered hollows)
         th = np.round((10 + 14 * fbm(wx / 60.0, 1.0, 3, salt + 2)) * ppm * clip((wooded - 0.50 - (kind == "snow") * 0.08) * most)).astype(int)
         fringe = (up >= sp[None, :]) & (up < (sp + th)[None, :])
-        dark = rnd(n[None, :], up, salt + 3) >= 0.35 if kind == "mountains" else up < (sp + th)[None, :] - 1  # (or under snow)
+        dark = rnd(n[None, :] // 2, up, salt + 3) >= 0.35 if kind == "mountains" else up < (sp + th)[None, :] - 1  # (or under snow)
         a[fringe] = np.where(dark, I["fir0"], I["fir1"] if kind == "mountains" else I["snow"])[fringe]
 
     # what stands in each plot of track
