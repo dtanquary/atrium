@@ -4,8 +4,8 @@
     python3 docs/pixel-window-seat/train_match.py /some/folder
 
 The test writes each ring's strip and the ground rows at the mock-ups' own numbers (the Large pane, focal 265, the
-eye 3.5 m up, the horizon 30% up, 13.3 m/s) at a few places along the line. Left out of the mock-up's side, since
-the build has none yet: its stamps (trees, houses, a church), the lane's poles and the lamps.
+eye 3.5 m up, the horizon 30% up, 13.3 m/s) at a few places along the line. A strip's byte is its material, with
+128 added where a lamp is.
 """
 import glob
 import os
@@ -13,22 +13,20 @@ import sys
 import numpy as np
 import train
 
-train.tree = train.fir = train.house = train.spire = lambda *a, **k: None
 folder = sys.argv[1]
 compared = differed = 0
 for path in sorted(glob.glob(f"{folder}/ring-*.bin")):
     _, z, x = os.path.basename(path)[:-4].split("-")
     Z, X = int(z), float(x)
     ours = np.fromfile(path, dtype=np.uint8).reshape(-1, train.PW)  # rows up from the foot
-    theirs, _ = train.ring_strip(Z, int(np.floor(X * train.FOCAL / Z)) - train.CX, train.PW, 1)
-    theirs = theirs[::-1].copy()
-    theirs[theirs == train.I["pole"]] = 0
+    theirs, lamps = train.ring_strip(Z, int(np.floor(X * train.FOCAL / Z)) - train.CX, train.PW, 1)
+    theirs = (theirs + 128 * lamps)[::-1].astype(np.uint8)
     tall = max(len(ours), len(theirs))
     a, b = np.zeros((tall, train.PW), np.uint8), np.zeros((tall, train.PW), np.uint8)
     a[:len(ours)], b[:len(theirs)] = ours, theirs
     wrong = int((a != b).sum())
     compared, differed = compared + a.size, differed + wrong
-    print(f"ring {Z:>6} m at {X:>10}: {a.size:>6} bytes, {int((b > 0).sum()):>5} of them land, {wrong} differ")
+    print(f"ring {Z:>6} m at {X:>10}: {a.size:>6} bytes, {int((b > 0).sum()):>5} of them land, {int((b > 127).sum()):>3} lamps, {wrong} differ")
 for path in sorted(glob.glob(f"{folder}/ground-*.bin")):
     X = float(os.path.basename(path)[7:-4])
     hy = round(train.PH * 0.7)

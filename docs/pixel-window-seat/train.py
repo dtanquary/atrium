@@ -330,6 +330,20 @@ def ring_strip(Z, n0, width, sun):
         pole = (np.round(wx / 42.0) * 42.0 * ppm).round().astype(int) == n
         sel = lane & pole
         a[H - 7:, sel] = np.where(a[H - 7:, sel] == 0, I["pole"], a[H - 7:, sel])
+    # Lights that show only after dark, so that a night with no village in view still has something to rest on
+    # (added in the build, after the sheets): far off, the windows of farms too small to draw, a few together; nearer,
+    # a lamp in a farm's yard, 4 to 7 m up.
+    if Z >= 1800:
+        hamlet = np.clip((noise(wx / 420.0, 6.0, salt + 64) - 0.5) * 4, 0, 1)
+        on = np.nonzero(rnd(n, 1, salt + 65) < 0.06 * hamlet)[0]
+        lamps[H - 1 - (sp[on] * rnd(n[on], 2, salt + 66)).astype(int), on] = True  # on the swell's face, or at its foot
+    elif Z >= 180:
+        for c in range(c0, c1 + 1):
+            x = int(round((c + float(rnd(c, 8, salt + 37))) * cell * ppm)) - n0
+            if rnd(c, 7, salt + 36) < 0.3 and 0 <= x < width:
+                up = int(sp[x]) + int(round((4.0 + 3.0 * float(rnd(c, 9, salt + 38))) * ppm))
+                if up < H:
+                    lamps[H - 1 - up, x] = True
     return a, lamps
 
 
@@ -495,7 +509,7 @@ def view(time="day", X=0.0, speed=13.3, horizon_up=0.30, cover=0.30, spill=False
         H = strip.shape[0]
         y0 = foot - H
         rgb = shade(strip, time, Z=Z, lamps=lamps, horizon_rgb=horizon_rgb)
-        m = strip > 0
+        m = (strip > 0) | (lamps & (time in ("night", "dusk")))  # a light with nothing drawn under it shows after dark
         ys = slice(max(0, y0), foot)
         sub = slice(max(0, -y0), H)
         region = out[ys]

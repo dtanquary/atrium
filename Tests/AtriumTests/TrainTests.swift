@@ -30,6 +30,45 @@ import Testing
     }
 }
 
+/// What keeps it calm at any speed: nothing thin (a lamp, the lane's poles) is laid on a ring that slides faster
+/// than `TrainWorld.thin` pixels a second, and nothing that stands (a tree, a house) on one faster than `broad`.
+@Test func trainNothingThinIsFast() {
+    var standing = 0, lamps = 0
+    for times in [0.5, 1, 1.5, 2, 3, 4, 6, 8, 10] {
+        let world = TrainWorld(focal: 265.2, eye: 3.5, speed: PixelTrain.pace * times)
+        for ring in 3..<TrainWorld.rings.count {
+            let rows = world.rows(ring), pace = world.perMetre(ring) * world.speed
+            var column = [UInt8](repeating: 0, count: rows)
+            for n in stride(from: 100_000, to: 106_000, by: 1) {
+                _ = column.withUnsafeMutableBufferPointer { world.column(ring, n, into: $0.baseAddress!) }
+                let lit = column.contains { $0 > 127 }, pole = column.contains { $0 & 127 == TrainMat.pole }
+                let stands = column.contains { [TrainMat.trunk, TrainMat.fir0, TrainMat.fir1, TrainMat.glass, TrainMat.white, TrainMat.brick, TrainMat.roof].contains($0 & 127) }
+                (standing, lamps) = (standing + (stands ? 1 : 0), lamps + (lit ? 1 : 0))
+                if pace > TrainWorld.thin { #expect(!lit && !pole, "at \(times)× the ring \(TrainWorld.rings[ring]) m off slides \(pace) px/s and holds a lamp or a pole") }
+                if pace > TrainWorld.broad { #expect(!stands, "at \(times)× the ring \(TrainWorld.rings[ring]) m off slides \(pace) px/s and has something standing on it") }
+            }
+        }
+    }
+    #expect(standing > 1000 && lamps > 100, "the test saw \(standing) columns with something standing and \(lamps) with a lamp")
+}
+
+/// The night must never be a black pane: along an hour of track, every minute's view has lamps in it, as the
+/// painter shows it, with what stands in front hiding what is behind.
+@MainActor @Test func trainNightIsNeverBlack() {
+    let keys = [PixelWindowSeat.previewTime.key, PixelWindowSeat.previewHour.key]
+    for (key, value) in zip(keys, [1.0, 23]) { UserDefaults.standard.set(value, forKey: key) }
+    defer { for key in keys { UserDefaults.standard.removeObject(forKey: key) } }
+    let scene = PixelTrain(size: CGSize(width: 1512, height: 982))
+    var seen: [Int] = []
+    for minute in 0..<60 {
+        PixelTrain.travelled = 52_000 + Double(minute) * PixelTrain.pace * 60
+        scene.update(5000 + Double(minute))
+        seen.append(scene.lit)
+    }
+    print("train night: lamp pixels in view, a minute apart: \(seen)")
+    #expect(seen.allSatisfy { $0 > 0 }, "\(seen.count { $0 == 0 }) of an hour's minutes have no lamp in view")
+}
+
 /// Writes what the world lays at the mock-ups' own lens and places, for docs/pixel-window-seat/train_match.py to
 /// set against the mock-ups' painter byte for byte:
 ///
