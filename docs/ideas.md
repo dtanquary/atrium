@@ -7,6 +7,7 @@ When one is picked, it gets its own doc and leaves this list.
 ## Picked, being researched
 - **Black Hole.** A lensed accretion disc slowly turning, bending the stars behind it. The light bending and the brighter approaching side are real physics, and NASA Goddard's public-domain visualisation is a reference to match, the way Galaxy was matched to Hubble. One shader, beside Nebula and Galaxy. Dave picked it on 2026-10-10.
 - **Pixel Night Train.** A ground-level window seat: countryside sliding past on the real clock, with rain on the glass when it rains where you are. Dave picked it on 2026-10-10 as an addition to [Pixel Window Seat](pixel-window-seat.md) rather than a wallpaper of its own.
+- **Meander.** A river migrating across its floodplain, cutting off oxbows and leaving scroll bars, drawn like lidar relief or Harold Fisk's 1944 maps of the Mississippi (US Army Corps of Engineers, public domain). The simulation is simple (the bank moves by its curvature). A new river on each load, in one colour family. Dave picked it later the same day.
 
 ## Parked
 In the order they were proposed, most promising first.
@@ -16,7 +17,6 @@ In the order they were proposed, most promising first.
 - **Earth Today.** Real full-disc photos from the weather satellite over the user's hemisphere, played as the last day's loop, as The Sun does with SDO's. NOAA's GOES images are public domain and come every ten minutes; cover and licences outside the Americas (Himawari, Meteosat) need checking. It could nest in Earth from Orbit.
 - **Open Sea.** Ocean to the horizon under Weather's sky, with the real Moon and its glitter path, and swell (height, period, direction) from Open-Meteo's marine feed for the nearest coast. The risk is water that looks real inside the 2 ms GPU budget. A night shore with glowing surf could be one of its looks.
 - **Cloud Chamber.** Particle tracks condensing in mist: short fat alphas, thin wandering betas, straight muons, in their real proportions, with a slider for how busy it is. Cheap to draw, and it belongs with Schlieren, Turing Patterns and Game of Life. Crystals showed that correct physics doesn't make a thing pretty, so it needs mock-ups first.
-- **Meander.** A river migrating across its floodplain, cutting off oxbows and leaving scroll bars, drawn like lidar relief or Harold Fisk's 1944 maps of the Mississippi (US Army Corps of Engineers, public domain). The simulation is simple (the bank moves by its curvature). A new river on each load, in one colour family.
 - **Ink.** Suminagashi: rings of ink floating on water, slowly stirred. It is flat by nature, so Schlieren's fluid solver is physically right for it. Flowing Gradient's and Lava Lamp's family, with palettes. Incense smoke on black is a near relation on the same solver.
 - **Snowfall.** Fireflies' engine (a photo ground, particles in depth, fog, wind) with snow in a forest at blue hour, or under a lamp. It could follow the live weather.
 
