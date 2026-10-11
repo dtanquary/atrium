@@ -4,12 +4,13 @@ import Testing
 
 /// Every display gets a scene its own size, with a window of any size or none: each must build, run on and paint.
 @MainActor @Test func trainRunsAtAnySize() {
-    defer { for key in [PixelWindowSeat.window.key, PixelCarriage.choice.key] { UserDefaults.standard.removeObject(forKey: key) } }
+    let sizes = [CGSize(width: 1512, height: 982), CGSize(width: 1080, height: 1920), CGSize(width: 3440, height: 1440), CGSize(width: 300, height: 120), CGSize(width: 40, height: 30)]
+    defer { for key in [PixelWindowSeat.window.key, PixelCarriage.choice.key, TrainWeather.preview.key] { UserDefaults.standard.removeObject(forKey: key) } }
     // Every carriage at every window: the sill and curtain once ran off the edge of a small canvas and stopped the app.
     for window in 0...3 { for carriage in 0...Int(PixelCarriage.choice.range.upperBound) {
         UserDefaults.standard.set(Double(window), forKey: PixelWindowSeat.window.key)
         UserDefaults.standard.set(Double(carriage), forKey: PixelCarriage.choice.key)
-        for size in [CGSize(width: 1512, height: 982), CGSize(width: 1080, height: 1920), CGSize(width: 3440, height: 1440), CGSize(width: 300, height: 120), CGSize(width: 40, height: 30)] {
+        for size in sizes {
             let scene = PixelTrain(size: size), start = PixelTrain.travelled
             for frame in 0...60 { scene.update(1000 + Double(frame) / 30) }
             #expect(PixelTrain.travelled - start > 25, "after two seconds at \(size) it has gone \(PixelTrain.travelled - start) m")
@@ -19,6 +20,17 @@ import Testing
             pane.withUnsafeMutableBufferPointer { cabin.reflect($0, ghost: 0.5) }
             #expect(cabin.picture(dim: 0.22, lamp: 1).count == w * h * 4)
             if glass.h >= 30 { #expect(pane.contains { $0 != 0xFF10_2030 } == (carriage == 2), "only the table's lamp leaves a ghost") }
+        }
+    } }
+    // And every weather: its snow and its lightning are painted by their own places on the pane. Half a minute of
+    // each, ten frames a second, in which a storm strikes four times and its stroke shows for two frames or more.
+    for weather in 1...Int(TrainWeather.preview.range.upperBound) { for window in [0.0, 3] {
+        UserDefaults.standard.set(Double(weather), forKey: TrainWeather.preview.key)
+        UserDefaults.standard.set(window, forKey: PixelWindowSeat.window.key)
+        for size in sizes {
+            let scene = PixelTrain(size: size), start = PixelTrain.travelled
+            for frame in 0...300 { scene.update(2000 + Double(frame) / 10) }
+            #expect(PixelTrain.travelled - start > 390, "after half a minute of weather \(weather) at \(size) it has gone \(PixelTrain.travelled - start) m")
         }
     } }
 }
@@ -85,6 +97,62 @@ import Testing
         print("train night, \(name): lamp pixels in view, a minute apart: \(seen)")
         #expect(seen.allSatisfy { $0 > 0 }, "through \(name), \(seen.count { $0 == 0 }) of an hour's minutes have no lamp in view")
     }
+}
+
+/// Nor in the thickest weather: at night the air is never thicker than 2 km, whatever the report, so through fog
+/// every minute's view still has lamps with a third of their light or more left. (Through the plain window, as above.)
+@MainActor @Test func trainNightKeepsItsLampsInFog() {
+    let keys = [PixelWindowSeat.previewTime.key, PixelWindowSeat.previewHour.key, PixelTrain.scenery.key, TrainWeather.preview.key, PixelCarriage.choice.key]
+    defer { for key in keys { UserDefaults.standard.removeObject(forKey: key) } }
+    for (scenery, name) in [(1.0, "countryside"), (2, "a lake"), (3, "the mountains"), (4, "a city"), (5, "snow")] {
+        for (key, value) in zip(keys, [1, 23, scenery, 3, 0]) { UserDefaults.standard.set(value, forKey: key) }
+        let scene = PixelTrain(size: CGSize(width: 1512, height: 982))
+        var seen: [Int] = []
+        for minute in 0...60 {
+            PixelTrain.travelled = 52_000 + Double(minute) * PixelTrain.pace * 60
+            scene.update(5500 + Double(minute))
+            if minute > 0 { seen.append(scene.litThroughWeather) }
+        }
+        print("train night in fog, \(name): lamp pixels with a third of their light left, a minute apart: \(seen)")
+        #expect(seen.allSatisfy { $0 > 0 }, "through \(name) in fog, \(seen.count { $0 == 0 }) of an hour's minutes have no lamp in view")
+    }
+}
+
+/// A report comes to one of a few kinds of weather: cover in eighths, the reach from the visibility, and what
+/// falls brings its own deck and its own gloom. With no report, as in every test, there is no weather at all, and
+/// the sky is Settings' Clouds; the preview's menu gives each kind by hand.
+@MainActor @Test func trainReadsTheWeather() {
+    typealias Report = LiveWeather.Conditions
+    #expect(TrainWeather(Report(code: 0, cloudCover: 0, visibility: 24_140)) == TrainWeather())
+    #expect(TrainWeather(Report(code: 2, cloudCover: 40, visibility: 30_000)) == TrainWeather(cover: 0.375))
+    #expect(TrainWeather(Report(code: 1, cloudCover: 10, visibility: 8000)) == TrainWeather(cover: 0.125, reach: 2000))
+    #expect(TrainWeather(Report(code: 3, cloudCover: 100, visibility: 14_000)) == TrainWeather(cover: 1, reach: 4000, gloom: 0.4))
+    #expect(TrainWeather(Report(code: 45, cloudCover: 60, visibility: 200)) == TrainWeather(cover: 1, reach: 400, gloom: 0.5))
+    #expect(TrainWeather(Report(code: 63, cloudCover: 90, visibility: 20_000, rain: 0.6)) == TrainWeather(cover: 1, reach: 4000, gloom: 0.7))
+    #expect(TrainWeather(Report(code: 73, cloudCover: 100, visibility: 3000, snowfall: 0.25)) == TrainWeather(cover: 1, reach: 1000, gloom: 0.5, snow: 2.0 / 3))
+    #expect(TrainWeather(Report(code: 95, cloudCover: 80, visibility: 20_000, rain: 2)) == TrainWeather(cover: 1, reach: 1000, gloom: 1, storm: true))
+
+    let keys = [TrainWeather.preview.key, TrainWeather.follow.key, PixelWindowSeat.clouds.key]
+    defer { for key in keys { UserDefaults.standard.removeObject(forKey: key) } }
+    for key in keys { UserDefaults.standard.removeObject(forKey: key) }
+    #expect(TrainWeather.follow.value == 1 && TrainWeather.now == nil, "with no report there is no weather")
+    for pick in 1...7 {
+        UserDefaults.standard.set(Double(pick), forKey: TrainWeather.preview.key)
+        #expect(TrainWeather.now == TrainWeather.previews[pick - 1])
+    }
+    #expect(TrainWeather.previews.count == Int(TrainWeather.preview.range.upperBound))
+}
+
+/// A storm overhead is plainly one, and safe to look at: in ten minutes it strikes at least once in any fourteen
+/// seconds, the whole pane never brightens more than twice in any one second (three is the limit, WCAG 2.3.1), and
+/// about three strikes in five show their stroke.
+@Test func trainLightningIsPlainAndSafe() {
+    let strikes = (0..<72_000).map { TrainWeather.strike(at: Double($0) / 120) }, light = strikes.map(\.light) // 120 times a second
+    let rises = (1..<light.count).filter { light[$0] > light[$0 - 1] }
+    #expect(stride(from: 0, to: light.count - 1680, by: 60).allSatisfy { light[$0..<$0 + 1680].contains(1) }, "fourteen seconds pass with no lightning")
+    #expect(rises.indices.dropLast(2).allSatisfy { rises[$0 + 2] - rises[$0] > 120 }, "three flashes inside a second")
+    let all = Set(strikes.filter { $0.light > 0 }.map(\.draw)).count, forked = Set(strikes.filter(\.forked).map(\.draw)).count
+    #expect(all >= 85 && forked * 2 > all && forked * 4 < all * 3, "\(forked) of \(all) strikes show their stroke")
 }
 
 /// Left to change, the country has lakes beside the line for a fair share of it, and neither they nor the country
@@ -198,17 +266,19 @@ import Testing
 /// 60 times a second has painted the same pixels. Through countryside, and beside a lake, whose water goes by the
 /// scene's clock.
 @MainActor @Test func trainLooksTheSameAtAnyFrameRate() {
-    let keys = [PixelWindowSeat.previewTime.key, PixelWindowSeat.previewHour.key, PixelTrain.scenery.key]
+    let keys = [PixelWindowSeat.previewTime.key, PixelWindowSeat.previewHour.key, PixelTrain.scenery.key, TrainWeather.preview.key]
     defer { for key in keys { UserDefaults.standard.removeObject(forKey: key) } }
-    for scenery in [1.0, 2, 3, 4, 5] {
-        for (key, value) in zip(keys, [1, 13, scenery]) { UserDefaults.standard.set(value, forKey: key) }
+    // Each country, then the weather that moves: snow falling on the snow country, and a storm over the city a
+    // fifth of a second into its first strike.
+    for (scenery, weather) in [(1.0, 0.0), (2, 0), (3, 0), (4, 0), (5, 0), (5, 6), (4, 7)] {
+        for (key, value) in zip(keys, [1, 13, scenery, weather]) { UserDefaults.standard.set(value, forKey: key) }
         var pictures: [[UInt32]] = []
         // (From an odd metre: 2.2 s at 1× is 29⅓ m, and from a whole one three rows of ground would end exactly on
         // a pixel's edge, where the last bit of a sum decides which side they fall.)
         let start = 52_000.37
         for (k, rate) in [15.0, 30, 60].enumerated() {
             PixelTrain.travelled = start
-            let scene = PixelTrain(size: CGSize(width: 1512, height: 982)), from = 7000 + scenery * 1000 + Double(k) * 100
+            let scene = PixelTrain(size: CGSize(width: 1512, height: 982)), from = 7000 + scenery * 1000 + weather * 300 + Double(k) * 100
             scene.update(from) // the first frame only sets the clocks
             PixelTrain.travelled = start
             for frame in 1...Int(rate * 2.2) { scene.update(from + Double(frame) / rate) }
@@ -216,6 +286,7 @@ import Testing
         }
         let differ = zip(pictures[0], pictures[2]).count { $0 != $1 } + zip(pictures[1], pictures[2]).count { $0 != $1 }
         #expect(differ == 0, "after 2.2 s, \(differ) pixels of the picture differ between 15, 30 and 60 frames a second")
+        if weather == 7 { #expect(TrainWeather.strike(at: 2.2).light > 0, "the storm is not lit when the pictures are taken") }
     }
 }
 

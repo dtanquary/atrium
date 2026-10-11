@@ -102,7 +102,9 @@ struct Refresh {
     Wallpaper(name: "Pixel Spaceport", icon: "location.north.fill", tint: .orange, blurb: "A pixel-art launch site that never stops.",
               make: pixelSpaceport, knobs: PixelCity.spaceportKnobs, status: (key: "spaceport.status", below: "spaceport.live"), refresh: .launches),
     Wallpaper(name: "Pixel Window Seat", icon: "airplane", tint: .blue, blurb: "A pixel-art window seat on a flight that never lands, or on the space station.",
-              make: pixelWindowSeat, knobs: PixelWindowSeat.knobs, retitled: PixelOrbit.offersTrain ? PixelWindowSeat.journey : nil),
+              make: pixelWindowSeat, knobs: PixelWindowSeat.knobs,
+              status: PixelOrbit.offersTrain ? (key: "weather.status", below: TrainWeather.follow.key) : nil, // the train's weather
+              retitled: PixelOrbit.offersTrain ? PixelWindowSeat.journey : nil),
     Wallpaper(name: "Fireflies", icon: "sparkle", tint: .yellow, blurb: "A meadow at blue hour, twinkling with fireflies.",
               make: fireflies, knobs: Fireflies.knobs),
     Wallpaper(name: "Murmuration", icon: "bird.fill", tint: .brown, blurb: "Starlings swirling over a sunset.",

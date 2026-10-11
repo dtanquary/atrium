@@ -630,20 +630,25 @@ struct SectionTitle: View {
 }
 
 /// A scene's own status line from UserDefaults, shown while the knob `gate` is live and there's something to say:
-/// at 0 for a menu (Weather's "Live where you are"), on for a switch (Rain on Glass's "Follow the weather").
+/// at 0 for a menu (Weather's "Live where you are"), on for a switch (Rain on Glass's "Follow the weather"). Where
+/// the knob is listed only by another's leave (the train's switch, in Pixel Window Seat), so is its line.
 struct StatusRow: View {
-    let live: Bool
+    let knob: Knob
     @AppStorage private var text: String
     @AppStorage private var gate: Double
+    @AppStorage private var listed: Double
 
     init(key: String, gate: Knob) {
-        live = gate.format == .toggle
+        knob = gate
         _text = AppStorage(wrappedValue: "", key)
         _gate = AppStorage(wrappedValue: gate.standard, gate.key)
+        _listed = AppStorage(wrappedValue: scenes.flatMap(\.knobs).first { $0.key == gate.shownWhen }?.standard ?? 1, gate.shownWhen ?? gate.key)
     }
 
     var body: some View {
-        if (gate > 0.5) == live && !text.isEmpty { Text(text).font(.callout).foregroundStyle(.secondary).textSelection(.enabled) }
+        if knob.shownWhen == nil || Knob.on(listed, at: knob.shownAt), (gate > 0.5) == (knob.format == .toggle), !text.isEmpty {
+            Text(text).font(.callout).foregroundStyle(.secondary).textSelection(.enabled)
+        }
     }
 }
 

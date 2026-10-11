@@ -17,7 +17,7 @@ final class PixelTrain: SKScene {
     nonisolated static let poles = Knob(key: "seat.poles", label: "Poles and wires beside the line", range: 0...1, standard: 1, section: "Flight",
                                         format: .toggle, shownWhen: "seat.orbit", shownAt: 2)
     /// The train's own settings, listed among the airliner's (`PixelWindowSeat.rows`) while the train is offered.
-    nonisolated static let knobs = [scenery, poles, PixelCarriage.choice]
+    nonisolated static let knobs = [scenery, poles, PixelCarriage.choice, TrainWeather.follow, TrainWeather.preview]
 
     /// 1× on Settings' Speed, in metres a second: 48 km/h, a slow scenic train.
     nonisolated static let pace = 48 / 3.6
@@ -57,9 +57,18 @@ final class PixelTrain: SKScene {
     private var cloud: TrainCloud
     private var cloudTones: [UInt32] = [], bolt: UInt32 = 0, storms: Float = 0, mirrored: [UInt32] = []
     // The light as last worked out, and where the Sun is drawn in the sky while it is up. Cloud over the Sun cuts
-    // its share of the light on the land, in eighths (`shade`), a step each quarter second (`shadeTick`).
+    // its share of the light on the land, in thirty-seconds (`shade`), a step each sixteenth of a second
+    // (`shadeTick`): about one level of 255 on the land at a time, where steps four times as big showed.
     private var daylight = (ambient: RGB.zero, key: RGB.zero, glow: RGB.zero, haze: RGB.zero)
     private var sunSpot: (x: Int, row: Int)?, shade = 0, shadeTick = 0
+    // The weather (PixelTrainSky.swift) as the scene was built, or none. What it does to the picture: how fast
+    // things fade into its air, as a share of them a metre (`murk`), and the colour they fade to (`mist`); the
+    // cloud's tones for each row of sky, seen through that much air (`skyTones`); how far each row of ground has
+    // faded, in parts of 256 (`fog`), and each ring's lamps, at half the rate (`lampFog`); the snow, in a colour
+    // for each of its layers; and how brightly lightning lights it just now.
+    private let weather: TrainWeather?
+    private var murk = 0.0, mist: UInt32 = 0, skyTones: [UInt32] = [], fog: [UInt32] = [], lampFog: [UInt32] = []
+    private var snow = TrainSnow(), flake: [UInt32] = [], flash: Float = 0
     private let texture: SKMutableTexture
     private let canvas = SKNode(), outside = SKSpriteNode(), cabin = SKSpriteNode()
 
@@ -86,7 +95,8 @@ final class PixelTrain: SKScene {
         (land, dash) = ([UInt8](repeating: 0, count: gw * horizon), [UInt8](repeating: 0, count: gw * horizon))
         (water, glint) = ([UInt32](repeating: 0, count: 5 * gw * horizon), [UInt8](repeating: 0, count: gw * horizon))
         skyline = [Int](repeating: 0, count: gw)
-        cloud = TrainCloud(wide: gw, rows: gh - horizon, focal: Double(gh) * 1.2, clouds: Int(PixelWindowSeat.clouds.value))
+        weather = TrainWeather.now
+        cloud = TrainCloud(wide: gw, rows: gh - horizon, focal: Double(gh) * 1.2, clouds: Int(PixelWindowSeat.clouds.value), held: weather?.cover)
         mirrored = [UInt32](repeating: 0, count: 15 * horizon)
         picture = [UInt32](repeating: 0, count: gw * gh)
         texture = SKMutableTexture(size: CGSize(width: gw, height: gh))
@@ -116,26 +126,44 @@ final class PixelTrain: SKScene {
         redraw()
         NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged),
                                                name: UserDefaults.didChangeNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(weatherChanged), name: LiveWeather.changed, object: nil)
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
-    override func didMove(to view: SKView) { Location.shared.start() }
+    /// Asks for the weather where you are every quarter hour while Settings follows it. (`LiveWeather` is shared,
+    /// and fetches at most every ten minutes however many scenes ask.)
+    override func didMove(to view: SKView) {
+        Location.shared.start()
+        run(.repeatForever(.sequence([.run { if TrainWeather.follow.value > 0.5 { LiveWeather.shared.poll() } }, .wait(forDuration: 900)])))
+    }
 
     /// Repaints when one of the page's settings changes (the notification comes for every wallpaper's). Another
-    /// window, another size of this one, another carriage, other scenery or the pole line put up or taken down is another scene: it
+    /// window, another size of this one, another carriage, other scenery, other weather or the pole line put up or taken down is another scene: it
     /// dissolves into it with both still running, as the airliner's changes do. A change of speed is not: the
     /// country carries on as it is, and only what comes into view from then on is laid by the new speed.
     @objc private func settingsChanged() {
         let picked = (PixelWindowSeat.knobs + Self.knobs).map(\.value)
         guard picked != settings, !retired else { return }
         settings = picked
+        if view != nil, TrainWeather.follow.value > 0.5 { LiveWeather.shared.poll() } // (switched on, it asks at once)
         let another = PixelOrbit.mode != windowOn || Int(PixelWindowSeat.window.value) != windowSize || Int(Self.scenery.value) != world.scenery
             || (Self.poles.value > 0.5) != polesOn || Int(PixelCarriage.choice.value) != carriage.kind
-            || Int(PixelWindowSeat.clouds.value) != cloud.clouds
+            || Int(PixelWindowSeat.clouds.value) != cloud.clouds || TrainWeather.now != weather
         guard another else { return redraw() }
+        dissolve(over: 0.8)
+    }
+
+    /// A new report: where it comes to other weather than the scene was built under, the sky turns to it over a
+    /// few seconds. (A report is rounded to a few kinds of weather, so most change nothing.)
+    @objc private func weatherChanged() {
+        if !retired, TrainWeather.now != weather { dissolve(over: 4) }
+    }
+
+    /// Hands over to a scene built by Settings as they are now, with both running while one fades into the other.
+    private func dissolve(over seconds: TimeInterval) {
         guard let view else { return } // (with no view to hand over in, as in the tests, it stays as built)
-        let fade = SKTransition.crossFade(withDuration: 0.8)
+        let fade = SKTransition.crossFade(withDuration: seconds)
         (fade.pausesIncomingScene, fade.pausesOutgoingScene) = (false, false)
         let next = pixelWindowSeat(size: size)
         next.scaleMode = scaleMode
@@ -172,14 +200,29 @@ final class PixelTrain: SKScene {
         // glow along the horizon lights the land too, two fifths of its colour: by the sky's light and the Sun's
         // alone the land went a dull green under the best sky of the day.
         let low = smoothstep(-10, -2, above.el) * smoothstep(12, 3, above.el)
-        daylight = (above.ambient, above.key, above.haze * (0.4 * low), above.haze)
+        // The weather's air. Under cloud that has put the day out, distance fades to the cloud's grey and not the
+        // sky's blue, and the horizon has no glow to give. After dark the cloud is darkened less and the air is
+        // never thicker than 2 km, or a foggy night would be a black pane with no lamp in it.
+        let gloom = Float(weather?.gloom ?? 0), tones = TrainCloud.tones(above.el, gloom: gloom * (1 - 0.7 * night))
+        murk = weather.map { 1 / max($0.reach, 2000 * Double(night)) } ?? 0
+        let air = weather == nil ? above.haze : mix(above.haze, tones[3] * mix(1, 1.5, night), gloom * 1.6)
+        mist = pack(air)
+        daylight = (above.ambient, above.key, above.haze * (0.4 * low * (1 - gloom)), air)
+        // The sky through it: the air is a layer 600 m deep, so a row of sky near the horizon looks through far
+        // more of it than one overhead, and is the mist's own colour.
+        let through = (0..<glass.h - horizon).map { UInt32(256 * (1 - exp(-600 * (1 + pow(world.focal / Double($0 + 1), 2)).squareRoot() * murk))) }
+        if murk > 0 {
+            for (row, veil) in through.enumerated() { for i in (horizon + row) * glass.w..<(horizon + row + 1) * glass.w { sky[i] = blend(sky[i], mist, veil) } }
+        }
+        cloudTones = tones.map(pack)
+        skyTones = through.flatMap { veil in cloudTones.map { blend($0, mist, veil) } }
+        fog = (1...horizon).map { UInt32(256 * (1 - exp(-world.focal * Self.eye / Double($0) * murk))) }
         // Where the Sun is drawn, for the cloud that passes over it; or, with the Sun up but behind the train, the
         // sky overhead. A scene starts in whatever shade its sky gives it.
         let drawn = above.sunSpot, inPane = drawn.x >= 0 && drawn.x < glass.w && drawn.y >= horizon && drawn.y < glass.h
         sunSpot = above.sun.elevation <= 0 ? nil : inPane ? (drawn.x, drawn.y - horizon) : (glass.w / 2, glass.h - horizon - 1)
         if clock == 0 { shade = shadeWanted(with: Self.travelled) }
         relight()
-        cloudTones = TrainCloud.tones(above.el).map(pack)
         (bolt, storms) = (pack(rgb(214, 224, 255)), PixelWindowSeat.lightning.value > 0.5 ? mix(0.22, 0.8, night) : 0) // by day a flash hardly shows
         // The lake: each row of water is the sky that many rows above the horizon turned over (three parts in five
         // the row's middle tone, the rest its own pixel, so a breath of what is up there shows), deepened toward its
@@ -205,6 +248,10 @@ final class PixelTrain: SKScene {
         // Lamps come on through dusk, each when the evening passes its own draw, as the airliner's do.
         (lamp, lights) = (pack(mix(rgb(255, 214, 150), rgb(255, 204, 128), night)), UInt8(min(255, night * 300)))
         for m in lamps.indices { lamps[m] = TrainMat.lit[UInt8(m)].map(pack) ?? lamp }
+        lampFog = rings.map { UInt32(256 * (1 - exp(-$0.away * murk / 2))) } // (a light carries twice as far as a wall)
+        // Snow: the cloud's own white, the nearest flakes most and the farthest half way to the air's colour.
+        let white = mix(unpack(cloudTones[2]), RGB(repeating: 1), 0.5 * (1 - night)) * mix(1, 1.6, night)
+        flake = [0.95, 0.75, 0.5].map { pack(mix(air, white, $0)) }
         // The pole line, unless Settings has it off or it would cross the pane too fast to be calm. A change takes
         // hold two poles beyond the pane's leading edge, so every wire in view keeps both its poles.
         let poleSpace = world.focal / TrainWorld.poleAway, calm = polesOn && poleSpace * speed <= TrainWorld.poleLimit
@@ -219,30 +266,43 @@ final class PixelTrain: SKScene {
     /// The colours the country takes in the light as last worked out: the sky's light, the Sun's less what cloud
     /// hides of it (three fifths, with the Sun quite hidden), and the horizon's glow.
     private func relight() {
-        let sun = daylight.key * (1 - 0.6 * Float(shade) / 8)
-        let light = (daylight.ambient + sun) * 0.78 * mix(1, 3.9, night) + daylight.glow, floor = rgb(9, 13, 27) * night
-        let mats = TrainMat.day.count
+        let sun = daylight.key * (1 - 0.6 * Float(shade) / 32)
+        // Weather that has put the day out dims the land by up to 45% (15% at night, which is lifted as it is) and
+        // takes up to two fifths of its colour; and lightning lights it.
+        let gloom = Float(weather?.gloom ?? 0), dim = 1 - gloom * mix(0.45, 0.15, night), flat = gloom * 0.4
+        let light = (daylight.ambient + sun) * 0.78 * mix(1, 3.9, night) * dim + daylight.glow + rgb(214, 224, 255) * (flash * 0.28)
+        let floor = rgb(9, 13, 27) * night, mats = TrainMat.day.count
+        func lit(_ base: RGB) -> RGB {
+            let c = pointwiseMin(base * light + floor, .one)
+            return flat > 0 ? mix(c, RGB(repeating: (c.x + c.y + c.z) / 3), flat) : c
+        }
         for (k, ring) in rings.enumerated() {
-            let far = Float(1 - exp(-ring.away / world.haze(Self.travelled)))
-            for (m, base) in TrainMat.day.enumerated() { ringColours[k * mats + m] = pack(mix(pointwiseMin(base * light + floor, .one), daylight.haze, far)) }
+            let far = Float(1 - exp(-ring.away / world.haze(Self.travelled) - ring.away * murk))
+            for (m, base) in TrainMat.day.enumerated() { ringColours[k * mats + m] = pack(mix(lit(base), daylight.haze, far)) }
         }
         // The ground, in the five tones a dash can take in each of a row's kinds: the far fields, which have no
         // dashes unless they slide too fast to show as fields, and the four kinds of near field.
         for tones in 0..<5 {
             for level in 0..<5 {
                 let lift = Float(level - 2) * (tones < 3 ? 0.03 : 0.045) + (tones > 0 && tones % 2 == 0 ? 0.022 : 0)
-                for (m, base) in TrainMat.day.enumerated() { groundColours[((tones * 5) + level) * mats + m] = pack(base * (1 + lift) * light + floor) }
+                for (m, base) in TrainMat.day.enumerated() { groundColours[((tones * 5) + level) * mats + m] = pack(lit(base * (1 + lift))) }
             }
         }
-        (pole, wire) = (pack(rgb(52, 44, 40) * light + floor), pack(rgb(44, 40, 40) * light + floor))
+        (pole, wire) = (pack(lit(rgb(52, 44, 40))), pack(lit(rgb(44, 40, 40))))
     }
 
-    /// How far cloud should be dimming the Sun's light, in eighths, with the train `x` metres along.
-    private func shadeWanted(with x: Double) -> Int { sunSpot.map { Int((cloud.hides($0, with: x) * 8).rounded()) } ?? 0 }
+    /// How far cloud should be dimming the Sun's light, in thirty-seconds, with the train `x` metres along: a whole
+    /// eighth or none, so that a cloud's ragged edge doesn't set it wavering.
+    private func shadeWanted(with x: Double) -> Int { sunSpot.map { Int((cloud.hides($0, with: x) * 8).rounded()) * 4 } ?? 0 }
 
     /// How many pixels of the picture are lamps, and how big the picture is, for the tests: the night must never be
     /// without a lamp.
     var lit: Int { lights == 0 ? 0 : picture.count(where: Set(lamps).contains) }
+    /// The same through weather: the pixels that are lamps with at least a third of their light left after the air.
+    var litThroughWeather: Int {
+        let seen = Set(rings.indices.filter { lampFog[$0] < 171 }.flatMap { ring in lamps.map { blend($0, mist, lampFog[ring]) } })
+        return lights == 0 ? 0 : picture.count(where: seen.contains)
+    }
     var pane: (w: Int, h: Int) { (glass.w, glass.h) }
 
     /// The carriage round the pane (PixelCarriage.swift), in the light of the moment.
@@ -257,6 +317,7 @@ final class PixelTrain: SKScene {
         if abs(Date().timeIntervalSince(redrawnAt)) >= 30 { redraw() }
         Self.travelled += min(max(currentTime - (Self.travelledAt ?? currentTime), 0), 0.1) * world.speed
         Self.travelledAt = currentTime
+        if weather?.snow ?? 0 > 0 { snow.advance(by: dt, speed: world.speed, focal: world.focal) }
         // The near ground and the poles move several pixels a frame, so every frame is painted, 60 times a second at
         // most: at 30 a pole would step twice as far.
         if clock - painted >= 1 / 60.0 - 0.002 {
@@ -309,17 +370,26 @@ final class PixelTrain: SKScene {
     private func compose() {
         painted = clock
         let (gw, gh) = (glass.w, glass.h), mats = TrainMat.day.count
-        // Cloud passing over the Sun dims the land, and gives it back, a step each quarter second: by where the
-        // train was at that quarter, so that it goes the same at any frame rate.
-        while shadeTick < Int(clock * 4) {
+        // Cloud passing over the Sun dims the land, and gives it back, a step each sixteenth of a second: by where
+        // the train was at that sixteenth, so that it goes the same at any frame rate.
+        while shadeTick < Int(clock * 16) {
             shadeTick += 1
-            let wanted = shadeWanted(with: Self.travelled - (clock - Double(shadeTick) / 4) * world.speed)
+            let wanted = shadeWanted(with: Self.travelled - (clock - Double(shadeTick) / 16) * world.speed)
             if wanted != shade {
                 shade += wanted > shade ? 1 : -1
                 relight()
             }
         }
         let flashes = (0..<16).map { storms > 0 ? SeatWorld.lightning($0, at: clock) * storms : 0 }
+        // A storm overhead: its lightning lights the land and all the cloud a little, and the cloud round the strike
+        // a great deal.
+        let strike = weather?.storm == true && storms > 0 ? TrainWeather.strike(at: clock) : (light: 0, across: 0, up: 0, draw: 0, forked: false)
+        if strike.light != flash {
+            flash = strike.light
+            relight()
+        }
+        let struck = (x: Int(strike.across * Double(gw)), row: Int(strike.up * Double(cloud.rows)), light: flash)
+        let tones = flash > 0 ? skyTones.map { blend($0, bolt, UInt32(flash * 50)) } : skyTones
         var above = [Int8](repeating: -1, count: gw) // the cloud's tones along the row of sky a row of water mirrors
         // How high what stands beyond a lake's far shore reaches, column by column, for the water to mirror.
         for i in 0..<gw { skyline[i] = 0 }
@@ -333,7 +403,12 @@ final class PixelTrain: SKScene {
         }
         picture.withUnsafeMutableBufferPointer { out in
             for i in horizon * gw..<gh * gw { out[i] = sky[i] }
-            cloud.paint(into: out, horizon: horizon, tones: cloudTones, bolt: bolt, flashes: flashes)
+            cloud.paint(into: out, horizon: horizon, tones: tones, bolt: bolt, flashes: flashes, strike: flash > 0 ? struck : nil)
+            if strike.forked {
+                TrainWeather.stroke(strike.draw, from: struck.x, struck.row, wide: gw) { x, row, main in
+                    out[(horizon + row) * gw + x] = main ? bolt : blend(out[(horizon + row) * gw + x], bolt, 150)
+                }
+            }
             // The ground, and where a lake lies, its water: ripples a few pixels long that shimmer where they are and
             // don't slide (water has nothing in it to follow), each lighter, darker or plain for about a second, and
             // the Sun's glitter, reshuffled five times in two seconds. A row of water mirrors the row of the picture that
@@ -352,7 +427,7 @@ final class PixelTrain: SKScene {
                             let draw = chance(ripple, d * 131 + (tick + ripple) / 3, 60)
                             (tone, sparkle) = (draw < 0.16 ? 1 : draw > 0.90 ? 2 : 0, scatter(ripple, d * 17 + tick, 61))
                         }
-                        let shines = Int(sparkle) * 8 < Int(glint[at + i]) * (8 - shade) // (no glitter from a Sun behind cloud)
+                        let shines = Int(sparkle) * 32 < Int(glint[at + i]) * (32 - shade) // (no glitter from a Sun behind cloud)
                         // (The far shore's hills stand before the cloud behind them, and their image is the darker.)
                         out[y + i] = shines ? water[3 * flat + at + i] : tone != 1 && shore < skyline[i] ? water[4 * flat + at + i]
                             : above[i] < 0 ? water[tone * flat + at + i] : mirrored[r * 15 + Int(above[i]) * 3 + tone]
@@ -362,6 +437,7 @@ final class PixelTrain: SKScene {
                     s += 1
                     if s == gw { s = 0 }
                 }
+                if fog[r] > 0 { for i in y..<y + gw { out[i] = blend(out[i], mist, fog[r]) } } // the weather's air over it
             }
             reflected.removeAll(keepingCapacity: true)
             for k in rings.indices {
@@ -374,8 +450,9 @@ final class PixelTrain: SKScene {
                         for up in low..<top where strips[column + up] != 0 {
                             let cell = strips[column + up]
                             if cell > 127, lights > 0, scatter(ring.first + i, up, 70 + UInt64(k)) <= lights {
-                                out[(ring.foot + up) * gw + i] = lamps[Int(cell & 127)]
-                                if ring.away >= TrainWorld.farShore { reflected.append((i, lamps[Int(cell & 127)])) }
+                                let glow = lampFog[k] == 0 ? lamps[Int(cell & 127)] : blend(lamps[Int(cell & 127)], mist, lampFog[k]) // through the weather's air
+                                out[(ring.foot + up) * gw + i] = glow
+                                if ring.away >= TrainWorld.farShore { reflected.append((i, glow)) }
                             } else if cell & 127 != 0, cell & 127 < TrainMat.lampSodium { // (a light with nothing drawn under it shows only when lit)
                                 out[(ring.foot + up) * gw + i] = ringColours[colours + Int(cell & 127)]
                             }
@@ -393,6 +470,13 @@ final class PixelTrain: SKScene {
                     && chance(i, d + flicker, 71) < 0.5 - Double(d) * 0.055 {
                     let at = (horizon - d) * gw + i
                     out[at] = pack(unpack(out[at]) * 0.45 + glow * (0.55 * (1 - Float(d) / 16)))
+                }
+            }
+            // Snow falling, in front of the country and behind the poles.
+            if let heavy = weather?.snow, heavy > 0 {
+                snow.flakes(heavy: heavy, wide: gw, high: gh) { x, y, layer in
+                    out[y * gw + x] = flake[layer]
+                    if layer == 0, x + 1 < gw { out[y * gw + x + 1] = flake[0] } // (the nearest are two pixels long)
                 }
             }
             // The pole line, in front of it all: its wires let two thirds of themselves show.

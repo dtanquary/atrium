@@ -63,7 +63,8 @@ private func listed(_ knobs: [Knob], window: Double) -> [String] {
     #expect(offered[0].format == .choice(["An airliner", "The space station", "A train"]) && offered[0].order == [0, 2, 1])
     #expect(listed(offered, window: 0) == airliner)
     #expect(listed(offered, window: 1) == station)
-    #expect(listed(offered, window: 2) == ["seat.orbit", "seat.window", "seat.looking", "seat.speed", "seat.country", "seat.poles", "seat.carriage", "seat.clouds", "seat.lightning", "seat.previewTime"])
+    #expect(listed(offered, window: 2) == ["seat.orbit", "seat.window", "seat.looking", "seat.speed", "seat.country", "seat.poles", "seat.carriage", "seat.weather",
+                                           "seat.previewWeather", "seat.clouds", "seat.lightning", "seat.previewTime"])
     // Carriage is the train's alone, and with no window there is no carriage to choose.
     let carriage = PixelCarriage.choice
     #expect((carriage.shownWhen, carriage.hiddenWhen) == (PixelOrbit.on.key, PixelWindowSeat.window.key) && !shipped.contains { $0.key == carriage.key })
@@ -77,6 +78,7 @@ private func listed(_ knobs: [Knob], window: Double) -> [String] {
     #expect([0.0, 1, 2].map { page.title(of: "Flight", holding: $0) } == ["Flight", "Flight", "Journey"])
     #expect(["View", "Preview"].allSatisfy { page.title(of: $0, holding: 2) == $0 })
     #expect(PixelOrbit.offersTrain || allScenes.first { $0.name == "Pixel Window Seat" }?.retitled == nil, "without the train, no section is retitled")
+    #expect(PixelOrbit.offersTrain || allScenes.first { $0.name == "Pixel Window Seat" }?.status == nil, "without the train, the page has no line of weather")
 
     // What is stored: 1 is the station either way, and 2 the train only where the train is offered.
     let key = PixelOrbit.on.key, size = CGSize(width: 1512, height: 982)
