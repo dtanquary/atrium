@@ -2,6 +2,8 @@
 
 A research agent's report as it was sent on 2026-10-10, unedited, kept so its detail and sources aren't lost. The plan beside it is the summary and has Dave's decisions; where the two differ, the plan is later. `scratch/` was the session's temporary folder: the scripts and pictures worth keeping were copied into this folder, the rest (downloaded references, video clips) is gone and its source URLs are below.
 
+The first seven messages are round 1; the note and five messages after them are round 2, which fixes the looks and has the complete maths as the final prototype runs it. The last message was sent to the look research's agent.
+
 Meander 1/7: it works, and one simulation feeds both looks. Verdict, paths, and what is and isn't proven.
 
 A Python prototype ran three days of wallpaper time (90,000 steps, 2,500 cutoffs) without the river crossing itself, leaving the valley, straightening or dying. It draws a Fisk-style map and a shaded relief from the same three per-texel fields, at the texture size the app would use (756 x 491, one texel per 2 pt), read the way Turing Patterns' shader reads its texture.
@@ -232,3 +234,193 @@ URLs:
 Unsourced: that a pinned inlet washes out because the instability travels downstream is my reading of what I saw. No real river's migration rate is cited anywhere above.
 
 Nothing was blocked. I wrote only under the scratchpad's meander/ folder.
+
+---
+
+Meander interim (new stills and a cutoff strip follow in a few minutes): the river in t5/t6 was not twice too wide, and three of the four faults are now fixed in the renders.
+
+Scale: I measured the water itself in my renders (distance transform on the water's colour). t5, t6 and every still I sent are 28 px of 1512 = 1.84% of the frame, 54 widths across: inside meander-look's 40 to 55. t1 was 16 px, 1.06%, 94 across. meander-look's 3.5 to 4% comes from thresholding brightness (scripts/width.py), which also counts the pale new ground beside the water. In my first relief that ground stayed pale for about 8 widths behind the moving bank, so the river read as a fat pipe. So the slider's true-to-life default is the geometry you already saw (28 to 32 pt); zooming in goes from there. What had to change was the look, not the scale.
+
+Fixed in the renders now (render.py, earlier version kept as render-v1.py):
+1. Pipe: no outline in relief. New ground now rises out of river level within about half a width of the bank, so the bright ribbon is the water plus a narrow apron. The channel's width now varies along its length, 0.7 W on straight reaches to 1.5 W round the tightest bends, easing over time so a cutoff can't jump it (meander.py; the earlier one is meander-v1-constant-width.py).
+2. Scroll rings: two spacings beating, uneven in strength, a few percent of brightness, about 0.2 W apart at the average bank's pace. At one pixel a point they nearly vanish; they show at Retina.
+3. Band colours: Fisk's four inks on cream with his line ink, as meander-look measured them; older is paler by his ink-coverage steps (solid, 65, 50, 40, 23%) as flat tints that slide smoothly; the live river is bare paper between heavy bank lines. Single-ink and dark versions too.
+
+Partly fixed:
+4. Empty ground: with the valley walls 1.5 W from the edges and memory raised to T 600, a river that has run a while covers the screen edge to edge, and dried lakes stay as lighter hollows. But the first frame after a T 60 launch history is still a young belt on empty ground. Filling it at launch means a much longer history (I have a cheap way to try: coarse nodes and steps for the distant past) or drawing the untouched ground as textured upland, which is what the left third of the Helena reference is. I'll show the first frame as it is.
+
+One correction to 6/7: my "slab band checked against the exhaustive version" held for the one state I tested. A later state showed it missing 4 of 44,883 texels at the joint across the period's seam. Fixed and rechecked (worst difference 4e-6 W). Field update timings are 0.5 to 0.9 ms depending on how much river is on screen.
+
+---
+
+Meander round 2, 1/5: the stills at true-to-life scale and the cutoff strip, to Dave's picks. Four more follow: the river's maths, the fields, the two looks' formulas, and what is still wrong.
+
+All under scratch/meander/proto/out2/ :
+- still-relief-survey-blue.png: relief, the default look, in meander-look's Sauk colours (also -rainforest, -garnet)
+- still-fisk-fisk-1944.png: the old map in Fisk's four inks on cream (also still-fisk-fisk-1944-dark.png, still-fisk-sage.png, -salmon, -sage-dark: single inks, older is paler)
+- cutoff/cutoff-fisk.png and cutoff/cutoff-relief.png: ten frames through one cutoff at 25 s a T, from 3 s before to 10 min after
+- cutoff/frame-before-after-diff-fisk.png (and -relief): the frame before, the cutoff frame, and what changed
+- first-frame-relief.png, first-frame-fisk.png: what a T 60 launch history leaves
+- retina-relief.png, retina-fisk.png: a 500 x 350 pt piece at 2x Retina
+- strip-minutes-relief.png, strip-minutes-fisk.png: six frames a minute apart at 25 s a T
+All stills are 1512 x 982 at one pixel a point, the river 54 widths across (28 pt, 1.85% of the frame), at T 400 of a fresh run.
+
+Against the four faults:
+1. Pipe: fixed. No outline in relief; the water is the lightest thing and new ground darkens within about half a width. The water's width now varies: 22 to 42 px (10th to 90th percentile), median 28.
+2. Even, strong scroll rings: fixed. They are now a few percent of brightness, two spacings beating, uneven. At one pixel a point they nearly vanish; see retina-relief.png.
+3. Empty ground: fixed for a river that has run a while (history covers 66 to 90% of the screen, median 83%, with the valley walls 1.5 W from the edges and memory at T 600; dried lakes stay as lighter hollows). Not fixed for the first frame.
+4. Colour wheel: fixed. meander-look's busy.py gives hues 1.00 for every new still. Relief: luma 0.25, edges 1.1%. Fisk 1944: luma 0.73, chroma 0.19.
+
+Measured on the final code:
+- River: the same model with a varying width, T 800 (20,000 steps): 630 cutoffs, no self-crossing at any of 20 checks, sinuosity 1.9 to 3.2, about 0.53 cutoffs per T on screen.
+- The cutoff frame, share of a 14 W window changing more than 20 levels: relief 0.07%, Fisk 0.38% (its two heavy bank lines in the neck vanish). The frames either side: 0.000% and 0.004%. My first try at the new looks made it 1.4% and 2.6%, because a new lake changed its line weight and gained a hollow at once; both now ease in with the lake's age.
+- Ordinary frame-to-frame change at 25 s a T, 1/15 s apart: relief 0.04 levels, Fisk 0.10. In 5/7 I guessed 25 s a T would land near Turing Patterns' Regrow (0.07 to 0.11) for both; that holds for Fisk only. The new relief is so low in contrast that it measures near Turing's Still (0.03) even at this pace.
+
+The Swift sketch still times the constant-width river; the varying width adds a multiply per texel and a slightly wider band, which I have not re-timed.
+
+---
+
+Meander round 2, 2/5: the river's maths, complete, as the final prototype runs it (proto/meander.py). Law and constants Omega, Gamma, alpha from meanderpy, Apache-2.0, https://github.com/zsylvester/meanderpy (its migrate_one_step and README), after Howard & Knutson 1984, https://agupubs.onlinelibrary.wiley.com/doi/abs/10.1029/WR020i011p01659 (paper not read). Everything marked "mine" is my choice, tested only by the runs.
+
+Units: channel width W = 1; time T = kl t / W. Screen sx by sy widths (54 by 35.07 for a 28 pt river on 1512 x 982 pt).
+
+State: nodes P_i = (x_i, y_i) with half-width hw_i, i = 0..n-1. Periodic: node i+n is node i moved by (L, 0), L = sx + 20 (mine).
+
+Start (mine): n = round(L / 0.5), x_i = -10 + L i / n, y_i = sy/2 + sum over k = 1..39 of a_k / sqrt(k) sin(2 pi k i / n + phase_k), a_k normal with deviation 0.25, phases uniform. hw_i = 0.5.
+
+One step of size eps:
+1. a = P_i - P_(i-1), b = P_(i+1) - P_i, c = a + b (neighbours wrap, adding or taking L in x).
+2. Curvature k_i = 2 (a_x b_y - a_y b_x) / (|a| |b| |c|). Normal n_i = (c_y, -c_x) / |c|. (Mine: exact for uneven spacing.)
+3. Upstream average, in order downstream, started 16 / (alpha 0.5) nodes before node 0: C = k_i w_i + q_i C, G = w_i + q_i G, with w_i = (|a| + |b|) / 2 and q_i = exp(-alpha |a|). U_i = C / G.
+4. R_i = -k_i + 2.5 U_i (Omega = -1, Gamma = 2.5). alpha = 0.73 (meanderpy's 2 Cf / D x W with Cf 0.011, D 6 m, W 200 m).
+5. The bank being eaten: B = P_i + 0.5 sign(R_i) n_i.
+6. Erodibility (mine): E = exp(0.5 g(B)), g a grid of standard normal numbers, cells about 8 W, read bilinearly, wrapping in x.
+7. Valley wall (mine): if sign(R_i) n_y (B_y - sy/2) > 0, E is multiplied by smoothstep((sy/2 - 1.5 - |B_y - sy/2|) / 5).
+8. P_i moves by clamp(R_i E eps, -1.25 eps, 1.25 eps) along n_i.
+9. Width (mine): bend = mean of |k| over the 7 nodes centred on i; want = 0.5 (0.7 + 0.8 clamp(bend / 0.4, 0, 1)); hw_i moves toward want by the share 1 - exp(-eps / 1.5).
+10. T increases by eps.
+
+Cutoff (every step live; mine except the idea): among pairs i, j (j may be in the next period) at least 12 nodes apart both ways round, with |P_i - P_j| < 1.04 (hw_i + hw_j), take the one with the least |P_i - P_j| - hw_i - hw_j. The loop is nodes i to j. The river becomes nodes j onward round to i, keeping both; the period's closing segment joins i to j. Repeat until none.
+
+Respacing (mine), up to 4 passes: split every segment longer than 0.7 at (-P0 + 9 P1 + 9 P2 - P3) / 16, the new half-width the mean of its neighbours'; otherwise drop the far node of every segment shorter than 0.3, never two neighbours in one pass. Then shift all x by a multiple of L so their mean stays near L/2 - 10.
+
+Step sizes: 0.04 for the launch history. Stable only while eps < spacing squared / 2 = 0.045 (my derivation; the -k term is a heat equation). Live: eps = 1 / (seconds per T x steps per second), 0.004 at 25 s a T and 10 steps a second.
+
+Derived by me: the fastest-growing wavelength is 2 pi / (alpha sqrt(sqrt(2.5) - 1)) = 8.24 / alpha = 11.3 W along the channel.
+
+Not from any source: every constant in steps 6 to 9, the cutoff's 1.04 and 12, the 1.25 cap, the respacing limits.
+
+---
+
+Meander round 2, 3/5: the fields and how they are kept, complete. All of this is mine; none of it comes from a source.
+
+Grid: 14 texels per river width (2 pt for a 28 pt river), 756 x 491. A texel's centre is ((ix + 0.5) / 14, (iy + 0.5) / 14) in widths.
+
+Three numbers per texel:
+- stamp: the time the live channel last covered it. Starts as "never".
+- lake: bank distance of the cut-off loop it belongs to. Starts at 1 (no lake).
+- live: bank distance of the live channel, kept only near it.
+
+Bank distance of a channel, for a texel centre p: the least, over the channel's segments, of [distance from p to the segment] - [half-width there, interpolated along the segment] + 0.5. So 0.5 is the bank, less is water. Each segment is drawn in the period that puts it on screen.
+
+Every field update (each live step; every 8th coarse step during the launch history, as timed):
+1. live = bank distance of the live channel, for texels out to 2 texels beyond its banks; elsewhere "far".
+2. cover = clamp(0.5 + (0.5 - live) x 14, 0, 1): the share of the texel under water.
+3. If cover = 1: stamp = now.
+   Else if cover is more than at the last update: stamp moves toward now by the share (cover - before) / (1 - before), starting from max(stamp, now - 400).
+   Else: unchanged. This is what records a bank's furthest reach to a fraction of a texel.
+4. lake = max(lake, 0.5 + 3 (0.5 - live)): the river erases any lake it crosses.
+5. Remember cover for next time (0 outside the band).
+
+At a cutoff, before the loop's nodes are dropped: for texels out to 0.5 W beyond the loop's banks, lake = min(lake, the loop's bank distance). These are the numbers the live field held, so the water does not change. Keep for the lake: its texels; for each, `end`, the distance along the loop to its nearer end; rate = 1 + 80 exp(-end / 1.2); the time it was born; half the loop's length.
+
+Every field update, per lake, with age = now - born and dT the time since the last update:
+- front = (half + 2) smoothstep(age; 4.8, 16) - 1.5
+- late = 40 smoothstep(front - end; -1.5, 0.5)
+- every texel with lake < 0.56: lake = min(lake + (rate + late) x 0.006 x dT, 0.56)
+So the ends plug in about 1 T, the body narrows slowly, then a front from each end closes it by about 16 T, and it stays at 0.56: dry, but remembered as a hollow. Forget the lake's list after 24 T.
+
+The texture (as the Swift sketch packs it): stamp in 16 bits across red and green at 0.01 T a level; lake and live in 8 bits each. For live, 0.5 + (value - 0.5) x 14 / 4, clamped, puts the bank at mid-range. The lake needs its range up to 0.66 for the hollow, so pack it over 0.25 to 1 instead.
+
+Rebasing: 16 bits at 0.01 T last 655 T, and memory is 600, so before the stamps run out subtract a constant from all of them and from the clock; a multiple of 15.86 T keeps the scroll phases and stage colours still (4 stages of 5 T; scroll periods 0.7 and 0.7 x 1.618). Not built. Keep the clock as a Double.
+
+The shader reads each field through a cubic B-spline (four taps for all three), and reads the stamp once more about two texels inside any lake, down the lake field's slope, for the lake's own age: at a lake's bank the plain read is already half the old land's stamp. The prototype stands in for that second read with "the newest stamp within two texels". It is only right within two texels of the lake's bank, which is all it is used for.
+
+---
+
+Meander round 2, 4/5: both looks, per pixel, complete (proto/render.py). S, LK, DA are the smoothed reads of stamp, lake and live; SI is the stamp read inside a lake. All colours are meander-look's measurements (scripts/palettes.py in the meander scratchpad; their report has the source pictures and licences). The formulas and constants are mine, tuned by eye against their references; px is one pixel in widths.
+
+Shared:
+- age = now - S, capped at 600 T. lage = now - SI.
+- river = smoothstep(0.5 - DA) over 0.6 px either side; lake = the same of LK, times (1 - river).
+
+Relief (the default):
+- height h = 0.25 (1 - exp(-age / 1.6)) + 0.75 (1 - exp(-age / 90)). The first term is what ended the pipe: new ground leaves river level in about half a width.
+- hollow = smoothstep(0.66 - LK; 0, 0.12) x smoothstep(lage; 2, 12) x exp(-lage / 140); h falls by 0.14 x hollow x smoothstep(h; 0.1, 0.4). Old channels stay a shade lighter, and never appear at once.
+- scroll = [0.6 cos(2 pi S / 0.7) + 0.4 cos(2 pi S / 1.133 + 1.3)] x fade x patch x (0.35 + 0.65 exp(-age / 150)). fade = 1 - smoothstep(2 pi |grad S| / 0.7; 0.7, 1.5) per pixel, which removes them where too fine to draw and across scarps. patch = 0.55 + 0.45 x soft noise in cells about 70 pt.
+- colour = ramp of h + 0.02 scroll through, at h = 0, 0.10, 0.32, 0.52, 0.72, 0.90, 1: (120,178,192) (52,130,151) (24,93,115) (14,76,97) (10,64,83) (4,46,63) (1,30,42).
+- ground untouched in memory (age past about 480 to 590): fades to (0,22,31), lifted toward (4,46,63) by three octaves of soft noise.
+- light: shading height 0.35 h + 0.03 scroll; normal = (-5 d/dx, -5 d/dy, 1) with the slope per texel; light from the upper left (-0.55, -0.62, 0.56); colour x clamp(1 + 0.9 (n.l - 0.56) x away, 0.72, 1.3). away fades the light to nothing within 4 px of any water, so no bank has a rim.
+- water: river (153,200,211); a lake drifts 35% toward (52,130,151) over lage 0.3 to 4.
+- vignette 0.22; everything x 0.86.
+
+Old map (Fisk):
+- stage k = floor(S / 5 T). ink = one of sage (188,199,139), salmon (215,114,97), grey-teal (154,180,159), straw (221,208,123), by k mod 4. Paper (235,224,196). Line ink (89,75,59).
+- cover, by age in stages (age / 5), straight lines between: 0 to 1.5: 1.0; 3: 0.65; 6: 0.5; 12: 0.4; 30: 0.23; 90: 0.12; 120: 0. These are Fisk's solid, hatch and dot coverages as flat tints, sliding with age so nothing steps.
+- colour = paper x (1 - cover) + ink x cover, both with 3% paper grain.
+- thin lines where stages meet (within about half a pixel of a whole number of S / 5) and along scarps (S / 5 changing by more than about 0.35 to 0.8 a pixel), at 45% ink, less on pale land; hachures every 1.4 T at 14%.
+- river and lakes: bare paper (244,237,216). Heavy line where |DA - 0.5| is under 0.9 to 2.2 px. A lake's line is the same heavy one when new, thinning to 0.3 to 1.3 px at 70% over lage 0.5 to 6.
+- single ink: two near shades of one ink alternating by stage. Dark: paper (27,24,20), river (166,158,138), line (80,76,67), inks (100,106,74) (123,65,55) (82,96,84) (110,104,61).
+
+What makes neither look pop: a stage's colour is fixed to the land once laid; cover, height, hollows and line weights depend only on ages, which move smoothly; the water's edge comes from fields that hand over the same numbers at a cutoff.
+
+---
+
+Meander round 2, 5/5: what is still wrong, what changes in the plan, and what is open.
+
+Still wrong in the new renders:
+- Lakes. A lake's drying ends are blocky, and where the river re-crosses a fresh oxbow near the neck it leaves ragged scraps (cutoff/cutoff-fisk.png: the 10 s, 30 s and 1 min frames). This is now the most visible flaw. I'd give each lake's end a taper worked out along its length rather than per texel, and dry a part-eaten lake quickly.
+- A hairline of land shows where a lake meets the river (retina-relief.png). Letting the lake run a texel under the river's edge would close it.
+- Banks are faceted on tight bends at Retina: straight chords up to 0.7 W long. Draw the fields from the centreline subdivided along its Catmull-Rom curve.
+- The first frame is a young belt on empty ground (first-frame-relief.png). It is dark, textured ground, and the left third of the Helena reference looks like that, but it is not the edge-to-edge floodplain of a river that has run two hours.
+- Relief is soft next to real lidar: no levees, no islands or bars in the channel, width varying 2x rather than 2 to 3x, scroll bars invisible below Retina.
+- In the old map, lakes are bare paper like the river, so a fresh oxbow reads as a second river until its line thins.
+
+Changes to the plan in 6/7:
+- River size slider: 28 pt (54 widths across) is already true to life, so the default sits at the small end and the slider zooms in from there, to about 56 pt. Changing it rebuilds the river. Keep 14 texels a width and let the texel grow from 2 pt to 4 pt as it zooms, so the cost stays the same.
+- Look: Relief by default, Old map as the other choice; same texture, a different shader branch or source.
+- Colors: two lists, one per look. Old map: Fisk 1944, Sage, Salmon, grey-teal, each with a dark version. Relief: Survey Blue, Rainforest, Garnet, Amethyst from meander-look's list.
+- Valley walls 1.5 W from the edges, memory T 600.
+- The shader needs the lake field over a wider range than I first packed it (3/5).
+- Each node now carries a half-width; the Swift sketch does not have that yet.
+
+Launch history, three choices for the empty first frame:
+1. Leave it: T 60, about 0.2 s as timed, young belt on dark ground.
+2. A longer history. The river alone costs about 0.045 ms a coarse step, so T 400 is about 0.45 s before any fields. Too slow as it stands.
+3. The distant past cheaply: coarser nodes and bigger steps for the river, plain filled quads for its stamps, then T 60 exactly. Stamps are a maximum, so order doesn't matter. Not tried; my guess is under 0.1 s extra.
+
+Open, for Dave:
+- Pace. Relief at 25 s a T measures as still as the Turing look he found finished. Faster, or is the old map's liveliness the answer for those who want motion?
+- The first frame: which of the three above.
+- Is the bold zoomed river still wanted now that the default no longer reads as a pipe?
+
+Verified this round by running: the varying-width river to T 800, both new looks, the cutoff frame. Not verified, as before: the shader as a shader, GPU cost, the upload, 15/30/60 fps. No real river's migration rate comes from me; meander-look's Mamore figure (about 0.03 widths a year) should set years per minute.
+
+---
+
+Your targets are in my new Meander renders, and one of your measurements needs a caveat: the channel's water was never twice too wide.
+
+Width: scripts/width.py thresholds brightness, so on my first relief it counted the pale new ground beside the water as channel. Measuring the water's own colour with a distance transform, t1 is 16 px of 1512 (1.06%, 94 widths across) and t5, t6 and every later still are 28 px (1.84%, 54 across), inside your 40 to 55. The fault was real, though: the ground stayed pale for about 8 widths behind the moving bank, so it read as a fat pipe. I've told team-lead the scale was already right and the look was wrong.
+
+What changed, from your message:
+- no outline in relief; new ground now leaves river level within about half a width
+- the water's width varies along the river, 22 to 42 px (10th to 90th percentile)
+- scroll bars a few percent of brightness, uneven, about 0.2 W apart (finer than that is below my texture at one pixel a point)
+- dried oxbows stay as lighter hollows; the floodplain is covered edge to edge once the river has run a while
+- relief in your Survey Blue (Sauk) colours; the map in your four Fisk inks on cream with your line ink, older paler by your coverage steps as flat tints, the river bare paper with heavy bank lines; single-ink and dark versions
+
+Your busy.py on the new stills: relief luma 0.25, edges 1.1%, hues 1.00; Fisk 1944 luma 0.73, chroma 0.19, hues 1.00.
+
+Stills, if you want to put them beside the references: scratch/meander/proto/out2/still-relief-survey-blue.png, still-fisk-fisk-1944.png, retina-relief.png, retina-fisk.png.
+
+Still short of your references: no levees, no bars or islands in the channel, width varying 2x not 2 to 3x, and the relief is much softer than real lidar.

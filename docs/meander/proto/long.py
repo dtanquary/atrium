@@ -7,8 +7,8 @@ import render
 out, seed, steps = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
 os.makedirs(out, exist_ok=True)
 r = River(seed=seed); t0 = time.time(); log = []
-minutes = {6000 + k * 60 for k in range(6)}        # 2.4 T apart: three minutes of wallpaper time each
-hours = set(range(10000, steps + 1, 10000))        # 400 T apart: 8 h 20 min each
+minutes = {1500} | {8000 + k * 60 for k in range(6)}  # the first frame after a T 60 launch history; then 2.4 T apart
+hours = set(range(2500, steps + 1, 2500))          # 100 T apart
 for n in range(1, steps + 1):
     r.step()
     if n % 1000 == 0:

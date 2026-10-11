@@ -85,7 +85,10 @@ def relief(r, f=2, palette="Survey Blue", crop=None, seed=7):
     p = RELIEF[palette]
     age = r.t - S
     # height above the river, 0 to 1: a bar is up out of the water within a couple of T, then silts up for ages
-    h = 0.42 * (1 - np.exp(-age / 1.6)) + 0.58 * (1 - np.exp(-age / 170))
+    h = 0.25 * (1 - np.exp(-age / 1.6)) + 0.75 * (1 - np.exp(-age / 90))
+    lage = np.maximum(r.t - SI, 0)  # the lake's own age (only right within two texels of its banks)
+    hollow = smooth(0.66 - LK, 0.0, 0.12) * smooth(lage, 2.0, 12.0) * np.exp(-lage / 140)  # an old channel stays low for a long while: never at once
+    h = h - 0.14 * hollow * smooth(h, 0.1, 0.4)
     # scroll bars: old bank lines, so contours of the stamp; two spacings beating, uneven in strength, and low
     gx, gy = grad(S); g = np.hypot(gx, gy)
     fade = 1 - smooth(2 * np.pi * g / TS, 0.7, 1.5)  # too fine to draw, and across a scarp: flat
@@ -98,11 +101,11 @@ def relief(r, f=2, palette="Survey Blue", crop=None, seed=7):
     # ground the river has not reached in memory: not flat, but nothing like a river's work either
     wild = smooth(age, AMAX * 0.80, AMAX * 0.98)
     rough = 0.6 * noise(S.shape, 60 * f // 2, seed) + 0.3 * noise(S.shape, 22 * f // 2, seed + 1) + 0.1 * noise(S.shape, 8 * f // 2, seed + 2)
-    hc = np.clip(h + 0.012 * scroll, 0, 1)
+    hc = np.clip(h + 0.02 * scroll, 0, 1)
     col = ramp(hc, p["stops"])
     col = col * (1 - wild[..., None]) + (p["ground"] + (np.array(p["stops"][5][1]) - p["ground"]) * smooth(rough, -0.1, 0.55)[..., None]) * wild[..., None]
     # light from the upper left on the fine relief only, and none within a few pixels of water: no rims
-    hs = 0.35 * h + 0.018 * scroll + 0.05 * wild * rough
+    hs = 0.35 * h + 0.03 * scroll + 0.05 * wild * rough
     gx, gy = grad(hs)
     z = 5.0 * f
     nx, ny = -gx * z, -gy * z
@@ -114,7 +117,7 @@ def relief(r, f=2, palette="Survey Blue", crop=None, seed=7):
     col = col * (1 - water[..., None]) + wcol * water[..., None]
     yy, xx = np.mgrid[0:S.shape[0], 0:S.shape[1]]
     vig = 1 - 0.22 * (((xx / S.shape[1] - 0.5) ** 2 + (yy / S.shape[0] - 0.5) ** 2) * 2)
-    return np.clip(col * vig[..., None], 0, 1)
+    return np.clip(col * vig[..., None] * 0.86, 0, 1)
 
 
 FISK = {
@@ -161,7 +164,8 @@ def fisk(r, f=2, palette="Fisk 1944", crop=None, seed=7):
     w = np.maximum(river, lake)[..., None]
     col = col * (1 - w) + p["river"][None, None, :] * grain * w
     heavy = 1 - smooth(np.abs(DA - 0.5), 0.9 * px, 2.2 * px)  # the present banks: the only heavy line on the sheet
-    thin = (1 - smooth(np.abs(LK - 0.5), 0.3 * px, 1.3 * px)) * (1 - river) * 0.7
+    fresh = 1 - smooth(r.t - SI, 0.5, 6.0)  # a new lake keeps the river's heavy bank line, thinning over a few T
+    thin = np.maximum((1 - smooth(np.abs(LK - 0.5), 0.3 * px, 1.3 * px)) * 0.7, (1 - smooth(np.abs(LK - 0.5), 0.9 * px, 2.2 * px)) * fresh) * (1 - river)
     line = np.maximum(heavy, thin)[..., None]
     col = col * (1 - line) + p["line"][None, None, :] * line
     yy, xx = np.mgrid[0:S.shape[0], 0:S.shape[1]]

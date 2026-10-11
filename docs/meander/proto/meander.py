@@ -210,7 +210,7 @@ class River:
         rising = (cov > s.cov) & ~full
         old = np.maximum(s.stamp[rising], s.t - 400.0)
         s.stamp[rising] = old + (s.t - old) * (cov[rising] - s.cov[rising]) / (1 - s.cov[rising])
-        np.maximum(s.lake, 1 - d, out=s.lake, where=d < 1)  # the river eats any lake it crosses, to a fraction of a texel
+        np.maximum(s.lake, 0.5 + 3 * (0.5 - d), out=s.lake, where=d < 1)  # the river eats any lake it crosses, to a fraction of a texel
         s.cov = cov
 
     def make_lake(s, lx, ly, lh):
@@ -236,7 +236,8 @@ class River:
         for idx, rate, born, end, half in s.lakes:
             front = (half + 2) * smooth(np.float32(s.t - born), s.lake_life * 0.3, s.lake_life) - 1.5
             late = s.lake_close * smooth(front - end, -1.5, 0.5)
-            lk[idx] = np.minimum(lk[idx] + (rate + late) * s.lake_fill * dT, 1.0)
+            v = lk[idx]
+            lk[idx] = np.where(v < 0.56, np.minimum(v + (rate + late) * s.lake_fill * dT, 0.56), v)  # a dried lake stays a hollow
         s.lakes = [L for L in s.lakes if s.t - L[2] < s.lake_life * 1.5]
 
     def live_band(s, r=0.5):

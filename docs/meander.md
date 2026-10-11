@@ -2,16 +2,16 @@
 
 A river slowly migrating across its floodplain: bends grow and shift down the valley, a neck narrows until the river cuts through and leaves an oxbow lake, and every former course stays written on the ground behind it. Drawn as lidar relief (height above the river, in one colour family) or as a map of old courses coloured by age, after Harold Fisk's 1944 maps of the Mississippi. A new river on each load.
 
-Dave picked the idea on 2026-10-10 ([ideas.md](ideas.md)). That day two agents researched it (one built and ran the simulation, one measured the real references) and one sheet went to Dave. **Nothing is built in the app.** This page is the plan, the measurements to build against and their sources.
+Dave picked the idea on 2026-10-10 ([ideas.md](ideas.md)). That day two agents researched it (one built and ran the simulation, one measured the real references) and two sheets went to Dave. **Nothing is built in the app.** This page is the plan, the measurements to build against and their sources.
 
 - **The two research reports in full:** [the simulation](meander/research-simulation.md) and [the look](meander/research-look.md).
-- **In `docs/meander/`:** `sheet1.jpg` (what Dave chose from), `reference-mississippi-relief.jpg` (the real river, our render of USGS elevation), the prototype's pictures, `proto/` (the simulation: `python3 meander.py` is its self-check; `render.py` draws both looks) and `measure/` (the scorecard `busy.py`, the palettes, the relief and scroll-bar measurements). Research scripts, not reviewed line by line.
+- **In `docs/meander/`:** `sheet1.jpg` (what Dave chose from) and `sheet2.jpg` (the same references above the prototype's second round, in the looks he chose), `reference-mississippi-relief.jpg` (the real river, our render of USGS elevation), the prototype's pictures (`proto-relief.jpg`, `proto-map-fisk.jpg`, `proto-cutoff.jpg`, `proto-first-frame.jpg`), `proto/` (the simulation: `python3 meander.py` is its self-check; `render.py` draws both looks) and `measure/` (the scorecard `busy.py`, the palettes, the relief and scroll-bar measurements). Research scripts, not reviewed line by line.
 
 ## Dave's decisions (2026-10-10)
 From sheet 1: the two real references (Fisk's sheet 6, and the same stretch of river as relief from USGS elevation) above the simulation's renders of that hour.
 - **Look:** both, from one simulation. Relief is the default; bands by age are a Settings choice.
 - **Band colours:** palettes. Fisk's own four muted inks on cream, and single-ink palettes where older is simply paler.
-- **River size:** a slider, true to life by default (the channel about 2% of the screen's width), zooming in toward a bold river.
+- **River size:** a slider, true to life by default (the channel about 2% of the screen's width), zooming in toward a bold river. The prototype's river was already that size (28 pt on a 1512 pt screen, 1.85%, 54 widths across), so the default is the small end and the slider zooms in from there, to about 56 pt. When he chose, I had told him the prototype's river was twice too wide; that was wrong (see [What is still wrong](#what-is-still-wrong-with-the-prototypes-pictures)).
 
 Not asked yet: the pace (it needs a film), Light and Dark Mode (the plan follows the system, as Wind does), and rivers "after a real one".
 
@@ -51,6 +51,8 @@ The pictures of rivers as height above the water, made famous by Daniel Coe. His
 | Our relief of the Mississippi from 3DEP | 0.20–0.31 | 1–2% | 1.0 |
 | The simulation's first relief | 0.19 | 3.3% | 1.0 |
 | The simulation's first bands | 0.64 | 10.3% | 0.44 |
+| Its second relief (Survey Blue) | 0.25 | 1.1% | 1.0 |
+| Its second map (Fisk's four inks) | 0.73 | – | 1.0 |
 
 Targets: Dark relief at 0.15–0.20, edges 2–5%, one family 1.0. Bands in Light at 0.80–0.88, edges under 10%, one family above 0.9 (Fisk's four inks apart).
 
@@ -119,11 +121,15 @@ Parameters:
 - **Neck cutoff:** the closest two nodes nearer than 1.04 W and at least 12 nodes apart along the river; drop the nodes between. 1.04 means the banks are touching, which is what makes the cutoff nearly invisible.
 - Left out: chute cutoffs, the river's slope and depth, levees, meanderpy's sinuosity factor.
 
-Over 90,000 steps: sinuosity 1.6 to 4.4, median 2.8; 239 to 656 nodes; about four big bends across a 54-width screen.
+- **The channel's width varies** (added in the second round): each node carries a half-width that eases toward `0.5 (0.7 + 0.8 clamp(bend/0.4, 0, 1))`, `bend` the mean curvature over seven nodes, so it runs from 0.7 W on straight reaches to 1.5 W round the tightest bends, slowly enough that a cutoff can't jump it. The cutoff test becomes `|P_i − P_j| < 1.04 (hw_i + hw_j)`.
+
+Over 90,000 steps with a constant width: sinuosity 1.6 to 4.4, median 2.8; 239 to 656 nodes; about four big bends across a 54-width screen. With the varying width, over 20,000 steps: 630 cutoffs, no self-crossing, sinuosity 1.9 to 3.2.
+
+**The complete maths as the final prototype runs it,** step by step with every constant and which are from meanderpy and which are the agent's own, is in [research-simulation.md](meander/research-simulation.md), round 2, messages 2 to 4. What follows is the summary.
 
 ### Running forever
 - **The river is periodic,** with a period of the screen's width plus 10 W either side, so what leaves on the right is what enters on the left, out of sight. Pinned at both ends (as meanderpy runs it) the river straightens from the inlet downstream and is two-thirds straight on screen by step 6,000.
-- **Valley walls** 3 W inside the top and bottom edges: a bank cutting toward a wall erodes more slowly over the last 6 W and stops at it. The belt as a whole wanders between the walls, which is where the long-run variety comes from.
+- **Valley walls** 1.5 W inside the top and bottom edges (3 W in the first round, which left empty margins): a bank cutting toward a wall erodes more slowly over the last 5 W and stops at it. The belt as a whole wanders between the walls, which is where the long-run variety comes from.
 - **Nothing tangles:** the instability regrows any straight reach, and cutoffs remove loops before they can cross. Zero self-crossings at every check of two 90,000-step runs.
 - **A new river on each load:** a straight line with small random wiggles and a random erodibility field, then a history run at launch in coarse steps. T 30 gives a full belt whose bends are young and alike; T 60 looks like a mature map.
 - **Each display its own river,** like every other simulated wallpaper.
@@ -141,40 +147,47 @@ The shader, so far only emulated in numpy (`render.py`): one cubic B-spline read
 - `age = now − stamp`.
 - Scroll bars `= cos(2π · stamp / 1.1 T)`: contours of the stamp, so they are the river's own old bank lines, fanning round each bend.
 - Water where the live or lake distance is under half a width.
-- **Bands:** `palette[floor(stamp / 5 T) mod 8]`, a ribbon per stage, fixed to the land once laid; all fading into the ground as age nears 160 T.
-- **Relief:** `height = 1 − exp(−age / 28 T)`, land building up since the river left, plus the scrolls, minus a hollow in a silting lake; colour by height above the river.
+- **Old map:** a ribbon per stage of 5 T, fixed to the land once laid, in one of Fisk's four inks by stage; the ink's cover falls with age through his measured steps (solid, 65%, 50%, 40%, 23%) as flat tints that slide, so nothing steps; the river and lakes are bare paper between heavy bank lines; all fading into the paper by 120 stages.
+- **Relief:** `height = 0.25 (1 − exp(−age/1.6)) + 0.75 (1 − exp(−age/90))`: new ground leaves river level within about half a width, which is what stopped the river reading as a pipe; plus faint scrolls at two spacings that beat, minus a hollow where a lake dried; colour by height above the river; light from the upper left, faded to nothing near water so no bank has a rim. Memory is 600 T.
 
 ### Pace and cutoffs, as measured
-For a river 28 pt wide, at 75 s of wallpaper per T: the fastest bank moves 0.47 pt a second and the average 0.11; a cutoff on screen about every 2.5 minutes; an oxbow lasts about 20 minutes; old courses stay visible 3.3 hours. At 25 s per T, three times all of that. Frame-to-frame change at 75 s per T is 0.026 grey levels a pixel (relief) and 0.035 (bands), about the same as the Turing Patterns look Dave called done moving (0.03), so the agent would default nearer 25–30 s per T with a Speed setting. The look research's "a year every 9 seconds" is in real years; the two haven't been reconciled.
+For a river 28 pt wide, at 75 s of wallpaper per T: the fastest bank moves 0.47 pt a second and the average 0.11; a cutoff on screen about every 2.5 minutes; an oxbow lasts about 20 minutes; old courses stay visible 3.3 hours. At 25 s per T, three times all of that. Frame-to-frame change at 75 s per T was 0.026 grey levels a pixel (relief) and 0.035 (bands) in the first round, about the same as the Turing Patterns look Dave called done moving (0.03). In the second round's looks at 25 s per T it is 0.04 (relief, which is now so low in contrast that it stays near that Still level even three times faster) and 0.10 (the old map, near Turing's Regrow). So relief may want a faster pace than the map, or the map is the lively one. The look research's "a year every 9 seconds" is in real years; the two haven't been reconciled.
 
-A cutoff, as it happens: the two limbs' banks touch; the loop's nodes are dropped; the river crosses the neck, which is the only thing that changes in one frame, a patch about a river's width across (0.05% of nearby pixels change by more than 20 levels in relief, 0.2% in bands; one cutoff measured). The kink relaxes over 10–20 s, the loop's ends silt up over a minute or two, its water darkens, and it narrows and dries from both ends, staying as a scar.
+A cutoff, as it happens: the two limbs' banks touch; the loop's nodes are dropped; the river crosses the neck, which is the only thing that changes in one frame, a patch about a river's width across (in the second round's looks, 0.07% of nearby pixels change by more than 20 levels in relief and 0.38% in the old map, whose two heavy bank lines vanish in the neck; one cutoff measured). The kink relaxes over 10–20 s, the loop's ends silt up over a minute or two, its water darkens, and it narrows and dries from both ends, staying as a scar.
 
 Stepping: 10 steps a second counted from elapsed time, as Turing Patterns counts its steps, so 15, 30 and 60 fps show the same river (by design; not run).
 
 ### Cost
 Measured with a standalone Swift sketch (`proto/bench.swift`, `swiftc -O`, M3 Max): the river step 0.03–0.05 ms; the field update 0.51–0.57 ms; so about 0.6 ms a step, ten times a second, or 0.1–0.4 ms a frame averaged. The launch history: about 200 ms for T 60, 72 ms for T 30, on the main thread at every load (Schlieren's is about 100 ms). Not measured: the texture upload, anything on the GPU.
 
-### What is wrong with the prototype's pictures
-See `docs/meander/proto-relief.jpg` and `proto-bands-jade.jpg` beside `reference-mississippi-relief.jpg`.
-- The relief reads as blue ribbon candy, not yet as lidar: the channel is about twice too wide with an outline, and the scroll bars are even, like corduroy (they are spaced by time, so they bunch where the river moved slowly).
-- Where the river re-crosses an oxbow, ragged scraps of water remain, and a drying lake's front is stair-stepped at Retina.
-- Old scarps wobble by about a pixel and, in bands, carry a thin fringe of other stages' colours.
-- The strips 3 W inside the top and bottom edges stay empty; history covers 62–77% of the screen.
-- Never-visited land is flat.
+### What is still wrong with the prototype's pictures
+See `sheet2.jpg`: the two real references above the second round.
+
+Fixed in the second round: the river reading as a pipe (no outline in relief, new ground darkening within half a width of the bank, a width that varies); even, strong scroll rings (now a few percent of brightness and uneven; at one pixel a point they nearly vanish and show at Retina); colours round the whole wheel (relief in Survey Blue; the map in Fisk's four inks on cream); empty ground beyond the belt, for a river that has run a while (history covers 66–90% of the screen).
+
+**A correction.** After the first round the look research measured the channel at 3.5–4% of the frame, twice the references', and that went to Dave and into the first version of this page. It was wrong: that script thresholds brightness, so it counted the pale new ground beside the water. Measured on the water's own colour, the channel was 1.84%, inside the references' range. The fault was real but it was the look (ground staying pale for eight widths behind a moving bank), not the scale.
+
+Still wrong:
+- **Lakes.** A drying lake's ends are blocky, and where the river re-crosses a fresh oxbow it leaves ragged scraps of water. Now the most visible flaw. Taper each lake's ends along its length, and dry a part-eaten lake quickly.
+- A hairline of land shows where a lake meets the river.
+- Banks are faceted on tight bends at Retina (straight chords up to 0.7 W long): draw the fields from the centreline subdivided along its curve.
+- **The first frame** after the launch history is a young belt on empty ground (`proto-first-frame.jpg`), not the edge-to-edge floodplain of a river that has run two hours.
+- Relief is soft beside real lidar: no levees, no bars or islands in the channel, width varying two times and not two to three, scroll bars invisible below Retina.
+- In the old map lakes are bare paper like the river, so a fresh oxbow reads as a second river until its line thins.
 
 ## The plan
 One file, `Sources/Atrium/Meander.swift`: a `River` type with no SpriteKit in it (nodes, step, cutoff, fields, pixel bytes), the scene, its shader, knobs and palettes. Everything built in `sceneDidLoad`; steps owed at 10 a second in `update(_:)`; the texture uploaded only when a step ran.
-1. **The look first, in the prototype:** bring `render.py`'s relief to the references' scorecard at the true-to-life river size Dave picked (thin channel of varying width, no outline, faint irregular scrolls, texture to the edges), and the bands in Fisk's measured inks. Then a film at two paces for Dave. No Swift before this: it is the Crystals risk.
+1. **The look first, in the prototype.** A second round is done (`sheet2.jpg`). Left: the lakes, the faceted banks, the first frame, and whether relief needs levees and bars to hold up beside the reference. Then a film at two paces for Dave. No Swift before he has seen it move: it is the Crystals risk.
 2. **`River`** ported from `meander.py`, with its check: 6,000 coarse steps must cut off loops, never cross and stay in the valley; stepping by 1/15, 1/30 and 1/60 s for the same elapsed time must give identical nodes.
 3. **The texture and shader,** matched to `render.py`'s stills. Finds out the unknowns: the alpha byte carrying data, a second dependent read, the uniform count, the upload's cost.
 4. **Motion,** in frame strips through a cutoff: no frame with more than about 0.3% of pixels changing over 20 levels.
-5. **Settings:** Look (Relief, Old map), Colors (palettes, Random by default), Speed (0.25–4×), River size (the slider Dave picked: a rebuild), how long old courses stay, scroll-bar strength, how long lakes last, the shared grade knobs.
+5. **Settings:** Look (Relief, Old map); Colors, a list per look (relief: Survey Blue, Rainforest, Garnet, Amethyst; old map: Fisk 1944, Sage, Salmon, Teal, each with a dark version), Random by default; Speed (0.25–4×); River size (the slider Dave picked, from 28 pt to about 56 pt: a rebuild, keeping 14 texels a width so the cost stays the same); how long old courses stay; scroll-bar strength; how long lakes last; the shared grade knobs.
 6. Left overnight: no drift in pace, no banding from rebasing. Then the doc, screenshots, README, site.
 
-Still Dave's to decide: the pace (from a film); whether 0.1–0.2 s to load is acceptable or the past should fill in over the first seconds; the empty margins (valley walls drawn as land, or left as ground); Light Mode (paper map by day, or leave it to the Look setting).
+Still Dave's to decide: the pace (from a film); the first frame (leave the young belt at about 0.2 s to load; a longer history, about 0.45 s; or the distant past drawn cheaply with coarse steps, untried, perhaps 0.1 s more); Light Mode (paper map by day, or leave it to the Look setting).
 
 ## Risks, worst first
-1. Pretty, not just correct. The bands are already striking; the relief, the default, is not there yet.
+1. Pretty, not just correct. The old map is already striking; the relief, the default, is calm and in one family but soft beside the real thing.
 2. Pace: calm enough to be ambient is as still as a look Dave has called finished.
 3. The launch history on the main thread at every load, shuffle and Settings page.
 4. Shader unknowns (above).
