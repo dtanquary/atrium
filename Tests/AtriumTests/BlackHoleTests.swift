@@ -3,6 +3,7 @@ import ImageIO
 import Metal
 import SpriteKit
 import Testing
+import simd
 @testable import Atrium
 
 /// What the shader reads from a packed table at unit coordinates: the GPU's smoothing between the four entries
@@ -152,4 +153,36 @@ private let prototypeView = BlackHole.View(distance: 50, tilt: 78, outer: 12, fi
                      name, worst, sum / n, between / n, 1.0 / 255))
         #expect(worst < limit, "the GPU's reading of table \(name) is off by \(worst)")
     }
+}
+
+/// The disc's colours come from a table of black-body colours worked out in Swift. Its curves' constants were typed
+/// in from memory of Wyman, Sloan & Shirley's fit, so they're checked here where it matters: the colour's place on
+/// the CIE chart against the Planckian locus's published points, to 0.004.
+@Test(arguments: [(2000.0, 0.5267, 0.4133), (3000, 0.4369, 0.4041), (4000, 0.3805, 0.3768), (5000, 0.3451, 0.3516),
+                  (6500, 0.3135, 0.3237), (10000, 0.2807, 0.2884)])
+func blackBodyKeepsToTheLocus(kelvin: Double, x: Double, y: Double) {
+    let seen = BlackBody.chromaticity(kelvin)
+    #expect(abs(seen.x - x) < 0.004 && abs(seen.y - y) < 0.004, "\(kelvin) K at \(seen), published \(x), \(y)")
+}
+
+/// The sky file is baked already turned to the scene's view (docs/black-hole/sky.py), so here the turn is made
+/// again from scratch for one star whose place nobody can mistake: Sirius (HYG has it at RA 6.7525 h, Dec −16.7161°,
+/// magnitude −1.44) must be the brightest thing in the cell it lands in. And the grid, one star to a cell, must
+/// have kept nearly all 115,562.
+@MainActor @Test func blackHoleSkyHoldsItsStars() {
+    func turn(_ axis: Int, _ degrees: Double) -> simd_double3x3 {
+        let (c, s) = (cos(degrees * .pi / 180), sin(degrees * .pi / 180))
+        return [simd_double3x3(rows: [[1, 0, 0], [0, c, -s], [0, s, c]]), simd_double3x3(rows: [[c, 0, s], [0, 1, 0], [-s, 0, c]]),
+                simd_double3x3(rows: [[c, -s, 0], [s, c, 0], [0, 0, 1]])][axis]
+    }
+    // the mock-up's turn of the sky (bh.py's sky_rot), from the camera's frame (right, up, toward the hole) to galactic
+    let toGalactic = simd_double3x3(rows: [[0, 0, 1], [-1, 0, 0], [0, 1, 0]]) * turn(1, -55) * turn(0, 12) * turn(2, 35)
+    let seen = toGalactic.transpose * (Sky.galactic * Sky.direction(6.7525 * 15, -16.7161))
+    let (w, h) = BlackHole.skyCells
+    let x = Int((atan2(seen.x, seen.z) / (2 * .pi) + 0.5) * Double(w)), y = Int((asin(seen.y) / .pi + 0.5) * Double(h))
+    let cells = BlackHole.starCells
+    #expect(cells[(y * w + x) * 4 + 2] == 254, "no Sirius at cell \(x), \(y)")
+    let kept = stride(from: 2, to: cells.count, by: 4).count { cells[$0] > 0 }
+    print("Black Hole: \(kept) of 115,562 stars have a cell of their own")
+    #expect(kept > 108_000)
 }

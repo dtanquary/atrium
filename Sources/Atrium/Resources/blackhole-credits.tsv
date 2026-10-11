@@ -1,0 +1,4 @@
+# Black Hole's sky, baked by docs/black-hole/sky.py from these two. CC BY and CC BY-SA require this attribution; the
+# star file is an adaptation of HYG and stays under CC BY-SA 4.0. file	subject	author	licence	source
+blackhole-glow.heic	The Milky Way panorama (its own stars taken out and their light spread into the glow; turned to the scene's view)	ESO/S. Brunier	CC BY 4.0	https://www.eso.org/public/images/eso0932a/
+blackhole-stars.lzfse	The HYG star database v4.4: its 115,562 stars to magnitude 11 (place, brightness and colour; turned to the scene's view)	David Nash	CC BY-SA 4.0	https://codeberg.org/astronexus/hyg

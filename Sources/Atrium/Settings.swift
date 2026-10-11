@@ -427,6 +427,7 @@ struct AboutPage: View {
                 group("Fish Tank", "Reef photos from iNaturalist, Wikimedia Commons and NOAA", "reef-credits.tsv")
                 group("Solar System Tour", "Photos from NASA, ESA, JAXA and the people who processed them", "solar-photos.tsv")
                 group("Deep Space Tour", "Photos from ESA/Hubble, ESA/Webb, ESO, NOIRLab, Euclid, Chandra and the EHT", "deep-photos.tsv")
+                group("Black Hole", "The Milky Way from ESO, and the HYG catalogue's stars", "blackhole-credits.tsv")
             } header: {
                 Text("Photos")
             } footer: {

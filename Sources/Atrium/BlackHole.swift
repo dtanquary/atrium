@@ -165,6 +165,8 @@ final class BlackHole: SKScene {
         Knob(key: "blackhole.beaming", label: "Beaming", range: 0...1, standard: 1, section: "Look"),
         Knob(key: "blackhole.streaks", label: "Streaks", range: 0...1, standard: 0.7, section: "Look"),
         speed,
+        Knob(key: "blackhole.stars", label: "Stars", range: 0...2, standard: 1, section: "Sky"),
+        Knob(key: "blackhole.milkyway", label: "Milky Way", range: 0...2, standard: 1, section: "Sky"),
     ]
 
     /// The disc's colours, each the temperature of its hottest ring in kelvin, and the exposure that suits it.
@@ -218,6 +220,44 @@ final class BlackHole: SKScene {
         return table(bytes, w + 1, h + 1)
     }()
 
+    /// The sky's frame, for the stars and the Milky Way alike: longitude across and latitude up, with 0, 0 straight
+    /// through the hole from the camera. docs/black-hole/sky.py bakes both files already turned to it.
+    static let skyCells = (across: 2048, up: 1024)
+
+    /// The real stars (the HYG catalogue to magnitude 11, Resources/blackhole-stars.lzfse) as a grid the shader can
+    /// find a star in: one cell every 0.18° of the sky, holding at most one star, the brightest that falls in it.
+    /// A cell's bytes are where in it the star sits (across, up), how bright it is (0 for no star, then 255 for
+    /// magnitude −1.5 down to 1 for 11) and where the black-body table keeps its colour.
+    static let starCells: [UInt8] = {
+        let (w, h) = skyCells
+        var cells = [UInt8](repeating: 0, count: w * h * 4)
+        let packed = try? Data(contentsOf: resource("blackhole-stars.lzfse")) as NSData
+        let bytes = ((try? packed?.decompressed(using: .lzfse)) as Data?).map { [UInt8]($0) } ?? [], count = bytes.count / 6
+        func place(_ run: Int, _ i: Int, _ size: Int) -> Double {
+            min(Double(Int(bytes[run * 2 * count + 2 * i]) | Int(bytes[run * 2 * count + 2 * i + 1]) << 8) / 65535 * Double(size), Double(size) - 0.001)
+        }
+        for i in 0..<count {
+            let (x, y) = (place(0, i, w), place(1, i, h)), at = (Int(y) * w + Int(x)) * 4
+            let bright = UInt8(max(255 - Int(bytes[4 * count + i]), 1))
+            guard bright > cells[at + 2] else { continue }
+            // its colour: B−V (the byte is −0.4...2) to kelvin by Ballesteros's formula (2012), to the table's place for it
+            let bv = Double(bytes[5 * count + i]) / 255 * 2.4 - 0.4, kelvin = 4600 * (1 / (0.92 * bv + 1.7) + 1 / (0.92 * bv + 0.62))
+            let hue = log(kelvin / BlackBody.coldest) / log(BlackBody.hottest / BlackBody.coldest) * 255
+            cells[at..<at + 4] = [UInt8((x - x.rounded(.down)) * 256), UInt8((y - y.rounded(.down)) * 256), bright, UInt8(min(max(hue, 0), 255))]
+        }
+        return cells
+    }()
+
+    private static let catalogue = table(starCells, skyCells.across, skyCells.up)
+
+    /// The Milky Way with its own stars taken out (ESO/S. Brunier's panorama, Resources/blackhole-glow.heic), stored
+    /// lighter than it is. It has smaller copies of itself for where the hole squeezes the whole sky into a few pixels.
+    private static let glow: SKTexture = {
+        let texture = SKTexture(image: NSImage(contentsOf: resource("blackhole-glow.heic")) ?? NSImage())
+        texture.usesMipmaps = true
+        return texture
+    }()
+
     private let knobUniforms: [String: SKUniform]
     private let lens = SKUniform(name: "u_lens", float: 0.5)
     private let age = SKUniform(name: "u_age", vectorFloat3: .zero)
@@ -248,6 +288,7 @@ final class BlackHole: SKScene {
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]),
             SKUniform(name: "u_rays", texture: Self.rays), SKUniform(name: "u_turns", texture: Self.turns),
             SKUniform(name: "u_heat", texture: Self.heat), SKUniform(name: "u_gas", texture: Self.gas),
+            SKUniform(name: "u_catalogue", texture: Self.catalogue), SKUniform(name: "u_glow", texture: Self.glow),
             SKUniform(name: "u_view", vectorFloat4: [Float(1 / view.distance), sin(tilt), cos(tilt), Float(1 / view.outer)]),
             SKUniform(name: "u_peak", vectorFloat2: [Float(heat.kelvin), Float(heat.exposure)]),
             SKUniform(name: "u_checks", float: checks ? 1 : 0),
@@ -328,6 +369,18 @@ final class BlackHole: SKScene {
         return dot((n - 0.5) * keep, vec4(1.0, 0.7, 0.5, 0.35));
     }
 
+    // A star's light `off` pixels from where it's drawn. `code` is the grid's byte for its brightness (1 at magnitude
+    // −1.5, falling to 0 at 11) and `gain` the Stars slider times how far the hole has magnified it. A magnitude 9
+    // star peaks at 0.18 before the stretch; brighter ones are wider as well as brighter. `room` is how far round a
+    // star the pixels are sure to find it in the grid: its light is gone by there, and where the hole squeezes the
+    // sky so hard that there's no room for it, it shrinks and dims instead of showing as a cut-off square.
+    float starLight(float off, float code, float room, float gain) {
+        float bright = 0.18 * exp(11.51 * code - 1.842) * gain;
+        float fits = min(0.75 * (1.0 + 0.25 * log(1.0 + bright)), room / 2.2);
+        float drawn = max(fits, 0.55);
+        return bright * (fits * fits / (drawn * drawn)) * exp(-off * off / (drawn * drawn)) * (1.0 - smoothstep(0.6 * room, room, off));
+    }
+
     // The light of the disc where a ray meets it, already times its opacity, and that opacity. `hue` is the gas's
     // colour there, `seen` its temperature against the hottest ring's as it reaches us, `gas` its streaks (0 to 1).
     // The disc thins out over the last 42% of its radius, and stops short at the innermost orbit.
@@ -398,6 +451,12 @@ final class BlackHole: SKScene {
         float grain1 = fwidth(deep1);
         float wide0 = length(fwidth(on0)) * u0 / 6.2831853;
         float wide1 = length(fwidth(on1)) * u1 / 6.2831853;
+        // The sky where the ray leaves for, as longitude and latitude in the scene's frame, and the Milky Way there.
+        // (Read for every pixel: a texture with smaller copies of itself can't be read inside a branch either.)
+        float lon = atan(sky.x, sky.z);
+        float lat = asin(clamp(sky.y, -1.0, 1.0));
+        vec3 glow = texture2D(u_glow, vec2(lon / 6.2831853 + 0.5, lat / 3.1415927 + 0.5)).rgb;
+        float pixel = fwidth(q.x);   // one pixel, in the units of q
 
         vec3 col = vec3(0.0);
         if (u_checks > 0.5) {
@@ -452,7 +511,45 @@ final class BlackHole: SKScene {
             // Galaxy's stretch: asinh on brightness, which lifts the disc's faint outer part, holds the bright side
             // without bleaching its colour and leaves black black. Past full, red clips first, then green: the
             // hottest gas goes yellow-white, as it did in the mock-ups Dave chose from.
-            vec3 x = light.rgb * (u_brightness * u_peak.y * 11.7);
+            // Behind the disc, where the ray gets away: the Milky Way's glow (stored as its value to the 0.6) and the
+            // catalogue's stars.
+            vec3 behind = vec3(0.0);
+            if (escapes && light.a < 0.996) {
+                behind = pow(glow, vec3(3.667)) * (3.2 * u_milkyway);
+                // How the hole stretches the sky here. Leaving at an angle `away` round the hole, a ray one step
+                // further out on screen leaves `outward` times that step further round; so a step on the sky along
+                // the ring's radius, or round the ring, is this many pixels on screen.
+                float tand = sqrt(off2);
+                float sind = tand / sqrt(1.0 + off2);
+                float swing = max(-log(max(1.0 - e2 * 6.75, 1e-12)), 1e-9);
+                float outward = 2.0 * (after - before) * 1023.0 * 6.75 / (50.0 * sqrt(swing / 50.0) * max(1.0 - e2 * 6.75, 1e-9)) * 2.0 * e2 / tand
+                              - 1.0 / sqrt((1.0 + off2) * max(1.0 - uc - sind * sind, 1e-6));
+                float side = abs(sin(away)) < 1e-4 ? 1e-4 : sin(away);   // (nought dead behind the hole, where a star is a ring)
+                float alongPx = (1.0 + off2) / (outward * pixel);
+                float roundPx = tand / (side * pixel);
+                float magnified = min(sind / abs(outward * side), 6.0);
+                // a cell east, and a cell north, as pixels on screen
+                float level = sqrt(max(1.0 - sky.y * sky.y, 1e-6));
+                vec3 ring = vec3(cos(away) * y, sin(away));
+                vec3 east = vec3(sky.z, 0.0, -sky.x) / level;
+                vec3 north = vec3(-sky.y * sky.x, level * level, -sky.y * sky.z) / level;
+                vec2 eastPx = vec2(dot(east, ring) * alongPx, (y.x * east.y - y.y * east.x) * roundPx) * (0.0030680 * level);
+                vec2 northPx = vec2(dot(north, ring) * alongPx, (y.x * north.y - y.y * north.x) * roundPx) * 0.0030680;
+                float room = 0.5 * abs(eastPx.x * northPx.y - eastPx.y * northPx.x) / max(max(length(eastPx), length(northPx)), 1e-6);
+                // the four cells round this pixel's place on the sky: any star near enough to light it is in one
+                vec2 place = vec2(lon / 6.2831853 + 0.5, lat / 3.1415927 + 0.5) * vec2(2048.0, 1024.0);
+                vec2 corner = floor(place - 0.5);
+                for (int k = 0; k < 4; k++) {
+                    vec2 cell = corner + vec2(mod(float(k), 2.0), floor(float(k) / 2.0));
+                    vec4 star = texture2D(u_catalogue, (vec2(mod(cell.x, 2048.0), clamp(cell.y, 0.0, 1023.0)) + 0.5) / vec2(2048.0, 1024.0));
+                    if (star.b > 0.0) {
+                        vec2 step = cell + (star.rg * 255.0 + 0.5) / 256.0 - place;
+                        vec3 hue = mix(vec3(1.0), texture2D(u_heat, vec2((star.a * 255.0 + 0.5) / 256.0, 0.5)).rgb, 0.7);
+                        behind += hue * starLight(length(step.x * eastPx + step.y * northPx), star.b, room, u_stars * magnified);
+                    }
+                }
+            }
+            vec3 x = light.rgb * (u_brightness * u_peak.y * 11.7) + (1.0 - light.a) * behind;
             float lum = dot(x, vec3(0.3, 0.5, 0.2)) + 0.0001;
             float stretched = log(20.0 * lum + sqrt(400.0 * lum * lum + 1.0)) / 8.0; // asinh(20 lum) / asinh(1490)
             col = min(x * stretched / lum, 1.0);

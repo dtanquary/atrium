@@ -2,11 +2,11 @@
 
 A black hole with a thin disc of glowing gas turning round it, in front of the real Milky Way, all of it bent by the hole's gravity: the far side of the disc lifts into a hump over the shadow, its underside shows as a ring below, the side turning toward us is brighter, and the stars behind slide and double round the edge. One shader, beside Nebula and Galaxy.
 
-Dave picked the idea on 2026-10-10 from a brainstorm ([ideas.md](ideas.md)). That day it was researched by two agents and mocked up in three rounds, and he made the choices below. The build began on 2026-10-11: [The build so far](#the-build-so-far) says what exists. It is in the app as a hidden wallpaper (`unfinished: true`): the bending and the disc, with no sky yet and a first pass at the look. The rest of this page is the plan, the measurements to build against and their sources.
+Dave picked the idea on 2026-10-10 from a brainstorm ([ideas.md](ideas.md)). That day it was researched by two agents and mocked up in three rounds, and he made the choices below. The build began on 2026-10-11: [The build so far](#the-build-so-far) says what exists. It is in the app as a hidden wallpaper (`unfinished: true`): the bending, the disc and the sky, with a first pass at the disc's look. The rest of this page is the plan, the measurements to build against and their sources.
 
 - **Mock-ups and prototypes:** `docs/black-hole/` (see [Mock-ups](#mock-ups) and [Prototype](#the-prototype)).
 - **The two research reports in full:** [the method](black-hole/research-method.md) and [the look](black-hole/research-look.md), which has the reference list, eight real black holes' numbers and the palettes.
-- **Next step:** build order step (c) below, the sky, then the disc's look (e) before the motion check (d).
+- **Next step:** the disc's look (e), then the motion check (d).
 
 ## Dave's decisions (2026-10-10)
 From mock-up sheets, each choice with a recommendation beside it.
@@ -112,7 +112,7 @@ Each a commit; follow "Adding a scene" in `Sources/CLAUDE.md`. One file, `Source
 4. **(d) Motion**, checked in frame strips.
 5. **(e) The look**, against NASA's frames and the mock-up tiles Dave picked (sheet 1 tiles A, D, E; sheet 2 tile H; sheet 3 tile K).
 6. **(f) A baked halo**, only if (e) says the stretch isn't enough.
-Also owed: Bruneton's BSD-3 notice in NOTICE (his two table mappings), a unit test of the tables against RK4 (`proto/checks.py` is the pattern), an icon, the README and site.
+Also owed: an icon, the README's own entry and the site. Done: Bruneton's BSD-3 notice in NOTICE (three expressions of his: table A's column, its row bound and table B's stretch), and the tables' test against Runge-Kutta.
 
 ## The build so far
 `Sources/Atrium/BlackHole.swift` and `Tests/AtriumTests/BlackHoleTests.swift`, written by the agent that made the prototype and reviewed by the session that planned it.
@@ -153,6 +153,26 @@ Measured:
 The look pass (e) is to fix these before the motion strips (d), since shimmer only shows at high contrast.
 
 A gotcha found on the way, now in `Sources/CLAUDE.md`: SKShader has `fwidth` but not `dFdx` or `dFdy`.
+
+**Step (c), the sky (2026-10-11).** The real stars and the Milky Way, both bent by the hole.
+- **Two files, baked by `docs/black-hole/sky.py`** in half a minute from HYG's `hyg_v44.csv` and ESO's 6000 × 3000 JPEG, both already turned to the scene's own frame (the sky as in tile K), so the app does no astronomy:
+  - `blackhole-stars.lzfse`, 566 KB: HYG's 115,562 stars from magnitude −1.5 to 11, six bytes each (place, magnitude, B−V).
+  - `blackhole-glow.heic`, 151 KB: ESO's panorama as a 2048 × 1024 glow.
+- **Credits:** `blackhole-credits.tsv` (author, licence, source), a line in Settings → About, the README's Credits, and NOTICE for Bruneton's expressions. The star file is an adaptation of HYG and stays under CC BY-SA 4.0.
+- **HYG's own sources, checked at its README on 2026-10-11:** v4.4 combines the Hipparcos, Yale Bright Star and Gliese catalogues, CC BY-SA 4.0 since v4.0. It has no Gaia data: that is its sister set, AT-HYG, which this doesn't use.
+- **The glow is not the mock-up's plain blur.** Blurred, the photo's own stars stay as soft blobs degrees from the catalogue's sharp ones. So the bake takes them out (a 9-pixel opening: stars go, dust lanes stay) and spreads their light back over a degree. Display levels beside tile K (mock-up / build): the Milky Way's band 48 / 38, under the hole 43 / 30, empty sky 13 / 4. The build is darker partly because the mock-up's bloom isn't copied.
+- **Stars are points** 1.5 to 4 px across at Retina. 110,973 of the 115,562 have a grid cell of their own; 4% share one with a brighter star and are dropped.
+- **Settings added, under Sky:** Stars and Milky Way, each 0 to 2.
+
+Measured:
+- **Stars land where the lens puts them.** A separate script solved each bright star's image directly (bisection on the escape angle) and looked for it in the app's picture: all 667 stars brighter than magnitude 7.5 in clear sky were found, their centres 0.07 px off at the median and 0.35 px at the 90th percentile; the 8 within four shadow radii, where the lens moves them most, 0.15 px.
+- **Tests, five now:** `blackHoleSkyHoldsItsStars` (Sirius, turned to the scene's frame from scratch, is the brightest thing in its cell) and `blackBodyKeepsToTheLocus` (the colour table against six published points of the Planckian locus, to 0.004) join the three.
+- **Cost with everything in:** GPU 0.70–0.71 ms a frame at 3024 × 1964 at every size, CPU 0.54 ms. Six textures and 13 other uniforms, so risk 3 is settled. Building the scene takes about 30 ms (tables 7, star grid 7, the glow's decode 14), 140 ms more the first time the app decodes any HEIC; a second copy takes 1.3 ms.
+
+Open after step (c):
+- The glow shows faint concentric arcs round the hole. They may be the haze's lumps stretched by the lens, as tile K's are, or an artefact. The test is a flat grey sky, which lensing must leave flat.
+- Stars read thinner than tile K's at a glance: about 10,600 peaks over 0.25 luma outside the disc at full size, 340 over 0.5. The default may want to be brighter.
+- The disc's look, as listed above. The dither is still on the shadow.
 
 ## Mock-ups
 In `docs/black-hole/`. They were rendered by `bh.py`, a brute-force tracer written for the purpose: every ray is integrated (`d²x/dλ² = −1.5 h² x / r⁵`, which gives a light ray's exact path), so the bending in them is real, not painted. Its disc texture, bloom and tone curve are stand-ins.
