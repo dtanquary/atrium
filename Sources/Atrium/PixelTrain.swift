@@ -28,6 +28,7 @@ final class PixelTrain: SKScene {
     private let glass: (x: Int, y: Int, w: Int, h: Int) // the window's pane on it
     private let horizon: Int // the pane's row the horizon lies on, counted from its bottom; the rows below are ground
     private let windowSize: Int // Settings' Window, as the scene was built: 3 is none, the pane being the whole canvas
+    private let windowOn = PixelOrbit.mode // Settings' pick of airliner, station or train, as the scene was built
     private var world: TrainWorld
     private(set) var rings: [TrainRing] = [] // far to near
     // What each ring shows: for each of its columns a strip of materials up from its foot, and how many of them are
@@ -35,10 +36,15 @@ final class PixelTrain: SKScene {
     private var strips: [UInt8] = [], tops: [UInt8] = []
     private var rows: [GroundRow] = []
     private var land: [UInt8], dash: [UInt8] // the ground rows' materials, and which tone of its dash each pixel takes
-    private var sky: [UInt32] = [], picture: [UInt32]
+    private var sky: [UInt32] = []
+    private(set) var picture: [UInt32] // the pane as last painted, its rows from the bottom
     private var ringColours: [UInt32] = [], groundColours: [UInt32] = [] // the colours of the moment, ready to copy
     private var lamp: UInt32 = 0, lights: UInt8 = 0 // a lamp's colour, and how far the evening has got: each comes on at its own draw
-    private var strung = false, pole: UInt32 = 0, wire: UInt32 = 0 // whether the pole line shows, and its colours
+    private var pole: UInt32 = 0, wire: UInt32 = 0 // the pole line's colours
+    private let polesOn: Bool // Settings' Poles and wires, as the scene was built
+    // From which pole on the line stands or doesn't: it is left out while it would slide too fast, and a change takes
+    // hold beyond the pane's leading edge, so the line runs out or comes in at a pole and never blinks.
+    private var strung: [(from: Int, on: Bool)] = []
     // The lake, by where a pixel is on the pane and not by what slides under it: each ground row's water in four
     // colours (flat, a ripple's light and its dark, the Sun's glitter), and how likely the glitter is there.
     private var water: [UInt32], glint: [UInt8]
@@ -64,6 +70,7 @@ final class PixelTrain: SKScene {
         let (gw, gh) = (glass.w, glass.h)
         horizon = gh - Int((Double(gh) * (1 - Self.horizonUp)).rounded())
         world = TrainWorld(focal: Double(gh) * 1.2, eye: Self.eye, speed: Self.pace * PixelWindowSeat.speed.value)
+        (world.scenery, polesOn) = (Int(Self.scenery.value), Self.poles.value > 0.5)
         (land, dash) = ([UInt8](repeating: 0, count: gw * horizon), [UInt8](repeating: 0, count: gw * horizon))
         (water, glint) = ([UInt32](repeating: 0, count: 4 * gw * horizon), [UInt8](repeating: 0, count: gw * horizon))
         picture = [UInt32](repeating: 0, count: gw * gh)
@@ -101,13 +108,15 @@ final class PixelTrain: SKScene {
     override func didMove(to view: SKView) { Location.shared.start() }
 
     /// Repaints when one of the page's settings changes (the notification comes for every wallpaper's). Another
-    /// window, or another size of this one, is another scene: it dissolves into it with both still running, as the
-    /// airliner's changes do.
+    /// window, another size of this one, other scenery or the pole line put up or taken down is another scene: it
+    /// dissolves into it with both still running, as the airliner's changes do. A change of speed is not: the
+    /// country carries on as it is, and only what comes into view from then on is laid by the new speed.
     @objc private func settingsChanged() {
         let picked = (PixelWindowSeat.knobs + Self.knobs).map(\.value)
         guard picked != settings, !retired else { return }
         settings = picked
-        let another = PixelOrbit.mode != 2 || Int(PixelWindowSeat.window.value) != windowSize
+        let another = PixelOrbit.mode != windowOn || Int(PixelWindowSeat.window.value) != windowSize || Int(Self.scenery.value) != world.scenery
+            || (Self.poles.value > 0.5) != polesOn
         guard another else { return redraw() }
         guard let view else { return } // (with no view to hand over in, as in the tests, it stays as built)
         let fade = SKTransition.crossFade(withDuration: 0.8)
@@ -135,31 +144,32 @@ final class PixelTrain: SKScene {
         let above = SeatSky(now, latitude: spot.latitude, longitude: spot.longitude, looking: Int(PixelWindowSeat.looking.value),
                             w: glass.w, h: glass.h, horizon: horizon, bands: glass.h - glass.h * 62 / 100) // the airliner's sky, and on up
         (night, sky) = (above.night, above.picture)
-        // What is laid goes by Settings' Scenery, by the speed (the near ground's dashes are as long as it makes
-        // them, and a ring leaves out what would slide too fast to follow) and by the side the Sun is on, which
-        // things are lit from: a change of any lays everything again. With the Sun nearly straight ahead or behind,
-        // the side stays.
+        // What is laid goes by the speed (the near ground's dashes are as long as it makes them, and a ring leaves
+        // out what would slide too fast to follow) and by the side the Sun is on, which things are lit from. Nothing
+        // in view is laid again for a change of either: what comes into view from then on goes by the new one
+        // (`advance`). With the Sun nearly straight ahead or behind, the side stays.
         let speed = Self.pace * PixelWindowSeat.speed.value, toSun = sin((above.sun.azimuth - above.facing) * .pi / 180)
-        let side = toSun > 0.25 ? 1 : toSun < -0.25 ? -1 : world.sun, scenery = Int(Self.scenery.value)
-        if (speed, side, scenery) != (world.speed, world.sun, world.scenery) {
-            (world.speed, world.sun, world.scenery) = (speed, side, scenery)
-            for k in rings.indices { rings[k].first = .min }
-            for r in rows.indices { rows[r].first = .min }
-        }
+        (world.speed, world.sun) = (speed, toSun > 0.25 ? 1 : toSun < -0.25 ? -1 : world.sun)
 
         // The sky's light and the Sun's on each material, with no veil of air in front of it as the airliner has. The
         // night is lifted, as the orbit's is: a true one from a train is a black pane.
-        let light = (above.ambient + above.key) * 0.78 * mix(1, 3.9, night), floor = rgb(9, 13, 27) * night
+        var light = (above.ambient + above.key) * 0.78 * mix(1, 3.9, night)
+        let floor = rgb(9, 13, 27) * night
+        // ponytail: a second light to choose between, for a sunset shown both ways (`TRAIN_WARM=1` in the environment):
+        // the glow along the horizon lights the land too. To be kept, or taken out, once one is picked.
+        if ProcessInfo.processInfo.environment["TRAIN_WARM"] != nil {
+            light += above.haze * (0.4 * smoothstep(-10, -2, above.el) * smoothstep(12, 3, above.el))
+        }
         let mats = TrainMat.day.count
         for (k, ring) in rings.enumerated() {
             let far = Float(1 - exp(-ring.away / TrainWorld.haze))
             for (m, base) in TrainMat.day.enumerated() { ringColours[k * mats + m] = pack(mix(pointwiseMin(base * light + floor, .one), above.haze, far)) }
         }
-        // The ground, in the five tones a dash can take in each of a row's four kinds of near field (and one flat
-        // tone further off).
+        // The ground, in the five tones a dash can take in each of a row's kinds: the far fields, which have no
+        // dashes unless they slide too fast to show as fields, and the four kinds of near field.
         for tones in 0..<5 {
             for level in 0..<5 {
-                let lift = tones == 0 ? 0 : Float(level - 2) * (tones < 3 ? 0.03 : 0.045) + (tones % 2 == 0 ? 0.022 : 0)
+                let lift = Float(level - 2) * (tones < 3 ? 0.03 : 0.045) + (tones > 0 && tones % 2 == 0 ? 0.022 : 0)
                 for (m, base) in TrainMat.day.enumerated() { groundColours[((tones * 5) + level) * mats + m] = pack(base * (1 + lift) * light + floor) }
             }
         }
@@ -182,16 +192,22 @@ final class PixelTrain: SKScene {
         }
         // Lamps come on through dusk, each when the evening passes its own draw, as the airliner's do.
         (lamp, lights) = (pack(mix(rgb(255, 214, 150), rgb(255, 204, 128), night)), UInt8(min(255, night * 300)))
-        // The pole line, unless Settings has it off or it would cross the pane too fast to be calm.
-        strung = Self.poles.value > 0.5 && world.focal / TrainWorld.poleAway * speed <= TrainWorld.poleLimit
+        // The pole line, unless Settings has it off or it would cross the pane too fast to be calm. A change takes
+        // hold two poles beyond the pane's leading edge, so every wire in view keeps both its poles.
+        let poleSpace = world.focal / TrainWorld.poleAway, calm = polesOn && poleSpace * speed <= TrainWorld.poleLimit
+        let ahead = Int(((Self.travelled + Double(gw / 2 + 8) / poleSpace) / TrainWorld.poleGap).rounded(.up)) + 1
+        if strung.isEmpty { strung = [(.min, calm)] } else if strung.last!.on != calm { strung.append((ahead, calm)) }
+        if strung.count > 1, strung[1].from < ahead - 4 - gw / Int(poleSpace * TrainWorld.poleGap) { strung.removeFirst() }
         (pole, wire) = (pack(rgb(52, 44, 40) * light + floor), pack(rgb(44, 40, 40) * light + floor))
         if windowSize < 3 { paintFrame() }
         advance()
         compose()
     }
 
-    /// How many pixels of the picture are lamps, for the tests: the night must never be without one.
+    /// How many pixels of the picture are lamps, and how big the picture is, for the tests: the night must never be
+    /// without a lamp.
     var lit: Int { lights == 0 ? 0 : picture.count { $0 == lamp } }
+    var pane: (w: Int, h: Int) { (glass.w, glass.h) }
 
     /// The carriage round the pane, plain: its wall, a pale frame with the light along its top edge, and a dark
     /// gasket round glass with small corners.
@@ -218,8 +234,9 @@ final class PixelTrain: SKScene {
         if abs(Date().timeIntervalSince(redrawnAt)) >= 30 { redraw() }
         Self.travelled += min(max(currentTime - (Self.travelledAt ?? currentTime), 0), 0.1) * world.speed
         Self.travelledAt = currentTime
-        // The near ground moves several pixels a frame, so there is always something to paint: 30 times a second at most.
-        if clock - painted >= 1 / 30.0 - 0.002 {
+        // The near ground and the poles move several pixels a frame, so every frame is painted, 60 times a second at
+        // most: at 30 a pole would step twice as far.
+        if clock - painted >= 1 / 60.0 - 0.002 {
             advance()
             compose()
         }
@@ -235,9 +252,14 @@ final class PixelTrain: SKScene {
             for k in rings.indices {
                 let ring = rings[k], first = Int((Self.travelled * ring.perMetre).rounded(.down)) - gw / 2
                 guard first != ring.first else { continue }
-                for n in entering(ring.first, first) {
+                // What comes into view from here on is laid by the speed and the Sun's side as they are now; what is
+                // in view already keeps what it was laid by, until it has slid out.
+                let new = entering(ring.first, first), now = TrainWorld.Laying(from: new.lowerBound, speed: world.speed, sun: world.sun)
+                if new.lowerBound == first { rings[k].laid = [now] } else if ring.laid.last.map({ ($0.speed, $0.sun) != (now.speed, now.sun) }) ?? true { rings[k].laid.append(now) }
+                if rings[k].laid.count > 1, rings[k].laid[1].from < first - 96 { rings[k].laid.removeFirst() }
+                for n in new {
                     let slot = ((n % gw) + gw) % gw
-                    tops[k * gw + slot] = world.column(k, n, into: strips.baseAddress! + ring.base + slot * ring.rows)
+                    tops[k * gw + slot] = world.column(k, n, into: strips.baseAddress! + ring.base + slot * ring.rows, by: rings[k].laid)
                 }
                 rings[k].first = first
             }
@@ -245,11 +267,16 @@ final class PixelTrain: SKScene {
         for r in rows.indices {
             let row = rows[r], first = Int((Self.travelled * row.perMetre).rounded(.down)) - gw / 2
             guard first != row.first else { continue }
-            for n in entering(row.first, first) {
+            // A dash is as long as the speed makes it, so how far along its dashes a row has got is added up a pixel
+            // at a time: a change of speed makes the dashes that come in longer or shorter, and moves none in view.
+            let new = entering(row.first, first), long = world.dashLength(r + 1)
+            var along = new.lowerBound == first ? Double(first) / long : row.dashed
+            for n in new {
                 let at = r * gw + ((n % gw) + gw) % gw
-                (land[at], dash[at]) = world.ground(r + 1, n)
+                (land[at], dash[at]) = world.ground(r + 1, n, dashed: along)
+                along += 1 / long
             }
-            rows[r].first = first
+            (rows[r].first, rows[r].dashed) = (first, along)
         }
     }
 
@@ -315,10 +342,8 @@ final class PixelTrain: SKScene {
                 }
             }
             // The pole line, in front of it all: its wires let two thirds of themselves show.
-            if strung {
-                world.poleLine(at: Self.travelled, wide: gw, high: gh, horizon: horizon) { x, y, standing in
-                    out[y * gw + x] = standing ? pole : blend(out[y * gw + x], wire, 166)
-                }
+            world.poleLine(at: Self.travelled, wide: gw, high: gh, horizon: horizon, where: { k in strung.last { $0.from <= k }?.on ?? false }) { x, y, standing in
+                out[y * gw + x] = standing ? pole : blend(out[y * gw + x], wire, 166)
             }
         }
         let shot = picture
@@ -337,13 +362,15 @@ final class PixelTrain: SKScene {
 struct TrainRing {
     let away: Double, perMetre: Double, rows: Int, foot: Int, base: Int
     var first = Int.min
+    var laid: [TrainWorld.Laying] = [] // what its columns were laid by, oldest first
 }
 
 /// One row of ground: how many pixels a metre along the track spans there, which tones its dashes take (0 for the
-/// far fields, which have none), and the pixel of its endless strip at the pane's left edge.
+/// far fields), the pixel of its endless strip at the pane's left edge, and how far along its dashes, in dashes, the
+/// next pixel to come into view is.
 private struct GroundRow {
     let perMetre: Double, tones: Int
-    var first = Int.min
+    var first = Int.min, dashed = 0.0
 }
 
 /// What a pixel of the country is made of: 0 is nothing, and shows what is behind. The numbers are the mock-ups'
@@ -389,10 +416,16 @@ struct TrainWorld {
     /// A lane and its hedge run beside the line this far out; nearer than `verge` is the railway's own grass.
     /// Things fade to the horizon's colour over `haze` metres.
     static let lane = 62.0, verge = 15.0, haze = 26_000.0
-    /// What keeps it calm at any speed, in pixels a second: thin things (a pole, a lamp, a hedge's end, a spire)
-    /// are laid only where they slide no faster than `thin`, and broad ones (a tree, a house) no faster than `broad`.
-    /// At 1× the fastest thin thing is a field's hedge 103 m out, at 34, and the nearest ring's trees are at 32.
-    static let thin = 36.0, broad = 60.0
+    /// What keeps it calm at any speed, in pixels a second: a lamp is laid only where it slides no faster than
+    /// `bright` (a pixel a frame at 30 frames a second), other thin things (a pole, a hedge's end, a spire) no faster
+    /// than `thin`, and broad ones (a tree, a house, a field) no faster than `broad`. At 1× the fastest lamp is at 20,
+    /// the fastest thin thing is a field's hedge 103 m out, at 34, and the nearest ring's trees are at 32.
+    static let bright = 30.0, thin = 36.0, broad = 60.0
+
+    /// What a ring's things are laid by, from one of its columns on: the train's speed and the side the Sun was on
+    /// when that column came into view. A thing wider than a column goes by where its left edge is, so a change of
+    /// speed never leaves half a tree.
+    struct Laying { let from: Int, speed: Double, sun: Int }
 
     /// The line of telegraph poles beside the track, which Dave picked from the mock-ups' film: `poleAway` metres
     /// out, a pole every `poleGap` metres and `poleTall` high. It is nearer than anything a ring holds, the one near
@@ -436,9 +469,10 @@ struct TrainWorld {
     /// Lays column `n` of a ring into `cells`, its foot first: far off, a hill or a range as a line of heights,
     /// wooded, farmed or under snow; nearer, the land's own swell with its hedged fields and the woods along its
     /// top, and on it whatever stands in that plot of track: a tree, a fir, a house, a church. A cell's top bit marks
-    /// a lamp: a window, or a light in a far town, that comes on after dark. Returns how many of the strip's rows
+    /// a lamp: a window, or a light in a far town, that comes on after dark. `laid` is what the ring's columns are
+    /// laid by (the speed and the Sun's side as they are, if nothing is given). Returns how many of the strip's rows
     /// the column uses.
-    func column(_ ring: Int, _ n: Int, into cells: UnsafeMutablePointer<UInt8>) -> UInt8 {
+    func column(_ ring: Int, _ n: Int, into cells: UnsafeMutablePointer<UInt8>, by laid: [Laying] = []) -> UInt8 {
         let z = Self.rings[ring], ppm = focal / z, wx = Double(n) / ppm, salt = UInt64(z), rows = rows(ring)
         cells.update(repeating: 0, count: rows)
         if z >= 15000 {
@@ -466,17 +500,22 @@ struct TrainWorld {
         // The swell's face: fields in strips that follow it, each with a hedge at its end, and patches of wood; and
         // where a town lies, its lamps.
         guard z >= Self.farShore || z <= shore(wx) else { return 0 } // out in a lake
-        let pace = ppm * speed // how fast this ring slides, in pixels a second
+        /// How fast the ring slid, in pixels a second, and which side the Sun was on, when column `n` came into view.
+        func when(_ n: Int) -> (pace: Double, sun: Int) {
+            let by = laid.last { $0.from <= n } ?? laid.first
+            return (ppm * (by?.speed ?? speed), by?.sun ?? sun)
+        }
+        let pace = when(n).pace
         let rise = Self.rise[ring], swell = rise == 0 ? 0 : rise * clip(fbm(wx / (z * 1.3) + 3, z / 2000, 3, salt + 60) * 1.7 - 0.42)
         let swollen = Int((swell * ppm).rounded(.toNearestOrEven)), face = min(swollen, rows)
         if face > 0 {
             let long = Self.fieldLength[ring], deep = max(2, Double(swollen) / 3 + 0.5)
-            let town = z >= 1800 && pace <= Self.thin && noise(wx / 1400, 2, 4242) > 0.62
+            let town = z >= 1800 && pace <= Self.bright && noise(wx / 1400, 2, 4242) > 0.62
             for up in 0..<face {
                 let band = (Double(up) / deep).rounded(.down), along = wx / long + band * 0.37
                 let crop = Self.fields[Int(unit(hash(Int(along.rounded(.down)), Int(band), salt + 61)) * Double(Self.fields.count))]
                 cells[up] = fbm(wx / (z * 0.2), Double(up) / 3, 3, salt + 62) > 0.63 ? TrainMat.leaf0 : crop
-                if abs(along - along.rounded(.toNearestOrEven)) * long * ppm < 0.6 { cells[up] = TrainMat.hedge }
+                if pace <= Self.thin, abs(along - along.rounded(.toNearestOrEven)) * long * ppm < 0.6 { cells[up] = TrainMat.hedge }
                 if town, unit(hash(n, up, salt + 63)) < 0.035 { cells[up] |= 128 }
             }
         }
@@ -492,32 +531,31 @@ struct TrainWorld {
         // church or houses where a village lies (the same villages on every ring), a farm on its own, or a tree, more
         // of them where the country is wooded. Each stands on the swell's face.
         let plot = Self.plot[ring], here = Int((wx / plot).rounded(.down))
-        if pace <= Self.broad, z <= 1800 {
+        if z <= 1800 {
             for c in here - 2...here + 2 {
                 let draw = unit(hash(c, 1, salt + 30)), at = (Double(c) + unit(hash(c, 2, salt + 31))) * plot
                 guard z >= Self.farShore || z <= shore(at) else { continue } // its plot is in the water, though this column isn't
                 let village = noise(at / 1400, 2, 4242), seed = Int(hash(c, 3, salt + 32) % (1 << 30))
-                let stamp: Stamp
-                if z == 900, village > 0.70, draw < 0.2 {
-                    guard pace <= Self.thin else { continue }
-                    stamp = .church(30 * ppm, sun)
+                let stamp: Stamp, spired = z == 900 && village > 0.70 && draw < 0.2
+                if spired {
+                    stamp = .church(30 * ppm)
                 } else if village > 0.64, draw < Self.housed[ring] {
-                    stamp = .house(max(2, 5.0 * ppm), seed, sun)
+                    stamp = .house(max(2, 5.0 * ppm), seed)
                 } else if draw < Self.farmed[ring] {
-                    stamp = .house(max(2, 5.5 * ppm), seed, sun)
+                    stamp = .house(max(2, 5.5 * ppm), seed)
                 } else if z <= 900, draw > 1 - min(max(0.18 + (fbm(at / 900, z / 300, 3, salt + 1) - 0.45) * 2.2, 0.08), 0.8) {
                     let high = 9 + 9 * unit(hash(c, 4, salt + 33))
-                    stamp = unit(hash(c, 5, salt + 34)) < 0.2 ? .fir(high * 1.2 * ppm, sun) : .tree(high * ppm, seed, sun)
+                    stamp = unit(hash(c, 5, salt + 34)) < 0.2 ? .fir(high * 1.2 * ppm) : .tree(high * ppm, seed)
                 } else {
                     continue
                 }
-                let left = Int((at * ppm).rounded(.toNearestOrEven)) - stamp.w / 2
+                let left = Int((at * ppm).rounded(.toNearestOrEven)) - stamp.w / 2, entered = when(left) // (all of it goes by its left edge)
                 let lift = Int(Double(swollen) * (0.35 + 0.65 * unit(hash(c, 6, salt + 35))))
-                guard n >= left, n < left + stamp.w, lift + stamp.h <= rows else { continue }
-                for (y, material) in stamp.column(n - left).enumerated() where material != 0 {
+                guard n >= left, n < left + stamp.w, lift + stamp.h <= rows, entered.pace <= (spired ? Self.thin : Self.broad) else { continue }
+                for (y, material) in stamp.column(n - left, entered.sun).enumerated() where material != 0 {
                     let up = lift + stamp.h - 1 - y
                     cells[up] = cells[up] & 128 | material
-                    if material == TrainMat.glass, pace <= Self.thin, unit(hash(seed + n - left, y, 55)) < 0.8 { cells[up] |= 128 }
+                    if material == TrainMat.glass, entered.pace <= Self.bright, unit(hash(seed + n - left, y, 55)) < 0.8 { cells[up] |= 128 }
                 }
                 top = max(top, lift + stamp.h)
             }
@@ -531,7 +569,7 @@ struct TrainWorld {
         // Lights that show only after dark, lamps with nothing drawn under them, so that a night with no village in
         // view still has something to rest on: far off, the windows of farms too small to draw, a few together, on
         // the swell's face or at its foot; nearer, a lamp in a farm's yard, 4 to 7 m up.
-        guard pace <= Self.thin else { return UInt8(top) }
+        guard pace <= Self.bright else { return UInt8(top) }
         if z >= 1800 {
             if unit(hash(n, 1, salt + 65)) < 0.06 * clip((noise(wx / 420, 6, salt + 64) - 0.5) * 4) {
                 let up = Int(Double(swollen) * unit(hash(n, 2, salt + 66)))
@@ -549,12 +587,13 @@ struct TrainWorld {
     /// Draws the pole line for a pane `wide` by `high` whose horizon is on its row `horizon`, with the train `x`
     /// metres along: `plot` is given each pixel by its column and its row (from the bottom), and whether it is a
     /// pole's or a wire's. Two wires, one on the cross-arm and one under it, rise to each pole and sag between.
-    func poleLine(at x: Double, wide: Int, high: Int, horizon: Int, _ plot: (Int, Int, Bool) -> Void) {
+    /// `strung` says whether the line has a pole at each place along it, counted in poles: all of them, if not given.
+    func poleLine(at x: Double, wide: Int, high: Int, horizon: Int, where strung: (Int) -> Bool = { _ in true }, _ plot: (Int, Int, Bool) -> Void) {
         let ppm = focal / Self.poleAway, gap = Self.poleGap * ppm, first = Int((x * ppm).rounded(.down)) - wide / 2
         // (In rows down from the pane's top, as the mock-ups count them, so that a wire rounds the way theirs does.)
         let foot = high - horizon + Int((eye * ppm).rounded(.toNearestOrEven)), top = foot - Int((Self.poleTall * ppm).rounded(.toNearestOrEven))
         /// Whether pole `k` of the line stands on land: a lake that comes in nearer than the line has none.
-        func stands(_ k: Int) -> Bool { shore(Double(k) * Self.poleGap) > Self.poleAway }
+        func stands(_ k: Int) -> Bool { strung(k) && shore(Double(k) * Self.poleGap) > Self.poleAway }
         let pole = Int((Double(first) / gap).rounded(.down)), standing = (pole - 1...pole + wide / max(Int(gap), 1) + 2).map(stands)
         for i in 0..<wide {
             let spans = Double(first + i) / gap, along = spans - spans.rounded(.down), sag = 4 * along * (1 - along)
@@ -581,26 +620,37 @@ struct TrainWorld {
         return z > 100 ? 0 : (z > Self.verge ? 1 : 3) + (d / 3) % 2
     }
 
+    /// How many pixels long a dash of the ground row `d` rows under the horizon is: at least twice as far as the row
+    /// moves in a thirtieth of a second, so nothing in it can strobe.
+    func dashLength(_ d: Int) -> Double { max(10, 2.2 * speed * (Double(d) / eye) / 30) }
+
     /// What lies at pixel `n` of the ground row `d` rows under the horizon, and which of the five tones of its
-    /// dash it takes. Beyond 100 m, fields a stretch of track long in belts of distance, hedged. Nearer, one crop
-    /// for a long way, a lane and its hedge, then the railway's grass, all drawn out into soft dashes each at least
-    /// twice as long as its row moves in a thirtieth of a second, so nothing in them can strobe.
-    func ground(_ d: Int, _ n: Int) -> (land: UInt8, dash: UInt8) {
-        let z = eye * focal / Double(d), ppm = Double(d) / eye, wx = Double(n) / ppm
+    /// dash it takes. Beyond 100 m, fields a stretch of track long in belts of distance, hedged. Nearer, or where a
+    /// row slides too fast to show its fields, one crop for a long way, a lane and its hedge, then the railway's
+    /// grass, all drawn out into soft dashes. `dashed` is how far along the row's dashes the pixel is, in dashes: by
+    /// its place, if not given, which is right at one steady speed.
+    func ground(_ d: Int, _ n: Int, dashed: Double? = nil) -> (land: UInt8, dash: UInt8) {
+        let z = eye * focal / Double(d), ppm = Double(d) / eye, wx = Double(n) / ppm, pace = ppm * speed
         if z > shore(wx) { return (TrainMat.water, 0) }
-        if z > 100 {
+        if z > 100, pace <= Self.broad {
             let belt = d <= 1 ? 0 : d <= 2 ? 1 : d <= 4 ? 2 : 3, long = 230.0 + 60 * Double(belt)
             let along = wx / long + Double(belt) * 0.37, field = Int(along.rounded(.down))
-            if ppm * speed <= Self.thin, abs(along - along.rounded(.toNearestOrEven)) * long < max(1.5, 1.2 / ppm),
+            if pace <= Self.thin, abs(along - along.rounded(.toNearestOrEven)) * long < max(1.5, 1.2 / ppm),
                unit(hash(field, belt, 4101)) < 0.6 { return (TrainMat.hedge, 2) }
             return (Self.fields[Int(unit(hash(field, belt, 4100)) * Double(Self.fields.count))], 2)
         }
+        let tone = fbm(dashed ?? Double(n) / dashLength(d), Double(d) / 3, 2, 4300)
+        // One crop for a long way means for a long time: above 1× a crop is as many times longer as the train is
+        // faster, so one still lasts a couple of minutes, and its end is drawn out, the two crops by turns, dash by
+        // dash, for a few seconds, where a hard edge would sweep the whole near field in a blink. (Faster in steps of
+        // a half again, so that a drag of the Speed slider changes the crops' length a few times and not at every
+        // tick: each change can start a new crop at the leading edge.)
+        let faster = pow(1.5, (log(max(1, speed / PixelTrain.pace)) / log(1.5)).rounded()), soft = faster > 1 ? (tone - 0.5) * 0.06 : 0
         let lane = Int((eye * focal / Self.lane).rounded(.toNearestOrEven))
         let land = d == lane - 2 ? TrainMat.hedge : d == lane - 1 ? TrainMat.hedgeLit : d == lane ? TrainMat.road
-            : z > Self.lane ? (fbm(wx / 1500, 0.5, 2, 4200) > 0.5 ? TrainMat.ley : TrainMat.wheat)
-            : z > Self.verge ? (fbm(wx / 1900, 1.5, 2, 4201) > 0.5 ? TrainMat.pasture : TrainMat.crop) : TrainMat.verge
-        let long = max(10, 2.2 * speed * ppm / 30)
-        return (land, UInt8(min(max((fbm(Double(n) / long, Double(d) / 3, 2, 4300) * 5).rounded(.down), 0), 4)))
+            : z > Self.lane ? (fbm(wx / (1500 * faster), 0.5, 2, 4200) + soft > 0.5 ? TrainMat.ley : TrainMat.wheat)
+            : z > Self.verge ? (fbm(wx / (1900 * faster), 1.5, 2, 4201) + soft > 0.5 ? TrainMat.pasture : TrainMat.crop) : TrainMat.verge
+        return (land, UInt8(min(max((tone * 5).rounded(.down), 0), 4)))
     }
 }
 
@@ -608,14 +658,14 @@ struct TrainWorld {
 /// top first, 0 where it is see-through. They are the mock-ups' own (train.py), and lit from the side `sun` says:
 /// 1 from the right.
 private struct Stamp {
-    let w: Int, h: Int, column: (Int) -> [UInt8]
+    let w: Int, h: Int, column: (_ x: Int, _ sun: Int) -> [UInt8]
 
     /// A broadleaf tree `tall` pixels high: a ragged round crown in three tones over a trunk.
-    static func tree(_ tall: Double, _ seed: Int, _ sun: Int) -> Stamp {
+    static func tree(_ tall: Double, _ seed: Int) -> Stamp {
         let h = max(3, Int(tall)), w = max(3, Int((Double(h) * (0.62 + 0.22 * unit(hash(seed, 1, 5)))).rounded(.toNearestOrEven)))
         let crown = h - max(1, Int((Double(h) * 0.24).rounded(.toNearestOrEven))), cy = Double(crown - 1) / 2, cx = Double(w - 1) / 2
         let stem = Int(cx)..<Int(cx) + (h < 20 ? 1 : 2)
-        return Stamp(w: w, h: h) { x in
+        return Stamp(w: w, h: h) { x, sun in
             var column = [UInt8](repeating: 0, count: h)
             for y in 0..<crown {
                 let down = (Double(y) - cy) / (Double(crown) / 2 + 0.3), across = (Double(x) - cx) / (Double(w) / 2 + 0.3)
@@ -630,9 +680,9 @@ private struct Stamp {
     }
 
     /// A fir `tall` pixels high: boughs that step out every third row, lit on one side, on a foot of trunk.
-    static func fir(_ tall: Double, _ sun: Int) -> Stamp {
+    static func fir(_ tall: Double) -> Stamp {
         let h = max(4, Int(tall)), w = max(3, Int((Double(h) * 0.42).rounded(.toNearestOrEven)) | 1), cx = w / 2
-        return Stamp(w: w, h: h) { x in
+        return Stamp(w: w, h: h) { x, sun in
             var column = [UInt8](repeating: 0, count: h)
             for y in 0..<h - 1 {
                 let half = Int((Double(y + 1) / Double(h - 1) * (Double(w) / 2) * (0.75 + 0.25 * (Double(y % 3) / 2))).rounded(.toNearestOrEven))
@@ -645,16 +695,15 @@ private struct Stamp {
 
     /// A house whose eaves are `eaves` pixels up: a wall of render, brick or stone with its windows, one end in
     /// shade, under a tiled or slated roof that is hipped or shows a gable, and often a chimney.
-    static func house(_ eaves: Double, _ seed: Int, _ sun: Int) -> Stamp {
+    static func house(_ eaves: Double, _ seed: Int) -> Stamp {
         let walls = [(TrainMat.white, TrainMat.whiteShade), (TrainMat.brick, TrainMat.brickShade), (TrainMat.stone, TrainMat.stoneShade)][Int(unit(hash(seed, 2, 21)) * 3)]
         let roofs = unit(hash(seed, 3, 22)) < 0.55 ? (TrainMat.roof, TrainMat.roofShade) : (TrainMat.slate, TrainMat.slateShade)
         let wall = max(2, Int(eaves)), w = max(4, Int((Double(wall) * (1.5 + 0.9 * unit(hash(seed, 4, 23)))).rounded(.toNearestOrEven)))
         let roof = max(2, Int((Double(wall) * 0.7).rounded(.toNearestOrEven))), hipped = unit(hash(seed, 5, 24)) < 0.5
-        let shade = sun > 0 ? 0..<max(1, w / 4) : w - max(1, w / 4)..<w
         let chimney = unit(hash(seed, 6, 25)) < 0.6 && w > 5 ? (unit(hash(seed, 7, 26)) < 0.5 ? w - 2 : 1) : -1
-        let firstWindow = 1 + (sun > 0 ? w / 4 : 0), between = max(2, wall / 2 + 1)
-        return Stamp(w: w, h: wall + roof) { x in
+        return Stamp(w: w, h: wall + roof) { x, sun in
             var column = [UInt8](repeating: 0, count: wall + roof)
+            let shade = sun > 0 ? 0..<max(1, w / 4) : w - max(1, w / 4)..<w, firstWindow = 1 + (sun > 0 ? w / 4 : 0), between = max(2, wall / 2 + 1)
             for y in roof..<roof + wall { column[y] = shade.contains(x) ? walls.1 : walls.0 }
             for y in 0..<roof {
                 let inset = hipped ? Int((Double(roof - 1 - y) * 0.9).rounded(.toNearestOrEven)) : 0
@@ -673,9 +722,9 @@ private struct Stamp {
     }
 
     /// A village church `tall` pixels high in all: a nave under a slate roof, with a tower and its spire at one end.
-    static func church(_ tall: Double, _ sun: Int) -> Stamp {
+    static func church(_ tall: Double) -> Stamp {
         let h = max(6, Int(tall)), nave = max(2, h / 3), tower = max(2, h / 5), spire = h - Int(Double(h) * 0.62)
-        return Stamp(w: max(4, Int(Double(h) * 0.9)) + tower, h: h) { x in
+        return Stamp(w: max(4, Int(Double(h) * 0.9)) + tower, h: h) { x, sun in
             var column = [UInt8](repeating: 0, count: h)
             if x >= tower {
                 for y in h - nave - max(1, nave / 2)..<h { column[y] = y < h - nave ? TrainMat.slate : TrainMat.stone }

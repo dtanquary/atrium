@@ -129,6 +129,44 @@ Hidden: Settings offers the train only with `unfinished` set (`defaults write co
 - **Not looked at:** dusk, when only some lamps are on; any Speed but 1×; any window size but Large; a portrait or ultrawide display; Settings' page with the train's rows; the app.
 - **Motion has only been glanced at** (eight frames a second apart). Strips at 15, 30 and 60 fps are step 5.
 
+### Step 5, motion (2026-10-11)
+- **A change of Speed lays nothing again.** The distance run already added up; what jumped was what was laid by the speed. Now:
+  - **Rings** keep what each stretch of their columns was laid by (`TrainWorld.Laying`: the speed and the Sun's side when it came into view). A change takes hold at the leading edge, and a tree or a house goes by where its left edge is, so none is ever half laid. At 3× the nearest ring's trees slide out whole and no more come in.
+  - **Ground rows** add up how far along their dashes they have got (`GroundRow.dashed`), so the dashes that come in are longer or shorter and none in view moves.
+  - **The pole line** is on or off from a pole on (`PixelTrain.strung`), two poles beyond the leading edge: it runs out at a pole, with every wire in view keeping both its poles, and comes back in at one.
+  - **The Sun's side** goes the same way as the speed, so the twice-daily change is never seen.
+  - **Scenery and Poles and wires** dissolve into a new scene over 0.8 s with both still running, as the airliner's Scenery does.
+- **It paints every frame, up to 60 a second** (it was 30): at 60 a pole steps 2 px a frame, not 4.
+- **Lamps have a limit of their own,** `TrainWorld.bright`, 30 px a second: a pixel a frame at 30 frames a second. Nothing changes at 1× (the fastest lamp is at 20); the 180 m ring's windows go dark from 1.5×.
+- **What a fast train does to the ground:**
+  - a row of the far fields that slides faster than 60 px a second is drawn as the near field is, one crop in dashes (from 1.8× the rows nearest 100 m; at 10× all but the top one);
+  - a crop of the near field is as many times longer as the train is faster, in steps of a half again, so one lasts a couple of minutes at any speed;
+  - above 1.2× a crop's end is the two crops by turns for a few seconds, not a hard edge;
+  - a hedge's end on a swell's face is culled with the other thin things.
+- **The scene compares the window with the one it was built for** (`windowOn`), not with the train's number. A scene built by a test, where the window isn't the train, took every change of setting for a change of window and ignored it, so the first speed test passed without testing anything.
+- **Films, with no GPU and nothing on screen:** `trainFilmsItself` steps a scene at a frame rate and writes each frame as the pane's art pixels, and `train_strips.py` measures a film and lays frames out to look at (`TRAIN_FILM=/tmp/f.bin TRAIN_FILM_FPS=30 TRAIN_FILM_SECONDS=6 TRAIN_FILM_DEFAULTS="seat.previewTime=1,seat.previewHour=23,seat.country=1" swift test -c release -Xswiftc -enable-testing --filter trainFilmsItself`, then `python3 docs/pixel-window-seat/train_strips.py /tmp/f.bin strip.png`; `TRAIN_FILM_THEN="seat.speed=3@2"` moves a setting part way through, `TRAIN_FILM_SIZE=1080x1920` films another display).
+- **Checked by running** (release, in the worktree; each decisive check twice, the two runs compared, since every worktree's tests share one defaults domain):
+  - **Lamps a frame apart,** countryside at night, 6 s at 1×: at 30 frames a second a lamp is in the same pixel a frame later 82.9% of the time, a pixel on 14.6%, and behind something or gone 2.3%; at 60, 91.1%, 7.2% and 1.5%; at 15, 68.1% and 27.0%, with 0.9% two pixels on, which is the 180 m ring's lamps at 20 px a second. (The films also count 19 lamps of 6,723 as two or three pixels on at 30 frames a second: a lamp gone behind a tree with another lamp beside it. `trainLampsMoveAPixelAtATime` settles it: at 30 and at 60 frames a second, at seven speeds, no ring slow enough to hold lamps moves more than a pixel in a frame.) Beside the lake at night no lamp moves more than a pixel at any of the three rates.
+  - **The pole** steps 8 to 9 px a frame at 15 frames a second, 4 to 5 at 30 and 2 to 3 at 60: 126 px a second each time.
+  - **How much changes from one frame to the next** at 30 frames a second: none of the sky; 7% round the horizon; 47% of the near field through countryside (its dashes, in tones 3% apart) and 2% of the lake, with a quarter of it at each reshuffle of the ripples and glitter, five times in two seconds.
+  - **The same picture at any frame rate,** `trainLooksTheSameAtAnyFrameRate`: after 2.2 s from the same metre, scenes stepped 15, 30 and 60 times a second have painted the same pixels, through countryside and beside the lake.
+  - **The slider,** `trainKeepsItsCountryAsTheSpeedChanges`: at the moment Speed goes to 3×, 10×, 0.5× and back to 1×, not one pixel of the picture changes.
+  - **Against the mock-ups:** 961,520 bytes compared, 0 differ, twice. `shots.sh` twice: the two runs the same 25 files, and the same as before step 1. 79 tests pass in release; the train's eleven in debug too.
+  - **Cost,** Large window, three runs in turn with the airliner: 0.70 to 0.74 ms of CPU a frame at 1×, 0.88 at 10× (ten times the columns to lay), the airliner 0.99 to 1.04. GPU 0.14 to 0.18. The render test steps 30 frames a second; at 60 on a real display it paints twice as often for the same cost a frame, which has not been measured in the running app.
+- **Looked at,** as strips of art pixels:
+  - twelve frames one after another at 30 a second, countryside by day and by night: the pole, the wires, the nearest trees, the lamps;
+  - frames a tenth of a second apart beside the lake by day and by night;
+  - 0.5×, 2×, 4× and 10× by day, after the pane had refilled: at 2× the pole line and the 110 m ring are gone and the 180 m ring's trees and houses lead; at 4× the 300 m ring leads; at 10× nothing stands nearer than 900 m and the fields under the horizon are long bands. The near field is one calm crop at every speed. Nothing strobes at any of them, so the slider's top can stay at 10×, which is 480 km/h and looks like it.
+  - the Speed slider moved from 1× to 3× two seconds into a film: the frame it moves in is the frame before it moved on, the pole line ends at a pole, and the near trees leave whole;
+  - the Small window, no window, the Medium window at night beside the lake, and a portrait display's pane (121 × 175) by day and night.
+- **The sunset, both ways** (`TRAIN_WARM=1` in the environment for the second; a `ponytail:` in `redraw` until one is picked): as built, the land goes by the sky's light and the Sun's, and at sunset it is a dim, cool green under the glow, the near field (76, 88, 51) twenty minutes before the 18:18 picture and (60, 77, 58) in it. Warm-lit, the glow along the horizon lights the land too (two fifths of the horizon's colour while the Sun is low): (108, 125, 69) and (95, 110, 73), olive and gold, and the land keeps its colours until the sky has lost its own. I would take the warm one: the cool one goes dull while the sky is at its best.
+- **Wrong, or not done:**
+  - **A change of Speed can start a new crop at the leading edge,** which sweeps across the near field once as any crop's end does: the crops' length goes by the speed. In steps, so a drag of the slider makes a few of these and not one a tick.
+  - **At 15 frames a second a lamp on the 180 m ring steps two pixels** one frame in three, and the pole 8 or 9. Only a Power setting of 15 gives that rate.
+  - **No test follows a tree through a change of speed** to prove it is never half laid; that rests on how `column` is written and on the film looked at.
+  - **Not done here:** cloud, weather, the carriages, stations (steps 6 to 9).
+  - **Not looked at:** dusk with the lamps half on, beyond one picture at 18:18; Settings' page; the app.
+
 ## Research for the next mock-ups
 - **The window.** Real glass, width to height: a TGV bar car 1.94:1, a EuroNight sleeper 1.46:1, a British Mark 1 bay 1.2:1 with top-lights, an Amtrak Superliner coach 2.75:1, a Shinkansen N700 0.96:1 (520 × 500 mm: an airliner's window again). The mock-ups' pane is the airliner's, 1.54:1. A wide picture window (about 1.9:1) fills a 16:10 screen best.
 - **The eye:** about 2.5 m above the rail on a European intercity, 3.85 m upstairs in a Superliner; add 0.5–1 m of track bed.
