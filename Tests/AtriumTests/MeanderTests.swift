@@ -348,6 +348,7 @@ private func seeded(_ seed: Double, _ others: [String: Double] = [:]) -> [String
 /// range is its list. And the scene follows them as it runs: a new look or new colours at once, on the same river; a new
 /// size of river by handing over to a new scene (which it does once the slider has rested; here it is told to at
 /// once, so that no other test runs while these settings are held). Colours that aren't a swatch's name are Random.
+/// The Look sliders change the picture, and leave it as it was once they are back.
 @MainActor @Test func meanderFollowsItsSettings() throws {
     for knob in Meander.knobs {
         if let gate = knob.shownWhen {
@@ -374,6 +375,18 @@ private func seeded(_ seed: Double, _ others: [String: Double] = [:]) -> [String
         #expect(pictures.last! != pictures[pictures.count - 2], "nothing changed when \(key) became \(value)")
     }
     #expect(scene.river === river && view.scene === scene)
+    // The Look sliders, each off its standard value in turn; and with all four back the picture is the one there
+    // was, every pixel: the shader has the grade only while one of them is moved.
+    let ungraded = pictures.last!
+    for (grade, value) in zip(Meander.grades, [1.3, 1.3, 0.4, 90.0]) {
+        UserDefaults.standard.set(value, forKey: grade.key)
+        for _ in 0..<2 { try screen.frame(rate: 1e9) }
+        pictures.append(screen.pixels)
+        #expect(pictures.last! != pictures[pictures.count - 2], "nothing changed when \(grade.key) became \(value)")
+    }
+    Meander.grades.map(\.key).forEach(UserDefaults.standard.removeObject)
+    for _ in 0..<2 { try screen.frame(rate: 1e9) }
+    #expect(screen.pixels == ungraded, "the picture with the Look sliders back at their standard values isn't the one before they moved")
     // a name no swatch has, as an older version's might be, is Random: it draws, with one of relief's colours
     UserDefaults.standard.set("Gone", forKey: "meander.colors")
     for _ in 0..<2 { try screen.frame(rate: 1e9) }

@@ -22,7 +22,7 @@ final class Meander: SKScene {
                       shownWhen: look.key, shownAt: 0),
         PaletteChoice(key: "meander.inks", options: maps.map { ($0.name, [$0.dark.paper] + $0.dark.inks, [$0.light.paper] + $0.light.inks) }, shownWhen: look.key, shownAt: 1),
     ]
-    /// The old map's two ways with its inks (see `map(rule:)`).
+    /// The old map's two ways with its inks (see `map(rule:graded:)`).
     nonisolated static let rule = Knob(key: "meander.rule", label: "Inks", range: 0...1, standard: 0, section: "Look",
                                        format: .choice(["Fixed to the land", "In Fisk's order"]), shownWhen: look.key, shownAt: 1)
     nonisolated static let bars = Knob(key: "meander.scroll", label: "Scroll bars", range: 0...2, standard: 1, section: "Look", format: .times,
@@ -36,7 +36,9 @@ final class Meander: SKScene {
     nonisolated static let lakes = Knob(key: "meander.lakes", label: "Lakes last", range: 1...10, standard: 16 / perMinute, section: "River", format: .minutes)
     /// T to a minute at speed 1.
     nonisolated private static let perMinute = 60 / River.pace
-    nonisolated static let knobs = [look, rule, bars, width, speed, memory, lakes]
+    /// The Look sliders every graded wallpaper has (brightness, contrast, saturation, hue), after the look's own rows.
+    nonisolated static let grades = gradeKnobs("meander")
+    nonisolated static let knobs = [look, rule, bars] + grades + [width, speed, memory, lakes]
 
     /// A colour from its three bytes.
     nonisolated private static func tone(_ r: Float, _ g: Float, _ b: Float) -> SIMD3<Float> { SIMD3(r, g, b) / 255 }
@@ -124,6 +126,8 @@ final class Meander: SKScene {
     private var ground: SKSpriteNode!
     private let clocks = SKUniform(name: "u_t", vectorFloat2: .zero), blend = SKUniform(name: "u_blend", float: 0)
     private let turns = SKUniform(name: "u_turns", vectorFloat4: .zero), settings = SKUniform(name: "u_knobs", vectorFloat4: .zero)
+    /// The Look sliders' uniforms (`u_brightness` and so on), which a shader has only while one is off its standard value.
+    private let grading = Meander.grades.map { SKUniform(name: "u_" + $0.key.split(separator: ".").last!, float: Float($0.value)) }
     private var lastTime: TimeInterval?
     /// What it was built and dressed with: the river's size, what Settings wanted the ground to wear, and the
     /// colours Random has picked for each look, which hold for the scene's life.
@@ -152,10 +156,10 @@ final class Meander: SKScene {
         NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged), name: UserDefaults.didChangeNotification, object: nil)
     }
 
-    /// What Settings wants the ground to wear: the look, the old map's rule, and each look's colours by name (none
-    /// is Random).
+    /// What Settings wants the ground to wear: the look, the old map's rule, each look's colours by name (none is
+    /// Random), and whether any of the Look sliders is off its standard value.
     private static var wanted: [String] {
-        [look, rule].map { "\($0.value)" } + palettes.map { UserDefaults.standard.string(forKey: $0.key) ?? "" }
+        [look, rule].map { "\($0.value)" } + palettes.map { UserDefaults.standard.string(forKey: $0.key) ?? "" } + [grades.contains { $0.value != $0.standard } ? "graded" : ""]
     }
 
     /// Gives the ground the look Settings asks for: a shader of its own for relief and for each of the old map's
@@ -165,8 +169,9 @@ final class Meander: SKScene {
         map = Self.look.value > 0.5
         let rule = Int(Self.rule.value)
         stage = Self.stages[rule]
+        let graded = dressed[4] == "graded"
         var uniforms = [SKUniform(name: "u_grid", vectorFloat2: [Float(river.columns), Float(river.rows)]), SKUniform(name: "u_other", texture: textures[1]),
-                        clocks, blend, turns, settings]
+                        clocks, blend, turns, settings] + (graded ? grading : [])
         if map {
             let sheets = Self.maps[Self.maps.firstIndex { $0.name == dressed[3] } ?? lucky.sheet], sheet = systemIsDark ? sheets.dark : sheets.light
             uniforms += [SKUniform(name: "u_paper", vectorFloat3: sheet.paper), SKUniform(name: "u_river", vectorFloat3: sheet.river),
@@ -191,16 +196,17 @@ final class Meander: SKScene {
                          SKUniform(name: "u_wet", vectorFloat3: relief.wet), SKUniform(name: "u_ground", vectorFloat3: relief.ground),
                          SKUniform(name: "u_wilds", vectorFloat3: wilds)]
         }
-        ground.shader = SKShader(source: shaderCommon + Self.reads + (map ? Self.map(rule: rule) : Self.relief(light: !systemIsDark)), uniforms: uniforms)
+        ground.shader = SKShader(source: shaderCommon + Self.reads + (map ? Self.map(rule: rule, graded: graded) : Self.relief(light: !systemIsDark, graded: graded)), uniforms: uniforms)
         tune()
         if times == [0, 0] { for _ in 0..<2 { upload() } } // a new scene: both grounds are the river's first
         show()
     }
 
     /// The sliders a shader or the river follows as they move: texels to a point of the screen (the river's size),
-    /// how long old courses stay in T, the scroll bars' strength, and a lake's life in T.
+    /// how long old courses stay in T, the scroll bars' strength, and a lake's life in T; and the Look sliders.
     private func tune() {
         river.lakeLife = Self.lakes.value * Self.perMinute
+        for (uniform, knob) in zip(grading, Self.grades) { uniform.floatValue = Float(knob.value) }
         settings.vectorFloat4Value = [Float(Double(river.columns) / size.width), Float(min(Self.memory.value * Self.perMinute, River.memory)), Float(Self.bars.value), Float(river.lakeLife)]
     }
 
@@ -264,6 +270,15 @@ final class Meander: SKScene {
         blend.floatValue = Float(newest == 1 ? toward : 1 - toward)
         func turn(_ period: Double) -> Float { Float(now / period - (now / period).rounded(.down)) }
         turns.vectorFloat4Value = map ? [turn(1.4), 0, 0, turn(stage * 4) * 4 + 160] : [turn(0.7), turn(1.1326), turn(2.9), 0]
+    }
+
+    /// A shader's last line: its finished colour, put through the shared Look sliders (`grade`, about the level a
+    /// picture in this mode mostly sits at) only while one of them is off its standard value. With all four at
+    /// their standard values `grade` changes nothing by its sums, but a GPU's `pow` isn't held to the last bit, and
+    /// the picture with the sliders untouched has to stay the same picture to the byte: so that is a source
+    /// without it, the one there was.
+    private static func finish(_ colour: String, graded: Bool) -> String {
+        graded ? "gl_FragColor = vec4(grade(\(colour), \(systemIsDark ? "0.3" : "0.7"), u_hue, u_saturation, u_contrast, u_brightness), 1.0);" : "gl_FragColor = vec4(\(colour), 1.0);"
     }
 
     /// The start of both shaders: the ground read smoothly, and what both looks need from it.
@@ -357,8 +372,9 @@ final class Meander: SKScene {
     /// dark look's strength made corduroy of the scroll bars, a lit side has little room to get lighter, and the
     /// dark look's vignette and gain would grey the paper. A second source and not a uniform, so that the dark
     /// picture is the same to the byte.
-    private static func relief(light: Bool) -> String {
+    private static func relief(light: Bool, graded: Bool) -> String {
         let (strength, lit, vignette, gain) = light ? ("0.45", "1.05", "0.16", "0.98") : ("0.9", "1.3", "0.44", "0.86")
+        let last = finish("col * (1.0 - \(vignette) * dot(middle, middle)) * \(gain)", graded: graded)
         return """
         // height above the river, 0 to 1: a bar is up out of the water within a couple of T, then silts up for ages
         float height = 0.25 * (1.0 - exp(-age / 2.5)) + 0.75 * (1.0 - exp(-age / 90.0));
@@ -440,7 +456,7 @@ final class Meander: SKScene {
         float still = mix(wetAge, past, smoothstep(0.8, 1.8, -bank)), lake = smoothstep(0.3, 4.0, still);
         float dull = 0.35 * lake + 0.65 * max(smoothstep(0.5 * u_knobs.w, u_knobs.w, still), lake * (1.0 - smoothstep(0.5, 2.0, -bank)));
         col = mix(col, mix(u_river, u_wet, dull), water);
-        gl_FragColor = vec4(col * (1.0 - \(vignette) * dot(middle, middle)) * \(gain), 1.0);
+        \(last)
     }
     """
     }
@@ -450,7 +466,8 @@ final class Meander: SKScene {
     /// 0 a stage's ink stays with its land for good, the four inks in turn, and only pales with age. With 1 land is
     /// inked as Fisk inks land that many stages old, and the whole sheet slides on to the next colours over the last
     /// third of every stage.
-    private static func map(rule: Int) -> String {
+    private static func map(rule: Int, graded: Bool) -> String {
+        let last = finish("col * (1.0 - 0.32 * dot(middle, middle))", graded: graded)
         let inks = rule == 0 ? """
             float cover = kept * (1.0 - 0.35 * clamp((old - 1.5) / 1.5, 0.0, 1.0) - 0.15 * clamp((old - 3.0) / 3.0, 0.0, 1.0) - 0.1 * clamp((old - 6.0) / 6.0, 0.0, 1.0)
                 - 0.17 * clamp((old - 12.0) / 18.0, 0.0, 1.0) - 0.11 * clamp((old - 30.0) / 60.0, 0.0, 1.0) - 0.12 * clamp((old - 90.0) / 30.0, 0.0, 1.0));
@@ -489,7 +506,7 @@ final class Meander: SKScene {
             // the river, and a lake for its first few T, wear the full bank line
             float off = abs(bank) / pt, fresh = 1.0 - smoothstep(0.5, 6.0, wetAge);
             col = mix(col, u_line, max((1.0 - smoothstep(0.3, 1.3, off)) * 0.7, (1.0 - smoothstep(0.5, 1.5, off)) * fresh));
-            gl_FragColor = vec4(col * (1.0 - 0.32 * dot(middle, middle)), 1.0);
+            \(last)
         }
         """
     }

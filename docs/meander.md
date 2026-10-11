@@ -384,6 +384,7 @@ Meander has a Settings page (`Meander.knobs`, on its entry in `Scenes.swift`). I
 | Look | (swatches) | the old map's: Random, Fisk 1944, Sage, Salmon, Teal. Shown for the old map | Random |
 | Look | Inks | Fixed to the land, or In Fisk's order. Shown for the old map | Fixed to the land |
 | Look | Scroll bars | their strength, 0 to 2×. Shown for relief | 1× |
+| Look | Brightness, Contrast, Saturation, Hue shift | the Look sliders every graded wallpaper has ("The Look sliders", below) | 1, 1, 1, 0 |
 | River | River size | the channel's width, 28 to 56 pt | 28 pt |
 | River | Speed | 0.25 to 4× | 1× |
 | River | Old courses stay | 15 to 125 min, at speed 1 | 125 min (600 T, all the ground remembers) |
@@ -417,7 +418,7 @@ Not done, or not known:
 - **The Settings page itself has not been seen.** The test that opens it (`SETTINGS_SHOT`) puts a window on the screen, which this build was told not to do. The rows are plain `Knob`s of kinds other pages already use.
 - **Colours were menus, not the swatch grid** other wallpapers have: a wallpaper has one `PaletteChoice`, and this one needs a list for each look. (Swatches since: "Colours as swatches", below.) The rows that belong to one look show while the Look menu is at it (`shownWhen` with `shownAt`, which came with the train).
 - **No relief for Light Mode.** (Built since: "Light Mode relief", below. Amethyst, Salmon and Teal too: "More colours".)
-- **No shared grade sliders** (brightness, contrast, saturation, hue).
+- **No shared grade sliders** (brightness, contrast, saturation, hue). (Built since: "The Look sliders", below.)
 - **No screenshot:** `Resources/preview-meander.jpg` and `docs/images` have none, so its Settings page is blank behind the header until the live copy has built. No README entry, nothing on the site.
 - With Random, two displays (or the desktop and the Settings page) pick their colours separately.
 
@@ -543,7 +544,7 @@ Relief had one look, a dark one. In Light Mode it is now ink on paper ([build-li
 - **Against A:** it is the only one of the three in which the river is not the lightest thing, so it is the furthest from the dark look's sense.
 
 - **The colours** (`Meander.reliefs`, a Dark and a Light for each, as the old map's sheets are) are "Palettes proposed"'s Light figures, with a bar at river level and the highest ground placed between them as the Dark ones are. None is measured. Amethyst's land is not the proposal's: that was peach, hard to tell from Garnet's, and is lilac now at the same lightness, under the same plum river.
-- **Four numbers differ from the dark look's,** in a second copy of the shader's source (`relief(light:)`), not a uniform, so that the dark picture is the same to the byte: 0 of 5,939,136 pixels differ in river 13's launch picture. The light on the fine relief is at half strength (at the dark look's it made corduroy of the scroll bars on a pale ground); a lit side may go 5% lighter, not 30% (there is little room above paper); and the vignette and gain are 0.16 and 0.98 for 0.44 and 0.86, which greyed the paper.
+- **Four numbers differ from the dark look's,** in a second copy of the shader's source (`relief(light:graded:)`), not a uniform, so that the dark picture is the same to the byte: 0 of 5,939,136 pixels differ in river 13's launch picture. The light on the fine relief is at half strength (at the dark look's it made corduroy of the scroll bars on a pale ground); a lit side may go 5% lighter, not 30% (there is little room above paper); and the vignette and gain are 0.16 and 0.98 for 0.44 and 0.86, which greyed the paper.
 - **The unworked ground's mottling** takes a quarter of the oldest land's tint, where the dark look takes all of it: at full strength it read as stains on the paper.
 - **Following the system:** the scene takes its sheet from `systemIsDark` when it dresses, as the old map does, and the app builds the scene afresh when the system's appearance changes (`main.swift` watches `effectiveAppearance`). So a change of appearance is a new scene, which for Meander is a new river: as it already was for the old map. Checked as far as a test can: `meanderDrawsEveryLook` builds every relief palette under each appearance and looks at a corner of unworked ground (over 200 of 255 in Light, under 60 in Dark). The app's own rebuild was read, not run.
 - **The swatches** show Light's colours in Light Mode (the river's ink running into two of the land's tints).
@@ -553,6 +554,17 @@ Not done, or not known:
 - Not seen on a real screen, in motion, or at the largest river. The page's swatches in Light Mode have not been seen at all.
 - Cost not measured apart: the Light source is the dark one with four numbers changed.
 - With Random, relief in Light and in Dark are the same family only by chance, since a change of appearance is a new scene and picks again.
+
+### The Look sliders (2026-10-11)
+Brightness, Contrast, Saturation and Hue shift, at the end of the Look section, for both looks in both modes ([build-grade.jpg](meander/build-grade.jpg): relief in Dark and in Light, then the old map in Dark and in Light; each as it stands, then brightness 1.3, contrast 1.4, saturation 0.2 and hue +90°).
+
+- **They are the app's own** (`gradeKnobs("meander")` for the rows and `grade()` in the shader, as Nebula, Aurora, Lava Lamp and the rest have them; nothing of Meander's own). The grade goes over the finished colour, vignette and all, and its contrast turns about 0.3 in Dark Mode and 0.7 in Light, the levels Lava Lamp uses for its two modes.
+- **With all four at their standard values the picture is the same to the byte,** and not by trusting the grade to be the identity there: by its sums it is, but a GPU's `pow` isn't held to the last bit. The shader has the grade only while a slider is off its standard value (`finish`; `dress` makes the other source when the first one moves, and the plain one again when the last goes back). 0 of 5,939,136 pixels differ in river 13's launch picture, and `meanderFollowsItsSettings` moves each slider on a running scene, puts them back and holds the picture to the one before, every pixel.
+- **Moving a slider follows as it moves** (a uniform, `tune`). The first move off the standard values and the last one back each make a new shader, as a change of look does.
+
+Not done, or not known:
+- Not seen on the Settings page or a real screen. Whether the first move of a slider shows as a hitch (a shader is compiled then) has not been timed.
+- Brightness above 1 clips Light Mode's paper to white, as it does every pale picture.
 
 ### Still wrong, worst first (2026-10-11)
 What is known to be wrong with the picture as built, in one place.
