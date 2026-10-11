@@ -12,8 +12,8 @@ import SpriteKit
 final class PixelTrain: SKScene {
     /// What country the line runs through: whatever comes, or held on one kind. (A menu of the train's own: the
     /// airliner's has sceneries the train hasn't got yet, and its ocean is the train's lake.)
-    nonisolated static let scenery = Knob(key: "seat.country", label: "Scenery", range: 0...3, standard: 0, section: "Flight",
-                                          format: .choice(["Changing", "Countryside", "A lake beside the line", "Mountains"]), shownWhen: "seat.orbit", shownAt: 2)
+    nonisolated static let scenery = Knob(key: "seat.country", label: "Scenery", range: 0...4, standard: 0, section: "Flight",
+                                          format: .choice(["Changing", "Countryside", "A lake beside the line", "Mountains", "A city"]), shownWhen: "seat.orbit", shownAt: 2)
     nonisolated static let poles = Knob(key: "seat.poles", label: "Poles and wires beside the line", range: 0...1, standard: 1, section: "Flight",
                                         format: .toggle, shownWhen: "seat.orbit", shownAt: 2)
     /// The train's own settings, listed among the airliner's (`PixelWindowSeat.rows`) while the train is offered.
@@ -40,6 +40,7 @@ final class PixelTrain: SKScene {
     private(set) var picture: [UInt32] // the pane as last painted, its rows from the bottom
     private var ringColours: [UInt32] = [], groundColours: [UInt32] = [] // the colours of the moment, ready to copy
     private var lamp: UInt32 = 0, lights: UInt8 = 0 // a lamp's colour, and how far the evening has got: each comes on at its own draw
+    private var lamps = [UInt32](repeating: 0, count: TrainMat.day.count) // a lit thing's colour by what it is: `lamp`, but for a few
     private var pole: UInt32 = 0, wire: UInt32 = 0 // the pole line's colours
     private let polesOn: Bool // Settings' Poles and wires, as the scene was built
     private let carriage: PixelCarriage // the cabin round the pane, by Settings' Carriage as the scene was built
@@ -50,7 +51,7 @@ final class PixelTrain: SKScene {
     // colours (flat, a ripple's light and its dark, the Sun's glitter), and how likely the glitter is there.
     private var water: [UInt32], glint: [UInt8]
     private var skyline: [Int] // for each column of the pane, the row what stands beyond a lake's far shore reaches up to
-    private var reflected: [Int] = [] // the columns of the far shore's lamps as last painted, for their streaks in the water
+    private var reflected: [(column: Int, colour: UInt32)] = [] // the far shore's lamps as last painted, for their streaks in the water
     // The cloud (PixelTrainSky.swift): its five tones in this light, lightning's colour and how strongly it lights a
     // storm (0 with Settings' Lightning off), and a lake's water under a cloud's image, each row in the five tones.
     private var cloud: TrainCloud
@@ -203,6 +204,7 @@ final class PixelTrain: SKScene {
         }
         // Lamps come on through dusk, each when the evening passes its own draw, as the airliner's do.
         (lamp, lights) = (pack(mix(rgb(255, 214, 150), rgb(255, 204, 128), night)), UInt8(min(255, night * 300)))
+        for m in lamps.indices { lamps[m] = TrainMat.lit[UInt8(m)].map(pack) ?? lamp }
         // The pole line, unless Settings has it off or it would cross the pane too fast to be calm. A change takes
         // hold two poles beyond the pane's leading edge, so every wire in view keeps both its poles.
         let poleSpace = world.focal / TrainWorld.poleAway, calm = polesOn && poleSpace * speed <= TrainWorld.poleLimit
@@ -240,7 +242,7 @@ final class PixelTrain: SKScene {
 
     /// How many pixels of the picture are lamps, and how big the picture is, for the tests: the night must never be
     /// without a lamp.
-    var lit: Int { lights == 0 ? 0 : picture.count { $0 == lamp } }
+    var lit: Int { lights == 0 ? 0 : picture.count(where: Set(lamps).contains) }
     var pane: (w: Int, h: Int) { (glass.w, glass.h) }
 
     /// The carriage round the pane (PixelCarriage.swift), in the light of the moment.
@@ -372,9 +374,9 @@ final class PixelTrain: SKScene {
                         for up in low..<top where strips[column + up] != 0 {
                             let cell = strips[column + up]
                             if cell > 127, lights > 0, scatter(ring.first + i, up, 70 + UInt64(k)) <= lights {
-                                out[(ring.foot + up) * gw + i] = lamp
-                                if ring.away >= TrainWorld.farShore { reflected.append(i) }
-                            } else if cell & 127 != 0 { // (a lamp with nothing drawn under it shows only when lit)
+                                out[(ring.foot + up) * gw + i] = lamps[Int(cell & 127)]
+                                if ring.away >= TrainWorld.farShore { reflected.append((i, lamps[Int(cell & 127)])) }
+                            } else if cell & 127 != 0, cell & 127 < TrainMat.lampSodium { // (a light with nothing drawn under it shows only when lit)
                                 out[(ring.foot + up) * gw + i] = ringColours[colours + Int(cell & 127)]
                             }
                         }
@@ -383,9 +385,10 @@ final class PixelTrain: SKScene {
                     if s == gw { s = 0 }
                 }
             }
-            // Each lamp on a lake's far shore leaves a broken streak in the water under it, fainter toward us.
-            let flicker = Int(clock * 2) * 31, glow = unpack(lamp)
-            for i in reflected {
+            // Each lamp on a lake's far shore leaves a broken streak of its colour in the water under it, fainter toward us.
+            let flicker = Int(clock * 2) * 31
+            for (i, colour) in reflected {
+                let glow = unpack(colour)
                 for d in 1...min(13, horizon) where land[(d - 1) * gw + ((rows[d - 1].first + i) % gw + gw) % gw] == TrainMat.water
                     && chance(i, d + flicker, 71) < 0.5 - Double(d) * 0.055 {
                     let at = (horizon - d) * gw + i
@@ -445,6 +448,9 @@ enum TrainMat {
     static let mesa: UInt8 = 51, mesaShade: UInt8 = 52, mesaPale: UInt8 = 53, track: UInt8 = 54
     static let concrete: UInt8 = 55, concreteShade: UInt8 = 56, tower: UInt8 = 57, towerShade: UInt8 = 58, tar: UInt8 = 59, rail: UInt8 = 60
     static let glassCool: UInt8 = 61, lampSodium: UInt8 = 62, lampRed: UInt8 = 63, lampGreen: UInt8 = 64, lampWhite: UInt8 = 65
+    /// What colour a lit thing is after dark, where it isn't a lamp's own warm one.
+    static let lit: [UInt8: RGB] = [glassCool: rgb(222, 232, 255), lampWhite: rgb(222, 232, 255), lampSodium: rgb(255, 172, 94),
+                                    lampRed: rgb(255, 88, 72), lampGreen: rgb(118, 230, 212)]
     /// Each one's colour in full daylight, before the haze.
     static let day: [RGB] = [
         .zero, rgb(40, 78, 50), rgb(60, 106, 58), rgb(94, 138, 68), rgb(64, 52, 46), rgb(32, 64, 54), rgb(48, 88, 66),
@@ -506,7 +512,8 @@ struct TrainWorld {
     var speed: Double
     /// Which side things are lit from: 1 from the right of the picture, -1 from the left.
     var sun = 1
-    /// Settings' Scenery: 0 for whatever comes, 1 for countryside, 2 for a lake beside the line, 3 for mountains.
+    /// Settings' Scenery: 0 for whatever comes, 1 for countryside, 2 for a lake beside the line, 3 for mountains,
+    /// 4 for a city.
     var scenery = 0
     /// A lake's far shore is the ring this far off, and those beyond it: nearer rings stand on our side of the water.
     static let farShore = 1800.0
@@ -543,7 +550,9 @@ struct TrainWorld {
         let z = Self.rings[ring], ppm = focal / z, wx = Double(n) / ppm, salt = UInt64(z), rows = rows(ring)
         cells.update(repeating: 0, count: rows)
         let land = country(wx), relief = land.relief(z) // (1 unless Scenery is left to change: the land sinks where one country meets the next)
-        if land.kind != .farmland { return otherColumn(land.kind, ring, n, into: cells, by: laid, relief: relief) }
+        if land.kind != .farmland, land.kind != .city || z < 30000 { // (a city lies in farmland, under its far hills)
+            return otherColumn(land.kind, ring, n, into: cells, by: laid, relief: relief)
+        }
         if z >= 15000 {
             let high: Double
             if z >= 30000 {
@@ -663,7 +672,7 @@ struct TrainWorld {
         // (In rows down from the pane's top, as the mock-ups count them, so that a wire rounds the way theirs does.)
         let foot = high - horizon + Int((eye * ppm).rounded(.toNearestOrEven)), top = foot - Int((Self.poleTall * ppm).rounded(.toNearestOrEven))
         /// Whether pole `k` of the line stands on land: a lake that comes in nearer than the line has none.
-        func stands(_ k: Int) -> Bool { strung(k) && shore(Double(k) * Self.poleGap) > Self.poleAway }
+        func stands(_ k: Int) -> Bool { strung(k) && shore(Double(k) * Self.poleGap) > Self.poleAway && country(Double(k) * Self.poleGap).kind != .city }
         let pole = Int((Double(first) / gap).rounded(.down)), standing = (pole - 1...pole + wide / max(Int(gap), 1) + 2).map(stands)
         for i in 0..<wide {
             let spans = Double(first + i) / gap, along = spans - spans.rounded(.down), sag = 4 * along * (1 - along)

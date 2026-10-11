@@ -16,7 +16,7 @@ import sys
 import numpy as np
 from PIL import Image
 
-LAMPS = [(255, 204, 128), (255, 214, 150)]
+LAMPS = [(255, 204, 128), (255, 214, 150), (222, 232, 255), (255, 172, 94), (255, 88, 72), (118, 230, 212)]  # warm, and a city's others
 
 
 def load(path):

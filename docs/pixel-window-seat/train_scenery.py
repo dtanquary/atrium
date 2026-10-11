@@ -142,9 +142,9 @@ FIELDS = {"mountains": ["alp", "pasture", "alp", "ley", "alp", "pasture", "stubb
 PLOT = {"mountains": {7000: 700.0, 3500: 420.0, 1800: 260.0, 900: 150.0, 500: 90.0, 300: 60.0, 180: 44.0, 110: 34.0},
         "snow": {7000: 700.0, 3500: 420.0, 1800: 260.0, 900: 150.0, 500: 90.0, 300: 60.0, 180: 44.0, 110: 34.0},
         "desert": {7000: 700.0, 3500: 420.0, 1800: 260.0, 900: 60.0, 500: 40.0, 300: 26.0, 180: 18.0, 110: 13.0},
-        "city": {15000: 200.0, 7000: 120.0, 3500: 90.0, 1800: 70.0, 900: 60.0, 500: 46.0, 300: 32.0, 180: 21.0, 110: 18.0}}
+        "city": {15000: 200.0, 7000: 120.0, 3500: 90.0, 1800: 70.0, 900: 90.0, 500: 70.0, 300: 32.0, 180: 21.0, 110: 18.0}}
 TALLEST = {"mountains": 34.0, "snow": 34.0, "desert": 12.0, "city": 0.0}  # what can stand on a ring, m (a city's are below)
-TOWER = {15000: 420.0, 7000: 450.0, 3500: 380.0, 1800: 250.0, 900: 60.0, 500: 26.0, 300: 15.0, 180: 10.0, 110: 7.0}
+TOWER = {15000: 420.0, 7000: 450.0, 3500: 380.0, 1800: 250.0, 900: 95.0, 500: 48.0, 300: 15.0, 180: 10.0, 110: 7.0}
 
 
 def downtown(pos):
@@ -165,7 +165,7 @@ def ring_strip(kind, Z, n0, width, sun):
     hpe = np.round(heights(kind, Z, np.arange(n0 - pad, n0 + width + pad) / ppm, salt) * ppm).astype(int)
     sp = hpe[pad:-pad]
     slope = (hpe[2 * pad:] - hpe[:-2 * pad]) * sun  # above 0 where the land's face is turned to the Sun
-    room = TOWER[Z] if kind == "city" else TALLEST[kind]
+    room = max(TOWER[Z], 17.0) if kind == "city" else TALLEST[kind]  # (17 m: a house, a tree or a works by the line)
     H = int(np.ceil(room * ppm)) + 4 + int(sp.max())
     a = np.zeros((H, width), dtype=np.uint8)
     lamps = np.zeros((H, width), dtype=bool)
@@ -263,21 +263,22 @@ def ring_strip(kind, Z, n0, width, sun):
                 st = bush((1.2 + 2.2 * size * size) * ppm, seed, sun)
         else:  # a city: towers far off where its centre is, slabs and blocks nearer, houses and yards by the line
             centre, high = downtown(pos), TOWER[Z] * (0.30 + 0.70 * size * size)
+            low = 0.6 if Z == 110 else 1.0  # by the line stand only low things, sheds and garden trees: the city's lights show over them
             style = int(rnd(c, 5, salt + 34) * 3)
             if Z >= 3500:
                 if r < 0.10 + 0.80 * centre:
                     st, glow = block((26 + 30 * rnd(c, 6, salt + 35)) * ppm, high * (0.45 + 0.55 * centre) * ppm, seed, sun, 2, 0 if style == 1 else style,
                                      light=high * (0.45 + 0.55 * centre) > 120)
             elif Z >= 500:
-                if r < 0.84:
+                if r < 0.78:  # slabs and blocks of every size, with sky between them
                     tall = high * (0.55 + 0.45 * centre)
-                    st, glow = block(cell * (0.50 + 0.55 * rnd(c, 6, salt + 35)) * ppm, tall * ppm, seed, sun, 3.2 * ppm, style, light=tall > 90)
+                    st, glow = block(cell * (0.40 + 0.75 * rnd(c, 6, salt + 35)) * ppm, tall * ppm, seed, sun, 3.2 * ppm, style, light=tall > 90)
             elif r < 0.40:
-                st = train.house(max(2, (5.0 + 2.5 * size) * ppm), seed, sun)
+                st = train.house(max(2, (5.0 + 2.5 * size) * low * ppm), seed, sun)
             elif r < 0.64:
-                st, glow = block(cell * (0.7 + 0.6 * rnd(c, 6, salt + 35)) * ppm, max(3, (4.5 + high * 0.8) * ppm), seed, sun, 3.2 * ppm, style % 2)
+                st, glow = block(cell * (0.7 + 0.6 * rnd(c, 6, salt + 35)) * ppm, max(3, (4.5 + high * 0.8) * low * ppm), seed, sun, 3.2 * ppm, style % 2)
             elif r < 0.80:
-                st = train.tree((7 + 7 * size) * ppm, seed, sun)
+                st = train.tree((7 + 7 * size) * low * ppm, seed, sun)
             if Z < 180:
                 glow = np.zeros_like(st, dtype=bool) if st is not None else None  # (too fast to carry lights at 1×)
         if st is None:

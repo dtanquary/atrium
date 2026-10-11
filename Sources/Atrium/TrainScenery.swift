@@ -4,27 +4,34 @@ import Foundation
 /// are laid here, each the mock-ups' painter line for line (docs/pixel-window-seat/train_scenery.py), as farmland is
 /// train.py's, so that what they lay can be checked against the sheet Dave picked from byte for byte.
 enum TrainCountry {
-    case farmland, mountains
+    case farmland, mountains, city
 
     /// What sets one country's hashes apart from another's, as in the mock-ups.
-    var salt: UInt64 { self == .farmland ? 0 : 100_000 }
+    var salt: UInt64 { [.farmland: 0, .mountains: 100_000, .city: 400_000][self]! }
 
-    /// How far off things have faded most of the way to the horizon's colour, in metres: mountain air is clear.
-    var haze: Double { self == .farmland ? TrainWorld.haze : 60_000 }
+    /// How far off things have faded most of the way to the horizon's colour, in metres: mountain air is clear,
+    /// and a city's is not.
+    var haze: Double { [.farmland: TrainWorld.haze, .mountains: 60_000, .city: 16_000][self]! }
 
-    /// For each ring, how high the land can stand above the track, in metres (farmland's are `TrainWorld.rise`).
-    /// The mountains' are the Alps' at their steepest, held all along the line.
-    var peaks: [Double] { self == .farmland ? [] : [4800, 4500, 4200, 2600, 450, 130, 30, 9, 0, 0, 0] }
+    /// For each ring, how high the land can stand above the track, in metres (farmland's are `TrainWorld.rise`,
+    /// and a city is level). The mountains' are the Alps' at their steepest, held all along the line.
+    var peaks: [Double] { self == .mountains ? [4800, 4500, 4200, 2600, 450, 130, 30, 9, 0, 0, 0] : [Double](repeating: 0, count: 11) }
 
     /// What its rows of ground are made of. Mountains: alpine meadows, and a milky river with its gravel bank where
-    /// farmland has a lane.
-    var ground: TrainGround { self == .farmland ? Self.farm : Self.valley }
+    /// farmland has a lane. A city: roofs and yards far off; nearer, the railway's own ground, ballast with the next
+    /// lines' rails as level lines 19 to 34 m out and a brick wall where the lane was.
+    var ground: TrainGround { self == .farmland ? Self.farm : self == .mountains ? Self.valley : Self.yards }
     private static let farm = TrainGround(fields: TrainWorld.fields, hedge: TrainMat.hedge, lines: (TrainMat.hedge, TrainMat.hedgeLit, TrainMat.road),
                                           far: (TrainMat.ley, TrainMat.wheat), near: (TrainMat.pasture, TrainMat.crop), verge: TrainMat.verge, salt: 0)
     private static let valley = TrainGround(fields: [TrainMat.alp, TrainMat.pasture, TrainMat.alp, TrainMat.ley, TrainMat.alp, TrainMat.pasture,
                                                      TrainMat.stubble, TrainMat.alp, TrainMat.ley, TrainMat.pasture],
                                             hedge: TrainMat.hedge, lines: (TrainMat.rock, TrainMat.river, TrainMat.river),
                                             far: (TrainMat.alp, TrainMat.pasture), near: (TrainMat.pasture, TrainMat.alp), verge: TrainMat.verge, salt: 100_000)
+    private static let yards = TrainGround(fields: [TrainMat.tar, TrainMat.concreteShade, TrainMat.tar, TrainMat.slate, TrainMat.tar, TrainMat.brickShade,
+                                                    TrainMat.tar, TrainMat.concreteShade, TrainMat.slateShade, TrainMat.tar],
+                                           hedge: nil, lines: (TrainMat.brickShade, TrainMat.brick, TrainMat.tar),
+                                           far: (TrainMat.tar, TrainMat.ballast), near: (TrainMat.ballast, TrainMat.ballast), verge: TrainMat.ballast,
+                                           rails: [19.0, 20.435, 33.0, 34.435], salt: 400_000)
 }
 
 /// What a country's rows of ground are made of: the crops of its far fields and what divides them, if anything; its
@@ -57,13 +64,13 @@ extension TrainWorld {
     /// so from 11 minutes to three quarters of an hour at 1×.
     static let stretch = 22_000.0
     /// The countries Changing passes through between its stretches of farmland.
-    static let passing: [TrainCountry] = [.mountains]
+    static let passing: [TrainCountry] = [.mountains, .city]
 
     /// Where a place along the line lies. Held on a scenery by Settings, the line is all one country. Left to
     /// change, it is cut into stretches at uneven places: every other one is farmland, and each between draws its
     /// country, so the line always comes back to farmland and no country runs on into another of its kind.
     func country(_ wx: Double) -> TrainPlace {
-        guard scenery == 0 else { return TrainPlace(kind: scenery == 3 ? .mountains : .farmland, edge: .infinity) }
+        guard scenery == 0 else { return TrainPlace(kind: scenery == 3 ? .mountains : scenery == 4 ? .city : .farmland, edge: .infinity) }
         func begins(_ k: Int) -> Double { (Double(k) + 0.2 + 0.6 * unit(hash(k, 0, 7171))) * Self.stretch }
         let near = Int((wx / Self.stretch).rounded(.down)), k = wx >= begins(near) ? near : near - 1
         let kind = k & 1 == 0 ? TrainCountry.farmland : Self.passing[Int(unit(hash(k, 1, 7171)) * Double(Self.passing.count))]
@@ -87,7 +94,7 @@ extension TrainWorld {
     /// How many rows a ring's strip needs for the tallest thing any other country stands there.
     func otherRows(_ ring: Int) -> Int {
         let ppm = perMetre(ring)
-        return Int((34 * ppm).rounded(.up)) + 4 + Int((TrainCountry.mountains.peaks[ring] * ppm).rounded(.up))
+        return max(Int((34 * ppm).rounded(.up)) + 4 + Int((TrainCountry.mountains.peaks[ring] * ppm).rounded(.up)), Int((max(Self.towers[ring], 17) * ppm).rounded(.up)) + 4)
     }
 
     /// How high a country's land stands above the track `wx` metres along, on a ring, in metres. Mountains: from
@@ -113,6 +120,7 @@ extension TrainWorld {
     /// turned from the Sun in shade. Nearer is the valley's floor: meadows in strips, patches of fir, farmland's
     /// villages with their church and grey-roofed timber chalets, and firs with a few broadleaves among them.
     func otherColumn(_ kind: TrainCountry, _ ring: Int, _ n: Int, into cells: UnsafeMutablePointer<UInt8>, by laid: [Laying], relief: Double) -> UInt8 {
+        if kind == .city { return cityColumn(ring, n, into: cells, by: laid) }
         let z = Self.rings[ring], ppm = focal / z, wx = Double(n) / ppm, salt = UInt64(z) + kind.salt, rows = rows(ring)
         guard z >= Self.farShore || z <= shore(wx) else { return 0 } // out in a lake
         /// How fast the ring slid, in pixels a second, and which side the Sun was on, when column `n` came into view.
@@ -206,12 +214,109 @@ extension TrainWorld {
         return UInt8(top)
     }
 
+    /// For each ring, how long a plot of a city's ground is, and how tall the tallest thing on it, in metres.
+    static let cityPlot: [Double] = [0, 0, 200, 120, 90, 70, 90, 70, 32, 21, 18], towers: [Double] = [0, 0, 420, 450, 380, 250, 95, 48, 15, 10, 7]
+
+    /// Lays column `n` of a ring in a city, the line at grade through it. From 15 to 3.5 km off, towers where the
+    /// city's centre is, a red light on the tallest; to 500 m, slabs and blocks of every size with sky between them;
+    /// nearer, houses, low works and street trees. Concrete, brick and glass, each building with its own share of
+    /// windows lit after dark, warm in homes and white in glass. Street lamps stand every 40 to 70 m from 900 m in,
+    /// on posts from 300 m in. And far off the city's streets are a seam of lights along its foot. Toward where
+    /// another country begins the buildings are lower.
+    private func cityColumn(_ ring: Int, _ n: Int, into cells: UnsafeMutablePointer<UInt8>, by laid: [Laying]) -> UInt8 {
+        let kind = TrainCountry.city, z = Self.rings[ring], ppm = focal / z, wx = Double(n) / ppm, salt = UInt64(z) + kind.salt, rows = rows(ring)
+        guard z >= Self.farShore || z <= shore(wx) else { return 0 } // out in a lake
+        func when(_ n: Int) -> (pace: Double, sun: Int) {
+            let by = laid.last { $0.from <= n } ?? laid.first
+            return (ppm * (by?.speed ?? speed), by?.sun ?? sun)
+        }
+        let pace = when(n).pace, plot = Self.cityPlot[ring], here = Int((wx / plot).rounded(.down))
+        var top = 0
+        for c in here - 2...here + 2 {
+            let draw = unit(hash(c, 1, salt + 30)), at = (Double(c) + unit(hash(c, 2, salt + 31))) * plot, place = country(at)
+            guard z >= Self.farShore || z <= shore(at), place.kind == kind, place.edge > 60 else { continue }
+            let seed = Int(hash(c, 3, salt + 32) % (1 << 30)), size = unit(hash(c, 4, salt + 33)), wide = unit(hash(c, 6, salt + 35))
+            let centre = clip((fbm(at / 5000, 7, 2, 5152) - 0.42) * 5), style = Int(unit(hash(c, 5, salt + 34)) * 3)
+            let high = Self.towers[ring] * (0.30 + 0.70 * size * size) * place.relief(z)
+            let low = z == 110 ? 0.6 : 1.0 // by the line stand only low things, sheds and garden trees: the city's lights show over them
+            let stamp: Stamp, built: Bool // (a building's columns carry their own lit windows; a house's glass lights as farmland's does)
+            if z >= 3500 {
+                guard draw < 0.10 + 0.80 * centre else { continue }
+                let tall = high * (0.45 + 0.55 * centre)
+                (stamp, built) = (.block((26 + 30 * wide) * ppm, tall * ppm, seed, floor: 2, style: style == 1 ? 0 : style, light: tall > 120), true)
+            } else if z >= 500 {
+                guard draw < 0.78 else { continue }
+                let tall = high * (0.55 + 0.45 * centre)
+                (stamp, built) = (.block(plot * (0.40 + 0.75 * wide) * ppm, tall * ppm, seed, floor: 3.2 * ppm, style: style, light: tall > 90), true)
+            } else if draw < 0.40 {
+                (stamp, built) = (.house(max(2, (5.0 + 2.5 * size) * low * ppm), seed), false)
+            } else if draw < 0.64 {
+                (stamp, built) = (.block(plot * (0.7 + 0.6 * wide) * ppm, max(3, (4.5 + high * 0.8) * low * ppm), seed, floor: 3.2 * ppm, style: style % 2, light: false), true)
+            } else if draw < 0.80 {
+                (stamp, built) = (.tree((7 + 7 * size) * low * ppm, seed), false)
+            } else {
+                continue
+            }
+            let left = Int((at * ppm).rounded(.toNearestOrEven)) - stamp.w / 2, entered = when(left)
+            guard n >= left, n < left + stamp.w, stamp.h <= rows, entered.pace <= Self.broad else { continue }
+            let lights = z >= 180 && entered.pace <= Self.bright
+            for (y, cell) in stamp.column(n - left, entered.sun).enumerated() where cell != 0 {
+                let lamp = lights && (built ? cell > 127 : cell == TrainMat.glass && unit(hash(seed + n - left, y, 55)) < 0.8)
+                cells[stamp.h - 1 - y] = cell & 127 | (lamp ? 128 : 0)
+            }
+            top = max(top, stamp.h)
+        }
+        // Street lamps, a sodium light 8.5 m up; on posts where they are near enough for one to show.
+        if z >= 180, z <= 900, pace <= Self.thin {
+            let gap = [70.0, 55, 45, 40][ring - 6], tall = Int((8.5 * ppm).rounded(.toNearestOrEven))
+            if Int(((wx / gap).rounded(.toNearestOrEven) * gap * ppm).rounded(.toNearestOrEven)) == n, tall < rows, cells[tall] == 0 { // (one behind a building doesn't show)
+                if z <= 300 { for up in 0..<tall where cells[up] == 0 { cells[up] = TrainMat.pole } }
+                (cells[tall], top) = (TrainMat.lampSodium | (pace <= Self.bright ? 128 : 0), max(top, tall + 1))
+            }
+        }
+        // The far city's streets and windows, seen edge-on: a seam of lights along its foot, most of them sodium.
+        if z >= 1800, pace <= Self.bright {
+            let dense = clip((fbm(wx / 9000, 3, 2, 5151) - 0.25) * 3.5)
+            for (row, share) in [(0, 0.42), (1, 0.20), (2, 0.07)] where cells[row] == 0 && unit(hash(n, row, salt + 65)) < share * dense {
+                let tint = unit(hash(n, row, salt + 66))
+                cells[row] = (tint < 0.45 ? TrainMat.lampSodium : tint < 0.62 ? TrainMat.lampWhite : tint < 0.66 ? TrainMat.lampGreen : tint < 0.69 ? TrainMat.lampRed : 0) | 128
+                top = max(top, row + 1)
+            }
+        }
+        return UInt8(top)
+    }
+
     /// A chalet is farmland's house in dark timber under grey shingles.
     private static let chalet = [TrainMat.brick: TrainMat.chalet, TrainMat.brickShade: TrainMat.chaletShade,
                                  TrainMat.roof: TrainMat.slate, TrainMat.roofShade: TrainMat.slateShade]
 }
 
 extension Stamp {
+    /// A city building `wide` by `high` pixels with a storey every `floor` of them: concrete, brick or glass by its
+    /// `style`, one end in shade, a darker edge to its roof, and its windows in rows. A cell's top bit marks a window
+    /// that is lit after dark: each building has its own share of them. With a `light` it is a row taller, for the
+    /// red light above its roof.
+    static func block(_ wide: Double, _ high: Double, _ seed: Int, floor: Double, style: Int, light: Bool) -> Stamp {
+        let (wall, shade, window) = [(TrainMat.concrete, TrainMat.concreteShade, TrainMat.glass), (TrainMat.brick, TrainMat.brickShade, TrainMat.glass),
+                                     (TrainMat.tower, TrainMat.towerShade, TrainMat.glassCool)][style]
+        let w = max(1, Int(wide)), h = max(2, Int(high)), side = w >= 4 ? max(1, w / 4) : 0, above = light ? 1 : 0
+        let pitch = max(2, Int(floor.rounded(.toNearestOrEven))), tall = pitch < 4 ? 1 : 2 // a window's height
+        let share = 0.10 + 0.55 * unit(hash(seed, 8, 27)) * unit(hash(seed, 9, 28)) // how much of the building is up
+        return Stamp(w: w, h: h + above) { x, sun in
+            var column = [UInt8](repeating: 0, count: h + above)
+            let shaded = side > 0 && (sun > 0 ? x < side : x >= w - side)
+            for y in 0..<h { column[above + y] = y == 0 || shaded ? shade : wall }
+            if w < 3 || (x % 2 == 1 && x < w - 1) {
+                for y in stride(from: h > 3 ? 2 : 1, to: h - tall, by: pitch) {
+                    let lit: UInt8 = unit(hash(seed + x, y, 55)) < share ? 128 : 0
+                    for k in 0..<tall { column[above + y + k] = window | lit }
+                }
+            }
+            if light, x == w / 2 { column[0] = TrainMat.lampRed | 128 }
+            return column
+        }
+    }
+
     /// The same stamp with some of its materials changed for others.
     func recast(_ others: [UInt8: UInt8]) -> Stamp { Stamp(w: w, h: h) { x, sun in column(x, sun).map { others[$0] ?? $0 } } }
 }
