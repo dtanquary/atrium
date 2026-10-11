@@ -238,7 +238,11 @@ FIELD = ["wheat", "pasture", "crop", "fallow", "ley", "pasture", "stubble", "cro
 
 def ring_strip(Z, n0, width, sun):
     """Columns n0 … n0+width of the ring Z metres off: material numbers, with the ring's foot on the bottom row,
-    and a mask of lamps (windows that light at night)."""
+    and a mask of lamps (windows that light at night).
+
+    A pixel's own speckle goes by its height above the foot (`up`). On the sheets Dave picked from it went by the
+    row counted from the strip's top (`yy`), and the strip is as tall as the tallest thing in view, so a hill's
+    speckle would have reshuffled whenever a taller one slid in. The shapes are the same."""
     ppm = FOCAL / Z
     n = np.arange(n0, n0 + width)
     wx = n / ppm  # metres along the track
@@ -255,9 +259,9 @@ def ring_strip(Z, n0, width, sun):
         yy = np.arange(H)[:, None]
         up = H - 1 - yy  # px above the foot
         body = up < hp[None, :]
-        wood = fbm(wx / (Z * 0.12), 7.0, 3, salt + 5)[None, :] + (rnd(n[None, :], yy, salt + 6) - 0.5) * 0.25
+        wood = fbm(wx / (Z * 0.12), 7.0, 3, salt + 5)[None, :] + (rnd(n[None, :], up, salt + 6) - 0.5) * 0.25
         if Z >= 30000:
-            snow = up > (1700.0 * ppm + (rnd(n[None, :], yy, salt + 7) - 0.5) * 2)
+            snow = up > (1700.0 * ppm + (rnd(n[None, :], up, salt + 7) - 0.5) * 2)
             a[body] = np.where(snow, I["white"], np.where(wood > 0.55, I["slate"], I["slateS"]))[body]
         else:
             a[body] = np.where(wood > 0.58, I["leaf0"], np.where(wood > 0.42, I["crop"], I["pasture"]))[body]
@@ -288,7 +292,7 @@ def ring_strip(Z, n0, width, sun):
     if Z >= 500:
         th = np.round((10 + 14 * fbm(wx / 60.0, 1.0, 3, salt + 2)) * ppm * np.clip((wooded - 0.50) * 9, 0, 1)).astype(int)
         body = (up >= sp[None, :]) & (up < (sp + th)[None, :])
-        tone = np.where(rnd(n[None, :], yy, salt + 3) < 0.35, I["leaf1"], I["leaf0"])
+        tone = np.where(rnd(n[None, :], up, salt + 3) < 0.35, I["leaf1"], I["leaf0"])
         a[body] = tone[body]
     cell = {7000: 700.0, 3500: 420.0, 1800: 260.0, 900: 150.0, 500: 90.0, 300: 60.0, 180: 44.0, 110: 34.0}[Z]
     c0, c1 = int(np.floor(wx[0] / cell)) - 2, int(np.floor(wx[-1] / cell)) + 2

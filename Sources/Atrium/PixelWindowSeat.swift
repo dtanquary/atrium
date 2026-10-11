@@ -1,8 +1,13 @@
 import SpriteKit
 
-/// The airliner, or the space station while Settings' Earth orbit is on (PixelOrbit.swift).
-// ponytail: the train (`PixelOrbit.mode` 2) is the airliner still, until its own scene is built.
-@MainActor func pixelWindowSeat(size: CGSize) -> SKScene { PixelOrbit.mode == 1 ? PixelOrbit(size: size) : PixelWindowSeat(size: size) }
+/// The airliner; or, by Settings' pick of window, the space station (PixelOrbit.swift) or the train (PixelTrain.swift).
+@MainActor func pixelWindowSeat(size: CGSize) -> SKScene {
+    switch PixelOrbit.mode {
+    case 1: PixelOrbit(size: size)
+    case 2: PixelTrain(size: size)
+    default: PixelWindowSeat(size: size)
+    }
+}
 
 /// The view from a window seat of an airliner that never lands, in Pixel City's pixel art. Outside is an endless
 /// land made up as we go (`SeatWorld`): ocean, coast, city, farmland, mountains, desert and snow, under cloud that
@@ -152,7 +157,7 @@ final class PixelWindowSeat: SKScene {
         let another = Int(Self.scenery.value) != world.scenery || Int(Self.clouds.value) != world.weather
         let resized = Int(Self.window.value) != windowSize // every buffer is the pane's size, so that takes a new scene
         settings = picked
-        let orbit = PixelOrbit.mode == 1 // up to the space station, which is another scene altogether
+        let orbit = PixelOrbit.mode != 0 // up to the space station or onto the train, each another scene altogether
         guard !(resized || orbit) || view != nil else { return } // (with no view to hand over in, as in the tests, it stays as built)
         if another || resized || orbit, let view { // a different world or window: dissolve into a new scene with both still running, never a cut
             let fade = SKTransition.crossFade(withDuration: 0.8)
@@ -525,8 +530,10 @@ struct SeatSky {
     let moonlight: RGB, ambient: RGB, key: RGB, haze: RGB, veil: RGB
 
     /// `pick` is Settings' Looking: 0 toward the midday Sun, then the eight compass points from north. `horizon` is
-    /// the row of a pane `gw` by `gh` that the horizon lies on, counted from its bottom.
-    @MainActor init(_ now: Date, latitude: Double, longitude: Double, looking pick: Int, w gw: Int, h gh: Int, horizon: Int) {
+    /// the row of a pane `gw` by `gh` that the horizon lies on, counted from its bottom. `bands` is how many rows
+    /// the sky takes to go from the horizon's colour to the zenith's: all of it for the airliner. A sky taller than
+    /// that looks higher, and goes on deepening above them.
+    @MainActor init(_ now: Date, latitude: Double, longitude: Double, looking pick: Int, w gw: Int, h gh: Int, horizon: Int, bands: Int? = nil) {
         let jd = Sky.julianDate(now)
         let turn = Sky.horizonMatrix(jd: jd, latitude: latitude, longitude: longitude)
         func seen(_ v: Sky.Vector) -> (elevation: Double, azimuth: Double) {
@@ -559,10 +566,10 @@ struct SeatSky {
         let glareColour = mix(rgb(255, 128, 64), rgb(255, 214, 150), smoothstep(-2, 10, el))
         let reach = mix(1, 0.35, smoothstep(4, 20, el))
         for y in horizon..<gh {
-            let t = Float(y - horizon) / Float(gh - horizon)
+            let t = Float(y - horizon) / Float(bands ?? gh - horizon)
             for x in 0..<gw {
-                let d = bayer(x, y)
-                var c = mix(horizons[x], top, pow(min(1, (t * 14 + (1 - band) / 2 + d * band).rounded(.down) / 14), 0.6))
+                let d = bayer(x, y), step = (t * 14 + (1 - band) / 2 + d * band).rounded(.down) / 14
+                var c = step > 1 ? mix(top, top * RGB(0.3, 0.69, 0.88), step - 1) : mix(horizons[x], top, pow(min(1, step), 0.6))
                 if glare > 0 {
                     let gx = Float(x - sunSpot.x) / (90 * reach), gy = Float(y - sunSpot.y) / (40 * reach)
                     c = mix(c, glareColour, (glare * exp(-(gx * gx + gy * gy)) * 5 + 0.3 + d * 0.4).rounded(.down) / 5)
