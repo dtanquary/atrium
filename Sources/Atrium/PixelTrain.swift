@@ -46,9 +46,10 @@ final class PixelTrain: SKScene {
     // From which pole on the line stands or doesn't: it is left out while it would slide too fast, and a change takes
     // hold beyond the pane's leading edge, so the line runs out or comes in at a pole and never blinks.
     private var strung: [(from: Int, on: Bool)] = []
-    // The lake, by where a pixel is on the pane and not by what slides under it: each ground row's water in four
+    // The lake, by where a pixel is on the pane and not by what slides under it: each ground row's water in five
     // colours (flat, a ripple's light and its dark, the Sun's glitter), and how likely the glitter is there.
     private var water: [UInt32], glint: [UInt8]
+    private var skyline: [Int] // for each column of the pane, the row what stands beyond a lake's far shore reaches up to
     private var reflected: [Int] = [] // the columns of the far shore's lamps as last painted, for their streaks in the water
     // The cloud (PixelTrainSky.swift): its five tones in this light, lightning's colour and how strongly it lights a
     // storm (0 with Settings' Lightning off), and a lake's water under a cloud's image, each row in the five tones.
@@ -82,7 +83,8 @@ final class PixelTrain: SKScene {
         world = TrainWorld(focal: Double(gh) * 1.2, eye: Self.eye, speed: Self.pace * PixelWindowSeat.speed.value)
         (world.scenery, polesOn) = (Int(Self.scenery.value), Self.poles.value > 0.5)
         (land, dash) = ([UInt8](repeating: 0, count: gw * horizon), [UInt8](repeating: 0, count: gw * horizon))
-        (water, glint) = ([UInt32](repeating: 0, count: 4 * gw * horizon), [UInt8](repeating: 0, count: gw * horizon))
+        (water, glint) = ([UInt32](repeating: 0, count: 5 * gw * horizon), [UInt8](repeating: 0, count: gw * horizon))
+        skyline = [Int](repeating: 0, count: gw)
         cloud = TrainCloud(wide: gw, rows: gh - horizon, focal: Double(gh) * 1.2, clouds: Int(PixelWindowSeat.clouds.value))
         mirrored = [UInt32](repeating: 0, count: 15 * horizon)
         picture = [UInt32](repeating: 0, count: gw * gh)
@@ -195,6 +197,7 @@ final class PixelTrain: SKScene {
             for x in 0..<gw {
                 let c = mix(middle * 0.6 + above[x] * 0.4, deep, 0.30 + 0.35 * min(1, Float(d) / Float(horizon))), at = (d - 1) * gw + x
                 (water[at], water[flat + at], water[2 * flat + at], water[3 * flat + at]) = (pack(c), pack(c * 1.1), pack(c * 0.9), pack(c * 0.25 + sunlight * 0.75))
+                water[4 * flat + at] = pack(c * 0.62) // under the far shore's hills, their mirror in place of the sky's
                 glint[at] = shining ? UInt8(255 * mix(0.75, 0.9, low) * exp(-abs(Float(x - sunAt.x)) / (5 + Float(d) * 0.45))) : 0
             }
         }
@@ -316,16 +319,27 @@ final class PixelTrain: SKScene {
         }
         let flashes = (0..<16).map { storms > 0 ? SeatWorld.lightning($0, at: clock) * storms : 0 }
         var above = [Int8](repeating: -1, count: gw) // the cloud's tones along the row of sky a row of water mirrors
+        // How high what stands beyond a lake's far shore reaches, column by column, for the water to mirror.
+        for i in 0..<gw { skyline[i] = 0 }
+        for k in rings.indices where rings[k].away >= TrainWorld.farShore {
+            var s = ((rings[k].first % gw) + gw) % gw
+            for i in 0..<gw {
+                skyline[i] = max(skyline[i], rings[k].foot + Int(tops[k * gw + s]))
+                s += 1
+                if s == gw { s = 0 }
+            }
+        }
         picture.withUnsafeMutableBufferPointer { out in
             for i in horizon * gw..<gh * gw { out[i] = sky[i] }
             cloud.paint(into: out, horizon: horizon, tones: cloudTones, bolt: bolt, flashes: flashes)
             // The ground, and where a lake lies, its water: ripples a few pixels long that shimmer where they are and
             // don't slide (water has nothing in it to follow), each lighter, darker or plain for about a second, and
-            // the Sun's glitter, reshuffled five times in two seconds.
+            // the Sun's glitter, reshuffled five times in two seconds. A row of water mirrors the row of the picture that
+            // many rows above the horizon: the sky, or darkly, between its lighter ripples, the hills that stand there.
             let tick = Int(clock * 2.5), flat = gw * horizon
             for r in rows.indices {
                 let row = rows[r], y = (horizon - 1 - r) * gw, at = r * gw, tones = row.tones * 5
-                let d = r + 1, long = 3 + d / 5, lead = (d * 7) % long
+                let d = r + 1, long = 3 + d / 5, lead = (d * 7) % long, shore = horizon + d * 8 / 5
                 var s = ((row.first % gw) + gw) % gw, ripple = -1, tone = 0, sparkle: UInt8 = 0, mirrors = false
                 for i in 0..<gw {
                     if land[at + s] == TrainMat.water {
@@ -337,7 +351,9 @@ final class PixelTrain: SKScene {
                             (tone, sparkle) = (draw < 0.16 ? 1 : draw > 0.90 ? 2 : 0, scatter(ripple, d * 17 + tick, 61))
                         }
                         let shines = Int(sparkle) * 8 < Int(glint[at + i]) * (8 - shade) // (no glitter from a Sun behind cloud)
-                        out[y + i] = shines || above[i] < 0 ? water[(shines ? 3 : tone) * flat + at + i] : mirrored[r * 15 + Int(above[i]) * 3 + tone]
+                        // (The far shore's hills stand before the cloud behind them, and their image is the darker.)
+                        out[y + i] = shines ? water[3 * flat + at + i] : tone != 1 && shore < skyline[i] ? water[4 * flat + at + i]
+                            : above[i] < 0 ? water[tone * flat + at + i] : mirrored[r * 15 + Int(above[i]) * 3 + tone]
                     } else {
                         out[y + i] = groundColours[(tones + Int(dash[at + s])) * mats + Int(land[at + s])]
                     }
@@ -702,10 +718,13 @@ struct TrainWorld {
         // tick: each change can start a new crop at the leading edge.)
         let faster = pow(1.5, (log(max(1, speed / PixelTrain.pace)) / log(1.5)).rounded()), soft = faster > 1 ? (tone - 0.5) * 0.06 : 0
         let lane = Int((eye * focal / Self.lane).rounded(.toNearestOrEven))
+        // Where two countries meet, the near field's crops change dash by dash over a hundred metres: changing at one
+        // column, they swept the near field as a hard-edged wedge. (Held to one scenery, both are the same country.)
+        let crops = country(wx + (tone - 0.5) * 160).kind.ground
         let land = d == lane - 2 ? look.lines.0 : d == lane - 1 ? look.lines.1 : d == lane ? look.lines.2
             : look.rails.contains { Int((eye * focal / $0).rounded(.toNearestOrEven)) == d } ? look.rail
-            : z > Self.lane ? (fbm(wx / (1500 * faster), 0.5, 2, 4200 + look.salt) + soft > 0.5 ? look.far.0 : look.far.1)
-            : z > Self.verge ? (fbm(wx / (1900 * faster), 1.5, 2, 4201 + look.salt) + soft > 0.5 ? look.near.0 : look.near.1) : look.verge
+            : z > Self.lane ? (fbm(wx / (1500 * faster), 0.5, 2, 4200 + crops.salt) + soft > 0.5 ? crops.far.0 : crops.far.1)
+            : z > Self.verge ? (fbm(wx / (1900 * faster), 1.5, 2, 4201 + crops.salt) + soft > 0.5 ? crops.near.0 : crops.near.1) : crops.verge
         return (land, UInt8(min(max((tone * 5).rounded(.down), 0), 4)))
     }
 }

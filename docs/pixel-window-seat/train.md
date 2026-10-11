@@ -256,6 +256,17 @@ The team lead accepted sheet 3 on Dave's standing word that all four be built (D
   - **Broken and Overcast by day are mine:** no sheet shows either.
   - **Not looked at:** any window but Large, a portrait display, the hours between the four the tones were painted for, Settings' page, the app.
 
+### After the mountains: watched moving, a meeting eased, a lake's mirror (2026-10-11)
+- **The mountains were filmed** (`trainFilmsItself`, the pane's art pixels) and the films measured and looked at, which the step before had not done.
+  - **Held, at metre 74,000, 4 s by day and 6 s by night, at 30 and at 15 frames a second.** The pole steps 4 to 5 px a frame at 30 and 8 to 9 at 15 (126 px a second), as in farmland. A lamp is in the same pixel a frame later 62.7% of the time at 30 frames a second and a pixel on 35.5%; none is two pixels on (two of 2,127 counted three on: a lamp gone behind a fir with another beside it). At 15, 6.9% are two pixels on: the 180 m ring's, as in farmland.
+  - **Eight frames one after another by day:** the pole, the nearest firs, a tree and a chalet move; the forest wall and the snow stand still. Nothing strobes.
+  - **What is new to the eye:** when a far ring steps a pixel, all of its speckled forest steps at once. Round the horizon 6% of pixels change from a frame to the next on average, and 26% in the frame the 3.5 km ring steps, once a second (farmland's most is about 8%). It is a tick, not a flicker, and I have left it: the speckle is the sheet's.
+  - **Across the meeting at metre 49,173, left to change, 8 s at 30 frames a second:** the range sinks away and farmland's swell rises with no seam on any ring. But the near field's crop changed at one column, and that column swept the near field as a hard-edged wedge for about five seconds.
+- **So the near field's crops now change dash by dash** over about a hundred metres where two countries meet (`TrainWorld.ground`: the crops' country is taken a dash's tone to one side of the place, up to 48 m). Filmed again, no edge shows. The level lines still end and begin at one place: the river stops where the lane starts. Held to one scenery nothing changes: the byte check is 2,180,080 compared, 0 differ.
+- **A lake mirrors what stands beyond its far shore,** darkly: a row of water that many rows under the horizon takes a darker tone (0.62 of its own) wherever the far rings reach that many rows above it, between its lighter ripples and under the Sun's glitter. Under the mountains it is a dark band the shape of the range turned over; beside farmland a thin one under the shore. Cost: one pass over six rings' tops a frame. It is not Dave's: the lake he picked mirrored only the sky.
+- **Checked by running:** the train's and the window seat's tests in release, 16 pass; the byte check as above.
+- **Not done:** the fade with distance still steps every 30 s across a meeting; no film showed it.
+
 ## Research for the next mock-ups
 - **The window.** Real glass, width to height: a TGV bar car 1.94:1, a EuroNight sleeper 1.46:1, a British Mark 1 bay 1.2:1 with top-lights, an Amtrak Superliner coach 2.75:1, a Shinkansen N700 0.96:1 (520 × 500 mm: an airliner's window again). The mock-ups' pane is the airliner's, 1.54:1. A wide picture window (about 1.9:1) fills a 16:10 screen best.
 - **The eye:** about 2.5 m above the rail on a European intercity, 3.85 m upstairs in a Superliner; add 0.5–1 m of track bed.
