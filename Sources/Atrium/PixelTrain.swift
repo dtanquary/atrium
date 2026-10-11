@@ -152,14 +152,11 @@ final class PixelTrain: SKScene {
         (world.speed, world.sun) = (speed, toSun > 0.25 ? 1 : toSun < -0.25 ? -1 : world.sun)
 
         // The sky's light and the Sun's on each material, with no veil of air in front of it as the airliner has. The
-        // night is lifted, as the orbit's is: a true one from a train is a black pane.
-        var light = (above.ambient + above.key) * 0.78 * mix(1, 3.9, night)
-        let floor = rgb(9, 13, 27) * night
-        // ponytail: a second light to choose between, for a sunset shown both ways (`TRAIN_WARM=1` in the environment):
-        // the glow along the horizon lights the land too. To be kept, or taken out, once one is picked.
-        if ProcessInfo.processInfo.environment["TRAIN_WARM"] != nil {
-            light += above.haze * (0.4 * smoothstep(-10, -2, above.el) * smoothstep(12, 3, above.el))
-        }
+        // night is lifted, as the orbit's is: a true one from a train is a black pane. And while the Sun is low the
+        // glow along the horizon lights the land too, two fifths of its colour: by the sky's light and the Sun's
+        // alone the land went a dull green under the best sky of the day.
+        let low = smoothstep(-10, -2, above.el) * smoothstep(12, 3, above.el)
+        let light = (above.ambient + above.key) * 0.78 * mix(1, 3.9, night) + above.haze * (0.4 * low), floor = rgb(9, 13, 27) * night
         let mats = TrainMat.day.count
         for (k, ring) in rings.enumerated() {
             let far = Float(1 - exp(-ring.away / TrainWorld.haze))
@@ -177,7 +174,6 @@ final class PixelTrain: SKScene {
         // the row's middle tone, the rest its own pixel, so a breath of what is up there shows), deepened toward its
         // own blue as it nears us. Under the Sun, while its disc is in the sky, lies a path of its glitter.
         let (gw, gh) = (glass.w, glass.h), flat = gw * horizon
-        let low = smoothstep(-10, -2, above.el) * smoothstep(12, 3, above.el)
         let deep = mix(mix(rgb(34, 78, 118), rgb(70, 56, 92), low), rgb(10, 14, 32), night)
         let sunAt = above.sunSpot, shining = above.sun.elevation > -1 && sunAt.y >= horizon && sunAt.y < gh && sunAt.x >= 0 && sunAt.x < gw
         let sunlight = shining ? unpack(sky[sunAt.y * gw + sunAt.x]) : .zero
