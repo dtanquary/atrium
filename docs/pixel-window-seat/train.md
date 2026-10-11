@@ -7,7 +7,7 @@ That day two agents researched it (one read the code and worked the geometry, on
 ## Dave's decisions (2026-10-10)
 - **Where it lives:** inside Pixel Window Seat, not its own wallpaper.
 - **Settings switch:** one menu of three, "Window on: An airliner, A train, The space station", in place of today's Earth orbit switch. Anyone with Earth orbit on must keep it (`seat.orbit` shipped in v0.107.0-beta).
-- **Carriage:** all three as a Settings choice: a plain window, a sill and a curtain, a table and its lamp (sheet 1, tiles A, B, C). I recommended the table; he took all three.
+- **Carriage:** all three as a Settings choice: a plain window, a sill and a curtain, a table and its lamp (sheet 1, tiles A, B, C). I recommended the table; he took all three. **The default, 2026-10-11:** the table and its lamp, chosen by the session leading the build on the carriage builder's recommendation and its own first one (it reads as a train at a glance, its lamp is the one warm still light at night, and it covers the near field, the weakest part of the view). Dave has been told and can overrule; the other two stay in the menu.
 - **1× on the Speed slider:** 48 km/h, a slow scenic train.
 - **Poles and wires:** yes, with a Settings switch, on by default: a line of telegraph poles 28 m out, 50 m apart, with two wires that rise to each pole and sag between (sheet 2, tile F, and its film).
 - **Rain on the glass** when it rains where you are: yes, on by default, with a switch and a preview menu (tile G).
