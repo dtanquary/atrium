@@ -224,6 +224,7 @@ Measured on the finished look, at full Retina size:
   - He had Size at its top (1.5×) and Milky Way at half while he tried it. Not asked for as defaults, so they stay.
 
 ### Still open
+- **The glow.** The mock-ups Dave chose from had a soft glow round the disc, a stand-in added to those pictures; the build has none, by the plan (NASA's has none, and one shader pass can't blur). A side agent pointed out on 2026-10-11 that he may have liked it. He was shown a sheet that day: tile H beside the app as it is and the app with a soft and a strong glow painted on (a blur of the disc's own light added back; not kept in the repo). If he wants it, it is build step (f): the disc drawn small offscreen once, blurred, and added as a texture, with a Glow slider.
 - **Dave has seen it once** ("it looks cool", and the speed: above). Everything else in step (e) was judged against the mock-up tiles, NASA's frames and the review's numbers by the agent that built it. To meet those numbers the disc is crisp and has a white-hot side; "calm, soft, dim" may want Streaks below its 0.7 and Brightness below 1. The sliders are there.
 - **Stars read finer than tile K's.** They are points about 1.5 px across at Retina, the brightest a soft 8, where the mock-up's were blobs and dashes, so at a glance the sky looks emptier, though it holds the same 111,000 stars. The Stars slider goes to 2.
 - **The disc's mean brightness wanders about ±5% over minutes** as knots come and go. It doesn't beat, but nobody has watched it for an hour.
