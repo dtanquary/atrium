@@ -4,15 +4,17 @@ import Testing
 
 /// Every display gets a scene its own size, with a window of any size or none: each must build, run on and paint.
 @MainActor @Test func trainRunsAtAnySize() {
-    defer { UserDefaults.standard.removeObject(forKey: PixelWindowSeat.window.key) }
-    for window in 0...3 {
+    defer { for key in [PixelWindowSeat.window.key, PixelCarriage.choice.key] { UserDefaults.standard.removeObject(forKey: key) } }
+    // Every carriage at every window: the sill and curtain once ran off the edge of a small canvas and stopped the app.
+    for window in 0...3 { for carriage in 0...Int(PixelCarriage.choice.range.upperBound) {
         UserDefaults.standard.set(Double(window), forKey: PixelWindowSeat.window.key)
+        UserDefaults.standard.set(Double(carriage), forKey: PixelCarriage.choice.key)
         for size in [CGSize(width: 1512, height: 982), CGSize(width: 1080, height: 1920), CGSize(width: 3440, height: 1440), CGSize(width: 300, height: 120), CGSize(width: 40, height: 30)] {
             let scene = PixelTrain(size: size), start = PixelTrain.travelled
             for frame in 0...60 { scene.update(1000 + Double(frame) / 30) }
             #expect(PixelTrain.travelled - start > 25, "after two seconds at \(size) it has gone \(PixelTrain.travelled - start) m")
         }
-    }
+    } }
 }
 
 /// A thing Z metres from the track slides focal × speed / Z pixels a second, whatever its height: over two seconds

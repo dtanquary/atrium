@@ -64,10 +64,10 @@ struct PixelCarriage {
             // A red curtain down the pane's left side, in three tones of fold that waver as they fall, gathered in
             // by a tie three fifths of the way down and spreading a little below it.
             let cloth = [Tone(126, 62, 58), Tone(156, 80, 70), Tone(188, 104, 86)], tie = 0.62, scale = scale
-            for y in y0..<y1 {
+            for y in max(y0, 0)..<max(min(y1, h), max(y0, 0)) { // kept to the canvas: a pane can overhang a very small one
                 let t = Double(y - y0) / Double(pane.h), gathered = (t - tie) / 0.16
                 let wide = (30 - 15 * exp(-(gathered * gathered)) + (t > tie ? 6 * (t - tie) : 0)) * scale
-                for x in x0..<x0 + Int(wide.rounded(.toNearestOrEven)) {
+                for x in max(x0, 0)..<max(min(x0 + Int(wide.rounded(.toNearestOrEven)), w), max(x0, 0)) {
                     var fold = (Double(x - x0) / max(wide, 1) * 5 + 0.3 * sin(Double(y) / (9 * scale))).truncatingRemainder(dividingBy: 3)
                     if fold < 0 { fold += 3 }
                     (out[y * w + x], glass[y * w + x]) = (cloth[min(Int(fold), 2)] * dim, false)
