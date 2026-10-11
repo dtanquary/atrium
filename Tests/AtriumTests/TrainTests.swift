@@ -223,3 +223,20 @@ import Testing
         try Data(line).write(to: folder.appendingPathComponent("poles-\(x).bin"))
     }
 }
+
+/// Writes the carriage as it is painted, for docs/pixel-window-seat/train_match.py to set against the mock-ups'
+/// painter and the saved sheets, byte for byte (the same two commands as `trainWritesItsCountry`). On a laptop's
+/// canvas, the mock-ups' own, at their four hours: with the pane where they had it, 12 rows from the top, and where
+/// the app puts it, a row lower.
+@MainActor @Test(.enabled(if: ProcessInfo.processInfo.environment["TRAIN_MATCH"] != nil)) func trainWritesItsCarriage() throws {
+    let folder = URL(fileURLWithPath: ProcessInfo.processInfo.environment["TRAIN_MATCH"]!)
+    try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    let (w, h, glass, _) = PixelWindowSeat.pane(CGSize(width: 1512, height: 982))
+    #expect((w, h) == (378, 246) && glass == (19, 12, 340, 221), "the Large window on a laptop is the mock-ups' pane, a row lower")
+    for top in [12, h - glass.y - glass.h] {
+        let carriage = PixelCarriage(w: w, h: h, glass: (glass.x, h - top - glass.h, glass.w, glass.h))
+        for (hour, dim) in [("day", PixelCarriage.light(0)), ("sunset", 0.62), ("dusk", 0.34), ("night", PixelCarriage.light(1))] {
+            try Data(carriage.picture(dim: dim)).write(to: folder.appendingPathComponent("carriage-plain-\(hour)-\(top).bin"))
+        }
+    }
+}

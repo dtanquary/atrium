@@ -42,6 +42,7 @@ final class PixelTrain: SKScene {
     private var lamp: UInt32 = 0, lights: UInt8 = 0 // a lamp's colour, and how far the evening has got: each comes on at its own draw
     private var pole: UInt32 = 0, wire: UInt32 = 0 // the pole line's colours
     private let polesOn: Bool // Settings' Poles and wires, as the scene was built
+    private let carriage: PixelCarriage // the cabin round the pane
     // From which pole on the line stands or doesn't: it is left out while it would slide too fast, and a change takes
     // hold beyond the pane's leading edge, so the line runs out or comes in at a pole and never blinks.
     private var strung: [(from: Int, on: Bool)] = []
@@ -69,6 +70,7 @@ final class PixelTrain: SKScene {
         (w, h, glass, windowSize) = PixelWindowSeat.pane(size)
         let (gw, gh) = (glass.w, glass.h)
         horizon = gh - Int((Double(gh) * (1 - Self.horizonUp)).rounded())
+        carriage = PixelCarriage(w: w, h: h, glass: glass)
         world = TrainWorld(focal: Double(gh) * 1.2, eye: Self.eye, speed: Self.pace * PixelWindowSeat.speed.value)
         (world.scenery, polesOn) = (Int(Self.scenery.value), Self.poles.value > 0.5)
         (land, dash) = ([UInt8](repeating: 0, count: gw * horizon), [UInt8](repeating: 0, count: gw * horizon))
@@ -205,21 +207,8 @@ final class PixelTrain: SKScene {
     var lit: Int { lights == 0 ? 0 : picture.count { $0 == lamp } }
     var pane: (w: Int, h: Int) { (glass.w, glass.h) }
 
-    /// The carriage round the pane, plain: its wall, a pale frame with the light along its top edge, and a dark
-    /// gasket round glass with small corners.
-    private func paintFrame() {
-        var px = Pixels(w, h)
-        let dim = mix(1, 0.22, night)
-        let wall = rgb(52, 56, 72) * dim, frame = rgb(122, 126, 142) * dim, lit = rgb(150, 154, 168) * dim, gasket = rgb(20, 22, 30) * dim
-        for y in 0..<h {
-            for x in 0..<w {
-                let d = PixelWindowSeat.outside(glass, x, y, round: 6)
-                guard d >= 0 else { continue }
-                px.plot(x, y, d < 1 ? gasket : d >= 5 ? wall : d >= 3 && y >= glass.y + glass.h + 3 ? lit : frame)
-            }
-        }
-        cabin.texture = px.texture()
-    }
+    /// The carriage round the pane (PixelCarriage.swift), in the light of the moment.
+    private func paintFrame() { cabin.texture = carriage.texture(night: Double(night)) }
 
     // MARK: - Motion (every frame)
 

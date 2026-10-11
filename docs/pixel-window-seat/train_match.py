@@ -6,6 +6,11 @@
 The test writes each ring's strip and the ground rows at the mock-ups' own numbers (the Large pane, focal 265, the
 eye 3.5 m up, the horizon 30% up, 13.3 m/s) at a few places along the line. A strip's byte is its material, with
 128 added where a lamp is.
+
+`trainWritesItsCarriage` writes the carriage round the pane as the bytes of its picture (red, green, blue, alpha;
+alpha 0 is glass) on the mock-ups' canvas at their four hours, with the pane's top on the row its file is named
+for: 12, where the mock-ups had it, and 13, where the app puts it. Each is set against `train.carriage` with the
+pane on that row, and those at 12 against the tiles of the saved sheets too, wherever the carriage covers them.
 """
 import glob
 import os
@@ -55,5 +60,34 @@ for path in sorted(glob.glob(f"{folder}/poles-*.bin")):
     wrong = int((ours != theirs)[:, keep].sum())
     compared, differed = compared + int(keep.sum()) * train.PH, differed + wrong
     print(f"pole line at {X:>10}: {int(keep.sum()) * train.PH} bytes, {int((theirs == 2).sum())} of them pole and {int((theirs == 1).sum())} wire, {wrong} differ")
+
+
+def tiles(name, cols, which):
+    """A saved sheet's tiles as art pixels, each with its carriage, its hour and its letter."""
+    from PIL import Image
+    sheet = np.asarray(Image.open(f"{train.HERE}/{name}.png").convert("RGB"))
+    wide, tall = train.CW * 3, train.CH * 3
+    return [(kind, hour, letter, sheet[8 + (k // cols) * (tall + 40):, 8 + (k % cols) * (wide + 8):][1:tall:3, 1:wide:3])
+            for k, (kind, hour, letter) in enumerate(which)]
+
+
+saved = tiles("train-sheet1", 3, [(kind, hour, f"{letter} by {hour}") for hour in ("day", "night") for kind, letter in (("plain", "A"), ("sill", "B"), ("table", "C"))])
+saved += tiles("train-sheet2", 2, [("sill", "day", "D"), ("table", "night", "E"), ("sill", "day", "F"), ("table", "dusk", "G")])
+for path in sorted(glob.glob(f"{folder}/carriage-*.bin")):
+    _, kind, hour, top = os.path.basename(path)[:-4].split("-")
+    ours = np.fromfile(path, dtype=np.uint8).reshape(train.CH, train.CW, 4)
+    train.PY0 = int(top)
+    theirs = train.carriage(hour, kind)
+    train.PY0 = 12
+    solid = theirs[..., 3:] > 0
+    theirs = np.concatenate([np.clip(theirs[..., :3], 0, 255) * solid, theirs[..., 3:]], -1).astype(np.uint8)  # cut down to bytes as `train.compose` does
+    wrong = int((ours != theirs).sum())
+    compared, differed = compared + ours.size, differed + wrong
+    print(f"carriage {kind:>5} at {hour:>6}, the pane {top} rows down: {ours.size} bytes, {int(solid.sum())} pixels of them carriage, {wrong} differ")
+    for tiled, at, letter, tile in saved:
+        if int(top) == 12 and (tiled, at) == (kind, hour):
+            wrong = int((ours[..., :3] != tile)[solid[..., 0]].sum())
+            compared, differed = compared + 3 * int(solid.sum()), differed + wrong
+            print(f"    and the saved sheet's tile {letter}: {3 * int(solid.sum())} bytes of carriage, {wrong} differ")
 print(f"{compared} bytes compared, {differed} differ")
 sys.exit(1 if differed else 0)
