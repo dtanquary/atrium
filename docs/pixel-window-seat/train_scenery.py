@@ -152,9 +152,12 @@ def downtown(pos):
     return float(clip((fbm(np.array([pos / 5000.0]), np.array([7.0]), 2, 5152)[0] - 0.42) * 5))
 
 
-def ring_strip(kind, Z, n0, width, sun):
+def ring_strip(kind, Z, n0, width, sun, water=False):
     """Columns n0 … n0+width of the ring Z metres off in one of the four sceneries: material numbers with the ring's
-    foot on the bottom row, and a mask of what lights after dark, as train.ring_strip gives for countryside."""
+    foot on the bottom row, and a mask of what lights after dark, as train.ring_strip gives for countryside.
+    `water` is a lake beside the line: nothing stands nearer than its far shore, 1.8 km off."""
+    if water and Z < 1800:
+        return np.zeros((2, width), dtype=np.uint8), np.zeros((2, width), dtype=bool)
     if kind == "country" or (kind == "city" and Z >= 30000):  # (a city lies in the same country, under the same hills)
         return train.ring_strip(Z, n0, width, sun)
     ppm = FOCAL / Z
@@ -339,6 +342,10 @@ def ring_strip(kind, Z, n0, width, sun):
                 tint = rnd(n[on], row, salt + 66)
                 a[H - 1 - row, on] = np.where(tint < 0.45, I["lampO"], np.where(tint < 0.62, I["lampW"], np.where(tint < 0.66, I["lampT"], np.where(tint < 0.69, I["lampR"], 0))))
                 lamps[H - 1 - row, on] = True
+        # Across a lake the city's shore is a quay: a line of wall along the water, under all that is there. (One row,
+        # the first of the water's: a second would stand in front of the farther rings' street lights.)
+        if water and Z == 1800:
+            a[H - 1] = np.where(a[H - 1] == 0, I["concS"], a[H - 1])
         return a, lamps
     far, near, reach = {"mountains": (1.0, 0.3, 620.0), "snow": (0.7, 0.2, 1e9), "desert": (0.45, 0.14, 1e9)}[kind]
     if Z >= 1800 and Z <= 7000:
@@ -431,7 +438,7 @@ def view(kind, time="day", X=52000.0, speed=13.3, horizon_up=0.30, cover=0.30, c
             continue
         ppm = FOCAL / Z
         n0 = int(np.floor(X * ppm)) - CX
-        strip, lamps = ring_strip(kind, Z, n0, PW, 1)
+        strip, lamps = ring_strip(kind, Z, n0, PW, 1, water)
         if time == "sunset":
             lamps = lamps & (rnd(n0 + np.arange(PW)[None, :], np.arange(strip.shape[0])[::-1, None], 70) < 0.5)
         foot = min(PH, hy + int(round(eye * ppm)))
@@ -484,5 +491,7 @@ if __name__ == "__main__":
             tiles.append((f"{label}, {when}", compose(kind, time, X, poles=True)))
     tiles += [("L  The city from a viaduct, the eye 12.5 m up (not what the build can do yet)", compose("city", "night", X, eye=12.5)),
               ("L  The same by day", compose("city", "day", X, eye=12.5)),
-              ("M  A city where a lake lies beside the line (as Changing brings)", compose("city", "night", X, water=True))]
+              ("M  A city across the water, by day", compose("city", "day", X, water=True)),
+              ("M  A city across the water, at dusk", compose("city", "sunset", X, water=True)),
+              ("M  A city across the water, at night", compose("city", "night", X, water=True))]
     train.sheet("train-sheet3", tiles)

@@ -53,7 +53,7 @@ import Testing
 /// What keeps it calm at any speed: no lamp is laid on a ring that slides faster than `TrainWorld.bright` pixels a
 /// second, none of the lane's poles on one faster than `thin`, and nothing that stands (a tree, a house) on one
 /// faster than `broad`. In each country held, and left to change.
-@Test(arguments: [0, 1, 3, 4, 5, 6]) func trainNothingThinIsFast(scenery: Int) {
+@Test(arguments: [0, 1, 3, 4, 5, 6, 7]) func trainNothingThinIsFast(scenery: Int) {
     var standing = 0, lamps = 0
     // What only a thing that stands is made of: a trunk, a window, a wall. (In the mountains fir is also the forest
     // on the land's face, which is land; a fir that stands has a trunk.)
@@ -85,7 +85,7 @@ import Testing
 @MainActor @Test func trainNightIsNeverBlack() {
     let keys = [PixelWindowSeat.previewTime.key, PixelWindowSeat.previewHour.key, PixelTrain.scenery.key, PixelCarriage.choice.key]
     defer { for key in keys { UserDefaults.standard.removeObject(forKey: key) } }
-    for (scenery, name) in [(1.0, "countryside"), (2, "a lake"), (3, "the mountains"), (4, "a city"), (5, "snow"), (6, "the desert")] {
+    for (scenery, name) in [(1.0, "countryside"), (2, "a lake"), (3, "the mountains"), (4, "a city"), (5, "snow"), (6, "the desert"), (7, "a city across the water")] {
         for (key, value) in zip(keys, [1, 23, scenery, 0]) { UserDefaults.standard.set(value, forKey: key) }
         let scene = PixelTrain(size: CGSize(width: 1512, height: 982))
         var seen: [Int] = []
@@ -104,7 +104,7 @@ import Testing
 @MainActor @Test func trainNightKeepsItsLampsInFog() {
     let keys = [PixelWindowSeat.previewTime.key, PixelWindowSeat.previewHour.key, PixelTrain.scenery.key, TrainWeather.preview.key, PixelCarriage.choice.key]
     defer { for key in keys { UserDefaults.standard.removeObject(forKey: key) } }
-    for (scenery, name) in [(1.0, "countryside"), (2, "a lake"), (3, "the mountains"), (4, "a city"), (5, "snow"), (6, "the desert")] {
+    for (scenery, name) in [(1.0, "countryside"), (2, "a lake"), (3, "the mountains"), (4, "a city"), (5, "snow"), (6, "the desert"), (7, "a city across the water")] {
         for (key, value) in zip(keys, [1, 23, scenery, 3, 0]) { UserDefaults.standard.set(value, forKey: key) }
         let scene = PixelTrain(size: CGSize(width: 1512, height: 982))
         var seen: [Int] = []
@@ -166,6 +166,38 @@ import Testing
 
 /// Left to change, the country has lakes beside the line for a fair share of it, and neither they nor the country
 /// between go on so long that the wallpaper seems stuck: at 1× the train covers 800 m a minute.
+/// A city across the water is the city with a lake held beside the line. Nearer than the far shore nothing stands
+/// and there is no pole line; every row of ground is water; and the far shore is a quay all along, with the city's
+/// lights over it. (What the rings beyond hold is set against the mock-ups' painter by `trainWritesItsCountry`.)
+@Test func trainHoldsACityAcrossTheWater() {
+    var harbour = TrainWorld(focal: 265, eye: 3.5, speed: 13.3)
+    harbour.scenery = 7
+    var bare = 0, onTheWater = 0, lamps = 0
+    for x in [52000.0, 3.0, 1_234_567.5] {
+        for ring in TrainWorld.rings.indices {
+            let rows = harbour.rows(ring), first = Int((x * harbour.perMetre(ring)).rounded(.down)) - 170
+            var across = [UInt8](repeating: 0, count: rows)
+            for n in first..<first + 340 {
+                _ = across.withUnsafeMutableBufferPointer { harbour.column(ring, n, into: $0.baseAddress!) }
+                if TrainWorld.rings[ring] >= TrainWorld.farShore {
+                    lamps += across.count { $0 > 127 }
+                    if TrainWorld.rings[ring] == TrainWorld.farShore, across[0] & 127 == 0 { bare += 1 }
+                } else {
+                    onTheWater += across.count { $0 != 0 }
+                }
+            }
+        }
+        for d in 1...66 {
+            let first = Int((x * (Double(d) / harbour.eye)).rounded(.down)) - 170
+            onTheWater += (first..<first + 340).count { harbour.ground(d, $0).land != TrainMat.water }
+        }
+        harbour.poleLine(at: x, wide: 340, high: 221, horizon: 66) { _, _, _ in onTheWater += 1 }
+    }
+    #expect(bare == 0, "\(bare) columns of the far shore have no quay")
+    #expect(onTheWater == 0, "\(onTheWater) things stand on the water")
+    #expect(lamps > 300, "the far shore has \(lamps) lights in three panes")
+}
+
 @Test func trainPassesLakes() {
     let world = TrainWorld(focal: 265.2, eye: 3.5, speed: PixelTrain.pace)
     var beside = 0, runs: [Bool: [Int]] = [true: [], false: []], last = false, run = 0
@@ -199,7 +231,7 @@ import Testing
     #expect(share.count == TrainWorld.passing.count + 1 && share.values.allSatisfy { $0 > 2000 }, "a country has under a twentieth of the line: \(share)")
     // The best night picture on the sheet is a city's lights in a lake: left to change, the line must bring one.
     print("train countries: a lake lies beside a city for \(harbours.count / 10) km of the 4,000, first at metres \(harbours.prefix(1)), and beside \(Set(harbours.map { $0 / 22_000 }).count) stretches of city")
-    #expect(harbours.count > 200, "a lake lies beside a city for only \(harbours.count / 10) km in 4,000")
+    #expect(harbours.count > 900, "a lake lies beside a city for only \(harbours.count / 10) km in 4,000") // (78 km without `TrainWorld.harbour`)
     #expect(runs[runs.count / 10] >= 80 && runs[runs.count * 9 / 10] <= 800, "stretches run from \(runs.first!) to \(runs.last!) hundred metres")
     var tallest = 0
     for meet in meets.prefix(40) {
@@ -279,7 +311,7 @@ import Testing
     defer { for key in keys { UserDefaults.standard.removeObject(forKey: key) } }
     // Each country, then the weather that moves: snow falling on the snow country, rain running on the glass
     // beside a lake, and a storm over the city a fifth of a second into its first strike.
-    for (scenery, weather) in [(1.0, 0.0), (2, 0), (3, 0), (4, 0), (5, 0), (6, 0), (5, 6), (2, 5), (4, 7)] {
+    for (scenery, weather) in [(1.0, 0.0), (2, 0), (3, 0), (4, 0), (5, 0), (6, 0), (7, 0), (5, 6), (2, 5), (4, 7)] {
         for (key, value) in zip(keys, [1, 13, scenery, weather]) { UserDefaults.standard.set(value, forKey: key) }
         var pictures: [[UInt32]] = []
         // (From an odd metre: 2.2 s at 1× is 29⅓ m, and from a whole one three rows of ground would end exactly on
@@ -302,7 +334,7 @@ import Testing
 /// Moving the Speed slider lays nothing again: at the moment it moves the picture stays as it was, pole line
 /// and all, though at 3× the line and the nearest trees are too fast to be laid. Only what comes into view from
 /// then on goes by the new speed.
-@MainActor @Test(arguments: [1.0, 3, 4, 5, 6]) func trainKeepsItsCountryAsTheSpeedChanges(scenery: Double) {
+@MainActor @Test(arguments: [1.0, 3, 4, 5, 6, 7]) func trainKeepsItsCountryAsTheSpeedChanges(scenery: Double) {
     let keys = [PixelWindowSeat.previewTime.key, PixelWindowSeat.previewHour.key, PixelTrain.scenery.key, PixelWindowSeat.speed.key]
     defer { for key in keys { UserDefaults.standard.removeObject(forKey: key) } }
     for (key, value) in zip(keys, [1, 13, scenery, 1.0]) { UserDefaults.standard.set(value, forKey: key) }
@@ -399,7 +431,7 @@ import Testing
     var world = TrainWorld(focal: 265, eye: 3.5, speed: 13.3) // the Large pane, its horizon 30% up
     let wide = 340, ground = 66
     // Countryside, as the first sheets' was, and then each of the other sceneries held, its files under its name.
-    for (scenery, name) in [(1, ""), (3, "mountains-"), (4, "city-"), (5, "snow-"), (6, "desert-")] {
+    for (scenery, name) in [(1, ""), (3, "mountains-"), (4, "city-"), (5, "snow-"), (6, "desert-"), (7, "harbour-")] {
         world.scenery = scenery
         for x in [52000.0, 52137.25, 3.0, 1_234_567.5] {
             for ring in TrainWorld.rings.indices {

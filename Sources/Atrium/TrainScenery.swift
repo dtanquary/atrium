@@ -116,8 +116,9 @@ extension TrainWorld {
     static let stretch = 22_000.0
     /// The countries Changing passes through between its stretches of farmland.
     static let passing: [TrainCountry] = [.mountains, .city, .snow, .desert]
-    /// The country Settings' Scenery holds the line to, by its pick (a lake's is farmland).
-    private static let held: [TrainCountry] = [.farmland, .farmland, .farmland, .mountains, .city, .snow, .desert]
+    /// The country Settings' Scenery holds the line to, by its pick (a lake's is farmland, and the last is a city
+    /// with a lake beside it).
+    private static let held: [TrainCountry] = [.farmland, .farmland, .farmland, .mountains, .city, .snow, .desert, .city]
 
     /// Where a place along the line lies. Held on a scenery by Settings, the line is all one country. Left to
     /// change, it is cut into stretches at uneven places: every other one is farmland, and each between draws its
@@ -184,7 +185,7 @@ extension TrainWorld {
     /// skirt of scree; dunes and low rises nearer, with a little scrub; then scrub in clumps from 900 m in, thicker by
     /// the line, and where farmland has villages a camp of round felt tents, each with a door that glows after dark.
     func otherColumn(_ kind: TrainCountry, _ ring: Int, _ n: Int, into cells: UnsafeMutablePointer<UInt8>, by laid: [Laying], relief: Double) -> UInt8 {
-        if kind == .city { return cityColumn(ring, n, into: cells, by: laid) }
+        if kind == .city { return cityColumn(ring, n, into: cells, by: laid, relief: relief) }
         let z = Self.rings[ring], ppm = focal / z, wx = Double(n) / ppm, salt = UInt64(z) + kind.salt, rows = rows(ring)
         guard z >= Self.farShore || z <= shore(wx) else { return 0 } // out in a lake
         /// How fast the ring slid, in pixels a second, and which side the Sun was on, when column `n` came into view.
@@ -347,7 +348,7 @@ extension TrainWorld {
     /// windows lit after dark, warm in homes and white in glass. Street lamps stand every 40 to 70 m from 900 m in,
     /// on posts from 300 m in. And far off the city's streets are a seam of lights along its foot. Toward where
     /// another country begins the buildings are lower.
-    private func cityColumn(_ ring: Int, _ n: Int, into cells: UnsafeMutablePointer<UInt8>, by laid: [Laying]) -> UInt8 {
+    private func cityColumn(_ ring: Int, _ n: Int, into cells: UnsafeMutablePointer<UInt8>, by laid: [Laying], relief: Double) -> UInt8 {
         let kind = TrainCountry.city, z = Self.rings[ring], ppm = focal / z, wx = Double(n) / ppm, salt = UInt64(z) + kind.salt, rows = rows(ring)
         guard z >= Self.farShore || z <= shore(wx) else { return 0 } // out in a lake
         func when(_ n: Int) -> (pace: Double, sun: Int) {
@@ -406,6 +407,13 @@ extension TrainWorld {
                 cells[row] = (tint < 0.45 ? TrainMat.lampSodium : tint < 0.62 ? TrainMat.lampWhite : tint < 0.66 ? TrainMat.lampGreen : tint < 0.69 ? TrainMat.lampRed : 0) | 128
                 top = max(top, row + 1)
             }
+        }
+        // Across a lake the city's shore is a quay: a line of wall along the water, under all that is there, a lamp
+        // with nothing drawn under it among them. (One row, the first of the water's: a second would stand in front
+        // of the farther rings' street lights. And none close to where another country begins.)
+        if z == Self.farShore, shore(wx) < .infinity, relief > 0.5 {
+            if cells[0] & 127 == 0 { cells[0] |= TrainMat.concreteShade }
+            top = max(top, 1)
         }
         return UInt8(top)
     }

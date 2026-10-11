@@ -27,11 +27,13 @@ import train_scenery
 folder = sys.argv[1]
 compared = differed = 0
 # The other sceneries' files carry their names in front ("mountains-ring-…"), and are set against train_scenery.py.
+# "harbour" is a city across the water: the city with a lake held beside the line.
 for path in sorted(glob.glob(f"{folder}/*ring-*.bin")):
     *kind, _, z, x = os.path.basename(path)[:-4].split("-")
     kind, Z, X = (kind or ["country"])[0], int(z), float(x)
     ours = np.fromfile(path, dtype=np.uint8).reshape(-1, train.PW)  # rows up from the foot
-    theirs, lamps = train_scenery.ring_strip(kind, Z, int(np.floor(X * train.FOCAL / Z)) - train.CX, train.PW, 1)
+    first = int(np.floor(X * train.FOCAL / Z)) - train.CX
+    theirs, lamps = train_scenery.ring_strip("city", Z, first, train.PW, 1, water=True) if kind == "harbour" else train_scenery.ring_strip(kind, Z, first, train.PW, 1)
     theirs = (theirs + 128 * lamps)[::-1].astype(np.uint8)
     tall = max(len(ours), len(theirs))
     a, b = np.zeros((tall, train.PW), np.uint8), np.zeros((tall, train.PW), np.uint8)
@@ -45,6 +47,11 @@ for path in sorted(glob.glob(f"{folder}/*ground-*.bin")):
     hy = round(train.PH * 0.7)
     rows = train.PH - hy
     ours = np.fromfile(path, dtype=np.uint8).reshape(2, rows, train.PW)
+    if kind == "harbour":  # every row is water, which takes the sky's colours and has no dashes
+        wrong = int((ours[0] != train.I["water"]).sum())
+        compared, differed = compared + ours[0].size, differed + wrong
+        print(f"{kind} ground at {X:>10}: {ours[0].size} bytes, all of them to be water, {wrong} differ")
+        continue
     theirs, lift = train_scenery.ground(hy, X, 13.3, kind)
     d = np.arange(1, rows + 1)[:, None]
     away = train.EYE * train.FOCAL / d
