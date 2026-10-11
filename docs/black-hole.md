@@ -1,12 +1,12 @@
-# Black Hole (planned, not built)
+# Black Hole (being built)
 
 A black hole with a thin disc of glowing gas turning round it, in front of the real Milky Way, all of it bent by the hole's gravity: the far side of the disc lifts into a hump over the shadow, its underside shows as a ring below, the side turning toward us is brighter, and the stars behind slide and double round the edge. One shader, beside Nebula and Galaxy.
 
-Dave picked the idea on 2026-10-10 from a brainstorm ([ideas.md](ideas.md)). That day it was researched by two agents and mocked up in three rounds, and he made the choices below. **Nothing is built: there is no Swift, and no shader has been compiled.** This page is the plan, the measurements to build against and their sources.
+Dave picked the idea on 2026-10-10 from a brainstorm ([ideas.md](ideas.md)). That day it was researched by two agents and mocked up in three rounds, and he made the choices below. The build began on 2026-10-11: [The build so far](#the-build-so-far) says what exists. It isn't in the menu yet. The rest of this page is the plan, the measurements to build against and their sources.
 
 - **Mock-ups and prototypes:** `docs/black-hole/` (see [Mock-ups](#mock-ups) and [Prototype](#the-prototype)).
 - **The two research reports in full:** [the method](black-hole/research-method.md) and [the look](black-hole/research-look.md), which has the reference list, eight real black holes' numbers and the palettes.
-- **Next step:** build order step (a) below, which also settles the two things nobody could test without building.
+- **Next step:** build order step (b) below, the disc.
 
 ## Dave's decisions (2026-10-10)
 From mock-up sheets, each choice with a recommendation beside it.
@@ -98,9 +98,9 @@ Note: Dave's mock-ups drew the disc to 22 M (11 r_s), not NASA's 30 M. Match the
 ## Risks, worst first
 1. **The look.** The geometry is settled; whether it is pretty at "soft and dim" is not. Crystals was cut with its physics right. This picture's beauty is fine bright streaks on black. Compare a softened render with NASA's side by side before going far.
 2. **Thin rings shimmering.** The second photon ring is about 2 px wide at Retina and the third 0.1 px. Use `fwidth` to soften where it is thinner than a pixel, and check frame strips at 15 fps as well as 60. With the view held still (Dave's pick) only the disc and sky move, which helps.
-3. **SpriteKit unknowns**, which nobody could test without building: packed 8-bit tables under the real GPU's filter (if it rounds the filtered value to 8 bits, the packing fails; fall back to fetching texel centres and mixing by hand); seven textures in one shader; about 23 uniforms.
+3. **SpriteKit unknowns**, which nobody could test without building: packed 8-bit tables under the real GPU's filter (if it rounds the filtered value to 8 bits, the packing fails; fall back to fetching texel centres and mixing by hand); seven textures in one shader; about 23 uniforms. **The first is settled** by step (a): the filter keeps the packed bytes.
 4. **GPU time** is an estimate.
-5. **The ring-by-ring turning** hasn't been seen moving: seams between rings may read as bands. A two-phase flow map is the fallback.
+5. **The ring-by-ring turning** hasn't been seen moving: seams between rings may read as bands. A two-phase flow map is the fallback. **Changed in the build:** the flow map goes first, see [The build so far](#the-build-so-far).
 6. **Float precision at the shadow's edge** (table B's coordinate takes `ln(1 − e²/μ)`).
 7. **The star grid's pole** pinches: put it where the camera never looks.
 
@@ -113,6 +113,23 @@ Each a commit; follow "Adding a scene" in `Sources/CLAUDE.md`. One file, `Source
 5. **(e) The look**, against NASA's frames and the mock-up tiles Dave picked (sheet 1 tiles A, D, E; sheet 2 tile H; sheet 3 tile K).
 6. **(f) A baked halo**, only if (e) says the stretch isn't enough.
 Also owed: Bruneton's BSD-3 notice in NOTICE (his two table mappings), a unit test of the tables against RK4 (`proto/checks.py` is the pattern), an icon, the README and site.
+
+## The build so far
+`Sources/Atrium/BlackHole.swift` and `Tests/AtriumTests/BlackHoleTests.swift`, written by the agent that made the prototype and reviewed by the session that planned it.
+
+**Step (a), the tables (2026-10-11).** `Bending` bakes both tables in Swift at launch (0.3 s for both, with their checks, in a debug build; a release build isn't timed yet). The shader bends light with them and can draw the prototype's test pattern in place of the picture. Three tests:
+- `blackHoleBendsAsThePrototype`: the pattern on the real GPU at 960 × 600 against `proto/out/compare-reference.png`. 352 of 576,000 pixels differ, all on the edges of checks: edges sit within about 0.015 px on the disc and 0.002 px on the sky.
+- `bendingTablesFollowTheRays`: the baked bytes, read as the shader reads them, against rays stepped by Runge-Kutta. Table A within 5e-5 in 1/r for rays aimed within 16 radii; table B within 1e-4 rad down to a part in 100,000 of the shadow's edge, checked against a march to the turning point, not the integral that baked it.
+- `gpuKeepsTheTablesPrecision`: each table read back through the GPU's filter.
+
+What the GPU's filter does, which nobody could know before building:
+- **It keeps the packed bytes.** A filtered reading isn't rounded to a byte (errors are 20 to 80 times smaller than that), so the two- and three-byte packing works.
+- **It places a reading only to about a 35th of an entry**, not the 256th the prototype assumed. Measured against exact smoothing: table A within 2.1e-4 (mean 5e-5), table B within 1.1e-4 (mean 1.2e-5). With both tables left to the filter, 987 pixels differed and the sky sat 0.03 px out.
+- So **table B is read at the two entries either side and mixed in the shader**, which took the sky to 0.002 px. Those two reads also give the slope the stars' stretch needs.
+- **Table A is left to the filter** (0.015 px here, about a 20th of a pixel at Retina width). Mixing it by hand gave 131 differing pixels, better than numpy's 152, but costs six more reads wherever the disc is. That is the known fix if the disc's texture ever looks stepped.
+- Table A's last two columns (rays aimed more than 16 radii out) are coarse, off by up to 0.004 in 1/r. No disc is out there, and the error can't make a false hit.
+
+**A change from the plan for step (b).** The disc's streaks will be three overlapping generations of noise, each sheared by its own age and reborn in turn (a flow map), not rings turning rigidly. Rigid rings can only draw concentric bands, the even "vinyl record" look of the mock-ups' stand-in texture, which the build isn't to copy; NASA's arcs are knots sheared by age. The conditions it has to meet: no breathing as generations cross (mean and contrast of a patch flat within about 2% over a cycle), streaks from the moment a generation is born, the inner edge still round once in 3 minutes, and a clock that Speed can stop or change without a jump.
 
 ## Mock-ups
 In `docs/black-hole/`. They were rendered by `bh.py`, a brute-force tracer written for the purpose: every ray is integrated (`d²x/dλ² = −1.5 h² x / r⁵`, which gives a light ray's exact path), so the bending in them is real, not painted. Its disc texture, bloom and tone curve are stand-ins.
