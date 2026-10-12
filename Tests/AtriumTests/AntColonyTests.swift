@@ -86,7 +86,7 @@ import Testing
 /// same four seconds into the farm of one day at nine in the morning, ants and all; a second scene given the same
 /// day and hour shows the same nest; and nine hours on there is more of it. The same again in white sand with the
 /// smallest ants, twice as many of them, at the top speed. And each look is its own: the gel blue, the sand pale,
-/// the white sand paler.
+/// the white sand paler. And the copy Settings runs behind its page opens on a nest worth judging its settings by.
 @MainActor @Test func antColonyLooksTheSameAtAnyFrameRate() throws {
     let keys = ["antcolony.day", "antcolony.hour", "antcolony.look", "antcolony.size", "antcolony.ants", "antcolony.speed"]
     defer { keys.forEach(UserDefaults.standard.removeObject) }
@@ -96,10 +96,12 @@ import Testing
     let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: w, height: h, mipmapped: false)
     descriptor.usage = [.renderTarget, .shaderRead]
     descriptor.storageMode = .shared
-    func picture(hour: Double, rate: Double) throws -> [UInt32] {
+    func picture(hour: Double, rate: Double, headStart: Bool = false) throws -> [UInt32] {
         UserDefaults.standard.set(hour, forKey: "antcolony.hour")
         let renderer = SKRenderer(device: device), target = try #require(device.makeTexture(descriptor: descriptor)), pass = MTLRenderPassDescriptor()
-        renderer.scene = AntColony(size: CGSize(width: w / 2, height: h / 2))
+        let scene = AntColony(size: CGSize(width: w / 2, height: h / 2))
+        if headStart { scene.headStart() }
+        renderer.scene = scene
         pass.colorAttachments[0].texture = target
         pass.colorAttachments[0].loadAction = .clear
         pass.colorAttachments[0].storeAction = .store
@@ -129,6 +131,11 @@ import Testing
     let sand = try [3.0, 12].map { try picture(hour: $0, rate: 30) }, tunnels = sand.map { count($0) { r, g, b in abs(r - b) <= 3 && r > 30 } }
     print("Ant Colony at nine in the morning: \(ants) pixels of ant below the top of the gel; \(tunnels[0]) pixels of tunnel in sand, and at six in the evening \(tunnels[1])")
     #expect(ants > 150 && tunnels[0] > 20000 && Double(tunnels[1]) > 1.8 * Double(tunnels[0]))
+    // Settings' own copy, made ten minutes into a farm, shows the middle of its day; one made at noon is left as it is.
+    let young = try [false, true].map { count(try picture(hour: 0.17, rate: 30, headStart: $0)) { r, g, b in abs(r - b) <= 3 && r > 30 } }
+    let noon = try [false, true].map { try picture(hour: 6, rate: 30, headStart: $0) }
+    print("Ant Colony ten minutes into a farm: \(young[0]) pixels of tunnel on the desktop, \(young[1]) behind its Settings page")
+    #expect(young[0] < 6000 && young[1] > 80000 && noon[0] == noon[1])
 
     func mean(_ picture: [UInt32]) -> SIMD3<Double> {
         picture[(w * h / 4)...].reduce(into: SIMD3<Double>()) { $0 += SIMD3(Double($1 >> 16 & 255), Double($1 >> 8 & 255), Double($1 & 255)) } / Double(w * h * 3 / 4)

@@ -23,7 +23,7 @@ final class AntColony: SKScene {
                                        format: .choice(["Gel", "Sand", "White Sand"]))
     /// How many farms a day: at 1 a nest takes the day, and at the top one is dug every three hours. The ants
     /// walk no faster for it, so the faster the digging the more of it goes on with no ant at the face. At 1 the
-    /// day's first shaft goes down a pixel in two or three seconds, with an ant digging at it four times in five;
+    /// day's first shaft goes down a pixel in two or three seconds, with an ant digging at it three times in five;
     /// at 8 it goes down an ant's length in thirteen seconds, which is as fast as one ant can be seen to dig.
     nonisolated static let speed = Knob(key: "antcolony.speed", label: "Speed", range: 1...8, standard: 1, section: "Tank", format: .times)
     /// An ant's length: 13, 22 or 36 points (26, 44 or 72 of a Retina display's pixels). The tank is the display
@@ -341,7 +341,7 @@ final class AntColony: SKScene {
         }
 
         // The look: the gel's shader or the sand's, the sand as bright as Settings asks, and the ants to suit.
-        let sand = look > 0, bright = look > 1 ? 0.95 : 0.66
+        let sand = look > 0, bright = look > 1 ? 1.12 : 0.66
         if medium.shader !== shader(sand: sand) { medium.shader = shader(sand: sand) }
         medium.isHidden = false
         tone.floatValue = Float(bright)
@@ -593,4 +593,15 @@ final class AntColony: SKScene {
             vec3 colour = mix(hollow, face, solid) * (1.12 - 0.42 * length(vec2((x - 0.22) * 1.1, down + 0.05))) * u_tone;
             colour += 0.014 * (exp(-sq((x - 0.30 - 0.38 * down) / 0.06)) + 0.5 * exp(-sq((x - 0.43 - 0.38 * down) / 0.02))) * vec3(1.0, 0.957, 0.882); // reflections in the pane
     """
+}
+
+extension AntColony: HeadStart {
+    /// For the copy Settings runs behind its page: early in a farm the tank is all but whole and at its end
+    /// nothing is being dug, and neither shows what Look, Ant size or Ants do. So when under three tenths of the
+    /// digging is done, or over nine, that copy is given three in the afternoon of the day's first farm (three
+    /// fifths dug), and goes on from there at Speed's pace. The desktop's copy keeps the wall's clock.
+    func headStart() {
+        let hours = asked.hour ?? Self.farm(at: Date.timeIntervalSinceReferenceDate, speed: Self.speed.value).hours
+        if !(0.3...0.9).contains(Self.share(after: hours)) { asked.hour = 9 }
+    }
 }
