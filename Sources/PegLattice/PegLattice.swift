@@ -40,8 +40,9 @@ public struct Crystal: Sendable {
 /// from the air; `beta` is the water everywhere at the start. It stops when the crystal comes within three holes of
 /// the display's edge or reaches `limit` pitches from its middle. Holes that froze on the same step come in the
 /// order `rng` gives them.
-// ponytail: grown where the scene is built, 5 to 20 ms for a laptop's half-size sheet, and `limit` keeps it under
-// about 100 ms on any display; a crystal to fill a 6K display at the smallest pegs would want growing off the main thread
+// ponytail: grown on the main thread, while the sheet is dark: 2 to 35 ms at a laptop's large and medium pegs, 50 to
+// 110 ms at its small ones, and `limit` keeps it there on any display. A crystal to fill a 6K display at the
+// smallest pegs would want growing off the main thread
 public func snowCrystal(on lattice: Lattice, alpha: Float, beta: Float, gamma: Float, limit: Double = 48,
                         using rng: inout some RandomNumberGenerator) -> Crystal {
     let (c0, r0) = (lattice.cols / 2, lattice.rows / 2), middle = lattice.place(c0, r0)
@@ -155,4 +156,66 @@ public struct Glow: Sendable {
         for i in light.indices { light[i] = 0 }
         for i in bytes.indices where i % 4 != 3 { bytes[i] = 0 }
     }
+}
+
+/// A picture cut down to pegs at one size (docs/peg-board/cut.py makes them): each hole's peg colour, 1 to 8, or 0
+/// for none, bottom row first. Its bottom row is one that is not offset, so it goes on a lattice at an even row.
+public struct Chart: Sendable {
+    public let name: String, cols: Int, rows: Int
+    public let pegs: [UInt8]
+}
+
+/// The charts in a charts file: each is a line "= name size columns rows" and then its rows from the top, a
+/// character a hole ("." for none, "1" to "8" for a peg). Lines that begin "#" are notes.
+public func charts(from text: String) -> [Chart] {
+    var found: [Chart] = []
+    let lines = text.split(separator: "\n").filter { !$0.hasPrefix("#") }
+    var at = 0
+    while at < lines.count {
+        let head = lines[at].split(separator: " ")
+        at += 1
+        guard head.count == 5, head[0] == "=", let cols = Int(head[3]), let rows = Int(head[4]), at + rows <= lines.count else { continue }
+        let pegs = lines[at..<at + rows].reversed().flatMap { row in row.utf8.prefix(cols).map { (49...56).contains($0) ? $0 - 48 : 0 } }
+        at += rows
+        if pegs.count == cols * rows { found.append(Chart(name: String(head[1]), cols: cols, rows: rows, pegs: pegs)) }
+    }
+    return found
+}
+
+/// The order to put a picture's pegs in, outline first: the pegs on an edge of their colour (one of the six holes
+/// round them holds another colour, or none), a colour at a time, and then the rest, a colour at a time. Within
+/// each the pegs go in runs, as a hand would place them: always the nearest one not yet in, starting from the top.
+/// `pegs` is every hole of a `cols` by `rows` lattice, 0 for none; the holes' numbers come back.
+// ponytail: each run looks through every peg left, so a colour of n pegs costs n squared: about 20 ms for a
+// picture of 5,000 pegs. One of 50,000 would want a grid to look through
+public func outlineFirst(pegs: [UInt8], cols: Int, rows: Int) -> [Int] {
+    func edge(_ hole: Int) -> Bool {
+        let (col, row) = (hole % cols, hole / cols), odd = row & 1, mine = pegs[hole]
+        func other(_ c: Int, _ r: Int) -> Bool { c < 0 || c >= cols || r < 0 || r >= rows || pegs[r * cols + c] != mine }
+        return other(col - 1, row) || other(col + 1, row) || other(col - 1 + odd, row - 1) || other(col + odd, row - 1)
+            || other(col - 1 + odd, row + 1) || other(col + odd, row + 1)
+    }
+    var groups = [[Int]](repeating: [], count: 18) // edges by colour, then the rest by colour
+    for hole in pegs.indices where pegs[hole] > 0 { groups[Int(pegs[hole]) + (edge(hole) ? 0 : 9)].append(hole) }
+    var order: [Int] = []
+    order.reserveCapacity(pegs.count)
+    for var group in groups where !group.isEmpty {
+        var place = group.map { SIMD2(Float($0 % cols) + 0.5 * Float($0 / cols & 1), Float($0 / cols) * Float(Lattice.rise)) }
+        var at = group.indices.max { (place[$0].y, -place[$0].x) < (place[$1].y, -place[$1].x) }! // the top row's leftmost
+        while true {
+            let here = place[at]
+            order.append(group[at])
+            group.swapAt(at, group.count - 1)
+            place.swapAt(at, place.count - 1)
+            group.removeLast()
+            place.removeLast()
+            guard !group.isEmpty else { break }
+            var nearest = Float.infinity
+            for i in place.indices {
+                let d = simd_distance_squared(place[i], here)
+                if d < nearest { (nearest, at) = (d, i) }
+            }
+        }
+    }
+    return order
 }

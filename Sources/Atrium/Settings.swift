@@ -444,6 +444,7 @@ struct AboutPage: View {
                 group("Deep Space Tour", "Photos from ESA/Hubble, ESA/Webb, ESO, NOIRLab, Euclid, Chandra and the EHT", "deep-photos.tsv")
                 group("Black Hole", "The Milky Way from ESO, and the HYG catalogue's stars", "blackhole-credits.tsv")
                 group(LineDrawing.title, "Prints and plates from The Met, Wellcome Collection, the Getty Research Institute and the US Patent Office", "line-drawing-credits.tsv")
+                group("Peg Board", "Prints and needlework charts from the Met, Cooper Hewitt, the National Gallery of Art and the Wellcome Collection", "peg-board-credits.tsv")
             } header: {
                 Text("Photos")
             } footer: {

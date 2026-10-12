@@ -8,12 +8,14 @@ import Testing
 /// A snow crystal grown on the lattice is one crystal with six arms that stays on the sheet: turned a sixth of a
 /// turn about the middle hole it lands on itself (but for a hole here and there, where two sums that should be
 /// equal differ in their last bit and a hole freezes a step sooner on one arm), no hole within two of the display's
-/// edge has a peg, and the order has every place once.
+/// edge has a peg, and the order has every place once. At each of the three peg sizes, on a laptop's display.
 @Test func snowCrystalHasSixArmsAndStaysOnTheSheet() {
-    let lattice = Lattice(width: 1512, height: 982, pitch: 16)
-    for (alpha, beta, gamma) in [(1, 0.5, 0.0005), (1, 0.35, 0.0035), (2, 0.3, 0.001), (1.5, 0.4, 0.006)] as [(Float, Float, Float)] {
+    for pitch in [32, 16, 32.0 / 3] { for (alpha, beta, gamma) in [(1, 0.5, 0.0005), (1, 0.35, 0.0035), (2, 0.3, 0.001), (1.5, 0.4, 0.006)] as [(Float, Float, Float)] {
+        let lattice = Lattice(width: 1512, height: 982, pitch: pitch)
         var rng = SplitMix(state: 5)
+        let clock = ContinuousClock(), began = clock.now
         let crystal = snowCrystal(on: lattice, alpha: alpha, beta: beta, gamma: gamma, using: &rng)
+        let took = clock.now - began
         let (c0, r0) = (lattice.cols / 2, lattice.rows / 2)
         var (turned, total, edge) = (0, 0, 0)
         for row in 0..<lattice.rows { for col in 0..<lattice.cols where crystal.order[row * lattice.cols + col] >= 0 {
@@ -24,16 +26,49 @@ import Testing
             let row2 = r0 + dr2, col2 = c0 + q2 + ((row2 - (row2 & 1)) - (r0 - (r0 & 1))) / 2
             if (0..<lattice.rows).contains(row2), (0..<lattice.cols).contains(col2), crystal.order[row2 * lattice.cols + col2] >= 0 { turned += 1 }
         } }
-        print("Peg Board, a crystal at \(alpha), \(beta), \(gamma): \(total) pegs, \(turned) of them on a peg when turned a sixth of a turn")
-        #expect(total == crystal.count && total > 200 && edge == 0)
+        print("Peg Board, a crystal at \(alpha), \(beta), \(gamma) on \(lattice.cols) by \(lattice.rows) holes: \(total) pegs, \(turned) of them on a peg when turned a sixth of a turn; grown in \(took)")
+        #expect(total == crystal.count && total > 150 && edge == 0)
         #expect(Double(turned) > 0.97 * Double(total))
         #expect(Set(crystal.order.filter { $0 >= 0 }).count == total && crystal.order.max() == Int32(total - 1))
-    }
+    } }
 }
 
-/// The picture is the same whatever the frame rate: after the same six seconds at speed 1 and three more at speed 4
-/// (where the glow's ticks come twice a frame at 15 frames a second), drawn at 15, 30 and 60 frames a second, every
-/// pixel is the same, and the crystal is part-built (some of the display is lit, most of it is not).
+/// Every picture's charts are whole (the holes each says it has, of the eight colours or none), fit what a
+/// 13-inch laptop's display holds at their size, and have a line in the credits; and there is a chart at each size.
+@MainActor @Test func pegBoardChartsAreWholeAndCredited() throws {
+    let credits = try String(contentsOf: resource("peg-board-credits.tsv"), encoding: .utf8).split(separator: "\n").filter { !$0.hasPrefix("#") }
+        .map { $0.split(separator: "\t", omittingEmptySubsequences: false).map(String.init) }
+    #expect(credits.allSatisfy { $0.count == 5 && $0[4].hasPrefix("https://") && ["CC0", "CC BY 4.0"].contains($0[3]) })
+    let charts = PegBoard.charts
+    #expect(charts.count == 13 && Set(charts.map(\.name)) == Set(credits.map { $0[0] }))
+    for chart in charts {
+        #expect(chart.pegs.count == chart.cols * chart.rows && chart.pegs.allSatisfy { $0 <= 8 } && chart.pegs.count { $0 > 0 } > 150, "\(chart.name)")
+        #expect([(43, 30), (86, 61), (131, 93)].contains { chart.cols <= $0.0 && chart.rows <= $0.1 }, "\(chart.name) is \(chart.cols) by \(chart.rows)")
+    }
+    for most in [(43, 30), (86, 61), (131, 93)] { #expect(charts.contains { $0.cols <= most.0 && $0.rows <= most.1 && $0.rows > most.1 * 2 / 3 }) }
+}
+
+/// Outline first: a picture's order has every peg once and no empty hole, and every peg on an edge of its colour
+/// comes before any that is not.
+@MainActor @Test func pegBoardBuildsAPictureOutlineFirst() throws {
+    let chart = try #require(PegBoard.charts.first { $0.name == "great-wave" && $0.cols < 86 })
+    let order = outlineFirst(pegs: chart.pegs, cols: chart.cols, rows: chart.rows)
+    #expect(order.count == chart.pegs.count { $0 > 0 } && Set(order).count == order.count && order.allSatisfy { chart.pegs[$0] > 0 })
+    func inside(_ hole: Int) -> Bool { // all six holes round it hold its colour
+        let (col, row) = (hole % chart.cols, hole / chart.cols), odd = row & 1
+        return [(col - 1, row), (col + 1, row), (col - 1 + odd, row - 1), (col + odd, row - 1), (col - 1 + odd, row + 1), (col + odd, row + 1)].allSatisfy {
+            (0..<chart.cols).contains($0.0) && (0..<chart.rows).contains($0.1) && chart.pegs[$0.1 * chart.cols + $0.0] == chart.pegs[hole]
+        }
+    }
+    let first = try #require(order.firstIndex(where: inside)), last = try #require(order.lastIndex { !inside($0) })
+    print("Peg Board, the Wave at \(chart.cols) by \(chart.rows): \(order.count) pegs, the first \(first) of them its outlines")
+    #expect(last < first && first > order.count / 5)
+}
+
+/// The picture is the same whatever the frame rate, all the way round: drawn at 15, 30 and 60 frames a second,
+/// every pixel is the same part-way through a build (after six seconds at speed 1 and one at speed 8), a minute on
+/// (the build done, the light show under way), and a minute after that (the sheet cleared and the next thing
+/// built). The display is a small one, which a thing of two or three hundred pegs fills.
 @MainActor @Test func pegBoardLooksTheSameAtAnyFrameRate() throws {
     defer { ["pegboard.seed", "pegboard.speed"].forEach(UserDefaults.standard.removeObject) }
     UserDefaults.standard.set(7, forKey: "pegboard.seed")
@@ -42,7 +77,7 @@ import Testing
     let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: w, height: h, mipmapped: false)
     descriptor.usage = [.renderTarget, .shaderRead]
     descriptor.storageMode = .shared
-    var pictures: [[UInt32]] = []
+    var pictures: [[[UInt32]]] = []
     for rate in [15.0, 30.0, 60.0] {
         UserDefaults.standard.set(1.0, forKey: "pegboard.speed")
         let renderer = SKRenderer(device: device), target = try #require(device.makeTexture(descriptor: descriptor)), pass = MTLRenderPassDescriptor()
@@ -52,22 +87,72 @@ import Testing
         pass.colorAttachments[0].storeAction = .store
         let start = ProcessInfo.processInfo.systemUptime + 1 // the renderer's first update runs on the system's clock
         var frames = 0.0
-        for _ in 0...Int(6 * rate) { renderer.update(atTime: start + frames / rate); frames += 1 }
-        UserDefaults.standard.set(4.0, forKey: "pegboard.speed")
-        for _ in 0..<Int(3 * rate) { renderer.update(atTime: start + frames / rate); frames += 1 }
-        for _ in 0..<2 { // drawn at the end only, with no more time gone by, and twice for the shader's sake
-            renderer.update(atTime: start + (frames - 1) / rate)
-            let buffer = try #require(queue.makeCommandBuffer())
-            renderer.render(withViewport: CGRect(x: 0, y: 0, width: w, height: h), commandBuffer: buffer, renderPassDescriptor: pass)
-            buffer.commit()
-            buffer.waitUntilCompleted()
+        func run(_ seconds: Double) { for _ in 0..<Int(seconds * rate) { renderer.update(atTime: start + frames / rate); frames += 1 } }
+        func picture() throws -> [UInt32] {
+            for _ in 0..<2 { // with no more time gone by, and twice for the shader's sake
+                renderer.update(atTime: start + (frames - 1) / rate)
+                let buffer = try #require(queue.makeCommandBuffer())
+                renderer.render(withViewport: CGRect(x: 0, y: 0, width: w, height: h), commandBuffer: buffer, renderPassDescriptor: pass)
+                buffer.commit()
+                buffer.waitUntilCompleted()
+            }
+            var raw = [UInt32](repeating: 0, count: w * h)
+            target.getBytes(&raw, bytesPerRow: w * 4, from: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0)
+            return raw
         }
-        var raw = [UInt32](repeating: 0, count: w * h)
-        target.getBytes(&raw, bytesPerRow: w * 4, from: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0)
-        pictures.append(raw)
+        renderer.update(atTime: start) // the first frame counts as a 30th of a second at any rate
+        frames = 1
+        run(6)
+        UserDefaults.standard.set(8.0, forKey: "pegboard.speed")
+        run(1)
+        var taken = [try picture()]
+        for _ in 0..<2 {
+            run(60)
+            taken.append(try picture())
+        }
+        pictures.append(taken)
     }
-    let lit = pictures[0].count { $0 >> 8 & 255 > 60 }
-    print("Peg Board after 6 s at 1x and 3 s at 4x: \(lit) of \(w * h) pixels are lit")
-    #expect(lit > 2000 && lit < w * h / 10)
-    #expect(pictures[1] == pictures[0] && pictures[2] == pictures[0], "the picture differs with the frame rate")
+    let lit = pictures[0].map { picture in picture.count { max($0 & 255, $0 >> 8 & 255, $0 >> 16 & 255) > 30 } }
+    print("Peg Board at 7 s, 67 s and 127 s, speed 8 from 6 s: \(lit) of \(w * h) pixels are lit")
+    #expect(lit[0] > 2000 && Double(lit[1]) > 1.5 * Double(lit[0]) && pictures[0][2] != pictures[0][1])
+    for moment in 0..<3 {
+        #expect(pictures[1][moment] == pictures[0][moment] && pictures[2][moment] == pictures[0][moment], "picture \(moment) differs with the frame rate")
+    }
+}
+
+/// The sheet follows Settings while it runs: another peg size is another sheet of holes, there and then; and where
+/// Shows no longer allows what is on the sheet, the sheet clears (four seconds) for something it does allow. And
+/// the largest picture goes up without holding a frame for long.
+@MainActor @Test func pegBoardFollowsItsSettings() throws {
+    let keys = ["pegboard.seed", "pegboard.size", "pegboard.shows", "pegboard.picture"]
+    defer { keys.forEach(UserDefaults.standard.removeObject) }
+    UserDefaults.standard.set(7, forKey: "pegboard.seed")
+    UserDefaults.standard.set(1.0, forKey: "pegboard.shows") // patterns only
+    let scene = PegBoard(size: CGSize(width: 1512, height: 982)), renderer = SKRenderer(device: try #require(MTLCreateSystemDefaultDevice()))
+    renderer.scene = scene
+    let start = ProcessInfo.processInfo.systemUptime + 1
+    var frames = 0.0
+    func run(_ seconds: Double) { for _ in 0..<Int(seconds * 30) { renderer.update(atTime: start + frames / 30); frames += 1 } }
+    run(1)
+    #expect(scene.built == 1 && scene.lattice.cols == 97 && !scene.picture && scene.children.count == 1)
+    UserDefaults.standard.set(2.0, forKey: "pegboard.size")
+    #expect(scene.built == 2 && scene.lattice.cols == 144 && !scene.picture && scene.children.count == 1)
+    UserDefaults.standard.set(2.0, forKey: "pegboard.shows") // pictures only
+    #expect(!scene.picture)
+    run(4.5)
+    #expect(scene.picture && scene.sequence.count > 1500)
+    UserDefaults.standard.set(1.0, forKey: "pegboard.shows")
+    run(4.5)
+    #expect(!scene.picture)
+    UserDefaults.standard.set(0.0, forKey: "pegboard.size")
+    UserDefaults.standard.set(2.0, forKey: "pegboard.shows")
+    #expect(scene.lattice.cols == 50)
+    run(4.5)
+    #expect(scene.picture && ["stag", "flea"].contains { name in PegBoard.charts.contains { $0.name == name && $0.pegs.count { $0 > 0 } == scene.sequence.count } })
+
+    UserDefaults.standard.set(2.0, forKey: "pegboard.size")
+    UserDefaults.standard.set("rhinoceros", forKey: "pegboard.picture")
+    let clock = ContinuousClock(), began = clock.now, big = PegBoard(size: CGSize(width: 1512, height: 982)), took = clock.now - began
+    print("Peg Board, its largest picture (\(big.sequence.count) pegs) put up in \(took)")
+    #expect(big.picture && big.sequence.count > 5000)
 }
