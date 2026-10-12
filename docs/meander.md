@@ -674,11 +674,33 @@ Dave, testing all three: "please ensure that on meander, anytime we transition f
 - **Cost:** a frame of a change takes 0.15 ms more of CPU in relief (its 256 land colours mixed and written again; a debug build) and 0.02 ms more in the old map. Drawing and the GPU are as at rest.
 
 **Not in this step.**
+- (The first of these is built since: "One look gives way to another", below.)
 - **Relief to Old map** is another shader, and still changes on the next frame. It would take a second sprite over the first wearing the other look, faded in over a few seconds and then left alone: the same river and the same two grounds under both, the colours already separate (`paints`, `inks`), and a second `u_turns` for the look going out. Both shaders draw for those seconds (about 2 ms of GPU, where relief alone is 1.3). The old map's two rules are two shaders the same way.
 - **Light and Dark Mode:** the app builds a new scene when the system's appearance changes, with its own crossfade, and a new scene is a new river. To keep the river the scene would have to follow the appearance itself (for the old map a `repaint` to the other sheet is all it needs; relief's Light is another shader, so the second sprite again), and the app would have to leave this wallpaper alone when the appearance changes, which is a change outside this file.
 - A Look slider's first move off its standard value also makes a new shader, but of the same colours: nothing shows.
 
 **Not seen:** the new row on the Settings page (its test opens a window). Nothing of this on a real screen.
+
+### One look gives way to another (2026-10-11)
+The colour step left two changes that were still a new picture at once: Relief to Old map, and Light to Dark. Dave: "yes do both of those". This is the first.
+
+**What it does now.** Relief to the old map and back, and one of the old map's rules to the other, happen on the river that is running: the new look comes up through the old over 2 s.
+- **How.** Each of these is another shader, so the ground has dressings (`Dress`): a sprite with a look's shader in one mode, and the cycles and colours that shader reads, which are its own. For a change a new dressing goes under the old one, and the old is drawn over it, less and less, by `u_show`, on a smoothstep over the 2 s, then taken away. Moved on by each frame's own time in 960ths of a second, as the colours are.
+- **A second change part-way through** has no jump in it. Whatever was giving way goes on giving way, on top; what was coming in starts giving way to the newest, which goes underneath them all. A swatch picked meanwhile repaints the newest where it lies.
+- **A sprite's own alpha does not reach a custom shader** (tried: at half alpha, 0 of 92,610 pixels changed). So a dressing that is giving way is drawn by another source, the same with `* u_show` at its end, and the dressing that stays keeps the source it always had: the picture at rest is drawn by exactly the shader it was.
+- The Look sliders' first move still swaps a shader in place, in whatever is showing: it is the same picture.
+
+**Checked.**
+- **At rest it is the picture it was, to the byte:** the launch pictures of rivers 13, 2 and 7 in the same five looks as before, against the commit before: 0 pixels differ in the fifteen.
+- `meanderGivesWayOnTheSameRiver`, three runs of it: relief to the old map and a swatch 0.8 s in; the old map to relief and back again 0.8 s in; one rule to the other and a swatch. The river is the same river. 1.2 s after the first change the picture at 15 frames a second is the one at 60, every pixel. When all is done it is the picture a scene with those settings from the start draws at that moment, every pixel, and one dressing is left on. Half-way through relief giving way to the old map, the picture is half of each to within 2 levels.
+- **The most a pixel changes in one frame** at 60 frames a second, as the colour step measured it (the thousandth that change most left out, and with them): with only the river moving 2 (39), 6 (72) and 6 (72) in the three runs; on the frame after the first change 1 (7), 2 (20), 2 (20); after the second 2 (3), 3 (8), 2 (8); on any frame of it 2 (25), 3 (47), 2 (47).
+- [build-gives.jpg](meander/build-gives.jpg): the top left of the screen every quarter second, from the first change. From the top: relief to the old map and then Sage; the old map to relief and back; two changes of mode, which come next (relief from Dark to Light and then Garnet; the old map to Teal and then from Light to Dark); one rule to the other and then Sage.
+- **Cost,** on a 14" screen: the frame of the change takes 4.5 ms of CPU to draw, once (two shaders are made). While one look gives way both are drawn: 1.84 ms of GPU at the middle and 3.0 at the most, where relief alone is 1.17, for the 2 s. The CPU's share is as at rest.
+
+**Left.**
+- A new size of river is still a new river, dissolved to over 0.8 s.
+- Changes made faster than they finish stack up: each dressing still giving way is another pass over the screen until its 2 s are up.
+- `meanderFollowsItsSettings` now holds that a look or a rule, like a swatch, changes nothing with no time gone by.
 
 ### Still wrong, worst first (2026-10-11)
 What is known to be wrong with the picture as built, in one place.
@@ -708,6 +730,7 @@ What stands between this and taking `unfinished` off, as its builder sees it.
 - **2026-10-11, the first build on his desktop** (both looks, the settings, 12.5 s a T): "Meander is looking great, we just need to keep improving the smoothness of it and add the rest of those features mentioned above". The features he means are the ones listed to him as still to build: a Light Mode relief, Amethyst and more single inks, a swatch grid for the colours where there are two menus, and the shared grade sliders.
   - **What he means by smoothness, the same day:** "regarding meander smoothness I am talking about the transitions, the initial drawing is perfect but the transitions can be jerky, when you speed it up its really obvious". So it is the motion, seen most at the top of the Speed slider, and the still picture is not to change for it.
 - **2026-10-11, testing all three wallpapers:** "please ensure that on meander, anytime we transition from one color to another on a color shuffle, we smoothly transition that color, no abrupt re coloring, when we shuffle color lets just slowly repaint the current scene and keep it animating". Built as "Colours change by a slow repaint", above: the same river carries on and its colours ease to the new family, for a swatch picked by hand and for Random, which now moves on by itself. The numbers chosen for him to overrule: 3 s for a swatch, 60 s for Random's change, every 10 minutes.
+- **2026-10-11, on the two changes that step left as a new picture at once** (Relief to Old map, Light to Dark): "yes do both of those". The first is built as "One look gives way to another", above: 2 s, on the river that is running.
 
 ## The plan
 One file, `Sources/Atrium/Meander.swift`: a `River` type with no SpriteKit in it (nodes, step, cutoff, fields, pixel bytes), the scene, its shader, knobs and palettes. Everything built in `sceneDidLoad`; steps owed at 10 a second in `update(_:)`; the texture uploaded only when a step ran.

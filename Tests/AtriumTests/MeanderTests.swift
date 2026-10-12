@@ -423,10 +423,12 @@ private func seeded(_ seed: Double, _ others: [String: Double] = [:]) -> [String
     let changes: [(String, Any)] = [("meander.look", 1.0), ("meander.rule", 1.0), ("meander.inks", "Sage"), ("meander.look", 0.0), ("meander.colors", "Garnet"), ("meander.scroll", 0.0), ("meander.memory", 15.0)]
     for (key, value) in changes {
         UserDefaults.standard.set(value, forKey: key)
-        for _ in 0..<2 { try screen.frame(rate: 1e9) } // the new shader's first frame, and no time gone by
+        for _ in 0..<2 { try screen.frame(rate: 1e9) } // no time gone by
         pictures.append(screen.pixels)
-        // a swatch's colours come in over a few seconds (`meanderRepaintsItsColours`), so with no time gone by nothing has changed yet
-        #expect((pictures.last! == pictures[pictures.count - 2]) == value is String, "when \(key) became \(value)")
+        // A slider is followed at once. A look, a rule or a swatch comes in over a few seconds
+        // (`meanderGivesWayOnTheSameRiver`, `meanderRepaintsItsColours`), so nothing has changed yet.
+        let slider = key.hasSuffix("scroll") || key.hasSuffix("memory")
+        #expect((pictures.last! != pictures[pictures.count - 2]) == slider, "when \(key) became \(value)")
     }
     #expect(scene.river === river && view.scene === scene)
     // The Look sliders, each off its standard value in turn; and with all four back the picture is the one there
@@ -1131,5 +1133,137 @@ private func ripple(_ picture: [UInt32], side: Int, texel: Int, counts: (_ x: In
         UserDefaults.standard.set(2.0, forKey: "meander.cycleMinutes")
         UserDefaults.standard.set(Meander.reliefs[families.firstIndex(of: second)!].name, forKey: "meander.colors")
         #expect(try after(200, screen) == second, "the colours changed while Settings named a family")
+    }
+}
+
+/// Another look, or the old map's other rule, is not a new picture at once, and never a new river: what the
+/// ground had on gives way to the new over two seconds, on the river that is running. Three runs, each one change
+/// and then a second 0.8 s into it: relief to the old map and a swatch; the old map to relief and back again; one
+/// rule of the old map to the other and a swatch. In each the river is the same river; no frame
+/// jumps (as `meanderRepaintsItsColours` measures it); 1.2 s after the first change the picture at 15 frames a
+/// second is the one at 60; and when all is done it is the picture a scene with those settings from the start
+/// draws at that moment, to the byte. Half-way through relief giving way to the old map, the picture is half of
+/// each. With MEANDER_REPAINT set to a folder, a strip of each run is saved: a corner every quarter second.
+@MainActor @Test func meanderGivesWayOnTheSameRiver() throws {
+    let folder = ProcessInfo.processInfo.environment["MEANDER_REPAINT"].map { URL(fileURLWithPath: $0) }
+    let before = NSApplication.shared.appearance
+    defer { NSApplication.shared.appearance = before }
+    let (w, h) = (756, 491), keys = ["meander.look", "meander.rule", "meander.colors", "meander.inks"]
+    func jump(_ a: [UInt32], _ b: [UInt32]) -> (calm: Int, any: Int) {
+        var counts = [Int](repeating: 0, count: 256)
+        a.withUnsafeBufferPointer { a in b.withUnsafeBufferPointer { b in
+            for i in 0..<a.count {
+                let (p, q) = (a[i], b[i])
+                counts[max(abs(Int(p & 255) - Int(q & 255)), abs(Int(p >> 8 & 255) - Int(q >> 8 & 255)), abs(Int(p >> 16 & 255) - Int(q >> 16 & 255)))] += 1
+            }
+        } }
+        var (left, calm) = (a.count / 1000, 255)
+        while calm > 0, counts[calm] <= left { (left, calm) = (left - counts[calm], calm - 1) }
+        return (calm, counts.lastIndex { $0 > 0 } ?? 0)
+    }
+    /// What a run starts with and its two changes, each a setting (a number or a swatch's name) or a mode.
+    typealias Change = (key: String, to: Any)
+    let runs: [(name: String, start: [Change], first: Change, second: Change)] = [
+        ("relief-to-map", [("mode", "dark"), ("meander.look", 0.0)], ("meander.look", 1.0), ("meander.inks", "Sage")),
+        ("map-to-relief-and-back", [("mode", "light"), ("meander.look", 1.0)], ("meander.look", 0.0), ("meander.look", 1.0)),
+        ("map-rule", [("mode", "light"), ("meander.look", 1.0), ("meander.rule", 0.0)], ("meander.rule", 1.0), ("meander.inks", "Sage")),
+    ]
+    @MainActor func make(_ change: Change) {
+        if change.key == "mode" { NSApplication.shared.appearance = NSAppearance(named: change.to as! String == "dark" ? .darkAqua : .aqua) }
+        else { UserDefaults.standard.set(change.to, forKey: change.key) }
+    }
+    for run in runs {
+        defer { keys.forEach(UserDefaults.standard.removeObject) }
+        try with(seeded(7)) {
+            @MainActor func begun() throws -> (Meander, Offscreen) {
+                keys.dropFirst(2).enumerated().forEach { UserDefaults.standard.set(["Survey Blue", "Fisk 1944"][$0.offset], forKey: $0.element) }
+                keys.prefix(2).forEach(UserDefaults.standard.removeObject)
+                run.start.forEach(make)
+                let scene = Meander(size: CGSize(width: w, height: h))
+                return (scene, try Offscreen(scene, w, h))
+            }
+            // at 60 frames a second: the first change after 25 frames, the second 48 frames into it
+            let (scene, screen) = try begun(), river = scene.river!
+            var (frames, quiet, worst): (Int, (calm: Int, any: Int), (calm: Int, any: Int)) = (0, (0, 0), (0, 0))
+            var (last, strip): ([UInt32], [[UInt32]]) = ([], [])
+            @MainActor func go(_ count: Int, changing: Bool = true) throws {
+                for _ in 0..<count {
+                    try screen.frame(rate: 60)
+                    frames += 1
+                    if frames % 7 < 2 || count == 1 {
+                        let picture = screen.piece(x: 0, y: 0, w: w, h: h)
+                        if frames % 7 == 1 || count == 1, !last.isEmpty, frames > 13 {
+                            let moved = jump(last, picture)
+                            if changing { worst = (max(worst.calm, moved.calm), max(worst.any, moved.any)) } else { quiet = (max(quiet.calm, moved.calm), max(quiet.any, moved.any)) }
+                        }
+                        last = picture
+                    }
+                    if frames % 15 == 10 { strip.append(screen.piece(x: 0, y: 0, w: 240, h: 160)) }
+                }
+            }
+            try go(24, changing: false)
+            try go(1, changing: false)
+            let first = last
+            make(run.first)
+            try go(1)
+            let atOnce = jump(first, last)
+            try go(47)
+            let then = screen.piece(x: 0, y: 0, w: w, h: h)
+            last = then
+            make(run.second)
+            try go(1)
+            let atSecond = jump(then, screen.piece(x: 0, y: 0, w: w, h: h))
+            try go(23)
+            let partWay = screen.piece(x: 0, y: 0, w: w, h: h) // 1.2 s after the first change
+            try go(190)
+            try go(180, changing: false)
+            let rested = screen.piece(x: 0, y: 0, w: w, h: h)
+            #expect(scene.river === river && scene.children.count == 1, "\(run.name): \(scene.children.count) dressings left on")
+            #expect(atOnce.calm <= quiet.calm + 1 && atSecond.calm <= quiet.calm + 2 && worst.calm <= quiet.calm + 3,
+                    "\(run.name): a pixel changed by \(atOnce.calm) levels on the frame after the first change, \(atSecond.calm) after the second and \(worst.calm) on some frame; \(quiet.calm) with only the river moving")
+            #expect(jump(first, rested).calm > 8, "\(run.name): nothing changed")
+            // the same at 15 frames a second: seven frames, the first change, twelve frames, the second, six frames
+            let (_, slow) = try begun()
+            for _ in 0..<7 { try slow.frame(rate: 15) }
+            make(run.first)
+            for _ in 0..<12 { try slow.frame(rate: 15) }
+            make(run.second)
+            for _ in 0..<6 { try slow.frame(rate: 15) }
+            #expect(slow.piece(x: 0, y: 0, w: w, h: h) == partWay, "\(run.name): part-way through, the picture at 15 frames a second isn't the one at 60")
+            // and at rest it is the picture of a scene that had it all from the start (the settings are as the run left them)
+            let fresh = try Offscreen(Meander(size: CGSize(width: w, height: h)), w, h)
+            for _ in 0..<frames - 1 { fresh.advance(rate: 60) }
+            try fresh.frame(rate: 60)
+            #expect(fresh.piece(x: 0, y: 0, w: w, h: h) == rested, "\(run.name): when it is done the picture isn't the one a scene with those settings from the start draws")
+            print("Meander giving way, \(run.name), 60 fps, the most a pixel changes in a frame, in levels (and with the river's banks): \(quiet.calm) (\(quiet.any)) with only the river moving, \(atOnce.calm) (\(atOnce.any)) on the frame after the first change, \(atSecond.calm) (\(atSecond.any)) after the second, \(worst.calm) (\(worst.any)) on any frame of it")
+            if let folder {
+                var sheet = [UInt32](repeating: 0, count: 240 * strip.count * 160)
+                for (k, tile) in strip.enumerated() { for y in 0..<160 { for x in 0..<240 { sheet[y * 240 * strip.count + k * 240 + x] = tile[y * 240 + x] } } }
+                save(sheet, 240 * strip.count, 160, to: folder.appendingPathComponent("gives-\(run.name).png"))
+            }
+        }
+    }
+    // Half-way through, it is half of each: relief giving way to the old map for a second, against a scene in each from the start
+    try with(seeded(7)) {
+        NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
+        defer { UserDefaults.standard.removeObject(forKey: "meander.look") }
+        @MainActor func picture(look: Double, changingAt frame: Int?) throws -> [UInt32] {
+            UserDefaults.standard.set(look, forKey: "meander.look")
+            let screen = try Offscreen(Meander(size: CGSize(width: w, height: h)), w, h)
+            for k in 0..<85 {
+                if k == frame { UserDefaults.standard.set(1.0 - look, forKey: "meander.look") }
+                try screen.frame(rate: 60)
+            }
+            return screen.piece(x: 0, y: 0, w: w, h: h)
+        }
+        let relief = try picture(look: 0, changingAt: nil), old = try picture(look: 1, changingAt: nil), between = try picture(look: 0, changingAt: 25)
+        var off = 0
+        for i in 0..<between.count {
+            for shift in [0, 8, 16] {
+                let (a, b, c) = (Int(relief[i] >> UInt32(shift) & 255), Int(old[i] >> UInt32(shift) & 255), Int(between[i] >> UInt32(shift) & 255))
+                if abs(2 * c - a - b) > 4 { off += 1 }
+            }
+        }
+        #expect(off * 1000 < between.count, "\(off) channels of \(between.count) pixels are over 2 levels from half of each look")
     }
 }
