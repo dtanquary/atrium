@@ -90,13 +90,13 @@ Licences are as Openverse and Wikimedia Commons list them.
 
 **A snow crystal** is Reiter's model (C. Reiter, "A local cellular model for snow crystal growth", Chaos, Solitons & Fractals 23(4), 2005, 1111-1119: https://ideas.repec.org/a/eee/chsofr/v23y2005i4p1111-1119.html; the rule as on his page, https://webbox.lafayette.edu/~reiterc/mvp/sfn/index.html; written from that description, not checked line by line against the paper). Every hole holds water, a hole is ice from 1 up, water away from the ice diffuses and holes beside it take a little from the air. It grows from the middle hole until it nears the display's edge or reaches 48 pitches, and its pegs go in the order they froze. Four sets of its three numbers give feathery, plump and narrow crystals; its colours run from heart to tips in one of three families.
 
-**A picture** is a chart: a list of holes, each empty or one of the eight colours. `docs/peg-board/cut.py` cuts each from its source at up to three sizes, named for the size of peg they are for: 43 by 30 holes at most for Large pegs, 86 by 61 for Medium and 131 by 93 for Small, which is what a 13-inch display holds at each, less a margin. Every hole takes the picture's average over its own cell and then, for a picture in colour, the nearest peg colour in OKLab with lightness counted 0.7, after the picture's chroma is brought up to the pegs' and with dark, colourless parts or its paper's colour left empty; or, for a print in one ink, a peg from a ramp of one colour family by its lightness, turned over so that ink is light. A peg with no neighbour is taken out. The scene puts up the largest chart of each picture that fits its sheet, in the middle. The order is outline first: the pegs on an edge of their colour, a colour at a time, then the rest, always the nearest peg not yet in.
+**A picture** is a chart: a list of holes, each empty or one of the eight colours. `docs/peg-board/cut.py` cuts each from its source at up to three sizes, named for the size of peg they are for: 43 by 30 holes at most for Large pegs, 86 by 61 for Medium and 131 by 93 for Small, which is what a 13-inch display holds at each, less a margin. Every hole takes the picture's average over its own cell and then, for a picture in colour, the nearest peg colour in OKLab with lightness counted 0.7, after the picture's chroma is brought up to the pegs' and with dark, colourless parts or its paper's colour left empty; or, for a print in one ink, a peg from a ramp of one colour family by its lightness, turned over where the ink is to be the light. A peg with no neighbour is taken out. The scene puts up the largest chart of each picture that fits its sheet, in the middle. The order is outline first: the pegs on an edge of their colour, a colour at a time, then the rest, always the nearest peg not yet in.
 
 What was tried and dropped: dithering (confetti), oil paintings (blobs at any size tried), and maps, machines, knots and star charts, whose content is a line thinner than a peg.
 
 ## The pictures
 
-All six were cut on 2026-10-12. "Reads at" is by eye on the app's own render (`docs/peg-board/pictures-*.jpg`).
+All five were cut on 2026-10-12. "Reads at" is by eye on the app's own render (`docs/peg-board/pictures-*.jpg`).
 
 | Chart | Picture | Holder | Licence | Reads at |
 |---|---|---|---|---|
@@ -105,17 +105,15 @@ All six were cut on 2026-10-12. "Reads at" is by eye on the app's own render (`d
 | stag | Design for Berlin Wool Work, Stag, Thomas Wilhelm Meister, c. 1850 | Cooper Hewitt, https://collection.cooperhewitt.org/view/objects/asitem/id/127556 | CC0 | all three |
 | flea | Robert Hooke, a flea, Micrographia, 1665; ink as light, in red, orange and yellow | Wellcome Collection, https://wellcomecollection.org/works/ajveb66y | CC BY 4.0 | all three |
 | sol | Federico de Vinciolo, Sol, a lace pattern, 1588; a sun god, which Dave's rule allows | The Metropolitan Museum of Art, https://www.metmuseum.org/art/collection/search/665397 | CC0 | Medium, Small |
-| rhinoceros | Albrecht Dürer, The Rhinoceros, 1515; ink as light, in blue, violet and clear; its title and monogram painted out | National Gallery of Art, Washington, https://www.nga.gov/collection/art-object-page.47903.html | CC0 | Small only, and only just |
 
 The licences as their holders state them:
 - **The Met:** it "has waived all copyright and related or neighboring rights to this dataset using the Creative Commons Zero license", and its API gives images "(JPEG format) that are in the public domain" (https://metmuseum.github.io/). The Wave's record said `isPublicDomain: true` when fetched for this.
 - **Cooper Hewitt:** CC0 under Smithsonian Open Access; each object's API record gives `usage.access = CC0` (https://creativecommons.org/publicdomain/zero/1.0/).
-- **National Gallery of Art:** it "waives any copyright or related rights that it might have in this dataset and is releasing this dataset under the Creative Commons Zero designation" (https://github.com/NationalGalleryOfArt/opendata).
 - **Wellcome Collection:** CC BY 4.0: "You can use this work for any purpose, including commercial uses, without restriction under copyright law. You should also provide attribution to the original work, source and licence." About credits it, as CC BY asks.
 
 All but the Met's general statement and the Wave's record were read by the rights research of 2026-10-12, not by the builder. The image addresses are in `cut.py`.
 
-Left out: a Berlin wool work hunting dog, whose white coat could not be told from its chart's paper; and everything religious (a face of Christ in an early test was removed with its renders).
+Left out: a Berlin wool work hunting dog, whose white coat could not be told from its chart's paper; Dürer's Rhinoceros (1515, National Gallery of Art), which shipped in the first build with its ink as light in blue, violet and clear, only just read and only at Small pegs, and was dropped on Dave's word on 2026-10-12; and everything religious (a face of Christ in an early test was removed with its renders).
 
 ## Rights
 
@@ -151,7 +149,7 @@ Measured 2026-10-12 on an M3 Max.
   | reading the four holes round each pixel, for an exact tight glow | 0.84 ms | 2.1 ms | 2.9 ms |
 
   The same at a pitch of 13.5 and of 27 points, and with the board half full or full.
-- **On the main thread, once per sheet, while it is dark:** a crystal grows in 2 to 4 ms at Large pegs, 16 to 34 at Medium and 53 to 111 at Small; the largest picture (5,629 pegs) goes up in 11 ms, order and all.
+- **On the main thread, once per sheet, while it is dark:** a crystal grows in 2 to 4 ms at Large pegs, 16 to 34 at Medium and 53 to 111 at Small; the largest picture (5,306 pegs) goes up in 9 ms, order and all.
 - **How busy it is,** by `docs/meander/measure/busy.py` (the share of pixels on a brightness edge) on the app's stills at Softness 0: a crystal 5.5 to 9.2%, the stag 6%, the Wave and the wreath about 11%, the flea 16.5%. The crystal that scores 9.2% is 6.2% at Softness 0.5 and 2.3% at 1. The wallpapers Dave has kept score 0 to 3.3% (Fish Tank 8.5%), and Game of Life's Classic look, which he called "so busy and wild", 11.1%. Its mean level is 0.08 to 0.14, like Nebula's.
 - **How much it moves:** a build at speed 1 changes 0.004 grey levels a pixel a frame at 15 fps (Meander 0.03 to 0.10): nearly still.
 
@@ -184,11 +182,10 @@ Worst first, as the builder saw it on stills; Dave has not seen it run.
 1. **Sharp and busy at Softness 0**, the default he chose: see the busy scores above. It is what got Zen Garden cut ("so bright and sharp and not relaxing"), and Softness is the answer he has to hand.
 2. **Nearly still at speed 1.** A crystal takes 2 to 3.5 minutes at Medium and a picture 2 to 6; the Wave takes 11 at Small and the flea 15. The slider now goes to 20×, where the flea at Small takes 45 s.
 3. **Large pegs have two pictures,** the stag and the flea, and the stag there is a blob with antlers. Nothing else read at 43 by 30 holes.
-4. **The rhinoceros only just reads,** in false colour.
-5. **The light show is faint in stills** and has not been watched moving.
-6. **A change of peg size is a hard cut** to a new sheet.
-7. **In Settings the page fades from its screenshot, a finished crystal, to the live copy's near-empty sheet,** since a scene starts afresh; and a new peg size starts the sheet again. Sliders are hard to judge until pegs are in. A head start for a scene's first sheet would mend it, at the cost of a desktop that does not start empty: not decided.
-8. Not checked: the Settings page itself (its test opens a window on the screen), a 5K or 6K display, a 1x display, a scaled display mode (measured in the mock-ups only: the pegs' sharpness drifts up to 3% across the sheet at pitches whose rows land just off a whole pixel).
+4. **The light show is faint in stills** and has not been watched moving.
+5. **A change of peg size is a hard cut** to a new sheet.
+6. **In Settings the page fades from its screenshot, a finished crystal, to the live copy's near-empty sheet,** since a scene starts afresh; and a new peg size starts the sheet again. Sliders are hard to judge until pegs are in. A head start for a scene's first sheet would mend it, at the cost of a desktop that does not start empty: not decided.
+7. Not checked: the Settings page itself (its test opens a window on the screen), a 5K or 6K display, a 1x display, a scaled display mode (measured in the mock-ups only: the pegs' sharpness drifts up to 3% across the sheet at pitches whose rows land just off a whole pixel).
 
 ## Next ideas
 

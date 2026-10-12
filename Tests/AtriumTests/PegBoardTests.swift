@@ -40,7 +40,7 @@ import Testing
         .map { $0.split(separator: "\t", omittingEmptySubsequences: false).map(String.init) }
     #expect(credits.allSatisfy { $0.count == 5 && $0[4].hasPrefix("https://") && ["CC0", "CC BY 4.0"].contains($0[3]) })
     let charts = PegBoard.charts
-    #expect(charts.count == 13 && Set(charts.map(\.name)) == Set(credits.map { $0[0] }))
+    #expect(charts.count == 12 && Set(charts.map(\.name)) == Set(credits.map { $0[0] }))
     for chart in charts {
         #expect(chart.pegs.count == chart.cols * chart.rows && chart.pegs.allSatisfy { $0 <= 8 } && chart.pegs.count { $0 > 0 } > 150, "\(chart.name)")
         #expect([(43, 30), (86, 61), (131, 93)].contains { chart.cols <= $0.0 && chart.rows <= $0.1 }, "\(chart.name) is \(chart.cols) by \(chart.rows)")
@@ -151,7 +151,7 @@ import Testing
     #expect(scene.picture && ["stag", "flea"].contains { name in PegBoard.charts.contains { $0.name == name && $0.pegs.count { $0 > 0 } == scene.sequence.count } })
 
     UserDefaults.standard.set(2.0, forKey: "pegboard.size")
-    UserDefaults.standard.set("rhinoceros", forKey: "pegboard.picture")
+    UserDefaults.standard.set("flea", forKey: "pegboard.picture")
     let clock = ContinuousClock(), began = clock.now, big = PegBoard(size: CGSize(width: 1512, height: 982)), took = clock.now - began
     print("Peg Board, its largest picture (\(big.sequence.count) pegs) put up in \(took)")
     #expect(big.picture && big.sequence.count > 5000)

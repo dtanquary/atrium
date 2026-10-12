@@ -9,8 +9,7 @@ empty or holding one of the eight peg colours. Every hole takes the picture's av
           or lands on a colour named in `drop`; else the nearest peg colour in OKLab, lightness counting 0.7.
   tone:   for a print in one ink. Its lightness, turned over when `ink` is set so that ink becomes light, is left
           empty below `cut` and above it takes a peg from `ramp`, dimmest first.
-`blank` lists parts of the picture painted over with its paper first (a print's title and monogram). A peg with no peg beside it
-is taken out. A picture is cut at each size in its `sizes`, and only those: every chart was looked at (the optional sheet draws
+A peg with no peg beside it is taken out. A picture is cut at each size in its `sizes`, and only those: every chart was looked at (the optional sheet draws
 them all as plain discs), and a picture that did not read at a size is not cut at it. docs/peg-board.md has the
 sources' licences. Needs numpy and Pillow."""
 import sys
@@ -25,7 +24,7 @@ SIZES = {"large": (43, 30), "medium": (86, 61), "small": (131, 93)}
 NAMES = ["red", "pink", "orange", "yellow", "green", "blue", "violet", "clear"]
 # The peg colours as measured from photographs of the real pegs, sRGB: what a picture's colours are matched to.
 PEGS = np.array([[200, 25, 10], [205, 25, 75], [220, 95, 10], [205, 170, 20], [0, 195, 25], [5, 80, 190], [140, 45, 190], [235, 215, 180]], np.float32)
-COOL, WARM = ("blue", "violet", "clear"), ("red", "orange", "yellow")
+WARM = ("red", "orange", "yellow")
 
 PICTURES = [
     dict(name="great-wave", file="great-wave-met-DP130155.jpg", title="Under the Wave off Kanagawa (The Great Wave), c. 1830-32",
@@ -48,10 +47,6 @@ PICTURES = [
          author="Federico de Vinciolo; The Metropolitan Museum of Art", licence="CC0", source="https://www.metmuseum.org/art/collection/search/665397",
          image="https://images.metmuseum.org/CRDImages/dp/original/DP364040.jpg",
          crop=(0.108, 0.112, 0.893, 0.708), how="tone", ink=False, cut=0.55, ramp=("yellow",), sizes=("medium", "small")),
-    dict(name="rhinoceros", file="prints-durer-rhinoceros-1515-nga.jpg", title="The Rhinoceros, 1515",
-         author="Albrecht Dürer; National Gallery of Art, Washington", licence="CC0", source="https://www.nga.gov/collection/art-object-page.47903.html",
-         image="https://api.nga.gov/iiif/a405d06a-f9b5-4ef9-9509-d27b4ac89bce",
-         crop=(0.02, 0.118, 0.98, 0.95), blank=((0.66, 0.0, 1.0, 0.215), (0.79, 0.20, 0.89, 0.275)), how="tone", ink=True, cut=0.30, ramp=COOL, sizes=("small",)),
 ]
 
 
@@ -94,9 +89,6 @@ def cut(p, cols, rows):
     im = Image.open(f"{SOURCES}/{p['file']}")
     if im.format == "JPEG": im.draft("RGB", (2400, 2400))
     im = im.convert("RGB"); w, h = im.size
-    for part in p.get("blank", ()):
-        b = [int(v * n) for v, n in zip(part, (w, h, w, h))]
-        im.paste(tuple(int(v) for v in np.percentile(np.asarray(im.resize((64, 64))).reshape(-1, 3), 95, 0)), b)   # its lightest: bare paper
     c = p["crop"]
     mean, on = holes(linear(np.asarray(im.crop((int(c[0] * w), int(c[1] * h), int(c[2] * w), int(c[3] * h))))), cols, rows)
     lab = oklab(mean)
