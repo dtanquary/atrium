@@ -157,6 +157,59 @@ import Testing
     #expect(big.picture && big.sequence.count > 5000)
 }
 
+/// The clear is a fade with nothing sudden at its end: by the time the sheet is dark its pegs have gone with their
+/// light, so the last picture of one thing and the first of the next are the same empty sheet, to within a level.
+/// (When the pegs stayed, as black shapes over the dots, every one of them vanished on that frame.)
+@MainActor @Test func pegBoardClearsWithoutAPop() throws {
+    defer { ["pegboard.seed", "pegboard.speed"].forEach(UserDefaults.standard.removeObject) }
+    UserDefaults.standard.set(7, forKey: "pegboard.seed")
+    UserDefaults.standard.set(20.0, forKey: "pegboard.speed")
+    let device = try #require(MTLCreateSystemDefaultDevice()), queue = try #require(device.makeCommandQueue())
+    let (w, h) = (1512, 982)
+    let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: w, height: h, mipmapped: false)
+    descriptor.usage = [.renderTarget, .shaderRead]
+    descriptor.storageMode = .shared
+    let renderer = SKRenderer(device: device), target = try #require(device.makeTexture(descriptor: descriptor)), pass = MTLRenderPassDescriptor()
+    let scene = PegBoard(size: CGSize(width: w / 2, height: h / 2))
+    renderer.scene = scene
+    pass.colorAttachments[0].texture = target
+    pass.colorAttachments[0].loadAction = .clear
+    pass.colorAttachments[0].storeAction = .store
+    let start = ProcessInfo.processInfo.systemUptime + 1
+    var frames = 0.0
+    func step() { renderer.update(atTime: start + frames / 60); frames += 1 }
+    func picture() throws -> [UInt32] {
+        for _ in 0..<2 {
+            renderer.update(atTime: start + (frames - 1) / 60)
+            let buffer = try #require(queue.makeCommandBuffer())
+            renderer.render(withViewport: CGRect(x: 0, y: 0, width: w, height: h), commandBuffer: buffer, renderPassDescriptor: pass)
+            buffer.commit()
+            buffer.waitUntilCompleted()
+        }
+        var raw = [UInt32](repeating: 0, count: w * h)
+        target.getBytes(&raw, bytesPerRow: w * 4, from: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0)
+        return raw
+    }
+    func most(_ a: [UInt32], _ b: [UInt32]) -> Int {
+        zip(a, b).reduce(0) { worst, pair in
+            max(worst, abs(Int(pair.0 & 255) - Int(pair.1 & 255)), abs(Int(pair.0 >> 8 & 255) - Int(pair.1 >> 8 & 255)), abs(Int(pair.0 >> 16 & 255) - Int(pair.1 >> 16 & 255)))
+        }
+    }
+    while scene.phase != .showing { step() }
+    let lit = try picture()
+    while scene.phase != .clearing { step() }
+    for _ in 0..<90 { step() } // half-way through the three seconds of going dark
+    let going = try picture()
+    for _ in 0..<120 { step() } // dark, half a second before the next thing begins
+    let dark = try picture()
+    while scene.phase == .clearing { step() }
+    let begun = try picture() // the frame the next thing began on
+    func bright(_ picture: [UInt32]) -> Int { picture.count { max($0 & 255, $0 >> 8 & 255, $0 >> 16 & 255) > 60 } }
+    print("Peg Board's clear: \(bright(lit)) bright pixels lit, \(bright(going)) half-way through going dark, \(bright(dark)) dark; the next thing's first frame differs from the dark one by \(most(dark, begun)) of 255 at the most")
+    #expect(bright(lit) > 20000 && bright(going) < bright(lit) && bright(going) > 0 && bright(dark) == 0)
+    #expect(most(dark, begun) <= 2, "something on the sheet changed as the next thing began")
+}
+
 /// With PEGBOARD_STILL set to a file (.png or .jpg): one picture of the sheet on a display of 1512 by 982 points,
 /// drawn PEGBOARD_STILL_WIDTH pixels across (1600 for docs/images, 1200 for Settings' preview), after
 /// SNAPSHOT_SECONDS with SNAPSHOT_DEFAULTS as the render test takes them. Drawn at the size it is shown at, because

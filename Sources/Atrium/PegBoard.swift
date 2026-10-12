@@ -55,7 +55,8 @@ final class PegBoard: SKScene {
     private static let rate = 6.0, lighting = 1.0
     /// The scene moves in steps of a 960th of a second, however many a frame holds, so that it is the same at any
     /// frame rate. In steps: between two states of the glow (the shader shows the one turning into the other); a
-    /// light show; the sheet going dark, and staying dark before the next thing begins.
+    /// light show; the sheet going dark, its pegs fading out with their light; and the whole clear, which leaves
+    /// the sheet empty for a second before the next thing begins.
     private static let second = 960, tickSteps = 240, showSteps = 60 * 960, fadeSteps = 3 * 960, clearSteps = 4 * 960
     /// How far a light show takes a peg down from full, and the seconds it takes to come in and to go.
     private static let depth = 0.4, eases = 3.0
@@ -73,10 +74,11 @@ final class PegBoard: SKScene {
     private let wave = SKUniform(name: "u_wave", vectorFloat4: .zero), deep = SKUniform(name: "u_depth", float: 0)
     private let soft = SKUniform(name: "u_soft", float: 0)
 
-    private enum Phase { case building, showing, clearing }
+    enum Phase { case building, showing, clearing }
     /// What it is doing; the pegs begun, which the Speed slider hurries, and how many are lighting at once; steps
     /// into the show or the clear; the time not yet stepped, in seconds; and steps since the glow's last tick.
-    private var phase = Phase.building, placed = 0.0, front = rate * lighting, since = 0, owed = 0.0, ticking = 0
+    private(set) var phase = Phase.building
+    private var placed = 0.0, front = rate * lighting, since = 0, owed = 0.0, ticking = 0
     /// How many pegs the glow has; which texture holds its newer state, and which state of it each texture holds.
     private var glowing = 0, newest = 0, holds = [0, 0], made = 0
     /// Whether a picture is on the sheet (or a crystal), the pictures not yet shown this round, and the light show.
@@ -279,7 +281,8 @@ final class PegBoard: SKScene {
     /// The whole board in one pass. A pixel belongs to the nearer of two holes, the nearest in the row below it and
     /// in the row above; that hole's peg, if it has one and its turn has come, is a disc shaded by the distance to
     /// its (slightly crooked) middle, coming in over the first quarter of the time it takes to light. Round it is
-    /// black paper with a faint dot at every empty hole, lit by the glow. `u_soft` is the Softness slider: it takes
+    /// black paper with a faint dot at every empty hole, lit by the glow. As the sheet goes dark the pegs go with
+    /// their light, so that what is left is an empty sheet, and the next thing begins on it with nothing to see. `u_soft` is the Softness slider: it takes
     /// the rim, the lip and the hot dot away, brings the glow up and widens the peg's outline. `mode` is the light
     /// show, which dims pegs and glow together by where they are on the sheet. Light is linear until the last two lines.
     private static let shader = """
@@ -308,7 +311,8 @@ final class PegBoard: SKScene {
             vec4 peg = texture2D(u_pegs, (cell + 0.5) / u_grid);
             float place = floor(dot(texture2D(u_order, (cell + 0.5) / u_grid).rgb, vec3(16711680.0, 65280.0, 255.0)) + 0.5);
             float turn = (u_state.x - place) / u_state.y;
-            float has = step(0.5, peg.a) * smoothstep(0.0, 0.25, turn);   // it comes in with its light: an unlit peg is a black blot on the glow
+            // it comes in with its light, and goes with the sheet's: an unlit peg is a black blot on the glow
+            float has = step(0.5, peg.a) * smoothstep(0.0, 0.25, turn) * u_state.w;
             vec2 mid = p - 0.5 * u_size, m = mid / u_size.y;
             float mode = u_state.w * (1.0 - u_depth * (1.0 - cos(u_wave.x * atan(m.y, m.x) + u_wave.y * length(m) + u_wave.z * (m.x + 0.5 * m.y) - u_wave.w)));
             float lit = smoothstep(0.0, 1.0, turn) * mode;

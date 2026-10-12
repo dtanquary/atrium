@@ -84,7 +84,7 @@ Licences are as Openverse and Wikimedia Commons list them.
 
 **Time.** The scene moves in steps of a 960th of a second, however many a frame holds, so the picture is the same at 15, 30 and 60 frames a second. The shader is told how many pegs have been begun and lights each by its place in the order: a peg comes in over the first quarter of a second and reaches full in one second at any speed, so a faster build is a wider soft front and not a sparkle. The place is three bytes, since a large display at Small pegs has more than 65,535 holes.
 
-**A round.** Build at 6 pegs a second times Speed; then a light show for 60 s; then the sheet fades to dark over 3 s and stays dark for one, and the next thing begins. Where both kinds are shown they take turns, the first at random; the pictures go round in a new order each time.
+**A round.** Build at 6 pegs a second times Speed; then a light show for 60 s; then the sheet goes dark over 3 s, its pegs fading out with their light, so that what is left is an empty sheet; a second later the next thing begins on it. Where both kinds are shown they take turns, the first at random; the pictures go round in a new order each time.
 
 **A light show** dims pegs and glow together by where they are on the sheet, between 20% and 100% of their light, easing in and out over 3 s. Three, one picked for each sheet: a lobe going round the middle once in 40 s, rings leaving the middle every 20 s, a band crossing every 24 s.
 
@@ -164,7 +164,7 @@ PEGBOARD_STILL=docs/images/peg-board.jpg PEGBOARD_STILL_WIDTH=1600 SNAPSHOT_SECO
 python3 -I docs/peg-board/cut.py <folder of the source pictures> Sources/Atrium/Resources sheet.png
 ```
 
-- The tests: a crystal has six arms and stays on the sheet at all three sizes; the charts are whole, fit their sizes and are credited; a picture's order is outline first; the picture is the same at 15, 30 and 60 fps part-way through a build, mid-show and after the clear; the sheet follows Peg size and Shows while it runs.
+- The tests: a crystal has six arms and stays on the sheet at all three sizes; the charts are whole, fit their sizes and are credited; a picture's order is outline first; the picture is the same at 15, 30 and 60 fps part-way through a build, mid-show and after the clear; the clear ends on an empty sheet, so nothing changes on the frame the next thing begins (when the pegs stayed as black shapes, that frame changed by 25 levels of 255; now by 1); the sheet follows Peg size and Shows while it runs.
 - **Stills are drawn at the size they are shown at** (`pegBoardStill`): a still reduced afterwards shows a weave in the dotted sheet. `docs/images/peg-board.jpg` is the line above; `peg-board-wave.jpg` is `pegboard.picture=great-wave` at 34.5 s; `Resources/preview-peg-board.jpg` is the first at 1200 wide. The crystal was picked from eight rolls.
 - `cut.py` needs each source downloaded by hand under the file name its table gives. After a change, look at its sheet and at the app's render at every size before keeping a chart.
 
@@ -185,15 +185,14 @@ Worst first, as the builder saw it on stills; Dave has not seen it run.
 2. **Nearly still at speed 1.** A crystal takes 2 to 3.5 minutes at Medium and a picture 2 to 6; the Wave takes 11 at Small and the flea 15. The slider now goes to 20×, where the flea at Small takes 45 s.
 3. **Large pegs have two pictures,** the stag and the flea, and the stag there is a blob with antlers. Nothing else read at 43 by 30 holes.
 4. **The rhinoceros only just reads,** in false colour.
-5. **The clear** leaves the unlit pegs as black shapes on the faint dots for a second, and then they are gone at once.
-6. **The light show is faint in stills** and has not been watched moving.
-7. **A change of peg size is a hard cut** to a new sheet.
-8. **In Settings the page fades from its screenshot, a finished crystal, to the live copy's near-empty sheet,** since a scene starts afresh; and a new peg size starts the sheet again. Sliders are hard to judge until pegs are in. A head start for a scene's first sheet would mend it, at the cost of a desktop that does not start empty: not decided.
-9. Not checked: the Settings page itself (its test opens a window on the screen), a 5K or 6K display, a 1x display, a scaled display mode (measured in the mock-ups only: the pegs' sharpness drifts up to 3% across the sheet at pitches whose rows land just off a whole pixel).
+5. **The light show is faint in stills** and has not been watched moving.
+6. **A change of peg size is a hard cut** to a new sheet.
+7. **In Settings the page fades from its screenshot, a finished crystal, to the live copy's near-empty sheet,** since a scene starts afresh; and a new peg size starts the sheet again. Sliders are hard to judge until pegs are in. A head start for a scene's first sheet would mend it, at the cost of a desktop that does not start empty: not decided.
+8. Not checked: the Settings page itself (its test opens a window on the screen), a 5K or 6K display, a 1x display, a scaled display mode (measured in the mock-ups only: the pegs' sharpness drifts up to 3% across the sheet at pitches whose rows land just off a whole pixel).
 
 ## Next ideas
 
 - Ornament drawn on the lattice instead of sampled: six-fold star patterns sit on a honeycomb exactly.
 - More charts from old needlework (Cooper Hewitt and the Met hold many, CC0), each needing a crop, a recipe and a look.
 - Other grown patterns beside the crystal. A rosette tried in the mock-ups read as a ship's wheel.
-- The pegs leaving one by one instead of the sheet going dark.
+- The pegs leaving one by one instead of fading with the sheet.
