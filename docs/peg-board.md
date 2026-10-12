@@ -84,7 +84,7 @@ Licences are as Openverse and Wikimedia Commons list them.
 
 **Time.** The scene moves in steps of a 960th of a second, however many a frame holds, so the picture is the same at 15, 30 and 60 frames a second. The shader is told how many pegs have been begun and lights each by its place in the order: a peg comes in over the first quarter of a second and reaches full in one second at any speed, so a faster build is a wider soft front and not a sparkle. The place is three bytes, since a large display at Small pegs has more than 65,535 holes.
 
-**A round.** Build at 6 pegs a second times Speed; then a light show for 60 s; then the sheet goes dark over 3 s, its pegs fading out with their light, so that what is left is an empty sheet; a second later the next thing begins on it. Where both kinds are shown they take turns, the first at random; the pictures go round in a new order each time.
+**A round.** Build at 6 pegs a second times Speed; then a light show for 60 s; then the sheet goes dark over 3 s, its pegs fading out with their light, so that what is left is an empty sheet; a second later the next thing begins on it. The fade is a straight line in the light, which on the screen is even: the pegs' brightness falls 19%, 24%, 29% and 28% of the way in its four quarters (eased in and out, as it first was, 12%, 32%, 40% and 16%, and it read as half as long). Where both kinds are shown they take turns, the first at random; the pictures go round in a new order each time.
 
 **A light show** dims pegs and glow together by where they are on the sheet, between 20% and 100% of their light, easing in and out over 3 s. Three, one picked for each sheet: a lobe going round the middle once in 40 s, rings leaving the middle every 20 s, a band crossing every 24 s.
 

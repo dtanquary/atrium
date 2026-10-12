@@ -159,7 +159,10 @@ import Testing
 
 /// The clear is a fade with nothing sudden at its end: by the time the sheet is dark its pegs have gone with their
 /// light, so the last picture of one thing and the first of the next are the same empty sheet, to within a level.
-/// (When the pegs stayed, as black shapes over the dots, every one of them vanished on that frame.)
+/// (When the pegs stayed, as black shapes over the dots, every one of them vanished on that frame.) And it is a
+/// fade through all three of its seconds: the pegs' brightness on the screen falls in each quarter of it by
+/// about a quarter of the whole: 19%, 24%, 29% and 28%. (Eased in and out it fell 12%, 32%, 40% and 16%, and read
+/// as half as long.)
 @MainActor @Test func pegBoardClearsWithoutAPop() throws {
     defer { ["pegboard.seed", "pegboard.speed"].forEach(UserDefaults.standard.removeObject) }
     UserDefaults.standard.set(7, forKey: "pegboard.seed")
@@ -198,9 +201,13 @@ import Testing
     while scene.phase != .showing { step() }
     let lit = try picture()
     while scene.phase != .clearing { step() }
-    for _ in 0..<90 { step() } // half-way through the three seconds of going dark
-    let going = try picture()
-    for _ in 0..<120 { step() } // dark, half a second before the next thing begins
+    var fading = [try picture()] // at the start of the three seconds of going dark, and at each quarter of them
+    for _ in 0..<4 {
+        for _ in 0..<45 { step() }
+        fading.append(try picture())
+    }
+    let going = fading[2]
+    for _ in 0..<30 { step() } // dark, half a second before the next thing begins
     let dark = try picture()
     while scene.phase == .clearing { step() }
     let begun = try picture() // the frame the next thing began on
@@ -208,6 +215,13 @@ import Testing
     print("Peg Board's clear: \(bright(lit)) bright pixels lit, \(bright(going)) half-way through going dark, \(bright(dark)) dark; the next thing's first frame differs from the dark one by \(most(dark, begun)) of 255 at the most")
     #expect(bright(lit) > 20000 && bright(going) < bright(lit) && bright(going) > 0 && bright(dark) == 0)
     #expect(most(dark, begun) <= 2, "something on the sheet changed as the next thing began")
+    // how bright the pegs are: the mean, over the pixels that were bright when lit, of each one's brightest channel
+    let pegs = lit.indices.filter { max(lit[$0] & 255, lit[$0] >> 8 & 255, lit[$0] >> 16 & 255) > 60 }
+    let levels = fading.map { picture in pegs.reduce(0.0) { $0 + Double(max(picture[$1] & 255, picture[$1] >> 8 & 255, picture[$1] >> 16 & 255)) } / Double(pegs.count) }
+    let falls = (0..<4).map { (levels[$0] - levels[$0 + 1]) / (levels[0] - levels[4]) }
+    print("Peg Board's clear, the pegs' brightness at each quarter of it:", levels.map { String(format: "%.0f", $0) }.joined(separator: " "),
+          "of 255; each quarter's share of the fall:", falls.map { String(format: "%.0f%%", $0 * 100) }.joined(separator: " "))
+    #expect(falls.allSatisfy { $0 > 0.15 && $0 < 0.35 })
 }
 
 /// With PEGBOARD_STILL set to a file (.png or .jpg): one picture of the sheet on a display of 1512 by 982 points,

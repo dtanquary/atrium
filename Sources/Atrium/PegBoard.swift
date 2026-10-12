@@ -271,7 +271,8 @@ final class PegBoard: SKScene {
         case .showing:
             depth = Self.depth * ease(seconds / Self.eases) * ease((Double(Self.showSteps / Self.second) - seconds) / Self.eases)
             turned = (seconds / show.period).truncatingRemainder(dividingBy: 1)
-        case .clearing: level = 1 - ease(seconds / Double(Self.fadeSteps / Self.second))
+        // in a straight line: a peg's light and the peg both go by it, which on the screen is an even fade from first to last
+        case .clearing: level = max(1 - seconds / Double(Self.fadeSteps / Self.second), 0)
         }
         state.vectorFloat4Value = [Float(min(placed, Double(sequence.count) + front)), Float(front), newest == 1 ? toward : 1 - toward, Float(level)]
         wave.vectorFloat4Value = [show.turn, show.out, show.across, Float(turned * 2 * .pi)]
