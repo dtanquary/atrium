@@ -171,6 +171,13 @@ struct Refresh {
     static func restart() { start = nil }
 }
 
+/// A scene that can skip ahead to something worth looking at, for a wallpaper that starts from nothing (an empty
+/// sheet, a bare screen). Settings asks it of the copy it runs behind a wallpaper's page (`LivePreview`), once, as
+/// soon as that copy is made, so that the page's sliders can be judged at once. The desktop's copy is never asked.
+@MainActor protocol HeadStart {
+    func headStart()
+}
+
 /// A scene that is one full-screen GPU shader. Besides `u_now` (see `WallpaperTime`) and `v_tex_coord`, the shader
 /// gets `u_size`, the scene size in points, for aspect-correct math, and a float for each knob, named `u_` plus
 /// the last part of its key, that follows Settings live.

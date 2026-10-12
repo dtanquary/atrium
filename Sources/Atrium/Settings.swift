@@ -611,6 +611,7 @@ struct LivePreview: NSViewRepresentable {
         let view = WallpaperView()
         applyPowerState(to: [view])
         let scene = wallpaper.make(NSScreen.main?.frame.size ?? CGSize(width: 1512, height: 982))
+        (scene as? HeadStart)?.headStart() // one that starts from nothing opens with something to judge its settings by
         scene.scaleMode = .aspectFill
         view.presentScene(scene)
         return view

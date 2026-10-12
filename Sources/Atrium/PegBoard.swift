@@ -83,6 +83,8 @@ final class PegBoard: SKScene {
     private var glowing = 0, newest = 0, holds = [0, 0], made = 0
     /// Whether a picture is on the sheet (or a crystal), the pictures not yet shown this round, and the light show.
     private(set) var picture = false, unseen: [String] = [], show = lightShows[0]
+    /// Whether it is the copy Settings runs behind its page, which opens on a whole sheet (`headStart`).
+    private var ahead = false
     private var rng = SplitMix(state: 0)
     private var lastTime: TimeInterval?
 
@@ -125,6 +127,7 @@ final class PegBoard: SKScene {
         addChild(sheet)
         soft.floatValue = Float(Self.softness.value)
         begin()
+        if ahead { fill() }
         tell()
     }
 
@@ -191,6 +194,14 @@ final class PegBoard: SKScene {
         glow.clear()
         for texture in glowTextures { send(glow.bytes, to: texture) }
         (phase, placed, since, glowing, made, holds) = (.building, 0, 0, 0, made + 1, [made + 1, made + 1])
+    }
+
+    /// Every peg of what is on the sheet in at once, lit and with its glow: straight to its light show.
+    private func fill() {
+        for hole in sequence[glowing...] { glow.stamp(col: hole % lattice.cols, row: hole / lattice.cols, colour: lights[Int(pegs[hole]) - 1] * lamp(at: hole)) }
+        (glowing, made) = (sequence.count, made + 1)
+        for texture in glowTextures { send(glow.bytes, to: texture) }
+        (holds, phase, placed, since) = ([made, made], .showing, Double(sequence.count) + front, 0)
     }
 
     /// The next picture: each in turn, in a new order every round.
@@ -344,4 +355,15 @@ final class PegBoard: SKScene {
             gl_FragColor = vec4(mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)), 1.0);
         }
         """
+}
+
+extension PegBoard: HeadStart {
+    /// For the copy Settings runs behind its page: the sheet whole and under its light show at once, and again
+    /// after every change of peg size, so that Softness, the colours and the size can be judged as they are
+    /// moved. From there the round goes on as on the desktop, whose own copy still starts from an empty sheet.
+    func headStart() {
+        ahead = true
+        fill()
+        tell()
+    }
 }

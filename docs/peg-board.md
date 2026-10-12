@@ -86,6 +86,8 @@ Licences are as Openverse and Wikimedia Commons list them.
 
 **A round.** Build at 6 pegs a second times Speed; then a light show for 60 s; then the sheet goes dark over 3 s, its pegs fading out with their light, so that what is left is an empty sheet; a second later the next thing begins on it. The fade is a straight line in the light, which on the screen is even: the pegs' brightness falls 19%, 24%, 29% and 28% of the way in its four quarters (eased in and out, as it first was, 12%, 32%, 40% and 16%, and it read as half as long). Where both kinds are shown they take turns, the first at random; the pictures go round in a new order each time.
 
+**In Settings** the page's own copy gets a head start: `LivePreview` asks any scene that is a `HeadStart` (Scenes.swift, added for this; nothing else adopts it yet) to skip ahead as it is made, and this one puts every peg of its first sheet in at once, lit and with its glow, and goes straight to the light show; it does the same after a change of peg size. So Softness, the colours and the size can be judged as they are moved. From there the round goes on as usual, and the desktop's copy is never asked: it starts from an empty sheet.
+
 **A light show** dims pegs and glow together by where they are on the sheet, between 20% and 100% of their light, easing in and out over 3 s. Three, one picked for each sheet: a lobe going round the middle once in 40 s, rings leaving the middle every 20 s, a band crossing every 24 s.
 
 **A snow crystal** is Reiter's model (C. Reiter, "A local cellular model for snow crystal growth", Chaos, Solitons & Fractals 23(4), 2005, 1111-1119: https://ideas.repec.org/a/eee/chsofr/v23y2005i4p1111-1119.html; the rule as on his page, https://webbox.lafayette.edu/~reiterc/mvp/sfn/index.html; written from that description, not checked line by line against the paper). Every hole holds water, a hole is ice from 1 up, water away from the ice diffuses and holes beside it take a little from the air. It grows from the middle hole until it nears the display's edge or reaches 48 pitches, and its pegs go in the order they froze. Four sets of its three numbers give feathery, plump and narrow crystals; its colours run from heart to tips in one of three families.
@@ -162,8 +164,8 @@ PEGBOARD_STILL=docs/images/peg-board.jpg PEGBOARD_STILL_WIDTH=1600 SNAPSHOT_SECO
 python3 -I docs/peg-board/cut.py <folder of the source pictures> Sources/Atrium/Resources sheet.png
 ```
 
-- The tests: a crystal has six arms and stays on the sheet at all three sizes; the charts are whole, fit their sizes and are credited; a picture's order is outline first; the picture is the same at 15, 30 and 60 fps part-way through a build, mid-show and after the clear; the clear ends on an empty sheet, so nothing changes on the frame the next thing begins (when the pegs stayed as black shapes, that frame changed by 25 levels of 255; now by 1); the sheet follows Peg size and Shows while it runs.
-- **Stills are drawn at the size they are shown at** (`pegBoardStill`): a still reduced afterwards shows a weave in the dotted sheet. `docs/images/peg-board.jpg` is the line above; `peg-board-wave.jpg` is `pegboard.picture=great-wave` at 34.5 s; `Resources/preview-peg-board.jpg` is the first at 1200 wide. The crystal was picked from eight rolls.
+- The tests: a crystal has six arms and stays on the sheet at all three sizes; the charts are whole, fit their sizes and are credited; a picture's order is outline first; the picture is the same at 15, 30 and 60 fps part-way through a build, mid-show and after the clear; the clear ends on an empty sheet, so nothing changes on the frame the next thing begins (when the pegs stayed as black shapes, that frame changed by 25 levels of 255; now by 1); the sheet follows Peg size and Shows while it runs; Settings' own copy is whole on its first frame and the desktop's is empty.
+- **Stills are drawn at the size they are shown at** (`pegBoardStill`; with `PEGBOARD_HEAD_START=1` and `SNAPSHOT_SECONDS=0` it draws the first frame of Settings' own copy): a still reduced afterwards shows a weave in the dotted sheet. `docs/images/peg-board.jpg` is the line above; `peg-board-wave.jpg` is `pegboard.picture=great-wave` at 34.5 s; `Resources/preview-peg-board.jpg` is the first at 1200 wide. The crystal was picked from eight rolls.
 - `cut.py` needs each source downloaded by hand under the file name its table gives. After a change, look at its sheet and at the app's render at every size before keeping a chart.
 
 ## Shortcuts
@@ -184,8 +186,7 @@ Worst first, as the builder saw it on stills; Dave has not seen it run.
 3. **Large pegs have two pictures,** the stag and the flea, and the stag there is a blob with antlers. Nothing else read at 43 by 30 holes.
 4. **The light show is faint in stills** and has not been watched moving.
 5. **A change of peg size is a hard cut** to a new sheet.
-6. **In Settings the page fades from its screenshot, a finished crystal, to the live copy's near-empty sheet,** since a scene starts afresh; and a new peg size starts the sheet again. Sliders are hard to judge until pegs are in. A head start for a scene's first sheet would mend it, at the cost of a desktop that does not start empty: not decided.
-7. Not checked: the Settings page itself (its test opens a window on the screen), a 5K or 6K display, a 1x display, a scaled display mode (measured in the mock-ups only: the pegs' sharpness drifts up to 3% across the sheet at pitches whose rows land just off a whole pixel).
+6. Not checked: the Settings page itself (its test opens a window on the screen), so the head start has been seen only as the scene's first frame, not behind the page; a 5K or 6K display, a 1x display, a scaled display mode (measured in the mock-ups only: the pegs' sharpness drifts up to 3% across the sheet at pitches whose rows land just off a whole pixel).
 
 ## Next ideas
 

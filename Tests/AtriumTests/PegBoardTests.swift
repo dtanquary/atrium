@@ -224,9 +224,52 @@ import Testing
     #expect(falls.allSatisfy { $0 > 0.15 && $0 < 0.35 })
 }
 
+/// The copy Settings runs behind its page gets a head start, which the desktop's does not: asked as `LivePreview`
+/// asks it, the sheet is whole and under its light show on its first frame, and whole again after a change of peg
+/// size; a scene not asked has only its first peg begun.
+@MainActor @Test func pegBoardGivesSettingsAHeadStart() throws {
+    let keys = ["pegboard.seed", "pegboard.size"]
+    defer { keys.forEach(UserDefaults.standard.removeObject) }
+    UserDefaults.standard.set(7, forKey: "pegboard.seed")
+    let device = try #require(MTLCreateSystemDefaultDevice()), queue = try #require(device.makeCommandQueue())
+    let (w, h) = (1512, 982)
+    let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: w, height: h, mipmapped: false)
+    descriptor.usage = [.renderTarget, .shaderRead]
+    descriptor.storageMode = .shared
+    func firstFrame(of scene: SKScene) throws -> Int { // how many of its pixels are bright
+        let renderer = SKRenderer(device: device), target = try #require(device.makeTexture(descriptor: descriptor)), pass = MTLRenderPassDescriptor()
+        renderer.scene = scene
+        pass.colorAttachments[0].texture = target
+        pass.colorAttachments[0].loadAction = .clear
+        pass.colorAttachments[0].storeAction = .store
+        let start = ProcessInfo.processInfo.systemUptime + 1
+        for _ in 0..<2 {
+            renderer.update(atTime: start)
+            let buffer = try #require(queue.makeCommandBuffer())
+            renderer.render(withViewport: CGRect(x: 0, y: 0, width: w, height: h), commandBuffer: buffer, renderPassDescriptor: pass)
+            buffer.commit()
+            buffer.waitUntilCompleted()
+        }
+        var raw = [UInt32](repeating: 0, count: w * h)
+        target.getBytes(&raw, bytesPerRow: w * 4, from: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0)
+        return raw.count { max($0 & 255, $0 >> 8 & 255, $0 >> 16 & 255) > 60 }
+    }
+    let desktop = PegBoard(size: CGSize(width: w / 2, height: h / 2)), page = PegBoard(size: CGSize(width: w / 2, height: h / 2))
+    let asked: SKScene = page
+    (asked as? HeadStart)?.headStart()
+    #expect(page.phase == .showing && desktop.phase == .building && page.sequence == desktop.sequence)
+    let (empty, whole) = (try firstFrame(of: desktop), try firstFrame(of: page))
+    UserDefaults.standard.set(0.0, forKey: "pegboard.size")
+    #expect(page.built == 0 && page.phase == .showing && desktop.built == 0 && desktop.phase == .building)
+    let larger = try firstFrame(of: page)
+    print("Peg Board's first frame: \(empty) bright pixels on the desktop's copy, \(whole) on Settings' own, and \(larger) on it after a change to Large pegs")
+    #expect(empty < 500 && whole > 20000 && larger > 20000)
+}
+
 /// With PEGBOARD_STILL set to a file (.png or .jpg): one picture of the sheet on a display of 1512 by 982 points,
 /// drawn PEGBOARD_STILL_WIDTH pixels across (1600 for docs/images, 1200 for Settings' preview), after
-/// SNAPSHOT_SECONDS with SNAPSHOT_DEFAULTS as the render test takes them. Drawn at the size it is shown at, because
+/// SNAPSHOT_SECONDS with SNAPSHOT_DEFAULTS as the render test takes them (and given Settings' head start first,
+/// with PEGBOARD_HEAD_START set). Drawn at the size it is shown at, because
 /// a still reduced afterwards shows a weave in the dotted sheet.
 @MainActor @Test(.enabled(if: ProcessInfo.processInfo.environment["PEGBOARD_STILL"] != nil))
 func pegBoardStill() throws {
@@ -240,7 +283,9 @@ func pegBoardStill() throws {
     descriptor.usage = [.renderTarget, .shaderRead]
     descriptor.storageMode = .shared
     let renderer = SKRenderer(device: device), target = try #require(device.makeTexture(descriptor: descriptor)), pass = MTLRenderPassDescriptor()
-    renderer.scene = PegBoard(size: CGSize(width: 1512, height: 982))
+    let scene = PegBoard(size: CGSize(width: 1512, height: 982))
+    if env["PEGBOARD_HEAD_START"] != nil { scene.headStart() }
+    renderer.scene = scene
     pass.colorAttachments[0].texture = target
     pass.colorAttachments[0].loadAction = .clear
     pass.colorAttachments[0].storeAction = .store
