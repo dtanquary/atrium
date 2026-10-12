@@ -393,7 +393,7 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
 }
 
 /// Full Speed on Battery shows on only once it's been set, so turning mains power down doesn't show it stuck on.
-@Test func fullSpeedOnBatteryOnlyOnceSet() {
+@MainActor @Test func fullSpeedOnBatteryOnlyOnceSet() {
     let defaults = UserDefaults.standard
     defer { Power.knobs.forEach { defaults.removeObject(forKey: $0.key) } }
     defaults.removeObject(forKey: Power.battery.key)
@@ -405,7 +405,7 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
 
 /// Held on a world seen only from the ground, with Views from the surface off, Solar System Tour still shows it
 /// rather than nothing.
-@Test func tourHeldOnGroundOnlyWorldShowsIt() {
+@MainActor @Test func tourHeldOnGroundOnlyWorldShowsIt() {
     let defaults = UserDefaults.standard
     defer { ["solar.body", "solar.surface", "solar.seen", "solar.recent"].forEach(defaults.removeObject) }
     defaults.set("Eros", forKey: "solar.body")
@@ -415,7 +415,7 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
 
 /// Knob values are cached for scenes that read them every frame, but a change shows at once, to a scene's own
 /// handler for the change too.
-@Test func knobValueFollowsChanges() {
+@MainActor @Test func knobValueFollowsChanges() {
     let knob = Knob(key: "test.knob", label: "", range: 0...1, standard: 0.25), defaults = UserDefaults.standard
     defer { defaults.removeObject(forKey: knob.key) }
     #expect(knob.value == 0.25)
