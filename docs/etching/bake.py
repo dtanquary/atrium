@@ -1,11 +1,11 @@
-"""Turns a picture into the route Line Drawing's stylus takes: one unbroken line, the picture's own outlines first
-and then its shading, written as Sources/Atrium/Resources/line-<name>.route (docs/line-drawing.md has the format).
+"""Turns a picture into the route Etching's stylus takes: one unbroken line, the picture's own outlines first
+and then its shading, written as Sources/Atrium/Resources/etching-<name>.route (docs/etching.md has the format).
 
     python3 bake.py <folder of source pictures> <Resources folder> [name ...] [--fine]
 
 The source pictures are not in the repo: PICTURES gives each one's address, and the file name it is looked for
 under. Needs numpy, scipy and Pillow, and clang for route.c. --fine bakes the half-width line (twice the detail)
-as line-<name>-fine.route.
+as etching-<name>-fine.route.
 
 The grid is the stylus's own: a cell is one step, 1024 x 640 of them to a 16:10 screen (2048 x 1280 fine), and the
 line is 1.44 cells wide. Measured on the real toy, a line is about 1/700 of the screen's width.
@@ -142,7 +142,7 @@ def wanted(d, rect, seed=1):
 
 def route(tier, start, bridge=20):
     """The stylus's cells in order, and how it came to each: 0 drawing, 1 back along its own line, 2 a stray mark."""
-    lib = os.path.join(tempfile.gettempdir(), "line-drawing-route.dylib")
+    lib = os.path.join(tempfile.gettempdir(), "etching-route.dylib")
     subprocess.check_call(["clang", "-O2", "-shared", "-o", lib, os.path.join(HERE, "route.c")])
     C = ctypes.CDLL(lib); p = ctypes.c_void_p
     C.route.restype = ctypes.c_long
@@ -190,7 +190,7 @@ if __name__ == "__main__":
         cells, kind = route(tier, start)
         assert not (kind[1:] == 3).any(), "the line lifted"
         data, nruns, clock = pack(cells, kind, grid, rect)
-        out = os.path.join(dst, f"line-{name}{'-fine' if fine else ''}.route")
+        out = os.path.join(dst, f"etching-{name}{'-fine' if fine else ''}.route")
         open(out, "wb").write(data)
         stray = int((kind == 2).sum())
         print(f"{os.path.basename(out)}: {len(cells) - 1} steps in {nruns} runs, {len(data)} bytes; clock {clock:.1f} cells = "

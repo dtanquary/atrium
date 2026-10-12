@@ -5,10 +5,10 @@ import SpriteKit
 import Testing
 @testable import Atrium
 
-/// A shipped route decodes to the steps and the clock its bake printed (docs/line-drawing/bake.py), never leaves
+/// A shipped route decodes to the steps and the clock its bake printed (docs/etching/bake.py), never leaves
 /// its grid and never lifts: each step is to a cell beside the last.
 @Test func lineRouteDecodesToItsKnownLength() throws {
-    let file = try Data(contentsOf: resource("line-wave.route")), route = try #require(LineRoute(file))
+    let file = try Data(contentsOf: resource("etching-wave.route")), route = try #require(LineRoute(file))
     #expect(route.steps == 238_714 && route.x.count == 238_715 && (route.columns, route.rows) == (1024, 640))
     #expect(abs(route.clock - 174_451.7) < 1 && abs(route.t[route.steps] - route.clock) < 1, "clock \(route.t[route.steps]) against \(route.clock)")
     #expect(route.x.allSatisfy { $0 > 0 && $0 < 1024 } && route.y.allSatisfy { $0 > 0 && $0 < 640 })
@@ -21,35 +21,35 @@ import Testing
 
 /// Every picture in the set has a route at both widths of line: each decodes, to the steps its heading promises,
 /// on the standard grid or the fine one of twice as many cells each way, and the fine one takes the longer.
-@MainActor @Test func lineDrawingHasEveryPictureAtBothWidths() throws {
-    for (place, picture) in LineDrawing.pictures.enumerated() {
+@MainActor @Test func etchingHasEveryPictureAtBothWidths() throws {
+    for (place, picture) in Etching.pictures.enumerated() {
         for (fine, grid) in [(false, 1024), (true, 2048)] {
-            let file = try Data(contentsOf: resource("line-\(picture.file)\(fine ? "-fine" : "").route")), route = try #require(LineRoute(file), "\(picture.name)")
+            let file = try Data(contentsOf: resource("etching-\(picture.file)\(fine ? "-fine" : "").route")), route = try #require(LineRoute(file), "\(picture.name)")
             #expect(route.columns == grid && route.rows == grid * 5 / 8 && route.x.count == route.steps + 1 && route.steps > 50_000, "\(picture.name), fine \(fine)")
             #expect(route.rect.x > 0 && route.rect.y > 0 && route.rect.x + route.rect.w < grid && route.rect.y + route.rect.h < grid * 5 / 8)
         }
-        #expect(LineDrawing.seconds[0][place] > 1500 && LineDrawing.seconds[1][place] > 1.5 * LineDrawing.seconds[0][place], "\(picture.name) takes \(LineDrawing.seconds.map { $0[place] })")
+        #expect(Etching.seconds[0][place] > 1500 && Etching.seconds[1][place] > 1.5 * Etching.seconds[0][place], "\(picture.name) takes \(Etching.seconds.map { $0[place] })")
     }
     // at the top of the Speed slider the longest, fine, is done in a few minutes
-    #expect(LineDrawing.seconds[1].max()! / LineDrawing.speed.range.upperBound < 300)
+    #expect(Etching.seconds[1].max()! / Etching.speed.range.upperBound < 300)
 }
 
 /// A route stamped for a 14-inch screen: the line covers a fifth of it, the first row of bytes is the bottom of the
 /// screen (where the stylus starts, at the frame's lower left corner, at the very start of the clock), and times
 /// run on to the clock's end. Prints how long decoding and stamping take.
 @Test func lineRouteStampsItsTextures() throws {
-    let file = try Data(contentsOf: resource("line-wave.route")), clock = ContinuousClock()
+    let file = try Data(contentsOf: resource("etching-wave.route")), clock = ContinuousClock()
     var route: LineRoute!, stamped: LineRoute.Stamped!
     let decoding = clock.measure { route = LineRoute(file) }
     let (w, h) = (3024, 1964), scale = min(Double(w) / 1024, Double(h) / 640), (dx, dy) = ((Double(w) - 1024 * scale) / 2, (Double(h) - 640 * scale) / 2)
     let stamping = clock.measure { stamped = route.stamp(width: w, height: h, scale: scale, dx: dx, dy: dy) }
     func ms(_ span: Duration) -> Double { Double(span.components.attoseconds) / 1e15 + Double(span.components.seconds) * 1000 }
     let making = clock.measure { _ = SKTexture(data: stamped.when, size: CGSize(width: w, height: h)) }
-    print(String(format: "Line Drawing, the Wave for 3024 x 1964: decoded in %.0f ms, stamped in %.0f ms, made a texture in %.1f ms", ms(decoding), ms(stamping), ms(making)))
+    print(String(format: "Etching, the Wave for 3024 x 1964: decoded in %.0f ms, stamped in %.0f ms, made a texture in %.1f ms", ms(decoding), ms(stamping), ms(making)))
     // and the fine route, of four times the steps, at the same size
-    let fine = try #require(LineRoute(try Data(contentsOf: resource("line-wave-fine.route"))))
+    let fine = try #require(LineRoute(try Data(contentsOf: resource("etching-wave-fine.route"))))
     let finer = clock.measure { _ = fine.stamp(width: w, height: h, scale: scale / 2, dx: dx, dy: dy) }
-    print(String(format: "Line Drawing, the Wave's fine route (%d steps) for 3024 x 1964: stamped in %.0f ms", fine.steps, ms(finer)))
+    print(String(format: "Etching, the Wave's fine route (%d steps) for 3024 x 1964: stamped in %.0f ms", fine.steps, ms(finer)))
     let when = [UInt8](stamped.when), again = [UInt8](stamped.more)
     func time(_ p: Int) -> Int { Int(when[p * 4]) << 16 | Int(when[p * 4 + 1]) << 8 | Int(when[p * 4 + 2]) }
     let drawn = (0..<w * h).filter { when[$0 * 4 + 3] > 127 }
@@ -63,7 +63,7 @@ import Testing
     #expect(Double(twice.count) / Double(drawn.count) > 0.2 && twice.allSatisfy { Int(again[$0 * 4]) << 8 | Int(again[$0 * 4 + 1]) >= time($0) >> 8 })
 }
 
-/// Draws a Line Drawing offscreen on a display `w` by `h` pixels at 2x, a frame at a time.
+/// Draws a Etching offscreen on a display `w` by `h` pixels at 2x, a frame at a time.
 @MainActor private final class Screen {
     let renderer: SKRenderer, queue: MTLCommandQueue, target: MTLTexture, pass = MTLRenderPassDescriptor()
     let (w, h): (Int, Int)
@@ -77,7 +77,7 @@ import Testing
         descriptor.storageMode = .shared
         (renderer, queue, target) = (SKRenderer(device: device), try #require(device.makeCommandQueue()), try #require(device.makeTexture(descriptor: descriptor)))
         (self.w, self.h) = (w, h)
-        renderer.scene = LineDrawing(size: CGSize(width: w / 2, height: h / 2))
+        renderer.scene = Etching(size: CGSize(width: w / 2, height: h / 2))
         pass.colorAttachments[0].texture = target
         pass.colorAttachments[0].loadAction = .clear
         pass.colorAttachments[0].storeAction = .store
@@ -119,8 +119,8 @@ private func ink(_ pixels: [UInt32]) -> Int {
 /// The picture is the same whatever the frame rate: begun 40% drawn and run for two seconds at the top of the Speed
 /// slider, drawn at 15, 30 and 60 frames a second, every pixel is the same; and it has moved on from where it began.
 /// (The clock is the wall's, by way of each frame's own time, and the shader is told nothing else.)
-@MainActor @Test func lineDrawingLooksTheSameAtAnyFrameRate() throws {
-    try with(["linedrawing.drawn": 0.4, LineDrawing.speed.key: 60, LineDrawing.picture.key: 1]) {
+@MainActor @Test func etchingLooksTheSameAtAnyFrameRate() throws {
+    try with(["etching.drawn": 0.4, Etching.speed.key: 60, Etching.picture.key: 1]) {
         var pictures: [[UInt32]] = []
         for rate in [15.0, 30.0, 60.0] {
             let screen = try Screen(1512, 982)
@@ -141,10 +141,10 @@ private func ink(_ pixels: [UInt32]) -> Int {
 /// A picture is drawn, rests, clears and gives way to the next, by the wall clock alone. Moving the Speed slider
 /// leaves it as far along as it was; picking another picture clears this one for it there and then; Random never
 /// draws the same picture twice running; and a Mac that was away for a day comes back to a picture part-way through.
-@Test func lineDrawingCycleFollowsTheClock() {
+@Test func etchingCycleFollowsTheClock() {
     let seconds = [600.0, 300, 900], next = { (was: Int) in (was + 1) % 3 }
-    var cycle = LineDrawing.Cycle(picture: 0, before: nil, began: 1000, paced: 1, following: nil, picked: 0)
-    func at(_ wall: Double, speed: Double = 1, pick: Int = 0) -> LineDrawing.Cycle.Moment { cycle.moment(at: wall, speed: speed, pick: pick, seconds: seconds, another: next) }
+    var cycle = Etching.Cycle(picture: 0, before: nil, began: 1000, paced: 1, following: nil, picked: 0)
+    func at(_ wall: Double, speed: Double = 1, pick: Int = 0) -> Etching.Cycle.Moment { cycle.moment(at: wall, speed: speed, pick: pick, seconds: seconds, another: next) }
     #expect(at(1000) == .init(picture: 0, before: nil, drawn: 0, cleared: 0, following: nil))
     #expect(at(1300).drawn == 0.5 && at(1600).drawn == 1)
     #expect(at(1899) == .init(picture: 0, before: nil, drawn: 1, cleared: 0, following: nil)) // resting: 300 s at speed 1
@@ -163,7 +163,7 @@ private func ink(_ pixels: [UInt32]) -> Int {
     let later = at(2075 + 86_400, speed: 2, pick: 0)
     #expect(later.picture != later.before && later.drawn >= 0 && later.drawn <= 1 && cycle.began <= 2075 + 86_400)
     // the other width of line takes twice as long: the picture stays as far drawn as it was
-    var other = LineDrawing.Cycle(picture: 0, before: nil, began: 0, paced: 2, following: nil, picked: 0)
+    var other = Etching.Cycle(picture: 0, before: nil, began: 0, paced: 2, following: nil, picked: 0)
     other.stretch(at: 100, from: 600, to: 1200)
     #expect(other.moment(at: 100, speed: 2, pick: 0, seconds: [1200, 300, 900], another: next).drawn == 1.0 / 3)
 }
@@ -171,31 +171,31 @@ private func ink(_ pixels: [UInt32]) -> Int {
 /// A finished picture clears to a faint ghost, and the next is drawn over it: full, half cleared, and the next
 /// picture just begun hold less and less line, and the ghost holds some. Drawn too at a 5K display's size, where
 /// the textures have a texel to two pixels each way and the shader reads four of them.
-@MainActor @Test func lineDrawingClearsToAGhost() throws {
+@MainActor @Test func etchingClearsToAGhost() throws {
     func drawn(_ hooks: [String: Double], _ w: Int = 1512, _ h: Int = 982) throws -> [UInt32] {
         var pixels: [UInt32] = []
-        try with(hooks.merging([LineDrawing.picture.key: 1]) { $1 }) { pixels = try Screen(w, h).settled() }
+        try with(hooks.merging([Etching.picture.key: 1]) { $1 }) { pixels = try Screen(w, h).settled() }
         return pixels
     }
-    let full = ink(try drawn(["linedrawing.drawn": 1])), clearing = ink(try drawn(["linedrawing.cleared": 0.5]))
+    let full = ink(try drawn(["etching.drawn": 1])), clearing = ink(try drawn(["etching.cleared": 0.5]))
     #expect(full > 4 * 1512 * 982 && clearing < full * 3 / 4 && clearing > full / 8, "ink: full \(full), half cleared \(clearing)")
     // the ghost: the bare screen, a few levels darker along another picture's whole line and nowhere much darker
-    let bare = try drawn(["linedrawing.drawn": 0]), ghost = try drawn(["linedrawing.drawn": 0, "linedrawing.ghost": 1])
+    let bare = try drawn(["etching.drawn": 0]), ghost = try drawn(["etching.drawn": 0, "etching.ghost": 1])
     let fainter = zip(bare, ghost).map { Int($0 & 255) - Int($1 & 255) }, lines = fainter.count { $0 >= 4 }
     #expect(lines > 1512 * 982 / 30 && fainter.max()! < 30 && fainter.min()! > -3, "the ghost darkens \(lines) pixels, by \(fainter.max()!) at the most")
-    let big = ink(try drawn(["linedrawing.drawn": 1], 5120, 2880)), share = Double(big) / Double(5120 * 2880) / (Double(full) / Double(1512 * 982))
+    let big = ink(try drawn(["etching.drawn": 1], 5120, 2880)), share = Double(big) / Double(5120 * 2880) / (Double(full) / Double(1512 * 982))
     #expect(share > 0.7 && share < 1.4, "at 5K the picture holds \(share) of the line it does at 14 inches, pixel for pixel")
 }
 
 /// The fine line: the same picture from its fine route is drawn, with a thinner line (fewer pixels as dark as a
 /// line's middle, though it holds more line). And at either width nothing is drawn in the top 4% of the screen,
 /// which the menu bar covers.
-@MainActor @Test func lineDrawingDrawsTheFineLine() throws {
+@MainActor @Test func etchingDrawsTheFineLine() throws {
     NSApplication.shared.appearance = NSAppearance(named: .aqua) // the levels below are Light Mode's
     defer { NSApplication.shared.appearance = nil }
     func finished(fine: Double) throws -> [UInt32] {
         var pixels: [UInt32] = []
-        try with(["linedrawing.drawn": 1, LineDrawing.picture.key: 2, LineDrawing.detail.key: fine]) { pixels = try Screen(3024, 1964).settled() }
+        try with(["etching.drawn": 1, Etching.picture.key: 2, Etching.detail.key: fine]) { pixels = try Screen(3024, 1964).settled() }
         return pixels
     }
     let standard = try finished(fine: 0), fine = try finished(fine: 1)
@@ -209,10 +209,10 @@ private func ink(_ pixels: [UInt32]) -> Int {
 
 /// The screen goes to the system's other mode by itself, under the picture: light, then two seconds after Dark
 /// Mode comes on, the dim screen.
-@MainActor @Test func lineDrawingFollowsTheAppearance() throws {
+@MainActor @Test func etchingFollowsTheAppearance() throws {
     defer { NSApplication.shared.appearance = nil }
     func level(_ pixels: [UInt32]) -> Int { pixels.map { Int($0 & 255) }.sorted()[pixels.count * 9 / 10] }
-    try with(["linedrawing.drawn": 0.3]) {
+    try with(["etching.drawn": 0.3]) {
         NSApplication.shared.appearance = NSAppearance(named: .aqua)
         let screen = try Screen(756, 491), light = level(try screen.settled())
         NSApplication.shared.appearance = NSAppearance(named: .darkAqua)

@@ -11,7 +11,7 @@ let package = Package(
         // Meander's river and the ground it writes on: the same, for the same reason. A new river is given two hours
         // of past as its scene is built, 90 ms optimised and seconds if not.
         .target(name: "MeanderRiver", swiftSettings: [.unsafeFlags(["-O"])]),
-        // Line Drawing's routes and the stamping of one into a display's worth of texels: the same again. A quarter
+        // Etching's routes and the stamping of one into a display's worth of texels: the same again. A quarter
         // of a million steps are stamped as its scene is built, 120 ms optimised for a 14-inch screen.
         .target(name: "LineRoute", swiftSettings: [.unsafeFlags(["-O"])]),
         // Peg Board's lattice: the snow crystal grown on it and the glow stamped as pegs go in. The same again.

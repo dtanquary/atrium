@@ -2,7 +2,7 @@ import LineRoute
 import SpriteKit
 import Synchronization
 
-@MainActor func lineDrawing(size: CGSize) -> SKScene { LineDrawing(size: size) }
+@MainActor func etching(size: CGSize) -> SKScene { Etching(size: size) }
 
 /// A picture drawn in one unbroken line on a screen of grey powder, as on the toy with two dials: the stylus scrapes
 /// the powder off the back of the glass, so the line is the dark inside showing through, and it can never lift. An
@@ -10,34 +10,32 @@ import Synchronization
 /// has drawn to get from place to place, which darkens them. A finished picture rests, clears as a shake would,
 /// unevenly and leaving a ghost, and another begins over it.
 ///
-/// A picture is a shipped route (`LineRoute`, made by docs/line-drawing/bake.py), stamped once into two textures:
+/// A picture is a shipped route (`LineRoute`, made by docs/etching/bake.py), stamped once into two textures:
 /// when each texel is first drawn, and when it is gone over again. The shader compares those with a clock, so a
 /// frame costs the same however much is drawn. The clock is the wall's (`Cycle`): the picture goes on from where it
 /// was after a relaunch or Shuffle, and every display shows the same moment of it.
-/// docs/line-drawing.md has the measurements of the real toy, the route's format and the sources.
-final class LineDrawing: SKScene {
-    /// Its name, in this one place: a working name until one is settled.
-    nonisolated static let title = "Line Drawing"
-    /// The set: each picture's name in the Picture menu, and its route's file (`line-<file>.route`). Each one's
-    /// source and licence is in Resources/line-drawing-credits.tsv and docs/line-drawing.md.
+/// docs/etching.md has the measurements of the real toy, the route's format and the sources.
+final class Etching: SKScene {
+    /// The set: each picture's name in the Picture menu, and its route's file (`etching-<file>.route`). Each one's
+    /// source and licence is in Resources/etching-credits.tsv and docs/etching.md.
     nonisolated static let pictures: [(name: String, file: String)] = [
         ("The Great Wave", "wave"), ("The Rhinoceros", "rhinoceros"), ("A Flea", "flea"), ("Interlace", "interlace"),
         ("Flying Machine", "flyer"), ("Mishima Pass", "mishima"),
     ]
     /// Which picture: Random, a different one each time, or one of the set over and over. Picking one clears the
     /// screen for it there and then.
-    nonisolated static let picture = Knob(key: "linedrawing.picture", label: "Picture", range: 0...Double(pictures.count), standard: 0, section: "Drawing",
+    nonisolated static let picture = Knob(key: "etching.picture", label: "Picture", range: 0...Double(pictures.count), standard: 0, section: "Drawing",
                                           format: .choice(["Random"] + pictures.map(\.name)))
     /// The line's width: the toy's own, about 1/700 of the screen's width, or half that, which holds twice the
-    /// detail each way, takes about twice as long, and looks more like a fine pen than the toy (`line-<file>-fine.route`).
-    nonisolated static let detail = Knob(key: "linedrawing.detail", label: "Detail", range: 0...1, standard: 0, section: "Drawing", format: .choice(["Standard", "Fine"]))
+    /// detail each way, takes about twice as long, and looks more like a fine pen than the toy (`etching-<file>-fine.route`).
+    nonisolated static let detail = Knob(key: "etching.detail", label: "Detail", range: 0...1, standard: 0, section: "Drawing", format: .choice(["Standard", "Fine"]))
     /// How many times faster than a careful hand: at 1 the stylus crosses a fortieth of the screen's width a
     /// second and a picture takes up to two hours (four, fine); at the top one is done in two minutes (four).
-    nonisolated static let speed = Knob(key: "linedrawing.speed", label: "Speed", range: 1...60, standard: 1, section: "Drawing", format: .times)
+    nonisolated static let speed = Knob(key: "etching.speed", label: "Speed", range: 1...60, standard: 1, section: "Drawing", format: .times)
     nonisolated static let knobs = [picture, detail, speed]
 
     /// A picture's route at one of the two widths of line.
-    private static func route(_ picture: Int, fine: Bool) -> Data? { try? Data(contentsOf: resource("line-\(pictures[picture].file)\(fine ? "-fine" : "").route")) }
+    private static func route(_ picture: Int, fine: Bool) -> Data? { try? Data(contentsOf: resource("etching-\(pictures[picture].file)\(fine ? "-fine" : "").route")) }
 
     /// Screen widths the stylus crosses in a second at speed 1: an eighth of a turn of a dial a second on the toy.
     private static let pace = 1.0 / 40
@@ -123,8 +121,8 @@ final class LineDrawing: SKScene {
         func place(_ key: String) -> Int? { defaults.string(forKey: key).flatMap { file in pictures.firstIndex { $0.file == file } } }
         func another(than picture: Int) -> Int { pictures.indices.filter { $0 != picture && seconds[$0] > 0 }.randomElement() ?? picture }
         if cycle == nil {
-            if let picture = place("linedrawing.drawing"), let began = defaults.object(forKey: "linedrawing.began") as? Double {
-                cycle = Cycle(picture: picture, before: place("linedrawing.before"), began: began, paced: speed, following: nil, picked: pick)
+            if let picture = place("etching.drawing"), let began = defaults.object(forKey: "etching.began") as? Double {
+                cycle = Cycle(picture: picture, before: place("etching.before"), began: began, paced: speed, following: nil, picked: pick)
             } else {
                 cycle = Cycle(picture: pick > 0 ? pick - 1 : another(than: -1), before: nil, began: wall, paced: speed, following: nil, picked: pick)
             }
@@ -135,9 +133,9 @@ final class LineDrawing: SKScene {
         let now = [pictures[cycle!.picture].file, cycle!.before.map { pictures[$0].file } ?? "", String(cycle!.began)]
         if now != saved {
             saved = now
-            defaults.set(now[0], forKey: "linedrawing.drawing")
-            defaults.set(now[1], forKey: "linedrawing.before")
-            defaults.set(cycle!.began, forKey: "linedrawing.began")
+            defaults.set(now[0], forKey: "etching.drawing")
+            defaults.set(now[1], forKey: "etching.before")
+            defaults.set(cycle!.began, forKey: "etching.began")
         }
         return moment
     }
@@ -173,8 +171,8 @@ final class LineDrawing: SKScene {
     private var held: Held?, cover: Data?, stamping: (of: Held, landing: Landing)?, made: (of: Held, stamped: LineRoute.Stamped)?
     /// The wall-clock moment the picture last went in on a bare screen: it fades up from there.
     private var shownAt: Double?, bare = true
-    /// What the tests and the pictures of it ask for as a scene is built: the share drawn (`linedrawing.drawn`), how
-    /// far cleared (`linedrawing.cleared`), and whether another picture's ghost lies under it (`linedrawing.ghost`).
+    /// What the tests and the pictures of it ask for as a scene is built: the share drawn (`etching.drawn`), how
+    /// far cleared (`etching.cleared`), and whether another picture's ghost lies under it (`etching.ghost`).
     /// With any of them the scene keeps a cycle of its own, begun at its first frame, and saves nothing.
     private var asked: (drawn: Double, cleared: Double, ghost: Bool)?, own: Cycle?
     /// The mode the screen is in, 0 in Light and 1 in Dark, and on its way to the system's; and the system's, watched.
@@ -192,7 +190,7 @@ final class LineDrawing: SKScene {
         tint()
         appearance = NSApplication.shared.observe(\.effectiveAppearance) { [weak self] _, _ in MainActor.assumeIsolated { self?.dark = systemIsDark } }
         // The display's own pixels, and a texel to each; from the 14-inch size up, a texel to two each way, which
-        // is a pixel softer and a quarter of the memory (docs/line-drawing.md, "Cost").
+        // is a pixel softer and a quarter of the memory (docs/etching.md, "Cost").
         let factor = NSScreen.screens.first { $0.frame.size == size }?.backingScaleFactor ?? 2
         let pixels = SIMD2(Double(size.width * factor).rounded(), Double(size.height * factor).rounded())
         let half = pixels.x * pixels.y > 6_500_000
@@ -204,12 +202,12 @@ final class LineDrawing: SKScene {
             SKUniform(name: "u_grain", texture: Self.grain), texels, when, more, clock, show, clear, screen, ink])
         addChild(sprite)
 
-        let defaults = UserDefaults.standard, hooks = ["linedrawing.drawn", "linedrawing.cleared", "linedrawing.ghost"].map { defaults.object(forKey: $0) as? Double }
+        let defaults = UserDefaults.standard, hooks = ["etching.drawn", "etching.cleared", "etching.ghost"].map { defaults.object(forKey: $0) as? Double }
         if hooks.contains(where: { $0 != nil }) { asked = (min(max(hooks[0] ?? 0, 0), 1), min(max(hooks[1] ?? 0, 0), 1), (hooks[2] ?? 0) > 0.5) }
     }
 
     /// The powder and the dark inside, for the mode the screen is in: 152 of 255 in a lit room and 104 in a dim
-    /// one, the line a third as light (docs/line-drawing.md, "Look").
+    /// one, the line a third as light (docs/etching.md, "Look").
     private func tint() {
         func tone(_ r: Float, _ g: Float, _ b: Float) -> SIMD3<Float> { SIMD3(r, g, b) / 255 }
         let mix = SIMD3<Float>(repeating: Float(simd_smoothstep(0, 1, shade)))

@@ -1,4 +1,4 @@
-// The router of docs/line-drawing/bake.py: the one slow loop, in C. bake.py builds it with clang when it runs.
+// The router of docs/etching/bake.py: the one slow loop, in C. bake.py builds it with clang when it runs.
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>

@@ -1,10 +1,10 @@
 import Foundation
 
 /// The route a stylus takes to draw one picture in one unbroken line, and the stamping of it into the textures
-/// Line Drawing's shader reads. Routes are made by docs/line-drawing/bake.py and shipped as `line-<name>.route`:
+/// Etching's shader reads. Routes are made by docs/etching/bake.py and shipped as `etching-<name>.route`:
 /// the picture's own outlines first, then each depth of its shading, the stylus going back along lines already
 /// drawn to get from place to place. This is the numeric half, built optimised even in debug (Package.swift):
-/// a quarter of a million steps stamped into a display's worth of texels. docs/line-drawing.md has the format.
+/// a quarter of a million steps stamped into a display's worth of texels. docs/etching.md has the format.
 public struct LineRoute: Sendable {
     /// The stylus's grid, in cells: one cell is one step.
     public let columns: Int, rows: Int

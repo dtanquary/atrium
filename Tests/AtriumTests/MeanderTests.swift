@@ -1342,9 +1342,9 @@ private func ripple(_ picture: [UInt32], side: Int, texel: Int, counts: (_ x: In
 }
 
 /// Meander changes mode by itself, so the app must not build it afresh when the appearance changes: its entry says
-/// so. So does Line Drawing's, whose screen eases to the other mode under the picture; no other wallpaper's does
+/// so. So does Etching's, whose screen eases to the other mode under the picture; no other wallpaper's does
 /// (each of those is built to the mode it starts in).
 @MainActor @Test func onlyTheseFollowTheAppearanceThemselves() {
-    #expect(allScenes.filter(\.followsAppearance).map(\.name) == [LineDrawing.title, "Meander"])
+    #expect(allScenes.filter(\.followsAppearance).map(\.name) == ["Etching", "Meander"])
 }
 
