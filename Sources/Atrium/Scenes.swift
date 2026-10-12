@@ -95,6 +95,8 @@ struct Refresh {
               make: blackHole, knobs: BlackHole.knobs, palettes: BlackHole.palette),
     Wallpaper(name: "Meander", icon: "point.bottomleft.forward.to.point.topright.scurvepath", tint: .teal,
               blurb: "A river wandering across its floodplain, leaving its old courses behind.", make: meander, knobs: Meander.knobs, looks: Meander.palettes, followsAppearance: true),
+    Wallpaper(name: LineDrawing.title, icon: "scribble.variable", tint: .gray, blurb: "An old print drawn in one unbroken line, a little at a time.",
+              make: lineDrawing, knobs: LineDrawing.knobs, unfinished: true),
     Wallpaper(name: "Live Sky", icon: "moon.stars.fill", tint: .blue, blurb: "The real sky above you, right now.",
               make: liveSky, knobs: LiveSky.knobs),
     Wallpaper(name: "Earth from Orbit", icon: "globe.americas.fill", tint: .cyan, blurb: "Day and night sweeping over the globe.",

@@ -11,8 +11,11 @@ let package = Package(
         // Meander's river and the ground it writes on: the same, for the same reason. A new river is given two hours
         // of past as its scene is built, 90 ms optimised and seconds if not.
         .target(name: "MeanderRiver", swiftSettings: [.unsafeFlags(["-O"])]),
+        // Line Drawing's routes and the stamping of one into a display's worth of texels: the same again. A quarter
+        // of a million steps are stamped as its scene is built, 120 ms optimised for a 14-inch screen.
+        .target(name: "LineRoute", swiftSettings: [.unsafeFlags(["-O"])]),
         // Resources are copied into the .app by build.sh and found with resource(_:), not Bundle.module.
-        .executableTarget(name: "Atrium", dependencies: ["TreeGrowth", "MeanderRiver"], exclude: ["Resources"]),
+        .executableTarget(name: "Atrium", dependencies: ["TreeGrowth", "MeanderRiver", "LineRoute"], exclude: ["Resources"]),
         .testTarget(name: "AtriumTests", dependencies: ["Atrium"]),
     ]
 )
