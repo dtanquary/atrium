@@ -17,7 +17,7 @@ Dave asked for it on 2026-10-12, slowly evolving and "based on realistic ant mov
 |---|---|
 | Name | Ant Colony |
 | What it shows | "that sideways clear view into the ant colony as it slowly forms and gets bigger" |
-| Look | "Gel and sand both", as a setting. Then, having seen both rounds of mock-ups: "all of what has been shown should be an option to select somehow". So every medium he was shown is a pick: the gel, sand dim and white, and earth |
+| Look | "Gel and sand both", as a setting. Then, having seen both rounds of mock-ups: "i love all of the ... mockups, all of what has been shown should be an option to select somehow". So every medium he was shown is a pick: the gel, sand dim and white, and earth |
 | The standard look | "Gel" |
 | The sand | "Both, as a setting; dim by default" |
 | Size of ant | "Middle, with a Size setting" |
