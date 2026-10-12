@@ -19,17 +19,24 @@ import Testing
     #expect(heading.steps == route.steps && heading.x.isEmpty)
 }
 
-/// Every picture in the set has a route at both widths of line: each decodes, to the steps its heading promises,
-/// on the standard grid or the fine one of twice as many cells each way, and the fine one takes the longer.
+/// Every picture in the set has a route at both widths of line, or at the fine one alone where it is a muddle at the
+/// standard line: then its name says so, and Random leaves it out while Detail is Standard. Each route decodes, to
+/// the steps its heading promises, on the standard grid or the fine one of twice as many cells each way, and the
+/// fine one takes the longer.
 @MainActor @Test func etchingHasEveryPictureAtBothWidths() throws {
+    #expect(Etching.pictures.count == 13 && Etching.picture.range.upperBound == 13)
     for (place, picture) in Etching.pictures.enumerated() {
-        for (fine, grid) in [(false, 1024), (true, 2048)] {
+        let alone = Etching.fineOnly[place], seconds = Etching.seconds.map { $0[place] }
+        #expect(alone == picture.name.hasSuffix("(Fine only)"), "\(picture.name)")
+        for (fine, grid) in [(false, 1024), (true, 2048)] where fine || !alone {
             let file = try Data(contentsOf: resource("etching-\(picture.file)\(fine ? "-fine" : "").route")), route = try #require(LineRoute(file), "\(picture.name)")
             #expect(route.columns == grid && route.rows == grid * 5 / 8 && route.x.count == route.steps + 1 && route.steps > 50_000, "\(picture.name), fine \(fine)")
             #expect(route.rect.x > 0 && route.rect.y > 0 && route.rect.x + route.rect.w < grid && route.rect.y + route.rect.h < grid * 5 / 8)
         }
-        #expect(Etching.seconds[0][place] > 1200 && Etching.seconds[1][place] > 1.3 * Etching.seconds[0][place], "\(picture.name) takes \(Etching.seconds.map { $0[place] })")
+        #expect(seconds[0] > 1200 && (alone ? seconds[1] == seconds[0] : seconds[1] > 1.3 * seconds[0]), "\(picture.name) takes \(seconds)")
     }
+    #expect(Etching.fineOnly.count { $0 } == 1)
+    #expect(Etching.choices(detailed: true) == Array(Etching.pictures.indices) && Etching.choices(detailed: false) == Etching.pictures.indices.filter { !Etching.fineOnly[$0] })
     // at the top of the Speed slider the longest, fine, is done in a few minutes
     #expect(Etching.seconds[1].max()! / Etching.speed.range.upperBound < 300)
 }
@@ -205,6 +212,15 @@ private func ink(_ pixels: [UInt32]) -> Int {
     func solid(_ pixels: [UInt32]) -> Double { Double(pixels.count { $0 & 255 < 75 }) / Double(pixels.count { $0 & 255 < 125 }) }
     #expect(solid(fine) < solid(standard), "fully dark share of the line: fine \(solid(fine)), standard \(solid(standard))")
     for pixels in [standard, fine] { #expect(!pixels[..<(3024 * (1964 * 4 / 100))].contains { $0 & 255 < 110 }, "a line under the menu bar") }
+    // a picture that ships fine only is drawn, and the same, whatever Detail says
+    func alone(detail: Double) throws -> [UInt32] {
+        var pixels: [UInt32] = []
+        let place = try #require(Etching.fineOnly.firstIndex(of: true))
+        try with(["etching.drawn": 1, Etching.picture.key: Double(place + 1), Etching.detail.key: detail]) { pixels = try Screen(1512, 982).settled() }
+        return pixels
+    }
+    let asStandard = try alone(detail: 0), asFine = try alone(detail: 1)
+    #expect(lines(asStandard) > 1512 * 982 / 20 && asStandard == asFine, "the fine-only picture has \(lines(asStandard)) pixels of line at Standard")
 }
 
 /// The screen's level: its pixels' blue, at the nine-tenths mark.

@@ -17,10 +17,13 @@ import Synchronization
 /// docs/etching.md has the measurements of the real toy, the route's format and the sources.
 final class Etching: SKScene {
     /// The set: each picture's name in the Picture menu, and its route's file (`etching-<file>.route`). Each one's
-    /// source and licence is in Resources/etching-credits.tsv and docs/etching.md.
+    /// source and licence is in Resources/etching-credits.tsv and docs/etching.md. The menu's pick is stored by
+    /// place, so a new picture goes at the end and none is moved.
     nonisolated static let pictures: [(name: String, file: String)] = [
         ("The Great Wave", "wave"), ("The Rhinoceros", "rhinoceros"), ("A Flea", "flea"), ("Interlace", "interlace"),
         ("Flying Machine", "flyer"), ("Mishima Pass", "mishima"),
+        ("Velocipede", "velocipede"), ("Airship", "airship"), ("Polyhedra", "polyhedra"), ("Kajikazawa", "kajikazawa"),
+        ("Twelve-Pointed Stars", "stars"), ("Woven Bands", "bands"), ("Pont Neuf (Fine only)", "pontneuf"),
     ]
     /// Which picture: Random, a different one each time, or one of the set over and over. Picking one clears the
     /// screen for it there and then.
@@ -30,8 +33,8 @@ final class Etching: SKScene {
     /// detail each way, takes about twice as long, and looks more like a fine pen than the toy (`etching-<file>-fine.route`).
     nonisolated static let detail = Knob(key: "etching.detail", label: "Detail", range: 0...1, standard: 0, section: "Drawing", format: .choice(["Standard", "Fine"]))
     /// How many times faster than a careful hand: at 1 the stylus crosses a fortieth of the screen's width a
-    /// second as it draws and a picture takes up to an hour and a half (three, fine); at the top one is done in
-    /// a minute and a half (three).
+    /// second as it draws and a picture takes up to an hour and a half (three, fine; four for the one that is
+    /// fine only); at the top the longest is done in about four minutes.
     nonisolated static let speed = Knob(key: "etching.speed", label: "Speed", range: 1...60, standard: 1, section: "Drawing", format: .times)
     /// The screen's powder: the bright one of a lit room, the dim one, or whichever suits the system's appearance.
     /// Bright is the standard, as every mock-up was, whatever the system is in.
@@ -39,7 +42,16 @@ final class Etching: SKScene {
     nonisolated static let knobs = [picture, detail, speed, powder]
 
     /// A picture's route at one of the two widths of line.
-    private static func route(_ picture: Int, fine: Bool) -> Data? { try? Data(contentsOf: resource("etching-\(pictures[picture].file)\(fine ? "-fine" : "").route")) }
+    private static func route(_ picture: Int, fine: Bool) -> Data? {
+        try? Data(contentsOf: resource("etching-\(pictures[picture].file)\(fine || fineOnly[picture] ? "-fine" : "").route"))
+    }
+    /// Whether a picture ships with no route for the standard line, being a muddle at that width: it is drawn
+    /// fine whatever Detail says, its name in the menu says so, and Random draws it only while Detail is Fine.
+    static let fineOnly: [Bool] = pictures.map { !FileManager.default.fileExists(atPath: resource("etching-\($0.file).route").path) }
+    /// The pictures Random may draw at one width of line.
+    static func choices(detailed: Bool) -> [Int] {
+        pictures.indices.filter { seconds[detailed ? 1 : 0][$0] > 0 && (detailed || !fineOnly[$0]) }
+    }
 
     /// Screen widths the stylus crosses in a second at speed 1: an eighth of a turn of a dial a second on the toy.
     private static let pace = 1.0 / 40
@@ -125,7 +137,7 @@ final class Etching: SKScene {
         let speed = Self.speed.value, pick = Int(Self.picture.value), defaults = UserDefaults.standard
         let detailed = Self.detail.value > 0.5, seconds = Self.seconds[detailed ? 1 : 0]
         func place(_ key: String) -> Int? { defaults.string(forKey: key).flatMap { file in pictures.firstIndex { $0.file == file } } }
-        func another(than picture: Int) -> Int { pictures.indices.filter { $0 != picture && seconds[$0] > 0 }.randomElement() ?? picture }
+        func another(than picture: Int) -> Int { choices(detailed: detailed).filter { $0 != picture }.randomElement() ?? picture }
         if cycle == nil {
             if let picture = place("etching.drawing"), let began = defaults.object(forKey: "etching.began") as? Double {
                 cycle = Cycle(picture: picture, before: place("etching.before"), began: began, paced: speed, following: nil, picked: pick)

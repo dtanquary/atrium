@@ -68,12 +68,12 @@ The app eases each position by one step (a quarter of each neighbour), so corner
 ## Making a route
 
 ```sh
-python3 docs/etching/bake.py <folder of source pictures> Sources/Atrium/Resources          # all six, standard
-python3 docs/etching/bake.py <folder of source pictures> Sources/Atrium/Resources --fine   # all six, fine
+python3 docs/etching/bake.py <folder of source pictures> Sources/Atrium/Resources          # every picture, standard
+python3 docs/etching/bake.py <folder of source pictures> Sources/Atrium/Resources --fine   # every picture, fine
 python3 docs/etching/bake.py <folder of source pictures> Sources/Atrium/Resources wave     # one
 ```
 
-Needs numpy, scipy, Pillow and clang (for `route.c`, the one slow loop). The source pictures are not in the repo: `PICTURES` in `bake.py` gives each one's address, the file name it is looked for under, and its crop. A bake is the same every time. What it does:
+Needs numpy, scipy, Pillow and clang (for `route.c`, the one slow loop). The source pictures are not in the repo: `PICTURES` in `bake.py` gives each one's address, the file name it is looked for under, and its crop, with what else it needed: a sheet turned on its side (`rot`), signatures painted out (`blank`), or a plate's faint construction lines dropped (`lift`). A patent's file is one sheet of the Patent Office's PDF, taken out with `pdfimages` as `bake.py` says. A picture named in `FINE_ONLY` gets no standard route. A bake is the same every time. What it does:
 
 1. **Darkness on the grid:** the picture, cropped, fitted to the grid with a margin, its paper tone taken as bare screen.
 2. **Lines:** cells darker than their surroundings (the picture less a 2.5-cell blur of itself), thinned to one cell wide with Zhang and Suen's thinning (T. Y. Zhang and C. Y. Suen, "A fast parallel algorithm for thinning digital patterns", Communications of the ACM 27(3), 1984, https://doi.org/10.1145/357994.358023). Bold strokes are drawn first.
@@ -86,7 +86,7 @@ Tried in the research and dropped: a line that lifts (floating dashes half-way, 
 
 ## The pictures
 
-All landscape, bold, and not religious. Each is shipped as its two routes only; the credits are also in `Resources/etching-credits.tsv`, which Settings → About lists.
+Thirteen, all landscape, bold, and not religious: six from the first build and seven added later the same day, when Dave picked "More Etching pictures" from a list. Each is shipped as its routes only; the credits are also in `Resources/etching-credits.tsv`, which Settings → About lists. The Picture menu stores its pick by place, so a new picture goes at the end of `Etching.pictures`.
 
 | Picture | Source | Licence | At speed 1 | Fine |
 |---|---|---|---|---|
@@ -96,21 +96,44 @@ All landscape, bold, and not religious. Each is shipped as its two routes only; 
 | Interlace: Bourgoin, *Les éléments de l'art arabe: le trait des entrelacs*, plate 96, 1879 (part) | Getty Research Institute, via the Internet Archive: https://archive.org/details/gri_33125012261786/page/n240 | Public domain (the Archive's record: not in copyright) | 23 min | 33 min |
 | Flying Machine: O. and W. Wright, US patent 821,393, Fig. 1, 1906 | US Patent and Trademark Office: https://patents.google.com/patent/US821393A | Public domain (patent drawings; the Office asks to be acknowledged) | 27 min | 49 min |
 | Mishima Pass: Hokusai, *Mishima Pass in Kai Province*, c. 1830–32 | The Met, 56346: https://www.metmuseum.org/art/collection/search/56346 | CC0, as above | 82 min | 161 min |
+| Velocipede: P. Lallement, US patent 59,915, Fig. 1, 1866 | US Patent and Trademark Office: https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/0059915 | Public domain (patent drawings, as below) | 28 min | 56 min |
+| Airship: F. Graf Zeppelin, "Navigable Balloon", US patent 621,195, Figs. 1 and 2, 1899 | US Patent and Trademark Office: https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/0621195 | Public domain (patent drawings, as below) | 26 min | 42 min |
+| Polyhedra: Jost Amman after Wenzel Jamnitzer, *Perspectiva Corporum Regularium*, plate F.IIII, 1568 | The Met, 339008: https://www.metmuseum.org/art/collection/search/339008 | CC0 (`isPublicDomain` true) | 71 min | 137 min |
+| Kajikazawa: Hokusai, *Kajikazawa in Kai Province*, c. 1830–32 | The Met, 56727: https://www.metmuseum.org/art/collection/search/56727 | CC0 (`isPublicDomain` true) | 89 min | 167 min |
+| Twelve-Pointed Stars: Bourgoin, the same book, plate 98 (part) | Getty Research Institute, via the Internet Archive: https://archive.org/details/gri_33125012261786/page/n244 | Public domain (the Archive's record, as below) | 29 min | 42 min |
+| Woven Bands: Bourgoin, the same book, plate 71 (part) | Getty Research Institute, via the Internet Archive: https://archive.org/details/gri_33125012261786/page/n190 | Public domain (the Archive's record, as below) | 29 min | 44 min |
+| Pont Neuf (Fine only): Louis Bretez, engraved by Claude Lucas, *Plan de Paris* (the Turgot map), sheet 11, 1739 (part) | Norman B. Leventhal Map & Education Center, Boston Public Library; the file from Wikimedia Commons: https://commons.wikimedia.org/wiki/File:Turgot_map_of_Paris,_sheet_11_-_Norman_B._Leventhal_Map_Center.jpg | Public domain (as below: the holder says "No known copyright restrictions") | none | 249 min |
 
-The licence lines for the flea, the interlace and the patent were read at their sources by the rights research of 2026-10-12; The Met's for the three prints from its API (`isPublicDomain`) and its API page (https://metmuseum.github.io/: the dataset is under Creative Commons Zero).
+The licence lines, as read at their sources on 2026-10-12:
 
-- **All six work at both widths.** Fine is the better picture every time: the Rhinoceros gets its scales and plates back, and the Wrights' reference numerals become legible.
+- **The Met** (five prints): each object's record in its API has `isPublicDomain` true (`https://collectionapi.metmuseum.org/public/collection/v1/objects/<id>`), and its API page says the dataset is under Creative Commons Zero (https://metmuseum.github.io/).
+- **Wellcome** (the flea): "You can use this work for any purpose, including commercial uses, without restriction under copyright law. You should also provide attribution to the original work, source and licence." (its page, above; read by the rights research).
+- **Patent drawings** (three): "Subject to limited exceptions reflected in 37 CFR 1.71(d) & (e) and 1.84(s), the text and drawings of a patent are typically not subject to copyright restrictions." (https://www.uspto.gov/terms-use-uspto-websites). The sheets used carry no copyright notice.
+- **Bourgoin's book** (three plates): the Internet Archive's record gives `possible-copyright-status` as `NOT_IN_COPYRIGHT` and names no licence (https://archive.org/metadata/gri_33125012261786). Bourgoin died in 1907.
+- **The Turgot map:** the Boston Public Library's repository gives the atlas "No known copyright restrictions." and "No known restrictions on use." (https://www.digitalcommonwealth.org/search/commonwealth:3f462t71h). That record is the atlas of twenty sheets; the sheet's own page at the Map Center answered with an error on both tries that day. Wikimedia Commons tags the file "Public domain". The holder's words are not "public domain", though an engraving of 1739 is: worth a second look before a public release.
+
+Nothing religious, by looking at each whole picture and not its title. The Pont Neuf crop took the most care: it was cut to leave out a church at its right edge (on the quay the sheet labels "Augustins") and a hall with tall round-arched windows along its top, and the two buildings the sheet marks with a cross nearby lie outside it, one above and one below. What it shows is the bridge, Henri IV's statue, Place Dauphine, the quays, boats, and the pump house on the bridge, which the sheet labels "Samaritaine": a building with windows here, its label a squiggle once drawn. (The real pump house was named for a carving on its front, from memory; nothing of that can be seen at this size.)
+
+- **Twelve work at both widths.** Fine is the better picture every time: the Rhinoceros gets its scales and plates back, the patents' reference letters become legible, and the polyhedra get their engraved shading.
+- **Pont Neuf is fine only.** At the standard line the river's ruled water and the houses' windows turn to a muddle; fine, it is the most intricate picture in the set and the longest, over four hours at speed 1. It ships with no standard route. Picked by name it is drawn fine whatever Detail says, and its name in the menu says "(Fine only)"; Random draws it only while Detail is Fine (`Etching.fineOnly`, `Etching.choices`). That is the least code that is honest about it: a menu whose picks depend on another menu would have needed new machinery in Settings.
+- **Kajikazawa's sky is the second set's weak spot:** the print's graded band along the top becomes rows of hatching, as Mishima Pass's does, though narrower and paler. A lighter tone curve thinned the band but lost the fishing lines, so it is kept as it is.
 - **Mishima Pass at the standard width is the weakest:** the print's graded sky becomes a dark band of hatching along the top, and the ground under the tree is muddled. It is kept because it reads as a tree, a mountain and clouds, and is clearly better fine. A candidate to cut.
 - **What suits a single line,** from nine pictures tried: one large subject or one bold pattern, its lines at least two line-widths apart, landscape. Patent drawings, geometric ornament, a natural-history plate of one specimen and bold woodcuts work. Fine tonal engraving, crowded charts and anything that depends on lettering do not: Dürer's *Melencolia I* came out a muddle (and its winged figure reads as an angel, so it is out anyway), and his star chart a tangle.
 - **Dropped:** Hokusai's *Ejiri in Suruga Province* (The Met, 36493), because it shows a wayside shrine.
+- **Tried for the second set and dropped:**
+  - Hokusai's *South Wind, Clear Sky* (The Met, 36490): no outline to speak of, so it came out as a field of stripes for a sky, worse than Mishima Pass. *Storm below Mount Fuji* (36492) was not baked: it is nearly all dark tone, and The Met's file is small.
+  - Sikorsky's helicopter (US patent 1,994,488, sheet 1): three figures and dozens of reference numerals, so at the standard line it is a scatter of squiggles round a shape that is hard to read.
+  - Not baked, from looking at their sheets: Edison's phonograph (US patent 200,521), a long narrow figure with a large solid disc; and Lilienthal's glider (544,816), a fan of hatching with a small figure.
+  - A crop of de' Barbari's *View of Venice* at the Arsenal (Cleveland Museum of Art, 1949.565, CC0): dense even when fine, and it reads as texture more than as a place. The Pont Neuf does the same job better.
+  - A Bourgoin plate with curves: none found. Small pictures of 92 of the first 113 plates were looked at; the few that look curved small (plates 14 to 16) are bands of short straight runs at full size, and sparse, so they were not baked.
 
 ## Settings
 
 | Setting | Range | What it does | Default |
 |---|---|---|---|
-| Picture | Random, or one of the six | Random draws a different picture each time. Picking one clears the screen for it there and then, and it is drawn over and over | Random |
+| Picture | Random, or one of the thirteen | Random draws a different picture each time. Picking one clears the screen for it there and then, and it is drawn over and over | Random |
 | Detail | Standard, Fine | the line's width: the toy's own, or half that. The picture stays as far drawn as it was and is stamped again | Standard |
-| Speed | 1× to 60× | how fast the stylus goes. At 1× it crosses a fortieth of the screen's width a second as it draws and a picture takes 23 to 85 minutes (33 to 168 fine); at 60× the longest takes a minute and a half (under three) | 1× |
+| Speed | 1× to 60× | how fast the stylus goes. At 1× it crosses a fortieth of the screen's width a second as it draws and a picture takes 23 to 89 minutes (33 to 168 fine, and 249 for the one that is fine only); at 60× the longest takes a minute and a half (just over four, fine) | 1× |
 | Screen | Light, Dark, Match System | the powder: bright (152 of 255) or dim (104) whatever the system's appearance, or bright in Light Mode and dim in Dark Mode. A change eases over two seconds, under the picture | Light |
 
 Three more keys, with no page in Settings, set a scene up for the tests and for pictures of it; with any of them the scene keeps a cycle of its own and saves nothing: `etching.drawn` (0 to 1) starts it that share of the way through its picture, `etching.cleared` (0 to 1) that far through its clearing, and `etching.ghost=1` lays the next picture's ghost under it.
@@ -129,18 +152,18 @@ Measured by the render test on a 14-inch screen at 2x (M3 Max, 2026-10-12): **0.
 
 - **Building:** a standard route decodes in 2 ms and stamps in about 120 ms for 3024 × 1964, off the main thread; a fine one, of four times the steps, in about 150 ms. A scene built part-way through a picture stamps the one before as well, for its ghost.
 - **Memory:** the two textures are 48 MB at that size, and a byte a texel more (6 MB) is kept for the next ghost. At 5K, with a texel to two pixels each way, 28 MB; at 6K, 39 MB.
-- **Shipped:** twelve routes, 942 KB.
+- **Shipped:** twenty-five routes, 1.9 MB (the first six pictures' twelve were 942 KB).
 - **Not timed in the app:** a 5K or 6K display (a test draws the picture at 5K through the four-read shader). A standalone copy of the shader, timed the same way before this was built, took 0.57 ms of GPU at 5K and 0.79 at 6K. Nor a GPU slower than an M3 Max, nor the frame on which a texture is first sent.
 
 ## Checking it
 
 - `lineRouteDecodesToItsKnownLength`: the Wave's route has the steps and the clock its bake printed, stays on its grid, and never lifts.
 - `lineRouteStampsItsTextures`: the stamp covers a fifth of a 14-inch screen, its first row of bytes is the bottom of the screen (SpriteKit's order), and going over a line again is recorded. Prints the decode and stamp times.
-- `etchingHasEveryPictureAtBothWidths`: all twelve routes decode on their grids, and the longest is done in under five minutes at the top of the Speed slider.
+- `etchingHasEveryPictureAtBothWidths`: all twenty-five routes decode on their grids; the one picture with no standard route is the one whose name says so, and Random leaves it out at Standard; and the longest is done in under five minutes at the top of the Speed slider.
 - `etchingLooksTheSameAtAnyFrameRate`: 15, 30 and 60 frames a second give the same picture to the pixel.
 - `etchingCycleFollowsTheClock`: drawing, resting, clearing and the next picture by the clock alone; the Speed slider and the Detail leave a picture as far along as it was; a picked picture follows at once; a day away comes back to a picture part-way through.
 - `etchingClearsToAGhost`: full, half cleared and a ghost hold less and less line; and the picture is drawn at a 5K display's size.
-- `etchingDrawsTheFineLine`: the fine route is drawn, with a thinner line, and nothing is drawn under the menu bar.
+- `etchingDrawsTheFineLine`: the fine route is drawn, with a thinner line, and nothing is drawn under the menu bar; and the fine-only picture is drawn the same whatever Detail says.
 - `etchingFollowsTheAppearance`: set to Match System, the screen's level goes from Light Mode's to Dark Mode's in two seconds.
 - `etchingScreenIsTheOneAskedFor`: as it comes the screen is the bright one in Dark Mode; set to Dark it eases to the dim one, and is the dim one in Light Mode.
 
@@ -156,4 +179,4 @@ Measured by the render test on a 14-inch screen at 2x (M3 Max, 2026-10-12): **0.
 - **At 1× the picture still stands still for a few seconds at a time** while the stylus goes back along its line: up to 4.8 s on the Wave and 6.5 on the flea, 11 to 14% of the clock. A frame with dials would show them turning then.
 - **The Settings page's live copy shows the same moment as the desktop,** so in a picture's first minutes it is a nearly bare screen.
 - **A frame with dials** ("frame later"): the screen is 1.40 : 1 on the toy, so a frame costs picture (62% of the display in the mock-ups). Dials would turn about five times to cross the screen; a fine knurl strobes at 15 frames a second, so theirs would be coarse or blurred.
-- **More pictures:** the set is six. The research's shortlist has 25, in four kinds.
+- **More pictures:** the set is thirteen. Still untried from the research's shortlist of 25: Ramelli's book wheel, Nolli's plan of Rome, Waldseemüller's world map, Haeckel's line plates of radiolaria.

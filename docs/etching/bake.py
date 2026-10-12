@@ -5,7 +5,10 @@ and then its shading, written as Sources/Atrium/Resources/etching-<name>.route (
 
 The source pictures are not in the repo: PICTURES gives each one's address, and the file name it is looked for
 under. Needs numpy, scipy and Pillow, and clang for route.c. --fine bakes the half-width line (twice the detail)
-as etching-<name>-fine.route.
+as etching-<name>-fine.route. A picture in FINE_ONLY is too dense for the standard line and is baked fine only.
+
+A patent's file is one sheet of the Patent Office's PDF, taken out as it is: `pdfimages -png -f 1 -l 1 US0059915.pdf
+US0059915-p1` (poppler), then renamed. A Bourgoin plate is the Internet Archive's own JPEG of that leaf.
 
 The grid is the stylus's own: a cell is one step, 1024 x 640 of them to a 16:10 screen (2048 x 1280 fine), and the
 line is 1.44 cells wide. Measured on the real toy, a line is about 1/700 of the screen's width.
@@ -28,19 +31,34 @@ PICTURES = {   # name: file, source, crop as fractions of the file, tone gamma, 
     "flyer": ("machines-wright-flying-machine-1906-uspto-sheet1.png", "https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/0821393",
               (0.17, 0.215, 0.80, 0.765), 1.0, dict(rot=-90)),
     "mishima": ("56346-DP141065.jpg", "https://images.metmuseum.org/CRDImages/as/original/DP141065.jpg", (0.005, 0.012, 0.985, 0.975), 1.0, {}),
+    # the second set, 2026-10-12
+    "velocipede": ("US0059915-p1.png", "https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/0059915", (0.16, 0.15, 0.73, 0.42), 1.0, {}),
+    "airship": ("US0621195-p1.png", "https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/0621195", (0.15, 0.15, 0.72, 0.87), 1.0,
+                dict(rot=-90, blank=[(0.0, 0.55, 0.20, 1.0), (0.0, 0.0, 0.22, 0.27)])),          # the sheet is sideways; signatures painted out
+    "polyhedra": ("339008-DP239933.jpg", "https://images.metmuseum.org/CRDImages/dp/original/DP239933.jpg", (0.13, 0.155, 0.90, 0.835), 1.0, {}),
+    "kajikazawa": ("56727-DP140973.jpg", "https://images.metmuseum.org/CRDImages/as/original/DP140973.jpg", (0.02, 0.03, 0.975, 0.955), 1.6, {}),
+    "stars": ("bourgoin-n244.jpg", "https://archive.org/download/gri_33125012261786/page/n244.jpg", (0.105, 0.475, 0.775, 0.775), 1.0, dict(lift=0.35)),
+    "bands": ("bourgoin-n190.jpg", "https://archive.org/download/gri_33125012261786/page/n190.jpg", (0.10, 0.33, 0.77, 0.63), 1.0, dict(lift=0.35)),
+    "pontneuf": ("maps-turgot-paris-sheet11-1739-bpl.jpg",
+                 "https://upload.wikimedia.org/wikipedia/commons/c/c3/Turgot_map_of_Paris%2C_sheet_11_-_Norman_B._Leventhal_Map_Center.jpg",
+                 (0.012, 0.55, 0.348, 0.855), 1.3, {}),
 }
+FINE_ONLY = {"pontneuf"}   # a muddle at the standard line: no standard route is baked, and the app draws it fine whatever Detail says
 
 class Grid:
     """The stylus's grid: cells across and down, and the bare margin round the picture."""
     def __init__(self, fine): self.w, self.h, self.margin = (2048, 1280, 52) if fine else (1024, 640, 26)
 
-def darkness(path, grid, crop, gamma=1.0, rot=0, invert=False, lift=0.08):
-    """The picture as darkness (0 bare screen .. 1 solid) on the grid, centred with a margin; and its rect in cells."""
+def darkness(path, grid, crop, gamma=1.0, rot=0, invert=False, lift=0.08, blank=()):
+    """The picture as darkness (0 bare screen .. 1 solid) on the grid, centred with a margin; and its rect in cells.
+    `lift` is the tone taken as bare screen: raised, it drops a plate's faint construction lines."""
     im = Image.open(path).convert("L")
     w, h = im.size
     im = im.crop((int(crop[0] * w), int(crop[1] * h), int(crop[2] * w), int(crop[3] * h)))
     if rot: im = im.rotate(rot, expand=True)                    # degrees anticlockwise: a plate printed sideways
     if invert: im = Image.eval(im, lambda v: 255 - v)           # white line on black: draw the line, not the ground
+    for x0, y0, x1, y1 in blank:                                # signatures and captions, as fractions of the crop: painted out
+        im.paste(255, (int(x0 * im.width), int(y0 * im.height), int(x1 * im.width), int(y1 * im.height)))
     s = min((grid.w - 2 * grid.margin) / im.width, (grid.h - 2 * grid.margin) / im.height)
     pw, ph = int(round(im.width * s)), int(round(im.height * s))
     a = np.asarray(im.resize((pw, ph), Image.BOX), dtype=np.float32)
@@ -185,6 +203,7 @@ if __name__ == "__main__":
     src, dst, names = args[0], args[1], args[2:] or list(PICTURES)
     grid = Grid(fine)
     for name in names:
+        if name in FINE_ONLY and not fine: print(f"{name}: fine only, skipped"); continue
         file, _, crop, gamma, more = PICTURES[name]
         d, rect = darkness(os.path.join(src, file), grid, crop, gamma, **more)
         tier, start = wanted(d, rect)
