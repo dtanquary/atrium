@@ -19,8 +19,9 @@ from PIL import Image, ImageDraw
 Image.MAX_IMAGE_PIXELS = None
 
 RISE = 0.8660254
-# Holes across and down, at most: what a 13-inch laptop's display holds at the toy's own size, at half and at a third.
-SIZES = {"small": (43, 30), "medium": (86, 61), "large": (131, 93)}
+# Holes across and down, at most, by the size of peg a chart is for: what a 13-inch laptop's display holds, less a
+# margin, at Large pegs (the toy's own size), Medium (half) and Small (a third).
+SIZES = {"large": (43, 30), "medium": (86, 61), "small": (131, 93)}
 NAMES = ["red", "pink", "orange", "yellow", "green", "blue", "violet", "clear"]
 # The peg colours as measured from photographs of the real pegs, sRGB: what a picture's colours are matched to.
 PEGS = np.array([[200, 25, 10], [205, 25, 75], [220, 95, 10], [205, 170, 20], [0, 195, 25], [5, 80, 190], [140, 45, 190], [235, 215, 180]], np.float32)
@@ -30,27 +31,27 @@ PICTURES = [
     dict(name="great-wave", file="great-wave-met-DP130155.jpg", title="Under the Wave off Kanagawa (The Great Wave), c. 1830-32",
          author="Katsushika Hokusai; The Metropolitan Museum of Art", licence="CC0", source="https://www.metmuseum.org/art/collection/search/45434",
          image="https://images.metmuseum.org/CRDImages/as/web-large/DP130155.jpg",
-         crop=(0.035, 0.03, 0.98, 0.97), how="colour", cut=0.6, drop=("yellow", "orange", "green"), sizes=("medium", "large")),
+         crop=(0.035, 0.03, 0.98, 0.97), how="colour", cut=0.6, drop=("yellow", "orange", "green"), sizes=("medium", "small")),
     dict(name="wreath", file="berlin-wicht-design-1860-ch-1947-78-2.jpg", title="Design for Berlin Wool Work (a wreath of flowers), c. 1860",
          author="Carl F. W. Wicht, Berlin; Cooper Hewitt, Smithsonian Design Museum", licence="CC0",
          source="https://collection.cooperhewitt.org/view/objects/asitem/id/96964", image="https://ids.si.edu/ids/download?id=CHSDM-1947-78-2MattFlynn.jpg",
-         crop=(0.250, 0.228, 0.785, 0.730), how="colour", cut=0.0, paper=0.06, sizes=("medium", "large")),
+         crop=(0.250, 0.228, 0.785, 0.730), how="colour", cut=0.0, paper=0.06, sizes=("medium", "small")),
     dict(name="stag", file="berlin-meister-stag-1850-ch-1960-59-2.jpg", title="Design for Berlin Wool Work, Stag, c. 1850",
          author="Thomas Wilhelm Meister, Berlin; Cooper Hewitt, Smithsonian Design Museum", licence="CC0",
          source="https://collection.cooperhewitt.org/view/objects/asitem/id/127556", image="https://ids.si.edu/ids/download?id=CHSDM-1960-59-2MattFlynn.jpg",
-         crop=(0.27, 0.30, 0.74, 0.72), how="colour", cut=0.0, paper=0.06, sizes=("small", "medium", "large")),
+         crop=(0.27, 0.30, 0.74, 0.72), how="colour", cut=0.0, paper=0.06, sizes=("large", "medium", "small")),
     dict(name="flea", file="science-hooke-flea-1665-wellcome.jpg", title="A flea, from Micrographia, 1665",
          author="Robert Hooke; Wellcome Collection", licence="CC BY 4.0", source="https://wellcomecollection.org/works/ajveb66y",
          image="https://iiif.wellcomecollection.org/image/L0084699/full/max/0/default.jpg",
-         crop=(0.075, 0.07, 0.95, 0.90), how="tone", ink=True, cut=0.35, ramp=WARM, sizes=("small", "medium", "large")),
+         crop=(0.075, 0.07, 0.95, 0.90), how="tone", ink=True, cut=0.35, ramp=WARM, sizes=("large", "medium", "small")),
     dict(name="sol", file="lacis-vinciolo-sol-1588-met-DP364040.jpg", title="Sol, a lace pattern from Les Singuliers et Nouveaux Portraicts, 1588",
          author="Federico de Vinciolo; The Metropolitan Museum of Art", licence="CC0", source="https://www.metmuseum.org/art/collection/search/665397",
          image="https://images.metmuseum.org/CRDImages/dp/original/DP364040.jpg",
-         crop=(0.108, 0.112, 0.893, 0.708), how="tone", ink=False, cut=0.55, ramp=("yellow",), sizes=("medium", "large")),
+         crop=(0.108, 0.112, 0.893, 0.708), how="tone", ink=False, cut=0.55, ramp=("yellow",), sizes=("medium", "small")),
     dict(name="rhinoceros", file="prints-durer-rhinoceros-1515-nga.jpg", title="The Rhinoceros, 1515",
          author="Albrecht Dürer; National Gallery of Art, Washington", licence="CC0", source="https://www.nga.gov/collection/art-object-page.47903.html",
          image="https://api.nga.gov/iiif/a405d06a-f9b5-4ef9-9509-d27b4ac89bce",
-         crop=(0.02, 0.118, 0.98, 0.95), blank=((0.66, 0.0, 1.0, 0.215), (0.79, 0.20, 0.89, 0.275)), how="tone", ink=True, cut=0.30, ramp=COOL, sizes=("large",)),
+         crop=(0.02, 0.118, 0.98, 0.95), blank=((0.66, 0.0, 1.0, 0.215), (0.79, 0.20, 0.89, 0.275)), how="tone", ink=True, cut=0.30, ramp=COOL, sizes=("small",)),
 ]
 
 
@@ -132,7 +133,7 @@ def cut(p, cols, rows):
 if __name__ == "__main__":
     SOURCES, out = sys.argv[1], sys.argv[2]
     lines = ["# Peg Board's pictures, cut down to pegs by docs/peg-board/cut.py from the sources in peg-board-credits.tsv.",
-             "# A chart is '= name size columns rows' and then its rows from the top: . is an empty hole, 1 to 8 a peg",
+             "# A chart is '= name size columns rows' (the size of peg it is for) and then its rows from the top: . is an empty hole, 1 to 8 a peg",
              "# (" + ", ".join(NAMES) + "). Rows are half a hole offset; a chart's bottom row is one that is not."]
     drawn = []
     for p in PICTURES:
@@ -149,7 +150,7 @@ if __name__ == "__main__":
     open(f"{out}/peg-board-credits.tsv", "w").write("\n".join(credits) + "\n")
     if len(sys.argv) > 3:                                     # every chart as plain discs, 10 px to a hole, to look at
         colours = [(188, 65, 50), (192, 65, 87), (201, 105, 56), (185, 159, 65), (66, 179, 66), (44, 95, 179), (138, 72, 178), (240, 204, 158)]
-        cw, ch = 131 * 10 + 20, int(93 * 10 * RISE) + 40
+        cw, ch = SIZES["small"][0] * 10 + 20, int(SIZES["small"][1] * 10 * RISE) + 40
         sheet = Image.new("RGB", (3 * cw, -(-len(drawn) // 3) * ch), (0, 0, 0)); d = ImageDraw.Draw(sheet)
         for n, (label, chart) in enumerate(drawn):
             x0, y0 = (n % 3) * cw + 10, (n // 3) * ch + 24
