@@ -1,7 +1,24 @@
 # The pictures Peg Board builds in pegs, each cut down from one of these (docs/peg-board/cut.py). Public domain,
-# CC0 or CC BY; CC BY requires this attribution. file	subject	author	licence	source
+# CC0 or CC BY; CC BY requires this attribution. Each holder's own words, read at the address given:
+# The Met (https://metmuseum.github.io/): its API gives "corresponding high resolution images (JPEG format) that are
+#   in the public domain", and a record's isPublicDomain, "When "true" indicates an artwork in the Public Domain",
+#   was true for each of these; of its data: "The Metropolitan Museum of Art has waived all copyright and related or
+#   neighboring rights to this dataset using the Creative Commons Zero license."
+# Cooper Hewitt: CC0 under Smithsonian Open Access; each object's API record gives usage.access = CC0.
+# Wellcome Collection (https://wellcomecollection.org/works/ajveb66y): CC BY 4.0, "You can use this work for any
+#   purpose, including commercial uses, without restriction under copyright law. You should also provide attribution
+#   to the original work, source and licence."
+# file	subject	author	licence	source
 great-wave	Under the Wave off Kanagawa (The Great Wave), c. 1830-32	Katsushika Hokusai; The Metropolitan Museum of Art	CC0	https://www.metmuseum.org/art/collection/search/45434
 wreath	Design for Berlin Wool Work (a wreath of flowers), c. 1860	Carl F. W. Wicht, Berlin; Cooper Hewitt, Smithsonian Design Museum	CC0	https://collection.cooperhewitt.org/view/objects/asitem/id/96964
 stag	Design for Berlin Wool Work, Stag, c. 1850	Thomas Wilhelm Meister, Berlin; Cooper Hewitt, Smithsonian Design Museum	CC0	https://collection.cooperhewitt.org/view/objects/asitem/id/127556
 flea	A flea, from Micrographia, 1665	Robert Hooke; Wellcome Collection	CC BY 4.0	https://wellcomecollection.org/works/ajveb66y
 sol	Sol, a lace pattern from Les Singuliers et Nouveaux Portraicts, 1588	Federico de Vinciolo; The Metropolitan Museum of Art	CC0	https://www.metmuseum.org/art/collection/search/665397
+modelbook-9	Schön Neues Modelbuch, page 9 recto: birds, flowers and scrolls, 1597	Johann Sibmacher; The Metropolitan Museum of Art	CC0	https://www.metmuseum.org/art/collection/search/680631
+modelbook-14	Schön Neues Modelbuch, page 14 recto: an eagle among flowers, 1597	Johann Sibmacher; The Metropolitan Museum of Art	CC0	https://www.metmuseum.org/art/collection/search/680637
+modelbook-19	Schön Neues Modelbuch, page 19 recto: a griffin among flowers, 1597	Johann Sibmacher; The Metropolitan Museum of Art	CC0	https://www.metmuseum.org/art/collection/search/680644
+modelbook-24	Schön Neues Modelbuch, page 24 recto: knots and stars, 1597	Johann Sibmacher; The Metropolitan Museum of Art	CC0	https://www.metmuseum.org/art/collection/search/680650
+modelbook-13	Schön Neues Modelbuch, page 13 recto: eight-pointed stars, 1597	Johann Sibmacher; The Metropolitan Museum of Art	CC0	https://www.metmuseum.org/art/collection/search/680636
+lion	A lion, a lace pattern from Les Singuliers et Nouveaux Portraicts, 1588	Federico de Vinciolo; The Metropolitan Museum of Art	CC0	https://www.metmuseum.org/art/collection/search/665797
+unicorn	A unicorn, a lace pattern from Les Singuliers et Nouveaux Portraicts, 1588	Federico de Vinciolo; The Metropolitan Museum of Art	CC0	https://www.metmuseum.org/art/collection/search/665812
+birds	Four birds, a lace pattern from Les Singuliers et Nouveaux Portraicts, 1588	Federico de Vinciolo; The Metropolitan Museum of Art	CC0	https://www.metmuseum.org/art/collection/search/665394

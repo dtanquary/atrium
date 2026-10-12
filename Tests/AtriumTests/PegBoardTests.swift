@@ -40,12 +40,13 @@ import Testing
         .map { $0.split(separator: "\t", omittingEmptySubsequences: false).map(String.init) }
     #expect(credits.allSatisfy { $0.count == 5 && $0[4].hasPrefix("https://") && ["CC0", "CC BY 4.0"].contains($0[3]) })
     let charts = PegBoard.charts
-    #expect(charts.count == 12 && Set(charts.map(\.name)) == Set(credits.map { $0[0] }))
+    #expect(charts.count == 32 && Set(charts.map(\.name)) == Set(credits.map { $0[0] }))
     for chart in charts {
         #expect(chart.pegs.count == chart.cols * chart.rows && chart.pegs.allSatisfy { $0 <= 8 } && chart.pegs.count { $0 > 0 } > 150, "\(chart.name)")
         #expect([(43, 30), (86, 61), (131, 93)].contains { chart.cols <= $0.0 && chart.rows <= $0.1 }, "\(chart.name) is \(chart.cols) by \(chart.rows)")
     }
     for most in [(43, 30), (86, 61), (131, 93)] { #expect(charts.contains { $0.cols <= most.0 && $0.rows <= most.1 && $0.rows > most.1 * 2 / 3 }) }
+    #expect(Set(charts.filter { $0.cols <= 43 && $0.rows <= 30 }.map(\.name)).count >= 7, "Large pegs have fewer than seven pictures")
 }
 
 /// Outline first: a picture's order has every peg once and no empty hole, and every peg on an edge of its colour
@@ -148,7 +149,8 @@ import Testing
     UserDefaults.standard.set(2.0, forKey: "pegboard.shows")
     #expect(scene.lattice.cols == 50)
     run(4.5)
-    #expect(scene.picture && ["stag", "flea"].contains { name in PegBoard.charts.contains { $0.name == name && $0.pegs.count { $0 > 0 } == scene.sequence.count } })
+    // (at Large pegs: one of the charts cut for them, 43 holes by 30 at the most)
+    #expect(scene.picture && PegBoard.charts.contains { chart in chart.cols <= 43 && chart.rows <= 30 && chart.pegs.count { $0 > 0 } == scene.sequence.count })
 
     UserDefaults.standard.set(2.0, forKey: "pegboard.size")
     UserDefaults.standard.set("flea", forKey: "pegboard.picture")

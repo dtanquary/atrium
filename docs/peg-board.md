@@ -8,7 +8,7 @@ Dave asked for a clone of it on 2026-10-12, "with lights, showing various lighti
 
 - **Source:** `Sources/Atrium/PegBoard.swift` (the scene and its one shader), `Sources/PegLattice/` (the lattice, the crystal, the glow, the charts and the order pegs go in; its own module, built with `-O`).
 - **Data:** `Resources/peg-board-charts.txt` (the pictures, cut down to pegs) and `Resources/peg-board-credits.tsv`.
-- **Scripts:** `docs/peg-board/cut.py` cuts the charts from their sources; `docs/peg-board/bench.swift` is the timing sketch the shader was tried in before the build ([Cost](#cost)).
+- **Scripts:** `docs/peg-board/cut.py` cuts the charts from their sources, with `grid.py` to find the net of a charted pattern; `docs/peg-board/bench.swift` is the timing sketch the shader was tried in before the build ([Cost](#cost)).
 - **Pictures of it:** `docs/images/peg-board.jpg`, `peg-board-wave.jpg`; and in `docs/peg-board/`, every picture as the app draws it at each size (`pictures-large.jpg`, `pictures-medium.jpg`, `pictures-small.jpg`), one whole round (`round.jpg`) and the Softness slider (`softness.jpg`).
 
 ## Dave's decisions (2026-10-12)
@@ -94,11 +94,13 @@ Licences are as Openverse and Wikimedia Commons list them.
 
 **A picture** is a chart: a list of holes, each empty or one of the eight colours. `docs/peg-board/cut.py` cuts each from its source at up to three sizes, named for the size of peg they are for: 43 by 30 holes at most for Large pegs, 86 by 61 for Medium and 131 by 93 for Small, which is what a 13-inch display holds at each, less a margin. Every hole takes the picture's average over its own cell and then, for a picture in colour, the nearest peg colour in OKLab with lightness counted 0.7, after the picture's chroma is brought up to the pegs' and with dark, colourless parts or its paper's colour left empty; or, for a print in one ink, a peg from a ramp of one colour family by its lightness, turned over where the ink is to be the light. A peg with no neighbour is taken out. The scene puts up the largest chart of each picture that fits its sheet, in the middle. The order is outline first: the pegs on an edge of their colour, a colour at a time, then the rest, always the nearest peg not yet in.
 
+**A charted pattern goes a square to a hole,** where its net is regular enough (the engraved pages of 1597; the woodcut lace of 1588 is not, and is averaged as any picture is). An old needlework chart is drawn on a net of squares, and averaging it over holes blurs it. So for these `grid.py` first fits the net (the lines' two beats in the page's Fourier transform, to a fraction of a pixel, the fit checked by eye at both ends of the band), and `cut.py` reads each square's middle and gives it one hole: every peg is one of the pattern-maker's own squares. Set on offset rows it is brick-fashion: each row sits half a hole along from the last, so uprights lean and zigzag, and the pattern comes out 13% shorter than it is wide. A band too wide for a size is cut down to a piece of itself, never resampled. Where a page marks a second colour with a ringed cross in the square, the marked squares are either left out (page 24) or taken as a second peg colour (page 13).
+
 What was tried and dropped: dithering (confetti), oil paintings (blobs at any size tried), and maps, machines, knots and star charts, whose content is a line thinner than a peg.
 
 ## The pictures
 
-All five were cut on 2026-10-12. "Reads at" is by eye on the app's own render (`docs/peg-board/pictures-*.jpg`).
+Thirteen, in 32 charts, all cut on 2026-10-12: five in the first build, and eight added the same day when Dave asked for more charts and for more at Large pegs: five pages of a pattern book and three more lace patterns. "Reads at" is by eye on the app's own render (`docs/peg-board/pictures-*.jpg`).
 
 | Chart | Picture | Holder | Licence | Reads at |
 |---|---|---|---|---|
@@ -107,15 +109,30 @@ All five were cut on 2026-10-12. "Reads at" is by eye on the app's own render (`
 | stag | Design for Berlin Wool Work, Stag, Thomas Wilhelm Meister, c. 1850 | Cooper Hewitt, https://collection.cooperhewitt.org/view/objects/asitem/id/127556 | CC0 | all three |
 | flea | Robert Hooke, a flea, Micrographia, 1665; ink as light, in red, orange and yellow | Wellcome Collection, https://wellcomecollection.org/works/ajveb66y | CC BY 4.0 | all three |
 | sol | Federico de Vinciolo, Sol, a lace pattern, 1588; a sun god, which Dave's rule allows | The Metropolitan Museum of Art, https://www.metmuseum.org/art/collection/search/665397 | CC0 | Medium, Small |
+| modelbook-9 | Johann Sibmacher, Schön Neues Modelbuch, 1597, page 9 recto: a bird among flowers over a band of scrolls; its own squares, in violet | The Metropolitan Museum of Art, https://www.metmuseum.org/art/collection/search/680631 | CC0 | all three (Large: a piece of the scrolls; Medium: part of the upper band; Small: both bands) |
+| modelbook-13 | the same book, page 13 recto: eight-pointed stars, the filled squares clear and the marked ones blue | https://www.metmuseum.org/art/collection/search/680636 | CC0 | Large (one star), Medium |
+| modelbook-14 | the same book, page 14 recto: an eagle among flowers, in clear | https://www.metmuseum.org/art/collection/search/680637 | CC0 | Medium (the eagle), Small (its whole band) |
+| modelbook-19 | the same book, page 19 recto: a griffin among flowers, in orange | https://www.metmuseum.org/art/collection/search/680644 | CC0 | Medium (the griffin), Small (its whole band) |
+| modelbook-24 | the same book, page 24 recto: knots of rings over a row of stars, in blue | https://www.metmuseum.org/art/collection/search/680650 | CC0 | all three (Large: two of the stars; Medium: the knots; Small: both) |
+| lion | Federico de Vinciolo, a lion, a lace pattern, 1588; in yellow | The Metropolitan Museum of Art, https://www.metmuseum.org/art/collection/search/665797 | CC0 | all three; at Large only just, as a ragged beast |
+| unicorn | the same book: a unicorn at a fountain, with a bird; in clear | https://www.metmuseum.org/art/collection/search/665812 | CC0 | Medium (its horn is faint), Small |
+| birds | the same book: four birds about a plant; in blue | https://www.metmuseum.org/art/collection/search/665394 | CC0 | all three (Large: the upper two) |
 
 The licences as their holders state them:
-- **The Met:** it "has waived all copyright and related or neighboring rights to this dataset using the Creative Commons Zero license", and its API gives images "(JPEG format) that are in the public domain" (https://metmuseum.github.io/). The Wave's record said `isPublicDomain: true` when fetched for this.
+- **The Met** (read by the builder at https://metmuseum.github.io/ on 2026-10-12): its API "gives access to all of The Met's Open Access data and to corresponding high resolution images (JPEG format) that are in the public domain"; a record's `isPublicDomain`, "When "true" indicates an artwork in the Public Domain", was true for the Wave, for Sol, for each of the five pages and for the three lace patterns when fetched; and of its data, "The Metropolitan Museum of Art has waived all copyright and related or neighboring rights to this dataset using the Creative Commons Zero license." The museum's own policy page on its website answered 429 (too many requests) each time it was tried, so it is unread.
 - **Cooper Hewitt:** CC0 under Smithsonian Open Access; each object's API record gives `usage.access = CC0` (https://creativecommons.org/publicdomain/zero/1.0/).
 - **Wellcome Collection:** CC BY 4.0: "You can use this work for any purpose, including commercial uses, without restriction under copyright law. You should also provide attribution to the original work, source and licence." About credits it, as CC BY asks.
 
-All but the Met's general statement and the Wave's record were read by the rights research of 2026-10-12, not by the builder. The image addresses are in `cut.py`.
+Cooper Hewitt's and Wellcome's were read by the rights research of 2026-10-12, not by the builder. The image addresses are in `cut.py`.
 
-Left out: a Berlin wool work hunting dog, whose white coat could not be told from its chart's paper; Dürer's Rhinoceros (1515, National Gallery of Art), which shipped in the first build with its ink as light in blue, violet and clear, only just read and only at Small pegs, and was dropped on Dave's word on 2026-10-12; and everything religious (a face of Christ in an early test was removed with its renders).
+**Looked through for the eight added:** the pages the Met's API lists of three pattern books, as small pictures, by eye, for subjects that suit pegs and for anything religious:
+- Sibmacher's Schön Neues Modelbuch, 1597: all 38 pages listed. Counted bands, engraved on a regular net. Five pages are in.
+- Vinciolo's Les Singuliers et Nouveaux Portraicts, 1588: all 94 listed. Its first half is cutwork drawn freehand, not on a net; its second half is counted lace, on a woodcut net too uneven to read square by square, so these are cut as Sol was. Three are in, with Sol.
+- Latomus's Schön newes Modelbuch, 1608: 72 of the 97 listed (and none of a 1617 edition's 19). White dots on black, as uneven; none is in, and cutting them as Sol was has not been tried.
+
+Left alone under Dave's rule: in the 1597 book, the band under the griffin on page 19, hounds after a stag with what may be a cross over it (a stag with a cross between its antlers is a saint's emblem), the leaping stag on page 17 for the same doubt, and page 13's key border, a chain of stepped crosses, which at Large pegs showed as one cross in a frame; in Vinciolo's, every page with winged infants (the rule names angels: Luna and three others) and the cutwork pages with crosses. His planets and seasons as gods are myth, which the rule allows; none is in yet but Sol, and Venus is unclothed. Two more Berlin wool work charts from Cooper Hewitt were cut and dropped: a spitz on a cushion (a white dog on pale paper again) and a band of acanthus leaves (it fills its paper, so nothing is left empty and it reads as camouflage).
+
+Left out earlier: a Berlin wool work hunting dog, whose white coat could not be told from its chart's paper; Dürer's Rhinoceros (1515, National Gallery of Art), which shipped in the first build with its ink as light in blue, violet and clear, only just read and only at Small pegs, and was dropped on Dave's word on 2026-10-12; and everything religious (a face of Christ in an early test was removed with its renders).
 
 ## Rights
 
@@ -151,7 +168,7 @@ Measured 2026-10-12 on an M3 Max.
   | reading the four holes round each pixel, for an exact tight glow | 0.84 ms | 2.1 ms | 2.9 ms |
 
   The same at a pitch of 13.5 and of 27 points, and with the board half full or full.
-- **On the main thread, once per sheet, while it is dark:** a crystal grows in 2 to 4 ms at Large pegs, 16 to 34 at Medium and 53 to 111 at Small; the largest picture (5,306 pegs) goes up in 9 ms, order and all.
+- **On the main thread, once per sheet, while it is dark:** a crystal grows in 2 to 4 ms at Large pegs, 16 to 34 at Medium and 53 to 111 at Small; a picture of 5,306 pegs goes up in 9 ms, order and all (the largest chart now has 5,585).
 - **How busy it is,** by `docs/meander/measure/busy.py` (the share of pixels on a brightness edge) on the app's stills at Softness 0: a crystal 5.5 to 9.2%, the stag 6%, the Wave and the wreath about 11%, the flea 16.5%. The crystal that scores 9.2% is 6.2% at Softness 0.5 and 2.3% at 1. The wallpapers Dave has kept score 0 to 3.3% (Fish Tank 8.5%), and Game of Life's Classic look, which he called "so busy and wild", 11.1%. Its mean level is 0.08 to 0.14, like Nebula's.
 - **How much it moves:** a build at speed 1 changes 0.004 grey levels a pixel a frame at 15 fps (Meander 0.03 to 0.10): nearly still.
 
@@ -166,7 +183,7 @@ python3 -I docs/peg-board/cut.py <folder of the source pictures> Sources/Atrium/
 
 - The tests: a crystal has six arms and stays on the sheet at all three sizes; the charts are whole, fit their sizes and are credited; a picture's order is outline first; the picture is the same at 15, 30 and 60 fps part-way through a build, mid-show and after the clear; the clear ends on an empty sheet, so nothing changes on the frame the next thing begins (when the pegs stayed as black shapes, that frame changed by 25 levels of 255; now by 1); the sheet follows Peg size and Shows while it runs; Settings' own copy is whole on its first frame and the desktop's is empty.
 - **Stills are drawn at the size they are shown at** (`pegBoardStill`; with `PEGBOARD_HEAD_START=1` and `SNAPSHOT_SECONDS=0` it draws the first frame of Settings' own copy): a still reduced afterwards shows a weave in the dotted sheet. `docs/images/peg-board.jpg` is the line above; `peg-board-wave.jpg` is `pegboard.picture=great-wave` at 34.5 s; `Resources/preview-peg-board.jpg` is the first at 1200 wide. The crystal was picked from eight rolls.
-- `cut.py` needs each source downloaded by hand under the file name its table gives. After a change, look at its sheet and at the app's render at every size before keeping a chart.
+- `cut.py` needs each source downloaded by hand under the file name its table gives. For a charted pattern, `python3 -I docs/peg-board/grid.py <page> <x0,y0,x1,y1> <out prefix>` prints the net to put in its entry: look at the dots it draws at both ends of the band first. After a change, look at its sheet and at the app's render at every size before keeping a chart.
 
 ## Shortcuts
 
@@ -183,14 +200,17 @@ Worst first, as the builder saw it on stills; Dave has not seen it run.
 
 1. **Sharp and busy at Softness 0**, the default he chose: see the busy scores above. It is what got Zen Garden cut ("so bright and sharp and not relaxing"), and Softness is the answer he has to hand.
 2. **Nearly still at speed 1.** A crystal takes 2 to 3.5 minutes at Medium and a picture 2 to 6; the Wave takes 11 at Small and the flea 15. The slider now goes to 20×, where the flea at Small takes 45 s.
-3. **Large pegs have two pictures,** the stag and the flea, and the stag there is a blob with antlers. Nothing else read at 43 by 30 holes.
-4. **The light show is faint in stills** and has not been watched moving.
-5. **A change of peg size is a hard cut** to a new sheet.
-6. Not checked: the Settings page itself (its test opens a window on the screen), so the head start has been seen only as the scene's first frame, not behind the page; a 5K or 6K display, a 1x display, a scaled display mode (measured in the mock-ups only: the pegs' sharpness drifts up to 3% across the sheet at pitches whose rows land just off a whole pixel).
+3. **Large pegs have seven pictures, none of them strong:** the stag (a blob with antlers), the flea, a lion that only just reads (a ragged beast), two birds, and from the pattern book a piece of scrollwork, one star and two small stars. The book's eagle and griffin are 57 squares tall; cut down to 30 rows by averaging they were ragged blots, and the unicorn did not read either.
+4. **The eight new pictures are each one colour** (page 13, two), chosen by the builder: violet, blue with clear, red, orange, pink, yellow, clear, blue. The books are black and white and say nothing of colour.
+5. **A few stray pegs** are left in page 24's charts, where a marked square printed dark enough to read as filled.
+6. **The light show is faint in stills** and has not been watched moving.
+7. **A change of peg size is a hard cut** to a new sheet.
+8. Not checked: the Settings page itself (its test opens a window on the screen), so the head start has been seen only as the scene's first frame, not behind the page; a 5K or 6K display, a 1x display, a scaled display mode (measured in the mock-ups only: the pegs' sharpness drifts up to 3% across the sheet at pitches whose rows land just off a whole pixel).
 
 ## Next ideas
 
 - Ornament drawn on the lattice instead of sampled: six-fold star patterns sit on a honeycomb exactly.
-- More charts from old needlework (Cooper Hewitt and the Met hold many, CC0), each needing a crop, a recipe and a look.
+- More of Vinciolo's counted lace: the four seasons and six more planets as gods, a stag (66 squares tall, so Small pegs only), squares of ornament. More pages of the 1597 pattern book: about thirty are left, most of them geometric bands, each needing its net fitted and a look.
+- A whole figure for Large pegs, drawn for 43 by 30 holes rather than cut down to them.
 - Other grown patterns beside the crystal. A rosette tried in the mock-ups read as a ship's wheel.
 - The pegs leaving one by one instead of fading with the sheet.
