@@ -99,6 +99,8 @@ struct Refresh {
               make: etching, knobs: Etching.knobs, followsAppearance: true, unfinished: true),
     Wallpaper(name: "Peg Board", icon: "circle.grid.3x3.fill", tint: .purple, blurb: "Glowing colored pegs on a black sheet, placed one at a time.",
               make: pegBoard, knobs: PegBoard.knobs, palettes: PegBoard.palette, unfinished: true),
+    Wallpaper(name: "Ant Colony", icon: "ant.fill", tint: .blue, blurb: "Ants digging a new nest every day, seen through the glass.",
+              make: antColony, unfinished: true),
     Wallpaper(name: "Live Sky", icon: "moon.stars.fill", tint: .blue, blurb: "The real sky above you, right now.",
               make: liveSky, knobs: LiveSky.knobs),
     Wallpaper(name: "Earth from Orbit", icon: "globe.americas.fill", tint: .cyan, blurb: "Day and night sweeping over the globe.",

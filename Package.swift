@@ -16,8 +16,11 @@ let package = Package(
         .target(name: "LineRoute", swiftSettings: [.unsafeFlags(["-O"])]),
         // Peg Board's lattice: the snow crystal grown on it and the glow stamped as pegs go in. The same again.
         .target(name: "PegLattice", swiftSettings: [.unsafeFlags(["-O"])]),
+        // Ant Colony's nest and its ants: the same again. A nest is baked as its scene is built, 70 ms optimised for
+        // a 14-inch screen, and its ants are stepped sixty times a second.
+        .target(name: "AntNest", swiftSettings: [.unsafeFlags(["-O"])]),
         // Resources are copied into the .app by build.sh and found with resource(_:), not Bundle.module.
-        .executableTarget(name: "Atrium", dependencies: ["TreeGrowth", "MeanderRiver", "LineRoute", "PegLattice"], exclude: ["Resources"]),
+        .executableTarget(name: "Atrium", dependencies: ["TreeGrowth", "MeanderRiver", "LineRoute", "PegLattice", "AntNest"], exclude: ["Resources"]),
         .testTarget(name: "AtriumTests", dependencies: ["Atrium"]),
     ]
 )
