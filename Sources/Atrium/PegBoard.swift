@@ -208,6 +208,7 @@ final class PegBoard: SKScene {
     private func chart() -> Chart? {
         let fitting = fitting
         if let asked = UserDefaults.standard.string(forKey: "pegboard.picture"), made == 0, let chart = fitting.first(where: { $0.name == asked }) { return chart }
+        unseen.removeAll { name in !fitting.contains { $0.name == name } } // a new peg size may have fewer pictures
         if unseen.isEmpty { unseen = fitting.map(\.name).shuffled(using: &rng) }
         guard let name = unseen.popLast() else { return nil }
         return fitting.first { $0.name == name }
