@@ -220,7 +220,7 @@ public struct Colony: Sendable {
     public func faces(at share: Double) -> [(branch: Int, at: Double)] {
         nest.branches.indices.compactMap { k in
             let r = reach(k, share)
-            return nest.branches[k].opened[0] <= share && r > 0.5 * bl && r < Double(last[k]) - 0.5 ? (k, r) : nil
+            return nest.branches[k].opened[0] <= share && r >= 1 && r < Double(last[k]) - 0.5 ? (k, r) : nil
         }
     }
 
@@ -231,8 +231,8 @@ public struct Colony: Sendable {
         while head < queue.count, !seen.contains(branch) {
             let b = queue[head]; head += 1
             for way in ways[b] ?? [] where !seen.contains(way.to) && way.opened <= share {
-                if b >= 0, way.at > reach(b, share) - 0.3 * bl { continue }
-                if way.to >= 0, way.toAt > reach(way.to, share) - 0.3 * bl { continue }
+                if b >= 0, way.at > reach(b, share) { continue } // (not dug as far as the way yet)
+                if way.to >= 0, way.toAt > reach(way.to, share) { continue }
                 from[way.to] = (b, way.at, way.toAt)
                 seen.insert(way.to)
                 queue.append(way.to)
@@ -296,15 +296,16 @@ public struct Colony: Sendable {
         var busy: [Int: Int] = [:]
         for other in ants { if case .dig(let face) = other.job { busy[face, default: 0] += 1 } }
         let free = faces(at: share).filter { busy[$0.branch, default: 0] < 3 }.sorted { busy[$0.branch, default: 0] < busy[$1.branch, default: 0] }
-        let roll = dice.unit(), bare = free.first { busy[$0.branch] == nil }
+        let roll = dice.unit(), bare = free.first { busy[$0.branch] == nil && !nest.branches[$0.branch].room }
         var found = false
-        if !free.isEmpty, roll < 0.65 * activity || bare != nil {
-            // a face nobody is at comes before any other task: a face is not left to dig itself
+        if !free.isEmpty, roll < 0.5 * activity || bare != nil {
+            // a tunnel's face nobody is at comes before any other task: a face is not left to dig itself (a room
+            // swells slowly all round, and takes its turn with the rest)
             let face = bare ?? free[0] // (and then the face with the fewest at it or on their way)
             ant.job = .dig(face.branch)
             found = plan(&ant, to: face.branch, at: max(face.at - (bare != nil ? 0.8 : 2.0) * bl, 0))
         }
-        if !found, roll < 0.65 * activity + 0.2 {
+        if !found, roll < 0.5 * activity + 0.3 {
             let rooms = open.filter { nest.branches[$0.branch].room }, places = rooms.isEmpty ? open : rooms
             ant.job = .rest
             if !places.isEmpty, dice.chance(0.85) {

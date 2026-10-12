@@ -240,7 +240,20 @@ public struct Nest: Sendable {
             }
             return branch
         }
-        links = b.links.map { Link(a: $0.a, at: $0.at, b: $0.b, to: $0.to, opened: share(Float($0.clock))) }
+        // A way is open once the straight line between its two ends is dug as well (a face that broke through
+        // may leave a wall standing a while); one whose line never is dug is no way.
+        func through(_ from: SIMD2<Double>, _ to: SIMD2<Double>, since opened: Double) -> Double {
+            (0...8).reduce(opened) { latest, step in
+                let p = simd_mix(from, to, SIMD2(repeating: Double(step) / 8))
+                return max(latest, p.y >= Double(y0) ? Double(rank[min(Int(p.y), rows - 1) * cols + min(max(Int(p.x), 0), cols - 1)]) : 0)
+            }
+        }
+        func point(_ branch: Int, _ at: Double) -> SIMD2<Double> { branches[branch].points[min(max(Int(at), 0), branches[branch].points.count - 1)] }
+        links = b.links.compactMap { link in
+            var opened = share(Float(link.clock))
+            if link.a >= 0 { opened = through(point(link.a, link.at), point(link.b, link.to), since: opened) }
+            return opened <= 1 ? Link(a: link.a, at: link.at, b: link.b, to: link.to, opened: opened) : nil
+        }
         // Where two tunnels cross without having met as faces, an ant may still turn from one into the other.
         let tunnels = branches.indices.filter { !branches[$0].room }
         var joined = Set(links.map { [$0.a, $0.b] } + links.map { [$0.b, $0.a] })
@@ -251,13 +264,7 @@ public struct Nest: Sendable {
                 if d < best.0 { best = (d, p, q) }
             } }
             if best.1 >= 0 {
-                // (usable once the way between the two is dug as well: there may be a wall between them for a while)
-                let (from, to) = (branches[i].points[best.1], branches[j].points[best.2])
-                var opened = max(branches[i].opened[best.1], branches[j].opened[best.2])
-                for step in 0...8 {
-                    let p = simd_mix(from, to, SIMD2(repeating: Double(step) / 8))
-                    opened = max(opened, Double(rank[min(max(Int(p.y), 0), rows - 1) * cols + min(max(Int(p.x), 0), cols - 1)]))
-                }
+                let opened = through(branches[i].points[best.1], branches[j].points[best.2], since: max(branches[i].opened[best.1], branches[j].opened[best.2]))
                 if opened <= 1 { links.append(Link(a: i, at: Double(best.1), b: j, to: Double(best.2), opened: opened)) }
                 joined.insert([i, j])
             }
