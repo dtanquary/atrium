@@ -18,6 +18,7 @@ Not asked yet: stations, tunnels and passing trains; which railway (overhead wir
 
 ## Dave's feedback
 - **2026-10-11, the first build on his desktop** (countryside and the lake, the plain window, a clear sky): "night train has potential, please spin up developer agents to work on all the pending 'still to build' items and get them integrated". Those items, as listed to him: clouds, weather and rain on the glass, the three carriage interiors, and mock-ups then builds of mountains, snow, desert and the city. They are being built in three streams, each on a branch of its own: the sky and weather, the carriages, the four sceneries.
+- **2026-10-11, the finished build list on his desktop** (every scenery, the three carriages, the weather and the rain on the glass; build 473 to 475): "so far pixel train is looking awesome, nothing to change yet". He was testing all three new wallpapers that evening and had changes for the other two. What nobody has yet seen is unchanged by this: a real weather report arriving, and the bottom of the Settings page.
 
 ## The finding that shapes it
 A thing `Z` metres from the track slides `focal × speed / Z` pixels a second, whatever its height and whatever the eye's height. With the airliner's lens (focal 265 art pixels):
