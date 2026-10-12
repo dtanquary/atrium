@@ -17,13 +17,15 @@ Dave asked for it on 2026-10-12, slowly evolving and "based on realistic ant mov
 |---|---|
 | Name | Ant Colony |
 | What it shows | "that sideways clear view into the ant colony as it slowly forms and gets bigger" |
-| Look | "Gel and sand both", as a setting. Then, having seen both rounds of mock-ups: "i love all of the ... mockups, all of what has been shown should be an option to select somehow". So every medium he was shown is a pick: the gel, sand dim and white, and earth |
+| Look | "Gel and sand both", as a setting. Then, having seen both rounds of mock-ups: "all of what has been shown should be an option to select somehow". So every medium he was shown is a pick: the gel, sand dim and white, and earth |
+| The standard look | "Gel" |
+| The sand | "Both, as a setting; dim by default" |
 | Size of ant | "Middle, with a Size setting" |
 | Time | "A farm a day", by the wall's clock, with a Speed slider |
 | The toy on screen | no frame and no skyline: the display is the glass, edge to edge |
 | How to build | "Build now, refine as it goes" |
 
-The lead's calls, which he has not ruled on: gel is the standard look, the mock-ups' deep dim one, with the brighter gel of the realism pass kept beside it as Bright Gel for him to compare; sand is dimmed and warm unless White Sand is picked; the day begins at six and follows the clock in [The day](#the-day), which is not how ants dig; the colony grows with its nest, and is ants only (no queen, no brood); a young colony sinks one or two shafts at a time; someone is always walking. The builder's, which neither has ruled on: Speed stops at 8; three ants to a face; ninety ants at the most.
+The lead's calls, which he has not ruled on: the mock-ups' deep dim gel is "Gel", with the brighter gel of the realism pass kept beside it as Bright Gel for him to compare; Speed keeps the nest on the tank; the day begins at six and follows the clock in [The day](#the-day), which is not how ants dig; the colony grows with its nest, and is ants only (no queen, no brood); a young colony sinks one or two shafts at a time; someone is always walking; the slider for how many ants is "Colony size". The builder's, which neither has ruled on: Speed stops at 8; three ants to a face; ninety ants at the most.
 
 ## What real ants and nests do
 
@@ -92,7 +94,7 @@ A day runs from six to six, and a nest takes 24 hours divided by Speed. The shar
 
 Which farm is on the tank, and how long it has been going, is one `Cycle` shared by every copy of the scene and kept in the defaults (`antcolony.farm`, the day it began and its turn in that day, which together are its seed; `antcolony.began`, when it would have begun at this pace; `antcolony.paced`). So a relaunch finds its place at any Speed from those three numbers, and Shuffle or a rebuild goes on from where it was. Every copy is at the same moment of the same farm; the nest itself is baked for a copy's own size, a tank as wide as its display, so two displays of one size show one nest, and two of different sizes (or Settings' preview) two nests of the one seed, each as far dug as the other.
 
-- **At Speed 1 a farm begins at six and only at six.** From a fresh install it is exactly the day's wall-clock farm. A nest finished early (Speed has been higher) stays finished, its ants about, until six.
+- **At Speed 1 a farm begins at six and only at six.** From a fresh install it is exactly the day's wall-clock farm. A nest finished early (Speed has been higher) stays finished, its ants about, until six; and an unfinished one carried over from a higher Speed is replaced at six, however far it has got.
 - **Above 1 the next farm begins as each ends,** through the fade.
 - **Moving Speed never moves the dig,** up or down: as much is dug as was, and it goes on from there at the new pace. (The first build's clock was a plain function of the wall's time and the slider, so a change of Speed could land in another nest.)
 - The ants walk no faster at any Speed.
@@ -119,7 +121,7 @@ One full-screen sprite with one of five shaders, a look each, and sprites for th
 - **What a read or two cannot tell** (how near a wall is, at three widths, and which way the wall faces the light) is three blurs of the dug mask in a third texture, worked out again off the main thread for each 4000th of the digging (13 ms).
 - **Gel**, the standard, is the mock-up Dave chose from: a deep blue slab that glows toward four lamps in its base; a tunnel is a frosted, paler tube with light gathered into a bright line at its edge, a halo in the gel beside it, a sheen and beads along its wet wall; small bubbles hang in the gel; what is dug lies on top as pale crumbs; the air above is dark but for the glow that leaks up, against which an ant on the heap is a shape. Ants are flat and dark.
 - **Bright Gel** is the same tank nearer photograph 6, and far brighter: a bloom of faint rays over each lamp, more bubbles, and tunnels that are the gel's own blue a little paler with bubbles frothing at their walls.
-- **Sand.** Grains a tenth of an ant across, scattered one to a square with no lattice to them (on a square lattice they showed as a weave wherever the picture was drawn at half size: a non-Retina display, Settings' preview, a README picture). The map is read at the middle of the grain a pixel is in, so a grain is there whole or not at all: an edge crumbles by the grain. A grain is as big as its nearest neighbour lets it be. A tunnel is a trough, its wall curving back to the pane behind, dark under its upper lip, with loose grains lying on the pane, most of them along the floors. Ants are red harvesters lit from above, their far legs darker, with a shadow on the pane. **Sand** is the mock-ups' warm sand (211,201,183, warmed) at two thirds of its brightness, with warm dark tunnels; **White Sand** is the toy's, matched to photograph 1, with the grey pane behind.
+- **Sand.** Grains a tenth of an ant across, scattered one to a square with no lattice to them (on a square lattice they showed as a weave wherever the picture was drawn at half size: a non-Retina display, Settings' preview, a README picture). The scatter is baked once into a tile that repeats every 64 squares (`Nest.scatter`), each of its texels saying which grain it is in, so a pixel finds its grain with one read. The map is read at the middle of the grain a pixel is in, so a grain is there whole or not at all: an edge crumbles by the grain. A grain is as big as its nearest neighbour lets it be. A tunnel is a trough, its wall curving back to the pane behind, dark under its upper lip, with loose grains lying on the pane, most of them along the floors. Ants are red harvesters lit from above, their far legs darker, with a shadow on the pane. **Sand** is the mock-ups' warm sand (211,201,183, warmed) at two thirds of its brightness, with warm dark tunnels; **White Sand** is the toy's, matched to photograph 1, with the grey pane behind.
 - **Earth.** Photograph 8's fine yellow-brown soil, too fine to show a grain, in clumps, lit from the upper left, its edge pushed about half a grain deep; tunnels dark, the soil behind in the shadow of the upper lip, with crumbs left on the pane beside the walls and a little light on the floors; a dark room above. Its ants are the sand's, and are not dimmed with the soil: in the first mock-up they were, and could hardly be seen in the tunnels.
 - **An ant** is a painted body and a sprite for each length of leg and antenna (16, or 22 for the largest ants, the only ones whose feet are big enough to show a bend), with soft sides so that a leg thinner than a pixel is a faint line and not a row of dots. An ant standing still has only its antennae placed.
 
@@ -166,19 +168,22 @@ Measured 2026-10-12 on an M3 Max with other work running, a debug build (the Ant
 
 | Display, at 2x | Look, ants | CPU ms (update + drawing) | GPU ms |
 |---|---|---|---|
-| 14-inch, 1512 × 982 points | Gel, Medium, 24 | 1.0 (0.24 + 0.08) | 0.5 |
+| 14-inch, 1512 × 982 points | Gel, Medium, 24 | 0.9 (0.26 + 0.08) | 0.5 to 0.7 |
 | | Bright Gel | the same | 0.85 |
-| | Sand or White Sand | the same | 1.1 |
+| | Sand or White Sand | the same | 0.45 |
 | | Earth | the same | 0.35 |
 | | Gel, Small at Colony size 2×, 90 | 1.9 (0.93 + 0.26) | 0.5 |
-| 6K, 3008 × 1692 points | Gel, Medium, 82 | 1.75 (0.84 + 0.23) | 1.75 |
-| | Gel, Small, 90 | 1.8 (0.93 + 0.26) | 1.7 |
-| | Sand, Small, 90 | 1.8 | 3.7 |
-| | Earth, Medium, 82 | 1.7 | 1.1 |
+| 6K, 3008 × 1692 points | Gel, Medium, 82 | 1.6 to 1.75 (0.9 + 0.26) | 1.75 |
+| | Gel, Small, 90 | 1.8 (0.92 + 0.26) | 1.7 |
+| | Bright Gel, Medium | 1.8 to 2.1 | 2.8 |
+| | Sand or White Sand, Medium | 1.6 to 1.85 | 1.5 to 1.7 |
+| | Sand, Small, 90 | 1.7 | 1.5 |
+| | Earth, Medium, 82 | 1.6 to 1.7 | 1.15 |
 
 - **The colony stops at ninety ants** so that the CPU figure stays under 2 ms on the largest display. An ant is eighteen sprites (two lengths to a leg; three for the largest ants), each placed, turned and stretched every frame it walks; an ant standing still has only its antennae placed. Stepping the ants is the small part: 36 millionths of a second a step for 22 of them (`probe.swift`), two steps to a frame at 30 fps.
-- **Sand is over the GPU budget on a 6K display** (3.7 ms): finding a pixel's grain looks through the nine squares round it, which is the price of grains with no lattice. On a laptop's display it is 1.1 ms.
-- **Before a farm fades up** its nest is baked and its ants run three minutes on, off the main thread: 0.06 s and 0.03 s on a 14-inch display at Medium, 0.18 and 0.11 at Small; 0.22 and 0.12 on a 6K display at Medium; and at Small on 6K, the largest tank there is (2,545 by 1,432 cells), 0.87 and 0.12, so about a second of black. The surroundings follow the nest (13 ms on a 14-inch display, 190 ms for the largest tank) and again each 4000th of the digging.
+- **Sand was 3.7 ms of GPU on a 6K display** while a pixel looked for its grain through the nine squares round it (1.1 ms on a laptop's). With the scatter baked into a tile it is 1.5 to 1.7 ms there.
+- **Bright Gel is over the GPU budget on a 6K display** (2.8 ms). Left until Dave has chosen between the gels.
+- **Before a farm fades up** its nest is baked and its ants run three minutes on, off the main thread: 0.06 s and 0.03 s on a 14-inch display at Medium, 0.18 and 0.11 at Small; 0.22 and 0.12 on a 6K display at Medium; and at Small on 6K, the largest tank there is (2,545 by 1,432 cells), 0.87 and 0.12, so about a second of black ([Still open](#still-open)). The surroundings follow the nest (13 ms on a 14-inch display, 190 ms for the largest tank) and again each 4000th of the digging.
 - Not measured: a release build, a slower Mac. The research's own timing sketch of a simpler shader ran 0.35, 0.7 and 1.0 ms of GPU at 14-inch, 5K and 6K on the same machine.
 
 ## Checking it
@@ -223,8 +228,9 @@ Worst first, as the builder saw it on stills and strips; Dave has not seen it ru
 9. **Tunnels are 1.3 to 1.5 ant lengths wide** once their walls have widened, against the measured one, so ants look small in them.
 10. **Digging is a nod of the head,** and a grain appears in the jaws.
 11. **The lit ant is drawn, not photographed,** and is lit from its own back, so its highlight turns with it. In earth it is small and bright against a dark tunnel, and has been judged on stills only.
-12. Not checked: the Settings page itself (its test opens a window on the screen), so the five looks have not been seen in its menu nor the head start behind its page; the picture on a 5K or 6K display (only its cost, off screen); a 1x display, a second display, a slower Mac, a release build, the lock screen's still.
-13. **Some people do not want insects on their screen,** and small dark things moving at the edge of vision can read as a real one on the glass. Whether it should be left out of Shuffle's list until picked is Dave's to say.
+12. **A second of black at Small on a 6K display** before a farm fades up (it was 1.7 to 1.85 s with ten minutes of ants and the surroundings waited for; the bake is one thread and is left so). 0.34 s at Medium there, 0.09 s on a 14-inch display.
+13. Not checked: the Settings page itself (its test opens a window on the screen), so the five looks have not been seen in its menu nor the head start behind its page; the picture on a 5K or 6K display (only its cost, off screen); a 1x display, a second display, a slower Mac, a release build, the lock screen's still.
+14. **Some people do not want insects on their screen,** and small dark things moving at the edge of vision can read as a real one on the glass. Whether it should be left out of Shuffle's list until picked is Dave's to say.
 
 ## Next ideas
 

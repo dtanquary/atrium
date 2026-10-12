@@ -178,6 +178,39 @@ public struct Nest: Sendable {
         return Data(out)
     }
 
+    /// Sand's grains, scattered once and for all: a tile of `squares` squares a side that repeats, a grain to each
+    /// square and anywhere in it, drawn `texels` texels to a square. Each texel says which grain it is in, the
+    /// nearest: in red and green how far that grain's middle is from the texel's own, over three squares about a
+    /// half, and in blue how big the grain is, from 0.24 of a square to 0.56 (as big as its nearest neighbour
+    /// lets it be). A shader reads it at a texel's middle and so finds a pixel's grain with one read, where
+    /// looking through the squares round the pixel cost nine.
+    public static func scatter(squares: Int = 64, texels: Int = 8, seed: UInt64 = 11) -> Data {
+        var dice = Dice(seed: seed)
+        let middles = (0..<squares * squares).map { k in SIMD2(Double(k % squares), Double(k / squares)) + 0.06 + 0.88 * SIMD2(dice.unit(), dice.unit()) }
+        /// The grains of the nine squares round a square, each where it is as seen from there (the tile repeats).
+        func round(_ x: Int, _ y: Int) -> [SIMD2<Double>] {
+            (0..<9).map { k in
+                let (i, j) = (x + k % 3 - 1, y + k / 3 - 1), (wi, wj) = ((i + squares) % squares, (j + squares) % squares)
+                return middles[wj * squares + wi] + SIMD2(Double(i - wi), Double(j - wj))
+            }
+        }
+        let sizes = (0..<squares * squares).map { k -> Double in
+            let near = round(k % squares, k / squares).map { simd_distance($0, middles[k]) }.filter { $0 > 0 }.min() ?? 1
+            return min(max(0.49 * near, 0.24), 0.56)
+        }
+        let side = squares * texels
+        var out = [UInt8](repeating: 255, count: side * side * 4)
+        for ty in 0..<side { for tx in 0..<side {
+            let here = (SIMD2(Double(tx), Double(ty)) + 0.5) / Double(texels), (x, y) = (tx / texels, ty / texels)
+            let nearest = round(x, y).min { simd_distance_squared($0, here) < simd_distance_squared($1, here) }!
+            let home = SIMD2((Int(nearest.x.rounded(.down)) + squares) % squares, (Int(nearest.y.rounded(.down)) + squares) % squares)
+            let off = (nearest - here) / 3 + 0.5, to = (ty * side + tx) * 4
+            (out[to], out[to + 1]) = (UInt8((off.x * 255).rounded()), UInt8((off.y * 255).rounded()))
+            out[to + 2] = UInt8(((sizes[home.y * squares + home.x] - 0.24) / 0.32 * 255).rounded())
+        } }
+        return Data(out)
+    }
+
     // MARK: - After the growth: the lumps, the ranks, the links and the spoil
 
     private mutating func finish(_ b: inout Builder, cap: Double) {

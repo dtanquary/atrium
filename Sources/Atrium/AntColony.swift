@@ -279,6 +279,8 @@ final class AntColony: SKScene {
         return tile
     }()
 
+    private static let scatter = SKTexture(data: Nest.scatter(), size: CGSize(width: 512, height: 512))
+
     private let medium = SKSpriteNode(), swarm = SKNode()
     /// The share dug; how many times that share a cell's rank is from it, for the shader to open a cell over the
     /// digging of the twenty before it; and the whole picture's fade up when a farm lands.
@@ -327,7 +329,8 @@ final class AntColony: SKScene {
         if let made = shaders[look] { return made }
         let made = SKShader(source: shaderCommon + Self.source(look), uniforms: [
             cells, SKUniform(name: "u_bl", float: Float(Self.antCells)), SKUniform(name: "u_px", float: Float(size.width / pixel)),
-            SKUniform(name: "u_grain", texture: Self.grain), map, heap, near, dug, fade, show])
+            SKUniform(name: "u_grain", texture: Self.grain), map, heap, near, dug, fade, show]
+            + (look == 2 || look == 3 ? [SKUniform(name: "u_scatter", texture: Self.scatter)] : []))
         shaders[look] = made
         return made
     }
@@ -669,21 +672,15 @@ final class AntColony: SKScene {
     """
 
     /// The sand's grains: a tenth of an ant across, scattered one to a square with no lattice to them (a lattice
-    /// shows as a weave when the picture is drawn at half size). This finds the grain a pixel is in, the nearest
-    /// of the nine squares round it, which is where the map is then read; and the next nearest, for how big the
-    /// grain can be without running into it.
+    /// shows as a weave when the picture is drawn at half size). The scatter is baked once into a tile that
+    /// repeats every 64 squares (`Nest.scatter`), read at a texel's middle: one read gives the grain a pixel is in,
+    /// where its middle is, which is where the map is then read, and how big it is. (Looking through the nine
+    /// squares round the pixel for it cost 3.7 ms of GPU on a 6K display.)
     private static let grains = """
-            vec2 gp = cell / (0.10 * u_bl), middle = gp, next = gp;
-            float away = 9.0, second = 9.0;
-            vec4 mine = vec4(0.0);
-            for (int k = 0; k < 9; k++) {
-                vec2 square = floor(gp) + vec2(mod(float(k), 3.0), floor(float(k) / 3.0)) - 1.0;
-                vec4 r = hash42(square + 17.0);
-                vec2 c = square + 0.06 + 0.88 * r.xy;
-                float d = length(gp - c);
-                if (d < away) { second = away; next = middle; away = d; middle = c; mine = r; }
-                else if (d < second) { second = d; next = c; }
-            }
+            vec2 gp = cell / (0.10 * u_bl), within = fract(gp / 64.0) * 64.0, texel = (floor(within * 8.0) + 0.5) / 8.0;
+            vec4 mine = texture2D(u_scatter, texel / 64.0);
+            vec2 middle = gp - within + texel + (mine.rg - 0.5) * 3.0;
+            float away = length(gp - middle);
             vec2 at = middle * 0.10 * u_bl;
     """
 
@@ -699,9 +696,9 @@ final class AntColony: SKScene {
             // and a few glinting; and between the beads the shadowed ones behind.
             vec3 sand = \(sand) * (1.0 - clamp(slow.b - 0.6, 0.0, 2.0) * vec3(0.0, 0.018, 0.045));
             vec4 more = hash42(floor(middle) + 53.0);
-            float size = clamp(0.49 * length(middle - next), 0.24, 0.56), bead = clamp((size - away) * 0.10 * u_bl * ppc / 1.3 + 0.5, 0.0, 1.0);
+            float size = 0.24 + 0.32 * mine.b, bead = clamp((size - away) * 0.10 * u_bl * ppc / 1.3 + 0.5, 0.0, 1.0);
             float lamp = dot((gp - middle) / size, vec2(-0.5, -0.86));
-            float shade = (0.90 + 0.11 * mine.w + 0.12 * lamp) * (1.0 + 0.035 * n.b + 0.03 * slow.r) * (1.0 - 0.30 * step(more.x, 0.03));
+            float shade = (0.90 + 0.11 * more.w + 0.12 * lamp) * (1.0 + 0.035 * n.b + 0.03 * slow.r) * (1.0 - 0.30 * step(more.x, 0.03));
             vec3 grain = sand * shade + 0.30 * step(0.955, more.y) * clamp(1.0 - 3.0 * length((gp - middle) / size - vec2(-0.3, -0.4)), 0.0, 1.0);
             vec3 between = sand * (0.74 + 0.04 * n.b);
             float edge = clamp((1.0 - close) * 2.0, 0.0, 1.0); // the sand's last grains before a tunnel
