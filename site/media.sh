@@ -5,7 +5,7 @@
 # HEVC for Safari on M1 and M2, plus a small landscape copy for the laptop on portrait phones. Output goes to
 # site/public/media, which is gitignored: this script is the source.
 #   site/media.sh               # all of them
-#   site/media.sh nebula pixel-city # just these
+#   site/media.sh nebula live-sky # just these
 #   site/media.sh cards         # just the cards for every wallpaper, cut from the README's screenshots (or card-aurora …)
 #   site/media.sh previews      # just the 1280-wide loops the cards open (or preview-aurora … for some)
 # Needs ffmpeg with libsvtav1 and libx265 (Homebrew's has both).
@@ -19,13 +19,14 @@ LOOP=12 FADE=2 # seconds: the loop, and the crossfade from its tail into its hea
 WORKS='nebula|Nebula|54|4|SNAPSHOT_DEFAULTS=nebula.palette=Hubble
 flowing-gradient|Flowing Gradient|34|4|SNAPSHOT_DEFAULTS=gradient.palette=Midnight,gradient.ribbonsOn=1
 live-sky|Live Sky|72|4|SNAPSHOT_DEFAULTS=sky.previewTime=1,sky.previewHour=23
-pixel-city|Pixel City|36|4|SNAPSHOT_DEFAULTS=city.place=1,city.previewTime=1,city.previewHour=18.5
+pixel-window-seat|Pixel Window Seat|70|5|TRAIN_AT=12000 SNAPSHOT_DEFAULTS=seat.orbit=2,seat.country=3,seat.previewTime=1,seat.previewHour=18.7
 murmuration|Murmuration|44|20|SNAPSHOT_DEFAULTS=murmuration.light=5,murmuration.ground=0 MURMURATION_SEED=3
 fish-tank|Fish Tank|42|4|SNAPSHOT_APPEARANCE=light'
 
 # Every wallpaper in the app, as the loop its card opens, in about the card's look:
 # slug|scene|seconds in before recording|extra environment
 PREVIEWS='aurora|Aurora|8|SNAPSHOT_DEFAULTS=aurora.palette=Purple,aurora.speed=2
+black-hole|Black Hole|5|
 dappled-light|Dappled Light|4|SNAPSHOT_DEFAULTS=dappled.previewTime=1,dappled.previewHour=17.5,dappled.weather=1
 deep-space-tour|Deep Space Tour|4|SNAPSHOT_DEFAULTS=deep.photo=deep-pillars-webb.heic
 earth-from-orbit|Earth from Orbit|4|SNAPSHOT_DEFAULTS=latitude=25,longitude=78,earth.previewStorm=1
@@ -36,6 +37,7 @@ galaxy|Galaxy|4|SNAPSHOT_DEFAULTS=galaxy.kind=Whirlpool,galaxy.rotation=4
 game-of-life|Game of Life|30|
 lava-lamp|Lava Lamp|40|SNAPSHOT_DEFAULTS=lava.palette=Coral LAVA_SEED=11
 live-sky|Live Sky|4|SNAPSHOT_DEFAULTS=sky.previewTime=1,sky.previewHour=20.5,sky.landscape=1,sky.ground=0
+meander|Meander|5|SNAPSHOT_DEFAULTS=meander.seed=13,meander.colors=Rainforest SNAPSHOT_APPEARANCE=dark
 murmuration|Murmuration|20|SNAPSHOT_DEFAULTS=murmuration.light=5,murmuration.ground=0 MURMURATION_SEED=3
 nebula|Nebula|4|SNAPSHOT_DEFAULTS=nebula.palette=Hubble
 pixel-city|Pixel City|30|SNAPSHOT_DEFAULTS=city.place=0,city.previewTime=1,city.previewHour=19
@@ -50,6 +52,7 @@ wind|Wind|4|SNAPSHOT_DEFAULTS=wind.zoom=2,wind.map=2'
 
 # Every wallpaper in the app, as 16:10 stills for the cards on the glass pane: slug|screenshot in docs/images.
 CARDS='aurora|aurora-purple
+black-hole|black-hole
 dappled-light|dappled-light-golden
 deep-space-tour|deep-space-pillars
 earth-from-orbit|earth-from-orbit
@@ -60,6 +63,7 @@ galaxy|galaxy-whirlpool
 game-of-life|game-of-life
 lava-lamp|lava-lamp
 live-sky|live-sky
+meander|meander
 murmuration|murmuration-blue-hour
 nebula|nebula-hubble
 pixel-city|pixel-city-dusk
