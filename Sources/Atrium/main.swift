@@ -43,7 +43,7 @@ final class WallpaperView: SKView, SKViewDelegate {
         wake(for: 1.5)
     }
 
-    private func wake(for seconds: Double) {
+    func wake(for seconds: Double) {
         awakeUntil = Date() + seconds
         updatePaused()
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds + 0.05) { [weak self] in self?.updatePaused() }
@@ -497,9 +497,18 @@ Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { _ in
     MainActor.assumeIsolated { Updater.shared.check() }
 }
 #endif
-// Rebuild the scene in the other look when macOS switches between Light and Dark Mode.
-// ponytail: rebuilds every scene, even ones with a single look; it only happens a couple of times a day
+// Rebuild the scene in the other look when macOS switches between Light and Dark Mode, unless it changes by itself
+// (`Wallpaper.followsAppearance`): then only the lock screen's still is taken again, once it has changed. A view
+// held still (Low Power Mode, Pause) is set running for the moment a new scene gets, to draw the change, which
+// its scene makes at once; after every observer has heard, so that the scene has seen its view held.
+// ponytail: rebuilds every other scene, even ones with a single look; it only happens a couple of times a day
 let appearance = app.observe(\.effectiveAppearance) { _, _ in
-    MainActor.assumeIsolated { switchScene() }
+    MainActor.assumeIsolated {
+        guard (scenes.first { $0.name == current } ?? defaultScene).followsAppearance else { return switchScene() }
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated { windows.compactMap { $0.contentView as? WallpaperView }.forEach { $0.wake(for: 0.5) } }
+        }
+        matchLockScreen(after: 4)
+    }
 }
 app.run()

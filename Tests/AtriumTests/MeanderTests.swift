@@ -423,12 +423,12 @@ private func seeded(_ seed: Double, _ others: [String: Double] = [:]) -> [String
     let changes: [(String, Any)] = [("meander.look", 1.0), ("meander.rule", 1.0), ("meander.inks", "Sage"), ("meander.look", 0.0), ("meander.colors", "Garnet"), ("meander.scroll", 0.0), ("meander.memory", 15.0)]
     for (key, value) in changes {
         UserDefaults.standard.set(value, forKey: key)
-        for _ in 0..<2 { try screen.frame(rate: 1e9) } // no time gone by
+        for _ in 0..<2 { try screen.frame(rate: 1e9) } // the new shader's first frame, and no time gone by
         pictures.append(screen.pixels)
-        // A slider is followed at once. A look, a rule or a swatch comes in over a few seconds
-        // (`meanderGivesWayOnTheSameRiver`, `meanderRepaintsItsColours`), so nothing has changed yet.
-        let slider = key.hasSuffix("scroll") || key.hasSuffix("memory")
-        #expect((pictures.last! != pictures[pictures.count - 2]) == slider, "when \(key) became \(value)")
+        // At once, the looks and the colours too: this scene's view isn't running, as a covered or a frozen
+        // desktop's isn't, and there nothing is eased (in a running one it is: `meanderGivesWayOnTheSameRiver`,
+        // `meanderRepaintsItsColours`)
+        #expect(pictures.last! != pictures[pictures.count - 2], "nothing changed when \(key) became \(value)")
     }
     #expect(scene.river === river && view.scene === scene)
     // The Look sliders, each off its standard value in turn; and with all four back the picture is the one there
@@ -1136,10 +1136,11 @@ private func ripple(_ picture: [UInt32], side: Int, texel: Int, counts: (_ x: In
     }
 }
 
-/// Another look, or the old map's other rule, is not a new picture at once, and never a new river: what the
-/// ground had on gives way to the new over two seconds, on the river that is running. Three runs, each one change
-/// and then a second 0.8 s into it: relief to the old map and a swatch; the old map to relief and back again; one
-/// rule of the old map to the other and a swatch. In each the river is the same river; no frame
+/// Another look, the old map's other rule or the other mode is not a new picture at once, and never a new river:
+/// what the ground had on gives way to the new over two seconds, on the river that is running. Five runs, each
+/// one change and then a second 0.8 s into it: relief to the old map and a swatch; the old map to relief and back
+/// again; relief from Dark Mode to Light and a swatch; a swatch on the old map and then Dark Mode to Light during
+/// its repaint; one rule of the old map to the other and a swatch. In each the river is the same river; no frame
 /// jumps (as `meanderRepaintsItsColours` measures it); 1.2 s after the first change the picture at 15 frames a
 /// second is the one at 60; and when all is done it is the picture a scene with those settings from the start
 /// draws at that moment, to the byte. Half-way through relief giving way to the old map, the picture is half of
@@ -1166,6 +1167,8 @@ private func ripple(_ picture: [UInt32], side: Int, texel: Int, counts: (_ x: In
     let runs: [(name: String, start: [Change], first: Change, second: Change)] = [
         ("relief-to-map", [("mode", "dark"), ("meander.look", 0.0)], ("meander.look", 1.0), ("meander.inks", "Sage")),
         ("map-to-relief-and-back", [("mode", "light"), ("meander.look", 1.0)], ("meander.look", 0.0), ("meander.look", 1.0)),
+        ("relief-dark-to-light", [("mode", "dark"), ("meander.look", 0.0)], ("mode", "light"), ("meander.colors", "Garnet")),
+        ("map-swatch-then-light-to-dark", [("mode", "light"), ("meander.look", 1.0)], ("meander.inks", "Teal"), ("mode", "dark")),
         ("map-rule", [("mode", "light"), ("meander.look", 1.0), ("meander.rule", 0.0)], ("meander.rule", 1.0), ("meander.inks", "Sage")),
     ]
     @MainActor func make(_ change: Change) {
@@ -1266,4 +1269,22 @@ private func ripple(_ picture: [UInt32], side: Int, texel: Int, counts: (_ x: In
         }
         #expect(off * 1000 < between.count, "\(off) channels of \(between.count) pixels are over 2 levels from half of each look")
     }
+    // A view held part-way through a change (Pause, a covered desktop) picks it up where it was: with the next
+    // frame an hour on, half a second into the two, the old look is still giving way, not gone
+    try with(seeded(7)) {
+        NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
+        defer { UserDefaults.standard.removeObject(forKey: "meander.look") }
+        let scene = Meander(size: CGSize(width: w, height: h)), screen = try Offscreen(scene, w, h)
+        for _ in 0..<25 { try screen.frame(rate: 60) }
+        UserDefaults.standard.set(1.0, forKey: "meander.look")
+        for _ in 0..<30 { try screen.frame(rate: 60) }
+        try screen.frame(rate: 1.0 / 60)
+        #expect(scene.children.count == 2, "held for an hour part-way through, the change leapt to its end")
+    }
+}
+
+/// Meander changes mode by itself, so the app must not build it afresh when the appearance changes: its entry says
+/// so, and no other wallpaper's does (each of those is built to the mode it starts in).
+@MainActor @Test func onlyMeanderFollowsTheAppearanceItself() {
+    #expect(allScenes.filter(\.followsAppearance).map(\.name) == ["Meander"])
 }

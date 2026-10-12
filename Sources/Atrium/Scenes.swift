@@ -23,6 +23,10 @@ struct Wallpaper {
     /// A section of its settings that goes by another title while one of its menus is at one pick: Pixel Window
     /// Seat's Flight is the train's Journey.
     var retitled: (section: String, title: String, when: String, at: Double)?
+    /// Its scene changes between Light and Dark Mode by itself, while it runs: it watches the system's appearance
+    /// and eases to its other look (Meander, whose river then carries on). The app builds no new scene for it
+    /// when the appearance changes, as it does for every other wallpaper.
+    var followsAppearance = false
     /// Not good enough to show yet: left out of the menu, Settings, Shuffle and the welcome unless `unfinished` is set
     /// (`defaults write com.dtanquary.atrium unfinished -bool true`, then relaunch), but still built and render-tested.
     var unfinished = false
@@ -90,7 +94,7 @@ struct Refresh {
     Wallpaper(name: "Black Hole", icon: "circle.circle.fill", tint: .orange, blurb: "A black hole's glowing disc, bent round it by gravity.",
               make: blackHole, knobs: BlackHole.knobs, palettes: BlackHole.palette, unfinished: true),
     Wallpaper(name: "Meander", icon: "point.bottomleft.forward.to.point.topright.scurvepath", tint: .teal,
-              blurb: "A river wandering across its floodplain, leaving its old courses behind.", make: meander, knobs: Meander.knobs, looks: Meander.palettes, unfinished: true),
+              blurb: "A river wandering across its floodplain, leaving its old courses behind.", make: meander, knobs: Meander.knobs, looks: Meander.palettes, followsAppearance: true, unfinished: true),
     Wallpaper(name: "Live Sky", icon: "moon.stars.fill", tint: .blue, blurb: "The real sky above you, right now.",
               make: liveSky, knobs: LiveSky.knobs),
     Wallpaper(name: "Earth from Orbit", icon: "globe.americas.fill", tint: .cyan, blurb: "Day and night sweeping over the globe.",

@@ -155,7 +155,7 @@ final class Meander: SKScene {
         }
     }
 
-    /// What it was built and dressed with: the river's size, and what Settings wanted the ground to wear.
+    /// What it was built and dressed with: the river's size, and what Settings and the system wanted the ground to wear.
     private let built = Meander.width.value.rounded()
     private var dressed: [String] = []
     /// What the ground has on; and the dressings giving way to it, each drawn over it, less and less, for `gives`
@@ -171,6 +171,8 @@ final class Meander: SKScene {
     private var fade: (from: [SIMD3<Float>], to: [SIMD3<Float>], elapsed: Double, seconds: Double)?
     /// Seconds between Random's changes (none while Settings names a family, or asks for none), and since the last.
     private var every = 0.0, waited = 0.0
+    /// The system's appearance, watched: the scene changes mode itself (`Wallpaper.followsAppearance`).
+    private var appearance: NSKeyValueObservation?
     /// Settings changes so far, so only the last of a quick run rebuilds; and whether it has handed over to a new scene.
     private var changes = 0, retired = false
 
@@ -188,22 +190,24 @@ final class Meander: SKScene {
         }
         dress()
         NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged), name: UserDefaults.didChangeNotification, object: nil)
+        appearance = NSApplication.shared.observe(\.effectiveAppearance) { [weak self] _, _ in MainActor.assumeIsolated { self?.settingsChanged() } }
     }
 
     /// What Settings wants the ground to wear: the look, the old map's rule, each look's colours by name (none is
     /// Random, and so is a name no swatch has, as an older version's might be), and whether any of the Look sliders
-    /// is off its standard value.
+    /// is off its standard value; and the mode the system is in.
     private static var wanted: [String] {
         let names = palettes.map { palette in
             let name = UserDefaults.standard.string(forKey: palette.key) ?? ""
             return palette.options.contains { $0.name == name } ? name : ""
         }
-        return [look, rule].map { "\($0.value)" } + names + [grades.contains { $0.value != $0.standard } ? "graded" : ""]
+        return [look, rule].map { "\($0.value)" } + names + [grades.contains { $0.value != $0.standard } ? "graded" : "", systemIsDark ? "dark" : "light"]
     }
 
-    /// Gives the ground what Settings asks for. The river is the same river whatever changes. A change of
-    /// colours alone makes no new shader: the ones showing ease to the new family's (`repaint`). Another look, or
-    /// the old map's other rule, is another shader, and so another dressing: the new one goes under
+    /// Gives the ground what Settings and the system ask for. The river is the same river whatever changes. A
+    /// change of colours alone makes no new shader: the ones showing ease to the new family's (`repaint`), and so
+    /// does an old map going to the other mode, whose sheet is only other colours. Another look, the old map's
+    /// other rule, or relief in the other mode is another shader, and so another dressing: the new one goes under
     /// the old, which is drawn over it less and less for `gives` seconds and then taken away. So a change that
     /// comes part-way through another has no jump in it either: what was giving way goes on doing so, on top.
     private func dress() {
@@ -216,9 +220,18 @@ final class Meander: SKScene {
         if map, let named = Self.maps.firstIndex(where: { $0.name == name }) { family.sheet = named }
         if !map, let named = Self.reliefs.firstIndex(where: { $0.name == name }) { family.relief = named }
         if let worn, worn.map == map, name.isEmpty, !was[map ? 3 : 2].isEmpty { another() }
+        // A view that isn't running (covered, frozen or paused) would hold a change part-way, perhaps for hours:
+        // there every change is made at once, as a scene built afresh would have been.
+        let held = view?.isPaused == true
+        if held {
+            leaving.forEach { $0.node.removeFromParent() }
+            leaving = []
+        }
         // (a sheet with the Look sliders moved has a shader for each mode too, by where its grade turns)
         if worn == nil || worn.map != map || (map && worn.rule != rule) || (worn.dark != dark && (!map || graded)) {
-            if let old = worn {
+            if let old = worn, held {
+                old.node.removeFromParent()
+            } else if let old = worn {
                 old.node.shader = shader(for: old, graded: graded, leaving: true)
                 leaving.append(old)
             }
@@ -238,9 +251,9 @@ final class Meander: SKScene {
             // a sheet's other mode in the time a look takes; a swatch picked by hand in a few seconds
             if worn.dark != dark {
                 worn.dark = dark
-                repaint(over: Self.gives)
+                repaint(over: held ? 0 : Self.gives)
             } else if family != before {
-                repaint(over: 3)
+                repaint(over: held ? 0 : 3)
             }
         }
         tune()
