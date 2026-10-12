@@ -38,7 +38,10 @@ final class Meander: SKScene {
     nonisolated private static let perMinute = 60 / River.pace
     /// The Look sliders every graded wallpaper has (brightness, contrast, saturation, hue), after the look's own rows.
     nonisolated static let grades = gradeKnobs("meander")
-    nonisolated static let knobs = [look, rule, bars] + grades + [width, speed, memory, lakes]
+    /// How often Random moves on to another family of the look that is showing: listed under that look's swatches
+    /// while they are at Random.
+    nonisolated static let cycleMinutes = Knob(key: "meander.cycleMinutes", label: "Change colors every", range: 0...30, standard: 10, section: "Colors", format: .minutes)
+    nonisolated static let knobs = [look, rule, bars] + grades + [width, speed, memory, lakes, cycleMinutes]
 
     /// A colour from its three bytes.
     nonisolated private static func tone(_ r: Float, _ g: Float, _ b: Float) -> SIMD3<Float> { SIMD3(r, g, b) / 255 }
@@ -129,11 +132,23 @@ final class Meander: SKScene {
     /// The Look sliders' uniforms (`u_brightness` and so on), which a shader has only while one is off its standard value.
     private let grading = Meander.grades.map { SKUniform(name: "u_" + $0.key.split(separator: ".").last!, float: Float($0.value)) }
     private var lastTime: TimeInterval?
-    /// What it was built and dressed with: the river's size, what Settings wanted the ground to wear, and the
-    /// colours Random has picked for each look, which hold for the scene's life.
+    /// What it was built and dressed with: the river's size, and what Settings wanted the ground to wear.
     private let built = Meander.width.value.rounded()
     private var dressed: [String] = [], map = false, stage = stages[0]
-    private let lucky = (relief: Int.random(in: reliefs.indices), sheet: Int.random(in: maps.indices))
+    /// The family each look is showing, by its place in `reliefs` and in `maps`: the one Settings names, or
+    /// Random's, which moves on (`another`).
+    private var family = (relief: Int.random(in: reliefs.indices), sheet: Int.random(in: maps.indices))
+    /// The colours a look's shader takes, which stay the same uniforms from one shader to the next so that they can
+    /// be eased: relief's river, dulled lake, unreached ground and its mottle, with the land's colours by height in
+    /// a texture 256 across; and a sheet's paper, river, line and four inks.
+    private let paints = ["u_river", "u_wet", "u_ground", "u_wilds"].map { SKUniform(name: $0, vectorFloat3: .zero) }
+    private let inks = (["u_paper", "u_river", "u_line"] + (0..<4).map { "u_ink\($0)" }).map { SKUniform(name: $0, vectorFloat3: .zero) }
+    private let heights = SKMutableTexture(size: CGSize(width: 256, height: 1))
+    /// The colours on the screen (`palette` lists them), and a change of them under way: what was showing when it
+    /// began, what it is going to, and how far through it is, in seconds.
+    private var shown: [SIMD3<Float>] = [], fade: (from: [SIMD3<Float>], to: [SIMD3<Float>], elapsed: Double, seconds: Double)?
+    /// Seconds between Random's changes (none while Settings names a family, or asks for none), and since the last.
+    private var every = 0.0, waited = 0.0
     /// Settings changes so far, so only the last of a quick run rebuilds; and whether it has handed over to a new scene.
     private var changes = 0, retired = false
 
@@ -149,6 +164,7 @@ final class Meander: SKScene {
             texture.filteringMode = .linear
             return texture
         }
+        heights.filteringMode = .linear
         ground = SKSpriteNode(texture: textures[0], size: size)
         ground.position = CGPoint(x: size.width / 2, y: size.height / 2)
         addChild(ground)
@@ -157,55 +173,104 @@ final class Meander: SKScene {
     }
 
     /// What Settings wants the ground to wear: the look, the old map's rule, each look's colours by name (none is
-    /// Random), and whether any of the Look sliders is off its standard value.
+    /// Random, and so is a name no swatch has, as an older version's might be), and whether any of the Look sliders
+    /// is off its standard value.
     private static var wanted: [String] {
-        [look, rule].map { "\($0.value)" } + palettes.map { UserDefaults.standard.string(forKey: $0.key) ?? "" } + [grades.contains { $0.value != $0.standard } ? "graded" : ""]
+        let names = palettes.map { palette in
+            let name = UserDefaults.standard.string(forKey: palette.key) ?? ""
+            return palette.options.contains { $0.name == name } ? name : ""
+        }
+        return [look, rule].map { "\($0.value)" } + names + [grades.contains { $0.value != $0.standard } ? "graded" : ""]
     }
 
     /// Gives the ground the look Settings asks for: a shader of its own for relief and for each of the old map's
-    /// rules, with the colours picked. The river is the same river, so a look can be changed while it runs.
+    /// rules, and its colours. The river is the same river, so a look can be changed while it runs. A change of
+    /// colours alone makes no new shader: the ones showing ease to the new family (`repaint`).
     private func dress() {
+        let was = dressed
         dressed = Self.wanted
         map = Self.look.value > 0.5
         let rule = Int(Self.rule.value)
         stage = Self.stages[rule]
-        let graded = dressed[4] == "graded"
-        var uniforms = [SKUniform(name: "u_grid", vectorFloat2: [Float(river.columns), Float(river.rows)]), SKUniform(name: "u_other", texture: textures[1]),
-                        clocks, blend, turns, settings] + (graded ? grading : [])
-        if map {
-            let sheets = Self.maps[Self.maps.firstIndex { $0.name == dressed[3] } ?? lucky.sheet], sheet = systemIsDark ? sheets.dark : sheets.light
-            uniforms += [SKUniform(name: "u_paper", vectorFloat3: sheet.paper), SKUniform(name: "u_river", vectorFloat3: sheet.river),
-                         SKUniform(name: "u_line", vectorFloat3: sheet.line), SKUniform(name: "u_stage", float: Float(stage))]
-            // four inks; a sheet of two takes them in turn
-            uniforms += (0..<4).map { SKUniform(name: "u_ink\($0)", vectorFloat3: sheet.inks[$0 % sheet.inks.count]) }
-        } else {
-            let both = Self.reliefs[Self.reliefs.firstIndex { $0.name == dressed[2] } ?? lucky.relief], relief = systemIsDark ? both.dark : both.light
-            // the land's colour by height, 256 across
-            let ramp = (0..<256).flatMap { level -> [UInt8] in
-                let height = Float(level) / 255, above = relief.heights.firstIndex { $0.at >= height } ?? relief.heights.count - 1
-                let (lo, hi) = (relief.heights[max(above - 1, 0)], relief.heights[above])
-                let colour = simd_mix(lo.colour, hi.colour, SIMD3(repeating: hi.at > lo.at ? (height - lo.at) / (hi.at - lo.at) : 0))
-                return [UInt8(colour.x * 255 + 0.5), UInt8(colour.y * 255 + 0.5), UInt8(colour.z * 255 + 0.5), 255]
-            }
-            let heights = SKTexture(data: Data(ramp), size: CGSize(width: 256, height: 1))
-            heights.filteringMode = .linear
-            // The ground the river never reached is mottled with its oldest land's colour: in Light with a quarter
-            // of it, or it reads as stains on the paper.
-            let oldest = relief.heights[relief.heights.count - 2].colour, wilds = systemIsDark ? oldest : simd_mix(relief.ground, oldest, SIMD3(repeating: 0.25))
-            uniforms += [SKUniform(name: "u_heights", texture: heights), SKUniform(name: "u_river", vectorFloat3: relief.river),
-                         SKUniform(name: "u_wet", vectorFloat3: relief.wet), SKUniform(name: "u_ground", vectorFloat3: relief.ground),
-                         SKUniform(name: "u_wilds", vectorFloat3: wilds)]
+        let graded = dressed[4] == "graded", name = dressed[map ? 3 : 2], sameLook = !was.isEmpty && was[0] == dressed[0], before = family
+        // The family Settings names. Random keeps the one showing, and moves on from it at once when it is picked
+        // in place of a name, so that the swatch answers.
+        if map, let named = Self.maps.firstIndex(where: { $0.name == name }) { family.sheet = named }
+        if !map, let named = Self.reliefs.firstIndex(where: { $0.name == name }) { family.relief = named }
+        if sameLook, name.isEmpty, !was[map ? 3 : 2].isEmpty { another() }
+        if !sameLook || was[1] != dressed[1] || was[4] != dressed[4] {
+            var uniforms = [SKUniform(name: "u_grid", vectorFloat2: [Float(river.columns), Float(river.rows)]), SKUniform(name: "u_other", texture: textures[1]),
+                            clocks, blend, turns, settings] + (graded ? grading : [])
+            if map { uniforms += inks[..<3] + [SKUniform(name: "u_stage", float: Float(stage))] + inks[3...] } else { uniforms += [SKUniform(name: "u_heights", texture: heights)] + paints }
+            ground.shader = SKShader(source: shaderCommon + Self.reads + (map ? Self.map(rule: rule, graded: graded) : Self.relief(light: !systemIsDark, graded: graded)), uniforms: uniforms)
         }
-        ground.shader = SKShader(source: shaderCommon + Self.reads + (map ? Self.map(rule: rule, graded: graded) : Self.relief(light: !systemIsDark, graded: graded)), uniforms: uniforms)
+        // at once for a new scene or another look, which is another picture; a few seconds for a swatch picked by hand
+        if !sameLook { repaint(over: 0) } else if family != before { repaint(over: 3) }
         tune()
         if times == [0, 0] { for _ in 0..<2 { upload() } } // a new scene: both grounds are the river's first
         show()
     }
 
+    /// The colours of the family the look is showing, in the system's mode, in the order `wear` takes them: relief's
+    /// four and then the land's by height, 256 of them; or a sheet's paper, river and line and its four inks (a
+    /// sheet of two takes them in turn).
+    private var palette: [SIMD3<Float>] {
+        if map {
+            let sheets = Self.maps[family.sheet], sheet = systemIsDark ? sheets.dark : sheets.light
+            return [sheet.paper, sheet.river, sheet.line] + (0..<4).map { sheet.inks[$0 % sheet.inks.count] }
+        }
+        let both = Self.reliefs[family.relief], relief = systemIsDark ? both.dark : both.light
+        // The ground the river never reached is mottled with its oldest land's colour: in Light with a quarter
+        // of it, or it reads as stains on the paper.
+        let oldest = relief.heights[relief.heights.count - 2].colour, wilds = systemIsDark ? oldest : simd_mix(relief.ground, oldest, SIMD3(repeating: 0.25))
+        return [relief.river, relief.wet, relief.ground, wilds] + (0..<256).map { level in
+            let height = Float(level) / 255, above = relief.heights.firstIndex { $0.at >= height } ?? relief.heights.count - 1
+            let (lo, hi) = (relief.heights[max(above - 1, 0)], relief.heights[above])
+            return simd_mix(lo.colour, hi.colour, SIMD3(repeating: hi.at > lo.at ? (height - lo.at) / (hi.at - lo.at) : 0))
+        }
+    }
+
+    /// Puts colours on the screen: the uniforms, and for relief the land's colours by height, as bytes.
+    private func wear(_ colours: [SIMD3<Float>]) {
+        shown = colours
+        for (uniform, colour) in zip(map ? inks : paints, colours) { uniform.vectorFloat3Value = colour }
+        guard !map else { return }
+        let ramp = colours[paints.count...].flatMap { colour -> [UInt8] in
+            [UInt8(colour.x * 255 + 0.5), UInt8(colour.y * 255 + 0.5), UInt8(colour.z * 255 + 0.5), 255]
+        }
+        heights.modifyPixelData { data, length in ramp.withUnsafeBytes { data?.copyMemory(from: $0.baseAddress!, byteCount: min(length, $0.count)) } }
+    }
+
+    /// Eases the colours on the screen to the showing family's over `seconds`, while the river carries on: a slow
+    /// repaint of the same picture, never a new one. It starts from whatever is showing, so a change that comes
+    /// part-way through another has no jump in it, and it ends on the family's own colours exactly: at rest the
+    /// picture is the one a scene dressed in them from the start would draw, to the byte. `update` moves it on by
+    /// the frame's own time, so it is the same at any frame rate and a view that was frozen can't make it leap.
+    // ponytail: a straight RGB blend, like Lava Lamp's; blend in a perceptual space if the middle ever looks muddy
+    private func repaint(over seconds: Double) {
+        let to = palette
+        waited = 0
+        if seconds > 0, shown.count == to.count {
+            fade = shown == to ? nil : (shown, to, 0, seconds)
+        } else {
+            fade = nil
+            wear(to)
+        }
+    }
+
+    /// Random's next family for the look that is showing: any but the one it has.
+    private func another() {
+        if map { family.sheet = Self.maps.indices.filter { $0 != family.sheet }.randomElement()! }
+        else { family.relief = Self.reliefs.indices.filter { $0 != family.relief }.randomElement()! }
+    }
+
     /// The sliders a shader or the river follows as they move: texels to a point of the screen (the river's size),
-    /// how long old courses stay in T, the scroll bars' strength, and a lake's life in T; and the Look sliders.
+    /// how long old courses stay in T, the scroll bars' strength, and a lake's life in T; the Look sliders; and how
+    /// often Random changes the colours.
     private func tune() {
         river.lakeLife = Self.lakes.value * Self.perMinute
+        let asked = dressed[map ? 3 : 2].isEmpty ? Self.cycleMinutes.value.rounded() * 60 : 0
+        if asked != every { (every, waited) = (asked, 0) } // a new wait counts from when it was asked for
         for (uniform, knob) in zip(grading, Self.grades) { uniform.floatValue = Float(knob.value) }
         settings.vectorFloat4Value = [Float(Double(river.columns) / size.width), Float(min(Self.memory.value * Self.perMinute, River.memory)), Float(Self.bars.value), Float(river.lakeLife)]
     }
@@ -238,8 +303,21 @@ final class Meander: SKScene {
     }
 
     override func update(_ currentTime: TimeInterval) {
-        river.advance(frameTime(currentTime, &lastTime), speed: Self.speed.value) { upload() }
+        let seconds = frameTime(currentTime, &lastTime)
+        river.advance(seconds, speed: Self.speed.value) { upload() }
         show()
+        // Random moves on to another family every so often, over a minute as the other wallpapers' colours do
+        waited += seconds
+        if every > 0, waited >= every {
+            another()
+            repaint(over: 60)
+        }
+        guard var change = fade else { return }
+        change.elapsed += seconds
+        // in 960ths of a second, so the frame rate's own way of adding the time up can't show in the picture
+        let elapsed = (change.elapsed * 960).rounded() / 960, share = Float(simd_smoothstep(0, 1, elapsed / change.seconds))
+        fade = elapsed < change.seconds ? change : nil
+        wear(fade == nil ? change.to : zip(change.from, change.to).map { simd_mix($0, $1, SIMD3(repeating: share)) })
     }
 
     /// Sends the ground's bytes to the texture holding the older of the last two steps, with the time since the

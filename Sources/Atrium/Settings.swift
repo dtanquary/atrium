@@ -501,7 +501,9 @@ struct WallpaperPage: View {
         ForEach(wallpaper.knobs.filter { $0.section == section }, id: \.key) { knob in
             KnobRow(knob: knob)
             if let status = wallpaper.status, status.below == knob.key { StatusRow(key: status.key, gate: knob) }
-            ForEach(wallpaper.looks.filter { $0.shownWhen == knob.key }, id: \.key) { LookPalette(choice: $0, menu: knob) }
+            ForEach(wallpaper.looks.filter { $0.shownWhen == knob.key }, id: \.key) {
+                LookPalette(choice: $0, menu: knob, timing: wallpaper.knobs.filter { $0.section == "Colors" })
+            }
         }
     }
 
@@ -734,18 +736,23 @@ struct RandomOnly<Content: View>: View {
 }
 
 /// The swatches of one of a wallpaper's `looks`, under the menu it goes with while that menu is at its pick. The
-/// scene follows the pick as it does a knob, so nothing is rebuilt.
+/// scene follows the pick as it does a knob, so nothing is rebuilt. Under them while they are at Random, the
+/// wallpaper's "Colors" rows (`timing`): how often its colours change.
 struct LookPalette: View {
     let choice: PaletteChoice
+    let timing: [Knob]
     @AppStorage private var pick: Double
 
-    init(choice: PaletteChoice, menu: Knob) {
-        self.choice = choice
+    init(choice: PaletteChoice, menu: Knob, timing: [Knob]) {
+        (self.choice, self.timing) = (choice, timing)
         _pick = AppStorage(wrappedValue: menu.standard, menu.key)
     }
 
     var body: some View {
-        if Knob.on(pick, at: choice.shownAt) { PalettePicker(choice: choice) {} }
+        if Knob.on(pick, at: choice.shownAt) {
+            PalettePicker(choice: choice) {}
+            RandomOnly(choice: choice) { ForEach(timing, id: \.key) { KnobRow(knob: $0) } }
+        }
     }
 }
 

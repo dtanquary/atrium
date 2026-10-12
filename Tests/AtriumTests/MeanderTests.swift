@@ -425,7 +425,8 @@ private func seeded(_ seed: Double, _ others: [String: Double] = [:]) -> [String
         UserDefaults.standard.set(value, forKey: key)
         for _ in 0..<2 { try screen.frame(rate: 1e9) } // the new shader's first frame, and no time gone by
         pictures.append(screen.pixels)
-        #expect(pictures.last! != pictures[pictures.count - 2], "nothing changed when \(key) became \(value)")
+        // a swatch's colours come in over a few seconds (`meanderRepaintsItsColours`), so with no time gone by nothing has changed yet
+        #expect((pictures.last! == pictures[pictures.count - 2]) == value is String, "when \(key) became \(value)")
     }
     #expect(scene.river === river && view.scene === scene)
     // The Look sliders, each off its standard value in turn; and with all four back the picture is the one there
@@ -987,5 +988,148 @@ private func ripple(_ picture: [UInt32], side: Int, texel: Int, counts: (_ x: In
                          size, points, rms, worst))
             if size == 28 { #expect(points > 300 && rms < 0.4, "\(points) points, \(rms) px") }
         }
+    }
+}
+
+/// A change of colours is a slow repaint of the picture that is running: never a snap, and never a new river. In
+/// each look, in Dark Mode and in Light, a swatch is picked while the river runs, and another half-way through
+/// that change. On no frame does the picture jump (the most a pixel changes from one frame to the next, leaving
+/// out the thousandth of them that change most, which are the river's moving banks); part-way through, the
+/// picture is the same at 15 frames a second as at 60; and once it has finished it is the picture a scene dressed
+/// in those colours from the start draws at that moment, to the byte. With MEANDER_REPAINT set to a folder, a
+/// strip of each is saved: a corner of the screen every half second.
+@MainActor @Test func meanderRepaintsItsColours() throws {
+    let folder = ProcessInfo.processInfo.environment["MEANDER_REPAINT"].map { URL(fileURLWithPath: $0) }
+    let before = NSApplication.shared.appearance
+    defer { NSApplication.shared.appearance = before }
+    let (w, h) = (756, 491)
+    /// The most any pixel changes from one picture to the next, in levels, and the most leaving out the thousandth
+    /// of them that change most.
+    func jump(_ a: [UInt32], _ b: [UInt32]) -> (calm: Int, any: Int) {
+        var counts = [Int](repeating: 0, count: 256)
+        a.withUnsafeBufferPointer { a in b.withUnsafeBufferPointer { b in
+            for i in 0..<a.count {
+                let (p, q) = (a[i], b[i])
+                counts[max(abs(Int(p & 255) - Int(q & 255)), abs(Int(p >> 8 & 255) - Int(q >> 8 & 255)), abs(Int(p >> 16 & 255) - Int(q >> 16 & 255)))] += 1
+            }
+        } }
+        var (left, calm) = (a.count / 1000, 255)
+        while calm > 0, counts[calm] <= left { (left, calm) = (left - counts[calm], calm - 1) }
+        return (calm, counts.lastIndex { $0 > 0 } ?? 0)
+    }
+    let cases: [(name: String, look: Double, key: String, families: [String], appearance: NSAppearance.Name)] = [
+        ("relief-dark", 0, "meander.colors", ["Survey Blue", "Garnet", "Rainforest"], .darkAqua), ("relief-light", 0, "meander.colors", ["Survey Blue", "Garnet", "Rainforest"], .aqua),
+        ("map-light", 1, "meander.inks", ["Fisk 1944", "Sage", "Teal"], .aqua), ("map-dark", 1, "meander.inks", ["Fisk 1944", "Sage", "Teal"], .darkAqua),
+    ]
+    for item in cases {
+        NSApplication.shared.appearance = NSAppearance(named: item.appearance)
+        try with(seeded(7, ["meander.look": item.look])) {
+            func pick(_ family: Int) { UserDefaults.standard.set(item.families[family], forKey: item.key) }
+            @MainActor func made() throws -> (Meander, Offscreen) {
+                let scene = Meander(size: CGSize(width: w, height: h))
+                return (scene, try Offscreen(scene, w, h))
+            }
+            // at 60 frames a second: the first swatch after 25 frames, the second a second and a half into its change
+            pick(0)
+            let (scene, screen) = try made(), river = scene.river!
+            // `quiet`: the most on frames with nothing changing but the river; `worst`: on frames of a change of colours
+            var (frames, quiet, worst): (Int, (calm: Int, any: Int), (calm: Int, any: Int)) = (0, (0, 0), (0, 0))
+            var costs: [[(update: Double, draw: Double, gpu: Double)]] = [[], []]
+            var (last, strip, halfway): ([UInt32], [[UInt32]], [UInt32]) = ([], [], [])
+            @MainActor func run(_ count: Int, blending: Bool = true) throws {
+                for _ in 0..<count {
+                    let cost = try screen.frame(rate: 60)
+                    frames += 1
+                    costs[blending ? 1 : 0].append(cost)
+                    if frames % 7 < 2 || count == 1 { // two frames running out of every seven, and any frame asked for alone
+                        let picture = screen.piece(x: 0, y: 0, w: w, h: h)
+                        if frames % 7 == 1 || count == 1, !last.isEmpty, frames > 13 { // (a new scene's first two steps show no motion)
+                            let moved = jump(last, picture)
+                            if blending { worst = (max(worst.calm, moved.calm), max(worst.any, moved.any)) } else { quiet = (max(quiet.calm, moved.calm), max(quiet.any, moved.any)) }
+                        }
+                        last = picture
+                    }
+                    if frames % 30 == 5 { strip.append(screen.piece(x: 0, y: 0, w: 240, h: 160)) }
+                }
+            }
+            try run(24, blending: false)
+            try run(1, blending: false)
+            let first = last
+            pick(1)
+            try run(1)
+            let atOnce = jump(first, last)
+            try run(71)
+            halfway = screen.piece(x: 0, y: 0, w: w, h: h)
+            try run(18)
+            last = screen.piece(x: 0, y: 0, w: w, h: h)
+            pick(2)
+            try run(1)
+            try run(185)
+            try run(240, blending: false)
+            let rested = screen.piece(x: 0, y: 0, w: w, h: h)
+            #expect(scene.river === river)
+            #expect(atOnce.calm <= quiet.calm + 1 && worst.calm <= quiet.calm + 2, "\(item.name): a pixel changed by \(atOnce.calm) levels on the frame after a swatch was picked and by \(worst.calm) on some frame of the change, and by \(quiet.calm) on a frame before")
+            #expect(jump(first, halfway).calm > 8 && jump(halfway, rested).calm > 8, "\(item.name): the colours didn't change")
+            // the same moment at 15 frames a second: seven frames, the swatch, eighteen frames
+            pick(0)
+            let (_, slow) = try made()
+            for _ in 0..<7 { try slow.frame(rate: 15) }
+            pick(1)
+            for _ in 0..<18 { try slow.frame(rate: 15) }
+            #expect(slow.piece(x: 0, y: 0, w: w, h: h) == halfway, "\(item.name): part-way through a change the picture at 15 frames a second isn't the one at 60")
+            // and at rest it is the picture of a scene that wore the last swatch from the start
+            pick(2)
+            let (_, fresh) = try made()
+            for _ in 0..<frames - 1 { fresh.advance(rate: 60) }
+            try fresh.frame(rate: 60)
+            #expect(fresh.piece(x: 0, y: 0, w: w, h: h) == rested, "\(item.name): after a change the picture isn't the one a scene in those colours from the start draws")
+            func middle(_ times: [Double]) -> Double { times.sorted()[times.count / 2] }
+            print(String(format: "Meander repainting, %@, 60 fps, the most a pixel changes in a frame, in levels (and with the river's banks): %d (%d) with only the river moving, %d (%d) on the frame after a swatch is picked, %d (%d) while the colours change. A frame's update, drawing and GPU: %.2f, %.2f and %.2f ms changing; %.2f, %.2f and %.2f at rest",
+                         item.name, quiet.calm, quiet.any, atOnce.calm, atOnce.any, worst.calm, worst.any, middle(costs[1].map(\.update)), middle(costs[1].map(\.draw)), middle(costs[1].map(\.gpu)),
+                         middle(costs[0].map(\.update)), middle(costs[0].map(\.draw)), middle(costs[0].map(\.gpu))))
+            if let folder {
+                var sheet = [UInt32](repeating: 0, count: 240 * strip.count * 160)
+                for (k, tile) in strip.enumerated() { for y in 0..<160 { for x in 0..<240 { sheet[y * 240 * strip.count + k * 240 + x] = tile[y * 240 + x] } } }
+                save(sheet, 240 * strip.count, 160, to: folder.appendingPathComponent("repaint-\(item.name).png"))
+            }
+        }
+    }
+}
+
+/// Under Random the colours move on by themselves, every "Change colors every" minutes, to another family of the
+/// look that is showing, over a minute; and not at all with that at 0, or while Settings names a family. Followed
+/// by the colour of the ground the river never reaches, in the picture's corner, which every family of relief has
+/// its own of: it is one family's until two minutes are up, between two half a minute later, and then another's.
+@MainActor @Test func meanderChangesColoursOnATimer() throws {
+    let (w, h) = (378, 245)
+    @MainActor func corner(_ screen: Offscreen) throws -> UInt32 {
+        try screen.frame(rate: 10)
+        return screen.piece(x: 4, y: 4, w: 1, h: 1)[0]
+    }
+    @MainActor func after(_ seconds: Int, _ screen: Offscreen) throws -> UInt32 {
+        for _ in 0..<seconds * 10 - 1 { screen.advance(rate: 10) }
+        return try corner(screen)
+    }
+    var families: [UInt32] = []
+    for family in Meander.reliefs {
+        try with(seeded(7), colours: [family.name, "Fisk 1944"]) { families.append(try corner(Offscreen(Meander(size: CGSize(width: w, height: h)), w, h))) }
+    }
+    #expect(Set(families).count == families.count)
+    try with(seeded(7, ["meander.cycleMinutes": 2]), colours: ["", "Fisk 1944"]) {
+        let scene = Meander(size: CGSize(width: w, height: h)), screen = try Offscreen(scene, w, h), river = scene.river!
+        let first = try corner(screen)
+        #expect(families.contains(first))
+        #expect(try after(118, screen) == first, "the colours changed before their two minutes were up")
+        let between = try after(32, screen)
+        #expect(!families.contains(between), "half a minute into a change the colours are a family's own")
+        let second = try after(35, screen)
+        #expect(families.contains(second) && second != first, "a minute after it began, the change hasn't ended on another family")
+        #expect(try after(40, screen) == second && scene.river === river)
+        // not with the slider at 0; and not once Settings names the family showing
+        UserDefaults.standard.set(0.0, forKey: "meander.cycleMinutes")
+        #expect(try after(200, screen) == second, "the colours changed with Change colors every at 0")
+        UserDefaults.standard.set(2.0, forKey: "meander.cycleMinutes")
+        UserDefaults.standard.set(Meander.reliefs[families.firstIndex(of: second)!].name, forKey: "meander.colors")
+        #expect(try after(200, screen) == second, "the colours changed while Settings named a family")
     }
 }
