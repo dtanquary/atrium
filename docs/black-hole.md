@@ -310,6 +310,7 @@ Measured, at 3024 × 1964:
   - **Changed:** a Drift slider under Sky, 0 by default, turns the whole sky, stars and Milky Way together, by taking the camera slowly round the hole: step (h) in [The build so far](#the-build-so-far). For him to try and judge.
 - **2026-10-12, the size:** "can we allow up to 3x size on black hole, the 1.5x is not enough range".
   - **Changed:** Size runs to 3×, a 20° field, with the disc wider than the screen. What the close-up looks like and measures is step (i) in [The build so far](#the-build-so-far).
+  - **Once he had it on his desktop:** "i think it looks great at 3x, dont have any issues". So the top stays at 3×, and the things step (i) lists as wrong there (the brightness, the hairline at the shadow's edge, 1× sitting 15% along the slider) are not his complaints.
 - **2026-10-11:** "proceed on your own until you have working versions of all 3" (this, Meander and the train).
 
 ### Still open
