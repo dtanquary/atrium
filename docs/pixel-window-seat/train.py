@@ -84,6 +84,9 @@ M = {
     "track": (200, 176, 136),
     "conc": (152, 152, 158), "concS": (114, 116, 126), "glassT": (90, 116, 146), "glassTS": (62, 84, 114), "tar": (72, 74, 82),
     "rail": (156, 156, 166), "glassW": (58, 66, 88),
+    # a city's shore across a lake: the embankment's dark foot and its pale cap (which is the same stone twice: a lamp
+    # that stands on the one lights sodium, and on the other white)
+    "quayS": (62, 64, 74), "quay": (198, 192, 178), "quayW": (198, 192, 178),
     # lights with nothing drawn under them by day: a street lamp, a red light on a tower, a sign, a white lamp
     "lampO": (0, 0, 0), "lampR": (0, 0, 0), "lampT": (0, 0, 0), "lampW": (0, 0, 0),
 }

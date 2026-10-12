@@ -140,11 +140,14 @@ extension TrainWorld {
     }
 
     /// How far off things have faded to the horizon's colour, where the train is: each country's own, and
-    /// farmland's where two meet.
+    /// farmland's where two meet. A city across a lake stands in the lake's haze as well as its own, and fades at
+    /// `overWater` of the distance, the nearer to that the wider the water has opened: its towers are then paler
+    /// than the shore in front of them, and sit back.
     func haze(_ wx: Double) -> Double {
-        let place = country(wx)
-        return Self.haze + (place.kind.haze - Self.haze) * place.relief(0)
+        let place = country(wx), far = Self.haze + (place.kind.haze - Self.haze) * place.relief(0)
+        return place.kind == .city ? far * (1 - (1 - Self.overWater) * (1 - min(shore(wx), Self.farShore) / Self.farShore)) : far
     }
+    static let overWater = 0.5
 
     /// How many rows a ring's strip needs for the tallest thing any other country stands there.
     func otherRows(_ ring: Int) -> Int {
@@ -185,7 +188,7 @@ extension TrainWorld {
     /// skirt of scree; dunes and low rises nearer, with a little scrub; then scrub in clumps from 900 m in, thicker by
     /// the line, and where farmland has villages a camp of round felt tents, each with a door that glows after dark.
     func otherColumn(_ kind: TrainCountry, _ ring: Int, _ n: Int, into cells: UnsafeMutablePointer<UInt8>, by laid: [Laying], relief: Double) -> UInt8 {
-        if kind == .city { return cityColumn(ring, n, into: cells, by: laid, relief: relief) }
+        if kind == .city { return cityColumn(ring, n, into: cells, by: laid) }
         let z = Self.rings[ring], ppm = focal / z, wx = Double(n) / ppm, salt = UInt64(z) + kind.salt, rows = rows(ring)
         guard z >= Self.farShore || z <= shore(wx) else { return 0 } // out in a lake
         /// How fast the ring slid, in pixels a second, and which side the Sun was on, when column `n` came into view.
@@ -348,7 +351,7 @@ extension TrainWorld {
     /// windows lit after dark, warm in homes and white in glass. Street lamps stand every 40 to 70 m from 900 m in,
     /// on posts from 300 m in. And far off the city's streets are a seam of lights along its foot. Toward where
     /// another country begins the buildings are lower.
-    private func cityColumn(_ ring: Int, _ n: Int, into cells: UnsafeMutablePointer<UInt8>, by laid: [Laying], relief: Double) -> UInt8 {
+    private func cityColumn(_ ring: Int, _ n: Int, into cells: UnsafeMutablePointer<UInt8>, by laid: [Laying]) -> UInt8 {
         let kind = TrainCountry.city, z = Self.rings[ring], ppm = focal / z, wx = Double(n) / ppm, salt = UInt64(z) + kind.salt, rows = rows(ring)
         guard z >= Self.farShore || z <= shore(wx) else { return 0 } // out in a lake
         func when(_ n: Int) -> (pace: Double, sun: Int) {
@@ -408,14 +411,68 @@ extension TrainWorld {
                 top = max(top, row + 1)
             }
         }
-        // Across a lake the city's shore is a quay: a line of wall along the water, under all that is there, a lamp
-        // with nothing drawn under it among them. (One row, the first of the water's: a second would stand in front
-        // of the farther rings' street lights. And none close to where another country begins.)
-        if z == Self.farShore, shore(wx) < .infinity, relief > 0.5 {
-            if cells[0] & 127 == 0 { cells[0] |= TrainMat.concreteShade }
-            top = max(top, 1)
+        // Across a lake the city stands on a shore of its own, to within 60 m of where another country begins. And
+        // for a kilometre beyond each end of the lake: from the train the far side is seen across the lake's corner
+        // for some way past where the lake itself has ended.
+        if z == Self.farShore, stands(wx, in: kind), stride(from: -1000.0, through: 1000, by: 250).contains(where: { shore(wx + $0) < .infinity }) {
+            top = max(top, waterfront(n, into: cells, rows: rows, salt: salt, when: when))
         }
         return UInt8(top)
+    }
+
+    /// How many rows of a city's shore across a lake are embankment: a dark foot at the water, and a pale cap.
+    static let embankment = 2
+
+    /// Lays a city's shore across a lake over the bottom rows of column `n` of its nearest ring, in front of the feet
+    /// of everything that stands there, so that the city stands on land and not in the water: an embankment, a dark
+    /// foot at the water under a pale cap; on it, trees all along, a ragged line 14 to 34 m high in a park and half
+    /// that behind a wharf's sheds (parks and wharves take turns, a kilometre or so of each); a wharf's sheds, and a
+    /// crane here and there; boats moored along the wall where there is a marina, a white hull on the water and a
+    /// mast; and the quay's lamps, along its cap and fewer in the two rows over it, which are the far shore's seam
+    /// of lights after dark. Returns how many of the strip's rows it uses.
+    private func waterfront(_ n: Int, into cells: UnsafeMutablePointer<UInt8>, rows: Int, salt: UInt64, when: (Int) -> (pace: Double, sun: Int)) -> Int {
+        let ppm = focal / Self.farShore, wx = Double(n) / ppm, wall = Self.embankment, lights: UInt8 = when(n).pace <= Self.bright ? 128 : 0
+        guard rows > wall + 1 else { return 0 }
+        for up in 0..<wall { cells[up] = up == wall - 1 ? TrainMat.quay : TrainMat.quayShade }
+        var top = wall
+        func put(_ up: Int, _ cell: UInt8) { if up < rows { (cells[up], top) = (cell, max(top, up + 1)) } }
+        let wharf = fbm(wx / 1100, 9, 2, salt + 80)
+        let tall = Int(((14 + 20 * fbm(wx / 45, 1, 3, salt + 82)) * ppm * (0.55 + 0.45 * clip((0.56 - wharf) * 7))).rounded(.toNearestOrEven))
+        for up in wall..<wall + tall {
+            let crown = up == wall + tall - 1 && unit(hash(n >> 1, 0, salt + 83)) < 0.5
+            put(up, crown || unit(hash(n >> 1, up, salt + 83)) < 0.2 ? TrainMat.leaf1 : TrainMat.leaf0)
+        }
+        let plot = 60.0, here = Int((wx / plot).rounded(.down))
+        for c in here - 3...here + 3 {
+            let draw = unit(hash(c, 1, salt + 84)), at = (Double(c) + unit(hash(c, 2, salt + 85))) * plot, busy = fbm(at / 1100, 9, 2, salt + 80)
+            let seed = Int(hash(c, 3, salt + 86) % (1 << 30)), wide = unit(hash(c, 4, salt + 87)), high = unit(hash(c, 5, salt + 88))
+            let stamp: Stamp
+            guard stands(at, in: .city) else { continue }
+            if busy > 0.50, draw < 0.55 {
+                stamp = .shed((30 + 60 * wide) * ppm, (14 + 12 * high) * ppm + 1, seed)
+            } else if busy > 0.54, draw > 0.92 {
+                stamp = .crane((44 + 26 * wide) * ppm, (22 + 14 * high) * ppm, seed)
+            } else {
+                continue
+            }
+            let left = Int((at * ppm).rounded(.toNearestOrEven)) - stamp.w / 2
+            guard n >= left, n < left + stamp.w else { continue }
+            for (y, cell) in stamp.column(n - left, 1).enumerated() where cell != 0 { put(wall + stamp.h - 1 - y, cell & 127 | (cell & lights)) }
+        }
+        let berth = 22.0, slip = Int((wx / berth).rounded(.down))
+        for c in slip - 2...slip + 2 {
+            let at = (Double(c) + unit(hash(c, 2, salt + 90))) * berth
+            guard noise(at / 600, 4, salt + 89) > 0.60, unit(hash(c, 1, salt + 91)) < 0.7 else { continue }
+            let x = Int((at * ppm).rounded(.toNearestOrEven)), mast = 2 + Int(unit(hash(c, 3, salt + 92)) * 3)
+            if n == x || n == x + 1 { cells[0] = TrainMat.white }
+            if n == x { for up in wall..<wall + mast { put(up, TrainMat.whiteShade) } }
+        }
+        if unit(hash(n, 1, salt + 65)) < 0.36 { cells[wall - 1] = (unit(hash(n, 2, salt + 66)) >= 0.7 ? TrainMat.quayWhite : TrainMat.quay) | lights }
+        for (row, share) in [(wall, 0.16), (wall + 1, 0.06)] where row < rows && unit(hash(n, row + 1, salt + 65)) < share {
+            if cells[row] & 127 == 0 { put(row, cells[row] & 128 | (unit(hash(n, row + 2, salt + 66)) < 0.6 ? TrainMat.lampSodium : TrainMat.lampWhite)) }
+            if cells[row] & 127 != TrainMat.whiteShade { cells[row] |= lights }
+        }
+        return top
     }
 
     /// A cabin is farmland's house in red or tarred timber under a snowed roof.
@@ -428,6 +485,32 @@ extension TrainWorld {
 }
 
 extension Stamp {
+    /// A waterfront shed or warehouse `wide` by `high` pixels: a dark wall under a pale roof, with a row of windows
+    /// if it is tall enough to have one, three in five of them lit after dark (a cell's top bit).
+    static func shed(_ wide: Double, _ high: Double, _ seed: Int) -> Stamp {
+        let w = max(3, Int(wide)), h = max(2, Int(high))
+        let (wall, roof) = [(TrainMat.brickShade, TrainMat.whiteShade), (TrainMat.concreteShade, TrainMat.stone), (TrainMat.chaletShade, TrainMat.slate),
+                            (TrainMat.concreteShade, TrainMat.whiteShade)][Int(unit(hash(seed, 2, 21)) * 4)]
+        return Stamp(w: w, h: h) { x, _ in
+            var column = [UInt8](repeating: wall, count: h)
+            column[0] = roof
+            if h >= 3, x >= 1, x < w - 1, (x - 1) % 3 == 0 { column[1] = TrainMat.glass | (unit(hash(seed + x, 1, 55)) < 0.6 ? 128 : 0) }
+            return column
+        }
+    }
+
+    /// A dockside crane `high` pixels tall: a mast with a jib `reach` pixels out to one side at its top, its hook
+    /// hanging from the end, and a stub the other way; and a red light over it.
+    static func crane(_ high: Double, _ reach: Double, _ seed: Int) -> Stamp {
+        let h = max(4, Int(high)), out = max(2, Int(reach)), left = unit(hash(seed, 3, 22)) < 0.5, mast = left ? out : 1
+        return Stamp(w: out + 2, h: h + 1) { x, _ in
+            var column = [UInt8](repeating: x == mast ? TrainMat.pole : 0, count: h + 1)
+            (column[0], column[1]) = (x == mast ? TrainMat.lampRed | 128 : 0, TrainMat.pole)
+            if x == (left ? 0 : out + 1) { column[2] = TrainMat.pole }
+            return column
+        }
+    }
+
     /// A city building `wide` by `high` pixels with a storey every `floor` of them: concrete, brick or glass by its
     /// `style`, one end in shade, a darker edge to its roof, and its windows in rows. A cell's top bit marks a window
     /// that is lit after dark: each building has its own share of them. With a `light` it is a row taller, for the

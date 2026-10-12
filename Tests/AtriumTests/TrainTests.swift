@@ -164,28 +164,38 @@ import Testing
     #expect(all >= 85 && forked * 2 > all && forked * 4 < all * 3, "\(forked) of \(all) strikes show their stroke")
 }
 
-/// Left to change, the country has lakes beside the line for a fair share of it, and neither they nor the country
-/// between go on so long that the wallpaper seems stuck: at 1× the train covers 800 m a minute.
 /// A city across the water is the city with a lake held beside the line. Nearer than the far shore nothing stands
-/// and there is no pole line; every row of ground is water; and the far shore is a quay all along, with the city's
-/// lights over it. (What the rings beyond hold is set against the mock-ups' painter by `trainWritesItsCountry`.)
+/// and there is no pole line, and every row of ground is water. And the city stands on a shore of its own: all
+/// along the far side an embankment, a dark foot or a moored boat's hull at the water under a pale cap, so that no
+/// tower's foot meets the water; things standing on it (trees, sheds, masts) along most of it; and its lamps.
+/// Left to change, a city's own lake has the same shore. (What the rings hold is set against the mock-ups' painter
+/// by `trainWritesItsCountry`.)
 @Test func trainHoldsACityAcrossTheWater() {
     var harbour = TrainWorld(focal: 265, eye: 3.5, speed: 13.3)
     harbour.scenery = 7
-    var bare = 0, onTheWater = 0, lamps = 0
+    let shore = TrainWorld.rings.firstIndex(of: TrainWorld.farShore)!, wall = TrainWorld.embankment
+    var across = [UInt8](repeating: 0, count: harbour.rows(shore))
+    /// Whether column `n` of the far shore is embanked: its foot at the water, and its cap.
+    func embanked(_ world: TrainWorld, _ n: Int) -> Bool {
+        _ = across.withUnsafeMutableBufferPointer { world.column(shore, n, into: $0.baseAddress!) }
+        return (0..<wall - 1).allSatisfy { [TrainMat.quayShade, TrainMat.white].contains(across[$0] & 127) } && [TrainMat.quay, TrainMat.quayWhite].contains(across[wall - 1] & 127)
+    }
+    var bare = 0, onTheWater = 0, lamps = 0, fronted = 0, columns = 0
     for x in [52000.0, 3.0, 1_234_567.5] {
-        for ring in TrainWorld.rings.indices {
-            let rows = harbour.rows(ring), first = Int((x * harbour.perMetre(ring)).rounded(.down)) - 170
-            var across = [UInt8](repeating: 0, count: rows)
+        for ring in TrainWorld.rings.indices where TrainWorld.rings[ring] < TrainWorld.farShore {
+            var near = [UInt8](repeating: 0, count: harbour.rows(ring))
+            let first = Int((x * harbour.perMetre(ring)).rounded(.down)) - 170
             for n in first..<first + 340 {
-                _ = across.withUnsafeMutableBufferPointer { harbour.column(ring, n, into: $0.baseAddress!) }
-                if TrainWorld.rings[ring] >= TrainWorld.farShore {
-                    lamps += across.count { $0 > 127 }
-                    if TrainWorld.rings[ring] == TrainWorld.farShore, across[0] & 127 == 0 { bare += 1 }
-                } else {
-                    onTheWater += across.count { $0 != 0 }
-                }
+                _ = near.withUnsafeMutableBufferPointer { harbour.column(ring, n, into: $0.baseAddress!) }
+                onTheWater += near.count { $0 != 0 }
             }
+        }
+        let first = Int((x * harbour.perMetre(shore)).rounded(.down)) - 170
+        for n in first..<first + 340 {
+            bare += embanked(harbour, n) ? 0 : 1
+            (columns, lamps) = (columns + 1, lamps + across[..<(wall + 2)].count { $0 > 127 })
+            fronted += [TrainMat.leaf0, TrainMat.leaf1, TrainMat.whiteShade, TrainMat.brickShade, TrainMat.concreteShade, TrainMat.chaletShade, TrainMat.glass]
+                .contains(across[wall] & 127) ? 1 : 0
         }
         for d in 1...66 {
             let first = Int((x * (Double(d) / harbour.eye)).rounded(.down)) - 170
@@ -193,11 +203,25 @@ import Testing
         }
         harbour.poleLine(at: x, wide: 340, high: 221, horizon: 66) { _, _, _ in onTheWater += 1 }
     }
-    #expect(bare == 0, "\(bare) columns of the far shore have no quay")
+    print("train shore: of \(columns) columns of the far shore \(bare) are not embanked, \(fronted) have a tree, a shed or a mast on the embankment, and its lamps are \(lamps)")
+    #expect(bare == 0, "\(bare) columns of the far shore have no embankment: a tower's foot meets the water there")
+    #expect(fronted * 10 > columns * 8, "only \(fronted) of \(columns) columns have something standing on the embankment")
     #expect(onTheWater == 0, "\(onTheWater) things stand on the water")
-    #expect(lamps > 300, "the far shore has \(lamps) lights in three panes")
+    #expect(lamps > 300, "the far shore has \(lamps) lamps along it in three panes")
+    // Left to change: wherever a lake lies beside a city, to within 100 m of where the city ends.
+    var changing = TrainWorld(focal: 265, eye: 3.5, speed: 13.3)
+    changing.scenery = 0
+    var harbours = 0, unbanked = 0
+    for step in 0..<20_000 { // 2,000 km, a place every 100 m
+        let wx = Double(step) * 100, place = changing.country(wx)
+        guard place.kind == .city, place.edge > 100, changing.shore(wx) < .infinity else { continue }
+        (harbours, unbanked) = (harbours + 1, unbanked + (embanked(changing, Int(wx * changing.perMetre(shore))) ? 0 : 1))
+    }
+    #expect(harbours > 100 && unbanked == 0, "of \(harbours) places where a lake lies beside a city, \(unbanked) have no embankment")
 }
 
+/// Left to change, the country has lakes beside the line for a fair share of it, and neither they nor the country
+/// between go on so long that the wallpaper seems stuck: at 1× the train covers 800 m a minute.
 @Test func trainPassesLakes() {
     let world = TrainWorld(focal: 265.2, eye: 3.5, speed: PixelTrain.pace)
     var beside = 0, runs: [Bool: [Int]] = [true: [], false: []], last = false, run = 0

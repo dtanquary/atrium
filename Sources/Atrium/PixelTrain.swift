@@ -50,10 +50,12 @@ final class PixelTrain: SKScene {
     // From which pole on the line stands or doesn't: it is left out while it would slide too fast, and a change takes
     // hold beyond the pane's leading edge, so the line runs out or comes in at a pole and never blinks.
     private var strung: [(from: Int, on: Bool)] = []
-    // The lake, by where a pixel is on the pane and not by what slides under it: each ground row's water in five
-    // colours (flat, a ripple's light and its dark, the Sun's glitter), and how likely the glitter is there.
+    // The lake, by where a pixel is on the pane and not by what slides under it: each ground row's water in six
+    // colours (flat, a ripple's light and its dark, the Sun's glitter, and under the image of what stands on the far
+    // shore, dark and faint), and how likely the glitter is there.
     private var water: [UInt32], glint: [UInt8]
     private var skyline: [Int] // for each column of the pane, the row what stands beyond a lake's far shore reaches up to
+    private var fronted: [Bool] // and whether the far shore there is a city's embankment
     private var reflected: [(column: Int, colour: UInt32)] = [] // the far shore's lamps as last painted, for their streaks in the water
     // The cloud (PixelTrainSky.swift): its five tones in this light, lightning's colour and how strongly it lights a
     // storm (0 with Settings' Lightning off), and a lake's water under a cloud's image, each row in the five tones.
@@ -64,6 +66,7 @@ final class PixelTrain: SKScene {
     // (`shadeTick`): about one level of 255 on the land at a time, where steps four times as big showed.
     private var daylight = (ambient: RGB.zero, key: RGB.zero, glow: RGB.zero, haze: RGB.zero)
     private var sunSpot: (x: Int, row: Int)?, shade = 0, shadeTick = 0
+    private var hazed = 0.0 // how far off things fade to the horizon's colour, as the colours were last worked out (`reach`)
     // The weather (PixelTrainSky.swift) as the scene was built, or none. What it does to the picture: how fast
     // things fade into its air, as a share of them a metre (`murk`), and the colour they fade to (`mist`); the
     // cloud's tones for each row of sky, seen through that much air (`skyTones`); how far each row of ground has
@@ -97,8 +100,8 @@ final class PixelTrain: SKScene {
         world = TrainWorld(focal: Double(gh) * 1.2, eye: Self.eye, speed: Self.pace * PixelWindowSeat.speed.value)
         (world.scenery, polesOn) = (Int(Self.scenery.value), Self.poles.value > 0.5)
         (land, dash) = ([UInt8](repeating: 0, count: gw * horizon), [UInt8](repeating: 0, count: gw * horizon))
-        (water, glint) = ([UInt32](repeating: 0, count: 5 * gw * horizon), [UInt8](repeating: 0, count: gw * horizon))
-        skyline = [Int](repeating: 0, count: gw)
+        (water, glint) = ([UInt32](repeating: 0, count: 6 * gw * horizon), [UInt8](repeating: 0, count: gw * horizon))
+        (skyline, fronted) = ([Int](repeating: 0, count: gw), [Bool](repeating: false, count: gw))
         weather = TrainWeather.now
         cloud = TrainCloud(wide: gw, rows: gh - horizon, focal: Double(gh) * 1.2, clouds: Int(PixelWindowSeat.clouds.value), held: weather?.cover)
         rain = TrainGlass(speed: world.speed)
@@ -227,6 +230,7 @@ final class PixelTrain: SKScene {
         let drawn = above.sunSpot, inPane = drawn.x >= 0 && drawn.x < glass.w && drawn.y >= horizon && drawn.y < glass.h
         sunSpot = above.sun.elevation <= 0 ? nil : inPane ? (drawn.x, drawn.y - horizon) : (glass.w / 2, glass.h - horizon - 1)
         if clock == 0 { shade = shadeWanted(with: Self.travelled) }
+        hazed = reach
         relight()
         (bolt, storms) = (pack(rgb(214, 224, 255)), PixelWindowSeat.lightning.value > 0.5 ? mix(0.22, 0.8, night) : 0) // by day a flash hardly shows
         // The lake: each row of water is the sky that many rows above the horizon turned over (three parts in five
@@ -247,6 +251,7 @@ final class PixelTrain: SKScene {
                 let c = mix(middle * 0.6 + above[x] * 0.4, deep, 0.30 + 0.35 * min(1, Float(d) / Float(horizon))), at = (d - 1) * gw + x
                 (water[at], water[flat + at], water[2 * flat + at], water[3 * flat + at]) = (pack(c), pack(c * 1.1), pack(c * 0.9), pack(c * 0.25 + sunlight * 0.75))
                 water[4 * flat + at] = pack(c * 0.62) // under the far shore's hills, their mirror in place of the sky's
+                water[5 * flat + at] = pack(c * 0.8) // and under a city's towers, what the ripples leave of theirs
                 glint[at] = shining ? UInt8(255 * mix(0.75, 0.9, low) * exp(-abs(Float(x - sunAt.x)) / (5 + Float(d) * 0.45))) : 0
             }
         }
@@ -283,7 +288,7 @@ final class PixelTrain: SKScene {
             return flat > 0 ? mix(c, RGB(repeating: (c.x + c.y + c.z) / 3), flat) : c
         }
         for (k, ring) in rings.enumerated() {
-            let far = Float(1 - exp(-ring.away / world.haze(Self.travelled) - ring.away * murk))
+            let far = Float(1 - exp(-ring.away / hazed - ring.away * murk))
             for (m, base) in TrainMat.day.enumerated() { ringColours[k * mats + m] = pack(mix(lit(base), daylight.haze, far)) }
         }
         // The ground, in the five tones a dash can take in each of a row's kinds: the far fields, which have no
@@ -296,6 +301,11 @@ final class PixelTrain: SKScene {
         }
         (pole, wire) = (pack(lit(rgb(52, 44, 40))), pack(lit(rgb(44, 40, 40))))
     }
+
+    /// How far off things fade to the horizon's colour where the train is, to the nearest 200 m. The country's colours
+    /// are worked out again each time it changes (`compose`), so that the air thickens and thins a shade at a time as
+    /// one country gives way to another, or a lake opens beside a city, and never in one step.
+    private var reach: Double { (world.haze(Self.travelled) / 200).rounded() * 200 }
 
     /// How far cloud should be dimming the Sun's light, in thirty-seconds, with the train `x` metres along: a whole
     /// eighth or none, so that a cloud's ragged edge doesn't set it wavering.
@@ -377,6 +387,10 @@ final class PixelTrain: SKScene {
     private func compose() {
         painted = clock
         let (gw, gh) = (glass.w, glass.h), mats = TrainMat.day.count
+        if reach != hazed {
+            hazed = reach
+            relight()
+        }
         // Cloud passing over the Sun dims the land, and gives it back, a step each sixteenth of a second: by where
         // the train was at that sixteenth, so that it goes the same at any frame rate.
         while shadeTick < Int(clock * 16) {
@@ -398,11 +412,14 @@ final class PixelTrain: SKScene {
         let struck = (x: Int(strike.across * Double(gw)), row: Int(strike.up * Double(cloud.rows)), light: flash)
         let tones = flash > 0 ? skyTones.map { blend($0, bolt, UInt32(flash * 50)) } : skyTones
         var above = [Int8](repeating: -1, count: gw) // the cloud's tones along the row of sky a row of water mirrors
-        // How high what stands beyond a lake's far shore reaches, column by column, for the water to mirror.
-        for i in 0..<gw { skyline[i] = 0 }
+        // How high what stands beyond a lake's far shore reaches, column by column, for the water to mirror; and
+        // where that shore is a city's embankment, which its cap says.
+        for i in 0..<gw { (skyline[i], fronted[i]) = (0, false) }
         for k in rings.indices where rings[k].away >= TrainWorld.farShore {
             var s = ((rings[k].first % gw) + gw) % gw
+            let cap = rings[k].away == TrainWorld.farShore && rings[k].rows >= TrainWorld.embankment ? rings[k].base + TrainWorld.embankment - 1 : -1
             for i in 0..<gw {
+                if cap >= 0 { fronted[i] = [TrainMat.quay, TrainMat.quayWhite].contains(strips[cap + s * rings[k].rows] & 127) }
                 skyline[i] = max(skyline[i], rings[k].foot + Int(tops[k * gw + s]))
                 s += 1
                 if s == gw { s = 0 }
@@ -420,11 +437,15 @@ final class PixelTrain: SKScene {
             // don't slide (water has nothing in it to follow), each lighter, darker or plain for about a second, and
             // the Sun's glitter, reshuffled five times in two seconds. A row of water mirrors the row of the picture that
             // many rows above the horizon: the sky, or darkly, between its lighter ripples, the hills that stand there.
+            // A city is not mirrored so, or its towers seem to go on down into the water: under its embankment lie three
+            // rows of the shore's own dark image, the last of them in pieces; and under those only what the ripples
+            // leave of a tower's, fainter, two fifths as long as the tower is tall and twelve rows at the most, fewer
+            // of its pieces the farther down.
             let tick = Int(clock * 2.5), flat = gw * horizon
             for r in rows.indices {
                 let row = rows[r], y = (horizon - 1 - r) * gw, at = r * gw, tones = row.tones * 5
                 let d = r + 1, long = 3 + d / 5, lead = (d * 7) % long, shore = horizon + d * 8 / 5
-                var s = ((row.first % gw) + gw) % gw, ripple = -1, tone = 0, sparkle: UInt8 = 0, mirrors = false
+                var s = ((row.first % gw) + gw) % gw, ripple = -1, tone = 0, sparkle: UInt8 = 0, mirrors = false, piece = 0.0
                 for i in 0..<gw {
                     if land[at + s] == TrainMat.water {
                         // (What the water mirrors is the sky eight rows up for every five down: cloud, if cloud is there.)
@@ -433,10 +454,22 @@ final class PixelTrain: SKScene {
                             ripple = (i + lead) / long
                             let draw = chance(ripple, d * 131 + (tick + ripple) / 3, 60)
                             (tone, sparkle) = (draw < 0.16 ? 1 : draw > 0.90 ? 2 : 0, scatter(ripple, d * 17 + tick, 61))
+                            piece = chance(ripple, d * 53 + (tick + ripple) / 3, 63)
                         }
                         let shines = Int(sparkle) * 32 < Int(glint[at + i]) * (32 - shade) // (no glitter from a Sun behind cloud)
                         // (The far shore's hills stand before the cloud behind them, and their image is the darker.)
-                        out[y + i] = shines ? water[3 * flat + at + i] : tone != 1 && shore < skyline[i] ? water[4 * flat + at + i]
+                        var image = shines ? 3 : -1
+                        if !shines, tone != 1 {
+                            if !fronted[i] {
+                                if shore < skyline[i] { image = 4 }
+                            } else if d <= 4 {
+                                if d < 4 || piece < 0.5 { image = 4 }
+                            } else {
+                                let deep = min((skyline[i] - horizon) * 2 / 5, 12)
+                                if d - 4 <= deep, piece < 0.75 - 0.6 * Double(d - 4) / Double(deep) { image = 5 }
+                            }
+                        }
+                        out[y + i] = image >= 0 ? water[image * flat + at + i]
                             : above[i] < 0 ? water[tone * flat + at + i] : mirrored[r * 15 + Int(above[i]) * 3 + tone]
                     } else {
                         out[y + i] = groundColours[(tones + Int(dash[at + s])) * mats + Int(land[at + s])]
@@ -535,17 +568,20 @@ enum TrainMat {
     static let water: UInt8 = 32
     /// The other countries' (TrainScenery.swift): rock, snow and ice, an alp's grass, a chalet's timber, a glacier's
     /// river; a cabin's red paint and a dwarf birch's twigs; sand, steppe grass, scrub, a mesa's bands and a dirt
-    /// track; a city's concrete, glass towers, tar and rails. `glassCool` is a window that lights white. The last four
-    /// are lights with nothing drawn under them by day: a street lamp, a red light on a tower, a green sign, a white lamp.
+    /// track; a city's concrete, glass towers, tar and rails. `glassCool` is a window that lights white. A city's shore
+    /// across a lake is an embankment, a dark foot under a pale cap, which is the same stone twice: a lamp that stands
+    /// on `quay` lights sodium, and one on `quayWhite` white. The last four are lights with nothing drawn under them
+    /// by day: a street lamp, a red light on a tower, a green sign, a white lamp.
     static let rock: UInt8 = 33, rockShade: UInt8 = 34, snow: UInt8 = 35, snowShade: UInt8 = 36, ice: UInt8 = 37, alp: UInt8 = 38
     static let chalet: UInt8 = 39, chaletShade: UInt8 = 40, river: UInt8 = 41, falu: UInt8 = 42, faluShade: UInt8 = 43, birch: UInt8 = 44
     static let sand: UInt8 = 45, sandShade: UInt8 = 46, steppe: UInt8 = 47, steppeDry: UInt8 = 48, scrub: UInt8 = 49, scrubShade: UInt8 = 50
     static let mesa: UInt8 = 51, mesaShade: UInt8 = 52, mesaPale: UInt8 = 53, track: UInt8 = 54
     static let concrete: UInt8 = 55, concreteShade: UInt8 = 56, tower: UInt8 = 57, towerShade: UInt8 = 58, tar: UInt8 = 59, rail: UInt8 = 60
-    static let glassCool: UInt8 = 61, lampSodium: UInt8 = 62, lampRed: UInt8 = 63, lampGreen: UInt8 = 64, lampWhite: UInt8 = 65
+    static let glassCool: UInt8 = 61, quayShade: UInt8 = 62, quay: UInt8 = 63, quayWhite: UInt8 = 64
+    static let lampSodium: UInt8 = 65, lampRed: UInt8 = 66, lampGreen: UInt8 = 67, lampWhite: UInt8 = 68
     /// What colour a lit thing is after dark, where it isn't a lamp's own warm one.
     static let lit: [UInt8: RGB] = [glassCool: rgb(222, 232, 255), lampWhite: rgb(222, 232, 255), lampSodium: rgb(255, 172, 94),
-                                    lampRed: rgb(255, 88, 72), lampGreen: rgb(118, 230, 212)]
+                                    lampRed: rgb(255, 88, 72), lampGreen: rgb(118, 230, 212), quay: rgb(255, 172, 94), quayWhite: rgb(222, 232, 255)]
     /// Each one's colour in full daylight, before the haze.
     static let day: [RGB] = [
         .zero, rgb(40, 78, 50), rgb(60, 106, 58), rgb(94, 138, 68), rgb(64, 52, 46), rgb(32, 64, 54), rgb(48, 88, 66),
@@ -559,7 +595,7 @@ enum TrainMat {
         rgb(218, 188, 136), rgb(178, 146, 110), rgb(192, 170, 106), rgb(168, 152, 98), rgb(122, 128, 88), rgb(94, 102, 76),
         rgb(178, 110, 82), rgb(136, 84, 74), rgb(200, 140, 98), rgb(200, 176, 136),
         rgb(152, 152, 158), rgb(114, 116, 126), rgb(90, 116, 146), rgb(62, 84, 114), rgb(72, 74, 82), rgb(156, 156, 166),
-        rgb(58, 66, 88), .zero, .zero, .zero, .zero,
+        rgb(58, 66, 88), rgb(62, 64, 74), rgb(198, 192, 178), rgb(198, 192, 178), .zero, .zero, .zero, .zero,
     ]
 }
 

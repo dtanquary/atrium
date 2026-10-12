@@ -16,11 +16,13 @@ SALT = {"mountains": 100000, "snow": 200000, "desert": 300000, "city": 400000}
 # Lights with nothing drawn under them by day, and what colour each lit thing is after dark (anything else: warm).
 LIGHT_ONLY = [I[k] for k in ("lampO", "lampR", "lampT", "lampW")]
 LAMPS = {I["glassW"]: (222, 232, 255), I["lampW"]: (222, 232, 255), I["lampO"]: (255, 172, 94), I["lampR"]: (255, 88, 72),
+         I["quay"]: (255, 172, 94), I["quayW"]: (222, 232, 255),
          I["lampT"]: (118, 230, 212)}
 
 
 # How far off things have faded two thirds of the way to the horizon's colour, km: mountain air is clear, a city's is not.
 HAZE = {"country": train.HAZE_KM, "mountains": 60.0, "snow": 40.0, "desert": 45.0, "city": 16.0}
+OVER_WATER = 0.5  # a city across a lake stands in the lake's haze too, and fades at this much of the distance
 
 
 def clip(v):
@@ -135,6 +137,102 @@ def block(w, h, seed, sun, floor, style, light=None):
         lit = np.vstack([np.zeros((1, w), dtype=bool), lit])
         a[0, w // 2], lit[0, w // 2] = I["lampR"], True
     return a, lit
+
+
+def shed(w, h, seed):
+    """A waterfront shed or warehouse w by h px: a dark wall under a pale roof, with a row of windows if it is tall
+    enough to have one."""
+    w, h = max(3, int(w)), max(2, int(h))
+    wall, roof = [("brickS", "whiteS"), ("concS", "stone"), ("chaletS", "slate"), ("concS", "whiteS")][int(rnd(seed, 2, 21) * 4)]
+    a = np.full((h, w), I[wall], dtype=np.uint8)
+    a[0, :] = I[roof]
+    if h >= 3:
+        a[1, 1: w - 1: 3] = I["glass"]
+    return a
+
+
+def crane(h, reach, seed):
+    """A dockside crane h px tall: a mast with a jib `reach` px out to one side at its top, its hook hanging from the
+    end, and a stub the other way; and a red light over it."""
+    h, reach = max(4, int(h)), max(2, int(reach))
+    left = rnd(seed, 3, 22) < 0.5
+    a = np.zeros((h + 1, reach + 2), dtype=np.uint8)
+    x = reach if left else 1
+    a[1:, x] = I["pole"]
+    a[1, :] = I["pole"]
+    a[2, 0 if left else reach + 1] = I["pole"]
+    a[0, x] = I["lampR"]
+    return a
+
+
+WALL = 2  # how many rows of the far shore are embankment: a dark foot at the water, and a pale cap
+
+
+def waterfront(a, lamps, n0, sun, salt, ppm):
+    """Lays a city's shore across a lake over the bottom rows of its nearest ring, in front of the feet of everything
+    that stands there, so that the city stands on land: an embankment, a dark foot at the water under a pale cap;
+    on it, lines of trees where there are parks and sheds with a crane or two where there are wharves; boats moored
+    along it where there is a marina, a white hull and a mast; and the lamps of the quay, which are the far shore's
+    seam of lights after dark."""
+    H, width = a.shape
+    n = np.arange(n0, n0 + width)
+    wx = n / ppm
+    up = (H - 1 - np.arange(H))[:, None]
+
+    def lay(top, x, st, glow=None):
+        """A stamp with its top row on strip row `top` and its left edge at column x (it may hang off either end)."""
+        for sx in range(st.shape[1]):
+            if 0 <= x + sx < width and top >= 0:
+                col = st[:, sx]
+                a[top: top + len(col), x + sx] = np.where(col > 0, col, a[top: top + len(col), x + sx])
+                lamps[top: top + len(col), x + sx] = np.where(col > 0, False if glow is None else glow[:, sx], lamps[top: top + len(col), x + sx])
+
+    a[H - WALL:] = I["quayS"]
+    a[H - WALL] = I["quay"]
+    lamps[H - WALL:] = False
+    # Parks and wharves take turns along the shore, a kilometre or so of each. Trees stand all along it, a ragged
+    # line 14 to 34 m high in a park and half that behind a wharf's sheds.
+    wharf = fbm(wx / 1100.0, 9.0, 2, salt + 80)
+    tall = np.round((14 + 20 * fbm(wx / 45.0, 1.0, 3, salt + 82)) * ppm * (0.55 + 0.45 * clip((0.56 - wharf) * 7))).astype(int)
+    trees = (up >= WALL) & (up < WALL + tall[None, :])
+    crown = (up == WALL + tall[None, :] - 1) & (rnd(n[None, :] // 2, 0, salt + 83) < 0.5)
+    a[trees] = np.where(crown | (rnd(n[None, :] // 2, up, salt + 83) < 0.2), I["leaf1"], I["leaf0"])[trees]
+    lamps[trees] = False
+    plot = 60.0
+    for c in range(int(np.floor(wx[0] / plot)) - 3, int(np.floor(wx[-1] / plot)) + 4):
+        r, pos = float(rnd(c, 1, salt + 84)), (c + float(rnd(c, 2, salt + 85))) * plot
+        seed = int(hash2(c, 3, salt + 86) % np.uint64(1 << 30))
+        here = float(fbm(np.array([pos / 1100.0]), np.array([9.0]), 2, salt + 80)[0])
+        x = int(round(pos * ppm)) - n0
+        if here > 0.50 and r < 0.55:
+            st = shed((30 + 60 * float(rnd(c, 4, salt + 87))) * ppm, (14 + 12 * float(rnd(c, 5, salt + 88))) * ppm + 1, seed)
+            glow = (st == I["glass"]) & (rnd(seed + np.arange(st.shape[1])[None, :], np.arange(st.shape[0])[:, None], 55) < 0.6)
+            lay(H - WALL - st.shape[0], x - st.shape[1] // 2, st, glow)
+        elif here > 0.54 and r > 0.92:
+            st = crane((44 + 26 * float(rnd(c, 4, salt + 87))) * ppm, (22 + 14 * float(rnd(c, 5, salt + 88))) * ppm, seed)
+            lay(H - WALL - st.shape[0], x - st.shape[1] // 2, st, st == I["lampR"])
+    # A marina: boats moored along the wall, a white hull on the water and a mast.
+    berth = 22.0
+    for c in range(int(np.floor(wx[0] / berth)) - 2, int(np.floor(wx[-1] / berth)) + 3):
+        pos = (c + float(rnd(c, 2, salt + 90))) * berth
+        if noise(np.array([pos / 600.0]), np.array([4.0]), salt + 89)[0] > 0.60 and rnd(c, 1, salt + 91) < 0.7:
+            x, mast = int(round(pos * ppm)) - n0, 2 + int(rnd(c, 3, salt + 92) * 3)
+            for sx in (0, 1):
+                if 0 <= x + sx < width:
+                    a[H - 1, x + sx] = I["white"]
+            if 0 <= x < width:
+                a[H - WALL - mast: H - WALL, x] = I["whiteS"]
+                lamps[H - WALL - mast: H - WALL, x] = False
+    # The quay's lamps: along its cap, most of them sodium; and fewer in the two rows over it, among the trees and
+    # the sheds or on posts of their own.
+    on = rnd(n, 1, salt + 65) < 0.36
+    a[H - WALL, on & (a[H - WALL] == I["quay"]) & (rnd(n, 2, salt + 66) >= 0.7)] = I["quayW"]
+    lamps[H - WALL] = on & np.isin(a[H - WALL], (I["quay"], I["quayW"]))
+    for row, share in ((WALL, 0.16), (WALL + 1, 0.06)):
+        on = rnd(n, row + 1, salt + 65) < share
+        bare = on & (a[H - 1 - row] == 0)
+        a[H - 1 - row, bare] = np.where(rnd(n[bare], row + 2, salt + 66) < 0.6, I["lampO"], I["lampW"])
+        lamps[H - 1 - row] |= on & (a[H - 1 - row] != I["whiteS"])
 
 
 # ---- rings
@@ -342,10 +440,8 @@ def ring_strip(kind, Z, n0, width, sun, water=False):
                 tint = rnd(n[on], row, salt + 66)
                 a[H - 1 - row, on] = np.where(tint < 0.45, I["lampO"], np.where(tint < 0.62, I["lampW"], np.where(tint < 0.66, I["lampT"], np.where(tint < 0.69, I["lampR"], 0))))
                 lamps[H - 1 - row, on] = True
-        # Across a lake the city's shore is a quay: a line of wall along the water, under all that is there. (One row,
-        # the first of the water's: a second would stand in front of the farther rings' street lights.)
         if water and Z == 1800:
-            a[H - 1] = np.where(a[H - 1] == 0, I["concS"], a[H - 1])
+            waterfront(a, lamps, n0, sun, salt, ppm)
         return a, lamps
     far, near, reach = {"mountains": (1.0, 0.3, 620.0), "snow": (0.7, 0.2, 1e9), "desert": (0.45, 0.14, 1e9)}[kind]
     if Z >= 1800 and Z <= 7000:
@@ -444,7 +540,7 @@ def view(kind, time="day", X=52000.0, speed=13.3, horizon_up=0.30, cover=0.30, c
         foot = min(PH, hy + int(round(eye * ppm)))
         H = strip.shape[0]
         y0 = foot - H
-        rgb = train.shade(strip, time, Z=Z * train.HAZE_KM / HAZE[kind], horizon_rgb=horizon_rgb)
+        rgb = train.shade(strip, time, Z=Z * train.HAZE_KM / (HAZE[kind] * (OVER_WATER if water and kind == "city" else 1)), horizon_rgb=horizon_rgb)
         m = (strip > 0) & ~np.isin(strip, LIGHT_ONLY)
         if dark:
             glow = np.full(strip.shape + (3,), (255.0, 204.0, 128.0) if time == "night" else (255.0, 214.0, 150.0))

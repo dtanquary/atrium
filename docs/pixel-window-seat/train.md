@@ -19,6 +19,8 @@ Not asked yet: stations, tunnels and passing trains; which railway (overhead wir
 ## Dave's feedback
 - **2026-10-11, the first build on his desktop** (countryside and the lake, the plain window, a clear sky): "night train has potential, please spin up developer agents to work on all the pending 'still to build' items and get them integrated". Those items, as listed to him: clouds, weather and rain on the glass, the three carriage interiors, and mock-ups then builds of mountains, snow, desert and the city. They are being built in three streams, each on a branch of its own: the sky and weather, the carriages, the four sceneries.
 - **2026-10-11, the finished build list on his desktop** (every scenery, the three carriages, the weather and the rain on the glass; build 473 to 475): "so far pixel train is looking awesome, nothing to change yet". He was testing all three new wallpapers that evening and had changes for the other two. What nobody has yet seen is unchanged by this: a real weather report arriving, and the bottom of the Settings page.
+- **2026-10-12, 08:25, with a screenshot of his desktop** (not kept in the repo): "on the train one, I had this happen where it looks like the city is under water". Scenery was left to change, so it was a city's own lake and not the held pick; a sill and a curtain; the Large window; following the weather, which was overcast. Brick and grey towers stood in a row straight out of blue water, each with a solid dark block of its own width under it, which read as the tower going on down below the surface; the one-pixel quay could not be seen. Answered the same day: [A shore for the city across the water](#a-shore-for-the-city-across-the-water-2026-10-12).
+- **2026-10-12, about 09:20, shown the shore enlarged five times** under overcast and clear skies, three rows: before on top, the shore with haze over the water in the middle, the same shore with the air as it was below: "middle row is perfect". The middle row is what was built.
 
 ## The finding that shapes it
 A thing `Z` metres from the track slides `focal × speed / Z` pixels a second, whatever its height and whatever the eye's height. With the airliner's lens (focal 265 art pixels):
@@ -481,7 +483,7 @@ For Dave. Each is the four sceneries' builder's own judgement.
 7. **Snow lies on the ground, the firs and the cabins' roofs and nowhere else:** not on the pole line, the snow fence or the carriage's sill.
 8. **The desert is very empty,** by day and more so by night (seven to forty-six lit pixels), as the real one is. On a mesa's shaded side the shade is a dither that reads as a rash at one or two places, and the bands of two mesas run at the same heights.
 9. **In the mountains a far ring still ticks:** when the 3.5 km ring steps a pixel, once a second, 18% of the band round the horizon changes at once (it was 26%).
-10. **The fade with distance steps every 30 s across a meeting,** a twentieth of the way each time. No film has shown it.
+10. **Done since** (see A shore for the city across the water, below): the fade with distance stepped every 30 s across a meeting, a twentieth of the way each time. It goes by 200 m of its distance at a time now.
 11. **Smaller things:** a city's street of houses is farmland's houses; the far towers are a few pixels wide; cabins and chalets are farmland's house in other colours; a tent is six pixels.
 
 **Mine, and not Dave's** (none was on a sheet he saw): how the line is cut into stretches (every other one farmland, 9 to 35 km, the others drawn evenly); the land sinking to the track's level at a meeting and how wide that is; nothing standing within 60 m of one; the near field's crops changing over 160 m, or 50 m where one of the two is not green; a far field belonging to the country its middle lies in; a lake's dark image of its far shore, which changes the lake he picked by a thin dark band; the mountains' speckle drawn two pixels at a time; and four changes to sheet 3 made after he was shown it, with the sheet painted again each time: the city's slabs taller and wider, the snow's fells given ridges and flanks and then laid again as the mountains' wall, and things on the city's nearest ring at three fifths their size.
@@ -551,9 +553,65 @@ The second thing on the list above: the best picture the train has was the rares
 - **Looked at,** as art pixels: the pick at metre 74,000 at 13:00 and 18:18 under scattered cloud and at 23:00; at 52,000 at 8:30; at 120,000 at 21:00 under scattered cloud; under a previewed thunderstorm at 23:00; at 3× (the same as 1×: nothing of it is near enough to be culled); left to change, a city's lake at metre 93,200 by day and by night; and the whole canvas with the table at 18:18 and 23:00, and after the rain landed at 23:00 in previewed rain (the lights soft through the wet glass, the threads across them). By day a skyline over blue water, each tower with its dark image under it and the cloud's in the water; at dusk the windows coming on over the Sun's orange path; at night the lights and their streaks. With the table, which a train starts with, only a short strip of the water shows over the sill.
 - **Wrong, or not done:**
   - **It is the stillest of the sceneries.** The far shore slides 2 pixels a second at 1×, so a tower takes nearly three minutes to cross the pane; what moves is the water's shimmer and the lights' streaks. The lake through countryside is the same. Speed helps.
-  - **By day the towers still look as if they stand at the water's edge with nothing between:** a one-pixel quay, no trees, cranes, boats or low sheds along the shore.
+  - **By day the towers still look as if they stand at the water's edge with nothing between:** a one-pixel quay, no trees, cranes, boats or low sheds along the shore. (Dave saw exactly this the next morning: see A shore for the city across the water, below.)
   - **The quay and the `harbour` number are mine,** not Dave's, and nor is the pick's name.
   - **Not looked at:** Settings' page with the new pick in its menu; the app.
+
+### A shore for the city across the water (2026-10-12)
+Dave's words and what his screenshot showed are under [Dave's feedback](#daves-feedback). The step before had said it would be read so ("by day the towers still look as if they stand at the water's edge with nothing between").
+
+**Looked at first:** nine photographs of Chicago, Toronto, Vancouver, Detroit and Boston across water, by day, under cloud, at dusk and at night (listed under Sources; for looking only, and nothing of theirs is here). What they have in common:
+- In rippled water there is no image of the towers at all. There is a darker band of water under the shore, and at night a streak under each lamp. Only flat calm mirrors a skyline (the Vancouver picture), and then the image is broken.
+- A low band always stands in front of the towers' feet: a wall or a breakwater, trees, sheds with pale roofs, piers, moored boats and their masts.
+- At night the shore is a line of lamps along the quay, most of them sodium.
+
+**What changed**, in the mock-up painter first (`train_scenery.py`, `waterfront`) and then in the build, matched to it byte for byte (`TrainWorld.waterfront`, TrainScenery.swift). Where a lake lies beside a city, the held pick or a city's own lake left to change, the bottom rows of the far shore's ring, 1.8 km off, are the city's shore, in front of the feet of everything that stands there:
+- **An embankment** all along: a dark foot at the water under a pale cap, two pixels in all (`TrainWorld.embankment`). At this distance two pixels are 14 m of wall: larger than life, as the airliner's ships are.
+- **On it, trees all along,** a ragged line 14 to 34 m high where there is a park and half that behind a wharf; **sheds** with pale roofs and a window row, and **a crane** here and there, where there is a wharf (parks and wharves take turns, a kilometre or so of each); and where there is a marina **boats** moored along the wall, a white hull on the water and a mast.
+- **The quay's lamps** are the far shore's seam of lights after dark: along the cap, a third of its pixels, most sodium and some white; and fewer in the two rows over it, warm among the trees and sheds. The street lights of the rings behind are hidden by the shore now, where they showed through.
+- **Three new materials** for it, `quayS`, `quay` and `quayW` (62 to 64; the four lights with nothing drawn under them moved up to 65 to 68, in the painter and the build alike). The cap is the same stone twice, so that a lamp standing on it can light sodium or white.
+- **The shore runs to within 60 m of where the city ends,** where the step before stopped it 1.5 km short and left the last low buildings in the water; and **a kilometre past each end of a lake**, because from the train the far side is seen across the lake's corner for some way beyond where the lake itself has ended. (Found by looking: left to change, towers past the lake's end still stood in water at the pane's edge.)
+
+**In the water** (the build only: `PixelTrain.compose`; the painter's water is the first mock-up's). Under a city's embankment the water no longer mirrors the skyline row for row, which is what made a tower go on down:
+- three rows of the shore's own dark image, the last of them in pieces;
+- under those only what the ripples leave of a tower's: a fainter tone (four fifths of the water's, where the old image was three fifths), in pieces a ripple long, two fifths as deep as the tower is tall and twelve rows at the most, fewer of the pieces the farther down;
+- the Sun's glitter, the cloud's image and the lamps' streaks as before. A far shore that is hills (countryside, the mountains) is mirrored as it was.
+
+**In the air.** A city across a lake stands in the lake's haze as well as its own: it fades at half the distance (`TrainWorld.overWater`: 8 km where a city fades at 16), the nearer to that the wider the water has opened. Its towers are then paler than the shore in front of them, and sit back. So that this does not arrive in one step when a lake opens, the country's colours are now worked out again whenever the fade's distance has changed by 200 m (`PixelTrain.reach`), not only every 30 s: which also ends number 10 of the list above, the fade stepping every 30 s where two countries meet.
+
+**The sheet** sent to the team lead before the rest was built (not in the repo): before and after in five lights (clear at 13:00, overcast at 08:25, rain, dusk, night), each with the sill and curtain and with the plain window, and after in two ways, with the haze over the water and without. I picked with; it is the smaller part of the change, and shows mostly under overcast. Dave, shown the shore enlarged in both ways beside how it was: "middle row is perfect", which is the way with the haze. `train-sheet3.png`'s tile M was painted again with the shore.
+
+**Checked by running** (release, in the worktree, each test run through the lock, on the code as committed):
+- **Against the mock-ups:** 17,155,416 bytes compared, 0 differ, the pick's rings among them with their new shore. (With the painter's embankment left at three rows and the build's at two, the same check reported 5,038.)
+- **The whole suite,** 117 tests, passes; the train's in debug too. `trainHoldsACityAcrossTheWater` now holds that every column of the far shore is embanked, its foot or a boat's hull at the water under its cap, so that no tower's foot meets the water (0 of 1,020 columns are not; 1,018 have a tree, a shed or a mast standing on the embankment; 636 lamps along it); that nothing stands on the water; and that left to change, at every place where a lake lies beside a city to within 100 m of the city's end, the shore is embanked. The cull at nine speeds, the same picture at 15, 30 and 60 frames a second and no pixel changing as Speed moves all run the pick as before.
+- **An hour of night,** lamp pixels showing a minute apart, main the same day against this: clear, 132 at the least, 323 at the median and 467 at the most on main; 205, 357 and 457 now. In fog, with a third of their light left: 76, 244 and 349 on main; 198, 335 and 430 now. The quay's lamps more than make up for the street lights the shore hides, but for the most-lit minute, which lost ten.
+- **Filmed** at metre 74,000, by day and by night, at 15 and 30 frames a second at 1× and at 30 at 10×: a lamp is in the same pixel a frame later 94.7% of the time at 1× and a pixel on 5.2%; at 10×, 47.9% and 51.7%. (Two of 68,172 at 1× and ten of 63,191 at 10× count as two or three on, where a lamp has gone behind a mast with another beside it; `trainLampsMoveAPixelAtATime` holds that no ring with lamps moves over a pixel a frame.) Of the band round the horizon 0.9% of pixels change from a frame to the next at 1× by day and 6.2% at 10×.
+- **Cost,** three runs in turn with main built from its own sources the same hour, the plain Large window, a clear sky: by day 0.82 to 0.88 ms of CPU a frame against main's 0.75 to 0.84; by night 0.78 to 0.88 against 0.80 to 0.89; the airliner 0.81 to 0.89. About a twentieth of a millisecond more by day: the water asks each pixel whether a city's shore is over it. GPU 0.12 to 0.18 ms.
+- **What ships:** `shots.sh`, 25 of 25 the same files as main's rendered the same day. **The 11 October pictures no longer serve as its yardstick:** the airliner's are of today at their hour, so on another day the Sun and the Moon stand elsewhere and twelve of its day pictures differ, on main itself (13 of 25 the same). `shots.sh` says so now.
+
+- **Run again on top of main's showing the train to everyone,** which landed as this was committed (one collision, this page, both kept): the whole suite, 117 tests; the byte check, 17,155,416 bytes compared, 0 differ; the night's hours as above; the ten tiles of the pick the same files as before it; `shots.sh`, 25 of 25 the same as main's of that morning.
+
+**Looked at:**
+- the sheet's thirty tiles, and the shore enlarged five times under overcast and clear skies, before and both ways after;
+- Dave's own case again: left to change, a city's own lake under overcast at 08:25 at metre 93,200, and eight places along that city's first lake as it opens, from metre 79,300 to 81,700;
+- the lake at the city's edge, eight places from metre 95,400 to 97,450: the shore runs on in front of the dwindling buildings, and farmland's green hills take over;
+- strips of frames at 1× and at 10× by day, and at night;
+- the shore in the Small and Medium windows, with no window, and on a portrait and an ultrawide display, under overcast.
+
+**Wrong, or not done, worst first:**
+1. **The shore is low:** four to six pixels of a pane 221 high. It reads as a quay with a line of sheds and trees along it, not as a deep waterfront, and a tower's foot is hidden only just. (The team lead's view: right for 1.8 km from 3.5 m up, and not to be raised.)
+2. **At a lake's end, left to change, the blocks on the nearer rings still stand at the waterline** for the half minute the lake's corner takes to pass: the shore that sweeps round from the far side to the track there has no embankment, only the far side has.
+3. **Under overcast the water is still strongly blue** against a grey sky. The lake's own colour does not follow the weather; nothing here changed it.
+4. **In rain the shore is a darker line in the mist** and little more.
+5. **The cap is one straight pale line** across the whole pane: the quay never breaks for a beach, a river's mouth or a dock. The team lead asked for it to be broken if that was cheap and did not change the row Dave had called perfect. It would have: the wharves and the marina where it would break are in that row. Left alone.
+6. **The cranes are small T shapes, and a boat is two white pixels and a mast.**
+7. **At night the seam of lamps is a band three or four pixels thick,** denser than the street lights it stands in front of.
+8. **The images in the water are not in the mock-up,** so nothing checks them but the pictures looked at.
+9. **It is still the stillest scenery.**
+
+**What Dave has seen, and what he has not.** He called the shore perfect as it stood on the enlarged sheet: the embankment, what stands on it, the water under it and the haze, by day under overcast and under a clear sky, at one place. He has not seen it in rain, at dusk or at night, so the quay's lamps and their share are mine; nor the two things found afterwards, the shore carried to the city's edge and a kilometre past a lake's ends. The numbers behind what he saw are mine too (two rows of embankment, three rows of the shore's image, the haze at half).
+
+**Not looked at:** Settings' page; the app; a film across a lake's opening (stills along it only).
 
 ## Shown to everyone (2026-10-12)
 Step 10 of the plan, on Dave's word. He asked for the README and the site to show the train ("update the pixel window seat stuff with the new train options") and, asked whether it should be unhidden with Black Hole and Meander, picked all three.
@@ -646,6 +704,17 @@ Footage measured (all openly licensed)
 - ICE on LGV Est (masts), CC0: https://commons.wikimedia.org/wiki/File:ICE_9574_on_LGV_Est_window_view.webm
 - Night train from Kyiv, CC BY 3.0: https://commons.wikimedia.org/wiki/File:Night_train_from_Kyiv_to_Chernivtsi_(Ukraine).webm
 - Rain (Pexels licence, measured only): https://www.pexels.com/video/raindrops-sliding-on-a-train-window-4640062/, https://www.pexels.com/video/raindrops-on-train-window-13255056/
+
+Skylines across water (photographs looked at for the city's shore, 2026-10-12; nothing of theirs is in the repo)
+- Chicago from Lake Michigan, CC BY-SA 2.0: https://commons.wikimedia.org/wiki/File:Chicago_from_Lake_Michigan_(48907298487).jpg
+- Navy Pier and Chicago from the lake, under cloud, CC BY-SA 4.0: https://commons.wikimedia.org/wiki/File:Navy_Pier_and_Chicago_from_Lake_Michigan.jpg
+- Toronto from the Toronto Islands, Free Art License: https://commons.wikimedia.org/wiki/File:Toronto_-_ON_-_Skyline_from_Toronto_Islands4.jpg
+- Toronto from the islands' yacht club, CC BY-SA 4.0: https://commons.wikimedia.org/wiki/File:Toronto_Islands_Yacht_Club_and_Skyline.jpg
+- Toronto across the frozen harbour, CC BY-SA 4.0: https://commons.wikimedia.org/wiki/File:Toronto_Skyline_from_Algonquin_Island,_February_28_2026_(05).jpg
+- Vancouver from Stanley Park, in flat calm, CC BY 2.0: https://commons.wikimedia.org/wiki/File:Vancouver_Skyline_from_Stanley_Park_(41045168080).jpg
+- Chicago at dusk, CC0: https://commons.wikimedia.org/wiki/File:Chicago_Skyline_-_Dusk.JPG
+- Detroit at night across the river, CC BY-SA 3.0: https://commons.wikimedia.org/wiki/File:Detroit_Night_Skyline.JPG
+- Boston at night across the Charles, CC BY 4.0: https://commons.wikimedia.org/wiki/File:Boston_night_skyline_from_across_the_Charles_September_2025.jpg
 
 The weather
 - Visibility and the 2% contrast it is defined by (Koschmieder: visual range = 3.912 / extinction): https://en.wikipedia.org/wiki/Visibility

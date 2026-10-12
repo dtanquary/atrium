@@ -7,7 +7,9 @@
 #     docs/pixel-window-seat/shots.sh /tmp/after      # with the change
 #     for f in /tmp/before/*.png; do cmp "$f" "/tmp/after/$(basename "$f")"; done
 #
-# Two runs of one build come out the same files. Nothing opens on screen.
+# Two runs of one build come out the same files, on the same day: the airliner's pictures are of today at their
+# hour, so the Sun and the Moon stand elsewhere tomorrow, and a folder kept overnight differs in a dozen of them.
+# Nothing opens on screen.
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OUT="${1:?a folder for the pictures}"; mkdir -p "$OUT"; TMP=$(mktemp -d)
 swift build --package-path "$ROOT" -c release -Xswiftc -enable-testing --build-tests 2>&1 | tail -1
