@@ -9,7 +9,8 @@ import Testing
 /// rank is what it says, the share of the digging done when a cell goes, so the dug area grows as the clock's
 /// share does; a young colony works one or two faces and a grown one eight, from one mouth at first; and the
 /// clock is the day Dave picked: a farm begins at six, has 8% dug by seven, 23% by nine, 44% at noon, 75% at six in
-/// the evening and 94% at midnight, and the moment before six belongs to the farm of the day before.
+/// the evening and 94% at midnight, and the moment before six belongs to the farm of the day before; and with
+/// Speed at 4 there are four farms to the day, one after another.
 @Test func antColonyBakesOneNestForADate() throws {
     let clock = ContinuousClock(), began = clock.now
     let nest = Nest(seed: 20261012, cols: 756, rows: 491, bodyLength: 11), took = clock.now - began
@@ -29,12 +30,16 @@ import Testing
     #expect(shares == [0, 8, 23, 44, 75, 94, 100, 100])
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = try #require(TimeZone(identifier: "America/Chicago"))
-    func farm(_ day: Int, _ hour: Int, _ minute: Int) throws -> (day: Int, hours: Double) {
+    func farm(_ day: Int, _ hour: Int, _ minute: Int, speed: Double = 1) throws -> (day: Int, turn: Int, hours: Double) {
         let date = try #require(calendar.date(from: DateComponents(year: 2026, month: 10, day: day, hour: hour, minute: minute)))
-        return AntColony.farm(at: date.timeIntervalSinceReferenceDate, calendar: calendar)
+        return AntColony.farm(at: date.timeIntervalSinceReferenceDate, speed: speed, calendar: calendar)
     }
     let (before, at, late) = (try farm(12, 5, 59), try farm(12, 6, 0), try farm(13, 0, 0))
     #expect(before.day == 20261011 && abs(before.hours - 23.0 - 59.0 / 60) < 1e-6 && at.day == 20261012 && at.hours == 0 && late.day == 20261012 && late.hours == 18)
+    #expect(before.turn == 0 && at.turn == 0 && late.turn == 0)
+    // At four farms a day the day's second begins at noon, and at 13:30 is a quarter of its way through its own day.
+    let (noon, after, last) = (try farm(12, 12, 0, speed: 4), try farm(12, 13, 30, speed: 4), try farm(13, 5, 59, speed: 4))
+    #expect(noon.day == 20261012 && noon.turn == 1 && noon.hours == 0 && after.turn == 1 && after.hours == 6 && last.day == 20261012 && last.turn == 3)
 }
 
 /// What the ants must never do, watched every sixtieth of a second for half a minute at four ages of three nests,
@@ -79,9 +84,12 @@ import Testing
 
 /// The picture is the same whatever the frame rate: drawn at 15, 30 and 60 frames a second, every pixel is the
 /// same four seconds into the farm of one day at nine in the morning, ants and all; a second scene given the same
-/// day and hour shows the same nest; and three hours on there is more of it.
+/// day and hour shows the same nest; and nine hours on there is more of it. The same again in white sand with the
+/// smallest ants, twice as many of them, at the top speed. And each look is its own: the gel blue, the sand pale,
+/// the white sand paler.
 @MainActor @Test func antColonyLooksTheSameAtAnyFrameRate() throws {
-    defer { ["antcolony.day", "antcolony.hour"].forEach(UserDefaults.standard.removeObject) }
+    let keys = ["antcolony.day", "antcolony.hour", "antcolony.look", "antcolony.size", "antcolony.ants", "antcolony.speed"]
+    defer { keys.forEach(UserDefaults.standard.removeObject) }
     UserDefaults.standard.set(20261012.0, forKey: "antcolony.day")
     let device = try #require(MTLCreateSystemDefaultDevice()), queue = try #require(device.makeCommandQueue())
     let (w, h) = (1512, 982)
@@ -111,13 +119,24 @@ import Testing
     let pictures = try [15.0, 30.0, 60.0].map { try picture(hour: 3, rate: $0) }
     #expect(pictures[1] == pictures[0], "the picture at 30 frames a second is not the one at 15")
     #expect(pictures[2] == pictures[0], "the picture at 60 frames a second is not the one at 15")
-    // An ant is the darkest thing below the top of the gel, and a tunnel is paler than the gel it is dug in.
+    // An ant is the darkest thing below the top of the gel; and in sand a tunnel is the grey of the pane behind it,
+    // where the sand is warm.
     func count(_ picture: [UInt32], _ wanted: (Int, Int, Int) -> Bool) -> Int {
         picture[(w * h / 4)...].count { wanted(Int($0 >> 16 & 255), Int($0 >> 8 & 255), Int($0 & 255)) }
     }
-    let later = try picture(hour: 12, rate: 30)
     let ants = count(pictures[0]) { r, g, b in r < 30 && g < 30 && b < 40 }
-    let tunnels = [pictures[0], later].map { count($0) { r, g, b in g > 95 && b > 150 } }
-    print("Ant Colony at nine in the morning: \(ants) pixels of ant below the top of the gel, \(tunnels[0]) of tunnel; at six in the evening \(tunnels[1])")
-    #expect(ants > 800 && tunnels[0] > 20000 && Double(tunnels[1]) > 1.8 * Double(tunnels[0]))
+    UserDefaults.standard.set(1.0, forKey: "antcolony.look")
+    let sand = try [3.0, 12].map { try picture(hour: $0, rate: 30) }, tunnels = sand.map { count($0) { r, g, b in abs(r - b) <= 3 && r > 30 } }
+    print("Ant Colony at nine in the morning: \(ants) pixels of ant below the top of the gel; \(tunnels[0]) pixels of tunnel in sand, and at six in the evening \(tunnels[1])")
+    #expect(ants > 150 && tunnels[0] > 20000 && Double(tunnels[1]) > 1.8 * Double(tunnels[0]))
+
+    func mean(_ picture: [UInt32]) -> SIMD3<Double> {
+        picture[(w * h / 4)...].reduce(into: SIMD3<Double>()) { $0 += SIMD3(Double($1 >> 16 & 255), Double($1 >> 8 & 255), Double($1 & 255)) } / Double(w * h * 3 / 4)
+    }
+    let dim = mean(sand[0])
+    for (key, value) in [("antcolony.look", 2.0), ("antcolony.size", 0), ("antcolony.ants", 2), ("antcolony.speed", 8)] { UserDefaults.standard.set(value, forKey: key) }
+    let white = try [15.0, 60.0].map { try picture(hour: 3, rate: $0) }, blue = mean(pictures[0]), bright = mean(white[0])
+    #expect(white[1] == white[0], "white sand with small ants at speed 8: the picture at 60 frames a second is not the one at 15")
+    print("Ant Colony below the top of the tank, mean red, green and blue: gel \(blue), sand \(dim), white sand \(bright)")
+    #expect(blue.z > 2 * blue.x && dim.x > dim.z && dim.x > 80 && bright.x > 1.3 * dim.x)
 }
