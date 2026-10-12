@@ -32,9 +32,10 @@ final class AntColony: SKScene {
     nonisolated static let antSize = Knob(key: "antcolony.size", label: "Ant size", range: 0...2, standard: 1, section: "Ants",
                                           format: .choice(["Small", "Medium", "Large"]))
     /// How crowded the grown colony is: at 1, an ant to every 130 square ant lengths of tank, which is 24 on a
-    /// 14-inch display at the middle size and 69 at the small one; and never more than a hundred.
-    // ponytail: an ant is some twenty sprites, a length of leg each, and SpriteKit's cost is by the sprite: a
-    // hundred small ants are 2 ms of a frame's CPU. One shader drawing a whole ant would lift that.
+    /// 14-inch display at the middle size and 69 at the small one; and never more than ninety.
+    // ponytail: an ant is eighteen sprites, a length of leg each, and each is placed and turned every frame it
+    // walks: ninety ants are 2 ms of a frame's CPU on the largest display. One shader drawing a whole ant would
+    // lift that.
     nonisolated static let crowd = Knob(key: "antcolony.ants", label: "Ants", range: 0.5...2, standard: 1, section: "Ants", format: .times)
     nonisolated static let knobs = [look, speed, antSize, crowd]
 
@@ -135,11 +136,12 @@ final class AntColony: SKScene {
         var day: Int, turn: Int, size: Int, most: Int
     }
 
-    /// A farm as it comes off the thread that baked it: the nest, its ants some minutes into their work, the map
-    /// and the spoil's heights as the shader reads them, and what the shader is told of each cell's surroundings
-    /// at `quantum`.
+    /// A farm as it comes off the thread that baked it: the nest, its ants some minutes into their work, and the
+    /// map and the spoil's heights as the shader reads them. (What the shader is told of each cell's surroundings
+    /// follows a moment later, as it does all day: a fifth of a second for the largest tank, while the picture is
+    /// still fading up.)
     private struct Made: Sendable {
-        var key: Key, nest: Nest, colony: Colony, map: Data, heap: Data, near: Data, quantum: Int
+        var key: Key, nest: Nest, colony: Colony, map: Data, heap: Data
     }
 
     /// Something made on another thread, handed to the scene's next frame.
@@ -169,17 +171,22 @@ final class AntColony: SKScene {
         var grain: NSColor { lit ? tone(222, 212, 194) : tone(118, 172, 240) }
     }
 
-    /// One ant's sprites: its body, the lengths of its legs (three to a leg, or two for the smallest ants, whose
-    /// feet are too small to show a bend) and four of its antennae, the grain it may carry and, on sand, its
+    /// One ant's sprites: its body, the lengths of its legs (three to a leg for the largest ants, two for the
+    /// others, whose feet are too small to show a bend) and four of its antennae, the grain it may carry and, on sand, its
     /// body's shadow. And how it stood when they were last placed, so that an ant standing still costs nothing.
     @MainActor private final class Figure {
         let node = SKNode(), body: SKSpriteNode, shadow: SKSpriteNode?, grain = SKSpriteNode(texture: AntColony.dot)
         let lines: [SKSpriteNode], joints: Int
+        /// How wide each line is drawn, in points: a leg thinner than a pixel is drawn a pixel wide and that much
+        /// fainter. Its width and its faintness are set once; only its place, turn and length change.
+        let thick: [Double]
         var stood: (at: SIMD2<Double>, facing: SIMD2<Double>, turn: SIMD3<Double>, claws: [SIMD3<Double>])?
 
-        init(_ style: Style) {
-            joints = style.length < 16 ? 2 : 3
-            lines = (0..<6 * joints + 4).map { _ in SKSpriteNode(texture: AntColony.line) }
+        init(_ style: Style, pixel: Double) {
+            let leg = style.length < 30 ? [0.034, 0.022] : [0.034, 0.024, 0.016]
+            let wide = ((0..<6).flatMap { _ in leg } + [0.020, 0.017, 0.020, 0.017]).map { $0 * style.length }
+            (joints, thick) = (leg.count, wide.map { max($0, pixel) })
+            lines = wide.map { _ in SKSpriteNode(texture: AntColony.line) }
             let side = AntColony.side(style.length)
             body = SKSpriteNode(texture: AntColony.body(style), size: CGSize(width: side, height: side))
             body.zPosition = 1
@@ -191,6 +198,7 @@ final class AntColony: SKScene {
             for (k, line) in lines.enumerated() {
                 let near = k < 6 * joints ? k < 3 * joints : k < 6 * joints + 2 // the near side's go over the body, the far side's under it
                 (line.color, line.colorBlendFactor, line.zPosition) = (near ? style.limb : style.farLimb, 1, near ? 2 : 0)
+                (line.size, line.alpha) = (CGSize(width: 1, height: 2 * thick[k]), min(wide[k] / pixel, 1))
                 node.addChild(line)
             }
             (grain.color, grain.colorBlendFactor, grain.zPosition) = (style.grain, 1, 3)
@@ -278,7 +286,9 @@ final class AntColony: SKScene {
     /// nothing is shown.
     private let map = SKUniform(name: "u_map", texture: SKTexture(data: Data([255, 255, 255, 255]), size: CGSize(width: 1, height: 1)))
     private let heap = SKUniform(name: "u_heap", texture: SKTexture(data: Data([0, 0, 255, 255]), size: CGSize(width: 1, height: 1)))
-    private let near = SKUniform(name: "u_near", texture: SKTexture(data: Data([255, 255, 128, 255]), size: CGSize(width: 1, height: 1)))
+    private let near = SKUniform(name: "u_near", texture: nowhere)
+    /// The surroundings of a cell deep in the medium, as one texel: what the shader has until a nest's own arrive.
+    private static let nowhere = SKTexture(data: Data([255, 255, 128, 255]), size: CGSize(width: 1, height: 1))
     /// A cell and a pixel in points, and each look's shader, made when first wanted.
     private var cell = 2.0, pixel = 0.5, shaders: [Int: SKShader] = [:]
     /// The farm on the screen, and its ants' sprites, in the style they were made in, and the grains they have dropped.
@@ -320,7 +330,7 @@ final class AntColony: SKScene {
     }
 
     /// Starts baking a farm, with `share` of its digging done, off the main thread: the nest (70 ms for a 14-inch
-    /// display at the middle size), its ants ten minutes into their work, and the textures. The map has eleven
+    /// display at the middle size), its ants three minutes into their work, and the textures. The map has eleven
     /// cells to an ant's length across the display, and as many rows as cover it.
     private func bake(_ key: Key, share: Double) {
         let landing = Landing<Made>(), cols = max(Int((size.width / (Self.lengths[key.size] / Self.antCells)).rounded()), 8)
@@ -329,9 +339,8 @@ final class AntColony: SKScene {
         Task.detached(priority: .userInitiated) {
             let nest = Nest(seed: seed, cols: cols, rows: rows, bodyLength: Self.antCells)
             var colony = Colony(nest: nest, most: key.most, seed: seed, share: share)
-            colony.fastForward(600)
-            let quantum = Int(share * 4000)
-            landing.arrive(Made(key: key, nest: nest, colony: colony, map: nest.bytes(), heap: nest.heights(), near: nest.surroundings(at: Double(quantum) / 4000), quantum: quantum))
+            colony.fastForward(180)
+            landing.arrive(Made(key: key, nest: nest, colony: colony, map: nest.bytes(), heap: nest.heights()))
         }
     }
 
@@ -356,24 +365,24 @@ final class AntColony: SKScene {
 
         // The farm for this moment: baked when the scene is made, when a farm gives way to the next, and when
         // Settings asks for another size of ant or another number of them (an ant, grown, to every 130 square ant
-        // lengths of tank, times Ants, and a hundred at the most).
+        // lengths of tank, times Ants, and ninety at the most).
         // ponytail: a finished farm gives way to the next through black, in under half a second (`u_show`). A
         // crossfade needs both farms' textures at once; add it if the cut is ever noticed.
         let room = Double(self.size.width * self.size.height) / (Self.lengths[size] * Self.lengths[size])
-        let wanted = Key(day: now.day, turn: now.turn, size: size, most: min(max(Int((room / 128 * Self.crowd.value).rounded()), 4), 100))
+        let wanted = Key(day: now.day, turn: now.turn, size: size, most: min(max(Int((room / 128 * Self.crowd.value).rounded()), 4), 90))
         if key != wanted, baking == nil { bake(wanted, share: share) }
         if let job = baking, let made = job.landing.take(waiting: view == nil) {
             let extent = CGSize(width: made.nest.cols, height: made.nest.rows)
             map.textureValue = SKTexture(data: made.map, size: extent)
             heap.textureValue = SKTexture(data: made.heap, size: CGSize(width: made.nest.cols, height: Nest.levels + 1))
-            near.textureValue = SKTexture(data: made.near, size: extent)
+            near.textureValue = Self.nowhere
             fade.floatValue = Float(made.nest.dug) / 10
             cells.vectorFloat3Value = [Float(made.nest.cols), Float(made.nest.rows), Float(made.nest.ground)]
             cell = Double(self.size.width) / Double(made.nest.cols)
             medium.size = CGSize(width: self.size.width, height: Double(made.nest.rows) * cell)
             // (the same nest with another number of ants goes on as it was; another nest fades up)
             if key?.day != made.key.day || key?.turn != made.key.turn || key?.size != made.key.size { shown = wall }
-            (key, nest, colony, baking, shading, shaded) = (made.key, made.nest, made.colony, nil, nil, made.quantum)
+            (key, nest, colony, baking, shading, shaded) = (made.key, made.nest, made.colony, nil, nil, -1)
             (since, ticked) = ((wall, now.hours, speed), 0)
         }
         // (while the next farm is baked, the one on the screen stays as it was)
@@ -426,7 +435,7 @@ final class AntColony: SKScene {
             (figures, crumbs, style) = ([], [], wantedStyle)
         }
         while figures.count < colony.ants.count {
-            figures.append(Figure(wantedStyle))
+            figures.append(Figure(wantedStyle, pixel: pixel))
             swarm.addChild(figures.last!.node)
         }
         for (n, figure) in figures.enumerated() {
@@ -471,21 +480,18 @@ final class AntColony: SKScene {
         let still = figure.stood.map { $0.at == stance.0 && $0.facing == stance.1 && $0.turn == stance.2 && $0.claws == stance.3 } ?? false
         figure.stood = stance
         var next = 0
-        func draw(_ joints: [SIMD2<Double>], widths: [Double]) {
-            for (k, width) in widths.enumerated() where next < figure.lines.count {
+        func draw(_ joints: [SIMD2<Double>]) {
+            for k in 0..<joints.count - 1 where next < figure.lines.count {
                 let (a, b) = (point(joints[k]), point(joints[k + 1])), line = figure.lines[next]
-                // (a leg thinner than a pixel is drawn a pixel wide and that much fainter)
-                let wide = width * length, thick = max(wide, pixel)
                 line.position = CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
                 line.zRotation = atan2(b.y - a.y, b.x - a.x)
-                line.size = CGSize(width: hypot(b.x - a.x, b.y - a.y) + thick, height: 2 * thick)
-                line.alpha = min(wide / pixel, 1)
+                line.xScale = hypot(b.x - a.x, b.y - a.y) + figure.thick[next]
                 next += 1
             }
         }
-        if !still { for leg in limbs.legs { draw(figure.joints == 3 ? leg : [leg[0], leg[1], leg[3]], widths: figure.joints == 3 ? [0.034, 0.024, 0.016] : [0.034, 0.022]) } }
+        if !still { for leg in limbs.legs { draw(figure.joints == 3 ? leg : [leg[0], leg[1], leg[3]]) } }
         next = 6 * figure.joints
-        for antenna in limbs.antennae { draw(antenna, widths: [0.020, 0.017]) }
+        for antenna in limbs.antennae { draw(antenna) }
     }
 
     /// The shader for a look. All begin the same way, with what is dug and what is buried.

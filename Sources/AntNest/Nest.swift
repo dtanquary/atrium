@@ -187,11 +187,12 @@ public struct Nest: Sendable {
         let seeds = (0..<8).map { _ in UInt64(dice.unit() * 4e9) }
         let big = Float(4 * b.clock + 10)
         var pushX = [Float](repeating: 0, count: count), pushY = pushX
+        let push = [(1.6, 0), (0.6, 1), (1.6, 2), (0.6, 3)].map { Lumps($0.0 * bl, seeds[$0.1], cols: cols, rows: rows) }
         var time = [Float](repeating: big, count: count)
         for y in y0..<rows { for x in 0..<cols {
             let (px, py) = (Double(x), Double(y)), keep = min(Double(y - y0) / (1.5 * bl), 1)
-            let dx = keep * (0.42 * bl * lumps(px, py, 1.6 * bl, seeds[0]) + 0.10 * bl * lumps(px, py, 0.6 * bl, seeds[1]))
-            let dy = keep * (0.42 * bl * lumps(px, py, 1.6 * bl, seeds[2]) + 0.10 * bl * lumps(px, py, 0.6 * bl, seeds[3]))
+            let dx = keep * (0.42 * bl * push[0](px, py) + 0.10 * bl * push[1](px, py))
+            let dy = keep * (0.42 * bl * push[2](px, py) + 0.10 * bl * push[3](px, py))
             (pushX[y * cols + x], pushY[y * cols + x]) = (Float(dx), Float(dy))
             let (sx, sy) = (min(max(px + dx, 0), Double(cols) - 1.001), min(max(py + dy, Double(y0)), Double(rows) - 1.001))
             let (i, j, f, g) = (Int(sx), Int(sy), Float(sx - sx.rounded(.down)), Float(sy - sy.rounded(.down)))
@@ -255,9 +256,13 @@ public struct Nest: Sendable {
             return opened <= 1 ? Link(a: link.a, at: link.at, b: link.b, to: link.to, opened: opened) : nil
         }
         // Where two tunnels cross without having met as faces, an ant may still turn from one into the other.
+        // (Only pairs whose boxes come within half a body length are looked at point by point: a large nest has
+        // a hundred thousand pairs.)
         let tunnels = branches.indices.filter { !branches[$0].room }
+        let boxes = branches.map { branch in branch.points.reduce((low: SIMD2(repeating: Double.infinity), high: SIMD2(repeating: -Double.infinity))) { (simd_min($0.low, $1), simd_max($0.high, $1)) } }
         var joined = Set(links.map { [$0.a, $0.b] } + links.map { [$0.b, $0.a] })
         for (n, i) in tunnels.enumerated() { for j in tunnels[(n + 1)...] where !joined.contains([i, j]) {
+            guard simd_reduce_max(simd_max(boxes[i].low - boxes[j].high, boxes[j].low - boxes[i].high)) < 0.5 * bl else { continue }
             var best = (0.25 * bl * bl, -1, -1)
             for p in stride(from: 0, to: branches[i].points.count, by: 3) { for q in stride(from: 0, to: branches[j].points.count, by: 3) {
                 let d = simd_distance_squared(branches[i].points[p], branches[j].points[q])
@@ -573,19 +578,40 @@ private struct Builder {
 
 // MARK: - Small numeric helpers
 
+/// The random value, from -1 to 1, at a point of the lattice `lumps` joins.
+private func corner(_ i: Double, _ j: Double, _ seed: UInt64) -> Double {
+    var h = seed &+ UInt64(bitPattern: Int64(i)) &* 0x9E37_79B9_7F4A_7C15 &+ UInt64(bitPattern: Int64(j)) &* 0xC2B2_AE3D_27D4_EB4F
+    h = (h ^ (h >> 30)) &* 0xBF58_476D_1CE4_E5B9
+    h = (h ^ (h >> 27)) &* 0x94D0_49BB_1331_11EB
+    return Double((h ^ (h >> 31)) >> 11) * 0x1p-52 - 1
+}
+
 /// Smooth noise about one bump per `scale` cells, from -1 to 1 with a spread near 0.42: a lattice of random values
 /// joined smoothly.
 func lumps(_ x: Double, _ y: Double, _ scale: Double, _ seed: UInt64) -> Double {
     let (px, py) = (x / scale, y / scale), (ix, iy) = (px.rounded(.down), py.rounded(.down))
     let (fx, fy) = (px - ix, py - iy), (sx, sy) = (fx * fx * (3 - 2 * fx), fy * fy * (3 - 2 * fy))
-    func corner(_ i: Double, _ j: Double) -> Double {
-        var h = seed &+ UInt64(bitPattern: Int64(i)) &* 0x9E37_79B9_7F4A_7C15 &+ UInt64(bitPattern: Int64(j)) &* 0xC2B2_AE3D_27D4_EB4F
-        h = (h ^ (h >> 30)) &* 0xBF58_476D_1CE4_E5B9
-        h = (h ^ (h >> 27)) &* 0x94D0_49BB_1331_11EB
-        return Double((h ^ (h >> 31)) >> 11) * 0x1p-52 - 1
-    }
-    let top = corner(ix, iy) + (corner(ix + 1, iy) - corner(ix, iy)) * sx, bottom = corner(ix, iy + 1) + (corner(ix + 1, iy + 1) - corner(ix, iy + 1)) * sx
+    let top = corner(ix, iy, seed) + (corner(ix + 1, iy, seed) - corner(ix, iy, seed)) * sx
+    let bottom = corner(ix, iy + 1, seed) + (corner(ix + 1, iy + 1, seed) - corner(ix, iy + 1, seed)) * sx
     return top + (bottom - top) * sy
+}
+
+/// `lumps` for every cell of a grid: the same numbers, with the lattice's values worked out once (they were most
+/// of a large nest's bake, four to a call).
+struct Lumps {
+    let scale: Double, across: Int, values: [Double]
+
+    init(_ scale: Double, _ seed: UInt64, cols: Int, rows: Int) {
+        (self.scale, across) = (scale, Int(Double(cols) / scale) + 2)
+        values = (0..<across * (Int(Double(rows) / scale) + 2)).map { [across] in corner(Double($0 % across), Double($0 / across), seed) }
+    }
+
+    func callAsFunction(_ x: Double, _ y: Double) -> Double {
+        let (px, py) = (x / scale, y / scale), (ix, iy) = (px.rounded(.down), py.rounded(.down)), at = Int(iy) * across + Int(ix)
+        let (fx, fy) = (px - ix, py - iy), (sx, sy) = (fx * fx * (3 - 2 * fx), fy * fy * (3 - 2 * fy))
+        let top = values[at] + (values[at + 1] - values[at]) * sx, bottom = values[at + across] + (values[at + across + 1] - values[at + across]) * sx
+        return top + (bottom - top) * sy
+    }
 }
 
 /// A Gaussian blur of a `cols` by `rows` field, as three passes of a running mean each way: its cost does not grow

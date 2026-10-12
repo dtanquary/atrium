@@ -23,7 +23,7 @@ Dave asked for it on 2026-10-12, slowly evolving and "based on realistic ant mov
 | The toy on screen | no frame and no skyline: the display is the glass, edge to edge |
 | How to build | "Build now, refine as it goes" |
 
-The lead's calls, which he has not ruled on: gel is the standard look, the mock-ups' deep dim one, with the brighter gel of the realism pass kept beside it as Bright Gel for him to compare; sand is dimmed and warm unless White Sand is picked; the day begins at six and follows the clock in [The day](#the-day), which is not how ants dig; the colony grows with its nest, and is ants only (no queen, no brood); a young colony sinks one or two shafts at a time; someone is always walking. The builder's, which neither has ruled on: Speed stops at 8; three ants to a face; a hundred ants at the most; every label in Settings.
+The lead's calls, which he has not ruled on: gel is the standard look, the mock-ups' deep dim one, with the brighter gel of the realism pass kept beside it as Bright Gel for him to compare; sand is dimmed and warm unless White Sand is picked; the day begins at six and follows the clock in [The day](#the-day), which is not how ants dig; the colony grows with its nest, and is ants only (no queen, no brood); a young colony sinks one or two shafts at a time; someone is always walking. The builder's, which neither has ruled on: Speed stops at 8; three ants to a face; ninety ants at the most.
 
 ## What real ants and nests do
 
@@ -140,7 +140,7 @@ From the search of 2026-10-12, by a helper who read the USPTO's records; the bui
 | Look | `antcolony.look` | Gel, Bright Gel, Sand, White Sand or Earth, stored as 0 to 4. The shader and the ants change there and then; the nest stays | Gel |
 | Speed | `antcolony.speed` | 1× to 8×: a nest takes 24 hours divided by it. Moving it never moves the dig; the nest goes on from where it is at the new pace. At 1 a farm begins only at six; above 1, as the last ends | 1× |
 | Ant size | `antcolony.size` | Small, Medium, Large: an ant 13, 22 or 36 points long. The tank is the display at any size, so smaller ants get a bigger nest, baked afresh | Medium |
-| Ants | `antcolony.ants` | 0.5× to 2× an ant to every 130 square ant lengths of tank when the nest is done (24 on a 14-inch display at Medium, 69 at Small), a hundred at the most | 1× |
+| Ants | `antcolony.ants` | 0.5× to 2× an ant to every 130 square ant lengths of tank when the nest is done (24 on a 14-inch display at Medium, 69 at Small), ninety at the most | 1× |
 
 `antcolony.day` (a number like 20261012) and `antcolony.hour` (a farm's own hours, of 24) are for the tests and for stills: the farm of another day, and how long it has been going at the scene's first frame, from where it runs on at Speed's pace. `antcolony.farm`, `antcolony.began` and `antcolony.paced` are the shared cycle's, kept by the app.
 
@@ -150,18 +150,24 @@ Settings' own copy, behind its page, is given three in the afternoon of the day'
 
 ## Cost
 
-Measured 2026-10-12 on an M3 Max, debug build, by the app's render test (3024 × 1964, the mean of 30 frames, this scene alone):
+Measured 2026-10-12 on an M3 Max with other work running, a debug build (the AntNest module optimised), the mean of 30 frames of this scene alone with its colony whole. "CPU" is the render test's figure, which is everything in a frame that is not the GPU's own time; of it, the scene's own update and SpriteKit's drawing were timed apart.
 
-| | CPU ms | GPU ms |
-|---|---|---|
-| Gel, Medium (13 to 24 ants) | 0.7 to 1.1 | 0.6 to 0.85 |
-| Sand, Medium | 0.75 to 0.9 | 0.65 |
-| Small ants (69) | 1.2 to 1.3 | 0.85 |
-| The fullest tank: Small ants at Ants 2×, held to 100 | 1.9 to 2.0 | 0.6 to 0.85 |
+| Display, at 2x | Look, ants | CPU ms (update + drawing) | GPU ms |
+|---|---|---|---|
+| 14-inch, 1512 × 982 points | Gel, Medium, 24 | 1.0 (0.24 + 0.08) | 0.5 |
+| | Bright Gel | the same | 0.85 |
+| | Sand or White Sand | the same | 1.1 |
+| | Earth | the same | 0.35 |
+| | Gel, Small at Colony size 2×, 90 | 1.9 (0.93 + 0.26) | 0.5 |
+| 6K, 3008 × 1692 points | Gel, Medium, 82 | 1.75 (0.84 + 0.23) | 1.75 |
+| | Gel, Small, 90 | 1.8 (0.93 + 0.26) | 1.7 |
+| | Sand, Small, 90 | 1.8 | 3.7 |
+| | Earth, Medium, 82 | 1.7 | 1.1 |
 
-- Most of the CPU is SpriteKit's, by the sprite: a hundred small ants are about 1,800 of them. The ants themselves cost 36 millionths of a second a step for 22 ants (`probe.swift`), two steps to a frame at 30 fps.
-- Off the main thread: the bake, 70 ms at Medium and 210 ms at Small on a 14-inch display, with the ants' first ten minutes run fast (90 ms; 840 ms for 126 small ants); the surroundings, 13 ms (41 ms at Small) each 4000th of the digging.
-- Not measured: a release build, a slower Mac, a 5K or 6K display. The research's own timing sketch of a simpler shader ran 0.35, 0.7 and 1.0 ms of GPU at 14-inch, 5K and 6K on the same machine.
+- **The colony stops at ninety ants** so that the CPU figure stays under 2 ms on the largest display. An ant is eighteen sprites (two lengths to a leg; three for the largest ants), each placed, turned and stretched every frame it walks; an ant standing still has only its antennae placed. Stepping the ants is the small part: 36 millionths of a second a step for 22 of them (`probe.swift`), two steps to a frame at 30 fps.
+- **Sand is over the GPU budget on a 6K display** (3.7 ms): finding a pixel's grain looks through the nine squares round it, which is the price of grains with no lattice. On a laptop's display it is 1.1 ms.
+- **Before a farm fades up** its nest is baked and its ants run three minutes on, off the main thread: 0.06 s and 0.03 s on a 14-inch display at Medium, 0.18 and 0.11 at Small; 0.22 and 0.12 on a 6K display at Medium; and at Small on 6K, the largest tank there is (2,545 by 1,432 cells), 0.87 and 0.12, so about a second of black. The surroundings follow the nest (13 ms on a 14-inch display, 190 ms for the largest tank) and again each 4000th of the digging.
+- Not measured: a release build, a slower Mac. The research's own timing sketch of a simpler shader ran 0.35, 0.7 and 1.0 ms of GPU at 14-inch, 5K and 6K on the same machine.
 
 ## Checking it
 
@@ -181,7 +187,7 @@ swiftc -O Sources/AntNest/Nest.swift Sources/AntNest/Colony.swift docs/ant-colon
 
 ## Shortcuts
 
-- **An ant is some twenty sprites,** and SpriteKit's cost is by the sprite, so the colony stops at a hundred ants. One shader drawing a whole ant would lift that.
+- **An ant is eighteen sprites,** each placed and turned every frame it walks, so the colony stops at ninety ants. One shader drawing a whole ant would lift that.
 - **A finished farm gives way to the next through black,** in under half a second. A crossfade needs both farms' textures at once.
 - **Every ant is seen from the side.** In a real thin tank some walk on the glass and are seen from above (photograph 4). That is drawn only for the third of a second an ant rolls over.
 - **Ants pass through each other.** Two that meet stop and one takes the other wall, but two overlapping shapes are not two bodies squeezing past.
