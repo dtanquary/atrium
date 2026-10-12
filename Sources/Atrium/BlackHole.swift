@@ -166,6 +166,11 @@ final class BlackHole: SKScene {
     /// the standard by half a magnitude, at 0 not at all. Seen from space no star twinkles; this is so that the sky
     /// isn't a still photograph behind a turning disc.
     nonisolated static let twinkle = Knob(key: "blackhole.twinkle", label: "Twinkle", range: 0...1, standard: 0.6, section: "Sky")
+    /// How fast the camera goes round the hole about the disc's axis. The disc looks the same from all the way
+    /// round, so what that does is turn the whole sky behind it, stars and Milky Way as one, with stars passing
+    /// behind the hole and being swept round its ring. At 1 the camera goes round as a body in orbit at its distance
+    /// would while the disc turns at its own 1: once in 36.5 minutes. 0, the standard, is a sky that stands still.
+    nonisolated static let drift = Knob(key: "blackhole.drift", label: "Drift", range: 0...4, standard: 0, section: "Sky", format: .times)
     /// Brightness is the exposure before the stretch, as Galaxy's is. Beaming is how much of the Doppler shift
     /// shows: at 1 the side coming toward us is as much hotter and brighter as relativity makes it.
     nonisolated static let knobs = [
@@ -178,6 +183,7 @@ final class BlackHole: SKScene {
         Knob(key: "blackhole.stars", label: "Stars", range: 0...2, standard: 1, section: "Sky"),
         twinkle,
         Knob(key: "blackhole.milkyway", label: "Milky Way", range: 0...2, standard: 1, section: "Sky"),
+        drift,
     ]
 
     /// The disc's colours, each the temperature of its hottest ring in kelvin, and the exposure that suits it.
@@ -198,6 +204,9 @@ final class BlackHole: SKScene {
     /// How long a generation of streaks lasts, in that unit (58 seconds at speed 1). Three overlap, a third of a
     /// life apart. The shader's weights have the same 60 written in.
     private static let life = 60.0
+    /// How long the camera takes to go once round at drift 1, in seconds: by Kepler, the inner edge's 45 times the
+    /// camera's distance over the inner edge's 3 radii, to the power 1.5.
+    private static let orbit = 45 * pow(View().distance / 3, 1.5)
 
     private static let rays = table(Bending.packed(Bending.rays, bytes: 2), Bending.raysSize.across, Bending.raysSize.up)
     private static let turns = table(Bending.packed(Bending.turns, bytes: 3), Bending.turnsSize, 1)
@@ -369,6 +378,16 @@ final class BlackHole: SKScene {
     /// rhythms are whole numbers of beats to that, so the number the shader sees stays small and nothing jumps
     /// when it comes round.
     private let beat = SKUniform(name: "u_beat", float: 0)
+    /// How far round the hole the camera has gone, in turns (0 to 1), and that as the shader takes it: the turn
+    /// about the disc's axis that carries a direction in the camera's frame to the frame the sky is kept in. With
+    /// it goes how far the sky turned in this frame, in radians: a star is drawn as the streak it left in that time,
+    /// so one that crosses several pixels a frame slides and doesn't hop, whatever the frame rate.
+    private var turned: Double
+    private let skyTurn = SKUniform(name: "u_sky", matrixFloat3x3: matrix_identity_float3x3), shutter = SKUniform(name: "u_shutter", float: 0)
+    private let axis: SIMD3<Float>
+    /// Whether the shader is the one that can turn the sky (see `source`). It isn't until the sky first has to turn,
+    /// so a sky that never does is drawn by the shader it always was.
+    private var drifts = false
     private let age = SKUniform(name: "u_age", vectorFloat3: .zero)
     private let seedRound = SKUniform(name: "u_seedRound", vectorFloat3: .zero), seedDeep = SKUniform(name: "u_seedDeep", vectorFloat3: .zero)
     /// The glow: the disc's light, spread (see `spread`), and how much that texture must be stretched to fit when
@@ -392,10 +411,11 @@ final class BlackHole: SKScene {
     /// streaks begin there (the disc's clock, and which generation of them), so two scenes can show the same
     /// picture; without, each begins at random. `alone` makes this the picture of a disc alone, for a glow: whichever
     /// scene's `show` last gave it, with no sky and no glow of its own, its fine streaks left as they are however
-    /// small it is drawn, and standing still wherever `hold` puts them.
-    init(size: CGSize, view: View? = nil, checks: Bool = false, start: (time: Double, generation: Int)? = nil, alone: Bool = false) {
-        // Size and Speed are worked out here, not in the shader (and "u_size" is the scene's own).
-        knobUniforms = Dictionary(uniqueKeysWithValues: Self.knobs.filter { $0.key != Self.size.key && $0.key != Self.speed.key }.map {
+    /// small it is drawn, and standing still wherever `hold` puts them. `turned` is how far round the hole the camera
+    /// has already gone, in turns: the sky is turned that far to begin with.
+    init(size: CGSize, view: View? = nil, checks: Bool = false, start: (time: Double, generation: Int)? = nil, turned: Double = 0, alone: Bool = false) {
+        // Size, Speed and Drift are worked out here, not in the shader (and "u_size" is the scene's own).
+        knobUniforms = Dictionary(uniqueKeysWithValues: Self.knobs.filter { ![Self.size.key, Self.speed.key, Self.drift.key].contains($0.key) }.map {
             ($0.key, SKUniform(name: "u_" + $0.key.split(separator: ".").last!, float: Float($0.standard)))
         })
         field = view?.field
@@ -408,22 +428,18 @@ final class BlackHole: SKScene {
         peak = SKUniform(name: "u_peak", vectorFloat2: [Float(heat.kelvin), Float(heat.exposure)])
         discTime = start?.time ?? .random(in: 0..<Self.life)
         firstGeneration = start?.generation ?? .random(in: 0..<10000)
+        (self.turned, axis) = (turned, [0, sin(tilt), -cos(tilt)])
         super.init(size: size)
 
         let sprite = SKSpriteNode(color: .black, size: size)
         sprite.anchorPoint = .zero
-        sprite.shader = SKShader(source: shaderCommon + Self.source(alone: alone), uniforms: [
-            SKUniform(name: "u_rays", texture: Self.rays), SKUniform(name: "u_turns", texture: Self.turns),
-            SKUniform(name: "u_heat", texture: Self.heat), SKUniform(name: "u_gas", texture: Self.gas),
-            SKUniform(name: "u_catalogue", texture: Self.catalogue), SKUniform(name: "u_galaxy", texture: Self.galaxy), halo,
-            SKUniform(name: "u_checks", float: checks ? 1 : 0),
-            extent, aim, peak, lens, age, seedRound, seedDeep, haloFit, beat,
-        ] + knobUniforms.values)
+        sprite.shader = shader()
         addChild(sprite)
 
         guard !alone else { return }
         applySettings()
         turnDisc(by: 0)
+        turnSky(by: 0)
         makeGlow()
         NotificationCenter.default.addObserver(self, selector: #selector(applySettings),
                                                name: UserDefaults.didChangeNotification, object: nil)
@@ -431,9 +447,23 @@ final class BlackHole: SKScene {
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
+    /// The scene's shader as things stand: the one that can turn the sky once `drifts` is set, and until then the
+    /// one that can't, with no word of it.
+    private func shader() -> SKShader {
+        SKShader(source: shaderCommon + Self.source(alone: alone, drifts: drifts), uniforms: [
+            SKUniform(name: "u_rays", texture: Self.rays), SKUniform(name: "u_turns", texture: Self.turns),
+            SKUniform(name: "u_heat", texture: Self.heat), SKUniform(name: "u_gas", texture: Self.gas),
+            SKUniform(name: "u_catalogue", texture: Self.catalogue), SKUniform(name: "u_galaxy", texture: Self.galaxy), halo,
+            SKUniform(name: "u_checks", float: checks ? 1 : 0),
+            extent, aim, peak, lens, age, seedRound, seedDeep, haloFit, beat,
+        ] + (drifts ? [skyTurn, shutter] : []) + knobUniforms.values)
+    }
+
     override func update(_ currentTime: TimeInterval) {
         guard !alone else { return }
-        turnDisc(by: frameTime(currentTime, &lastUpdate) * Self.speed.value)
+        let seconds = frameTime(currentTime, &lastUpdate)
+        turnDisc(by: seconds * Self.speed.value)
+        if drifts || Self.drift.value > 0 { turnSky(by: seconds * Self.drift.value) }
         beat.floatValue = Float((WallpaperTime.elapsed / 120).truncatingRemainder(dividingBy: 1))
         // The glow is made again when a slider that changes the disc has moved, but no more than seven times a
         // second, and never two scenes' in one frame, so dragging one never waits on it (it takes 10 ms).
@@ -441,6 +471,18 @@ final class BlackHole: SKScene {
             makeGlow()
             (haloMade, Self.glowMade) = (currentTime, currentTime)
         }
+    }
+
+    /// Takes the camera on round the hole by `seconds` of its orbit at drift 1, and tells the shader how far the sky
+    /// has turned. It goes the way the gas does, so the sky passes from left to right. The first time the sky has
+    /// turned at all, the scene changes to the shader that can turn it (it compiles then, once: about 0.15 s).
+    private func turnSky(by seconds: Double) {
+        turned = (turned + seconds / Self.orbit).truncatingRemainder(dividingBy: 1)
+        skyTurn.matrixFloat3x3Value = simd_float3x3(simd_quatf(angle: Float(-2 * .pi * turned), axis: axis))
+        shutter.floatValue = Float(2 * .pi * seconds / Self.orbit)
+        guard turned != 0, !drifts else { return }
+        drifts = true
+        (children.first as? SKSpriteNode)?.shader = shader()
     }
 
     /// Moves the disc's clock on by `seconds` at speed 1, and tells the shader each streak generation's age and
@@ -500,8 +542,37 @@ final class BlackHole: SKScene {
     /// The shader. `alone` gives the one that draws the disc for its glow (see `spread`), which differs in two lines:
     /// they are written in here, not switched by a uniform, so that the desktop's shader is to the letter what it
     /// would be without them. (A line that never runs still changed how the rest was compiled, and with it the
-    /// last bit of a few pixels.)
-    private static func source(alone: Bool) -> String { """
+    /// last bit of a few pixels.) `drifts` gives the one that can turn the sky, written in the same way and for the
+    /// same reason: given the turn as a uniform that was no turn at all, one pixel in six million came out a step off.
+    private static func source(alone: Bool, drifts: Bool) -> String {
+        let (sky, back) = drifts ? ("home", " * u_sky") : ("sky", "")
+        // In a sky that drifts, the Milky Way's picture is mended where its two ends meet. They are the same line on
+        // the sky and don't quite match (a step of 4 of 255, grey against mauve), which never showed while that
+        // line stayed behind the camera; a drifting sky brings it across the screen. So half the difference between
+        // the ends at this height is taken off one side and put on the other, fading out over 11° from the join.
+        let mend = drifts ? """
+            vec3 ends = texture2D(u_galaxy, vec2(0.0, lat / 3.1415927 + 0.5)).rgb - texture2D(u_galaxy, vec2(1.0, lat / 3.1415927 + 0.5)).rgb;
+            float along = lon / 6.2831853 + 0.5;
+            galaxy -= ends * (along < 0.5 ? 0.5 : -0.5) * max(1.0 - min(along, 1.0 - along) / 0.03, 0.0);
+            """ : ""
+        // In a sky that drifts, a star is drawn as the streak it left in this frame, so that one crossing several
+        // pixels a frame slides and doesn't hop: `smear` is how far its image went over the screen (the sky turns
+        // about the disc's axis, so a star moves along axis x sky), a pixel's distance from the star becomes its
+        // distance from that streak, and the star's light is thinned by as much as the streak is longer than the
+        // star is wide.
+        // ponytail: the thinning takes every star to be 0.9 px in radius. The few bright ones are up to twice that,
+        // and lose a little too much as they streak; give `thin` the star's own width if one is seen to dim.
+        let smear = drifts ? """
+            vec3 slide = cross(axis, sky) * u_shutter;
+            vec2 smear = vec2(dot(slide, ring) * alongPx, (y.x * slide.y - y.y * slide.x) * roundPx);
+            float thin = 1.0 / (1.0 + length(smear) / 1.6);
+            """ : ""
+        let streak = drifts ? """
+            vec2 from = step.x * eastPx + step.y * northPx;
+            from -= smear * clamp(dot(from, smear) / max(dot(smear, smear), 1e-12), -0.5, 0.5);
+            """ : ""
+        let (reach, thinned) = drifts ? ("length(from)", " * thin") : ("length(step.x * eastPx + step.y * northPx)", "")
+        return """
     // Where table A keeps a ray's distance: its e across, how far it has turned up (see Bending in BlackHole.swift).
     vec2 raysAt(float e2, float turn) {
         float furthest = (1.0 + e2) / (1.0 / 3.0 + 2.0 * e2 * sqrt(e2));
@@ -633,9 +704,13 @@ final class BlackHole: SKScene {
         float wide1 = length(fwidth(on1)) * u1 / 6.2831853;
         // The sky where the ray leaves for, as longitude and latitude in the scene's frame, and the Milky Way there.
         // (Read for every pixel: a texture with smaller copies of itself can't be read inside a branch either.)
-        float lon = atan(sky.x, sky.z);
-        float lat = asin(clamp(sky.y, -1.0, 1.0));
+        // (When the sky drifts, `home` is that direction in the frame the sky is kept in: the camera's, turned
+        // about the disc's axis by as far as the camera has gone round the hole.)
+        \(drifts ? "vec3 home = u_sky * sky;" : "")
+        float lon = atan(\(sky).x, \(sky).z);
+        float lat = asin(clamp(\(sky).y, -1.0, 1.0));
         vec3 galaxy = texture2D(u_galaxy, vec2(lon / 6.2831853 + 0.5, lat / 3.1415927 + 0.5)).rgb;
+        \(mend)
         float pixel = fwidth(q.x);   // one pixel, in the units of q
 
         vec3 col = vec3(0.0);
@@ -718,16 +793,19 @@ final class BlackHole: SKScene {
                 float roundPx = tand / (side * pixel);
                 float magnified = min(sind / abs(outward * side), 6.0);
                 // a cell east, and a cell north, as pixels on screen
-                float level = sqrt(max(1.0 - sky.y * sky.y, 1e-6));
+                // (in a sky that drifts, east and north are worked out in its own frame and brought back to the camera's)
+                float level = sqrt(max(1.0 - \(sky).y * \(sky).y, 1e-6));
                 vec3 ring = vec3(cos(away) * y, sin(away));
-                vec3 east = vec3(sky.z, 0.0, -sky.x) / level;
-                vec3 north = vec3(-sky.y * sky.x, level * level, -sky.y * sky.z) / level;
+                vec3 east = vec3(\(sky).z, 0.0, -\(sky).x) / level\(back);
+                vec3 north = vec3(-\(sky).y * \(sky).x, level * level, -\(sky).y * \(sky).z) / level\(back);
                 vec2 eastPx = vec2(dot(east, ring) * alongPx, (y.x * east.y - y.y * east.x) * roundPx) * (0.0030680 * level);
                 vec2 northPx = vec2(dot(north, ring) * alongPx, (y.x * north.y - y.y * north.x) * roundPx) * 0.0030680;
                 float room = 0.5 * abs(eastPx.x * northPx.y - eastPx.y * northPx.x) / max(max(length(eastPx), length(northPx)), 1e-6);
+                \(smear)
                 // the four cells round this pixel's place on the sky: any star near enough to light it is in one
                 // ponytail: the stretch is taken at the pixel, which keeps a star round except right at the ring
-                // dead behind the hole, where one or two come out as short dashes. Fine while the sky stands still.
+                // dead behind the hole, where one or two come out as short dashes. Fine while the sky stands still;
+                // in a sky that drifts, stars pass through there all the time, and are streaks there anyway.
                 vec2 place = vec2(lon / 6.2831853 + 0.5, lat / 3.1415927 + 0.5) * vec2(2048.0, 1024.0);
                 vec2 corner = floor(place - 0.5);
                 for (int k = 0; k < 4; k++) {
@@ -742,7 +820,8 @@ final class BlackHole: SKScene {
                         // brightness code by up to 0.0695 either way, which is 0.87 of a magnitude.
                         vec4 own = hash42(vec2(mod(cell.x, 2048.0), clamp(cell.y, 0.0, 1023.0)));
                         float swell = sin(6.2831853 * (floor(15.0 + 25.0 * own.x) * u_beat + own.z)) + sin(6.2831853 * (floor(15.0 + 25.0 * own.y) * u_beat + own.w));
-                        behind += hue * starLight(length(step.x * eastPx + step.y * northPx), star.b + 0.03475 * u_twinkle * swell, room, u_stars * magnified);
+                        \(streak)
+                        behind += hue * starLight(\(reach), star.b + 0.03475 * u_twinkle * swell, room, u_stars * magnified\(thinned));
                     }
                 }
             }
@@ -769,5 +848,6 @@ final class BlackHole: SKScene {
         }
         gl_FragColor = vec4(col, 1.0);
     }
-    """ }
+    """
+    }
 }

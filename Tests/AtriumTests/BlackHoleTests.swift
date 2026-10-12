@@ -229,12 +229,32 @@ func blackBodyKeepsToTheLocus(kelvin: Double, x: Double, y: Double) {
     #expect(most > 10 && most < 120, "in two seconds a star's pixel changes by \(most) of 255 at most")
 }
 
+/// The sky's drift, with the disc and the twinkle held still. A sky that has turned is another picture; turned a
+/// whole turn further it is the same one again; and with the sky dark, turning it changes nothing, since it is the
+/// sky that turns and not the disc (but for the last bit: the turned sky is drawn by a shader of its own).
+@MainActor @Test func blackHoleDrifts() throws {
+    let defaults = UserDefaults.standard, held = [BlackHole.speed.key, BlackHole.twinkle.key], sky = ["blackhole.stars", "blackhole.milkyway"]
+    for key in held { defaults.set(0, forKey: key) }
+    defer { for key in held + sky { defaults.removeObject(forKey: key) } }
+    func picture(turned: Double) throws -> [SIMD3<UInt8>] {
+        try drawn(BlackHole(size: CGSize(width: 378, height: 246), start: (time: 20, generation: 7), turned: turned), 756, 492)
+    }
+    func most(_ a: [SIMD3<UInt8>], _ b: [SIMD3<UInt8>]) -> Int { zip(a, b).map { abs(Int($0.y) - Int($1.y)) }.max() ?? 0 }
+    let turned = try picture(turned: 0.3)
+    #expect(most(try picture(turned: 0), turned) > 60, "the sky is where it was after 0.3 of a turn")
+    #expect(most(try picture(turned: 1.3), turned) == 0)
+    for key in sky { defaults.set(0, forKey: key) }
+    let step = most(try picture(turned: 0), try picture(turned: 0.3))
+    #expect(step <= 1, "with the sky dark, turning it changes a pixel by \(step) of 255")
+}
+
 /// For looking at the Black Hole moving: `BLACKHOLE_STRIPS=<dir> swift test --filter blackHoleMoves` steps one scene
 /// frame by frame (not in real time) and saves, for 15 and 30 frames a second, eight frames in a row of three places
 /// where trouble would show (the thin ring over the shadow, the disc's near side seen edge on, the bright left end)
 /// with the change between each pair beside them, eight times over; then one frame with the glow a dragged slider
 /// has left behind and the same frame with the glow made for it, for three sliders; then the stars twinkling with
-/// the disc held still, a patch of sky every half second; then fifteen frames 7.5 s apart through two lives of the
+/// the disc held still, a patch of sky every half second; then the sky drifting at the top of its slider, eight
+/// frames in a row of the open sky and of the ring; then fifteen frames 7.5 s apart through two lives of the
 /// streaks. It prints how much single pixels jump between frames, how much they step when the fresh glow comes,
 /// how far the twinkle alone moves a pixel in a frame, and how far the disc's brightness and contrast wander over those two lives, with how much
 /// of that keeps time with the streak generations handing over (breathing) rather than being the streaks
@@ -382,6 +402,37 @@ func blackBodyKeepsToTheLocus(kelvin: Double, x: Double, y: Double) {
                      twinkle, Double(changed) / 64 / Double(w * h) * 100, nearlyAll, most))
     }
 
+    // The sky drifting, and nothing else: the disc and the twinkle held still, Drift at the slider's top, at 15 fps.
+    // A star that moves changes its pixels by all it has, so the steps printed are large and say only where the
+    // motion is; what to look at is the strips, eight frames in a row of the open sky and of the sky over the hump,
+    // where stars from behind the hole are swept round its ring: each streak should begin where the last one ended.
+    do {
+        let defaults = UserDefaults.standard, held = [BlackHole.speed.key, BlackHole.twinkle.key]
+        for key in held { defaults.set(0, forKey: key) }
+        defaults.set(BlackHole.drift.range.upperBound, forKey: BlackHole.drift.key)
+        defer { for key in held + [BlackHole.drift.key] { defaults.removeObject(forKey: key) } }
+        let renderer = SKRenderer(device: device)
+        renderer.scene = BlackHole(size: CGSize(width: w / 2, height: h / 2), start: (time: 20, generation: 7))
+        let spots = [("open sky", 240, 160), ("the ring", w / 2 - 200, 215)], (pw, ph) = (400, 150)
+        var last = try frame(of: renderer, after: 1, at: 15), strips = spots.map { _ in [UInt32](repeating: 0, count: pw * 2 * ph * 8) }
+        var steps = spots.map { _ in [Int](repeating: 0, count: 256) }
+        for n in 0..<8 {
+            let next = try frame(of: renderer, after: 1.0 / 15, at: 15)
+            for (k, (_, x0, y0)) in spots.enumerated() { for y in 0..<ph { for x in 0..<pw {
+                let at = (y0 + y) * w + x0 + x, change = abs(luma(next[at]) - luma(last[at])), row = (n * ph + y) * pw * 2
+                (strips[k][row + x], strips[k][row + pw + x]) = (next[at], UInt32(min(change * 2, 255)) * 0x010101)
+                steps[k][change] += 1
+            } } }
+            last = next
+        }
+        for (k, (name, _, _)) in spots.enumerated() {
+            save(strips[k], pw * 2, ph * 8, "sky drifting, \(name).png")
+            print(String(format: "Black Hole moving, the sky alone at Drift %.0f and 15 fps, %@: %.1f%% of it changes in a frame, %d pixels a frame by 80 of 255 or more, the most %d",
+                         BlackHole.drift.range.upperBound, name, Double(steps[k][1...].reduce(0, +)) / 8 / Double(pw * ph) * 100, steps[k][80...].reduce(0, +) / 8,
+                         steps[k].lastIndex { $0 > 0 } ?? 0))
+        }
+    }
+
     // Two lives of the streaks: 120 units of the disc's time, 117 s at speed 1, looked at every 1.5 s. A generation
     // hands over every third of a life, 19.5 s or 13 looks, so any breathing would beat at that.
     let renderer = SKRenderer(device: device)
@@ -412,7 +463,8 @@ func blackBodyKeepsToTheLocus(kelvin: Double, x: Double, y: Double) {
 /// One still of the Black Hole that comes out the same every time, for comparing a change with what went before:
 /// `BLACKHOLE_STILL=<file.png> swift test --filter blackHoleStill`, with `BLACKHOLE_DEFAULTS="blackhole.size=1.5,…"`
 /// for Settings values as the render test takes them. The disc is held still at a fixed start, at full Retina size;
-/// `BLACKHOLE_START="<disc time>,<generation>"` starts its streaks somewhere else.
+/// `BLACKHOLE_START="<disc time>,<generation>"` starts its streaks somewhere else, and `BLACKHOLE_TURNED=<turns>`
+/// turns the sky that far first.
 @MainActor @Test func blackHoleStill() throws {
     let env = ProcessInfo.processInfo.environment
     guard let file = env["BLACKHOLE_STILL"] else { return }
@@ -422,7 +474,8 @@ func blackBodyKeepsToTheLocus(kelvin: Double, x: Double, y: Double) {
     defer { for pair in settings { UserDefaults.standard.removeObject(forKey: String(pair[0])) } }
     let (w, h) = (3024, 1964)
     let start = (env["BLACKHOLE_START"] ?? "20,7").split(separator: ",").compactMap { Double($0) }
-    let pixels = try drawn(BlackHole(size: CGSize(width: w / 2, height: h / 2), start: (time: start[0], generation: Int(start[1]))), w, h)
+    let pixels = try drawn(BlackHole(size: CGSize(width: w / 2, height: h / 2), start: (time: start[0], generation: Int(start[1])),
+                                     turned: Double(env["BLACKHOLE_TURNED"] ?? "") ?? 0), w, h)
     let bytes = pixels.flatMap { [$0.x, $0.y, $0.z] }
     let image = try #require(CGImage(width: w, height: h, bitsPerComponent: 8, bitsPerPixel: 24, bytesPerRow: w * 3, space: CGColorSpace(name: CGColorSpace.sRGB)!,
                                      bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.none.rawValue), provider: CGDataProvider(data: Data(bytes) as CFData)!,
