@@ -142,6 +142,11 @@ public struct LineRoute: Sendable {
     /// from the textures' own. A texel takes the time of the pass that covers it most, so the fringe of a line laid
     /// beside it later doesn't show early; and the time of the next pass over it, which draws it darker. `ghost` is
     /// the cover of the picture before, from its own stamping at this size, if there was one.
+    ///
+    /// A step whose own line is off the textures' edge takes no time, and the clock it would have taken comes off
+    /// every time after it: a picture scaled up until it is cut off there is finished before the route's clock is,
+    /// and nothing in it waits for a stylus that is out of sight. Even at `haste` the frame alone held a bare
+    /// screen for 15 s. A route that fits inside is stamped to its own clock.
     // ponytail: where a later line overlaps an earlier one's edge by less than a quarter of a texel's cover, that
     // sliver shows with the earlier line; store a time per pass if lines ever cross thickly enough to see it.
     public func stamp(width: Int, height: Int, scale: Double, dx: Double, dy: Double, over ghost: Data? = nil) -> Stamped {
@@ -149,12 +154,18 @@ public struct LineRoute: Sendable {
         var first = [UInt32](repeating: never, count: count), second = [UInt32](repeating: never, count: count), cover = [UInt8](repeating: 0, count: count)
         let reach = Float(Self.line / 2 * scale) + 0.5, unit = Self.end / clock, gap = UInt32(Self.apart * unit)
         first.withUnsafeMutableBufferPointer { first in second.withUnsafeMutableBufferPointer { second in cover.withUnsafeMutableBufferPointer { cover in
+            var saved = 0.0
             for i in 1..<max(x.count, 1) {
                 let ax = Float(Double(x[i - 1]) * scale + dx), ay = Float(Double(height) - (Double(y[i - 1]) * scale + dy))
                 let bx = Float(Double(x[i]) * scale + dx), by = Float(Double(height) - (Double(y[i]) * scale + dy))
                 let ex = bx - ax, ey = by - ay, length = ex * ex + ey * ey
                 let x0 = max(Int((min(ax, bx) - reach).rounded(.down)), 0), x1 = min(Int((max(ax, bx) + reach).rounded(.up)), width - 1)
                 let y0 = max(Int((min(ay, by) - reach).rounded(.down)), 0), y1 = min(Int((max(ay, by) + reach).rounded(.up)), height - 1)
+                // out of sight by its own line, whatever of its width reaches in: a row of hatching just off the
+                // edge would otherwise be waited for and show a sliver
+                let unseen = max(ax, bx) < 0 || min(ax, bx) > Float(width) || max(ay, by) < 0 || min(ay, by) > Float(height)
+                let from = t[i - 1] - saved, took = unseen ? 0 : t[i] - t[i - 1]
+                saved += t[i] - t[i - 1] - took
                 guard x0 <= x1, y0 <= y1 else { continue }
                 for py in y0...y1 {
                     for px in x0...x1 {
@@ -164,7 +175,7 @@ public struct LineRoute: Sendable {
                         guard far < reach * reach else { continue }
                         let level = UInt8(min(reach - far.squareRoot(), 1) * 255)
                         guard level > 0 else { continue }
-                        let p = py * width + px, q = UInt32((t[i - 1] + Double(along) * (t[i] - t[i - 1])) * unit)
+                        let p = py * width + px, q = UInt32((from + Double(along) * took) * unit)
                         if first[p] == never || Int(level) > Int(cover[p]) + 64 {
                             first[p] = q; second[p] = never
                         } else if second[p] == never, level > 76, q > first[p] + gap {
