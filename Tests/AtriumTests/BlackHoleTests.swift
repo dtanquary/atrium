@@ -208,13 +208,35 @@ func blackBodyKeepsToTheLocus(kelvin: Double, x: Double, y: Double) {
     #expect(darker <= 1, "a pixel is \(darker) of 255 darker for the glow")
 }
 
+/// The stars' twinkle, with the disc held still so that nothing else moves. It is a matter of the app's clock alone:
+/// two pictures two seconds of that clock apart differ in their stars at the standard Twinkle, by no great step,
+/// and at Twinkle 0 not in one pixel.
+@MainActor @Test func blackHoleTwinkles() throws {
+    let defaults = UserDefaults.standard
+    defaults.set(0, forKey: BlackHole.speed.key)
+    defer { for key in [BlackHole.speed.key, BlackHole.twinkle.key] { defaults.removeObject(forKey: key) } }
+    func change(twinkle: Double) throws -> Int {
+        defaults.set(twinkle, forKey: BlackHole.twinkle.key)
+        let scene = BlackHole(size: CGSize(width: 378, height: 246), start: (time: 20, generation: 7))
+        WallpaperTime.restart()
+        WallpaperTime.set(100)
+        let before = try drawn(scene, 756, 492)
+        WallpaperTime.set(102)
+        return zip(before, try drawn(scene, 756, 492)).map { abs(Int($0.y) - Int($1.y)) }.max() ?? 0
+    }
+    #expect(try change(twinkle: 0) == 0)
+    let most = try change(twinkle: BlackHole.twinkle.standard)
+    #expect(most > 10 && most < 120, "in two seconds a star's pixel changes by \(most) of 255 at most")
+}
+
 /// For looking at the Black Hole moving: `BLACKHOLE_STRIPS=<dir> swift test --filter blackHoleMoves` steps one scene
 /// frame by frame (not in real time) and saves, for 15 and 30 frames a second, eight frames in a row of three places
 /// where trouble would show (the thin ring over the shadow, the disc's near side seen edge on, the bright left end)
 /// with the change between each pair beside them, eight times over; then one frame with the glow a dragged slider
-/// has left behind and the same frame with the glow made for it, for three sliders; then fifteen frames 7.5 s apart
-/// through two lives of the streaks. It prints how much single pixels jump between frames, how much they step when
-/// the fresh glow comes, and how far the disc's brightness and contrast wander over those two lives, with how much
+/// has left behind and the same frame with the glow made for it, for three sliders; then the stars twinkling with
+/// the disc held still, a patch of sky every half second; then fifteen frames 7.5 s apart through two lives of the
+/// streaks. It prints how much single pixels jump between frames, how much they step when the fresh glow comes,
+/// how far the twinkle alone moves a pixel in a frame, and how far the disc's brightness and contrast wander over those two lives, with how much
 /// of that keeps time with the streak generations handing over (breathing) rather than being the streaks
 /// themselves coming and going.
 @MainActor @Test func blackHoleMoves() throws {
@@ -233,6 +255,7 @@ func blackBodyKeepsToTheLocus(kelvin: Double, x: Double, y: Double) {
     func frame(of renderer: SKRenderer, after seconds: Double, at fps: Double) throws -> [UInt32] {
         for _ in 0..<max(Int((seconds * fps).rounded()), 1) {
             clock += 1 / fps
+            WallpaperTime.set(clock)
             renderer.update(atTime: clock)
         }
         let buffer = try #require(queue.makeCommandBuffer())
@@ -300,11 +323,12 @@ func blackBodyKeepsToTheLocus(kelvin: Double, x: Double, y: Double) {
     // A slider dragged. The glow is made again at most every 0.15 s, so between times it is the last one (stretched
     // to fit, for Size). Does the picture step when the fresh one comes? The disc is held still, the slider is put
     // where 0.15 s of a drag across its whole range in 2 s would have taken it, and the same frame is drawn with
-    // the glow as it was and then with the one made for it.
+    // the glow as it was and then with the one made for it. (The stars are held still too, or their twinkle
+    // between the two frames would be counted with it.)
     for (key, moved) in [(BlackHole.size.key, 0.064), ("blackhole.brightness", 0.105), ("blackhole.streaks", 0.075)] {
-        let defaults = UserDefaults.standard
-        defaults.set(0, forKey: BlackHole.speed.key)
-        defer { for key in [key, BlackHole.speed.key] { defaults.removeObject(forKey: key) } }
+        let defaults = UserDefaults.standard, held = [BlackHole.speed.key, BlackHole.twinkle.key]
+        for key in held { defaults.set(0, forKey: key) }
+        defer { for key in held + [key] { defaults.removeObject(forKey: key) } }
         let renderer = SKRenderer(device: device)
         renderer.scene = BlackHole(size: CGSize(width: w / 2, height: h / 2), start: (time: 20, generation: 7))
         defaults.set(0.8, forKey: key)
@@ -323,6 +347,39 @@ func blackBodyKeepsToTheLocus(kelvin: Double, x: Double, y: Double) {
         steps.sort()
         print(String(format: "Black Hole moving, a fresh glow after 0.15 s of dragging %@: %.1f%% of pixels change at all, 99.9%% of them by %d of 255 or less, the most %d",
                      key, Double(steps.count { $0 > 0 }) / Double(steps.count) * 100, steps[steps.count * 999 / 1000], steps.last!))
+    }
+
+    // The stars twinkling, and nothing else: with the disc held still, whatever changes between frames is the
+    // twinkle. At the standard Twinkle and at the slider's top: how far a pixel steps in a frame at 15 fps, over 64
+    // frames, and a patch of sky every half second with its change from the half second before (x4) beside it.
+    for twinkle in [BlackHole.twinkle.standard, BlackHole.twinkle.range.upperBound] {
+        let defaults = UserDefaults.standard
+        defaults.set(0, forKey: BlackHole.speed.key)
+        defaults.set(twinkle, forKey: BlackHole.twinkle.key)
+        defer { for key in [BlackHole.twinkle.key, BlackHole.speed.key] { defaults.removeObject(forKey: key) } }
+        let renderer = SKRenderer(device: device)
+        renderer.scene = BlackHole(size: CGSize(width: w / 2, height: h / 2), start: (time: 20, generation: 7))
+        let (pw, ph) = (400, 150), (x0, y0) = (240, 160)
+        var last = try frame(of: renderer, after: 1, at: 15), steps = [Int](repeating: 0, count: 256), strip = [UInt32](repeating: 0, count: pw * 2 * ph * 8)
+        var held = last
+        for n in 0..<64 {
+            let next = try frame(of: renderer, after: 1.0 / 15, at: 15)
+            for i in 0..<w * h where next[i] != last[i] { steps[abs(luma(next[i]) - luma(last[i]))] += 1 }
+            if n % 8 == 7 {   // every eighth frame: 0.53 s
+                for y in 0..<ph { for x in 0..<pw {
+                    let at = (y0 + y) * w + x0 + x, row = (n / 8 * ph + y) * pw * 2
+                    (strip[row + x], strip[row + pw + x]) = (next[at], UInt32(min(abs(luma(next[at]) - luma(held[at])) * 4, 255)) * 0x010101)
+                } }
+                held = next
+            }
+            last = next
+        }
+        save(strip, pw * 2, ph * 8, "stars twinkling at \(twinkle).png")
+        let changed = steps[1...].reduce(0, +), most = steps.lastIndex { $0 > 0 } ?? 0
+        var seen = 0
+        let nearlyAll = (1..<256).first { seen += steps[$0]; return seen * 1000 >= changed * 999 } ?? 0
+        print(String(format: "Black Hole moving, the stars alone at Twinkle %.1f and 15 fps: %.2f%% of the picture changes in a frame, 99.9%% of that by %d of 255 or less, the most %d",
+                     twinkle, Double(changed) / 64 / Double(w * h) * 100, nearlyAll, most))
     }
 
     // Two lives of the streaks: 120 units of the disc's time, 117 s at speed 1, looked at every 1.5 s. A generation
@@ -359,6 +416,7 @@ func blackBodyKeepsToTheLocus(kelvin: Double, x: Double, y: Double) {
 @MainActor @Test func blackHoleStill() throws {
     let env = ProcessInfo.processInfo.environment
     guard let file = env["BLACKHOLE_STILL"] else { return }
+    WallpaperTime.restart()   // the stars' twinkle goes by the app's clock: every still is of its first moment
     let settings = ((env["BLACKHOLE_DEFAULTS"] ?? "") + ",blackhole.speed=0").split(separator: ",").map { $0.split(separator: "=") }.filter { $0.count == 2 }
     for pair in settings { UserDefaults.standard.set(Double(pair[1]).map { $0 as Any } ?? String(pair[1]), forKey: String(pair[0])) }
     defer { for pair in settings { UserDefaults.standard.removeObject(forKey: String(pair[0])) } }

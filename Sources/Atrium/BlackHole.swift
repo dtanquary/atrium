@@ -162,6 +162,10 @@ final class BlackHole: SKScene {
     /// The disc's light spread round it, as a lens spreads anything this bright: 1 is the soft glow Dave picked from
     /// a sheet (tile M), 0 none at all, and then the picture is to the byte what it was before there was one.
     nonisolated static let glow = Knob(key: "blackhole.glow", label: "Glow", range: 0...2, standard: 1, section: "Look")
+    /// How far each star swells and fades on its own slow rhythm: at 1 by up to 0.87 of a magnitude either way, at
+    /// the standard by half a magnitude, at 0 not at all. Seen from space no star twinkles; this is so that the sky
+    /// isn't a still photograph behind a turning disc.
+    nonisolated static let twinkle = Knob(key: "blackhole.twinkle", label: "Twinkle", range: 0...1, standard: 0.6, section: "Sky")
     /// Brightness is the exposure before the stretch, as Galaxy's is. Beaming is how much of the Doppler shift
     /// shows: at 1 the side coming toward us is as much hotter and brighter as relativity makes it.
     nonisolated static let knobs = [
@@ -172,6 +176,7 @@ final class BlackHole: SKScene {
         Knob(key: "blackhole.streaks", label: "Streaks", range: 0...1, standard: 0.7, section: "Look"),
         speed,
         Knob(key: "blackhole.stars", label: "Stars", range: 0...2, standard: 1, section: "Sky"),
+        twinkle,
         Knob(key: "blackhole.milkyway", label: "Milky Way", range: 0...2, standard: 1, section: "Sky"),
     ]
 
@@ -360,6 +365,10 @@ final class BlackHole: SKScene {
     /// The picture's size, the view and the disc's colour, as the shader takes them ("u_size", "u_view", "u_peak").
     private let extent: SKUniform, aim: SKUniform, peak: SKUniform
     private let lens = SKUniform(name: "u_lens", float: 0.5)
+    /// Where the stars' rhythms stand: 0 to 1 over two minutes of the app's clock, round and round. Every star's
+    /// rhythms are whole numbers of beats to that, so the number the shader sees stays small and nothing jumps
+    /// when it comes round.
+    private let beat = SKUniform(name: "u_beat", float: 0)
     private let age = SKUniform(name: "u_age", vectorFloat3: .zero)
     private let seedRound = SKUniform(name: "u_seedRound", vectorFloat3: .zero), seedDeep = SKUniform(name: "u_seedDeep", vectorFloat3: .zero)
     /// The glow: the disc's light, spread (see `spread`), and how much that texture must be stretched to fit when
@@ -408,7 +417,7 @@ final class BlackHole: SKScene {
             SKUniform(name: "u_heat", texture: Self.heat), SKUniform(name: "u_gas", texture: Self.gas),
             SKUniform(name: "u_catalogue", texture: Self.catalogue), SKUniform(name: "u_galaxy", texture: Self.galaxy), halo,
             SKUniform(name: "u_checks", float: checks ? 1 : 0),
-            extent, aim, peak, lens, age, seedRound, seedDeep, haloFit,
+            extent, aim, peak, lens, age, seedRound, seedDeep, haloFit, beat,
         ] + knobUniforms.values)
         addChild(sprite)
 
@@ -425,6 +434,7 @@ final class BlackHole: SKScene {
     override func update(_ currentTime: TimeInterval) {
         guard !alone else { return }
         turnDisc(by: frameTime(currentTime, &lastUpdate) * Self.speed.value)
+        beat.floatValue = Float((WallpaperTime.elapsed / 120).truncatingRemainder(dividingBy: 1))
         // The glow is made again when a slider that changes the disc has moved, but no more than seven times a
         // second, and never two scenes' in one frame, so dragging one never waits on it (it takes 10 ms).
         if glowSettings != haloFor, abs(currentTime - haloMade) > 0.15, abs(currentTime - Self.glowMade) > 0.05 {
@@ -726,7 +736,13 @@ final class BlackHole: SKScene {
                     if (star.b > 0.0) {
                         vec2 step = cell + (star.rg * 255.0 + 0.5) / 256.0 - place;
                         vec3 hue = mix(vec3(1.0), texture2D(u_heat, vec2((star.a * 255.0 + 0.5) / 256.0, 0.5)).rgb, 0.7);
-                        behind += hue * starLight(length(step.x * eastPx + step.y * northPx), star.b, room, u_stars * magnified);
+                        // Its twinkle: two slow rhythms of its own, 3 to 8 seconds long (15 to 39 beats to u_beat's
+                        // two minutes), each starting where it likes. They are the star's, not the pixel's: picked by
+                        // its cell in the grid, so both of a star's images keep time. Together they move its
+                        // brightness code by up to 0.0695 either way, which is 0.87 of a magnitude.
+                        vec4 own = hash42(vec2(mod(cell.x, 2048.0), clamp(cell.y, 0.0, 1023.0)));
+                        float swell = sin(6.2831853 * (floor(15.0 + 25.0 * own.x) * u_beat + own.z)) + sin(6.2831853 * (floor(15.0 + 25.0 * own.y) * u_beat + own.w));
+                        behind += hue * starLight(length(step.x * eastPx + step.y * northPx), star.b + 0.03475 * u_twinkle * swell, room, u_stars * magnified);
                     }
                 }
             }

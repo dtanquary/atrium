@@ -63,7 +63,7 @@ Size, tilt, distance, where the hole sits and how the sky is turned are all unif
 ### Glow and stretch
 One `SKShader` pass can't blur. Start with Galaxy's stretch (`asinh(20·lum)/asinh(240)` on brightness, colour kept) and dither. NASA's picture has no bloom at all: the shadow, and the gap between the photon ring and the disc, are exactly black. A baked halo (the shader drawn small offscreen, blurred on the CPU, handed back as a texture, as `MoonBaker` does) is only for later, if the stretch alone looks hard. **As built:** `asinh(20·most)/asinh(165)` on the strongest channel (step e), and the baked halo after all, because Dave picked the glow (step f).
 
-### Cost (the estimate; measured with everything in, the glow too: GPU 0.80–0.84 ms, CPU 0.5–0.7 ms, seven textures and 15 other uniforms)
+### Cost (the estimate; measured with everything in, the glow and the twinkle too: GPU 0.87–0.94 ms, CPU 0.5–0.7 ms, seven textures and 17 other uniforms)
 8 to 14 fetches from small textures a pixel, about 250–350 arithmetic operations. Expect 0.6–1.2 ms of GPU against the 2 ms budget; about 0.5 ms of CPU, as every shader scene. About 23 uniforms of roughly 30, 7 of them textures. Memory: 136 KB of tables, 2 MB star grid, 2 MB glow map.
 
 ## Acceptance numbers
@@ -88,7 +88,7 @@ Note: Dave's mock-ups drew the disc to 22 M (11 r_s), not NASA's 30 M. Match the
 - **Size:** a slider, close to small in a wide sky; medium by default.
 - **Motion:** Speed, 0 to 4×; 1× is the inner edge in 3 minutes (45 seconds as built).
 - **Look:** Brightness (exposure before the stretch, Galaxy's way), then the shared grade knobs; Beaming 0–1; Streaks 0–1.
-- **Sky:** star brightness, Milky Way brightness.
+- **Sky:** star brightness, Milky Way brightness. (And a twinkle, which Dave asked for once he had it on his desktop: step (g).)
 - Not planned: a view choice, a drift, spin (below), jewel palettes, a stars-only switch. Each was offered and not picked, or advised against.
 
 As built (all on the `Wallpaper` entry, from `BlackHole.knobs` and `BlackHole.palette`):
@@ -103,6 +103,7 @@ As built (all on the `Wallpaper` entry, from `BlackHole.knobs` and `BlackHole.pa
 | `blackhole.streaks` | Streaks | 0–1 | 0.7 | the streaks' contrast; 0 is a smooth disc |
 | `blackhole.speed` | Speed | 0–4× | 1 | the disc's clock; 1× is the inner edge round in 45 seconds, 0 holds it |
 | `blackhole.stars` | Stars | 0–2 | 1 | the stars' brightness |
+| `blackhole.twinkle` | Twinkle | 0–1 | 0.6 | how far each star swells and fades on its own slow rhythm: up to 0.87 of a magnitude either way at 1, none at 0 |
 | `blackhole.milkyway` | Milky Way | 0–2 | 1 | the glow's brightness |
 
 The shared grade knobs (contrast, saturation, hue) were planned and not built: nothing asked for them, and each is another uniform.
@@ -236,6 +237,29 @@ Measured at 3024 × 1964, default size, Orange, on stills from `blackHoleStill`:
 - **Motion** (`blackHoleMoves`): from frame to frame at 15 fps no pixel changes by more than 6 of 255 (7 on the commit before, in the same session), at 30 fps by more than 3 (4): the glow adds no flicker. When a fresh glow takes over from the last after 0.15 s of a slider dragged across its whole range in 2 s, with the disc held still: for Size no pixel changes by more than 5 of 255 and 99.9% by 3 or less; Brightness 4; Streaks 2. The handover between streak generations beats by 0.1–0.8% of the mean.
 - **Tests, nine:** `blackHoleGlows` joins them (Glow 0 leaves the sky over the hump black; Glow 1 lights it, has died away by the corner and darkens nothing), with `blackHoleStill`, which saves a still that comes out the same every time (`BLACKHOLE_STILL=<file.png>`, with `BLACKHOLE_DEFAULTS` and `BLACKHOLE_START`). The whole suite passes.
 
+**Step (g), the stars' twinkle (2026-10-11).** Dave asked for it while testing the build (his words are under [Dave's feedback](#daves-feedback)). Each catalogue star swells and fades a little on a slow rhythm of its own, and a Twinkle slider under Sky sets how far: 0 to 1, 0.6 the default, 0 none. The Milky Way's glow is left as it was.
+- **What a star does.** Its brightness follows the sum of two sine rhythms, each 3 to 8 seconds long and starting where it likes, so no star is regular for long: it can sit almost still for some seconds, then swing. The swing is in magnitudes and the same for every star: up to 0.87 of a magnitude either way at Twinkle 1 (2.2 times brighter or dimmer), 0.52 at the default (1.6 times), and under half of that most of the time. The scene draws a brighter star wider, so a bright star grows and shrinks at its rim, while a faint one only brightens and dims.
+- **The star's own, not the pixel's.** The two rhythms are picked by the star's cell in the catalogue grid (the shared `hash42`). So a star keeps its rhythm wherever the lens puts it, and both of its images keep time. That is by construction; no star was followed through both images to check.
+- **A matter of the app's clock only** (`WallpaperTime`), so it is the same at any frame rate. The shader gets that clock as one number going 0 to 1 every two minutes, and every rhythm is a whole number of beats to it (15 to 39): the number stays small, and nothing jumps when it comes round. The sky's twinkling as a whole repeats every two minutes.
+- **Not true to life, and meant not to be.** Stars twinkle through air; seen from space, as here, they don't. It is there so the sky isn't a still photograph behind a turning disc.
+- **The default, 0.6,** is the builder's judgement of "noticed, but not sparkle": in a 6 s film a typical star's peak moves over 29 of 255 (a fifth to a half of its own level), three stars in four over 20 or more, none faster than 3 of 255 in a frame at 15 fps. The app's other twinkles are shallower (Galaxy's stars ±14% over 2 to 10 s, the shared star field's ±25% over 2 to 6 s; this one is ±27% as a rule and up to 1.6 times). Dave only noticed this disc turning at four times the planned speed, so it leans to the strong side; the slider's top is 1.7 times it.
+- **Twinkle 0 is the picture as it was, to the byte,** and a plain uniform gave that: no second shader source this time. (The twinkle is added to the star's brightness code, and nought added changes nothing; but that was checked, not assumed, after the glow's lesson.)
+
+What was tried, on 8 s films of a patch of sky at 15 fps with the disc held still:
+- **One rhythm a star, or two.** One is a steady breathing. Two give each star quiet spells and the odd deeper swing, with no more code. Kept two.
+- **The swing as a share of the star's light, or in magnitudes.** As a share (±35% to ±50%), anything deeper takes a star to nothing at the bottom of its swing, where the picture steps (81 of 255 in a frame in the trial at ±100%). In magnitudes it is even both ways and can't reach nothing. Kept magnitudes.
+- **Bright stars more than faint.** With the swing growing with brightness, the brightest winked out and back (one pixel stepped 174 of 255 in a frame), and the fainter ones moved less than they had. Dropped: with the same swing for all, the bright ones show it most anyway, because they change size.
+- **A trace of colour,** the star's colour drifting toward white and back on its second rhythm. Where it measured at all, a star wandered over as much colour as separates one star from the next (0.074 against 0.084, red against blue), which is a star changing what it is; and on points 1.5 px across it couldn't be seen at three times life size. Dropped.
+- **How quick.** Rhythms of 4 to 10 s, 3 to 8 s and 2 to 5 s. The slowest is the calmest and the least likely to be noticed. The quickest steps 13 of 255 in a frame at the slider's top. Kept 3 to 8 s.
+
+Measured on the one kept, at 3024 × 1964:
+- **Twinkle 0 against main:** the still from `blackHoleStill` is the same file as main's (`cmp`): four runs with the stars, one with Stars at 0. At the default the still differs, as it should, and comes out the same on every run (the still is of the clock's first moment).
+- **How far a pixel steps in a frame from the twinkle alone,** at 15 fps over 64 frames with the disc held still (`blackHoleMoves`): at the default 0.41% of the picture changes in a frame, 99.9% of that by 4 of 255 or less, the most 5; at the slider's top 0.54%, 6 and 7. The bar was the disc's own, about 8. At 30 and 60 fps a step is a half and a quarter of that, since only the clock moves it; those weren't run.
+- **What the stars do in a 6 s film of the wallpaper running** (209 stars in a 640 × 400 patch): at the default a star's peak moves over 29 of 255 at the median, a tenth of them over 37, the most 42; at the top 48, 61 and 68.
+- **Looked at in motion:** the strips from `blackHoleMoves` (a patch every half second, with its change beside it) and frames a second apart from both films, at three times life size. Stars come and go singly and slowly; nothing flashes. Two films at 15 fps were made for whoever reviews it, at the default and at the top; they aren't in the repo.
+- **Cost,** release build, three rounds turn about with main's commit: GPU 0.82–0.86 ms a frame on main at the default size and 0.84–0.90 at the other two; 0.87–0.94 with the twinkle, at any Twinkle and every size (the work is done whether or not the slider is up); CPU 0.5–0.7 either way. So about 0.06 ms. Seven textures and 17 other uniforms. If that is ever wanted back, the rhythms could come from the star's own bytes in the grid in place of the hash.
+- **Tests:** `blackHoleTwinkles` joins them: with the disc held still, two pictures two seconds of the clock apart differ in their stars at the default and in no pixel at 0. That makes nine in the file (the counts above run one high). `blackHoleMoves` now runs the app's clock as it steps, and holds the stars still where it measures the glow being made again. They and `everySceneRenders` pass; the rest of the suite wasn't run, since nothing outside this wallpaper's two files changed.
+
 ## Dave's feedback
 - **2026-10-11, the first build on his desktop:** "it looks cool but we should adjust speed slider, only when I had it at 4x did even really notice motion". He had picked a lap of the inner edge in 3 minutes from a mock-up's film, where it was plain to see; on the desktop, at the real size and with nothing else moving, it wasn't.
   - **Changed:** 1× is four times faster, a lap in 45 seconds, which is the speed he had it at. The slider still runs 0 to 4×, so it now reaches a lap in 11 seconds. A streak generation's life follows the disc's clock, so it is 58 seconds at 1× where it was 3 minutes 54.
@@ -243,6 +267,8 @@ Measured at 3024 × 1964, default size, Orange, on stills from `blackHoleStill`:
   - **Checked at the new top, 4×,** in a 4 s film at 15 fps: a disc pixel changes by 1.8 of 255 a frame on average. 0.04% of pixels step by more than 15 in a frame, all at the inner edge left of the hole, where a bright knot's edge passes; each steps once and stays, so it is fast motion and not sparkle.
   - He had Size at its top (1.5×) and Milky Way at half while he tried it. Not asked for as defaults, so they stay.
 - **2026-10-11, the glow:** "go with M for the glow". The mock-ups he chose from had a soft glow round the disc, a stand-in added to those pictures; the build had none, by the plan (NASA's has none, and one shader pass can't blur). A side agent pointed out that he may have liked it, so he was shown a sheet: mock-up tile H, the app as it was (L), and the app with a soft (M) and a strong (N) glow painted on. He picked M. `black-hole/glow.py` is that painting as numbers (the disc's own light blurred at 14 and 60 px on a 3024 px picture, 60% and 40%, added back at 0.45), for the build to be matched against. It is to have a Glow slider that goes down to none. **Built:** step (f) in [The build so far](#the-build-so-far).
+- **2026-10-11, the sky, while testing the build with the glow in it:** "is it possible to add some 'twinkle' to the stars in black hole so the background image doesnt feel so static".
+  - **Changed:** every star swells and fades on its own slow rhythm, with a Twinkle slider under Sky (0 to 1, 0.6 by default): step (g) in [The build so far](#the-build-so-far). The Milky Way's glow doesn't move.
 - **2026-10-11:** "proceed on your own until you have working versions of all 3" (this, Meander and the train).
 
 ### Still open
@@ -250,6 +276,7 @@ Measured at 3024 × 1964, default size, Orange, on stills from `blackHoleStill`:
 - **At Glow 1 the shadow's middle is 23 of 255, not black,** as in tile M (21). Dave picked M with that in it; whether he wants the shadow kept darker is his call.
 - **The first glow of a run holds the main thread for 0.1–0.2 s** while its shader compiles: at launch, or on first switching to this wallpaper. Not measured in the running app, nor with a slider really dragged in Settings, nor on two displays.
 - **Dave has seen it once** ("it looks cool", and the speed: above). Everything else in step (e) was judged against the mock-up tiles, NASA's frames and the review's numbers by the agent that built it. To meet those numbers the disc is crisp and has a white-hot side; "calm, soft, dim" may want Streaks below its 0.7 and Brightness below 1. The sliders are there.
+- **The twinkle's default is a guess until Dave has watched it.** 0.6 was chosen from films and numbers by the agent that built it, to be noticed without sparkling; whether it is enough to stop the sky feeling static is for him to say. The slider's top is 1.7 times it. The glow of the Milky Way still doesn't move at all, which may be the larger part of "static".
 - **Stars read finer than tile K's.** They are points about 1.5 px across at Retina, the brightest a soft 8, where the mock-up's were blobs and dashes, so at a glance the sky looks emptier, though it holds the same 111,000 stars. The Stars slider goes to 2.
 - **The disc's mean brightness wanders about ±5% over minutes** as knots come and go. It doesn't beat, but nobody has watched it for an hour.
 - **Whether the turning is "plain to see" at 1×** is a number here (above), not yet somebody watching the desktop.
