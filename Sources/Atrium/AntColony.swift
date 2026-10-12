@@ -114,17 +114,24 @@ final class AntColony: SKScene {
     /// The one cycle every copy of the scene follows, and what of it was last saved.
     private static var cycle: Cycle?, saved: Cycle?
 
-    /// The shared cycle's farm at `wall`, and the hours it has been going: read from the defaults the first time
-    /// (so a relaunch finds its place at any Speed: the farm, when it would have begun, and at what pace), and
-    /// saved back whenever it moves on to another farm or the slider moves it.
-    private static func moment(at wall: Double) -> (day: Int, turn: Int, hours: Double) {
+    /// The shared cycle as it stands, moved on by nobody: the one in hand, or the one kept in the defaults (so a
+    /// relaunch finds its place at any Speed: the farm, when it would have begun, and at what pace), or, on a
+    /// fresh install, the day's own farm.
+    private static func standing(at wall: Double) -> Cycle {
         let speed = Self.speed.value, defaults = UserDefaults.standard
-        if cycle == nil {
-            if let farm = defaults.object(forKey: "antcolony.farm") as? Int, let began = defaults.object(forKey: "antcolony.began") as? Double {
-                cycle = Cycle(day: farm / 100, turn: farm % 100, began: began, paced: defaults.object(forKey: "antcolony.paced") as? Double ?? max(speed, 1))
-            } else { cycle = Cycle(at: wall, speed: speed) }
+        if let cycle { return cycle }
+        if let farm = defaults.object(forKey: "antcolony.farm") as? Int, let began = defaults.object(forKey: "antcolony.began") as? Double {
+            return Cycle(day: farm / 100, turn: farm % 100, began: began, paced: defaults.object(forKey: "antcolony.paced") as? Double ?? max(speed, 1))
         }
-        let hours = cycle!.hours(at: wall, speed: speed)
+        return Cycle(at: wall, speed: speed)
+    }
+
+    /// The shared cycle's farm at `wall`, and the hours it has been going. This moves the cycle on, and saves it
+    /// back whenever it has gone on to another farm or the slider has moved it.
+    private static func moment(at wall: Double) -> (day: Int, turn: Int, hours: Double) {
+        let defaults = UserDefaults.standard
+        cycle = standing(at: wall)
+        let hours = cycle!.hours(at: wall, speed: Self.speed.value)
         if cycle != saved {
             saved = cycle
             defaults.set(cycle!.day * 100 + cycle!.turn, forKey: "antcolony.farm")
@@ -752,9 +759,13 @@ extension AntColony: HeadStart {
     /// For the copy Settings runs behind its page: early in a farm the tank is all but whole and at its end
     /// nothing is being dug, and neither shows what Look, Ant size or Colony size do. So when under three tenths of the
     /// digging is done, or over nine, that copy is given three in the afternoon of the day's first farm (three
-    /// fifths dug), and goes on from there at Speed's pace. The desktop's copy keeps the wall's clock.
+    /// fifths dug), and goes on from there at Speed's pace, by a clock of its own. The desktop's copy keeps the
+    /// wall's clock, and this never touches the cycle they share: it looks at a copy of it, so opening the page
+    /// moves nothing on the desktop.
     func headStart() {
-        let hours = asked.hour ?? Self.moment(at: Date.timeIntervalSinceReferenceDate).hours
+        let wall = Date.timeIntervalSinceReferenceDate
+        var shared = Self.standing(at: wall)
+        let hours = asked.hour ?? shared.hours(at: wall, speed: Self.speed.value)
         if !(0.3...0.9).contains(Self.share(after: hours)) { asked.hour = 9 }
     }
 }

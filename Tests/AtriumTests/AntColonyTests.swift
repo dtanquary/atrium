@@ -215,6 +215,13 @@ import Testing
     let noon = try [false, true].map { try picture(hour: 6, rate: 30, headStart: $0) }
     print("Ant Colony ten minutes into a farm: \(young[0]) pixels of tunnel on the desktop, \(young[1]) behind its Settings page")
     #expect(young[0] < 6000 && young[1] > 80000 && noon[0] == noon[1])
+    // And a head start writes nothing of the cycle the desktop's copy follows: opening the page moves nothing there.
+    let shared = ["antcolony.farm", "antcolony.began", "antcolony.paced"]
+    shared.forEach(UserDefaults.standard.removeObject)
+    for hook in ["antcolony.day", "antcolony.hour"] { UserDefaults.standard.removeObject(forKey: hook) }
+    AntColony(size: CGSize(width: w / 2, height: h / 2)).headStart()
+    UserDefaults.standard.set(20261012.0, forKey: "antcolony.day")
+    #expect(shared.allSatisfy { UserDefaults.standard.object(forKey: $0) == nil }, "Settings' head start saved the shared cycle")
 
     // Speed never moves the dig: the frame after it goes from 1 to 8, or from 8 to 1, there is as much tunnel as the
     // frame before (to a five-hundredth); a minute on at 8 there is more.
