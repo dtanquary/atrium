@@ -10,8 +10,7 @@ import Testing
 /// rank is what it says, the share of the digging done when a cell goes, so the dug area grows as the clock's
 /// share does; a young colony works one or two faces and a grown one eight, from one mouth at first; and the
 /// clock is the day Dave picked: a farm begins at six, has 8% dug by seven, 23% by nine, 44% at noon, 75% at six in
-/// the evening and 94% at midnight, and the moment before six belongs to the farm of the day before; and with
-/// Speed at 4 there are four farms to the day, one after another.
+/// the evening and 94% at midnight.
 @Test func antColonyBakesOneNestForADate() throws {
     let clock = ContinuousClock(), began = clock.now
     let nest = Nest(seed: 20261012, cols: 756, rows: 491, bodyLength: 11), took = clock.now - began
@@ -29,18 +28,61 @@ import Testing
 
     let shares = [0, 1, 3, 6, 12, 18, 24, 30].map { (AntColony.share(after: $0) * 100).rounded() }
     #expect(shares == [0, 8, 23, 44, 75, 94, 100, 100])
+}
+
+/// The farm by the wall clock (`AntColony.Cycle`). A day runs from six to six. From a fresh install at Speed 1 it
+/// is exactly the day's wall-clock farm. Moving Speed never moves the dig, up or down: as much is dug as was, and
+/// it goes on from there at the new pace. Above 1 the next farm begins as each ends; at 1 a farm begins only at
+/// six, so a nest finished early stays finished until then. A relaunch, which has only the four saved numbers,
+/// finds the same place; after months away it is the day's own farm again; and a clock set back leaves the farm
+/// whole and waiting.
+@Test func antColonySpeedNeverMovesTheDig() throws {
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = try #require(TimeZone(identifier: "America/Chicago"))
-    func farm(_ day: Int, _ hour: Int, _ minute: Int, speed: Double = 1) throws -> (day: Int, turn: Int, hours: Double) {
-        let date = try #require(calendar.date(from: DateComponents(year: 2026, month: 10, day: day, hour: hour, minute: minute)))
-        return AntColony.farm(at: date.timeIntervalSinceReferenceDate, speed: speed, calendar: calendar)
+    func wall(_ day: Int, _ hour: Int, _ minute: Int = 0, _ second: Int = 0) -> Double {
+        calendar.date(from: DateComponents(year: 2026, month: 10, day: day, hour: hour, minute: minute, second: second))!.timeIntervalSinceReferenceDate
     }
-    let (before, at, late) = (try farm(12, 5, 59), try farm(12, 6, 0), try farm(13, 0, 0))
-    #expect(before.day == 20261011 && abs(before.hours - 23.0 - 59.0 / 60) < 1e-6 && at.day == 20261012 && at.hours == 0 && late.day == 20261012 && late.hours == 18)
-    #expect(before.turn == 0 && at.turn == 0 && late.turn == 0)
-    // At four farms a day the day's second begins at noon, and at 13:30 is a quarter of its way through its own day.
-    let (noon, after, last) = (try farm(12, 12, 0, speed: 4), try farm(12, 13, 30, speed: 4), try farm(13, 5, 59, speed: 4))
-    #expect(noon.day == 20261012 && noon.turn == 1 && noon.hours == 0 && after.turn == 1 && after.hours == 6 && last.day == 20261012 && last.turn == 3)
+    let (before, six) = (AntColony.day(at: wall(12, 5, 59), calendar: calendar), AntColony.day(at: wall(12, 6), calendar: calendar))
+    #expect(before.day == 20261011 && abs(before.hours - 23 - 59.0 / 60) < 1e-6 && six.day == 20261012 && six.hours == 0)
+
+    var cycle = AntColony.Cycle(at: wall(12, 13, 30), speed: 1, calendar: calendar)
+    func hours(_ day: Int, _ hour: Int, _ minute: Int = 0, _ second: Int = 0, speed: Double) -> Double {
+        cycle.hours(at: wall(day, hour, minute, second), speed: speed, calendar: calendar)
+    }
+    #expect(cycle == AntColony.Cycle(day: 20261012, turn: 0, began: wall(12, 6), paced: 1))
+    #expect(abs(hours(12, 13, 30, speed: 1) - 7.5) < 1e-9)
+    // Speed to 4 at half past one: still seven and a half hours dug; an hour on, eleven and a half.
+    #expect(abs(hours(12, 13, 30, speed: 4) - 7.5) < 1e-9 && abs(hours(12, 14, 30, speed: 4) - 11.5) < 1e-9 && cycle.turn == 0)
+    // It ends 16.5 farm-hours on, at 17:37:30, and the day's next begins there.
+    #expect(abs(hours(12, 17, 37, 29, speed: 4) - 24) < 0.002 && cycle.turn == 0)
+    #expect(abs(hours(12, 17, 38, speed: 4) - 4 * 30.0 / 3600) < 1e-9 && cycle.day == 20261012 && cycle.turn == 1)
+    // Back to 1 at six in the evening: an hour and a half dug, and it goes on at the day's pace; at six, the day's own.
+    #expect(abs(hours(12, 18, speed: 4) - 1.5) < 1e-9 && abs(hours(12, 18, speed: 1) - 1.5) < 1e-9)
+    #expect(abs(hours(13, 5, 59, speed: 1) - 1.5 - 11 - 59.0 / 60) < 1e-9 && cycle.day == 20261012 && cycle.turn == 1)
+    #expect(hours(13, 6, speed: 1) == 0 && cycle == AntColony.Cycle(day: 20261013, turn: 0, began: wall(13, 6), paced: 1))
+
+    // A nest hurried at 8 from six to half past eight, twenty hours' digging, and then left at 1 is done at half
+    // past twelve, and stays done, the same nest, until six.
+    #expect(hours(13, 6, speed: 8) == 0 && abs(hours(13, 8, 30, speed: 8) - 20) < 1e-9 && abs(hours(13, 8, 30, speed: 1) - 20) < 1e-9)
+    #expect(abs(hours(13, 12, 30, speed: 1) - 24) < 1e-9)
+    #expect(hours(13, 20, speed: 1) > 24 && hours(14, 5, 59, speed: 1) > 24 && cycle.day == 20261013 && cycle.turn == 0)
+    #expect(hours(14, 6, speed: 1) == 0 && cycle.day == 20261014 && cycle.turn == 0)
+
+    // A relaunch at Speed 4 has the farm, when it would have begun and at what pace, and is where it was.
+    _ = hours(14, 9, speed: 4)
+    var relaunched = AntColony.Cycle(day: cycle.day, turn: cycle.turn, began: cycle.began, paced: cycle.paced)
+    #expect(relaunched.hours(at: wall(14, 9, 45), speed: 4, calendar: calendar) == (hours(14, 9, 45, speed: 4)) && relaunched == cycle)
+    // Ten hours off at Speed 4: it is on a later farm of the same day, part dug.
+    let later = relaunched.hours(at: wall(14, 19, 45), speed: 4, calendar: calendar)
+    #expect(relaunched.day == 20261014 && relaunched.turn >= 1 && later >= 0 && later < 24)
+    // The clock set back to before that farm began: the same farm, whole and waiting.
+    let turn = relaunched.turn
+    #expect(relaunched.hours(at: wall(14, 9), speed: 4, calendar: calendar) == 0 && relaunched.day == 20261014 && relaunched.turn == turn)
+    // Sixteen days off, some 66 farms on: one of that day's, part dug. Two hundred days off: the day's own farm again, as
+    // far along as the wall clock has it.
+    let weeks = relaunched.hours(at: wall(31, 9), speed: 4, calendar: calendar)
+    #expect(relaunched.day == 20261031 && relaunched.turn >= 1 && weeks >= 0 && weeks < 24)
+    #expect(abs(relaunched.hours(at: wall(31, 9) + 200 * 86400, speed: 4, calendar: calendar) - 3) < 1e-9 && relaunched.day == 20270519 && relaunched.turn == 0)
 }
 
 /// What the ants must never do, watched every sixtieth of a second for half a minute at four ages of three nests,
@@ -131,7 +173,7 @@ import Testing
     let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: w, height: h, mipmapped: false)
     descriptor.usage = [.renderTarget, .shaderRead]
     descriptor.storageMode = .shared
-    func picture(hour: Double, rate: Double, headStart: Bool = false) throws -> [UInt32] {
+    func picture(hour: Double, rate: Double, headStart: Bool = false, then change: (() -> Void)? = nil, for more: Double = 0) throws -> [UInt32] {
         UserDefaults.standard.set(hour, forKey: "antcolony.hour")
         let renderer = SKRenderer(device: device), target = try #require(device.makeTexture(descriptor: descriptor)), pass = MTLRenderPassDescriptor()
         let scene = AntColony(size: CGSize(width: w / 2, height: h / 2))
@@ -142,8 +184,10 @@ import Testing
         pass.colorAttachments[0].storeAction = .store
         let start = ProcessInfo.processInfo.systemUptime + 1 // the renderer's first update runs on the system's clock
         for frame in 0...Int(4 * rate) { renderer.update(atTime: start + Double(frame) / rate) }
+        change?()
+        for frame in 0..<Int(more * rate) { renderer.update(atTime: start + 4 + Double(frame + 1) / rate) }
         for _ in 0..<2 { // with no more time gone by, and twice for the shader's sake
-            renderer.update(atTime: start + 4)
+            renderer.update(atTime: start + 4 + more)
             let buffer = try #require(queue.makeCommandBuffer())
             renderer.render(withViewport: CGRect(x: 0, y: 0, width: w, height: h), commandBuffer: buffer, renderPassDescriptor: pass)
             buffer.commit()
@@ -171,6 +215,16 @@ import Testing
     let noon = try [false, true].map { try picture(hour: 6, rate: 30, headStart: $0) }
     print("Ant Colony ten minutes into a farm: \(young[0]) pixels of tunnel on the desktop, \(young[1]) behind its Settings page")
     #expect(young[0] < 6000 && young[1] > 80000 && noon[0] == noon[1])
+
+    // Speed never moves the dig: the frame after it goes from 1 to 8, or from 8 to 1, there is as much tunnel as the
+    // frame before (to a five-hundredth); a minute on at 8 there is more.
+    func speed(_ value: Double) { UserDefaults.standard.set(value, forKey: "antcolony.speed") }
+    func tunnel(_ picture: [UInt32]) -> Double { Double(count(picture) { r, g, b in abs(r - b) <= 3 && r > 30 }) }
+    let slow = tunnel(sand[0]), up = tunnel(try picture(hour: 3, rate: 30, then: { speed(8) }, for: 1.0 / 30)), on = tunnel(try picture(hour: 3, rate: 30, then: { speed(8) }, for: 60))
+    let fast = tunnel(try picture(hour: 3, rate: 30)), down = tunnel(try picture(hour: 3, rate: 30, then: { speed(1) }, for: 1.0 / 30))
+    speed(1)
+    print("Ant Colony, tunnel in white sand at nine: \(slow) pixels at Speed 1, \(up) the frame after Speed goes to 8, \(on) a minute on; \(fast) at Speed 8, \(down) the frame after it goes back to 1")
+    #expect(abs(up - slow) < 0.002 * slow && on > 1.02 * slow && abs(down - fast) < 0.002 * fast)
 
     func mean(_ picture: [UInt32]) -> SIMD3<Double> {
         picture[(w * h / 4)...].reduce(into: SIMD3<Double>()) { $0 += SIMD3(Double($1 >> 16 & 255), Double($1 >> 8 & 255), Double($1 & 255)) } / Double(w * h * 3 / 4)

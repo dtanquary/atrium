@@ -88,7 +88,16 @@ It is a believable sketch of a young nest in section, matched to the kinds of fe
 
 ### The day
 
-A day runs from six to six, and a farm's seed is its day and its turn in the day, so every display shows the same nest and a relaunch goes on from where it was. The share dug is 1 − (1 − h/24)² at h hours: 8% by seven, 23% by nine, 44% at noon, 75% at six in the evening, 94% at midnight, and the last of it through the small hours. Real ants dig faster still at first (above), which would leave most of a day with a finished nest. With Speed above 1 there are that many farms to the day, the first at six and each as the one before it ends; the ants walk no faster.
+A day runs from six to six, and a nest takes 24 hours divided by Speed. The share dug is 1 − (1 − h/24)² at h hours into a farm: at Speed 1, 8% by seven, 23% by nine, 44% at noon, 75% at six in the evening, 94% at midnight, and the last of it through the small hours. Real ants dig faster still at first (above), which would leave most of a day with a finished nest.
+
+Which farm is on the tank, and how long it has been going, is one `Cycle` shared by every copy of the scene and kept in the defaults (`antcolony.farm`, the day it began and its turn in that day, which together are its seed; `antcolony.began`, when it would have begun at this pace; `antcolony.paced`). So a relaunch finds its place at any Speed from those three numbers, and Shuffle or a rebuild goes on from where it was.
+
+- **At Speed 1 a farm begins at six and only at six.** From a fresh install it is exactly the day's wall-clock farm. A nest finished early (Speed has been higher) stays finished, its ants about, until six.
+- **Above 1 the next farm begins as each ends,** through the fade.
+- **Moving Speed never moves the dig,** up or down: as much is dug as was, and it goes on from there at the new pace. (The first build's clock was a plain function of the wall's time and the slider, so a change of Speed could land in another nest.)
+- The ants walk no faster at any Speed.
+
+A test's scene, and the copy Settings gives a head start, keep a cycle of their own by the frame's clock, and save nothing.
 
 ### The ants
 
@@ -129,11 +138,11 @@ From the search of 2026-10-12, by a helper who read the USPTO's records; the bui
 | Setting | Key | What it does | Default |
 |---|---|---|---|
 | Look | `antcolony.look` | Gel, Bright Gel, Sand, White Sand or Earth, stored as 0 to 4. The shader and the ants change there and then; the nest stays | Gel |
-| Speed | `antcolony.speed` | 1× to 8× farms a day. In the day's first farm, moving it moves the dig along; later it lands in another farm, through half a second of black | 1× |
+| Speed | `antcolony.speed` | 1× to 8×: a nest takes 24 hours divided by it. Moving it never moves the dig; the nest goes on from where it is at the new pace. At 1 a farm begins only at six; above 1, as the last ends | 1× |
 | Ant size | `antcolony.size` | Small, Medium, Large: an ant 13, 22 or 36 points long. The tank is the display at any size, so smaller ants get a bigger nest, baked afresh | Medium |
 | Ants | `antcolony.ants` | 0.5× to 2× an ant to every 130 square ant lengths of tank when the nest is done (24 on a 14-inch display at Medium, 69 at Small), a hundred at the most | 1× |
 
-`antcolony.day` (a number like 20261012) and `antcolony.hour` (hours since six) are for the tests and for stills: the farm of another day, and how long it has been going at the scene's first frame, from where it runs on at Speed's pace.
+`antcolony.day` (a number like 20261012) and `antcolony.hour` (a farm's own hours, of 24) are for the tests and for stills: the farm of another day, and how long it has been going at the scene's first frame, from where it runs on at Speed's pace. `antcolony.farm`, `antcolony.began` and `antcolony.paced` are the shared cycle's, kept by the app.
 
 **Why Speed stops at 8.** The ants walk no faster, so the faster the dig, the more of it happens with no ant at the face. At 1 the day's first shaft goes down a pixel in two or three seconds; at 8 it goes down an ant's length in thirteen seconds with one ant digging at it, which is about as fast as one ant can be seen to dig (`face-at-speed-8.jpg`, 0.47 s a tile).
 
@@ -164,7 +173,7 @@ swiftc -O Sources/AntNest/Nest.swift Sources/AntNest/Colony.swift docs/ant-colon
 swiftc -O Sources/AntNest/Nest.swift Sources/AntNest/Colony.swift docs/ant-colony/wide.swift -o /tmp/wide && /tmp/wide
 ```
 
-- **The other tests:** the same seed bakes the same nest and another seed another; the dug area is the share the clock says; the clock's hours, and four farms a day at Speed 4; one shaft only in a farm's first twentieth. Three nests at four ages, watched every sixtieth of a second with the digging forty times too fast: no ant's middle is ever over undug medium (0 of 302,956 ant-moments; its head or gaster 147), no planted foot moves, no body goes further in a sixtieth of a second than a quarter of its length (0.068 at most), and someone is always walking. The picture is the same at 15, 30 and 60 fps, in gel and in white sand with small ants at Speed 8; the five looks differ as they should; there is more tunnel at six in the evening than at nine in the morning; and Settings' copy opens on a nest part-dug.
+- **The other tests:** the same seed bakes the same nest and another seed another; the dug area is the share the clock says; the clock's hours; one shaft only in a farm's first twentieth. Three nests at four ages, watched every sixtieth of a second with the digging forty times too fast: no ant's middle is ever over undug medium (0 of 302,956 ant-moments; its head or gaster 147), no planted foot moves, no body goes further in a sixtieth of a second than a quarter of its length (0.068 at most), and someone is always walking. The picture is the same at 15, 30 and 60 fps, in gel and in white sand with small ants at Speed 8; the five looks differ as they should; there is more tunnel at six in the evening than at nine in the morning; Settings' copy opens on a nest part-dug; and the frame after Speed goes from 1 to 8, or back, shows exactly as much tunnel as the frame before. The cycle on its own: a fresh one at Speed 1 is the day's wall-clock farm; a change of Speed keeps the hours dug; the next farm begins as one ends above 1 and only at six at 1; a relaunch from the saved numbers is where it was; a clock set back leaves the farm whole.
 - **A nest is baked from the date every morning,** so a trap on one date is a crash at every launch that day. The test that stays bakes 36 nests (six dates on six grids: a 14-inch display's at each size of ant, a portrait display's, a 13-inch's, a 5K's), runs each at four ages and once with the clock set back under its ants, and asserts that every ant is somewhere in the tank and none has its middle in the medium (2 s). **`wide.swift`** is the same on twelve grids, up to Small ants on a 6K display (2,545 by 1,432 cells), and as many dates as asked. Its run of 2026-10-12: 1,080 nests, 91.7 million ant-moments, no trap, 0 middles in the medium, 0 places off the tank or not a number; 1,006 ants moved to their place at once, 918 of them on the frame the clock went back; fewest mouths 1; every nest had a room. Its first run trapped, on an ant digging in a tunnel the set-back clock had not yet dug; that and two ways of standing in the medium for a moment after a set-back are fixed.
 - **`probe.swift`** runs ten minutes at four ages of a day at the day's own pace and prints how often a tunnel face that moved had an ant at it, where the ants' time went, how many planted feet were on the medium, and what a step costs. The figures under [Still open](#still-open) are its, for the nests of 2026-10-12, 13 and 15.
 - **Judge motion from strips**, not stills: `SNAPSHOT_MOVIE` saves frames at 15 fps. `one-ant.jpg` is an ant at a face, turning about and leaving with its grain.
@@ -174,8 +183,6 @@ swiftc -O Sources/AntNest/Nest.swift Sources/AntNest/Colony.swift docs/ant-colon
 
 - **An ant is some twenty sprites,** and SpriteKit's cost is by the sprite, so the colony stops at a hundred ants. One shader drawing a whole ant would lift that.
 - **A finished farm gives way to the next through black,** in under half a second. A crossfade needs both farms' textures at once.
-- **Speed keeps no state.** The clock is a function of the wall's time and the slider, so a change of Speed after the day's first farm shows another nest. Etching keeps its picture and changes only its pace; that needs a saved cycle.
-- **At a Speed that is not a whole number, the day's last farm is cut short at six.**
 - **Every ant is seen from the side.** In a real thin tank some walk on the glass and are seen from above (photograph 4). That is drawn only for the third of a second an ant rolls over.
 - **Ants pass through each other.** Two that meet stop and one takes the other wall, but two overlapping shapes are not two bodies squeezing past.
 - **The nest is one flat layer.** A real gel tank is 3 cm deep, so its tunnels overlap and catch light on facets.
@@ -204,7 +211,6 @@ Worst first, as the builder saw it on stills and strips; Dave has not seen it ru
 ## Next ideas
 
 - One shader for a whole ant, for a tank of several hundred small ones.
-- A saved cycle, so that Speed changes the pace and keeps the nest.
 - Ants on the glass, seen from above, where the wall has a gap.
 - A crossfade between farms, and a minute of the finished nest held before it.
 - Rooms with flat floors and a use: ants resting in rows, a store of seeds.

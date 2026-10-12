@@ -21,10 +21,11 @@ final class AntColony: SKScene {
     /// a bloom over each lamp; sand, dimmed and warm as a wallpaper wants it, or as white as the toy's; or earth.
     nonisolated static let look = Knob(key: "antcolony.look", label: "Look", range: 0...4, standard: 0, section: "Tank",
                                        format: .choice(["Gel", "Bright Gel", "Sand", "White Sand", "Earth"]))
-    /// How many farms a day: at 1 a nest takes the day, and at the top one is dug every three hours. The ants
-    /// walk no faster for it, so the faster the digging the more of it goes on with no ant at the face. At 1 the
-    /// day's first shaft goes down a pixel in two or three seconds, with an ant digging at it three times in five;
-    /// at 8 it goes down an ant's length in thirteen seconds, which is as fast as one ant can be seen to dig.
+    /// How fast a nest is dug: at 1 it takes the day, and at the top three hours. Moving it never moves the dig:
+    /// the nest goes on from where it is at the new pace (`Cycle`). The ants walk no faster for it, so the faster
+    /// the digging the more of it goes on with no ant at the face. At 1 the day's first shaft goes down a pixel in
+    /// two or three seconds, with an ant digging at it three times in five; at 8 it goes down an ant's length in
+    /// thirteen seconds, which is as fast as one ant can be seen to dig.
     nonisolated static let speed = Knob(key: "antcolony.speed", label: "Speed", range: 1...8, standard: 1, section: "Tank", format: .times)
     /// An ant's length: 13, 22 or 36 points (26, 44 or 72 of a Retina display's pixels). The tank is the display
     /// whatever the size, so smaller ants have a bigger nest to dig.
@@ -51,16 +52,82 @@ final class AntColony: SKScene {
         return 1 - left * left
     }
 
-    /// The farm of a moment of the wall's clock, with `speed` farms to a day: the day it belongs to, as a number
-    /// like 20261012 (a day runs from six to six); which of that day's farms it is, the first beginning at six
-    /// and each as the one before it ends; and the hours it has been going, of its own 24. A day and a turn are a
-    /// farm's seed. (Where the speed is not a whole number the day's last farm is cut short at six.)
-    nonisolated static func farm(at wall: Double, speed: Double = 1, calendar: Calendar = .current) -> (day: Int, turn: Int, hours: Double) {
+    /// The day a moment of the wall's clock belongs to (a day runs from six to six), as a number like 20261012;
+    /// the moment that day began, in seconds since the reference date; and the hours since.
+    nonisolated static func day(at wall: Double, calendar: Calendar = .current) -> (day: Int, six: Double, hours: Double) {
         let morning = calendar.startOfDay(for: Date(timeIntervalSinceReferenceDate: wall - dawn * 3600))
-        let parts = calendar.dateComponents([.year, .month, .day], from: morning)
-        let gone = (wall - morning.timeIntervalSinceReferenceDate) / 3600 - dawn, pace = max(speed, 1)
-        let turn = min(max(Int(gone * pace / 24), 0), Int(pace.rounded(.up)) - 1)
-        return ((parts.year ?? 0) * 10000 + (parts.month ?? 0) * 100 + (parts.day ?? 0), turn, gone * pace - 24 * Double(turn))
+        let parts = calendar.dateComponents([.year, .month, .day], from: morning), six = morning.timeIntervalSinceReferenceDate + dawn * 3600
+        return ((parts.year ?? 0) * 10000 + (parts.month ?? 0) * 100 + (parts.day ?? 0), six, (wall - six) / 3600)
+    }
+
+    /// Which farm is on the tank and how long it has been going, by the wall clock. One of these is shared by
+    /// every copy of the scene, each display and Settings' preview, and kept in the defaults, so that the farm
+    /// goes on from where it was whatever builds a scene, at any Speed.
+    ///
+    /// A nest takes 24 hours divided by Speed. At Speed 1 a farm begins at six and only at six: from a fresh
+    /// install it is exactly the day's wall-clock farm, and a nest finished early (Speed has been higher) stays
+    /// finished, its ants about, until six. Above 1 the next farm begins as each ends. Moving Speed never moves
+    /// the dig: as much is dug as was, and it goes on from there at the new pace.
+    struct Cycle: Equatable {
+        /// The farm: the day it began on, and its turn in that day, 0 for the one that begins at six and 1 up for
+        /// those that follow as each ends. A day and a turn are a farm's seed.
+        var day: Int, turn: Int
+        /// The wall-clock moment, in seconds since the reference date, this farm would have begun at speed
+        /// `paced`. Moving the Speed slider moves it, so that the nest stays as far dug as it is.
+        var began: Double, paced: Double
+
+        init(day: Int, turn: Int, began: Double, paced: Double) { (self.day, self.turn, self.began, self.paced) = (day, turn, began, paced) }
+
+        /// The day's own farm, as far along as the wall clock has it, to go on at `speed`.
+        init(at wall: Double, speed: Double, calendar: Calendar = .current) {
+            let today = AntColony.day(at: wall, calendar: calendar)
+            self.init(day: today.day, turn: 0, began: wall - today.hours * 3600 / max(speed, 1), paced: max(speed, 1))
+        }
+
+        /// Moves on to the wall-clock moment `wall`, given the slider's speed, and gives the hours the farm has
+        /// been going, of its own 24 (more, for a finished nest waiting for six). A scene with a clock of its own
+        /// (a test's, Settings' head start) is not `daily`: no farm of its is the day's, and its farms are told
+        /// apart by their turn alone.
+        mutating func hours(at wall: Double, speed slider: Double, daily: Bool = true, calendar: Calendar = .current) -> Double {
+            let speed = max(slider, 1)
+            if speed != paced { // as much is dug as was, a finished nest being finished; it goes on from there at the new speed
+                began = wall - min(max(wall - began, 0) * paced, 86400) / speed
+                paced = speed
+            }
+            let today = daily ? AntColony.day(at: wall, calendar: calendar) : nil
+            if let today, speed == 1, today.day != day { (day, turn, began) = (today.day, 0, today.six) } // at six, the day's own farm
+            var turns = 0
+            while speed > 1, (wall - began) * speed >= 86400 { // above 1, on to the next farm as often as the clock says
+                began += 86400 / speed
+                let next = daily ? AntColony.day(at: began, calendar: calendar).day : day
+                (day, turn, turns) = (next, daily && next != day ? 1 : turn + 1, turns + 1)
+                if turns > 500, daily { self = Cycle(at: wall, speed: speed, calendar: calendar) } // away for weeks: the day's own farm, as far along as it is
+            }
+            return max(wall - began, 0) * speed / 3600
+        }
+    }
+
+    /// The one cycle every copy of the scene follows, and what of it was last saved.
+    private static var cycle: Cycle?, saved: Cycle?
+
+    /// The shared cycle's farm at `wall`, and the hours it has been going: read from the defaults the first time
+    /// (so a relaunch finds its place at any Speed: the farm, when it would have begun, and at what pace), and
+    /// saved back whenever it moves on to another farm or the slider moves it.
+    private static func moment(at wall: Double) -> (day: Int, turn: Int, hours: Double) {
+        let speed = Self.speed.value, defaults = UserDefaults.standard
+        if cycle == nil {
+            if let farm = defaults.object(forKey: "antcolony.farm") as? Int, let began = defaults.object(forKey: "antcolony.began") as? Double {
+                cycle = Cycle(day: farm / 100, turn: farm % 100, began: began, paced: defaults.object(forKey: "antcolony.paced") as? Double ?? max(speed, 1))
+            } else { cycle = Cycle(at: wall, speed: speed) }
+        }
+        let hours = cycle!.hours(at: wall, speed: speed)
+        if cycle != saved {
+            saved = cycle
+            defaults.set(cycle!.day * 100 + cycle!.turn, forKey: "antcolony.farm")
+            defaults.set(cycle!.began, forKey: "antcolony.began")
+            defaults.set(cycle!.paced, forKey: "antcolony.paced")
+        }
+        return (cycle!.day, cycle!.turn, hours)
     }
 
     /// What a farm on the screen was baked for: its day and turn, the size of its ants, and how many of them.
@@ -220,13 +287,13 @@ final class AntColony: SKScene {
     /// shader has them for, in 4000ths.
     private var baking: (key: Key, landing: Landing<Made>)?, shading: (quantum: Int, landing: Landing<Data>)?, shaded = -1
     /// When the ants on the screen were last set going: by the wall's clock, in the farm's own hours, and at what
-    /// speed; the sixtieths of a second they have been stepped through since; when the picture last faded up; and
-    /// the time of the scene's first frame.
-    private var since = (wall: 0.0, hours: 0.0, speed: 1.0), ticked = 0, shown = 0.0, first: TimeInterval?
+    /// speed; the sixtieths of a second they have been stepped through since; and when the picture last faded up.
+    private var since = (wall: 0.0, hours: 0.0, speed: 1.0), ticked = 0, shown = 0.0
     /// What the tests and the pictures of it ask for as a scene is built: the farm of another day
     /// (`antcolony.day`, a number like 20261012) and the hours it has been going at the scene's first frame
-    /// (`antcolony.hour`), from where it then runs at Speed's pace.
-    private var asked: (day: Int?, hour: Double?) = (nil, nil)
+    /// (`antcolony.hour`). With either the scene keeps a cycle of its own, begun at its first frame by the frame's
+    /// clock, and saves nothing.
+    private var asked: (day: Int?, hour: Double?) = (nil, nil), own: Cycle?
 
     override func sceneDidLoad() {
         pixel = 1 / (NSScreen.screens.first { $0.frame.size == size }?.backingScaleFactor ?? 2)
@@ -275,17 +342,21 @@ final class AntColony: SKScene {
         // The wall's clock, by way of the frame's own time: the two run together, but the tests' frames come
         // faster than real ones and their pictures have to be of their own moments.
         let wall = currentTime + Date.timeIntervalSinceReferenceDate - ProcessInfo.processInfo.systemUptime
-        let opened = first ?? currentTime
-        first = opened
-        let speed = Self.speed.value, size = min(max(Int(Self.antSize.value), 0), 2), look = Int(Self.look.value)
-        var now = Self.farm(at: wall, speed: speed)
-        if let asked = asked.day { (now.day, now.turn) = (asked, 0) }
-        if let asked = asked.hour { (now.turn, now.hours) = (0, asked + (currentTime - opened) * speed / 3600) }
+        let speed = max(Self.speed.value, 1), size = min(max(Int(Self.antSize.value), 0), 2), look = Int(Self.look.value)
+        if asked.day != nil || asked.hour != nil, own == nil {
+            let today = Self.day(at: wall)
+            own = Cycle(day: asked.day ?? today.day, turn: 0, began: currentTime - (asked.hour ?? today.hours) * 3600 / speed, paced: speed)
+        }
+        var now = (day: 0, turn: 0, hours: 0.0)
+        if own != nil {
+            let hours = own!.hours(at: currentTime, speed: speed, daily: false)
+            now = (own!.day, own!.turn, hours)
+        } else { now = Self.moment(at: wall) }
         let share = Self.share(after: now.hours)
 
-        // The farm for this moment: baked when the scene is made, when a farm ends, and when Settings asks for
-        // another size of ant or another number of them (an ant, grown, to every 130 square ant lengths of tank,
-        // times Ants, and a hundred at the most).
+        // The farm for this moment: baked when the scene is made, when a farm gives way to the next, and when
+        // Settings asks for another size of ant or another number of them (an ant, grown, to every 130 square ant
+        // lengths of tank, times Ants, and a hundred at the most).
         // ponytail: a finished farm gives way to the next through black, in under half a second (`u_show`). A
         // crossfade needs both farms' textures at once; add it if the cut is ever noticed.
         let room = Double(self.size.width * self.size.height) / (Self.lengths[size] * Self.lengths[size])
@@ -311,7 +382,7 @@ final class AntColony: SKScene {
 
         // The ants, in sixtieths of a second counted from when they were set going, each with the share dug at
         // its own moment, so that they are where they are whatever the frame rate; set going again from here
-        // when Speed moves the clock. After a gap (the display asleep, the wallpaper covered) they are moved on
+        // when Speed changes the pace. After a gap (the display asleep, the wallpaper covered) they are moved on
         // without being watched, by two minutes at the most.
         if speed != since.speed || abs(now.hours - since.hours - (wall - since.wall) * speed / 3600) > 0.01 { (since, ticked) = ((wall, now.hours, speed), 0) }
         let due = Int(((wall - since.wall) * 60).rounded())
@@ -674,7 +745,7 @@ extension AntColony: HeadStart {
     /// digging is done, or over nine, that copy is given three in the afternoon of the day's first farm (three
     /// fifths dug), and goes on from there at Speed's pace. The desktop's copy keeps the wall's clock.
     func headStart() {
-        let hours = asked.hour ?? Self.farm(at: Date.timeIntervalSinceReferenceDate, speed: Self.speed.value).hours
+        let hours = asked.hour ?? Self.moment(at: Date.timeIntervalSinceReferenceDate).hours
         if !(0.3...0.9).contains(Self.share(after: hours)) { asked.hour = 9 }
     }
 }
