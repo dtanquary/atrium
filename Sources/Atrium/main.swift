@@ -89,13 +89,18 @@ final class WallpaperView: SKView, SKViewDelegate {
     }
 }
 
+/// The Settings → Power choice in force: Low Power Mode's, else the battery's or mains power's.
+@MainActor func powerKnob() -> Knob {
+    // Either call may return NULL, which unwrapped would crash: then it's taken as plugged in.
+    let source = IOPSCopyPowerSourcesInfo().flatMap { IOPSGetProvidingPowerSourceType($0.takeRetainedValue())?.takeUnretainedValue() }
+    return ProcessInfo.processInfo.isLowPowerModeEnabled ? Power.lowPower
+        : source as String? == kIOPMBatteryPowerKey ? Power.battery : Power.plugged
+}
+
 /// Runs at the frame rate Settings → Power picks for Low Power Mode, battery or mains power (60 and 30 fps, and
 /// frozen in Low Power Mode, unless changed), or holds still while the menu's Pause is on.
 @MainActor func applyPowerState(to views: [WallpaperView]) {
-    // Either call may return NULL, which unwrapped would crash: then it's taken as plugged in.
-    let source = IOPSCopyPowerSourcesInfo().flatMap { IOPSGetProvidingPowerSourceType($0.takeRetainedValue())?.takeUnretainedValue() }
-    let fps = Power.rate(ProcessInfo.processInfo.isLowPowerModeEnabled ? Power.lowPower
-                         : source as String? == kIOPMBatteryPowerKey ? Power.battery : Power.plugged)
+    let fps = Power.rate(powerKnob())
     for view in views {
         if fps > 0 { view.preferredFramesPerSecond = fps }
         view.frozen = fps == 0 || WallpaperView.paused
@@ -280,7 +285,13 @@ if !scenes.contains(where: { $0.name == current }) {
             menu.addItem(.separator())
         }
         #endif
-        menu.addItem(withTitle: WallpaperView.paused ? "Resume" : "Pause", action: #selector(togglePause), keyEquivalent: "").target = self
+        // Already held still by Settings → Power, Pause would change nothing: a greyed line says why it's still.
+        let power = powerKnob()
+        if Power.rate(power) == 0, !WallpaperView.paused {
+            menu.addItem(withTitle: "Frozen: \(power.label)", action: nil, keyEquivalent: "")
+        } else {
+            menu.addItem(withTitle: WallpaperView.paused ? "Resume" : "Pause", action: #selector(togglePause), keyEquivalent: "").target = self
+        }
         menu.addItem(.separator())
         for scene in scenes {
             let entry = menu.addItem(withTitle: scene.name, action: #selector(pick), keyEquivalent: "")
