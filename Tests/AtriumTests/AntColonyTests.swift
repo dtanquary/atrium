@@ -1,6 +1,7 @@
 import Foundation
 import Metal
 import SpriteKit
+import Synchronization
 import Testing
 @testable import AntNest
 @testable import Atrium
@@ -80,6 +81,40 @@ import Testing
     #expect(jump < 0.25)
     #expect(gaveUp <= 6 && leapt <= 12)
     #expect(Double(walked) > 0.97 * Double(ticks))
+}
+
+/// A nest is baked from the date every morning, so a trap on one date is a crash at every launch that day. Six
+/// dates on six grids (a 14-inch display's at each size of ant, a portrait display's, a 13-inch's and a 5K's), each
+/// at four ages of its day and once with the clock set back under its ants: nothing traps, every ant is somewhere
+/// in the tank, no ant's middle is in the medium, and every nest has a mouth. (The wide run of this, 1,080 nests
+/// on twelve grids, is in docs/ant-colony.md.)
+@Test func antColonySurvivesManyDatesAndDisplays() {
+    let grids = [(756, 491), (1279, 831), (462, 300), (540, 960), (640, 400), (1280, 720)]
+    let seeds: [UInt64] = [2026101200, 2026103101, 2027010100, 2027022800, 2027070403, 2028022900]
+    let tally = Mutex((nests: 0, moments: 0, buried: 0, lost: 0, mouths: 99))
+    let clock = ContinuousClock(), began = clock.now
+    DispatchQueue.concurrentPerform(iterations: grids.count * seeds.count) { job in
+        let (cols, rows) = grids[job % grids.count], seed = seeds[job / grids.count]
+        let nest = Nest(seed: seed, cols: cols, rows: rows, bodyLength: 11), most = min(max(cols * rows / 121 / 128, 4), 100)
+        var (moments, buried, lost) = (0, 0, 0)
+        for (from, to) in [(0.02, 0.06), (0.3, 0.33), (0.7, 0.72), (0.99, 1), (0.5, 0.2)] {
+            var colony = Colony(nest: nest, most: most, seed: seed, share: from)
+            colony.fastForward(60)
+            for tick in 1...300 {
+                colony.step(share: to < from ? (tick < 150 ? from : to) : from + (to - from) * Double(tick) / 300) // (set back in one go)
+                for ant in colony.ants {
+                    moments += 1
+                    let at = ant.position
+                    if !(at.x.isFinite && at.y.isFinite && ant.forward.x.isFinite && at.x > -1 && at.x < Double(cols) + 1 && at.y > -1 && at.y < Double(rows) + 1) { lost += 1 }
+                    if !colony.clear(at, ant.forward, middle: true) { buried += 1 }
+                }
+            }
+        }
+        tally.withLock { $0 = ($0.nests + 1, $0.moments + moments, $0.buried + buried, $0.lost + lost, min($0.mouths, nest.entrances.count)) }
+    }
+    let all = tally.withLock { $0 }
+    print("Ant Colony, \(all.nests) nests on \(grids.count) grids in \(clock.now - began): \(all.moments) ant-moments, \(all.buried) with a middle in the medium, \(all.lost) off the tank or nowhere; fewest mouths \(all.mouths)")
+    #expect(all.nests == 36 && all.moments > 400_000 && all.buried == 0 && all.lost == 0 && all.mouths >= 1)
 }
 
 /// The picture is the same whatever the frame rate: drawn at 15, 30 and 60 frames a second, every pixel is the

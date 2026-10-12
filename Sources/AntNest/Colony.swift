@@ -364,6 +364,7 @@ public struct Colony: Sendable {
             while ants[n].branch >= 0, reach(ants[n].branch, share) < 0.5 { // its tunnel is not dug (the clock was set back): out to where it joins
                 let branch = nest.branches[ants[n].branch]
                 (ants[n].branch, ants[n].at, ants[n].route, ants[n].job, ants[n].placed) = (branch.parent, branch.at, [], .none, false)
+                (ants[n].state, ants[n].timer, ants[n].carrying, ants[n].nod, ants[n].turning) = (.pause, 0.5, false, 0, 0) // (whatever it was doing there)
             }
             if ants[n].branch >= 0 { ants[n].at = min(ants[n].at, max(reach(ants[n].branch, share) - 0.45 * bl, 0)) }
             if ants[n].turning > 0 { continue }
@@ -398,7 +399,10 @@ public struct Colony: Sendable {
             if coarse != nil {
                 if ants[n].turning > 0 { (ants[n].heading, ants[n].turning) = (-ants[n].heading, 0) } // run fast, an about turn is made at once
                 settle(n)
-            } else if ants[n].turning > 0 { turn(n, dt) } else { place(n, dt) }
+            } else if ants[n].turning > 0, clear(ants[n].position, ants[n].forward, middle: true) { turn(n, dt) } else {
+                (ants[n].turning, ants[n].yaw) = (0, 0) // (a turn is cut short where the clock, set back, has left it standing in the medium)
+                place(n, dt)
+            }
         }
     }
 
@@ -423,6 +427,11 @@ public struct Colony: Sendable {
             ant.at = target
             ant.route.removeFirst()
             if let hop = leg.hop {
+                // (a way that is not open at either end: the clock has been set back; think again)
+                guard leg.branch < 0 || reach(leg.branch, share) >= leg.to, hop.branch < 0 || reach(hop.branch, share) >= hop.at else {
+                    (ant.route, ant.job) = ([], ant.carrying ? .dump : .none)
+                    return
+                }
                 (ant.branch, ant.at, ant.lateral) = (hop.branch, hop.at, .nan)
                 if let next = ant.route.first { ant.heading = next.to >= ant.at ? 1 : -1 }
             }
