@@ -38,19 +38,14 @@ final class PixelWindowSeat: SKScene {
                                               section: "Preview", format: .toggle, hiddenWhen: "seat.orbit", hiddenAt: 1)
     nonisolated static let previewHour = Knob(key: "seat.previewHour", label: "Time", range: 0...24, standard: 19, section: "Preview",
                                               format: .clock, shownWhen: "seat.previewTime", hiddenWhen: "seat.orbit", hiddenAt: 1)
-    /// The airliner's settings and the orbit's (PixelOrbit.swift), each kind hidden while the other is flying.
-    nonisolated static let knobs = rows(train: PixelOrbit.offersTrain)
+    /// The airliner's settings, the orbit's (PixelOrbit.swift) and the train's (PixelTrain.swift), each kind hidden
+    /// while another is the window.
+    nonisolated static let knobs = [PixelOrbit.on, seat, PixelOrbit.array, window, looking, PixelOrbit.looking, speed, PixelOrbit.follow, scenery]
+        + PixelTrain.knobs + [clouds, PixelOrbit.realClouds, lightning, previewTime, previewHour]
 
     /// The train's Speed, Scenery and Poles and wires are rows of the Flight section, which a train hasn't got: while
     /// the train is the window the section is titled Journey (`Wallpaper.retitled`).
     nonisolated static let journey = (section: "Flight", title: "Journey", when: "seat.orbit", at: 2.0)
-
-    /// The page's rows: with the Earth orbit switch it had before; or with the menu that offers the train, and
-    /// then the train's own rows too.
-    nonisolated static func rows(train: Bool) -> [Knob] {
-        [PixelOrbit.picker(train: train), seat, PixelOrbit.array, window, looking, PixelOrbit.looking, speed, PixelOrbit.follow, scenery]
-            + (train ? PixelTrain.knobs : []) + [clouds, PixelOrbit.realClouds, lightning, previewTime, previewHour]
-    }
 
     /// How high we fly and where the cloud layer's base is, in km, and how fast, in km a second (Mach 0.78 or so).
     nonisolated static let cruise = 11.0, deck = 2.4, pace = 0.25

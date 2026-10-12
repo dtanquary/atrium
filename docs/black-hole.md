@@ -1,12 +1,12 @@
-# Black Hole (built, hidden)
+# Black Hole
 
 A black hole with a thin disc of glowing gas turning round it, in front of the real Milky Way, all of it bent by the hole's gravity: the far side of the disc lifts into a hump over the shadow, its underside shows as a ring below, the side turning toward us is brighter, and the stars behind slide and double round the edge. One shader, beside Nebula and Galaxy.
 
-Dave picked the idea on 2026-10-10 from a brainstorm ([ideas.md](ideas.md)). That day it was researched by two agents and mocked up in three rounds, and he made the choices below. It was built on 2026-10-11 and 12: [The build so far](#the-build-so-far) says what exists, step by step. It is in the app as a hidden wallpaper (`unfinished: true`): the bending, the disc in three colours, its glow, the sky with stars that twinkle and can drift, and a size slider up to a close-up. The rest of this page is the plan it was built from, the measurements and their sources.
+Dave picked the idea on 2026-10-10 from a brainstorm ([ideas.md](ideas.md)). That day it was researched by two agents and mocked up in three rounds, and he made the choices below. It was built on 2026-10-11 and 12: [The build so far](#the-build-so-far) says what exists, step by step. It was hidden as `unfinished` while Dave tested it, and has been in the app for everyone since 0.109.0 (2026-10-12): the bending, the disc in three colours, its glow, the sky with stars that twinkle and can drift, and a size slider up to a close-up. The rest of this page is the plan it was built from, the measurements and their sources.
 
 - **Mock-ups and prototypes:** `docs/black-hole/` (see [Mock-ups](#mock-ups) and [Prototype](#the-prototype)).
 - **The two research reports in full:** [the method](black-hole/research-method.md) and [the look](black-hole/research-look.md), which has the reference list, eight real black holes' numbers and the palettes.
-- **Where it stands (2026-10-12):** built. Steps (a) to (e) of the build order are done, and so are the four things Dave asked for once he had it on his desktop: the glow (f), the twinkle (g), the drifting sky (h, off until he has tried it) and Size up to 3× (i). It is still hidden (`unfinished: true`) while he tests it. What is left is his verdict on what is listed under [Still open](#still-open), and what every wallpaper needs before it is unhidden: a proper icon, its screenshot and Settings preview, the README and site entries, and the version bump.
+- **Where it stands (2026-10-12):** built. Steps (a) to (e) of the build order are done, and so are the four things Dave asked for once he had it on his desktop: the glow (f), the twinkle (g), the drifting sky (h, off until he has tried it) and Size up to 3× (i). On 2026-10-12 he asked for its README and site pictures and said to unhide it: 0.109.0, with its screenshots, Settings preview, README section and site card ([Checking it](#checking-it)). What is left is his verdict on what is listed under [Still open](#still-open), and an icon chosen on purpose.
 
 ## Dave's decisions (2026-10-10)
 From mock-up sheets, each choice with a recommendation beside it.
@@ -312,6 +312,7 @@ Measured, at 3024 × 1964:
   - **Changed:** Size runs to 3×, a 20° field, with the disc wider than the screen. What the close-up looks like and measures is step (i) in [The build so far](#the-build-so-far).
   - **Once he had it on his desktop:** "i think it looks great at 3x, dont have any issues". So the top stays at 3×, and the things step (i) lists as wrong there (the brightness, the hairline at the shadow's edge, 1× sitting 15% along the slider) are not his complaints.
 - **2026-10-11:** "proceed on your own until you have working versions of all 3" (this, Meander and the train).
+- **2026-10-12, the README and the site:** "I need you to make new material for black hole, meander", and, asked which of the three to unhide, all three. Shown to everyone in 0.109.0, at the settings it had: Orange, 1×, Drift off.
 
 ### Still open
 - **The glow is built (step f) and nobody has seen it on a desktop.** It was matched to tile M in stills and numbers by the agent that built it. Where it differs from M: it is the streaks' average and doesn't follow them, so it is 31% brighter than M at the left end of the one still M was made from, and the turning shows about a seventh less than under a glow made from each frame; it spreads the white-hot light that M's mask left out; it fades out where M's stops dead. If the disc looks too soft, Glow below 1 is the slider; making the glow follow the streaks (scaled by a pixel's own light over the average there) is the fix that wasn't built.
@@ -327,7 +328,12 @@ Measured, at 3024 × 1964:
 - **The disc's mean brightness wanders about ±5% over minutes** as knots come and go. It doesn't beat, but nobody has watched it for an hour.
 - **Whether the turning is "plain to see" at 1×** is a number here (above), not yet somebody watching the desktop.
 - **One or two stars at the Einstein ring are short dashes** in a still sky, as in the first motion check. In a drifting sky stars pass through there all the time and are streaks anyway.
-- **Not done:** the Settings page's own screenshot and preview (`SETTINGS_SHOT` can't open a hidden wallpaper's page), an icon chosen on purpose (it has `circle.circle.fill`), the README's own entry and the site.
+- **Not done:** an icon chosen on purpose (it has `circle.circle.fill`). Its screenshots, Settings preview, README section and site card were made on 2026-10-12: [Checking it](#checking-it).
+
+## Checking it
+- `SNAPSHOT_SCENE="Black Hole" swift test -c release -Xswiftc -enable-testing --filter everySceneRenders` renders it at the standard settings, and `SNAPSHOT_DEFAULTS="blackhole.heat=Blue-white,blackhole.size=2"` and the like with Settings' values (the disc's colour is stored by its name). The streaks begin at a random place each run, so two renders of one setting differ in the streaks and in nothing else; `blackHoleStill` (step (e), above) saves one that comes out the same every time.
+- **Screenshots (2026-10-12, for 0.109.0),** each 5 s in (`SNAPSHOT_SECONDS=5`) at the standard settings but for those named: `black-hole.jpg` is the standard picture (Orange, 1×); `black-hole-wide.jpg` is `blackhole.heat=White-gold,blackhole.size=0.65`; `black-hole-blue-white.jpg` is `blackhole.heat=Blue-white,blackhole.size=2`; `black-hole-close.jpg` is `blackhole.size=3`. They were picked from a sheet of six (the three colours at 1×, and these). `preview-black-hole.jpg`, Settings' picture, is a 1200-pixel copy of the first, and the website's card is cut from it (`site/media.sh card-black-hole`).
+- `black-hole.webp`, the README's moving picture, is the website's preview loop (`site/media.sh preview-black-hole`: the standard settings, 5 s in, 12 s) as a plain WebP, 340 KB (177 frames: three merged into their neighbours). Looked at as six frames 2 s apart and its last frame beside its first: the streaks and the bright side's knots move from frame to frame, and the seam doesn't show. A frame of the WebP 9 s in beside its source showed no blocks (it is off by 2.2 of 255 on average, against 1.9 with every frame a keyframe, which is 2.2 MB).
 
 ## Mock-ups
 In `docs/black-hole/`. They were rendered by `bh.py`, a brute-force tracer written for the purpose: every ray is integrated (`d²x/dλ² = −1.5 h² x / r⁵`, which gives a light ray's exact path), so the bending in them is real, not painted. Its disc texture, bloom and tone curve are stand-ins.

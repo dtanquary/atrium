@@ -50,16 +50,13 @@ private func listed(_ knobs: [Knob], window: Double) -> [String] {
     return knobs.filter { $0.shows(gate: held($0.shownWhen), hide: held($0.hiddenWhen)) }.map(\.key)
 }
 
-/// Until the train is ready to be seen, the page is the one people have: the Earth orbit switch, and under it the
-/// airliner's rows or the station's. With `unfinished` set the switch is a menu of three under the same key, so a
-/// stored 1 is still the station, and the train lists the rows it shares with the airliner.
-@MainActor @Test func windowSeatOffersTheTrainOnlyUnfinished() {
-    let shipped = PixelWindowSeat.rows(train: false), offered = PixelWindowSeat.rows(train: true)
+/// The page's first row is a menu of three windows under the key the Earth orbit switch had, so a stored 1 is still
+/// the station, and each window lists its own rows: the airliner's and the station's as they were before the train,
+/// and the train's with the rows it shares with the airliner.
+@MainActor @Test func windowSeatListsEachWindowsRows() {
+    let offered = PixelWindowSeat.knobs
     let airliner = ["seat.orbit", "seat.wing", "seat.window", "seat.looking", "seat.speed", "seat.scenery", "seat.clouds", "seat.lightning", "seat.previewTime"]
     let station = ["seat.orbit", "seat.array", "seat.window", "seat.orbitLooking", "seat.speed", "seat.follow", "seat.clouds", "seat.realClouds", "seat.lightning"]
-    #expect(shipped[0].label == "Earth orbit" && shipped[0].format == .toggle && shipped[0].range == 0...1)
-    #expect(listed(shipped, window: 0) == airliner)
-    #expect(listed(shipped, window: 1) == station)
     #expect(offered[0].format == .choice(["An airliner", "The space station", "A train"]) && offered[0].order == [0, 2, 1])
     #expect(listed(offered, window: 0) == airliner)
     #expect(listed(offered, window: 1) == station)
@@ -67,26 +64,23 @@ private func listed(_ knobs: [Knob], window: Double) -> [String] {
                                            "seat.rain", "seat.previewWeather", "seat.clouds", "seat.lightning", "seat.previewTime"])
     // Carriage is the train's alone, and with no window there is no carriage to choose.
     let carriage = PixelCarriage.choice
-    #expect((carriage.shownWhen, carriage.hiddenWhen) == (PixelOrbit.on.key, PixelWindowSeat.window.key) && !shipped.contains { $0.key == carriage.key })
+    #expect((carriage.shownWhen, carriage.hiddenWhen) == (PixelOrbit.on.key, PixelWindowSeat.window.key))
     #expect([0.0, 1, 2].map { carriage.shows(gate: $0, hide: 2) } == [false, false, true] && !carriage.shows(gate: 2, hide: 3))
-    let shared = offered.filter { knob in !PixelTrain.knobs.contains { $0.key == knob.key } } // all but the train's own rows are the page's as it was
-    #expect(shared.count == shipped.count && zip(shipped, shared).dropFirst().allSatisfy { $0.key == $1.key && $0.label == $1.label && $0.format == $1.format })
 
     // The train's rows are in the page's own sections, and Flight goes by Journey only while the train is the window.
     #expect(Set(offered.filter { listed(offered, window: 2).contains($0.key) }.map(\.section)) == ["View", "Flight", "Preview"])
     let page = Wallpaper(name: "", icon: "", tint: .blue, blurb: "", make: pixelWindowSeat, retitled: PixelWindowSeat.journey)
     #expect([0.0, 1, 2].map { page.title(of: "Flight", holding: $0) } == ["Flight", "Flight", "Journey"])
     #expect(["View", "Preview"].allSatisfy { page.title(of: $0, holding: 2) == $0 })
-    #expect(PixelOrbit.offersTrain || allScenes.first { $0.name == "Pixel Window Seat" }?.retitled == nil, "without the train, no section is retitled")
-    #expect(PixelOrbit.offersTrain || allScenes.first { $0.name == "Pixel Window Seat" }?.status == nil, "without the train, the page has no line of weather")
 
-    // What is stored: 1 is the station either way, and 2 the train only where the train is offered.
+    // What is stored: 1 is the station, as it was when this was a switch, and 2 the train.
     let key = PixelOrbit.on.key, size = CGSize(width: 1512, height: 982)
     defer { UserDefaults.standard.removeObject(forKey: key) }
-    for (stored, switched, picked) in [(0.0, 0.0, 0.0), (1, 1, 1), (2, 1, 2)] {
+    for stored in [0.0, 1, 2] {
         UserDefaults.standard.set(stored, forKey: key)
-        #expect(shipped[0].value == switched && offered[0].value == picked)
-        #expect(pixelWindowSeat(size: size) is PixelOrbit == (PixelOrbit.mode == 1), "a stored \(stored) opened the wrong window")
+        #expect(offered[0].value == stored && PixelOrbit.mode == Int(stored))
+        let scene = pixelWindowSeat(size: size)
+        #expect((scene is PixelWindowSeat, scene is PixelOrbit, scene is PixelTrain) == (stored == 0, stored == 1, stored == 2), "a stored \(stored) opened the wrong window")
     }
     UserDefaults.standard.set(1.0, forKey: key)
     #expect(pixelWindowSeat(size: size) is PixelOrbit)

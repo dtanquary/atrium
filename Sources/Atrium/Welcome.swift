@@ -11,8 +11,8 @@ struct WelcomeView: View {
     /// The wallpapers by mood, as the README groups them. Any wallpaper not listed joins the last group.
     static let groups: [(name: String, members: [String])] = [
         ("Nature and weather", ["Fish Tank", "Weather", "A Tree for the Year", "Dappled Light", "Rain on Glass", "Wind",
-                                "Murmuration", "Aurora", "Fireflies", "Campfire"]),
-        ("Space", ["Solar System Tour", "Deep Space Tour", "Nebula", "Galaxy", "Live Sky", "Earth from Orbit", "Pixel Spaceport"]),
+                                "Murmuration", "Aurora", "Fireflies", "Meander", "Campfire"]),
+        ("Space", ["Solar System Tour", "Deep Space Tour", "Nebula", "Galaxy", "Black Hole", "Live Sky", "Earth from Orbit", "Pixel Spaceport"]),
         ("Color, light and pattern", ["Flowing Gradient", "Lava Lamp", "Schlieren", "Turing Patterns", "Game of Life", "Pixel City",
                                       "Pixel Window Seat"]),
     ]

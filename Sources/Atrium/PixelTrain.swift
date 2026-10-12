@@ -19,7 +19,7 @@ final class PixelTrain: SKScene {
                                           order: [0, 1, 2, 3, 4, 7, 5, 6], shownWhen: "seat.orbit", shownAt: 2)
     nonisolated static let poles = Knob(key: "seat.poles", label: "Poles and wires beside the line", range: 0...1, standard: 1, section: "Flight",
                                         format: .toggle, shownWhen: "seat.orbit", shownAt: 2)
-    /// The train's own settings, listed among the airliner's (`PixelWindowSeat.rows`) while the train is offered.
+    /// The train's own settings, listed among the airliner's (`PixelWindowSeat.knobs`).
     nonisolated static let knobs = [scenery, poles, PixelCarriage.choice, TrainWeather.follow, TrainWeather.glass, TrainWeather.preview]
 
     /// 1× on Settings' Speed, in metres a second: 48 km/h, a slow scenic train.

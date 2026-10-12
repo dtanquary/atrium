@@ -1,8 +1,8 @@
-# Pixel Window Seat: a train (built, hidden)
+# Pixel Window Seat: a train
 
 A third window for [Pixel Window Seat](../pixel-window-seat.md): a seat on a slow train, the country sliding past under the real Sun, Moon and stars for your clock and place, with rain on the glass when it rains where you are. It began as "Pixel Night Train" in the 2026-10-10 brainstorm ([ideas.md](../ideas.md)); Dave picked it as "an addition to pixel window seat, doesn't have to be its own wallpaper".
 
-That day two agents researched it (one read the code and worked the geometry, one measured real footage) and one round of mock-ups went to Dave. It was built on 2026-10-11 and is on `main`: steps 1 to 8 of the [step plan](#step-plan), with the three carriages, seven sceneries, the weather and rain on the glass. Stations (step 9, "if wanted") are not built, and step 10 is the unhiding. "A train" is offered in Settings only with the `unfinished` switch on, until Dave says otherwise: [The build so far](#the-build-so-far) says what is in. This page is the plan it was built from, the findings and their sources. The two reports in full: [the engine](train-research-engine.md) and [the footage and scenery](train-research-footage.md). When it is unhidden, what a reader of `pixel-window-seat.md` needs moves there.
+That day two agents researched it (one read the code and worked the geometry, one measured real footage) and one round of mock-ups went to Dave. It was built on 2026-10-11 and is on `main`: steps 1 to 8 of the [step plan](#step-plan), with the three carriages, seven sceneries, the weather and rain on the glass. Stations (step 9, "if wanted") are not built. "A train" was offered in Settings only with the `unfinished` switch on until 2026-10-12, when Dave said to unhide it: from 0.109.0 the menu is everyone's ([Shown to everyone](#shown-to-everyone-2026-10-12), step 10). [The build so far](#the-build-so-far) says what is in. This page is the plan it was built from, the findings and their sources. The two reports in full: [the engine](train-research-engine.md) and [the footage and scenery](train-research-footage.md). What a reader of `pixel-window-seat.md` needs is there, under [A train](../pixel-window-seat.md#a-train); this page stays as the build's record.
 
 ## Dave's decisions (2026-10-10)
 - **Where it lives:** inside Pixel Window Seat, not its own wallpaper.
@@ -555,6 +555,15 @@ The second thing on the list above: the best picture the train has was the rares
   - **The quay and the `harbour` number are mine,** not Dave's, and nor is the pick's name.
   - **Not looked at:** Settings' page with the new pick in its menu; the app.
 
+## Shown to everyone (2026-10-12)
+Step 10 of the plan, on Dave's word. He asked for the README and the site to show the train ("update the pixel window seat stuff with the new train options") and, asked whether it should be unhidden with Black Hole and Meander, picked all three.
+- **In (0.109.0):** `PixelOrbit.on` is the menu of three for everybody. `PixelOrbit.offersTrain`, `picker(train:)` and `PixelWindowSeat.rows(train:)` are gone, and with them the Earth orbit switch and the `ponytail:` about a stored 2 read by the switch. The wallpaper's entry in Scenes.swift always has the weather's status line and the Journey title, and its blurb is the plan's. `seat.orbit` keeps its values, so a 1 stored by the switch is still the station.
+- **Checked by running:** `windowSeatListsEachWindowsRows` (it was `windowSeatOffersTheTrainOnlyUnfinished`): each window's rows, and a stored 0, 1 and 2 opening the airliner, the station and the train. The whole suite, 117 tests.
+- **Not folded into `pixel-window-seat.md`,** as step 10 had planned: that page has a section, [A train](../pixel-window-seat.md#a-train), with what a reader needs (its settings, how to check it, its pictures' recipes), and this page stays as the build's record.
+- **Its pictures** for the README and the site are listed there. None shows a city beside water: Dave had said that morning that a city beside a lake "looks like the city is under water", and its far shore was being mended as they were taken. The city across the water wants a picture once that is in.
+- **Every command on this page that sets `unfinished=1`** works without it now; `seat.orbit=2` alone is the train.
+- **Not done:** the Settings page was not captured again with the menu shown to everyone (the same rows as with `unfinished`, which were seen on 2026-10-11).
+
 ## Research for the next mock-ups
 - **The window.** Real glass, width to height: a TGV bar car 1.94:1, a EuroNight sleeper 1.46:1, a British Mark 1 bay 1.2:1 with top-lights, an Amtrak Superliner coach 2.75:1, a Shinkansen N700 0.96:1 (520 × 500 mm: an airliner's window again). The mock-ups' pane is the airliner's, 1.54:1. A wide picture window (about 1.9:1) fills a 16:10 screen best.
 - **The eye:** about 2.5 m above the rail on a European intercity, 3.85 m upstairs in a Superliner; add 0.5–1 m of track bed.
@@ -576,7 +585,7 @@ The second thing on the list above: the best picture the train has was the rares
 7. **Weather:** follow, previews (the tests never fetch, so previews are the only way to test it), drops, haze, snow. (Built, with the rain on the glass.)
 8. **The carriages**, each matched to its mock-up pixel for pixel, as the Cupola was.
 9. **Stations**, if wanted.
-10. Fold this page into `pixel-window-seat.md`; screenshots, the blurb ("A pixel-art window seat on a plane, a train or the space station."), the README, a minor version.
+10. Fold this page into `pixel-window-seat.md`; screenshots, the blurb ("A pixel-art window seat on a plane, a train or the space station."), the README, a minor version. (Done on 2026-10-12, but for the folding: [Shown to everyone](#shown-to-everyone-2026-10-12).)
 
 ## Risks, worst first
 1. It doesn't look like a train window: stamps 8 to 30 px tall carry the whole picture.

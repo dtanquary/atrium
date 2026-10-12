@@ -5,7 +5,7 @@ Ideas for new wallpapers, kept here so they aren't lost. They came out of a brai
 When one is picked, it gets its own doc, and that doc is where it is kept from then on.
 
 ## Built
-Picked by Dave on 2026-10-10, researched and mocked up that day, and built on 2026-10-11 and 12. All three are in the app and hidden: they show only with the `unfinished` switch on (`defaults write com.dtanquary.atrium unfinished -bool true`), until Dave has judged them on his own screen. Each one's doc has what was built, what was measured, what is still wrong and what stands between it and being unhidden.
+Picked by Dave on 2026-10-10, researched and mocked up that day, and built on 2026-10-11 and 12. All three were hidden behind the `unfinished` switch while Dave tested them, and have been in the app for everyone since 0.109.0 (2026-10-12), when he said to unhide them and put them on the README and the site. Each one's doc has what was built, what was measured and what is still wrong.
 
 - **Black Hole.** A lensed accretion disc slowly turning, bending the real Milky Way and catalogue stars behind it; one shader, beside Nebula and Galaxy. Three disc colours, a size slider from a small hole in a wide sky to a close-up wider than the screen, stars that twinkle and a sky that can drift. A wallpaper of its own: [black-hole.md](black-hole.md).
 - **Pixel Night Train.** A ground-level window seat: country sliding past on the real clock, with rain on the glass when it rains where you are. Dave picked it as an addition to [Pixel Window Seat](pixel-window-seat.md) rather than a wallpaper of its own, so it is that wallpaper's third window ("Window on: A train"), with three carriages and seven sceneries: [pixel-window-seat/train.md](pixel-window-seat/train.md).
