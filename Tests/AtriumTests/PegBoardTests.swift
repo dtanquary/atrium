@@ -156,3 +156,43 @@ import Testing
     print("Peg Board, its largest picture (\(big.sequence.count) pegs) put up in \(took)")
     #expect(big.picture && big.sequence.count > 5000)
 }
+
+/// With PEGBOARD_STILL set to a file (.png or .jpg): one picture of the sheet on a display of 1512 by 982 points,
+/// drawn PEGBOARD_STILL_WIDTH pixels across (1600 for docs/images, 1200 for Settings' preview), after
+/// SNAPSHOT_SECONDS with SNAPSHOT_DEFAULTS as the render test takes them. Drawn at the size it is shown at, because
+/// a still reduced afterwards shows a weave in the dotted sheet.
+@MainActor @Test(.enabled(if: ProcessInfo.processInfo.environment["PEGBOARD_STILL"] != nil))
+func pegBoardStill() throws {
+    let env = ProcessInfo.processInfo.environment, url = URL(fileURLWithPath: env["PEGBOARD_STILL"]!)
+    let settings = (env["SNAPSHOT_DEFAULTS"] ?? "").split(separator: ",").map { $0.split(separator: "=") }.filter { $0.count == 2 }
+    for pair in settings { UserDefaults.standard.set(Double(pair[1]).map { $0 as Any } ?? String(pair[1]), forKey: String(pair[0])) }
+    defer { for pair in settings { UserDefaults.standard.removeObject(forKey: String(pair[0])) } }
+    let w = Int(env["PEGBOARD_STILL_WIDTH"] ?? "") ?? 1600, h = w * 982 / 1512, seconds = Double(env["SNAPSHOT_SECONDS"] ?? "") ?? 30
+    let device = try #require(MTLCreateSystemDefaultDevice()), queue = try #require(device.makeCommandQueue())
+    let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: w, height: h, mipmapped: false)
+    descriptor.usage = [.renderTarget, .shaderRead]
+    descriptor.storageMode = .shared
+    let renderer = SKRenderer(device: device), target = try #require(device.makeTexture(descriptor: descriptor)), pass = MTLRenderPassDescriptor()
+    renderer.scene = PegBoard(size: CGSize(width: 1512, height: 982))
+    pass.colorAttachments[0].texture = target
+    pass.colorAttachments[0].loadAction = .clear
+    pass.colorAttachments[0].storeAction = .store
+    let start = ProcessInfo.processInfo.systemUptime + 1
+    for frame in 0...Int(seconds * 30) + 1 {
+        renderer.update(atTime: start + Double(min(frame, Int(seconds * 30))) / 30)
+        guard frame >= Int(seconds * 30) else { continue } // drawn at the end only, twice for the shader's sake
+        let buffer = try #require(queue.makeCommandBuffer())
+        renderer.render(withViewport: CGRect(x: 0, y: 0, width: w, height: h), commandBuffer: buffer, renderPassDescriptor: pass)
+        buffer.commit()
+        buffer.waitUntilCompleted()
+    }
+    var raw = [UInt32](repeating: 0, count: w * h)
+    target.getBytes(&raw, bytesPerRow: w * 4, from: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0)
+    let image = try #require(CGImage(width: w, height: h, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: w * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                     bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue),
+                                     provider: CGDataProvider(data: Data(bytes: raw, count: w * h * 4) as CFData)!, decode: nil, shouldInterpolate: false, intent: .defaultIntent))
+    let kind = url.pathExtension == "jpg" ? "public.jpeg" : "public.png"
+    let file = try #require(CGImageDestinationCreateWithURL(url as CFURL, kind as CFString, 1, nil))
+    CGImageDestinationAddImage(file, image, [kCGImageDestinationLossyCompressionQuality: 0.7] as CFDictionary)
+    #expect(CGImageDestinationFinalize(file))
+}

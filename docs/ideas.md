@@ -13,6 +13,7 @@ Picked by Dave on 2026-10-10, researched and mocked up that day, and built on 20
 
 ## Asked for outright
 - **Etching.** Dave asked for it on 2026-10-12, with research and mock-ups first: old etchings, engravings and woodcuts drawn slowly in one unbroken line on a screen of grey powder, after the two-dial drawing toy. Built that day and hidden behind the `unfinished` switch while he tests it: [etching.md](etching.md). A frame with dials round the screen, and more pictures, are its own next ideas.
+- **Peg Board.** Dave asked on 2026-10-12, with research and mock-ups first, for a clone of the peg-light toy of 1967, "with lights, showing various lighting patterns and what not". A black sheet of holes with glowing coloured pegs placed one at a time: a grown snow crystal or a picture built outline first, then a slow light show, then the sheet clears. Built the same day and hidden as `unfinished` until he has tried it: [peg-board.md](peg-board.md).
 
 ## Parked
 In the order they were proposed, most promising first.
