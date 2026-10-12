@@ -72,7 +72,7 @@ private func crossings(_ river: River) -> Int {
 /// lakes are drawn as water, and hollows mark old channels. And how long that takes, which every load, shuffle and
 /// Settings page waits for on the main thread, and what a live step costs after it. (The river's module is built
 /// optimised even in a debug build, so the times mean the same in both.) The times are printed, and the past's is
-/// held to 200 ms only with MEANDER_COSTS set (`measuring`): it is about 130, of which the older river's ground is 30.
+/// held to 200 ms only with MEANDER_COSTS set (`measuring`): it is about 130, of which the older ground is 30.
 @Test func riverGetsAPastQuickly() {
     func milliseconds(_ body: () -> Void) -> Double {
         let start = DispatchTime.now().uptimeNanoseconds
@@ -152,11 +152,13 @@ private func crossings(_ river: River) -> Int {
     #expect(steps[300] < 1.5)
 }
 
-/// The first picture is floodplain to every edge, in both valleys: when a river's past ends, no texel of the
-/// ground is one no river has made (an older river's ground lies under this one's, `River.layBackdrop`), on a
-/// 14" screen at the smallest river and the largest, for four rivers each. And the two valleys are what they say:
-/// kept within the screen, a river's line never crosses its top or bottom; given the full view, three of the four
-/// reach nearer an edge than the walls of the other valley would let them.
+/// The picture is floodplain to every edge, in both valleys, and stays so: beneath a river's own ground lies an
+/// older river's (`River.beneath`), which shows wherever the river's own is forgotten or never was. It has an age at
+/// every texel, and under a fiftieth of it is flat ground that none of its courses reached (none at all, in the
+/// rivers tried), on a 14" screen at the smallest river and the largest, for four rivers each. It is laid once:
+/// the river running on writes nothing to it. And the two valleys are what they say: kept within the
+/// screen, a river's line never crosses its top or bottom; given the full view, three of the four reach nearer
+/// an edge than the walls of the other valley would let them.
 @Test func riverLeavesNoGroundUnworked() {
     for width in [28.0, 56.0] {
         var reaching = 0
@@ -164,11 +166,17 @@ private func crossings(_ river: River) -> Int {
             for seed: UInt64 in [13, 2, 7, 21] {
                 let river = River(seed: seed, across: Float(1512 / width), up: Float(982 / width), texels: 14, valley: valley)
                 river.age()
-                let oldest = Float(river.now - river.base - River.memory - 5), unworked = river.ground.count { $0.x <= oldest }
-                #expect(unworked == 0, "\(unworked) texels of river \(seed)'s ground at \(width) pt, \(valley), are ground no river made")
+                let texels = river.columns * river.rows, laid = river.beneath
+                #expect(laid.count == texels * 4)
+                let flat = (0..<texels).count { Int(laid[$0 * 4]) << 8 | Int(laid[$0 * 4 + 1]) < 50 }
+                #expect(flat * 50 < texels, "\(flat) of \(texels) texels of the older ground under river \(seed) at \(width) pt, \(valley), are flat")
                 let furthest = river.nodes.map { abs($0.y - river.up / 2) }.max()!
                 if valley == .within { #expect(furthest < river.up / 2, "river \(seed) at \(width) pt runs off the screen") }
                 else if furthest > river.up / 2 - 1.5 { reaching += 1 }
+                if seed == 13 {
+                    river.advance(60, speed: 4)
+                    #expect(river.beneath == laid, "the older ground changed as the river ran on")
+                }
             }
         }
         #expect(reaching >= 3, "only \(reaching) of four rivers with the full view at \(width) pt use it")
@@ -458,6 +466,25 @@ private func seeded(_ seed: Double, _ others: [String: Double] = [:]) -> [String
     scene.handOver()
     let next = try #require(view.scene as? Meander)
     #expect(next !== scene && abs(next.river.columns * 2 - river.columns) <= 1, "\(next.river.columns) columns after \(river.columns)")
+}
+
+/// The older ground keeps its age, so what shows of it is the same picture for as long as the river runs. The top
+/// twentieth of the screen, which a river kept within the screen never reaches, is the same to within a level
+/// after the river has run 90 T, past two moves of the stamps' base: with old courses staying their longest and
+/// their least, in relief and in both of the old map's rules.
+@MainActor @Test func meanderKeepsItsOlderGroundStill() throws {
+    for look: [String: Double] in [[:], ["meander.memory": 15], ["meander.look": 1, "meander.memory": 15], ["meander.look": 1, "meander.rule": 1]] {
+        try with(seeded(7, look)) {
+            let scene = Meander(size: CGSize(width: 756, height: 491)), screen = try Offscreen(scene, 756, 491), river = scene.river!
+            for _ in 0..<2 { try screen.frame(rate: 1e9) }
+            let before = screen.piece(x: 0, y: 0, w: 756, h: 24), base = river.base
+            river.advance(90 * River.pace / 4, speed: 4)
+            for _ in 0..<2 { scene.upload() }
+            try screen.frame(rate: 1e9)
+            let differs = zip(before, screen.piece(x: 0, y: 0, w: 756, h: 24)).count { a, b in [0, 8, 16].contains { abs(Int(a >> UInt32($0) & 255) - Int(b >> UInt32($0) & 255)) > 1 } }
+            #expect(river.base > base + 80 && differs == 0, "\(differs) pixels of the far ground changed in 90 T with \(look)")
+        }
+    }
 }
 
 /// Another valley is another river, as another size is: the scene hands over to one built to it.
@@ -1120,13 +1147,13 @@ private func ripple(_ picture: [UInt32], side: Int, texel: Int, counts: (_ x: In
 
 /// Under Random the colours move on by themselves, every "Change colors every" minutes, to another family of the
 /// look that is showing, over a minute; and not at all with that at 0, or while Settings names a family. Followed
-/// by the colour of ground the river has forgotten (old courses are set to stay 15 minutes, and the spot is an
-/// older river's ground, over 73 T old), which every family of relief has its own of: it is one family's until
-/// two minutes are up, between two half a minute later, and then another's.
+/// by the colour of a spot the river has no ground of its own at, where the older ground shows and keeps still,
+/// which every family of relief has its own of: it is one family's until two minutes are up, between two half a
+/// minute later, and then another's.
 @MainActor @Test func meanderChangesColoursOnATimer() throws {
     let (w, h) = (378, 245)
-    // a pixel of ground left over 73 T ago, well clear of any water and near the bottom, where this river
-    // doesn't come: ground forgotten after 72 T, of one colour however much older it gets (the same river every time)
+    // a pixel well clear of any water and near the bottom, where this river doesn't come and has left no ground:
+    // of one colour however long the river runs (the same river every time)
     var spot = (x: 4, y: 4)
     try with(seeded(7)) {
         let river = try #require(Meander(size: CGSize(width: w, height: h)).river), present = Float(river.now - river.base)
@@ -1319,3 +1346,4 @@ private func ripple(_ picture: [UInt32], side: Int, texel: Int, counts: (_ x: In
 @MainActor @Test func onlyMeanderFollowsTheAppearanceItself() {
     #expect(allScenes.filter(\.followsAppearance).map(\.name) == ["Meander"])
 }
+

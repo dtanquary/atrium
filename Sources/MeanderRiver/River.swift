@@ -104,6 +104,9 @@ public final class River {
     public static let memory = 600.0
     /// A lake's life, in T: over its second half it narrows to nothing. A setting, so it can change as the river runs.
     public var lakeLife = 16.0
+    /// How long the river's own courses stay in the picture, in T: a setting too. Ground it left longer ago than
+    /// that is drawn as the older ground beneath, so that is what a bank's furthest reach there steps up to.
+    public var stays = River.memory
     /// A stamp for ground the river has never covered.
     static let never: Float = -1e9
     /// A lake is drawn again once a front of its has moved this far since it last was, in texels; and how many
@@ -111,9 +114,9 @@ public final class River {
     static let adrift: Float = 0.04, lakesAStep = 6
 
     /// Where the river may go. `within`: kept inside the screen, its walls standing 1.5 to 6.5 widths in from the
-    /// top and bottom; the ground beyond them is an older river's (`layBackdrop`), which nothing
-    /// works again. `full`: to the edges and past them, its walls up to 2 widths out, so the picture is river and
-    /// floodplain from edge to edge and bends run off it.
+    /// top and bottom; what shows beyond them is the older ground (`beneath`). `full`: to the edges and past
+    /// them, its walls up to 2 widths out, so the picture is river and floodplain from edge to edge and bends run
+    /// off it.
     public enum Valley: Sendable { case within, full }
 
     /// The screen in widths, and texels a width.
@@ -146,6 +149,15 @@ public final class River {
     /// a lake, whichever is nearer; its bank at mid-range, two texels either side filling the byte), then the hollow
     /// over 0.25 to 1.
     public private(set) var pixels: [UInt8]
+    /// The older ground, which lies beneath this river's own and shows wherever that is forgotten or was never
+    /// made (`layBackdrop`): four bytes a texel for a shader, the first two how long before `ancient` its river
+    /// left there, in 16 bits at 0.01 T a level. It is laid once and never changes: its ages are for good.
+    /// (Empty until the river has its past.)
+    public private(set) var beneath: [UInt8] = []
+    /// The older ground's age at a texel, in T.
+    @inline(__always) private func olderAge(_ i: Int) -> Float { Float(Self.ancient) - Float(Int(beneath[i * 4]) << 8 | Int(beneath[i * 4 + 1])) / 100 }
+    /// When a past being made will end (`age`): the older ground's ages are as at then, while it is made.
+    private var pastEnds = 0.0
 
     /// A bank distance for texels nowhere near a channel.
     private static let far: Float = 9
@@ -545,7 +557,7 @@ public final class River {
     /// nobody watched.
     private func fill(_ a: SIMD2<Float>, _ b: SIMD2<Float>, _ c: SIMD2<Float>, _ d: SIMD2<Float>, from: Float, to: Float, hollow: Bool = false,
                       soft: Bool = true, _ ground: UnsafeMutableBufferPointer<SIMD4<Float>>) {
-        let tex = texels, L = period, ribbon = from == to
+        let tex = texels, L = period, ribbon = from == to, settled = Float((sweeping ? pastEnds : now) - base)
         // The first edge's line and the third's, as slopes in x and in y that give how far inside each a point is
         var first = simd_normalize(SIMD2(a.y - b.y, b.x - a.x) + [1e-12, 0]), third = simd_normalize(SIMD2(c.y - d.y, d.x - c.x) + [1e-12, 0])
         if simd_dot(c + d - a - b, first) < 0 { first = -first }
@@ -574,7 +586,8 @@ public final class River {
                 if cover >= 1 {
                     (ground[i].x, ground[i].y) = (value, hollow ? min(ground[i].y, 0.3) : 1)
                 } else if cover > 0 {
-                    let old = max(ground[i].x, value - 400)
+                    // (where the river has left no ground of its own, what is there is the older ground)
+                    let own = ground[i].x == Self.never && !beneath.isEmpty ? settled - olderAge(i) : ground[i].x, old = max(own, value - 400)
                     ground[i].x = old + (value - old) * cover
                 }
                 (inFirst, inThird) = (inFirst + first.x, inThird + third.x)
@@ -988,7 +1001,7 @@ public final class River {
         swap(&touched, &before)
         touched.count = 0
         band(trace(), closed: true, reach: 2 / texels, into: &touched)
-        let tex = texels, stampNow = Float(now - base), far = Self.far
+        let tex = texels, stampNow = Float(now - base), far = Self.far, gone = beneath.isEmpty ? -.infinity : stampNow - Float(0.9 * stays)
         // Over half the river's texels are deep water, a third of a width inside the bank or more, and all alike:
         // the present time, no hollow, and bytes that are the same for every one of them
         let level = UInt32(max(0, min(65535, stampNow * 100))), deep = (level >> 8 | (level & 255) << 8 | 255 << 24).littleEndian
@@ -1010,7 +1023,8 @@ public final class River {
                 if covered >= 1 {
                     ground[i].x = stampNow
                 } else if covered > was {
-                    ground[i].x = Self.shared(ground[i].x, stampNow, (covered - was) / (1 - was))
+                    // (ground left so long ago that the older ground shows there is the older ground, for this)
+                    ground[i].x = Self.shared(ground[i].x > gone ? ground[i].x : stampNow - olderAge(i), stampNow, (covered - was) / (1 - was))
                 }
                 ground[i].y = max(ground[i].y, 0.5 + 3 * (0.5 - distance))
                 ground[i].z = distance
@@ -1125,41 +1139,61 @@ public final class River {
         return stepped
     }
 
-    /// How long the older river runs, in T, and how old the last ground it left is when this river's past ends:
-    /// its courses are paler than this river's newest work, and young enough still to show.
-    static let before = 140.0, settled = 40.0
-    /// How old ground that neither river reached is taken to be when the past ends: a little older than anything
-    /// the older river left, so that it lies among those courses as one more of them and not as a hole. (And not
-    /// a whole number of the old map's stages, 5 T and 11 T, before the past's end: flat ground of one age, on
-    /// the line between two inks, came out in specks of both.)
-    static let ancient = settled + before + 42.5
+    /// How long the older river runs, in T, and how old the last ground it left is: old enough that its courses
+    /// are fainter than this river's own and no lighter than the oldest of them at the belt's edge, and young
+    /// enough still to show. (At 40 T they were as bold as the belt's, with the belt's dark margin between; at
+    /// 140, hard to see.)
+    static let before = 140.0, settled = 90.0
+    /// Where the older river never went, the ground is an older course still (`layBackdrop`): this much older
+    /// than the course it is taken from, in T.
+    static let older = 80.0
+    /// How old the oldest of the older ground is, which is what neither course reached: a little older than
+    /// anything they left, so that it lies among them as one more of them and not as a hole. (And half-way
+    /// between two whole numbers of the old map's stages, 5 T and 11 T: flat ground of one age, on the line
+    /// between two inks, came out in specks of both.)
+    public static let ancient = settled + before + older + 47.5
     /// How far the older river's first line swings, as a share of the way from the valley's middle to its wall.
     static let swing: Float = 0.75
 
-    /// Lays the ground an older river left, before this one's past begins, so that the picture is floodplain to
-    /// every edge from its first frame: old courses, paler than this river's own, wherever this river doesn't go.
-    /// The older river is another `River`, with another seed and walls 4 widths past the top and bottom, started
-    /// on a wide swing and run the cheap way for `before` T on a ground of half as many texels each way; its
-    /// stamps are spread over this ground's texels smoothly (they are old, and soft does for them). What neither
-    /// river reaches has an age too, `ancient`: nothing in the picture is ground no river has made. `end` is when
-    /// this river's past will end, which the ages are counted back from.
-    private func layBackdrop(for end: Double) {
+    /// Lays the older ground, `beneath`: what an older river left, so that the picture is floodplain to every
+    /// edge from its first frame and stays so, with old courses, paler than this river's own, wherever this
+    /// river's ground doesn't show. The older river is another `River`, with another seed and walls 4 widths past
+    /// the top and bottom, started on a wide swing and run the cheap way for `before` T on a ground of half as
+    /// many texels each way; its stamps are spread over this ground's texels smoothly (they are old, and soft does
+    /// for them). Where it never went, in a corner or two, the ground is its own from half the screen along,
+    /// turned top to bottom and `older` T older: an older course still. (Or, where it never went there either,
+    /// as across the top and bottom of a tall screen, its own from half the screen up or down.) The little that
+    /// none of those reached has an age too, `ancient`, so nothing in the picture is ground no river has made.
+    /// The ages are not counted from any clock, so nothing ages them: a shader draws this ground the same for as
+    /// long as the river runs.
+    // ponytail: the corners are the same river's ground used twice, not a third river's, which would cost its
+    // 30 ms at every launch. If a corner is ever recognised in the ground across from it, run one.
+    private func layBackdrop() {
         let old = River(seed: seed &* 0x9E3779B97F4A7C15 &+ 0xD1B54A32D192ED03, across: across, up: up, texels: texels / 2, spacing: spacing, valley: valley, backdrop: true)
-        // An older river's stamp s, on its own clock, is ground `settled + before - s` T old at `end`. Its ground
-        // starts at `ancient`, not at nothing, so that its soft scarps shade into that and not into ground 400 T
-        // older than they are, which would be a rim of ground beyond memory round everything it never reached.
-        let shift = Float(end - Self.settled - Self.before), wide = old.columns, high = old.rows
-        old.ground = Array(repeating: [Float(end - Self.ancient - base) - shift, 1, Self.far, Self.far], count: wide * high)
+        // An older river's stamp s is ground `settled + before - s - old.base` T old. Its ground starts `older`
+        // T short of `ancient`, not at nothing, so that its soft scarps shade into that and not into ground 400 T
+        // older than they are, which would be a rim of the oldest ground round everything it never reached.
+        let unreached = Float(Self.settled + Self.before - Self.ancient + Self.older - old.base), wide = old.columns, high = old.rows
+        old.ground = Array(repeating: [unreached, 1, Self.far, Self.far], count: wide * high)
         old.age(distant: Self.before, recent: 0)
-        ground.withUnsafeMutableBufferPointer { ground in old.ground.withUnsafeBufferPointer { theirs in
+        var stamps = old.ground.map(\.x)
+        for row in 0..<high { for column in 0..<wide where stamps[row * wide + column] == unreached {
+            let other = old.ground[(high - 1 - row) * wide + (column + wide / 2) % wide].x, middle = old.ground[(row + high / 2) % high * wide + column].x
+            stamps[row * wide + column] = (other != unreached ? other : middle) - Float(Self.older)
+        } }
+        beneath = Array(repeating: 255, count: columns * rows * 4)
+        let oldest = unreached - Float(Self.older)
+        stamps.withUnsafeBufferPointer { theirs in beneath.withUnsafeMutableBufferPointer { bytes in
             @inline(__always) func stamp(_ column: Int, _ row: Int) -> Float {
-                theirs[min(max(row, 0), high - 1) * wide + min(max(column, 0), wide - 1)].x + shift
+                theirs[min(max(row, 0), high - 1) * wide + min(max(column, 0), wide - 1)] - oldest
             }
             for row in 0..<rows {
                 let v = (Float(row) + 0.5) * Float(high) / Float(rows) - 0.5, r = Int(v.rounded(.down)), fy = v - Float(r)
                 for column in 0..<columns {
                     let u = (Float(column) + 0.5) * Float(wide) / Float(columns) - 0.5, c = Int(u.rounded(.down)), fx = u - Float(c)
-                    ground[row * columns + column].x = (stamp(c, r) * (1 - fx) + stamp(c + 1, r) * fx) * (1 - fy) + (stamp(c, r + 1) * (1 - fx) + stamp(c + 1, r + 1) * fx) * fy
+                    let since = (stamp(c, r) * (1 - fx) + stamp(c + 1, r) * fx) * (1 - fy) + (stamp(c, r + 1) * (1 - fx) + stamp(c + 1, r + 1) * fx) * fy
+                    let level = Int(max(0, min(65535, since * 100))), i = (row * columns + column) * 4
+                    (bytes[i], bytes[i + 1]) = (UInt8(level >> 8), UInt8(level & 255))
                 }
             }
         } }
@@ -1174,7 +1208,8 @@ public final class River {
     /// where this takes 100, and left the bars in terraces, one to a visit, where they should be smooth.)
     public func age(distant: Double = 240, recent: Double = 60) {
         let end = now + distant + recent
-        if !backdrop { layBackdrop(for: end) }
+        pastEnds = end
+        if !backdrop { layBackdrop() }
         if distant > 0 {
             let fresh = spacing
             spacing = 1

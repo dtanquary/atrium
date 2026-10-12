@@ -8,8 +8,10 @@ import SpriteKit
 /// The ground remembers when the river last left every spot, and that memory is the picture: as lidar relief, where
 /// land the river left long ago stands higher and darker and the bars it built show as fine ridges, or as an old
 /// survey's map, each stage of the river's past in its own ink (after Fisk's 1944 plates of the Mississippi).
-/// `River` (the MeanderRiver module) is the river and the ground, on the CPU; this is its texture and the two
-/// shaders that read it. docs/meander.md has the model, the measurements and the sources.
+/// Where the river has not been in memory, an older river's ground shows from beneath, which keeps its age: the
+/// picture is floodplain to every edge for as long as it runs. `River` (the MeanderRiver module) is the river and
+/// both grounds, on the CPU; this is their textures and the two shaders that read them. docs/meander.md has the
+/// model, the measurements and the sources.
 final class Meander: SKScene {
     /// The two looks, as a menu; the rows that belong to one of them show while it is picked.
     nonisolated static let look = Knob(key: "meander.look", label: "Look", range: 0...1, standard: 0, section: "Look", format: .choice(["Relief", "Old map"]))
@@ -131,9 +133,12 @@ final class Meander: SKScene {
     /// how far the river is toward its next step, so a bank moves on every frame and not only when the river
     /// steps. Each step's bytes go to whichever holds the older.
     private var textures: [SKMutableTexture] = [], times = [0.0, 0.0], newest = 0
+    /// The older ground beneath the river's own (`River.beneath`), sent once: what a shader draws wherever the
+    /// river's ground is forgotten, or was never made.
+    private var beneath: SKMutableTexture!
     private let clocks = SKUniform(name: "u_t", vectorFloat2: .zero), blend = SKUniform(name: "u_blend", float: 0), settings = SKUniform(name: "u_knobs", vectorFloat4: .zero)
-    /// How far the picture fades to its flat ground at the very top and bottom: some, for a river kept within the
-    /// screen, whose far ground is an older river's; none for the full view.
+    /// How far the picture fades to one flat colour at the very top and bottom: some, for a river kept within the
+    /// screen, where all that shows there is the older ground; none for the full view.
     private let edge = SKUniform(name: "u_edge", float: Meander.valley.value > 0.5 ? 0 : 0.4)
     /// The Look sliders' uniforms (`u_brightness` and so on), which a shader has only while one is off its standard value.
     private let grading = Meander.grades.map { SKUniform(name: "u_" + $0.key.split(separator: ".").last!, float: Float($0.value)) }
@@ -141,7 +146,7 @@ final class Meander: SKScene {
 
     /// One dressing of the ground: a sprite that draws a look in one mode, and what its shader reads that is its
     /// own. That is where the present falls in the look's cycles, and its colours, which are the same uniforms for
-    /// its life so that they can be eased: relief's river, dulled lake and unreached ground, with the land's
+    /// its life so that they can be eased: relief's river, dulled lake and the colour its edges fade to, with the land's
     /// colours by height in a texture 256 across; or a sheet's paper, river, line and four inks. Two
     /// dressings are on the screen while one gives way to the other (`dress`), so they share none of it.
     @MainActor private final class Dress {
@@ -192,11 +197,13 @@ final class Meander: SKScene {
                       valley: full ? .full : .within)
         river.lakeLife = Self.lakes.value * Self.perMinute
         river.age()
-        textures = (0..<2).map { _ in
+        textures = (0..<3).map { _ in
             let texture = SKMutableTexture(size: CGSize(width: river.columns, height: river.rows))
             texture.filteringMode = .linear
             return texture
         }
+        beneath = textures.removeLast()
+        send(river.beneath, to: beneath)
         dress()
         NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged), name: UserDefaults.didChangeNotification, object: nil)
         appearance = NSApplication.shared.observe(\.effectiveAppearance) { [weak self] _, _ in MainActor.assumeIsolated { self?.settingsChanged() } }
@@ -275,7 +282,7 @@ final class Meander: SKScene {
     /// shader, and the shader of a picture at rest has to stay the one it was, to the byte.
     private func shader(for dress: Dress, graded: Bool, leaving: Bool) -> SKShader {
         var uniforms = [SKUniform(name: "u_grid", vectorFloat2: [Float(river.columns), Float(river.rows)]), SKUniform(name: "u_other", texture: textures[1]),
-                        clocks, blend, dress.turns, settings, edge] + (graded ? grading : [])
+                        SKUniform(name: "u_beneath", texture: beneath), clocks, blend, dress.turns, settings, edge] + (graded ? grading : [])
         if dress.map {
             uniforms += dress.paints[..<3] + [SKUniform(name: "u_stage", float: Float(Self.stages[dress.rule]))] + dress.paints[3...]
         } else {
@@ -341,10 +348,11 @@ final class Meander: SKScene {
     /// often Random changes the colours.
     private func tune() {
         river.lakeLife = Self.lakes.value * Self.perMinute
+        river.stays = min(Self.memory.value * Self.perMinute, River.memory)
         let asked = dressed[worn.map ? 3 : 2].isEmpty ? Self.cycleMinutes.value.rounded() * 60 : 0
         if asked != every { (every, waited) = (asked, 0) } // a new wait counts from when it was asked for
         for (uniform, knob) in zip(grading, Self.grades) { uniform.floatValue = Float(knob.value) }
-        settings.vectorFloat4Value = [Float(Double(river.columns) / size.width), Float(min(Self.memory.value * Self.perMinute, River.memory)), Float(Self.bars.value), Float(river.lakeLife)]
+        settings.vectorFloat4Value = [Float(Double(river.columns) / size.width), Float(river.stays), Float(Self.bars.value), Float(river.lakeLife)]
     }
 
     /// When Settings changes: the sliders at once, a new look as soon as it is asked for, and a new size of river,
@@ -405,16 +413,21 @@ final class Meander: SKScene {
     /// the two can be mixed across a move of the base, `River.rebase`.)
     func upload() {
         newest = 1 - newest
-        // The river's own buffer, not a copy of it: SpriteKit takes the bytes before `modifyPixelData` returns
-        // (meanderGroundReachesTheShader checks that it does), and the river next writes on them a step later
-        river.pixels.withUnsafeBytes { buffer in
-            nonisolated(unsafe) let bytes = buffer
-            textures[newest].modifyPixelData { data, length in data?.copyMemory(from: bytes.baseAddress!, byteCount: min(length, bytes.count)) }
-        }
+        send(river.pixels, to: textures[newest])
         times[newest] = river.now
         var since = clocks.vectorFloat2Value
         since[newest] = Float(river.now - river.base)
         clocks.vectorFloat2Value = since
+    }
+
+    /// Sends a ground's bytes to a texture. The river's own buffer, not a copy of it: SpriteKit takes the bytes
+    /// before `modifyPixelData` returns (meanderGroundReachesTheShader checks that it does), and the river next
+    /// writes on them a step later.
+    private func send(_ ground: [UInt8], to texture: SKMutableTexture) {
+        ground.withUnsafeBytes { buffer in
+            nonisolated(unsafe) let bytes = buffer
+            texture.modifyPixelData { data, length in data?.copyMemory(from: bytes.baseAddress!, byteCount: min(length, bytes.count)) }
+        }
     }
 
     /// Tells the shader, on every frame, how to mix the two grounds: by how far the river is toward its next step,
@@ -470,6 +483,23 @@ final class Meander: SKScene {
         return vec2(0.25 * (1.0 - exp(-age / 2.5)) + 0.75 * (1.0 - exp(-age / 90.0)), gone * gone * (3.0 - 2.0 * gone));
     }
 
+    // Relief's scroll bars: old bank lines, so contours of the stamp. Two spacings beating, uneven in strength,
+    // and low; and sets of them, arcs that show at a glance. Where the lines would be too fine to draw, or
+    // across a scarp, the ground is flat. For land of an `age` that the river left `past` ago, where the stamp's
+    // slope a texel is `slope` and the present falls at `cycles` in the three spacings' turns: how far they
+    // raise the ground, and what they take from its tilt.
+    vec3 scrolls(float age, float past, vec2 slope, vec3 cycles, vec2 pts, float strength) {
+        float steep = 6.2832 * length(slope) * 0.5; // how far half a texel takes the stamp, as an angle for a period of 1 T
+        float bars = strength * (1.0 - smoothstep(0.7, 1.5, steep / 0.7)) * (0.55 + 0.34 * lumps(pts / 70.0 + 5.0)) * (0.35 + 0.65 * exp(-age / 150.0));
+        float sets = strength * 0.9 * (1.0 - smoothstep(0.7, 1.5, steep / 2.9)) * (0.5 + 0.5 * exp(-age / 200.0));
+        vec3 turn = 6.2832 * fract(cycles - past / vec3(0.7, 1.1326, 2.9)) + vec3(0.0, 1.3, 0.7);
+        return vec3(bars * (0.6 * cos(turn.x) + 0.4 * cos(turn.y)) + sets * cos(turn.z),
+                    0.03 * (bars * (0.6 * sin(turn.x) / 0.7 + 0.4 * sin(turn.y) / 1.1326) + sets * sin(turn.z) / 2.9) * 6.2832 * slope);
+    }
+
+    // Relief's light, from the upper left, on ground tilted so: how much lighter or darker than level ground.
+    float light(vec2 tilt) { return (dot(tilt, vec2(-0.55, 0.62)) + 0.56) / sqrt(dot(tilt, tilt) + 1.0) - 0.56; }
+
     vec3 pick(float which, vec3 a, vec3 b, vec3 c, vec3 d) { return which < 0.5 ? a : which < 1.5 ? b : which < 2.5 ? c : d; }
 
     void main() {
@@ -502,6 +532,13 @@ final class Meander: SKScene {
         float past = mix(u_t.x - (ground1.r * 65280.0 + ground1.g * 255.0) / 100.0, u_t.y - (ground2.r * 65280.0 + ground2.g * 255.0) / 100.0, u_blend);
         vec2 slope = vec2(across.r * 65280.0 + across.g * 255.0, up.r * 65280.0 + up.g * 255.0) / 100.0 * (1.0 - smoothstep(604.5, 605.0, past));
         past = min(past, 605.0);
+        // The older ground beneath, read the same way from the same four taps: how long ago its river left
+        // here, which never changes, and the slope a texel of when it did, as `slope` is the stamp's.
+        vec4 c00 = texture2D(u_beneath, h0), c10 = texture2D(u_beneath, vec2(h1.x, h0.y)), c01 = texture2D(u_beneath, vec2(h0.x, h1.y)), c11 = texture2D(u_beneath, h1);
+        vec4 lower = g0.y * (g0.x * c00 + g1.x * c10) + g1.y * (g0.x * c01 + g1.x * c11);
+        vec4 lowerAcross = (g0.y * (c10 - c00) + g1.y * (c11 - c01)) / apart.x, lowerUp = (g0.x * (c01 - c00) + g1.x * (c11 - c10)) / apart.y;
+        float pastBeneath = \(River.ancient) - (lower.r * 65280.0 + lower.g * 255.0) / 100.0;
+        vec2 slopeBeneath = vec2(lowerAcross.r * 65280.0 + lowerAcross.g * 255.0, lowerUp.r * 65280.0 + lowerUp.g * 255.0) / 100.0;
         // how far toward the top or the bottom this is, over the outer half of the way: what fades there, by `u_edge`
         float outer = smoothstep(0.45, 1.0, abs(v_tex_coord.y - 0.5) * 2.0);
         vec2 shore = vec2(across.b, up.b); // points away from the water
@@ -542,9 +579,9 @@ final class Meander: SKScene {
         // height above the river, 0 to 1: a bar is up out of the water within a couple of T, then silts up for ages
         float height = 0.25 * (1.0 - exp(-age / 2.5)) + 0.75 * (1.0 - exp(-age / 90.0));
         vec2 rise = (0.1 * exp(-age / 2.5) + 0.75 / 90.0 * exp(-age / 90.0)) * older; // its slope a texel
-        // Ground the river has not reached in memory (as long as Settings has old courses stay) is flat, in one
-        // colour, and what the river made there fades out into it. (It was mottled once. Dave: "the cloudy edges
-        // on top and bottom dont look as cool as whats happening in the middle".)
+        // Ground the river has not reached in memory (as long as Settings has old courses stay) is the older
+        // ground beneath, and what the river made there fades out into it. (It was mottled once, with nothing
+        // on it. Dave: "the cloudy edges on top and bottom dont look as cool as whats happening in the middle".)
         float gone = clamp((age - 0.8 * u_knobs.y) / (0.18 * u_knobs.y), 0.0, 1.0), wild = gone * gone * (3.0 - 2.0 * gone);
         // A scarp with new land at its foot, where the river has drawn back from a bank it was cutting (as it does
         // in the seconds after a cutoff). The height is steep in age at first, so the smooth read's mix of ages came
@@ -552,15 +589,17 @@ final class Meander: SKScene {
         // stairs. There the height is mixed from the sixteen texels' own heights instead, by the same weights, and
         // its slope from them. Only on a slope with new land among the sixteen, and not within a texel and a half
         // of water (all of it from two texels off): settled ground is drawn as it was, and so is every bank, where the
-        // water's own texels would come into the mix as land at the river's level and show as a light rim.
+        // water's own texels would come into the mix as land at the river's level and show as a light rim. And at
+        // the edge of ground the river has no stamp for, which the smooth read drew as a rim of the oldest land,
+        // dark against the older ground beneath: there it is as far gone as the sixteen are, by those weights.
         // (Everything that decides it is mixed by those weights too, which fall to nothing as a texel goes out of
         // reach: the least or the most of the four reads changes at once there, and that showed as a chequerboard.)
         float drop = length(slope), scarp = smoothstep(0.25, 1.0, drop) * smoothstep(1.4, 2.0, bank);
-        if (scarp > 0.0 && past - 3.0 * drop < 20.0) {
+        if (scarp > 0.0 && (past - 3.0 * drop < 20.0 || past + 6.0 * drop > 604.0)) {
             vec4 wx = vec4(w0.x, w1.x, w2.x, w3.x), wy = vec4(w0.y, w1.y, w2.y, w3.y);
             vec2 d0 = -0.5 * (1.0 - s) * (1.0 - s), d1 = 1.5 * s * s - 2.0 * s, d3 = 0.5 * s * s, d2 = -d0 - d1 - d3; // the weights' slopes
             vec4 dx = vec4(d0.x, d1.x, d2.x, d3.x), dy = vec4(d0.y, d1.y, d2.y, d3.y);
-            float mixed = 0.0;
+            float mixed = 0.0, mostly = 0.0;
             vec2 sloped = vec2(0.0);
             vec4 ends = vec4(0.0); // for the lowest, the highest, the furthest gone and the youngest of them, softly
             for (int row = 0; row < 4; row++) {
@@ -570,16 +609,20 @@ final class Meander: SKScene {
                     float aged = clamp(mix(u_t.x - (one.r * 65280.0 + one.g * 255.0) / 100.0, u_t.y - (other.r * 65280.0 + other.g * 255.0) / 100.0, u_blend), 0.0, 605.0);
                     vec2 its = stands(aged, u_knobs.y);
                     mixed += wx[column] * wy[row] * its.x;
+                    mostly += wx[column] * wy[row] * its.y;
                     sloped += vec2(dx[column] * wy[row], wx[column] * dy[row]) * its.x;
                     ends += wx[column] * wy[row] * exp(vec4(-30.0 * its.x, 30.0 * (its.x - 1.0), 30.0 * (its.y - 1.0), -0.5 * aged));
                 }
             }
-            scarp *= 1.0 - smoothstep(8.0, 20.0, -2.0 * log(ends.w)); // all of it where the youngest is under 8 T old, none over 20
-            // The ground is as far gone as the furthest gone of the sixteen, by how far the height is from the
-            // lowest of them to the highest: mixed from the texels' own, which are gone or not, the edge of ground
-            // the river never made came out in stairs too.
+            // all of it where the youngest is under 8 T old, none over 20; or as the furthest gone of them is gone
+            float young = 1.0 - smoothstep(8.0, 20.0, -2.0 * log(ends.w));
+            scarp *= max(young, 1.0 + log(ends.z) / 30.0);
+            // Beside new land the ground is as far gone as the furthest gone of the sixteen, by how far the height
+            // is from the lowest of them to the highest: mixed from the texels' own, which are gone or not, the
+            // edge of ground the river never made came out in stairs there. (Elsewhere that mix is the one to
+            // have: old land and land with no stamp stand nearly as high as each other.)
             float lowest = -log(ends.x) / 30.0, share = (1.0 + log(ends.z) / 30.0) / max(1.0 + log(ends.y) / 30.0 - lowest, 0.02);
-            float lost = clamp((mixed - lowest) * share, 0.0, 1.0);
+            float lost = mix(mostly, clamp((mixed - lowest) * share, 0.0, 1.0), young);
             // beside water the land is still the land two texels out, as a cut bank's is
             vec2 land = stands(beside, u_knobs.y), stepped = 6.0 * nearing * (1.0 - nearing) / 1.4 * 4.0 * vec2(across.b, up.b);
             height = mix(height, mix(mixed, land.x, near), scarp);
@@ -594,21 +637,21 @@ final class Meander: SKScene {
         // sixth of the picture flicker by a level whenever the stamps' base moved.
         vec2 tilt = 0.35 * (1.0 - wild) * (rise + sunk * 6.0 * dip * (1.0 - dip) / 0.12 * 0.75 * vec2(across.a, up.a));
         height -= sunk * dip * dip * (3.0 - 2.0 * dip);
-        // Scroll bars: old bank lines, so contours of the stamp. Two spacings beating, uneven in strength, and low;
-        // and sets of them, arcs that show at a glance. Where the lines would be too fine to draw, or across a
-        // scarp, the ground is flat. Settings has their strength.
-        float steep = 6.2832 * length(slope) * 0.5; // how far half a texel takes the stamp, as an angle for a period of 1 T
-        float bars = u_knobs.z * (1.0 - wild) * (1.0 - smoothstep(0.7, 1.5, steep / 0.7)) * (0.55 + 0.34 * lumps(pts / 70.0 + 5.0)) * (0.35 + 0.65 * exp(-age / 150.0));
-        float sets = u_knobs.z * (1.0 - wild) * 0.9 * (1.0 - smoothstep(0.7, 1.5, steep / 2.9)) * (0.5 + 0.5 * exp(-age / 200.0));
-        vec3 turn = 6.2832 * fract(u_turns.xyz - past / vec3(0.7, 1.1326, 2.9)) + vec3(0.0, 1.3, 0.7);
-        float scroll = bars * (0.6 * cos(turn.x) + 0.4 * cos(turn.y)) + sets * cos(turn.z);
-        tilt -= 0.03 * (bars * (0.6 * sin(turn.x) / 0.7 + 0.4 * sin(turn.y) / 1.1326) + sets * sin(turn.z) / 2.9) * 6.2832 * slope;
-        vec3 col = texture2D(u_heights, vec2((clamp(height + 0.02 * scroll, 0.0, 1.0) * 255.0 + 0.5) / 256.0, 0.5)).rgb;
-        col = mix(col, u_ground, wild);
+        // scroll bars (`scrolls`), as strong as Settings has them
+        vec3 scroll = scrolls(age, past, slope, u_turns.xyz, pts, u_knobs.z * (1.0 - wild));
+        tilt -= scroll.yz;
+        vec3 col = texture2D(u_heights, vec2((clamp(height + 0.02 * scroll.x, 0.0, 1.0) * 255.0 + 0.5) / 256.0, 0.5)).rgb;
         // light from the upper left on the fine relief only, and none within a few pixels of water: no rims
-        tilt *= -5.0;
-        float shade = (dot(tilt, vec2(-0.55, 0.62)) + 0.56) / sqrt(dot(tilt, tilt) + 1.0) - 0.56;
-        col *= clamp(1.0 + \(strength) * shade * smoothstep(0.25, 1.9, bank), 0.72, \(lit));
+        col *= clamp(1.0 + \(strength) * light(-5.0 * tilt) * smoothstep(0.25, 1.9, bank), 0.72, \(lit));
+        // The older ground beneath, where this river's is gone: the same land by its own age, which it keeps
+        // (its bars' turns are counted from nothing, so they keep still too), with no water, bank or hollow.
+        if (wild > 0.0) {
+            vec2 old = stands(pastBeneath, 1e9);
+            vec3 bars = scrolls(pastBeneath, pastBeneath, slopeBeneath, vec3(0.0), pts, u_knobs.z);
+            vec2 lean = -0.35 * (0.1 * exp(-pastBeneath / 2.5) + 0.75 / 90.0 * exp(-pastBeneath / 90.0)) * slopeBeneath - bars.yz;
+            vec3 under = texture2D(u_heights, vec2((clamp(old.x + 0.02 * bars.x, 0.0, 1.0) * 255.0 + 0.5) / 256.0, 0.5)).rgb;
+            col = mix(col, under * clamp(1.0 + \(strength) * light(-5.0 * lean), 0.72, \(lit)), wild);
+        }
         // Water the river has left dulls a little over its first few T: a lake. Over the second half of its life
         // a lake narrows to nothing (`River.trace`), and as it does it dulls to the colour of a new bar, all of
         // it at once, so that by the time it is a sliver it doesn't shine like a highlight. (Its shallows used to
@@ -628,43 +671,59 @@ final class Meander: SKScene {
     /// live river is bare paper between two bank lines; a lake keeps that line when new, and it thins. With `rule`
     /// 0 a stage's ink stays with its land for good, the four inks in turn, and only pales with age. With 1 land is
     /// inked as Fisk inks land that many stages old, and the whole sheet slides on to the next colours over the last
-    /// third of every stage.
+    /// third of every stage. Under it is the older ground, inked the same way by ages that never change.
     private static func map(rule: Int, light: Bool, graded: Bool, leaving: Bool) -> String {
         let last = finish("col * (1.0 - 0.32 * dot(middle, middle))", light: light, graded: graded, leaving: leaving)
-        let inks = rule == 0 ? """
-            float cover = kept * (1.0 - 0.35 * clamp((old - 1.5) / 1.5, 0.0, 1.0) - 0.15 * clamp((old - 3.0) / 3.0, 0.0, 1.0) - 0.1 * clamp((old - 6.0) / 6.0, 0.0, 1.0)
-                - 0.17 * clamp((old - 12.0) / 18.0, 0.0, 1.0) - 0.11 * clamp((old - 30.0) / 60.0, 0.0, 1.0) - 0.12 * clamp((old - 90.0) / 30.0, 0.0, 1.0));
-            vec3 col = mix(paper, mix(pick(mod(number - 1.0, 4.0), u_ink0, u_ink1, u_ink2, u_ink3), pick(mod(number, 4.0), u_ink0, u_ink1, u_ink2, u_ink3), newer) * grain, cover);
-        """ : """
-            // land in this stage, and in the one before it and the one before that, as Fisk inks land that old
-            float slide = smoothstep(0.67, 1.0, fract(u_turns.w)), ago = floor(u_turns.w) - number;
-            vec2 one = inked(ago), two = inked(ago + 1.0), three = inked(ago + 2.0);
-            vec3 first = mix(paper, pick(one.x, u_ink0, u_ink1, u_ink2, u_ink3) * grain, one.y * kept);
-            vec3 second = mix(paper, pick(two.x, u_ink0, u_ink1, u_ink2, u_ink3) * grain, two.y * kept);
-            vec3 third = mix(paper, pick(three.x, u_ink0, u_ink1, u_ink2, u_ink3) * grain, three.y * kept);
-            float cover = kept * mix(mix(two.y, three.y, slide), mix(one.y, two.y, slide), newer);
-            vec3 col = mix(mix(second, third, slide), mix(first, second, slide), newer);
-        """
+        /// Leaves in `name` the colour of land the river left `past` ago, where the stamp's slope a texel is
+        /// `slope` and the present falls at `turns` in the map's cycles.
+        func inks(_ name: String, past: String, slope: String, turns: String) -> String {
+            let inked = rule == 0 ? """
+                float cover = 1.0 - 0.35 * clamp((old - 1.5) / 1.5, 0.0, 1.0) - 0.15 * clamp((old - 3.0) / 3.0, 0.0, 1.0) - 0.1 * clamp((old - 6.0) / 6.0, 0.0, 1.0)
+                    - 0.17 * clamp((old - 12.0) / 18.0, 0.0, 1.0) - 0.11 * clamp((old - 30.0) / 60.0, 0.0, 1.0) - 0.12 * clamp((old - 90.0) / 30.0, 0.0, 1.0);
+                vec3 land = mix(paper, mix(pick(mod(number - 1.0, 4.0), u_ink0, u_ink1, u_ink2, u_ink3), pick(mod(number, 4.0), u_ink0, u_ink1, u_ink2, u_ink3), newer) * grain, cover);
+            """ : """
+                // land in this stage, and in the one before it and the one before that, as Fisk inks land that old
+                float slide = smoothstep(0.67, 1.0, fract(\(turns).w)), ago = floor(\(turns).w) - number;
+                vec2 one = inked(ago), two = inked(ago + 1.0), three = inked(ago + 2.0);
+                vec3 first = mix(paper, pick(one.x, u_ink0, u_ink1, u_ink2, u_ink3) * grain, one.y);
+                vec3 second = mix(paper, pick(two.x, u_ink0, u_ink1, u_ink2, u_ink3) * grain, two.y);
+                vec3 third = mix(paper, pick(three.x, u_ink0, u_ink1, u_ink2, u_ink3) * grain, three.y);
+                float cover = mix(mix(two.y, three.y, slide), mix(one.y, two.y, slide), newer);
+                vec3 land = mix(mix(second, third, slide), mix(first, second, slide), newer);
+            """
+            return """
+            vec3 \(name);
+            {
+                // how many stages ago the river left here, and in which stage, counted so that the present is `turns.w`
+                float old = \(past) / u_stage, staged = \(turns).w - old;
+                // Where one stage meets the next its ink is mixed with the last one's across a pixel (`newer` is this
+                // stage's share), so the edge is smooth under its line, and a spot on it can't turn from one ink to
+                // the other on the last bits of its age. `rise` is stages to a point of the screen.
+                float rise = length(\(slope)) * pt / u_stage + 1e-9, mixed = staged + 0.5 * rise * pixel / pt;
+                float number = floor(mixed), newer = clamp((mixed - number) / (rise * pixel / pt), 0.0, 1.0);
+            \(inked)
+                // thin lines where one stage meets the next and along old scarps; faint ridge-and-swale lines inside a stage
+                // (none on ground that is dead flat, a cut-off loop's bed say: left all at once, it might be all on a line)
+                float part = staged - floor(staged), sloping = min(rise * 1e4, 1.0);
+                float edge = max(1.0 - smoothstep(0.2, 0.8, min(part, 1.0 - part) / rise), smoothstep(1.75, 4.0, rise * u_stage)) * sloping * (0.25 + 0.75 * smoothstep(0.0, 0.5, cover));
+                float swale = fract(\(turns).x - \(past) / 1.4), fine = rise * u_stage / 1.4;
+                float hatch = (1.0 - smoothstep(0.15, 0.6, min(swale, 1.0 - swale) / fine)) * (1.0 - smoothstep(0.22, 0.4, fine)) * cover * sloping;
+                \(name) = mix(land, u_line, clamp(0.45 * edge + 0.12 * hatch, 0.0, 1.0));
+            }
+            """
+        }
         return """
-            // how many stages ago the river left here, and in which stage, counted so that the present is `u_turns.w`
-            float old = past / u_stage, staged = u_turns.w - old;
             float grain = 1.0 + 0.023 * lumps(pts / 3.0) + 0.019 * lumps(pts / 40.0 + 3.0);
             vec3 paper = u_paper * grain;
-            // Where one stage meets the next its ink is mixed with the last one's across a pixel (`newer` is this
-            // stage's share), so the edge is smooth under its line, and a spot on it can't turn from one ink to
-            // the other on the last bits of its age. `rise` is stages to a point of the screen.
-            float rise = length(slope) * pt / u_stage + 1e-9, mixed = staged + 0.5 * rise * pixel / pt;
-            float number = floor(mixed), newer = clamp((mixed - number) / (rise * pixel / pt), 0.0, 1.0);
-            // the inks go from ground the river has forgotten, as long as Settings has old courses stay
+        \(inks("col", past: "past", slope: "slope", turns: "u_turns"))
+            // The inks and their lines go from ground the river has forgotten, as long as Settings has old courses
+            // stay, and the older ground beneath shows: its stages are counted from nothing, so its inks keep still.
             float kept = 1.0 - smoothstep(0.8 * u_knobs.y, 0.98 * u_knobs.y, past);
-        \(inks)
-            // thin lines where one stage meets the next and along old scarps; faint ridge-and-swale lines inside a stage
-            // (none on ground that is dead flat, a cut-off loop's bed say: left all at once, it might be all on a line)
-            float part = staged - floor(staged), sloping = min(rise * 1e4, 1.0);
-            float edge = max(1.0 - smoothstep(0.2, 0.8, min(part, 1.0 - part) / rise), smoothstep(1.75, 4.0, rise * u_stage)) * sloping * (0.25 + 0.75 * smoothstep(0.0, 0.5, cover));
-            float swale = fract(u_turns.x - past / 1.4), fine = rise * u_stage / 1.4;
-            float hatch = (1.0 - smoothstep(0.15, 0.6, min(swale, 1.0 - swale) / fine)) * (1.0 - smoothstep(0.22, 0.4, fine)) * cover * sloping;
-            col = mix(col, u_line, clamp(0.45 * edge + 0.12 * hatch, 0.0, 1.0));
+            if (kept < 1.0) {
+                vec4 still = vec4(0.0, 0.0, 0.0, 160.0);
+        \(inks("under", past: "pastBeneath", slope: "slopeBeneath", turns: "still"))
+                col = mix(under, col, kept);
+            }
             // A lake is bare paper like the river for most of its life. Once it has narrowed to two thirds of
             // its width (`River.trace`) it takes its bed's ink as it goes, and its line thins: it closes up,
             // where it was a white crescent in a patch of the newest ink to the last.
