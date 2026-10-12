@@ -1,12 +1,12 @@
-# Black Hole (being built)
+# Black Hole (built, hidden)
 
 A black hole with a thin disc of glowing gas turning round it, in front of the real Milky Way, all of it bent by the hole's gravity: the far side of the disc lifts into a hump over the shadow, its underside shows as a ring below, the side turning toward us is brighter, and the stars behind slide and double round the edge. One shader, beside Nebula and Galaxy.
 
-Dave picked the idea on 2026-10-10 from a brainstorm ([ideas.md](ideas.md)). That day it was researched by two agents and mocked up in three rounds, and he made the choices below. The build began on 2026-10-11: [The build so far](#the-build-so-far) says what exists. It is in the app as a hidden wallpaper (`unfinished: true`): the bending, the disc and the sky, with a first pass at the disc's look. The rest of this page is the plan, the measurements to build against and their sources.
+Dave picked the idea on 2026-10-10 from a brainstorm ([ideas.md](ideas.md)). That day it was researched by two agents and mocked up in three rounds, and he made the choices below. It was built on 2026-10-11 and 12: [The build so far](#the-build-so-far) says what exists, step by step. It is in the app as a hidden wallpaper (`unfinished: true`): the bending, the disc in three colours, its glow, the sky with stars that twinkle and can drift, and a size slider up to a close-up. The rest of this page is the plan it was built from, the measurements and their sources.
 
 - **Mock-ups and prototypes:** `docs/black-hole/` (see [Mock-ups](#mock-ups) and [Prototype](#the-prototype)).
 - **The two research reports in full:** [the method](black-hole/research-method.md) and [the look](black-hole/research-look.md), which has the reference list, eight real black holes' numbers and the palettes.
-- **Where it stands:** steps (a) to (e) of the build order are done, the motion check (d) twice, the second time on the finished look. It is still hidden (`unfinished: true`). Next is Dave's eye on it, and what is listed under [Still open](#still-open).
+- **Where it stands (2026-10-12):** built. Steps (a) to (e) of the build order are done, and so are the four things Dave asked for once he had it on his desktop: the glow (f), the twinkle (g), the drifting sky (h, off until he has tried it) and Size up to 3× (i). It is still hidden (`unfinished: true`) while he tests it. What is left is his verdict on what is listed under [Still open](#still-open), and what every wallpaper needs before it is unhidden: a proper icon, its screenshot and Settings preview, the README and site entries, and the version bump.
 
 ## Dave's decisions (2026-10-10)
 From mock-up sheets, each choice with a recommendation beside it.

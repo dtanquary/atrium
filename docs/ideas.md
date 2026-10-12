@@ -1,13 +1,15 @@
 # Wallpaper ideas
 
-Ideas for new wallpapers that haven't been built, kept here so they aren't lost. They came out of a brainstorm with Dave on 2026-10-10, aimed at what has worked so far: real data, photoreal, soft and dim, and engines the app already has. **None of this is researched.** Every data feed, licence and cost below is a guess to check before a build, and a big one starts with mock-ups for Dave to pick from.
+Ideas for new wallpapers, kept here so they aren't lost. They came out of a brainstorm with Dave on 2026-10-10, aimed at what has worked so far: real data, photoreal, soft and dim, and engines the app already has. Three were picked that day and have been built ([Built](#built)). **None of the rest is researched.** Every data feed, licence and cost under Parked is a guess to check before a build, and a big one starts with mock-ups for Dave to pick from.
 
-When one is picked, it gets its own doc and leaves this list.
+When one is picked, it gets its own doc, and that doc is where it is kept from then on.
 
-## Picked, being researched
-- **Black Hole.** A lensed accretion disc slowly turning, bending the stars behind it. The light bending and the brighter approaching side are real physics, and NASA Goddard's public-domain visualisation is a reference to match, the way Galaxy was matched to Hubble. One shader, beside Nebula and Galaxy. Dave picked it on 2026-10-10. Its plan, with his picks from the mock-ups: [black-hole.md](black-hole.md).
-- **Pixel Night Train.** A ground-level window seat: countryside sliding past on the real clock, with rain on the glass when it rains where you are. Dave picked it on 2026-10-10 as an addition to [Pixel Window Seat](pixel-window-seat.md) rather than a wallpaper of its own. Its plan: [pixel-window-seat/train.md](pixel-window-seat/train.md).
-- **Meander.** A river migrating across its floodplain, cutting off oxbows and leaving scroll bars, drawn like lidar relief or Harold Fisk's 1944 maps of the Mississippi (US Army Corps of Engineers, public domain). The simulation is simple (the bank moves by its curvature). A new river on each load, in one colour family. Dave picked it later the same day. Its plan: [meander.md](meander.md).
+## Built
+Picked by Dave on 2026-10-10, researched and mocked up that day, and built on 2026-10-11 and 12. All three are in the app and hidden: they show only with the `unfinished` switch on (`defaults write com.dtanquary.atrium unfinished -bool true`), until Dave has judged them on his own screen. Each one's doc has what was built, what was measured, what is still wrong and what stands between it and being unhidden.
+
+- **Black Hole.** A lensed accretion disc slowly turning, bending the real Milky Way and catalogue stars behind it; one shader, beside Nebula and Galaxy. Three disc colours, a size slider from a small hole in a wide sky to a close-up wider than the screen, stars that twinkle and a sky that can drift. A wallpaper of its own: [black-hole.md](black-hole.md).
+- **Pixel Night Train.** A ground-level window seat: country sliding past on the real clock, with rain on the glass when it rains where you are. Dave picked it as an addition to [Pixel Window Seat](pixel-window-seat.md) rather than a wallpaper of its own, so it is that wallpaper's third window ("Window on: A train"), with three carriages and seven sceneries: [pixel-window-seat/train.md](pixel-window-seat/train.md).
+- **Meander.** A river migrating across its floodplain, cutting off oxbows and leaving scroll bars, drawn as lidar relief or as an old map after Harold Fisk's 1944 sheets of the Mississippi (US Army Corps of Engineers, public domain). A new river on each load, in one colour family. A wallpaper of its own: [meander.md](meander.md).
 
 ## Parked
 In the order they were proposed, most promising first.

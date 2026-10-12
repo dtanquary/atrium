@@ -1,8 +1,8 @@
-# Pixel Window Seat: a train (being built, hidden)
+# Pixel Window Seat: a train (built, hidden)
 
 A third window for [Pixel Window Seat](../pixel-window-seat.md): a seat on a slow train, the country sliding past under the real Sun, Moon and stars for your clock and place, with rain on the glass when it rains where you are. It began as "Pixel Night Train" in the 2026-10-10 brainstorm ([ideas.md](../ideas.md)); Dave picked it as "an addition to pixel window seat, doesn't have to be its own wallpaper".
 
-That day two agents researched it (one read the code and worked the geometry, one measured real footage) and one round of mock-ups went to Dave. It is being built on the branch `night-train`, hidden from everyone until Dave has seen it move: [The build so far](#the-build-so-far) says what is in. This page is the plan, the findings and their sources. The two reports in full: [the engine](train-research-engine.md) and [the footage and scenery](train-research-footage.md). When it is built, it becomes a part of `pixel-window-seat.md`.
+That day two agents researched it (one read the code and worked the geometry, one measured real footage) and one round of mock-ups went to Dave. It was built on 2026-10-11 and is on `main`: steps 1 to 8 of the [step plan](#step-plan), with the three carriages, seven sceneries, the weather and rain on the glass. Stations (step 9, "if wanted") are not built, and step 10 is the unhiding. "A train" is offered in Settings only with the `unfinished` switch on, until Dave says otherwise: [The build so far](#the-build-so-far) says what is in. This page is the plan it was built from, the findings and their sources. The two reports in full: [the engine](train-research-engine.md) and [the footage and scenery](train-research-footage.md). When it is unhidden, what a reader of `pixel-window-seat.md` needs moves there.
 
 ## Dave's decisions (2026-10-10)
 - **Where it lives:** inside Pixel Window Seat, not its own wallpaper.
