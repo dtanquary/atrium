@@ -1,9 +1,10 @@
 // probe.swift: what the ants do in a nest, measured with nothing drawn. From the repository's root:
-//     swiftc -O Sources/AntNest/Nest.swift Sources/AntNest/Colony.swift docs/ant-colony/probe.swift -o /tmp/probe && /tmp/probe [seed]
+//     swiftc -O Sources/AntNest/Nest.swift Sources/AntNest/Colony.swift docs/ant-colony/probe.swift -o /tmp/probe && /tmp/probe [seed [speeds]]
 // It bakes the nest of a seed on a 14-inch display's grid (756 by 491 cells, an ant 11 of them long), then at four
-// ages of the day lets ten minutes go by at the day's own pace and prints: how often a tunnel's face that moved had an ant
-// digging at it, or near it; where the ants' time went; how many planted feet were on the medium; how often a
-// walking ant had no wall within a length and a half under it; and what a sixtieth of a second costs.
+// ages of the day and at each of four Speeds lets ten minutes go by and prints: how often a tunnel's face that moved
+// had an ant digging at it, or near it; where the ants' time went; how many planted feet were on the medium, and
+// how many were not though there was some within half an ant's length; how
+// often a walking ant had no wall within a length and a half under it; and what a sixtieth of a second costs.
 // docs/ant-colony.md quotes these figures ("Still open", "Cost").
 import Foundation
 import simd
@@ -21,15 +22,16 @@ func share(_ hours: Double) -> Double { let left = 1 - min(max(hours / 24, 0), 1
         let sand = nest.cols * (nest.rows - nest.ground)
         print("seed \(seed): baked in \(bake); \(nest.branches.count { !$0.room }) tunnels, \(nest.branches.count { $0.room }) rooms, \(nest.links.count) ways between them, \(nest.entrances.count) mouths; \(100 * nest.dug / sand)% of the medium dug")
 
-        for hours in [0.5, 3.0, 9.0, 16.0] {
+        let speeds = CommandLine.arguments.count > 2 ? CommandLine.arguments[2].split(separator: ",").compactMap { Double($0) } : [1, 2, 4, 8]
+        for speed in speeds { for hours in [0.5, 3.0, 9.0, 16.0] {
             var colony = Colony(nest: nest, most: 24, seed: seed, share: share(hours))
             colony.fastForward(600)
-            var (moved, dug, near, held, onMedium, walking, bare) = (0, 0, 0, 0, 0, 0, 0)
+            var (moved, dug, near, held, onMedium, missed, walking, bare) = (0, 0, 0, 0, 0, 0, 0, 0)
             var states: [String: Int] = [:], reaches: [Int: Double] = [:]
             let took = clock.measure {
                 for tick in 1...36000 {
-                    let u = share(hours + Double(tick) / 216_000)
-                    colony.step(share: u)
+                    let now = hours + Double(tick) * speed / 216_000, u = share(now)
+                    colony.step(share: u, soon: share(now + speed / 60))
                     guard tick % 30 == 0 else { continue }
                     for face in colony.faces(at: u) where !nest.branches[face.branch].room {
                         let was = reaches[face.branch] ?? face.at
@@ -46,6 +48,10 @@ func share(_ hours: Double) -> Double { let left = 1 - min(max(hours / 24, 0), 1
                             guard let hold else { continue }
                             held += 1
                             if (-1...1).contains(where: { dx in (-1...1).contains { dy in nest.solid(hold.x + Double(dx), hold.y + Double(dy), at: u) } }) { onMedium += 1 }
+                            else if (0..<8).contains(where: { k in // not on it, though there is some within half an ant's length
+                                let way = SIMD2(cos(Double(k) * .pi / 4), sin(Double(k) * .pi / 4))
+                                return stride(from: 0.1 * bl, through: 0.5 * bl, by: 0.1 * bl).contains { nest.solid(hold.x + way.x * $0, hold.y + way.y * $0, at: u) }
+                            }) { missed += 1 }
                         }
                         guard ant.state == .walk, ant.position.y > Double(nest.ground) else { continue }
                         walking += 1
@@ -56,8 +62,8 @@ func share(_ hours: Double) -> Double { let left = 1 - min(max(hours / 24, 0), 1
                 }
             }
             let all = Double(states.values.reduce(0, +))
-            print(String(format: "%4.1f h, %2d ants: a face moved %d times, with an ant digging at it %d%% and one near it %d%%; feet on the medium %d%%; walking with no wall under it %d%%;", hours, colony.ants.count, moved, 100 * dug / max(moved, 1), 100 * near / max(moved, 1), 100 * onMedium / max(held, 1), 100 * bare / max(walking, 1)),
+            print(String(format: "Speed %.0f, %4.1f h, %2d ants: a face moved %d times, with an ant digging at it %d%% and one near it %d%%; feet on the medium %d%%, off it with some within half a length %d%%; walking with no wall under it %d%%;", speed, hours, colony.ants.count, moved, 100 * dug / max(moved, 1), 100 * near / max(moved, 1), 100 * onMedium / max(held, 1), 100 * missed / max(held, 1), 100 * bare / max(walking, 1)),
                   states.sorted { $0.key < $1.key }.map { "\($0.key) \(Int((100 * Double($0.value) / all).rounded()))%" }.joined(separator: ", ") + ";", "a sixtieth of a second \(took / 36000); \(colony.leapt) leapt, \(colony.gaveUp) gave up")
-        }
+        } }
     }
 }

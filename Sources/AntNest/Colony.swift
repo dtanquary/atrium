@@ -126,8 +126,8 @@ public struct Ant: Sendable {
 
 /// The ants living in a nest. They do not dig it: its history is baked (`Nest`), and at each share of the digging
 /// the ants are sent to the faces that history says are being worked, a face nobody is at before any other task.
-/// An ant goes to a face and digs, one at a time with up to two more waiting or on their way, carries a grain up
-/// and drops it on the spoil, rests in a room, or wanders; it walks in bouts with stops; two that meet stop and
+/// An ant goes to a face and digs, one at a time with up to two more waiting or on their way, until the next is
+/// waiting behind it; then it carries a grain up and drops it on the spoil, rests in a room, or wanders; it walks in bouts with stops; two that meet stop and
 /// touch antennae, and one takes the other wall to pass (docs/ant-colony.md has the measured behaviour these
 /// follow). The colony grows with its nest: a few ants at first, the number asked for when it is grown; and
 /// someone is always walking.
@@ -158,7 +158,7 @@ public struct Colony: Sendable {
     public private(set) var gaveUp = 0, leapt = 0
     /// The share of the digging done, as of the last moment stepped.
     public private(set) var share: Double
-    private var dice: Dice
+    private var dice: Dice, ahead = 0.0
     private let bl: Double
     private var ways: [Int: [(at: Double, to: Int, toAt: Double, opened: Double)]] = [:]
     /// The furthest point each branch ever opens.
@@ -195,8 +195,12 @@ public struct Colony: Sendable {
         settle(ants.count - 1)
     }
 
-    /// One sixtieth of a second (`tick`), with `share` of the digging done at its end.
-    public mutating func step(share: Double) { tick(share: share) }
+    /// One sixtieth of a second (`tick`), with `share` of the digging done at its end. `soon` is the share a minute
+    /// of the clock on, if the caller knows it: by it the ants know which faces are about to move.
+    public mutating func step(share: Double, soon: Double? = nil) {
+        ahead = soon ?? share
+        tick(share: share)
+    }
 
     /// The ants as they would be found some minutes on, with `share` of the digging done: `seconds` of going about
     /// their work in steps of a tenth of a second, with nothing drawn, then two seconds at the usual pace so that
@@ -295,13 +299,17 @@ public struct Colony: Sendable {
         let open = nest.branches.indices.compactMap { k in let r = reach(k, share); return r > 1.4 * bl ? (branch: k, reach: r) : nil }
         var busy: [Int: Int] = [:]
         for other in ants { if case .dig(let face) = other.job { busy[face, default: 0] += 1 } }
-        let free = faces(at: share).filter { busy[$0.branch, default: 0] < 3 }.sorted { busy[$0.branch, default: 0] < busy[$1.branch, default: 0] }
-        let roll = dice.unit(), bare = free.first { busy[$0.branch] == nil && !nest.branches[$0.branch].room }
+        // The faces that go on within the minute come first (the nest's history has others waiting their turn,
+        // which do not move for a while); where the clock a minute on is not known, they all count.
+        func moves(_ face: (branch: Int, at: Double)) -> Bool { ahead <= share || reach(face.branch, ahead) > face.at }
+        let free = faces(at: share).filter { busy[$0.branch, default: 0] < 3 }
+            .sorted { (moves($0) ? 0 : 1, busy[$0.branch, default: 0]) < (moves($1) ? 0 : 1, busy[$1.branch, default: 0]) }
+        let roll = dice.unit(), bare = free.first { busy[$0.branch] == nil && !nest.branches[$0.branch].room && moves($0) }
         var found = false
         if !free.isEmpty, roll < 0.5 * activity || bare != nil {
-            // a tunnel's face nobody is at comes before any other task: a face is not left to dig itself (a room
-            // swells slowly all round, and takes its turn with the rest)
-            let face = bare ?? free[0] // (and then the face with the fewest at it or on their way)
+            // a tunnel's moving face nobody is at comes before any other task: a face is not left to dig itself
+            // (a room swells slowly all round, and takes its turn with the rest)
+            let face = bare ?? free[0] // (and then a moving face before a waiting one, and the one with the fewest at it or on their way)
             ant.job = .dig(face.branch)
             found = plan(&ant, to: face.branch, at: max(face.at - (bare != nil ? 0.8 : 2.0) * bl, 0))
         }
@@ -334,7 +342,7 @@ public struct Colony: Sendable {
                 (ants[n].state, ants[n].timer) = (.pause, dice.uniform(1, 2.5))
             } else if ants[n].branch == face, ants[n].at < spot - 0.3 * bl {
                 (ants[n].route, ants[n].state, ants[n].bout) = ([Ant.Leg(branch: face, to: spot, hop: nil)], .walk, dice.uniform(2, 5))
-            } else { (ants[n].state, ants[n].timer) = (.dig, dice.uniform(10, 25)) }
+            } else { (ants[n].state, ants[n].timer, ants[n].bout) = (.dig, dice.uniform(10, 25), dice.uniform(60, 100)) }
         case .dump: (ants[n].state, ants[n].timer) = (.drop, 1.2)
         case .rest: (ants[n].state, ants[n].timer, ants[n].job) = (.idle, dice.uniform(20, 90) / max(activity, 0.2), .none)
         default: (ants[n].state, ants[n].timer, ants[n].job) = (.pause, dice.uniform(0.5, 3), .none)
@@ -371,10 +379,14 @@ public struct Colony: Sendable {
             switch ants[n].state {
             case .walk: walk(n, dt)
             case .dig:
-                ants[n].timer -= dt
+                (ants[n].timer, ants[n].bout) = (ants[n].timer - dt, ants[n].bout - dt)
                 ants[n].nod = 0.03 * (1 + sin(time * 2 * .pi * 2.2 + Double(n)))
                 ants[n].at = max(min(reach(ants[n].branch, share) - 0.8 * bl, ants[n].at + 0.3 * bl * dt), 0) // creep on as the face moves
-                if ants[n].timer <= 0 { carryOut(n) }
+                if ants[n].timer <= 0 { // it leaves with its grain once another is waiting behind it, or after a minute or more; till then it digs on
+                    let face = ants[n].branch
+                    if ants[n].bout <= 0 || ants.contains(where: { $0.id != n && $0.job == .dig(face) && $0.state == .pause && $0.branch == face }) { carryOut(n) }
+                    else { ants[n].timer = dice.uniform(3, 6) }
+                }
             case .drop:
                 ants[n].timer -= dt
                 ants[n].nod = 0.05 * sin(min(1, (1.2 - ants[n].timer) / 0.6) * .pi)
@@ -634,12 +646,18 @@ public struct Colony: Sendable {
         } else { feet(&ant, moved: went, walking: walking, dt) }
     }
 
-    /// A foothold for a leg, `along` body lengths ahead of the body's middle: the point of the wall under the body there.
+    /// A foothold for a leg, `along` body lengths ahead of the body's middle: the point of the wall under the body
+    /// there; or, where there is none straight under it (the mouth of a side tunnel, a dip in a room's floor), of
+    /// the wall a leg's reach ahead or behind; or, where there is none at all, where a floor would be, as on the glass.
     private func hold(_ ant: Ant, _ leg: Int, _ along: Double) -> SIMD2<Double> {
         let under = ant.position + ant.forward * along * bl
         if ant.branch < 0 { return SIMD2(under.x, Double(nest.ground) - nest.surface(under.x, at: share)) }
-        let far = (Build.clear + 0.45) * bl, d = wall(from: under, along: -ant.up, upTo: far)
-        return under - ant.up * (d >= far - 0.01 ? Build.clear * bl : d) // nothing to stand on there: where a floor would be
+        let far = (Build.clear + 0.45) * bl
+        for tilt in [0, 0.5, -0.5, 1, -1] {
+            let way = -ant.up * cos(tilt) + ant.forward * sin(tilt), d = wall(from: under, along: way, upTo: far)
+            if d < far - 0.01 { return under + way * d }
+        }
+        return under - ant.up * (Build.clear * bl)
     }
 
     /// A point of the tank in the ant's own measure (forward, up, sideways), for a leg.

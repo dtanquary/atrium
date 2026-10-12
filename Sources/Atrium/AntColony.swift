@@ -12,8 +12,10 @@ import Synchronization
 /// The nest is baked whole from the date (`Nest`, in the AntNest module): one map of when each cell is dug, as a
 /// share of all the digging, so the shader shows the nest at any moment by comparing that map with one number and
 /// a frame costs the same however much is dug. The number comes from the wall's clock (`farm`, `share`), so the
-/// nest goes on from where it was after a relaunch or Shuffle, and every display shows the same moment of the
-/// same nest. The ants are not what digs it: they are sent to the faces the map says are being worked
+/// nest goes on from where it was after a relaunch or Shuffle, and every copy of the scene is at the same moment
+/// of the same farm. (The nest itself is baked for a copy's own size, a tank as wide as its display: two displays
+/// of one size show one nest, and two of different sizes, or Settings' preview, two nests of the one seed, each
+/// as far dug as the other.) The ants are not what digs it: they are sent to the faces the map says are being worked
 /// (`Colony`), and drawn as a body and its jointed legs, feet planted on the walls.
 /// docs/ant-colony.md has the measurements of real ants and nests these follow, and the sources.
 final class AntColony: SKScene {
@@ -23,9 +25,10 @@ final class AntColony: SKScene {
                                        format: .choice(["Gel", "Bright Gel", "Sand", "White Sand", "Earth"]))
     /// How fast a nest is dug: at 1 it takes the day, and at the top three hours. Moving it never moves the dig:
     /// the nest goes on from where it is at the new pace (`Cycle`). The ants walk no faster for it, so the faster
-    /// the digging the more of it goes on with no ant at the face. At 1 the day's first shaft goes down a pixel in
-    /// two or three seconds, with an ant digging at it three times in five; at 8 it goes down an ant's length in
-    /// thirteen seconds, which is as fast as one ant can be seen to dig.
+    /// the digging the more of it goes on with no ant at the face: the top is where a face that moves still has an
+    /// ant digging at it two times in three at every hour of the day (measured: 79% of the time at 1, 70% at 8,
+    /// and under two in three through the morning at 12; docs/ant-colony.md). At 8 the day's first shaft goes down
+    /// an ant's length in thirteen seconds.
     nonisolated static let speed = Knob(key: "antcolony.speed", label: "Speed", range: 1...8, standard: 1, section: "Tank", format: .times)
     /// An ant's length: 13, 22 or 36 points (26, 44 or 72 of a Retina display's pixels). The tank is the display
     /// whatever the size, so smaller ants have a bigger nest to dig.
@@ -398,7 +401,10 @@ final class AntColony: SKScene {
         if due - ticked > 30 {
             colony.fastForward(min(Double(due - ticked) / 60, 120), share: share)
         } else if due > ticked {
-            for tick in (ticked + 1)...due { colony.step(share: Self.share(after: since.hours + Double(tick) * speed / 216_000)) }
+            for tick in (ticked + 1)...due {
+                let hours = since.hours + Double(tick) * speed / 216_000
+                colony.step(share: Self.share(after: hours), soon: Self.share(after: hours + speed / 60))
+            }
         }
         ticked = max(due, ticked)
 
