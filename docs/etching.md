@@ -29,12 +29,13 @@ The lead's calls, which Dave has not ruled on: progress follows the wall clock; 
 ## How it works
 
 - **A picture is a route**, not an image: the cells the stylus steps through, in order, on a grid of 1024 × 640 (one cell is one step; the line is 1.44 cells wide). `docs/etching/bake.py` makes a route from a picture; the app ships only routes (`Resources/etching-<name>.route`).
-- **The route is stamped once** into two textures, off the main thread (`LineRoute.stamp`, in the `LineRoute` module, which is built optimised even in debug). One holds when each texel is first drawn, as a 24-bit share of the route's clock, and how much of it the finished line covers; the other when it is gone over again (16 bits), and the ghost of the picture before. Until the stamp lands the screen is bare, which is how a drawing starts anyway; then the picture so far fades up over 0.4 s.
+- **The route is stamped once** into two textures, off the main thread (`LineRoute.stamp`, in the `LineRoute` module, which is built optimised even in debug). One holds when each texel is first drawn, as a 24-bit share of the route's clock, and how much of it the finished line covers; the other when it is gone over again, to the same 24 bits, and the ghost of the picture before. Until the stamp lands the screen is bare, which is how a drawing starts anyway; then the picture so far fades up over 0.4 s.
 - **One shader compares those times with a clock.** So a frame costs the same however much is drawn, and the CPU does nothing per frame but set the clock.
 - **Every read of a texture is at a texel's centre.** SpriteKit smooths any texture a shader reads, whatever its filtering mode says, and a time smoothed between a drawn texel and a bare one is a moment when nothing happened: lines would arrive thin and ragged. With a texel to each pixel that is one read of each texture. Above the 14-inch size the textures have a texel to two pixels each way, and the shader reads the four round each pixel, compares each with the clock, and only then mixes them: a pixel softer, a quarter of the memory. A standalone test before the build found 8.8% of pixels wrong when read at plain coordinates, with `.nearest` or `.linear` alike, and 24 in 5.9 million at texel centres.
 - **The clock is the wall's** (`Etching.Cycle`). Which picture is on the screen, the one before it and the moment this one was begun are kept in the defaults (`etching.drawing`, `etching.before`, `etching.began`) and shared by every copy of the scene, so a relaunch, Shuffle or a second display goes on from the same place, and a picture carries on while the wallpaper is covered or the Mac is asleep. Moving the Speed slider, or changing the Detail, moves that moment, so the picture stays as far along as it was.
 - **A picture is drawn, rests, clears, and the next begins.** It rests for five minutes at speed 1 (less when hurried, never under 20 s), then clears over 12 s whatever the speed: a soft fade, sooner in some places than others, as a shake lays the powder back unevenly. A ghost of its whole line stays (8% of the way to the dark inside) under the next picture, and goes when that one clears. The next picture is chosen as the clearing starts and stamped during it, so it begins on the frame the clearing ends.
 - **A line drawn once is pale; gone over, it is dark.** The first pass draws a line 62% of the way to the dark inside and the second the rest, so outlines the stylus travels along come out bolder, as on the toy.
+- **Going back along a line, the stylus goes eight times as fast** as it draws (`LineRoute.haste`, and `HASTE` in the bake). Nothing new appears while it does, but for a pale line turning dark the first time it is gone over. At twice the drawing pace, as first built, a picture stood still for up to 26 s at a time and for 32 to 39% of its clock; at eight times the longest spell is 3.6 to 6.5 s and it is still for 11 to 14%. The lead asked for this once Dave was to watch it at 1×; a frame with dials that keep turning would be the other answer.
 - **The screen follows the system's appearance by itself** (`followsAppearance`): its two colours ease to the other mode's over two seconds, under the picture, with nothing rebuilt.
 - **The picture keeps clear of the menu bar:** the grid is fitted below the top 4% of the screen (a notched MacBook's bar is 3.8%).
 - **The powder** is a 512-texel tile of grain and soft mottle that repeats, a slow unevenness stretched over the whole screen, light from the upper left and a few bright specks.
@@ -60,7 +61,7 @@ The photos: a classic toy with an outline drawing, the best unprocessed one foun
 
 ## The route's file
 
-Little-endian. `LRT1`; the grid's width and height in cells; the picture's rectangle on it (x, y, width, height); the start cell (x, y), all 16-bit; the number of steps (32-bit); the route's clock as a 32-bit float (cells of drawing, a step back along a line counting half); the length of what follows (32-bit). Then the runs, deflated (raw DEFLATE, which `NSData.decompressed(using: .zlib)` reads): one byte to a run of steps one way, bit 7 set while the stylus goes back along its own line, bits 6 to 4 the direction (east, south, west, north, then the four diagonals from south-east round), bits 3 to 0 the run's length less one.
+Little-endian. `LRT1`; the grid's width and height in cells; the picture's rectangle on it (x, y, width, height); the start cell (x, y), all 16-bit; the number of steps (32-bit); the route's clock as a 32-bit float (cells of drawing, a step back along a line counting an eighth); the length of what follows (32-bit). Then the runs, deflated (raw DEFLATE, which `NSData.decompressed(using: .zlib)` reads): one byte to a run of steps one way, bit 7 set while the stylus goes back along its own line, bits 6 to 4 the direction (east, south, west, north, then the four diagonals from south-east round), bits 3 to 0 the run's length less one.
 
 The app eases each position by one step (a quarter of each neighbour), so corners round a little, and takes the clock along the eased line.
 
@@ -89,12 +90,12 @@ All landscape, bold, and not religious. Each is shipped as its two routes only; 
 
 | Picture | Source | Licence | At speed 1 | Fine |
 |---|---|---|---|---|
-| The Great Wave: Hokusai, *Under the Wave off Kanagawa*, c. 1830–32 | The Met, 45434: https://www.metmuseum.org/art/collection/search/45434 | CC0 (The Met's Open Access; `isPublicDomain` true) | 114 min | 211 min |
-| The Rhinoceros: Dürer, 1515 | The Met, 356497: https://www.metmuseum.org/art/collection/search/356497 | CC0, as above | 120 min | 237 min |
-| A Flea: Hooke, *Micrographia*, Schem. XXXIV, 1665 | Wellcome Collection, L0084699: https://wellcomecollection.org/works/ajveb66y | **CC BY 4.0: must be credited** ("Wellcome Collection") | 105 min | 196 min |
-| Interlace: Bourgoin, *Les éléments de l'art arabe: le trait des entrelacs*, plate 96, 1879 (part) | Getty Research Institute, via the Internet Archive: https://archive.org/details/gri_33125012261786/page/n240 | Public domain (the Archive's record: not in copyright) | 32 min | 51 min |
-| Flying Machine: O. and W. Wright, US patent 821,393, Fig. 1, 1906 | US Patent and Trademark Office: https://patents.google.com/patent/US821393A | Public domain (patent drawings; the Office asks to be acknowledged) | 41 min | 78 min |
-| Mishima Pass: Hokusai, *Mishima Pass in Kai Province*, c. 1830–32 | The Met, 56346: https://www.metmuseum.org/art/collection/search/56346 | CC0, as above | 109 min | 210 min |
+| The Great Wave: Hokusai, *Under the Wave off Kanagawa*, c. 1830–32 | The Met, 45434: https://www.metmuseum.org/art/collection/search/45434 | CC0 (The Met's Open Access; `isPublicDomain` true) | 80 min | 152 min |
+| The Rhinoceros: Dürer, 1515 | The Met, 356497: https://www.metmuseum.org/art/collection/search/356497 | CC0, as above | 85 min | 168 min |
+| A Flea: Hooke, *Micrographia*, Schem. XXXIV, 1665 | Wellcome Collection, L0084699: https://wellcomecollection.org/works/ajveb66y | **CC BY 4.0: must be credited** ("Wellcome Collection") | 80 min | 150 min |
+| Interlace: Bourgoin, *Les éléments de l'art arabe: le trait des entrelacs*, plate 96, 1879 (part) | Getty Research Institute, via the Internet Archive: https://archive.org/details/gri_33125012261786/page/n240 | Public domain (the Archive's record: not in copyright) | 23 min | 33 min |
+| Flying Machine: O. and W. Wright, US patent 821,393, Fig. 1, 1906 | US Patent and Trademark Office: https://patents.google.com/patent/US821393A | Public domain (patent drawings; the Office asks to be acknowledged) | 27 min | 49 min |
+| Mishima Pass: Hokusai, *Mishima Pass in Kai Province*, c. 1830–32 | The Met, 56346: https://www.metmuseum.org/art/collection/search/56346 | CC0, as above | 82 min | 161 min |
 
 The licence lines for the flea, the interlace and the patent were read at their sources by the rights research of 2026-10-12; The Met's for the three prints from its API (`isPublicDomain`) and its API page (https://metmuseum.github.io/: the dataset is under Creative Commons Zero).
 
@@ -109,7 +110,7 @@ The licence lines for the flea, the interlace and the patent were read at their 
 |---|---|---|---|
 | Picture | Random, or one of the six | Random draws a different picture each time. Picking one clears the screen for it there and then, and it is drawn over and over | Random |
 | Detail | Standard, Fine | the line's width: the toy's own, or half that. The picture stays as far drawn as it was and is stamped again | Standard |
-| Speed | 1× to 60× | how fast the stylus goes. At 1× it crosses a fortieth of the screen's width a second and a picture takes 32 to 120 minutes (51 to 237 fine); at 60× the longest takes two (four) | 1× |
+| Speed | 1× to 60× | how fast the stylus goes. At 1× it crosses a fortieth of the screen's width a second as it draws and a picture takes 23 to 85 minutes (33 to 168 fine); at 60× the longest takes a minute and a half (under three) | 1× |
 
 Three more keys, with no page in Settings, set a scene up for the tests and for pictures of it; with any of them the scene keeps a cycle of its own and saves nothing: `etching.drawn` (0 to 1) starts it that share of the way through its picture, `etching.cleared` (0 to 1) that far through its clearing, and `etching.ghost=1` lays the next picture's ghost under it.
 
@@ -148,7 +149,7 @@ Measured by the render test on a 14-inch screen at 2x (M3 Max, 2026-10-12): **0.
 ## What is wrong, and next
 
 - **Not yet seen on a desktop.** Everything above is from the render test's pictures. The Settings page has not been opened: the test that does it puts a window on the screen.
-- **At 1× the picture can stand still for seconds** while the stylus goes back along its line (a third to nearly half of the clock; the longest spell on the Wave is 19 s). A frame with dials would show them turning then.
+- **At 1× the picture still stands still for a few seconds at a time** while the stylus goes back along its line: up to 4.8 s on the Wave and 6.5 on the flea, 11 to 14% of the clock. A frame with dials would show them turning then.
 - **The Settings page's live copy shows the same moment as the desktop,** so in a picture's first minutes it is a nearly bare screen.
 - **The slow unevenness shows as cloudy patches** on the bare screen, more than in the mock-ups.
 - **A picture with big darks leaves a large grey ghost** under the next one for its whole time.

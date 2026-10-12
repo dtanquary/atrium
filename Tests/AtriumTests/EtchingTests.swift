@@ -10,7 +10,7 @@ import Testing
 @Test func lineRouteDecodesToItsKnownLength() throws {
     let file = try Data(contentsOf: resource("etching-wave.route")), route = try #require(LineRoute(file))
     #expect(route.steps == 238_714 && route.x.count == 238_715 && (route.columns, route.rows) == (1024, 640))
-    #expect(abs(route.clock - 174_451.7) < 1 && abs(route.t[route.steps] - route.clock) < 1, "clock \(route.t[route.steps]) against \(route.clock)")
+    #expect(abs(route.clock - 123_131.2) < 1 && abs(route.t[route.steps] - route.clock) < 1, "clock \(route.t[route.steps]) against \(route.clock)")
     #expect(route.x.allSatisfy { $0 > 0 && $0 < 1024 } && route.y.allSatisfy { $0 > 0 && $0 < 640 })
     // eased by one step, two cells in a row are never more than a diagonal apart
     #expect((1...route.steps).allSatisfy { abs(route.x[$0] - route.x[$0 - 1]) < 1.01 && abs(route.y[$0] - route.y[$0 - 1]) < 1.01 })
@@ -28,7 +28,7 @@ import Testing
             #expect(route.columns == grid && route.rows == grid * 5 / 8 && route.x.count == route.steps + 1 && route.steps > 50_000, "\(picture.name), fine \(fine)")
             #expect(route.rect.x > 0 && route.rect.y > 0 && route.rect.x + route.rect.w < grid && route.rect.y + route.rect.h < grid * 5 / 8)
         }
-        #expect(Etching.seconds[0][place] > 1500 && Etching.seconds[1][place] > 1.5 * Etching.seconds[0][place], "\(picture.name) takes \(Etching.seconds.map { $0[place] })")
+        #expect(Etching.seconds[0][place] > 1200 && Etching.seconds[1][place] > 1.3 * Etching.seconds[0][place], "\(picture.name) takes \(Etching.seconds.map { $0[place] })")
     }
     // at the top of the Speed slider the longest, fine, is done in a few minutes
     #expect(Etching.seconds[1].max()! / Etching.speed.range.upperBound < 300)

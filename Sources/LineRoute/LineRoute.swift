@@ -12,7 +12,8 @@ public struct LineRoute: Sendable {
     public let rect: (x: Int, y: Int, w: Int, h: Int)
     /// Steps taken after the first cell.
     public let steps: Int
-    /// The whole drawing's clock, in cells of drawing: a step drawn counts its length, a step back along a line half.
+    /// The whole drawing's clock, in cells of drawing: a step drawn counts its length, a step back along a line an
+    /// eighth of it (`haste`).
     public let clock: Double
     /// The stylus's position after each step, in cells from the top left, eased by one step so corners round a
     /// little; and the clock when it gets there.
@@ -22,6 +23,9 @@ public struct LineRoute: Sendable {
     public static let line = 1.44
     /// Cells of drawing between two passes over a spot for the second to count as going over it again.
     static let apart = 8.0
+    /// How many times faster the stylus goes back along a line already drawn than it draws. Nothing shows while it
+    /// does, so it hurries: at twice the pace a picture stood still for up to 26 s at a time, at this for 3 to 6.
+    public static let haste = 8.0
 
     private static let directions: [(Int, Int)] = [(1, 0), (0, 1), (-1, 0), (0, -1), (1, 1), (-1, 1), (-1, -1), (1, -1)]
 
@@ -62,7 +66,7 @@ public struct LineRoute: Sendable {
         t = [Double](repeating: 0, count: steps + 1)
         for i in 1..<steps + 1 {
             let length = Double(((x[i] - x[i - 1]) * (x[i] - x[i - 1]) + (y[i] - y[i - 1]) * (y[i] - y[i - 1])).squareRoot())
-            t[i] = t[i - 1] + (back[i] ? length / 2 : length)
+            t[i] = t[i - 1] + (back[i] ? length / Self.haste : length)
         }
     }
 
@@ -72,8 +76,8 @@ public struct LineRoute: Sendable {
         /// Red, green and blue: when the texel was first drawn, as a 24-bit share of the route's clock (all ones:
         /// never). Alpha: how much of the texel the finished line covers.
         public let when: Data
-        /// Red and green: when it was gone over again, as a 16-bit share of the clock (all ones: never). Blue: how
-        /// much of the texel the line of the picture before covered, which stays as a ghost.
+        /// Red, green and alpha: when it was gone over again, as a 24-bit share of the clock like `when`'s (all
+        /// ones: never). Blue: how much of the texel the line of the picture before covered, which stays as a ghost.
         public let more: Data
         /// How much of each texel the finished line covers, a byte to a texel: the next picture's ghost.
         public let cover: Data
@@ -142,7 +146,7 @@ public struct LineRoute: Sendable {
     // sliver shows with the earlier line; store a time per pass if lines ever cross thickly enough to see it.
     public func stamp(width: Int, height: Int, scale: Double, dx: Double, dy: Double, over ghost: Data? = nil) -> Stamped {
         let count = width * height, never: UInt32 = 0xFF_FFFF
-        var first = [UInt32](repeating: never, count: count), second = [UInt16](repeating: .max, count: count), cover = [UInt8](repeating: 0, count: count)
+        var first = [UInt32](repeating: never, count: count), second = [UInt32](repeating: never, count: count), cover = [UInt8](repeating: 0, count: count)
         let reach = Float(Self.line / 2 * scale) + 0.5, unit = Self.end / clock, gap = UInt32(Self.apart * unit)
         first.withUnsafeMutableBufferPointer { first in second.withUnsafeMutableBufferPointer { second in cover.withUnsafeMutableBufferPointer { cover in
             for i in 1..<max(x.count, 1) {
@@ -162,9 +166,9 @@ public struct LineRoute: Sendable {
                         guard level > 0 else { continue }
                         let p = py * width + px, q = UInt32((t[i - 1] + Double(along) * (t[i] - t[i - 1])) * unit)
                         if first[p] == never || Int(level) > Int(cover[p]) + 64 {
-                            first[p] = q; second[p] = .max
-                        } else if second[p] == .max, level > 76, q > first[p] + gap {
-                            second[p] = UInt16(min(q >> 8, 65534))
+                            first[p] = q; second[p] = never
+                        } else if second[p] == never, level > 76, q > first[p] + gap {
+                            second[p] = q
                         }
                         if level > cover[p] { cover[p] = level }
                     }
@@ -177,7 +181,7 @@ public struct LineRoute: Sendable {
             for p in 0..<count {
                 let q = first[p], s = second[p]
                 when[p * 4] = UInt8(q >> 16); when[p * 4 + 1] = UInt8(q >> 8 & 255); when[p * 4 + 2] = UInt8(q & 255); when[p * 4 + 3] = cover[p]
-                more[p * 4] = UInt8(s >> 8); more[p * 4 + 1] = UInt8(s & 255); more[p * 4 + 2] = before?[p] ?? 0; more[p * 4 + 3] = 255
+                more[p * 4] = UInt8(s >> 16); more[p * 4 + 1] = UInt8(s >> 8 & 255); more[p * 4 + 2] = before?[p] ?? 0; more[p * 4 + 3] = UInt8(s & 255)
             }
         } }
         return Stamped(width: width, height: height, when: when, more: more, cover: Data(cover))

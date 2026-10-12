@@ -156,12 +156,13 @@ def route(tier, start, bridge=20):
     return out[:n].copy(), kind[:n].copy()
 
 DIRS = [(1, 0), (0, 1), (-1, 0), (0, -1), (1, 1), (-1, 1), (-1, -1), (1, -1)]
+HASTE = 8   # how many times faster the stylus goes back along a line than it draws (LineRoute.haste)
 
 def pack(cells, kind, grid, rect):
     """The route as bytes. Each run of steps one way is a byte: bit 7 set while the stylus goes back along its own
     line, bits 6-4 the direction (DIRS), bits 3-0 the run's length less one. The runs are deflated; before them:
     "LRT1", the grid's width and height, the picture's rect, the start cell, the number of steps, the route's clock
-    (cells of drawing, going back counting half), and the deflated length."""
+    (cells of drawing, going back counting an eighth), and the deflated length."""
     x, y = cells % grid.w, cells // grid.w
     dx, dy = np.diff(x), np.diff(y)
     code = np.array([DIRS.index((int(a), int(b))) for a, b in zip(dx, dy)], np.uint8) << 4 | (kind[1:] == 1).astype(np.uint8) << 7
@@ -170,11 +171,11 @@ def pack(cells, kind, grid, rect):
     for a, b in zip(edge[:-1], edge[1:]):
         n = int(b - a)
         while n > 0: out.append(int(code[a]) | (min(n, 16) - 1)); n -= 16
-    # the clock, as the app works it out: positions eased by one step, a step going back taking half the time
+    # the clock, as the app works it out: positions eased by one step, a step going back taking an eighth of the time
     fx, fy = x + 0.5, y + 0.5
     for v in (fx, fy): v[1:-1] = (v[:-2] + 2 * v[1:-1] + v[2:]) / 4
     seg = np.hypot(np.diff(fx), np.diff(fy))
-    clock = float(np.where(kind[1:] == 1, seg / 2, seg).sum())
+    clock = float(np.where(kind[1:] == 1, seg / HASTE, seg).sum())
     packed = zlib.compressobj(9, zlib.DEFLATED, -15); body = packed.compress(bytes(out)) + packed.flush()
     head = b"LRT1" + struct.pack("<8HIfI", grid.w, grid.h, *rect, int(x[0]), int(y[0]), len(cells) - 1, clock, len(body))
     return head + body, len(out), clock

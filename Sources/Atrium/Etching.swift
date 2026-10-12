@@ -30,7 +30,8 @@ final class Etching: SKScene {
     /// detail each way, takes about twice as long, and looks more like a fine pen than the toy (`etching-<file>-fine.route`).
     nonisolated static let detail = Knob(key: "etching.detail", label: "Detail", range: 0...1, standard: 0, section: "Drawing", format: .choice(["Standard", "Fine"]))
     /// How many times faster than a careful hand: at 1 the stylus crosses a fortieth of the screen's width a
-    /// second and a picture takes up to two hours (four, fine); at the top one is done in two minutes (four).
+    /// second as it draws and a picture takes up to an hour and a half (three, fine); at the top one is done in
+    /// a minute and a half (three).
     nonisolated static let speed = Knob(key: "etching.speed", label: "Speed", range: 1...60, standard: 1, section: "Drawing", format: .times)
     nonisolated static let knobs = [picture, detail, speed]
 
@@ -162,7 +163,7 @@ final class Etching: SKScene {
     private let texels = SKUniform(name: "u_tex", vectorFloat2: [1, 1])
     /// A texel that was never drawn and holds no ghost, until a route is stamped.
     private let when = SKUniform(name: "u_when", texture: SKTexture(data: Data([255, 255, 255, 0]), size: CGSize(width: 1, height: 1)))
-    private let more = SKUniform(name: "u_more", texture: SKTexture(data: Data([255, 255, 0, 255]), size: CGSize(width: 1, height: 1)))
+    private let more = SKUniform(name: "u_more", texture: SKTexture(data: Data([255, 255, 0, 255]), size: CGSize(width: 1, height: 1))) // (never gone over, no ghost)
     private let screen = SKUniform(name: "u_screen", vectorFloat3: .zero), ink = SKUniform(name: "u_ink", vectorFloat3: .zero)
     /// The textures' size, and the grid's fit in them: texels to a cell of the standard grid of 1024 by 640.
     private var wide = 1, high = 1
@@ -291,7 +292,7 @@ final class Etching: SKScene {
                     vec2 tc = (clamp(b + vec2(i, j), vec2(0.0), u_tex - 1.0) + 0.5) / u_tex;
                     vec4 w = texture2D(u_when, tc), m = texture2D(u_more, tc);
                     float share = mix(1.0 - f.x, f.x, i) * mix(1.0 - f.y, f.y, j);
-                    line += share * w.a * (0.62 * step(when24(w), u_clock) + 0.38 * step(when16(m), floor(u_clock)));
+                    line += share * w.a * (0.62 * step(when24(w), u_clock) + 0.38 * step(again24(m), u_clock));
                     cover += share * w.a;
                     ghost += share * m.b;
                 }
@@ -299,14 +300,14 @@ final class Etching: SKScene {
         """ : """
             vec2 tc = (floor(v_tex_coord * u_tex) + 0.5) / u_tex;
             vec4 w = texture2D(u_when, tc), m = texture2D(u_more, tc);
-            float line = w.a * (0.62 * step(when24(w), u_clock) + 0.38 * step(when16(m), floor(u_clock)));
+            float line = w.a * (0.62 * step(when24(w), u_clock) + 0.38 * step(again24(m), u_clock));
             float cover = w.a, ghost = m.b;
         """
         return """
-        // When a texel was first drawn, from its three bytes, in 65,536ths of the picture's clock to a 256th of
-        // one; and when it was gone over again, from two, in whole ones.
+        // When a texel was first drawn, from three of its bytes, in 65,536ths of the picture's clock to a 256th of
+        // one; and when it was gone over again, the same from the other texture's (its blue is the ghost).
         float when24(vec4 w) { return floor(w.r * 255.0 + 0.5) * 256.0 + floor(w.g * 255.0 + 0.5) + floor(w.b * 255.0 + 0.5) / 256.0; }
-        float when16(vec4 m) { return floor(m.r * 255.0 + 0.5) * 256.0 + floor(m.g * 255.0 + 0.5); }
+        float again24(vec4 m) { return floor(m.r * 255.0 + 0.5) * 256.0 + floor(m.g * 255.0 + 0.5) + floor(m.a * 255.0 + 0.5) / 256.0; }
 
         void main() {
         \(read)
