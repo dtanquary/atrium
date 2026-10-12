@@ -39,7 +39,7 @@ final class AntColony: SKScene {
     // ponytail: an ant is eighteen sprites, a length of leg each, and each is placed and turned every frame it
     // walks: ninety ants are 2 ms of a frame's CPU on the largest display. One shader drawing a whole ant would
     // lift that.
-    nonisolated static let crowd = Knob(key: "antcolony.ants", label: "Ants", range: 0.5...2, standard: 1, section: "Ants", format: .times)
+    nonisolated static let crowd = Knob(key: "antcolony.ants", label: "Colony size", range: 0.5...2, standard: 1, section: "Ants", format: .times)
     nonisolated static let knobs = [look, speed, antSize, crowd]
 
     /// An ant's length in points at each size, and in cells of the nest's map at every size.
@@ -368,7 +368,7 @@ final class AntColony: SKScene {
 
         // The farm for this moment: baked when the scene is made, when a farm gives way to the next, and when
         // Settings asks for another size of ant or another number of them (an ant, grown, to every 130 square ant
-        // lengths of tank, times Ants, and ninety at the most).
+        // lengths of tank, times Colony size, and ninety at the most).
         // ponytail: a finished farm gives way to the next through black, in under half a second (`u_show`). A
         // crossfade needs both farms' textures at once; add it if the cut is ever noticed.
         let room = Double(self.size.width * self.size.height) / (Self.lengths[size] * Self.lengths[size])
@@ -753,7 +753,7 @@ final class AntColony: SKScene {
 
 extension AntColony: HeadStart {
     /// For the copy Settings runs behind its page: early in a farm the tank is all but whole and at its end
-    /// nothing is being dug, and neither shows what Look, Ant size or Ants do. So when under three tenths of the
+    /// nothing is being dug, and neither shows what Look, Ant size or Colony size do. So when under three tenths of the
     /// digging is done, or over nine, that copy is given three in the afternoon of the day's first farm (three
     /// fifths dug), and goes on from there at Speed's pace. The desktop's copy keeps the wall's clock.
     func headStart() {

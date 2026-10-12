@@ -140,7 +140,7 @@ From the search of 2026-10-12, by a helper who read the USPTO's records; the bui
 | Look | `antcolony.look` | Gel, Bright Gel, Sand, White Sand or Earth, stored as 0 to 4. The shader and the ants change there and then; the nest stays | Gel |
 | Speed | `antcolony.speed` | 1× to 8×: a nest takes 24 hours divided by it. Moving it never moves the dig; the nest goes on from where it is at the new pace. At 1 a farm begins only at six; above 1, as the last ends | 1× |
 | Ant size | `antcolony.size` | Small, Medium, Large: an ant 13, 22 or 36 points long. The tank is the display at any size, so smaller ants get a bigger nest, baked afresh | Medium |
-| Ants | `antcolony.ants` | 0.5× to 2× an ant to every 130 square ant lengths of tank when the nest is done (24 on a 14-inch display at Medium, 69 at Small), ninety at the most | 1× |
+| Colony size | `antcolony.ants` | 0.5× to 2× an ant to every 130 square ant lengths of tank when the nest is done (24 on a 14-inch display at Medium, 69 at Small), ninety at the most | 1× |
 
 `antcolony.day` (a number like 20261012) and `antcolony.hour` (a farm's own hours, of 24) are for the tests and for stills: the farm of another day, and how long it has been going at the scene's first frame, from where it runs on at Speed's pace. `antcolony.farm`, `antcolony.began` and `antcolony.paced` are the shared cycle's, kept by the app.
 
