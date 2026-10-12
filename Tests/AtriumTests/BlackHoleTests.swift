@@ -83,6 +83,15 @@ private let rayBytes = Bending.packed(Bending.rays, bytes: 2), turnBytes = Bendi
     return pixels.map { [UInt8($0 >> 16 & 255), UInt8($0 >> 8 & 255), UInt8($0 & 255)] }
 }
 
+/// Settings for a test from a line like "blackhole.size=3,blackhole.heat=Blue-white", as the render test takes them:
+/// sets them, and gives back their keys for the test to take away again when it is done.
+@MainActor private func setting(_ line: String) -> [String] {
+    line.split(separator: ",").map { $0.split(separator: "=") }.filter { $0.count == 2 }.map { pair in
+        UserDefaults.standard.set(Double(pair[1]).map { $0 as Any } ?? String(pair[1]), forKey: String(pair[0]))
+        return String(pair[0])
+    }
+}
+
 /// The prototype's view: its brute-force picture (docs/black-hole/proto/out/compare-reference.png) has the camera
 /// 100 M out, 78° from the axis, 40° across, the disc out to 24 M.
 private let prototypeView = BlackHole.View(distance: 50, tilt: 78, outer: 12, field: 40)
@@ -248,7 +257,8 @@ func blackBodyKeepsToTheLocus(kelvin: Double, x: Double, y: Double) {
     #expect(step <= 1, "with the sky dark, turning it changes a pixel by \(step) of 255")
 }
 
-/// For looking at the Black Hole moving: `BLACKHOLE_STRIPS=<dir> swift test --filter blackHoleMoves` steps one scene
+/// For looking at the Black Hole moving: `BLACKHOLE_STRIPS=<dir> swift test --filter blackHoleMoves` (with
+/// `BLACKHOLE_DEFAULTS="blackhole.size=3,…"` for Settings values, as the still below takes them) steps one scene
 /// frame by frame (not in real time) and saves, for 15 and 30 frames a second, eight frames in a row of three places
 /// where trouble would show (the thin ring over the shadow, the disc's near side seen edge on, the bright left end)
 /// with the change between each pair beside them, eight times over; then one frame with the glow a dragged slider
@@ -260,7 +270,10 @@ func blackBodyKeepsToTheLocus(kelvin: Double, x: Double, y: Double) {
 /// of that keeps time with the streak generations handing over (breathing) rather than being the streaks
 /// themselves coming and going.
 @MainActor @Test func blackHoleMoves() throws {
-    guard let dir = ProcessInfo.processInfo.environment["BLACKHOLE_STRIPS"] else { return }
+    let env = ProcessInfo.processInfo.environment
+    guard let dir = env["BLACKHOLE_STRIPS"] else { return }
+    let asked = setting(env["BLACKHOLE_DEFAULTS"] ?? "")
+    defer { for key in asked { UserDefaults.standard.removeObject(forKey: key) } }
     try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
     let device = try #require(MTLCreateSystemDefaultDevice()), queue = try #require(device.makeCommandQueue())
     let (w, h) = (3024, 1964)
@@ -296,7 +309,7 @@ func blackBodyKeepsToTheLocus(kelvin: Double, x: Double, y: Double) {
     }
     func luma(_ p: UInt32) -> Int { (Int(p >> 16 & 255) * 3 + Int(p >> 8 & 255) * 6 + Int(p & 255)) / 10 }
 
-    // frame to frame, at the default size and speed
+    // frame to frame, at the default speed
     let places = [("ring", w / 2 - 200, h / 2 - 260, 400, 150), ("near side", w / 2 - 700, h / 2 + 10, 400, 150), ("left end", w / 2 - 1050, h / 2 - 60, 400, 150)]
     for fps in [15.0, 30.0] {
         let renderer = SKRenderer(device: device)
@@ -345,10 +358,13 @@ func blackBodyKeepsToTheLocus(kelvin: Double, x: Double, y: Double) {
     // where 0.15 s of a drag across its whole range in 2 s would have taken it, and the same frame is drawn with
     // the glow as it was and then with the one made for it. (The stars are held still too, or their twinkle
     // between the two frames would be counted with it.)
-    for (key, moved) in [(BlackHole.size.key, 0.064), ("blackhole.brightness", 0.105), ("blackhole.streaks", 0.075)] {
-        let defaults = UserDefaults.standard, held = [BlackHole.speed.key, BlackHole.twinkle.key]
+    for (key, moved) in [(BlackHole.size.key, 0.176), ("blackhole.brightness", 0.105), ("blackhole.streaks", 0.075)] {
+        let defaults = UserDefaults.standard, held = [BlackHole.speed.key, BlackHole.twinkle.key], before = defaults.object(forKey: key)
         for key in held { defaults.set(0, forKey: key) }
-        defer { for key in held + [key] { defaults.removeObject(forKey: key) } }
+        defer {
+            for key in held { defaults.removeObject(forKey: key) }
+            defaults.set(before, forKey: key)   // (as it was: a size asked for on the command line goes on to the parts below)
+        }
         let renderer = SKRenderer(device: device)
         renderer.scene = BlackHole(size: CGSize(width: w / 2, height: h / 2), start: (time: 20, generation: 7))
         defaults.set(0.8, forKey: key)
@@ -469,9 +485,8 @@ func blackBodyKeepsToTheLocus(kelvin: Double, x: Double, y: Double) {
     let env = ProcessInfo.processInfo.environment
     guard let file = env["BLACKHOLE_STILL"] else { return }
     WallpaperTime.restart()   // the stars' twinkle goes by the app's clock: every still is of its first moment
-    let settings = ((env["BLACKHOLE_DEFAULTS"] ?? "") + ",blackhole.speed=0").split(separator: ",").map { $0.split(separator: "=") }.filter { $0.count == 2 }
-    for pair in settings { UserDefaults.standard.set(Double(pair[1]).map { $0 as Any } ?? String(pair[1]), forKey: String(pair[0])) }
-    defer { for pair in settings { UserDefaults.standard.removeObject(forKey: String(pair[0])) } }
+    let asked = setting((env["BLACKHOLE_DEFAULTS"] ?? "") + ",blackhole.speed=0")
+    defer { for key in asked { UserDefaults.standard.removeObject(forKey: key) } }
     let (w, h) = (3024, 1964)
     let start = (env["BLACKHOLE_START"] ?? "20,7").split(separator: ",").compactMap { Double($0) }
     let pixels = try drawn(BlackHole(size: CGSize(width: w / 2, height: h / 2), start: (time: start[0], generation: Int(start[1])),

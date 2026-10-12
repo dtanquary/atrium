@@ -157,7 +157,7 @@ final class BlackHole: SKScene {
         var distance = 40.0, tilt = 84.0, outer = 11.0, field = 56.0
     }
 
-    nonisolated static let size = Knob(key: "blackhole.size", label: "Size", range: 0.65...1.5, standard: 1, section: "Look", format: .times)
+    nonisolated static let size = Knob(key: "blackhole.size", label: "Size", range: 0.65...3, standard: 1, section: "Look", format: .times)
     nonisolated static let speed = Knob(key: "blackhole.speed", label: "Speed", range: 0...4, standard: 1, section: "Motion", format: .times)
     /// The disc's light spread round it, as a lens spreads anything this bright: 1 is the soft glow Dave picked from
     /// a sheet (tile M), 0 none at all, and then the picture is to the byte what it was before there was one.
