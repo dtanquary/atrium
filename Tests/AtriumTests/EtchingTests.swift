@@ -197,12 +197,12 @@ private func ink(_ pixels: [UInt32]) -> Int {
 }
 
 /// The fine line: the same picture from its fine route is drawn, with a thinner line (fewer pixels as dark as a
-/// line's middle, though it holds more line). And at either width nothing is drawn in the top 4% of the screen,
-/// which the menu bar covers.
+/// line's middle, though it holds more line). And at either width, fitted inside the screen, nothing is drawn in
+/// its top 4%, which the menu bar covers.
 @MainActor @Test func etchingDrawsTheFineLine() throws {
     func finished(fine: Double) throws -> [UInt32] {
         var pixels: [UInt32] = []
-        try with(["etching.drawn": 1, Etching.picture.key: 2, Etching.detail.key: fine]) { pixels = try Screen(3024, 1964).settled() }
+        try with(["etching.drawn": 1, Etching.picture.key: 2, Etching.detail.key: fine, Etching.fill.key: 0]) { pixels = try Screen(3024, 1964).settled() }
         return pixels
     }
     let standard = try finished(fine: 0), fine = try finished(fine: 1)
@@ -257,5 +257,74 @@ private func level(_ pixels: [UInt32]) -> Int { pixels.map { Int($0 & 255) }.sor
         NSApplication.shared.appearance = NSAppearance(named: .aqua)
         let dim = level(try Screen(756, 491).settled())
         #expect(abs(dim - 105) < 8, "set to Dark in Light Mode the screen's level is \(dim)")
+    }
+}
+
+/// Fill the screen, which is on unless it is turned off: a picture squarer than the display (the Interlace, 1.21
+/// wide for 1 high, on a 14-inch screen's 1.54) is scaled up until it covers it, so its line runs off the top and
+/// the bottom; on the same screen turned upright, off the left and the right. Turned off, the picture is fitted
+/// inside as it was: nothing is drawn at any edge, nor in the top 4%. And a picture kept whole (the Airship, wider
+/// than the screen, which filling would cut at both ends) is fitted inside whichever way the switch is.
+@MainActor @Test func etchingFillsTheScreen() throws {
+    func finished(_ file: String, _ w: Int, _ h: Int, _ settings: [String: Double] = [:]) throws -> [UInt32] {
+        var pixels: [UInt32] = []
+        let picture = Double(try #require(Etching.pictures.firstIndex { $0.file == file }) + 1)
+        try with(settings.merging(["etching.drawn": 1, Etching.picture.key: picture]) { $1 }) { pixels = try Screen(w, h).settled() }
+        return pixels
+    }
+    /// Pixels of line in the outer hundredth of a screen at its left, right, top and bottom.
+    func edges(_ pixels: [UInt32], _ w: Int, _ h: Int) -> [Int] {
+        func lines(_ xs: Range<Int>, _ ys: Range<Int>) -> Int { ys.reduce(0) { sum, y in sum + xs.count { pixels[y * w + $0] & 255 < 110 } } }
+        return [lines(0..<w / 100, 0..<h), lines(w - w / 100..<w, 0..<h), lines(0..<w, 0..<h / 100), lines(0..<w, h - h / 100..<h)]
+    }
+    let (w, h) = (3024, 1964), wide = edges(try finished("interlace", w, h), w, h), upright = edges(try finished("interlace", h, w), h, w)
+    #expect(wide[2] > 2000 && wide[3] > 2000 && upright[0] > 2000 && upright[1] > 2000, "pixels of line at the left, right, top and bottom: \(wide), and upright \(upright)")
+    let fitted = try finished("interlace", w, h, [Etching.fill.key: 0])
+    #expect(edges(fitted, w, h) == [0, 0, 0, 0] && !fitted[..<(w * (h * 4 / 100))].contains { $0 & 255 < 110 }, "fitted, a line at an edge or under the menu bar")
+    let whole = try finished("airship", w, h), asFitted = try finished("airship", w, h, [Etching.fill.key: 0])
+    #expect(Etching.whole.contains("airship") && edges(whole, w, h) == [0, 0, 0, 0] && whole == asFitted,
+            "the Airship with Fill the screen on has line at its edges, \(edges(whole, w, h)), or is not as it is fitted")
+}
+
+/// What shows of a route stamped for a display `w` by `h`, fitted or filling: the longest stretch, in seconds at
+/// speed 1, in which no texel of the line changes (none is drawn and none gone over), from the first moment to the
+/// last change; and how long the drawing takes there. The texels the menu bar covers don't show.
+private func stillness(_ route: LineRoute, _ w: Int, _ h: Int, fill: Bool) -> (longest: Double, drawing: Double) {
+    let at = Etching.placement(of: route, across: w, down: h, fill: fill)
+    let stamped = route.stamp(width: w, height: h, scale: at.scale, dx: at.dx, dy: at.dy, covered: at.covered)
+    // every change marked at its time, to 16 of the 24 bits' units: 5 to 9 ms
+    var marks = [Bool](repeating: false, count: 1 << 20), last = 0
+    stamped.when.withUnsafeBytes { (when: UnsafeRawBufferPointer) in stamped.more.withUnsafeBytes { (more: UnsafeRawBufferPointer) in marks.withUnsafeMutableBufferPointer { marks in
+        for p in 0..<w * Int(Double(h) - at.covered) where when[p * 4 + 3] > 127 { // bottom row first: the menu bar's are the last
+            let drawn = Int(when[p * 4]) << 16 | Int(when[p * 4 + 1]) << 8 | Int(when[p * 4 + 2]), again = Int(more[p * 4]) << 16 | Int(more[p * 4 + 1]) << 8 | Int(more[p * 4 + 3])
+            marks[drawn >> 4] = true
+            last = max(last, drawn)
+            if again != 0xFF_FFFF { marks[again >> 4] = true; last = max(last, again) }
+        }
+    } } }
+    var longest = 0, run = 0
+    for mark in marks[...(last >> 4)] {
+        run = mark ? 0 : run + 1
+        longest = max(longest, run)
+    }
+    let seconds = route.clock / LineRoute.end / (Double(route.columns) / 40) // to a unit, the stylus crossing a fortieth of the grid a second
+    return (Double(longest * 16) * seconds, Double(last) * seconds)
+}
+
+/// A picture that fills the screen is cut off at the display's edges and runs under the menu bar, and nothing waits
+/// for the stylus while it is out there or under it. For every route a picture ships, on a 14-inch screen with
+/// Fill the screen on: the longest stretch in which nothing that shows changes is under two and a half seconds,
+/// and the drawing is done no later than fitted. Prints both for each, filling and fitted. (That a spell be no
+/// longer than fitted is not asked: one texel changing in the middle of a run splits it, so that compares noise.)
+@MainActor @Test func etchingNeverWaitsOutOfSight() throws {
+    for (place, picture) in Etching.pictures.enumerated() {
+        for fine in [false, true] where fine || !Etching.fineOnly[place] {
+            let route = try #require(LineRoute(try Data(contentsOf: resource("etching-\(picture.file)\(fine ? "-fine" : "").route"))))
+            let fitted = stillness(route, 3024, 1964, fill: false), filled = stillness(route, 3024, 1964, fill: Etching.fills(place, asked: true))
+            let found = String(format: "%@%@: still for %.2f s at the most filling the screen and %.2f s fitted; drawn in %.1f min and %.1f", picture.name, fine ? ", fine" : "",
+                               filled.longest, fitted.longest, filled.drawing / 60, fitted.drawing / 60)
+            print("Etching, \(found)")
+            #expect(filled.longest < 2.5 && filled.drawing <= fitted.drawing, "\(found)")
+        }
     }
 }

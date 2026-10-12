@@ -21,8 +21,9 @@ From the rights research of 2026-10-12, which read the US Patent and Trademark O
 - **"Screen alone now, frame later."** The screen fills the display. He saw a walnut frame with brass dials and a graphite one mocked up, and chose "our own frame" for later; the picture's rectangle is kept relative to the screen so a frame can take a smaller one.
 - **Detail: "Both, as a setting":** the toy's own line width, and a line half as wide. He will judge the default on his desktop; it starts at the toy's.
 - **A Speed slider:** "be sure to include a speed slider on the line drawing (etch) wallpaper in case a user wants to see it go faster".
-- **The screen follows the system's appearance:** 152 of 255 in Light Mode, 104 in Dark Mode. Changed the same day, once he saw it on his desktop, in Dark Mode: "something off with final etching background color, it does not match any of the mockups that showed a brighter paper like color, is it auto reacting to light and dark theme? it so we need to make the background on etching a configurable option". It was reacting: the mock-ups he approved all showed the bright screen, and his Mac showed the dim one. So the screen is now a setting, Screen: Light (the bright powder, the default, whatever the system is in), Dark, or Match System, which is what it did before.
+- **The screen follows the system's appearance:** 152 of 255 in Light Mode, 104 in Dark Mode. Changed the same day, once he saw it on his desktop, in Dark Mode: "something off with final etching background color, it does not match any of the mockups that showed a brighter paper like color, is it auto reacting to light and dark theme? it so we need to make the background on etching a configurable option". It was reacting: the mock-ups he approved all showed the bright screen, and his Mac showed the dim one. So the screen is now a setting, Screen: Light (the bright powder, the default, whatever the system is in), Dark, or Match System, which is what it did before. Once that reached his desktop: "the light screen looks right now" (2026-10-12). Light stays the default.
 - **Pictures:** "nothing religious". Classical myth is fine.
+- **The picture fills the screen:** "lets also attempt to scale etching images up to "cover mode" so they fill the screen even if we loose a bit of content, or just make this an option in the settings, I personally would enable this if it was a setting". It is a setting, Fill the screen, and on unless turned off ([below](#filling-the-screen)).
 
 The lead's calls, which Dave has not ruled on: progress follows the wall clock; a finished picture rests, clears softly to a ghost, and the next begins; the gone-over line is darker; the Picture menu has Random first.
 
@@ -37,8 +38,42 @@ The lead's calls, which Dave has not ruled on: progress follows the wall clock; 
 - **A line drawn once is pale; gone over, it is dark.** The first pass draws a line 62% of the way to the dark inside and the second the rest, so outlines the stylus travels along come out bolder, as on the toy.
 - **Going back along a line, the stylus goes eight times as fast** as it draws (`LineRoute.haste`, and `HASTE` in the bake). Nothing new appears while it does, but for a pale line turning dark the first time it is gone over. At twice the drawing pace, as first built, a picture stood still for up to 26 s at a time and for 32 to 39% of its clock; at eight times the longest spell is 3.6 to 6.5 s and it is still for 11 to 14%. The lead asked for this once Dave was to watch it at 1×; a frame with dials that keep turning would be the other answer.
 - **The screen is bright or dim by a setting** (Screen: Light, Dark or Match System), read every frame. Changing it, or the system's appearance changing under Match System, eases its two colours to the other's over two seconds, under the picture, with nothing rebuilt: the scene watches the appearance itself (`followsAppearance`), so the app never builds it afresh for one.
-- **The picture keeps clear of the menu bar:** the grid is fitted below the top 4% of the screen (a notched MacBook's bar is 3.8%).
+- **The picture fills the screen** unless Fill the screen is turned off: its own rectangle on the grid is scaled until it covers the display, and what is over is cut off at the edges ([below](#filling-the-screen)). Turned off, the whole grid is fitted below the top 4% of the screen, clear of the menu bar (a notched MacBook's bar is 3.8%), and centred, with bare powder beside it.
 - **The powder** is a 512-texel tile of grain and soft mottle that repeats, a slow unevenness stretched over the whole screen, light from the upper left and a few bright specks. The slow unevenness is kept faint: it read as cloudy patches on a bare screen at the mock-ups' strength. Measured on a bare screen 2560 px wide with the light taken off, the level's spread after an 80 px blur is 0.86% of the level, where the mock-ups' was 1.67% and the first build's 1.43%. The light falls off by 5% across the bright screen and by 2% across the dim one, where 5% read as a vignette.
+
+## Filling the screen
+
+Fill the screen (`etching.fill`, on unless turned off) is where a route's grid goes in the textures, and nothing else (`Etching.placement`). The picture's rectangle, which every route's heading gives, is scaled until it covers the display and centred; what is over lies outside the textures. The menu bar's band is not kept clear: the picture runs under it. The frame line every route begins with is six cells outside the picture, so it is never seen. **One picture is never filled:** the Airship, whose hull would lose both its rounded ends at a 14-inch screen's sides and read as a long box. It is marked whole or not at all (`Etching.whole`) and is fitted inside, below the menu bar, whichever way the switch is; no other picture is marked. Turning it on or off stamps the picture again, as changing the Detail does: the old textures stay up until the new ones land.
+
+- **Nothing waits for a stylus that is out of sight.** In `LineRoute.stamp`, a step whose own line is off the textures' edge takes no time, and the clock it would have taken comes off every time after it. Tried first at the pace of going back along a line, eight times the drawing's: the frame alone held a bare screen for 15 s at the start of every picture. At 64 times it was 1.8 s, more than some pictures ever stand still fitted. A step is out of sight by its own line and not by its width: a row of hatching just off the edge was otherwise waited for, to show a sliver (11.5 s on the fine flea).
+- **Under the menu bar is out of sight too.** The bar does not show the wallpaper through it, so a step whose line lies wholly in the top 4% of a filled screen (`placement`'s `covered`) takes no time either. Before it counted, the stylus worked there with nothing else changing for up to 83 s on Mishima Pass (133 fine), whose sky is a band of hatching along the top, 30 s on the flea (43) and 13 s on the Rhinoceros. The line is stamped there all the same, for a display that has no bar.
+- **The shared cycle is as it was.** Which picture is up, and when it rests, clears and gives way, still come from the routes' own clocks and the wall's, the same for every display. A display whose picture is cut off finishes drawing before that clock says and rests the longer. So two displays of different shapes are a little differently far along the same route, and turning Fill on or off moves the picture a little along it.
+- **The line is wider and the stylus quicker across the glass** by as much as the picture is scaled up: on a 14-inch screen from 1.13 times (Kajikazawa, Polyhedra, Twelve-Pointed Stars) to 1.44 (the Interlace), where the line is 1/494 of the screen's width for the fitted 1/711.
+- **Going over a line again** is told from drawing it by the clock between the two passes (`apart`), and that clock is now the display's own. Stamped for a 14-inch screen with and without the time taken off, at most 2,200 of a picture's 0.4 to 2.2 million texels of line differ (the first six pictures) in whether they were gone over.
+
+Measured on 2026-10-12 for a 14-inch screen (3024 × 1964, 1.54 wide for 1 high), at 1×, each as Standard and then Fine, with the fitted figure in brackets. A picture narrower than that screen is cut at the top and the bottom, a wider one at the left and the right, never both. "Still" is the longest stretch in which no texel of the line below the menu bar's band changes, neither drawn nor gone over (`etchingNeverWaitsOutOfSight`). "Back or away" is the longest run of steps back along a line, off the edge or under the bar, by the route alone: the measure of the 3.6 to 6.5 s above.
+
+| Picture | Cut off, at each of | Drawn in, minutes | Still, seconds | Back or away, seconds |
+|---|---|---|---|---|
+| The Great Wave | top and bottom, 1.7% | 76 (80), 145 (152) | 1.8 (1.8), 0.9 (1.2) | 4.8 (4.8), 4.9 (5.7) |
+| The Rhinoceros | top and bottom, 4.4% | 78 (85), 156 (168) | 1.2 (1.4), 1.2 (1.3) | 3.6 (3.9), 4.7 (4.0) |
+| A Flea | top and bottom, 8.0% | 70 (80), 134 (150) | 1.2 (2.0), 0.3 (2.1) | 4.3 (6.5), 3.6 (3.8) |
+| Interlace | top and bottom, 10.7% | 16 (23), 22 (33) | 0.7 (0.7), 1.1 (1.9) | 5.0 (3.6), 3.6 (3.9) |
+| Flying Machine | top and bottom, 8.4% | 25 (27), 46 (49) | 1.5 (2.5), 1.3 (2.4) | 3.7 (5.9), 4.9 (6.2) |
+| Mishima Pass | top and bottom, 0.1% | 71 (82), 140 (161) | 1.4 (1.4), 1.4 (2.2) | 4.2 (4.2), 4.4 (5.1) |
+| Velocipede | top and bottom, 3.3% | 26 (28), 54 (56) | 0.8 (0.8), 0.8 (0.8) | 3.7 (4.1), 4.3 (4.3) |
+| Airship | nothing: kept whole, so fitted (filled, 8.5% at the left and the right) | 26 (26), 42 (42) | 1.2 (1.2), 1.1 (1.1) | 4.3 (4.3), 4.3 (4.3) |
+| Polyhedra | left and right, 2.7% | 67 (71), 133 (137) | 2.1 (2.4), 1.7 (2.3) | 4.7 (5.8), 6.2 (6.2) |
+| Kajikazawa | left and right, 0.6% | 84 (89), 159 (167) | 1.3 (2.6), 0.8 (2.2) | 4.0 (6.6), 2.8 (5.7) |
+| Twelve-Pointed Stars | left and right, 0.2% | 25 (29), 38 (42) | 0.5 (0.4), 1.8 (0.8) | 3.7 (3.5), 3.2 (3.2) |
+| Woven Bands | top and bottom, 0.4% | 26 (29), 40 (44) | 0.3 (0.4), 0.8 (0.9) | 4.4 (3.3), 4.4 (3.8) |
+| Pont Neuf (Fine only) | left and right, 5.6% | 210 (249) | 0.5 (1.6) | 4.3 (5.4) |
+
+- **Nothing that shows stands still for 2.5 s,** which is what `etchingNeverWaitsOutOfSight` holds; the longest is 2.05 s (Polyhedra), where fitted it is 2.58 (Kajikazawa). That each route be no stiller than it is fitted is not held, because that compares noise: one texel changing in the middle of a run back along lines splits a spell in two. Two routes were stiller filling than fitted by more than a quarter of a second, both under 2 s. The fine Twelve-Pointed Stars, by 1.0 s (1.77 for 0.76): the same 640 steps back along lines either way, which fitted are broken in two by a texel or so changing between them; counting a change only where two texels change at once it is 1.9 s filling and 2.1 fitted. And the Airship at the standard width, by 0.35 s (1.51 for 1.16), two runs back along lines being joined by 118 steps off the left edge: measured before it was kept whole, and no longer so, since it is never filled.
+- **Five figures got worse by the route's measure,** most of all Woven Bands at the standard width (4.4 s for 3.3) and the Interlace (5.0 for 3.6): two runs back along lines, with a stretch out of sight between them, now run together. Lines are turning dark through them, and all are inside what the other pictures do fitted (6.6 s).
+- **What is lost** on that screen: the top of the Rhinoceros's back, the undersides of its feet and the date over its name; the top of the flea's back and its feet; "Fig. 1" over the Flying Machine, of which the bottom half is left at the top edge; a fifth of the Interlace's pattern, which has no subject to lose. Of the seven added since, the Airship would lose both rounded ends of its hull, the worst of all thirteen, and so is never filled. Pont Neuf loses a strip of the map at each side. The Wave, Mishima Pass and the rest lose nothing that reads.
+- **A wider display loses more.** At 16 : 9, of the first six, the cut at the top and the bottom is each 6.8% (Mishima Pass) to 15.9% (the Interlace), 10.5% for the Rhinoceros and 13.6% for the flea.
+- **A display with no menu bar** (a second display without one, or a bar set to hide itself) shows the top 4% of a filled screen, and there the line arrives at no pace: each stretch of it all at once, as the stylus would have passed. Most on Mishima Pass, where that is nine minutes of the sky's hatching (18 fine).
 
 ## The look, and the real toy
 
@@ -133,15 +168,16 @@ Nothing religious, by looking at each whole picture and not its title. The Pont 
 |---|---|---|---|
 | Picture | Random, or one of the thirteen | Random draws a different picture each time. Picking one clears the screen for it there and then, and it is drawn over and over | Random |
 | Detail | Standard, Fine | the line's width: the toy's own, or half that. The picture stays as far drawn as it was and is stamped again | Standard |
-| Speed | 1× to 60× | how fast the stylus goes. At 1× it crosses a fortieth of the screen's width a second as it draws and a picture takes 23 to 89 minutes (33 to 168 fine, and 249 for the one that is fine only); at 60× the longest takes a minute and a half (just over four, fine) | 1× |
+| Speed | 1× to 60× | how fast the stylus goes. At 1× it crosses a fortieth of the grid's width a second as it draws and a picture takes 23 to 89 minutes (33 to 168 fine, and 249 for the one that is fine only), less where part of it is cut off; at 60× the longest takes a minute and a half (just over four, fine) | 1× |
 | Screen | Light, Dark, Match System | the powder: bright (152 of 255) or dim (104) whatever the system's appearance, or bright in Light Mode and dim in Dark Mode. A change eases over two seconds, under the picture | Light |
+| Fill the screen | on, off | on, the picture is scaled until it covers the display and what is over is cut off at the edges; off, it is fitted inside, below the menu bar, with bare powder beside it. The Airship is fitted inside either way. The picture is stamped again and goes on from about where it was | on |
 
 Three more keys, with no page in Settings, set a scene up for the tests and for pictures of it; with any of them the scene keeps a cycle of its own and saves nothing: `etching.drawn` (0 to 1) starts it that share of the way through its picture, `etching.cleared` (0 to 1) that far through its clearing, and `etching.ghost=1` lays the next picture's ghost under it.
 
-The screenshots (`docs/images/etching.jpg`, the dim screen, and `-light.jpg`, the bright one) are the Great Wave 70% drawn (`etching.drawn=0` gives the bare screen the unevenness was measured on). They were made when the screen followed the appearance; now the screen is asked for by name (`etching.screen=0` Light, `1` Dark):
+The screenshots (`docs/images/etching.jpg`, the dim screen, and `-light.jpg`, the bright one) are the Great Wave 70% drawn and fitted inside the screen (`etching.drawn=0` gives the bare screen the unevenness was measured on). They were made when the screen followed the appearance, and before Fill the screen; now each is asked for by name (`etching.screen=0` Light, `1` Dark; `etching.fill=0` fitted):
 
 ```sh
-SNAPSHOT_SCENE="Etching" SNAPSHOT_DEFAULTS="etching.drawn=0.7,etching.picture=1,etching.screen=1" swift test --filter everySceneRenders
+SNAPSHOT_SCENE="Etching" SNAPSHOT_DEFAULTS="etching.drawn=0.7,etching.picture=1,etching.screen=1,etching.fill=0" swift test --filter everySceneRenders
 ```
 
 The Settings page has one still, `preview-etching.jpg`, of the bright screen, in both appearances: the page's live copy is bright as it comes, and a dim still in Dark Mode would fade to a bright picture.
@@ -150,7 +186,7 @@ The Settings page has one still, `preview-etching.jpg`, of the bright screen, in
 
 Measured by the render test on a 14-inch screen at 2x (M3 Max, 2026-10-12): **0.45 to 0.65 ms of CPU and 0.22 to 0.29 ms of GPU a frame**, whatever the picture, its detail and however much of it is drawn, in on either screen and while clearing.
 
-- **Building:** a standard route decodes in 2 ms and stamps in about 120 ms for 3024 × 1964, off the main thread; a fine one, of four times the steps, in about 150 ms. A scene built part-way through a picture stamps the one before as well, for its ghost.
+- **Building:** a standard route decodes in 2 ms and stamps in about 120 ms for 3024 × 1964, off the main thread; a fine one, of four times the steps, in about 150 ms. Filling the screen, where the line is wider, 49 to 161 ms, and 56 to 270 ms fine (fitted, 38 to 128 and 50 to 259). A scene built part-way through a picture stamps the one before as well, for its ghost.
 - **Memory:** the two textures are 48 MB at that size, and a byte a texel more (6 MB) is kept for the next ghost. At 5K, with a texel to two pixels each way, 28 MB; at 6K, 39 MB.
 - **Shipped:** twenty-five routes, 1.9 MB (the first six pictures' twelve were 942 KB).
 - **Not timed in the app:** a 5K or 6K display (a test draws the picture at 5K through the four-read shader). A standalone copy of the shader, timed the same way before this was built, took 0.57 ms of GPU at 5K and 0.79 at 6K. Nor a GPU slower than an M3 Max, nor the frame on which a texture is first sent.
@@ -163,7 +199,9 @@ Measured by the render test on a 14-inch screen at 2x (M3 Max, 2026-10-12): **0.
 - `etchingLooksTheSameAtAnyFrameRate`: 15, 30 and 60 frames a second give the same picture to the pixel.
 - `etchingCycleFollowsTheClock`: drawing, resting, clearing and the next picture by the clock alone; the Speed slider and the Detail leave a picture as far along as it was; a picked picture follows at once; a day away comes back to a picture part-way through.
 - `etchingClearsToAGhost`: full, half cleared and a ghost hold less and less line; and the picture is drawn at a 5K display's size.
-- `etchingDrawsTheFineLine`: the fine route is drawn, with a thinner line, and nothing is drawn under the menu bar; and the fine-only picture is drawn the same whatever Detail says.
+- `etchingDrawsTheFineLine`: the fine route is drawn, with a thinner line, and fitted inside the screen nothing is drawn under the menu bar; and the fine-only picture is drawn the same whatever Detail says.
+- `etchingFillsTheScreen`: the Interlace's line runs off the top and the bottom of a 14-inch screen, and off the left and the right of the same screen turned upright; with Fill the screen off there is no line at any edge, nor under the menu bar. The Airship, kept whole, has no line at any edge with it on, and is the same picture as with it off.
+- `etchingNeverWaitsOutOfSight`: for every route a picture ships, on a 14-inch screen with Fill the screen on, the longest stretch in which nothing that shows, below the menu bar, changes is under 2.5 s, and the drawing is done no later than fitted. Prints both for each, filling and fitted.
 - `etchingFollowsTheAppearance`: set to Match System, the screen's level goes from Light Mode's to Dark Mode's in two seconds.
 - `etchingScreenIsTheOneAskedFor`: as it comes the screen is the bright one in Dark Mode; set to Dark it eases to the dim one, and is the dim one in Light Mode.
 
@@ -175,6 +213,7 @@ Measured by the render test on a 14-inch screen at 2x (M3 Max, 2026-10-12): **0.
 
 ## What is wrong, and next
 
+- **Filling the screen cuts into three subjects** on a 14-inch screen, and further on a wider display: the Rhinoceros's back and feet, the flea's back and feet, and the Flying Machine's caption ([Filling the screen](#filling-the-screen)). Only the Airship, which lost both ends of its hull, is kept whole (`Etching.whole`). A picture could carry how much of itself may be cut, or be baked to a wider crop.
 - **Not yet seen on a desktop.** Everything above is from the render test's pictures. The Settings page has not been opened: the test that does it puts a window on the screen.
 - **At 1× the picture still stands still for a few seconds at a time** while the stylus goes back along its line: up to 4.8 s on the Wave and 6.5 on the flea, 11 to 14% of the clock. A frame with dials would show them turning then.
 - **The Settings page's live copy shows the same moment as the desktop,** so in a picture's first minutes it is a nearly bare screen.

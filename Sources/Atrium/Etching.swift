@@ -25,6 +25,9 @@ final class Etching: SKScene {
         ("Velocipede", "velocipede"), ("Airship", "airship"), ("Polyhedra", "polyhedra"), ("Kajikazawa", "kajikazawa"),
         ("Twelve-Pointed Stars", "stars"), ("Woven Bands", "bands"), ("Pont Neuf (Fine only)", "pontneuf"),
     ]
+    /// The pictures that are whole or not at all, by their files: cut off at a display's edges one would lose what
+    /// makes it (the Airship, both rounded ends of its hull), so it is fitted inside whatever Fill the screen says.
+    nonisolated static let whole: Set = ["airship"]
     /// Which picture: Random, a different one each time, or one of the set over and over. Picking one clears the
     /// screen for it there and then.
     nonisolated static let picture = Knob(key: "etching.picture", label: "Picture", range: 0...Double(pictures.count), standard: 0, section: "Drawing",
@@ -39,7 +42,10 @@ final class Etching: SKScene {
     /// The screen's powder: the bright one of a lit room, the dim one, or whichever suits the system's appearance.
     /// Bright is the standard, as every mock-up was, whatever the system is in.
     nonisolated static let powder = Knob(key: "etching.screen", label: "Screen", range: 0...2, standard: 0, section: "Drawing", format: .choice(["Light", "Dark", "Match System"]))
-    nonisolated static let knobs = [picture, detail, speed, powder]
+    /// Whether the picture is scaled up until it covers the display, what is over cut off at the edges, or is
+    /// fitted inside it below the menu bar, with bare powder left beside it or above and below.
+    nonisolated static let fill = Knob(key: "etching.fill", label: "Fill the screen", range: 0...1, standard: 1, section: "Drawing", format: .toggle)
+    nonisolated static let knobs = [picture, detail, speed, powder, fill]
 
     /// A picture's route at one of the two widths of line.
     private static func route(_ picture: Int, fine: Bool) -> Data? {
@@ -62,6 +68,23 @@ final class Etching: SKScene {
     /// width and at the fine one's; none for one that can't be read.
     static let seconds: [[Double]] = [false, true].map { fine in
         pictures.indices.map { route($0, fine: fine).flatMap { LineRoute($0, walking: false) }.map { $0.clock / (Double($0.columns) * pace) } ?? 0 }
+    }
+
+    /// Where a route's grid goes in textures `across` by `down` texels: the texels to a cell, the grid's top left
+    /// corner in from the textures' own, and the texels at the top that the menu bar covers with line under them.
+    /// Fitted, the whole grid is inside, below the menu bar's band and centred there (a frame, later, would give
+    /// it a smaller rectangle here). Filling, the picture's own rectangle on the grid covers the textures, centred:
+    /// what is over lies outside them, and its top is under the menu bar, and a step takes no time in either.
+    /// Whether a picture fills the screen when Fill the screen is `asked` for: all do but those kept whole.
+    nonisolated static func fills(_ picture: Int, asked: Bool) -> Bool { asked && !whole.contains(pictures[picture].file) }
+    nonisolated static func placement(of route: LineRoute, across: Int, down: Int, fill: Bool) -> (scale: Double, dx: Double, dy: Double, covered: Double) {
+        let (w, h) = (Double(across), Double(down)), rect = route.rect, top = bar * h
+        guard fill else {
+            let scale = min(w / Double(route.columns), (h - top) / Double(route.rows))
+            return (scale, (w - Double(route.columns) * scale) / 2, top + (h - top - Double(route.rows) * scale) / 2, 0)
+        }
+        let scale = max(w / Double(rect.w), h / Double(rect.h))
+        return (scale, w / 2 - (Double(rect.x) + Double(rect.w) / 2) * scale, h / 2 - (Double(rect.y) + Double(rect.h) / 2) * scale, top)
     }
 
     /// Which picture is on the screen and how far along it is, by the wall clock: it is drawn, rests, clears, and
@@ -170,9 +193,10 @@ final class Etching: SKScene {
         }
     }
 
-    /// What a pair of textures holds: a picture's line at one width, and the ghost of the one before it.
+    /// What a pair of textures holds: a picture's line at one width, fitted or filling, and the ghost of the one
+    /// before it.
     private struct Held: Equatable {
-        var picture: Int, ghost: Int?, fine: Bool
+        var picture: Int, ghost: Int?, fine: Bool, fill: Bool
     }
 
     private let sprite = SKSpriteNode()
@@ -243,19 +267,16 @@ final class Etching: SKScene {
     /// scene has if that picture is on the screen now; otherwise its route is stamped first, for the cover alone.
     private func stamp(_ wanted: Held) {
         let landing = Landing(), (across, down) = (wide, high)
-        let files = [wanted.picture, wanted.ghost].map { place in place.flatMap { Self.route($0, fine: wanted.fine) } }
-        let known = wanted.ghost == held?.picture && wanted.fine == held?.fine ? cover : nil
+        let places = [wanted.picture, wanted.ghost], files = places.map { place in place.flatMap { Self.route($0, fine: wanted.fine) } }
+        let known = wanted.ghost == held?.picture && wanted.fine == held?.fine && wanted.fill == held?.fill ? cover : nil
         stamping = (wanted, landing)
         Task.detached(priority: .userInitiated) {
-            // The grid fitted to the screen below the menu bar's band and centred there; a frame, later, would
-            // give it a smaller rectangle here.
-            func stamped(_ file: Data?, over ghost: Data?) -> LineRoute.Stamped? {
-                guard let route = file.flatMap({ LineRoute($0) }) else { return nil }
-                let top = Self.bar * Double(down), scale = min(Double(across) / Double(route.columns), (Double(down) - top) / Double(route.rows))
-                return route.stamp(width: across, height: down, scale: scale, dx: (Double(across) - Double(route.columns) * scale) / 2,
-                                   dy: top + (Double(down) - top - Double(route.rows) * scale) / 2, over: ghost)
+            func stamped(_ which: Int, over ghost: Data?) -> LineRoute.Stamped? {
+                guard let place = places[which], let route = files[which].flatMap({ LineRoute($0) }) else { return nil }
+                let at = Self.placement(of: route, across: across, down: down, fill: Self.fills(place, asked: wanted.fill))
+                return route.stamp(width: across, height: down, scale: at.scale, dx: at.dx, dy: at.dy, covered: at.covered, over: ghost)
             }
-            landing.arrive(stamped(files[0], over: known ?? stamped(files[1], over: nil)?.cover))
+            landing.arrive(stamped(0, over: known ?? stamped(1, over: nil)?.cover))
         }
     }
 
@@ -281,7 +302,8 @@ final class Etching: SKScene {
 
         // The textures for this moment, and, once the picture is clearing, the ones for the picture to follow, so
         // that it can begin on the frame the clearing ends.
-        let now = Held(picture: moment.picture, ghost: moment.before, fine: fine), next = moment.following.map { Held(picture: $0, ghost: moment.picture, fine: fine) }
+        let fill = Self.fill.value > 0.5
+        let now = Held(picture: moment.picture, ghost: moment.before, fine: fine, fill: fill), next = moment.following.map { Held(picture: $0, ghost: moment.picture, fine: fine, fill: fill) }
         if let job = stamping, let stamped = job.landing.take(waiting: view == nil && job.of == now) {
             (made, stamping) = ((job.of, stamped), nil)
         }
@@ -293,7 +315,7 @@ final class Etching: SKScene {
             if bare { shownAt = wall }
         }
         if let wanted = held != now ? now : next, stamping?.of != wanted, made?.of != wanted { stamp(wanted) }
-        // (the same picture at the other width of line stays up, as far drawn, until its own textures land)
+        // (the same picture at the other width of line, or the other fit, stays up, as far drawn, until its own textures land)
         bare = held?.picture != now.picture || held?.ghost != now.ghost
 
         clock.floatValue = Float(moment.drawn * LineRoute.end / 256)

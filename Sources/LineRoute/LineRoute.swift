@@ -143,16 +143,18 @@ public struct LineRoute: Sendable {
     /// beside it later doesn't show early; and the time of the next pass over it, which draws it darker. `ghost` is
     /// the cover of the picture before, from its own stamping at this size, if there was one.
     ///
-    /// A step whose own line is off the textures' edge takes no time, and the clock it would have taken comes off
-    /// every time after it: a picture scaled up until it is cut off there is finished before the route's clock is,
-    /// and nothing in it waits for a stylus that is out of sight. Even at `haste` the frame alone held a bare
-    /// screen for 15 s. A route that fits inside is stamped to its own clock.
+    /// A step whose own line is off the textures' edge, or in the `covered` texels at their top (a menu bar's),
+    /// takes no time, and the clock it would have taken comes off every time after it: a picture scaled up until
+    /// it is cut off there is finished before the route's clock is, and nothing in it waits for a stylus that is
+    /// out of sight. Even at `haste` the frame alone held a bare screen for 15 s. Under a cover the line is
+    /// stamped all the same, for a display that has none. A route that fits inside is stamped to its own clock.
     // ponytail: where a later line overlaps an earlier one's edge by less than a quarter of a texel's cover, that
     // sliver shows with the earlier line; store a time per pass if lines ever cross thickly enough to see it.
-    public func stamp(width: Int, height: Int, scale: Double, dx: Double, dy: Double, over ghost: Data? = nil) -> Stamped {
+    public func stamp(width: Int, height: Int, scale: Double, dx: Double, dy: Double, covered: Double = 0, over ghost: Data? = nil) -> Stamped {
         let count = width * height, never: UInt32 = 0xFF_FFFF
         var first = [UInt32](repeating: never, count: count), second = [UInt32](repeating: never, count: count), cover = [UInt8](repeating: 0, count: count)
         let reach = Float(Self.line / 2 * scale) + 0.5, unit = Self.end / clock, gap = UInt32(Self.apart * unit)
+        let top = Float(Double(height) - covered) // of what shows, rows counted from the bottom
         first.withUnsafeMutableBufferPointer { first in second.withUnsafeMutableBufferPointer { second in cover.withUnsafeMutableBufferPointer { cover in
             var saved = 0.0
             for i in 1..<max(x.count, 1) {
@@ -163,7 +165,7 @@ public struct LineRoute: Sendable {
                 let y0 = max(Int((min(ay, by) - reach).rounded(.down)), 0), y1 = min(Int((max(ay, by) + reach).rounded(.up)), height - 1)
                 // out of sight by its own line, whatever of its width reaches in: a row of hatching just off the
                 // edge would otherwise be waited for and show a sliver
-                let unseen = max(ax, bx) < 0 || min(ax, bx) > Float(width) || max(ay, by) < 0 || min(ay, by) > Float(height)
+                let unseen = max(ax, bx) < 0 || min(ax, bx) > Float(width) || max(ay, by) < 0 || min(ay, by) > top
                 let from = t[i - 1] - saved, took = unseen ? 0 : t[i] - t[i - 1]
                 saved += t[i] - t[i - 1] - took
                 guard x0 <= x1, y0 <= y1 else { continue }
