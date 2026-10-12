@@ -310,6 +310,7 @@ Open Atrium and a short welcome lets you try the wallpapers. After that it lives
 ## Using it
 
 Atrium's icon in the menu bar is a TV with sparkles (✨📺). Use it to:
+- **Pause** the wallpaper on its current frame, and **Resume** it. The icon dims while it's paused, a wallpaper you pick meanwhile is held still too, and quitting Atrium ends the pause.
 - **Pick** a wallpaper.
 - Turn on **Shuffle** to move on to a random wallpaper every so often, and choose **Next Wallpaper** to skip ahead. Settings → General sets how often (every 5 minutes to every day, or on every unlock) and which wallpapers take part.
 - Open **Settings…** (⌘,): a page for each wallpaper, with palettes, sliders and switches that update live, plus General, Power and About.

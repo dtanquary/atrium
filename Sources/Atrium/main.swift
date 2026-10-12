@@ -13,6 +13,8 @@ final class WallpaperView: SKView, SKViewDelegate {
     var lastDrawn = Date()
     /// Set while the displays sleep, Power Nap's dark wakes included: nothing draws then, and nothing needs to.
     static var screensAsleep = false
+    /// Set by the menu's Pause: every display holds its frame until Resume. Not saved, so a relaunch runs again.
+    static var paused = false
     /// How many views in a row `watch` has put in this one's place without a frame drawn since.
     private var replaced = 0
     /// Holds the current frame still, e.g. in Low Power Mode.
@@ -88,7 +90,7 @@ final class WallpaperView: SKView, SKViewDelegate {
 }
 
 /// Runs at the frame rate Settings → Power picks for Low Power Mode, battery or mains power (60 and 30 fps, and
-/// frozen in Low Power Mode, unless changed).
+/// frozen in Low Power Mode, unless changed), or holds still while the menu's Pause is on.
 @MainActor func applyPowerState(to views: [WallpaperView]) {
     // Either call may return NULL, which unwrapped would crash: then it's taken as plugged in.
     let source = IOPSCopyPowerSourcesInfo().flatMap { IOPSGetProvidingPowerSourceType($0.takeRetainedValue())?.takeUnretainedValue() }
@@ -96,7 +98,7 @@ final class WallpaperView: SKView, SKViewDelegate {
                          : source as String? == kIOPMBatteryPowerKey ? Power.battery : Power.plugged)
     for view in views {
         if fps > 0 { view.preferredFramesPerSecond = fps }
-        view.frozen = fps == 0
+        view.frozen = fps == 0 || WallpaperView.paused
     }
 }
 
@@ -259,7 +261,7 @@ if !scenes.contains(where: { $0.name == current }) {
     }
 }
 
-/// The menu bar icon: pick or shuffle wallpapers, open Settings, toggle Open at Login, quit.
+/// The menu bar icon: pause, pick or shuffle wallpapers, open Settings, toggle Open at Login, quit.
 @MainActor final class StatusMenu: NSObject, NSMenuDelegate {
     let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
 
@@ -278,6 +280,8 @@ if !scenes.contains(where: { $0.name == current }) {
             menu.addItem(.separator())
         }
         #endif
+        menu.addItem(withTitle: WallpaperView.paused ? "Resume" : "Pause", action: #selector(togglePause), keyEquivalent: "").target = self
+        menu.addItem(.separator())
         for scene in scenes {
             let entry = menu.addItem(withTitle: scene.name, action: #selector(pick), keyEquivalent: "")
             entry.target = self
@@ -304,6 +308,14 @@ if !scenes.contains(where: { $0.name == current }) {
 
     @objc func pick(_ sender: NSMenuItem) {
         show(sender.title)
+    }
+
+    /// Holds every display on its current frame, as Freeze does, until Resume. A wallpaper picked or shuffled to
+    /// meanwhile fades in and is held too. The icon dims, since a still wallpaper otherwise looks like one that hung.
+    @objc func togglePause() {
+        WallpaperView.paused.toggle()
+        applyPowerState(to: windows.compactMap { $0.contentView as? WallpaperView })
+        item.button?.appearsDisabled = WallpaperView.paused
     }
 
     @objc func openSettings() {

@@ -30,6 +30,20 @@ import UniformTypeIdentifiers
     #expect((window.contentView as? WallpaperView)?.scene === fresh)
 }
 
+/// The menu's Pause holds a view still whatever frame rate Settings → Power gives it, and Resume lets it run again.
+@MainActor @Test func pauseFreezesTheWallpaper() {
+    let defaults = UserDefaults.standard
+    defer { WallpaperView.paused = false; Power.knobs.forEach { defaults.removeObject(forKey: $0.key) } }
+    Power.knobs.forEach { defaults.set(3.0, forKey: $0.key) } // 60 fps on any power, so only Pause can freeze it
+    let view = WallpaperView()
+    WallpaperView.paused = true
+    applyPowerState(to: [view])
+    #expect(view.frozen)
+    WallpaperView.paused = false
+    applyPowerState(to: [view])
+    #expect(!view.frozen)
+}
+
 /// While the displays sleep (Power Nap's dark wakes too) nothing draws and nothing is replaced; and a fresh view that
 /// hasn't drawn yet is given longer than the one before it, so a state that draws nothing can't rebuild every 5 s.
 @MainActor @Test func stoppedViewWaitsWhileScreensSleep() throws {
