@@ -1,6 +1,6 @@
 # Ant Colony
 
-A thin tank seen from the side, with the display as its glass: blue gel lit from its base, or sand. At six in the morning the tank is whole and a few ants are on top of it. They sink a shaft, branch it, open rooms, and carry what they dig up to lie round the mouths. The colony grows with its nest, and by the next morning the nest is finished and another begins.
+A thin tank seen from the side, with the display as its glass: blue gel lit from its base, sand, or earth. At six in the morning the tank is whole and a few ants are on top of it. They sink a shaft, branch it, open rooms, and carry what they dig up to lie round the mouths. The colony grows with its nest, and by the next morning the nest is finished and another begins.
 
 It imitates the Ant Farm, the toy sold since 1956, and the blue gel tanks that came after it. That name is a registered mark and is used nowhere in the app: see [Rights](#rights).
 
@@ -9,7 +9,7 @@ Dave asked for it on 2026-10-12, slowly evolving and "based on realistic ant mov
 - **Source:** `Sources/Atrium/AntColony.swift` (the scene, the two shaders and the ants' sprites), `Sources/AntNest/` (`Nest.swift`, the nest and its bake; `Colony.swift`, the ants; its own module, built with `-O`).
 - **Data:** none. Everything is made from the date.
 - **Scripts:** `docs/ant-colony/probe.swift` measures what the ants do with nothing drawn ([Checking it](#checking-it)); `avinery_curve.py` and `measure_photos.py` are the two measurements taken off other people's films and photographs.
-- **Pictures of it:** `docs/images/ant-colony.jpg`, `ant-colony-sand.jpg`, `ant-colony-white-sand.jpg`; and in `docs/ant-colony/`, one farm at four moments of its day (`day.jpg`), the smallest ants beside the largest (`sizes.jpg`), one ant followed for five seconds (`one-ant.jpg`) and a face at the top of Speed (`face-at-speed-8.jpg`).
+- **Pictures of it:** `docs/images/ant-colony.jpg` and one for each other look (`ant-colony-bright-gel.jpg`, `ant-colony-sand.jpg`, `ant-colony-white-sand.jpg`, `ant-colony-earth.jpg`); and in `docs/ant-colony/`, one farm at four moments of its day (`day.jpg`), the smallest ants beside the largest (`sizes.jpg`), one ant followed for five seconds (`one-ant.jpg`) and a face at the top of Speed (`face-at-speed-8.jpg`).
 
 ## Dave's decisions (2026-10-12)
 
@@ -17,13 +17,13 @@ Dave asked for it on 2026-10-12, slowly evolving and "based on realistic ant mov
 |---|---|
 | Name | Ant Colony |
 | What it shows | "that sideways clear view into the ant colony as it slowly forms and gets bigger" |
-| Look | "Gel and sand both", as a setting; earth was dropped |
+| Look | "Gel and sand both", as a setting. Then, having seen both rounds of mock-ups: "i love all of the ant farm mockups, all of what has been shown should be an option to select somehow". So every medium he was shown is a pick: the gel, sand dim and white, and earth |
 | Size of ant | "Middle, with a Size setting" |
 | Time | "A farm a day", by the wall's clock, with a Speed slider |
 | The toy on screen | no frame and no skyline: the display is the glass, edge to edge |
 | How to build | "Build now, refine as it goes" |
 
-The lead's calls, which he has not ruled on: gel is the standard look, and sand is dimmed unless White Sand is picked; the day begins at six and follows the clock in [The day](#the-day), which is not how ants dig; the colony grows with its nest, and is ants only (no queen, no brood); a young colony sinks one or two shafts at a time; someone is always walking. The builder's, which neither has ruled on: Speed stops at 8; three ants to a face; a hundred ants at the most; every label in Settings.
+The lead's calls, which he has not ruled on: gel is the standard look, the mock-ups' deep dim one, with the brighter gel of the realism pass kept beside it as Bright Gel for him to compare; sand is dimmed and warm unless White Sand is picked; the day begins at six and follows the clock in [The day](#the-day), which is not how ants dig; the colony grows with its nest, and is ants only (no queen, no brood); a young colony sinks one or two shafts at a time; someone is always walking. The builder's, which neither has ruled on: Speed stops at 8; three ants to a face; a hundred ants at the most; every label in Settings.
 
 ## What real ants and nests do
 
@@ -70,6 +70,7 @@ Looked at, measured for colour (`docs/ant-colony/measure_photos.py`) and compare
 5. One harvester ant in side view: same, https://www.flickr.com/photos/justbcuz/4276960030/. Its colour: (148,73,23) in its dark parts, (171,108,49) in its mid tones.
 6. A gel tank lit by its own lamps in the dark: Steve Jurvetson, https://www.flickr.com/photos/jurvetson/2635075929/ (CC BY 2.0). Gel (9,54,206) up to (75,142,254); tunnel rims (176,241,251); ants and room black. The gel look was matched to this one.
 7. Gel, backlit, close: same, https://www.flickr.com/photos/jurvetson/5268677/ (CC BY 2.0). Five ants in single file, in silhouette, in a tunnel 0.74 ant lengths wide.
+8. A home-made nest in fine yellow-brown soil against glass (*Lasius niger* by its title): Tim Keppens, https://www.flickr.com/photos/mckillaboy/3382430428/ (CC BY-NC-ND 2.0). Soil (185,143,95); voids (105,83,52) and darker, fringed with grains stuck to the glass. The earth look's colours are this one's.
 
 ## How it works
 
@@ -103,12 +104,14 @@ Everything is stepped in sixtieths of a second counted from when the farm landed
 
 ### The picture
 
-One full-screen sprite with one of two shaders, and sprites for the ants.
+One full-screen sprite with one of five shaders, a look each, and sprites for the ants. Each look is its own source, the two gels and the two sands as well: a variant behind a uniform can move pixels where it never runs.
 
 - **What is dug.** A texture a shader reads is smoothed whatever its filtering is set to, and a rank smoothed between a dug cell and one never dug is a rank nothing has. So the map is read at the middles of the four cells round the pixel, each compared with the share dug on its own, and only then mixed. A cell is open by the time an ant may stand in it and opens over the digging of the twenty cells before, so a face creeps and never jumps a cell. The spoil's top is its height read from a second small texture, the same heights the ants stand on.
 - **What a read or two cannot tell** (how near a wall is, at three widths, and which way the wall faces the light) is three blurs of the dug mask in a third texture, worked out again off the main thread for each 4000th of the digging (13 ms).
-- **Gel.** A deep blue slab that glows toward four lamps in its base, each with a bloom of faint rays over it; small bubbles hang in it; a tunnel is the gel's own blue a little paler, with bubbles frothing at its walls, a line of light at the rim and a sheen; what is dug lies on top as pale crumbs; the air above is dark but for the glow that leaks up, against which an ant on the heap is a shape. Ants are flat and dark.
-- **Sand.** Grains a tenth of an ant across, one to a square of a lattice and pushed about in it. The map is read at the middle of the grain a pixel is in, so a grain is there whole or not at all: an edge crumbles by the grain. A tunnel is a trough, its wall curving back to the pane behind, dark under its upper lip, with loose grains lying on the pane, most of them along the floors. Ants are red harvesters lit from above, their far legs darker, with a shadow on the pane. Sand is dimmed to 0.66 of the toy's white; White Sand is the toy's.
+- **Gel**, the standard, is the mock-up Dave chose from: a deep blue slab that glows toward four lamps in its base; a tunnel is a frosted, paler tube with light gathered into a bright line at its edge, a halo in the gel beside it, a sheen and beads along its wet wall; small bubbles hang in the gel; what is dug lies on top as pale crumbs; the air above is dark but for the glow that leaks up, against which an ant on the heap is a shape. Ants are flat and dark.
+- **Bright Gel** is the same tank nearer photograph 6, and far brighter: a bloom of faint rays over each lamp, more bubbles, and tunnels that are the gel's own blue a little paler with bubbles frothing at their walls.
+- **Sand.** Grains a tenth of an ant across, scattered one to a square with no lattice to them (on a square lattice they showed as a weave wherever the picture was drawn at half size: a non-Retina display, Settings' preview, a README picture). The map is read at the middle of the grain a pixel is in, so a grain is there whole or not at all: an edge crumbles by the grain. A grain is as big as its nearest neighbour lets it be. A tunnel is a trough, its wall curving back to the pane behind, dark under its upper lip, with loose grains lying on the pane, most of them along the floors. Ants are red harvesters lit from above, their far legs darker, with a shadow on the pane. **Sand** is the mock-ups' warm sand (211,201,183, warmed) at two thirds of its brightness, with warm dark tunnels; **White Sand** is the toy's, matched to photograph 1, with the grey pane behind.
+- **Earth.** Photograph 8's fine yellow-brown soil, too fine to show a grain, in clumps, lit from the upper left, its edge pushed about half a grain deep; tunnels dark, the soil behind in the shadow of the upper lip, with crumbs left on the pane beside the walls and a little light on the floors; a dark room above. Its ants are the sand's, and are not dimmed with the soil: in the first mock-up they were, and could hardly be seen in the tunnels.
 - **An ant** is a painted body and a sprite for each length of leg and antenna (22, or 16 for the smallest ants, whose feet are too small to show a bend), with soft sides so that a leg thinner than a pixel is a faint line and not a row of dots. An ant standing still has only its antennae placed.
 
 ## Rights
@@ -125,7 +128,7 @@ From the search of 2026-10-12, by a helper who read the USPTO's records; the bui
 
 | Setting | Key | What it does | Default |
 |---|---|---|---|
-| Look | `antcolony.look` | Gel, Sand (dimmed) or White Sand. The shader and the ants change there and then; the nest stays | Gel |
+| Look | `antcolony.look` | Gel, Bright Gel, Sand, White Sand or Earth, stored as 0 to 4. The shader and the ants change there and then; the nest stays | Gel |
 | Speed | `antcolony.speed` | 1× to 8× farms a day. In the day's first farm, moving it moves the dig along; later it lands in another farm, through half a second of black | 1× |
 | Ant size | `antcolony.size` | Small, Medium, Large: an ant 13, 22 or 36 points long. The tank is the display at any size, so smaller ants get a bigger nest, baked afresh | Medium |
 | Ants | `antcolony.ants` | 0.5× to 2× an ant to every 130 square ant lengths of tank when the nest is done (24 on a 14-inch display at Medium, 69 at Small), a hundred at the most | 1× |
@@ -156,14 +159,14 @@ Measured 2026-10-12 on an M3 Max, debug build, by the app's render test (3024 ×
 ```sh
 swift test --filter 'antColony'
 SNAPSHOT_SCENE="Ant Colony" SNAPSHOT_DEFAULTS="antcolony.day=20261013,antcolony.hour=11" swift test --filter everySceneRenders
-SNAPSHOT_SCENE="Ant Colony" SNAPSHOT_MOVIE=8 SNAPSHOT_DEFAULTS="antcolony.day=20261013,antcolony.hour=6,antcolony.speed=8,antcolony.look=2" swift test --filter everySceneRenders
+SNAPSHOT_SCENE="Ant Colony" SNAPSHOT_MOVIE=8 SNAPSHOT_DEFAULTS="antcolony.day=20261013,antcolony.hour=6,antcolony.speed=8,antcolony.look=3" swift test --filter everySceneRenders
 swiftc -O Sources/AntNest/Nest.swift Sources/AntNest/Colony.swift docs/ant-colony/probe.swift -o /tmp/probe && /tmp/probe 2026101300
 ```
 
-- **The tests:** the same seed bakes the same nest and another seed another; the dug area is the share the clock says; the clock's hours, and four farms a day at Speed 4; one shaft only in a farm's first twentieth. Three nests at four ages, watched every sixtieth of a second with the digging forty times too fast: no ant's middle is ever over undug medium (0 of 302,956 ant-moments; its head or gaster 147), no planted foot moves, no body goes further in a sixtieth of a second than a quarter of its length (0.068 at most), and someone is always walking. The picture is the same at 15, 30 and 60 fps, in gel and in white sand with small ants at Speed 8; the three looks differ; there is more tunnel at six in the evening than at nine in the morning; and Settings' copy opens on a nest part-dug.
+- **The tests:** the same seed bakes the same nest and another seed another; the dug area is the share the clock says; the clock's hours, and four farms a day at Speed 4; one shaft only in a farm's first twentieth. Three nests at four ages, watched every sixtieth of a second with the digging forty times too fast: no ant's middle is ever over undug medium (0 of 302,956 ant-moments; its head or gaster 147), no planted foot moves, no body goes further in a sixtieth of a second than a quarter of its length (0.068 at most), and someone is always walking. The picture is the same at 15, 30 and 60 fps, in gel and in white sand with small ants at Speed 8; the five looks differ as they should; there is more tunnel at six in the evening than at nine in the morning; and Settings' copy opens on a nest part-dug.
 - **`probe.swift`** runs ten minutes at four ages of a day at the day's own pace and prints how often a tunnel face that moved had an ant at it, where the ants' time went, how many planted feet were on the medium, and what a step costs. The figures under [Still open](#still-open) are its, for the nests of 2026-10-12, 13 and 15.
 - **Judge motion from strips**, not stills: `SNAPSHOT_MOVIE` saves frames at 15 fps. `one-ant.jpg` is an ant at a face, turning about and leaving with its grain.
-- **The pictures:** `docs/images/ant-colony.jpg` is the second line above; `ant-colony-sand.jpg` is `antcolony.day=20261015,antcolony.hour=11,antcolony.look=1`; `ant-colony-white-sand.jpg` is `antcolony.day=20261014,antcolony.hour=9,antcolony.look=2`. Each is `sips -s format jpeg -s formatOptions 85 -Z 1600` of the test's PNG, and `Resources/preview-ant-colony.jpg` is the first at 1200 wide. The day was picked from four.
+- **The pictures:** `docs/images/ant-colony.jpg` is the second line above, and `ant-colony-bright-gel.jpg` the same with `antcolony.look=1`; `ant-colony-sand.jpg` is `antcolony.day=20261015,antcolony.hour=11,antcolony.look=2`; `ant-colony-white-sand.jpg` is `antcolony.day=20261014,antcolony.hour=9,antcolony.look=3`; `ant-colony-earth.jpg` is `antcolony.day=20261012,antcolony.hour=10,antcolony.look=4`. Each is `sips -s format jpeg -s formatOptions 85 -Z 1600` of the test's PNG, and `Resources/preview-ant-colony.jpg` is the first at 1200 wide. The day was picked from four.
 
 ## Shortcuts
 
@@ -183,7 +186,7 @@ swiftc -O Sources/AntNest/Nest.swift Sources/AntNest/Colony.swift docs/ant-colon
 Worst first, as the builder saw it on stills and strips; Dave has not seen it run.
 
 1. **A face often moves with no ant at it.** At the day's own pace a tunnel face that moved had an ant digging at it 59 to 63% of the time in a farm's first half hour, 17 to 48% at nine, 19 to 53% at three in the afternoon and 14 to 27% at ten at night. At that pace a face moves four pixels in seven to fifty seconds, which is not seen moving; at Speed 8 it is.
-2. **The gel's tubes are not glass.** Beside photograph 6 they are a paler blue with froth at the walls; the photograph's are clear, with heavy white bubbling and light caught on facets.
+2. **Bright Gel's tubes are not glass.** Beside photograph 6 they are a paler blue with froth at the walls; the photograph's are clear, with heavy white bubbling and light caught on facets. And it is bright, where Dave's taste is soft and dim: it is there to be compared with Gel.
 3. **Feet on nothing.** 76 to 96% of planted feet are on the medium; the rest rest where a floor would be, over the mouth of a side tunnel or on a room's uneven floor. A walking ant has no wall within a length and a half under it 1 to 11% of the time.
 4. **Rooms do not read as rooms.** About twenty are baked in each nest; they look like bulges.
 5. **It is busier than real ants:** about two thirds of the colony are walking at once later in the day, where real workers are idle 60% of the time. Dave's rule is lively over realistic, but this has not been judged running.
@@ -192,7 +195,7 @@ Worst first, as the builder saw it on stills and strips; Dave has not seen it ru
 8. **Tunnel edges are scalloped at the size of a cell** (4 pixels) close up, and large sand grains show their lattice when a picture is reduced.
 9. **Tunnels are 1.3 to 1.5 ant lengths wide** once their walls have widened, against the measured one, so ants look small in them.
 10. **Digging is a nod of the head,** and a grain appears in the jaws.
-11. **The lit ant is drawn, not photographed,** and is lit from its own back, so its highlight turns with it.
+11. **The lit ant is drawn, not photographed,** and is lit from its own back, so its highlight turns with it. In earth it is small and bright against a dark tunnel, and has been judged on stills only.
 12. Not checked: the Settings page itself (its test opens a window on the screen), a 5K or 6K display, a 1x display, a second display, a slower Mac, the lock screen's still.
 13. **Some people do not want insects on their screen,** and small dark things moving at the edge of vision can read as a real one on the glass. Whether it should be left out of Shuffle's list until picked is Dave's to say.
 
@@ -204,5 +207,4 @@ Worst first, as the builder saw it on stills and strips; Dave has not seen it ru
 - A crossfade between farms, and a minute of the finished nest held before it.
 - Rooms with flat floors and a use: ants resting in rows, a store of seeds.
 - An Activity slider, from the measured idleness to what is there now.
-- Earth as a third look: it was mocked up and dropped for the first build.
 - Fewer ants walking at night.

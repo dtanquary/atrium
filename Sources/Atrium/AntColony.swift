@@ -5,7 +5,7 @@ import Synchronization
 @MainActor func antColony(size: CGSize) -> SKScene { AntColony(size: size) }
 
 /// A colony of ants digging its nest in a thin tank seen from the side, with the display as its glass: a tank of
-/// blue gel lit from below, or of sand. A farm lasts a day: at six in the morning the tank is whole and a few ants
+/// blue gel lit from below, of sand, or of earth. A farm lasts a day: at six in the morning the tank is whole and a few ants
 /// are on top of it; they sink a shaft, branch it, open rooms, and carry what they dig up to lie round the mouths;
 /// by the next morning the nest is finished, and another begins. The colony grows with its nest.
 ///
@@ -17,10 +17,10 @@ import Synchronization
 /// (`Colony`), and drawn as a body and its jointed legs, feet planted on the walls.
 /// docs/ant-colony.md has the measurements of real ants and nests these follow, and the sources.
 final class AntColony: SKScene {
-    /// The tank's medium: the blue gel, lit from its base; or sand, dimmed as a wallpaper wants it, or as white as
-    /// the toy's.
-    nonisolated static let look = Knob(key: "antcolony.look", label: "Look", range: 0...2, standard: 0, section: "Tank",
-                                       format: .choice(["Gel", "Sand", "White Sand"]))
+    /// The tank's medium, every one Dave was shown: the blue gel lit from its base, deep and dim, or brighter with
+    /// a bloom over each lamp; sand, dimmed and warm as a wallpaper wants it, or as white as the toy's; or earth.
+    nonisolated static let look = Knob(key: "antcolony.look", label: "Look", range: 0...4, standard: 0, section: "Tank",
+                                       format: .choice(["Gel", "Bright Gel", "Sand", "White Sand", "Earth"]))
     /// How many farms a day: at 1 a nest takes the day, and at the top one is dug every three hours. The ants
     /// walk no faster for it, so the faster the digging the more of it goes on with no ant at the face. At 1 the
     /// day's first shaft goes down a pixel in two or three seconds, with an ant digging at it three times in five;
@@ -87,9 +87,9 @@ final class AntColony: SKScene {
         }
     }
 
-    /// How the ants are drawn: against the gel each is a shape with the light behind it; on sand it is a red
-    /// harvester lit from above, its far legs darker, with a shadow on the pane behind it. `gain` dims the sand's
-    /// ants with their sand.
+    /// How the ants are drawn: against the gel each is a shape with the light behind it; on sand and in earth it
+    /// is a red harvester lit from above, its far legs darker, with a shadow on the pane behind it. `gain` dims
+    /// the dim sand's ants with their sand.
     private struct Style: Equatable {
         var lit: Bool, length: Double, gain: Double
 
@@ -203,9 +203,8 @@ final class AntColony: SKScene {
 
     private let medium = SKSpriteNode(), swarm = SKNode()
     /// The share dug; how many times that share a cell's rank is from it, for the shader to open a cell over the
-    /// digging of the twenty before it; the whole picture's fade up when a farm lands; and how bright the sand is.
+    /// digging of the twenty before it; and the whole picture's fade up when a farm lands.
     private let dug = SKUniform(name: "u_dug", float: 0), fade = SKUniform(name: "u_fade", float: 1), show = SKUniform(name: "u_show", float: 0)
-    private let tone = SKUniform(name: "u_tone", float: 0.66)
     /// The tank in cells and the row of its ground line, for the shader.
     private let cells = SKUniform(name: "u_cells", vectorFloat3: [1, 1, 0])
     /// The nest's map, the spoil's heights and the surroundings: a single texel each until a nest lands, by when
@@ -213,8 +212,8 @@ final class AntColony: SKScene {
     private let map = SKUniform(name: "u_map", texture: SKTexture(data: Data([255, 255, 255, 255]), size: CGSize(width: 1, height: 1)))
     private let heap = SKUniform(name: "u_heap", texture: SKTexture(data: Data([0, 0, 255, 255]), size: CGSize(width: 1, height: 1)))
     private let near = SKUniform(name: "u_near", texture: SKTexture(data: Data([255, 255, 128, 255]), size: CGSize(width: 1, height: 1)))
-    /// A cell and a pixel in points, and the shader for the gel and the one for sand, each made when first wanted.
-    private var cell = 2.0, pixel = 0.5, shaders: [Bool: SKShader] = [:]
+    /// A cell and a pixel in points, and each look's shader, made when first wanted.
+    private var cell = 2.0, pixel = 0.5, shaders: [Int: SKShader] = [:]
     /// The farm on the screen, and its ants' sprites, in the style they were made in, and the grains they have dropped.
     private var key: Key?, nest: Nest?, colony: Colony?, figures: [Figure] = [], crumbs: [SKSpriteNode] = [], style: Style?
     /// A farm being baked; the surroundings being worked out for a later share of the digging; and the share the
@@ -243,13 +242,13 @@ final class AntColony: SKScene {
         asked = ((defaults.object(forKey: "antcolony.day") as? Double).map { Int($0) }, defaults.object(forKey: "antcolony.hour") as? Double)
     }
 
-    /// The shader for the gel or for sand.
-    private func shader(sand: Bool) -> SKShader {
-        if let made = shaders[sand] { return made }
-        let made = SKShader(source: shaderCommon + Self.source(sand: sand), uniforms: [
+    /// The shader for a look, by its place in the Look menu.
+    private func shader(_ look: Int) -> SKShader {
+        if let made = shaders[look] { return made }
+        let made = SKShader(source: shaderCommon + Self.source(look), uniforms: [
             cells, SKUniform(name: "u_bl", float: Float(Self.antCells)), SKUniform(name: "u_px", float: Float(size.width / pixel)),
-            SKUniform(name: "u_grain", texture: Self.grain), map, heap, near, dug, fade, show] + (sand ? [tone] : []))
-        shaders[sand] = made
+            SKUniform(name: "u_grain", texture: Self.grain), map, heap, near, dug, fade, show])
+        shaders[look] = made
         return made
     }
 
@@ -340,17 +339,17 @@ final class AntColony: SKScene {
             }
         }
 
-        // The look: the gel's shader or the sand's, the sand as bright as Settings asks, and the ants to suit.
-        let sand = look > 0, bright = look > 1 ? 1.12 : 0.66
-        if medium.shader !== shader(sand: sand) { medium.shader = shader(sand: sand) }
+        // The look: its shader, and the ants to suit it (shapes against the gel, lit in sand and in earth, and
+        // dimmed with the dim sand).
+        let pick = min(max(look, 0), 4)
+        if medium.shader !== shader(pick) { medium.shader = shader(pick) }
         medium.isHidden = false
-        tone.floatValue = Float(bright)
         dug.floatValue = Float(share)
         show.floatValue = Float(simd_smoothstep(0, 1, (wall - shown) / 0.4 + (view == nil ? 1 : 0)))
         swarm.alpha = CGFloat(show.floatValue)
 
         // The ants and the grains they have dropped, made afresh when the look or the size changes.
-        let wantedStyle = Style(lit: sand, length: Self.lengths[key.size], gain: sand ? min(bright + 0.2, 1) : 1)
+        let wantedStyle = Style(lit: pick >= 2, length: Self.lengths[key.size], gain: pick == 2 ? 0.86 : 1)
         if style != wantedStyle {
             swarm.removeAllChildren()
             (figures, crumbs, style) = ([], [], wantedStyle)
@@ -418,7 +417,7 @@ final class AntColony: SKScene {
         for antenna in limbs.antennae { draw(antenna, widths: [0.020, 0.017]) }
     }
 
-    /// The shader, for the gel or for sand. Both begin the same way, with what is dug and what is buried.
+    /// The shader for a look. All begin the same way, with what is dug and what is buried.
     ///
     /// A texture a shader reads is smoothed whatever its filtering is set to, and a rank smoothed between a dug
     /// cell and one never dug is a rank nothing has. So the map is read at the centres of the four cells round the
@@ -427,26 +426,22 @@ final class AntColony: SKScene {
     /// are they mixed; the edge is a pixel and a half soft by the mix's own slope. The spoil's top is its height
     /// read from `u_heap`. What cannot be had from a read or two (how near a wall is, and which way it faces) is
     /// in `u_near`. In sand the place the map is read at is the middle of the grain the pixel is in, so that a
-    /// grain is there whole or not at all, and an edge is a crumbling one.
+    /// grain is there whole or not at all, and an edge is a crumbling one; in earth it is pushed about by the
+    /// soil's own grain, half a grain deep.
     ///
-    /// The gel is a deep blue slab lit by lamps in its base, after the toy's gel tanks: it glows brighter toward
-    /// the lamps; a tunnel is a frosted, paler tube with light gathered into a bright line at its edge, a halo in
-    /// the gel beside it, a sheen and beads along its wet wall; small bubbles hang in the gel; what is dug lies on
-    /// top as pale crumbs; and the air above is dark but for the glow that leaks up, against which an ant on the
-    /// heap is a shape.
-    ///
-    /// The sand is the toy's white sand between two panes an ant's length apart, lit by one lamp up and to the
-    /// left: grains a tenth of an ant across lit from the lamp's side, in clumps, with a few dark ones and glints;
-    /// a tunnel is a trough, its wall curving back from the front pane to the back one, dark under its upper lip
-    /// and lit on its floor, and in its middle the back pane shows with the lip's shadow across it and grains left
-    /// lying on it, most of them beside the walls. (docs/ant-colony.md has the photographs both are matched to.)
-    private static func source(sand: Bool) -> String {
-        """
+    /// Each look is its own source, the two gels and the two sands as well: a variant behind a uniform can move
+    /// pixels where it never runs (Sources/CLAUDE.md).
+    private static func source(_ look: Int) -> String {
+        let place = [2: grains, 3: grains, 4: "    vec2 at = cell + 0.035 * u_bl * n.rg * step(ground + 0.5, cell.y);"][look] ?? "    vec2 at = cell;"
+        let picture = [gelLook, brightGelLook,
+                       sandLook(sand: "vec3(0.860, 0.790, 0.680)", pane: "vec3(0.557, 0.502, 0.431)", tone: "0.66"),
+                       sandLook(sand: "vec3(0.905, 0.868, 0.800)", pane: "vec3(0.560, 0.562, 0.560)", tone: "1.12"), earthLook][look]
+        return """
         float sq(float x) { return x * x; }
 
         void main() {
-            // This pixel in cells from the tank's top left; in the air or below the ground line; pixels to a cell,
-            // and to one of the pixels this was drawn for (an ant 44 of them long).
+            // This pixel in cells from the tank's top left; pixels to a cell, and to one of the pixels this was
+            // drawn for (an ant 44 of them long).
             vec2 cell = vec2(v_tex_coord.x, 1.0 - v_tex_coord.y) * u_cells.xy;
             float ground = u_cells.z, ppc = u_px / u_cells.x, px = u_bl * ppc / 44.0;
 
@@ -456,7 +451,7 @@ final class AntColony: SKScene {
             vec4 slow = (texture2D(u_grain, fract(g / 6144.0)) - 0.5) * 6.0;
             vec4 h = hash42(floor(g));
 
-        \(sand ? grains : "    vec2 at = cell;")
+        \(place)
             // Dug: the four cells round that place (none of them above the ground line), each open or not.
             vec2 p = vec2(at.x, max(at.y, ground + 0.5)) - 0.5, base = floor(p), f = p - base;
             vec4 open;
@@ -483,14 +478,59 @@ final class AntColony: SKScene {
             float close = q.r, wide = q.g, lit = q.b * 2.0 - 1.0, hug = q.a;
             float x = v_tex_coord.x, down = 1.0 - v_tex_coord.y;
 
-        \(sand ? sandLook : gelLook)
+        \(picture)
             colour *= 1.0 - 0.38 * (sq(x - 0.5) + sq(down - 0.5));
             gl_FragColor = vec4(clamp(colour, 0.0, 1.0) * u_show, 1.0);
         }
         """
     }
 
+    /// The gel as Dave chose it from the mock-ups, after the toy's gel tanks: a deep blue slab lit by lamps in its
+    /// base, glowing brighter toward them; a tunnel is a frosted, paler tube with light gathered into a bright
+    /// line at its edge, a halo in the gel beside it, a sheen and beads along its wet wall; small bubbles hang in
+    /// the gel; what is dug lies on top as pale crumbs; and the air above is dark but for the glow that leaks up,
+    /// against which an ant on the heap is a shape.
     private static let gelLook = """
+            float lamps = exp(-sq((x - 0.13) / 0.10)) + exp(-sq((x - 0.37) / 0.10)) + exp(-sq((x - 0.62) / 0.10)) + exp(-sq((x - 0.87) / 0.10));
+            float d = clamp((cell.y - ground) / (u_cells.y - ground), 0.0, 1.0);
+            float glow = (0.40 + 0.46 * pow(d, 1.5) + 0.78 * lamps * pow(d, 2.4)) * (1.0 + 0.05 * slow.b + 0.03 * slow.r);
+
+            // The gel, with the light gathered beside a tunnel, and its bubbles: one to a square in six, a dark ring
+            // with a glint on the lamps' side.
+            vec3 body = vec3(0.035, 0.212, 0.808) * glow + vec3(0.235, 0.471, 0.980) * 0.09 * (1.0 - d);
+            body += vec3(0.275, 0.667, 1.0) * 0.34 * pow(clamp((1.0 - wide) * 2.0, 0.0, 1.0), 1.6) * (0.5 + 0.7 * glow);
+            float square = 0.9 * u_bl;
+            vec2 box = floor(cell / square);
+            vec4 b = hash42(box + 7.0), b2 = hash42(box + 91.0);
+            float radius = u_bl * mix(mix(0.018, 0.05, b2.y), mix(0.05, 0.11, b2.y), step(0.85, b2.x)) * ppc;
+            vec2 off = (cell - (box + 0.15 + 0.7 * b.xy) * square) * ppc;
+            float has = step(b.z, 0.17) * step(ground + 0.3 * u_bl, cell.y);
+            float ring = exp(-sq((length(off) - radius) / (0.8 * px))) * min(1.0, radius / (2.0 * px)) * has;
+            float glint = exp(-sq(length(off + vec2(0.3, -0.45) * radius) / max(0.45 * radius, 0.7 * px))) * has;
+            body = body * (1.0 - 0.5 * ring) + vec3(0.745, 0.922, 1.0) * 0.55 * glint * (0.4 + glow);
+
+            // A tunnel: frosted, paler toward its walls, with the bright line at its edge, a sheen and beads.
+            float frost = 1.0 + 0.10 * n.r + 0.045 * n.b + 0.04 * n.a, by = clamp(wide * 2.0, 0.0, 1.0);
+            vec3 tube = (vec3(0.149, 0.439, 0.925) * glow * (0.80 + 0.34 * clamp(wide * 2.4, 0.0, 1.0)) + 0.04) * frost;
+            float sparks = step(0.990 - 0.05 * by * by, h.x);
+            float sheen = clamp(1.0 - abs(wide - 0.30) / 0.14, 0.0, 1.0) * sq(clamp(0.5 + 0.6 * n.b, 0.0, 1.0)) * (0.65 + 0.35 * lit);
+            float rim = pow(clamp(1.0 - abs(close - 0.42) / 0.30, 0.0, 1.0), 1.5);
+            float beads = clamp(n.b - 0.7, 0.0, 1.6) * pow(by, 1.5);
+            tube += vec3(0.690, 0.945, 0.984) * (0.50 * rim + 0.30 * sheen + 0.32 * sparks + 0.42 * beads) * (0.45 + 0.75 * glow);
+
+            // Above the ground: the crumbs, and the dark air with the glow that hugs the heap.
+            vec3 crumbs = vec3(0.463, 0.675, 0.941) * (0.36 + 0.07 * n.b + 0.05 * n.a + 0.22 * step(0.9965, h.y) + 0.30 * clamp((1.0 - close) * 2.0, 0.0, 1.0)) * (0.8 + 0.5 * lamps);
+            float height = clamp((ground - cell.y) / (3.0 * u_bl), 0.0, 4.0);
+            vec3 air = vec3(0.063, 0.133, 0.337) * exp(-height * 1.6) * (0.55 + 0.6 * lamps) + vec3(0.220, 0.463, 0.910) * 0.75 * pow(hug, 1.15) * (0.7 + 0.5 * lamps) + vec3(0.008, 0.012, 0.031);
+
+            vec3 colour = mix(mix(tube, air, above), mix(body, crumbs, above), solid) * 0.85;
+            colour += 0.010 * exp(-sq((x - 0.30 - 0.38 * down) / 0.06)) * vec3(0.784, 0.882, 1.0); // a reflection in the glass
+    """
+
+    /// The gel nearer its photograph (docs/ant-colony.md, photograph 6), and brighter than the mock-ups were: a
+    /// bloom of faint rays over each lamp, and tubes that are the gel's own blue a little paler, with bubbles
+    /// frothing at their walls.
+    private static let brightGelLook = """
             // The lamps in the base: their light through the gel, and the bloom over each, a hot core with rays.
             float d = clamp((cell.y - ground) / (u_cells.y - ground), 0.0, 1.0), lamps = 0.0, cores = 0.0, bloom = 0.0;
             for (int k = 0; k < 4; k++) {
@@ -545,28 +585,38 @@ final class AntColony: SKScene {
             colour += 0.010 * exp(-sq((x - 0.30 - 0.38 * down) / 0.06)) * vec3(0.784, 0.882, 1.0); // a reflection in the glass
     """
 
-    /// The sand's grains: a tenth of an ant across, one to a square of a lattice and pushed about in it. This
-    /// finds the grain a pixel is in (the nearest of four), which is where the map is then read.
+    /// The sand's grains: a tenth of an ant across, scattered one to a square with no lattice to them (a lattice
+    /// shows as a weave when the picture is drawn at half size). This finds the grain a pixel is in, the nearest
+    /// of the nine squares round it, which is where the map is then read; and the next nearest, for how big the
+    /// grain can be without running into it.
     private static let grains = """
-            vec2 gp = cell / (0.10 * u_bl), corner = floor(gp - 0.5), middle = gp;
-            float away = 9.0;
+            vec2 gp = cell / (0.10 * u_bl), middle = gp, next = gp;
+            float away = 9.0, second = 9.0;
             vec4 mine = vec4(0.0);
-            for (int k = 0; k < 4; k++) {
-                vec2 square = corner + vec2(mod(float(k), 2.0), floor(float(k) / 2.0));
+            for (int k = 0; k < 9; k++) {
+                vec2 square = floor(gp) + vec2(mod(float(k), 3.0), floor(float(k) / 3.0)) - 1.0;
                 vec4 r = hash42(square + 17.0);
-                vec2 c = square + 0.5 + 0.56 * (r.xy - 0.5);
+                vec2 c = square + 0.06 + 0.88 * r.xy;
                 float d = length(gp - c);
-                if (d < away) { away = d; middle = c; mine = r; }
+                if (d < away) { second = away; next = middle; away = d; middle = c; mine = r; }
+                else if (d < second) { second = d; next = c; }
             }
             vec2 at = middle * 0.10 * u_bl;
     """
 
-    private static let sandLook = """
-            // A grain: a bead, brighter on the lamp's side, a few of them dark and a few glinting; and between
-            // the beads the shadowed ones behind. The spoil is the same grains, looser.
-            vec3 sand = vec3(0.905, 0.868, 0.800) * (1.0 - clamp(slow.b - 0.6, 0.0, 2.0) * vec3(0.0, 0.018, 0.045));
+    /// Sand between two panes an ant's length apart, lit by one lamp up and to the left: grains lit from the
+    /// lamp's side, a few of them dark and a few glinting; a tunnel is a trough, its wall curving back from the
+    /// front pane to the back one, dark under its upper lip and lit on its floor, and in its middle the back pane
+    /// shows with the lip's shadow across it and loose grains lying on it, most of them along the floors. `sand`
+    /// and `pane` are the colours of a grain and of the pane behind, and `tone` how bright the whole is: the
+    /// mock-ups' warm sand at two thirds, or the toy's white sand as photographed (photograph 1).
+    private static func sandLook(sand: String, pane: String, tone: String) -> String {
+        """
+            // A grain: a bead as big as its neighbour lets it be, brighter on the lamp's side, a few of them dark
+            // and a few glinting; and between the beads the shadowed ones behind.
+            vec3 sand = \(sand) * (1.0 - clamp(slow.b - 0.6, 0.0, 2.0) * vec3(0.0, 0.018, 0.045));
             vec4 more = hash42(floor(middle) + 53.0);
-            float size = 0.47 + 0.10 * mine.z, bead = clamp((size - away) * 0.10 * u_bl * ppc / 1.3 + 0.5, 0.0, 1.0);
+            float size = clamp(0.49 * length(middle - next), 0.24, 0.56), bead = clamp((size - away) * 0.10 * u_bl * ppc / 1.3 + 0.5, 0.0, 1.0);
             float lamp = dot((gp - middle) / size, vec2(-0.5, -0.86));
             float shade = (0.90 + 0.11 * mine.w + 0.12 * lamp) * (1.0 + 0.035 * n.b + 0.03 * slow.r) * (1.0 - 0.30 * step(more.x, 0.03));
             vec3 grain = sand * shade + 0.30 * step(0.955, more.y) * clamp(1.0 - 3.0 * length((gp - middle) / size - vec2(-0.3, -0.4)), 0.0, 1.0);
@@ -579,7 +629,7 @@ final class AntColony: SKScene {
             float depth = clamp((0.5 - wide) / 0.40, 0.0, 1.0);
             vec3 wall = sand * (0.74 + 0.26 * lit) * (1.0 - 0.50 * depth) * (0.80 + 0.20 * bead) * (1.0 + 0.05 * n.r);
             float lip = texture2D(u_near, vec2(cell.x - 0.20 * u_bl, u_cells.y - cell.y + 0.36 * u_bl) / u_cells.xy).r;
-            vec3 room = vec3(0.560, 0.562, 0.560) * (1.0 + 0.06 * slow.b + 0.02 * n.b) * (1.05 - 0.25 * down);
+            vec3 room = \(pane) * (1.0 + 0.06 * slow.b + 0.02 * n.b) * (1.05 - 0.25 * down);
             vec3 hollow = mix(wall, room * (1.0 - 0.38 * lip), pow(depth, 1.5));
             float floors = clamp(wide * 2.4, 0.0, 1.0) * (0.35 + 0.65 * clamp(lit, 0.0, 1.0));
             float loose = step(more.z, 0.03 + 0.55 * sq(floors)) * bead * (1.0 - above);
@@ -590,8 +640,31 @@ final class AntColony: SKScene {
             // A grain that is there shows as its bead; round the bead, the shadowed sand behind it, or at an edge
             // the tunnel.
             vec3 face = mix(mix(hollow, between, smoothstep(0.35, 0.75, close)), grain, bead);
-            vec3 colour = mix(hollow, face, solid) * (1.12 - 0.42 * length(vec2((x - 0.22) * 1.1, down + 0.05))) * u_tone;
+            vec3 colour = mix(hollow, face, solid) * (1.12 - 0.42 * length(vec2((x - 0.22) * 1.1, down + 0.05))) * \(tone);
             colour += 0.014 * (exp(-sq((x - 0.30 - 0.38 * down) / 0.06)) + 0.5 * exp(-sq((x - 0.43 - 0.38 * down) / 0.02))) * vec3(1.0, 0.957, 0.882); // reflections in the pane
+        """
+    }
+
+    /// Earth, after a home-made nest in fine yellow-brown soil (photograph 8): the soil too fine to show a grain,
+    /// in clumps, lit from the upper left; a tunnel is dark, the soil behind it in the shadow of its upper lip,
+    /// with crumbs left on the pane beside its walls and a little light on its floor; the room above is dark.
+    /// The ants are not dimmed with it, or they would not be seen in its tunnels.
+    private static let earthLook = """
+            vec3 soil = vec3(0.725, 0.561, 0.373) * (1.0 - clamp(slow.b - 0.5, 0.0, 2.0) * vec3(0.03, 0.045, 0.06));
+            vec3 face = soil * (1.0 + 0.085 * n.r + 0.05 * n.b + 0.03 * slow.r) * (1.0 + 0.07 * n.g + 0.04 * n.a) * (1.0 + 0.04 * spoil);
+            float edge = clamp((1.0 - close) * 2.0, 0.0, 1.0); // the soil's last crumbs before a tunnel
+            face *= 1.0 - 0.20 * edge * clamp(-lit, 0.0, 1.0) + 0.08 * edge * clamp(lit, 0.0, 1.0);
+
+            float depth = clamp((0.5 - wide) / 0.40, 0.0, 1.0);
+            float lip = texture2D(u_near, vec2(cell.x - 0.16 * u_bl, u_cells.y - cell.y + 0.30 * u_bl) / u_cells.xy).r;
+            vec3 back = vec3(0.361, 0.275, 0.180) * (1.0 + 0.04 * n.r + 0.05 * slow.b) * (1.0 - 0.5 * lip) * (1.0 + 0.45 * clamp(lit, 0.0, 1.0) * clamp(wide * 2.4, 0.0, 1.0));
+            vec3 wall = soil * (0.60 + 0.22 * lit) * (1.0 - 0.45 * depth) * (1.0 + 0.06 * n.r);
+            vec3 hollow = mix(wall, back, pow(depth, 1.2));
+            hollow = mix(hollow, face * 0.78, step(h.x, 0.55 * pow(clamp(close * 1.6, 0.0, 1.0), 1.5)));
+            hollow = mix(hollow, vec3(0.078, 0.075, 0.078) * (1.25 - 0.5 * down), step(cell.y, ground));
+
+            vec3 colour = mix(hollow, face, solid) * 0.60;
+            colour += 0.012 * exp(-sq((x - 0.25 - 0.35 * down) / 0.07)) * vec3(1.0, 0.957, 0.882); // a reflection in the pane
     """
 }
 

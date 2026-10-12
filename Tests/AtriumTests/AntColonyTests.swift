@@ -85,8 +85,8 @@ import Testing
 /// The picture is the same whatever the frame rate: drawn at 15, 30 and 60 frames a second, every pixel is the
 /// same four seconds into the farm of one day at nine in the morning, ants and all; a second scene given the same
 /// day and hour shows the same nest; and nine hours on there is more of it. The same again in white sand with the
-/// smallest ants, twice as many of them, at the top speed. And each look is its own: the gel blue, the sand pale,
-/// the white sand paler. And the copy Settings runs behind its page opens on a nest worth judging its settings by.
+/// smallest ants, twice as many of them, at the top speed. And each of the five looks is its own: the gels blue
+/// and one brighter, the sand warm, the white sand paler, the earth brown. And the copy Settings runs behind its page opens on a nest worth judging its settings by.
 @MainActor @Test func antColonyLooksTheSameAtAnyFrameRate() throws {
     let keys = ["antcolony.day", "antcolony.hour", "antcolony.look", "antcolony.size", "antcolony.ants", "antcolony.speed"]
     defer { keys.forEach(UserDefaults.standard.removeObject) }
@@ -127,7 +127,7 @@ import Testing
         picture[(w * h / 4)...].count { wanted(Int($0 >> 16 & 255), Int($0 >> 8 & 255), Int($0 & 255)) }
     }
     let ants = count(pictures[0]) { r, g, b in r < 30 && g < 30 && b < 40 }
-    UserDefaults.standard.set(1.0, forKey: "antcolony.look")
+    UserDefaults.standard.set(3.0, forKey: "antcolony.look")
     let sand = try [3.0, 12].map { try picture(hour: $0, rate: 30) }, tunnels = sand.map { count($0) { r, g, b in abs(r - b) <= 3 && r > 30 } }
     print("Ant Colony at nine in the morning: \(ants) pixels of ant below the top of the gel; \(tunnels[0]) pixels of tunnel in sand, and at six in the evening \(tunnels[1])")
     #expect(ants > 150 && tunnels[0] > 20000 && Double(tunnels[1]) > 1.8 * Double(tunnels[0]))
@@ -140,10 +140,16 @@ import Testing
     func mean(_ picture: [UInt32]) -> SIMD3<Double> {
         picture[(w * h / 4)...].reduce(into: SIMD3<Double>()) { $0 += SIMD3(Double($1 >> 16 & 255), Double($1 >> 8 & 255), Double($1 & 255)) } / Double(w * h * 3 / 4)
     }
-    let dim = mean(sand[0])
-    for (key, value) in [("antcolony.look", 2.0), ("antcolony.size", 0), ("antcolony.ants", 2), ("antcolony.speed", 8)] { UserDefaults.standard.set(value, forKey: key) }
-    let white = try [15.0, 60.0].map { try picture(hour: 3, rate: $0) }, blue = mean(pictures[0]), bright = mean(white[0])
+    // The five looks, by their places in the menu: Gel, Bright Gel, Sand, White Sand, Earth.
+    let looks = try (0...4).map { look -> SIMD3<Double> in
+        UserDefaults.standard.set(Double(look), forKey: "antcolony.look")
+        return mean(try picture(hour: 3, rate: 30))
+    }
+    print("Ant Colony below the top of the tank, mean red, green and blue: gel \(looks[0]), bright gel \(looks[1]), sand \(looks[2]), white sand \(looks[3]), earth \(looks[4])")
+    #expect(looks[0].z > 2 * looks[0].x && looks[1].z > 1.1 * looks[0].z, "the gels are not blue, or the bright one no brighter")
+    #expect(looks[2].x > 1.15 * looks[2].z && looks[2].x > 70 && looks[3].x > 1.3 * looks[2].x, "the sand is not warm, or the white sand no whiter")
+    #expect(looks[4].x > 1.4 * looks[4].z && looks[4].x / looks[4].z > looks[2].x / looks[2].z, "the earth is not brown, or no browner than sand")
+    for (key, value) in [("antcolony.look", 3.0), ("antcolony.size", 0), ("antcolony.ants", 2), ("antcolony.speed", 8)] { UserDefaults.standard.set(value, forKey: key) }
+    let white = try [15.0, 60.0].map { try picture(hour: 3, rate: $0) }
     #expect(white[1] == white[0], "white sand with small ants at speed 8: the picture at 60 frames a second is not the one at 15")
-    print("Ant Colony below the top of the tank, mean red, green and blue: gel \(blue), sand \(dim), white sand \(bright)")
-    #expect(blue.z > 2 * blue.x && dim.x > dim.z && dim.x > 80 && bright.x > 1.3 * dim.x)
 }
