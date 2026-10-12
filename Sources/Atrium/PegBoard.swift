@@ -15,7 +15,7 @@ import SpriteKit
 final class PegBoard: SKScene {
     nonisolated static let shows = Knob(key: "pegboard.shows", label: "Shows", range: 0...2, standard: 0, section: "Sheet",
                                         format: .choice(["Everything", "Patterns only", "Pictures only"]))
-    nonisolated static let speed = Knob(key: "pegboard.speed", label: "Speed", range: 0.5...8, standard: 1, section: "Sheet", format: .times)
+    nonisolated static let speed = Knob(key: "pegboard.speed", label: "Speed", range: 0.5...20, standard: 1, section: "Sheet", format: .times)
     /// Three sizes of peg, since every picture is cut for each: the real toy's own, half of it, and a third.
     nonisolated static let pegSize = Knob(key: "pegboard.size", label: "Peg size", range: 0...2, standard: 1, section: "Pegs",
                                           format: .choice(["Large", "Medium", "Small"]))

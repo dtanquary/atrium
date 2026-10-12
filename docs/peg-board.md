@@ -132,7 +132,7 @@ From the rights research of 2026-10-12 (kept with that day's research as `toys/r
 |---|---|---|---|
 | Colors | `pegboard.palette` | Calm, Vivid, or Random, which takes one of the two for each new sheet | Calm |
 | Shows | `pegboard.shows` | Everything, Patterns only, Pictures only. A change clears the sheet at once if what is on it is no longer allowed | Everything |
-| Speed | `pegboard.speed` | 0.5× to 8× the 6 pegs a second. The light show and the clear take the same time at any speed | 1× |
+| Speed | `pegboard.speed` | 0.5× to 20× the 6 pegs a second (Dave will judge the default on his desktop). The light show and the clear take the same time at any speed | 1× |
 | Peg size | `pegboard.size` | Large, Medium, Small. Another size is another sheet, there and then | Medium |
 | Softness | `pegboard.softness` | 0 to 1: the rim, lip and dark band from full to 0.3; the glow ×1 to ×4; the hot dot 0.35 to none; the outline 1.2 to 3 pixels wide; exposure 1.8 to 1.6 to hold the level. Nothing is stamped again, so it is instant | 0 |
 
@@ -182,7 +182,7 @@ python3 -I docs/peg-board/cut.py <folder of the source pictures> Sources/Atrium/
 Worst first, as the builder saw it on stills; Dave has not seen it run.
 
 1. **Sharp and busy at Softness 0**, the default he chose: see the busy scores above. It is what got Zen Garden cut ("so bright and sharp and not relaxing"), and Softness is the answer he has to hand.
-2. **Nearly still at speed 1.** A crystal takes 2 to 3.5 minutes at Medium and a picture 2 to 6; the Wave takes 11 at Small and the flea 15.
+2. **Nearly still at speed 1.** A crystal takes 2 to 3.5 minutes at Medium and a picture 2 to 6; the Wave takes 11 at Small and the flea 15. The slider now goes to 20×, where the flea at Small takes 45 s.
 3. **Large pegs have two pictures,** the stag and the flea, and the stag there is a blob with antlers. Nothing else read at 43 by 30 holes.
 4. **The rhinoceros only just reads,** in false colour.
 5. **The clear** leaves the unlit pegs as black shapes on the faint dots for a second, and then they are gone at once.
