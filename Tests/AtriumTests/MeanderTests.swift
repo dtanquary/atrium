@@ -72,7 +72,7 @@ private func crossings(_ river: River) -> Int {
 /// lakes are drawn as water, and hollows mark old channels. And how long that takes, which every load, shuffle and
 /// Settings page waits for on the main thread, and what a live step costs after it. (The river's module is built
 /// optimised even in a debug build, so the times mean the same in both.) The times are printed, and the past's is
-/// held to 150 ms only with MEANDER_COSTS set (`measuring`).
+/// held to 200 ms only with MEANDER_COSTS set (`measuring`): it is about 130, of which the older river's ground is 30.
 @Test func riverGetsAPastQuickly() {
     func milliseconds(_ body: () -> Void) -> Double {
         let start = DispatchTime.now().uptimeNanoseconds
@@ -119,7 +119,7 @@ private func crossings(_ river: River) -> Int {
     if let folder = ProcessInfo.processInfo.environment["MEANDER_DUMP"] { // the texture's bytes, to look at
         try? Data(river.pixels).write(to: URL(fileURLWithPath: folder).appendingPathComponent("meander-\(river.columns)x\(river.rows).rgba"))
     }
-    #expect(!measuring || times.min()! < 150, "the past took \(times) ms")
+    #expect(!measuring || times.min()! < 200, "the past took \(times) ms")
     // The banks in the ground against the long way, which splits each segment in two as the prototype did: near a
     // bank (two texels either side), at every fifth texel
     var off: [Float] = []
@@ -152,25 +152,27 @@ private func crossings(_ river: River) -> Int {
     #expect(steps[300] < 1.5)
 }
 
-/// A swept past leaves no pocket of ground the river never reached inside the belt, where Light Mode drew it as a
-/// white block: every never-reached texel can be walked to from the ground's edge over never-reached ground. The
-/// river is the one a 14" screen gets from seed 13, which had 52 texels that couldn't be, in two pockets the
-/// sweeps had missed.
-@Test func riverLeavesNoGroundWalledIn() {
-    let river = River(seed: 13, across: 54, up: Float(982.0 / 28), texels: 14)
-    river.age()
-    let texels = river.columns * river.rows, columns = river.columns, oldest = Float(river.now - river.base - River.memory - 5)
-    var open = [Bool](repeating: false, count: texels)
-    var walk = (0..<texels).filter { $0 < columns || $0 >= texels - columns || $0 % columns == 0 || $0 % columns == columns - 1 }
-    while let i = walk.popLast() {
-        guard !open[i], river.ground[i].x <= oldest else { continue }
-        open[i] = true
-        for step in [-columns - 1, -columns, -columns + 1, -1, 1, columns - 1, columns, columns + 1] where i + step >= 0 && i + step < texels && abs((i + step) % columns - i % columns) <= 1 {
-            walk.append(i + step)
+/// The first picture is floodplain to every edge, in both valleys: when a river's past ends, no texel of the
+/// ground is one no river has made (an older river's ground lies under this one's, `River.layBackdrop`), on a
+/// 14" screen at the smallest river and the largest, for four rivers each. And the two valleys are what they say:
+/// kept within the screen, a river's line never crosses its top or bottom; given the full view, three of the four
+/// reach nearer an edge than the walls of the other valley would let them.
+@Test func riverLeavesNoGroundUnworked() {
+    for width in [28.0, 56.0] {
+        var reaching = 0
+        for valley in [River.Valley.within, .full] {
+            for seed: UInt64 in [13, 2, 7, 21] {
+                let river = River(seed: seed, across: Float(1512 / width), up: Float(982 / width), texels: 14, valley: valley)
+                river.age()
+                let oldest = Float(river.now - river.base - River.memory - 5), unworked = river.ground.count { $0.x <= oldest }
+                #expect(unworked == 0, "\(unworked) texels of river \(seed)'s ground at \(width) pt, \(valley), are ground no river made")
+                let furthest = river.nodes.map { abs($0.y - river.up / 2) }.max()!
+                if valley == .within { #expect(furthest < river.up / 2, "river \(seed) at \(width) pt runs off the screen") }
+                else if furthest > river.up / 2 - 1.5 { reaching += 1 }
+            }
         }
+        #expect(reaching >= 3, "only \(reaching) of four rivers with the full view at \(width) pt use it")
     }
-    let walled = (0..<texels).count { river.ground[$0].x <= oldest && !open[$0] }
-    #expect(walled == 0, "\(walled) texels the river never reached are walled in by ground it has worked")
 }
 
 /// Only a couple of lakes are drawn again on each step. Over 24 T at speed 4, long enough for every lake there at
@@ -361,14 +363,18 @@ private func seeded(_ seed: Double, _ others: [String: Double] = [:]) -> [String
     }
     for look: [String: Double] in [[:], ["meander.look": 1], ["meander.look": 1, "meander.rule": 1]] { try draw(look) }
     #expect(pictures[0] != pictures[1] && pictures[1] != pictures[2])
+    // and with the full view, which is another river and has no fade at its top and bottom
+    for look: [String: Double] in [["meander.valley": 1], ["meander.valley": 1, "meander.look": 1]] { try draw(look) }
+    #expect(pictures[3] != pictures[0] && pictures[4] != pictures[1])
+    pictures.removeLast(2)
     let before = NSApplication.shared.appearance
     defer { NSApplication.shared.appearance = before }
     for name in [NSAppearance.Name.aqua, .darkAqua] {
         NSApplication.shared.appearance = NSAppearance(named: name)
         for relief in Meander.reliefs {
             try draw([:], relief: relief.name)
-            let corner = pictures.last![756 * 5 + 5] // ground the river never reached
-            #expect(name == .aqua ? corner.y > 200 : corner.y < 60, "\(relief.name) in \(name.rawValue): its unworked ground is \(corner)")
+            let corner = pictures.last![756 * 5 + 5] // an older river's ground, far from this one
+            #expect(name == .aqua ? corner.y > 150 : corner.y < 90, "\(relief.name) in \(name.rawValue): its far ground is \(corner)")
         }
         for sheet in Meander.maps { for rule in 0...1 { try draw(["meander.look": 1, "meander.rule": Double(rule)], sheet: sheet.name) } }
     }
@@ -454,6 +460,19 @@ private func seeded(_ seed: Double, _ others: [String: Double] = [:]) -> [String
     #expect(next !== scene && abs(next.river.columns * 2 - river.columns) <= 1, "\(next.river.columns) columns after \(river.columns)")
 }
 
+/// Another valley is another river, as another size is: the scene hands over to one built to it.
+@MainActor @Test func meanderTakesAnotherValleyAsAnotherRiver() throws {
+    defer { ["meander.valley", "meander.seed"].forEach(UserDefaults.standard.removeObject) }
+    UserDefaults.standard.set(7.0, forKey: "meander.seed")
+    let view = WallpaperView(frame: CGRect(x: 0, y: 0, width: 378, height: 245)), scene = Meander(size: view.frame.size)
+    view.presentScene(scene)
+    #expect(scene.river.valley == .within)
+    UserDefaults.standard.set(1.0, forKey: "meander.valley")
+    scene.handOver()
+    let next = try #require(view.scene as? Meander)
+    #expect(next !== scene && next.river.valley == .full)
+}
+
 /// What Meander costs a frame on a 14" MacBook Pro's screen, for docs/meander.md: a frame the river steps on and
 /// one it doesn't, each as its update, the CPU's share of drawing it (on a step frame SpriteKit sends the ground's
 /// bytes to the GPU there) and the GPU's; and the copy of the bytes alone. Each look at speed 1 and 60 frames a
@@ -465,6 +484,7 @@ private func seeded(_ seed: Double, _ others: [String: Double] = [:]) -> [String
     let runs: [(name: String, settings: [String: Double], rate: Double)] = [
         ("relief", [:], 60), ("old map", ["meander.look": 1], 60), ("old map in Fisk's order", ["meander.look": 1, "meander.rule": 1], 60),
         ("relief at 4x", ["meander.speed": 4], 60), ("relief at 4x and 15 fps", ["meander.speed": 4], 15),
+        ("relief with the full view at 4x and 15 fps", ["meander.speed": 4, "meander.valley": 1], 15),
     ]
     for run in runs {
         try with(seeded(13, run.settings)) {
@@ -1100,13 +1120,22 @@ private func ripple(_ picture: [UInt32], side: Int, texel: Int, counts: (_ x: In
 
 /// Under Random the colours move on by themselves, every "Change colors every" minutes, to another family of the
 /// look that is showing, over a minute; and not at all with that at 0, or while Settings names a family. Followed
-/// by the colour of the ground the river never reaches, in the picture's corner, which every family of relief has
-/// its own of: it is one family's until two minutes are up, between two half a minute later, and then another's.
+/// by the colour of ground the river has forgotten (old courses are set to stay 15 minutes, and the spot is an
+/// older river's ground, over 73 T old), which every family of relief has its own of: it is one family's until
+/// two minutes are up, between two half a minute later, and then another's.
 @MainActor @Test func meanderChangesColoursOnATimer() throws {
     let (w, h) = (378, 245)
+    // a pixel of ground left over 73 T ago, well clear of any water and near the bottom, where this river
+    // doesn't come: ground forgotten after 72 T, of one colour however much older it gets (the same river every time)
+    var spot = (x: 4, y: 4)
+    try with(seeded(7)) {
+        let river = try #require(Meander(size: CGSize(width: w, height: h)).river), present = Float(river.now - river.base)
+        let texel = try #require((2 * river.columns..<20 * river.columns).first { present - river.ground[$0].x > 73 && min(river.ground[$0].z, river.ground[$0].w) > 1.5 })
+        spot = ((texel % river.columns * 2 + 1) * w / (2 * river.columns), h - 1 - (texel / river.columns * 2 + 1) * h / (2 * river.rows))
+    }
     @MainActor func corner(_ screen: Offscreen) throws -> UInt32 {
         try screen.frame(rate: 10)
-        return screen.piece(x: 4, y: 4, w: 1, h: 1)[0]
+        return screen.piece(x: spot.x, y: spot.y, w: 1, h: 1)[0]
     }
     @MainActor func after(_ seconds: Int, _ screen: Offscreen) throws -> UInt32 {
         for _ in 0..<seconds * 10 - 1 { screen.advance(rate: 10) }
@@ -1114,25 +1143,27 @@ private func ripple(_ picture: [UInt32], side: Int, texel: Int, counts: (_ x: In
     }
     var families: [UInt32] = []
     for family in Meander.reliefs {
-        try with(seeded(7), colours: [family.name, "Fisk 1944"]) { families.append(try corner(Offscreen(Meander(size: CGSize(width: w, height: h)), w, h))) }
+        try with(seeded(7, ["meander.memory": 15]), colours: [family.name, "Fisk 1944"]) { families.append(try corner(Offscreen(Meander(size: CGSize(width: w, height: h)), w, h))) }
     }
-    #expect(Set(families).count == families.count)
-    try with(seeded(7, ["meander.cycleMinutes": 2]), colours: ["", "Fisk 1944"]) {
+    /// The same colour, to within two levels.
+    func like(_ a: UInt32, _ b: UInt32) -> Bool { [0, 8, 16].allSatisfy { abs(Int(a >> UInt32($0) & 255) - Int(b >> UInt32($0) & 255)) <= 2 } }
+    for (k, one) in families.enumerated() { #expect(!families[..<k].contains { like($0, one) }) }
+    try with(seeded(7, ["meander.cycleMinutes": 2, "meander.memory": 15]), colours: ["", "Fisk 1944"]) {
         let scene = Meander(size: CGSize(width: w, height: h)), screen = try Offscreen(scene, w, h), river = scene.river!
         let first = try corner(screen)
-        #expect(families.contains(first))
-        #expect(try after(118, screen) == first, "the colours changed before their two minutes were up")
+        #expect(families.contains { like($0, first) })
+        #expect(like(try after(118, screen), first), "the colours changed before their two minutes were up")
         let between = try after(32, screen)
-        #expect(!families.contains(between), "half a minute into a change the colours are a family's own")
+        #expect(!families.contains { like($0, between) }, "half a minute into a change the colours are a family's own")
         let second = try after(35, screen)
-        #expect(families.contains(second) && second != first, "a minute after it began, the change hasn't ended on another family")
-        #expect(try after(40, screen) == second && scene.river === river)
+        #expect(families.contains { like($0, second) } && !like(second, first), "a minute after it began, the change hasn't ended on another family")
+        #expect(like(try after(40, screen), second) && scene.river === river)
         // not with the slider at 0; and not once Settings names the family showing
         UserDefaults.standard.set(0.0, forKey: "meander.cycleMinutes")
-        #expect(try after(200, screen) == second, "the colours changed with Change colors every at 0")
+        #expect(like(try after(200, screen), second), "the colours changed with Change colors every at 0")
         UserDefaults.standard.set(2.0, forKey: "meander.cycleMinutes")
-        UserDefaults.standard.set(Meander.reliefs[families.firstIndex(of: second)!].name, forKey: "meander.colors")
-        #expect(try after(200, screen) == second, "the colours changed while Settings named a family")
+        UserDefaults.standard.set(Meander.reliefs[families.firstIndex { like($0, second) } ?? 0].name, forKey: "meander.colors")
+        #expect(like(try after(200, screen), second), "the colours changed while Settings named a family")
     }
 }
 

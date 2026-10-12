@@ -41,7 +41,12 @@ final class Meander: SKScene {
     /// How often Random moves on to another family of the look that is showing: listed under that look's swatches
     /// while they are at Random.
     nonisolated static let cycleMinutes = Knob(key: "meander.cycleMinutes", label: "Change colors every", range: 0...30, standard: 10, section: "Colors", format: .minutes)
-    nonisolated static let knobs = [look, rule, bars] + grades + [width, speed, memory, lakes, cycleMinutes]
+    /// Where the river may go (`River.Valley`): kept within the screen, with an older river's pale courses beyond it
+    /// and the picture fading toward its top and bottom; or the full view, river and floodplain to every edge and
+    /// past them. Another valley is another river, as another size is.
+    nonisolated static let valley = Knob(key: "meander.valley", label: "Meanders", range: 0...1, standard: 0, section: "River",
+                                         format: .choice(["Within the screen", "Full view"]))
+    nonisolated static let knobs = [look, rule, bars] + grades + [valley, width, speed, memory, lakes, cycleMinutes]
 
     /// A colour from its three bytes.
     nonisolated private static func tone(_ r: Float, _ g: Float, _ b: Float) -> SIMD3<Float> { SIMD3(r, g, b) / 255 }
@@ -127,14 +132,17 @@ final class Meander: SKScene {
     /// steps. Each step's bytes go to whichever holds the older.
     private var textures: [SKMutableTexture] = [], times = [0.0, 0.0], newest = 0
     private let clocks = SKUniform(name: "u_t", vectorFloat2: .zero), blend = SKUniform(name: "u_blend", float: 0), settings = SKUniform(name: "u_knobs", vectorFloat4: .zero)
+    /// How far the picture fades to its flat ground at the very top and bottom: some, for a river kept within the
+    /// screen, whose far ground is an older river's; none for the full view.
+    private let edge = SKUniform(name: "u_edge", float: Meander.valley.value > 0.5 ? 0 : 0.4)
     /// The Look sliders' uniforms (`u_brightness` and so on), which a shader has only while one is off its standard value.
     private let grading = Meander.grades.map { SKUniform(name: "u_" + $0.key.split(separator: ".").last!, float: Float($0.value)) }
     private var lastTime: TimeInterval?
 
     /// One dressing of the ground: a sprite that draws a look in one mode, and what its shader reads that is its
     /// own. That is where the present falls in the look's cycles, and its colours, which are the same uniforms for
-    /// its life so that they can be eased: relief's river, dulled lake, unreached ground and its mottle, with the
-    /// land's colours by height in a texture 256 across; or a sheet's paper, river, line and four inks. Two
+    /// its life so that they can be eased: relief's river, dulled lake and unreached ground, with the land's
+    /// colours by height in a texture 256 across; or a sheet's paper, river, line and four inks. Two
     /// dressings are on the screen while one gives way to the other (`dress`), so they share none of it.
     @MainActor private final class Dress {
         let node: SKSpriteNode, map: Bool, rule: Int
@@ -149,14 +157,14 @@ final class Meander: SKScene {
 
         init(node: SKSpriteNode, map: Bool, rule: Int, dark: Bool) {
             (self.node, self.map, self.rule, self.dark) = (node, map, rule, dark)
-            let names = map ? ["u_paper", "u_river", "u_line"] + (0..<4).map { "u_ink\($0)" } : ["u_river", "u_wet", "u_ground", "u_wilds"]
+            let names = map ? ["u_paper", "u_river", "u_line"] + (0..<4).map { "u_ink\($0)" } : ["u_river", "u_wet", "u_ground"]
             paints = names.map { SKUniform(name: $0, vectorFloat3: .zero) }
             heights.filteringMode = .linear
         }
     }
 
     /// What it was built and dressed with: the river's size, and what Settings and the system wanted the ground to wear.
-    private let built = Meander.width.value.rounded()
+    private let built = Meander.width.value.rounded(), full = Meander.valley.value > 0.5
     private var dressed: [String] = []
     /// What the ground has on; and the dressings giving way to it, each drawn over it, less and less, for `gives`
     /// seconds. Each new one goes a place lower than the last (`depth`).
@@ -180,7 +188,8 @@ final class Meander: SKScene {
         backgroundColor = .black
         // ("meander.seed" is for the tests, which want the same river twice; nothing else sets it.)
         let seed = UInt64(max(UserDefaults.standard.integer(forKey: "meander.seed"), 0))
-        river = River(seed: seed > 0 ? seed : .random(in: 1...UInt64.max), across: Float(size.width / built), up: Float(size.height / built), texels: Self.texels)
+        river = River(seed: seed > 0 ? seed : .random(in: 1...UInt64.max), across: Float(size.width / built), up: Float(size.height / built), texels: Self.texels,
+                      valley: full ? .full : .within)
         river.lakeLife = Self.lakes.value * Self.perMinute
         river.age()
         textures = (0..<2).map { _ in
@@ -266,7 +275,7 @@ final class Meander: SKScene {
     /// shader, and the shader of a picture at rest has to stay the one it was, to the byte.
     private func shader(for dress: Dress, graded: Bool, leaving: Bool) -> SKShader {
         var uniforms = [SKUniform(name: "u_grid", vectorFloat2: [Float(river.columns), Float(river.rows)]), SKUniform(name: "u_other", texture: textures[1]),
-                        clocks, blend, dress.turns, settings] + (graded ? grading : [])
+                        clocks, blend, dress.turns, settings, edge] + (graded ? grading : [])
         if dress.map {
             uniforms += dress.paints[..<3] + [SKUniform(name: "u_stage", float: Float(Self.stages[dress.rule]))] + dress.paints[3...]
         } else {
@@ -278,7 +287,7 @@ final class Meander: SKScene {
     }
 
     /// The colours of the family a dressing's look is showing, in its mode, in the order `wear` takes them:
-    /// relief's four and then the land's by height, 256 of them; or a sheet's paper, river and line and its four
+    /// relief's three and then the land's by height, 256 of them; or a sheet's paper, river and line and its four
     /// inks (a sheet of two takes them in turn).
     private func palette(of dress: Dress) -> [SIMD3<Float>] {
         if dress.map {
@@ -286,10 +295,7 @@ final class Meander: SKScene {
             return [sheet.paper, sheet.river, sheet.line] + (0..<4).map { sheet.inks[$0 % sheet.inks.count] }
         }
         let both = Self.reliefs[family.relief], relief = dress.dark ? both.dark : both.light
-        // The ground the river never reached is mottled with its oldest land's colour: in Light with a quarter
-        // of it, or it reads as stains on the paper.
-        let oldest = relief.heights[relief.heights.count - 2].colour, wilds = dress.dark ? oldest : simd_mix(relief.ground, oldest, SIMD3(repeating: 0.25))
-        return [relief.river, relief.wet, relief.ground, wilds] + (0..<256).map { level in
+        return [relief.river, relief.wet, relief.ground] + (0..<256).map { level in
             let height = Float(level) / 255, above = relief.heights.firstIndex { $0.at >= height } ?? relief.heights.count - 1
             let (lo, hi) = (relief.heights[max(above - 1, 0)], relief.heights[above])
             return simd_mix(lo.colour, hi.colour, SIMD3(repeating: hi.at > lo.at ? (height - lo.at) / (hi.at - lo.at) : 0))
@@ -348,7 +354,7 @@ final class Meander: SKScene {
         guard !retired else { return }
         tune()
         if Self.wanted != dressed { dress() }
-        guard Self.width.value.rounded() != built else { return }
+        guard Self.width.value.rounded() != built || (Self.valley.value > 0.5) != full else { return }
         changes += 1
         let change = changes
         Task { [weak self] in
@@ -359,7 +365,7 @@ final class Meander: SKScene {
 
     /// Hands over to a new scene with a river of the size Settings now asks for, if that isn't this one's.
     func handOver() {
-        guard !retired, Self.width.value.rounded() != built, let view else { return } // no view: the render tests
+        guard !retired, Self.width.value.rounded() != built || (Self.valley.value > 0.5) != full, let view else { return } // no view: the render tests
         retired = true
         let fade = SKTransition.crossFade(withDuration: 0.8)
         (fade.pausesIncomingScene, fade.pausesOutgoingScene) = (false, false)
@@ -496,6 +502,8 @@ final class Meander: SKScene {
         float past = mix(u_t.x - (ground1.r * 65280.0 + ground1.g * 255.0) / 100.0, u_t.y - (ground2.r * 65280.0 + ground2.g * 255.0) / 100.0, u_blend);
         vec2 slope = vec2(across.r * 65280.0 + across.g * 255.0, up.r * 65280.0 + up.g * 255.0) / 100.0 * (1.0 - smoothstep(604.5, 605.0, past));
         past = min(past, 605.0);
+        // how far toward the top or the bottom this is, over the outer half of the way: what fades there, by `u_edge`
+        float outer = smoothstep(0.45, 1.0, abs(v_tex_coord.y - 0.5) * 2.0);
         vec2 shore = vec2(across.b, up.b); // points away from the water
         shore /= max(length(shore), 0.0001);
         // texels to a pixel, across and up, from the GPU's own slopes, which are one value to a block of four pixels:
@@ -534,10 +542,10 @@ final class Meander: SKScene {
         // height above the river, 0 to 1: a bar is up out of the water within a couple of T, then silts up for ages
         float height = 0.25 * (1.0 - exp(-age / 2.5)) + 0.75 * (1.0 - exp(-age / 90.0));
         vec2 rise = (0.1 * exp(-age / 2.5) + 0.75 / 90.0 * exp(-age / 90.0)) * older; // its slope a texel
-        // Ground the river has not reached in memory (as long as Settings has old courses stay): not flat, but
-        // nothing like a river's work either, and what the river made there fades out of it.
+        // Ground the river has not reached in memory (as long as Settings has old courses stay) is flat, in one
+        // colour, and what the river made there fades out into it. (It was mottled once. Dave: "the cloudy edges
+        // on top and bottom dont look as cool as whats happening in the middle".)
         float gone = clamp((age - 0.8 * u_knobs.y) / (0.18 * u_knobs.y), 0.0, 1.0), wild = gone * gone * (3.0 - 2.0 * gone);
-        vec2 fading = 6.0 * gone * (1.0 - gone) / (0.18 * u_knobs.y) * older; // and that's slope a texel
         // A scarp with new land at its foot, where the river has drawn back from a bank it was cutting (as it does
         // in the seconds after a cutoff). The height is steep in age at first, so the smooth read's mix of ages came
         // out nearly as high as the old ground wherever it had any old ground in it: the scarp in texel-sized
@@ -577,7 +585,6 @@ final class Meander: SKScene {
             height = mix(height, mix(mixed, land.x, near), scarp);
             wild = mix(wild, mix(lost, land.y, near), scarp);
             rise = mix(rise, (1.0 - near) * sloped - (land.x - mixed) * stepped, scarp);
-            fading = mix(fading, (1.0 - near) * share * sloped - (land.y - lost) * stepped, scarp);
         }
         // an old channel stays low for a long while, but never at once: a lake first
         float dip = clamp((0.66 - low) / 0.12, 0.0, 1.0), settled = smoothstep(2.0, 12.0, wetAge) * exp(-wetAge / 140.0);
@@ -596,10 +603,8 @@ final class Meander: SKScene {
         vec3 turn = 6.2832 * fract(u_turns.xyz - past / vec3(0.7, 1.1326, 2.9)) + vec3(0.0, 1.3, 0.7);
         float scroll = bars * (0.6 * cos(turn.x) + 0.4 * cos(turn.y)) + sets * cos(turn.z);
         tilt -= 0.03 * (bars * (0.6 * sin(turn.x) / 0.7 + 0.4 * sin(turn.y) / 1.1326) + sets * sin(turn.z) / 2.9) * 6.2832 * slope;
-        float rough = 0.75 * (0.6 * lumps(pts / 60.0) + 0.3 * lumps(pts / 22.0 + 9.0) + 0.1 * lumps(pts / 8.0 + 17.0));
-        tilt += 0.05 * (rough * fading + wild * vec2(dfdx(rough), dfdy(rough)) / perPixel);
         vec3 col = texture2D(u_heights, vec2((clamp(height + 0.02 * scroll, 0.0, 1.0) * 255.0 + 0.5) / 256.0, 0.5)).rgb;
-        col = mix(col, mix(u_ground, u_wilds, smoothstep(-0.1, 0.55, rough)), wild);
+        col = mix(col, u_ground, wild);
         // light from the upper left on the fine relief only, and none within a few pixels of water: no rims
         tilt *= -5.0;
         float shade = (dot(tilt, vec2(-0.55, 0.62)) + 0.56) / sqrt(dot(tilt, tilt) + 1.0) - 0.56;
@@ -613,6 +618,7 @@ final class Meander: SKScene {
         float still = mix(wetAge, past, smoothstep(0.8, 1.8, -bank)), lake = smoothstep(0.3, 4.0, still);
         float dull = lake * mix(0.35, 1.0, smoothstep(0.5 * u_knobs.w, 0.9 * u_knobs.w, still));
         col = mix(col, mix(u_river, u_wet, dull), water);
+        col = mix(col, u_ground, u_edge * outer);
         \(last)
     }
     """
@@ -667,6 +673,7 @@ final class Meander: SKScene {
             // the river, and a lake for its first few T, wear the full bank line
             float off = abs(bank) / pt, fresh = 1.0 - smoothstep(0.5, 6.0, wetAge);
             col = mix(col, u_line, max((1.0 - smoothstep(0.3, 1.3, off)) * (0.7 - 0.35 * going), (1.0 - smoothstep(0.5, 1.5, off)) * fresh));
+            col = mix(col, paper, u_edge * outer);
             \(last)
         }
         """
