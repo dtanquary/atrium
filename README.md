@@ -85,7 +85,7 @@ A river wandering across its floodplain. It's a simulation, not a film: each ban
 
 | <img src="docs/images/meander.webp" alt="Meander as relief in Rainforest, moving" width="1600"> | ![Meander as an old map in the inks of Fisk's 1944 sheets, in Light Mode](docs/images/meander-old-map.jpg) |
 |---|---|
-| Relief, in Rainforest | Old map, in the inks of Fisk's 1944 sheets, in Light Mode |
+| Relief, in Rainforest, at 2× speed | Old map, in the inks of Fisk's 1944 sheets, in Light Mode |
 | ![Meander as relief in Rainforest, in Light Mode](docs/images/meander-light.jpg) | ![Meander as relief in Amethyst](docs/images/meander-amethyst.jpg) |
 | Relief in Light Mode, as ink on paper | Another river, in Amethyst |
 | ![Meander as an old map in Salmon, in Dark Mode](docs/images/meander-salmon.jpg) | ![Meander as relief in Survey Blue, with Full view](docs/images/meander-full-view.jpg) |
@@ -148,7 +148,7 @@ A black hole and the disc of glowing gas turning around it, seen nearly edge on 
 
 | <img src="docs/images/black-hole.webp" alt="Black Hole with an orange disc, turning" width="1600"> | ![Black Hole with a white-gold disc, small in a wide sky](docs/images/black-hole-wide.jpg) |
 |---|---|
-| The orange disc, at its standard size | White-gold, small in a wide sky, the Milky Way bent around it |
+| The orange disc at its standard size, turning at 2× speed | White-gold, small in a wide sky, the Milky Way bent around it |
 | ![Black Hole with a blue-white disc at twice the size](docs/images/black-hole-blue-white.jpg) | ![Black Hole close up, the orange disc wider than the screen](docs/images/black-hole-close.jpg) |
 | Blue-white, at 2× | The close-up, at 3× |
 

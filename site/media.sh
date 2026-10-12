@@ -26,7 +26,7 @@ fish-tank|Fish Tank|42|4|SNAPSHOT_APPEARANCE=light'
 # Every wallpaper in the app, as the loop its card opens, in about the card's look:
 # slug|scene|seconds in before recording|extra environment
 PREVIEWS='aurora|Aurora|8|SNAPSHOT_DEFAULTS=aurora.palette=Purple,aurora.speed=2
-black-hole|Black Hole|5|
+black-hole|Black Hole|2.5|SNAPSHOT_DEFAULTS=blackhole.speed=2
 dappled-light|Dappled Light|4|SNAPSHOT_DEFAULTS=dappled.previewTime=1,dappled.previewHour=17.5,dappled.weather=1
 deep-space-tour|Deep Space Tour|4|SNAPSHOT_DEFAULTS=deep.photo=deep-pillars-webb.heic
 earth-from-orbit|Earth from Orbit|4|SNAPSHOT_DEFAULTS=latitude=25,longitude=78,earth.previewStorm=1
@@ -37,7 +37,7 @@ galaxy|Galaxy|4|SNAPSHOT_DEFAULTS=galaxy.kind=Whirlpool,galaxy.rotation=4
 game-of-life|Game of Life|30|
 lava-lamp|Lava Lamp|40|SNAPSHOT_DEFAULTS=lava.palette=Coral LAVA_SEED=11
 live-sky|Live Sky|4|SNAPSHOT_DEFAULTS=sky.previewTime=1,sky.previewHour=20.5,sky.landscape=1,sky.ground=0
-meander|Meander|5|SNAPSHOT_DEFAULTS=meander.seed=13,meander.colors=Rainforest SNAPSHOT_APPEARANCE=dark
+meander|Meander|2.5|SNAPSHOT_DEFAULTS=meander.seed=13,meander.colors=Rainforest,meander.speed=2 SNAPSHOT_APPEARANCE=dark
 murmuration|Murmuration|20|SNAPSHOT_DEFAULTS=murmuration.light=5,murmuration.ground=0 MURMURATION_SEED=3
 nebula|Nebula|4|SNAPSHOT_DEFAULTS=nebula.palette=Hubble
 pixel-city|Pixel City|30|SNAPSHOT_DEFAULTS=city.place=0,city.previewTime=1,city.previewHour=19
