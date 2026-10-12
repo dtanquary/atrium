@@ -28,16 +28,26 @@ final class LineDrawing: SKScene {
     /// screen for it there and then.
     nonisolated static let picture = Knob(key: "linedrawing.picture", label: "Picture", range: 0...Double(pictures.count), standard: 0, section: "Drawing",
                                           format: .choice(["Random"] + pictures.map(\.name)))
+    /// The line's width: the toy's own, about 1/700 of the screen's width, or half that, which holds twice the
+    /// detail each way, takes about twice as long, and looks more like a fine pen than the toy (`line-<file>-fine.route`).
+    nonisolated static let detail = Knob(key: "linedrawing.detail", label: "Detail", range: 0...1, standard: 0, section: "Drawing", format: .choice(["Standard", "Fine"]))
     /// How many times faster than a careful hand: at 1 the stylus crosses a fortieth of the screen's width a
-    /// second and a picture takes up to two hours; at the top one is done in two minutes.
+    /// second and a picture takes up to two hours (four, fine); at the top one is done in two minutes (four).
     nonisolated static let speed = Knob(key: "linedrawing.speed", label: "Speed", range: 1...60, standard: 1, section: "Drawing", format: .times)
-    nonisolated static let knobs = [picture, speed]
+    nonisolated static let knobs = [picture, detail, speed]
+
+    /// A picture's route at one of the two widths of line.
+    private static func route(_ picture: Int, fine: Bool) -> Data? { try? Data(contentsOf: resource("line-\(pictures[picture].file)\(fine ? "-fine" : "").route")) }
 
     /// Screen widths the stylus crosses in a second at speed 1: an eighth of a turn of a dial a second on the toy.
     private static let pace = 1.0 / 40
-    /// How long each picture takes at speed 1, in seconds, from its route's own clock; none for one that can't be read.
-    static let seconds: [Double] = pictures.map { picture in
-        (try? Data(contentsOf: resource("line-\(picture.file).route"))).flatMap { LineRoute($0, walking: false) }.map { $0.clock / (Double($0.columns) * pace) } ?? 0
+    /// The share of the screen's height kept clear at the top: the menu bar's, which on a notched MacBook is 3.8%
+    /// and would otherwise lie over the top of the picture's frame.
+    nonisolated private static let bar = 0.04
+    /// How long each picture takes at speed 1, in seconds, from its route's own clock, at the standard line's
+    /// width and at the fine one's; none for one that can't be read.
+    static let seconds: [[Double]] = [false, true].map { fine in
+        pictures.indices.map { route($0, fine: fine).flatMap { LineRoute($0, walking: false) }.map { $0.clock / (Double($0.columns) * pace) } ?? 0 }
     }
 
     /// Which picture is on the screen and how far along it is, by the wall clock: it is drawn, rests, clears, and
@@ -63,6 +73,13 @@ final class LineDrawing: SKScene {
         /// it is drawn and rests); and the picture to follow, once it is clearing.
         struct Moment: Equatable {
             var picture: Int, before: Int?, drawn: Double, cleared: Double, following: Int?
+        }
+
+        /// The picture now takes `new` seconds at speed 1 where it took `old` (the other width of line): it stays
+        /// the same share drawn, or as long rested.
+        mutating func stretch(at wall: Double, from old: Double, to new: Double) {
+            let since = wall - began, drawing = old / paced
+            began = since < drawing && drawing > 0 ? wall - since / drawing * new / paced : wall - new / paced - (since - drawing)
         }
 
         /// Moves on to the wall-clock moment `wall`, given the slider's speed, the menu's pick, each picture's
@@ -94,13 +111,15 @@ final class LineDrawing: SKScene {
         }
     }
 
-    /// The one cycle every copy of the scene follows, and what of it was last saved.
-    private static var cycle: Cycle?, saved: [String] = []
+    /// The one cycle every copy of the scene follows, the width of line it was last worked out for, and what of it
+    /// was last saved.
+    private static var cycle: Cycle?, fine: Bool?, saved: [String] = []
 
     /// The shared cycle's moment at `wall`, read from the defaults the first time and saved back whenever it moves
     /// to another picture or the slider moves it.
     private static func moment(at wall: Double) -> Cycle.Moment {
         let speed = Self.speed.value, pick = Int(Self.picture.value), defaults = UserDefaults.standard
+        let detailed = Self.detail.value > 0.5, seconds = Self.seconds[detailed ? 1 : 0]
         func place(_ key: String) -> Int? { defaults.string(forKey: key).flatMap { file in pictures.firstIndex { $0.file == file } } }
         func another(than picture: Int) -> Int { pictures.indices.filter { $0 != picture && seconds[$0] > 0 }.randomElement() ?? picture }
         if cycle == nil {
@@ -110,6 +129,8 @@ final class LineDrawing: SKScene {
                 cycle = Cycle(picture: pick > 0 ? pick - 1 : another(than: -1), before: nil, began: wall, paced: speed, following: nil, picked: pick)
             }
         }
+        if let was = fine, was != detailed { cycle!.stretch(at: wall, from: Self.seconds[was ? 1 : 0][cycle!.picture], to: seconds[cycle!.picture]) }
+        fine = detailed
         let moment = cycle!.moment(at: wall, speed: speed, pick: pick, seconds: seconds, another: another)
         let now = [pictures[cycle!.picture].file, cycle!.before.map { pictures[$0].file } ?? "", String(cycle!.began)]
         if now != saved {
@@ -133,9 +154,9 @@ final class LineDrawing: SKScene {
         }
     }
 
-    /// What a pair of textures holds: a picture's line, and the ghost of the one before it.
+    /// What a pair of textures holds: a picture's line at one width, and the ghost of the one before it.
     private struct Held: Equatable {
-        var picture: Int, ghost: Int?
+        var picture: Int, ghost: Int?, fine: Bool
     }
 
     private let sprite = SKSpriteNode()
@@ -200,16 +221,17 @@ final class LineDrawing: SKScene {
     /// scene has if that picture is on the screen now; otherwise its route is stamped first, for the cover alone.
     private func stamp(_ wanted: Held) {
         let landing = Landing(), (across, down) = (wide, high)
-        let files = [wanted.picture, wanted.ghost].map { place in place.flatMap { try? Data(contentsOf: resource("line-\(Self.pictures[$0].file).route")) } }
-        let known = wanted.ghost == held?.picture ? cover : nil
+        let files = [wanted.picture, wanted.ghost].map { place in place.flatMap { Self.route($0, fine: wanted.fine) } }
+        let known = wanted.ghost == held?.picture && wanted.fine == held?.fine ? cover : nil
         stamping = (wanted, landing)
         Task.detached(priority: .userInitiated) {
-            // The grid fitted to the screen and centred; a frame, later, would give it a smaller rectangle here.
+            // The grid fitted to the screen below the menu bar's band and centred there; a frame, later, would
+            // give it a smaller rectangle here.
             func stamped(_ file: Data?, over ghost: Data?) -> LineRoute.Stamped? {
                 guard let route = file.flatMap({ LineRoute($0) }) else { return nil }
-                let scale = min(Double(across) / Double(route.columns), Double(down) / Double(route.rows))
+                let top = Self.bar * Double(down), scale = min(Double(across) / Double(route.columns), (Double(down) - top) / Double(route.rows))
                 return route.stamp(width: across, height: down, scale: scale, dx: (Double(across) - Double(route.columns) * scale) / 2,
-                                   dy: (Double(down) - Double(route.rows) * scale) / 2, over: ghost)
+                                   dy: top + (Double(down) - top - Double(route.rows) * scale) / 2, over: ghost)
             }
             landing.arrive(stamped(files[0], over: known ?? stamped(files[1], over: nil)?.cover))
         }
@@ -226,18 +248,18 @@ final class LineDrawing: SKScene {
             tint()
         }
 
-        let speed = Self.speed.value, pick = Int(Self.picture.value)
+        let speed = Self.speed.value, pick = Int(Self.picture.value), fine = Self.detail.value > 0.5, seconds = Self.seconds[fine ? 1 : 0]
         if let asked, own == nil {
-            let picture = pick > 0 ? pick - 1 : 0, count = Self.pictures.count, drawing = Self.seconds[picture] / speed
+            let picture = pick > 0 ? pick - 1 : 0, count = Self.pictures.count, drawing = seconds[picture] / speed
             let since = asked.cleared > 0 ? drawing + Cycle.rest(at: speed) + asked.cleared * Cycle.clearing : asked.drawn * drawing
             own = Cycle(picture: picture, before: asked.ghost ? (picture + 1) % count : nil, began: wall - since, paced: speed,
                         following: asked.cleared > 0 ? (picture + 2) % count : nil, picked: pick)
         }
-        let moment = own?.moment(at: wall, speed: speed, pick: pick, seconds: Self.seconds) { ($0 + 1) % Self.pictures.count } ?? Self.moment(at: wall)
+        let moment = own?.moment(at: wall, speed: speed, pick: pick, seconds: seconds) { ($0 + 1) % Self.pictures.count } ?? Self.moment(at: wall)
 
         // The textures for this moment, and, once the picture is clearing, the ones for the picture to follow, so
         // that it can begin on the frame the clearing ends.
-        let now = Held(picture: moment.picture, ghost: moment.before), next = moment.following.map { Held(picture: $0, ghost: moment.picture) }
+        let now = Held(picture: moment.picture, ghost: moment.before, fine: fine), next = moment.following.map { Held(picture: $0, ghost: moment.picture, fine: fine) }
         if let job = stamping, let stamped = job.landing.take(waiting: view == nil && job.of == now) {
             (made, stamping) = ((job.of, stamped), nil)
         }
@@ -249,7 +271,8 @@ final class LineDrawing: SKScene {
             if bare { shownAt = wall }
         }
         if let wanted = held != now ? now : next, stamping?.of != wanted, made?.of != wanted { stamp(wanted) }
-        bare = held != now
+        // (the same picture at the other width of line stays up, as far drawn, until its own textures land)
+        bare = held?.picture != now.picture || held?.ghost != now.ghost
 
         clock.floatValue = Float(moment.drawn * LineRoute.end / 256)
         clear.floatValue = Float(moment.cleared)

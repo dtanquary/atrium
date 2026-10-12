@@ -11,6 +11,9 @@ Picked by Dave on 2026-10-10, researched and mocked up that day, and built on 20
 - **Pixel Night Train.** A ground-level window seat: country sliding past on the real clock, with rain on the glass when it rains where you are. Dave picked it as an addition to [Pixel Window Seat](pixel-window-seat.md) rather than a wallpaper of its own, so it is that wallpaper's third window ("Window on: A train"), with three carriages and seven sceneries: [pixel-window-seat/train.md](pixel-window-seat/train.md).
 - **Meander.** A river migrating across its floodplain, cutting off oxbows and leaving scroll bars, drawn as lidar relief or as an old map after Harold Fisk's 1944 sheets of the Mississippi (US Army Corps of Engineers, public domain). A new river on each load, in one colour family. A wallpaper of its own: [meander.md](meander.md).
 
+## Asked for outright
+- **Line Drawing** (a working name). Dave asked for it on 2026-10-12, with research and mock-ups first: an old print drawn slowly in one unbroken line on a screen of grey powder, after the two-dial drawing toy. Built that day and hidden behind the `unfinished` switch while he tests it: [line-drawing.md](line-drawing.md). A frame with dials round the screen, and more pictures, are its own next ideas.
+
 ## Parked
 In the order they were proposed, most promising first.
 

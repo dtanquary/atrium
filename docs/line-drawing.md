@@ -1,29 +1,62 @@
 # Line Drawing
 
-An old print drawn slowly in one unbroken line on a screen of grey powder: the stylus scrapes the powder off the back of the glass, so the line is the dark inside showing through, and it can never lift. It imitates the Etch A Sketch, and that name is used nowhere in the app. "Line Drawing" is a working name, written once (`LineDrawing.title`), until one is settled.
+An old print drawn slowly in one unbroken line on a screen of grey powder: the stylus scrapes the powder off the back of the glass, so the line is the dark inside showing through, and it can never lift. It imitates the Etch A Sketch, and that name is used nowhere in the app.
 
-**Hidden while it is built** (`unfinished: true`). Dave picked it on 2026-10-12 from research and mock-ups made that day, and it is going in a step at a time. In so far: six pictures drawn from shipped routes, a Picture menu, the clearing between pictures and its ghost, the darker gone-over line, and both appearances. Still to come: the Detail setting, its Settings preview and screenshot.
+**Hidden while Dave tests it** (`unfinished: true`). He asked for it on 2026-10-12 (a wallpaper in that toy's style "where intricate public domain images become slowly drawn out over time starting from fresh"), it was researched and mocked up that day, and built the same day in three steps.
+
+**"Line Drawing" is a working name.** Dave has not settled one. It is written once (`LineDrawing.title`); a rename also means the two preview files (`Resources/preview-line-drawing*.jpg`), which Settings finds by the name, this doc and its folder, and the row in [README.md](README.md). The code's names (`LineDrawing`, `LineRoute`, `linedrawing.*`) are neutral and can stay.
+
+## Names and look-alikes
+
+From the rights research of 2026-10-12, which read the US Patent and Trademark Office's records (status pages are `https://tsdr.uspto.gov/statusview/sn<serial>`). Not a lawyer's advice.
+
+- **The toy's name is a registered word mark** of Spin Master Ltd. (reg. 725595, serial 72110281, live), and since 2026-05-05 also for "downloadable computer software applications featuring digital art and drawing" (reg. 8237930, serial 97223677). So the name is not the wallpaper's, and appears in no menu, setting, store listing or keyword.
+- **The toy's shape is registered too** (reg. 1587707, serial 73701288): a drawing of a frame, a screen and two circles in the lower corners, with no colour claimed. Red with white knobs is its famous look. So a frame, if one comes, is plainly not the toy's: another material and colour, the dials not in the lower corners.
+- **The mechanism is free:** one unbroken line scraped into grey powder. The patents are long expired.
+- **"Etch" alone:** Spin Master holds only the full name and two variants, and ten other owners hold ETCH for other things. It is an ordinary word, but it is the first word of the mark, and beside a grey screen and a dial-drawn line it reads as a reference to the toy. The research's order of risk, low to high: Line Drawing, Etching, Etch, the toy's full name.
 
 ## Dave's decisions (2026-10-12)
 
 - **The line is unbroken, with shading:** the picture's outlines, then its shading as hatching, the stylus going back along lines already drawn to get from place to place. He saw it beside a line that lifts and chose this.
-- **The screen alone, edge to edge, for now;** a frame with dials later. The picture's rectangle is kept relative to the screen so a frame can take a smaller one.
-- **Detail is to be a setting:** the toy's own line width, and a line half as wide. Not built yet.
-- **A Speed slider,** in his words "in case a user wants to see it go faster".
+- **"Screen alone now, frame later."** The screen fills the display. He saw a walnut frame with brass dials and a graphite one mocked up, and chose "our own frame" for later; the picture's rectangle is kept relative to the screen so a frame can take a smaller one.
+- **Detail: "Both, as a setting":** the toy's own line width, and a line half as wide. He will judge the default on his desktop; it starts at the toy's.
+- **A Speed slider:** "be sure to include a speed slider on the line drawing (etch) wallpaper in case a user wants to see it go faster".
 - **The screen follows the system's appearance:** 152 of 255 in Light Mode, 104 in Dark Mode.
-- **Nothing religious** among the pictures; classical myth is fine.
+- **Pictures:** "nothing religious". Classical myth is fine.
+
+The lead's calls, which Dave has not ruled on: progress follows the wall clock; a finished picture rests, clears softly to a ghost, and the next begins; the gone-over line is darker; the Picture menu has Random first.
 
 ## How it works
 
-- **A picture is a route**, not an image: the cells the stylus steps through, in order, on a grid of 1024 × 640 (one cell is one step; the line is 1.44 cells wide, about 1/700 of the screen's width, as measured on photos of the real toy). `docs/line-drawing/bake.py` makes a route from a picture; the app ships only routes (`Resources/line-<name>.route`, 48 KB for the Wave).
-- **The route is stamped once** into a texture, off the main thread, as the scene is built (`LineRoute.stamp`, in the `LineRoute` module, which is built optimised even in debug). Each texel holds when it is first drawn, as a 24-bit share of the route's clock, and how much of it the finished line covers. Until the stamp lands the screen is bare, which is how a drawing starts anyway; then the picture so far fades up over 0.4 s.
-- **One shader compares that time with a clock.** So a frame costs the same however much is drawn, and the CPU does nothing per frame but set the clock.
-- **Every read of the texture is at a texel's centre.** SpriteKit smooths any texture a shader reads, whatever its filtering mode says, and a time smoothed between a drawn texel and a bare one is a moment when nothing happened: lines would arrive thin and ragged. With a texel to each pixel that is one read. Above the 14-inch size the texture has a texel to two pixels each way, and the shader reads the four round each pixel, compares each with the clock, and only then mixes them: a pixel softer, a quarter of the memory.
-- **The clock is the wall's** (`LineDrawing.Cycle`). Which picture is on the screen, the one before it and the moment this one was begun are kept in the defaults (`linedrawing.drawing`, `linedrawing.before`, `linedrawing.began`) and shared by every copy of the scene, so a relaunch, Shuffle or a second display goes on from the same place, and a picture carries on while the wallpaper is covered or the Mac is asleep. Moving the Speed slider moves that moment, so the picture stays as far along as it was.
+- **A picture is a route**, not an image: the cells the stylus steps through, in order, on a grid of 1024 × 640 (one cell is one step; the line is 1.44 cells wide). `docs/line-drawing/bake.py` makes a route from a picture; the app ships only routes (`Resources/line-<name>.route`).
+- **The route is stamped once** into two textures, off the main thread (`LineRoute.stamp`, in the `LineRoute` module, which is built optimised even in debug). One holds when each texel is first drawn, as a 24-bit share of the route's clock, and how much of it the finished line covers; the other when it is gone over again (16 bits), and the ghost of the picture before. Until the stamp lands the screen is bare, which is how a drawing starts anyway; then the picture so far fades up over 0.4 s.
+- **One shader compares those times with a clock.** So a frame costs the same however much is drawn, and the CPU does nothing per frame but set the clock.
+- **Every read of a texture is at a texel's centre.** SpriteKit smooths any texture a shader reads, whatever its filtering mode says, and a time smoothed between a drawn texel and a bare one is a moment when nothing happened: lines would arrive thin and ragged. With a texel to each pixel that is one read of each texture. Above the 14-inch size the textures have a texel to two pixels each way, and the shader reads the four round each pixel, compares each with the clock, and only then mixes them: a pixel softer, a quarter of the memory. A standalone test before the build found 8.8% of pixels wrong when read at plain coordinates, with `.nearest` or `.linear` alike, and 24 in 5.9 million at texel centres.
+- **The clock is the wall's** (`LineDrawing.Cycle`). Which picture is on the screen, the one before it and the moment this one was begun are kept in the defaults (`linedrawing.drawing`, `linedrawing.before`, `linedrawing.began`) and shared by every copy of the scene, so a relaunch, Shuffle or a second display goes on from the same place, and a picture carries on while the wallpaper is covered or the Mac is asleep. Moving the Speed slider, or changing the Detail, moves that moment, so the picture stays as far along as it was.
 - **A picture is drawn, rests, clears, and the next begins.** It rests for five minutes at speed 1 (less when hurried, never under 20 s), then clears over 12 s whatever the speed: a soft fade, sooner in some places than others, as a shake lays the powder back unevenly. A ghost of its whole line stays (8% of the way to the dark inside) under the next picture, and goes when that one clears. The next picture is chosen as the clearing starts and stamped during it, so it begins on the frame the clearing ends.
-- **A line drawn once is pale; gone over, it is dark.** A second texture holds when each texel is gone over again (16 bits), and the ghost in a spare channel. The first pass draws a line 62% of the way to the dark inside and the second the rest, so outlines the stylus travels along come out bolder, as on the toy.
+- **A line drawn once is pale; gone over, it is dark.** The first pass draws a line 62% of the way to the dark inside and the second the rest, so outlines the stylus travels along come out bolder, as on the toy.
 - **The screen follows the system's appearance by itself** (`followsAppearance`): its two colours ease to the other mode's over two seconds, under the picture, with nothing rebuilt.
+- **The picture keeps clear of the menu bar:** the grid is fitted below the top 4% of the screen (a notched MacBook's bar is 3.8%).
 - **The powder** is a 512-texel tile of grain and soft mottle that repeats, a slow unevenness stretched over the whole screen, light from the upper left and a few bright specks.
+
+## The look, and the real toy
+
+Measured on 2026-10-12 from photos (line widths as a share of the screen's width; levels of 255).
+
+| | The real toy | Here |
+|---|---|---|
+| A line's width | 1/353 to 1/434 on a soft photo, so too wide; near 1/1200 on a scan of an expert's hatching | 1/711 (Standard), 1/1422 (Fine) |
+| Finest hatching | rows 1/610 apart (George Vlosich III's work) | 1/512 (Standard), 1/1024 (Fine) |
+| A line drawn once, against the screen | 0.68 to 0.70 of its level, blurred, so the true line is darker | about 0.6 |
+| Gone over, against the screen | 0.33 | 0.33 |
+| The screen | neutral grey, 137 to 191 with the room's light | 152 in Light Mode, 104 in Dark |
+| The screen's shape | 1.40 to 1.43 wide for 1 high | the display's own |
+
+The photos: a classic toy with an outline drawing, the best unprocessed one found (https://upload.wikimedia.org/wikipedia/commons/5/5a/Etch_A_Sketch_engine_drawing.jpg, CC BY 2.0 per Wikimedia Commons); a close scan and whole works by George Vlosich III (https://gvartwork.com/pages/etch-a-sketch, no licence, reference only); three of Jane Labowitch's (https://www.intrepidtravel.com/adventures/the-worlds-best-etch-a-sketch-artist-does-india/, no licence, reference only).
+
+- **How the experts shade** is what the routes copy: horizontal hatching at an even pitch, then vertical in the darks, then scraped solid, with thick outlines from going over them. Labowitch: "I sometimes have to go over the same area over a dozen times to get the darkest tones" (the page above).
+- **How the toy works:** "The inside surface of the glass screen is coated with aluminum powder, which is then scraped off by a movable stylus"; "The "black" line merely exposes the darkness inside the toy" (https://en.wikipedia.org/wiki/Etch_A_Sketch).
+- **Not matched:** the real screen has a sheen that moves across it with the light, and its lines are softer and more often doubled, where going back along one misses by a line's width. No sharp unprocessed close-up of a single line was found, and no photo of a cleared screen: the clearing and its ghost are a guess.
 
 ## The route's file
 
@@ -34,62 +67,90 @@ The app eases each position by one step (a quarter of each neighbour), so corner
 ## Making a route
 
 ```sh
-python3 docs/line-drawing/bake.py <folder of source pictures> Sources/Atrium/Resources wave
+python3 docs/line-drawing/bake.py <folder of source pictures> Sources/Atrium/Resources          # all six, standard
+python3 docs/line-drawing/bake.py <folder of source pictures> Sources/Atrium/Resources --fine   # all six, fine
+python3 docs/line-drawing/bake.py <folder of source pictures> Sources/Atrium/Resources wave     # one
 ```
 
-Needs numpy, scipy, Pillow and clang (for `route.c`, the one slow loop). The source pictures are not in the repo: `PICTURES` in `bake.py` gives each one's address and the file name it is looked for under. What it does:
+Needs numpy, scipy, Pillow and clang (for `route.c`, the one slow loop). The source pictures are not in the repo: `PICTURES` in `bake.py` gives each one's address, the file name it is looked for under, and its crop. A bake is the same every time. What it does:
 
 1. **Darkness on the grid:** the picture, cropped, fitted to the grid with a margin, its paper tone taken as bare screen.
 2. **Lines:** cells darker than their surroundings (the picture less a 2.5-cell blur of itself), thinned to one cell wide with Zhang and Suen's thinning (T. Y. Zhang and C. Y. Suen, "A fast parallel algorithm for thinning digital patterns", Communications of the ACM 27(3), 1984, https://doi.org/10.1145/357994.358023). Bold strokes are drawn first.
 3. **Shading:** six layers switched on by darkness. Horizontal rows every 8 cells, then 4, then 2; vertical columns every 4, then 2; then solid. Neighbouring rows are joined at alternate ends, so the stylus zigzags as a hand does.
 4. **One route:** the stylus walks to an undrawn neighbour, straight on first. Stuck, it takes the cheapest way to the nearest wanted cell: back along lines already drawn, or, where a piece of the picture stands alone, across bare screen (a stray mark, costed at twenty times a step back so it is the last resort). The whole picture's outlines come first, then each depth of shading over the whole picture, so a half-drawn picture is a whole composition and not a finished corner.
 
+The fine routes are the same bake on a grid of 2048 × 1280, so everything is half the size: a line half as wide, hatching twice as close.
+
+Tried in the research and dropped: a line that lifts (floating dashes half-way, and two dials could not draw it), finishing the nearest ink first (a finished corner and a bare screen for an hour), hatching alone (stray marks across the bare areas), TSP art and a raster squiggle (neither looks like the toy or like a person drawing).
+
 ## The pictures
 
-All landscape, bold, and not religious (Dave's rule). Each is shipped as its route only; the credits are also in `Resources/line-drawing-credits.tsv`, which Settings → About lists.
+All landscape, bold, and not religious. Each is shipped as its two routes only; the credits are also in `Resources/line-drawing-credits.tsv`, which Settings → About lists.
 
-| Picture | Source | Licence | At speed 1 |
-|---|---|---|---|
-| The Great Wave: Hokusai, *Under the Wave off Kanagawa*, c. 1830–32 | The Met, 45434: https://www.metmuseum.org/art/collection/search/45434 | CC0 (The Met's Open Access; `isPublicDomain` true) | 114 min |
-| The Rhinoceros: Dürer, 1515 | The Met, 356497: https://www.metmuseum.org/art/collection/search/356497 | CC0, as above | 120 min |
-| A Flea: Hooke, *Micrographia*, Schem. XXXIV, 1665 | Wellcome Collection, L0084699: https://wellcomecollection.org/works/ajveb66y | **CC BY 4.0: must be credited** ("Wellcome Collection") | 105 min |
-| Interlace: Bourgoin, *Les éléments de l'art arabe: le trait des entrelacs*, plate 96, 1879 (part) | Getty Research Institute, via the Internet Archive: https://archive.org/details/gri_33125012261786/page/n240 | Public domain (the Archive's record: not in copyright) | 32 min |
-| Flying Machine: O. and W. Wright, US patent 821,393, Fig. 1, 1906 | US Patent and Trademark Office: https://patents.google.com/patent/US821393A | Public domain (patent drawings; the Office asks to be acknowledged) | 41 min |
-| Mishima Pass: Hokusai, *Mishima Pass in Kai Province*, c. 1830–32 | The Met, 56346: https://www.metmuseum.org/art/collection/search/56346 | CC0, as above | 109 min |
+| Picture | Source | Licence | At speed 1 | Fine |
+|---|---|---|---|---|
+| The Great Wave: Hokusai, *Under the Wave off Kanagawa*, c. 1830–32 | The Met, 45434: https://www.metmuseum.org/art/collection/search/45434 | CC0 (The Met's Open Access; `isPublicDomain` true) | 114 min | 211 min |
+| The Rhinoceros: Dürer, 1515 | The Met, 356497: https://www.metmuseum.org/art/collection/search/356497 | CC0, as above | 120 min | 237 min |
+| A Flea: Hooke, *Micrographia*, Schem. XXXIV, 1665 | Wellcome Collection, L0084699: https://wellcomecollection.org/works/ajveb66y | **CC BY 4.0: must be credited** ("Wellcome Collection") | 105 min | 196 min |
+| Interlace: Bourgoin, *Les éléments de l'art arabe: le trait des entrelacs*, plate 96, 1879 (part) | Getty Research Institute, via the Internet Archive: https://archive.org/details/gri_33125012261786/page/n240 | Public domain (the Archive's record: not in copyright) | 32 min | 51 min |
+| Flying Machine: O. and W. Wright, US patent 821,393, Fig. 1, 1906 | US Patent and Trademark Office: https://patents.google.com/patent/US821393A | Public domain (patent drawings; the Office asks to be acknowledged) | 41 min | 78 min |
+| Mishima Pass: Hokusai, *Mishima Pass in Kai Province*, c. 1830–32 | The Met, 56346: https://www.metmuseum.org/art/collection/search/56346 | CC0, as above | 109 min | 210 min |
 
 The licence lines for the flea, the interlace and the patent were read at their sources by the rights research of 2026-10-12; The Met's for the three prints from its API (`isPublicDomain`) and its API page (https://metmuseum.github.io/: the dataset is under Creative Commons Zero).
 
-What suits a single line, from nine pictures tried: one large subject or one bold pattern, its lines at least two line-widths apart, landscape. Patent drawings, geometric ornament, a natural-history plate of one specimen and bold woodcuts work. Fine tonal engraving, crowded charts and anything that depends on lettering do not: Dürer's *Melencolia I* came out a muddle, and his star chart a tangle.
+- **All six work at both widths.** Fine is the better picture every time: the Rhinoceros gets its scales and plates back, and the Wrights' reference numerals become legible.
+- **Mishima Pass at the standard width is the weakest:** the print's graded sky becomes a dark band of hatching along the top, and the ground under the tree is muddled. It is kept because it reads as a tree, a mountain and clouds, and is clearly better fine. A candidate to cut.
+- **What suits a single line,** from nine pictures tried: one large subject or one bold pattern, its lines at least two line-widths apart, landscape. Patent drawings, geometric ornament, a natural-history plate of one specimen and bold woodcuts work. Fine tonal engraving, crowded charts and anything that depends on lettering do not: Dürer's *Melencolia I* came out a muddle (and its winged figure reads as an angel, so it is out anyway), and his star chart a tangle.
+- **Dropped:** Hokusai's *Ejiri in Suruga Province* (The Met, 36493), because it shows a wayside shrine.
 
 ## Settings
 
 | Setting | Range | What it does | Default |
 |---|---|---|---|
 | Picture | Random, or one of the six | Random draws a different picture each time. Picking one clears the screen for it there and then, and it is drawn over and over | Random |
-| Speed | 1× to 60× | how fast the stylus goes. At 1× it crosses a fortieth of the screen's width a second and a picture takes 32 to 120 minutes; at 60× the longest takes two | 1× |
+| Detail | Standard, Fine | the line's width: the toy's own, or half that. The picture stays as far drawn as it was and is stamped again | Standard |
+| Speed | 1× to 60× | how fast the stylus goes. At 1× it crosses a fortieth of the screen's width a second and a picture takes 32 to 120 minutes (51 to 237 fine); at 60× the longest takes two (four) | 1× |
 
 Three more keys, with no page in Settings, set a scene up for the tests and for pictures of it; with any of them the scene keeps a cycle of its own and saves nothing: `linedrawing.drawn` (0 to 1) starts it that share of the way through its picture, `linedrawing.cleared` (0 to 1) that far through its clearing, and `linedrawing.ghost=1` lays the next picture's ghost under it.
 
+The screenshots (`docs/images/line-drawing.jpg` and `-light.jpg`, and the Settings previews made from them) are the Great Wave 70% drawn:
+
 ```sh
-SNAPSHOT_SCENE="Line Drawing" SNAPSHOT_DEFAULTS="linedrawing.drawn=0.4,linedrawing.picture=2" swift test --filter everySceneRenders
+SNAPSHOT_SCENE="Line Drawing" SNAPSHOT_APPEARANCE=dark SNAPSHOT_DEFAULTS="linedrawing.drawn=0.7,linedrawing.picture=1" swift test --filter everySceneRenders
 ```
 
 ## Cost
 
-Measured by the render test on a 14-inch screen at 2x (M3 Max, 2026-10-12): **0.5 to 0.65 ms of CPU and 0.22 to 0.29 ms of GPU a frame**, whatever the picture and however much of it is drawn, in both appearances and while clearing. Building: a route decodes in 2 ms and stamps in about 120 ms for 3024 × 1964, off the main thread; a scene built part-way through a picture stamps the one before as well, for its ghost. The two textures are 48 MB at that size, and a byte a texel more (6 MB) is kept for the next ghost.
+Measured by the render test on a 14-inch screen at 2x (M3 Max, 2026-10-12): **0.45 to 0.65 ms of CPU and 0.22 to 0.29 ms of GPU a frame**, whatever the picture, its detail and however much of it is drawn, in both appearances and while clearing.
 
-At a 5K display's size the half-resolution path is drawn by a test but not timed in the app. A standalone copy of the shader, timed the same way before this was built, took 0.57 ms of GPU at 5K and 0.79 at 6K with 28 and 39 MB of textures.
+- **Building:** a standard route decodes in 2 ms and stamps in about 120 ms for 3024 × 1964, off the main thread; a fine one, of four times the steps, in about 150 ms. A scene built part-way through a picture stamps the one before as well, for its ghost.
+- **Memory:** the two textures are 48 MB at that size, and a byte a texel more (6 MB) is kept for the next ghost. At 5K, with a texel to two pixels each way, 28 MB; at 6K, 39 MB.
+- **Shipped:** twelve routes, 942 KB.
+- **Not timed in the app:** a 5K or 6K display (a test draws the picture at 5K through the four-read shader). A standalone copy of the shader, timed the same way before this was built, took 0.57 ms of GPU at 5K and 0.79 at 6K. Nor a GPU slower than an M3 Max, nor the frame on which a texture is first sent.
 
 ## Checking it
 
 - `lineRouteDecodesToItsKnownLength`: the Wave's route has the steps and the clock its bake printed, stays on its grid, and never lifts.
 - `lineRouteStampsItsTextures`: the stamp covers a fifth of a 14-inch screen, its first row of bytes is the bottom of the screen (SpriteKit's order), and going over a line again is recorded. Prints the decode and stamp times.
+- `lineDrawingHasEveryPictureAtBothWidths`: all twelve routes decode on their grids, and the longest is done in under five minutes at the top of the Speed slider.
 - `lineDrawingLooksTheSameAtAnyFrameRate`: 15, 30 and 60 frames a second give the same picture to the pixel.
-- `lineDrawingCycleFollowsTheClock`: drawing, resting, clearing and the next picture by the clock alone; the Speed slider leaves a picture as far along as it was; a picked picture follows at once; a day away comes back to a picture part-way through.
-- `lineDrawingClearsToAGhost`: full, half cleared and a ghost hold less and less line; and the picture is drawn at a 5K display's size, through the four-read shader.
+- `lineDrawingCycleFollowsTheClock`: drawing, resting, clearing and the next picture by the clock alone; the Speed slider and the Detail leave a picture as far along as it was; a picked picture follows at once; a day away comes back to a picture part-way through.
+- `lineDrawingClearsToAGhost`: full, half cleared and a ghost hold less and less line; and the picture is drawn at a 5K display's size.
+- `lineDrawingDrawsTheFineLine`: the fine route is drawn, with a thinner line, and nothing is drawn under the menu bar.
 - `lineDrawingFollowsTheAppearance`: the screen's level goes from Light Mode's to Dark Mode's in two seconds.
 
 ## Shortcuts
 
 - A texel takes the time of the pass that covers it most, and the finished line's cover. Where a later line overlaps an earlier one's edge by a sliver, that sliver shows with the earlier line (`ponytail:` in `LineRoute.stamp`).
 - The stray marks that join separate pieces are part of every unbroken route: 536 cells of them on the Wave.
+- The tracer is not an artist: shading in small pale areas turns into boxy meanders, hatching never follows a form, and at the standard width lettering is illegible.
+
+## What is wrong, and next
+
+- **Not yet seen on a desktop.** Everything above is from the render test's pictures. The Settings page has not been opened: the test that does it puts a window on the screen.
+- **At 1× the picture can stand still for seconds** while the stylus goes back along its line (a third to nearly half of the clock; the longest spell on the Wave is 19 s). A frame with dials would show them turning then.
+- **The Settings page's live copy shows the same moment as the desktop,** so in a picture's first minutes it is a nearly bare screen.
+- **The slow unevenness shows as cloudy patches** on the bare screen, more than in the mock-ups.
+- **A picture with big darks leaves a large grey ghost** under the next one for its whole time.
+- **A frame with dials** ("frame later"): the screen is 1.40 : 1 on the toy, so a frame costs picture (62% of the display in the mock-ups). Dials would turn about five times to cross the screen; a fine knurl strobes at 15 frames a second, so theirs would be coarse or blurred.
+- **More pictures:** the set is six. The research's shortlist has 25, in four kinds.

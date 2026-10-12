@@ -19,6 +19,21 @@ import Testing
     #expect(heading.steps == route.steps && heading.x.isEmpty)
 }
 
+/// Every picture in the set has a route at both widths of line: each decodes, to the steps its heading promises,
+/// on the standard grid or the fine one of twice as many cells each way, and the fine one takes the longer.
+@MainActor @Test func lineDrawingHasEveryPictureAtBothWidths() throws {
+    for (place, picture) in LineDrawing.pictures.enumerated() {
+        for (fine, grid) in [(false, 1024), (true, 2048)] {
+            let file = try Data(contentsOf: resource("line-\(picture.file)\(fine ? "-fine" : "").route")), route = try #require(LineRoute(file), "\(picture.name)")
+            #expect(route.columns == grid && route.rows == grid * 5 / 8 && route.x.count == route.steps + 1 && route.steps > 50_000, "\(picture.name), fine \(fine)")
+            #expect(route.rect.x > 0 && route.rect.y > 0 && route.rect.x + route.rect.w < grid && route.rect.y + route.rect.h < grid * 5 / 8)
+        }
+        #expect(LineDrawing.seconds[0][place] > 1500 && LineDrawing.seconds[1][place] > 1.5 * LineDrawing.seconds[0][place], "\(picture.name) takes \(LineDrawing.seconds.map { $0[place] })")
+    }
+    // at the top of the Speed slider the longest, fine, is done in a few minutes
+    #expect(LineDrawing.seconds[1].max()! / LineDrawing.speed.range.upperBound < 300)
+}
+
 /// A route stamped for a 14-inch screen: the line covers a fifth of it, the first row of bytes is the bottom of the
 /// screen (where the stylus starts, at the frame's lower left corner, at the very start of the clock), and times
 /// run on to the clock's end. Prints how long decoding and stamping take.
@@ -31,6 +46,10 @@ import Testing
     func ms(_ span: Duration) -> Double { Double(span.components.attoseconds) / 1e15 + Double(span.components.seconds) * 1000 }
     let making = clock.measure { _ = SKTexture(data: stamped.when, size: CGSize(width: w, height: h)) }
     print(String(format: "Line Drawing, the Wave for 3024 x 1964: decoded in %.0f ms, stamped in %.0f ms, made a texture in %.1f ms", ms(decoding), ms(stamping), ms(making)))
+    // and the fine route, of four times the steps, at the same size
+    let fine = try #require(LineRoute(try Data(contentsOf: resource("line-wave-fine.route"))))
+    let finer = clock.measure { _ = fine.stamp(width: w, height: h, scale: scale / 2, dx: dx, dy: dy) }
+    print(String(format: "Line Drawing, the Wave's fine route (%d steps) for 3024 x 1964: stamped in %.0f ms", fine.steps, ms(finer)))
     let when = [UInt8](stamped.when), again = [UInt8](stamped.more)
     func time(_ p: Int) -> Int { Int(when[p * 4]) << 16 | Int(when[p * 4 + 1]) << 8 | Int(when[p * 4 + 2]) }
     let drawn = (0..<w * h).filter { when[$0 * 4 + 3] > 127 }
@@ -143,6 +162,10 @@ private func ink(_ pixels: [UInt32]) -> Int {
     // back to Random and away for a day: somewhere in a picture that isn't the one before it
     let later = at(2075 + 86_400, speed: 2, pick: 0)
     #expect(later.picture != later.before && later.drawn >= 0 && later.drawn <= 1 && cycle.began <= 2075 + 86_400)
+    // the other width of line takes twice as long: the picture stays as far drawn as it was
+    var other = LineDrawing.Cycle(picture: 0, before: nil, began: 0, paced: 2, following: nil, picked: 0)
+    other.stretch(at: 100, from: 600, to: 1200)
+    #expect(other.moment(at: 100, speed: 2, pick: 0, seconds: [1200, 300, 900], another: next).drawn == 1.0 / 3)
 }
 
 /// A finished picture clears to a faint ghost, and the next is drawn over it: full, half cleared, and the next
@@ -162,6 +185,26 @@ private func ink(_ pixels: [UInt32]) -> Int {
     #expect(lines > 1512 * 982 / 30 && fainter.max()! < 30 && fainter.min()! > -3, "the ghost darkens \(lines) pixels, by \(fainter.max()!) at the most")
     let big = ink(try drawn(["linedrawing.drawn": 1], 5120, 2880)), share = Double(big) / Double(5120 * 2880) / (Double(full) / Double(1512 * 982))
     #expect(share > 0.7 && share < 1.4, "at 5K the picture holds \(share) of the line it does at 14 inches, pixel for pixel")
+}
+
+/// The fine line: the same picture from its fine route is drawn, with a thinner line (fewer pixels as dark as a
+/// line's middle, though it holds more line). And at either width nothing is drawn in the top 4% of the screen,
+/// which the menu bar covers.
+@MainActor @Test func lineDrawingDrawsTheFineLine() throws {
+    NSApplication.shared.appearance = NSAppearance(named: .aqua) // the levels below are Light Mode's
+    defer { NSApplication.shared.appearance = nil }
+    func finished(fine: Double) throws -> [UInt32] {
+        var pixels: [UInt32] = []
+        try with(["linedrawing.drawn": 1, LineDrawing.picture.key: 2, LineDrawing.detail.key: fine]) { pixels = try Screen(3024, 1964).settled() }
+        return pixels
+    }
+    let standard = try finished(fine: 0), fine = try finished(fine: 1)
+    func lines(_ pixels: [UInt32]) -> Int { pixels.count { $0 & 255 < 110 } }
+    #expect(lines(fine) > 3024 * 1964 / 40 && fine != standard, "the fine picture has \(lines(fine)) pixels of line and the standard \(lines(standard))")
+    // a thinner line has more edge to its middle: of the pixels a line touches, fewer are at full depth
+    func solid(_ pixels: [UInt32]) -> Double { Double(pixels.count { $0 & 255 < 75 }) / Double(pixels.count { $0 & 255 < 125 }) }
+    #expect(solid(fine) < solid(standard), "fully dark share of the line: fine \(solid(fine)), standard \(solid(standard))")
+    for pixels in [standard, fine] { #expect(!pixels[..<(3024 * (1964 * 4 / 100))].contains { $0 & 255 < 110 }, "a line under the menu bar") }
 }
 
 /// The screen goes to the system's other mode by itself, under the picture: light, then two seconds after Dark
