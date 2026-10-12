@@ -33,7 +33,10 @@ final class Etching: SKScene {
     /// second as it draws and a picture takes up to an hour and a half (three, fine); at the top one is done in
     /// a minute and a half (three).
     nonisolated static let speed = Knob(key: "etching.speed", label: "Speed", range: 1...60, standard: 1, section: "Drawing", format: .times)
-    nonisolated static let knobs = [picture, detail, speed]
+    /// The screen's powder: the bright one of a lit room, the dim one, or whichever suits the system's appearance.
+    /// Bright is the standard, as every mock-up was, whatever the system is in.
+    nonisolated static let powder = Knob(key: "etching.screen", label: "Screen", range: 0...2, standard: 0, section: "Drawing", format: .choice(["Light", "Dark", "Match System"]))
+    nonisolated static let knobs = [picture, detail, speed, powder]
 
     /// A picture's route at one of the two widths of line.
     private static func route(_ picture: Int, fine: Bool) -> Data? { try? Data(contentsOf: resource("etching-\(pictures[picture].file)\(fine ? "-fine" : "").route")) }
@@ -180,8 +183,11 @@ final class Etching: SKScene {
     /// far cleared (`etching.cleared`), and whether another picture's ghost lies under it (`etching.ghost`).
     /// With any of them the scene keeps a cycle of its own, begun at its first frame, and saves nothing.
     private var asked: (drawn: Double, cleared: Double, ghost: Bool)?, own: Cycle?
-    /// The mode the screen is in, 0 in Light and 1 in Dark, and on its way to the system's; and the system's, watched.
+    /// The screen's powder, 0 the bright and 1 the dim, on its way to the one Settings asks for; and the system's
+    /// appearance, watched, for Match System.
     private var shade = 0.0, dark = false, appearance: NSKeyValueObservation?, lastWall: Double?
+    /// Whether Settings asks for the dim powder: Dark, or Match System in Dark Mode.
+    private var dim: Bool { Self.powder.value > 1.5 ? dark : Self.powder.value > 0.5 }
 
     private static let grain: SKTexture = {
         let tile = SKTexture(data: LineRoute.grain(), size: CGSize(width: 512, height: 512))
@@ -191,7 +197,7 @@ final class Etching: SKScene {
 
     override func sceneDidLoad() {
         dark = systemIsDark
-        shade = dark ? 1 : 0
+        shade = dim ? 1 : 0
         tint()
         appearance = NSApplication.shared.observe(\.effectiveAppearance) { [weak self] _, _ in MainActor.assumeIsolated { self?.dark = systemIsDark } }
         // The display's own pixels, and a texel to each; from the 14-inch size up, a texel to two each way, which
@@ -211,8 +217,8 @@ final class Etching: SKScene {
         if hooks.contains(where: { $0 != nil }) { asked = (min(max(hooks[0] ?? 0, 0), 1), min(max(hooks[1] ?? 0, 0), 1), (hooks[2] ?? 0) > 0.5) }
     }
 
-    /// The powder and the dark inside, for the mode the screen is in: 152 of 255 in a lit room and 104 in a dim
-    /// one, the line a third as light (docs/etching.md, "Look").
+    /// The powder and the dark inside, for the shade the screen is at: 152 of 255, bright, and 104, dim, the line
+    /// a third as light (docs/etching.md, "Look").
     private func tint() {
         func tone(_ r: Float, _ g: Float, _ b: Float) -> SIMD3<Float> { SIMD3(r, g, b) / 255 }
         let mix = SIMD3<Float>(repeating: Float(simd_smoothstep(0, 1, shade)))
@@ -247,8 +253,8 @@ final class Etching: SKScene {
         let wall = currentTime + Date.timeIntervalSinceReferenceDate - ProcessInfo.processInfo.systemUptime
         let passed = min(max(wall - (lastWall ?? wall), 0), 0.1)
         lastWall = wall
-        if shade != (dark ? 1 : 0) { // to the system's other mode over two seconds, as Meander goes
-            shade = dark ? min(shade + passed / 2, 1) : max(shade - passed / 2, 0)
+        if shade != (dim ? 1 : 0) { // to the other powder over two seconds, as Meander goes to the system's other mode
+            shade = dim ? min(shade + passed / 2, 1) : max(shade - passed / 2, 0)
             tint()
         }
 

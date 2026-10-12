@@ -21,7 +21,7 @@ From the rights research of 2026-10-12, which read the US Patent and Trademark O
 - **"Screen alone now, frame later."** The screen fills the display. He saw a walnut frame with brass dials and a graphite one mocked up, and chose "our own frame" for later; the picture's rectangle is kept relative to the screen so a frame can take a smaller one.
 - **Detail: "Both, as a setting":** the toy's own line width, and a line half as wide. He will judge the default on his desktop; it starts at the toy's.
 - **A Speed slider:** "be sure to include a speed slider on the line drawing (etch) wallpaper in case a user wants to see it go faster".
-- **The screen follows the system's appearance:** 152 of 255 in Light Mode, 104 in Dark Mode.
+- **The screen follows the system's appearance:** 152 of 255 in Light Mode, 104 in Dark Mode. Changed the same day, once he saw it on his desktop, in Dark Mode: "something off with final etching background color, it does not match any of the mockups that showed a brighter paper like color, is it auto reacting to light and dark theme? it so we need to make the background on etching a configurable option". It was reacting: the mock-ups he approved all showed the bright screen, and his Mac showed the dim one. So the screen is now a setting, Screen: Light (the bright powder, the default, whatever the system is in), Dark, or Match System, which is what it did before.
 - **Pictures:** "nothing religious". Classical myth is fine.
 
 The lead's calls, which Dave has not ruled on: progress follows the wall clock; a finished picture rests, clears softly to a ghost, and the next begins; the gone-over line is darker; the Picture menu has Random first.
@@ -36,9 +36,9 @@ The lead's calls, which Dave has not ruled on: progress follows the wall clock; 
 - **A picture is drawn, rests, clears, and the next begins.** It rests for five minutes at speed 1 (less when hurried, never under 20 s), then clears over 12 s whatever the speed: a soft fade, sooner in some places than others, as a shake lays the powder back unevenly. A ghost of its whole line stays (8% of the way to the dark inside) and fades away under the next picture, over its first six minutes of drawing at speed 1 (`Cycle.ghosting`). As first built the ghost stayed until the next clearing, and a print with big darks left a grey shape under the next picture for its whole time: a flaw, not a feature. The next picture is chosen as the clearing starts and stamped during it, so it begins on the frame the clearing ends.
 - **A line drawn once is pale; gone over, it is dark.** The first pass draws a line 62% of the way to the dark inside and the second the rest, so outlines the stylus travels along come out bolder, as on the toy.
 - **Going back along a line, the stylus goes eight times as fast** as it draws (`LineRoute.haste`, and `HASTE` in the bake). Nothing new appears while it does, but for a pale line turning dark the first time it is gone over. At twice the drawing pace, as first built, a picture stood still for up to 26 s at a time and for 32 to 39% of its clock; at eight times the longest spell is 3.6 to 6.5 s and it is still for 11 to 14%. The lead asked for this once Dave was to watch it at 1×; a frame with dials that keep turning would be the other answer.
-- **The screen follows the system's appearance by itself** (`followsAppearance`): its two colours ease to the other mode's over two seconds, under the picture, with nothing rebuilt.
+- **The screen is bright or dim by a setting** (Screen: Light, Dark or Match System), read every frame. Changing it, or the system's appearance changing under Match System, eases its two colours to the other's over two seconds, under the picture, with nothing rebuilt: the scene watches the appearance itself (`followsAppearance`), so the app never builds it afresh for one.
 - **The picture keeps clear of the menu bar:** the grid is fitted below the top 4% of the screen (a notched MacBook's bar is 3.8%).
-- **The powder** is a 512-texel tile of grain and soft mottle that repeats, a slow unevenness stretched over the whole screen, light from the upper left and a few bright specks. The slow unevenness is kept faint: it read as cloudy patches on a bare screen at the mock-ups' strength. Measured on a bare screen 2560 px wide with the light taken off, the level's spread after an 80 px blur is 0.86% of the level, where the mock-ups' was 1.67% and the first build's 1.43%. The light falls off by 5% across the screen in Light Mode and by 2% in Dark Mode, where 5% read as a vignette.
+- **The powder** is a 512-texel tile of grain and soft mottle that repeats, a slow unevenness stretched over the whole screen, light from the upper left and a few bright specks. The slow unevenness is kept faint: it read as cloudy patches on a bare screen at the mock-ups' strength. Measured on a bare screen 2560 px wide with the light taken off, the level's spread after an 80 px blur is 0.86% of the level, where the mock-ups' was 1.67% and the first build's 1.43%. The light falls off by 5% across the bright screen and by 2% across the dim one, where 5% read as a vignette.
 
 ## The look, and the real toy
 
@@ -50,7 +50,7 @@ Measured on 2026-10-12 from photos (line widths as a share of the screen's width
 | Finest hatching | rows 1/610 apart (George Vlosich III's work) | 1/512 (Standard), 1/1024 (Fine) |
 | A line drawn once, against the screen | 0.68 to 0.70 of its level, blurred, so the true line is darker | about 0.6 |
 | Gone over, against the screen | 0.33 | 0.33 |
-| The screen | neutral grey, 137 to 191 with the room's light | 152 in Light Mode, 104 in Dark |
+| The screen | neutral grey, 137 to 191 with the room's light | 152 (Light), 104 (Dark) |
 | The screen's shape | 1.40 to 1.43 wide for 1 high | the display's own |
 
 The photos: a classic toy with an outline drawing, the best unprocessed one found (https://upload.wikimedia.org/wikipedia/commons/5/5a/Etch_A_Sketch_engine_drawing.jpg, CC BY 2.0 per Wikimedia Commons); a close scan and whole works by George Vlosich III (https://gvartwork.com/pages/etch-a-sketch, no licence, reference only); three of Jane Labowitch's (https://www.intrepidtravel.com/adventures/the-worlds-best-etch-a-sketch-artist-does-india/, no licence, reference only).
@@ -111,18 +111,21 @@ The licence lines for the flea, the interlace and the patent were read at their 
 | Picture | Random, or one of the six | Random draws a different picture each time. Picking one clears the screen for it there and then, and it is drawn over and over | Random |
 | Detail | Standard, Fine | the line's width: the toy's own, or half that. The picture stays as far drawn as it was and is stamped again | Standard |
 | Speed | 1× to 60× | how fast the stylus goes. At 1× it crosses a fortieth of the screen's width a second as it draws and a picture takes 23 to 85 minutes (33 to 168 fine); at 60× the longest takes a minute and a half (under three) | 1× |
+| Screen | Light, Dark, Match System | the powder: bright (152 of 255) or dim (104) whatever the system's appearance, or bright in Light Mode and dim in Dark Mode. A change eases over two seconds, under the picture | Light |
 
 Three more keys, with no page in Settings, set a scene up for the tests and for pictures of it; with any of them the scene keeps a cycle of its own and saves nothing: `etching.drawn` (0 to 1) starts it that share of the way through its picture, `etching.cleared` (0 to 1) that far through its clearing, and `etching.ghost=1` lays the next picture's ghost under it.
 
-The screenshots (`docs/images/etching.jpg` and `-light.jpg`, and the Settings previews made from them) are the Great Wave 70% drawn (`etching.drawn=0` gives the bare screen the unevenness was measured on):
+The screenshots (`docs/images/etching.jpg`, the dim screen, and `-light.jpg`, the bright one) are the Great Wave 70% drawn (`etching.drawn=0` gives the bare screen the unevenness was measured on). They were made when the screen followed the appearance; now the screen is asked for by name (`etching.screen=0` Light, `1` Dark):
 
 ```sh
-SNAPSHOT_SCENE="Etching" SNAPSHOT_APPEARANCE=dark SNAPSHOT_DEFAULTS="etching.drawn=0.7,etching.picture=1" swift test --filter everySceneRenders
+SNAPSHOT_SCENE="Etching" SNAPSHOT_DEFAULTS="etching.drawn=0.7,etching.picture=1,etching.screen=1" swift test --filter everySceneRenders
 ```
+
+The Settings page has one still, `preview-etching.jpg`, of the bright screen, in both appearances: the page's live copy is bright as it comes, and a dim still in Dark Mode would fade to a bright picture.
 
 ## Cost
 
-Measured by the render test on a 14-inch screen at 2x (M3 Max, 2026-10-12): **0.45 to 0.65 ms of CPU and 0.22 to 0.29 ms of GPU a frame**, whatever the picture, its detail and however much of it is drawn, in both appearances and while clearing.
+Measured by the render test on a 14-inch screen at 2x (M3 Max, 2026-10-12): **0.45 to 0.65 ms of CPU and 0.22 to 0.29 ms of GPU a frame**, whatever the picture, its detail and however much of it is drawn, in on either screen and while clearing.
 
 - **Building:** a standard route decodes in 2 ms and stamps in about 120 ms for 3024 × 1964, off the main thread; a fine one, of four times the steps, in about 150 ms. A scene built part-way through a picture stamps the one before as well, for its ghost.
 - **Memory:** the two textures are 48 MB at that size, and a byte a texel more (6 MB) is kept for the next ghost. At 5K, with a texel to two pixels each way, 28 MB; at 6K, 39 MB.
@@ -138,7 +141,8 @@ Measured by the render test on a 14-inch screen at 2x (M3 Max, 2026-10-12): **0.
 - `etchingCycleFollowsTheClock`: drawing, resting, clearing and the next picture by the clock alone; the Speed slider and the Detail leave a picture as far along as it was; a picked picture follows at once; a day away comes back to a picture part-way through.
 - `etchingClearsToAGhost`: full, half cleared and a ghost hold less and less line; and the picture is drawn at a 5K display's size.
 - `etchingDrawsTheFineLine`: the fine route is drawn, with a thinner line, and nothing is drawn under the menu bar.
-- `etchingFollowsTheAppearance`: the screen's level goes from Light Mode's to Dark Mode's in two seconds.
+- `etchingFollowsTheAppearance`: set to Match System, the screen's level goes from Light Mode's to Dark Mode's in two seconds.
+- `etchingScreenIsTheOneAskedFor`: as it comes the screen is the bright one in Dark Mode; set to Dark it eases to the dim one, and is the dim one in Light Mode.
 
 ## Shortcuts
 

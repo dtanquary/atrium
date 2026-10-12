@@ -193,8 +193,6 @@ private func ink(_ pixels: [UInt32]) -> Int {
 /// line's middle, though it holds more line). And at either width nothing is drawn in the top 4% of the screen,
 /// which the menu bar covers.
 @MainActor @Test func etchingDrawsTheFineLine() throws {
-    NSApplication.shared.appearance = NSAppearance(named: .aqua) // the levels below are Light Mode's
-    defer { NSApplication.shared.appearance = nil }
     func finished(fine: Double) throws -> [UInt32] {
         var pixels: [UInt32] = []
         try with(["etching.drawn": 1, Etching.picture.key: 2, Etching.detail.key: fine]) { pixels = try Screen(3024, 1964).settled() }
@@ -209,12 +207,14 @@ private func ink(_ pixels: [UInt32]) -> Int {
     for pixels in [standard, fine] { #expect(!pixels[..<(3024 * (1964 * 4 / 100))].contains { $0 & 255 < 110 }, "a line under the menu bar") }
 }
 
-/// The screen goes to the system's other mode by itself, under the picture: light, then two seconds after Dark
-/// Mode comes on, the dim screen.
+/// The screen's level: its pixels' blue, at the nine-tenths mark.
+private func level(_ pixels: [UInt32]) -> Int { pixels.map { Int($0 & 255) }.sorted()[pixels.count * 9 / 10] }
+
+/// Set to Match System, the screen goes to the system's other mode by itself, under the picture: light, then two
+/// seconds after Dark Mode comes on, the dim screen.
 @MainActor @Test func etchingFollowsTheAppearance() throws {
     defer { NSApplication.shared.appearance = nil }
-    func level(_ pixels: [UInt32]) -> Int { pixels.map { Int($0 & 255) }.sorted()[pixels.count * 9 / 10] }
-    try with(["etching.drawn": 0.3]) {
+    try with(["etching.drawn": 0.3, Etching.powder.key: 2]) {
         NSApplication.shared.appearance = NSAppearance(named: .aqua)
         let screen = try Screen(756, 491), light = level(try screen.settled())
         NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
@@ -222,5 +222,24 @@ private func ink(_ pixels: [UInt32]) -> Int {
         for _ in 0..<75 { _ = try screen.picture(after: 1.0 / 30) }
         let dim = level(try screen.picture(after: 1.0 / 30))
         #expect(abs(light - 154) < 8 && partway > dim + 20 && abs(dim - 105) < 8, "the screen's level: \(light) in Light Mode, \(partway) a frame after Dark Mode, \(dim) after")
+    }
+}
+
+/// The screen is the one Settings asks for whatever the system's appearance: bright as it comes, in Dark Mode, and
+/// dim when set to Dark, in Light Mode. Changing the setting eases the screen over, as the appearance does.
+@MainActor @Test func etchingScreenIsTheOneAskedFor() throws {
+    defer { NSApplication.shared.appearance = nil }
+    try with(["etching.drawn": 0.3]) {
+        NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
+        let screen = try Screen(756, 491), bright = level(try screen.settled())
+        UserDefaults.standard.set(1.0, forKey: Etching.powder.key)
+        defer { UserDefaults.standard.removeObject(forKey: Etching.powder.key) }
+        let partway = level(try screen.picture(after: 1.0 / 30))
+        for _ in 0..<75 { _ = try screen.picture(after: 1.0 / 30) }
+        let dimmed = level(try screen.picture(after: 1.0 / 30))
+        #expect(abs(bright - 154) < 8 && partway > dimmed + 20 && abs(dimmed - 105) < 8, "in Dark Mode the screen's level is \(bright) as it comes, \(partway) a frame after Dark is picked, \(dimmed) after")
+        NSApplication.shared.appearance = NSAppearance(named: .aqua)
+        let dim = level(try Screen(756, 491).settled())
+        #expect(abs(dim - 105) < 8, "set to Dark in Light Mode the screen's level is \(dim)")
     }
 }
