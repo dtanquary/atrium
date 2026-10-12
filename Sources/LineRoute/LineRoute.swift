@@ -72,8 +72,11 @@ public struct LineRoute: Sendable {
         /// Red, green and blue: when the texel was first drawn, as a 24-bit share of the route's clock (all ones:
         /// never). Alpha: how much of the texel the finished line covers.
         public let when: Data
-        /// Red and green: when it was gone over again, as a 16-bit share of the clock (all ones: never).
-        public let again: Data
+        /// Red and green: when it was gone over again, as a 16-bit share of the clock (all ones: never). Blue: how
+        /// much of the texel the line of the picture before covered, which stays as a ghost.
+        public let more: Data
+        /// How much of each texel the finished line covers, a byte to a texel: the next picture's ghost.
+        public let cover: Data
     }
 
     /// The screen's powder, as a 512 by 512 tile that repeats: red is its fine grain and soft mottle together (128
@@ -133,10 +136,11 @@ public struct LineRoute: Sendable {
 
     /// Stamps the line into textures with `scale` texels to a cell, the grid's top left corner `dx`, `dy` texels in
     /// from the textures' own. A texel takes the time of the pass that covers it most, so the fringe of a line laid
-    /// beside it later doesn't show early; and the time of the next pass over it, which draws it darker.
+    /// beside it later doesn't show early; and the time of the next pass over it, which draws it darker. `ghost` is
+    /// the cover of the picture before, from its own stamping at this size, if there was one.
     // ponytail: where a later line overlaps an earlier one's edge by less than a quarter of a texel's cover, that
     // sliver shows with the earlier line; store a time per pass if lines ever cross thickly enough to see it.
-    public func stamp(width: Int, height: Int, scale: Double, dx: Double, dy: Double) -> Stamped {
+    public func stamp(width: Int, height: Int, scale: Double, dx: Double, dy: Double, over ghost: Data? = nil) -> Stamped {
         let count = width * height, never: UInt32 = 0xFF_FFFF
         var first = [UInt32](repeating: never, count: count), second = [UInt16](repeating: .max, count: count), cover = [UInt8](repeating: 0, count: count)
         let reach = Float(Self.line / 2 * scale) + 0.5, unit = Self.end / clock, gap = UInt32(Self.apart * unit)
@@ -167,14 +171,15 @@ public struct LineRoute: Sendable {
                 }
             }
         } } }
-        var when = Data(count: count * 4), again = Data(count: count * 4)
-        when.withUnsafeMutableBytes { when in again.withUnsafeMutableBytes { again in
+        let before = ghost.flatMap { $0.count == count ? [UInt8]($0) : nil }
+        var when = Data(count: count * 4), more = Data(count: count * 4)
+        when.withUnsafeMutableBytes { when in more.withUnsafeMutableBytes { more in
             for p in 0..<count {
                 let q = first[p], s = second[p]
                 when[p * 4] = UInt8(q >> 16); when[p * 4 + 1] = UInt8(q >> 8 & 255); when[p * 4 + 2] = UInt8(q & 255); when[p * 4 + 3] = cover[p]
-                again[p * 4] = UInt8(s >> 8); again[p * 4 + 1] = UInt8(s & 255); again[p * 4 + 3] = 255
+                more[p * 4] = UInt8(s >> 8); more[p * 4 + 1] = UInt8(s & 255); more[p * 4 + 2] = before?[p] ?? 0; more[p * 4 + 3] = 255
             }
         } }
-        return Stamped(width: width, height: height, when: when, again: again)
+        return Stamped(width: width, height: height, when: when, more: more, cover: Data(cover))
     }
 }

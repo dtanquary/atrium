@@ -31,7 +31,7 @@ import Testing
     func ms(_ span: Duration) -> Double { Double(span.components.attoseconds) / 1e15 + Double(span.components.seconds) * 1000 }
     let making = clock.measure { _ = SKTexture(data: stamped.when, size: CGSize(width: w, height: h)) }
     print(String(format: "Line Drawing, the Wave for 3024 x 1964: decoded in %.0f ms, stamped in %.0f ms, made a texture in %.1f ms", ms(decoding), ms(stamping), ms(making)))
-    let when = [UInt8](stamped.when), again = [UInt8](stamped.again)
+    let when = [UInt8](stamped.when), again = [UInt8](stamped.more)
     func time(_ p: Int) -> Int { Int(when[p * 4]) << 16 | Int(when[p * 4 + 1]) << 8 | Int(when[p * 4 + 2]) }
     let drawn = (0..<w * h).filter { when[$0 * 4 + 3] > 127 }
     #expect(Double(drawn.count) / Double(w * h) > 0.12 && Double(drawn.count) / Double(w * h) < 0.3, "the line covers \(drawn.count) texels")
@@ -44,44 +44,138 @@ import Testing
     #expect(Double(twice.count) / Double(drawn.count) > 0.2 && twice.allSatisfy { Int(again[$0 * 4]) << 8 | Int(again[$0 * 4 + 1]) >= time($0) >> 8 })
 }
 
-/// The picture is the same whatever the frame rate: begun 40% drawn and run for two seconds at the top of the Speed
-/// slider, drawn at 15, 30 and 60 frames a second, every pixel is the same; and it has moved on from where it began.
-/// (The clock is the wall's, by way of each frame's own time, and the shader is told nothing else.)
-@MainActor @Test func lineDrawingLooksTheSameAtAnyFrameRate() throws {
-    let keys = ["linedrawing.drawn": 0.4, LineDrawing.speed.key: 60.0]
-    defer { keys.keys.forEach(UserDefaults.standard.removeObject) }
-    for (key, value) in keys { UserDefaults.standard.set(value, forKey: key) }
-    let device = try #require(MTLCreateSystemDefaultDevice()), queue = try #require(device.makeCommandQueue())
-    let (w, h) = (1512, 982), descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: w, height: h, mipmapped: false)
-    descriptor.usage = [.renderTarget, .shaderRead]
-    descriptor.storageMode = .shared
-    var pictures: [[UInt32]] = [], begun: [UInt32] = []
-    for rate in [15.0, 30.0, 60.0] {
-        let renderer = SKRenderer(device: device), target = try #require(device.makeTexture(descriptor: descriptor)), pass = MTLRenderPassDescriptor()
+/// Draws a Line Drawing offscreen on a display `w` by `h` pixels at 2x, a frame at a time.
+@MainActor private final class Screen {
+    let renderer: SKRenderer, queue: MTLCommandQueue, target: MTLTexture, pass = MTLRenderPassDescriptor()
+    let (w, h): (Int, Int)
+    private let start = ProcessInfo.processInfo.systemUptime + 1 // the renderer's first update runs on the system's clock
+    private var seconds = 0.0
+
+    init(_ w: Int, _ h: Int) throws {
+        let device = try #require(MTLCreateSystemDefaultDevice())
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: w, height: h, mipmapped: false)
+        descriptor.usage = [.renderTarget, .shaderRead]
+        descriptor.storageMode = .shared
+        (renderer, queue, target) = (SKRenderer(device: device), try #require(device.makeCommandQueue()), try #require(device.makeTexture(descriptor: descriptor)))
+        (self.w, self.h) = (w, h)
         renderer.scene = LineDrawing(size: CGSize(width: w / 2, height: h / 2))
         pass.colorAttachments[0].texture = target
         pass.colorAttachments[0].loadAction = .clear
         pass.colorAttachments[0].storeAction = .store
-        let start = ProcessInfo.processInfo.systemUptime + 1 // the renderer's first update runs on the system's clock
-        func picture(at frame: Int) throws -> [UInt32] {
-            renderer.update(atTime: start + Double(frame) / rate)
-            let buffer = try #require(queue.makeCommandBuffer())
-            renderer.render(withViewport: CGRect(x: 0, y: 0, width: w, height: h), commandBuffer: buffer, renderPassDescriptor: pass)
-            buffer.commit()
-            buffer.waitUntilCompleted()
-            var pixels = [UInt32](repeating: 0, count: w * h)
-            target.getBytes(&pixels, bytesPerRow: w * 4, from: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0)
-            return pixels
-        }
-        for frame in 0...Int(2 * rate) {
-            let pixels = try picture(at: frame)
-            if frame == Int(rate) { begun = pixels } // a second in: the picture has faded up, and has a second still to run
-            if frame == Int(2 * rate) { pictures.append(pixels) }
-        }
-        let moved = zip(begun, pictures.last!).count { $0 != $1 }
-        #expect(moved > 300, "at \(rate) fps only \(moved) pixels changed in a second")
     }
-    let dark = pictures[0].count { $0 & 255 < 90 }
-    #expect(dark > w * h / 50, "only \(dark) pixels of line")
-    #expect(pictures[1] == pictures[0] && pictures[2] == pictures[0], "the picture differs with the frame rate")
+
+    /// The picture `after` more seconds: each pixel a word, blue lowest, top row first.
+    func picture(after: Double) throws -> [UInt32] {
+        seconds += after
+        renderer.update(atTime: start + seconds)
+        let buffer = try #require(queue.makeCommandBuffer())
+        renderer.render(withViewport: CGRect(x: 0, y: 0, width: w, height: h), commandBuffer: buffer, renderPassDescriptor: pass)
+        buffer.commit()
+        buffer.waitUntilCompleted()
+        var pixels = [UInt32](repeating: 0, count: w * h)
+        target.getBytes(&pixels, bytesPerRow: w * 4, from: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0)
+        return pixels
+    }
+
+    /// A picture once the scene has settled: its route stamped and faded up.
+    func settled() throws -> [UInt32] {
+        for _ in 0..<3 { _ = try picture(after: 0.25) }
+        return try picture(after: 0.25)
+    }
+}
+
+/// With Settings values and the scene's own hooks for the length of `body`, as the render test sets them.
+@MainActor private func with(_ settings: [String: Double], _ body: () throws -> Void) rethrows {
+    defer { settings.keys.forEach(UserDefaults.standard.removeObject) }
+    for (key, value) in settings { UserDefaults.standard.set(value, forKey: key) }
+    try body()
+}
+
+/// How much line a picture holds: how far its pixels' blue falls below the screen's own, summed.
+private func ink(_ pixels: [UInt32]) -> Int {
+    let levels = pixels.map { Int($0 & 255) }, screen = levels.sorted()[levels.count * 9 / 10]
+    return levels.reduce(0) { $0 + max(screen - $1 - 12, 0) }
+}
+
+/// The picture is the same whatever the frame rate: begun 40% drawn and run for two seconds at the top of the Speed
+/// slider, drawn at 15, 30 and 60 frames a second, every pixel is the same; and it has moved on from where it began.
+/// (The clock is the wall's, by way of each frame's own time, and the shader is told nothing else.)
+@MainActor @Test func lineDrawingLooksTheSameAtAnyFrameRate() throws {
+    try with(["linedrawing.drawn": 0.4, LineDrawing.speed.key: 60, LineDrawing.picture.key: 1]) {
+        var pictures: [[UInt32]] = []
+        for rate in [15.0, 30.0, 60.0] {
+            let screen = try Screen(1512, 982)
+            var begun: [UInt32] = []
+            for frame in 0...Int(2 * rate) {
+                let pixels = try screen.picture(after: frame == 0 ? 0 : 1 / rate)
+                if frame == Int(rate) { begun = pixels } // a second in: the picture has faded up, and has a second still to run
+                if frame == Int(2 * rate) { pictures.append(pixels) }
+            }
+            let moved = zip(begun, pictures.last!).count { $0 != $1 }
+            #expect(moved > 300, "at \(rate) fps only \(moved) pixels changed in a second")
+        }
+        #expect(ink(pictures[0]) > 1512 * 982, "hardly any line: \(ink(pictures[0]))")
+        #expect(pictures[1] == pictures[0] && pictures[2] == pictures[0], "the picture differs with the frame rate")
+    }
+}
+
+/// A picture is drawn, rests, clears and gives way to the next, by the wall clock alone. Moving the Speed slider
+/// leaves it as far along as it was; picking another picture clears this one for it there and then; Random never
+/// draws the same picture twice running; and a Mac that was away for a day comes back to a picture part-way through.
+@Test func lineDrawingCycleFollowsTheClock() {
+    let seconds = [600.0, 300, 900], next = { (was: Int) in (was + 1) % 3 }
+    var cycle = LineDrawing.Cycle(picture: 0, before: nil, began: 1000, paced: 1, following: nil, picked: 0)
+    func at(_ wall: Double, speed: Double = 1, pick: Int = 0) -> LineDrawing.Cycle.Moment { cycle.moment(at: wall, speed: speed, pick: pick, seconds: seconds, another: next) }
+    #expect(at(1000) == .init(picture: 0, before: nil, drawn: 0, cleared: 0, following: nil))
+    #expect(at(1300).drawn == 0.5 && at(1600).drawn == 1)
+    #expect(at(1899) == .init(picture: 0, before: nil, drawn: 1, cleared: 0, following: nil)) // resting: 300 s at speed 1
+    #expect(at(1906) == .init(picture: 0, before: nil, drawn: 1, cleared: 0.5, following: 1)) // clearing, and the next is chosen
+    #expect(at(1912) == .init(picture: 1, before: 0, drawn: 0, cleared: 0, following: nil)) // the next, over the first one's ghost
+    // twice as fast from a third of the way through: still a third drawn, and done in half the time left
+    #expect(abs(at(2012).drawn - 1 / 3) < 1e-9 && abs(at(2012, speed: 2).drawn - 1 / 3) < 1e-9 && abs(at(2062, speed: 2).drawn - 2 / 3) < 1e-9)
+    // the third picture picked by name: this one clears at once, and that one follows, over and over
+    _ = at(2063, speed: 2, pick: 3)
+    let picked = at(2064, speed: 2, pick: 3)
+    #expect(picked.picture == 1 && abs(picked.cleared - 1.0 / 12) < 1e-9 && picked.following == 2)
+    #expect(at(2075, speed: 2, pick: 3) == .init(picture: 2, before: 1, drawn: 0, cleared: 0, following: nil))
+    let again = at(2075 + 450 + 150 + 12, speed: 2, pick: 3) // 900 s at twice the speed, 150 s resting, 12 clearing
+    #expect(again.picture == 2 && again.before == 2 && again.drawn < 0.01)
+    // back to Random and away for a day: somewhere in a picture that isn't the one before it
+    let later = at(2075 + 86_400, speed: 2, pick: 0)
+    #expect(later.picture != later.before && later.drawn >= 0 && later.drawn <= 1 && cycle.began <= 2075 + 86_400)
+}
+
+/// A finished picture clears to a faint ghost, and the next is drawn over it: full, half cleared, and the next
+/// picture just begun hold less and less line, and the ghost holds some. Drawn too at a 5K display's size, where
+/// the textures have a texel to two pixels each way and the shader reads four of them.
+@MainActor @Test func lineDrawingClearsToAGhost() throws {
+    func drawn(_ hooks: [String: Double], _ w: Int = 1512, _ h: Int = 982) throws -> [UInt32] {
+        var pixels: [UInt32] = []
+        try with(hooks.merging([LineDrawing.picture.key: 1]) { $1 }) { pixels = try Screen(w, h).settled() }
+        return pixels
+    }
+    let full = ink(try drawn(["linedrawing.drawn": 1])), clearing = ink(try drawn(["linedrawing.cleared": 0.5]))
+    #expect(full > 4 * 1512 * 982 && clearing < full * 3 / 4 && clearing > full / 8, "ink: full \(full), half cleared \(clearing)")
+    // the ghost: the bare screen, a few levels darker along another picture's whole line and nowhere much darker
+    let bare = try drawn(["linedrawing.drawn": 0]), ghost = try drawn(["linedrawing.drawn": 0, "linedrawing.ghost": 1])
+    let fainter = zip(bare, ghost).map { Int($0 & 255) - Int($1 & 255) }, lines = fainter.count { $0 >= 4 }
+    #expect(lines > 1512 * 982 / 30 && fainter.max()! < 30 && fainter.min()! > -3, "the ghost darkens \(lines) pixels, by \(fainter.max()!) at the most")
+    let big = ink(try drawn(["linedrawing.drawn": 1], 5120, 2880)), share = Double(big) / Double(5120 * 2880) / (Double(full) / Double(1512 * 982))
+    #expect(share > 0.7 && share < 1.4, "at 5K the picture holds \(share) of the line it does at 14 inches, pixel for pixel")
+}
+
+/// The screen goes to the system's other mode by itself, under the picture: light, then two seconds after Dark
+/// Mode comes on, the dim screen.
+@MainActor @Test func lineDrawingFollowsTheAppearance() throws {
+    defer { NSApplication.shared.appearance = nil }
+    func level(_ pixels: [UInt32]) -> Int { pixels.map { Int($0 & 255) }.sorted()[pixels.count * 9 / 10] }
+    try with(["linedrawing.drawn": 0.3]) {
+        NSApplication.shared.appearance = NSAppearance(named: .aqua)
+        let screen = try Screen(756, 491), light = level(try screen.settled())
+        NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
+        let partway = level(try screen.picture(after: 1.0 / 30))
+        for _ in 0..<75 { _ = try screen.picture(after: 1.0 / 30) }
+        let dim = level(try screen.picture(after: 1.0 / 30))
+        #expect(abs(light - 154) < 8 && partway > dim + 20 && abs(dim - 105) < 8, "the screen's level: \(light) in Light Mode, \(partway) a frame after Dark Mode, \(dim) after")
+    }
 }
