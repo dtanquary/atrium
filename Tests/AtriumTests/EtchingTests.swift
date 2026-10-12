@@ -183,6 +183,8 @@ private func ink(_ pixels: [UInt32]) -> Int {
     let bare = try drawn(["etching.drawn": 0]), ghost = try drawn(["etching.drawn": 0, "etching.ghost": 1])
     let fainter = zip(bare, ghost).map { Int($0 & 255) - Int($1 & 255) }, lines = fainter.count { $0 >= 4 }
     #expect(lines > 1512 * 982 / 30 && fainter.max()! < 30 && fainter.min()! > -3, "the ghost darkens \(lines) pixels, by \(fainter.max()!) at the most")
+    // and it is gone once the next picture is six minutes of drawing along: the picture is the one with no ghost under it
+    #expect(try drawn(["etching.drawn": 0.1]) == drawn(["etching.drawn": 0.1, "etching.ghost": 1]))
     let big = ink(try drawn(["etching.drawn": 1], 5120, 2880)), share = Double(big) / Double(5120 * 2880) / (Double(full) / Double(1512 * 982))
     #expect(share > 0.7 && share < 1.4, "at 5K the picture holds \(share) of the line it does at 14 inches, pixel for pixel")
 }

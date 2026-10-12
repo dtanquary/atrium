@@ -8,7 +8,7 @@ import Synchronization
 /// the powder off the back of the glass, so the line is the dark inside showing through, and it can never lift. An
 /// old print's own outlines come first, then its shading as rows of hatching, the stylus going back along lines it
 /// has drawn to get from place to place, which darkens them. A finished picture rests, clears as a shake would,
-/// unevenly and leaving a ghost, and another begins over it.
+/// unevenly and leaving a ghost, and another begins over it as the ghost fades.
 ///
 /// A picture is a shipped route (`LineRoute`, made by docs/etching/bake.py), stamped once into two textures:
 /// when each texel is first drawn, and when it is gone over again. The shader compares those with a clock, so a
@@ -65,6 +65,8 @@ final class Etching: SKScene {
 
         /// Seconds a clearing takes, whatever the speed: a soft fade, never a flash.
         static let clearing = 12.0
+        /// Seconds of drawing, at speed 1, over which the ghost of the picture before fades away under the new one.
+        static let ghosting = 360.0
         /// Seconds a finished picture is left to be looked at: five minutes at speed 1, less when it is hurried.
         static func rest(at speed: Double) -> Double { max(20, 300 / speed) }
 
@@ -160,6 +162,8 @@ final class Etching: SKScene {
 
     private let sprite = SKSpriteNode()
     private let clock = SKUniform(name: "u_clock", float: 0), show = SKUniform(name: "u_show", float: 0), clear = SKUniform(name: "u_clear", float: 0)
+    /// How much of the ghost is left, and how much brighter the screen's upper left is than its lower right.
+    private let ghost = SKUniform(name: "u_ghost", float: 1), light = SKUniform(name: "u_light", float: 0.05)
     private let texels = SKUniform(name: "u_tex", vectorFloat2: [1, 1])
     /// A texel that was never drawn and holds no ghost, until a route is stamped.
     private let when = SKUniform(name: "u_when", texture: SKTexture(data: Data([255, 255, 255, 0]), size: CGSize(width: 1, height: 1)))
@@ -200,7 +204,7 @@ final class Etching: SKScene {
         sprite.anchorPoint = .zero
         sprite.shader = SKShader(source: shaderCommon + Self.source(half: half), uniforms: [
             SKUniform(name: "u_px", vectorFloat2: [Float(pixels.x), Float(pixels.y)]), SKUniform(name: "u_grains", float: Float(2560 / pixels.x)),
-            SKUniform(name: "u_grain", texture: Self.grain), texels, when, more, clock, show, clear, screen, ink])
+            SKUniform(name: "u_grain", texture: Self.grain), texels, when, more, clock, show, clear, ghost, light, screen, ink])
         addChild(sprite)
 
         let defaults = UserDefaults.standard, hooks = ["etching.drawn", "etching.cleared", "etching.ghost"].map { defaults.object(forKey: $0) as? Double }
@@ -214,6 +218,7 @@ final class Etching: SKScene {
         let mix = SIMD3<Float>(repeating: Float(simd_smoothstep(0, 1, shade)))
         screen.vectorFloat3Value = simd_mix(tone(152, 154, 151), tone(104, 106, 104), mix)
         ink.vectorFloat3Value = simd_mix(tone(50, 52, 54), tone(34, 35, 37), mix)
+        light.floatValue = simd_mix(0.05, 0.02, mix.x) // a dim screen lit as unevenly reads as a vignette
     }
 
     /// Starts stamping a picture's route over its ghost, off the main thread. The ghost's cover is the one the
@@ -275,6 +280,7 @@ final class Etching: SKScene {
 
         clock.floatValue = Float(moment.drawn * LineRoute.end / 256)
         clear.floatValue = Float(moment.cleared)
+        ghost.floatValue = Float(1 - simd_smoothstep(0, 1, moment.drawn * seconds[moment.picture] / Cycle.ghosting))
         show.floatValue = bare ? 0 : Float(simd_smoothstep(0, 1, (wall - (shownAt ?? wall)) / 0.4))
     }
 
@@ -315,16 +321,16 @@ final class Etching: SKScene {
             // slow unevenness across the whole screen, light from the upper left, and a few bright specks.
             vec2 at = v_tex_coord * u_px * u_grains;
             float fine = (texture2D(u_grain, fract(at / 512.0)).r - 0.502) * 0.1275;
-            float slow = (texture2D(u_grain, v_tex_coord).g - 0.502) * 0.1275;
+            float slow = (texture2D(u_grain, v_tex_coord).g - 0.502) * 0.0765;
             vec2 cell = floor(at / 48.0);
             vec4 h = hash42(cell);
             float speck = max(0.0, 1.0 - distance(at, (cell + 0.15 + 0.7 * h.xy) * 48.0) / 1.6);
-            vec3 screen = u_screen * (1.0 + fine + slow + 0.05 * (v_tex_coord.y - v_tex_coord.x) + 0.3 * step(h.z, 0.12) * speck * speck);
+            vec3 screen = u_screen * (1.0 + fine + slow + u_light * (v_tex_coord.y - v_tex_coord.x) + 0.3 * step(h.z, 0.12) * speck * speck);
             // A line drawn once is pale and one gone over is the dark inside. Clearing lays the powder back, sooner
-            // in some places than others (by the slow unevenness), down to a faint ghost of the whole line; and
-            // the ghost that was under it, of the picture before, goes for good.
-            float gone = smoothstep(0.0, 0.4, u_clear - 0.6 * clamp(0.5 + slow * 12.0, 0.0, 1.0));
-            float a = max(mix(line, 0.08 * cover, gone), 0.08 * ghost * (1.0 - gone));
+            // in some places than others (by the slow unevenness), down to a faint ghost of the whole line, which
+            // then fades away under the next picture's first minutes (u_ghost).
+            float gone = smoothstep(0.0, 0.4, u_clear - 0.6 * clamp(0.5 + slow * 20.0, 0.0, 1.0));
+            float a = max(mix(line, 0.08 * cover, gone), 0.08 * ghost * u_ghost * (1.0 - gone));
             a = clamp(a * (1.0 + 6.0 * fine), 0.0, 1.0) * u_show;
             gl_FragColor = vec4(mix(screen, u_ink, a), 1.0);
         }
