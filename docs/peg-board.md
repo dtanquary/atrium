@@ -20,13 +20,23 @@ Dave asked for a clone of it on 2026-10-12, "with lights, showing various lighti
 | The toy on screen | the sheet alone, edge to edge. He asked to see a light box round it too; mocked up, it read as a tablet's bezel and held only the toy's 1,735 holes, and he chose no box |
 | Peg look | "A slider, crisp by default": the measured plastic peg, with Softness down to a glowing disc |
 | Peg size | "A slider", settled as three fixed sizes (the toy's own, half, a third; half the default), each picture cut and checked by eye at each, and left out at a size where it does not read |
-| Colours | a calmer set by default, the set measured from the real pegs as a second palette |
+| Colours | a calmer set by default, the set measured from the real pegs as a second palette. Once he had run it: "the color options are good" |
 | Pictures | "nothing religious"; asked whether that covers a sun god on a lace chart or Neptune on a map: "Myth is fine". Only public-domain, CC0, CC BY or CC BY-SA sources; never the toy's own template sheets |
 | The pictures, once he had run it at Large pegs | "on peg board, pictures are hard to make out, but the pattern looks good". Asked what to do: "Draw our own: simple bold figures designed hole by hole for each peg size (a sailboat, a butterfly, a flower), the way a person would make them on the toy. Mock-ups first for you to judge; the old-print charts go if these read better." |
 | The drawn figures (2026-10-13, on the mock-ups) | the eight put forward, and of the four left out "Balloon and snail too" and "Lighthouse, redrawn"; not the moon with stars |
 | The old prints (2026-10-13) | "Remove them all" |
 
 The lead's calls, which he has not ruled on: a Speed slider; the lean shader; three bytes for a peg's place; a fresh start on each load.
+
+## Dave's feedback
+
+**2026-10-12, after running it on his desktop** (a 14-inch display; Shows at Patterns only, Large pegs, which is 48 by 36 holes there, Softness 0, Speed about 10, the Calm colours):
+
+> on peg board, pictures are hard to make out, but the pattern looks good, I only see 1 pattern ever though but it does look really cool, the color options are good
+
+- **Pictures are hard to make out.** Asked what to do about it, he picked "Draw our own": figures drawn for pegs, not cut down from prints and charts.
+- **The pattern looks good, and there is only one.** There are four snow crystals (four sets of Reiter's numbers) in three colour families, but at Large pegs a crystal is 13 holes from heart to tip and the four come out alike. Asked which kinds of new pattern to mock up, he picked all four offered: growth, geometric, fractals, spirals and flowers. A new pattern has to read at Large pegs first, and to differ from the crystal and from the others at a glance.
+- **The colours are good:** the two sets and Random stay as they are.
 
 ## What the real toy looks like
 
@@ -213,7 +223,12 @@ PEGBOARD_STILL=docs/images/peg-board-sailboat.jpg PEGBOARD_STILL_WIDTH=1600 PEGB
 
 ## Still open
 
-Worst first, as the builders saw it on stills. Dave has run it at Large pegs: [The pictures](#the-pictures) has what he said of it.
+**From Dave, having run it** at Large pegs and Patterns only on 2026-10-12 ([his words](#daves-feedback)):
+
+- **Pictures are hard to make out.** Figures drawn for pegs are to replace or join the cut-down ones.
+- **Only one pattern:** the crystals look alike at Large pegs. New kinds of pattern are being mocked up for him to pick from.
+
+**As the builders saw it on stills,** worst first; he has not spoken to these:
 
 1. **Sharp and busy at Softness 0**, the default he chose: see the busy scores above. It is what got Zen Garden cut ("so bright and sharp and not relaxing"), and Softness is the answer he has to hand.
 2. **Nearly still at speed 1.** A crystal takes 2 to 3.5 minutes at Medium. A figure takes 0.6 to 1.7 minutes at Large pegs (217 to 623 pegs), 2.4 to 7 at Medium and 5 to 15 at Small. The slider goes to 20×, where the butterfly at Small takes 46 s.
