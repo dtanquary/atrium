@@ -85,6 +85,8 @@ final class PegBoard: SKScene {
     private var glowing = 0, newest = 0, holds = [0, 0], made = 0
     /// Whether a picture is on the sheet (or a pattern), the pictures not yet shown this round, and the light show.
     private(set) var picture = false, unseen: [String] = [], show = lightShows[0]
+    /// The last picture put up.
+    private var figure: String?
     /// The kind of pattern on the sheet, or the last that was: nil is a snow crystal. Whether there has been one
     /// yet, the kinds not yet shown this round, and whether nothing has been on this sheet of holes before.
     private(set) var kind: PatternKind?
@@ -245,14 +247,20 @@ final class PegBoard: SKScene {
         (holds, phase, placed, since) = ([made, made], .showing, Double(sequence.count) + front, 0)
     }
 
-    /// The next picture: each in turn, in a new order every round.
+    /// The next picture: each in turn, in a new order every round, and never the same twice running.
     private func chart() -> Chart? {
         let fitting = fitting
-        if let asked = UserDefaults.standard.string(forKey: "pegboard.picture"), made == 0, let chart = fitting.first(where: { $0.name == asked }) { return chart }
+        if let asked = UserDefaults.standard.string(forKey: "pegboard.picture"), made == 0, let chart = fitting.first(where: { $0.name == asked }) {
+            figure = asked
+            return chart
+        }
         unseen.removeAll { name in !fitting.contains { $0.name == name } } // a new peg size may have fewer pictures
-        if unseen.isEmpty { unseen = fitting.map(\.name).shuffled(using: &rng) }
-        guard let name = unseen.popLast() else { return nil }
-        return fitting.first { $0.name == name }
+        if unseen.isEmpty {
+            unseen = fitting.map(\.name).shuffled(using: &rng)
+            if unseen.count > 1, unseen.last == figure { unseen.swapAt(0, unseen.count - 1) }
+        }
+        figure = unseen.popLast()
+        return fitting.first { $0.name == figure }
     }
 
     /// How much less of the lamp reaches a peg toward the sheet's corners, as one bulb behind the middle gives.

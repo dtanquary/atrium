@@ -55,8 +55,9 @@ import Testing
 }
 
 /// The pictures go round: with pictures only, every figure goes up once before any comes again, and the next time
-/// round they come in another order. And with everything shown, both kinds come. (A figure is known here by how
-/// many pegs it has, which no two share at Large pegs.)
+/// round they come in another order; and none comes twice running, the last of one round and the first of the
+/// next, in thirty rounds. And with everything shown, both kinds come. (A figure is known here by how many pegs it
+/// has, which no two share at Large pegs.)
 @MainActor @Test func pegBoardShowsEveryFigureInANewOrderEachRound() throws {
     let keys = ["pegboard.seed", "pegboard.size", "pegboard.shows", "pegboard.speed"]
     defer { keys.forEach(UserDefaults.standard.removeObject) }
@@ -80,6 +81,8 @@ import Testing
     #expect(figures.count == 11 && shown.count == 22 && shown.allSatisfy(\.picture))
     let (first, second) = (shown.prefix(11).map(\.pegs), shown.suffix(11).map(\.pegs))
     #expect(Set(first) == figures && Set(second) == figures && first != second)
+    let rounds = things(331, shows: 2).map(\.pegs)
+    #expect(rounds.count == 331 && zip(rounds, rounds.dropFirst()).allSatisfy { $0 != $1 }, "a figure came twice running")
     let both = things(4, shows: 0)
     #expect(both.contains { $0.picture } && both.contains { !$0.picture })
 }
