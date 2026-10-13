@@ -91,6 +91,17 @@ A river wandering across its floodplain. It's a simulation, not a film: each ban
 | ![Meander as an old map in Salmon, in Dark Mode](docs/images/meander-salmon.jpg) | ![Meander as relief in Survey Blue, with Full view](docs/images/meander-full-view.jpg) |
 | Old map in Salmon, in Dark Mode | Full view, in Survey Blue: the river free to wander past the edges |
 
+#### Ant Colony
+A colony of ants digging its nest in a thin tank seen from the side, with your display as the glass. At six in the morning the tank is whole, with a few ants on top of it. Through the day a shaft goes down, branches and opens into rooms, what's dug out piles up around the entrances, and more ants walk in as the nest grows. By the next morning it's finished, and a new one begins. Each nest is made from the date, so every day's is different, and nothing is downloaded. The digging is fastest early: nearly half is done by noon and three quarters by six in the evening. The ants walk as real ones do, three legs at a time with their feet planted on the tunnel's walls, in short bouts with stops between. Two that meet stop and touch antennae. At the end of a tunnel being dug, one ant digs while others wait behind it, then carries a grain up to the pile by the entrance. In Settings, Look picks what they dig in: Gel, the standard, a deep blue gel lit from its base, or Bright Gel, Sand, White Sand or Earth. Speed runs from 1×, a nest a day beginning at six in the morning, to 8×, a nest every three hours, one after another; the ants walk no faster. Ant size is Small, Medium (the standard) or Large, and smaller ants get a bigger nest to dig. Colony size sets how many ants there are once the nest is done, from half to twice the standard number.
+
+| <img src="docs/images/ant-colony.webp" alt="Ant Colony in Gel, moving: dark ants walking the pale tunnels of a nest dug in deep blue gel" width="1600"> | ![Ant Colony in Bright Gel, the same nest with rays of light over the lamps in its base](docs/images/ant-colony-bright-gel.jpg) |
+|---|---|
+| Gel, the standard look, at five in the afternoon: the nest about 70% dug | Bright Gel: the same nest at the same moment |
+| ![Ant Colony in Sand, red ants in tunnels through dim, warm sand](docs/images/ant-colony-sand.jpg) | ![Ant Colony in White Sand, red ants in tunnels through pale sand](docs/images/ant-colony-white-sand.jpg) |
+| Sand, another day's nest at five in the afternoon | White Sand, at three in the afternoon |
+| ![Ant Colony in Earth, red ants in dark tunnels through yellow-brown soil](docs/images/ant-colony-earth.jpg) | ![Ant Colony in Gel with Large ants, early in the day: one shaft down from the surface and its first three branches, with four ants in them](docs/images/ant-colony-large.jpg) |
+| Earth, at four in the afternoon | Large ants in Gel at nine in the morning: the first shaft and its first branches |
+
 ### Space
 
 #### Solar System Tour
