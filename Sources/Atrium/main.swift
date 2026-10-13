@@ -266,7 +266,7 @@ if !scenes.contains(where: { $0.name == current }) {
     }
 }
 
-/// The menu bar icon: pause, pick or shuffle wallpapers, open Settings, toggle Open at Login, quit.
+/// The menu bar icon: pick, pause or shuffle wallpapers, open Settings, toggle Open at Login, quit.
 @MainActor final class StatusMenu: NSObject, NSMenuDelegate {
     let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     /// The wallpapers as pictures: one item, kept from one opening of the menu to the next.
@@ -291,14 +291,6 @@ if !scenes.contains(where: { $0.name == current }) {
             menu.addItem(.separator())
         }
         #endif
-        // Already held still by Settings → Power, Pause would change nothing: a greyed line says why it's still.
-        let power = powerKnob()
-        if Power.rate(power) == 0, !WallpaperView.paused {
-            menu.addItem(withTitle: "Frozen: \(power.label)", action: nil, keyEquivalent: "")
-        } else {
-            menu.addItem(withTitle: WallpaperView.paused ? "Resume" : "Pause", action: #selector(togglePause), keyEquivalent: "").target = self
-        }
-        menu.addItem(.separator())
         if MenuGrid.pictures {
             menu.addItem(grid)
         } else {
@@ -309,6 +301,14 @@ if !scenes.contains(where: { $0.name == current }) {
             }
         }
         menu.addItem(.separator())
+        // Pause sits with Shuffle: the two that act on whatever is showing.
+        // Already held still by Settings → Power, Pause would change nothing: a greyed line says why it's still.
+        let power = powerKnob()
+        if Power.rate(power) == 0, !WallpaperView.paused {
+            menu.addItem(withTitle: "Frozen: \(power.label)", action: nil, keyEquivalent: "")
+        } else {
+            menu.addItem(withTitle: WallpaperView.paused ? "Resume" : "Pause", action: #selector(togglePause), keyEquivalent: "").target = self
+        }
         let shuffle = menu.addItem(withTitle: "Shuffle", action: #selector(toggleShuffle), keyEquivalent: "")
         shuffle.target = self
         shuffle.state = Shuffle.on.value > 0.5 ? .on : .off

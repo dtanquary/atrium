@@ -53,11 +53,9 @@ func menuShot() throws {
     }
     menu.autoenablesItems = false
     item.view = grid
-    menu.addItem(withTitle: "Pause", action: nil, keyEquivalent: "")
-    menu.addItem(.separator())
     menu.addItem(item)
     menu.addItem(.separator())
-    for title in ["Shuffle", "Settings…", "Quit Atrium"] { menu.addItem(withTitle: title, action: nil, keyEquivalent: "") }
+    for title in ["Pause", "Shuffle", "Settings…", "Quit Atrium"] { menu.addItem(withTitle: title, action: nil, keyEquivalent: "") }
     // The menu holds the main thread until it closes, so what happens while it's open is set up first: on timers,
     // which run while a menu tracks the mouse. The main queue doesn't, with this test itself a job on it.
     func after(_ seconds: Double, _ work: @escaping @MainActor () -> Void) {
