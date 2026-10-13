@@ -35,3 +35,4 @@ Knobs are stored in UserDefaults. `knob.value` is cached (emptied on any default
 - A texture handed to a shader as a uniform is smoothed between its pixels even when its `filteringMode` is `.nearest`. For crisp pixel art, sample at the centre of a whole pixel: `(floor(p) + 0.5) / size` (see Pixel City's water).
 - A shader can take about 30 uniforms (Metal's buffer indices run 0–30, and SpriteKit adds its own). Past that it fails to compile at runtime ("'buffer' attribute parameter is out of bounds") and draws nothing; `swift build` won't catch it. Pass `shaderScene` only the knobs its shader reads, and write fixed values into the source.
 - `paint(_:_:)` draws at 2x, so the texture's pixel size is double. Give sprites an explicit size.
+- SpriteKit's cost is by the sprite and by each property set on it a frame: count both before anything else (Ant Colony).
