@@ -230,28 +230,39 @@ private func triangles(_ sheet: Sheet, using rng: inout some RandomNumberGenerat
 }
 
 /// A hexaflake: a hole and the six round it, then that seven-fold thing and six copies of it round it three times
-/// as far out, and so on. As many levels as fit; where there is room it is drawn twice the size, each point a
-/// cluster of seven. It is laid as it is made: the middle flake of each level, then the six round it in turn.
-/// Toned by how many levels a point is the middle one at.
+/// as far out, and so on. It is laid as it is made: the middle flake of each level, then the six round it in turn.
+/// The shape is one shape, so the seed varies what it can: how big a step is (one hole, or two or three with a
+/// cluster of seven pegs at each point) with as many levels as then fit; whether the smallest flakes are left
+/// without their middle point, as rings of six; and how it is toned, by how many levels a point is the middle
+/// one at, or by which of the seven flakes of one level it is in, the six round the middle in two tones by turns.
 private func hexaflake(_ sheet: Sheet, using rng: inout some RandomNumberGenerator) -> Pattern {
     let room = min(sheet.rows, sheet.cols)
-    var levels = 1
-    while (power(3, levels + 1) - 1) / 2 <= room { levels += 1 }
-    let double = power(3, levels) <= room, first = Int.random(in: 0..<6, using: &rng)
+    // at each step, as many levels as fit; and of those, the ones that reach across half the sheet's height or more
+    let fits = (1...3).map { step -> (levels: Int, step: Int) in
+        var levels = 1
+        while step * (power(3, levels + 1) - 1) / 2 + min(step - 1, 1) <= room { levels += 1 }
+        return (levels, step)
+    }
+    let big = fits.filter { $0.levels >= 2 && $0.step * (power(3, $0.levels) - 1) >= room }
+    let (levels, step) = (big.isEmpty ? [fits[0]] : big).randomElement(using: &rng)!
+    // (At a step of three, or with the middle flake of a higher level left out, the gap is a star of six points,
+    // thirteen holes or more of it: tried, and not to be shown.)
+    let hollow = step < 3 && Int.random(in: 0..<3, using: &rng) == 0
+    let by = Int.random(in: 0...levels, using: &rng), first = Int.random(in: 0..<6, using: &rng)
     var b = Builder(sheet)
-    func lay(_ level: Int, _ q: Int, _ r: Int, _ middles: Int) {
+    func lay(_ level: Int, _ q: Int, _ r: Int, _ middles: Int, _ part: Int) {
         guard level >= 0 else {
-            let tone = middles == levels ? 3 : min(middles, 2)
-            if double { for d in [(0, 0)] + Sheet.dirs { b.put(2 * q + d.0, 2 * r + d.1, tone) } } else { b.put(q, r, tone) }
+            let tone = middles == levels ? 3 : by == levels ? min(middles, 2) : part
+            if step > 1 { for d in [(0, 0)] + Sheet.dirs { b.put(step * q + d.0, step * r + d.1, tone) } } else { b.put(q, r, tone) }
             return
         }
-        lay(level - 1, q, r, middles + 1)
+        if level > 0 || !hollow { lay(level - 1, q, r, middles + 1, level == by ? 0 : part) }
         for k in 0..<6 {
             let d = Sheet.dirs[(first + k) % 6]
-            lay(level - 1, q + d.0 * power(3, level), r + d.1 * power(3, level), middles)
+            lay(level - 1, q + d.0 * power(3, level), r + d.1 * power(3, level), middles, level == by ? 1 + k % 2 : part)
         }
     }
-    lay(levels - 1, 0, 0, 0)
+    lay(levels - 1, 0, 0, 0, 0)
     return b.made
 }
 

@@ -304,28 +304,30 @@ import Testing
 }
 
 /// Every kind of pattern, at each peg size on a laptop's display and from six seeds, lays each hole once, every
-/// peg on the display and in one of the four tones, and is more than a handful of pegs. Printed for
-/// docs/peg-board.md: how many pegs each is, and how long it took to make. (The seeds are ones whose first number
-/// is spread evenly from 0 to 1, since a kind's first choice, of a size or a rule, is made with it: seeds 1 to 3
-/// made the same choice.)
+/// peg on the display and in one of the four tones, and is more than a handful of pegs; and the six are not one
+/// picture, whatever order its pegs go in. Printed for docs/peg-board.md: how many pegs each is, how many pictures
+/// the six are, and how long it took to make. (The seeds are ones whose first number is spread evenly from 0 to 1,
+/// since a kind's first choice, of a size or a rule, is made with it: seeds 1 to 3 made the same choice.)
 @Test func pegBoardPatternsFitTheSheet() {
     for pitch in [32, 16, 32.0 / 3] {
         let lattice = Lattice(width: 1512, height: 982, pitch: pitch)
         for kind in PatternKind.allCases {
-            var counts: [Int] = [], took: [Double] = []
+            var counts: [Int] = [], took: [Double] = [], pictures = Set<[Int]>()
             for seed in [41, 61, 14, 12, 42, 32] as [UInt64] {
                 var rng = SplitMix(state: seed)
                 let clock = ContinuousClock(), began = clock.now
                 let made = pattern(kind, on: lattice, using: &rng), span = clock.now - began
                 took.append(Double(span.components.attoseconds) / 1e15 + Double(span.components.seconds) * 1000)
                 counts.append(made.order.count)
+                pictures.insert(zip(made.order, made.tone).map { $0 * 4 + Int($1) }.sorted())
                 #expect(made.order.count == made.tone.count && Set(made.order).count == made.order.count, "\(kind) lays a hole twice")
                 #expect(made.tone.allSatisfy { $0 < 4 })
                 #expect(made.order.allSatisfy { (1...lattice.cols - 2).contains($0 % lattice.cols) && (1...lattice.rows - 2).contains($0 / lattice.cols) }, "\(kind) is off the display")
                 #expect(made.order.count >= 60, "\(kind) at a pitch of \(pitch) from seed \(seed) is \(made.order.count) pegs")
             }
-            print(String(format: "Peg Board's %@ on %d by %d holes: %d to %d pegs; made in %.1f ms at the most", kind.rawValue, lattice.cols - 2, lattice.rows - 2,
-                         counts.min()!, counts.max()!, took.max()!))
+            #expect(pictures.count >= 2, "\(kind) at a pitch of \(pitch) is the same picture from six seeds")
+            print(String(format: "Peg Board's %@ on %d by %d holes: %d to %d pegs, %d pictures from six seeds; made in %.1f ms at the most", kind.rawValue,
+                         lattice.cols - 2, lattice.rows - 2, counts.min()!, counts.max()!, pictures.count, took.max()!))
         }
     }
 }
