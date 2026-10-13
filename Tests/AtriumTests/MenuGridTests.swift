@@ -29,8 +29,11 @@ import Testing
 /// Opens a menu holding the grid on screen for a moment and captures it, since a menu's glass only renders for real.
 ///
 ///     MENU_SHOT=1 swift test --filter menuShot           # → $TMPDIR/atrium-menu.png
-///     MENU_SHOT="Nebula" swift test --filter menuShot    # with the pointer over that wallpaper
+///     MENU_SHOT="Nebula" swift test --filter menuShot    # with the pointer over that wallpaper, then a click on it
 ///     SNAPSHOT_APPEARANCE=light MENU_SHOT=1 …            # in Light Mode
+///
+/// The pointer and the click are events handed to the grid as the menu would hand them, at the middle of the tile
+/// worked out from where the grid sits in the menu's window: the real pointer stays where it is.
 @MainActor @Test(.enabled(if: ProcessInfo.processInfo.environment["MENU_SHOT"] != nil))
 func menuShot() throws {
     let env = ProcessInfo.processInfo.environment
@@ -38,7 +41,16 @@ func menuShot() throws {
     try? FileManager.default.removeItem(atPath: path)
     NSApplication.shared.setActivationPolicy(.accessory)
     if let look = env["SNAPSHOT_APPEARANCE"] { NSApp.appearance = NSAppearance(named: look == "light" ? .aqua : .darkAqua) }
-    let menu = NSMenu(), grid = MenuGridView { _ in }, item = NSMenuItem()
+    let wanted = scenes.firstIndex { $0.name == env["MENU_SHOT"] }
+    var hovered: String?, picked: String?
+    let menu = NSMenu(), grid = MenuGridView { picked = $0 }, item = NSMenuItem()
+    func mouse(_ type: NSEvent.EventType) -> NSEvent? {
+        guard let wanted, let window = grid.window else { return nil }
+        let tile = MenuGrid.frame(wanted), inWindow = grid.convert(grid.bounds, to: nil)
+        return .mouseEvent(with: type, location: NSPoint(x: inWindow.minX + tile.midX, y: inWindow.maxY - tile.midY), modifierFlags: [],
+                           timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil,
+                           eventNumber: 0, clickCount: 1, pressure: 0)
+    }
     menu.autoenablesItems = false
     item.view = grid
     menu.addItem(withTitle: "Pause", action: nil, keyEquivalent: "")
@@ -51,8 +63,9 @@ func menuShot() throws {
     func after(_ seconds: Double, _ work: @escaping @MainActor () -> Void) {
         RunLoop.main.add(Timer(timeInterval: seconds, repeats: false) { _ in MainActor.assumeIsolated(work) }, forMode: .common)
     }
-    after(0.7) { grid.hover.name = scenes.first { $0.name == env["MENU_SHOT"] }?.name }
+    after(0.7) { mouse(.mouseMoved).map(grid.mouseMoved) }
     after(1.6) {
+        hovered = grid.hover.name
         // A capture of the menu's window alone comes out empty, so this takes its part of the screen, desktop and all.
         if let area = grid.window?.frame.insetBy(dx: -12, dy: -12), let screen = NSScreen.screens.first {
             let capture = Process()
@@ -66,9 +79,11 @@ func menuShot() throws {
             grid.cacheDisplay(in: grid.bounds, to: bitmap)
             try? bitmap.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
         }
+        mouse(.leftMouseUp).map(grid.mouseUp) // which closes the menu, as a pick does
         menu.cancelTracking()
     }
     let screen = try #require(NSScreen.main).visibleFrame
     menu.popUp(positioning: nil, at: NSPoint(x: screen.maxX - MenuGrid.width - 40, y: screen.maxY - 8), in: nil)
+    if let wanted { #expect(hovered == scenes[wanted].name && picked == scenes[wanted].name, "over \(hovered ?? "none"), picked \(picked ?? "none")") }
     print("The menu → \(path)")
 }
