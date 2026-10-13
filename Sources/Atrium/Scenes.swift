@@ -29,6 +29,8 @@ struct Wallpaper {
     var followsAppearance = false
     /// Not good enough to show yet: left out of the menu, Settings, Shuffle and the welcome unless `unfinished` is set
     /// (`defaults write com.dtanquary.atrium unfinished -bool true`, then relaunch), but still built and render-tested.
+    /// One that is parked, not being worked on, can be left hidden even then by name
+    /// (`defaults write com.dtanquary.atrium unfinished.hide -array "A Tree for the Year"`).
     var unfinished = false
 
     /// The title a section of its settings goes by, given what the menu that can retitle it holds.
@@ -147,8 +149,11 @@ struct Refresh {
               palettes: Tour.solarSystem.showChoice),
 ].sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
 
-/// The wallpapers people see: all but the unfinished ones, unless `unfinished` is set for working on them.
-@MainActor let scenes = allScenes.filter { !$0.unfinished || UserDefaults.standard.bool(forKey: "unfinished") }
+/// The wallpapers people see: all but the unfinished ones, unless `unfinished` is set for working on them, and
+/// even then not those named in `unfinished.hide`.
+@MainActor let scenes = allScenes.filter {
+    !$0.unfinished || UserDefaults.standard.bool(forKey: "unfinished") && UserDefaults.standard.stringArray(forKey: "unfinished.hide")?.contains($0.name) != true
+}
 
 /// The wallpaper on first launch, and in place of a saved one that's since been cut.
 @MainActor let defaultScene = scenes.first { $0.name == "Fish Tank" }!
