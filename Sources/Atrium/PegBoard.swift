@@ -182,6 +182,11 @@ final class PegBoard: SKScene {
             sequence = design.order
             for (hole, tone) in zip(design.order, design.tone) { pegs[hole] = tones[Int(tone)] }
         } else {
+            // ponytail: a crystal is grown here, on the main thread: a stall of 54 to 114 ms at Small pegs on a laptop
+            // (a few at Large), on a sheet that is dark, so nothing is seen to stop. It stops being good enough when
+            // a stall that long shows, as it would with anything moving on the sheet as the next thing begins, or
+            // on a display with many more holes. The way up is to grow it ahead on another thread, as a reef is
+            // (`Reserve`), from a seed of its own.
             let numbers = Self.crystals.randomElement(using: &rng)!, family = Self.families.randomElement(using: &rng)!
             let crystal = snowCrystal(on: lattice, alpha: numbers.alpha, beta: numbers.beta, gamma: numbers.gamma, using: &rng)
             sequence = [Int](repeating: 0, count: crystal.count)
