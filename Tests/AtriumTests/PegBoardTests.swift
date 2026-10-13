@@ -303,45 +303,84 @@ import Testing
     #expect(empty < 500 && whole > 20000 && larger > 20000)
 }
 
-/// With PEGBOARD_STILL set to a file (.png or .jpg): one picture of the sheet on a display of 1512 by 982 points,
-/// drawn PEGBOARD_STILL_WIDTH pixels across (1600 for docs/images, 1200 for Settings' preview), after
-/// SNAPSHOT_SECONDS with SNAPSHOT_DEFAULTS as the render test takes them (and given Settings' head start first,
-/// with PEGBOARD_HEAD_START set). Drawn at the size it is shown at, because
-/// a still reduced afterwards shows a weave in the dotted sheet.
-@MainActor @Test(.enabled(if: ProcessInfo.processInfo.environment["PEGBOARD_STILL"] != nil))
-func pegBoardStill() throws {
-    let env = ProcessInfo.processInfo.environment, url = URL(fileURLWithPath: env["PEGBOARD_STILL"]!)
-    let settings = (env["SNAPSHOT_DEFAULTS"] ?? "").split(separator: ",").map { $0.split(separator: "=") }.filter { $0.count == 2 }
+/// Draws the sheet as it would be on a display of 1512 by 982 points, `width` pixels across, with Settings values
+/// as the render test takes them ("key=value,key=value"), and saves it (.png or .jpg). `moment` is seconds from
+/// the start; or, like "40%", that far through the first thing's build; or "whole", with Settings' head start: all
+/// of it at once, before its light show has begun; or, like "film 25", every other frame of that many seconds at
+/// 30 frames a second, saved as a folder of numbered PNGs. Drawn at the size it is shown at, because a still
+/// reduced afterwards shows a weave in the dotted sheet. Gives back how many pegs the first thing has.
+@MainActor @discardableResult private func drawPegBoard(to url: URL, width w: Int, moment: String, defaults: String) throws -> Int {
+    let settings = defaults.split(separator: ",").map { $0.split(separator: "=") }.filter { $0.count == 2 }
     for pair in settings { UserDefaults.standard.set(Double(pair[1]).map { $0 as Any } ?? String(pair[1]), forKey: String(pair[0])) }
     defer { for pair in settings { UserDefaults.standard.removeObject(forKey: String(pair[0])) } }
-    let w = Int(env["PEGBOARD_STILL_WIDTH"] ?? "") ?? 1600, h = w * 982 / 1512, seconds = Double(env["SNAPSHOT_SECONDS"] ?? "") ?? 30
+    let h = w * 982 / 1512
     let device = try #require(MTLCreateSystemDefaultDevice()), queue = try #require(device.makeCommandQueue())
     let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: w, height: h, mipmapped: false)
     descriptor.usage = [.renderTarget, .shaderRead]
     descriptor.storageMode = .shared
     let renderer = SKRenderer(device: device), target = try #require(device.makeTexture(descriptor: descriptor)), pass = MTLRenderPassDescriptor()
-    let scene = PegBoard(size: CGSize(width: 1512, height: 982))
-    if env["PEGBOARD_HEAD_START"] != nil { scene.headStart() }
+    let scene = PegBoard(size: CGSize(width: 1512, height: 982)), pegs = scene.sequence.count
+    if moment == "whole" { scene.headStart() }
     renderer.scene = scene
     pass.colorAttachments[0].texture = target
     pass.colorAttachments[0].loadAction = .clear
     pass.colorAttachments[0].storeAction = .store
-    let start = ProcessInfo.processInfo.systemUptime + 1
-    for frame in 0...Int(seconds * 30) + 1 {
-        renderer.update(atTime: start + Double(min(frame, Int(seconds * 30))) / 30)
-        guard frame >= Int(seconds * 30) else { continue } // drawn at the end only, twice for the shader's sake
+    func save(to url: URL) throws {
+        var raw = [UInt32](repeating: 0, count: w * h)
+        target.getBytes(&raw, bytesPerRow: w * 4, from: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0)
+        let image = try #require(CGImage(width: w, height: h, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: w * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                         bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue),
+                                         provider: CGDataProvider(data: Data(bytes: raw, count: w * h * 4) as CFData)!, decode: nil, shouldInterpolate: false, intent: .defaultIntent))
+        let kind = url.pathExtension == "jpg" ? "public.jpeg" : "public.png"
+        let file = try #require(CGImageDestinationCreateWithURL(url as CFURL, kind as CFString, 1, nil))
+        CGImageDestinationAddImage(file, image, [kCGImageDestinationLossyCompressionQuality: 0.7] as CFDictionary)
+        #expect(CGImageDestinationFinalize(file))
+    }
+    func draw() throws {
         let buffer = try #require(queue.makeCommandBuffer())
         renderer.render(withViewport: CGRect(x: 0, y: 0, width: w, height: h), commandBuffer: buffer, renderPassDescriptor: pass)
         buffer.commit()
         buffer.waitUntilCompleted()
     }
-    var raw = [UInt32](repeating: 0, count: w * h)
-    target.getBytes(&raw, bytesPerRow: w * 4, from: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0)
-    let image = try #require(CGImage(width: w, height: h, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: w * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
-                                     bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue),
-                                     provider: CGDataProvider(data: Data(bytes: raw, count: w * h * 4) as CFData)!, decode: nil, shouldInterpolate: false, intent: .defaultIntent))
-    let kind = url.pathExtension == "jpg" ? "public.jpeg" : "public.png"
-    let file = try #require(CGImageDestinationCreateWithURL(url as CFURL, kind as CFString, 1, nil))
-    CGImageDestinationAddImage(file, image, [kCGImageDestinationLossyCompressionQuality: 0.7] as CFDictionary)
-    #expect(CGImageDestinationFinalize(file))
+    let start = ProcessInfo.processInfo.systemUptime + 1
+    if moment.hasPrefix("film ") {
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        for frame in 0..<Int((Double(moment.dropFirst(5)) ?? 10) * 30) {
+            renderer.update(atTime: start + Double(frame) / 30)
+            guard frame % 2 == 0 else { continue }
+            try draw()
+            try save(to: url.appendingPathComponent(String(format: "%04d.png", frame / 2)))
+        }
+        return pegs
+    }
+    // a peg takes a second to light, so a build is whole a second after its last peg is begun
+    let share = moment.hasSuffix("%") ? (Double(moment.dropLast()) ?? 100) / 100 : 0
+    let seconds = moment == "whole" ? 0 : moment.hasSuffix("%") ? share * Double(pegs) / (6 * PegBoard.speed.value) + (share >= 1 ? 1.3 : 0) : Double(moment) ?? 30
+    for frame in 0...Int(seconds * 30) + 1 {
+        renderer.update(atTime: start + Double(min(frame, Int(seconds * 30))) / 30)
+        if frame >= Int(seconds * 30) { try draw() } // drawn at the end only, twice for the shader's sake
+    }
+    try save(to: url)
+    return pegs
+}
+
+/// With PEGBOARD_STILL set to a file: one picture of the sheet (`drawPegBoard`), PEGBOARD_STILL_WIDTH pixels across
+/// (1600 for docs/images, 1200 for Settings' preview), after SNAPSHOT_SECONDS with SNAPSHOT_DEFAULTS, or with
+/// Settings' head start first where PEGBOARD_HEAD_START is set.
+@MainActor @Test(.enabled(if: ProcessInfo.processInfo.environment["PEGBOARD_STILL"] != nil))
+func pegBoardStill() throws {
+    let env = ProcessInfo.processInfo.environment
+    try drawPegBoard(to: URL(fileURLWithPath: env["PEGBOARD_STILL"]!), width: Int(env["PEGBOARD_STILL_WIDTH"] ?? "") ?? 1600,
+                     moment: env["PEGBOARD_HEAD_START"] != nil ? "whole" : env["SNAPSHOT_SECONDS"] ?? "30", defaults: env["SNAPSHOT_DEFAULTS"] ?? "")
+}
+
+/// With PEGBOARD_STILLS set to a file of jobs, a line each of "file, width, moment, defaults" with tabs between:
+/// draws them all in one run (`drawPegBoard`), and prints how many pegs each had.
+@MainActor @Test(.enabled(if: ProcessInfo.processInfo.environment["PEGBOARD_STILLS"] != nil))
+func pegBoardStills() throws {
+    let jobs = try String(contentsOfFile: ProcessInfo.processInfo.environment["PEGBOARD_STILLS"]!, encoding: .utf8)
+    for job in jobs.split(separator: "\n").map({ $0.split(separator: "\t", omittingEmptySubsequences: false).map(String.init) }) where job.count == 4 {
+        let pegs = try drawPegBoard(to: URL(fileURLWithPath: job[0]), width: Int(job[1]) ?? 1512, moment: job[2], defaults: job[3])
+        print("Peg Board still \(URL(fileURLWithPath: job[0]).lastPathComponent): \(pegs) pegs")
+    }
 }

@@ -201,6 +201,7 @@ Measured 2026-10-12 on an M3 Max.
 
 ```sh
 swift test --filter 'snowCrystal|pegBoard'
+PEGBOARD_STILLS=jobs.tsv swift test --filter pegBoardStills   # many stills in one run: a line each of file, width, moment and defaults, with tabs between
 SNAPSHOT_SCENE="Peg Board" SNAPSHOT_SECONDS=35 SNAPSHOT_DEFAULTS="pegboard.picture=sailboat,pegboard.speed=8,pegboard.seed=7" swift test --filter everySceneRenders
 PEGBOARD_STILL=docs/images/peg-board.jpg PEGBOARD_STILL_WIDTH=1600 SNAPSHOT_SECONDS=27.5 SNAPSHOT_DEFAULTS="pegboard.shows=1,pegboard.speed=8,pegboard.seed=6" swift test --filter pegBoardStill
 python3 -I docs/peg-board/draw.py Sources/Atrium/Resources sheet.png large    # draws the figures and writes the charts; the sheet is optional
