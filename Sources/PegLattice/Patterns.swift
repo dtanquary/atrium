@@ -140,9 +140,10 @@ private func reef(_ sheet: Sheet, using rng: inout some RandomNumberGenerator) -
 /// A plate: one of Packard's snowflakes (N. Packard, "Lattice models for solidification and aggregation", 1986).
 /// From one frozen hole, every hole freezes on the step it has one of the rule's numbers of frozen holes round it;
 /// it grows until a hole would freeze off the sheet, and its pegs go in ring by ring, toned by when they froze. A
-/// rule makes one shape only: the seed picks one of five rules. (1, 3 or 5 grows the same plate as 1 or 3.)
+/// rule makes one shape only, with its own lace of holes: the seed picks one of four rules. (1, 3 or 5 grows the
+/// same plate as 1 or 3; and 1 or 2 a solid hexagon with no lace at all, which Dave was never shown.)
 private func plate(_ sheet: Sheet, using rng: inout some RandomNumberGenerator) -> Pattern {
-    let rule = [[1], [1, 3], [1, 2], [1, 5], [1, 3, 4, 5, 6]].randomElement(using: &rng)!
+    let rule = [[1], [1, 3], [1, 5], [1, 3, 4, 5, 6]].randomElement(using: &rng)!
     let span = min(sheet.rows, sheet.cols) + 4, side = 2 * span + 1
     var when = [Int](repeating: -1, count: side * side)
     when[span * side + span] = 0
