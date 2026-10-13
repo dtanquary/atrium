@@ -5,7 +5,7 @@
 # HEVC for Safari on M1 and M2, plus a small landscape copy for the laptop on portrait phones. Output goes to
 # site/public/media, which is gitignored: this script is the source.
 #   site/media.sh               # all of them
-#   site/media.sh nebula live-sky # just these
+#   site/media.sh nebula meander # just these
 #   site/media.sh cards         # just the cards for every wallpaper, cut from the README's screenshots (or card-aurora …)
 #   site/media.sh previews      # just the 1280-wide loops the cards open (or preview-aurora … for some)
 # Needs ffmpeg with libsvtav1 and libx265 (Homebrew's has both).
@@ -16,9 +16,9 @@ TMP=${TMPDIR:-/tmp}/atrium-site-media
 LOOP=12 FADE=2 # seconds: the loop, and the crossfade from its tail into its head that hides the seam
 
 # slug|scene|focal x % for the phone crop|seconds in before recording|extra environment
-WORKS='nebula|Nebula|54|4|SNAPSHOT_DEFAULTS=nebula.palette=Hubble
-flowing-gradient|Flowing Gradient|34|4|SNAPSHOT_DEFAULTS=gradient.palette=Midnight,gradient.ribbonsOn=1
-live-sky|Live Sky|72|4|SNAPSHOT_DEFAULTS=sky.previewTime=1,sky.previewHour=23
+WORKS='meander|Meander|40|2.5|SNAPSHOT_DEFAULTS="meander.seed=13,meander.colors=Survey Blue,meander.speed=3" SNAPSHOT_APPEARANCE=dark
+etching|Etching|52|4|SNAPSHOT_DEFAULTS=etching.drawn=0.6908,etching.picture=1,etching.speed=8,etching.screen=1
+nebula|Nebula|54|4|SNAPSHOT_DEFAULTS=nebula.palette=Hubble
 pixel-window-seat|Pixel Window Seat|70|5|TRAIN_AT=12000 SNAPSHOT_DEFAULTS=seat.orbit=2,seat.country=3,seat.previewTime=1,seat.previewHour=18.7
 murmuration|Murmuration|44|20|SNAPSHOT_DEFAULTS=murmuration.light=5,murmuration.ground=0 MURMURATION_SEED=3
 fish-tank|Fish Tank|42|4|SNAPSHOT_APPEARANCE=light'
@@ -96,9 +96,9 @@ render() {
     dir=$1
     rm -rf "$dir" && mkdir -p "$dir"
     echo "== $2: rendering $((LOOP + FADE)) s"
-    # shellcheck disable=SC2086 # $4 is a list of NAME=value words
-    env SNAPSHOT_SCENE="$2" SNAPSHOT_DIR="$dir" SNAPSHOT_SECONDS="$3" SNAPSHOT_MOVIE=$((LOOP + FADE)) \
-        SNAPSHOT_MOVIE_FPS=30 $4 swift test -c release -Xswiftc -enable-testing --filter everySceneRenders </dev/null >"$dir/test.log" 2>&1 ||
+    # $4 is a list of NAME=value words, read as the shell reads them so one can be quoted (a palette's name with a space in it)
+    eval "env SNAPSHOT_SCENE=\"\$2\" SNAPSHOT_DIR=\"\$dir\" SNAPSHOT_SECONDS=\"\$3\" SNAPSHOT_MOVIE=$((LOOP + FADE)) \
+        SNAPSHOT_MOVIE_FPS=30 $4 swift test -c release -Xswiftc -enable-testing --filter everySceneRenders" </dev/null >"$dir/test.log" 2>&1 ||
         { tail -20 "$dir/test.log"; exit 1; }
     echo "== $2: looping and encoding"
     ffmpeg -nostdin -loglevel error -y -framerate 30 -start_number 1 -i "$dir/$2-%03d.png" -filter_complex \

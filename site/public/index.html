@@ -31,9 +31,12 @@
   .line { font-size: 14px; color: var(--text-2); }
   [data-work=murmuration] .label { top: 24%; } /* in the open sky, clear of the pier */
   /* Over Fish Tank's open water, not its bright sand; the words lift to hold 4.5:1 (the accent too, on the section). */
-  [data-work=fish-tank] .label { top: 130px; }
-  [data-work=fish-tank] .line { color: #e4ecff; }
+  [data-work=fish-tank] .label, [data-work=meander] .label { top: 130px; } /* Meander's: on the old ground above the river's loops */
+  [data-work=fish-tank] .line, [data-work=meander] .line { color: #e4ecff; } /* Meander's too: over its palest old ground on phones */
   [data-work=pixel-window-seat] .label { top: 81%; } /* on the carriage's dark table, clear of the curtain and its gold tie-back */
+  /* Etching: in the open sky beside the wave. Its powder is a mid grey, where only white words hold 4.5:1. */
+  [data-work=etching] .label { left: auto; right: 56px; top: 14%; color: #fff; }
+  [data-work=etching] .line { color: #fff; }
   .last { position: absolute; inset: 130px 56px auto; display: flex; justify-content: space-between; gap: 48px; }
   .last > div { display: flex; flex-direction: column; gap: 14px; max-width: 560px; }
   /* Over Fish Tank's open water on phones, the dark under the laptop on desktops: lifted to hold 4.5:1 on the water. */
@@ -114,6 +117,7 @@
     .tagline { font-size: 20px; }
     .fine { font-size: 12px; }
     .label, [data-work] .label { left: 24px; right: 24px; top: 130px; }
+    [data-work=etching] .label { left: 34%; top: 45%; } /* in the hollow of the wave, under its claws */
     @keyframes pass { 0%, 25% { opacity: 0; } 45%, 50% { opacity: 1; } 54%, 100% { opacity: 0; } } /* gone before they reach the site's bar */
     .last { inset: 88px 24px auto; flex-direction: column; gap: 28px; }
     /* Download and the pane's button share a line. */
@@ -136,6 +140,9 @@
     .preview > div { padding: 10px; }
     .preview video { border-radius: 17px; }
   }
+  /* Meander's label keeps to the old ground above the river, whose first loop climbs to 19% of the picture's height by
+     the end of the 12 s: on portrait screens, and in windows too narrow to hold its words left of that loop. */
+  @media (max-aspect-ratio: 1/1), (max-width: 1199px) { [data-work=meander] .label { top: max(56px, calc(18svh - 66px)); } }
 </style>
 <script type="module" src="site.js"></script>
 </head>
@@ -150,17 +157,17 @@
   <div class="end"><a class="download" href="https://github.com/dtanquary/atrium/releases/latest">Download</a><button class="pause" type="button">Pause</button></div>
 </header>
 <main>
-  <section data-work="flowing-gradient">
+  <section data-work="meander">
     <div class="opening">
       <p class="tagline">Living wallpapers for your Mac.</p>
       <p class="fine">Free · macOS 26 or later, on Apple silicon · <a href="https://github.com/dtanquary/atrium">Source on GitHub (MIT)</a></p>
     </div>
   </section>
-  <section data-work="flowing-gradient">
-    <div class="label"><h2 class="title">Flowing Gradient</h2><p class="medium">Shader</p><p class="line">pools of color whose mood follows the real Sun</p></div>
+  <section data-work="meander" style="--own: #9be4fd">
+    <div class="label"><h2 class="title">Meander</h2><p class="medium">Simulation</p><p class="line">a river wandering across its floodplain</p></div>
   </section>
-  <section data-work="live-sky">
-    <div class="label"><h2 class="title">Live Sky</h2><p class="medium">Live</p><p class="line">the real sky above you, right now</p></div>
+  <section data-work="etching">
+    <div class="label"><h2 class="title">Etching</h2><p class="medium">Drawing</p><p class="line">old prints drawn slowly, in one unbroken line</p></div>
   </section>
   <section data-work="nebula">
     <div class="label"><h2 class="title">Nebula</h2><p class="medium">Shader</p><p class="line">a new nebula every time, in colors modeled on real ones</p></div>
