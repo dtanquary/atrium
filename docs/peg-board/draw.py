@@ -1,6 +1,6 @@
 """Draws Peg Board's own figures and sets them on its holes: pictures made for pegs, not cut down to them.
 
-usage: python3 -I draw.py <Sources/Atrium/Resources> [sheet.png [large|medium|small]] [--all]
+usage: python3 -I draw.py <Sources/Atrium/Resources> [sheet.png [large|medium|small]]
 
 The sheet is the charts of one size as plain discs, to look at while drawing.
 
@@ -102,7 +102,15 @@ def wave(x0, x1, y, high=0.9, long=6.2):
     return [(x0 + (x1 - x0) * i / n, y + high * sin(2 * pi * (x0 + (x1 - x0) * i / n) / long)) for i in range(n + 1)] + [(x1, 30), (x0, 30)]
 
 
+def gore(colour, k):
+    """The balloon's envelope, or a stripe of it k of its width: a ball and the cone under it."""
+    return [disc(colour, 12, 11.2, 11 * k, 9.5), poly(colour, (12 - 9.3 * k, 16.5), (12.2, 16.5), (12.2, 24), (12 - 2.4 * k, 24))]
+
+
 BODY = disc("orange", 23, 15, 12, 7.8)                        # the fish's, which its stripes are cut to
+TOWER = poly("clear", (13.75, 10), (17.2, 10), (17.2, 26), (11.75, 26))   # the lighthouse's, likewise
+# the snail's shell, a coil from its middle out
+SPIRAL = [(15.5 + (1.2 + 3.3 * t) * cos(radians(70 - 360 * (t - 2.75))), 14 + (1.2 + 3.3 * t) * sin(radians(70 - 360 * (t - 2.75))) / RISE) for t in [i / 40 for i in range(111)]]
 
 FIGURES = {
     "sailboat": dict(shapes=[
@@ -119,15 +127,15 @@ FIGURES = {
         line("yellow", 0.8, (17.5, 4.5), (15.5, 0.5)),
     ]),
     "tulip": dict(shapes=[
-        poly("green", smooth((10.5, 30), (4, 27.5), (1.5, 22), (2.5, 16.5), (6, 22), (10.6, 27))),
-        poly("green", smooth((11.5, 30), (17, 28), (20, 23.5), (19.7, 18.5), (15.5, 23), (11.6, 27.5))),
+        poly("green", smooth((10.4, 30), (4.5, 27.5), (1.2, 21), (1.5, 12.5), (5.5, 19.5), (10.4, 26))),
+        poly("green", smooth((11.6, 30), (17.5, 27.5), (20.8, 22), (20.6, 14.5), (16.5, 20.5), (11.6, 26.5))),
         poly("green", (10.25, 15), (12.25, 15), (12.25, 30), (10.25, 30)),
-        poly("red", arc(11, 8, 7.2, 0, 180, ry=7 * RISE), (4, 0.4), (7.6, 4.6), (11, 0.2), (14.4, 4.6), (18, 0.4)),
+        poly("red", arc(11, 8, 7.2, 0, 180, ry=7 * RISE), (3.8, 0.3), (5.3, 0.3), (7.6, 4.6), (10.2, 0.2), (11.8, 0.2), (14.4, 4.6), (16.7, 0.3), (18.2, 0.3)),
         line("none", 0.8, (8, 5.5), (11, 11.5)), line("none", 0.8, (14, 5.5), (11, 11.5)),
     ]),
     "fish": dict(shapes=[
-        poly("red", smooth((12, 15), (3, 5.5), (1.2, 7.5), (5, 15), (1.2, 22.5), (3, 24.5))),
-        poly("red", (16, 8.5), (19.5, 2), (28.5, 7.5), (24, 9)), poly("red", (25, 22.5), (18, 22), (16.5, 27), (20.5, 27.6)),
+        poly("yellow", smooth((12, 15), (3, 5.5), (1.2, 7.5), (5, 15), (1.2, 22.5), (3, 24.5))),
+        poly("yellow", (16, 8.5), (19.5, 2), (28.5, 7.5), (24, 9)), poly("yellow", (25, 22.5), (18, 22), (16.5, 27), (20.5, 27.6)),
         BODY,
         poly("clear", (17.25, 0), (19.75, 0), (19.75, 30), (17.25, 30), within=BODY),
         poly("clear", (25.25, 0), (27.75, 0), (27.75, 30), (25.25, 30), within=BODY),
@@ -161,19 +169,6 @@ FIGURES = {
         disc("pink", 12, 1.5, 1.2),
         poly("orange", (5.75, 24), (18.25, 24), (18.25, 26), (5.75, 26)), poly("orange", (6.75, 26), (17.25, 26), (15.6, 30), (8.4, 30)),
     ]),
-}
-
-
-# Drawn and looked at with the rest, and left out of the charts: docs/peg-board.md says why. --all charts them too.
-def gore(colour, k):
-    """The balloon's envelope, or a stripe of it k of its width: a ball and the cone under it."""
-    return [disc(colour, 12, 11.2, 11 * k, 9.5), poly(colour, (12 - 9.3 * k, 16.5), (12.2, 16.5), (12.2, 24), (12 - 2.4 * k, 24))]
-
-
-TOWER = poly("clear", (14.25, 10), (17.2, 10), (17.2, 26), (12.25, 26))      # the lighthouse's
-# the snail's shell, a coil from its middle out
-SPIRAL = [(15.5 + (1.2 + 3.3 * t) * cos(radians(70 - 360 * (t - 2.75))), 14 + (1.2 + 3.3 * t) * sin(radians(70 - 360 * (t - 2.75))) / RISE) for t in [i / 40 for i in range(111)]]
-DROPPED = {
     "balloon": dict(mirror=12, shapes=[
         *gore("red", 1), *gore("yellow", 0.6), *gore("red", 0.2),
         poly("orange", (9.75, 26), (12.2, 26), (12.2, 30), (10.25, 30)),
@@ -184,29 +179,24 @@ DROPPED = {
         line("yellow", 1.0, (31.3, 16.5), (30, 12.5)), line("yellow", 1.0, (32.7, 16.5), (34.5, 12.8)),
         line("orange", 2.3, SPIRAL),
     ]),
-    "lighthouse": dict(mirror=17, whole=[poly("yellow", (15, 5), (1, 0.3), (1, 8), (15, 7.3))], shapes=[
-        poly("red", (13.6, 4.2), (17.2, 0.2), (17.2, 4.2)),
-        poly("clear", (15.25, 4.2), (17.2, 4.2), (17.2, 8), (15.25, 8)),
-        poly("red", (13.25, 8), (17.2, 8), (17.2, 10), (13.25, 10)),
+    "lighthouse": dict(mirror=17, whole=[   # its light: three rays to one side only (one each side made a cross with the tower)
+        line("yellow", 0.9, (13.5, 6.5), (1.5, 6.5)), line("yellow", 0.9, (13.2, 5.6), (1.5, 2.4)), line("yellow", 0.9, (13.2, 7.4), (1.5, 10.6)),
+    ], shapes=[
+        poly("red", (13.3, 4), (17.2, -0.3), (17.2, 4)),
+        poly("yellow", (14.75, 4), (17.2, 4), (17.2, 8), (14.75, 8)),
+        poly("red", (12.75, 8), (17.2, 8), (17.2, 10), (12.75, 10)),
         TOWER,
         poly("red", (0, 14), (18, 14), (18, 18), (0, 18), within=TOWER), poly("red", (0, 22), (18, 22), (18, 26), (0, 26), within=TOWER),
-        poly("blue", wave(4, 17.4, 27.2)),
-    ]),
-    "moon": dict(shapes=[
-        poly("yellow", smooth((16, 1.1), (9, 3), (3, 9), (2, 15.5), (4.5, 22), (10, 27), (17.5, 28.7), (23, 26.5), (17, 24.5), (12, 20), (9.5, 14.5), (10.5, 8.5), (13.6, 4.4), (17.4, 2.8))),
-        disc("blue", 22, 24.5, 3.6), disc("blue", 27, 22.5, 4.6), disc("blue", 32, 24.5, 3.4), poly("blue", (22, 24.5), (32, 24.5), (32, 28), (22, 28)), poly("none", (18.4, 28), (36, 28), (36, 31), (18.4, 31)),
-        disc("clear", 31, 3.5, 1.2), disc("clear", 37, 9.5, 0.6), disc("clear", 35.5, 16.5, 1.2), disc("clear", 2, 3.5, 0.6), disc("clear", 3.5, 24.5, 0.6), disc("clear", 26, 9.5, 0.6),
+        poly("blue", wave(3, 17.4, 27.2)),
     ]),
 }
 
 
 if __name__ == "__main__":
-    figures = {**FIGURES, **DROPPED} if "--all" in sys.argv else FIGURES
-    sys.argv = [a for a in sys.argv if a != "--all"]
     out = sys.argv[1]
     kept = open(f"{out}/peg-board-charts.txt").read().split(HEADING)[0].rstrip("\n").split("\n")
     lines, drawn = kept + [HEADING], []
-    for name, figure in figures.items():
+    for name, figure in FIGURES.items():
         for size, s in SIZES.items():
             c = chart(figure, size)
             pegs = int((c > 0).sum())

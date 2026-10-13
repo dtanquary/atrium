@@ -22,6 +22,9 @@ Dave asked for a clone of it on 2026-10-12, "with lights, showing various lighti
 | Peg size | "A slider", settled as three fixed sizes (the toy's own, half, a third; half the default), each picture cut and checked by eye at each, and left out at a size where it does not read |
 | Colours | a calmer set by default, the set measured from the real pegs as a second palette |
 | Pictures | "nothing religious"; asked whether that covers a sun god on a lace chart or Neptune on a map: "Myth is fine". Only public-domain, CC0, CC BY or CC BY-SA sources; never the toy's own template sheets |
+| The pictures, once he had run it at Large pegs | "on peg board, pictures are hard to make out, but the pattern looks good". Asked what to do: "Draw our own: simple bold figures designed hole by hole for each peg size (a sailboat, a butterfly, a flower), the way a person would make them on the toy. Mock-ups first for you to judge; the old-print charts go if these read better." |
+| The drawn figures (2026-10-13, on the mock-ups) | the eight put forward, and of the four left out "Balloon and snail too" and "Lighthouse, redrawn"; not the moon with stars |
+| The old prints (2026-10-13) | "Remove them all" |
 
 The lead's calls, which he has not ruled on: a Speed slider; the lean shader; three bytes for a peg's place; a fresh start on each load.
 
@@ -136,37 +139,43 @@ Left out earlier: a Berlin wool work hunting dog, whose white coat could not be 
 
 ## Drawn figures
 
-Dave ran it on his desktop at Large pegs on 2026-10-12: "on peg board, pictures are hard to make out, but the pattern looks good". Asked what to do about the pictures, he picked: "Draw our own: simple bold figures designed hole by hole for each peg size (a sailboat, a butterfly, a flower), the way a person would make them on the toy. Mock-ups first for you to judge; the old-print charts go if these read better." These are those mock-ups, made the same day: eight figures in 24 charts, in the charts file after the prints', which stay until he has judged. He has not seen them yet.
+Dave ran it on his desktop at Large pegs on 2026-10-12: "on peg board, pictures are hard to make out, but the pattern looks good". Asked what to do about the pictures, he picked: "Draw our own: simple bold figures designed hole by hole for each peg size (a sailboat, a butterfly, a flower), the way a person would make them on the toy. Mock-ups first for you to judge; the old-print charts go if these read better." Twelve were drawn that day and eight put forward. On 2026-10-13 he judged them on sheets of the app's own stills, beside the prints: he kept the eight, and of the four left out said "Balloon and snail too" and "Lighthouse, redrawn". He did not pick the moon with stars. So there are eleven, in 33 charts.
 
-**A figure is geometry, not a picture cut down.** `docs/peg-board/draw.py` holds each as a list of flat shapes (polygons, discs, thick lines with round ends), each in one of the eight peg colours, the later over the earlier; a shape of "none" is empty holes, which on a black sheet is a dark line. Nothing is averaged or matched: every hole takes the colour of the shape its own middle is in. Each was drawn from nothing for that file. No picture, chart or template sheet was copied or traced, so a figure has no source and no line in the credits: the chart test takes the charts under draw.py's heading in the file as the app's own.
+**A figure is geometry, not a picture cut down.** `docs/peg-board/draw.py` holds each as a list of flat shapes (polygons, discs, thick lines with round ends), each in one of the eight peg colours, the later over the earlier; a shape of "none" is empty holes, which on a black sheet is a dark line. Nothing is averaged or matched: every hole takes the colour of the shape its own middle is in. Each was drawn from nothing for that file. No picture, chart or template sheet was copied or traced, so a figure has no source and needs no credit.
 
-**The drawing's units are the holes of a chart for Large pegs,** the size Dave runs: x counts holes along a row and y counts rows from the top, 43 by 30 at the most. So at Large pegs a figure is set hole by hole: an edge goes between two rows or two holes, a spot goes on a hole (a disc of radius 1.2 is that hole and the six round it, the board's own dot; 2.1 takes the next ring too), and a line of single pegs runs along a row or a diagonal of the honeycomb. The charts for Medium and Small pegs are the same drawing at two and three holes to a unit, 86 by 60 and 129 by 90 at the most: the same shapes with smoother edges, nothing added. A shape can be marked for some sizes only (`only`), for where Large pegs want a simpler drawing; none of the eight needed it. A figure with `mirror` is drawn as its left half and folded, so it is the same on both sides to the hole.
+**The drawing's units are the holes of a chart for Large pegs,** the size Dave runs: x counts holes along a row and y counts rows from the top, 43 by 30 at the most. So at Large pegs a figure is set hole by hole: an edge goes between two rows or two holes, a spot goes on a hole (a disc of radius 1.2 is that hole and the six round it, the board's own dot; 2.1 takes the next ring too), and a line of single pegs runs along a row or a diagonal of the honeycomb. The charts for Medium and Small pegs are the same drawing at two and three holes to a unit, 86 by 60 and 129 by 90 at the most: the same shapes with smoother edges, nothing added but the balloon's ropes (a shape can be marked for some sizes only, `only`). A figure with `mirror` is drawn as its left half and folded, so it is the same on both sides to the hole.
 
-**The look:** two to four colours, big flat areas, nothing dithered or shaded, the sheet round the figure empty. A row of empty holes does for a line: the mast between the sailboat's sails, the gap under the mushroom's cap and between the butterfly's wings, the V of the tulip's middle petal, the owl's pupils, the fish's eye. Nothing is thinner than two pegs but the butterfly's feelers, the tips of the tulip's petals and the ring of the fish's bubble. The scene's outline-first order suits them: every colour's outlines go up before anything is filled, so a figure can be told about a third of the way in (looked at on strips of the app's stills of the sailboat and the owl, and on plain drawings of the order for the rest).
+**The look:** two to four colours, big flat areas, nothing dithered or shaded, the sheet round the figure empty. A row of empty holes does for a line: the mast between the sailboat's sails, the gap under the mushroom's cap and between the butterfly's wings, the V of the tulip's middle petal, the owl's pupils, the fish's eye, the turns of the snail's shell. Nothing is thinner than two pegs but the butterfly's feelers, the snail's eye stalks, the ring of the fish's bubble and the lighthouse's rays, which Dave accepted. The scene's outline-first order suits them: every colour's outlines go up before anything is filled, so a figure can be told about a third of the way in.
 
 | Chart | Colours | At Large pegs | Reads at |
 |---|---|---|---|
 | sailboat | clear and yellow sails, a red hull, blue waves | 32 by 28 holes, 438 pegs | all three |
 | butterfly | violet and pink wings with clear spots, yellow body | 35 by 28, 623 | all three |
-| tulip | red, green | 18 by 29, 264 | all three; the least bold of the eight at Large |
-| fish | orange with clear stripes, red tail and fins, a blue bubble | 37 by 26, 466 | all three |
+| tulip | red, green | 20 by 30, 309 | all three |
+| fish | orange with clear stripes, yellow tail and fins, a blue bubble | 37 by 26, 466 | all three |
 | rocket | red nose and fins, clear body, a blue window, yellow flame | 18 by 29, 217 | all three |
 | owl | violet, clear eyes, yellow beak and feet, an orange branch | 22 by 29, 429 | all three |
 | mushroom | red cap with clear spots, clear stem, green grass | 26 by 29, 455 | all three |
 | cactus | green, in an orange pot, with a pink flower | 19 by 30, 287 | all three |
+| balloon | red and yellow stripes, an orange basket | 23 by 30, 418 | all three; at Large its envelope is faceted, like a paper lantern |
+| snail | an orange shell, a yellow body | 34 by 27, 426 | all three; at Large its shell, a coil two pegs wide, comes out six-sided |
+| lighthouse | red and clear stripes, a yellow lamp and rays, blue waves | 31 by 30, 312 | all three; at Large its two slanting rays are steps of three and four pegs |
 
-"Reads at" is by the builder's eye on the app's own stills of a 1512 by 982 point display, Softness 0, in both palettes at Large and in Calm at the other two. At Small pegs they read but are plain: flat areas of thousands of pegs, which no hand would set, and long to build (the butterfly is 5,565 pegs, 15 minutes at speed 1).
+"Reads at" is by the builder's eye on the app's own stills of a 1512 by 982 point display, Softness 0. At Small pegs they read but are plain: flat areas of thousands of pegs, which no hand would set, and long to build (the butterfly is 5,565 pegs, 15 minutes at speed 1).
 
-**Twelve were drawn for eight.** The other four are still in draw.py, as `DROPPED`, and `--all` charts them too:
-- A hot-air balloon and a snail read at all three sizes and are out only to make eight. At Large pegs the balloon's envelope, 23 holes across in five stripes, is faceted like a paper lantern, and the snail's shell, a coil two pegs wide, comes out six-sided.
-- A lighthouse: its striped tower reads, its beam does not (a wedge of yellow that looks like a flag). It has one beam because two, one each side, made a cross with the tower.
-- A crescent moon with stars and a cloud: it reads as a night sky, but a star of seven pegs looks like a flower at Large pegs, and a crescent beside stars is close to an emblem of a faith. Under Dave's rule it stays out unless he says otherwise.
+**Changed after Dave's look** (2026-10-13), each seen before and after on the app's stills:
+- The lighthouse's light was a wedge of yellow that read as a flag. It is now three rays from a yellow lamp, to one side only: one each side made a cross with the tower, which is never to come back. At Medium and Small pegs the rays are clean lines; at Large the two that slant are stepped.
+- The fish's tail and fins were red, too close to its orange body in the Calm colours. They are yellow.
+- The tulip was the weakest at Large pegs. Its leaves are longer and stand up beside the stem (309 pegs from 264) and its petals' tips are two pegs, not one.
+
+**Drawn and left out:** a crescent moon with stars and a cloud. It read as a night sky, but a star of seven pegs looks like a flower at Large pegs, and a crescent beside stars is close to an emblem of a faith. Dave did not pick it, and its drawing is gone from draw.py (it is in git history, in the commit that first added the file).
 
 **Learnt on the way:**
 - A disc of radius 1.8 about a hole is thirteen holes in the shape of a six-pointed star. Spots are 7 or 19 holes.
 - On offset rows an upright edge at a whole or a half x goes through holes' middles; at a quarter x it is a zigzag half a hole deep, which is what an upright edge is on this board. An upright band two holes wide cannot be centred on a hole: the tulip's stem sits a quarter of a hole right of its bloom.
 - A sliver left between two shapes comes out as a dotted line. The snail's shell was first a disc with a spiral of empty holes, which left dots along its rim; it is now one thick coiled line.
-- Calm's red, pink and orange are close. They are side by side only where the fish's red fins meet its orange body.
+- A wedge of one colour reads as a thing, not as light. Rays with dark between them read as light.
+- Calm's red, pink and orange are close: keep them apart, or part them with a row of empty holes.
 
 ## Rights
 
@@ -237,7 +246,7 @@ Worst first, as the builder saw it on stills; Dave has not seen it run.
 
 1. **Sharp and busy at Softness 0**, the default he chose: see the busy scores above. It is what got Zen Garden cut ("so bright and sharp and not relaxing"), and Softness is the answer he has to hand.
 2. **Nearly still at speed 1.** A crystal takes 2 to 3.5 minutes at Medium and a picture 2 to 6; the Wave takes 11 at Small and the flea 15. The slider now goes to 20×, where the flea at Small takes 45 s.
-3. **Large pegs have seven pictures, none of them strong:** the stag (a blob with antlers), the flea, a lion that only just reads (a ragged beast), two birds, and from the pattern book a piece of scrollwork, one star and two small stars. The book's eagle and griffin are 57 squares tall; cut down to 30 rows by averaging they were ragged blots, and the unicorn did not read either. The eight [drawn figures](#drawn-figures) are the answer on trial: if Dave keeps them, the prints' charts for Large pegs can go.
+3. **Large pegs have seven pictures, none of them strong:** the stag (a blob with antlers), the flea, a lion that only just reads (a ragged beast), two birds, and from the pattern book a piece of scrollwork, one star and two small stars. The book's eagle and griffin are 57 squares tall; cut down to 30 rows by averaging they were ragged blots, and the unicorn did not read either. Dave kept the [drawn figures](#drawn-figures), eleven of them.
 4. **The eight new pictures are each one colour** (page 13, two), chosen by the builder: violet, blue with clear, red, orange, pink, yellow, clear, blue. The books are black and white and say nothing of colour.
 5. **A few stray pegs** are left in page 24's charts, where a marked square printed dark enough to read as filled.
 6. **The light show is faint in stills** and has not been watched moving.

@@ -45,7 +45,7 @@ import Testing
     let drawn = PegLattice.charts(from: String(file[try #require(file.range(of: "\n# Figures drawn for the app")).lowerBound...])).map(\.name)
     let cut = charts.map(\.name).filter { !drawn.contains($0) }
     #expect(cut.count == 32 && Set(cut) == Set(credits.map { $0[0] }))
-    #expect(drawn.count == 24 && Set(drawn).allSatisfy { name in drawn.count { $0 == name } == 3 })
+    #expect(drawn.count == 33 && Set(drawn).allSatisfy { name in drawn.count { $0 == name } == 3 })
     for chart in charts {
         #expect(chart.pegs.count == chart.cols * chart.rows && chart.pegs.allSatisfy { $0 <= 8 } && chart.pegs.count { $0 > 0 } > 150, "\(chart.name)")
         #expect([(43, 30), (86, 61), (131, 93)].contains { chart.cols <= $0.0 && chart.rows <= $0.1 }, "\(chart.name) is \(chart.cols) by \(chart.rows)")
