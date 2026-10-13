@@ -325,6 +325,17 @@ Old prints, plates and patent drawings, drawn slowly in one unbroken line on a s
 | ![Etching: the velocipede from Lallement's patent of 1866, nearly finished](docs/images/etching-velocipede.jpg) | ![Etching: the Pont Neuf from the Turgot map of Paris, drawn with the finer line](docs/images/etching-pont-neuf.jpg) |
 | The velocipede from Lallement's patent of 1866, nearly finished | The Pont Neuf from the Turgot map of Paris, in the finer line |
 
+#### Peg Board
+A black sheet of holes from edge to edge, with colored translucent pegs pushed through it one at a time and lit from behind. Each peg takes a second to light, and its glow spreads onto the paper around it. It builds one thing after another. Some are patterns, made fresh each time, of eight kinds that take turns: a snow crystal grown by a model of how real ones freeze, a reef of branching growths, a lacy hexagonal plate, tumbling blocks, the triangles inside Pascal's triangle, a hexaflake, a pinwheel and a rose. The others are eleven pictures drawn for the app, among them a sailboat, a butterfly, an owl, a rocket and a lighthouse, which go up outline first and are then filled in. A finished one stays for 30 seconds under a slow light show, a soft shadow that goes round, spreads out in rings or drifts across the pegs, with nothing flashing; then the sheet fades to dark and the next begins. In Settings you can show patterns only or pictures only, set the speed from half to 20 times the standard six pegs a second, hold a finished one for 10 seconds to 5 minutes, pick large, medium or small pegs (medium unless changed), soften the pegs from molded plastic with a bright rim down to plain glowing discs, and choose between two sets of peg colors, Calm and Vivid, or Random, which takes one of the two for each new sheet.
+
+| <img src="docs/images/peg-board.webp" alt="Peg Board, a pinwheel of blue, violet and pink pegs growing outward arm by arm, moving" width="1600"> | ![Peg Board, a reef of green and yellow branching growths rising from the bottom of the sheet](docs/images/peg-board-reef.jpg) |
+|---|---|
+| A pinwheel going in at 20× speed, the top of the Speed slider; at the standard speed it takes about four minutes | A reef, grown from the bottom of the sheet |
+| ![Peg Board, a rose of long violet petals around a ring of shorter pink ones and a clear middle](docs/images/peg-board-rose.jpg) | ![Peg Board, triangles nested inside triangles in violet, pink and orange](docs/images/peg-board-triangles.jpg) |
+| A rose, which goes in petal by petal | The triangles inside Pascal's triangle |
+| ![Peg Board, a butterfly half built: every outline up, the lower wings filled in pink](docs/images/peg-board-butterfly.jpg) | ![Peg Board, a sailboat at Large pegs](docs/images/peg-board-sailboat.jpg) |
+| A butterfly half built: the outlines go up first, then the filling | A sailboat with Large pegs |
+
 ## Settings
 
 The first time Atrium opens, a short welcome lets you try the wallpapers on your desktop and shuffle between them all (it's in Settings → About → Show Welcome any time after). Choose Settings… (⌘,) from the menu bar icon. Every wallpaper has a page, laid out like System Settings, with its palettes, photos, sliders, switches and menus (Fish Tank has none yet). The wallpaper runs live behind the top of its page, so each change shows as you make it. General holds Open at Login, Shuffle and Match the lock screen; Power sets the frame rate when plugged in, on battery and in Low Power Mode.
