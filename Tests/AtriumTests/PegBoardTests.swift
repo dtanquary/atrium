@@ -59,8 +59,9 @@ import Testing
 /// next, in thirty rounds. And with everything shown, both kinds come. (A figure is known here by how many pegs it
 /// has, which no two share at Large pegs.)
 @MainActor @Test func pegBoardShowsEveryFigureInANewOrderEachRound() throws {
-    let keys = ["pegboard.seed", "pegboard.size", "pegboard.shows", "pegboard.speed"]
+    let keys = ["pegboard.seed", "pegboard.size", "pegboard.shows", "pegboard.speed", "pegboard.hold"]
     defer { keys.forEach(UserDefaults.standard.removeObject) }
+    UserDefaults.standard.set(0.0, forKey: "pegboard.hold") // ten seconds, for the test's sake
     UserDefaults.standard.set(7, forKey: "pegboard.seed")
     UserDefaults.standard.set(0.0, forKey: "pegboard.size")
     UserDefaults.standard.set(20.0, forKey: "pegboard.speed")
@@ -107,11 +108,13 @@ import Testing
 /// The picture is the same whatever the frame rate, all the way round: drawn at 15, 30 and 60 frames a second,
 /// every pixel is the same part-way through a build (after six seconds at speed 1 and one at speed 8), a minute on
 /// (the build done, the light show under way), and a minute after that (the sheet cleared and the next thing
-/// built). The display is a small one, which a thing of two or three hundred pegs fills. Twice: with whatever
-/// comes first, and with a reef first, the one kind of pattern that is made on another thread.
+/// built). The display is a small one, which a thing of two or three hundred pegs fills, and Hold when finished
+/// is at a minute. Twice: with whatever comes first, and with a reef first, the one kind of pattern that is made on
+/// another thread.
 @MainActor @Test(arguments: ["", "reef"]) func pegBoardLooksTheSameAtAnyFrameRate(first: String) throws {
-    defer { ["pegboard.seed", "pegboard.speed", "pegboard.pattern"].forEach(UserDefaults.standard.removeObject) }
+    defer { ["pegboard.seed", "pegboard.speed", "pegboard.pattern", "pegboard.hold"].forEach(UserDefaults.standard.removeObject) }
     UserDefaults.standard.set(7, forKey: "pegboard.seed")
+    UserDefaults.standard.set(2.0, forKey: "pegboard.hold")
     if !first.isEmpty { UserDefaults.standard.set(first, forKey: "pegboard.pattern") }
     let device = try #require(MTLCreateSystemDefaultDevice()), queue = try #require(device.makeCommandQueue())
     let (w, h) = (1512, 982)
@@ -370,6 +373,50 @@ import Testing
         first.insert(PegBoard(size: CGSize(width: 1512, height: 982)).kind)
     }
     #expect(!first.contains(.reef) && first.count == 7, "of forty sheets, the first things were \(first.map { $0?.rawValue ?? "crystal" }.sorted())")
+}
+
+/// A finished thing is held, under its light show, for as long as Hold when finished says, whatever the speed it
+/// was built at: ten seconds, thirty (which is the pick where none has been made), a minute or five. And a change
+/// of the pick while a thing is held neither starts its hold again nor makes anything jump: with a longer one it
+/// goes on to that time from when its hold began, even picked in the last second, as the light show was going out;
+/// with a shorter one that is already past, the sheet starts to clear at once, the light show as it is. (`shade`
+/// is how deep the light show is, of 0.4: between two frames a 60th of a second apart it moves 0.004 at the most.)
+@MainActor @Test func pegBoardHoldsForAsLongAsPicked() {
+    let keys = ["pegboard.seed", "pegboard.size", "pegboard.shows", "pegboard.speed", "pegboard.pattern", "pegboard.hold"]
+    defer { keys.forEach(UserDefaults.standard.removeObject) }
+    UserDefaults.standard.set(7, forKey: "pegboard.seed")
+    UserDefaults.standard.set(0.0, forKey: "pegboard.size")
+    UserDefaults.standard.set("triangles", forKey: "pegboard.pattern")
+    #expect(PegBoard.hold.standard == 1 && PegBoard.hold.label == "Hold when finished")
+    /// Seconds the first thing is held, at a speed, with one pick or none; and with another made that many seconds
+    /// into its hold. With them, the most the light show's depth moved in one frame from that change on.
+    func held(_ pick: Double?, speed: Double, then change: (after: Double, pick: Double)? = nil) -> (seconds: Double, jump: Double) {
+        if let pick { UserDefaults.standard.set(pick, forKey: "pegboard.hold") } else { UserDefaults.standard.removeObject(forKey: "pegboard.hold") }
+        UserDefaults.standard.set(speed, forKey: "pegboard.speed")
+        let scene = PegBoard(size: CGSize(width: 1512, height: 982))
+        var frame = 0, began: Int?, changed = false, jump = 0.0
+        while true {
+            frame += 1
+            let (was, shade) = (scene.phase, scene.shade)
+            scene.update(100 + Double(frame) / 60)
+            if changed { jump = max(jump, abs(scene.shade - shade)) }
+            if began == nil, scene.phase == .showing { began = frame }
+            if let began, was == .showing, scene.phase == .clearing { return (Double(frame - began) / 60, jump) }
+            if let began, let change, !changed, frame - began == Int(change.after * 60) {
+                UserDefaults.standard.set(change.pick, forKey: "pegboard.hold")
+                changed = true
+            }
+        }
+    }
+    for speed in [1.0, 20.0] {
+        let seconds = [0.0, 1, 2, 3].map { held($0, speed: speed).seconds } + [held(nil, speed: speed).seconds]
+        print("Peg Board's hold at speed \(speed), by the menu's four picks and with none made: \(seconds) seconds")
+        #expect(zip(seconds, [10.0, 30, 60, 300, 30]).allSatisfy { abs($0 - $1) < 0.05 })
+    }
+    let longer = held(0, speed: 20, then: (5, 2)), late = held(1, speed: 20, then: (29, 2)), past = held(3, speed: 20, then: (45, 1)), sooner = held(3, speed: 20, then: (20, 1))
+    print("Peg Board's hold, changed under it: ten seconds to a minute at 5 s, \(longer); thirty to a minute at 29 s, \(late); five minutes to thirty seconds at 45 s, \(past); and at 20 s, \(sooner)")
+    #expect(abs(longer.seconds - 60) < 0.05 && abs(late.seconds - 60) < 0.05 && abs(past.seconds - 45) < 0.05 && abs(sooner.seconds - 30) < 0.05)
+    #expect([longer, late, past, sooner].allSatisfy { $0.jump < 0.005 }, "the light show jumped")
 }
 
 /// Draws the sheet as it would be on a display of 1512 by 982 points, `width` pixels across, with Settings values

@@ -22,7 +22,11 @@ final class PegBoard: SKScene {
     /// From the plastic peg as measured (its bright rim, its moulded lip, the lamp showing through as a hot dot)
     /// down to a plain glowing disc: one number, which the shader turns into all of those.
     nonisolated static let softness = Knob(key: "pegboard.softness", label: "Softness", range: 0...1, standard: 0, section: "Pegs")
-    nonisolated static let knobs = [shows, speed, pegSize, softness]
+    /// How long a finished thing stays up, under its light show, before the sheet clears: the menu's picks, in seconds.
+    nonisolated static let hold = Knob(key: "pegboard.hold", label: "Hold when finished", range: 0...3, standard: 1, section: "Sheet",
+                                       format: .choice(["10 seconds", "30 seconds", "1 minute", "5 minutes"]))
+    private static let holdSeconds = [10, 30, 60, 300]
+    nonisolated static let knobs = [shows, speed, hold, pegSize, softness]
 
     /// The eight peg colours (red, pink, orange, yellow, green, blue, violet, clear) in two sets, sRGB: Vivid as
     /// measured from photographs of the real pegs, and Calm, the same with less colour, more even in lightness and
@@ -56,10 +60,10 @@ final class PegBoard: SKScene {
     /// build is a wider soft front and not a sparkle.
     private static let rate = 6.0, lighting = 1.0
     /// The scene moves in steps of a 960th of a second, however many a frame holds, so that it is the same at any
-    /// frame rate. In steps: between two states of the glow (the shader shows the one turning into the other); a
-    /// light show; the sheet going dark, its pegs fading out with their light; and the whole clear, which leaves
-    /// the sheet empty for a second before the next thing begins.
-    private static let second = 960, tickSteps = 240, showSteps = 60 * 960, fadeSteps = 3 * 960, clearSteps = 4 * 960
+    /// frame rate. In steps: between two states of the glow (the shader shows the one turning into the other); the
+    /// sheet going dark, its pegs fading out with their light; and the whole clear, which leaves the sheet empty for
+    /// a second before the next thing begins. (How long a light show lasts is Settings' to say: `hold`.)
+    private static let second = 960, tickSteps = 240, fadeSteps = 3 * 960, clearSteps = 4 * 960
     /// How far a light show takes a peg down from full, and the seconds it takes to come in and to go.
     private static let depth = 0.4, eases = 3.0
 
@@ -81,6 +85,10 @@ final class PegBoard: SKScene {
     /// into the show or the clear; the time not yet stepped, in seconds; and steps since the glow's last tick.
     private(set) var phase = Phase.building
     private var placed = 0.0, front = rate * lighting, since = 0, owed = 0.0, ticking = 0
+    /// How deep the light show is now, and how many steps of it there have been: kept as the sheet clears, so that
+    /// a show cut short goes dark as it is, with nothing sudden.
+    private(set) var shade = 0.0
+    private var lit = 0
     /// How many pegs the glow has; which texture holds its newer state, and which state of it each texture holds.
     private var glowing = 0, newest = 0, holds = [0, 0], made = 0
     /// Whether a picture is on the sheet (or a pattern), the pictures not yet shown this round, and the light show.
@@ -221,6 +229,7 @@ final class PegBoard: SKScene {
         glow.clear()
         for texture in glowTextures { send(glow.bytes, to: texture) }
         (phase, placed, since, glowing, made, holds, fresh) = (.building, 0, 0, 0, made + 1, [made + 1, made + 1], false)
+        (shade, lit) = (0, 0)
     }
 
     /// The next kind of pattern: each in turn, in a new order every round, and never the same twice running.
@@ -279,15 +288,16 @@ final class PegBoard: SKScene {
     override func update(_ currentTime: TimeInterval) {
         owed += frameTime(currentTime, &lastTime)
         let steps = Int((owed * Double(Self.second)).rounded()), speed = Self.speed.value
+        let hold = Self.holdSeconds[min(max(Int(Self.hold.value), 0), Self.holdSeconds.count - 1)] * Self.second
         owed -= Double(steps) / Double(Self.second)
-        for _ in 0..<steps { step(speed) }
+        for _ in 0..<steps { step(speed, hold) }
         tell()
     }
 
-    /// One 960th of a second. Pegs are begun at the Speed slider's pace until all are lit; then the light show, and
-    /// the clear, take the time they take at any speed; and then the next thing begins. Every quarter second, a
-    /// tick of the glow.
-    private func step(_ speed: Double) {
+    /// One 960th of a second. Pegs are begun at the Speed slider's pace until all are lit; then the light show lasts
+    /// `hold` steps and the clear takes the time it takes, at any speed; and then the next thing begins. Every
+    /// quarter second, a tick of the glow.
+    private func step(_ speed: Double, _ hold: Int) {
         switch phase {
         case .building:
             front = Self.rate * Self.lighting * speed
@@ -295,7 +305,13 @@ final class PegBoard: SKScene {
             if placed >= Double(sequence.count) + front { (phase, since) = (.showing, 0) }
         case .showing:
             since += 1
-            if since >= Self.showSteps { (phase, since) = (.clearing, 0) }
+            lit = since
+            // The show eases in, and out again before its time is up; and it goes no faster than that where the
+            // time is changed under it, so a longer hold picked as it was going out does not bring it back at once.
+            let aim = Self.depth * Self.ease(Double(since) / Double(Self.second) / Self.eases) * Self.ease(Double(hold - since) / Double(Self.second) / Self.eases)
+            let most = 1.6 * Self.depth / Self.eases / Double(Self.second)
+            shade += min(max(aim - shade, -most), most)
+            if since >= hold { (phase, since) = (.clearing, 0) } // at once, where a shorter hold is picked that is already past
         case .clearing:
             since += 1
             if since >= Self.clearSteps { begin() }
@@ -322,22 +338,17 @@ final class PegBoard: SKScene {
         holds[newest] = made
     }
 
+    private static func ease(_ x: Double) -> Double { let t = min(max(x, 0), 1); return t * t * (3 - 2 * t) }
+
     /// Tells the shader where things have got to.
     private func tell() {
-        func ease(_ x: Double) -> Double { let t = min(max(x, 0), 1); return t * t * (3 - 2 * t) }
         let seconds = Double(since) / Double(Self.second), toward = Float(ticking) / Float(Self.tickSteps)
-        var (level, depth, turned) = (1.0, 0.0, 0.0)
-        switch phase {
-        case .building: break
-        case .showing:
-            depth = Self.depth * ease(seconds / Self.eases) * ease((Double(Self.showSteps / Self.second) - seconds) / Self.eases)
-            turned = (seconds / show.period).truncatingRemainder(dividingBy: 1)
         // in a straight line: a peg's light and the peg both go by it, which on the screen is an even fade from first to last
-        case .clearing: level = max(1 - seconds / Double(Self.fadeSteps / Self.second), 0)
-        }
+        let level = phase == .clearing ? max(1 - seconds / Double(Self.fadeSteps / Self.second), 0) : 1
+        let turned = (Double(lit) / Double(Self.second) / show.period).truncatingRemainder(dividingBy: 1)
         state.vectorFloat4Value = [Float(min(placed, Double(sequence.count) + front)), Float(front), newest == 1 ? toward : 1 - toward, Float(level)]
         wave.vectorFloat4Value = [show.turn, show.out, show.across, Float(turned * 2 * .pi)]
-        deep.floatValue = Float(depth)
+        deep.floatValue = Float(shade)
     }
 
     /// The whole board in one pass. A pixel belongs to the nearer of two holes, the nearest in the row below it and
@@ -421,8 +432,8 @@ private final class Reserve: @unchecked Sendable {
         }
     }
 
-    /// The reef, waited for if it is not made yet. On the desktop it has had the minute and more that the thing
-    /// before it was on the sheet; only a test or a still that asks for a reef first waits.
+    /// The reef, waited for if it is not made yet. On the desktop it has had the time the thing before it was on
+    /// the sheet, a quarter of a minute at the least; only a test or a still that asks for a reef first waits.
     var reef: PegLattice.Pattern { done.wait(); return made! }
 }
 
