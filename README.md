@@ -2,7 +2,7 @@
 
 <img src="docs/images/app-icon.png" alt="Atrium's icon: a skylight onto a glowing nebula" width="128">
 
-Living, animated desktop wallpapers for macOS, 24 of them: a reef tank of real fish and corals, slow tours through the best real photos of the Solar System and deep space, the real sky above you right now, your live weather and wind, sunlight through leaves from the real Sun, rising heat as a schlieren camera sees it, drifting nebulae, a black hole that bends the Milky Way around it, a pixel-art spaceport where rockets launch and land, and more. It's a small menu bar app written in Swift and SpriteKit, with no dependencies.
+Living, animated desktop wallpapers for macOS, 27 of them: a reef tank of real fish and corals, slow tours through the best real photos of the Solar System and deep space, the real sky above you right now, your live weather and wind, sunlight through leaves from the real Sun, rising heat as a schlieren camera sees it, drifting nebulae, a black hole that bends the Milky Way around it, a pixel-art spaceport where rockets launch and land, and more. It's a small menu bar app written in Swift and SpriteKit, with no dependencies.
 
 It's free and open source, for macOS 26 or later on Apple silicon. See it move at **[atrium.show](https://atrium.show)**, [download it](#download), or [build it yourself](#build-from-source) in a few minutes.
 
@@ -10,9 +10,9 @@ It's free and open source, for macOS 26 or later on Apple silicon. See it move a
 
 Screenshots show the wallpaper alone, with no desktop icons, menu bar or Dock. The first of each wallpaper's pictures is a 12-second loop of it moving, drawn by the app itself, the same ones its cards play on [atrium.show](https://atrium.show). Everything moves: the fish school, the photos drift and zoom, the wind streams, the nebulae fold, the galaxies turn, the starlings wheel and the rockets launch and land. Galaxy, Nebula and the reef are rebuilt differently on every load. Every wallpaper has its own page in [Settings](#settings). The docs in [`docs/`](docs/README.md) cover each wallpaper in depth: how it works, its settings, cost and ideas for next steps.
 
-- **Nature and weather:** [Fish Tank](#fish-tank) · [Weather](#weather) · [Dappled Light](#dappled-light) · [Rain on Glass](#rain-on-glass) · [Wind](#wind) · [Murmuration](#murmuration) · [Aurora](#aurora) · [Fireflies](#fireflies) · [Meander](#meander)
+- **Nature and weather:** [Fish Tank](#fish-tank) · [Weather](#weather) · [Dappled Light](#dappled-light) · [Rain on Glass](#rain-on-glass) · [Wind](#wind) · [Murmuration](#murmuration) · [Aurora](#aurora) · [Fireflies](#fireflies) · [Meander](#meander) · [Ant Colony](#ant-colony)
 - **Space:** [Solar System Tour](#solar-system-tour) · [Deep Space Tour](#deep-space-tour) · [Nebula](#nebula) · [Galaxy](#galaxy) · [Black Hole](#black-hole) · [Live Sky](#live-sky) · [Earth from Orbit](#earth-from-orbit) · [Pixel Spaceport](#pixel-spaceport)
-- **Color, light and pattern:** [Flowing Gradient](#flowing-gradient) · [Lava Lamp](#lava-lamp) · [Schlieren](#schlieren) · [Turing Patterns](#turing-patterns) · [Game of Life](#game-of-life) · [Pixel City](#pixel-city) · [Pixel Window Seat](#pixel-window-seat)
+- **Color, light and pattern:** [Flowing Gradient](#flowing-gradient) · [Lava Lamp](#lava-lamp) · [Schlieren](#schlieren) · [Turing Patterns](#turing-patterns) · [Game of Life](#game-of-life) · [Pixel City](#pixel-city) · [Pixel Window Seat](#pixel-window-seat) · [Etching](#etching) · [Peg Board](#peg-board)
 
 ### Nature and weather
 
