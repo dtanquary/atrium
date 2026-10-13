@@ -39,13 +39,19 @@ final class Etching: SKScene {
     /// second as it draws and a picture takes up to an hour and a half (three, fine; four for the one that is
     /// fine only); at the top the longest is done in about four minutes.
     nonisolated static let speed = Knob(key: "etching.speed", label: "Speed", range: 1...60, standard: 1, section: "Drawing", format: .times)
+    /// How long a finished picture is left to be looked at before it clears, whatever the Speed: one of `holds`.
+    nonisolated static let hold = Knob(key: "etching.hold", label: "Hold when finished", range: 0...3, standard: 1, section: "Drawing",
+                                       format: .choice(["10 seconds", "30 seconds", "1 minute", "5 minutes"]))
+    /// The seconds each of that menu's picks stands for, and the picked one's.
+    nonisolated static let holds = [10.0, 30, 60, 300]
+    private static var rest: Double { holds[Int(hold.value)] }
     /// The screen's powder: the bright one of a lit room, the dim one, or whichever suits the system's appearance.
     /// Bright is the standard, as every mock-up was, whatever the system is in.
     nonisolated static let powder = Knob(key: "etching.screen", label: "Screen", range: 0...2, standard: 0, section: "Drawing", format: .choice(["Light", "Dark", "Match System"]))
     /// Whether the picture is scaled up until it covers the display, what is over cut off at the edges, or is
     /// fitted inside it below the menu bar, with bare powder left beside it or above and below.
     nonisolated static let fill = Knob(key: "etching.fill", label: "Fill the screen", range: 0...1, standard: 1, section: "Drawing", format: .toggle)
-    nonisolated static let knobs = [picture, detail, speed, powder, fill]
+    nonisolated static let knobs = [picture, detail, speed, hold, powder, fill]
 
     /// A picture's route at one of the two widths of line.
     private static func route(_ picture: Int, fine: Bool) -> Data? {
@@ -94,8 +100,9 @@ final class Etching: SKScene {
         /// The picture being drawn and the one before it, whose ghost is left, by their places in the set.
         var picture: Int, before: Int?
         /// The wall-clock moment, in seconds since the reference date, this picture would have been begun at speed
-        /// `paced`. Moving the Speed slider moves it, so the picture stays as far along as it is.
-        var began: Double, paced: Double
+        /// `paced`, and the seconds it rests once drawn. Moving the Speed slider moves `began`, so the picture stays
+        /// as far along as it is; another pick of the rest moves it only for a picture that is past resting.
+        var began: Double, paced: Double, rested: Double
         /// The picture to follow, chosen as this one starts to clear so that every display clears to the same one.
         var following: Int?
         /// The Picture menu's pick when last looked at: 0 for Random.
@@ -105,8 +112,6 @@ final class Etching: SKScene {
         static let clearing = 12.0
         /// Seconds of drawing, at speed 1, over which the ghost of the picture before fades away under the new one.
         static let ghosting = 360.0
-        /// Seconds a finished picture is left to be looked at: five minutes at speed 1, less when it is hurried.
-        static func rest(at speed: Double) -> Double { max(20, 300 / speed) }
 
         /// A moment of it: the picture and the one before; the share of it drawn; how far it has cleared (0 while
         /// it is drawn and rests); and the picture to follow, once it is clearing.
@@ -121,19 +126,24 @@ final class Etching: SKScene {
             began = since < drawing && drawing > 0 ? wall - since / drawing * new / paced : wall - new / paced - (since - drawing)
         }
 
-        /// Moves on to the wall-clock moment `wall`, given the slider's speed, the menu's pick, each picture's
-        /// seconds at speed 1 and a way to choose another picture than the one given.
-        mutating func moment(at wall: Double, speed: Double, pick: Int, seconds: [Double], another: (Int) -> Int) -> Moment {
-            func whole(_ picture: Int) -> Double { seconds[picture] / speed + Self.rest(at: speed) + Self.clearing }
+        /// Moves on to the wall-clock moment `wall`, given the slider's speed, the seconds a finished picture rests,
+        /// the menu's pick, each picture's seconds at speed 1 and a way to choose another picture than the one given.
+        mutating func moment(at wall: Double, speed: Double, rest: Double, pick: Int, seconds: [Double], another: (Int) -> Int) -> Moment {
+            func whole(_ picture: Int) -> Double { seconds[picture] / speed + rest + Self.clearing }
             if speed != paced { // as much is drawn, or as long rested, as was; it goes on from there at the new speed
                 let since = wall - began, drawing = seconds[picture] / paced
                 began = since < drawing ? wall - since * paced / speed : wall - seconds[picture] / speed - (since - drawing)
                 paced = speed
             }
+            if rest != rested { // a clearing goes on from where it is; a picture that has rested the new time clears from now
+                let past = wall - began - seconds[picture] / speed
+                if past >= rested { began += rested - rest } else if past > rest { began = wall - seconds[picture] / speed - rest }
+                rested = rest
+            }
             if pick != picked { // a picture picked by name follows at once: this one clears now
                 picked = pick
                 following = pick > 0 ? pick - 1 : nil
-                let untilClearing = seconds[picture] / speed + Self.rest(at: speed)
+                let untilClearing = seconds[picture] / speed + rest
                 if pick > 0, pick - 1 != picture, wall - began < untilClearing { began = wall - untilClearing }
             }
             var turns = 0
@@ -144,7 +154,7 @@ final class Etching: SKScene {
                 if turns > 500 { began = wall } // away for weeks: begin afresh
             }
             let since = max(wall - began, 0), drawing = seconds[picture] / speed
-            let cleared = min(max((since - drawing - Self.rest(at: speed)) / Self.clearing, 0), 1)
+            let cleared = min(max((since - drawing - rest) / Self.clearing, 0), 1)
             if cleared > 0, following == nil { following = pick > 0 ? pick - 1 : another(picture) }
             return Moment(picture: picture, before: before, drawn: drawing > 0 ? min(since / drawing, 1) : 1, cleared: cleared, following: cleared > 0 ? following : nil)
         }
@@ -155,7 +165,7 @@ final class Etching: SKScene {
     private static var cycle: Cycle?, fine: Bool?, saved: [String] = []
 
     /// The shared cycle's moment at `wall`, read from the defaults the first time and saved back whenever it moves
-    /// to another picture or the slider moves it.
+    /// to another picture or a setting moves it.
     private static func moment(at wall: Double) -> Cycle.Moment {
         let speed = Self.speed.value, pick = Int(Self.picture.value), defaults = UserDefaults.standard
         let detailed = Self.detail.value > 0.5, seconds = Self.seconds[detailed ? 1 : 0]
@@ -163,14 +173,14 @@ final class Etching: SKScene {
         func another(than picture: Int) -> Int { choices(detailed: detailed).filter { $0 != picture }.randomElement() ?? picture }
         if cycle == nil {
             if let picture = place("etching.drawing"), let began = defaults.object(forKey: "etching.began") as? Double {
-                cycle = Cycle(picture: picture, before: place("etching.before"), began: began, paced: speed, following: nil, picked: pick)
+                cycle = Cycle(picture: picture, before: place("etching.before"), began: began, paced: speed, rested: rest, following: nil, picked: pick)
             } else {
-                cycle = Cycle(picture: pick > 0 ? pick - 1 : another(than: -1), before: nil, began: wall, paced: speed, following: nil, picked: pick)
+                cycle = Cycle(picture: pick > 0 ? pick - 1 : another(than: -1), before: nil, began: wall, paced: speed, rested: rest, following: nil, picked: pick)
             }
         }
         if let was = fine, was != detailed { cycle!.stretch(at: wall, from: Self.seconds[was ? 1 : 0][cycle!.picture], to: seconds[cycle!.picture]) }
         fine = detailed
-        let moment = cycle!.moment(at: wall, speed: speed, pick: pick, seconds: seconds, another: another)
+        let moment = cycle!.moment(at: wall, speed: speed, rest: rest, pick: pick, seconds: seconds, another: another)
         let now = [pictures[cycle!.picture].file, cycle!.before.map { pictures[$0].file } ?? "", String(cycle!.began)]
         if now != saved {
             saved = now
@@ -291,14 +301,14 @@ final class Etching: SKScene {
             tint()
         }
 
-        let speed = Self.speed.value, pick = Int(Self.picture.value), fine = Self.detail.value > 0.5, seconds = Self.seconds[fine ? 1 : 0]
+        let speed = Self.speed.value, rest = Self.rest, pick = Int(Self.picture.value), fine = Self.detail.value > 0.5, seconds = Self.seconds[fine ? 1 : 0]
         if let asked, own == nil {
             let picture = pick > 0 ? pick - 1 : 0, count = Self.pictures.count, drawing = seconds[picture] / speed
-            let since = asked.cleared > 0 ? drawing + Cycle.rest(at: speed) + asked.cleared * Cycle.clearing : asked.drawn * drawing
-            own = Cycle(picture: picture, before: asked.ghost ? (picture + 1) % count : nil, began: wall - since, paced: speed,
+            let since = asked.cleared > 0 ? drawing + rest + asked.cleared * Cycle.clearing : asked.drawn * drawing
+            own = Cycle(picture: picture, before: asked.ghost ? (picture + 1) % count : nil, began: wall - since, paced: speed, rested: rest,
                         following: asked.cleared > 0 ? (picture + 2) % count : nil, picked: pick)
         }
-        let moment = own?.moment(at: wall, speed: speed, pick: pick, seconds: seconds) { ($0 + 1) % Self.pictures.count } ?? Self.moment(at: wall)
+        let moment = own?.moment(at: wall, speed: speed, rest: rest, pick: pick, seconds: seconds) { ($0 + 1) % Self.pictures.count } ?? Self.moment(at: wall)
 
         // The textures for this moment, and, once the picture is clearing, the ones for the picture to follow, so
         // that it can begin on the frame the clearing ends.

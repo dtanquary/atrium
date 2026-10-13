@@ -150,11 +150,11 @@ private func ink(_ pixels: [UInt32]) -> Int {
 /// draws the same picture twice running; and a Mac that was away for a day comes back to a picture part-way through.
 @Test func etchingCycleFollowsTheClock() {
     let seconds = [600.0, 300, 900], next = { (was: Int) in (was + 1) % 3 }
-    var cycle = Etching.Cycle(picture: 0, before: nil, began: 1000, paced: 1, following: nil, picked: 0)
-    func at(_ wall: Double, speed: Double = 1, pick: Int = 0) -> Etching.Cycle.Moment { cycle.moment(at: wall, speed: speed, pick: pick, seconds: seconds, another: next) }
+    var cycle = Etching.Cycle(picture: 0, before: nil, began: 1000, paced: 1, rested: 300, following: nil, picked: 0)
+    func at(_ wall: Double, speed: Double = 1, pick: Int = 0) -> Etching.Cycle.Moment { cycle.moment(at: wall, speed: speed, rest: 300, pick: pick, seconds: seconds, another: next) }
     #expect(at(1000) == .init(picture: 0, before: nil, drawn: 0, cleared: 0, following: nil))
     #expect(at(1300).drawn == 0.5 && at(1600).drawn == 1)
-    #expect(at(1899) == .init(picture: 0, before: nil, drawn: 1, cleared: 0, following: nil)) // resting: 300 s at speed 1
+    #expect(at(1899) == .init(picture: 0, before: nil, drawn: 1, cleared: 0, following: nil)) // resting, for 300 s
     #expect(at(1906) == .init(picture: 0, before: nil, drawn: 1, cleared: 0.5, following: 1)) // clearing, and the next is chosen
     #expect(at(1912) == .init(picture: 1, before: 0, drawn: 0, cleared: 0, following: nil)) // the next, over the first one's ghost
     // twice as fast from a third of the way through: still a third drawn, and done in half the time left
@@ -164,15 +164,91 @@ private func ink(_ pixels: [UInt32]) -> Int {
     let picked = at(2064, speed: 2, pick: 3)
     #expect(picked.picture == 1 && abs(picked.cleared - 1.0 / 12) < 1e-9 && picked.following == 2)
     #expect(at(2075, speed: 2, pick: 3) == .init(picture: 2, before: 1, drawn: 0, cleared: 0, following: nil))
-    let again = at(2075 + 450 + 150 + 12, speed: 2, pick: 3) // 900 s at twice the speed, 150 s resting, 12 clearing
+    let again = at(2075 + 450 + 300 + 12, speed: 2, pick: 3) // 900 s at twice the speed, 300 s resting, 12 clearing
     #expect(again.picture == 2 && again.before == 2 && again.drawn < 0.01)
     // back to Random and away for a day: somewhere in a picture that isn't the one before it
     let later = at(2075 + 86_400, speed: 2, pick: 0)
     #expect(later.picture != later.before && later.drawn >= 0 && later.drawn <= 1 && cycle.began <= 2075 + 86_400)
     // the other width of line takes twice as long: the picture stays as far drawn as it was
-    var other = Etching.Cycle(picture: 0, before: nil, began: 0, paced: 2, following: nil, picked: 0)
+    var other = Etching.Cycle(picture: 0, before: nil, began: 0, paced: 2, rested: 300, following: nil, picked: 0)
     other.stretch(at: 100, from: 600, to: 1200)
-    #expect(other.moment(at: 100, speed: 2, pick: 0, seconds: [1200, 300, 900], another: next).drawn == 1.0 / 3)
+    #expect(other.moment(at: 100, speed: 2, rest: 300, pick: 0, seconds: [1200, 300, 900], another: next).drawn == 1.0 / 3)
+}
+
+/// Hold when finished: a finished picture rests for the time picked, the same at any Speed, then clears over its
+/// twelve seconds and gives way. Moving the menu never changes the picture, never moves how far it is drawn and
+/// never drops the screen into the middle of a clearing: while a picture is drawn nothing changes; while it rests, a
+/// longer pick keeps it resting and a shorter one whose time is already past starts the clearing from its
+/// beginning, there and then; and a clearing goes on from where it is.
+@Test func etchingHoldsAFinishedPicture() {
+    typealias Moment = Etching.Cycle.Moment
+    let seconds = [600.0, 300, 900], next = { (was: Int) in (was + 1) % 3 }, whole = Moment(picture: 0, before: nil, drawn: 1, cleared: 0, following: nil)
+    #expect(Etching.hold.label == "Hold when finished" && Etching.hold.format == .choice(["10 seconds", "30 seconds", "1 minute", "5 minutes"]))
+    #expect(Etching.holds == [10, 30, 60, 300] && Etching.holds[Int(Etching.hold.standard)] == 30 && Etching.hold.range == 0...3)
+    for rest in Etching.holds {
+        for speed in [1, Etching.speed.range.upperBound] {
+            var cycle = Etching.Cycle(picture: 0, before: nil, began: 0, paced: speed, rested: rest, following: nil, picked: 0)
+            func at(_ wall: Double) -> Moment { cycle.moment(at: wall, speed: speed, rest: rest, pick: 0, seconds: seconds, another: next) }
+            let drawing = 600 / speed
+            #expect(at(drawing) == whole && at(drawing + rest - 0.01) == whole, "held for \(rest) s at speed \(speed)")
+            #expect(abs(at(drawing + rest + 6).cleared - 0.5) < 1e-9 && at(drawing + rest + 12.01).picture == 1, "held for \(rest) s at speed \(speed)")
+        }
+    }
+    /// A picture of 600 s begun at 0 and held for `old` seconds: the moment at `wall`, the moment on the next frame
+    /// with the menu moved to `new`, and a way to look at it later.
+    func moved(at wall: Double, from old: Double, to new: Double) -> (was: Moment, now: Moment, later: (Double) -> Moment) {
+        var cycle = Etching.Cycle(picture: 0, before: nil, began: 0, paced: 1, rested: old, following: nil, picked: 0)
+        let was = cycle.moment(at: wall, speed: 1, rest: old, pick: 0, seconds: seconds, another: next)
+        let now = cycle.moment(at: wall, speed: 1, rest: new, pick: 0, seconds: seconds, another: next)
+        return (was, now, { later in var cycle = cycle; return cycle.moment(at: later, speed: 1, rest: new, pick: 0, seconds: seconds, another: next) })
+    }
+    for (old, new) in [(30.0, 300.0), (300, 10), (10, 30)] { // while it is drawn: nothing changes, and it rests the new time when done
+        let drawing = moved(at: 300, from: old, to: new)
+        #expect(drawing.was == Moment(picture: 0, before: nil, drawn: 0.5, cleared: 0, following: nil) && drawing.now == drawing.was, "\(old) to \(new) s while drawing")
+        #expect(drawing.later(600 + new - 0.01) == whole && abs(drawing.later(600 + new + 6).cleared - 0.5) < 1e-9)
+    }
+    // resting, 20 s in: a longer pick keeps it resting, for the new time in all
+    let longer = moved(at: 620, from: 30, to: 300)
+    #expect(longer.was == whole && longer.now == whole && longer.later(899.99) == whole && abs(longer.later(906).cleared - 0.5) < 1e-9)
+    // a shorter one not yet past does the same
+    let shorter = moved(at: 620, from: 300, to: 30)
+    #expect(shorter.was == whole && shorter.now == whole && shorter.later(629.99) == whole && abs(shorter.later(636).cleared - 0.5) < 1e-9)
+    // a shorter one already past, 100 s in: the clearing starts from its beginning, now, and the next picture follows it
+    let past = moved(at: 700, from: 300, to: 30)
+    #expect(past.was == whole && past.now == whole && abs(past.later(700.12).cleared - 0.01) < 1e-9 && abs(past.later(706).cleared - 0.5) < 1e-9)
+    #expect(past.later(711.99).picture == 0 && past.later(712.01).picture == 1 && past.later(712.01).before == 0 && past.later(712.01).cleared == 0)
+    // clearing, half-way: it goes on from there, to the same picture, whichever way the menu moves
+    for new in [10.0, 60, 300] {
+        let clearing = moved(at: 636, from: 30, to: new)
+        #expect(clearing.was == Moment(picture: 0, before: nil, drawn: 1, cleared: 0.5, following: 1), "\(clearing.was)")
+        #expect(clearing.now.picture == 0 && clearing.now.drawn == 1 && abs(clearing.now.cleared - 0.5) < 1e-9 && clearing.now.following == 1, "30 to \(new) s while clearing: \(clearing.now)")
+        #expect(abs(clearing.later(639).cleared - 0.75) < 1e-9 && clearing.later(642.01).picture == 1)
+    }
+}
+
+/// The scene rests by its menu, at any Speed. A finished picture 16 s on: held for 10 seconds, at the top of the
+/// Speed slider, it is half cleared; held for the 30 it comes with, at either end of the slider, it is whole, and
+/// half cleared 36 s on.
+@MainActor @Test func etchingRestsForTheTimePicked() throws {
+    /// The line a finished picture holds as it lands, and `later` seconds after it was finished.
+    func line(_ later: Double, _ settings: [String: Double]) throws -> (whole: Int, later: Int) {
+        var found = (0, 0)
+        try with(settings.merging(["etching.drawn": 1, Etching.picture.key: 1]) { $1 }) {
+            let screen = try Screen(756, 491)
+            _ = try screen.picture(after: 0.25) // the scene's first frame, when its cycle begins
+            for _ in 0..<3 { _ = try screen.picture(after: 0.25) }
+            found = (ink(try screen.picture(after: 0.25)), ink(try screen.picture(after: later - 1)))
+        }
+        return found
+    }
+    let top = Etching.speed.range.upperBound
+    let short = try line(16, [Etching.hold.key: 0, Etching.speed.key: top])
+    #expect(short.whole > 756 * 491 && short.later < short.whole * 3 / 4 && short.later > short.whole / 8, "held for 10 s, the line 16 s on: \(short)")
+    for speed in [1, top] {
+        let resting = try line(16, [Etching.speed.key: speed]), clearing = try line(36, [Etching.speed.key: speed])
+        #expect(resting.later == resting.whole, "as it comes, at speed \(speed), the line 16 s on: \(resting)")
+        #expect(clearing.later < clearing.whole * 3 / 4 && clearing.later > clearing.whole / 8, "as it comes, at speed \(speed), the line 36 s on: \(clearing)")
+    }
 }
 
 /// A finished picture clears to a faint ghost, and the next is drawn over it: full, half cleared, and the next
