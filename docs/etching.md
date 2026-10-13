@@ -212,6 +212,19 @@ Measured by the render test on a 14-inch screen at 2x (M3 Max, 2026-10-12): **0.
 - `etchingFollowsTheAppearance`: set to Match System, the screen's level goes from Light Mode's to Dark Mode's in two seconds.
 - `etchingScreenIsTheOneAskedFor`: as it comes the screen is the bright one in Dark Mode; set to Dark it eases to the dim one, and is the dim one in Light Mode.
 
+**The README's and the website's pictures** (2026-10-13). The two stills of the Wave are under [Settings](#settings), with their commands. The README has two more, each the render test's picture after its usual 4 s, then `sips -Z 1600 -s format jpeg -s formatOptions 75`:
+
+```sh
+SNAPSHOT_SCENE="Etching" SNAPSHOT_DEFAULTS="etching.drawn=0.95,etching.picture=7" swift test -c release -Xswiftc -enable-testing --filter everySceneRenders   # etching-velocipede.jpg
+SNAPSHOT_SCENE="Etching" SNAPSHOT_DEFAULTS="etching.drawn=0.9,etching.picture=13" swift test -c release -Xswiftc -enable-testing --filter everySceneRenders   # etching-pont-neuf.jpg, fine as it always is
+```
+
+- **The loop** is the Wave from the hero still's moment, at Speed 8: `etching|Etching|4|SNAPSHOT_DEFAULTS=etching.drawn=0.6908,etching.picture=1,etching.speed=8` in `site/media.sh` (`site/media.sh preview-etching card-etching`). In its 12 s the stylus lays vertical hatching over the wave's body, left to right under the crest, then climbs its neck: 96 s of drawing at speed 1, 2% of the picture.
+- **Why 8.** Tried as pairs of stills 14 s apart at 4, 8 and 16. At 4 the stylus covers half that ground (0.7% of the screen's pixels change, for 1.5%), too little to see at the README's 640 pixels. At 16 it leaves the wave for the foam at the left and the swell at the bottom, and the loop's seam takes back twice as much.
+- **Why 0.6908 and not 0.7.** The loop's first frame is 6 s after the scene is built (the 4 s in the line, and the 2 s the dissolve takes from the front), which at Speed 8 is 48 s of drawing, where the still is 4 s on from 0.7. The Wave's clock is 4810 s at speed 1, so 0.7 − (8 × 6.03 − 4) / 4810 puts the loop's first frame on the still's own moment, and the card, cut from `etching.jpg`, is the loop's poster: cut the same way, no pixel of the two differs by more than 40 of 255. At plain 0.7 the poster had a patch of hatching the card lacked. A retaken hero, or another speed, needs the number worked out again.
+- **The seam.** The loop's last 2 s dissolve into its first 2 s, so the hatching it drew fades out again: 0.4% of the screen's pixels, over the wave's body and neck. It is a soft fade and nothing jumps, but it is a drawing undoing itself every 12 s, which no stretch of this wallpaper can avoid.
+- **The README's moving picture** is that loop as WebP by the usual recipe (`docs/README.md`, Screenshots), with no keyframe setting: 68 KB, each frame a patch a few pixels across where the stylus is. Looked at 9 s in, it has no blocks.
+
 ## Shortcuts
 
 - A texel takes the time of the pass that covers it most, and the finished line's cover. Where a later line overlaps an earlier one's edge by a sliver, that sliver shows with the earlier line (`ponytail:` in `LineRoute.stamp`).
