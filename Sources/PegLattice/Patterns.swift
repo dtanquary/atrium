@@ -138,33 +138,41 @@ private func reef(_ sheet: Sheet, using rng: inout some RandomNumberGenerator) -
 }
 
 /// A plate: one of Packard's snowflakes (N. Packard, "Lattice models for solidification and aggregation", 1986).
-/// From one frozen hole, every hole freezes on the step it has one of the rule's numbers of frozen holes round it;
-/// it grows until a hole would freeze off the sheet, and its pegs go in ring by ring, toned by when they froze. A
-/// rule makes one shape only, with its own lace of holes: the seed picks one of four rules. (1, 3 or 5 grows the
-/// same plate as 1 or 3; and 1 or 2 a solid hexagon with no lace at all, which Dave was never shown.)
+/// From one frozen hole, every hole freezes on the step it has one of the rule's numbers of frozen holes round it.
+/// A rule makes one plate, with its own lace of holes: the seed picks one of four rules. It is whole, a hexagon,
+/// after 8, 16, 32 steps and so on and on the step before each, and between those it has six arms: so it is grown
+/// until a hole would freeze off the sheet, and what had frozen by the last of those steps is kept. Its pegs go in
+/// by rings of holes from the middle, and are toned by ring. (In the order they froze, three of the four grow, and
+/// band, in the shape of a six-pointed star, which this wallpaper does not show: docs/peg-board.md, "Dave's
+/// decisions". And 1, 3 or 5 grows the same plate as 1 or 3.)
 private func plate(_ sheet: Sheet, using rng: inout some RandomNumberGenerator) -> Pattern {
     let rule = [[1], [1, 3], [1, 5], [1, 3, 4, 5, 6]].randomElement(using: &rng)!
     let span = min(sheet.rows, sheet.cols) + 4, side = 2 * span + 1
-    var when = [Int](repeating: -1, count: side * side)
-    when[span * side + span] = 0
-    var cells: [(step: Int, turn: Double, q: Int, r: Int)] = [(0, 0, 0, 0)], last = 0
+    var frozen = [Bool](repeating: false, count: side * side)
+    frozen[span * side + span] = true
+    var cells: [(step: Int, q: Int, r: Int)] = [(0, 0, 0)], steps = 0
     grow: for step in 1...2 * span {
         var fresh: [(Int, Int)] = []
-        for r in -span + 1..<span { for q in -span + 1..<span where when[(r + span) * side + q + span] < 0 {
-            let count = Sheet.dirs.count { when[(r + $0.1 + span) * side + q + $0.0 + span] >= 0 }
+        for r in -span + 1..<span { for q in -span + 1..<span where !frozen[(r + span) * side + q + span] {
+            let count = Sheet.dirs.count { frozen[(r + $0.1 + span) * side + q + $0.0 + span] }
             if rule.contains(count) { fresh.append((q, r)) }
         } }
         guard !fresh.isEmpty, fresh.allSatisfy({ sheet.hole($0.0, $0.1) != nil }) else { break grow }
         for (q, r) in fresh {
-            when[(r + span) * side + q + span] = step
-            let p = sheet.place(q, r)
-            cells.append((step, atan2(p.y, p.x), q, r))
+            frozen[(r + span) * side + q + span] = true
+            cells.append((step, q, r))
         }
-        last = step
+        steps = step
     }
-    cells.sort { ($0.step, $0.turn) < ($1.step, $1.turn) }
+    var whole = 1
+    while whole * 2 <= steps + 1 { whole *= 2 }
+    whole = min(whole, steps)
+    let rings = cells.filter { $0.step <= whole }.map { cell -> (ring: Int, turn: Double, q: Int, r: Int) in
+        let p = sheet.place(cell.q, cell.r)
+        return (max(abs(cell.q), abs(cell.r), abs(cell.q + cell.r)), atan2(p.y, p.x), cell.q, cell.r)
+    }.sorted { ($0.ring, $0.turn) < ($1.ring, $1.turn) }
     var b = Builder(sheet)
-    for cell in cells { b.put(cell.q, cell.r, cell.step == 0 ? 3 : min(cell.step * 3 / max(last, 1), 2)) }
+    for cell in rings { b.put(cell.q, cell.r, cell.ring == 0 ? 3 : min(cell.ring * 3 / max(whole, 1), 2)) }
     return b.made
 }
 
