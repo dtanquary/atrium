@@ -24,6 +24,7 @@ Dave asked for it on 2026-10-12, slowly evolving and "based on realistic ant mov
 | Time | "A farm a day", by the wall's clock, with a Speed slider |
 | The toy on screen | no frame and no skyline: the display is the glass, edge to edge |
 | How to build | "Build now, refine as it goes" |
+| On his desktop, the same evening | "ant colony is great" |
 
 The lead's calls, which he has not ruled on: the mock-ups' deep dim gel is "Gel", with the brighter gel of the realism pass kept beside it as Bright Gel for him to compare; Speed keeps the nest on the tank; the day begins at six and follows the clock in [The day](#the-day), which is not how ants dig; the colony grows with its nest, and is ants only (no queen, no brood); a young colony sinks one or two shafts at a time; someone is always walking; the slider for how many ants is "Colony size". The builder's, which neither has ruled on: Speed stops at 8; three ants to a face; ninety ants at the most.
 
