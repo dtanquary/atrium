@@ -33,31 +33,61 @@ import Testing
     } }
 }
 
-/// Every picture's charts are whole (the holes each says it has, of the eight colours or none), fit what a
-/// 13-inch laptop's display holds at their size, and have a line in the credits; and there is a chart at each size.
-/// The figures drawn for the app (docs/peg-board/draw.py: the charts under its heading in the file) are its own
-/// work, so they have no line there, and each is at all three sizes.
-@MainActor @Test func pegBoardChartsAreWholeAndCredited() throws {
-    let credits = try String(contentsOf: resource("peg-board-credits.tsv"), encoding: .utf8).split(separator: "\n").filter { !$0.hasPrefix("#") }
-        .map { $0.split(separator: "\t", omittingEmptySubsequences: false).map(String.init) }
-    #expect(credits.allSatisfy { $0.count == 5 && $0[4].hasPrefix("https://") && ["CC0", "CC BY 4.0"].contains($0[3]) })
-    let charts = PegBoard.charts, file = try String(contentsOf: resource("peg-board-charts.txt"), encoding: .utf8)
-    let drawn = PegLattice.charts(from: String(file[try #require(file.range(of: "\n# Figures drawn for the app")).lowerBound...])).map(\.name)
-    let cut = charts.map(\.name).filter { !drawn.contains($0) }
-    #expect(cut.count == 32 && Set(cut) == Set(credits.map { $0[0] }))
-    #expect(drawn.count == 33 && Set(drawn).allSatisfy { name in drawn.count { $0 == name } == 3 })
-    for chart in charts {
-        #expect(chart.pegs.count == chart.cols * chart.rows && chart.pegs.allSatisfy { $0 <= 8 } && chart.pegs.count { $0 > 0 } > 150, "\(chart.name)")
-        #expect([(43, 30), (86, 61), (131, 93)].contains { chart.cols <= $0.0 && chart.rows <= $0.1 }, "\(chart.name) is \(chart.cols) by \(chart.rows)")
+/// Every figure's charts are whole (the holes each says it has, of the eight colours or none), and there is one
+/// for each peg size, which fits what a 13-inch laptop's display holds at that size and is the one the scene puts
+/// up there: so every figure is offered at every size.
+@MainActor @Test func pegBoardHasEveryFigureAtEverySize() throws {
+    defer { ["pegboard.size", "pegboard.picture"].forEach(UserDefaults.standard.removeObject) }
+    let figures = Dictionary(grouping: PegBoard.charts, by: \.name)
+    #expect(figures.count == 11)
+    for (name, charts) in figures {
+        #expect(charts.count == 3, "\(name)")
+        for (size, chart) in charts.sorted(by: { $0.pegs.count < $1.pegs.count }).prefix(3).enumerated() { // for Large pegs, Medium, Small
+            let most = [(43, 30), (86, 61), (131, 93)][size], pegs = chart.pegs.count { $0 > 0 }
+            #expect(chart.pegs.count == chart.cols * chart.rows && chart.pegs.allSatisfy { $0 <= 8 } && pegs > 150, "\(name)")
+            #expect(chart.cols <= most.0 && chart.rows <= most.1, "\(name) is \(chart.cols) by \(chart.rows)")
+            UserDefaults.standard.set(Double(size), forKey: "pegboard.size")
+            UserDefaults.standard.set(name, forKey: "pegboard.picture")
+            let scene = PegBoard(size: CGSize(width: 1512, height: 982))
+            #expect(scene.picture && scene.sequence.count == pegs, "\(name) at peg size \(size)")
+        }
     }
-    for most in [(43, 30), (86, 61), (131, 93)] { #expect(charts.contains { $0.cols <= most.0 && $0.rows <= most.1 && $0.rows > most.1 * 2 / 3 }) }
-    #expect(Set(charts.filter { $0.cols <= 43 && $0.rows <= 30 }.map(\.name)).count >= 7, "Large pegs have fewer than seven pictures")
+}
+
+/// The pictures go round: with pictures only, every figure goes up once before any comes again, and the next time
+/// round they come in another order. And with everything shown, both kinds come. (A figure is known here by how
+/// many pegs it has, which no two share at Large pegs.)
+@MainActor @Test func pegBoardShowsEveryFigureInANewOrderEachRound() throws {
+    let keys = ["pegboard.seed", "pegboard.size", "pegboard.shows", "pegboard.speed"]
+    defer { keys.forEach(UserDefaults.standard.removeObject) }
+    UserDefaults.standard.set(7, forKey: "pegboard.seed")
+    UserDefaults.standard.set(0.0, forKey: "pegboard.size")
+    UserDefaults.standard.set(20.0, forKey: "pegboard.speed")
+    func things(_ count: Int, shows: Double) -> [(picture: Bool, pegs: Int)] { // what goes up, one after another
+        UserDefaults.standard.set(shows, forKey: "pegboard.shows")
+        let scene = PegBoard(size: CGSize(width: 1512, height: 982))
+        var shown = [(scene.picture, scene.sequence.count)], time = 0.0
+        while shown.count < count, time < 100.0 * Double(count) {
+            time += 0.1
+            let was = scene.phase
+            scene.update(time)
+            if was == .clearing, scene.phase == .building { shown.append((scene.picture, scene.sequence.count)) }
+        }
+        return shown
+    }
+    let figures = Set(PegBoard.charts.filter { $0.rows <= 30 }.map { chart in chart.pegs.count { $0 > 0 } })
+    let shown = things(22, shows: 2)
+    #expect(figures.count == 11 && shown.count == 22 && shown.allSatisfy(\.picture))
+    let (first, second) = (shown.prefix(11).map(\.pegs), shown.suffix(11).map(\.pegs))
+    #expect(Set(first) == figures && Set(second) == figures && first != second)
+    let both = things(4, shows: 0)
+    #expect(both.contains { $0.picture } && both.contains { !$0.picture })
 }
 
 /// Outline first: a picture's order has every peg once and no empty hole, and every peg on an edge of its colour
 /// comes before any that is not.
 @MainActor @Test func pegBoardBuildsAPictureOutlineFirst() throws {
-    let chart = try #require(PegBoard.charts.first { $0.name == "great-wave" && $0.cols < 86 })
+    let chart = try #require(PegBoard.charts.first { $0.name == "sailboat" && $0.rows <= 30 })
     let order = outlineFirst(pegs: chart.pegs, cols: chart.cols, rows: chart.rows)
     #expect(order.count == chart.pegs.count { $0 > 0 } && Set(order).count == order.count && order.allSatisfy { chart.pegs[$0] > 0 })
     func inside(_ hole: Int) -> Bool { // all six holes round it hold its colour
@@ -67,7 +97,7 @@ import Testing
         }
     }
     let first = try #require(order.firstIndex(where: inside)), last = try #require(order.lastIndex { !inside($0) })
-    print("Peg Board, the Wave at \(chart.cols) by \(chart.rows): \(order.count) pegs, the first \(first) of them its outlines")
+    print("Peg Board, the sailboat at \(chart.cols) by \(chart.rows): \(order.count) pegs, the first \(first) of them its outlines")
     #expect(last < first && first > order.count / 5)
 }
 
@@ -158,7 +188,7 @@ import Testing
     #expect(scene.picture && PegBoard.charts.contains { chart in chart.cols <= 43 && chart.rows <= 30 && chart.pegs.count { $0 > 0 } == scene.sequence.count })
 
     UserDefaults.standard.set(2.0, forKey: "pegboard.size")
-    UserDefaults.standard.set("flea", forKey: "pegboard.picture")
+    UserDefaults.standard.set("butterfly", forKey: "pegboard.picture")
     let clock = ContinuousClock(), began = clock.now, big = PegBoard(size: CGSize(width: 1512, height: 982)), took = clock.now - began
     print("Peg Board, its largest picture (\(big.sequence.count) pegs) put up in \(took)")
     #expect(big.picture && big.sequence.count > 5000)

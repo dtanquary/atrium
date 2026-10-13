@@ -5,13 +5,13 @@ import SpriteKit
 
 /// A black sheet of holes, edge to edge, with coloured translucent pegs pushed through it one at a time and lit from
 /// behind. It shows one thing after another: a snow crystal grown from the middle in the order it freezes, or a
-/// picture cut down to pegs and built outline first; each, once whole, under a slow light show; then the sheet
+/// figure drawn for pegs and built outline first; each, once whole, under a slow light show; then the sheet
 /// goes dark and is cleared for the next.
 /// One shader draws every peg: for each pixel it works out the hole it is nearest by arithmetic, reads that hole's
 /// colour and its place in the order from two small textures, and shades the peg's face from the distance to its
 /// middle. The glow on the paper is a third texture, stamped on the CPU as pegs go in (`Glow`, in the PegLattice
 /// module with the lattice, the crystal and the charts). docs/peg-board.md has the measurements of the real toy
-/// that the numbers here come from, and the pictures' sources.
+/// that the numbers here come from, and how the figures are drawn.
 final class PegBoard: SKScene {
     nonisolated static let shows = Knob(key: "pegboard.shows", label: "Shows", range: 0...2, standard: 0, section: "Sheet",
                                         format: .choice(["Everything", "Patterns only", "Pictures only"]))
@@ -40,7 +40,7 @@ final class PegBoard: SKScene {
     private static let families: [[UInt8]] = [[8, 8, 6, 6, 7, 7, 2, 6, 8], [8, 8, 4, 4, 3, 3, 1, 3, 8], [8, 8, 5, 5, 6, 6, 7, 6, 8]]
     /// Reiter's three numbers for crystals that come out well on a board this coarse: feathery, plump, narrow.
     private static let crystals: [(alpha: Float, beta: Float, gamma: Float)] = [(1, 0.5, 0.0005), (1, 0.35, 0.0035), (2, 0.3, 0.001), (1.5, 0.4, 0.006)]
-    /// The pictures, each at up to three sizes (Resources/peg-board-charts.txt, credited in peg-board-credits.tsv).
+    /// The pictures: the app's own figures, each at three sizes (Resources/peg-board-charts.txt, which docs/peg-board/draw.py draws).
     static let charts = PegLattice.charts(from: (try? String(contentsOf: resource("peg-board-charts.txt"), encoding: .utf8)) ?? "")
     /// The light shows: how the light varies over the sheet (in lobes round its middle; and in radians to the
     /// display's height, with the distance from the middle and across the sheet) and the seconds the pattern takes

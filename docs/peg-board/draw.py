@@ -1,4 +1,4 @@
-"""Draws Peg Board's own figures and sets them on its holes: pictures made for pegs, not cut down to them.
+"""Draws Peg Board's pictures, the app's own figures, and sets them on its holes: its charts are this file's work.
 
 usage: python3 -I draw.py <Sources/Atrium/Resources> [sheet.png [large|medium|small]]
 
@@ -17,8 +17,7 @@ want a simpler drawing. A figure with `mirror` is drawn as its left half and fol
 
 Every figure here was drawn from nothing for this file: no picture, template or chart was copied or traced.
 
-It writes the charts into peg-board-charts.txt after cut.py's, from its own heading on, so run it again after cut.py.
-Needs numpy and Pillow."""
+It writes peg-board-charts.txt afresh. Needs numpy and Pillow."""
 import sys
 from math import cos, sin, pi, radians
 import numpy as np
@@ -28,7 +27,6 @@ RISE = 0.8660254
 SIZES = {"large": 1, "medium": 2, "small": 3}                 # holes to a unit of the drawing
 COLS, ROWS = 43, 30
 NAMES = ["red", "pink", "orange", "yellow", "green", "blue", "violet", "clear"]
-HEADING = "# Figures drawn for the app by docs/peg-board/draw.py: its own work, with no source to credit."
 # ponytail: Pillow draws each shape as a picture, 30 pixels to a hole with two holes of margin, and a hole reads the
 # pixel under its middle. So an edge is good to a thirtieth of a hole, which is plenty while edges are kept clear of
 # holes' middles; a figure that needs one closer would want the shapes tested exactly.
@@ -90,7 +88,7 @@ def chart(figure, size):
             x, y = (col + 0.5 * ((rows - 1 - top) & 1)) / s, (top + 0.5) / s
             def read(layer, x): return layer[int((x + PAD) * FINE), int((y + PAD) * RISE * FINE)]
             out[top, col] = (read(layers[1], x) or read(layers[0], axis - abs(x - axis) if axis else x)) % 9   # 9 is "none"
-    # trimmed to its pegs as cut.py's are: whole columns, rows off the top, and rows off the bottom in twos
+    # trimmed to its pegs: whole columns, rows off the top, and rows off the bottom in twos, so the bottom row stays one that is not offset
     rws, cls = np.flatnonzero(out.any(1)), np.flatnonzero(out.any(0))
     bottom = rows - 1 - rws[-1]
     return out[rws[0]:rows - (bottom - bottom % 2), cls[0]:cls[-1] + 1]
@@ -194,8 +192,10 @@ FIGURES = {
 
 if __name__ == "__main__":
     out = sys.argv[1]
-    kept = open(f"{out}/peg-board-charts.txt").read().split(HEADING)[0].rstrip("\n").split("\n")
-    lines, drawn = kept + [HEADING], []
+    lines = ["# Peg Board's pictures: figures drawn for the app by docs/peg-board/draw.py, its own work, with no source to credit.",
+             "# A chart is '= name size columns rows' (the size of peg it is for) and then its rows from the top: . is an empty hole, 1 to 8 a peg",
+             "# (" + ", ".join(NAMES) + "). Rows are half a hole offset; a chart's bottom row is one that is not."]
+    drawn = []
     for name, figure in FIGURES.items():
         for size, s in SIZES.items():
             c = chart(figure, size)

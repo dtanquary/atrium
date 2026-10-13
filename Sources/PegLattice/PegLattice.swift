@@ -158,7 +158,7 @@ public struct Glow: Sendable {
     }
 }
 
-/// A picture cut down to pegs at one size (docs/peg-board/cut.py makes them): each hole's peg colour, 1 to 8, or 0
+/// A picture in pegs at one size (docs/peg-board/draw.py makes them): each hole's peg colour, 1 to 8, or 0
 /// for none, bottom row first. Its bottom row is one that is not offset, so it goes on a lattice at an even row.
 public struct Chart: Sendable {
     public let name: String, cols: Int, rows: Int
