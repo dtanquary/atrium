@@ -19,7 +19,7 @@ Knobs are stored in UserDefaults. `knob.value` is cached (emptied on any default
 5. For separate Light and Dark Mode looks, read `systemIsDark` when the scene is built. The app rebuilds the current scene with a crossfade when macOS switches appearance. Check both looks with `SNAPSHOT_APPEARANCE=light|dark`.
 6. Stay within budget: about 2 ms of CPU and 2 ms of GPU per frame at 2x Retina, as the render test prints it. Scenes run all day.
 7. Look at the snapshot PNG before calling it done.
-8. Add a screenshot to `docs/images` and its Settings copy (see `docs/README.md`). While its Settings page is open, a second copy of the scene runs, just as it would on a second display, so shared state has to cope with two. A scene that starts from nothing (Peg Board's empty sheet) can adopt `HeadStart` (Scenes.swift): Settings calls its `headStart()` on that copy alone, as it is made, so the page opens on something to judge the settings by.
+8. Add a screenshot to `docs/images` and its Settings copy (see `docs/README.md`), which is also its tile in the menu's grid: without one a test fails. While its Settings page is open, a second copy of the scene runs, just as it would on a second display, so shared state has to cope with two. A scene that starts from nothing (Peg Board's empty sheet) can adopt `HeadStart` (Scenes.swift): Settings calls its `headStart()` on that copy alone, as it is made, so the page opens on something to judge the settings by.
 
 ## Gotchas
 - SKShader is GLSL-like and gets translated to Metal. There's no `inout`, no early `return` from `main()` (it won't compile), and no `sampler2D` parameters (keep texture reads in `main()`).

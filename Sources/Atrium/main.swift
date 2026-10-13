@@ -269,6 +269,12 @@ if !scenes.contains(where: { $0.name == current }) {
 /// The menu bar icon: pause, pick or shuffle wallpapers, open Settings, toggle Open at Login, quit.
 @MainActor final class StatusMenu: NSObject, NSMenuDelegate {
     let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+    /// The wallpapers as pictures: one item, kept from one opening of the menu to the next.
+    private lazy var grid = {
+        let item = NSMenuItem()
+        item.view = MenuGridView { show($0) }
+        return item
+    }()
 
     override init() {
         super.init()
@@ -293,10 +299,14 @@ if !scenes.contains(where: { $0.name == current }) {
             menu.addItem(withTitle: WallpaperView.paused ? "Resume" : "Pause", action: #selector(togglePause), keyEquivalent: "").target = self
         }
         menu.addItem(.separator())
-        for scene in scenes {
-            let entry = menu.addItem(withTitle: scene.name, action: #selector(pick), keyEquivalent: "")
-            entry.target = self
-            entry.state = scene.name == current ? .on : .off
+        if MenuGrid.pictures {
+            menu.addItem(grid)
+        } else {
+            for scene in scenes {
+                let entry = menu.addItem(withTitle: scene.name, action: #selector(pick), keyEquivalent: "")
+                entry.target = self
+                entry.state = scene.name == current ? .on : .off
+            }
         }
         menu.addItem(.separator())
         let shuffle = menu.addItem(withTitle: "Shuffle", action: #selector(toggleShuffle), keyEquivalent: "")

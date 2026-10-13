@@ -232,7 +232,7 @@ struct IconTile: View {
 /// Posted when Open at Login is turned on or off, from Settings, the menu or the welcome, so each shows it.
 let openAtLoginChanged = Notification.Name("com.dtanquary.atrium.openAtLoginChanged")
 
-/// Open at Login, and Shuffle with the wallpapers it picks from.
+/// Open at Login, how the menu lists the wallpapers, and Shuffle with the wallpapers it picks from.
 struct GeneralPage: View {
     static let tag = "General" // sidebar selection; can't clash with a wallpaper name
     @State private var openAtLogin = SMAppService.mainApp.status == .enabled
@@ -254,6 +254,11 @@ struct GeneralPage: View {
                 if SMAppService.mainApp.status == .requiresApproval {
                     Text("Waiting for your approval in System Settings → General → Login Items.").foregroundStyle(.secondary)
                 }
+            }
+            Section {
+                KnobRow(knob: MenuGrid.knob)
+            } footer: {
+                Text("Names lists them in words, for the arrow keys, typing a name, and VoiceOver.").foregroundStyle(.secondary)
             }
             Section {
                 KnobRow(knob: Shuffle.on)
