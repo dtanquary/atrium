@@ -291,28 +291,31 @@ private func pinwheel(_ sheet: Sheet, using rng: inout some RandomNumberGenerato
 }
 
 /// A flower seen from above: a bright middle, a ring of short petals and a ring of long ones between them, each
-/// petal a lens with dark between it and the next. It opens from the middle out. The seed picks how many petals
+/// petal a lens with a round end and dark between it and the next. It is laid a petal at a time: the middle, the
+/// short petals in turn round it, then the long ones, each from its foot to its tip. (Laid from the middle out,
+/// all its petals at once, it was a wheel with dark spokes until the last of it.) The seed picks how many petals
 /// (never six) and turns it.
 private func rose(_ sheet: Sheet, using rng: inout some RandomNumberGenerator) -> Pattern {
     let petals = (sheet.reach < 18 ? [5, 7, 8] : [7, 8, 9, 10, 12]).randomElement(using: &rng)!
     let turned = Double.random(in: 0..<2 * .pi, using: &rng), full = sheet.reach, heart = max(1.6, full * 0.12)
-    /// Whether a place `out` from the middle at `turn` is on one of a ring of petals that run from `near` to `far`.
-    func onPetal(_ out: Double, _ turn: Double, from near: Double, to far: Double, offset: Double) -> Bool {
-        guard out > near, out < far else { return false }
-        let between = 2 * Double.pi / Double(petals), along = (out - near) / (far - near)
-        let aside = abs((turn - turned - offset * between).remainder(dividingBy: between)) * out
-        return aside <= 0.43 * between * (near + 0.5 * (far - near)) * pow(sin(.pi * pow(along, 1.4)), 0.5)
+    let between = 2 * Double.pi / Double(petals)
+    /// Which of a ring of petals that run from `near` to `far` a place `out` from the middle at `turn` is on, if any.
+    func petal(_ out: Double, _ turn: Double, from near: Double, to far: Double, offset: Double) -> Int? {
+        guard out > near, out < far else { return nil }
+        let at = (turn - turned) / between - offset, along = (out - near) / (far - near) // in petals round, and from foot to tip
+        guard abs(at - at.rounded()) * between * out <= 0.43 * between * (near + 0.5 * (far - near)) * pow(sin(.pi * pow(along, 1.4)), 0.5) else { return nil }
+        return floorMod(Int(at.rounded()), petals)
     }
-    var cells: [(out: Double, turn: Double, q: Int, r: Int, tone: Int)] = []
+    var cells: [(ring: Int, petal: Int, out: Double, turn: Double, q: Int, r: Int)] = []
     let span = sheet.span
     for r in -span...span { for q in -span...span {
         let p = sheet.place(q, r), out = simd_length(p), turn = atan2(p.y, p.x)
-        if out <= heart { cells.append((out, turn, q, r, 3)) }
-        else if onPetal(out, turn, from: heart + 0.5, to: full * 0.56, offset: 0.5) { cells.append((out, turn, q, r, 1)) }
-        else if onPetal(out, turn, from: full * 0.3, to: full, offset: 0) { cells.append((out, turn, q, r, 0)) }
+        if out <= heart { cells.append((0, 0, out, turn, q, r)) }
+        else if let short = petal(out, turn, from: heart + 0.5, to: full * 0.56, offset: 0.5) { cells.append((1, short, out, turn, q, r)) }
+        else if let long = petal(out, turn, from: full * 0.3, to: full, offset: 0) { cells.append((2, long, out, turn, q, r)) }
     } }
-    cells.sort { ($0.out, $0.turn) < ($1.out, $1.turn) }
+    cells.sort { ($0.ring, $0.petal, $0.out, $0.turn) < ($1.ring, $1.petal, $1.out, $1.turn) }
     var b = Builder(sheet)
-    for cell in cells { b.put(cell.q, cell.r, cell.tone) }
+    for cell in cells { b.put(cell.q, cell.r, [3, 1, 0][cell.ring]) }
     return b.made
 }
