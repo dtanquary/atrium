@@ -21,7 +21,8 @@ first square's middle is and the steps to the next square across and down, in th
 them). A size is then a list of (net, columns from and to, rows from and to), set one under the next with three
 empty rows between; a size given as None is cut from the `crop` in the ordinary way.
 
-docs/peg-board.md has the sources' licences. Needs numpy and Pillow."""
+It writes peg-board-charts.txt afresh, so the app's own figures, which draw.py adds to that file, want drawing again
+after it. docs/peg-board.md has the sources' licences. Needs numpy and Pillow."""
 import sys
 import numpy as np
 from PIL import Image, ImageDraw
@@ -237,6 +238,7 @@ if __name__ == "__main__":
                "# Wellcome Collection (https://wellcomecollection.org/works/ajveb66y): CC BY 4.0, \"You can use this work for any",
                "#   purpose, including commercial uses, without restriction under copyright law. You should also provide attribution",
                "#   to the original work, source and licence.\"",
+               "# The figures drawn for the app (docs/peg-board/draw.py) are its own work, with no source, and are not listed.",
                "# file\tsubject\tauthor\tlicence\tsource"]
     credits += ["\t".join([p["name"], p["title"], p["author"], p["licence"], p["source"]]) for p in PICTURES]
     open(f"{out}/peg-board-credits.tsv", "w").write("\n".join(credits) + "\n")

@@ -35,12 +35,17 @@ import Testing
 
 /// Every picture's charts are whole (the holes each says it has, of the eight colours or none), fit what a
 /// 13-inch laptop's display holds at their size, and have a line in the credits; and there is a chart at each size.
+/// The figures drawn for the app (docs/peg-board/draw.py: the charts under its heading in the file) are its own
+/// work, so they have no line there, and each is at all three sizes.
 @MainActor @Test func pegBoardChartsAreWholeAndCredited() throws {
     let credits = try String(contentsOf: resource("peg-board-credits.tsv"), encoding: .utf8).split(separator: "\n").filter { !$0.hasPrefix("#") }
         .map { $0.split(separator: "\t", omittingEmptySubsequences: false).map(String.init) }
     #expect(credits.allSatisfy { $0.count == 5 && $0[4].hasPrefix("https://") && ["CC0", "CC BY 4.0"].contains($0[3]) })
-    let charts = PegBoard.charts
-    #expect(charts.count == 32 && Set(charts.map(\.name)) == Set(credits.map { $0[0] }))
+    let charts = PegBoard.charts, file = try String(contentsOf: resource("peg-board-charts.txt"), encoding: .utf8)
+    let drawn = PegLattice.charts(from: String(file[try #require(file.range(of: "\n# Figures drawn for the app")).lowerBound...])).map(\.name)
+    let cut = charts.map(\.name).filter { !drawn.contains($0) }
+    #expect(cut.count == 32 && Set(cut) == Set(credits.map { $0[0] }))
+    #expect(drawn.count == 24 && Set(drawn).allSatisfy { name in drawn.count { $0 == name } == 3 })
     for chart in charts {
         #expect(chart.pegs.count == chart.cols * chart.rows && chart.pegs.allSatisfy { $0 <= 8 } && chart.pegs.count { $0 > 0 } > 150, "\(chart.name)")
         #expect([(43, 30), (86, 61), (131, 93)].contains { chart.cols <= $0.0 && chart.rows <= $0.1 }, "\(chart.name) is \(chart.cols) by \(chart.rows)")
