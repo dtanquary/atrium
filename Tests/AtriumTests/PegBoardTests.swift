@@ -104,10 +104,12 @@ import Testing
 /// The picture is the same whatever the frame rate, all the way round: drawn at 15, 30 and 60 frames a second,
 /// every pixel is the same part-way through a build (after six seconds at speed 1 and one at speed 8), a minute on
 /// (the build done, the light show under way), and a minute after that (the sheet cleared and the next thing
-/// built). The display is a small one, which a thing of two or three hundred pegs fills.
-@MainActor @Test func pegBoardLooksTheSameAtAnyFrameRate() throws {
-    defer { ["pegboard.seed", "pegboard.speed"].forEach(UserDefaults.standard.removeObject) }
+/// built). The display is a small one, which a thing of two or three hundred pegs fills. Twice: with whatever
+/// comes first, and with a reef first, the one kind of pattern that is made on another thread.
+@MainActor @Test(arguments: ["", "reef"]) func pegBoardLooksTheSameAtAnyFrameRate(first: String) throws {
+    defer { ["pegboard.seed", "pegboard.speed", "pegboard.pattern"].forEach(UserDefaults.standard.removeObject) }
     UserDefaults.standard.set(7, forKey: "pegboard.seed")
+    if !first.isEmpty { UserDefaults.standard.set(first, forKey: "pegboard.pattern") }
     let device = try #require(MTLCreateSystemDefaultDevice()), queue = try #require(device.makeCommandQueue())
     let (w, h) = (1512, 982)
     let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: w, height: h, mipmapped: false)
@@ -117,7 +119,9 @@ import Testing
     for rate in [15.0, 30.0, 60.0] {
         UserDefaults.standard.set(1.0, forKey: "pegboard.speed")
         let renderer = SKRenderer(device: device), target = try #require(device.makeTexture(descriptor: descriptor)), pass = MTLRenderPassDescriptor()
-        renderer.scene = PegBoard(size: CGSize(width: w / 2, height: h / 2))
+        let scene = PegBoard(size: CGSize(width: w / 2, height: h / 2))
+        #expect(first.isEmpty || (!scene.picture && scene.kind?.rawValue == first))
+        renderer.scene = scene
         pass.colorAttachments[0].texture = target
         pass.colorAttachments[0].loadAction = .clear
         pass.colorAttachments[0].storeAction = .store
@@ -149,7 +153,7 @@ import Testing
         pictures.append(taken)
     }
     let lit = pictures[0].map { picture in picture.count { max($0 & 255, $0 >> 8 & 255, $0 >> 16 & 255) > 30 } }
-    print("Peg Board at 7 s, 67 s and 127 s, speed 8 from 6 s: \(lit) of \(w * h) pixels are lit")
+    print("Peg Board\(first.isEmpty ? "" : ", a \(first) first,") at 7 s, 67 s and 127 s, speed 8 from 6 s: \(lit) of \(w * h) pixels are lit")
     #expect(lit[0] > 2000 && Double(lit[1]) > 1.5 * Double(lit[0]) && pictures[0][2] != pictures[0][1])
     for moment in 0..<3 {
         #expect(pictures[1][moment] == pictures[0][moment] && pictures[2][moment] == pictures[0][moment], "picture \(moment) differs with the frame rate")
@@ -333,8 +337,9 @@ import Testing
 }
 
 /// The kinds of pattern take turns: the snow crystal and the seven others each come once, in some order, before any
-/// comes again; the order is a new one each round; and none follows itself, across rounds either. Three rounds at
-/// Large pegs and the slider's top speed.
+/// comes again; the order is a new one each round; none follows itself, across rounds either; and a new sheet
+/// never opens on a reef, which is made on another thread and would have to be waited for. Three rounds at Large
+/// pegs and the slider's top speed, and the first thing of forty sheets.
 @MainActor @Test func pegBoardShowsEveryKindOfPatternInTurn() {
     let keys = ["pegboard.seed", "pegboard.size", "pegboard.shows", "pegboard.speed"]
     defer { keys.forEach(UserDefaults.standard.removeObject) }
@@ -355,6 +360,13 @@ import Testing
     #expect(every.count == 8 && rounds.allSatisfy { Set($0) == every }, "a kind came twice before another had come once")
     #expect(Set(rounds).count == 3, "two rounds went in the same order")
     #expect(zip(shown, shown.dropFirst()).allSatisfy { $0 != $1 }, "a kind followed itself")
+
+    var first = Set<PatternKind?>()
+    for seed in 1...40 {
+        UserDefaults.standard.set(seed, forKey: "pegboard.seed")
+        first.insert(PegBoard(size: CGSize(width: 1512, height: 982)).kind)
+    }
+    #expect(!first.contains(.reef) && first.count == 7, "of forty sheets, the first things were \(first.map { $0?.rawValue ?? "crystal" }.sorted())")
 }
 
 /// Draws the sheet as it would be on a display of 1512 by 982 points, `width` pixels across, with Settings values

@@ -86,9 +86,12 @@ final class PegBoard: SKScene {
     /// Whether a picture is on the sheet (or a pattern), the pictures not yet shown this round, and the light show.
     private(set) var picture = false, unseen: [String] = [], show = lightShows[0]
     /// The kind of pattern on the sheet, or the last that was: nil is a snow crystal. Whether there has been one
-    /// yet, and the kinds not yet shown this round.
+    /// yet, the kinds not yet shown this round, and whether nothing has been on this sheet of holes before.
     private(set) var kind: PatternKind?
-    private var patterned = false, unshown: [PatternKind?] = []
+    private var patterned = false, unshown: [PatternKind?] = [], fresh = true
+    /// The next reef, being made on another thread; and where the seeds for those come from, apart from `rng`,
+    /// so that what else is drawn does not depend on how many reefs have been begun.
+    private var reserve: Reserve!, spare = SplitMix(state: 0)
     /// Whether it is the copy Settings runs behind its page, which opens on a whole sheet (`headStart`).
     private var ahead = false
     private var rng = SplitMix(state: 0)
@@ -99,6 +102,7 @@ final class PegBoard: SKScene {
         // ("pegboard.seed" is for the tests, which want the same sheets twice; nothing else sets it.)
         let seed = UInt64(max(UserDefaults.standard.integer(forKey: "pegboard.seed"), 0))
         rng = SplitMix(state: seed > 0 ? seed : .random(in: 1...UInt64.max))
+        spare = SplitMix(state: ~rng.state)
         // The first thing is the other kind from this: either, where both are shown. ("pegboard.picture" and
         // "pegboard.pattern" are for the tests and for stills: the picture, or the kind of pattern, to put up first.)
         let defaults = UserDefaults.standard
@@ -114,7 +118,8 @@ final class PegBoard: SKScene {
         built = Int(Self.pegSize.value)
         lattice = Lattice(width: size.width, height: size.height, pitch: Self.pitches[built])
         glow = Glow(for: lattice)
-        unshown = [] // a new sheet of holes is a new round of patterns
+        // a new sheet of holes is a new round of patterns, and wants a reef made for it
+        (unshown, fresh, reserve) = ([], true, Reserve(on: lattice, seed: spare.next()))
         func texture(_ width: Int, _ height: Int, smooth: Bool) -> SKMutableTexture {
             let texture = SKMutableTexture(size: CGSize(width: width, height: height))
             texture.filteringMode = smooth ? .linear : .nearest
@@ -170,7 +175,10 @@ final class PegBoard: SKScene {
             for row in 0..<chart.rows { for col in 0..<chart.cols { pegs[(row0 + row) * lattice.cols + col0 + col] = chart.pegs[row * chart.cols + col] } }
             sequence = outlineFirst(pegs: pegs, cols: lattice.cols, rows: lattice.rows)
         } else if let kind = nextKind() {
-            let design = pattern(kind, on: lattice, using: &rng), tones = Self.tones.randomElement(using: &rng)!
+            // A reef is the one kind too slow to make here (0.4 s at Small pegs): the one made since the sheet was,
+            // or since the last reef, and another begun for next time.
+            let design = kind == .reef ? reserve.reef : pattern(kind, on: lattice, using: &rng), tones = Self.tones.randomElement(using: &rng)!
+            if kind == .reef { reserve = Reserve(on: lattice, seed: spare.next()) }
             sequence = design.order
             for (hole, tone) in zip(design.order, design.tone) { pegs[hole] = tones[Int(tone)] }
         } else {
@@ -205,7 +213,7 @@ final class PegBoard: SKScene {
         send(orderBytes, to: orderTexture)
         glow.clear()
         for texture in glowTextures { send(glow.bytes, to: texture) }
-        (phase, placed, since, glowing, made, holds) = (.building, 0, 0, 0, made + 1, [made + 1, made + 1])
+        (phase, placed, since, glowing, made, holds, fresh) = (.building, 0, 0, 0, made + 1, [made + 1, made + 1], false)
     }
 
     /// The next kind of pattern: each in turn, in a new order every round, and never the same twice running.
@@ -217,7 +225,8 @@ final class PegBoard: SKScene {
         }
         if unshown.isEmpty {
             unshown = (PatternKind.allCases as [PatternKind?] + [nil]).shuffled(using: &rng)
-            if patterned, unshown.last! == kind { unshown.swapAt(0, unshown.count - 1) }
+            // (nor a reef first on a new sheet: it is still being made, and would have to be waited for)
+            while (patterned && unshown.last! == kind) || (fresh && unshown.last! == .reef) { unshown.insert(unshown.removeLast(), at: 0) }
         }
         kind = unshown.removeLast()
         return kind
@@ -383,6 +392,25 @@ final class PegBoard: SKScene {
             gl_FragColor = vec4(mix(c * 12.92, 1.055 * pow(c, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, c)), 1.0);
         }
         """
+}
+
+/// A reef, made on another thread from the moment this is: one takes up to 0.4 s at Small pegs, and everything else
+/// on a sheet is made on the main thread while the sheet is dark. `made` is written before `done` is left and read
+/// only after it, which is what makes this safe to hand between threads.
+private final class Reserve: @unchecked Sendable {
+    private let done = DispatchGroup()
+    private var made: PegLattice.Pattern? // (by its full name: ApplicationServices has a Pattern too)
+
+    init(on lattice: Lattice, seed: UInt64) {
+        DispatchQueue.global(qos: .userInitiated).async(group: done) { [self] in
+            var rng = SplitMix(state: seed)
+            made = pattern(.reef, on: lattice, using: &rng)
+        }
+    }
+
+    /// The reef, waited for if it is not made yet. On the desktop it has had the minute and more that the thing
+    /// before it was on the sheet; only a test or a still that asks for a reef first waits.
+    var reef: PegLattice.Pattern { done.wait(); return made! }
 }
 
 extension PegBoard: HeadStart {

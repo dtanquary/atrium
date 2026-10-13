@@ -88,7 +88,7 @@ private func power(_ base: Int, _ n: Int) -> Int { (0..<n).reduce(1) { value, _ 
 /// what grows is a row of branching things, never twice the same, each its own tone. A peg that touches stays with
 /// `stick` chance, which below one thickens the branches. It stops at a count of pegs, about a quarter of the
 /// holes under a height the seed picks: held to that height, it piled up along the line in a flat cap. It is a
-/// walk a peg, and so the slow one: 0.4 s at Small pegs.
+/// walk a peg, and so the slow one: the scene has it made on another thread.
 private func reef(_ sheet: Sheet, using rng: inout some RandomNumberGenerator) -> Pattern {
     let (cols, rows) = (sheet.lattice.cols, sheet.lattice.rows), stick = 0.3
     var stuck = [Bool](repeating: false, count: cols * rows), root = [Int](repeating: 0, count: cols * rows)
