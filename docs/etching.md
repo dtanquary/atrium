@@ -178,13 +178,14 @@ Nothing religious, by looking at each whole picture and not its title. The Pont 
 
 Three more keys, with no page in Settings, set a scene up for the tests and for pictures of it; with any of them the scene keeps a cycle of its own and saves nothing: `etching.drawn` (0 to 1) starts it that share of the way through its picture, `etching.cleared` (0 to 1) that far through its clearing, and `etching.ghost=1` lays the next picture's ghost under it.
 
-The screenshots (`docs/images/etching.jpg`, the dim screen, and `-light.jpg`, the bright one) are the Great Wave 70% drawn and fitted inside the screen (`etching.drawn=0` gives the bare screen the unevenness was measured on). They were made when the screen followed the appearance, and before Fill the screen; now each is asked for by name (`etching.screen=0` Light, `1` Dark; `etching.fill=0` fitted):
+The screenshots are the Great Wave 70% drawn, filling the screen as it does unless Fill the screen is turned off (retaken on 2026-10-13; the first ones were fitted inside it). `docs/images/etching.jpg` is the wallpaper as it comes, on the bright screen, and `etching-dark.jpg` the same on the dim one (`etching.screen=1`); there is no `-light` one, the screen being bright in both appearances unless set otherwise. `etching.fill=0` gives it fitted, and `etching.drawn=0` the bare screen the unevenness was measured on. Each is the render test's picture, then `sips -Z 1600 -s format jpeg -s formatOptions 75`:
 
 ```sh
-SNAPSHOT_SCENE="Etching" SNAPSHOT_DEFAULTS="etching.drawn=0.7,etching.picture=1,etching.screen=1,etching.fill=0" swift test --filter everySceneRenders
+SNAPSHOT_SCENE="Etching" SNAPSHOT_DEFAULTS="etching.drawn=0.7,etching.picture=1" swift test --filter everySceneRenders                    # etching.jpg
+SNAPSHOT_SCENE="Etching" SNAPSHOT_DEFAULTS="etching.drawn=0.7,etching.picture=1,etching.screen=1" swift test --filter everySceneRenders   # etching-dark.jpg
 ```
 
-The Settings page has one still, `preview-etching.jpg`, of the bright screen, in both appearances: the page's live copy is bright as it comes, and a dim still in Dark Mode would fade to a bright picture.
+The Settings page has one still, `preview-etching.jpg`, a 1200-pixel copy of `etching.jpg`, which is also the wallpaper's tile in the menu's grid. It is of the bright screen in both appearances: the page's live copy is bright as it comes, and a dim still in Dark Mode would fade to a bright picture.
 
 ## Cost
 
