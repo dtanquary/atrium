@@ -25,7 +25,8 @@ fish-tank|Fish Tank|42|4|SNAPSHOT_APPEARANCE=light'
 
 # Every wallpaper in the app, as the loop its card opens, in about the card's look:
 # slug|scene|seconds in before recording|extra environment
-PREVIEWS='aurora|Aurora|8|SNAPSHOT_DEFAULTS=aurora.palette=Purple,aurora.speed=2
+PREVIEWS='ant-colony|Ant Colony|4|SNAPSHOT_DEFAULTS=antcolony.day=20261013,antcolony.hour=11
+aurora|Aurora|8|SNAPSHOT_DEFAULTS=aurora.palette=Purple,aurora.speed=2
 black-hole|Black Hole|2.5|SNAPSHOT_DEFAULTS=blackhole.speed=2
 dappled-light|Dappled Light|4|SNAPSHOT_DEFAULTS=dappled.previewTime=1,dappled.previewHour=17.5,dappled.weather=1
 deep-space-tour|Deep Space Tour|4|SNAPSHOT_DEFAULTS=deep.photo=deep-pillars-webb.heic
@@ -51,7 +52,8 @@ weather|Weather|4|SNAPSHOT_DEFAULTS=weather.lock=2,weather.previewTime=1,weather
 wind|Wind|4|SNAPSHOT_DEFAULTS=wind.zoom=2,wind.map=2'
 
 # Every wallpaper in the app, as 16:10 stills for the cards on the glass pane: slug|screenshot in docs/images.
-CARDS='aurora|aurora-purple
+CARDS='ant-colony|ant-colony
+aurora|aurora-purple
 black-hole|black-hole
 dappled-light|dappled-light-golden
 deep-space-tour|deep-space-pillars
