@@ -232,9 +232,10 @@ private func triangles(_ sheet: Sheet, using rng: inout some RandomNumberGenerat
 /// A hexaflake: a hole and the six round it, then that seven-fold thing and six copies of it round it three times
 /// as far out, and so on. It is laid as it is made: the middle flake of each level, then the six round it in turn.
 /// The shape is one shape, so the seed varies what it can: how big a step is (one hole, or two or three with a
-/// cluster of seven pegs at each point) with as many levels as then fit; whether the smallest flakes are left
-/// without their middle point, as rings of six; and how it is toned, by how many levels a point is the middle
-/// one at, or by which of the seven flakes of one level it is in, the six round the middle in two tones by turns.
+/// cluster of seven pegs at each point) with as many levels as then fit; and how it is toned, by how many levels
+/// a point is the middle one at, or by which of the seven flakes of one level it is in, the six round the middle
+/// in two tones by turns. Every flake keeps its middle one: left out, the gap is a star of six points, which
+/// this wallpaper does not show (docs/peg-board.md, "Dave's decisions").
 private func hexaflake(_ sheet: Sheet, using rng: inout some RandomNumberGenerator) -> Pattern {
     let room = min(sheet.rows, sheet.cols)
     // at each step, as many levels as fit; and of those, the ones that reach across half the sheet's height or more
@@ -245,9 +246,6 @@ private func hexaflake(_ sheet: Sheet, using rng: inout some RandomNumberGenerat
     }
     let big = fits.filter { $0.levels >= 2 && $0.step * (power(3, $0.levels) - 1) >= room }
     let (levels, step) = (big.isEmpty ? [fits[0]] : big).randomElement(using: &rng)!
-    // (At a step of three, or with the middle flake of a higher level left out, the gap is a star of six points,
-    // thirteen holes or more of it: tried, and not to be shown.)
-    let hollow = step < 3 && Int.random(in: 0..<3, using: &rng) == 0
     let by = Int.random(in: 0...levels, using: &rng), first = Int.random(in: 0..<6, using: &rng)
     var b = Builder(sheet)
     func lay(_ level: Int, _ q: Int, _ r: Int, _ middles: Int, _ part: Int) {
@@ -256,7 +254,7 @@ private func hexaflake(_ sheet: Sheet, using rng: inout some RandomNumberGenerat
             if step > 1 { for d in [(0, 0)] + Sheet.dirs { b.put(step * q + d.0, step * r + d.1, tone) } } else { b.put(q, r, tone) }
             return
         }
-        if level > 0 || !hollow { lay(level - 1, q, r, middles + 1, level == by ? 0 : part) }
+        lay(level - 1, q, r, middles + 1, level == by ? 0 : part)
         for k in 0..<6 {
             let d = Sheet.dirs[(first + k) % 6]
             lay(level - 1, q + d.0 * power(3, level), r + d.1 * power(3, level), middles, level == by ? 1 + k % 2 : part)
