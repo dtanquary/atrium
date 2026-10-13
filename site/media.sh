@@ -42,6 +42,7 @@ live-sky|Live Sky|4|SNAPSHOT_DEFAULTS=sky.previewTime=1,sky.previewHour=20.5,sky
 meander|Meander|2.5|SNAPSHOT_DEFAULTS=meander.seed=13,meander.colors=Rainforest,meander.speed=2 SNAPSHOT_APPEARANCE=dark
 murmuration|Murmuration|20|SNAPSHOT_DEFAULTS=murmuration.light=5,murmuration.ground=0 MURMURATION_SEED=3
 nebula|Nebula|4|SNAPSHOT_DEFAULTS=nebula.palette=Hubble
+peg-board|Peg Board|2.5|SNAPSHOT_DEFAULTS=pegboard.pattern=pinwheel,pegboard.shows=1,pegboard.speed=20,pegboard.seed=9
 pixel-city|Pixel City|30|SNAPSHOT_DEFAULTS=city.place=0,city.previewTime=1,city.previewHour=19
 pixel-spaceport|Pixel Spaceport|19|SNAPSHOT_DEFAULTS=spaceport.previewTime=1,spaceport.previewHour=18.3
 pixel-window-seat|Pixel Window Seat|5|SEAT_AT=30500 SNAPSHOT_DEFAULTS=seat.previewTime=1,seat.previewHour=10.5
@@ -70,6 +71,7 @@ live-sky|live-sky
 meander|meander
 murmuration|murmuration-blue-hour
 nebula|nebula-hubble
+peg-board|peg-board
 pixel-city|pixel-city-dusk
 pixel-spaceport|pixel-spaceport
 pixel-window-seat|pixel-window-seat
