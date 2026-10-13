@@ -2,7 +2,7 @@
 
 Old etchings, engravings and woodcuts drawn line by line: each one slowly, in one unbroken line, on a screen of grey powder. The screen imitates the Etch A Sketch's: a stylus scrapes the powder off the back of the glass, so the line is the dark inside showing through, and it can never lift. That name is used nowhere in the app.
 
-**Hidden while Dave tests it** (`unfinished: true`). He asked for it on 2026-10-12 (a wallpaper in that toy's style "where intricate public domain images become slowly drawn out over time starting from fresh"), it was researched and mocked up that day, and built the same day in three steps.
+**Shown to everyone from 0.111.0** (2026-10-13, when Dave said "unhide all 3 of the new ones"; it was built behind the `unfinished` switch). He asked for it on 2026-10-12 (a wallpaper in that toy's style "where intricate public domain images become slowly drawn out over time starting from fresh"), it was researched and mocked up that day, and built the same day in three steps.
 
 **The name is Dave's pick** (2026-10-12): Etching names the old prints being drawn, is not a piece of the toy's mark, and nobody holds it ([below](#names-and-look-alikes)). It was built under the working name "Line Drawing", which is why its module is still `LineRoute`.
 

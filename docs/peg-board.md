@@ -4,7 +4,7 @@ A black sheet of holes, edge to edge, with coloured translucent pegs pushed thro
 
 It imitates Lite-Brite, the peg-light toy Hasbro first sold in 1967. That name is a registered mark and is used nowhere in the app: see [Rights](#rights).
 
-Dave asked for a clone of it on 2026-10-12, "with lights, showing various lighting patterns and what not"; it was researched and mocked up that day, and he chose from the sheets ([Dave's decisions](#daves-decisions-2026-10-12)). It was built the same day in three steps and is flagged `unfinished`: hidden until he has tried it.
+Dave asked for a clone of it on 2026-10-12, "with lights, showing various lighting patterns and what not"; it was researched and mocked up that day, and he chose from the sheets ([Dave's decisions](#daves-decisions-2026-10-12)). It was built the same day in three steps behind the `unfinished` switch, and has been shown to everyone since 0.111.0 (2026-10-13, when Dave said "unhide all 3 of the new ones").
 
 - **Source:** `Sources/Atrium/PegBoard.swift` (the scene and its one shader), `Sources/PegLattice/` (the lattice, the crystal, the glow, the charts and the order pegs go in; its own module, built with `-O`).
 - **Data:** `Resources/peg-board-charts.txt` (the pictures, cut down to pegs) and `Resources/peg-board-credits.tsv`.

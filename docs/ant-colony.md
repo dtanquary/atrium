@@ -4,7 +4,7 @@ A thin tank seen from the side, with the display as its glass: blue gel lit from
 
 It imitates the Ant Farm, the toy sold since 1956, and the blue gel tanks that came after it. That name is a registered mark and is used nowhere in the app: see [Rights](#rights).
 
-Dave asked for it on 2026-10-12, slowly evolving and "based on realistic ant movements", and then: "think that sideways clear view into the ant colony as it slowly forms and gets bigger". It was researched and mocked up that day, he chose from the sheets ([Dave's decisions](#daves-decisions-2026-10-12)), and it was built the same day in three steps, then gone over again after the lead's review and Dave's second look at the mock-ups. It is flagged `unfinished`: hidden until he has tried it.
+Dave asked for it on 2026-10-12, slowly evolving and "based on realistic ant movements", and then: "think that sideways clear view into the ant colony as it slowly forms and gets bigger". It was researched and mocked up that day, he chose from the sheets ([Dave's decisions](#daves-decisions-2026-10-12)), and it was built the same day in three steps, then gone over again after the lead's review and Dave's second look at the mock-ups. It was built behind the `unfinished` switch, and has been shown to everyone since 0.111.0 (2026-10-13, when Dave said "unhide all 3 of the new ones").
 
 - **Source:** `Sources/Atrium/AntColony.swift` (the scene, its clock, the five looks' shaders and the ants' sprites), `Sources/AntNest/` (`Nest.swift`, the nest and its bake; `Colony.swift`, the ants; its own module, built with `-O`).
 - **Data:** none. Everything is made from the date.
@@ -25,6 +25,7 @@ Dave asked for it on 2026-10-12, slowly evolving and "based on realistic ant mov
 | The toy on screen | no frame and no skyline: the display is the glass, edge to edge |
 | How to build | "Build now, refine as it goes" |
 | On his desktop, the same evening | "ant colony is great" |
+| Which gel to keep (2026-10-13) | "keep both gels for now" |
 
 The lead's calls, which he has not ruled on: the mock-ups' deep dim gel is "Gel", with the brighter gel of the realism pass kept beside it as Bright Gel for him to compare; Speed keeps the nest on the tank; the day begins at six and follows the clock in [The day](#the-day), which is not how ants dig; the colony grows with its nest, and is ants only (no queen, no brood); a young colony sinks one or two shafts at a time; someone is always walking; the slider for how many ants is "Colony size". The builder's, which neither has ruled on: Speed stops at 8; three ants to a face; ninety ants at the most.
 
@@ -183,7 +184,7 @@ Measured 2026-10-12 on an M3 Max with other work running, a debug build (the Ant
 
 - **The colony stops at ninety ants** so that the CPU figure stays under 2 ms on the largest display. An ant is eighteen sprites (two lengths to a leg; three for the largest ants), each placed, turned and stretched every frame it walks; an ant standing still has only its antennae placed. Stepping the ants is the small part: 36 millionths of a second a step for 22 of them (`probe.swift`), two steps to a frame at 30 fps.
 - **Sand was 3.7 ms of GPU on a 6K display** while a pixel looked for its grain through the nine squares round it (1.1 ms on a laptop's). With the scatter baked into a tile it is 1.5 to 1.7 ms there.
-- **Bright Gel is over the GPU budget on a 6K display** (2.8 ms). Left until Dave has chosen between the gels.
+- **Bright Gel is over the GPU budget on a 6K display** (2.8 ms). It was left until Dave had chosen between the gels; on 2026-10-13 he kept both "for now", so it wants trimming there.
 - **Before a farm fades up** its nest is baked and its ants run three minutes on, off the main thread: 0.06 s and 0.03 s on a 14-inch display at Medium, 0.18 and 0.11 at Small; 0.22 and 0.12 on a 6K display at Medium; and at Small on 6K, the largest tank there is (2,545 by 1,432 cells), 0.87 and 0.12, so about a second of black ([Still open](#still-open)). The surroundings follow the nest (13 ms on a 14-inch display, 190 ms for the largest tank) and again each 4000th of the digging.
 - Not measured: a release build, a slower Mac. The research's own timing sketch of a simpler shader ran 0.35, 0.7 and 1.0 ms of GPU at 14-inch, 5K and 6K on the same machine.
 
