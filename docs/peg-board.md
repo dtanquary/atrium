@@ -1,12 +1,12 @@
 # Peg Board
 
-A black sheet of holes, edge to edge, with coloured translucent pegs pushed through it one at a time and lit from behind. It shows one thing after another: a snow crystal grown from the middle, or a picture built outline first; each, once whole, under a slow light show; then the sheet goes dark and is cleared for the next.
+A black sheet of holes, edge to edge, with coloured translucent pegs pushed through it one at a time and lit from behind. It shows one thing after another: a pattern made fresh, of [eight kinds](#the-patterns) in turn, or a picture built outline first; each, once whole, under a slow light show; then the sheet goes dark and is cleared for the next.
 
 It imitates Lite-Brite, the peg-light toy Hasbro first sold in 1967. That name is a registered mark and is used nowhere in the app: see [Rights](#rights).
 
 Dave asked for a clone of it on 2026-10-12, "with lights, showing various lighting patterns and what not"; it was researched and mocked up that day, and he chose from the sheets ([Dave's decisions](#daves-decisions-2026-10-12)). It was built the same day in three steps behind the `unfinished` switch, and has been shown to everyone since 0.111.0 (2026-10-13, when Dave said "unhide all 3 of the new ones").
 
-- **Source:** `Sources/Atrium/PegBoard.swift` (the scene and its one shader), `Sources/PegLattice/` (the lattice, the crystal, the glow, the charts and the order pegs go in; its own module, built with `-O`).
+- **Source:** `Sources/Atrium/PegBoard.swift` (the scene and its one shader), `Sources/PegLattice/` (the lattice, the crystal, the glow, the charts and the order pegs go in; its own module, built with `-O`). `Patterns.swift` there makes the seven kinds of [pattern](#the-patterns) beside the crystal.
 - **Data:** `Resources/peg-board-charts.txt`: the pictures, which are the app's own figures, drawn for pegs.
 - **Scripts:** `docs/peg-board/draw.py` draws the figures and writes the charts ([The pictures](#the-pictures)); `docs/peg-board/bench.swift` is the timing sketch the shader was tried in before the build ([Cost](#cost)).
 - **Pictures of it:** `docs/images/peg-board.jpg`, `peg-board-sailboat.jpg`; and in `docs/peg-board/`, every figure as the app draws it at each size (`figures-large.jpg`, `figures-medium.jpg`, `figures-small.jpg`), one whole round (`round.jpg`), the three light shows over a figure (`light-show.jpg`) and the Softness slider (`softness.jpg`).
@@ -17,6 +17,7 @@ Dave asked for a clone of it on 2026-10-12, "with lights, showing various lighti
 |---|---|
 | Name | Peg Board |
 | What it shows | all three kinds he was offered, in rotation: pictures built peg by peg from an empty sheet; patterns that grow ("symmetric designs made fresh each time, growing outward"); slow light shows on a finished board, nothing flashing. With a setting: everything, patterns only, pictures only |
+| Patterns beside the crystal | seven of the fourteen mocked up for him, asked kind by kind (relayed 2026-10-13): of the growths, "Reef, Plate"; of the geometric, "Blocks"; of the fractals, "Triangles, Hexaflake"; of the spirals and flowers, "Pinwheel, Rose". All eight take turns |
 | The toy on screen | the sheet alone, edge to edge. He asked to see a light box round it too; mocked up, it read as a tablet's bezel and held only the toy's 1,735 holes, and he chose no box |
 | Peg look | "A slider, crisp by default": the measured plastic peg, with Softness down to a glowing disc |
 | Peg size | "A slider", settled as three fixed sizes (the toy's own, half, a third; half the default), each picture cut and checked by eye at each, and left out at a size where it does not read |
@@ -35,7 +36,7 @@ The lead's calls, which he has not ruled on: a Speed slider; the lean shader; th
 > on peg board, pictures are hard to make out, but the pattern looks good, I only see 1 pattern ever though but it does look really cool, the color options are good
 
 - **Pictures are hard to make out.** Asked what to do about it, he picked "Draw our own": figures drawn for pegs, not cut down from prints and charts.
-- **The pattern looks good, and there is only one.** There are four snow crystals (four sets of Reiter's numbers) in three colour families, but at Large pegs a crystal is 13 holes from heart to tip and the four come out alike. Asked which kinds of new pattern to mock up, he picked all four offered: growth, geometric, fractals, spirals and flowers. A new pattern has to read at Large pegs first, and to differ from the crystal and from the others at a glance.
+- **The pattern looks good, and there is only one.** There are four snow crystals (four sets of Reiter's numbers) in three colour families, but at Large pegs a crystal is 13 holes from heart to tip and the four come out alike. Asked which kinds of new pattern to mock up, he picked all four offered: growth, geometric, fractals, spirals and flowers. A new pattern has to read at Large pegs first, and to differ from the crystal and from the others at a glance. He then picked seven of the fourteen shown him: [The patterns](#the-patterns).
 - **The colours are good:** the two sets and Random stay as they are.
 
 ## What the real toy looks like
@@ -97,7 +98,7 @@ Licences are as Openverse and Wikimedia Commons list them.
 
 **Time.** The scene moves in steps of a 960th of a second, however many a frame holds, so the picture is the same at 15, 30 and 60 frames a second. The shader is told how many pegs have been begun and lights each by its place in the order: a peg comes in over the first quarter of a second and reaches full in one second at any speed, so a faster build is a wider soft front and not a sparkle. The place is three bytes, since a large display at Small pegs has more than 65,535 holes.
 
-**A round.** Build at 6 pegs a second times Speed; then a light show for 60 s; then the sheet goes dark over 3 s, its pegs fading out with their light, so that what is left is an empty sheet; a second later the next thing begins on it. The fade is a straight line in the light, which on the screen is even: the pegs' brightness falls 19%, 24%, 29% and 28% of the way in its four quarters (eased in and out, as it first was, 12%, 32%, 40% and 16%, and it read as half as long). Where both kinds are shown they take turns, the first at random; the pictures go round in a new order each time.
+**A round.** Build at 6 pegs a second times Speed; then a light show for 60 s; then the sheet goes dark over 3 s, its pegs fading out with their light, so that what is left is an empty sheet; a second later the next thing begins on it. The fade is a straight line in the light, which on the screen is even: the pegs' brightness falls 19%, 24%, 29% and 28% of the way in its four quarters (eased in and out, as it first was, 12%, 32%, 40% and 16%, and it read as half as long). Where both pictures and patterns are shown they take turns, the first at random; the pictures go round in a new order each time, and so do the eight kinds of pattern.
 
 **In Settings** the page's own copy gets a head start: `LivePreview` asks any scene that is a `HeadStart` (Scenes.swift, added for this; nothing else adopts it yet) to skip ahead as it is made, and this one puts every peg of its first sheet in at once, lit and with its glow, and goes straight to the light show; it does the same after a change of peg size. So Softness, the colours and the size can be judged as they are moved. From there the round goes on as usual, and the desktop's copy is never asked: it starts from an empty sheet.
 
@@ -157,6 +158,69 @@ They are gone from the app with everything of theirs: the 32 charts, the scripts
 
 What they taught, which the figures are drawn by: a picture averaged over holes is blurred; dithering is confetti; oil paintings were blobs at any size tried; a map, a machine, a knot or a star chart is a line thinner than a peg; a needlework chart can go a square to a hole and still not read in 30 rows; and a picture that fills its paper leaves no sheet empty and reads as camouflage.
 
+## The patterns
+
+Eight kinds, each made fresh from the scene's seeded numbers and built in the order it is made. **They take turns:** each comes once, in a new order every round, before any comes again, and none follows itself, across rounds or a change of peg size either (`nextKind`). The first was the snow crystal, [above](#how-it-works). Dave, having run that alone: "I only see 1 pattern ever". Fourteen more kinds were mocked up for him on 2026-10-12 and he picked seven ([his decisions](#daves-decisions-2026-10-12)); the rest are under [Tried and dropped](#tried-and-dropped).
+
+Each of the seven gives the holes in the order their pegs go in and one of four tones a peg (`Pattern`, in `Sources/PegLattice/Patterns.swift`), which the scene turns into three colours of one family and the clear peg, from the colour set in use. Five such families: blue, violet and pink; red, orange and yellow; green, blue and violet; violet, pink and orange; blue, green and yellow. A peg still takes a second to light, so nothing flashes.
+
+| Kind | What it is | Its build | What the seed varies | How it reads |
+|---|---|---|---|---|
+| `reef` | A row of branching things grown from the floor of the sheet, each its own tone: a peg at a time wanders in from above and stops where it first touches the floor or what has grown, staying three times in ten, which thickens the branches. It stops at a count of pegs: held to a height, it piled up along the line in a flat cap | all of them rising together, as they grew | everything: no two are alike | At Large pegs a row of seaweed, the tallest to two thirds of the height; finer, and more of them, at the others. Its roots are where the Dock is |
+| `plate` | A plate grown ring by ring from the middle hole: every hole freezes on the step it has one of the rule's numbers of frozen holes round it, until one would freeze off the sheet. Toned by when it froze | ring by ring, each ring round | one of six rules, each of which makes one plate (1; 1 or 3; 1, 3 or 5; 1 or 2; 1 or 5; 1, 3, 4, 5 or 6 frozen neighbours) | A filled hexagon, 26 holes across at Large, with a lace of holes in it and three bands of tone. One outline, with a different inside; one rule at Small gives six lobes |
+| `blocks` | Tumbling blocks: hexagons cut in three diamonds that the eye takes for cubes, the tops clear. Whole cubes only | a cube at a time from the middle out, its top first | their size; and, one time in three, the right faces left dark | Cubes at once where they are three holes a side or more; two a side, at Large, as a woven band; with dark faces, as steps. The strongest at Medium and Small, and the brightest: see [Cost](#cost) |
+| `triangles` | Pascal's triangle less the numbers a prime divides: Sierpinski's triangles for 2, their cousins for 3 and 5, toned by the remainder | a row at a time from its point, each row from its middle | the prime, which way up, and with them the size | Reads at every size |
+| `hexaflake` | A hole and the six round it, that and six copies of it three times as far out, and so on | the middle flake of each level, then the six round it | nothing but which of its six goes in first: it is one shape every time | A lacy six-fold flake, the nearest of these to the crystal |
+| `pinwheel` | Spiral arms of even width from a clear hub, each its own tone | all arms winding outward together | two to five arms, which way they wind and how tightly | Reads at once. At Large the arms have six corners, as anything round has at that size |
+| `rose` | A flower from above: a clear middle, a ring of short petals and a ring of long ones between them, each with a round end | from the middle out | five, seven or eight petals at Large, seven to twelve at the others, never six; and how it is turned | A flower at every size, once whole: a primrose at Large, a daisy at the others. For the middle half of its build it is a disc with dark spokes |
+
+**Pegs and time,** at Large · Medium · Small on a 14-inch display (the test `pegBoardPatternsFitTheSheet` prints them, from six seeds). A build is its pegs at 6 a second times Speed, and a second for the last to light:
+
+| Kind | Pegs | Build at Speed 1 | At Speed 10 | Made in, ms |
+|---|---|---|---|---|
+| crystal | 217 to 303 · 829 to 1,259 · 1,735 to 2,673 | 37 s to 52 s · 2.3 min to 3.5 min · 4.8 min to 7.4 min | 5 s to 6 s · 15 s to 22 s · 30 s to 46 s | 2 to 4 · 16 to 34 · 53 to 111 |
+| reef | 152 to 215 · 631 to 891 · 1,452 to 2,048 | 26 s to 37 s · 1.8 min to 2.5 min · 4.0 min to 5.7 min | 4 s to 5 s · 12 s to 16 s · 25 s to 35 s | 8.5 · 86 · 389 |
+| plate | 499 to 721 · 1,999 to 3,367 · 4,339 to 7,957 | 84 s to 2.0 min · 5.6 min to 9.4 min · 12 min to 22 min | 9 s to 13 s · 34 s to 57 s · 73 s to 2.2 min | 0.2 · 1.0 · 3.2 |
+| blocks | 624 to 972 · 2,550 to 4,752 · 4,992 to 10,692 | 1.8 min to 2.7 min · 7.1 min to 13 min · 14 min to 30 min | 11 s to 17 s · 44 s to 80 s · 84 s to 3.0 min | 0.0 · 0.0 · 0.1 |
+| triangles | 216 to 243 · 648 to 729 · 1,215 to 2,250 | 37 s to 42 s · 1.8 min to 2.0 min · 3.4 min to 6.3 min | 5 s · 12 s to 13 s · 21 s to 38 s | 0.0 · 0.1 · 0.1 |
+| hexaflake | 343 · 1,717 · 2,401 | 58 s · 4.8 min · 6.7 min | 7 s · 30 s · 41 s | 0.0 · 0.0 · 0.0 |
+| pinwheel | 287 to 305 · 1,456 to 1,485 · 3,496 to 3,503 | 49 s to 52 s · 4.1 min · 9.7 min | 6 s · 25 s to 26 s · 59 s | 0.0 · 0.1 · 0.3 |
+| rose | 399 to 405 · 2,032 to 2,053 · 4,891 to 4,933 | 68 s · 5.7 min · 14 min | 8 s · 35 s · 83 s | 0.1 · 0.2 · 0.5 |
+
+At Dave's Speed 10 and Large pegs a pattern is whole in 4 to 17 s and then sits under the light show for a minute. Blocks at Small pegs and Speed 1 take a quarter to half an hour, and 40 s to a minute and a half at 20×, the slider's top.
+
+**Where each comes from.** All were written from the builder's memory of these, not checked against the papers:
+- `reef`: diffusion-limited aggregation, T. Witten and L. Sander, "Diffusion-Limited Aggregation, a Kinetic Critical Phenomenon", Physical Review Letters 47, 1400 (1981), https://doi.org/10.1103/PhysRevLett.47.1400.
+- `plate`: Norman Packard's snowflakes of the 1980s; the family is set out in J. Gravner and D. Griffeath, "Modeling snow crystal growth I: rigorous results for Packard's digital snowflakes", Experimental Mathematics 15(4), 2006, https://www.projecteuclid.org/euclid.em/1175789778. The rules here were picked by eye for plates that differ and have not been checked against that paper's list.
+- `triangles`: https://en.wikipedia.org/wiki/Sierpi%C5%84ski_triangle, under Pascal's triangle. `hexaflake`: https://en.wikipedia.org/wiki/Hexaflake.
+- `blocks` is old paving and patchwork: https://en.wikipedia.org/wiki/Rhombille_tiling. `pinwheel` and `rose` are the builder's own drawing.
+
+### Tried and dropped
+
+Fifteen kinds were built for the mock-ups, on a branch that was never merged. Dave was shown fourteen and picked seven; these eight are not in the code:
+
+| Kind | What it was | Why it is out |
+|---|---|---|
+| `coral` | the reef's growth from the middle hole, toned by how far out | Not picked. At Large pegs a scrap of twig, about 100 pegs; good at Medium and Small |
+| `frost` | the same from all four edges, the middle left dark | Not picked. Failed at Large: a few twigs on the edges, half off the display |
+| `flame` | flame stitch (https://en.wikipedia.org/wiki/Bargello_(needlework)): bands of tone in one zigzag over the whole sheet | Not picked. Read strongly, and lit every hole: a mean level of 0.34 against the crystal's 0.09 to 0.12, and 25% busy at Large |
+| `flowsnake` | Gosper's curve (https://en.wikipedia.org/wiki/Gosper_curve), one line that fills an island | Not picked. The same island every time; only its build was worth watching |
+| `spiro` | one line weaving between two rings, crossing itself in loops | Not picked. At Large, four of five were a tangle of wire netting; a clean line at Medium. Drawn with points, as a wheel in a ring draws it, it had come out as a five-pointed star in one line |
+| `rings` | rings of colour about the middle | Not picked. A target, with nothing in it to find; nested hexagons at Large |
+| `sunflower` | a sunflower's head (H. Vogel, "A better way to construct the sunflower head", Mathematical Biosciences 44, 1979, 179-189, https://doi.org/10.1016/0025-5564(79)90080-4) | Not picked. Failed at Large: 115 to 157 pegs scattered as confetti |
+| `stars` | six-pointed stars set point to point | **Never shown to Dave,** on the builder's call, which the lead upheld: each star is a hexagram, which most people read as the Star of David, and his rule is nothing religious |
+
+Not built: Koch's snowflake, whose first step is a hexagram; crystals seeded in several places that meet.
+
+**How they were judged:** by eye, on the app's own renders of a 14-inch display (1512 by 982 points) with Dave's settings, Calm and Softness 0: five seeds a kind at Large and at Medium, one at Small, six moments of eight builds, and a film of four building at Speed 10. The sheets are kept with that day's research (`toys/pegs2/patterns/`, and `toys/pegs2/rotation/` for what changed after his pick), not in the repo.
+
+**Found by looking, and worth keeping in mind:**
+- **Seeds 1 to 4 are the wrong ones to judge by.** A kind makes its first choice (a size, a rule, how many arms) with the seed's second number, and for seeds 1, 2, 3 and 5 that number is 0.70 to 0.75: the first sheets showed four tiles of one choice and made every kind look the same each time. The sheets and the test use seeds picked for numbers spread from 0 to 1. Spread the same way, the crystal's four kinds and three families give two shapes at Large, of 217 or 218 pegs and of 301 or 303, in one six-armed outline.
+- **Six-pointed stars turn up unasked** on a lattice with six directions: as a tiling, as Koch's first step, as the gap where a hexaflake's middle is left out, as a spirograph's figure. Three of the five plates on his sheet have a six-pointed star as their inner band of tone, and the crystal is itself a star of six arms; Dave has picked both. A hexagram, drawn or left as a gap, is what is kept out.
+- **A reef let round from one side of the sheet to the other grew a bare pole up the edge:** a peg that crossed landed on the edge column behind the branches that would have caught it. The sides are walls.
+- **Anything round is cut to a hexagon if it is made in a window of holes as wide as its reach:** rows are closer together than the holes in one, so the window has to be wider by 2/√3 (`Sheet.span`). It showed only on the Small sheet.
+- **A thin ring at Large pegs is a hexagon anyway:** a ring a peg wide and under eight holes out is one on this lattice.
+
 ## Rights
 
 The pictures are the app's own drawings, made from nothing for it: no source, no licence, no credit. What follows is about the toy.
@@ -178,7 +242,7 @@ From the rights research of 2026-10-12 (kept with that day's research as `toys/r
 | Peg size | `pegboard.size` | Large, Medium, Small. Another size is another sheet, there and then | Medium |
 | Softness | `pegboard.softness` | 0 to 1: the rim, lip and dark band from full to 0.3; the glow ×1 to ×4; the hot dot 0.35 to none; the outline 1.2 to 3 pixels wide; exposure 1.8 to 1.6 to hold the level. Nothing is stamped again, so it is instant | 0 |
 
-`pegboard.seed` and `pegboard.picture` are for the tests and for stills: the same sheets twice, and the picture to put up first.
+`pegboard.seed` and `pegboard.picture` are for the tests and for stills: the same sheets twice, and the picture to put up first. `pegboard.pattern` is the kind of pattern to put up first: `crystal`, or one of the seven names under [The patterns](#the-patterns).
 
 ## Cost
 
@@ -194,6 +258,8 @@ Measured 2026-10-12 on an M3 Max.
 
   The same at a pitch of 13.5 and of 27 points, and with the board half full or full.
 - **On the main thread, once per sheet, while it is dark:** a crystal grows in 2 to 4 ms at Large pegs, 16 to 34 at Medium and 53 to 111 at Small; the largest picture, the butterfly at Small pegs (5,565 pegs), goes up in 10 ms, order and all.
+- **The seven other patterns** are made on the main thread while the sheet is dark, as the crystal is: in under 4 ms at any size ([their table](#the-patterns)), but for the reef, which takes 0.4 s at Small pegs.
+- **How busy the patterns are,** by the measure in the next line, one still each at Large · Medium pegs: a crystal 3.8 to 5.7% · 5.6 to 8.9%, a reef 2.7 · 4.8%, triangles 3.8 · 4.6%, a pinwheel 4.9 · 9.3%, a hexaflake 5.5 · 10.6% (as it was when picked), a rose 7.3 · 13.9%, a plate 10.2 · 16.7% and blocks 17 · 26%, with a mean level of 0.26 against the crystal's 0.09 to 0.12: blocks cover most of the sheet.
 - **How busy it is,** by `docs/meander/measure/busy.py` (the share of pixels on a brightness edge) on the app's stills at Softness 0: a crystal 5.5 to 9.2%; a figure at Large pegs 3.6% (the rocket) to 9.5% (the butterfly), and the butterfly at Medium and Small pegs 18%, since every peg has a rim (the figures' stills measured 3024 pixels across). The crystal that scores 9.2% is 6.2% at Softness 0.5 and 2.3% at 1. The wallpapers Dave has kept score 0 to 3.3% (Fish Tank 8.5%), and Game of Life's Classic look, which he called "so busy and wild", 11.1%. Its mean level is 0.08 to 0.15, like Nebula's.
 - **How much it moves:** a build at speed 1 changes 0.004 grey levels a pixel a frame at 15 fps (Meander 0.03 to 0.10): nearly still.
 
@@ -203,18 +269,20 @@ Measured 2026-10-12 on an M3 Max.
 swift test --filter 'snowCrystal|pegBoard'
 PEGBOARD_STILLS=jobs.tsv swift test --filter pegBoardStills   # many stills in one run: a line each of file, width, moment and defaults, with tabs between
 SNAPSHOT_SCENE="Peg Board" SNAPSHOT_SECONDS=35 SNAPSHOT_DEFAULTS="pegboard.picture=sailboat,pegboard.speed=8,pegboard.seed=7" swift test --filter everySceneRenders
-PEGBOARD_STILL=docs/images/peg-board.jpg PEGBOARD_STILL_WIDTH=1600 SNAPSHOT_SECONDS=27.5 SNAPSHOT_DEFAULTS="pegboard.shows=1,pegboard.speed=8,pegboard.seed=6" swift test --filter pegBoardStill
+PEGBOARD_STILL=docs/images/peg-board.jpg PEGBOARD_STILL_WIDTH=1600 SNAPSHOT_SECONDS=27.5 SNAPSHOT_DEFAULTS="pegboard.pattern=crystal,pegboard.shows=1,pegboard.speed=8,pegboard.seed=6" swift test --filter pegBoardStill
 python3 -I docs/peg-board/draw.py Sources/Atrium/Resources sheet.png large    # draws the figures and writes the charts; the sheet is optional
 PEGBOARD_STILL=docs/images/peg-board-sailboat.jpg PEGBOARD_STILL_WIDTH=1600 PEGBOARD_HEAD_START=1 SNAPSHOT_SECONDS=0 SNAPSHOT_DEFAULTS="pegboard.picture=sailboat,pegboard.size=0" swift test --filter pegBoardStill
 ```
 
 - The tests: a crystal has six arms and stays on the sheet at all three sizes; every figure has a whole chart for each peg size, and the scene puts it up at that size; with pictures only, every figure goes up once before any comes again, in another order the next time round, and with everything shown both kinds come; a picture's order is outline first; the picture is the same at 15, 30 and 60 fps part-way through a build, mid-show and after the clear; the clear ends on an empty sheet, so nothing changes on the frame the next thing begins (when the pegs stayed as black shapes, that frame changed by 25 levels of 255; now by 1); the sheet follows Peg size and Shows while it runs; Settings' own copy is whole on its first frame and the desktop's is empty.
+- The patterns' tests: each of the seven kinds, at each size and from six seeds, lays each hole once and stays on the display. The eight kinds each come once a round, in a new order, none following itself.
 - **Stills are drawn at the size they are shown at** (`pegBoardStill`; with `PEGBOARD_HEAD_START=1` and `SNAPSHOT_SECONDS=0` it draws the first frame of Settings' own copy, every peg in at full light): a still reduced afterwards shows a weave in the dotted sheet. `docs/images/peg-board.jpg` is the third line above; `peg-board-sailboat.jpg` is the last, a figure whole at Large pegs; `Resources/preview-peg-board.jpg` is the first of those at 1200 wide. The crystal was picked from eight rolls. The sheets in `docs/peg-board/` are stills 756 pixels across, set side by side unreduced: `figures-*.jpg` each figure whole at one peg size; `round.jpg` the owl at Speed 8 from an empty sheet at 3, 11, 25, 45, 71.5, 73.5, 78 and 90 s; `light-show.jpg` the butterfly whole (`PEGBOARD_HEAD_START=1` with `SNAPSHOT_SECONDS` 3 to 23) under `pegboard.seed` 1, 3 and 6, which give the rings, the lobe and the band.
 - `draw.py`'s sheet is its charts at one size as plain discs, to look at while drawing. After a change, look at the app's own still of the figure at every size (`pegboard.size` 0, 1 and 2 in the line above) before keeping it.
 
 ## Shortcuts
 
-- A crystal is grown on the main thread, while the sheet is dark. One to fill a 6K display at Small pegs would want a thread of its own (`snowCrystal`'s `limit` holds it to 48 pitches meanwhile).
+- A crystal is grown on the main thread, while the sheet is dark, and so is a reef. One to fill a 6K display at Small pegs would want a thread of its own (`snowCrystal`'s `limit` holds it to 48 pitches meanwhile).
+- A plate is grown by looking at every hole of its window on every step: about 3 ms on a laptop at Small pegs, and about four times that on a display twice as wide.
 - The outline-first order looks through every peg left for each run: fine to about 5,000 pegs, too slow at 50,000.
 - A round's order is shuffled without a look at the round before, so the last figure of one round can be the first of the next: with pictures only, the same figure twice running, about one round in eleven.
 - Charts stop at 129 by 90 holes, so on a display much larger than a laptop's a picture sits in the middle of the sheet and does not grow. And a chart goes up only where it fits with a hole to spare all round: at Large pegs on a display under 804 points high (1280 by 800) the four figures of 30 rows (the tulip, the cactus, the balloon and the lighthouse) are not offered.
@@ -226,8 +294,10 @@ PEGBOARD_STILL=docs/images/peg-board-sailboat.jpg PEGBOARD_STILL_WIDTH=1600 PEGB
 
 **From Dave, having run it** at Large pegs and Patterns only on 2026-10-12 ([his words](#daves-feedback)):
 
-- **Pictures are hard to make out.** Figures drawn for pegs are to replace or join the cut-down ones.
-- **Only one pattern:** the crystals look alike at Large pegs. New kinds of pattern are being mocked up for him to pick from.
+- **Pictures are hard to make out:** answered with the app's own figures, drawn for pegs. [The pictures](#the-pictures) has what he said of them.
+- **Only one pattern:** answered with [seven more kinds](#the-patterns) of his picking, in turn with the crystal. He has not seen them running, nor what was [changed after his pick](#the-patterns).
+- **A reef's roots sit where the Dock is,** on the bottom rows of the sheet. Left as it is, on the lead's word.
+- **Blocks are bright:** three to four times as busy as a crystal and nearly three times its level, as the sheets he picked from said.
 
 **As the builders saw it on stills,** worst first; he has not spoken to these:
 
@@ -242,7 +312,7 @@ PEGBOARD_STILL=docs/images/peg-board-sailboat.jpg PEGBOARD_STILL_WIDTH=1600 PEGB
 
 ## Next ideas
 
-- Ornament drawn on the lattice instead of sampled: six-fold star patterns sit on a honeycomb exactly.
+- Ornament drawn on the lattice instead of sampled. (Six-fold star patterns sit on a honeycomb exactly, and each star is a hexagram: see `stars` under [Tried and dropped](#tried-and-dropped).)
 - More figures, and wide ones that fill a Large sheet (a train, a whale, a row of houses); and figures drawn for the 48 by 36 holes a 14-inch display shows where the display has them.
-- Other grown patterns beside the crystal. A rosette tried in the mock-ups read as a ship's wheel.
+- A rosette tried in the first mock-ups read as a ship's wheel; the rose is a disc with spokes only while it builds.
 - The pegs leaving one by one instead of fading with the sheet.

@@ -4,9 +4,9 @@ import SpriteKit
 @MainActor func pegBoard(size: CGSize) -> SKScene { PegBoard(size: size) }
 
 /// A black sheet of holes, edge to edge, with coloured translucent pegs pushed through it one at a time and lit from
-/// behind. It shows one thing after another: a snow crystal grown from the middle in the order it freezes, or a
-/// figure drawn for pegs and built outline first; each, once whole, under a slow light show; then the sheet
-/// goes dark and is cleared for the next.
+/// behind. It shows one thing after another: a pattern made fresh and built in the order it is made (a snow
+/// crystal, or one of seven other kinds, each in turn), or a figure drawn for pegs and built outline first; each,
+/// once whole, under a slow light show; then the sheet goes dark and is cleared for the next.
 /// One shader draws every peg: for each pixel it works out the hole it is nearest by arithmetic, reads that hole's
 /// colour and its place in the order from two small textures, and shades the peg's face from the distance to its
 /// middle. The glow on the paper is a third texture, stamped on the CPU as pegs go in (`Glow`, in the PegLattice
@@ -38,6 +38,8 @@ final class PegBoard: SKScene {
     }, standard: "Calm")
     /// A crystal's colours from its heart to its tips, by when each part froze: one family at a time.
     private static let families: [[UInt8]] = [[8, 8, 6, 6, 7, 7, 2, 6, 8], [8, 8, 4, 4, 3, 3, 1, 3, 8], [8, 8, 5, 5, 6, 6, 7, 6, 8]]
+    /// The four tones of a pattern other than the crystal (`Pattern`), as colours: three of a family and a bright one.
+    private static let tones: [[UInt8]] = [[6, 7, 2, 8], [1, 3, 4, 8], [5, 6, 7, 8], [7, 2, 3, 8], [6, 5, 4, 8]]
     /// Reiter's three numbers for crystals that come out well on a board this coarse: feathery, plump, narrow.
     private static let crystals: [(alpha: Float, beta: Float, gamma: Float)] = [(1, 0.5, 0.0005), (1, 0.35, 0.0035), (2, 0.3, 0.001), (1.5, 0.4, 0.006)]
     /// The pictures: the app's own figures, each at three sizes (Resources/peg-board-charts.txt, which docs/peg-board/draw.py draws).
@@ -81,8 +83,12 @@ final class PegBoard: SKScene {
     private var placed = 0.0, front = rate * lighting, since = 0, owed = 0.0, ticking = 0
     /// How many pegs the glow has; which texture holds its newer state, and which state of it each texture holds.
     private var glowing = 0, newest = 0, holds = [0, 0], made = 0
-    /// Whether a picture is on the sheet (or a crystal), the pictures not yet shown this round, and the light show.
+    /// Whether a picture is on the sheet (or a pattern), the pictures not yet shown this round, and the light show.
     private(set) var picture = false, unseen: [String] = [], show = lightShows[0]
+    /// The kind of pattern on the sheet, or the last that was: nil is a snow crystal. Whether there has been one
+    /// yet, and the kinds not yet shown this round.
+    private(set) var kind: PatternKind?
+    private var patterned = false, unshown: [PatternKind?] = []
     /// Whether it is the copy Settings runs behind its page, which opens on a whole sheet (`headStart`).
     private var ahead = false
     private var rng = SplitMix(state: 0)
@@ -93,9 +99,10 @@ final class PegBoard: SKScene {
         // ("pegboard.seed" is for the tests, which want the same sheets twice; nothing else sets it.)
         let seed = UInt64(max(UserDefaults.standard.integer(forKey: "pegboard.seed"), 0))
         rng = SplitMix(state: seed > 0 ? seed : .random(in: 1...UInt64.max))
-        // The first thing is the other kind from this: either, where both are shown. ("pegboard.picture" is for the
-        // tests and for stills: the picture to put up first.)
-        picture = UserDefaults.standard.string(forKey: "pegboard.picture") == nil && Bool.random(using: &rng)
+        // The first thing is the other kind from this: either, where both are shown. ("pegboard.picture" and
+        // "pegboard.pattern" are for the tests and for stills: the picture, or the kind of pattern, to put up first.)
+        let defaults = UserDefaults.standard
+        picture = defaults.string(forKey: "pegboard.picture") == nil && (Bool.random(using: &rng) || defaults.string(forKey: "pegboard.pattern") != nil)
         build()
         NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged), name: UserDefaults.didChangeNotification, object: nil)
     }
@@ -107,6 +114,7 @@ final class PegBoard: SKScene {
         built = Int(Self.pegSize.value)
         lattice = Lattice(width: size.width, height: size.height, pitch: Self.pitches[built])
         glow = Glow(for: lattice)
+        unshown = [] // a new sheet of holes is a new round of patterns
         func texture(_ width: Int, _ height: Int, smooth: Bool) -> SKMutableTexture {
             let texture = SKMutableTexture(size: CGSize(width: width, height: height))
             texture.filteringMode = smooth ? .linear : .nearest
@@ -151,8 +159,8 @@ final class PegBoard: SKScene {
         return (shows == 2 || (shows == 0 && !last)) && !fitting.isEmpty
     }
 
-    /// The next thing on an empty sheet: a picture's pegs in outline-first order or a new snow crystal's in the
-    /// order it froze, in the colours Settings names, all sent to the shader, and the light show it will have.
+    /// The next thing on an empty sheet: a picture's pegs in outline-first order or a new pattern's in the order
+    /// it was made, in the colours Settings names, all sent to the shader, and the light show it will have.
     private func begin() {
         picture = wantsPicture(after: picture)
         pegs = [UInt8](repeating: 0, count: lattice.count)
@@ -161,9 +169,13 @@ final class PegBoard: SKScene {
             let (col0, row0) = ((lattice.cols - chart.cols) / 2, (lattice.rows - chart.rows) / 2 & ~1)
             for row in 0..<chart.rows { for col in 0..<chart.cols { pegs[(row0 + row) * lattice.cols + col0 + col] = chart.pegs[row * chart.cols + col] } }
             sequence = outlineFirst(pegs: pegs, cols: lattice.cols, rows: lattice.rows)
+        } else if let kind = nextKind() {
+            let design = pattern(kind, on: lattice, using: &rng), tones = Self.tones.randomElement(using: &rng)!
+            sequence = design.order
+            for (hole, tone) in zip(design.order, design.tone) { pegs[hole] = tones[Int(tone)] }
         } else {
-            let kind = Self.crystals.randomElement(using: &rng)!, family = Self.families.randomElement(using: &rng)!
-            let crystal = snowCrystal(on: lattice, alpha: kind.alpha, beta: kind.beta, gamma: kind.gamma, using: &rng)
+            let numbers = Self.crystals.randomElement(using: &rng)!, family = Self.families.randomElement(using: &rng)!
+            let crystal = snowCrystal(on: lattice, alpha: numbers.alpha, beta: numbers.beta, gamma: numbers.gamma, using: &rng)
             sequence = [Int](repeating: 0, count: crystal.count)
             for hole in 0..<lattice.count where crystal.order[hole] >= 0 {
                 sequence[Int(crystal.order[hole])] = hole
@@ -194,6 +206,21 @@ final class PegBoard: SKScene {
         glow.clear()
         for texture in glowTextures { send(glow.bytes, to: texture) }
         (phase, placed, since, glowing, made, holds) = (.building, 0, 0, 0, made + 1, [made + 1, made + 1])
+    }
+
+    /// The next kind of pattern: each in turn, in a new order every round, and never the same twice running.
+    private func nextKind() -> PatternKind? {
+        defer { patterned = true }
+        if made == 0, let asked = UserDefaults.standard.string(forKey: "pegboard.pattern"), asked == "crystal" || PatternKind(rawValue: asked) != nil {
+            kind = PatternKind(rawValue: asked)
+            return kind
+        }
+        if unshown.isEmpty {
+            unshown = (PatternKind.allCases as [PatternKind?] + [nil]).shuffled(using: &rng)
+            if patterned, unshown.last! == kind { unshown.swapAt(0, unshown.count - 1) }
+        }
+        kind = unshown.removeLast()
+        return kind
     }
 
     /// Every peg of what is on the sheet in at once, lit and with its glow: straight to its light show.

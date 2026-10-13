@@ -303,6 +303,58 @@ import Testing
     #expect(empty < 500 && whole > 20000 && larger > 20000)
 }
 
+/// Every kind of pattern, at each peg size on a laptop's display and from six seeds, lays each hole once, every
+/// peg on the display and in one of the four tones, and is more than a handful of pegs. Printed for
+/// docs/peg-board.md: how many pegs each is, and how long it took to make. (The seeds are ones whose first number
+/// is spread evenly from 0 to 1, since a kind's first choice, of a size or a rule, is made with it: seeds 1 to 3
+/// made the same choice.)
+@Test func pegBoardPatternsFitTheSheet() {
+    for pitch in [32, 16, 32.0 / 3] {
+        let lattice = Lattice(width: 1512, height: 982, pitch: pitch)
+        for kind in PatternKind.allCases {
+            var counts: [Int] = [], took: [Double] = []
+            for seed in [41, 61, 14, 12, 42, 32] as [UInt64] {
+                var rng = SplitMix(state: seed)
+                let clock = ContinuousClock(), began = clock.now
+                let made = pattern(kind, on: lattice, using: &rng), span = clock.now - began
+                took.append(Double(span.components.attoseconds) / 1e15 + Double(span.components.seconds) * 1000)
+                counts.append(made.order.count)
+                #expect(made.order.count == made.tone.count && Set(made.order).count == made.order.count, "\(kind) lays a hole twice")
+                #expect(made.tone.allSatisfy { $0 < 4 })
+                #expect(made.order.allSatisfy { (1...lattice.cols - 2).contains($0 % lattice.cols) && (1...lattice.rows - 2).contains($0 / lattice.cols) }, "\(kind) is off the display")
+                #expect(made.order.count >= 60, "\(kind) at a pitch of \(pitch) from seed \(seed) is \(made.order.count) pegs")
+            }
+            print(String(format: "Peg Board's %@ on %d by %d holes: %d to %d pegs; made in %.1f ms at the most", kind.rawValue, lattice.cols - 2, lattice.rows - 2,
+                         counts.min()!, counts.max()!, took.max()!))
+        }
+    }
+}
+
+/// The kinds of pattern take turns: the snow crystal and the seven others each come once, in some order, before any
+/// comes again; the order is a new one each round; and none follows itself, across rounds either. Three rounds at
+/// Large pegs and the slider's top speed.
+@MainActor @Test func pegBoardShowsEveryKindOfPatternInTurn() {
+    let keys = ["pegboard.seed", "pegboard.size", "pegboard.shows", "pegboard.speed"]
+    defer { keys.forEach(UserDefaults.standard.removeObject) }
+    UserDefaults.standard.set(1.0, forKey: "pegboard.shows") // patterns only
+    UserDefaults.standard.set(0.0, forKey: "pegboard.size")
+    UserDefaults.standard.set(20.0, forKey: "pegboard.speed")
+    UserDefaults.standard.set(7, forKey: "pegboard.seed")
+    let scene = PegBoard(size: CGSize(width: 1512, height: 982)), every = Set(PatternKind.allCases as [PatternKind?] + [nil])
+    var shown = [scene.kind], time = 100.0, was = scene.phase
+    while shown.count < 25 {
+        time += 0.1
+        scene.update(time)
+        if was == .clearing, scene.phase == .building { shown.append(scene.kind) }
+        was = scene.phase
+    }
+    let rounds = (0..<3).map { Array(shown[$0 * 8..<$0 * 8 + 8]) }
+    print("Peg Board's patterns, three rounds:", rounds.map { $0.map { $0?.rawValue ?? "crystal" }.joined(separator: " ") }.joined(separator: " | "), "| then", shown[24]?.rawValue ?? "crystal")
+    #expect(every.count == 8 && rounds.allSatisfy { Set($0) == every }, "a kind came twice before another had come once")
+    #expect(Set(rounds).count == 3, "two rounds went in the same order")
+    #expect(zip(shown, shown.dropFirst()).allSatisfy { $0 != $1 }, "a kind followed itself")
+}
+
 /// Draws the sheet as it would be on a display of 1512 by 982 points, `width` pixels across, with Settings values
 /// as the render test takes them ("key=value,key=value"), and saves it (.png or .jpg). `moment` is seconds from
 /// the start; or, like "40%", that far through the first thing's build; or "whole", with Settings' head start: all
