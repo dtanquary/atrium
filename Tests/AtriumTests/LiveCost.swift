@@ -31,7 +31,10 @@ func liveCost() async throws {
     let first = try #require(chosen.first, "no wallpaper named \(names ?? [])")
     // No App Nap, and no display sleep: a view on a sleeping display draws nothing.
     let activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .idleDisplaySleepDisabled], reason: "Measuring wallpapers")
-    defer { ProcessInfo.processInfo.endActivity(activity) }
+    defer {
+        ProcessInfo.processInfo.endActivity(activity)
+        for knob in Power.knobs { UserDefaults.standard.removeObject(forKey: knob.key) }
+    }
     NSApplication.shared.setActivationPolicy(.accessory)
     let screen = try #require(NSScreen.screens.first)
 
@@ -60,6 +63,9 @@ func liveCost() async throws {
         w.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle]
         w.ignoresMouseEvents = true
         w.isReleasedWhenClosed = false
+        // A scene with a battery cap of its own has the view take the app's rate as it's shown (`applyPowerState`), so
+        // every power pick is set to this rate, whatever the Mac runs on; mains power's too, so no cap applies.
+        for knob in Power.knobs { UserDefaults.standard.set(Double(Power.rates.firstIndex(of: fps) ?? 3), forKey: knob.key) }
         let v = WallpaperView()
         v.preferredFramesPerSecond = max(fps, 1)
         v.frozen = fps == 0
