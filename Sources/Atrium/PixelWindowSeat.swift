@@ -412,7 +412,10 @@ final class PixelWindowSeat: SKScene, BatteryPaced {
         let (gw, gh) = (glass.w, glass.h), mats = paint.mats
         let tick = UInt32(truncatingIfNeeded: Int(clock * 3))
         let lightsOn = paint.lights > 0
-        picture.withUnsafeMutableBufferPointer { out in
+        // the rings and tables as locals, so reading them in the loops below doesn't check for exclusive access or
+        // copy-on-write at every pixel
+        let (land, glow, tall, cloud, storm, sky, glint, rows, paint, dither) = (land, glow, tall, cloud, storm, sky, glint, rows, paint, dither)
+        ceiling.withUnsafeMutableBufferPointer { ceiling in picture.withUnsafeMutableBufferPointer { out in
             for i in horizon * gw..<gh * gw { out[i] = sky[i] }
             // The ground, nearest row first. Land that stands up (mountains, and downtown's towers) paints a column
             // from its own row up to its top, and each column of the picture remembers how high the ground in front
@@ -507,7 +510,7 @@ final class PixelWindowSeat: SKScene, BatteryPaced {
                 out[spot.at] = flash && spot.flash > 196 ? paint.wingFlash[Int(spot.part)] : paint.wing[Int(spot.part)]
                 if spot.flash > 236, flash || paint.tipOn { out[spot.at] = flash ? 0xFFFF_FFFF : paint.tip }
             }
-        }
+        } }
         let shot = picture
         texture.modifyPixelData { data, length in
             shot.withUnsafeBytes { data?.copyMemory(from: $0.baseAddress!, byteCount: min(length, $0.count)) }
