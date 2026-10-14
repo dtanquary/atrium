@@ -804,6 +804,8 @@ What stands between this and taking `unfinished` off, as its builder sees it. **
 - **Not run:** the app itself overnight (eight hours of the river's time have been run offscreen and looked at for a drift in pace and for banding: "The floodplain to every edge", the long run); a real portrait or ultrawide display (both drawn offscreen), or two displays; the live app under `sample`, which the render test's costs don't stand in for; the river in motion at sizes other than 28 pt, and "Old courses stay" and "Lakes last" away from their standard values, beyond what the tests draw.
 - **What every wallpaper needs:** its screenshot and its Settings preview (`docs/README.md`), the README and site entries, the version bump, and the lines drafted for the two CLAUDE.md files, which are Dave's.
 
+**On battery it runs at 12 fps at most** (`batteryRate` in Scenes.swift; 2026-10-13). The fastest bank moves about 6 device pixels (2x on a 14-inch MacBook Pro, 3024 × 1964) a second at 1× (0.16–0.21 px a frame at 30 fps, above): 0.5 px a frame at 12. The river steps 10 times a second on elapsed time and blends between steps every frame, so it keeps its pace at any rate. At Speed 4× a bank steps 2 px a frame; the colour crossfade takes 2 s.
+
 
 ## Checking it
 - `SNAPSHOT_SCENE=Meander swift test -c release -Xswiftc -enable-testing --filter everySceneRenders` renders a new river in whatever Settings has. For the same river twice, `meander.seed` in `SNAPSHOT_DEFAULTS` (nothing but tests and snapshots sets it); `meander.look=1` is the old map; `meander.colors` and `meander.inks` take a colour family by its name (relief's and the old map's); `meander.valley=1` is Full view; `SNAPSHOT_APPEARANCE=light|dark` is the mode.

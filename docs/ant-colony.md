@@ -188,6 +188,8 @@ Measured 2026-10-12 on an M3 Max with other work running, a debug build (the Ant
 - **Before a farm fades up** its nest is baked and its ants run three minutes on, off the main thread: 0.06 s and 0.03 s on a 14-inch display at Medium, 0.18 and 0.11 at Small; 0.22 and 0.12 on a 6K display at Medium; and at Small on 6K, the largest tank there is (2,545 by 1,432 cells), 0.87 and 0.12, so about a second of black ([Still open](#still-open)). The surroundings follow the nest (13 ms on a 14-inch display, 190 ms for the largest tank) and again each 4000th of the digging.
 - Not measured: a release build, a slower Mac. The research's own timing sketch of a simpler shader ran 0.35, 0.7 and 1.0 ms of GPU at 14-inch, 5K and 6K on the same machine.
 
+**On battery it runs at 20 fps at most** (`batteryRate` in Scenes.swift; 2026-10-13). Walking ants are the fastest thing: up to 1.75 body lengths a second (pace 1.4 × tempo 1.25), so a Medium ant, 44 device pixels (2x on a 14-inch MacBook Pro, 3024 × 1964) long, moves 44–77 px a second, 2.2–3.9 px a frame at 20 fps, with its legs at about 3 Hz. Large ants (72 px) step up to 6 px. Speed doesn't make ants walk faster. Its sprites are placed every frame, so the cap saves CPU as well as GPU.
+
 ## Checking it
 
 ```sh

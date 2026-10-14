@@ -79,6 +79,8 @@ Palettes (`nebulaPalettes`: background, main gas, secondary gas, hot core), each
 ## Performance
 CPU 0.45 ms and GPU about 1.6 ms per frame (release, 2x; the dissolve's thickness adds about 0.07 ms over the old 1.52). The GPU cost is mostly the three fbm calls (5 octaves each) plus two noise octaves for dust. During the 90 s change both nebulas are drawn, about 3.1 ms, as the old two-scene crossfade was. That's acceptable once every 8 minutes. The Settings grade is a handful of arithmetic per pixel and doesn't show in the measurement.
 
+**On battery it runs at 15 fps at most** (`batteryRate` in Scenes.swift; 2026-10-13). The fastest thing in it is the cloud's drift, `u_now * 0.005` in Shaders.swift with its domain warp, about 8–15 device pixels (2x on a 14-inch MacBook Pro, 3024 × 1964) a second: 1 px a frame at 15 fps. The stars twinkle at 0.64 Hz at most (`starField`), far under a third of 15, and the new cloud dissolves in over 90 s.
+
 ## Gotchas and shortcuts
 - Every roll is random. To compare palettes, pin one with `SNAPSHOT_DEFAULTS="nebula.palette=Hubble"`. To see another moment, raise `SNAPSHOT_SECONDS`: the drift runs on `u_now`, which moves with it.
 - Helper functions can't read uniforms, so `brightStar` takes `t` as a parameter.

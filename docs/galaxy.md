@@ -127,6 +127,8 @@ After the research pass took the worst case to 2.5 ms, these savings brought it 
 
 Thinning the star grain made no measurable difference. Pixels beyond 1.6 galaxy radii skip the disc work entirely (steep kinds use the rounder `rh`). During the 90 s dissolve both galaxies render, so it roughly doubles (`ponytail:` in `handOver`).
 
+**On battery it runs at 12 fps at most** (`batteryRate` in Scenes.swift; 2026-10-13). The disc turns once in 720 s at 1× (`2 * .pi / 720 * turnRate` in `update`), so its rim, about 864 device pixels (2x on a 14-inch MacBook Pro, 3024 × 1964) from the middle, moves 7.5 px a second: 0.6 px a frame at 12 fps, 2.5 at Rotation 4×. The stars twinkle at 0.41 Hz at most, and a new galaxy crossfades in over 90 s.
+
 ## Gotchas and shortcuts
 - **`u_texture` is taken:** SpriteKit already defines it as the sprite's texture, so a uniform with that name fails to compile ("redefinition of parameter"). The kind's raggedness and dust ride in `u_arms` instead.
 - **Stars and knots in a turning, tilted disc:** hashed cells live in `g` so they turn with it, but distances are measured on screen through `m`. Otherwise tilt squashes the stars into dashes.

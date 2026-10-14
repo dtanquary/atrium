@@ -28,6 +28,8 @@ Solar System Tour's sister: slow pans and zooms across the best real photos of w
 ## Performance
 The same as Solar System Tour's photos: about 0.5 ms CPU and 0.3 ms GPU a frame.
 
+**On battery it runs at 20 fps at most** (`batteryRate` in Scenes.swift; 2026-10-13). A view pans up to 0.6 of the screen's width at 1.25× zoom over its 66 s (`PhotoTour.swift`), at most about 34 device pixels (2x on a 14-inch MacBook Pro, 3024 × 1964) a second: 1.7 px a frame at 20 fps, which sharp star fields need (15 fps would step 2.3). With Each view for at its shortest, 20 s, a pan reaches about 87 px a second, 4.4 px a frame. The dissolve between views takes 6 s.
+
 ## Dave's feedback and decisions
 - 2026-09-28: "what are your thoughts on a similar 'Galactic Tour' where we find the highest quality images from anywhere in the universe, famous nebula, black holes, etc … would it make sense to combine into a single wallpaper or have two?" Two wallpapers on one engine; the name Deep Space Tour, since "galactic" means our own galaxy. Show holds by type. Colour handled as in Solar System Tour. The same Caption settings ("i think same or similar settings would be needing on the galactic tour too"), under `deep.…`.
 

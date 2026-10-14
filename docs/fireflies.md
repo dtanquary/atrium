@@ -86,6 +86,8 @@ CPU 0.54 ms and GPU 0.52 ms per frame (release build, 2x, 2026-09-26).
   ponytail: crop each slice's sprite to the rows its distances occupy if the GPU cost matters.
 - **Memory:** the photo is 4096×1461 RGBA, about 24 MB decoded.
 
+**On battery it runs at 20 fps at most** (`batteryRate` in Scenes.swift; 2026-10-13). The nearest flies, 3 m away, drift 0.05 m/s, about 50 device pixels (2x on a 14-inch MacBook Pro, 3024 × 1964) a second (14 for a typical fly 10 m off): 2.5 px a frame at 20 fps, and they are large soft orbs, which hide a step. The glow lasts 3 s and the stars twinkle at 0.64 Hz at most. At Speed 2× the nearest step 5 px.
+
 ## Gotchas and shortcuts
 - **Fading:** orbs fade with node alpha, which a SpriteKit custom shader gets as `v_color_mix.a`.
 - **Metal naming:** `half` is a reserved word in Metal, so don't name a shader variable that.

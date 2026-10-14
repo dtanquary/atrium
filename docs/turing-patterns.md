@@ -80,6 +80,8 @@ With Motion, a frame at 30 fps (2 steps) costs about 1.1 ms of CPU with Regrow a
 
 **Busyness** (rendered frames 1/15 s apart, average grey-level change per pixel, 90 s in, never a jump): Still 0.03, Regrow 0.07 on Coral, 0.11 on Holes and 0.05 on Spots, and Flow 0.21. That's against 0.22 for Game of Life's Calm look and 1.41 for Classic. Regrow's change is local (a few patches at a time), so these averages undersell how visible it is.
 
+**On battery it runs at 15 fps at most** (`batteryRate` in Scenes.swift; 2026-10-13). The flow current and the front of a regrowing pattern move about 7 device pixels (2x on a 14-inch MacBook Pro, 3024 × 1964) a second (0.012 cells a step; 75 seeds filling in 20 s): 0.5 px a frame at 15 fps. The simulation runs on elapsed time but takes at most 12 steps a frame, so at Speed 3× (180 steps a second) 15 fps is the lowest rate that keeps its pace; a lower cap would slow it. The cap saves GPU only, since the steps a second, and their CPU, stay the same.
+
 ## Gotchas and shortcuts
 - **`dFdx` doesn't exist in SKShader.** SpriteKit's translator doesn't map GLSL's `dFdx`/`dFdy`, and the shader fails to compile ("did you mean 'dfdx'?"). Metal's `dfdx`/`dfdy` pass straight through and work.
 - **Seed size:** see How it works. Anything smaller than about 9 cells across dissolves.

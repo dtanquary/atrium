@@ -273,6 +273,8 @@ Measured 2026-10-12 on an M3 Max.
 - **How busy it is,** by `docs/meander/measure/busy.py` (the share of pixels on a brightness edge) on the app's stills at Softness 0: a crystal 5.5 to 9.2%; a figure at Large pegs 3.6% (the rocket) to 9.5% (the butterfly), and the butterfly at Medium and Small pegs 18%, since every peg has a rim (the figures' stills measured 3024 pixels across). The crystal that scores 9.2% is 6.2% at Softness 0.5 and 2.3% at 1. The wallpapers Dave has kept score 0 to 3.3% (Fish Tank 8.5%), and Game of Life's Classic look, which he called "so busy and wild", 11.1%. Its mean level is 0.08 to 0.15, like Nebula's.
 - **How much it moves:** a build at speed 1 changes 0.004 grey levels a pixel a frame at 15 fps (Meander 0.03 to 0.10): nearly still.
 
+**On battery it runs at 12 fps at most** (`batteryRate` in Scenes.swift; 2026-10-13). Nothing in it travels: a peg fades up over 1 s, six a second at most, and the light shows are waves of 20 to 40 s, so a pixel changes by under a hundredth of a grey level a frame even at 12 fps. At Speed 20 the fading front only widens.
+
 ## Checking it
 
 ```sh

@@ -71,6 +71,7 @@ A slow tour of the Sun's family in the best photos spacecraft and telescopes hav
 - **Memory:** two textures at up to screen size (24 MB each at 3024×1964), plus a transient full decode while cutting (up to 70 MB, in the background).
 - **Cutting** takes 110–240 ms per photo. Only the first view is cut on the main thread, when the scene is built, so the render test has a photo.
 - **App size:** Solar System Tour's photos are about 190 MB with the views from the surface (2026-09-28).
+- **On battery it runs at 20 fps at most** (`batteryRate` in Scenes.swift; 2026-10-13). Its pans are Deep Space Tour's: up to about 34 device pixels (2x on a 14-inch MacBook Pro, 3024 × 1964) a second, 1.7 px a frame at 20 fps, and 4.4 with Each view for at its shortest. The live Sun's plasma moves about 7 px a second and its eruptions up to 17; the Moon is still.
 
 ## Gotchas and shortcuts
 - **SpriteKit leaves a texture uniform undeclared while its texture is nil,** and the shader then fails to compile. Both slots start with a 1-pixel black texture.
