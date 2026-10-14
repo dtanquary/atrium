@@ -3,8 +3,10 @@ import Testing
 @testable import Atrium
 
 /// `setIfChanged` writes, and so tells every observer, only when the value differs: the second of two equal writes
-/// posts nothing. A suite of its own, so writes from other tests or a running Atrium aren't counted.
-@Test func unchangedWritesPostNothing() {
+/// posts nothing. A suite of its own, so writes from other tests or a running Atrium aren't counted. On the main actor,
+/// since a change to any suite is posted to every observer of `didChangeNotification`, scenes from other tests among
+/// them, which trap off the main thread.
+@MainActor @Test func unchangedWritesPostNothing() {
     let name = "com.dtanquary.atrium.tests.\(UUID().uuidString)", defaults = UserDefaults(suiteName: name)!
     defer { defaults.removePersistentDomain(forName: name) }
     var posted = 0
