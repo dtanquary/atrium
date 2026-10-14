@@ -1,5 +1,5 @@
 # Etching's pictures: each route (docs/etching/bake.py) is the stylus's path over one of these, redrawn as a single line.
-# Public domain or CC0 but for Hooke's flea and ant, whose scans are CC BY 4.0 and require this attribution. file	subject	author	licence	source
+# Public domain or CC0 but for Hooke's flea and ant (Wellcome Collection) and Leonardo's six Codex Madrid sheets (Biblioteca Nacional de España), whose scans are CC BY 4.0 and require these attributions. file	subject	author	licence	source
 etching-wave.route	Under the Wave off Kanagawa, c. 1830-32	Katsushika Hokusai; The Metropolitan Museum of Art, 45434	CC0	https://www.metmuseum.org/art/collection/search/45434
 etching-rhinoceros.route	The Rhinoceros, 1515	Albrecht Dürer; The Metropolitan Museum of Art, 356497	CC0	https://www.metmuseum.org/art/collection/search/356497
 etching-flea.route	A flea, Micrographia, Schem. XXXIV, 1665	Robert Hooke; Wellcome Collection, L0084699	CC BY 4.0	https://wellcomecollection.org/works/ajveb66y
@@ -34,3 +34,9 @@ etching-fountain.route	Fountain with chirping birds, Le diverse et artificiose m
 etching-furnaces.route	Glass furnaces, De re metallica, book XII, p. 473, 1556	Georgius Agricola; Science History Institute, Philadelphia	Public domain	https://digital.sciencehistory.org/works/z4o90mf
 etching-peacocks.route	Water clock of the peacocks, Book of the Knowledge of Ingenious Mechanical Devices, a copy of 1315 (part)	al-Jazari; The Metropolitan Museum of Art, 451302	CC0	https://www.metmuseum.org/art/collection/search/451302
 etching-dragon.route	Siege tower and the dragon engine, De re militari, 1472	Roberto Valturio, the woodcuts attributed to Matteo de' Pasti; The Metropolitan Museum of Art, 358276	CC0	https://www.metmuseum.org/art/collection/search/358276
+etching-spring.route	Clock spring and its equalising gear, Codex Madrid I, f. 4r, c. 1493-97	Leonardo da Vinci. Imágenes procedentes de los fondos de la Biblioteca Nacional de España, Mss/8937	CC BY 4.0	https://bnedigital.bne.es/bd/card?oid=0000040157&site=bdh
+etching-fusee.route	Spring barrel with a fusee, Codex Madrid I, f. 16r, c. 1493-97	Leonardo da Vinci. Imágenes procedentes de los fondos de la Biblioteca Nacional de España, Mss/8937	CC BY 4.0	https://bnedigital.bne.es/bd/card?oid=0000040157&site=bdh
+etching-twister.route	Thread-twisting machine with many spindles, Codex Madrid I, f. 67v, c. 1493-97	Leonardo da Vinci. Imágenes procedentes de los fondos de la Biblioteca Nacional de España, Mss/8937	CC BY 4.0	https://bnedigital.bne.es/bd/card?oid=0000040157&site=bdh
+etching-sector.route	Sector gear with rod and rope drive, Codex Madrid I, f. 30v, c. 1493-97	Leonardo da Vinci. Imágenes procedentes de los fondos de la Biblioteca Nacional de España, Mss/8937	CC BY 4.0	https://bnedigital.bne.es/bd/card?oid=0000040157&site=bdh
+etching-hammers.route	Winch driven by wedge hammers, Codex Madrid I, f. 92v, c. 1493-97	Leonardo da Vinci. Imágenes procedentes de los fondos de la Biblioteca Nacional de España, Mss/8937	CC BY 4.0	https://bnedigital.bne.es/bd/card?oid=0000040157&site=bdh
+etching-rack.route	A beam raised on a rack and lever, Codex Madrid I, f. 29r, c. 1493-97	Leonardo da Vinci. Imágenes procedentes de los fondos de la Biblioteca Nacional de España, Mss/8937	CC BY 4.0	https://bnedigital.bne.es/bd/card?oid=0000040157&site=bdh

@@ -24,10 +24,11 @@ import Testing
 /// the steps its heading promises, on the standard grid or the fine one of twice as many cells each way, and the
 /// fine one takes the longer. The Picture menu's pick is stored by place, so each picture is where it was put.
 @MainActor @Test func etchingHasEveryPictureAtBothWidths() throws {
-    #expect(Etching.pictures.count == 34 && Etching.picture.range.upperBound == 34)
+    #expect(Etching.pictures.count == 40 && Etching.picture.range.upperBound == 40)
     #expect(Etching.pictures.map(\.file) == ["wave", "rhinoceros", "flea", "interlace", "flyer", "mishima", "velocipede", "airship", "polyhedra", "kajikazawa", "stars", "bands", "pontneuf",
                                              "rotonda", "ant", "fanlight", "crystal", "stjerneborg", "telescope", "press", "waterworks", "steamer", "balloons", "cayley", "roadengine",
-                                             "draught", "centres", "screw", "bear", "wing", "fountain", "furnaces", "peacocks", "dragon"])
+                                             "draught", "centres", "screw", "bear", "wing", "fountain", "furnaces", "peacocks", "dragon",
+                                             "spring", "fusee", "twister", "sector", "hammers", "rack"])
     #expect(!Etching.pictures.contains { $0.name.contains("Notre") }) // the Waterworks is a pump house; the bridge's name is no part of the picture
     for (place, picture) in Etching.pictures.enumerated() {
         let alone = Etching.fineOnly[place], seconds = Etching.seconds.map { $0[place] }

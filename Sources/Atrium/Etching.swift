@@ -31,6 +31,8 @@ final class Etching: SKScene {
         ("Ship Draught", "draught"), ("Bridge Centres", "centres"),
         ("Leonardo's Aerial Screw", "screw"), ("Leonardo's Bear", "bear"), ("Leonardo's Wing", "wing"), ("Ramelli's Fountain", "fountain"),
         ("Glass Furnaces", "furnaces"), ("Peacock Clock", "peacocks"), ("Dragon Engine", "dragon"),
+        ("Leonardo's Clock Spring", "spring"), ("Leonardo's Fusee", "fusee"), ("Leonardo's Thread Twister", "twister"),
+        ("Leonardo's Sector Gear", "sector"), ("Leonardo's Hammer Winch", "hammers"), ("Leonardo's Rack and Lever", "rack"),
     ]
     /// The Picture menu's order, which is not the one its picks are stored by: Random, then every picture by its
     /// name, a leading "The", "A" or "An" left out of the comparison. Worked out from the names, so a new picture

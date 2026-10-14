@@ -25,6 +25,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 WELLCOME = "https://iiif.wellcomecollection.org/image/%s/full/max/0/default.jpg"
 HYDE_PARK = ("https://archive.org/download/McGillLibrary-rbsc_building-erected-hyde-park_folioNA6750L6D71852-21979/rbsc_building-erected-hyde-park_folioNA6750L6D71852"
              "_jp2.zip/rbsc_building-erected-hyde-park_folioNA6750L6D71852_jp2%%2Frbsc_building-erected-hyde-park_folioNA6750L6D71852_%s.jp2")
+MADRID = "https://bnedigital.bne.es/bd/es/viewer?id=1354ee8e-5c8d-4f9c-bb4c-6963121b7a7e&page=%d"
 
 PICTURES = {   # name: file, source, crop as fractions of the file, tone gamma, then options (rot, invert, lift, blank, flatten)
     "wave": ("45434-DP130155.jpg", "https://images.metmuseum.org/CRDImages/as/original/DP130155.jpg", (0.0, 0.0, 1.0, 1.0), 1.0, {}),
@@ -85,6 +86,15 @@ PICTURES = {   # name: file, source, crop as fractions of the file, tone gamma, 
                  dict(lift=0.2, blank=[(0.0, 0.86, 0.20, 1.0)], flatten="paper")),   # its bottom edge is not to move: under it is a bent crank that, alone, reads as a hooked cross
     "dragon": ("358276-DP108930.jpg", "https://images.metmuseum.org/CRDImages/dp/original/DP108930.jpg", (0.105, 0.035, 0.895, 0.835), 1.0,
                dict(blank=[(0.497, 0.0, 0.522, 1.0), (0.0, 0.0, 0.33, 0.115), (0.74, 0.0, 1.0, 0.135)])),          # two facing pages: the gutter painted out
+    # Leonardo's Codex Madrid I (Biblioteca Nacional de España, Mss/8937): each file is that page of BNE's own viewer, downloaded
+    # from its panel as a JPEG (1578 x 2174) and renamed by its folio. The blanks paint out the page's writing.
+    "spring": ("bne-mss8937-f004r.jpg", MADRID % 20, (0.054, 0.204, 0.951, 0.623), 1.0, dict(lift=0.15, blank=[(0.88, 0.0, 1.0, 1.0)], flatten="through")),
+    "fusee": ("bne-mss8937-f016r.jpg", MADRID % 44, (0.044, 0.064, 0.936, 0.482), 1.0, dict(lift=0.15, blank=[(0.0, 0.76, 0.21, 1.0), (0.0, 0.0, 1.0, 0.05)], flatten="through")),
+    "twister": ("bne-mss8937-f067v.jpg", MADRID % 131, (0.112, 0.100, 0.888, 0.463), 1.0,
+                dict(lift=0.15, blank=[(0.19, 0.0, 0.77, 0.165), (0.0, 0.0, 0.105, 0.21), (0.0, 0.6, 0.11, 1.0), (0.905, 0.27, 1.0, 1.0), (0.78, 0.0, 0.845, 0.16)], flatten="through")),
+    "sector": ("bne-mss8937-f030v.jpg", MADRID % 73, (0.029, 0.087, 0.979, 0.521), 1.0, dict(lift=0.15, blank=[(0.1, 0.0, 0.92, 0.205)], flatten="through")),
+    "hammers": ("bne-mss8937-f092v.jpg", MADRID % 181, (0.015, 0.036, 0.985, 0.505), 1.0, dict(lift=0.15, blank=[(0.1, 0.80, 0.66, 1.0)], flatten="through")),
+    "rack": ("bne-mss8937-f029r.jpg", MADRID % 70, (0.093, 0.219, 0.907, 0.598), 1.0, dict(lift=0.15, blank=[(0.28, 0.0, 0.82, 0.14)], flatten="through")),
 }
 FINE_ONLY = {"pontneuf"}   # a muddle at the standard line: no standard route is baked, and the app draws it fine whatever Detail says
 
@@ -97,9 +107,11 @@ def flattened(path, through, wide=0.04):
     before `darkness` can take one tone as bare screen. The paper's tone is taken channel by channel from the sheet
     itself (the 85th percentile of each neighbourhood `wide` of the sheet's width across, on a copy an eighth the
     size, then blurred by half that), and each channel is divided by it, so stains and the sheet's darker edges come
-    out as bare paper. `through` takes the other side's writing out as well: on the scans of Leonardo's Codex Madrid
-    it shows through 14 to 19% darker than the paper in red but only 6 to 12% in green, where the ink is 50 to 80%
-    darker in both, so twice the green less the red keeps the ink and cancels what shows through."""
+    out as bare paper. `through` takes the other side's writing out as well: on scans of Leonardo's Codex Madrid it
+    shows through more in red than in green (14 to 19% darker than the paper against 6 to 12% on the copies the
+    research measured; 10 to 18% against 6 to 14% on the library's own files, which ship), where the ink is 50 to
+    85% darker in both, so twice the green less the red keeps the ink and takes most of what shows through away;
+    the pictures' `lift` drops the rest."""
     a = np.asarray(Image.open(path).convert("RGB"), np.float32)
     h, w = a.shape[:2]
     small = np.asarray(Image.fromarray(a.astype(np.uint8)).resize((w // 8, h // 8), Image.BOX), np.float32)
