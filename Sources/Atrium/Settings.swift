@@ -448,7 +448,7 @@ struct AboutPage: View {
                 group("Solar System Tour", "Photos from NASA, ESA, JAXA and the people who processed them", "solar-photos.tsv")
                 group("Deep Space Tour", "Photos from ESA/Hubble, ESA/Webb, ESO, NOIRLab, Euclid, Chandra and the EHT", "deep-photos.tsv")
                 group("Black Hole", "The Milky Way from ESO, and the HYG catalogue's stars", "blackhole-credits.tsv")
-                group("Etching", "Prints, plates and a map from The Met, Wellcome Collection, the Getty Research Institute, the Boston Public Library and the US Patent Office", "etching-credits.tsv")
+                group("Etching", "Prints, plates, drawings and a map from The Met, Wellcome Collection, the Library of Congress, the Science History Institute, the US Patent Office and six more libraries and museums", "etching-credits.tsv")
             } header: {
                 Text("Photos")
             } footer: {

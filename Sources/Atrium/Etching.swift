@@ -19,20 +19,33 @@ import Synchronization
 final class Etching: SKScene {
     /// The set: each picture's name in the Picture menu, and its route's file (`etching-<file>.route`). Each one's
     /// source and licence is in Resources/etching-credits.tsv and docs/etching.md. The menu's pick is stored by
-    /// place, so a new picture goes at the end and none is moved.
+    /// place, so a new picture goes at the end and none is moved; the menu lists them by name (`listed`).
     nonisolated static let pictures: [(name: String, file: String)] = [
         ("The Great Wave", "wave"), ("The Rhinoceros", "rhinoceros"), ("A Flea", "flea"), ("Interlace", "interlace"),
         ("Flying Machine", "flyer"), ("Mishima Pass", "mishima"),
         ("Velocipede", "velocipede"), ("Airship", "airship"), ("Polyhedra", "polyhedra"), ("Kajikazawa", "kajikazawa"),
         ("Twelve-Pointed Stars", "stars"), ("Woven Bands", "bands"), ("Pont Neuf (Fine only)", "pontneuf"),
+        ("Villa Rotonda", "rotonda"), ("An Ant", "ant"), ("Crystal Palace Fanlight", "fanlight"), ("Crystal Palace", "crystal"),
+        ("Tycho's Observatory", "stjerneborg"), ("Reflecting Telescope", "telescope"), ("Printing Press", "press"), ("Waterworks", "waterworks"),
+        ("Paddle Steamer", "steamer"), ("Air Balloons", "balloons"), ("Cayley's Flying Machine", "cayley"), ("Road Engine", "roadengine"),
+        ("Ship Draught", "draught"), ("Bridge Centres", "centres"),
+        ("Leonardo's Aerial Screw", "screw"), ("Leonardo's Bear", "bear"), ("Leonardo's Wing", "wing"), ("Ramelli's Fountain", "fountain"),
+        ("Glass Furnaces", "furnaces"), ("Peacock Clock", "peacocks"), ("Dragon Engine", "dragon"),
     ]
+    /// The Picture menu's order, which is not the one its picks are stored by: Random, then every picture by its
+    /// name, a leading "The", "A" or "An" left out of the comparison. Worked out from the names, so a new picture
+    /// needs no placing.
+    nonisolated static let listed: [Int] = {
+        func sorting(_ name: String) -> String { ["The ", "A ", "An "].first { name.hasPrefix($0) }.map { String(name.dropFirst($0.count)) } ?? name }
+        return [0] + pictures.indices.sorted { sorting(pictures[$0].name).localizedStandardCompare(sorting(pictures[$1].name)) == .orderedAscending }.map { $0 + 1 }
+    }()
     /// The pictures that are whole or not at all, by their files: cut off at a display's edges one would lose what
     /// makes it (the Airship, both rounded ends of its hull), so it is fitted inside whatever Fill the screen says.
     nonisolated static let whole: Set = ["airship"]
     /// Which picture: Random, a different one each time, or one of the set over and over. Picking one clears the
     /// screen for it there and then.
     nonisolated static let picture = Knob(key: "etching.picture", label: "Picture", range: 0...Double(pictures.count), standard: 0, section: "Drawing",
-                                          format: .choice(["Random"] + pictures.map(\.name)))
+                                          format: .choice(["Random"] + pictures.map(\.name)), order: listed)
     /// The line's width: the toy's own, about 1/700 of the screen's width, or half that, which holds twice the
     /// detail each way, takes about twice as long, and looks more like a fine pen than the toy (`etching-<file>-fine.route`).
     nonisolated static let detail = Knob(key: "etching.detail", label: "Detail", range: 0...1, standard: 0, section: "Drawing", format: .choice(["Standard", "Fine"]))

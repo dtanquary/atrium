@@ -22,6 +22,10 @@ from scipy import ndimage as ndi
 Image.MAX_IMAGE_PIXELS = None
 HERE = os.path.dirname(os.path.abspath(__file__))
 
+WELLCOME = "https://iiif.wellcomecollection.org/image/%s/full/max/0/default.jpg"
+HYDE_PARK = ("https://archive.org/download/McGillLibrary-rbsc_building-erected-hyde-park_folioNA6750L6D71852-21979/rbsc_building-erected-hyde-park_folioNA6750L6D71852"
+             "_jp2.zip/rbsc_building-erected-hyde-park_folioNA6750L6D71852_jp2%%2Frbsc_building-erected-hyde-park_folioNA6750L6D71852_%s.jp2")
+
 PICTURES = {   # name: file, source, crop as fractions of the file, tone gamma, then options (rot, invert, lift, blank, flatten)
     "wave": ("45434-DP130155.jpg", "https://images.metmuseum.org/CRDImages/as/original/DP130155.jpg", (0.0, 0.0, 1.0, 1.0), 1.0, {}),
     "rhinoceros": ("356497-DT241450.jpg", "https://images.metmuseum.org/CRDImages/dp/original/DT241450.jpg", (0.0, 0.104, 1.0, 0.995), 1.0, {}),
@@ -43,6 +47,44 @@ PICTURES = {   # name: file, source, crop as fractions of the file, tone gamma, 
     "pontneuf": ("maps-turgot-paris-sheet11-1739-bpl.jpg",
                  "https://upload.wikimedia.org/wikipedia/commons/c/c3/Turgot_map_of_Paris%2C_sheet_11_-_Norman_B._Leventhal_Map_Center.jpg",
                  (0.012, 0.55, 0.348, 0.855), 1.3, {}),
+    # the third set, 2026-10-13: old plans and plates
+    "rotonda": ("698054-DP109542.jpg", "https://images.metmuseum.org/CRDImages/dp/original/DP109542.jpg", (0.03, 0.604, 0.97, 0.988), 1.0,
+                dict(lift=0.2, blank=[(0.36, 0.0, 0.64, 0.17), (0.84, 0.60, 1.0, 0.76)])),       # the lower half of the page; the plan above it is cropped away
+    "ant": ("wellcome-L0084697.jpg", WELLCOME % "L0084697", (0.185, 0.03, 0.992, 0.976), 1.6, dict(rot=90, blank=[(0.02, 0.555, 0.065, 0.80)])),
+    "fanlight": ("hydepark-0155.jp2", HYDE_PARK % "0155", (0.08, 0.09, 0.985, 0.85), 1.0, {}),
+    "crystal": ("hydepark-0074.jp2", HYDE_PARK % "0074", (0.316, 0.122, 0.677, 0.80), 1.0, {}),   # the elevation's middle third
+    "stjerneborg": ("tycho-n104.jpg", "https://archive.org/download/gri_tychonisbrah00brah/page/n104.jpg", (0.035, 0.148, 0.893, 0.495), 1.0,
+                    dict(lift=0.25)),                                                             # the next page's type shows through the paper
+    "telescope": ("wellcome-V0024709.jpg", WELLCOME % "V0024709", (0.03, 0.112, 0.955, 0.95), 1.0,
+                  dict(lift=0.15, blank=[(0.0, 0.574, 0.389, 0.678), (0.0, 0.678, 0.365, 0.762), (0.461, 0.574, 1.0, 0.671), (0.488, 0.671, 1.0, 0.762)])),
+    "press": ("wellcome-V0023776.jpg", WELLCOME % "V0023776", (0.02, 0.115, 0.955, 0.875), 1.4, dict(blank=[(0.185, 0.17, 0.255, 0.215), (0.762, 0.86, 1.0, 1.0)])),
+    "waterworks": ("wellcome-V0023884.jpg", WELLCOME % "V0023884", (0.05, 0.064, 0.93, 0.78), 1.0,
+                   dict(blank=[(0.63, 0.275, 0.96, 0.34), (0.245, 0.35, 0.295, 0.385), (0.72, 0.35, 0.77, 0.385)])),
+    "steamer": ("wellcome-V0024366.jpg", WELLCOME % "V0024366", (0.12, 0.528, 0.98, 0.912), 1.0,
+                dict(blank=[(0.2, 0.0, 0.8, 0.06), (0.375, 0.305, 0.41, 0.355), (0.85, 0.945, 0.96, 0.995)])),   # one figure of the plate's four
+    "balloons": ("loc-ppmsca-02501u.tif", "https://cdn.loc.gov/master/pnp/ppmsca/02500/02501u.tif", (0.06, 0.095, 0.89, 0.495), 1.3,
+                 dict(lift=0.3, blank=[(0.0, 0.0, 0.215, 0.03), (0.245, 0.0, 0.5, 0.03), (0.66, 0.0, 0.95, 0.055), (0.0, 0.925, 0.55, 1.0)])),   # the top row
+    "cayley": ("loc-ppmsca-02521u.tif", "https://cdn.loc.gov/master/pnp/ppmsca/02500/02521u.tif", (0.03, 0.06, 0.95, 0.85), 1.0,
+               dict(blank=[(0.62, 0.03, 1.0, 0.085), (0.04, 0.77, 0.07, 0.90)])),
+    "roadengine": ("US0549160-p1.png", "https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/0549160", (0.19, 0.225, 0.91, 0.54), 1.0,
+                   dict(blank=[(0.50, 0.0, 0.67, 0.09), (0.0, 0.0, 0.5, 0.012)])),
+    "draught": ("dimu-architecturan-XL.jpg", "https://ems.dimu.org/image/012uK3KjAwSh?dimension=max", (0.03, 0.10, 0.945, 0.93), 0.6,   # hair-thin lines: darkened to keep them
+                dict(blank=[(0.0, 0.25, 0.225, 0.35), (0.0, 0.545, 0.235, 0.65), (0.0, 0.85, 0.25, 0.96), (0.585, 0.04, 0.645, 0.085), (0.89, 0.035, 0.95, 0.08),
+                            (0.905, 0.465, 0.96, 0.51), (0.91, 0.755, 0.97, 0.81), (0.915, 0.10, 1.0, 0.27)])),
+    "centres": ("wellcome-V0024341.jpg", WELLCOME % "V0024341", (0.03, 0.20, 0.97, 0.93), 1.0,
+                dict(blank=[(0.43, 0.235, 0.56, 0.275), (0.23, 0.375, 0.75, 0.475), (0.75, 0.35, 1.0, 0.48), (0.40, 0.49, 0.61, 0.528), (0.44, 0.80, 0.56, 0.84), (0.76, 0.48, 1.0, 0.615)])),
+    # and Leonardo and the old machine books. A Science History Institute file is the page's "Full-sized JPG".
+    "screw": ("ravaisson2-n340.jpg", "https://archive.org/download/lesmanuscritsdel02lo/page/n340.jpg", (0.31, 0.375, 0.72, 0.565), 1.0,
+              dict(lift=0.3, blank=[(0.0, 0.25, 0.21, 0.72), (0.0, 0.80, 1.0, 1.0)], flatten="paper")),
+    "bear": ("459184-DP324213.jpg", "https://images.metmuseum.org/CRDImages/rl/original/DP324213.jpg", (0.06, 0.07, 0.94, 0.86), 1.0, dict(lift=0.35, flatten="paper")),
+    "wing": ("atlanticus-f858r.jpg", "https://upload.wikimedia.org/wikipedia/commons/8/89/Leonardo_da_Vinci_-_Ambrosiana-Codice-Atlantico-Codex-Atlanticus-f-858-recto.jpg",
+             (0.0, 0.0, 0.985, 0.985), 1.0, dict(lift=0.15, flatten="paper")),
+    "fountain": ("ramelli-644.jpg", "https://digital.sciencehistory.org/downloads/deriv/d217qp85p/download_full", (0.186, 0.20, 0.855, 0.79), 1.6, dict(lift=0.3)),
+    "furnaces": ("agricola-500.jpg", "https://digital.sciencehistory.org/downloads/deriv/kdc86qn/download_full", (0.105, 0.153, 0.682, 0.486), 1.5, {}),
+    "peacocks": ("451302-DP369551.jpg", "https://images.metmuseum.org/CRDImages/is/original/DP369551.jpg", (0.07, 0.035, 0.93, 0.407), 1.0,
+                 dict(lift=0.2, blank=[(0.0, 0.86, 0.20, 1.0)], flatten="paper")),   # its bottom edge is not to move: under it is a bent crank that, alone, reads as a hooked cross
+    "dragon": ("358276-DP108930.jpg", "https://images.metmuseum.org/CRDImages/dp/original/DP108930.jpg", (0.105, 0.035, 0.895, 0.835), 1.0,
+               dict(blank=[(0.497, 0.0, 0.522, 1.0), (0.0, 0.0, 0.33, 0.115), (0.74, 0.0, 1.0, 0.135)])),          # two facing pages: the gutter painted out
 }
 FINE_ONLY = {"pontneuf"}   # a muddle at the standard line: no standard route is baked, and the app draws it fine whatever Detail says
 
