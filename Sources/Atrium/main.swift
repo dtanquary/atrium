@@ -479,9 +479,20 @@ NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenPar
 
 // Follow Low Power Mode, plugging in or unplugging, Settings → Power and the Mac's heat as they change. The heat can
 // be posted off the main thread; the main queue takes it there.
-for name in [.NSProcessInfoPowerStateDidChange, UserDefaults.didChangeNotification, ProcessInfo.thermalStateDidChangeNotification] {
+for name in [.NSProcessInfoPowerStateDidChange, ProcessInfo.thermalStateDidChangeNotification] {
     NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { _ in
         MainActor.assumeIsolated { applyPowerState(to: windows.compactMap { $0.contentView as? WallpaperView }) }
+    }
+}
+// Of the defaults, only Settings → Power and the scene: asking IOKit for the power source took about 0.1 ms, and
+// scenes write status lines and counts as they go.
+var powerSettings = (Power.knobs.map(\.value), UserDefaults.standard.string(forKey: "scene"))
+NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { _ in
+    MainActor.assumeIsolated {
+        let now = (Power.knobs.map(\.value), UserDefaults.standard.string(forKey: "scene"))
+        guard now != powerSettings else { return }
+        powerSettings = now
+        applyPowerState(to: windows.compactMap { $0.contentView as? WallpaperView })
     }
 }
 if let source = IOPSNotificationCreateRunLoopSource({ _ in
