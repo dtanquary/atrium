@@ -346,9 +346,12 @@ final class PegBoard: SKScene {
         // in a straight line: a peg's light and the peg both go by it, which on the screen is an even fade from first to last
         let level = phase == .clearing ? max(1 - seconds / Double(Self.fadeSteps / Self.second), 0) : 1
         let turned = (Double(lit) / Double(Self.second) / show.period).truncatingRemainder(dividingBy: 1)
-        state.vectorFloat4Value = [Float(min(placed, Double(sequence.count) + front)), Float(front), newest == 1 ? toward : 1 - toward, Float(level)]
-        wave.vectorFloat4Value = [show.turn, show.out, show.across, Float(turned * 2 * .pi)]
-        deep.floatValue = Float(shade)
+        // (each only when it changes: a uniform set costs even with the value it had)
+        let now: SIMD4<Float> = [Float(min(placed, Double(sequence.count) + front)), Float(front), newest == 1 ? toward : 1 - toward, Float(level)]
+        let turning: SIMD4<Float> = [show.turn, show.out, show.across, Float(turned * 2 * .pi)]
+        if state.vectorFloat4Value != now { state.vectorFloat4Value = now }
+        if wave.vectorFloat4Value != turning { wave.vectorFloat4Value = turning }
+        if deep.floatValue != Float(shade) { deep.floatValue = Float(shade) }
     }
 
     /// The whole board in one pass. A pixel belongs to the nearer of two holes, the nearest in the row below it and
