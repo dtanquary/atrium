@@ -75,16 +75,17 @@ func liveCost() async throws {
     }
     var covered = false
     // The view draws while the main actor sleeps; nothing runs the app's event loop here, so its events are handed on
-    // by hand, or the window would never learn it's visible. A covered WallpaperView pauses itself, as the app should:
-    // here it's set going again, so the scene is measured at the rate it would draw uncovered, and the line says so.
+    // by hand, or the window would never learn it's visible. A view left paused though uncovered (three lines of 128
+    // drew nothing that way) is set going. So is a covered one, which pauses itself as it should, but its line
+    // says covered and isn't to be trusted: SpriteKit can tick its frames yet draw next to nothing into a covered
+    // window (GPU near 0 on some such lines), and WindowServer has less to composite.
     func spin(until end: Date) async {
         while Date() < end {
             try? await Task.sleep(for: .seconds(min(0.25, max(0, end.timeIntervalSinceNow))))
             while let event = NSApp.nextEvent(matching: .any, until: nil, inMode: .default, dequeue: true) { NSApp.sendEvent(event) }
-            if let window, let view, fps > 0, !window.occlusionState.contains(.visible) {
-                covered = true
-                view.isPaused = false
-            }
+            guard let window, let view, fps > 0 else { continue }
+            if !window.occlusionState.contains(.visible) { covered = true }
+            view.isPaused = false
         }
     }
     await spin(until: Date() + 3)
