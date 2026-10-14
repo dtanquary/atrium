@@ -612,9 +612,13 @@ private final class Flock: SKNode {
         guard !now.isEmpty || !touched.isEmpty else { return }
         let rowsToConvert = now.isEmpty ? touched : touched.isEmpty ? now : min(now.lowerBound, touched.lowerBound)..<max(now.upperBound, touched.upperBound)
         touched = now
-        for k in rowsToConvert.lowerBound * cols..<rowsToConvert.upperBound * cols {
-            bytes[k * 4] = UInt8(splat[k] / (1 + splat[k]) * 255)
-            splat[k] = 0
+        splat.withUnsafeMutableBufferPointer { splat in // (indexing the arrays themselves checks each access)
+            bytes.withUnsafeMutableBufferPointer { bytes in
+                for k in rowsToConvert.lowerBound * cols..<rowsToConvert.upperBound * cols {
+                    bytes[k * 4] = UInt8(splat[k] / (1 + splat[k]) * 255)
+                    splat[k] = 0
+                }
+            }
         }
         let data = bytes
         reflection.modifyPixelData { pointer, length in
