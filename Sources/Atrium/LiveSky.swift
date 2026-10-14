@@ -177,16 +177,23 @@ final class LiveSky: SKScene, BatteryPaced {
         sunGlow.isHidden = sun.isHidden
         sun.colorBlendFactor = CGFloat(1 - simd_smoothstep(0, 12, sunAltitude)) // redder near the horizon
 
-        let path = CGMutablePath()
-        for strip in constellationLines {
-            var drawing = false
-            for point in strip {
-                let h = toHorizon * point
-                if h.z > 0, let p = project(h) {
-                    drawing ? path.addLine(to: p) : path.move(to: p)
-                    drawing = true
+        // SpriteKit strokes the whole path again every frame, so leave out the lines it can't show: each unbroken
+        // run of a constellation goes in whole (cutting one changes the pixels of the rest) or not at all, when every
+        // segment of it is off one side of the screen, as is all of it while the lines are hidden or faded out.
+        let path = CGMutablePath(), screen = frame.insetBy(dx: -30, dy: -30)
+        func onScreen(_ a: CGPoint, _ b: CGPoint) -> Bool {
+            max(a.x, b.x) >= screen.minX && min(a.x, b.x) <= screen.maxX && max(a.y, b.y) >= screen.minY && min(a.y, b.y) <= screen.maxY
+        }
+        for strip in constellationLines where !constellations.isHidden && day < 1 {
+            var run: [CGPoint] = [], shows = false // the run above the horizon so far; whether any of it shows
+            for point in strip + [nil] { // nil ends the last run
+                let h = point.map { toHorizon * $0 }
+                if let h, h.z > 0, let p = project(h) {
+                    if let a = run.last, onScreen(a, p) { shows = true }
+                    run.append(p)
                 } else {
-                    drawing = false
+                    if shows { path.addLines(between: run) }
+                    run = []; shows = false
                 }
             }
         }

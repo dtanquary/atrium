@@ -25,7 +25,7 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
   - Size is `max(2.2, 11 − 1.55·V)` points, colour comes from B−V (`starColour`), and alpha from V.
   - Stars brighter than V 2 twinkle with fade actions.
   - Stars are grouped into 16 parent layers by half magnitude (`starLayers`), so daylight fades a whole magnitude band by setting one layer's alpha. The twinkle actions keep owning each star's own alpha, and the two don't fight.
-- **Constellations:** one `SKShapeNode` path, rebuilt each refresh from `constellations.txt` polylines. A segment breaks where it dips below the horizon.
+- **Constellations:** one `SKShapeNode` path, rebuilt each refresh from `constellations.txt` polylines. A segment breaks where it dips below the horizon. SpriteKit strokes a shape node's whole path again every frame, path unchanged or not, so the path holds only the unbroken runs with a segment on screen, each run whole (cutting off just its off-screen segments moved pixels along the rest), and nothing while the lines are switched off or faded out by day.
 - **Planets:** `Sky.planet(_:_:)` gives Mercury to Saturn. Each is a glow sprite with a fixed size, colour and typical magnitude (used only for daytime fading) and an "ISS"-style label as its child.
 - **Sun:** a 48 pt disc and a 360 pt glow, blended toward orange below 12° altitude. It's hidden below the horizon or out of view.
 - **Moon:** a 46 pt disc (exaggerated; the real Moon is about 5 pt at this scale) drawn by a shader.
@@ -95,6 +95,7 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
 - About 0.64 ms CPU and 0.90 ms GPU per frame (release build, 2x, 1512×982).
 - The GPU cost is the full-screen background shader: 3D noise for the Milky Way on every pixel.
 - The CPU cost is mostly SpriteKit handling about 2,900 star sprites, which batch because they share one texture. `refresh()` only runs every 5 s.
+- Re-stroking the constellations was about 45% of the CPU frame (`sample` of the render test) until 2026-10-14, when the path dropped the runs that are wholly off screen: 162 segments of 325 on a night in October, and the render's CPU went from about 0.3 to 0.14 ms a frame, pixel for pixel the same.
 - Well within the 2 ms budget.
 
 - **On battery it runs at 15 fps at most, and at the battery's rate while a meteor crosses** (`batteryRate`, dropped as `meteor()` lights one and back once it has gone, 0.7 s later; 2026-10-13). The ISS is the fastest steady thing, up to about 36 device pixels (2x on a 14-inch MacBook Pro, 3024 × 1964) a second: 2.4 px a frame at 15 fps. Stars twinkle at 1.3 Hz at most and positions move every 5 s. A meteor crosses 180–360 points in 0.7 s, up to 1,030 px a second, every 15–75 s.
