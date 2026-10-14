@@ -407,6 +407,8 @@ private final class Flock: SKNode {
     /// Each parcel's scattering (and whether it's mirrored), its wings' angle on screen, and which frame of the atlas shows.
     private var looks: [(layout: Int, mirrored: Bool)] = [], angles: [Float] = [], frames: [Int] = []
     private var bucketStart = [Int32](repeating: 0, count: Flock.buckets + 1), bucketItems: [Int32] = []
+    /// Where each bird in `bucketItems` is, in the same order, so the neighbour search reads along memory.
+    private var bucketPositions: [SIMD3<Float>] = []
     private var tick = 0, clock: Float = 0, nextTurn: Float = 7, nextFalcon: Float = 40
     /// Time not yet stepped, under a thirtieth of a second.
     private var pending: Float = 0
@@ -469,6 +471,7 @@ private final class Flock: SKNode {
             sprites.append(sprite)
         }
         bucketItems = [Int32](repeating: 0, count: Self.count)
+        bucketPositions = [SIMD3<Float>](repeating: .zero, count: Self.count)
         reflection.filteringMode = .linear
         for _ in 0..<150 { simulate(1.0 / 30) } // settle into a flock first
         place(1)
@@ -733,6 +736,7 @@ private final class Flock: SKNode {
 
         bucketStart.withUnsafeMutableBufferPointer { start in
             bucketItems.withUnsafeMutableBufferPointer { items in
+            bucketPositions.withUnsafeMutableBufferPointer { positions in
                 birds.withUnsafeMutableBufferPointer { birds in
                     // Bucket birds by spatial hash (counting sort).
                     for c in 0..<start.count { start[c] = 0 }
@@ -745,6 +749,7 @@ private final class Flock: SKNode {
                     for i in 0..<birds.count where birds[i].state != 0 {
                         let c = Int(birds[i].cell)
                         items[Int(start[c])] = Int32(i)
+                        positions[Int(start[c])] = birds[i].p
                         start[c] += 1
                     }
                     for c in stride(from: start.count - 1, to: 0, by: -1) { start[c] = start[c - 1] } // back to each bucket's start
@@ -771,7 +776,7 @@ private final class Flock: SKNode {
                                 for s in Int(start[k])..<Int(start[k + 1]) {
                                     let j = items[s]
                                     if j == Int32(i) { continue }
-                                    let d = birds[Int(j)].p - b.p
+                                    let d = positions[s] - b.p
                                     let d2 = simd_dot(d, d)
                                     if d2 < cell * cell { crowd += 1 }
                                     if found == 7 && d2 >= dist[6] { continue }
@@ -878,6 +883,7 @@ private final class Flock: SKNode {
                         if birds[i].state == 2 && birds[i].p.z < perch.z { birds[i].state = 0 } // roosting
                     }
                 }
+            }
             }
         }
     }

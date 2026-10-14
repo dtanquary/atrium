@@ -65,6 +65,7 @@ For repeatable snapshots, `MURMURATION_SEED=3` seeds the flock, and `MURMURATION
 
 ## Performance
 - Release build at 2x: CPU 1.25–1.8 ms (simulation 0.4–0.7, sprites 0.25, SpriteKit's own 1,500 nodes about 0.6), GPU 0.45–0.8 ms. It no longer scales with screen area.
+- The neighbour search reads positions copied in bucket order (`bucketPositions`), along memory, rather than each neighbour's whole `Bird`: about 0.04 ms a frame less (2026-10-14; the same flight to the bit).
 - The flock fixes of 2026-09-26 cost nothing measurable. Side by side on a busy machine: CPU 2.05–2.23 ms against 2.41–3.01 before, GPU 0.65–0.76 against 0.95–1.24. A parcel changes texture only when its angle crosses to the next of 16.
 - The reflection costs nothing while the flock is high; about 0.05 ms while it's over the water. Its conversion to bytes goes through buffer pointers: indexed directly, every read and write of the class's two arrays checked exclusivity and uniqueness, about 0.2 ms more a frame while the flock was over the water (until 2026-10-14; pixel for pixel the same).
 - Flipping wing poses every few frames for shimmer cost 0.15 ms and only flickered at 3–5 px, so each parcel keeps one pose.
