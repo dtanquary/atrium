@@ -74,6 +74,8 @@ let rainPreview = [
     /// The rain easing toward what's falling; the drops get it in steps (`Glass.rain`).
     private var flowing = 1.0
     private var last: Date?, lastSave = Date.distantPast, primed = false
+    /// The state last written to `rain.glass`, to the precision that shows (see `save`), and when.
+    private var saved = (state: [Double](), date: Date.distantPast)
     /// The preview's rain changes, so drops dry when the preview's rain is turned off.
     private var preview = Glass()
 
@@ -209,7 +211,7 @@ let rainPreview = [
 
     /// Settings' status line, written only when it changes: each write tells every scene that settings changed.
     private func status(_ text: String) {
-        if UserDefaults.standard.string(forKey: "rain.status") != text { UserDefaults.standard.set(text, forKey: "rain.status") }
+        UserDefaults.standard.setIfChanged(text, forKey: "rain.status")
     }
 
     // MARK: - Physics
@@ -293,8 +295,16 @@ let rainPreview = [
     // MARK: - Keeping it
 
     /// Saves the live state, so a relaunch carries on (frost takes hours); a state more than a day old is dropped.
+    /// Written only once it has moved by as much as shows, or an hour on, so a steady pane isn't a write a minute:
+    /// each write tells every scene that settings changed.
+    // ponytail: a relaunch steps from the saved time, so up to an hour that moved the pane by less than that is
+    // stepped again; save at every move if a relaunch's catch-up ever shows it.
     private func save(_ date: Date) {
         lastSave = date
+        let state = [(live.glass * 10).rounded(), (live.water * 100).rounded(), (live.frost * 100).rounded(), (live.frozen * 100).rounded(),
+                     (min(live.dried, 16) * 10).rounded(), live.rain, live.changed.timeIntervalSince1970, Double(frostSeed)]
+        guard state != saved.state || date.timeIntervalSince(saved.date) > 3600 else { return }
+        saved = (state, date)
         UserDefaults.standard.set([date.timeIntervalSince1970, live.glass, live.water, live.frost, live.frozen, live.dried, live.rain,
                                    live.changed.timeIntervalSince1970, Double(frostSeed)], forKey: "rain.glass")
     }
