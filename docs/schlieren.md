@@ -70,7 +70,7 @@ Rising heat as a colour schlieren camera sees it, after the photos of Gary Settl
 
 | Key | Label | Range | Default | Notes |
 |---|---|---|---|---|
-| `schlieren.source` | Heat | Candles, Candle, Mug, Warm air | Candles | live; rebuilds the air and objects |
+| `schlieren.source` | Heat | Candles, Candle, Mug, Warm air | Warm air | live; rebuilds the air and objects |
 | `schlieren.filter` | Filter | Dark field, Rainbow, Bands, Knife edge | Dark field | live; rebakes the filter table |
 | `schlieren.sensitivity` | Sensitivity | 0.3–3× | 1× | live; the rig's gain (f/span) |
 | `schlieren.speed` | Speed | 0.03–0.5× | 0.1× | live; slow motion, as a high-speed camera plays it |
@@ -120,6 +120,7 @@ Two research agents, 2026-09-28. The notes are summarised here. The photos (30, 
 
 ## Dave's feedback and decisions
 - 2026-09-28: picked from the "physics as colour" ideas after Crystals was cut. He asked for the colour schlieren version, with a lot of research images, recreated with high fidelity and colour customisation.
+- 2026-10-14: Warm air became the standard Heat in place of Candles: "set 'warm air' to be the default, its more interesting looking". The README, menu and site pictures were retaken in it.
 
 ## Ideas / next steps
 - **A hand:** the classic Settles shot, a black hand with its warm boundary layer rising off the fingertips. It needs a sensitive rig (span 10–30 µrad) and a good silhouette.

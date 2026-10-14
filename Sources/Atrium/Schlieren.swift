@@ -23,7 +23,7 @@ final class Schlieren: SKScene {
     /// outer colours, the dark field and knife edge keep them softer.
     nonisolated static let filterGain: [Float] = [1, 2, 1.6, 1]
     nonisolated static let knobs = [
-        Knob(key: "schlieren.source", label: "Heat", range: 0...Double(sources.count - 1), standard: 0, format: .choice(sources.map(\.name))),
+        Knob(key: "schlieren.source", label: "Heat", range: 0...Double(sources.count - 1), standard: 3, format: .choice(sources.map(\.name))),
         Knob(key: "schlieren.filter", label: "Filter", range: 0...Double(filters.count - 1), standard: 0, format: .choice(filters)),
         Knob(key: "schlieren.sensitivity", label: "Sensitivity", range: 0.3...3, standard: 1, format: .times),
         Knob(key: "schlieren.speed", label: "Speed", range: 0.03...0.5, standard: 0.1, format: .times),
