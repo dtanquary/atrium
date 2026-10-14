@@ -221,7 +221,7 @@ final class Etching: SKScene, BatteryPaced {
 
     /// The one cycle every copy of the scene follows, the width of line it was last worked out for, and what of it
     /// was last saved.
-    private static var cycle: Cycle?, fine: Bool?, saved: [String] = []
+    private static var cycle: Cycle?, fine: Bool?, saved: (picture: Int, before: Int?, began: Double) = (-1, nil, .nan)
 
     /// The shared cycle's moment at `wall`, read from the defaults the first time and saved back whenever it moves
     /// to another picture or a setting moves it.
@@ -240,11 +240,10 @@ final class Etching: SKScene, BatteryPaced {
         if let was = fine, was != detailed { cycle!.stretch(at: wall, from: Self.seconds[was ? 1 : 0][cycle!.picture], to: seconds[cycle!.picture]) }
         fine = detailed
         let moment = cycle!.moment(at: wall, speed: speed, rest: rest, pick: pick, seconds: seconds, another: another)
-        let now = [pictures[cycle!.picture].file, cycle!.before.map { pictures[$0].file } ?? "", String(cycle!.began)]
-        if now != saved {
-            saved = now
-            defaults.set(now[0], forKey: "etching.drawing")
-            defaults.set(now[1], forKey: "etching.before")
+        if cycle!.picture != saved.picture || cycle!.before != saved.before || cycle!.began != saved.began {
+            saved = (cycle!.picture, cycle!.before, cycle!.began)
+            defaults.set(pictures[cycle!.picture].file, forKey: "etching.drawing")
+            defaults.set(cycle!.before.map { pictures[$0].file } ?? "", forKey: "etching.before")
             defaults.set(cycle!.began, forKey: "etching.began")
         }
         return moment
