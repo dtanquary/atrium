@@ -35,6 +35,7 @@ SNAPSHOT_DEFAULTS="gradient.ribbons=1,gradient.previewTime=1" swift test   # sna
 SNAPSHOT_SCENE="Fish Tank" SNAPSHOT_MOVIE=6 swift test   # then 6 s in real time, saved as 15 fps frames (Fish Tank-000.png…)
 SETTINGS_SHOT="Nebula" swift test --filter settingsWindow   # opens Settings on that page for a moment and captures the window
 MENU_SHOT="Nebula" swift test --filter menuShot   # opens a menu with the picture grid for a moment, the pointer over that wallpaper, and captures it
+LIVE_COST=1 swift test -c release -Xswiftc -enable-testing --filter liveCost   # each wallpaper on the desktop at 60 and 30 fps: CPU, GPU, energy, frames, memory, and WindowServer's share → $TMPDIR/atrium-livecost.tsv
 ```
 
 ## Conventions
