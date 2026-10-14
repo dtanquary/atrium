@@ -108,7 +108,7 @@ final class PixelCity: SKScene, BatteryPaced {
     private var launchLayer = SKSpriteNode(), launchTexture: SKMutableTexture?, launchShown: [Int] = []
     private var smoke = Bytes(1, 1, floor: 0), density: [Float] = [], smokeTime: Float = 0, smokeMoved = false, smokeSteps = 0
     private var smoked = 0..<0 // the rows of it the last painting reached, which are all the next has to clear
-    private var countdown = SKSpriteNode(), counted = ("", "")
+    private var countdown = SKSpriteNode(), counted = ("", ""), board = (false, false, false, -1, "") // its text, and what it was made from
     private var visitor = SKSpriteNode(), visiting: Flag?, hoist: Float = 0 // a visiting rocket's flag, and how far up its pole it is
     private var orbiter = Orbiter() // the Shuttle's, when it glides home
     private var hazeColour = RGB.zero // the horizon's colour, which far-off things fade toward
@@ -2231,7 +2231,7 @@ final class PixelCity: SKScene, BatteryPaced {
         countdown.size = CGSize(width: 31, height: 11)
         countdown.position = CGPoint(x: w * 9 / 100, y: 14)
         countdown.zPosition = 3
-        counted = ("", "")
+        (counted, board) = (("", ""), (false, false, false, -1, ""))
         visitor = SKSpriteNode()
         visitor.anchorPoint = .zero
         visitor.size = CGSize(width: 9, height: 6)
@@ -2711,7 +2711,10 @@ final class PixelCity: SKScene, BatteryPaced {
         let up = !pad.scrubbed && (since < 95 || pad.phase == .recover || pad.phase == .rollBack), seconds = Int(up ? since : left.rounded(.up))
         var name = (up ? flew : pad.rocket).kit.name // while the clock counts up, the board keeps the rocket that just flew
         if up ? flewLive : pad.live, Int(clock / 3) % 2 == 1 { name = "LIVE" }
-        let text = pad.scrubbed ? "SCRUB" : pad.live && pad.phase == .count && live?.status == .hold ? "HOLD"
+        let hold = pad.live && pad.phase == .count && live?.status == .hold
+        guard (pad.scrubbed, hold, up, seconds, name) != board else { return } // the text is made only when it can change
+        board = (pad.scrubbed, hold, up, seconds, name)
+        let text = pad.scrubbed ? "SCRUB" : hold ? "HOLD"
             : "T" + (up ? "+" : "-") + String(format: "%02d:%02d", min(seconds / 60, 99), seconds % 60)
         if (text, name) != counted {
             counted = (text, name)
