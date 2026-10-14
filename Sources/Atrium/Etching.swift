@@ -45,9 +45,23 @@ final class Etching: SKScene {
     /// The seconds each of that menu's picks stands for, and the picked one's.
     nonisolated static let holds = [10.0, 30, 60, 300]
     private static var rest: Double { holds[Int(hold.value)] }
-    /// The screen's powder: the bright one of a lit room, the dim one, or whichever suits the system's appearance.
-    /// Bright is the standard, as every mock-up was, whatever the system is in.
-    nonisolated static let powder = Knob(key: "etching.screen", label: "Screen", range: 0...2, standard: 0, section: "Drawing", format: .choice(["Light", "Dark", "Match System"]))
+    /// The screen's powder: the bright one of a lit room, the dim one, whichever suits the system's appearance, or
+    /// bright by day and dim by night, by the real Sun where the Mac is. Bright is the standard, as every mock-up
+    /// was, whatever the system is in. The pick is stored by place, so a new one goes at the end.
+    nonisolated static let powder = Knob(key: "etching.screen", label: "Screen", range: 0...3, standard: 0, section: "Drawing",
+                                         format: .choice(["Light", "Dark", "Match System", "Follow Day and Night"]))
+    /// Where `shade` goes with the Sun at an altitude in degrees, for Follow Day and Night: 0, the bright screen,
+    /// from 6° above the horizon, and 1, the dim one, from 6° below. `tint` eases `shade`, so the screen's dimness
+    /// is a smoothstep between the two, dusk takes about an hour, and nothing steps.
+    nonisolated static func nightfall(sun altitude: Double) -> Double { min(max(0.5 - altitude / 12, 0), 1) }
+    /// The Sun's altitude in degrees at a wall-clock moment, where the Mac is (a guess from the time zone, without
+    /// leave to know), worked out as Flowing Gradient's is. `etching.sun` stands in for it, for the tests and for
+    /// pictures.
+    private static func sun(at wall: Double) -> Double {
+        if let asked = UserDefaults.standard.object(forKey: "etching.sun") as? Double { return asked }
+        let here = Location.shared.coordinate, jd = Sky.julianDate(Date(timeIntervalSinceReferenceDate: wall))
+        return asin((Sky.horizonMatrix(jd: jd, latitude: here.latitude, longitude: here.longitude) * Sky.sun(jd)).z) * 180 / .pi
+    }
     /// Whether the picture is scaled up until it covers the display, what is over cut off at the edges, or is
     /// fitted inside it below the menu bar, with bare powder left beside it or above and below.
     nonisolated static let fill = Knob(key: "etching.fill", label: "Fill the screen", range: 0...1, standard: 1, section: "Drawing", format: .toggle)
@@ -232,8 +246,18 @@ final class Etching: SKScene {
     /// The screen's powder, 0 the bright and 1 the dim, on its way to the one Settings asks for; and the system's
     /// appearance, watched, for Match System.
     private var shade = 0.0, dark = false, appearance: NSKeyValueObservation?, lastWall: Double?
-    /// Whether Settings asks for the dim powder: Dark, or Match System in Dark Mode.
-    private var dim: Bool { Self.powder.value > 1.5 ? dark : Self.powder.value > 0.5 }
+    /// For Follow Day and Night: where the Sun last put the shade, the wall-clock moment it was looked up (none
+    /// while another pick is the one chosen), and whether the Mac has been asked where it is.
+    private var night = 0.0, sunAt: Double?, located = false
+    /// The shade Settings asks for: Light's or Dark's, Dark Mode's under Match System, or the Sun's.
+    private var wanted: Double {
+        switch Int(Self.powder.value) {
+        case 0: 0
+        case 1: 1
+        case 2: dark ? 1 : 0
+        default: night
+        }
+    }
 
     private static let grain: SKTexture = {
         let tile = SKTexture(data: LineRoute.grain(), size: CGSize(width: 512, height: 512))
@@ -243,7 +267,8 @@ final class Etching: SKScene {
 
     override func sceneDidLoad() {
         dark = systemIsDark
-        shade = dim ? 1 : 0
+        night = Self.powder.value > 2.5 ? Self.nightfall(sun: Self.sun(at: Date.timeIntervalSinceReferenceDate)) : 0
+        shade = wanted
         tint()
         appearance = NSApplication.shared.observe(\.effectiveAppearance) { [weak self] _, _ in MainActor.assumeIsolated { self?.dark = systemIsDark } }
         // The display's own pixels, and a texel to each; from the 14-inch size up, a texel to two each way, which
@@ -262,6 +287,15 @@ final class Etching: SKScene {
         let defaults = UserDefaults.standard, hooks = ["etching.drawn", "etching.cleared", "etching.ghost"].map { defaults.object(forKey: $0) as? Double }
         if hooks.contains(where: { $0 != nil }) { asked = (min(max(hooks[0] ?? 0, 0), 1), min(max(hooks[1] ?? 0, 0), 1), (hooks[2] ?? 0) > 0.5) }
     }
+
+    /// Asks where the Mac is, once, and only while the Screen follows the Sun: the first time, macOS asks leave.
+    private func locate() {
+        guard !located, view != nil, Self.powder.value > 2.5 else { return }
+        located = true
+        Location.shared.start()
+    }
+
+    override func didMove(to view: SKView) { locate() }
 
     /// The powder and the dark inside, for the shade the screen is at: 152 of 255, bright, and 104, dim, the line
     /// a third as light (docs/etching.md, "Look").
@@ -296,8 +330,14 @@ final class Etching: SKScene {
         let wall = currentTime + Date.timeIntervalSinceReferenceDate - ProcessInfo.processInfo.systemUptime
         let passed = min(max(wall - (lastWall ?? wall), 0), 0.1)
         lastWall = wall
-        if shade != (dim ? 1 : 0) { // to the other powder over two seconds, as Meander goes to the system's other mode
-            shade = dim ? min(shade + passed / 2, 1) : max(shade - passed / 2, 0)
+        if Self.powder.value < 2.5 {
+            sunAt = nil
+        } else if wall - (sunAt ?? -.infinity) >= 30 { // in which the Sun climbs or sinks an eighth of a degree at the most
+            locate()
+            (night, sunAt) = (Self.nightfall(sun: Self.sun(at: wall)), wall)
+        }
+        if shade != wanted { // to another powder over two seconds, as Meander goes to the system's other mode
+            shade = abs(wanted - shade) <= passed / 2 ? wanted : shade + (wanted > shade ? passed / 2 : -passed / 2)
             tint()
         }
 

@@ -336,6 +336,33 @@ private func level(_ pixels: [UInt32]) -> Int { pixels.map { Int($0 & 255) }.sor
     }
 }
 
+/// Follow Day and Night, the Screen menu's last pick, after the three that were there: the screen is bright with the
+/// Sun 6° or more above the horizon, dim with it as far below, and half-way between with it on the horizon, by a
+/// smoothstep (`nightfall` is where the shade goes, which `tint` eases). The Sun is `etching.sun`'s here. As it sets
+/// the screen follows it, within half a minute and then over two seconds.
+@MainActor @Test func etchingFollowsDayAndNight() throws {
+    #expect(Etching.powder.format == .choice(["Light", "Dark", "Match System", "Follow Day and Night"]) && Etching.powder.range == 0...3 && Etching.powder.standard == 0)
+    #expect(Etching.nightfall(sun: 10) == 0 && Etching.nightfall(sun: 0) == 0.5 && Etching.nightfall(sun: -10) == 1)
+    #expect(Etching.nightfall(sun: 6) == 0 && Etching.nightfall(sun: 3) == 0.25 && Etching.nightfall(sun: -6) == 1)
+    defer { NSApplication.shared.appearance = nil }
+    NSApplication.shared.appearance = NSAppearance(named: .darkAqua) // which this pick takes no notice of
+    func screen(sun: Double) throws -> Int {
+        var found = 0
+        try with(["etching.drawn": 0.3, Etching.powder.key: 3, "etching.sun": sun]) { found = level(try Screen(756, 491).settled()) }
+        return found
+    }
+    let day = try screen(sun: 10), night = try screen(sun: -10), dusk = try screen(sun: 0)
+    #expect(abs(day - 154) < 8 && abs(night - 105) < 8 && abs(2 * dusk - day - night) < 6, "the screen's level with the Sun at 10°, 0° and -10°: \(day), \(dusk), \(night)")
+    try with(["etching.drawn": 0.3, Etching.powder.key: 3, "etching.sun": 10]) {
+        let screen = try Screen(756, 491), bright = level(try screen.settled())
+        UserDefaults.standard.set(-10.0, forKey: "etching.sun")
+        let before = level(try screen.picture(after: 20)), partway = level(try screen.picture(after: 11)) // looked up every 30 s
+        for _ in 0..<25 { _ = try screen.picture(after: 0.1) }
+        let dimmed = level(try screen.picture(after: 0.1))
+        #expect(before == bright && partway > dimmed + 20 && dimmed == night, "the Sun gone down: \(bright), \(before) 20 s on, \(partway) once it is looked up, \(dimmed) after")
+    }
+}
+
 /// Fill the screen, which is on unless it is turned off: a picture squarer than the display (the Interlace, 1.21
 /// wide for 1 high, on a 14-inch screen's 1.54) is scaled up until it covers it, so its line runs off the top and
 /// the bottom; on the same screen turned upright, off the left and the right. Turned off, the picture is fitted
