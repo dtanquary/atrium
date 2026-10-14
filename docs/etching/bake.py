@@ -8,7 +8,8 @@ under. Needs numpy, scipy and Pillow, and clang for route.c. --fine bakes the ha
 as etching-<name>-fine.route. A picture in FINE_ONLY is too dense for the standard line and is baked fine only.
 
 A patent's file is one sheet of the Patent Office's PDF, taken out as it is: `pdfimages -png -f 1 -l 1 US0059915.pdf
-US0059915-p1` (poppler), then renamed. A Bourgoin plate is the Internet Archive's own JPEG of that leaf.
+US0059915-p1` (poppler), then renamed. A Bourgoin plate is the Internet Archive's own JPEG of that leaf. A drawing on
+a stained sheet, or a painted leaf, has its paper's tone taken out first (`flatten`).
 
 The grid is the stylus's own: a cell is one step, 1024 x 640 of them to a 16:10 screen (2048 x 1280 fine), and the
 line is 1.44 cells wide. Measured on the real toy, a line is about 1/700 of the screen's width.
@@ -21,7 +22,7 @@ from scipy import ndimage as ndi
 Image.MAX_IMAGE_PIXELS = None
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-PICTURES = {   # name: file, source, crop as fractions of the file, tone gamma, then options (rot, invert)
+PICTURES = {   # name: file, source, crop as fractions of the file, tone gamma, then options (rot, invert, lift, blank, flatten)
     "wave": ("45434-DP130155.jpg", "https://images.metmuseum.org/CRDImages/as/original/DP130155.jpg", (0.0, 0.0, 1.0, 1.0), 1.0, {}),
     "rhinoceros": ("356497-DT241450.jpg", "https://images.metmuseum.org/CRDImages/dp/original/DT241450.jpg", (0.0, 0.104, 1.0, 0.995), 1.0, {}),
     "flea": ("science-hooke-flea-1665-wellcome.jpg", "https://iiif.wellcomecollection.org/image/L0084699/full/max/0/default.jpg", (0.05, 0.04, 0.98, 0.95), 1.2, {}),
@@ -49,10 +50,32 @@ class Grid:
     """The stylus's grid: cells across and down, and the bare margin round the picture."""
     def __init__(self, fine): self.w, self.h, self.margin = (2048, 1280, 52) if fine else (1024, 640, 26)
 
-def darkness(path, grid, crop, gamma=1.0, rot=0, invert=False, lift=0.08, blank=()):
+def flattened(path, through, wide=0.04):
+    """A manuscript sheet as bare paper and ink, in grey: what a drawing on stained paper, or a painted leaf, needs
+    before `darkness` can take one tone as bare screen. The paper's tone is taken channel by channel from the sheet
+    itself (the 85th percentile of each neighbourhood `wide` of the sheet's width across, on a copy an eighth the
+    size, then blurred by half that), and each channel is divided by it, so stains and the sheet's darker edges come
+    out as bare paper. `through` takes the other side's writing out as well: on the scans of Leonardo's Codex Madrid
+    it shows through 14 to 19% darker than the paper in red but only 6 to 12% in green, where the ink is 50 to 80%
+    darker in both, so twice the green less the red keeps the ink and cancels what shows through."""
+    a = np.asarray(Image.open(path).convert("RGB"), np.float32)
+    h, w = a.shape[:2]
+    small = np.asarray(Image.fromarray(a.astype(np.uint8)).resize((w // 8, h // 8), Image.BOX), np.float32)
+    k = max(3, int(wide * w / 8))
+    rel = []
+    for c in range(3):
+        paper = ndi.gaussian_filter(ndi.percentile_filter(small[..., c], 85, size=k), k / 2)
+        paper = np.asarray(Image.fromarray(paper).resize((w, h), Image.BILINEAR))
+        rel.append(a[..., c] / np.maximum(paper, 1))
+    v = 2 * rel[1] - rel[0] if through else (rel[0] + rel[1] + rel[2]) / 3
+    return Image.fromarray((np.clip(v, 0, 1) * 255).astype(np.uint8))
+
+def darkness(path, grid, crop, gamma=1.0, rot=0, invert=False, lift=0.08, blank=(), flatten=None):
     """The picture as darkness (0 bare screen .. 1 solid) on the grid, centred with a margin; and its rect in cells.
-    `lift` is the tone taken as bare screen: raised, it drops a plate's faint construction lines."""
-    im = Image.open(path).convert("L")
+    `lift` is the tone taken as bare screen: raised, it drops a plate's faint construction lines. `flatten` takes
+    the paper's own tone out of the whole sheet first (`flattened`): "paper", or "through" where the other side's
+    writing shows through as well."""
+    im = flattened(path, flatten == "through") if flatten else Image.open(path).convert("L")
     w, h = im.size
     im = im.crop((int(crop[0] * w), int(crop[1] * h), int(crop[2] * w), int(crop[3] * h)))
     if rot: im = im.rotate(rot, expand=True)                    # degrees anticlockwise: a plate printed sideways

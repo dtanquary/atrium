@@ -145,7 +145,7 @@ python3 docs/etching/bake.py <folder of source pictures> Sources/Atrium/Resource
 python3 docs/etching/bake.py <folder of source pictures> Sources/Atrium/Resources wave     # one
 ```
 
-Needs numpy, scipy, Pillow and clang (for `route.c`, the one slow loop). The source pictures are not in the repo: `PICTURES` in `bake.py` gives each one's address, the file name it is looked for under, and its crop, with what else it needed: a sheet turned on its side (`rot`), signatures painted out (`blank`), or a plate's faint construction lines dropped (`lift`). A patent's file is one sheet of the Patent Office's PDF, taken out with `pdfimages` as `bake.py` says. A picture named in `FINE_ONLY` gets no standard route. A bake is the same every time. What it does:
+Needs numpy, scipy, Pillow and clang (for `route.c`, the one slow loop). The source pictures are not in the repo: `PICTURES` in `bake.py` gives each one's address, the file name it is looked for under, and its crop, with what else it needed: a sheet turned on its side (`rot`), signatures painted out (`blank`), a plate's faint construction lines dropped (`lift`), or a stained sheet's own tone taken out (`flatten`, below). A patent's file is one sheet of the Patent Office's PDF, taken out with `pdfimages` as `bake.py` says. A picture named in `FINE_ONLY` gets no standard route. A bake is the same every time. What it does:
 
 1. **Darkness on the grid:** the picture, cropped, fitted to the grid with a margin, its paper tone taken as bare screen.
 2. **Lines:** cells darker than their surroundings (the picture less a 2.5-cell blur of itself), thinned to one cell wide with Zhang and Suen's thinning (T. Y. Zhang and C. Y. Suen, "A fast parallel algorithm for thinning digital patterns", Communications of the ACM 27(3), 1984, https://doi.org/10.1145/357994.358023). Bold strokes are drawn first.
@@ -153,6 +153,13 @@ Needs numpy, scipy, Pillow and clang (for `route.c`, the one slow loop). The sou
 4. **One route:** the stylus walks to an undrawn neighbour, straight on first. Stuck, it takes the cheapest way to the nearest wanted cell: back along lines already drawn, or, where a piece of the picture stands alone, across bare screen (a stray mark, costed at twenty times a step back so it is the last resort). The whole picture's outlines come first, then each depth of shading over the whole picture, so a half-drawn picture is a whole composition and not a finished corner.
 
 The fine routes are the same bake on a grid of 2048 × 1280, so everything is half the size: a line half as wide, hatching twice as close.
+
+**`flatten`** (2026-10-13) is for a drawing on old paper, or a painted leaf, where no one tone is the bare sheet: a manuscript's page is darker at its edges and stained, and step 1 would draw the stains. Before anything else the whole sheet is turned into paper and ink (`flattened` in `bake.py`):
+
+- **`flatten="paper"`:** the paper's tone is taken from the sheet itself, channel by channel: the 85th percentile of each neighbourhood 4% of the sheet's width across, worked out on a copy an eighth the size and blurred by half that width. Each channel is divided by it and the three are averaged, so stains and dark edges come out as bare paper.
+- **`flatten="through"`:** the same, and the other side's writing taken out as well. Measured on scans of Leonardo's Codex Madrid I, what shows through the sheet is 14 to 19% darker than the paper in red but only 6 to 12% in green, where the ink is 50 to 80% darker in both. So twice the green less the red keeps the ink and cancels what shows through.
+
+The crop, `lift` and `blank` then apply as for any picture. With no `flatten` the bake is as it was: fourteen pictures baked with and without the option in the script gave the same bytes.
 
 Tried in the research and dropped: a line that lifts (floating dashes half-way, and two dials could not draw it), finishing the nearest ink first (a finished corner and a bare screen for an hour), hatching alone (stray marks across the bare areas), TSP art and a raster squiggle (neither looks like the toy or like a person drawing).
 
