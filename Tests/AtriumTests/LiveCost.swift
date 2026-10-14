@@ -9,7 +9,8 @@ import Testing
 /// a core left to clock down between them. The render test's hot loop under-reports this several times over.
 /// One line per scene and rate, and a TSV: the process's CPU time per second and the share of it on performance
 /// cores (under load the scheduler moves it to efficiency cores, where the same work takes longer and less energy),
-/// its GPU time, the kernel's energy estimate (mW), frames drawn, hitches (gaps over 1.5 frames) and the longest gap,
+/// its GPU time, the kernel's energy estimate (mW), frames drawn, hitches (gaps over 1.5 frames), the longest gap and the
+/// commonest gaps (to show uneven pacing),
 /// the footprint after warm-up and how much of it came with this scene (less what the last one gave back meanwhile),
 /// and the build time; and WindowServer's CPU, GPU and energy impact over the same seconds,
 /// since it composites every frame drawn. A frozen view comes first, for what a window costs with nothing drawing,
@@ -38,7 +39,7 @@ func liveCost() async throws {
     NSApplication.shared.setActivationPolicy(.accessory)
     let screen = try #require(NSScreen.screens.first)
 
-    var rows = ["scene\tfps\tachieved fps\tcovered\tcpu ms/s\tP-core %\tgpu ms/s\tenergy mW\thitches\tmax gap ms\tfootprint MB\tgrowth MB\tbuild ms\tWindowServer cpu %\tWindowServer gpu ms/s\tWindowServer power"]
+    var rows = ["scene\tfps\tachieved fps\tcovered\tcpu ms/s\tP-core %\tgpu ms/s\tenergy mW\thitches\tmax gap ms\tgaps ms×count\tfootprint MB\tgrowth MB\tbuild ms\tWindowServer cpu %\tWindowServer gpu ms/s\tWindowServer power"]
     func run(_ wallpaper: Wallpaper?, fps: Int) async {
         let row = await measure(wallpaper, fps: fps, on: screen, seconds: seconds, sample: env["LIVE_COST_SAMPLE"])
         print(row.replacingOccurrences(of: "\t", with: "  "))
@@ -127,9 +128,15 @@ func liveCost() async throws {
     return [wallpaper?.name ?? "(no window)", "\(fps)", String(format: "%.1f", Double(times.count) / wall), covered ? "yes" : "no",
             perSecond(after.cpu - before.cpu), String(format: "%.0f", pCores), gpu(getpid()),
             perSecond(after.power.task_energy - before.power.task_energy),
-            "\(hitches)", String(format: "%.0f", (gaps.max() ?? 0) * 1000), String(format: "%.0f", Double(footprint) / 1_048_576),
+            "\(hitches)", String(format: "%.0f", (gaps.max() ?? 0) * 1000), pattern(gaps), String(format: "%.0f", Double(footprint) / 1_048_576),
             String(format: "%.0f", (Double(footprint) - Double(bare)) / 1_048_576), String(format: "%.0f", build),
             ws[0], gpu(windowServerPID), ws[1]].joined(separator: "\t")
+}
+
+/// The commonest gaps between frames, to the nearest ms, with how many of each: "33×450 25×12".
+private func pattern(_ gaps: [TimeInterval]) -> String {
+    Dictionary(grouping: gaps) { Int(($0 * 1000).rounded()) }.map { ($0.key, $0.value.count) }
+        .sorted { $0.1 > $1.1 }.prefix(3).map { "\($0.0)×\($0.1)" }.joined(separator: " ")
 }
 
 /// Counts the frames a `WallpaperView` draws, standing in as its delegate and handing each frame on to it.
