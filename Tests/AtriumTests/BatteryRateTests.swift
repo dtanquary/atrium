@@ -120,3 +120,58 @@ private final class SeenWindow: NSWindow {
         #expect(allowed.contains((scene as? BatteryPaced)?.batteryRate), "\(wallpaper.name)'s scene")
     }
 }
+
+/// Runs `body` with the defaults in `settings` set, then removes them.
+@MainActor private func with(_ settings: [String: Double], _ body: () throws -> Void) rethrows {
+    defer { settings.keys.forEach(UserDefaults.standard.removeObject) }
+    for (key, value) in settings { UserDefaults.standard.set(value, forKey: key) }
+    try body()
+}
+
+private let small = CGSize(width: 320, height: 200)
+
+/// Flowing Gradient runs slower on battery while its pools alone move, and at the battery's rate with the ribbons,
+/// following the switch as it's flipped.
+@MainActor @Test func flowingGradientRateFollowsRibbons() {
+    with(["gradient.ribbonsOn": 0]) {
+        let scene = FlowingGradient(size: small)
+        #expect(scene.batteryRate == 20)
+        UserDefaults.standard.set(1.0, forKey: "gradient.ribbonsOn")
+        #expect(scene.batteryRate == nil)
+    }
+}
+
+/// Game of Life's rate on battery follows its look: Calm slower than Classic.
+@MainActor @Test func gameOfLifeRateFollowsLook() {
+    with(["life.calm": 1]) {
+        let scene = GameOfLife(size: small)
+        #expect(scene.batteryRate == 12)
+        UserDefaults.standard.set(0.0, forKey: "life.calm")
+        #expect(scene.batteryRate == 20)
+    }
+}
+
+/// Weather runs slower on battery under fair skies and fog, at the battery's rate in rain, and follows the weather
+/// as it changes; A Tree for the Year, built on it, takes the calm rate back.
+@MainActor @Test func weatherRateFollowsTheWeather() {
+    with(["weather.lock": 1, "tree.lock": 1]) { // Clear
+        let scene = WeatherScene(size: small)
+        #expect(scene.batteryRate == 15)
+        UserDefaults.standard.set(6.0, forKey: "weather.lock") // Rain
+        #expect(scene.batteryRate == nil)
+        UserDefaults.standard.set(4.0, forKey: "weather.lock") // Fog
+        #expect(scene.batteryRate == 15)
+        #expect(TreeScene(size: small).batteryRate == nil)
+    }
+}
+
+/// Etching runs at 20 fps on battery while drawing, and 10 once the picture is done, resting or clearing.
+@MainActor @Test func etchingRateFollowsTheDrawing() {
+    for (hooks, rate) in [(["etching.drawn": 0.4], 20), (["etching.drawn": 1], 10), (["etching.cleared": 0.5], 10)] {
+        with(hooks.merging([Etching.picture.key: 1]) { $1 }) {
+            let scene = Etching(size: small)
+            scene.update(ProcessInfo.processInfo.systemUptime)
+            #expect(scene.batteryRate == rate, "\(hooks)")
+        }
+    }
+}

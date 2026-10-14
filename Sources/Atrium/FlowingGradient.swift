@@ -8,7 +8,7 @@ import simd
 /// they're watercolour washes on pale paper, with the silk as a white sheen. The mood follows the real Sun: warmer
 /// around sunrise and sunset, deeper and cooler at night, a touch brighter at noon. Every knob is live in Settings,
 /// and the palette can be pinned there; left on Random, it eases to another palette every few minutes.
-final class FlowingGradient: SKScene {
+final class FlowingGradient: SKScene, BatteryPaced {
     nonisolated static let cycleMinutes = Knob(key: "gradient.cycleMinutes", label: "Change colors every", range: 0...30,
                                                standard: 5, section: "Colors", format: .minutes)
     /// Its Settings. Each drives the shader uniform named `u_` plus the last part of its key.
@@ -75,6 +75,9 @@ final class FlowingGradient: SKScene {
     private let colours = (["u_base"] + (0..<7).map { "u_c\($0)" }).map { SKUniform(name: $0, vectorFloat3: .zero) }
     private var time = 0.0 // the phase, kept in Double: see update(_:)
     private var flowSpeed = 1.0
+    /// 20 fps on battery while the pools alone move: they are edgeless, so a step of up to 8 px a frame shows as
+    /// under 1.5% of brightness. The ribbons' sharp strands want the battery's full rate.
+    var batteryRate: Int? = 20 { didSet { batteryRateChanged(from: oldValue) } }
     private var lastUpdate: TimeInterval?
     private var scheduledCycle: Double?
     private var paletteName = ""
@@ -127,6 +130,7 @@ final class FlowingGradient: SKScene {
     @objc private func applySettings() {
         for knob in Self.knobs { knobUniforms[knob.key]?.floatValue = Float(knob.value) }
         flowSpeed = Self.knobs[1].value
+        batteryRate = Self.knobs[3].value > 0.5 ? nil : 20
         let chosen = UserDefaults.standard.string(forKey: "gradient.palette") ?? ""
         let pinned = Self.palettes.contains { $0.name == chosen } // like init, anything else is Random
         let minutes = pinned ? 0 : Self.cycleMinutes.value.rounded()

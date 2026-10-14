@@ -84,6 +84,8 @@ The swatches in Settings (`paletteOptions`) use pools 1, 3, 4 and 6, and their p
 ## Performance
 CPU 0.47 ms and GPU 0.55 ms per frame (release, 2x), one of the cheapest scenes. The 7 gaussians and 10 strand exponentials per pixel are the bulk. Lots of headroom. The colour cycle only animates uniforms, so it costs the GPU nothing.
 
+**On battery it runs at 20 fps at most while the ribbons are off, and at the battery's rate with them on** (`batteryRate`, set in `applySettings` as the switch moves; 2026-10-13). The pools' warp moves up to about 80 points, 160 device pixels (2x on a 14-inch MacBook Pro, 3024 × 1964), a second at Flow speed 2 (`time += … * 0.04 * flowSpeed` and the warp in the shader): 8 px a frame at 20 fps, but the pools are edgeless Gaussians at least 412 points wide, so a pixel's brightness changes by about 1.4% a frame or less. The ribbons are 9-point strands moving 50–80 points a second, 5–8 px a frame at 20, which a lower rate would show.
+
 ## Gotchas and shortcuts
 - **Knobs are read by array index:** `Self.knobs[1]` (speed), `[9]` (previewTime), `[10]` (previewHour). Reordering the `knobs` array silently breaks them. Look the key up instead if you touch this. The cycle knob is its own `static let cycleMinutes`, like Galaxy's.
 - Every knob gets a `u_<name>` uniform, even the ones the shader doesn't use (`previewTime`, `previewHour`, `cycleMinutes`). That's harmless, but it's 26 uniforms now, near SKShader's limit of about 30 (see CLAUDE.md). Filter the unused ones out before adding more.

@@ -404,6 +404,8 @@ Measured by the render test on a 14-inch screen at 2x (M3 Max, 2026-10-13): **0.
 - **Shipped:** seventy-nine routes, 5.5 MB (the first thirteen pictures' twenty-five were 1.9 MB, and the first six's twelve 942 KB). The twenty-seven new pictures are 3.6 MB: 12 to 46 KB each at the standard line and 28 to 190 KB fine.
 - **Not timed in the app:** a 5K or 6K display (a test draws the picture at 5K through the four-read shader). A standalone copy of the shader, timed the same way before this was built, took 0.57 ms of GPU at 5K and 0.79 at 6K; that was without the tooth, which is worked out for every pixel of the display and so costs more there than the tenth of a millisecond it costs here. Nor a GPU slower than an M3 Max, nor the frame on which a texture is first sent.
 
+- **On battery it runs at 20 fps at most while the line is drawn, and 10 once the picture is done**, through its rest and its 12 s clearing (`batteryRate`, set in `update` from the cycle's `drawn`; 2026-10-13). The tip draws 1/40 of the screen's width a second at Speed 1 (`pace`), 76 device pixels (2x on a 14-inch MacBook Pro, 3024 × 1964) a second: 3.8 px a frame at 20 fps, where 15 grew the line in 5 px chunks the eye could follow. Resting, nothing moves; clearing is a fade.
+
 ## Checking it
 
 - `lineRouteDecodesToItsKnownLength`: the Wave's route has the steps and the clock its bake printed, stays on its grid, and never lifts.

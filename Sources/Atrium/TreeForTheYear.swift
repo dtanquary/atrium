@@ -74,6 +74,8 @@ final class TreeScene: WeatherScene {
         Knob(key: "tree.day", label: "Day", range: 0...364, standard: 180, section: "Preview", format: .date, shownWhen: "tree.previewDay"),
     ] + WeatherScene.settings("tree")
     private static let held = treeKnobs[0], warmer = treeKnobs[1], sway = treeKnobs[2], previewDay = treeKnobs[3], day = treeKnobs[4]
+    /// The crown sways with the live wind, so no calmer rate on battery whatever the weather.
+    override class var calmRate: Int? { nil }
 
     /// ponytail: white oak only; Japanese maple and Yoshino cherry are more `TreeSpecies` values and a menu, with
     /// their own leaves, bark and `Phenology`.

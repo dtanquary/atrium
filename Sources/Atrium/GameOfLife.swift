@@ -6,7 +6,7 @@ import SpriteKit
 /// Dead cells fade out over a second or two. When the board settles into still lifes and blinkers, fresh soup is dropped in.
 /// The Calm look runs slower and shows a long exposure of the board: each cell's average over a few seconds, so
 /// blinkers and still lifes hold a steady glow and only real movement shows, melted into soft blobs.
-final class GameOfLife: SKScene {
+final class GameOfLife: SKScene, BatteryPaced {
     nonisolated static let knobs = [
         Knob(key: "life.calm", label: "Calm", range: 0...1, standard: 1, section: "Look", format: .toggle),
         Knob(key: "life.speed", label: "Generations a second", range: 0.5...4, standard: 1.5, section: "Look", shownWhen: "life.calm"),
@@ -28,6 +28,9 @@ final class GameOfLife: SKScene {
     private var quietSteps = 0
     /// Settings, read as they change rather than every frame.
     private var isCalm = true, interval: TimeInterval = 0.14, exposure = 3.0
+    /// 12 fps on battery for Calm, whose gliders move 6 px a second under a long exposure; 20 for Classic, whose 7
+    /// generations a second and 70 ms blooms 12 or 15 fps would lose.
+    var batteryRate: Int? = 12 { didSet { batteryRateChanged(from: oldValue) } }
 
     override func sceneDidLoad() {
         backgroundColor = SKColor(red: 0.035, green: 0.04, blue: 0.075, alpha: 1)
@@ -57,6 +60,7 @@ final class GameOfLife: SKScene {
         softness.floatValue = Float(Self.knobs[3].value)
         interval = isCalm ? 1 / Self.knobs[1].value : classicInterval
         exposure = Self.knobs[2].value
+        batteryRate = isCalm ? 12 : 20
     }
 
     override func update(_ currentTime: TimeInterval) {

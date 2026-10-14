@@ -131,6 +131,8 @@ What changed from it:
 - The sky bake is 4 ms a minute, off the main thread. The first build also makes the atmosphere tables and cloud noise and decodes the photo, about 200 ms once per launch; later builds take about 4 ms.
 - Memory: the ground photo is 24 MB as a texture (4096×1485), the rest is small.
 
+- **On battery it runs at 15 fps at most under clear, partly cloudy and overcast skies and in fog, and at the battery's rate in drizzle, rain, snow and storms** (`batteryRate`, set as each weather is built in `build()`, so it follows the live weather; 2026-10-13). Fair-weather clouds drift about 5 points a second at the default Cloud speed 6× (0.7 device pixels (2x on a 14-inch MacBook Pro, 3024 × 1964) a frame at 15 fps; 1.7 at 15×). Snow falls 148 px a second (10 px a frame at 15), rain far faster, and a lightning stroke lasts 30 ms. A Tree for the Year, built on it, takes the calm rate back (`calmRate`), since its crown sways with the wind.
+
 ## Gotchas and shortcuts
 - **The decoding bug that hid everything.** `.convertFromSnakeCase` turns `wind_speed_10m` into `windSpeed10M`, so every reply failed to decode silently. The scene sat on its default of a partly cloudy day, even at night. The fix is explicit `CodingKeys`, and `parsesOpenMeteo()` in WeatherTests parses a real reply to keep it fixed.
 - **SKShader can't return early from `main()`**: the Metal translation needs a value on every path, so it fails to compile. Use if/else.

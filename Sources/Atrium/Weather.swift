@@ -22,7 +22,7 @@ import SpriteKit
 /// sun or moon and stars, drifting clouds, drizzle, rain, snow, fog or a thunderstorm. Day or night follows the
 /// real Sun where you are, checked every minute, so it's right offline too. Another wallpaper can stand on its own
 /// `WeatherGround` under the same sky, with its own settings keys, and add to it in `addForeground()`.
-class WeatherScene: SKScene {
+class WeatherScene: SKScene, BatteryPaced {
     nonisolated static let knobs = settings("weather")
 
     /// The weather lock, cloud speed, time preview and star trails, stored under `prefix`.
@@ -51,6 +51,12 @@ class WeatherScene: SKScene {
     private var sinceTrack = 0.0, baking = false, skyDate = Date.distantPast
     /// How much faster than the real wind the clouds drift: they'd look still at real speed. From Settings.
     private var cloudSpeed: Double
+    /// `calmRate` under fair skies and fog, whose clouds drift under 1 px a frame at 15 fps (2 at Cloud speed 15×);
+    /// none in drizzle, rain, snow and storms, whose streaks, flakes and flashes are fast. Set as each weather is built.
+    private(set) var batteryRate: Int? { didSet { batteryRateChanged(from: oldValue) } }
+    /// The ceiling on battery in calm weather, for a wallpaper built on this one whose own motion is faster (A Tree
+    /// for the Year's sway) to take back.
+    class var calmRate: Int? { 15 }
     /// How far the cloud deck (km) and the cirrus (in their noise's own units) have drifted, wrapped where the noise
     /// repeats so the floats keep their precision.
     private var deckDrift = SIMD2<Double>.zero, cirrusDrift = SIMD2<Double>.zero
@@ -177,6 +183,7 @@ class WeatherScene: SKScene {
 
     /// Rebuilds everything for the current conditions.
     private func build() {
+        batteryRate = [.clear, .partlyCloudy, .overcast, .fog].contains(conditions.kind) ? Self.calmRate : nil
         removeAllChildren()
         removeAction(forKey: "lightning")
         addSky()

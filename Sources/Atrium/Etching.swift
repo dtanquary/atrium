@@ -16,7 +16,7 @@ import Synchronization
 /// frame costs the same however much is drawn. The clock is the wall's (`Cycle`): the picture goes on from where it
 /// was after a relaunch or Shuffle, and every display shows the same moment of it.
 /// docs/etching.md has the measurements of the real toy, the route's format and the sources.
-final class Etching: SKScene {
+final class Etching: SKScene, BatteryPaced {
     /// The set: each picture's name in the Picture menu, and its route's file (`etching-<file>.route`). Each one's
     /// source and licence is in Resources/etching-credits.tsv and docs/etching.md. The menu's pick is stored by
     /// place, so a new picture goes at the end and none is moved; the menu lists them by name (`listed`).
@@ -285,6 +285,9 @@ final class Etching: SKScene {
     private var held: Held?, cover: Data?, stamping: (of: Held, landing: Landing)?, made: (of: Held, stamped: LineRoute.Stamped)?
     /// The wall-clock moment the picture last went in on a bare screen: it fades up from there.
     private var shownAt: Double?, bare = true
+    /// 20 fps on battery while the line is drawn (its tip goes 76 px a second, 3.8 a frame at 20); 10 once the
+    /// picture is done, through its rest and its 12 s clearing, where nothing moves but fades.
+    var batteryRate: Int? = 20 { didSet { batteryRateChanged(from: oldValue) } }
     /// What the tests and the pictures of it ask for as a scene is built: the share drawn (`etching.drawn`), how
     /// far cleared (`etching.cleared`), and whether another picture's ghost lies under it (`etching.ghost`).
     /// With any of them the scene keeps a cycle of its own, begun at its first frame, and saves nothing.
@@ -430,6 +433,7 @@ final class Etching: SKScene {
         // (the same picture at the other width of line, or the other fit, stays up, as far drawn, until its own textures land)
         bare = held?.picture != now.picture || held?.ghost != now.ghost
 
+        batteryRate = moment.drawn < 1 ? 20 : 10
         clock.floatValue = Float(moment.drawn * LineRoute.end / 256)
         clear.floatValue = Float(moment.cleared)
         ghost.floatValue = Float(1 - simd_smoothstep(0, 1, moment.drawn * seconds[moment.picture] / Cycle.ghosting))

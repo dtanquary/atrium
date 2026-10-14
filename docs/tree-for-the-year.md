@@ -55,6 +55,8 @@ One young white oak on a chalk hilltop, living through the real seasons where yo
 - Memory: the tree's 12 textures are about 20 MB at 15, 29 at 30; the hilltop photo 23 MB. A bake is shared by every copy of the scene the same size and goes with the last one showing it, its pixel arrays dropped once they're in textures. Until 2026-10-08 the last three bakes stayed for the app's life, each holding its pixels twice (found in the 1.0 review).
 - `TreeGrowth` is its own SwiftPM target built with `-O` even in debug (`unsafeFlags`): unoptimised, the bake took about 100 s, which added that to every `swift test`. It's Foundation and simd only, so it has no SpriteKit.
 
+- **On battery** it runs at the battery's rate in all weathers, though Weather, which it's built on, slows to 15 fps in calm weather: the crown sways with the live wind (`calmRate` in TreeForTheYear.swift; 2026-10-13).
+
 ## Gotchas and shortcuts
 - **Slab order:** the prototype first stored slab 0 nearest, so the far crown and trunk were drawn over the near leaves; slab 0 is the farthest now.
 - **Thresholds on the internode grid:** leafZone was 0.8 = 5 × the 0.16 m internode, and `dtip < leafZone` flipped on 1e-15 rounding between Python and Swift; it's 0.88.

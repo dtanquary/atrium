@@ -66,6 +66,8 @@ Still to come: a cell size (it resizes the board, so it needs a rebuild), and pa
 ## Performance
 Calm measured at CPU 0.55 ms and GPU 0.36 ms per frame (release build, 2x, 2026-09-26); the exposure and blur cost about as much as Classic's integer easing. Classic measured at CPU 0.47 ms and GPU 0.52 ms. CPU cost is the per-frame glow easing over about 18.5k cells, plus copying the 74 KB buffer (`let bytes = pixels` makes a copy every frame), plus a generation step 7 times a second. In debug it measured about 2.6 ms of CPU. There's comfortable headroom in release.
 
+**On battery it runs at 12 fps at most in Calm and 20 in Classic** (`batteryRate`, set in `settingsChanged`; 2026-10-13). Calm steps 1.5 generations a second under a 3 s exposure, so a glider moves about 6 device pixels (2x on a 14-inch MacBook Pro, 3024 × 1964) a second: 0.5 px a frame at 12 fps (at its top, 4 generations a second with no exposure, 12 fps still shows each one). Classic steps about 7 generations a second with births blooming in 70 ms, more than a third of 15 fps, so it keeps 20.
+
 ## Gotchas and shortcuts
 - **Whole-number glow:** a dying cell loses at least 1 of its 255 each frame, otherwise the smaller steps at 60 fps round to 0 and leave cells glowing forever.
 - **Blobby reseeds:** reseeded patches arrive as visible round blobs (flagged by the nature agent).
