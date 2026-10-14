@@ -59,6 +59,20 @@ final class AntColony: SKScene {
     /// The day a moment of the wall's clock belongs to (a day runs from six to six), as a number like 20261012;
     /// the moment that day began, in seconds since the reference date; and the hours since.
     nonisolated static func day(at wall: Double, calendar: Calendar = .current) -> (day: Int, six: Double, hours: Double) {
+        if let known = lastDay.withLock({ $0 }), known.calendar == calendar, known.six <= wall, wall < known.until {
+            return (known.day, known.six, (wall - known.six) / 3600)
+        }
+        let made = workDay(at: wall, calendar), until = workDay(at: made.six + 26 * 3600, calendar).six // the next six
+        lastDay.withLock { $0 = (calendar, made.day, made.six, until) }
+        return made
+    }
+
+    /// The last day `day(at:)` worked out, and the six that ends it: the calendar's work is about 1.5 µs, and the
+    /// farm asks every frame.
+    private static let lastDay = Mutex<(calendar: Calendar, day: Int, six: Double, until: Double)?>(nil)
+
+    /// `day(at:)` worked out by the calendar.
+    private nonisolated static func workDay(at wall: Double, _ calendar: Calendar) -> (day: Int, six: Double, hours: Double) {
         let morning = calendar.startOfDay(for: Date(timeIntervalSinceReferenceDate: wall - dawn * 3600))
         let parts = calendar.dateComponents([.year, .month, .day], from: morning), six = morning.timeIntervalSinceReferenceDate + dawn * 3600
         return ((parts.year ?? 0) * 10000 + (parts.month ?? 0) * 100 + (parts.day ?? 0), six, (wall - six) / 3600)
@@ -482,11 +496,15 @@ final class AntColony: SKScene {
         figure.body.position = point(ant.position)
         figure.body.zRotation = atan2(forward.dy, forward.dx) - left * 3 * ant.nod
         // (end on it is a third as long as it is from the side; rolled over it is as thick seen from above)
-        figure.body.xScale = max(cos(ant.yaw), 0.3)
-        figure.body.yScale = left * (ant.flat < 0 ? -1 : 1) * max(abs(ant.flat), 0.85)
+        // (each scale is set only when it changes, which is only while it turns about or rolls: a set costs a KVO notice)
+        let xScale = max(cos(ant.yaw), 0.3), yScale = left * (ant.flat < 0 ? -1 : 1) * max(abs(ant.flat), 0.85)
+        if figure.body.xScale != xScale { figure.body.xScale = xScale }
+        if figure.body.yScale != yScale { figure.body.yScale = yScale }
         if let shadow = figure.shadow {
             shadow.position = CGPoint(x: figure.body.position.x + 0.10 * length, y: figure.body.position.y - 0.18 * length)
-            (shadow.zRotation, shadow.xScale, shadow.yScale) = (figure.body.zRotation, figure.body.xScale, figure.body.yScale)
+            shadow.zRotation = figure.body.zRotation
+            if shadow.xScale != xScale { shadow.xScale = xScale }
+            if shadow.yScale != yScale { shadow.yScale = yScale }
         }
         figure.grain.isHidden = !ant.carrying
         figure.grain.position = point(ant.mouth(bodyLength: bodyLength))
@@ -501,7 +519,7 @@ final class AntColony: SKScene {
                 let (a, b) = (point(joints[k]), point(joints[k + 1])), line = figure.lines[next]
                 line.position = CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2)
                 line.zRotation = atan2(b.y - a.y, b.x - a.x)
-                line.xScale = hypot(b.x - a.x, b.y - a.y) + figure.thick[next]
+                line.size.width = hypot(b.x - a.x, b.y - a.y) + figure.thick[next] // its length (size: no KVO, as a scale has)
                 next += 1
             }
         }
