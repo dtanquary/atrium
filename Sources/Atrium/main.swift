@@ -17,6 +17,8 @@ final class WallpaperView: SKView, SKViewDelegate {
     static var paused = false
     /// How many views in a row `watch` has put in this one's place without a frame drawn since.
     private var replaced = 0
+    /// The `Wallpaper.batteryRate` of the wallpaper it shows, for `applyPowerState`.
+    var batteryRate: Int?
     /// Holds the current frame still, e.g. in Low Power Mode.
     var frozen = false { didSet { updatePaused() } }
     /// Runs even while frozen until then, so a new scene draws its first frame, or finishes crossfading, and an
@@ -74,6 +76,7 @@ final class WallpaperView: SKView, SKViewDelegate {
         let fresh = WallpaperView()
         fresh.frozen = frozen
         fresh.preferredFramesPerSecond = preferredFramesPerSecond
+        fresh.batteryRate = batteryRate
         fresh.replaced = replaced + 1
         window.contentView = fresh
         fresh.presentScene(scene(window.frame.size))
@@ -98,10 +101,12 @@ final class WallpaperView: SKView, SKViewDelegate {
 }
 
 /// Runs at the frame rate Settings → Power picks for Low Power Mode, battery or mains power (60 and 30 fps, and
-/// frozen in Low Power Mode, unless changed), or holds still while the menu's Pause is on.
+/// frozen in Low Power Mode, unless changed), held to each view's wallpaper's `batteryRate` below mains power's,
+/// or holds still while the menu's Pause is on.
 @MainActor func applyPowerState(to views: [WallpaperView]) {
-    let fps = Power.fps(pick: powerKnob().value, fast: Power.fastDisplay)
+    let pick = powerKnob().value
     for view in views {
+        let fps = Power.fps(pick: pick, plugged: Power.plugged.value, fast: Power.fastDisplay, cap: view.batteryRate)
         if fps > 0 { view.preferredFramesPerSecond = fps }
         view.frozen = fps == 0 || WallpaperView.paused
     }
@@ -143,8 +148,17 @@ if !scenes.contains(where: { $0.name == current }) {
     UserDefaults.standard.removeObject(forKey: "scene")
 }
 
-@MainActor func currentScene(size: CGSize) -> SKScene {
-    (scenes.first { $0.name == current } ?? defaultScene).make(size)
+/// The wallpaper on the desktop.
+@MainActor func currentWallpaper() -> Wallpaper { scenes.first { $0.name == current } ?? defaultScene }
+
+@MainActor func currentScene(size: CGSize) -> SKScene { currentWallpaper().make(size) }
+
+/// Shows the desktop's wallpaper, built afresh, in `view`, at that wallpaper's frame rate: crossfading with `fade`.
+@MainActor func presentCurrent(in view: WallpaperView, size: CGSize, fade: Bool) {
+    view.batteryRate = currentWallpaper().batteryRate
+    applyPowerState(to: [view])
+    let scene = currentScene(size: size)
+    if fade { view.presentScene(scene, transition: .crossFade(withDuration: 0.8)) } else { view.presentScene(scene) }
 }
 
 /// A borderless window for one display, parked at desktop level: above the system wallpaper,
@@ -157,8 +171,7 @@ if !scenes.contains(where: { $0.name == current }) {
     window.isReleasedWhenClosed = false
 
     let view = WallpaperView()
-    applyPowerState(to: [view])
-    view.presentScene(currentScene(size: screen.frame.size))
+    presentCurrent(in: view, size: screen.frame.size, fade: false)
     window.contentView = view
     window.orderFront(nil)
     return window
@@ -191,8 +204,7 @@ if !scenes.contains(where: { $0.name == current }) {
 /// Crossfades every display to the chosen scene in its existing window.
 @MainActor func switchScene() {
     for window in windows {
-        let view = window.contentView as? SKView
-        view?.presentScene(currentScene(size: window.frame.size), transition: .crossFade(withDuration: 0.8))
+        if let view = window.contentView as? WallpaperView { presentCurrent(in: view, size: window.frame.size, fade: true) }
     }
     matchLockScreen(after: 1.5)
 }
@@ -213,7 +225,9 @@ if !scenes.contains(where: { $0.name == current }) {
     guard WallpaperTime.elapsed > hours * 3600 else { return }
     WallpaperTime.restart()
     if fade { return switchScene() }
-    for window in windows { (window.contentView as? SKView)?.presentScene(currentScene(size: window.frame.size)) }
+    for window in windows {
+        if let view = window.contentView as? WallpaperView { presentCurrent(in: view, size: window.frame.size, fade: false) }
+    }
     matchLockScreen(after: 1.5)
 }
 
@@ -514,7 +528,7 @@ Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { _ in
 // ponytail: rebuilds every other scene, even ones with a single look; it only happens a couple of times a day
 let appearance = app.observe(\.effectiveAppearance) { _, _ in
     MainActor.assumeIsolated {
-        guard (scenes.first { $0.name == current } ?? defaultScene).followsAppearance else { return switchScene() }
+        guard currentWallpaper().followsAppearance else { return switchScene() }
         DispatchQueue.main.async {
             MainActor.assumeIsolated { windows.compactMap { $0.contentView as? WallpaperView }.forEach { $0.wake(for: 0.5) } }
         }

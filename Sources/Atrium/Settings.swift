@@ -325,9 +325,13 @@ struct GeneralPage: View {
     static func rate(_ knob: Knob) -> Int { rates[min(max(Int(knob.value), 0), rates.count - 1)] }
 
     /// The frames per second to run at for the pick `pick` in force (0 freezes), with a display above 60 Hz (`fast`)
-    /// or without, where a pick of 120 fps runs at 60.
-    nonisolated static func fps(pick: Double, fast: Bool) -> Int {
-        rates[min(max(Int(pick), 0), fast ? rates.count - 1 : 3)]
+    /// or without, where a pick of 120 fps runs at 60. A wallpaper's `cap` (`Wallpaper.batteryRate`) holds it lower
+    /// while that's below mains power's pick `plugged`; it never raises a rate or unfreezes.
+    nonisolated static func fps(pick: Double, plugged: Double, fast: Bool, cap: Int?) -> Int {
+        let rate = { (pick: Double) in rates[min(max(Int(pick), 0), fast ? rates.count - 1 : 3)] }
+        var fps = rate(pick)
+        if let cap, fps < rate(plugged) { fps = min(fps, cap) }
+        return fps
     }
 
     /// Full Speed on Battery, in the menu and the welcome: battery set to run as fast as mains power. Only when it's
@@ -625,6 +629,7 @@ struct LivePreview: NSViewRepresentable {
 
     func makeNSView(context: Context) -> WallpaperView {
         let view = WallpaperView()
+        view.batteryRate = wallpaper.batteryRate
         applyPowerState(to: [view])
         let scene = wallpaper.make(NSScreen.main?.frame.size ?? CGSize(width: 1512, height: 982))
         (scene as? HeadStart)?.headStart() // one that starts from nothing opens with something to judge its settings by

@@ -27,6 +27,9 @@ struct Wallpaper {
     /// and eases to its other look (Meander, whose river then carries on). The app builds no new scene for it
     /// when the appearance changes, as it does for every other wallpaper.
     var followsAppearance = false
+    /// A ceiling in frames per second for when it runs slower than on mains power (on battery or in Low Power Mode,
+    /// not with Full Speed on Battery), for a wallpaper whose motion is slow enough that a lower rate can't be seen.
+    var batteryRate: Int?
     /// Not good enough to show yet: left out of the menu, Settings, Shuffle and the welcome unless `unfinished` is set
     /// (`defaults write com.dtanquary.atrium unfinished -bool true`, then relaunch), but still built and render-tested.
     /// One that is parked, not being worked on, can be left hidden even then by name

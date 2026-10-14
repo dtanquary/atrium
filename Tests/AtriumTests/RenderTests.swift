@@ -16,7 +16,7 @@ import UniformTypeIdentifiers
 }
 
 /// A view that has stopped drawing though it should be running gives way to a fresh one showing the wallpaper
-/// built afresh, display link and all.
+/// built afresh, display link and all, held to the same battery cap.
 @MainActor @Test func stoppedViewIsReplaced() {
     let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 64, height: 64), styleMask: .borderless, backing: .buffered, defer: false)
     let view = WallpaperView()
@@ -24,10 +24,12 @@ import UniformTypeIdentifiers
     view.presentScene(SKScene(size: window.frame.size))
     view.isPaused = false
     view.lastDrawn = Date(timeIntervalSinceNow: -10)
+    view.batteryRate = 20
     let fresh = SKScene(size: window.frame.size)
     view.watch { _ in fresh }
     #expect(window.contentView !== view)
     #expect((window.contentView as? WallpaperView)?.scene === fresh)
+    #expect((window.contentView as? WallpaperView)?.batteryRate == 20)
 }
 
 /// The menu's Pause holds a view still whatever frame rate Settings → Power gives it, and Resume lets it run again.
@@ -421,14 +423,27 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
 /// only with a display that goes above 60 Hz, and a pick stored past the menu's end (120 kept from a ProMotion
 /// display, or a `defaults write`) runs at the fastest the menu offers rather than crashing.
 @MainActor @Test func powerPicksToFrameRates() {
-    #expect(Power.fps(pick: Power.plugged.standard, fast: false) == 60)
-    #expect(Power.fps(pick: Power.battery.standard, fast: false) == 30)
-    #expect(Power.fps(pick: Power.lowPower.standard, fast: false) == 0)
-    #expect(Power.fps(pick: Power.plugged.standard, fast: true) == 60)
-    #expect(Power.fps(pick: 4, fast: true) == 120)
-    #expect(Power.fps(pick: 4, fast: false) == 60)
-    #expect(Power.fps(pick: 9, fast: true) == 120 && Power.fps(pick: -1, fast: true) == 0)
+    func fps(_ pick: Double, fast: Bool = false) -> Int { Power.fps(pick: pick, plugged: 3, fast: fast, cap: nil) }
+    #expect(fps(Power.plugged.standard) == 60)
+    #expect(fps(Power.battery.standard) == 30)
+    #expect(fps(Power.lowPower.standard) == 0)
+    #expect(fps(Power.plugged.standard, fast: true) == 60)
+    #expect(fps(4, fast: true) == 120)
+    #expect(fps(4) == 60)
+    #expect(fps(9, fast: true) == 120 && fps(-1, fast: true) == 0)
     #expect(Power.plugged.range.upperBound == (Power.fastDisplay ? 4 : 3))
+}
+
+/// A wallpaper's battery cap holds it down only while it runs slower than on mains power: on battery or in Low Power
+/// Mode, not plugged in nor with Full Speed on Battery (battery at mains power's pick); and it never unfreezes.
+@MainActor @Test func batteryCapOnlyBelowMainsPower() {
+    #expect(Power.fps(pick: 2, plugged: 3, fast: false, cap: 15) == 15) // battery, 30 → 15
+    #expect(Power.fps(pick: 2, plugged: 3, fast: false, cap: 45) == 30) // a cap never raises
+    #expect(Power.fps(pick: 3, plugged: 3, fast: false, cap: 15) == 60) // plugged in, or Full Speed on Battery
+    #expect(Power.fps(pick: 4, plugged: 4, fast: true, cap: 15) == 120)
+    #expect(Power.fps(pick: 3, plugged: 4, fast: true, cap: 30) == 30) // 60 on battery below 120 plugged in
+    #expect(Power.fps(pick: 4, plugged: 4, fast: false, cap: 30) == 60) // a stale 120 on both is the same rate
+    #expect(Power.fps(pick: 0, plugged: 3, fast: false, cap: 15) == 0) // Low Power Mode's Freeze stays frozen
 }
 
 /// Held on a world seen only from the ground, with Views from the surface off, Solar System Tour still shows it
