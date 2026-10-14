@@ -402,6 +402,9 @@ final class PixelOrbit: SKScene, BatteryPaced {
         let flashes = (0..<16).map { paint.storms ? SeatWorld.lightning($0, at: clock) : 0 }
         let mats = OrbitPaint.mats, hazes = OrbitPaint.hazes
         let space = pack(rgb(4, 5, 9))
+        // the per-pixel tables as locals, so reading them in the loops below doesn't check for exclusive access at
+        // every pixel
+        let (ringOf, place, facing, toward, slant, haze, dither, rings, cells, paint) = (ringOf, place, facing, toward, slant, haze, dither, rings, cells, paint)
         picture.withUnsafeMutableBufferPointer { out in
             for i in 0..<gw * gh {
                 let r = Int(ringOf[i])

@@ -425,6 +425,10 @@ final class PixelTrain: SKScene {
                 if s == gw { s = 0 }
             }
         }
+        // the rows' and rings' strips and colours as locals, so reading them in the loops below doesn't check for
+        // exclusive access at every pixel
+        let (land, dash, glint, water, mirrored, groundColours, fog, skyline, fronted) = (land, dash, glint, water, mirrored, groundColours, fog, skyline, fronted)
+        let (rows, rings, strips, tops, lamps, lampFog, ringColours, sky) = (rows, rings, strips, tops, lamps, lampFog, ringColours, sky)
         picture.withUnsafeMutableBufferPointer { out in
             for i in horizon * gw..<gh * gw { out[i] = sky[i] }
             cloud.paint(into: out, horizon: horizon, tones: tones, bolt: bolt, flashes: flashes, strike: flash > 0 ? struck : nil)
