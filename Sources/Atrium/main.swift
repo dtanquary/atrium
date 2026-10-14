@@ -101,12 +101,12 @@ final class WallpaperView: SKView, SKViewDelegate {
 }
 
 /// Runs at the frame rate Settings → Power picks for Low Power Mode, battery or mains power (60 and 30 fps, and
-/// frozen in Low Power Mode, unless changed), held to each view's wallpaper's `batteryRate` below mains power's,
-/// or holds still while the menu's Pause is on.
+/// frozen in Low Power Mode, unless changed), held to each view's wallpaper's `batteryRate` below mains power's and
+/// to 30 or 15 fps while the Mac runs hot, or holds still while the menu's Pause is on.
 @MainActor func applyPowerState(to views: [WallpaperView]) {
-    let pick = powerKnob().value
+    let pick = powerKnob().value, heat = ProcessInfo.processInfo.thermalState
     for view in views {
-        let fps = Power.fps(pick: pick, plugged: Power.plugged.value, fast: Power.fastDisplay, cap: view.batteryRate)
+        let fps = Power.fps(pick: pick, plugged: Power.plugged.value, fast: Power.fastDisplay, cap: view.batteryRate, heat: heat)
         if fps > 0 { view.preferredFramesPerSecond = fps }
         view.frozen = fps == 0 || WallpaperView.paused
     }
@@ -457,8 +457,9 @@ NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenPar
     MainActor.assumeIsolated { syncWindows() }
 }
 
-// Follow Low Power Mode, plugging in or unplugging, and Settings → Power as they change.
-for name in [.NSProcessInfoPowerStateDidChange, UserDefaults.didChangeNotification] {
+// Follow Low Power Mode, plugging in or unplugging, Settings → Power and the Mac's heat as they change. The heat can
+// be posted off the main thread; the main queue takes it there.
+for name in [.NSProcessInfoPowerStateDidChange, UserDefaults.didChangeNotification, ProcessInfo.thermalStateDidChangeNotification] {
     NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { _ in
         MainActor.assumeIsolated { applyPowerState(to: windows.compactMap { $0.contentView as? WallpaperView }) }
     }

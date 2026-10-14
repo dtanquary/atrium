@@ -423,7 +423,7 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
 /// only with a display that goes above 60 Hz, and a pick stored past the menu's end (120 kept from a ProMotion
 /// display, or a `defaults write`) runs at the fastest the menu offers rather than crashing.
 @MainActor @Test func powerPicksToFrameRates() {
-    func fps(_ pick: Double, fast: Bool = false) -> Int { Power.fps(pick: pick, plugged: 3, fast: fast, cap: nil) }
+    func fps(_ pick: Double, fast: Bool = false) -> Int { Power.fps(pick: pick, plugged: 3, fast: fast, cap: nil, heat: .nominal) }
     #expect(fps(Power.plugged.standard) == 60)
     #expect(fps(Power.battery.standard) == 30)
     #expect(fps(Power.lowPower.standard) == 0)
@@ -437,13 +437,27 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
 /// A wallpaper's battery cap holds it down only while it runs slower than on mains power: on battery or in Low Power
 /// Mode, not plugged in nor with Full Speed on Battery (battery at mains power's pick); and it never unfreezes.
 @MainActor @Test func batteryCapOnlyBelowMainsPower() {
-    #expect(Power.fps(pick: 2, plugged: 3, fast: false, cap: 15) == 15) // battery, 30 → 15
-    #expect(Power.fps(pick: 2, plugged: 3, fast: false, cap: 45) == 30) // a cap never raises
-    #expect(Power.fps(pick: 3, plugged: 3, fast: false, cap: 15) == 60) // plugged in, or Full Speed on Battery
-    #expect(Power.fps(pick: 4, plugged: 4, fast: true, cap: 15) == 120)
-    #expect(Power.fps(pick: 3, plugged: 4, fast: true, cap: 30) == 30) // 60 on battery below 120 plugged in
-    #expect(Power.fps(pick: 4, plugged: 4, fast: false, cap: 30) == 60) // a stale 120 on both is the same rate
-    #expect(Power.fps(pick: 0, plugged: 3, fast: false, cap: 15) == 0) // Low Power Mode's Freeze stays frozen
+    func fps(_ pick: Double, _ plugged: Double, fast: Bool = false, cap: Int) -> Int {
+        Power.fps(pick: pick, plugged: plugged, fast: fast, cap: cap, heat: .nominal)
+    }
+    #expect(fps(2, 3, cap: 15) == 15) // battery, 30 → 15
+    #expect(fps(2, 3, cap: 45) == 30) // a cap never raises
+    #expect(fps(3, 3, cap: 15) == 60) // plugged in, or Full Speed on Battery
+    #expect(fps(4, 4, fast: true, cap: 15) == 120)
+    #expect(fps(3, 4, fast: true, cap: 30) == 30) // 60 on battery below 120 plugged in
+    #expect(fps(4, 4, cap: 30) == 60) // a stale 120 on both is the same rate
+    #expect(fps(0, 3, cap: 15) == 0) // Low Power Mode's Freeze stays frozen
+}
+
+/// A hot Mac runs at 30 fps at most while macOS calls its heat serious, and 15 at critical, on any power, after any
+/// battery cap; heat never raises a rate or unfreezes.
+@MainActor @Test func heatCapsTheFrameRate() {
+    #expect(Power.fps(pick: 4, plugged: 4, fast: true, cap: nil, heat: .fair) == 120)
+    #expect(Power.fps(pick: 4, plugged: 4, fast: true, cap: nil, heat: .serious) == 30)
+    #expect(Power.fps(pick: 3, plugged: 3, fast: false, cap: nil, heat: .critical) == 15)
+    #expect(Power.fps(pick: 1, plugged: 3, fast: false, cap: nil, heat: .serious) == 15)
+    #expect(Power.fps(pick: 2, plugged: 3, fast: false, cap: 20, heat: .serious) == 20)
+    #expect(Power.fps(pick: 0, plugged: 3, fast: false, cap: nil, heat: .critical) == 0)
 }
 
 /// Held on a world seen only from the ground, with Views from the surface off, Solar System Tour still shows it

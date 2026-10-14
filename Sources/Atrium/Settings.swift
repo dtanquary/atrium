@@ -326,12 +326,17 @@ struct GeneralPage: View {
 
     /// The frames per second to run at for the pick `pick` in force (0 freezes), with a display above 60 Hz (`fast`)
     /// or without, where a pick of 120 fps runs at 60. A wallpaper's `cap` (`Wallpaper.batteryRate`) holds it lower
-    /// while that's below mains power's pick `plugged`; it never raises a rate or unfreezes.
-    nonisolated static func fps(pick: Double, plugged: Double, fast: Bool, cap: Int?) -> Int {
+    /// while that's below mains power's pick `plugged`, and `heat` to 30 fps at `.serious` and 15 at `.critical`.
+    /// Neither raises a rate or unfreezes.
+    nonisolated static func fps(pick: Double, plugged: Double, fast: Bool, cap: Int?, heat: ProcessInfo.ThermalState) -> Int {
         let rate = { (pick: Double) in rates[min(max(Int(pick), 0), fast ? rates.count - 1 : 3)] }
         var fps = rate(pick)
         if let cap, fps < rate(plugged) { fps = min(fps, cap) }
-        return fps
+        switch heat {
+        case .critical: return min(fps, 15)
+        case .serious: return min(fps, 30)
+        default: return fps
+        }
     }
 
     /// Full Speed on Battery, in the menu and the welcome: battery set to run as fast as mains power. Only when it's
