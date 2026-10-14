@@ -1908,7 +1908,8 @@ final class PixelCity: SKScene, BatteryPaced {
             plane.xScale = CGFloat(planeDirection)
             plane.isHidden = false
         }
-        for bird in flock { // one slow turn in 26 seconds, on a wide flat ring that itself drifts about
+        for bird in flock where !bird.node.isHidden { // one slow turn in 26 seconds, on a wide flat ring that itself drifts about;
+            // roosting birds are left alone, as `redraw` shows them before this runs
             let t = Float(clock), turn = t * 2 * .pi / 26 + bird.lag
             let x = Float(w) * 0.5 + 34 * sin(t / 41) + Float(w) * 0.19 * cos(turn) + bird.offset.x
             let y = Float(h) * 0.37 + 5 * sin(t / 29) + 9 * sin(turn) + bird.offset.y
