@@ -10,7 +10,7 @@ import SpriteKit
 /// of the orbit (the ground a fixed distance to one side of the track) and it lies across the picture in a curve.
 /// Each pixel of the pane is given its strip and its place along it once, when the scene is built (`lay`), and a
 /// cell of ground is worked out once, as it slides into view (`advance`).
-final class PixelOrbit: SKScene {
+final class PixelOrbit: SKScene, BatteryPaced {
     /// Which window this is, a menu of three under the key the Earth orbit switch had before the train, so that a
     /// stored 1 is still the station: 0 the airliner, 1 the space station, 2 the train.
     nonisolated static let on = Knob(key: "seat.orbit", label: "Window on", range: 0...2, standard: 0, section: "View",
@@ -60,6 +60,8 @@ final class PixelOrbit: SKScene {
     private var settings: [Double] = []
     private var retired = false // it has handed over to another scene, and is fading out
     private var paintEvery = 1 / 15.0
+    /// 15 fps on battery while it paints 15 times a second, as at Speed 1×; the battery's rate once it paints more often.
+    var batteryRate: Int? = 15 { didSet { batteryRateChanged(from: oldValue) } }
     private var clock: TimeInterval = 0, lastUpdate: TimeInterval?, painted: TimeInterval = -1
     private var sun = Sky.Vector(0, 0, 1), moon = Sky.Vector(0, 0, 1), moonLit = 0.5, skyAt = Date.distantPast
     /// Settings' Speed; or the real pace while following the real station, whatever the slider was left at, which
@@ -250,6 +252,7 @@ final class PixelOrbit: SKScene {
         // Paint as often as the finest cells move on, and half as often again, between 15 and 30 times a second.
         let quickest = rings.map(\.size).min() ?? 1
         paintEvery = 1 / min(30, max(15, Orbit.pace * pace / quickest * 1.5))
+        batteryRate = paintEvery > 1 / 15.5 ? 15 : nil
         let weather = (Int(PixelWindowSeat.clouds.value), Self.realClouds.value > 0.5)
         if weather != (world.weather, world.real) {
             (world.weather, world.real) = weather

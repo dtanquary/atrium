@@ -102,6 +102,8 @@ Release build, 2x, 1512 × 982, measured 2026-10-10 with the render test (which 
 - **A new scene** lays every row: about 59,000 ground pixels at Large (42,000 at Medium) and as many of cloud.
 - **Debug builds** paint at 10 to 30 ms a frame. Measure in release.
 
+- **On battery the airliner and the space station run at 15 fps at most while they paint 15 times a second, and the train at the battery's rate** (`batteryRate`, set where `paintEvery` is worked out in `redraw`; 2026-10-13). At Speed 1× the airliner's nearest cloud row moves 5.3 art pixels a second and its ground 4.1, and the station's finest cells 4.5–5, all under one 8-device-pixel art pixel a frame at 15 fps; a higher Speed, which paints up to 30 times a second, lifts the cap. The train's poles 28 m out cross at 126 art pixels a second (about 1,000 device pixels), already 34 px a frame at 30 fps, and its lamps and ground dashes are tuned for 30.
+
 ## Gotchas and shortcuts
 - **`rgb(_:_:_:)` is private here and in PixelCity.swift, on purpose.** When it was shared, `rgb(1, 1, 1)` in CampfireFlames.swift quietly became this one (whole numbers prefer it) in place of Fireflies' `rgb` of CGFloats that makes a CGColor, a gradient came back nil and the full test run crashed. The other canvas helpers have no namesakes.
 - **Sideways only.** The row trick needs the view square to the track and the horizon level: no bank, no looking ahead. A view turned toward the nose would move every pixel on a curve and need the whole picture worked out each frame.

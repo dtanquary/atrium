@@ -367,6 +367,10 @@ let rainPreview = [
         rain.vectorFloat4Value = [Float(now.rain), Float(now.before), clock(now.changed), Float(now.dried)]
         stop.floatValue = now.stopped.map(clock) ?? 1e9
         clocks = used
+        // 10 fps on battery once rain and snow have stopped and the last runs have coasted to a halt (1.5 s of the
+        // water's clock, 6 s at a quarter speed, four times over): only drying, fog and frost change then, over minutes.
+        let still = now.rain == 0 && now.snow == 0 && now.stopped.map { Date().timeIntervalSince($0) > 30 } == true
+        scene.batteryRate = still ? 10 : nil
         glass.vectorFloat4Value = [Float(now.mist), Float(now.water), Float(now.frost), Float(now.frozen)]
         snow.vectorFloat4Value = [Float(now.snow), Float(now.melt), Float(now.flake), 0]
         pane.vectorFloat4Value = [now.inside ? 1 : 0, now.drizzle ? 2 : 1, now.drizzle ? 0.3 : 1, Float(now.melting)]

@@ -15,7 +15,7 @@ import SpriteKit
 /// picture is a strip of the world at one distance, which slides sideways by whole pixels at its own speed, the near
 /// rows fast and the far ones barely at all. Mountains stand up from their rows as columns, and so do the clouds of
 /// the cloud layer, a second set of strips nearer to us.
-final class PixelWindowSeat: SKScene {
+final class PixelWindowSeat: SKScene, BatteryPaced {
     nonisolated static let seat = Knob(key: "seat.wing", label: "Seat", range: 0...1, standard: 0, section: "View",
                                        format: .choice(["Over the wing", "Ahead of the wing"]), shownWhen: "seat.orbit", shownAt: 0)
     /// How much of the screen the window takes, or no window at all: the view alone, edge to edge.
@@ -80,6 +80,9 @@ final class PixelWindowSeat: SKScene {
     private var settings: [Double] = []
     private var retired = false // it has handed over to a scene of another world, and is fading out
     private var kmPerSecond = PixelWindowSeat.pace, paintEvery = 1 / 30.0
+    /// 15 fps on battery while it paints 15 times a second (at Speed 1×, its fastest strip moves 5 art pixels a
+    /// second), and the battery's rate once a higher Speed has it painting more often. The train has none.
+    var batteryRate: Int? { didSet { batteryRateChanged(from: oldValue) } }
     private var night: Float = 0, sunUp: Float = 0
     private var clock: TimeInterval = 0, lastUpdate: TimeInterval?, painted: TimeInterval = -1
     // Another airliner, now and then, crossing far off at our height with its contrail behind it: where its nose is
@@ -187,6 +190,7 @@ final class PixelWindowSeat: SKScene {
         // Paint as often as the fastest strip (the cloud in the nearest row) moves a pixel, and a little oftener:
         // 15 to 30 times a second. Painting is most of the scene's cost.
         paintEvery = 1 / min(30, max(15, kmPerSecond / rows[0].cloudAcross * 1.5))
+        batteryRate = paintEvery > 1 / 15.5 ? 15 : nil
         let (gw, gh) = (glass.w, glass.h)
         let spot = Location.shared.coordinate
         let above = SeatSky(now, latitude: spot.latitude, longitude: spot.longitude, looking: Int(Self.looking.value), w: gw, h: gh, horizon: horizon)

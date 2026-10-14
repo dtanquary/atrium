@@ -11,7 +11,7 @@ import SpriteKit
 /// a town up a hillside, the view over a sea of rooftops, or an airport with aircraft coming and going. The same
 /// scene, pinned to a launch site whose rockets lift off and whose boosters come back, is Pixel Spaceport, a
 /// wallpaper of its own (`spaceport`).
-final class PixelCity: SKScene {
+final class PixelCity: SKScene, BatteryPaced {
     private enum K: Int {
         case view, shuffle, shuffleMinutes, looking, flightsDay, flightsNight, wind, launches
         case falcon9, falconHeavy, starship, sls, shuttle, saturnV, ariane, titan, atlas, redstone, soyuz, longMarch, h3, lvm3, previewTime, previewHour
@@ -98,6 +98,10 @@ final class PixelCity: SKScene {
     // the layer they are painted into, which the lagoon mirrors; and the figures on the countdown clock.
     private var pad = Pad(), boosters: [Booster] = [], crane = Crane(), plume: [Puff] = []
     private var pace = 1.0 // Settings' Launches, as of the last repaint: reading a setting costs too much to do every frame
+    /// The Spaceport's ceiling on battery: 15 fps between launches, where the crawler moves 5 art pixels a second and
+    /// the smoke steps 15 times a second; 20 from the count to the end of the climb, and while a booster or the
+    /// orbiter comes down, at up to 20 art pixels a second. The city has none: its cars move 22.
+    private(set) var batteryRate: Int? { didSet { batteryRateChanged(from: oldValue) } }
     private var following = false, polledAt = Date.distantPast // Settings' Follow real launches, likewise; and when the schedule was last asked
     private var flewLive = false // the last lift-off was a real launch's, for the board's LIVE
     private var liftoffAt: TimeInterval = -1000, trailFrom: SIMD2<Float>?, flew = Rocket.falcon9 // the last to lift off
@@ -150,6 +154,7 @@ final class PixelCity: SKScene {
 
     init(size: CGSize, spaceport: Bool) {
         self.spaceport = spaceport
+        batteryRate = spaceport ? 15 : nil
         let pixel = max(2, (size.height / 240).rounded()) // points per art pixel
         w = Int((size.width / pixel).rounded(.up))
         h = Int((size.height / pixel).rounded(.up))
@@ -1929,7 +1934,11 @@ final class PixelCity: SKScene {
             }
         }
         if city == .airport { fly(dt) }
-        if city == .spaceport { launch(dt) }
+        if city == .spaceport {
+            launch(dt)
+            let flying = [.count, .climb].contains(pad.phase) || boosters.contains { $0.phase == .fall || $0.phase == .burn }
+            batteryRate = flying || orbiter.phase == .glide || orbiter.phase == .roll ? 20 : 15
+        }
         if planeDirection != 0 {
             planeX += planeDirection * 7 * dt
             plane.position.x = CGFloat(planeX.rounded(.down))
