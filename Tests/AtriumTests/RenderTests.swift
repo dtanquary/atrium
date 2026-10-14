@@ -66,6 +66,19 @@ import UniformTypeIdentifiers
     #expect(window.contentView === fresh)
 }
 
+/// A view still paused in a window that's on show, its not drawing never judged since `watch` skips paused views,
+/// is set going by the watchdog: a pause can outlast its cause if the occlusion change that ends it is missed.
+@MainActor @Test func stalePauseEnds() {
+    final class ShownWindow: NSWindow { override var occlusionState: NSWindow.OcclusionState { .visible } }
+    let window = ShownWindow(contentRect: CGRect(x: 0, y: 0, width: 64, height: 64), styleMask: .borderless, backing: .buffered, defer: false)
+    let view = WallpaperView()
+    window.contentView = view
+    view.isPaused = true
+    view.lastDrawn = Date(timeIntervalSinceNow: -60)
+    view.watch { SKScene(size: $0) }
+    #expect(!view.isPaused && window.contentView === view) // running again, and given its time to draw before it's judged
+}
+
 /// Renders every wallpaper offscreen at Retina size, saves a PNG to look at, and prints what a frame costs.
 /// Fails if a scene comes out as one flat colour (e.g. a shader that didn't compile).
 ///

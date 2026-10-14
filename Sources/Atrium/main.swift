@@ -93,6 +93,7 @@ final class WallpaperView: SKView, SKViewDelegate {
     /// afternoon with the lid shut. Should some other state draw nothing, each fresh view that doesn't draw waits
     /// twice as long as the one before it, up to about 11 minutes.
     func watch(building scene: @MainActor (CGSize) -> SKScene = currentScene) {
+        if isPaused, !Self.screensAsleep { updatePaused() } // a pause whose end it never heard of (a missed occlusion change) ends here
         let patience = 5 * pow(2, Double(min(replaced, 7)))
         guard !Self.screensAsleep, !isPaused, Date().timeIntervalSince(lastDrawn) > patience, let window else { return }
         Self.log.error("drawing stopped \(Date().timeIntervalSince(self.lastDrawn), format: .fixed(precision: 0)) s ago while running; replacing the view")
