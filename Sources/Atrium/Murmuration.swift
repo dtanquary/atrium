@@ -402,6 +402,8 @@ private final class Flock: SKNode {
     private var birds: [Bird] = []
     private var sprites: [SKSpriteNode] = []
     private let atlas: [SKTexture]
+    /// The width of one frame of the atlas: a sprite's size at a scale of 1.
+    private let frameSize: CGFloat
     /// Each parcel's scattering (and whether it's mirrored), its wings' angle on screen, and which frame of the atlas shows.
     private var looks: [(layout: Int, mirrored: Bool)] = [], angles: [Float] = [], frames: [Int] = []
     private var bucketStart = [Int32](repeating: 0, count: Flock.buckets + 1), bucketItems: [Int32] = []
@@ -446,6 +448,7 @@ private final class Flock: SKNode {
         self.view = view
         self.perch = perch
         atlas = Self.makeAtlas()
+        frameSize = atlas[0].size().width
         let seed = ProcessInfo.processInfo.environment["MURMURATION_SEED"].flatMap(UInt64.init) ?? .random(in: 1...UInt64.max)
         random = Xorshift(seed: seed)
         super.init()
@@ -461,6 +464,7 @@ private final class Flock: SKNode {
             sprite.color = ink
             sprite.colorBlendFactor = 1
             sprite.zPosition = 2
+            sprite.xScale = look.mirrored ? -1 : 1 // once: `place` sizes it each frame, one property rather than two scales
             addChild(sprite)
             sprites.append(sprite)
         }
@@ -585,9 +589,8 @@ private final class Flock: SKNode {
             let look = looks[i], shown = look.mirrored ? -angles[i] : angles[i]
             let frame = look.layout * Self.turns + Int(((shown / .pi + 0.5) * Float(Self.turns)).rounded()) & (Self.turns - 1)
             if frames[i] != frame { sprite.texture = atlas[frame]; frames[i] = frame }
-            let scale = CGFloat(Self.parcel * at.perMetre / 64)
-            sprite.xScale = look.mirrored ? -scale : scale
-            sprite.yScale = scale
+            let side = CGFloat(Self.parcel * at.perMetre / 64) * frameSize
+            sprite.size = CGSize(width: side, height: side)
             let alpha = (0.22 + 0.45 * facing) * (b.state == 2 ? min(max((p.z - perch.z) / 6, 0), 1) : 1) // fading into the roost
             sprite.alpha = CGFloat(alpha)
             // Its reflection: ten birds of about 0.06 m² each, spread over the texels it lands on.
