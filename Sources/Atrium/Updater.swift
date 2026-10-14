@@ -30,6 +30,8 @@ import SwiftUI
     /// A release on GitHub: its version ("0.95.0", from the tag "v0.95.0-beta"), notes in Markdown, disk image, the
     /// list of the files in that image (release.sh's, on a release that has one) and page.
     struct Release: Equatable { let version: String, notes: String, dmg: URL, files: URL?, page: URL }
+    /// A release's notes for Software Update's list: its version as tagged ("0.95.0 beta"), when it came out and its page.
+    struct Notes { let version: String, date: Date?, notes: String, page: URL }
     /// One of the app's files as release.sh lists it: its SHA-256, size, where it starts in the disk image, its
     /// permissions (644, or 755 for one that runs) and its path in the bundle.
     struct Listed: Equatable { let hash: String, size: Int, offset: Int, mode: Int, path: String }
@@ -38,6 +40,8 @@ import SwiftUI
     private(set) var state = State.idle
     /// The newer release, once one is found.
     private(set) var release: Release?
+    /// Every release's notes from the last look, newest first.
+    private(set) var history: [Notes] = []
     /// The disk image's download, while it runs.
     private(set) var download: URLSessionDownloadTask?
     /// The update file by file, while it runs, and the bytes it has fetched of those this copy lacks.
@@ -56,10 +60,10 @@ import SwiftUI
     /// Looks for a newer release: now with `force` (Check Now, or opening Software Update), otherwise only while
     /// automatic checks are on and a day has passed since GitHub last answered. One found by a daily look opens Settings
     /// to offer it the first time, behind the app in front; the menu offers it from then on. Offline, a daily look tries
-    /// again at the next call.
+    /// again at the next call. A copy built from source looks only when forced, for the notes, and is offered nothing.
     func check(force: Bool = false) {
-        guard updatable, state != .checking, state != .installing, download == nil, patch == nil,
-              force || Self.automatic.value > 0.5 && abs(Date().timeIntervalSince(checked ?? .distantPast)) > 86400 else { return }
+        guard state != .checking, state != .installing, download == nil, patch == nil,
+              force || updatable && Self.automatic.value > 0.5 && abs(Date().timeIntervalSince(checked ?? .distantPast)) > 86400 else { return }
         let before = state
         state = .checking
         Task {
@@ -69,7 +73,8 @@ import SwiftUI
                 return
             }
             UserDefaults.standard.set(Date(), forKey: Self.checkedKey)
-            release = Self.newest(from: data, version: Self.version, prerelease: Self.prerelease)
+            history = Self.history(from: data, prerelease: Self.prerelease)
+            release = updatable ? Self.newest(from: data, version: Self.version, prerelease: Self.prerelease) : nil
             state = release == nil ? .upToDate : .available
             if let release, !force, UserDefaults.standard.string(forKey: Self.offeredKey) != release.version {
                 UserDefaults.standard.set(release.version, forKey: Self.offeredKey)
@@ -152,14 +157,7 @@ import SwiftUI
     /// release follows any candidate, and a later label another ("rc2" after "rc 1", "rc1" after "beta"); one of those
     /// is named as tagged ("1.0.0-rc2"), so it doesn't read as this version.
     nonisolated static func newest(from reply: Data, version: String, prerelease: String) -> Release? {
-        struct Entry: Decodable {
-            struct Asset: Decodable { let name: String, browserDownloadUrl: URL }
-            let tagName: String, body: String?, htmlUrl: URL, draft: Bool, prerelease: Bool, assets: [Asset]
-        }
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        guard let entry = (try? decoder.decode([Entry].self, from: reply))?.first(where: { !$0.draft && (!$0.prerelease || !prerelease.isEmpty) }),
-              let dmg = entry.assets.first(where: { $0.name.hasSuffix(".dmg") }) else { return nil }
+        guard let entry = entries(reply, prerelease: prerelease).first, let dmg = entry.assets.first(where: { $0.name.hasSuffix(".dmg") }) else { return nil }
         let tag = entry.tagName.trimmingPrefix("v").split(separator: "-", maxSplits: 1)
         let number = String(tag.first ?? "")
         let order = number.compare(version, options: .numeric)
@@ -171,6 +169,26 @@ import SwiftUI
         return newer ? Release(version: order == .orderedSame && tag.count == 2 ? tag.joined(separator: "-") : number, notes: entry.body ?? "",
                                dmg: dmg.browserDownloadUrl, files: entry.assets.first { $0.name.hasSuffix(".files") }?.browserDownloadUrl,
                                page: entry.htmlUrl) : nil
+    }
+
+    /// Every release's notes in a GitHub `releases` reply that `newest` would consider, newest first.
+    nonisolated static func history(from reply: Data, prerelease: String) -> [Notes] {
+        entries(reply, prerelease: prerelease).map {
+            Notes(version: String($0.tagName.trimmingPrefix("v").replacing("-", with: " ")), date: $0.publishedAt, notes: $0.body ?? "", page: $0.htmlUrl)
+        }
+    }
+
+    private struct Entry: Decodable {
+        struct Asset: Decodable { let name: String, browserDownloadUrl: URL }
+        let tagName: String, body: String?, htmlUrl: URL, publishedAt: Date?, draft: Bool, prerelease: Bool, assets: [Asset]
+    }
+
+    /// The releases in a GitHub `releases` reply, newest first, less drafts, and less prereleases unless this build is one.
+    nonisolated private static func entries(_ reply: Data, prerelease: String) -> [Entry] {
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        decoder.dateDecodingStrategy = .iso8601
+        return ((try? decoder.decode([Entry].self, from: reply)) ?? []).filter { !$0.draft && (!$0.prerelease || !prerelease.isEmpty) }
     }
 
     /// Reads release.sh's list: a line for each file, its fields separated by tabs. Nil unless every line is well
@@ -337,7 +355,8 @@ import SwiftUI
 }
 
 /// Settings → Software Update, like System Settings': the version running, any newer one with its notes and Install
-/// and Relaunch, the download as it runs, and the daily check's switch. Opening it looks for an update.
+/// and Relaunch, the download as it runs, the daily check's switch, and past releases' notes, folded. Opening it looks
+/// for an update.
 struct UpdatePage: View {
     static let tag = "Software Update" // sidebar selection; can't clash with a wallpaper name
     private let updater = Updater.shared
@@ -365,12 +384,6 @@ struct UpdatePage: View {
                     }
                 }
             }
-            if let release = updater.release, updater.state != .upToDate {
-                Section("What's New in \(release.version)") {
-                    Text(Self.notes(release.notes)).textSelection(.enabled)
-                    Link("Release notes on GitHub", destination: release.page)
-                }
-            }
             if updater.updatable {
                 Section {
                     KnobRow(knob: Updater.automatic)
@@ -379,9 +392,30 @@ struct UpdatePage: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            // The newest release: the one on offer, or else the latest (this version's, unless built from source).
+            if let latest = updater.history.first {
+                Section(updater.release.map { "What's New in \($0.version)" } ?? "Recently Changed") {
+                    if updater.release == nil { label(latest) }
+                    Text(Self.notes(latest.notes)).textSelection(.enabled)
+                    Link("Release notes on GitHub", destination: latest.page)
+                }
+            }
+            if updater.history.count > 1 {
+                Section("Past Updates") {
+                    ForEach(updater.history.dropFirst(), id: \.page) { past in
+                        DisclosureGroup { Text(Self.notes(past.notes)).textSelection(.enabled) } label: { label(past) }
+                    }
+                    // ponytail: the feed brings the last ten releases; page through GitHub's if older ones are wanted here.
+                    Link("All releases on GitHub", destination: URL(string: "https://github.com/dtanquary/atrium/releases")!)
+                }
+            }
         }
         .formStyle(.grouped)
         .task { if updater.state == .idle { updater.check(force: true) } }
+    }
+
+    private func label(_ release: Updater.Notes) -> some View {
+        LabeledContent(release.version) { Text(release.date?.formatted(date: .abbreviated, time: .omitted) ?? "") }
     }
 
     private var headline: String {

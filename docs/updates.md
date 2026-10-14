@@ -5,7 +5,7 @@ How Atrium updates itself outside the App Store (`Sources/Atrium/Updater.swift`,
 On 2026-10-10 Dave asked whether each release could publish a full build and a delta, with the app applying several deltas in a row when it's several versions behind: "my goal is to prevent users from having to re download the whole thing over and over as i add more wallpapers." Two research agents and local tests answered it (below). He then said "yes build it, go ahead with the notarize test". Since 0.107.0 an update fetches only the files a copy lacks.
 
 ## How an update works
-1. **The look.** Once a day, and when Software Update opens, `check()` reads GitHub's list of releases and `newest` picks the first that's newer. A `Release` holds the disk image's address (the asset ending `.dmg`) and, if the release has one, its list of files (the asset ending `.files`).
+1. **The look.** Once a day, and when Software Update opens, `check()` reads GitHub's list of releases and `newest` picks the first that's newer. A `Release` holds the disk image's address (the asset ending `.dmg`) and, if the release has one, its list of files (the asset ending `.files`). The same reply gives Software Update every release's notes (`history`): the newest under Recently Changed, or What's New when it's on offer, and the rest folded under Past Updates. A copy built from source looks too, when Software Update opens, for the notes only: it's offered nothing.
 2. **File by file** (`install` → `rebuild` → `build` → `assemble`), when the release has a list:
    - The list is fetched and read by `listed`: a line for each file of the new app, with its SHA-256, size, where it starts in the disk image, permissions and path.
    - Every file of the installed app is hashed (0.2 s for 400 MB).

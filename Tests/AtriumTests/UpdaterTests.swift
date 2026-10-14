@@ -4,11 +4,13 @@ import Testing
 @testable import Atrium
 
 /// The updater offers the newest release from GitHub's reply only when it's newer than this build, skips drafts, and
-/// skips prereleases for a stable build. It finds the release's list of files beside the disk image, if there is one.
+/// skips prereleases for a stable build. It finds the release's list of files beside the disk image, if there is one, and
+/// keeps every release's notes for Software Update.
 @MainActor @Test func picksTheNewerRelease() throws {
     func reply(_ releases: [(tag: String, prerelease: Bool, draft: Bool)]) -> Data {
         try! JSONSerialization.data(withJSONObject: releases.map { release in
             ["tag_name": release.tag, "body": "### New\r\n- **Pixel Spaceport**", "draft": release.draft, "prerelease": release.prerelease,
+             "published_at": "2026-10-07T02:11:03Z",
              "html_url": "https://github.com/dtanquary/atrium/releases/tag/\(release.tag)",
              "assets": [["name": "notes.txt", "browser_download_url": "https://example.com/notes.txt"],
                         ["name": "Atrium-\(release.tag).dmg", "browser_download_url": "https://example.com/\(release.tag).dmg"]]
@@ -37,6 +39,11 @@ import Testing
     #expect(Updater.newest(from: Data("{\"message\":\"API rate limit exceeded\"}".utf8), version: "0.1.0", prerelease: "beta") == nil)
 
     #expect(String(UpdatePage.notes(offer.notes).characters) == "New\n• Pixel Spaceport")
+
+    // Software Update's list of past notes: the same releases, named as tagged.
+    #expect(Updater.history(from: betas, prerelease: "beta").map(\.version) == ["0.96.0 beta", "0.95.0 beta"])
+    #expect(Updater.history(from: stable, prerelease: "").map(\.version) == ["1.0.0"])
+    #expect(Updater.history(from: betas, prerelease: "beta").first?.date == Date(timeIntervalSince1970: 1_791_339_063))
 }
 
 /// An update file by file: the new app is built from the old one's files wherever it has the bytes, under any name,
