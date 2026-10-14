@@ -99,6 +99,8 @@ All are read live through `Self.knobs[i].value` every frame (in `knobs` order: I
 - The globe shader only covers the globe's sprite. The orbit path rebuilds at most every 5 s.
 - Plenty of headroom.
 
+- **On battery it runs at 10 fps at most with no storm cell near, and at the battery's rate while there are any** (`batteryRate`, set in `updateLightning` each time it looks for a cell, every 5 s with none; 2026-10-13). Without storms nothing moves even 1 device pixels (2x on a 14-inch MacBook Pro, 3024 × 1964) a second: the ISS marker about 1, its pulse 1.6 s, a new cloud map fades in over 60 s. Lightning strokes rise in 30 ms and fall in 60–150, flickering at 5–11 Hz, which 15 fps or less would merge or miss.
+
 ## Gotchas and shortcuts
 - `ponytail:` **the orbit ring** comes from two fixes in Earth-fixed axes, so it ignores Earth's spin: about a 3° tilt error.
 - **The ISS label** must not be a child of the pulsing marker, or it scales and fades with it.

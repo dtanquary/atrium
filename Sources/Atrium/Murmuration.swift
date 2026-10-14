@@ -48,8 +48,11 @@ private struct Light: Sendable {
 /// it folds into dark bands and opens into pale sheets as it wheels. With Light on Whole evening it plays out a whole
 /// evening: feeder flocks arrive and merge, the light sinks from golden hour to blue hour, the swoops get lower, the
 /// flock pours down to roost, and after a quiet spell a new evening fades in.
-final class Murmuration: SKScene {
+final class Murmuration: SKScene, BatteryPaced {
     private var flock: Flock?
+    /// 12 fps on battery while the sky is empty, from the last bird down to roost to the next evening's first
+    /// arrivals, when only the light moves; the battery's rate while birds fly, at up to 15 px a frame at 15 fps.
+    var batteryRate: Int? { didSet { batteryRateChanged(from: oldValue) } }
     private var lastTime: TimeInterval?
     private var built = (light: -1.0, ground: -1.0)
 
@@ -160,6 +163,7 @@ final class Murmuration: SKScene {
         }
         applyFade()
         flock?.step(Float(dt))
+        batteryRate = flock.map { $0.flying + $0.falling == 0 } == true ? 12 : nil
     }
 
     // MARK: - The light

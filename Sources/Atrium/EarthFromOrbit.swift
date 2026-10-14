@@ -6,7 +6,7 @@ import simd
 /// The whole Earth seen from high above you, like a geostationary satellite: the real day/night line sweeping
 /// across it, today's clouds, lightning in the storms around you, city lights on the night side, sun glint on the
 /// oceans, and the ISS with its orbit.
-final class EarthFromOrbit: SKScene {
+final class EarthFromOrbit: SKScene, BatteryPaced {
     nonisolated static let knobs = [
         Knob(key: "earth.iss", label: "ISS tracking", range: 0...1, standard: 1, section: "Show", format: .toggle),
         Knob(key: "earth.clouds", label: "Live clouds", range: 0...1, standard: 1, section: "Show", format: .toggle),
@@ -33,6 +33,9 @@ final class EarthFromOrbit: SKScene {
                                endCenter: CGPoint(x: 16, y: 16), endRadius: 16, options: [])
     }
     private var nextFlash: TimeInterval = 0
+    /// 10 fps on battery with no storm near, where nothing moves 1 px a second; the battery's rate while there are
+    /// storm cells, whose strokes of lightning last 30 ms.
+    var batteryRate: Int? = 10 { didSet { batteryRateChanged(from: oldValue) } }
     private var sunDirection = Sky.Vector(1, 0, 0)
     private let iss = SKSpriteNode()
     private let issLabel = SKLabelNode(fontNamed: "HelveticaNeue")
@@ -165,9 +168,10 @@ final class EarthFromOrbit: SKScene {
     /// Flashes in the storms around you, about one every 5 s per storm cell (at most one a second): a stroke or three
     /// lighting the cloud tops from inside, bright on the night side and faint by day.
     private func updateLightning(_ currentTime: TimeInterval) {
-        guard Self.knobs[2].value > 0.5, currentTime > nextFlash else { return }
+        guard currentTime > nextFlash else { return }
         let here = Location.shared.coordinate
-        let cells = Storms.shared.cells + (Self.knobs[3].value > 0.5 ? Storms.preview(around: here) : [])
+        let cells = Self.knobs[2].value < 0.5 ? [] : Storms.shared.cells + (Self.knobs[3].value > 0.5 ? Storms.preview(around: here) : [])
+        batteryRate = cells.isEmpty ? 10 : nil
         guard let cell = cells.randomElement() else {
             nextFlash = currentTime + 5
             return

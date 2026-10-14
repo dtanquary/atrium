@@ -175,3 +175,23 @@ private let small = CGSize(width: 320, height: 200)
         }
     }
 }
+
+/// Earth from Orbit runs at 10 fps on battery with no storm near, and at the battery's rate while it has storm cells
+/// to flash in (here the preview's).
+@MainActor @Test func earthRateFollowsStorms() {
+    with(["earth.lightning": 1, "earth.previewStorm": 1]) {
+        let scene = EarthFromOrbit(size: small)
+        scene.update(1)
+        #expect(scene.batteryRate == nil)
+    }
+    with(["earth.lightning": 0]) {
+        let scene = EarthFromOrbit(size: small)
+        scene.update(1)
+        #expect(scene.batteryRate == 10)
+    }
+}
+
+/// Dappled Light runs at 10 fps on battery under an overcast sky, which casts no leaf shadows.
+@MainActor @Test func dappledLightRateUnderCloud() {
+    with(["dappled.weather": 3]) { #expect(DappledLight(size: small).batteryRate == 10) }
+}

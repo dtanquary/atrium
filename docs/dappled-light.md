@@ -58,6 +58,8 @@ Any change re-runs `light()`; a new surface swaps its textures in place. Nothing
 - 2026-10-06, debug test build, 2x, each surface at 4 pm and 5:45 pm: 0.51–0.74 ms CPU, 0.47–0.91 ms GPU. The siding and brick's relief march (eight more texture reads) doesn't show above the noise.
 - Textures: the surface 32 MB (albedo and relief, each 2048² RGBA; the siding's half that), the canopy 4 MB. Built when first shown, shared by every display and the Settings preview; only one surface is kept.
 
+- **On battery it runs at 20 fps at most while direct light casts the leaves' shadows, and 10 with none** (`batteryRate`, set in `light()` every second; 2026-10-13). In the default Clear weather the branches sway about 1 cm at 2.7 rad/s, about 42 device pixels (2x on a 14-inch MacBook Pro, 3024 × 1964) a second on the wall: 2.1 px a frame at 20 fps; the leaves flutter at 2.4–5.6 Hz, more than a third of 15. Direct light is the Sun's by day, and at night the streetlight's (At night, on by default) or the Moon's; overcast, or with the source behind the wall or below the horizon, only the skylight's soft shade sways. On a windy live day, or at Sway 3×, the sway reaches 200–600 px a second.
+
 ## Gotchas and shortcuts
 - `ponytail:` **the lamp is at infinity.** A real streetlight's rays spread about ±7° across the wall; here they're parallel.
 - `ponytail:` **a bigger source means fewer, bigger gaps.** The gaps are laid out in sky offset, so the lamp (3× the Sun) gets a coarser crown. Pinholes fixed in the tree would be better if the lamp ever matters.

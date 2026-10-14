@@ -6,7 +6,10 @@ import simd
 /// The real sky above you right now, facing the equator: stars, Milky Way, constellations, planets, the Moon in
 /// its true phase, the ISS, and the odd meteor. It stays a night sky but reacts to the Sun: deep blue by day with
 /// only the brightest stars and planets, the Sun drawn when it's in view, and sunrise and sunset glow on time.
-final class LiveSky: SKScene {
+final class LiveSky: SKScene, BatteryPaced {
+    /// 15 fps on battery, where the ISS, the fastest steady thing, moves up to 2.4 px a frame; the battery's rate
+    /// while a meteor crosses, at 1,000 px a second, for its 0.7 s.
+    var batteryRate: Int? = 15 { didSet { batteryRateChanged(from: oldValue) } }
     nonisolated static let knobs = [
         Knob(key: "sky.constellations", label: "Constellation lines", range: 0...1, standard: 1, section: "Show",
              format: .toggle),
@@ -474,10 +477,12 @@ final class LiveSky: SKScene {
         streak.alpha = 0
         streak.zPosition = 5
         addChild(streak)
+        batteryRate = nil
         let travel = CGFloat.random(in: 180...360)
         streak.run(.sequence([
             .group([.moveBy(x: cos(angle) * travel, y: sin(angle) * travel, duration: 0.7),
                     .sequence([.fadeIn(withDuration: 0.1), .fadeOut(withDuration: 0.6)])]),
+            .run { [weak self] in self?.batteryRate = 15 },
             .removeFromParent(),
         ]))
     }

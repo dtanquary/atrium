@@ -9,7 +9,7 @@ import SpriteKit
 /// shadows. Cloud cover and wind can come from the live weather; by night, a warm streetlight or moonlight at the real
 /// phase. The wall can be plaster, limewash, brick or painted siding, or an oak floor in the open or by a window.
 /// Made for Light Mode; in Dark Mode the white plaster is charcoal.
-final class DappledLight: SKScene {
+final class DappledLight: SKScene, BatteryPaced {
     /// What the light falls on: scans from Poly Haven and ambientCG (CC0, credited in dappled-credits.tsv). The
     /// albedo is greyscale, tinted by `colour` in linear light (`dark` in Dark Mode), or with none in its own colours.
     /// Its relief is the slope across and up (`-nx`, `-ny`) and, for relief deep enough to shade itself, `depth`
@@ -82,6 +82,10 @@ final class DappledLight: SKScene {
     /// The light as of the last `light()`: direct light at the wall (normal to the rays) and skylight, before
     /// clouds, and the exposure the eye has settled on.
     private var lit = (direct: V.zero, sky: V.zero, overcastSky: V.zero, exposure: 1.0)
+    /// 20 fps on battery while direct light (the Sun's, the Moon's or the streetlight's) casts the leaves' shadows,
+    /// whose sway moves about 42 px a second in a light breeze; 10 with none, overcast or the source behind the wall
+    /// or set, when only the soft skylight's shade moves.
+    var batteryRate: Int? = 20 { didSet { batteryRateChanged(from: oldValue) } }
     private var conditions = LiveWeather.Conditions(code: 1, cloudCover: 10, wind: 8)
     private var sinceLight = 0.0, clock = 0.0, lastUpdate: TimeInterval?
     /// The twig's base in the plane of its leaves, fixed when the surface is picked so its shadow starts on screen.
@@ -248,6 +252,7 @@ final class DappledLight: SKScene {
         // Sunlight bounced off the ground and everything around warms the shade, most at golden hour when the sky is dim.
         if !isNight { sky += strength * 0.05 * pow(1 - max(sun.z, 0), 3) }
         lit = (lights ? strength * fade : .zero, sky, overcastSky, 1)
+        batteryRate = lit.direct == .zero || conditions.sunshine == .overcast ? 10 : 20
 
         // The sky offset (in source radii) that each metre of wall sees through a gap, per metre of path from it.
         let (e1, e2) = basis(toward)

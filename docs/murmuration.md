@@ -70,6 +70,8 @@ For repeatable snapshots, `MURMURATION_SEED=3` seeds the flock, and `MURMURATION
 - Flipping wing poses every few frames for shimmer cost 0.15 ms and only flickered at 3–5 px, so each parcel keeps one pose.
 - It steps in fixed thirtieths of a second, two a frame at 15 fps and one every other frame at 60, drawing each bird where it has got to since its last step, so the flight is the same at every frame rate. Until 2026-10-08 it took one step a frame at 60 fps, so on mains power birds re-planned every twelfth of a second, twice as often as on battery (found in the 1.0 review).
 
+- **On battery it runs at 12 fps at most while the sky is empty, and at the battery's rate while birds fly** (`batteryRate`, set in `update` from the flock's count of birds flying and going down; 2026-10-13). The flock cruises at 10 m/s 150–250 m off, 97–161 device pixels (2x on a 14-inch MacBook Pro, 3024 × 1964) a second, and strays and roost dives go 14 m/s, about 226: up to 15 px a frame at 15 fps, which judders. From the last bird down to roost to the next evening's first arrivals, 25 s after it begins, only the light moves, about 2–3 minutes in every 30.
+
 ## Gotchas and shortcuts
 - `ponytail:` 1,500 agents stand for about 60,000 birds, each drawn as a sprite of ten. More agents would give finer folds but cost CPU linearly.
 - The fixed lights bake the sky once; Whole evening re-bakes it every 20 s on a background task (about 4 ms of work across cores each time).
