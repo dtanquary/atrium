@@ -485,9 +485,10 @@ NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotificati
 // then keep the still fresh while the displays are awake (time-of-day scenes drift), and take one as they sleep,
 // just before a lock.
 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { LockScreen.update(windows) }
+// Each repeating timer has a tolerance, so macOS can wake for it along with others, which saves battery.
 Timer.scheduledTimer(withTimeInterval: 600, repeats: true) { _ in
     MainActor.assumeIsolated { if !WallpaperView.screensAsleep { matchLockScreen(after: 0) } }
-}
+}.tolerance = 60
 // macOS gave that still to the Space in front only, so each other Space gets it as it comes to the front.
 NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { _ in
     MainActor.assumeIsolated { LockScreen.spaceChanged() }
@@ -503,11 +504,11 @@ NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.screensDi
 }
 Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { _ in
     MainActor.assumeIsolated { refreshIfStale(after: 72, fade: true) }
-}
+}.tolerance = 360
 // A wallpaper that has stopped drawing though it should be running is restarted (see `WallpaperView.watch`).
 Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in
     MainActor.assumeIsolated { windows.compactMap { $0.contentView as? WallpaperView }.forEach { $0.watch() } }
-}
+}.tolerance = 1
 // Awake, each view gets the watchdog's few seconds to start drawing again before it's judged stopped.
 NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { _ in
     MainActor.assumeIsolated {
@@ -520,7 +521,7 @@ NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.screensDi
 Updater.shared.check()
 Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { _ in
     MainActor.assumeIsolated { Updater.shared.check() }
-}
+}.tolerance = 360
 #endif
 // Rebuild the scene in the other look when macOS switches between Light and Dark Mode, unless it changes by itself
 // (`Wallpaper.followsAppearance`): then only the lock screen's still is taken again, once it has changed. A view
