@@ -352,8 +352,8 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
 /// albedo at half scale: its own daylight, haze and colour cast were taken out offline. `aurora-ground-aux` holds each
 /// point's distance in red (log, estimated with Depth Anything V2) and open snow in green.
 @MainActor private enum AuroraGround {
-    static let photo = SKTexture(image: NSImage(contentsOf: resource("aurora-ground.heic")) ?? NSImage())
-    static let aux = SKTexture(image: NSImage(contentsOf: resource("aurora-ground-aux.png")) ?? NSImage())
+    static var photo: SKTexture { sharedTexture("aurora-ground.heic") }
+    static var aux: SKTexture { sharedTexture("aurora-ground-aux.png") }
     /// Where the highest summit sits: down from the top of the photo as a fraction of its height, and up the screen.
     static let summit = 60.0 / 1390, peak = 0.38
 }
@@ -362,11 +362,11 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
 /// above each part of it (`u_poolA`/`u_poolB`, from `AuroraCurtains`), bluer and greyer as the eye sees in the dark,
 /// hazing into the glow above the skyline with distance, and glinting where near snow catches the light.
 @MainActor private func auroraGround(size: CGSize, grade: [SKUniform]) -> SKNode {
-    let photo = AuroraGround.photo.size(), aspect = photo.width / max(photo.height, 1)
+    let texture = AuroraGround.photo, photo = texture.size(), aspect = photo.width / max(photo.height, 1)
     let peak = size.height * AuroraGround.peak, summit = AuroraGround.summit
     let width = max(size.width, peak / (1 - summit) * aspect), height = width / aspect
     let top = peak + summit * height
-    let ground = SKSpriteNode(texture: AuroraGround.photo, size: CGSize(width: width, height: height))
+    let ground = SKSpriteNode(texture: texture, size: CGSize(width: width, height: height))
     ground.anchorPoint = CGPoint(x: 0.5, y: 1)
     ground.position = CGPoint(x: size.width / 2, y: top)
     ground.zPosition = 1

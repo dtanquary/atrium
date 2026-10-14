@@ -303,14 +303,9 @@ final class Murmuration: SKScene, BatteryPaced {
 
     // MARK: - The ground
 
-    /// The ground photos, decoded once each on first use: the cut-out photo and its aux map (R water, G reflectance ÷ 2).
-    private static var photos: [String: (texture: SKTexture, aux: SKTexture)] = [:]
+    /// A ground photo, shared while any scene shows it: the cut-out photo and its aux map (R water, G reflectance ÷ 2).
     private static func photo(_ file: String) -> (texture: SKTexture, aux: SKTexture) {
-        if let cached = photos[file] { return cached }
-        let pair = (SKTexture(image: NSImage(contentsOf: resource(file + ".heic")) ?? NSImage()),
-                    SKTexture(image: NSImage(contentsOf: resource(file + "-aux.png")) ?? NSImage()))
-        photos[file] = pair
-        return pair
+        (sharedTexture(file + ".heic"), sharedTexture(file + "-aux.png"))
     }
 
     /// The land as photographed, scaled from the photo's sky to ours so it stays a near-black silhouette; the water as

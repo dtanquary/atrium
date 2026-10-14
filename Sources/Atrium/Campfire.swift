@@ -240,9 +240,9 @@ struct FireCamera {
 /// The baked backdrop: "Hochsal Forest" (Poly Haven, CC0) with a scanned stone fire pit and dry branches (Poly
 /// Haven, CC0) rendered into the same view. See docs/campfire.md for the bake.
 @MainActor enum CampfirePhoto {
-    static let albedo = SKTexture(image: NSImage(contentsOf: resource("campfire-ground.heic")) ?? NSImage())
-    static let aux = SKTexture(image: NSImage(contentsOf: resource("campfire-ground-aux.png")) ?? NSImage())
-    static let bed = SKTexture(image: NSImage(contentsOf: resource("campfire-bed.png")) ?? NSImage())
+    static var albedo: SKTexture { sharedTexture("campfire-ground.heic") }
+    static var aux: SKTexture { sharedTexture("campfire-ground-aux.png") }
+    static var bed: SKTexture { sharedTexture("campfire-bed.png") }
     /// The bed mask's place in the photo (R wood, G the pit and wood), in texture coordinates (origin bottom-left).
     static let bedRect = CGRect(x: 1640.0 / 4096, y: 1 - 2372.0 / 2660, width: 812.0 / 4096, height: 632.0 / 2660)
 }

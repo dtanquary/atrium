@@ -6,9 +6,9 @@ import TreeGrowth
 extension WeatherGround {
     /// Cissbury Ring on the South Downs (Andy Li, CC0): a grassy hilltop whose own lone tree was painted out, with the
     /// hill falling away to fields and the sea haze. Low on the screen, so the tree stands against the sky.
-    static let cissbury = WeatherGround(photo: SKTexture(image: NSImage(contentsOf: resource("tree-ground.heic")) ?? NSImage()),
-                                        aux: SKTexture(image: NSImage(contentsOf: resource("tree-ground-aux.png")) ?? NSImage()),
-                                        top: 0.36, horizon: 0.30)
+    static var cissbury: WeatherGround {
+        WeatherGround(photo: sharedTexture("tree-ground.heic"), aux: sharedTexture("tree-ground-aux.png"), top: 0.36, horizon: 0.30)
+    }
 }
 
 /// When a tree does what through the year, as days of the year (1 for 1 January) in northern Illinois at 42°N, from

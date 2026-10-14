@@ -337,16 +337,17 @@ final class DappledLight: SKScene, BatteryPaced {
 
     // MARK: - Textures
 
-    /// The last surface's textures, kept for every display and the Settings preview; only one surface's at a time,
-    /// since each is 32 MB.
-    private static var loaded: (key: String, albedo: SKTexture, relief: SKTexture, mean: Float)?
+    /// The last surface's textures, shared by every display and the Settings preview while any shows them; only one
+    /// surface's at a time, since each is 32 MB, and let go with the last scene.
+    private static var loaded: (key: String, mean: Float)?
+    private static weak var loadedAlbedo: SKTexture?, loadedRelief: SKTexture?
 
     /// A surface's albedo, and its relief packed as slope across in red, slope up in green and height in blue, from
     /// greyscale HEICs (a colour HEIC's chroma subsampling ruins packed channels); and the albedo's mean in linear
     /// light, which the tint is divided by.
     static func textures(_ surface: Surface) -> (albedo: SKTexture, relief: SKTexture, mean: Float) {
         let key = surface.albedo + "+" + surface.relief
-        if let loaded, loaded.key == key { return (loaded.albedo, loaded.relief, loaded.mean) }
+        if let loaded, loaded.key == key, let albedo = loadedAlbedo, let relief = loadedRelief { return (albedo, relief, loaded.mean) }
         func image(_ name: String) -> CGImage? {
             NSImage(contentsOf: resource("dappled-\(name).heic"))?.cgImage(forProposedRect: nil, context: nil, hints: nil)
         }
@@ -383,7 +384,7 @@ final class DappledLight: SKScene, BatteryPaced {
             for i in 0..<w * h { relief[i * 4 + channel] = plane[i] }
         }
         let result = (albedo: texture(albedo), relief: texture(relief), mean: Float(sum / Double(w * h)))
-        loaded = (key, result.albedo, result.relief, result.mean)
+        (loaded, loadedAlbedo, loadedRelief) = ((key, result.mean), result.albedo, result.relief)
         return result
     }
 

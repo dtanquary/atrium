@@ -64,6 +64,7 @@ final class Fireflies: SKScene {
     /// The sky, then the meadow photo in slices by distance, near to far, so fireflies fly behind nearer grass. The
     /// last slice runs to the trees and beyond, behind every firefly.
     private func meadow() {
+        let photo = MeadowPhoto.photo
         let sky = SKSpriteNode(color: .black, size: size)
         sky.anchorPoint = .zero
         sky.zPosition = -1000
@@ -82,7 +83,7 @@ final class Fireflies: SKScene {
         ]
         let cuts: [CGFloat] = [0, 5, 9, 16, 28, 1e4]
         for (a, b) in zip(cuts, cuts.dropFirst()) {
-            let slice = SKSpriteNode(texture: MeadowPhoto.photo, size: CGSize(width: width, height: height))
+            let slice = SKSpriteNode(texture: photo, size: CGSize(width: width, height: height))
             slice.anchorPoint = CGPoint(x: 0.5, y: 1)
             slice.position = CGPoint(x: size.width / 2, y: size.height * MeadowPhoto.top)
             slice.zPosition = b > 1e3 ? -500 : 100 - (a + b) / 2
@@ -253,9 +254,9 @@ final class Fireflies: SKScene {
 /// map holds log distance in red (Depth Anything V2; 0 nearest, 1 at 32 times as far) and open field in green.
 /// Heights are fractions of the height up from the bottom, with the photo's top edge at `top` on a 1512×982 screen.
 @MainActor private enum MeadowPhoto {
-    static let photo = SKTexture(image: NSImage(contentsOf: resource("fireflies-meadow.heic")) ?? NSImage())
-    static let aux = SKTexture(image: NSImage(contentsOf: resource("fireflies-meadow-aux.png")) ?? NSImage())
-    static let aspect = photo.size().width / max(photo.size().height, 1)
+    static var photo: SKTexture { sharedTexture("fireflies-meadow.heic") }
+    static var aux: SKTexture { sharedTexture("fireflies-meadow-aux.png") }
+    static let aspect = { let size = photo.size(); return size.width / max(size.height, 1) }()
     /// The photo's top edge, the treeline's top (median) and its foot, and the ground plane's horizon.
     static let top: CGFloat = 0.549, skyline: CGFloat = 0.487, foot: CGFloat = 0.317, horizon: CGFloat = 0.3585
     /// Fitted from the lens (16 mm on a GF1) and the ground plane `v = horizon − 0.3387/D` over the open field, for

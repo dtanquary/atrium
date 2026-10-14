@@ -13,9 +13,9 @@ import SpriteKit
 
     /// Fort Ord's green hills and oak woodland (BLM, public domain). Its distances were estimated offline with Apple's
     /// Core ML Depth Anything V2.
-    static let fortOrd = WeatherGround(photo: SKTexture(image: NSImage(contentsOf: resource("weather-ground.heic")) ?? NSImage()),
-                                       aux: SKTexture(image: NSImage(contentsOf: resource("weather-ground-aux.png")) ?? NSImage()),
-                                       top: 0.56, horizon: 0.45)
+    static var fortOrd: WeatherGround {
+        WeatherGround(photo: sharedTexture("weather-ground.heic"), aux: sharedTexture("weather-ground-aux.png"), top: 0.56, horizon: 0.45)
+    }
 }
 
 /// Rolling hills under whatever the weather is doing outside right now, from Open-Meteo every 15 minutes:
@@ -565,12 +565,17 @@ class WeatherScene: SKScene, BatteryPaced {
         ("cu-flat-1", 3.5, [0.50, 0.83], false), ("cu-sidelit-1", 2.4, [0.62, 0.87], false),
         ("cu-congestus-3", 4.5, [0.65, 0.90], true),
     ] // ponytail: nine clouds and one tower; five more were cut but ran into their photos' frames, which showed
-    private static var cloudTextures: [String: SKTexture] = [:]
+    /// Each cloud as packed, kept while this scene lives so one that drifts off isn't packed again when it's next
+    /// picked, and shared with any other scene showing it.
+    private var cloudTextures: [String: SKTexture] = [:]
 
-    private static func cloudTexture(_ name: String) -> SKTexture {
+    private func cloudTexture(_ name: String) -> SKTexture {
         if let texture = cloudTextures[name] { return texture }
-        let texture = packedCloud(name).map { SKTexture(cgImage: $0) } ?? SKTexture()
-        texture.usesMipmaps = true // drawn far smaller than the photo when far away
+        let texture = sharedTexture("weather-cloud-\(name)") {
+            let texture = Self.packedCloud(name).map { SKTexture(cgImage: $0) } ?? SKTexture()
+            texture.usesMipmaps = true // drawn far smaller than the photo when far away
+            return texture
+        }
         cloudTextures[name] = texture
         return texture
     }
@@ -663,7 +668,7 @@ class WeatherScene: SKScene, BatteryPaced {
             let tower = towers == 0 && Double.random(in: 0...1) < 0.15
             if tower { towers += 1 }
             let pick = Self.photoClouds.filter { $0.tower == tower }.randomElement()!
-            let node = SKSpriteNode(texture: Self.cloudTexture(pick.name))
+            let node = SKSpriteNode(texture: cloudTexture(pick.name))
             node.anchorPoint = CGPoint(x: 0.5, y: 0.077) // the photo's base, in a node 4% bigger so puffs can swell
             node.shader = photoCloudShader
             node.userData = ["seed": SIMD2<Float>(.random(in: 0...1), .random(in: 0...1))]
@@ -703,7 +708,7 @@ class WeatherScene: SKScene, BatteryPaced {
                     ? (across > 0 ? -1 : 1) * viewpoint.tanH * 1.3 * cloud.away
                     : .random(in: -1.1...1.1) * viewpoint.tanH * cloud.away
                 let pick = Self.photoClouds.filter { $0.tower == tower }.randomElement()!
-                cloud.node.texture = Self.cloudTexture(pick.name)
+                cloud.node.texture = cloudTexture(pick.name)
                 cloud.node.setValue(SKAttributeValue(vectorFloat2: pick.lum), forAttribute: "a_lum")
                 cloud.node.xScale = Bool.random() ? 1 : -1
                 cloud.km = pick.km * .random(in: 0.85...1.2)

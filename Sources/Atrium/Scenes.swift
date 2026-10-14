@@ -274,3 +274,17 @@ func resource(_ name: String) -> URL {
     Bundle.main.url(forResource: name, withExtension: nil)
         ?? URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Resources/\(name)")
 }
+
+/// A texture shared by every scene that shows it (a display's and Settings' copy, or a scene and the one crossfading
+/// in), and let go with the last: drawn by `make`, else the picture `name` in Resources. A wallpaper's photo is tens
+/// of MB once decoded, and again on the GPU. Kept in statics for good once shown, a tour of every wallpaper (Shuffle's)
+/// left 300 MB of texture pixels alone that no scene was using. Hold it in a local while building, or it may be let
+/// go and drawn twice.
+@MainActor func sharedTexture(_ name: String, make: (() -> SKTexture)? = nil) -> SKTexture {
+    if let texture = sharedTextures.object(forKey: name as NSString) { return texture }
+    let texture = make?() ?? SKTexture(image: NSImage(contentsOf: resource(name)) ?? NSImage())
+    sharedTextures.setObject(texture, forKey: name as NSString)
+    return texture
+}
+
+@MainActor private let sharedTextures = NSMapTable<NSString, SKTexture>.strongToWeakObjects()
