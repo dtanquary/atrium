@@ -357,7 +357,7 @@ struct PowerPage: View {
             } header: {
                 Text("Frame Rate")
             } footer: {
-                Text("120 fps, on displays that offer it, is smoother still than 60 and uses about twice the power. 30 fps uses about half the power of 60, and 15 fps about a quarter. Freeze holds the current frame. Wallpapers always pause while the desktop is covered.")
+                Text("120 fps, on displays that offer it, is smoother still than 60 and uses about twice the power. 30 fps uses about half the power of 60, and 15 fps about a quarter. Freeze holds the current frame. Wallpapers always pause while the desktop is covered. On battery, wallpapers whose motion is slow run slower still, where it doesn't show.")
                     .foregroundStyle(.secondary)
             }
             ResetSection { for knob in Power.knobs { UserDefaults.standard.removeObject(forKey: knob.key) } }

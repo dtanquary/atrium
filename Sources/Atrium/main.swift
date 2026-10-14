@@ -17,8 +17,13 @@ final class WallpaperView: SKView, SKViewDelegate {
     static var paused = false
     /// How many views in a row `watch` has put in this one's place without a frame drawn since.
     private var replaced = 0
-    /// The `Wallpaper.batteryRate` of the wallpaper it shows, for `applyPowerState`.
+    /// The `Wallpaper.batteryRate` of the wallpaper it shows.
     var batteryRate: Int?
+    /// The scene it was last given: during a crossfade `scene` is still the one before.
+    private weak var shown: SKScene?
+    /// The ceiling on battery that `applyPowerState` holds it to: the scene's own while it sets one (`BatteryPaced`),
+    /// else its wallpaper's.
+    var cap: Int? { (shown as? BatteryPaced)?.batteryRate ?? batteryRate }
     /// Holds the current frame still, e.g. in Low Power Mode.
     var frozen = false { didSet { updatePaused() } }
     /// Runs even while frozen until then, so a new scene draws its first frame, or finishes crossfading, and an
@@ -30,9 +35,12 @@ final class WallpaperView: SKView, SKViewDelegate {
         delegate = self
         NotificationCenter.default.addObserver(self, selector: #selector(occlusionChanged),
                                                name: NSWindow.didChangeOcclusionStateNotification, object: window)
+        NotificationCenter.default.addObserver(self, selector: #selector(batteryRateChanged),
+                                               name: .batteryRateChanged, object: nil)
     }
 
     override func presentScene(_ scene: SKScene?) {
+        show(scene)
         super.presentScene(scene)
         wake(for: 0.5)
     }
@@ -41,8 +49,21 @@ final class WallpaperView: SKView, SKViewDelegate {
     /// uncovered: the lock screen's still, taken meanwhile, would be of the wallpaper before. So it swaps straight.
     override func presentScene(_ scene: SKScene, transition: SKTransition) {
         guard window?.occlusionState.contains(.visible) == true else { return presentScene(scene) }
+        show(scene)
         super.presentScene(scene, transition: transition)
         wake(for: 1.5)
+    }
+
+    /// Takes the frame rate for `scene`, which is shown from now, crossfading or not.
+    private func show(_ scene: SKScene?) {
+        let was = cap
+        shown = scene
+        if cap != was { applyPowerState(to: [self]) }
+    }
+
+    /// Takes the frame rate the scene it shows now asks for: the incoming one, mid-crossfade.
+    @objc private func batteryRateChanged(_ note: Notification) {
+        if note.object as AnyObject? === shown { applyPowerState(to: [self]) }
     }
 
     func wake(for seconds: Double) {
@@ -74,12 +95,11 @@ final class WallpaperView: SKView, SKViewDelegate {
         guard !Self.screensAsleep, !isPaused, Date().timeIntervalSince(lastDrawn) > patience, let window else { return }
         Self.log.error("drawing stopped \(Date().timeIntervalSince(self.lastDrawn), format: .fixed(precision: 0)) s ago while running; replacing the view")
         let fresh = WallpaperView()
-        fresh.frozen = frozen
-        fresh.preferredFramesPerSecond = preferredFramesPerSecond
         fresh.batteryRate = batteryRate
         fresh.replaced = replaced + 1
         window.contentView = fresh
         fresh.presentScene(scene(window.frame.size))
+        applyPowerState(to: [fresh]) // frozen or not as this one was, at the rate its scene, built afresh, asks for
     }
 
     nonisolated func view(_ view: SKView, shouldRenderAtTime time: TimeInterval) -> Bool {
@@ -101,12 +121,12 @@ final class WallpaperView: SKView, SKViewDelegate {
 }
 
 /// Runs at the frame rate Settings → Power picks for Low Power Mode, battery or mains power (60 and 30 fps, and
-/// frozen in Low Power Mode, unless changed), held to each view's wallpaper's `batteryRate` below mains power's and
-/// to 30 or 15 fps while the Mac runs hot, or holds still while the menu's Pause is on.
+/// frozen in Low Power Mode, unless changed), held to each view's `cap` (its wallpaper's or scene's `batteryRate`)
+/// below mains power's and to 30 or 15 fps while the Mac runs hot, or holds still while the menu's Pause is on.
 @MainActor func applyPowerState(to views: [WallpaperView]) {
     let pick = powerKnob().value, heat = ProcessInfo.processInfo.thermalState
     for view in views {
-        let fps = Power.fps(pick: pick, plugged: Power.plugged.value, fast: Power.fastDisplay, cap: view.batteryRate, heat: heat)
+        let fps = Power.fps(pick: pick, plugged: Power.plugged.value, fast: Power.fastDisplay, cap: view.cap, heat: heat)
         if fps > 0 { view.preferredFramesPerSecond = fps }
         view.frozen = fps == 0 || WallpaperView.paused
     }

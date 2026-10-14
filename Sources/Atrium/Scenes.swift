@@ -28,7 +28,9 @@ struct Wallpaper {
     /// when the appearance changes, as it does for every other wallpaper.
     var followsAppearance = false
     /// A ceiling in frames per second for when it runs slower than on mains power (on battery or in Low Power Mode,
-    /// not with Full Speed on Battery), for a wallpaper whose motion is slow enough that a lower rate can't be seen.
+    /// not with Full Speed on Battery), for a wallpaper whose motion is slow enough that a lower rate can't be seen:
+    /// 10, 12, 15 or 20, which divide 60 and 120. A scene whose motion speeds up and slows down as it runs says so
+    /// itself instead (`BatteryPaced`).
     var batteryRate: Int?
     /// Not good enough to show yet: left out of the menu, Settings, Shuffle and the welcome unless `unfinished` is set
     /// (`defaults write com.dtanquary.atrium unfinished -bool true`, then relaunch), but still built and render-tested.
@@ -188,6 +190,26 @@ struct Refresh {
     func headStart()
 }
 
+/// A scene whose ceiling on battery (as `Wallpaper.batteryRate`) changes as it runs: lower through slow phases, none
+/// through fast ones. While it's set, the view showing the scene holds to it in place of its wallpaper's; nil leaves
+/// the wallpaper's. The scene sets it from the moment it's built, as a view reads it when the scene is presented, and
+/// calls `batteryRateChanged(from:)` whenever it sets it, which tells the view only if it changed.
+@MainActor protocol BatteryPaced: SKScene {
+    var batteryRate: Int? { get }
+}
+
+extension BatteryPaced {
+    /// Tells the views showing this scene, if `batteryRate` is no longer `old`. None does in the render tests.
+    func batteryRateChanged(from old: Int?) {
+        if batteryRate != old { NotificationCenter.default.post(name: .batteryRateChanged, object: self) }
+    }
+}
+
+extension Notification.Name {
+    /// Posted by a `BatteryPaced` scene whose `batteryRate` has changed.
+    static let batteryRateChanged = Notification.Name("AtriumBatteryRateChanged")
+}
+
 /// A scene that is one full-screen GPU shader. Besides `u_now` (see `WallpaperTime`) and `v_tex_coord`, the shader
 /// gets `u_size`, the scene size in points, for aspect-correct math, and a float for each knob, named `u_` plus
 /// the last part of its key, that follows Settings live.
@@ -208,9 +230,11 @@ struct Refresh {
     return scene
 }
 
-/// A `shaderScene`, which keeps its knob uniforms in step with Settings, and runs its clock if it has one.
-final class ShaderScene: SKScene {
+/// A `shaderScene`, which keeps its knob uniforms in step with Settings, and runs its clock if it has one. Its
+/// `batteryRate` is its wallpaper's unless the scene's maker sets one (Rain on Glass, once its drops have stopped).
+final class ShaderScene: SKScene, BatteryPaced {
     var knobs: [(knob: Knob, uniform: SKUniform)] = []
+    var batteryRate: Int? { didSet { batteryRateChanged(from: oldValue) } }
     var clock: (uniform: SKUniform, speed: Knob)?
     /// The clock's time, summed in Double so it keeps counting after days (a Float stops once each frame's step
     /// rounds away); the shader gets it as a Float, so keep it small where the shader needs it precise.
