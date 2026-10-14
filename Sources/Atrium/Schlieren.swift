@@ -52,7 +52,6 @@ final class Schlieren: SKScene {
     private let screen = SKSpriteNode()
     private var air: AirSim!
     private var field: SKMutableTexture!
-    private var pixels: [UInt8] = []
     private var flames: [(node: SKSpriteNode, heater: Int)] = []
     private var shown = (source: -1, filter: -1)
     private var lastUpdate: TimeInterval?
@@ -167,7 +166,6 @@ final class Schlieren: SKScene {
         for _ in 0..<90 { air.step(1 / 60) } // already burning
         field = SKMutableTexture(size: CGSize(width: air.fx, height: air.fy))
         field.filteringMode = .linear
-        pixels = Array(repeating: 255, count: air.fx * air.fy * 4)
         uniforms.field.textureValue = field
         uniforms.texel.vectorFloat2Value = [1 / Float(air.fx), 1 / Float(air.fy)]
         upload()
@@ -221,19 +219,21 @@ final class Schlieren: SKScene {
     }
 
     /// Sends T0/T (1 in room air, 0.25 in flame) to the texture as 16 bits, so the shader's gradient doesn't band.
+    /// Written straight into the texture's own bytes, all four of each pixel.
     private func upload() {
         let fx = air.fx, fy = air.fy, fw = air.fw, t = air.t
-        pixels.withUnsafeMutableBufferPointer { px in
+        field.modifyPixelData { data, length in
+            guard let px = data?.assumingMemoryBound(to: UInt8.self), length >= fx * fy * 4 else { return }
             for y in 0..<fy {
                 for x in 0..<fx {
                     let m = 1 / (1 + max(t[(y + 1) * fw + x + 1], 0)), v = Int(m * 65535), o = (y * fx + x) * 4
                     px[o] = UInt8(v >> 8)
                     px[o + 1] = UInt8(v & 255)
+                    px[o + 2] = 255
+                    px[o + 3] = 255
                 }
             }
         }
-        let bytes = pixels
-        field.modifyPixelData { data, length in bytes.withUnsafeBytes { data?.copyMemory(from: $0.baseAddress!, byteCount: min(length, $0.count)) } }
     }
 
     // MARK: Filter, flame and shader
@@ -423,14 +423,19 @@ final class AirSim {
         heat()
         // coarse temperature, the mean of each block of fine cells, and the lift it gives against the room's mean
         let inv = 1 / Float(r * r)
-        var mean: Float = 0
-        for y in 1...ny { for x in 1...nx {
-            var s: Float = 0
-            for j in 0..<r { let row = ((y - 1) * r + j + 1) * fw + (x - 1) * r + 1; for i in 0..<r { s += t[row + i] } }
+        let t = t, temp = temp, r = r
+        for y in 1...ny { for g in 0..<(nx + 3) / 4 { // four blocks at a time (see `F4`)
+            let x = min(1 + 4 * g, nx - 3)
+            var s = F4.zero
+            for j in 0..<r {
+                let row = t + ((y - 1) * r + j + 1) * fw + (x - 1) * r + 1
+                for i in 0..<r { s += F4(row[i], row[i + r], row[i + 2 * r], row[i + 3 * r]) }
+            }
             let th = s * inv
-            temp[y * w + x] = th / (1 + th)
-            mean += temp[y * w + x]
+            put(temp, y * w + x, th / (1 + th))
         } }
+        var mean: Float = 0
+        for y in 1...ny { for x in 1...nx { mean += temp[y * w + x] } }
         mean /= Float(nx * ny)
         let lift = dt * buoyancy, keep = exp(-drag * dt)
         for y in 1...ny { for x in 1...nx {
@@ -456,12 +461,13 @@ final class AirSim {
         let decay = exp(-cool * dt / Float(passes)), c = diffuse * dt / (cell * cell) / Float(passes)
         let quench = 1 - exp(-12 * dt / Float(passes))
         for _ in 0..<passes {
-            for y in 1...fy { for x in 1...fx {
-                let k = y * fw + x
-                let mixed = t[k] + c * (t[k - 1] + t[k + 1] + t[k - fw] + t[k + fw] - 4 * t[k])
-                t2[k] = (mixed - max(mixed - 0.8, 0) * quench) * decay
+            let t = self.t, t2 = self.t2
+            for y in 1...fy { for g in 0..<(fx + 3) / 4 { // four cells at a time (see `F4`)
+                let k = y * fw + min(1 + 4 * g, fx - 3), tk = f4(t, k)
+                let mixed = tk + c * (f4(t, k - 1) + f4(t, k + 1) + f4(t, k - fw) + f4(t, k + fw) - 4 * tk)
+                put(t2, k, (mixed - above(mixed - 0.8, .zero) * quench) * decay)
             } }
-            swap(&t, &t2)
+            swap(&self.t, &self.t2)
         }
         time += dt
     }
@@ -552,6 +558,15 @@ final class AirSim {
                 for y in 1...ny {
                     var k = y * w + 1 + (y + colour) & 1
                     let end = y * w + nx
+                    // four of the colour at a time: their neighbours are all of the other colour, so nothing a lane
+                    // reads changes in the sweep (see `F4`)
+                    while k + 6 <= end {
+                        let around = f8(p, k - 1), centre = around.oddHalf
+                        let sum = f8(div, k).evenHalf + f8(p, k + 1).evenHalf + around.evenHalf + f8(p, k + w).evenHalf + f8(p, k - w).evenHalf
+                        let q = centre + omega * (sum * 0.25 - centre)
+                        p[k] = q[0]; p[k + 2] = q[1]; p[k + 4] = q[2]; p[k + 6] = q[3]
+                        k += 8
+                    }
                     while k <= end {
                         p[k] += omega * ((div[k] + p[k + 1] + p[k - 1] + p[k + w] + p[k - w]) * 0.25 - p[k])
                         k += 2
@@ -581,38 +596,76 @@ final class AirSim {
     }
 
     /// MacCormack on the fine grid (Selle et al. 2008), limited to the cells it read so it can't overshoot, with the
-    /// velocity read bilinearly from the coarse grid. Past the edges is room air.
+    /// velocity read bilinearly from the coarse grid. Past the edges is room air. Four cells at a time (see `F4`).
     private func advectFine(_ dt: Float) {
         let fx = fx, fy = fy, fw = fw, w = w, rr = Float(r), s = dt / cell, nx = nx, ny = ny
         let maxX = Float(fx) + 0.999, maxY = Float(fy) + 0.999
+        let u = u, v = v, t = t, t1 = t1, t2 = t2, ox = ox, oy = oy, lo = lo, hi = hi
+        let lane = F4(0, 1, 2, 3), zero = F4.zero, mx = F4(repeating: maxX), my = F4(repeating: maxY), row = Float(fw)
+        // the coarse velocity read across each fine column, along the two coarse rows a fine row lies between: the
+        // same for the three or so fine rows between one pair, so worked out once for them
+        let across = UnsafeMutablePointer<Float>.allocate(capacity: 4 * fw)
+        defer { across.deallocate() }
+        let ub = across, ut = across + fw, vb = across + 2 * fw, vt = across + 3 * fw
+        var pair = -1
         for y in 1...fy {
             let cy = min(max((Float(y) - 0.5) / rr + 0.5, 1), Float(ny) - 0.001)
             let cy0 = Int(cy), ty = cy - Float(cy0), d = draft[cy0] + (draft[cy0 + 1] - draft[cy0]) * ty
-            for x in 1...fx {
-                let cx = min(max((Float(x) - 0.5) / rr + 0.5, 1), Float(nx) - 0.001)
-                let cx0 = Int(cx), tx = cx - Float(cx0), i = cy0 * w + cx0
-                let ub = u[i] + (u[i + 1] - u[i]) * tx, ut = u[i + w] + (u[i + w + 1] - u[i + w]) * tx
-                let vb = v[i] + (v[i + 1] - v[i]) * tx, vt = v[i + w] + (v[i + w + 1] - v[i + w]) * tx
-                let k = y * fw + x
-                ox[k] = ((ub + (ut - ub) * ty) + d) * s; oy[k] = (vb + (vt - vb) * ty) * s
-                let px = min(max(Float(x) - ox[k], 0), maxX), py = min(max(Float(y) - oy[k], 0), maxY)
-                let x0 = Int(px), y0 = Int(py), ax = px - Float(x0), ay = py - Float(y0), j = y0 * fw + x0
-                let q00 = t[j], q10 = t[j + 1], q01 = t[j + fw], q11 = t[j + fw + 1]
+            if cy0 != pair {
+                pair = cy0
+                for x in 1...fx {
+                    let cx = min(max((Float(x) - 0.5) / rr + 0.5, 1), Float(nx) - 0.001)
+                    let cx0 = Int(cx), tx = cx - Float(cx0), i = cy0 * w + cx0
+                    ub[x] = u[i] + (u[i + 1] - u[i]) * tx; ut[x] = u[i + w] + (u[i + w + 1] - u[i + w]) * tx
+                    vb[x] = v[i] + (v[i + 1] - v[i]) * tx; vt[x] = v[i + w] + (v[i + w + 1] - v[i + w]) * tx
+                }
+            }
+            let yy = F4(repeating: Float(y))
+            for g in 0..<(fx + 3) / 4 {
+                let x = min(1 + 4 * g, fx - 3), k = y * fw + x
+                let b = f4(ub, x), c = f4(vb, x)
+                let dx = ((b + (f4(ut, x) - b) * ty) + d) * s, dy = (c + (f4(vt, x) - c) * ty) * s
+                put(ox, k, dx); put(oy, k, dy)
+                let px = below(above(Float(x) + lane - dx, zero), mx), py = below(above(yy - dy, zero), my)
+                let x0 = px.rounded(.towardZero), y0 = py.rounded(.towardZero), ax = px - x0, ay = py - y0
+                let j = y0 * row + x0 // whole numbers under 2²⁴, so exact
+                let (q00, q10, q01, q11) = corners(t, j, fw)
                 let bottom = q00 + (q10 - q00) * ax, top = q01 + (q11 - q01) * ax
-                t1[k] = bottom + (top - bottom) * ay
-                lo[k] = min(min(q00, q10), min(q01, q11)); hi[k] = max(max(q00, q10), max(q01, q11))
+                put(t1, k, bottom + (top - bottom) * ay)
+                put(lo, k, below(below(q00, q10), below(q01, q11))); put(hi, k, above(above(q00, q10), above(q01, q11)))
             }
         }
-        for y in 1...fy { for x in 1...fx {
-            let k = y * fw + x
-            let px = min(max(Float(x) + ox[k], 0), maxX), py = min(max(Float(y) + oy[k], 0), maxY)
-            let x0 = Int(px), y0 = Int(py), ax = px - Float(x0), ay = py - Float(y0), j = y0 * fw + x0
-            let bottom = t1[j] + (t1[j + 1] - t1[j]) * ax, top = t1[j + fw] + (t1[j + fw + 1] - t1[j + fw]) * ax
-            t2[k] = min(max(t1[k] + 0.5 * (t[k] - (bottom + (top - bottom) * ay)), lo[k]), hi[k])
-        } }
-        swap(&t, &t2)
+        for y in 1...fy {
+            let yy = F4(repeating: Float(y))
+            for g in 0..<(fx + 3) / 4 {
+                let x = min(1 + 4 * g, fx - 3), k = y * fw + x
+                let px = below(above(Float(x) + lane + f4(ox, k), zero), mx), py = below(above(yy + f4(oy, k), zero), my)
+                let x0 = px.rounded(.towardZero), y0 = py.rounded(.towardZero), ax = px - x0, ay = py - y0
+                let j = y0 * row + x0 // whole numbers under 2²⁴, so exact
+                let (q00, q10, q01, q11) = corners(t1, j, fw)
+                let bottom = q00 + (q10 - q00) * ax, top = q01 + (q11 - q01) * ax
+                put(t2, k, below(above(f4(t1, k) + 0.5 * (f4(t, k) - (bottom + (top - bottom) * ay)), f4(lo, k)), f4(hi, k)))
+            }
+        }
+        swap(&self.t, &self.t2)
         // room air comes in at the bottom and sides; at the top, air leaves as it is
-        for x in 0..<fw { t[x] = 0; t[(fy + 1) * fw + x] = t[fy * fw + x] }
-        for y in 0..<fy + 1 { t[y * fw] = 0; t[y * fw + fx + 1] = 0 }
+        for x in 0..<fw { t2[x] = 0; t2[(fy + 1) * fw + x] = t2[fy * fw + x] }
+        for y in 0..<fy + 1 { t2[y * fw] = 0; t2[y * fw + fx + 1] = 0 }
     }
+}
+
+/// Four neighbouring cells, for passes that run a row four at a time. Each lane does exactly the scalar sum (`below`
+/// and `above` are `min` and `max`, ties included), so the result is the same to the bit, and a row's last four
+/// overlap the four before rather than run past its end, which is safe where each cell's result is made only from
+/// the fields the pass reads.
+fileprivate typealias F4 = SIMD4<Float>
+@inline(__always) fileprivate func f4(_ p: UnsafeMutablePointer<Float>, _ k: Int) -> F4 { UnsafeRawPointer(p + k).loadUnaligned(as: F4.self) }
+@inline(__always) fileprivate func f8(_ p: UnsafeMutablePointer<Float>, _ k: Int) -> SIMD8<Float> { UnsafeRawPointer(p + k).loadUnaligned(as: SIMD8<Float>.self) }
+@inline(__always) fileprivate func put(_ p: UnsafeMutablePointer<Float>, _ k: Int, _ f: F4) { UnsafeMutableRawPointer(p + k).storeBytes(of: f, as: F4.self) }
+@inline(__always) fileprivate func below(_ a: F4, _ b: F4) -> F4 { a.replacing(with: b, where: b .< a) }
+@inline(__always) fileprivate func above(_ a: F4, _ b: F4) -> F4 { a.replacing(with: b, where: b .>= a) }
+/// The four cells round each lane's point in a field `fw` wide, its bottom-left at j.
+@inline(__always) fileprivate func corners(_ p: UnsafeMutablePointer<Float>, _ j: F4, _ fw: Int) -> (F4, F4, F4, F4) {
+    let a = p + Int(j[0]), b = p + Int(j[1]), c = p + Int(j[2]), d = p + Int(j[3])
+    return (F4(a[0], b[0], c[0], d[0]), F4(a[1], b[1], c[1], d[1]), F4(a[fw], b[fw], c[fw], d[fw]), F4(a[fw + 1], b[fw + 1], c[fw + 1], d[fw + 1]))
 }

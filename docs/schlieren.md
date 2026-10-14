@@ -81,7 +81,7 @@ Rising heat as a colour schlieren camera sees it, after the photos of Gary Settl
 
 ## Performance
 - Release, 2x, 2026-09-28: CPU 1.9–2.1 ms, GPU 0.35–1.6 ms per frame. The GPU is highest with the mirror and on bright screens.
-- The CPU is one sim step a frame at about 1.1 ms (99×72 coarse, 297×216 fine), plus the upload.
+- The CPU is one sim step a frame at about 0.65 ms (99×72 coarse, 297×216 fine), plus the upload. On 2026-10-14 the fine-grid passes (MacCormack advection, mixing, the block means) and the pressure sweeps went four cells at a time with SIMD4, each lane doing the scalar arithmetic in the same order, so the sim's output is the same to the bit (checked against the old code over 4,000 steps, and by identical render-test PNGs at 4, 20 and 60 s); a step went from 1.34 to 0.66 ms, timed interleaved in a release build. The upload writes straight into the texture's bytes instead of copying a buffer in.
 - Two displays, or Settings' live preview, run a sim each.
 - Debug builds are about 30 times slower on the CPU.
 
@@ -115,7 +115,7 @@ Two research agents, 2026-09-28. The notes are summarised here. The photos (30, 
 - **Box edges show.** Any heater drawn into a box shows the box's edge as a hard line, since schlieren sees gradients. Every heater fades to nothing inside its box.
 - **Heat drawing costs.** Evaluating each flame's halo every step (exp and pow over 18k cells a flame) took 0.6 ms of the budget. The stamp tables made that a copy.
 - **The sim's top edge** showed as a line until the grid ran on above the frame (`above`, `u_visible`).
-- `ponytail:` the sim is plain scalar Swift on the main thread, about 1.1 ms a step. If finer filaments or faster Speed are wanted, it moves to a Metal compute pass. The two edge lines of a stem are 3–4 fine cells apart, about 15 pt, which is enough.
+- `ponytail:` the sim is plain Swift (SIMD4 on its fine grid) on the main thread, about 0.65 ms a step. If finer filaments or faster Speed are wanted, it moves to a Metal compute pass. The two edge lines of a stem are 3–4 fine cells apart, about 15 pt, which is enough.
 - `ponytail:` the 2D slice stands in for an axisymmetric plume with a fixed `depth`. A real plume's peak bend doesn't depend on its width (1.52·Δn at 0.71 radii), whereas here wider plumes bend a little less.
 
 ## Dave's feedback and decisions
