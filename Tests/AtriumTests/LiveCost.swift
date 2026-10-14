@@ -139,7 +139,7 @@ private func pattern(_ gaps: [TimeInterval]) -> String {
         .sorted { $0.1 > $1.1 }.prefix(3).map { "\($0.0)×\($0.1)" }.joined(separator: " ")
 }
 
-/// Counts the frames a `WallpaperView` draws, standing in as its delegate and handing each frame on to it.
+/// Counts the frames a `WallpaperView` draws, standing in as its delegate and handing each tick on to it.
 @MainActor private final class FrameCounter: NSObject, SKViewDelegate {
     let view: WallpaperView
     var times: [TimeInterval] = []
@@ -152,8 +152,9 @@ private func pattern(_ gaps: [TimeInterval]) -> String {
 
     nonisolated func view(_ skView: SKView, shouldRenderAtTime time: TimeInterval) -> Bool {
         MainActor.assumeIsolated {
-            times.append(time)
-            return view.view(skView, shouldRenderAtTime: time)
+            let draws = view.view(skView, shouldRenderAtTime: time)
+            if draws { times.append(time) }
+            return draws
         }
     }
 }

@@ -29,6 +29,8 @@ final class WallpaperView: SKView, SKViewDelegate {
     /// Runs even while frozen until then, so a new scene draws its first frame, or finishes crossfading, and an
     /// uncovered window catches up, before it's held still.
     private var awakeUntil = Date.distantPast
+    /// When its next frame is due, by SpriteKit's clock (`shouldRenderAtTime`).
+    private var due: TimeInterval = 0
 
     override func viewDidMoveToWindow() {
         guard let window else { return }
@@ -102,13 +104,21 @@ final class WallpaperView: SKView, SKViewDelegate {
         applyPowerState(to: [fresh]) // frozen or not as this one was, at the rate its scene, built afresh, asks for
     }
 
+    /// Draws at `preferredFramesPerSecond`, evenly. SpriteKit asks at every vsync from when it thinks a frame is due,
+    /// and on a 120 Hz display it thinks so early: asked for 30 it drew 33 fps, 25 and 33 ms apart, and asked for 10,
+    /// 12.5 (2026-10-14). So it's refused until the frame is due by the beat, less half a 120 Hz vsync, so a vsync a
+    /// little early or late is never passed over. That holds the rate on a display of any refresh rate, evenly where
+    /// the display's rate is a multiple of it.
     nonisolated func view(_ view: SKView, shouldRenderAtTime time: TimeInterval) -> Bool {
         MainActor.assumeIsolated {
+            guard time >= due - 1 / 240.0 else { return false }
+            let interval = 1 / Double(preferredFramesPerSecond)
+            due = (time - due > interval ? time : due) + interval // from now, after a pause; else on the beat
             WallpaperTime.set(time)
             lastDrawn = Date()
             replaced = 0
+            return true
         }
-        return true
     }
 }
 

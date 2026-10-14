@@ -111,6 +111,22 @@ private final class SeenWindow: NSWindow {
     }
 }
 
+/// A view draws on every second, third… vsync, whichever rate the app asks for, on a 60 or 120 Hz display, though each
+/// vsync comes a millisecond early or late.
+@MainActor @Test func viewDrawsEvenlyAtEachRate() {
+    for hz in [60, 120] {
+        for fps in [120, 60, 30, 20, 15, 12, 10] where fps <= hz {
+            let view = WallpaperView()
+            view.preferredFramesPerSecond = fps
+            let drawn = (0..<5 * hz).filter { vsync in
+                view.view(view, shouldRenderAtTime: 1000 + Double(vsync) / Double(hz) + Double(vsync % 3 - 1) / 1000)
+            }
+            #expect(drawn.count == 5 * fps, "\(fps) fps at \(hz) Hz")
+            #expect(Set(zip(drawn, drawn.dropFirst()).map { $1 - $0 }) == [hz / fps], "\(fps) fps at \(hz) Hz")
+        }
+    }
+}
+
 /// The rates a wallpaper or its scene may ask for: ones that divide 60 and 120, under the battery's standard 30.
 @MainActor @Test func batteryRatesDivideTheDisplaysRates() {
     let allowed: Set<Int?> = [nil, 10, 12, 15, 20]
