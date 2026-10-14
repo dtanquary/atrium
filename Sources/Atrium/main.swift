@@ -144,13 +144,13 @@ final class WallpaperView: SKView, SKViewDelegate {
 /// draws at its wallpaper's `batteryScale` below mains power's with Lighter drawing on battery on (`Power.scale`).
 @MainActor func applyPowerState(to views: [WallpaperView]) {
     let pick = powerKnob().value, heat = ProcessInfo.processInfo.thermalState
-    let lighter = Power.lighter.value > 0.5
+    let lighter = Power.lighter.value > 0.5, onMains = Power.lighterPlugged.value > 0.5
     for view in views {
         let fps = Power.fps(pick: pick, plugged: Power.plugged.value, fast: Power.fastDisplay, cap: view.cap, heat: heat)
         if fps > 0 { view.preferredFramesPerSecond = fps }
         view.frozen = fps == 0 || WallpaperView.paused
         view.drawScale = Power.scale(pick: pick, plugged: Power.plugged.value, fast: Power.fastDisplay, batteryScale: view.batteryScale,
-                                     lighter: lighter)
+                                     lighter: lighter, onMains: onMains)
     }
 }
 
