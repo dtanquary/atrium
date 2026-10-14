@@ -201,8 +201,7 @@ final class FishTank: SKScene {
         let turning = sin(.pi * (1 - abs(fish.facing))) * fish.bank
         let level = (0.85 + 0.2 * lamp) * (0.8 + 0.3 * high) * (1 + 0.25 * min(0, turning))
         let bounce = 0.3 * exp(-(p.y - sand) / Double(60 * unit))
-        fish.node.setValue(SKAttributeValue(vectorFloat4: [1, Float(level), Float(0.3 * max(0, turning)), Float(bounce)]),
-                           forAttribute: "a_fish")
+        attribute("a_fish", of: fish.node, to: [1, Float(level), Float(0.3 * max(0, turning)), Float(bounce)])
 
         let above = max(0, p.y - sand), spread = 1 + 1.5 * above / Double(size.height), side = abs(fish.facing)
         let back = sand / Double(sandHeight) // fading out where the sand melts into the back panel
@@ -226,7 +225,7 @@ final class FishTank: SKScene {
                                  Float(b.length * 0.15 + drop * 0.25), Float(strength))
                 }
             }
-            a.node.setValue(SKAttributeValue(vectorFloat4: best), forAttribute: "a_shadow")
+            attribute("a_shadow", of: a.node, to: best)
         }
     }
 
@@ -498,7 +497,16 @@ final class FishTank: SKScene {
     private func framed(_ node: SKSpriteNode) {
         let w = node.size.width * node.xScale, h = node.size.height * node.yScale
         let corner = SIMD2<Float>(Float(node.position.x - node.anchorPoint.x * w), Float(node.position.y - node.anchorPoint.y * h))
-        node.setValue(SKAttributeValue(vectorFloat4: [corner.x, corner.y, Float(w), Float(h)]), forAttribute: "a_frame")
+        attribute("a_frame", of: node, to: [corner.x, corner.y, Float(w), Float(h)])
+    }
+
+    /// Sets a shader attribute by changing the node's own value in place, and only when it differs: a new
+    /// `SKAttributeValue` for each of three attributes on every fish every frame was most of the tank's CPU.
+    private func attribute(_ name: String, of node: SKSpriteNode, to value: SIMD4<Float>) {
+        guard let current = node.value(forAttributeNamed: name) else {
+            return node.setValue(SKAttributeValue(vectorFloat4: value), forAttribute: name)
+        }
+        if current.vectorFloat4Value != value { current.vectorFloat4Value = value }
     }
 
     /// Two islands of rock and coral, the way reefkeepers aquascape, with open sand between them for the fish to
