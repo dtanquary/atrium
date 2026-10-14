@@ -1279,7 +1279,7 @@ private func ripple(_ picture: [UInt32], side: Int, texel: Int, counts: (_ x: In
             try go(190)
             try go(180, changing: false)
             let rested = screen.piece(x: 0, y: 0, w: w, h: h)
-            #expect(scene.river === river && scene.children.count == 1, "\(run.name): \(scene.children.count) dressings left on")
+            #expect(scene.river === river && scene.trim.content.children.count == 1, "\(run.name): \(scene.trim.content.children.count) dressings left on")
             #expect(atOnce.calm <= quiet.calm + 1 && atSecond.calm <= quiet.calm + 2 && worst.calm <= quiet.calm + 3,
                     "\(run.name): a pixel changed by \(atOnce.calm) levels on the frame after the first change, \(atSecond.calm) after the second and \(worst.calm) on some frame; \(quiet.calm) with only the river moving")
             #expect(jump(first, rested).calm > 8, "\(run.name): nothing changed")
@@ -1337,7 +1337,7 @@ private func ripple(_ picture: [UInt32], side: Int, texel: Int, counts: (_ x: In
         UserDefaults.standard.set(1.0, forKey: "meander.look")
         for _ in 0..<30 { try screen.frame(rate: 60) }
         try screen.frame(rate: 1.0 / 60)
-        #expect(scene.children.count == 2, "held for an hour part-way through, the change leapt to its end")
+        #expect(scene.trim.content.children.count == 2, "held for an hour part-way through, the change leapt to its end")
     }
 }
 

@@ -82,6 +82,8 @@ CPU 0.5–0.7 ms and GPU 1.0–1.45 ms per frame (release build, 2x, 2026-09-25)
 
 **On battery it runs at 15 fps at most** (`batteryRate` in Scenes.swift; 2026-10-13). The folds and rays drift 0.6 km/s on curtains 135–380 km away, at most about 8 device pixels (2x on a 14-inch MacBook Pro, 3024 × 1964) a second at 1×: 0.6 px a frame at 15 fps. Snow glints twinkle at 1.9 Hz and stars at 0.64, both under a third of 15. At Speed 6× the folds step 3.4 px a frame, but they are soft.
 
+**On battery it draws its sky, curtains and stars at half the screen's resolution each way** (`batteryScale` in Scenes.swift, under the same condition as its battery rate, with Settings → Power's Lighter drawing on battery, on unless changed; 2026-10-14). That cuts the GPU's work a frame by 58% (1.01 to 0.43 ms, frames drawn back to back at 3024 × 1964), about 24 ms of GPU time a second at 15 fps. Side by side at 100% (`trimShots` in TrimShots.swift) the curtains and sky can't be told apart, and only the faintest stars dim a touch. The ground photo is a sprite of its own and stays sharp.
+
 ## Gotchas and shortcuts
 - The Tetons are Wyoming, not Norway: they won on looks (see below).
 - The photo's lens is about 29 mm (18 mm on APS-C); the sky's is wider (about 22 mm) for more of the arc. Nobody can tell from a skyline.

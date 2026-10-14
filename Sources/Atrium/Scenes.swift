@@ -32,6 +32,10 @@ struct Wallpaper {
     /// 10, 12, 15 or 20, which divide 60 and 120. A scene whose motion speeds up and slows down as it runs says so
     /// itself instead (`BatteryPaced`).
     var batteryRate: Int?
+    /// The fraction of the screen's resolution its softest part draws at under the same condition as `batteryRate`,
+    /// with Settings → Power's Lighter drawing on battery on: 0.75 or 0.5, for a wallpaper where side-by-side
+    /// comparisons at 100% show no difference. Its scene adopts `Trimmable`.
+    var batteryScale: CGFloat?
     /// Not good enough to show yet: left out of the menu, Settings, Shuffle and the welcome unless `unfinished` is set
     /// (`defaults write com.dtanquary.atrium unfinished -bool true`, then relaunch), but still built and render-tested.
     /// One that is parked, not being worked on, can be left hidden even then by name
@@ -90,20 +94,22 @@ struct Refresh {
                                       title: "Backdrop"),
               status: (key: "rain.status", below: "rain.weather"), refresh: .weather),
     Wallpaper(name: "Aurora", icon: "mountain.2.fill", tint: .teal, blurb: "Northern lights over snowy peaks.", make: aurora, knobs: auroraKnobs,
-              palettes: PaletteChoice(key: "aurora.palette", options: auroraPalettes.map { ($0.name, $0.colours.reversed(), $0.colours.reversed()) }), batteryRate: 15),
+              palettes: PaletteChoice(key: "aurora.palette", options: auroraPalettes.map { ($0.name, $0.colours.reversed(), $0.colours.reversed()) }), batteryRate: 15,
+              batteryScale: 0.5),
     Wallpaper(name: "Nebula", icon: "sparkles", tint: .purple, blurb: "A new deep-space cloud every few minutes.",
               make: nebula, knobs: nebulaKnobs,
-              palettes: PaletteChoice(key: "nebula.palette", options: nebulaPalettes.map { ($0.name, Array($0.colours[1...]), Array($0.colours[1...])) }), batteryRate: 15),
+              palettes: PaletteChoice(key: "nebula.palette", options: nebulaPalettes.map { ($0.name, Array($0.colours[1...]), Array($0.colours[1...])) }), batteryRate: 15,
+              batteryScale: 0.75),
     Wallpaper(name: "Galaxy", icon: "hurricane", tint: .indigo, blurb: "A spiral galaxy, after a real one, slowly turning.",
               make: galaxy, knobs: Galaxy.knobs,
               palettes: PaletteChoice(key: "galaxy.kind", options: Galaxy.kinds.map { ($0.name, [$0.colours[0], $0.colours[3], $0.colours[2]],
                                                                                      [$0.colours[0], $0.colours[3], $0.colours[2]]) }),
-              batteryRate: 12),
+              batteryRate: 12, batteryScale: 0.75),
     Wallpaper(name: "Black Hole", icon: "circle.circle.fill", tint: .orange, blurb: "A black hole's glowing disc, bent round it by gravity.",
               make: blackHole, knobs: BlackHole.knobs, palettes: BlackHole.palette, batteryRate: 20),
     Wallpaper(name: "Meander", icon: "point.bottomleft.forward.to.point.topright.scurvepath", tint: .teal,
               blurb: "A river wandering across its floodplain, leaving its old courses behind.", make: meander, knobs: Meander.knobs, looks: Meander.palettes, followsAppearance: true,
-              batteryRate: 12),
+              batteryRate: 12, batteryScale: 0.75),
     Wallpaper(name: "Etching", icon: "scribble.variable", tint: .gray, blurb: "Old etchings, engravings and woodcuts, drawn in one unbroken line.",
               make: etching, knobs: Etching.knobs, followsAppearance: true),
     Wallpaper(name: "Peg Board", icon: "circle.grid.3x3.fill", tint: .purple, blurb: "Glowing colored pegs on a black sheet, placed one at a time.",
@@ -111,7 +117,7 @@ struct Refresh {
     Wallpaper(name: "Ant Colony", icon: "ant.fill", tint: .blue, blurb: "Ants digging a new nest every day, seen through the glass.",
               make: antColony, knobs: AntColony.knobs, batteryRate: 20),
     Wallpaper(name: "Live Sky", icon: "moon.stars.fill", tint: .blue, blurb: "The real sky above you, right now.",
-              make: liveSky, knobs: LiveSky.knobs),
+              make: liveSky, knobs: LiveSky.knobs, batteryScale: 0.5),
     Wallpaper(name: "Earth from Orbit", icon: "globe.americas.fill", tint: .cyan, blurb: "Day and night sweeping over the globe.",
               make: earthFromOrbit, knobs: EarthFromOrbit.knobs, refresh: .earth),
     Wallpaper(name: "Weather", icon: "cloud.sun.fill", tint: .blue, blurb: "Real hills under your live local weather.",
@@ -144,7 +150,7 @@ struct Refresh {
               palettes: PaletteChoice(key: "wind.palette", options: WindScene.paletteOptions, standard: "Midnight"), refresh: .wind),
     Wallpaper(name: "Dappled Light", icon: "leaf.fill", tint: .mint, blurb: "Sunlight through leaves on a plaster wall, from the real Sun.",
               make: dappledLight, knobs: DappledLight.knobs, status: (key: "weather.status", below: "dappled.weather"),
-              refresh: .weather),
+              refresh: .weather, batteryScale: 0.75),
     Wallpaper(name: "A Tree for the Year", icon: "tree.fill", tint: .green, blurb: "One tree on a hill, through your real seasons and weather.",
               make: treeForTheYear, knobs: TreeScene.treeKnobs, status: (key: "weather.status", below: "tree.lock"),
               refresh: .weather, unfinished: true),
@@ -227,7 +233,9 @@ extension Notification.Name {
     let sizeUniform = SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)])
     sprite.shader = SKShader(source: source, uniforms: [sizeUniform] + uniforms + scene.knobs.map(\.uniform) + [scene.clock?.uniform].compactMap { $0 }
                              + (source.contains("u_now") ? [WallpaperTime.now] : []))
-    scene.addChild(sprite)
+    scene.sprite = sprite
+    scene.trim.content.addChild(sprite)
+    scene.addChild(scene.trim)
     NotificationCenter.default.addObserver(scene, selector: #selector(ShaderScene.applyKnobs),
                                            name: UserDefaults.didChangeNotification, object: nil)
     return scene
@@ -235,7 +243,10 @@ extension Notification.Name {
 
 /// A `shaderScene`, which keeps its knob uniforms in step with Settings, and runs its clock if it has one. Its
 /// `batteryRate` is its wallpaper's unless the scene's maker sets one (Rain on Glass, once its drops have stopped).
-final class ShaderScene: SKScene, BatteryPaced {
+final class ShaderScene: SKScene, BatteryPaced, Trimmable {
+    /// The full-screen sprite its shader draws on, in `trim`.
+    var sprite: SKSpriteNode!
+    let trim = TrimNode()
     var knobs: [(knob: Knob, uniform: SKUniform)] = []
     var batteryRate: Int? { didSet { batteryRateChanged(from: oldValue) } }
     var clock: (uniform: SKUniform, speed: Knob)?

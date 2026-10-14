@@ -6,7 +6,7 @@ import simd
 /// The real sky above you right now, facing the equator: stars, Milky Way, constellations, planets, the Moon in
 /// its true phase, the ISS, and the odd meteor. It stays a night sky but reacts to the Sun: deep blue by day with
 /// only the brightest stars and planets, the Sun drawn when it's in view, and sunrise and sunset glow on time.
-final class LiveSky: SKScene, BatteryPaced {
+final class LiveSky: SKScene, BatteryPaced, Trimmable {
     /// 15 fps on battery, where the ISS, the fastest steady thing, moves up to 2.4 px a frame; the battery's rate
     /// while a meteor crosses, at 1,000 px a second, for its 0.7 s.
     var batteryRate: Int? = 15 { didSet { batteryRateChanged(from: oldValue) } }
@@ -30,6 +30,9 @@ final class LiveSky: SKScene, BatteryPaced {
     private let starLayers = (0..<16).map { _ in SKNode() } // by half magnitude, so daylight can fade the faint ones
     private var planets: [(planet: Sky.Planet, node: SKSpriteNode, magnitude: Double)] = []
     private let sun = SKSpriteNode()
+    /// Holds the sky behind everything, which alone is drawn at a lower resolution when trimmed: the stars, lines and
+    /// labels over it stay sharp.
+    let trim = TrimNode()
     private let sunGlow = SKSpriteNode()
     private let moon = SKSpriteNode(color: .white, size: CGSize(width: 46, height: 46))
     private let moonGlow = SKSpriteNode()
@@ -434,7 +437,8 @@ final class LiveSky: SKScene, BatteryPaced {
                 SKUniform(name: "u_scale", float: Float(scale)),
                 galacticUniform, dayUniform, twilightUniform, sunUniform,
             ])
-        addChild(sky)
+        trim.content.addChild(sky)
+        addChild(trim)
     }
 
     /// Paints a silhouette along the bottom, in place of the one before.

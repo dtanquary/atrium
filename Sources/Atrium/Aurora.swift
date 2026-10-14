@@ -208,7 +208,7 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
     ] + sky.uniforms + colours + [crown], knobs: gradeKnobs("aurora"))
     let phase = SKUniform(name: "u_phase", float: 0), poolA = SKUniform(name: "u_poolA", vectorFloat4: .zero)
     let poolB = SKUniform(name: "u_poolB", vectorFloat4: .zero), glow = SKUniform(name: "u_glow", vectorFloat3: .zero)
-    (scene.children.first as? SKSpriteNode)?.shader?.addUniform(phase)
+    (scene as! ShaderScene).sprite.shader?.addUniform(phase)
     func light() {
         let pool = sky.pool()
         poolA.vectorFloat4Value = SIMD4(pool[0..<4]); poolB.vectorFloat4Value = SIMD4(pool[4..<8])

@@ -19,6 +19,11 @@ final class WallpaperView: SKView, SKViewDelegate {
     private var replaced = 0
     /// The `Wallpaper.batteryRate` of the wallpaper it shows.
     var batteryRate: Int?
+    /// The `Wallpaper.batteryScale` of the wallpaper it shows.
+    var batteryScale: CGFloat?
+    /// The resolution its scene draws its softest part at (`Trimmable`), which `applyPowerState` sets: a frozen view
+    /// keeps its frame until it next draws.
+    var drawScale: CGFloat = 1 { didSet { (shown as? Trimmable)?.trim.scale = drawScale } }
     /// The scene it was last given: during a crossfade `scene` is still the one before.
     private weak var shown: SKScene?
     /// The ceiling on battery that `applyPowerState` holds it to: the scene's own while it sets one (`BatteryPaced`),
@@ -56,10 +61,11 @@ final class WallpaperView: SKView, SKViewDelegate {
         wake(for: 1.5)
     }
 
-    /// Takes the frame rate for `scene`, which is shown from now, crossfading or not.
+    /// Takes the frame rate and resolution for `scene`, which is shown from now, crossfading or not.
     private func show(_ scene: SKScene?) {
         let was = cap
         shown = scene
+        (scene as? Trimmable)?.trim.scale = drawScale
         if cap != was { applyPowerState(to: [self]) }
     }
 
@@ -99,6 +105,7 @@ final class WallpaperView: SKView, SKViewDelegate {
         Self.log.error("drawing stopped \(Date().timeIntervalSince(self.lastDrawn), format: .fixed(precision: 0)) s ago while running; replacing the view")
         let fresh = WallpaperView()
         fresh.batteryRate = batteryRate
+        fresh.batteryScale = batteryScale
         fresh.replaced = replaced + 1
         window.contentView = fresh
         fresh.presentScene(scene(window.frame.size))
@@ -133,14 +140,23 @@ final class WallpaperView: SKView, SKViewDelegate {
 
 /// Runs at the frame rate Settings → Power picks for Low Power Mode, battery or mains power (60 and 30 fps, and
 /// frozen in Low Power Mode, unless changed), held to each view's `cap` (its wallpaper's or scene's `batteryRate`)
-/// below mains power's and to 30 or 15 fps while the Mac runs hot, or holds still while the menu's Pause is on.
+/// below mains power's and to 30 or 15 fps while the Mac runs hot, or holds still while the menu's Pause is on; and
+/// draws at its wallpaper's `batteryScale` below mains power's with Lighter drawing on battery on (`Power.scale`).
 @MainActor func applyPowerState(to views: [WallpaperView]) {
     let pick = powerKnob().value, heat = ProcessInfo.processInfo.thermalState
+    let lighter = Power.lighter.value > 0.5
     for view in views {
         let fps = Power.fps(pick: pick, plugged: Power.plugged.value, fast: Power.fastDisplay, cap: view.cap, heat: heat)
         if fps > 0 { view.preferredFramesPerSecond = fps }
         view.frozen = fps == 0 || WallpaperView.paused
+        view.drawScale = Power.scale(pick: pick, plugged: Power.plugged.value, fast: Power.fastDisplay, batteryScale: view.batteryScale,
+                                     lighter: lighter)
     }
+}
+
+/// Every view showing a wallpaper: the desktop's, and Settings' live copy.
+@MainActor func wallpaperViews() -> [WallpaperView] {
+    windows.compactMap { $0.contentView as? WallpaperView } + [LivePreview.shown].compactMap { $0 }
 }
 
 var windows: [NSWindow] = []
@@ -187,6 +203,7 @@ if !scenes.contains(where: { $0.name == current }) {
 /// Shows the desktop's wallpaper, built afresh, in `view`, at that wallpaper's frame rate: crossfading with `fade`.
 @MainActor func presentCurrent(in view: WallpaperView, size: CGSize, fade: Bool) {
     view.batteryRate = currentWallpaper().batteryRate
+    view.batteryScale = currentWallpaper().batteryScale
     applyPowerState(to: [view])
     let scene = currentScene(size: size)
     if fade { view.presentScene(scene, transition: .crossFade(withDuration: 0.8)) } else { view.presentScene(scene) }
@@ -492,22 +509,22 @@ NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenPar
 // be posted off the main thread; the main queue takes it there.
 for name in [.NSProcessInfoPowerStateDidChange, ProcessInfo.thermalStateDidChangeNotification] {
     NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { _ in
-        MainActor.assumeIsolated { applyPowerState(to: windows.compactMap { $0.contentView as? WallpaperView }) }
+        MainActor.assumeIsolated { applyPowerState(to: wallpaperViews()) }
     }
 }
 // Of the defaults, only Settings → Power and the scene: asking IOKit for the power source took about 0.1 ms, and
 // scenes write status lines and counts as they go.
-var powerSettings = (Power.knobs.map(\.value), UserDefaults.standard.string(forKey: "scene"))
+var powerSettings = ((Power.knobs + Power.drawing).map(\.value), UserDefaults.standard.string(forKey: "scene"))
 NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { _ in
     MainActor.assumeIsolated {
-        let now = (Power.knobs.map(\.value), UserDefaults.standard.string(forKey: "scene"))
+        let now = ((Power.knobs + Power.drawing).map(\.value), UserDefaults.standard.string(forKey: "scene"))
         guard now != powerSettings else { return }
         powerSettings = now
-        applyPowerState(to: windows.compactMap { $0.contentView as? WallpaperView })
+        applyPowerState(to: wallpaperViews())
     }
 }
 if let source = IOPSNotificationCreateRunLoopSource({ _ in
-    MainActor.assumeIsolated { applyPowerState(to: windows.compactMap { $0.contentView as? WallpaperView }) }
+    MainActor.assumeIsolated { applyPowerState(to: wallpaperViews()) }
 }, nil)?.takeRetainedValue() {
     CFRunLoopAddSource(CFRunLoopGetMain(), source, .defaultMode)
 }

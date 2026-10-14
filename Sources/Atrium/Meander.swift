@@ -12,7 +12,7 @@ import SpriteKit
 /// picture is floodplain to every edge for as long as it runs. `River` (the MeanderRiver module) is the river and
 /// both grounds, on the CPU; this is their textures and the two shaders that read them. docs/meander.md has the
 /// model, the measurements and the sources.
-final class Meander: SKScene {
+final class Meander: SKScene, Trimmable {
     /// The two looks, as a menu; the rows that belong to one of them show while it is picked.
     nonisolated static let look = Knob(key: "meander.look", label: "Look", range: 0...1, standard: 0, section: "Look", format: .choice(["Relief", "Old map"]))
     /// Each look's colours, as swatches under the Look menu with Random first: relief's, then the old map's. With
@@ -174,6 +174,8 @@ final class Meander: SKScene {
     /// What the ground has on; and the dressings giving way to it, each drawn over it, less and less, for `gives`
     /// seconds. Each new one goes a place lower than the last (`depth`).
     private var worn: Dress!, leaving: [Dress] = [], depth = 0
+    /// Holds the dressings, so they can be drawn at a lower resolution together (`Trimmable`).
+    let trim = TrimNode()
     /// How long one look or mode takes to give way to another, in seconds.
     private static let gives = 2.0
     /// The family each look is showing, by its place in `reliefs` and in `maps`: the one Settings names, or
@@ -204,6 +206,7 @@ final class Meander: SKScene {
         }
         beneath = textures.removeLast()
         send(river.beneath, to: beneath)
+        addChild(trim)
         dress()
         NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged), name: UserDefaults.didChangeNotification, object: nil)
         appearance = NSApplication.shared.observe(\.effectiveAppearance) { [weak self] _, _ in MainActor.assumeIsolated { self?.settingsChanged() } }
@@ -255,7 +258,7 @@ final class Meander: SKScene {
             node.position = CGPoint(x: size.width / 2, y: size.height / 2)
             depth -= 1
             node.zPosition = CGFloat(depth)
-            addChild(node)
+            trim.content.addChild(node)
             worn = Dress(node: node, map: map, rule: rule, dark: dark)
             node.shader = shader(for: worn, graded: graded, leaving: false)
             repaint(over: 0)

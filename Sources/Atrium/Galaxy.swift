@@ -7,7 +7,7 @@ import SpriteKit
 /// clouds, with dust lanes along their inner edges and pink star-forming knots just past them, around a glowing
 /// bulge and, for barred kinds, a bar. The disc's own stars sparkle as it turns. Left running, it dissolves into
 /// a new galaxy every few minutes.
-final class Galaxy: SKScene {
+final class Galaxy: SKScene, Trimmable {
     nonisolated static let rotation = Knob(key: "galaxy.rotation", label: "Rotation speed", range: 0...4, standard: 1,
                                            section: "Motion")
     nonisolated static let cycleMinutes = Knob(key: "galaxy.cycleMinutes", label: "New galaxy every", range: 0...30,
@@ -53,6 +53,7 @@ final class Galaxy: SKScene {
 
     private let knobUniforms: [String: SKUniform]
     private let phase = SKUniform(name: "u_phase", float: 0)
+    let trim = TrimNode()
     private var turnRate = 1.0
     private var lastUpdate: TimeInterval?
     private var scheduledCycle: Double?
@@ -84,7 +85,8 @@ final class Galaxy: SKScene {
             SKUniform(name: "u_young", vectorFloat3: kind.colours[2]), SKUniform(name: "u_knots", vectorFloat3: kind.colours[3]),
             phase, WallpaperTime.now,
         ] + companionUniforms(kind.name) + knobUniforms.values.filter { Self.source.contains($0.name) }) // only those it reads: a shader takes about 30 uniforms
-        addChild(sprite)
+        trim.content.addChild(sprite)
+        addChild(trim)
 
         applySettings()
         NotificationCenter.default.addObserver(self, selector: #selector(applySettings),

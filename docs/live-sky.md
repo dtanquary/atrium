@@ -99,6 +99,7 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
 - Well within the 2 ms budget.
 
 - **On battery it runs at 15 fps at most, and at the battery's rate while a meteor crosses** (`batteryRate`, dropped as `meteor()` lights one and back once it has gone, 0.7 s later; 2026-10-13). The ISS is the fastest steady thing, up to about 36 device pixels (2x on a 14-inch MacBook Pro, 3024 × 1964) a second: 2.4 px a frame at 15 fps. Stars twinkle at 1.3 Hz at most and positions move every 5 s. A meteor crosses 180–360 points in 0.7 s, up to 1,030 px a second, every 15–75 s.
+- **On battery it draws the sky behind the stars at half the screen's resolution each way** (`batteryScale` in Scenes.swift, under the same condition as its battery rate, with Settings → Power's Lighter drawing on battery, on unless changed; 2026-10-14). That cuts the GPU's work a frame by 62% (0.75 to 0.28 ms, frames drawn back to back at 3024 × 1964), about 26 ms of GPU time a second at 15 fps. Side by side at 100% (`trimShots` in TrimShots.swift) it can't be told from full resolution, the Milky Way included: the stars, lines and labels are sprites over it and stay sharp.
 
 ## Gotchas and shortcuts
 - `ponytail:` **precession.** It's ignored since J2000, about 0.35° by 2026. It shifts the whole sky together, so nothing looks wrong relative to itself.

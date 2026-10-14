@@ -329,6 +329,10 @@ struct GeneralPage: View {
     static let battery = Knob(key: "power.battery", label: "On battery", range: 0...top, standard: 2, format: .choice(names))
     static let lowPower = Knob(key: "power.lowPower", label: "Low Power Mode", range: 0...top, standard: 0, format: .choice(names))
     static let knobs = [plugged, battery, lowPower]
+    /// Lighter drawing on battery: a wallpaper with a `batteryScale` draws at it whenever its battery cap would apply.
+    static let lighter = Knob(key: "power.lighter", label: "Lighter drawing on battery", range: 0...1, standard: 1, format: .toggle)
+    /// The drawing switches, beside the frame-rate menus in `knobs`.
+    static let drawing = [lighter]
 
     /// The frame rate for a knob's current choice.
     static func rate(_ knob: Knob) -> Int { rates[min(max(Int(knob.value), 0), rates.count - 1)] }
@@ -338,15 +342,26 @@ struct GeneralPage: View {
     /// while that's below mains power's pick `plugged`, and `heat` to 30 fps at `.serious` and 15 at `.critical`.
     /// Neither raises a rate or unfreezes.
     nonisolated static func fps(pick: Double, plugged: Double, fast: Bool, cap: Int?, heat: ProcessInfo.ThermalState) -> Int {
-        let rate = { (pick: Double) in rates[min(max(Int(pick), 0), fast ? rates.count - 1 : 3)] }
-        var fps = rate(pick)
-        if let cap, fps < rate(plugged) { fps = min(fps, cap) }
+        var fps = rate(pick, fast: fast)
+        if let cap, fps < rate(plugged, fast: fast) { fps = min(fps, cap) }
         switch heat {
         case .critical: return min(fps, 15)
         case .serious: return min(fps, 30)
         default: return fps
         }
     }
+
+    /// The fraction of the screen's resolution to draw a wallpaper's softest part at, given its `batteryScale`: that
+    /// scale under the same condition as `fps` holds a cap, the pick `pick` in force below mains power's `plugged`
+    /// (on battery or in Low Power Mode, not with Full Speed on Battery), while `lighter` is on. Otherwise 1, full
+    /// resolution.
+    nonisolated static func scale(pick: Double, plugged: Double, fast: Bool, batteryScale: CGFloat?, lighter: Bool) -> CGFloat {
+        guard let batteryScale, lighter, rate(pick, fast: fast) < rate(plugged, fast: fast) else { return 1 }
+        return batteryScale
+    }
+
+    /// The frame rate for a menu pick, where a pick of 120 fps runs at 60 without a display above 60 Hz (`fast`).
+    private nonisolated static func rate(_ pick: Double, fast: Bool) -> Int { rates[min(max(Int(pick), 0), fast ? rates.count - 1 : 3)] }
 
     /// Full Speed on Battery, in the menu and the welcome: battery set to run as fast as mains power. Only when it's
     /// been set, so turning mains power down doesn't show it on, where turning it off would do nothing.
@@ -355,7 +370,7 @@ struct GeneralPage: View {
     }
 }
 
-/// The frame-rate menus. Low Power Mode wins over the power source.
+/// The frame-rate menus, and the drawing switches. Low Power Mode wins over the power source.
 struct PowerPage: View {
     static let tag = "Power" // sidebar selection; can't clash with a wallpaper name
 
@@ -369,7 +384,13 @@ struct PowerPage: View {
                 Text("120 fps, on displays that offer it, is smoother still than 60 and uses about twice the power. 30 fps uses about half the power of 60, and 15 fps about a quarter. Freeze holds the current frame. Wallpapers always pause while the desktop is covered. On battery, wallpapers whose motion is slow run slower still, where it doesn't show.")
                     .foregroundStyle(.secondary)
             }
-            ResetSection { for knob in Power.knobs { UserDefaults.standard.removeObject(forKey: knob.key) } }
+            Section {
+                ForEach(Power.drawing, id: \.key) { KnobRow(knob: $0) }
+            } footer: {
+                Text("Draws the softest wallpapers at a lower resolution on battery, where it doesn't show.")
+                    .foregroundStyle(.secondary)
+            }
+            ResetSection { for knob in Power.knobs + Power.drawing { UserDefaults.standard.removeObject(forKey: knob.key) } }
         }
         .formStyle(.grouped)
     }
@@ -640,10 +661,14 @@ extension Wallpaper {
 /// like one on another display, so shared services (location, clouds, ISS) already cope.
 struct LivePreview: NSViewRepresentable {
     let wallpaper: Wallpaper
+    /// The copy showing, which follows changes of power as the desktop's views do (`wallpaperViews`).
+    @MainActor static weak var shown: WallpaperView?
 
     func makeNSView(context: Context) -> WallpaperView {
         let view = WallpaperView()
         view.batteryRate = wallpaper.batteryRate
+        view.batteryScale = wallpaper.batteryScale
+        Self.shown = view
         applyPowerState(to: [view])
         let scene = wallpaper.make(NSScreen.main?.frame.size ?? CGSize(width: 1512, height: 982))
         (scene as? HeadStart)?.headStart() // one that starts from nothing opens with something to judge its settings by

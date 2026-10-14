@@ -9,7 +9,7 @@ import SpriteKit
 /// shadows. Cloud cover and wind can come from the live weather; by night, a warm streetlight or moonlight at the real
 /// phase. The wall can be plaster, limewash, brick or painted siding, or an oak floor in the open or by a window.
 /// Made for Light Mode; in Dark Mode the white plaster is charcoal.
-final class DappledLight: SKScene, BatteryPaced {
+final class DappledLight: SKScene, BatteryPaced, Trimmable {
     /// What the light falls on: scans from Poly Haven and ambientCG (CC0, credited in dappled-credits.tsv). The
     /// albedo is greyscale, tinted by `colour` in linear light (`dark` in Dark Mode), or with none in its own colours.
     /// Its relief is the slope across and up (`-nx`, `-ny`) and, for relief deep enough to shade itself, `depth`
@@ -67,6 +67,7 @@ final class DappledLight: SKScene, BatteryPaced {
     private static let wallWidth = 2.4, far = 5.0, mid = 1.2, near = 0.25
 
     private let wall = SKSpriteNode()
+    let trim = TrimNode()
     private let proj = SKUniform(name: "u_proj", vectorFloat4: .zero), invL = SKUniform(name: "u_invL", float: 0)
     private let shiftFar = SKUniform(name: "u_shiftFar", vectorFloat2: .zero), shiftNear = SKUniform(name: "u_shiftNear", vectorFloat4: .zero)
     private let blur = SKUniform(name: "u_blur", vectorFloat4: .zero)
@@ -107,7 +108,8 @@ final class DappledLight: SKScene, BatteryPaced {
             proj, invL, shiftFar, shiftNear, blur, source, terminator, direct, ambient, direction, wind, twigPose, tint, night,
             WallpaperTime.now,
         ])
-        addChild(wall)
+        trim.content.addChild(wall)
+        addChild(trim)
         conditions = wanted
         pickSurface()
         update(0)

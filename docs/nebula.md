@@ -81,6 +81,8 @@ CPU 0.45 ms and GPU about 1.6 ms per frame (release, 2x; the dissolve's thicknes
 
 **On battery it runs at 15 fps at most** (`batteryRate` in Scenes.swift; 2026-10-13). The fastest thing in it is the cloud's drift, `u_now * 0.005` in Shaders.swift with its domain warp, about 8–15 device pixels (2x on a 14-inch MacBook Pro, 3024 × 1964) a second: 1 px a frame at 15 fps. The stars twinkle at 0.64 Hz at most (`starField`), far under a third of 15, and the new cloud dissolves in over 90 s.
 
+**On battery it draws at three quarters of the screen's resolution each way** (`batteryScale` in Scenes.swift, under the same condition as its battery rate, with Settings → Power's Lighter drawing on battery, on unless changed; 2026-10-14). That cuts the GPU's work a frame by 40% (1.49 to 0.90 ms, frames drawn back to back at 3024 × 1964), about 24 ms of GPU time a second at 15 fps. Side by side at 100% (`trimShots` in TrimShots.swift) the gas can't be told apart and the stars barely; at half resolution the faintest stars thinned and softened, so it stays at three quarters.
+
 ## Gotchas and shortcuts
 - Every roll is random. To compare palettes, pin one with `SNAPSHOT_DEFAULTS="nebula.palette=Hubble"`. To see another moment, raise `SNAPSHOT_SECONDS`: the drift runs on `u_now`, which moves with it.
 - Helper functions can't read uniforms, so `brightStar` takes `t` as a parameter.

@@ -806,6 +806,8 @@ What stands between this and taking `unfinished` off, as its builder sees it. **
 
 **On battery it runs at 12 fps at most** (`batteryRate` in Scenes.swift; 2026-10-13). The fastest bank moves about 6 device pixels (2x on a 14-inch MacBook Pro, 3024 × 1964) a second at 1× (0.16–0.21 px a frame at 30 fps, above): 0.5 px a frame at 12. The river steps 10 times a second on elapsed time and blends between steps every frame, so it keeps its pace at any rate. At Speed 4× a bank steps 2 px a frame; the colour crossfade takes 2 s.
 
+**On battery it draws at three quarters of the screen's resolution each way** (`batteryScale` in Scenes.swift, under the same condition as its battery rate, with Settings → Power's Lighter drawing on battery, on unless changed; 2026-10-14). The dressings sit in one `TrimNode`, so a change of look is trimmed whole. That cuts the GPU's work a frame by 35% (0.92 to 0.60 ms, frames drawn back to back at 3024 × 1964), about 15 ms of GPU time a second at 12 fps. Side by side at 100% (`trimShots` in TrimShots.swift) no difference shows; at half resolution the banks' edges softened.
+
 
 ## Checking it
 - `SNAPSHOT_SCENE=Meander swift test -c release -Xswiftc -enable-testing --filter everySceneRenders` renders a new river in whatever Settings has. For the same river twice, `meander.seed` in `SNAPSHOT_DEFAULTS` (nothing but tests and snapshots sets it); `meander.look=1` is the old map; `meander.colors` and `meander.inks` take a colour family by its name (relief's and the old map's); `meander.valley=1` is Full view; `SNAPSHOT_APPEARANCE=light|dark` is the mode.
