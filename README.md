@@ -357,10 +357,14 @@ It uses public AppKit and SpriteKit APIs only. It uses no private frameworks, ma
 Each wallpaper is a SpriteKit scene. Many are full-screen Metal shaders written as `SKShader`s, and whatever can be drawn in code is: skies, water, wax, streaks of wind, starlings, reaction–diffusion, rising heat, and the pixel-art cities and rockets. Photos come in where they beat anything procedural: the reef's fish and corals, and the landscapes behind Weather, Aurora, Murmuration, Fireflies and Rain on Glass, all cut out of permissively licensed photos and relit; the scanned walls, floors and leaves of Dappled Light; the two tours' photos from spacecraft and telescopes; and NASA's maps of the Earth and the Moon. Live data comes over the network: the weather, the wind, the clouds, the ISS and the Sun.
 
 It's kind to your battery:
-- 60 fps plugged in, 30 fps on battery.
+- 60 fps plugged in, 30 fps on battery. On battery, wallpapers whose motion is slow run slower still, at 10 to 20 fps, where it doesn't show.
+- On battery the softest wallpapers also draw at a lower resolution, where it doesn't show (Settings → Power → Lighter drawing on battery).
 - In Low Power Mode it freezes on the current frame.
 - Rendering pauses whenever the desktop is fully covered.
-- Settings → Power changes each of these rates (Freeze, 15, 30 or 60 fps). For a demo on battery, choose Full Speed on Battery in the menu bar.
+- If the Mac runs hot, it drops to 30 fps, or 15.
+- Settings → Power changes each of these rates (Freeze, 15, 30 or 60 fps, and 120 on a ProMotion display). For a demo on battery, choose Full Speed on Battery in the menu bar.
+
+Measured on a 14-inch MacBook Pro (M3 Max) on battery and otherwise idle, Atrium added about 2 watts to the whole Mac's draw with the busiest wallpapers on screen, and under 1 watt with the calmest: at most about 3% of the battery an hour. While windows cover the desktop, or in Low Power Mode, it adds almost nothing.
 
 The lock screen, and the tint of the menu bar and windows, come from your normal system wallpaper, which Atrium only covers. To match them, turn on **Settings → General → Match the lock screen**: it sets your system wallpaper to a still of Atrium's, refreshed as it changes, and puts yours back when you turn it off or quit. One gap: after an Aerial screen saver, the lock screen shows the Aerial's last frame rather than the wallpaper, so pick another screen saver, or set it to start Never in System Settings → Lock Screen.
 
