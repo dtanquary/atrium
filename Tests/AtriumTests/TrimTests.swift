@@ -4,11 +4,10 @@ import Testing
 @testable import Atrium
 
 /// Lighter drawing applies a wallpaper's scale under the same condition as its battery cap, below mains power's rate,
-/// and never with the switch off or without a scale; for comparing, on mains power too.
+/// and never with the switch off or without a scale.
 @Test func drawScaleFollowsThePower() {
-    func scale(_ pick: Double, plugged: Double = 3, fast: Bool = false, batteryScale: CGFloat? = 0.5, lighter: Bool = true,
-               onMains: Bool = false) -> CGFloat {
-        Power.scale(pick: pick, plugged: plugged, fast: fast, batteryScale: batteryScale, lighter: lighter, onMains: onMains)
+    func scale(_ pick: Double, plugged: Double = 3, fast: Bool = false, batteryScale: CGFloat? = 0.5, lighter: Bool = true) -> CGFloat {
+        Power.scale(pick: pick, plugged: plugged, fast: fast, batteryScale: batteryScale, lighter: lighter)
     }
     #expect(scale(2) == 0.5) // on battery at 30 fps, against 60 on mains
     #expect(scale(1) == 0.5 && scale(0) == 0.5) // Low Power Mode's 15 fps, and its Freeze (held still anyway)
@@ -16,8 +15,7 @@ import Testing
     #expect(scale(4) == 1) // 120 picked runs at 60 without a fast display: not below mains power's
     #expect(scale(3, plugged: 4, fast: true) == 0.5 && scale(4, plugged: 4, fast: true) == 1)
     #expect(scale(2, batteryScale: nil) == 1)
-    #expect(scale(2, lighter: false) == 1 && scale(3, lighter: false, onMains: true) == 1)
-    #expect(scale(3, onMains: true) == 0.5 && scale(2, onMains: true) == 0.5)
+    #expect(scale(2, lighter: false) == 1)
 }
 
 /// Every wallpaper with a battery scale has a scene that can take it, and a scene built outside a view, as the render
@@ -44,22 +42,6 @@ import Testing
     let next = shaderScene(size: size, source: "void main() { gl_FragColor = vec4(0.5); }") as! ShaderScene
     view.presentScene(next)
     #expect(next.trim.scale == 0.5 && view.frozen)
-}
-
-/// With Also while plugged in, `applyPowerState` gives a view its wallpaper's scale on whatever power this Mac is on,
-/// for comparing; with Lighter drawing on battery off, never. Settings → Power is put back after.
-@MainActor @Test func trimsCanBeComparedOnMainsPower() {
-    let defaults = UserDefaults.standard, saved = Power.drawing.map { defaults.object(forKey: $0.key) }
-    defer { for (knob, value) in zip(Power.drawing, saved) { defaults.set(value, forKey: knob.key) } }
-    defaults.set(1.0, forKey: Power.lighter.key)
-    defaults.set(1.0, forKey: Power.lighterPlugged.key)
-    let view = WallpaperView()
-    view.batteryScale = 0.75
-    applyPowerState(to: [view])
-    #expect(view.drawScale == 0.75)
-    defaults.set(0.0, forKey: Power.lighter.key)
-    applyPowerState(to: [view])
-    #expect(view.drawScale == 1)
 }
 
 /// At scale 1 a trimmed scene draws byte for byte what it drew before it had a trim: the same scene, at the same

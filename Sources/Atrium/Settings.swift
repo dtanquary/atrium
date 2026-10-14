@@ -331,12 +331,8 @@ struct GeneralPage: View {
     static let knobs = [plugged, battery, lowPower]
     /// Lighter drawing on battery: a wallpaper with a `batteryScale` draws at it whenever its battery cap would apply.
     static let lighter = Knob(key: "power.lighter", label: "Lighter drawing on battery", range: 0...1, standard: 1, format: .toggle)
-    // ponytail: for Dave to compare the trims on his own screen, on mains power too; take it out once he has
-    // (compare, then lock in).
-    static let lighterPlugged = Knob(key: "power.lighterPlugged", label: "Also while plugged in", range: 0...1, standard: 0,
-                                     format: .toggle, shownWhen: lighter.key)
     /// The drawing switches, beside the frame-rate menus in `knobs`.
-    static let drawing = [lighter, lighterPlugged]
+    static let drawing = [lighter]
 
     /// The frame rate for a knob's current choice.
     static func rate(_ knob: Knob) -> Int { rates[min(max(Int(knob.value), 0), rates.count - 1)] }
@@ -357,11 +353,10 @@ struct GeneralPage: View {
 
     /// The fraction of the screen's resolution to draw a wallpaper's softest part at, given its `batteryScale`: that
     /// scale under the same condition as `fps` holds a cap, the pick `pick` in force below mains power's `plugged`
-    /// (on battery or in Low Power Mode, not with Full Speed on Battery), while `lighter` is on; or always, with
-    /// `onMains` as well. Otherwise 1, full resolution.
-    nonisolated static func scale(pick: Double, plugged: Double, fast: Bool, batteryScale: CGFloat?, lighter: Bool,
-                                  onMains: Bool) -> CGFloat {
-        guard let batteryScale, lighter, onMains || rate(pick, fast: fast) < rate(plugged, fast: fast) else { return 1 }
+    /// (on battery or in Low Power Mode, not with Full Speed on Battery), while `lighter` is on. Otherwise 1, full
+    /// resolution.
+    nonisolated static func scale(pick: Double, plugged: Double, fast: Bool, batteryScale: CGFloat?, lighter: Bool) -> CGFloat {
+        guard let batteryScale, lighter, rate(pick, fast: fast) < rate(plugged, fast: fast) else { return 1 }
         return batteryScale
     }
 
