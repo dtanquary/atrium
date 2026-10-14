@@ -74,6 +74,8 @@ Reaction–diffusion: two chemicals spread across the screen at different rates 
 ## Performance
 Measured at CPU 0.9–1.05 ms and GPU 0.3–0.75 ms per frame (release build, 2x, 2026-09-26). GPU cost rises with how much of the screen is pattern. The CPU cost is one step (about 60k cells) per frame at 60 fps, or two at 30 fps: roughly 0.45 ms a step. Faster Speed costs CPU in proportion. At 1× that's about 27 ms of CPU a second (under 3% of one core); at 3× it's about 1.4 ms a frame at 60 fps, or 2.7 ms at 30 fps, which is over budget.
 
+Since 2026-10-14 the step works on four cells at a time (SIMD4), each lane doing the scalar sum in the same order, and the upload writes straight into the texture's bytes: an update at 30 fps (two steps and the upload) went from 0.52 to 0.27 ms in a release build, timed in interleaved runs, and the pictures are the same to the byte (render-test PNGs at 4 and 60 s, Regrow and Flow at 3×, compared with the random draws seeded alike). The rest of the upload's cost is SpriteKit's: each `modifyPixelData` makes a new Metal texture and fills it with `replaceRegion`, which the GPU driver swizzles into its tiled layout on the CPU; no public SpriteKit path avoids that.
+
 Debug builds are much slower (about 29 ms of CPU a frame in `swift test`), as the unsafe-buffer loop isn't optimised; build.sh builds release.
 
 With Motion, a frame at 30 fps (2 steps) costs about 1.1 ms of CPU with Regrow and 1.35 ms with Flow. The step loop always reads the kill and current arrays, which are zero when unused.

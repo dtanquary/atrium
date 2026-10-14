@@ -38,7 +38,6 @@ final class TuringPatterns: SKScene {
     private let stepsPerSecond = 60.0
     private var cols = 0, rows = 0, stride = 0 // the grid has a one-cell border that mirrors the far edge, so it wraps
     private var a: [Float] = [], b: [Float] = [], nextA: [Float] = [], nextB: [Float] = []
-    private var pixels: [UInt8] = [] // RGBA; red and green hold b as 16 bits, so the shader's smooth reads don't band
     private var texture: SKMutableTexture!
     private var lastTime: TimeInterval?
     private var owed = 0.0
@@ -61,7 +60,6 @@ final class TuringPatterns: SKScene {
         kill = Array(repeating: 0, count: a.count)
         flowX = kill
         flowY = kill
-        pixels = Array(repeating: 255, count: cols * rows * 4)
 
         texture = SKMutableTexture(size: CGSize(width: cols, height: rows))
         texture.filteringMode = .linear
@@ -174,9 +172,12 @@ final class TuringPatterns: SKScene {
 
     private func clear(_ g: inout [Float]) { g.withUnsafeMutableBufferPointer { $0.update(repeating: 0) } }
 
-    /// One step of Gray–Scott with Sims' constants: diffusion 1 and 0.5, a 3×3 Laplacian, a time step of 1.
-    // ponytail: scalar Swift on the main thread, about 0.45 ms a step; if more speed or finer cells are wanted, the
-    // branch-free rows vectorise, or it moves to a Metal compute pass
+    /// One step of Gray–Scott with Sims' constants: diffusion 1 and 0.5, a 3×3 Laplacian, a time step of 1. Four
+    /// cells at a time, each lane doing the scalar sum in the same order, so the result is the same to the bit; a
+    /// row's last four overlap the four before rather than run past its end, which is safe as a cell's new value is
+    /// made only from the old arrays.
+    // ponytail: SIMD4 on the main thread, about 0.1 ms a step; if more speed or finer cells are wanted, it moves to a
+    // Metal compute pass
     private func step(f: Float, k: Float) {
         wrap(&a)
         wrap(&b)
@@ -184,18 +185,23 @@ final class TuringPatterns: SKScene {
         a.withUnsafeBufferPointer { a in b.withUnsafeBufferPointer { b in
         kill.withUnsafeBufferPointer { kill in flowX.withUnsafeBufferPointer { fx in flowY.withUnsafeBufferPointer { fy in
         nextA.withUnsafeMutableBufferPointer { na in nextB.withUnsafeMutableBufferPointer { nb in
+            typealias F4 = SIMD4<Float>
+            @inline(__always) func at(_ p: UnsafeBufferPointer<Float>, _ i: Int) -> F4 { UnsafeRawPointer(p.baseAddress! + i).loadUnaligned(as: F4.self) }
+            @inline(__always) func put(_ p: UnsafeMutableBufferPointer<Float>, _ i: Int, _ v: F4) { UnsafeMutableRawPointer(p.baseAddress! + i).storeBytes(of: v, as: F4.self) }
             for y in 1...rows {
-                for i in y * s + 1...y * s + cols {
-                    let la = (a[i - 1] + a[i + 1] + a[i - s] + a[i + s]) * 0.2
-                        + (a[i - s - 1] + a[i - s + 1] + a[i + s - 1] + a[i + s + 1]) * 0.05 - a[i]
-                    let lb = (b[i - 1] + b[i + 1] + b[i - s] + b[i + s]) * 0.2
-                        + (b[i - s - 1] + b[i - s + 1] + b[i + s - 1] + b[i + s + 1]) * 0.05 - b[i]
-                    let r = a[i] * b[i] * b[i]
+                for g in 0..<(cols + 3) / 4 {
+                    let i = y * s + min(1 + 4 * g, cols - 3), ai = at(a, i), bi = at(b, i)
+                    let la = (at(a, i - 1) + at(a, i + 1) + at(a, i - s) + at(a, i + s)) * 0.2
+                        + (at(a, i - s - 1) + at(a, i - s + 1) + at(a, i + s - 1) + at(a, i + s + 1)) * 0.05 - ai
+                    let lb = (at(b, i - 1) + at(b, i + 1) + at(b, i - s) + at(b, i + s)) * 0.2
+                        + (at(b, i - s - 1) + at(b, i - s + 1) + at(b, i + s - 1) + at(b, i + s + 1)) * 0.05 - bi
+                    let r = ai * bi * bi
                     // carried by the current: central differences, stable here because diffusion dwarfs it
-                    let ca = fx[i] * (a[i + 1] - a[i - 1]) + fy[i] * (a[i + s] - a[i - s])
-                    let cb = fx[i] * (b[i + 1] - b[i - 1]) + fy[i] * (b[i + s] - b[i - s])
-                    na[i] = a[i] + la - r + f * (1 - a[i]) - 0.5 * ca
-                    nb[i] = b[i] + 0.5 * lb + r - (k + kill[i] + f) * b[i] - 0.5 * cb
+                    let fxi = at(fx, i), fyi = at(fy, i)
+                    let ca = fxi * (at(a, i + 1) - at(a, i - 1)) + fyi * (at(a, i + s) - at(a, i - s))
+                    let cb = fxi * (at(b, i + 1) - at(b, i - 1)) + fyi * (at(b, i + s) - at(b, i - s))
+                    put(na, i, ai + la - r + f * (1 - ai) - 0.5 * ca)
+                    put(nb, i, bi + 0.5 * lb + r - (k + at(kill, i) + f) * bi - 0.5 * cb)
                 }
             }
         } }
@@ -218,27 +224,25 @@ final class TuringPatterns: SKScene {
         }
     }
 
-    /// Sends b to the texture, and reseeds if the pattern has died out, which no pattern here should do.
+    /// Sends b to the texture, RGBA with red and green holding it as 16 bits, so the shader's smooth reads don't band;
+    /// written straight into the texture's own bytes, all four of each texel. Then reseeds if the pattern has died
+    /// out, which no pattern here should do.
     private func upload() {
         let cols = cols, rows = rows, s = stride
         var peak: Float = 0
         b.withUnsafeBufferPointer { b in
-            pixels.withUnsafeMutableBufferPointer { px in
+            texture.modifyPixelData { data, length in
+                guard let px = data?.assumingMemoryBound(to: UInt8.self), length >= cols * rows * 4 else { return }
                 for y in 0..<rows {
                     for x in 0..<cols {
                         let value = b[(y + 1) * s + x + 1], v = Int(min(max(value * 2, 0), 1) * 65535), o = (y * cols + x) * 4
                         peak = max(peak, value)
-                        px[o] = UInt8(v >> 8)
-                        px[o + 1] = UInt8(v & 255)
+                        (px[o], px[o + 1], px[o + 2], px[o + 3]) = (UInt8(v >> 8), UInt8(v & 255), 255, 255)
                     }
                 }
             }
         }
         if peak < 0.05 { for _ in 0..<cols * rows / 800 { seed() } }
-        let bytes = pixels
-        texture.modifyPixelData { data, length in
-            bytes.withUnsafeBytes { data?.copyMemory(from: $0.baseAddress!, byteCount: min(length, $0.count)) }
-        }
     }
 
     private static let shader = """
