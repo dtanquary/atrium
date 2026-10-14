@@ -306,17 +306,29 @@ struct GeneralPage: View {
 }
 
 /// How fast wallpapers run on mains power, on battery and in Low Power Mode. `applyPowerState` reads the choices.
-enum Power {
-    /// Frames per second for each menu choice; 0 freezes the wallpaper on its current frame.
-    static let rates = [0, 15, 30, 60]
-    private static let names = ["Freeze", "15 fps", "30 fps", "60 fps"]
-    static let plugged = Knob(key: "power.plugged", label: "Plugged in", range: 0...3, standard: 3, format: .choice(names))
-    static let battery = Knob(key: "power.battery", label: "On battery", range: 0...3, standard: 2, format: .choice(names))
-    static let lowPower = Knob(key: "power.lowPower", label: "Low Power Mode", range: 0...3, standard: 0, format: .choice(names))
+@MainActor enum Power {
+    /// Frames per second for each menu choice; 0 freezes the wallpaper on its current frame. 120 is offered only with
+    /// a display that goes above 60 Hz.
+    nonisolated static let rates = [0, 15, 30, 60, 120]
+    /// Whether a display that goes above 60 Hz (ProMotion) is attached, so the menus offer 120 fps.
+    // ponytail: as of launch; a fast display plugged in later is offered 120 only after a relaunch, and one unplugged
+    // leaves 120 picked until then. Follow screen changes if people move between displays like that.
+    static let fastDisplay = NSScreen.screens.contains { $0.maximumFramesPerSecond > 60 }
+    private static let top = fastDisplay ? 4.0 : 3.0
+    private static let names = Array(["Freeze", "15 fps", "30 fps", "60 fps", "120 fps"].prefix(Int(top) + 1))
+    static let plugged = Knob(key: "power.plugged", label: "Plugged in", range: 0...top, standard: 3, format: .choice(names))
+    static let battery = Knob(key: "power.battery", label: "On battery", range: 0...top, standard: 2, format: .choice(names))
+    static let lowPower = Knob(key: "power.lowPower", label: "Low Power Mode", range: 0...top, standard: 0, format: .choice(names))
     static let knobs = [plugged, battery, lowPower]
 
     /// The frame rate for a knob's current choice.
     static func rate(_ knob: Knob) -> Int { rates[min(max(Int(knob.value), 0), rates.count - 1)] }
+
+    /// The frames per second to run at for the pick `pick` in force (0 freezes), with a display above 60 Hz (`fast`)
+    /// or without, where a pick of 120 fps runs at 60.
+    nonisolated static func fps(pick: Double, fast: Bool) -> Int {
+        rates[min(max(Int(pick), 0), fast ? rates.count - 1 : 3)]
+    }
 
     /// Full Speed on Battery, in the menu and the welcome: battery set to run as fast as mains power. Only when it's
     /// been set, so turning mains power down doesn't show it on, where turning it off would do nothing.
@@ -336,7 +348,7 @@ struct PowerPage: View {
             } header: {
                 Text("Frame Rate")
             } footer: {
-                Text("60 fps is the smoothest. 30 fps uses about half the power, and 15 fps about a quarter. Freeze holds the current frame. Wallpapers always pause while the desktop is covered.")
+                Text("120 fps, on displays that offer it, is smoother still than 60 and uses about twice the power. 30 fps uses about half the power of 60, and 15 fps about a quarter. Freeze holds the current frame. Wallpapers always pause while the desktop is covered.")
                     .foregroundStyle(.secondary)
             }
             ResetSection { for knob in Power.knobs { UserDefaults.standard.removeObject(forKey: knob.key) } }

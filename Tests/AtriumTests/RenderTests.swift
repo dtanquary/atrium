@@ -417,6 +417,20 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
     #expect(Power.fullSpeedOnBattery)
 }
 
+/// Settings → Power's standard picks run 60 fps plugged in, 30 on battery and freeze in Low Power Mode. 120 fps runs
+/// only with a display that goes above 60 Hz, and a pick stored past the menu's end (120 kept from a ProMotion
+/// display, or a `defaults write`) runs at the fastest the menu offers rather than crashing.
+@MainActor @Test func powerPicksToFrameRates() {
+    #expect(Power.fps(pick: Power.plugged.standard, fast: false) == 60)
+    #expect(Power.fps(pick: Power.battery.standard, fast: false) == 30)
+    #expect(Power.fps(pick: Power.lowPower.standard, fast: false) == 0)
+    #expect(Power.fps(pick: Power.plugged.standard, fast: true) == 60)
+    #expect(Power.fps(pick: 4, fast: true) == 120)
+    #expect(Power.fps(pick: 4, fast: false) == 60)
+    #expect(Power.fps(pick: 9, fast: true) == 120 && Power.fps(pick: -1, fast: true) == 0)
+    #expect(Power.plugged.range.upperBound == (Power.fastDisplay ? 4 : 3))
+}
+
 /// Held on a world seen only from the ground, with Views from the surface off, Solar System Tour still shows it
 /// rather than nothing.
 @MainActor @Test func tourHeldOnGroundOnlyWorldShowsIt() {

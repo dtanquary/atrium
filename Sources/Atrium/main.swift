@@ -100,7 +100,7 @@ final class WallpaperView: SKView, SKViewDelegate {
 /// Runs at the frame rate Settings → Power picks for Low Power Mode, battery or mains power (60 and 30 fps, and
 /// frozen in Low Power Mode, unless changed), or holds still while the menu's Pause is on.
 @MainActor func applyPowerState(to views: [WallpaperView]) {
-    let fps = Power.rate(powerKnob())
+    let fps = Power.fps(pick: powerKnob().value, fast: Power.fastDisplay)
     for view in views {
         if fps > 0 { view.preferredFramesPerSecond = fps }
         view.frozen = fps == 0 || WallpaperView.paused
