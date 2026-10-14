@@ -284,8 +284,9 @@ private func ink(_ pixels: [UInt32]) -> Int {
     let standard = try finished(fine: 0), fine = try finished(fine: 1)
     func lines(_ pixels: [UInt32]) -> Int { pixels.count { $0 & 255 < 110 } }
     #expect(lines(fine) > 3024 * 1964 / 40 && fine != standard, "the fine picture has \(lines(fine)) pixels of line and the standard \(lines(standard))")
-    // a thinner line has more edge to its middle: of the pixels a line touches, fewer are at full depth
-    func solid(_ pixels: [UInt32]) -> Double { Double(pixels.count { $0 & 255 < 75 }) / Double(pixels.count { $0 & 255 < 125 }) }
+    // a thinner line has more edge to its middle: of the pixels a line touches, fewer are at full depth (of Paper's
+    // blue, 216 on bare ground and 31 on a line gone over: three quarters of the way, of those a quarter of the way)
+    func solid(_ pixels: [UInt32]) -> Double { Double(pixels.count { $0 & 255 < 72 }) / Double(pixels.count { $0 & 255 < 166 }) }
     #expect(solid(fine) < solid(standard), "fully dark share of the line: fine \(solid(fine)), standard \(solid(standard))")
     for pixels in [standard, fine] { #expect(!pixels[..<(3024 * (1964 * 4 / 100))].contains { $0 & 255 < 110 }, "a line under the menu bar") }
     // a picture that ships fine only is drawn, and the same, whatever Detail says
@@ -299,67 +300,162 @@ private func ink(_ pixels: [UInt32]) -> Int {
     #expect(lines(asStandard) > 1512 * 982 / 20 && asStandard == asFine, "the fine-only picture has \(lines(asStandard)) pixels of line at Standard")
 }
 
-/// The screen's level: its pixels' blue, at the nine-tenths mark.
-private func level(_ pixels: [UInt32]) -> Int { pixels.map { Int($0 & 255) }.sorted()[pixels.count * 9 / 10] }
+/// The ground's level: the middle pixel's blue, which is bare ground whichever of the line and the ground is the
+/// lighter. Paper's, which Etching starts on, is 216 in its light tone and 53 in its dark one.
+private func level(_ pixels: [UInt32]) -> Int { pixels.map { Int($0 & 255) }.sorted()[pixels.count / 2] }
+
+/// A picture's pixels as colours, red, green and blue of 255: every `step`th of them.
+private func colours(_ pixels: [UInt32], every step: Int = 1) -> [SIMD3<Float>] {
+    stride(from: 0, to: pixels.count, by: step).map { SIMD3(Float(pixels[$0] >> 16 & 255), Float(pixels[$0] >> 8 & 255), Float(pixels[$0] & 255)) }
+}
+
+/// The colour in the middle of some, channel by channel: the bare ground's, the line being the lesser part.
+private func middle(_ colours: [SIMD3<Float>]) -> SIMD3<Float> {
+    SIMD3(colours.map(\.x).sorted()[colours.count / 2], colours.map(\.y).sorted()[colours.count / 2], colours.map(\.z).sorted()[colours.count / 2])
+}
 
 /// Set to Match System, the screen goes to the system's other mode by itself, under the picture: light, then two
-/// seconds after Dark Mode comes on, the dim screen.
+/// seconds after Dark Mode comes on, the dark tone.
 @MainActor @Test func etchingFollowsTheAppearance() throws {
     defer { NSApplication.shared.appearance = nil }
-    try with(["etching.drawn": 0.3, Etching.powder.key: 2]) {
+    try with(["etching.drawn": 0.3, Etching.screen.key: 2]) {
         NSApplication.shared.appearance = NSAppearance(named: .aqua)
         let screen = try Screen(756, 491), light = level(try screen.settled())
         NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
         let partway = level(try screen.picture(after: 1.0 / 30))
         for _ in 0..<75 { _ = try screen.picture(after: 1.0 / 30) }
         let dim = level(try screen.picture(after: 1.0 / 30))
-        #expect(abs(light - 154) < 8 && partway > dim + 20 && abs(dim - 105) < 8, "the screen's level: \(light) in Light Mode, \(partway) a frame after Dark Mode, \(dim) after")
+        #expect(abs(light - 216) < 8 && partway > dim + 20 && abs(dim - 53) < 8, "the ground's level: \(light) in Light Mode, \(partway) a frame after Dark Mode, \(dim) after")
     }
 }
 
-/// The screen is the one Settings asks for whatever the system's appearance: bright as it comes, in Dark Mode, and
-/// dim when set to Dark, in Light Mode. Changing the setting eases the screen over, as the appearance does.
+/// The tone is the one Settings asks for whatever the system's appearance: light as it comes, in Dark Mode, and
+/// dark when set to Dark, in Light Mode. Changing the setting eases the screen over, as the appearance does.
 @MainActor @Test func etchingScreenIsTheOneAskedFor() throws {
     defer { NSApplication.shared.appearance = nil }
     try with(["etching.drawn": 0.3]) {
         NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
         let screen = try Screen(756, 491), bright = level(try screen.settled())
-        UserDefaults.standard.set(1.0, forKey: Etching.powder.key)
-        defer { UserDefaults.standard.removeObject(forKey: Etching.powder.key) }
+        UserDefaults.standard.set(1.0, forKey: Etching.screen.key)
+        defer { UserDefaults.standard.removeObject(forKey: Etching.screen.key) }
         let partway = level(try screen.picture(after: 1.0 / 30))
         for _ in 0..<75 { _ = try screen.picture(after: 1.0 / 30) }
         let dimmed = level(try screen.picture(after: 1.0 / 30))
-        #expect(abs(bright - 154) < 8 && partway > dimmed + 20 && abs(dimmed - 105) < 8, "in Dark Mode the screen's level is \(bright) as it comes, \(partway) a frame after Dark is picked, \(dimmed) after")
+        #expect(abs(bright - 216) < 8 && partway > dimmed + 20 && abs(dimmed - 53) < 8, "in Dark Mode the ground's level is \(bright) as it comes, \(partway) a frame after Dark is picked, \(dimmed) after")
         NSApplication.shared.appearance = NSAppearance(named: .aqua)
         let dim = level(try Screen(756, 491).settled())
-        #expect(abs(dim - 105) < 8, "set to Dark in Light Mode the screen's level is \(dim)")
+        #expect(abs(dim - 53) < 8, "set to Dark in Light Mode the ground's level is \(dim)")
     }
 }
 
-/// Follow Day and Night, the Screen menu's last pick, after the three that were there: the screen is bright with the
-/// Sun 6° or more above the horizon, dim with it as far below, and half-way between with it on the horizon, by a
+/// Follow Day and Night, the Screen menu's last pick, after the three that were there: the ground is light with the
+/// Sun 6° or more above the horizon, dark with it as far below, and half-way between with it on the horizon, by a
 /// smoothstep (`nightfall` is where the shade goes, which `tint` eases). The Sun is `etching.sun`'s here. As it sets
 /// the screen follows it, within half a minute and then over two seconds.
 @MainActor @Test func etchingFollowsDayAndNight() throws {
-    #expect(Etching.powder.format == .choice(["Light", "Dark", "Match System", "Follow Day and Night"]) && Etching.powder.range == 0...3 && Etching.powder.standard == 0)
+    #expect(Etching.screen.format == .choice(["Light", "Dark", "Match System", "Follow Day and Night"]) && Etching.screen.range == 0...3 && Etching.screen.standard == 0)
     #expect(Etching.nightfall(sun: 10) == 0 && Etching.nightfall(sun: 0) == 0.5 && Etching.nightfall(sun: -10) == 1)
     #expect(Etching.nightfall(sun: 6) == 0 && Etching.nightfall(sun: 3) == 0.25 && Etching.nightfall(sun: -6) == 1)
     defer { NSApplication.shared.appearance = nil }
     NSApplication.shared.appearance = NSAppearance(named: .darkAqua) // which this pick takes no notice of
     func screen(sun: Double) throws -> Int {
         var found = 0
-        try with(["etching.drawn": 0.3, Etching.powder.key: 3, "etching.sun": sun]) { found = level(try Screen(756, 491).settled()) }
+        try with(["etching.drawn": 0.3, Etching.screen.key: 3, "etching.sun": sun]) { found = level(try Screen(756, 491).settled()) }
         return found
     }
     let day = try screen(sun: 10), night = try screen(sun: -10), dusk = try screen(sun: 0)
-    #expect(abs(day - 154) < 8 && abs(night - 105) < 8 && abs(2 * dusk - day - night) < 6, "the screen's level with the Sun at 10°, 0° and -10°: \(day), \(dusk), \(night)")
-    try with(["etching.drawn": 0.3, Etching.powder.key: 3, "etching.sun": 10]) {
+    #expect(abs(day - 216) < 8 && abs(night - 53) < 8 && abs(2 * dusk - day - night) < 6, "the ground's level with the Sun at 10°, 0° and -10°: \(day), \(dusk), \(night)")
+    try with(["etching.drawn": 0.3, Etching.screen.key: 3, "etching.sun": 10]) {
         let screen = try Screen(756, 491), bright = level(try screen.settled())
         UserDefaults.standard.set(-10.0, forKey: "etching.sun")
         let before = level(try screen.picture(after: 20)), partway = level(try screen.picture(after: 11)) // looked up every 30 s
         for _ in 0..<25 { _ = try screen.picture(after: 0.1) }
         let dimmed = level(try screen.picture(after: 0.1))
         #expect(before == bright && partway > dimmed + 20 && dimmed == night, "the Sun gone down: \(bright), \(before) 20 s on, \(partway) once it is looked up, \(dimmed) after")
+    }
+}
+
+/// The Surface menu, above Screen: Paper, which Etching starts on, Parchment, Blueprint and Powder. A bare screen of
+/// each, in its light tone and its dark one, is the colour its entry gives, to a couple of levels; is not flat, by
+/// the render test's own measure (more than 20 colours among some 6,000 pixels); and is clean: averaged over blocks
+/// 56 pixels square, which take in as much as a 16-pixel blur, neighbouring blocks differ by under 0.3% of the
+/// level. (Neighbours, so that the light from the upper left, which is the same step from each block to the next,
+/// is left out. Blurred by 16 pixels, the cloudy powder these replaced spread by 1.2% of its level and these by
+/// 0.06% to 0.17%: docs/etching.md.)
+@MainActor @Test func etchingSurfacesHaveTheirGrounds() throws {
+    #expect(Etching.surface.format == .choice(["Paper", "Parchment", "Blueprint", "Powder"]) && Etching.surface.range == 0...3 && Etching.surface.standard == 0)
+    #expect(Etching.knobs.map(\.label) == ["Picture", "Detail", "Speed", "Hold when finished", "Surface", "Screen", "Fill the screen"])
+    let (w, h, block) = (1512, 982, 56)
+    for (place, surface) in Etching.surfaces.enumerated() {
+        for dark in [false, true] {
+            var pixels: [UInt32] = []
+            try with(["etching.drawn": 0, Etching.picture.key: 1, Etching.surface.key: Double(place), Etching.screen.key: dark ? 1 : 0]) { pixels = try Screen(w, h).settled() }
+            let ground = middle(colours(pixels, every: 31)), table = (dark ? surface.ground.dark : surface.ground.light) * 255
+            let varied = Set(stride(from: 0, to: pixels.count, by: 251).map { pixels[$0] }).count
+            // the blocks' mean green, row by row, clear of the line's first step at the lower left; then each from its neighbour
+            let means = (0..<h / block).map { by in (3..<w / block).map { bx in
+                (0..<block * block).reduce(0) { $0 + Float(pixels[(by * block + $1 / block) * w + bx * block + $1 % block] >> 8 & 255) } / Float(block * block)
+            } }
+            let steps = means.flatMap { row in zip(row, row.dropFirst()).map { $1 - $0 } }, mean = steps.reduce(0, +) / Float(steps.count)
+            let spread = (steps.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Float(steps.count) / 2).squareRoot() / ground.y * 100
+            #expect(simd_reduce_max(simd_abs(ground - table)) <= 2 && varied > 20 && spread < 0.3,
+                    "\(surface.name), \(dark ? "dark" : "light"): the ground is \(ground) for \(table), with \(varied) colours, and its blocks' spread is \(spread)%")
+        }
+    }
+}
+
+/// How far the line gone over is from the bare ground, in levels, the mean of red, green and blue, and whether it is
+/// the lighter: the pixel a hundredth from the far end, every picture here having more line gone over than that.
+private func contrast(_ pixels: [UInt32]) -> (levels: Float, lighter: Bool) {
+    let some = colours(pixels, every: 7), ground = middle(some)
+    let far = some.map { simd_reduce_add($0 - ground) / 3 }.sorted { abs($0) < abs($1) }[some.count * 99 / 100]
+    return (abs(far), far > 0)
+}
+
+/// Picking another surface eases the ground, the line and the tooth over to it in two seconds, under the picture,
+/// with nothing rebuilt: from Paper to Powder the ground is part of the way a second in and Powder's after, and the
+/// line is all still there.
+@MainActor @Test func etchingChangesSurface() throws {
+    func lines(_ pixels: [UInt32]) -> Int { pixels.count { $0 & 255 < 110 } }
+    try with(["etching.drawn": 0.7, Etching.picture.key: 1]) {
+        let screen = try Screen(1512, 982), paper = try screen.settled()
+        UserDefaults.standard.set(3.0, forKey: Etching.surface.key)
+        defer { UserDefaults.standard.removeObject(forKey: Etching.surface.key) }
+        for _ in 0..<29 { _ = try screen.picture(after: 1.0 / 30) }
+        let partway = try screen.picture(after: 1.0 / 30)
+        for _ in 0..<32 { _ = try screen.picture(after: 1.0 / 30) }
+        let powder = try screen.picture(after: 1.0 / 30), still = try screen.picture(after: 1)
+        #expect(abs(level(paper) - 216) < 4 && abs(level(partway) - 183) < 8 && abs(level(powder) - 151) < 4, "the ground's level: \(level(paper)), \(level(partway)) a second in, \(level(powder)) after")
+        #expect(contrast(paper).levels > 150 && contrast(powder).levels > 80 && !contrast(powder).lighter, "the line is \(contrast(paper)) from Paper's ground and \(contrast(powder)) from Powder's")
+        // (as dark as that, which on Powder's darker ground more of a line's soft edge is)
+        #expect(lines(paper) > 1512 * 982 / 12 && abs(lines(powder) - lines(paper)) < lines(paper) / 5, "pixels of line: \(lines(paper)) on Paper, \(lines(powder)) on Powder")
+        // settled: nothing more moves but the stylus, a second's worth
+        #expect(level(still) == level(powder) && zip(powder, still).count { $0 != $1 } < 1512 * 982 / 100)
+    }
+}
+
+/// The line reads through dusk. On Paper, Parchment and Blueprint the line is darker than the ground in the light
+/// tone and lighter in the dark one, so it does not go by the shade, which would leave it the ground's own colour
+/// half-way: it is the light tone's line until the shade is past a half and the dark tone's after. Under Follow Day
+/// and Night with the Sun half a degree up and half a degree down, on every surface, the line gone over is 60
+/// levels or more from the ground, and on those three it is the darker before sunset and the lighter after. And in
+/// a running scene it crosses by itself, in two seconds, once the Sun is down.
+@MainActor @Test func etchingLineReadsThroughDusk() throws {
+    for (place, surface) in Etching.surfaces.enumerated() {
+        for sun in [0.5, -0.5] {
+            var found = (levels: Float(0), lighter: false)
+            try with(["etching.drawn": 0.7, Etching.picture.key: 1, Etching.surface.key: Double(place), Etching.screen.key: 3, "etching.sun": sun]) { found = contrast(try Screen(1512, 982).settled()) }
+            let chalk = simd_reduce_add(surface.line.dark - surface.ground.dark) > 0
+            #expect(found.levels >= 60 && found.lighter == (chalk && sun < 0), "\(surface.name), the Sun at \(sun)°: the line is \(found.levels) levels from the ground, lighter \(found.lighter)")
+        }
+    }
+    try with(["etching.drawn": 0.7, Etching.picture.key: 1, Etching.screen.key: 3, "etching.sun": 0.5]) {
+        let screen = try Screen(1512, 982), before = contrast(try screen.settled())
+        UserDefaults.standard.set(-0.5, forKey: "etching.sun")
+        _ = try screen.picture(after: 31)
+        for _ in 0..<25 { _ = try screen.picture(after: 0.1) }
+        let after = contrast(try screen.picture(after: 0.1))
+        #expect(before.levels >= 60 && !before.lighter && after.levels >= 60 && after.lighter, "Paper as the Sun goes down: the line is \(before) from the ground, then \(after)")
     }
 }
 

@@ -83,9 +83,10 @@ public struct LineRoute: Sendable {
         public let cover: Data
     }
 
-    /// The screen's powder, as a 512 by 512 tile that repeats: red is its fine grain and soft mottle together (128
-    /// for none, 2,000 levels to the whole of the screen's brightness), green a slow unevenness for stretching over
-    /// the whole screen (128 for none, 40 levels to one standard deviation). The same tile every time.
+    /// What Etching's ground is made from, as a 512 by 512 tile that wraps: red is the soft tooth, two or three
+    /// texels across, for reading a texel to a pixel (128 for none, 32 levels to one standard deviation); green a
+    /// slow unevenness for stretching over the whole screen, which is where a clearing comes sooner and later (128
+    /// for none, 40 levels to one standard deviation). The same tile every time.
     public static func grain() -> Data {
         let n = 512
         var seed: UInt64 = 7
@@ -101,21 +102,18 @@ public struct LineRoute: Sendable {
             let mean = field.reduce(0, +) / Float(field.count), spread = (field.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Float(field.count)).squareRoot()
             return field.map { ($0 - mean) / spread }
         }
-        let fine = (0..<n * n).map { _ in bell() }
-        // the mottle: noise blurred about 3.5 texels wide, by three passes of a 7-texel box each way, wrapping
-        var mottle = (0..<n * n).map { _ in bell() }
-        for _ in 0..<3 {
+        // the soft tooth: noise blurred about 2.5 texels wide, by two passes of a 3-texel box each way, wrapping
+        var tooth = (0..<n * n).map { _ in bell() }
+        for _ in 0..<2 {
             for across in [true, false] {
-                var next = mottle
+                var next = tooth
                 for y in 0..<n { for x in 0..<n {
-                    var sum: Float = 0
-                    for k in -3...3 { sum += across ? mottle[y * n + (x + k + n) % n] : mottle[((y + k + n) % n) * n + x] }
-                    next[y * n + x] = sum / 7
+                    next[y * n + x] = (-1...1).reduce(0) { $0 + (across ? tooth[y * n + (x + $1 + n) % n] : tooth[((y + $1 + n) % n) * n + x]) } / 3
                 } }
-                mottle = next
+                tooth = next
             }
         }
-        mottle = evened(mottle)
+        tooth = evened(tooth)
         // the slow unevenness: an 8 by 8 lattice of random levels, eased between
         let lattice = (0..<64).map { _ in bell() }
         let slow = evened((0..<n * n).map { i -> Float in
@@ -127,7 +125,7 @@ public struct LineRoute: Sendable {
         var tile = Data(count: n * n * 4)
         tile.withUnsafeMutableBytes { tile in
             for i in 0..<n * n {
-                tile[i * 4] = UInt8(min(max(128 + (0.010 * fine[i] + 0.012 * mottle[i]) * 2000, 0), 255))
+                tile[i * 4] = UInt8(min(max(128 + tooth[i] * 32, 0), 255))
                 tile[i * 4 + 1] = UInt8(min(max(128 + slow[i] * 40, 0), 255))
                 tile[i * 4 + 3] = 255
             }

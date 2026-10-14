@@ -4,11 +4,12 @@ import Synchronization
 
 @MainActor func etching(size: CGSize) -> SKScene { Etching(size: size) }
 
-/// A picture drawn in one unbroken line on a screen of grey powder, as on the toy with two dials: the stylus scrapes
-/// the powder off the back of the glass, so the line is the dark inside showing through, and it can never lift. An
-/// old print's own outlines come first, then its shading as rows of hatching, the stylus going back along lines it
-/// has drawn to get from place to place, which darkens them. A finished picture rests, clears as a shake would,
-/// unevenly and leaving a ghost, and another begins over it as the ghost fades.
+/// A picture drawn in one unbroken line, as on the toy with two dials, whose stylus can never lift. An old print's
+/// own outlines come first, then its shading as rows of hatching, the stylus going back along lines it has drawn
+/// to get from place to place, which darkens them. A finished picture rests, clears as a shake would, unevenly and
+/// leaving a ghost, and another begins over it as the ghost fades. It is drawn on paper, on parchment, on a
+/// blueprint's sheet, or on the toy's own screen of grey powder, where the stylus scrapes the powder off the back
+/// of the glass and the line is the dark inside showing through (`surfaces`).
 ///
 /// A picture is a shipped route (`LineRoute`, made by docs/etching/bake.py), stamped once into two textures:
 /// when each texel is first drawn, and when it is gone over again. The shader compares those with a clock, so a
@@ -45,14 +46,17 @@ final class Etching: SKScene {
     /// The seconds each of that menu's picks stands for, and the picked one's.
     nonisolated static let holds = [10.0, 30, 60, 300]
     private static var rest: Double { holds[Int(hold.value)] }
-    /// The screen's powder: the bright one of a lit room, the dim one, whichever suits the system's appearance, or
-    /// bright by day and dim by night, by the real Sun where the Mac is. Bright is the standard, as every mock-up
+    /// What the picture is drawn on, one of `surfaces`: paper, unless another is picked. Stored by place.
+    nonisolated static let surface = Knob(key: "etching.surface", label: "Surface", range: 0...Double(surfaces.count - 1), standard: 0, section: "Drawing",
+                                          format: .choice(surfaces.map(\.name)))
+    /// Which of the surface's two tones: the light one, the dark one, whichever suits the system's appearance, or
+    /// light by day and dark by night, by the real Sun where the Mac is. Light is the standard, as every mock-up
     /// was, whatever the system is in. The pick is stored by place, so a new one goes at the end.
-    nonisolated static let powder = Knob(key: "etching.screen", label: "Screen", range: 0...3, standard: 0, section: "Drawing",
+    nonisolated static let screen = Knob(key: "etching.screen", label: "Screen", range: 0...3, standard: 0, section: "Drawing",
                                          format: .choice(["Light", "Dark", "Match System", "Follow Day and Night"]))
-    /// Where `shade` goes with the Sun at an altitude in degrees, for Follow Day and Night: 0, the bright screen,
-    /// from 6° above the horizon, and 1, the dim one, from 6° below. `tint` eases `shade`, so the screen's dimness
-    /// is a smoothstep between the two, dusk takes about an hour, and nothing steps.
+    /// Where `shade` goes with the Sun at an altitude in degrees, for Follow Day and Night: 0, the light tone, from
+    /// 6° above the horizon, and 1, the dark one, from 6° below. `tint` eases `shade`, so the ground's darkness is
+    /// a smoothstep between the two, dusk takes about an hour, and nothing steps.
     nonisolated static func nightfall(sun altitude: Double) -> Double { min(max(0.5 - altitude / 12, 0), 1) }
     /// The Sun's altitude in degrees at a wall-clock moment, where the Mac is (a guess from the time zone, without
     /// leave to know), worked out as Flowing Gradient's is. `etching.sun` stands in for it, for the tests and for
@@ -63,9 +67,35 @@ final class Etching: SKScene {
         return asin((Sky.horizonMatrix(jd: jd, latitude: here.latitude, longitude: here.longitude) * Sky.sun(jd)).z) * 180 / .pi
     }
     /// Whether the picture is scaled up until it covers the display, what is over cut off at the edges, or is
-    /// fitted inside it below the menu bar, with bare powder left beside it or above and below.
+    /// fitted inside it below the menu bar, with bare ground left beside it or above and below.
     nonisolated static let fill = Knob(key: "etching.fill", label: "Fill the screen", range: 0...1, standard: 1, section: "Drawing", format: .toggle)
-    nonisolated static let knobs = [picture, detail, speed, hold, powder, fill]
+    nonisolated static let knobs = [picture, detail, speed, hold, surface, screen, fill]
+
+    /// A surface to draw on, in its light tone and its dark one: the bare ground and the line gone over (sRGB, as
+    /// shares of 255), and the ground's tooth (`source`): a pixel's own noise and the soft tooth, each as one
+    /// standard deviation of the ground's level, and how far a fibre is from it. A dark ground's tooth is the
+    /// greater share of it, to be about as many levels. On three of the dark tones the line is the lighter of the
+    /// two: chalk on charcoal paper, and the white line of a blueprint.
+    struct Surface: Sendable {
+        typealias Tones = (light: SIMD3<Float>, dark: SIMD3<Float>)
+        var name: String
+        var ground: Tones, line: Tones, tooth: Tones
+
+        /// This surface a share of the way to another, for easing from the one to the other.
+        func mixed(with other: Surface, _ share: Float) -> Surface {
+            func mix(_ a: Tones, _ b: Tones) -> Tones { (simd_mix(a.light, b.light, SIMD3(repeating: share)), simd_mix(a.dark, b.dark, SIMD3(repeating: share))) }
+            return Surface(name: other.name, ground: mix(ground, other.ground), line: mix(line, other.line), tooth: mix(tooth, other.tooth))
+        }
+    }
+    nonisolated private static func tone(_ r: Float, _ g: Float, _ b: Float) -> SIMD3<Float> { SIMD3(r, g, b) / 255 }
+    /// The surfaces, in the Surface menu's order, which is stored by place: a new one goes at the end. Powder is
+    /// the toy's own screen, whose levels docs/etching.md measures against photos of the real one.
+    nonisolated static let surfaces = [
+        Surface(name: "Paper", ground: (tone(236, 230, 216), tone(58, 56, 53)), line: (tone(36, 33, 31), tone(228, 224, 214)), tooth: ([0.009, 0.008, 0.025], [0.020, 0.024, 0.05])),
+        Surface(name: "Parchment", ground: (tone(216, 199, 165), tone(74, 58, 42)), line: (tone(62, 42, 27), tone(232, 216, 184)), tooth: ([0.011, 0.010, 0.032], [0.020, 0.024, 0.05])),
+        Surface(name: "Blueprint", ground: (tone(226, 232, 238), tone(24, 60, 116)), line: (tone(38, 72, 138), tone(232, 240, 248)), tooth: ([0.009, 0.008, 0.025], [0.020, 0.024, 0.05])),
+        Surface(name: "Powder", ground: (tone(152, 154, 151), tone(104, 106, 104)), line: (tone(50, 52, 54), tone(34, 35, 37)), tooth: ([0.009, 0.008, 0.025], [0.013, 0.015, 0.035])),
+    ]
 
     /// A picture's route at one of the two widths of line.
     private static func route(_ picture: Int, fine: Bool) -> Data? {
@@ -225,13 +255,14 @@ final class Etching: SKScene {
 
     private let sprite = SKSpriteNode()
     private let clock = SKUniform(name: "u_clock", float: 0), show = SKUniform(name: "u_show", float: 0), clear = SKUniform(name: "u_clear", float: 0)
-    /// How much of the ghost is left, and how much brighter the screen's upper left is than its lower right.
-    private let ghost = SKUniform(name: "u_ghost", float: 1), light = SKUniform(name: "u_light", float: 0.05)
+    /// How much of the ghost is left.
+    private let ghost = SKUniform(name: "u_ghost", float: 1)
     private let texels = SKUniform(name: "u_tex", vectorFloat2: [1, 1])
     /// A texel that was never drawn and holds no ghost, until a route is stamped.
     private let when = SKUniform(name: "u_when", texture: SKTexture(data: Data([255, 255, 255, 0]), size: CGSize(width: 1, height: 1)))
     private let more = SKUniform(name: "u_more", texture: SKTexture(data: Data([255, 255, 0, 255]), size: CGSize(width: 1, height: 1))) // (never gone over, no ghost)
-    private let screen = SKUniform(name: "u_screen", vectorFloat3: .zero), ink = SKUniform(name: "u_ink", vectorFloat3: .zero)
+    /// The bare ground, the line gone over, and the ground's tooth, as `tint` sets them.
+    private let ground = SKUniform(name: "u_ground", vectorFloat3: .zero), ink = SKUniform(name: "u_ink", vectorFloat3: .zero), tooth = SKUniform(name: "u_tooth", vectorFloat3: .zero)
     /// The textures' size, and the grid's fit in them: texels to a cell of the standard grid of 1024 by 640.
     private var wide = 1, high = 1
     /// What the textures hold; this picture's cover, at their size, for the next one's ghost; a stamp being made;
@@ -243,15 +274,19 @@ final class Etching: SKScene {
     /// far cleared (`etching.cleared`), and whether another picture's ghost lies under it (`etching.ghost`).
     /// With any of them the scene keeps a cycle of its own, begun at its first frame, and saves nothing.
     private var asked: (drawn: Double, cleared: Double, ghost: Bool)?, own: Cycle?
-    /// The screen's powder, 0 the bright and 1 the dim, on its way to the one Settings asks for; and the system's
-    /// appearance, watched, for Match System.
-    private var shade = 0.0, dark = false, appearance: NSKeyValueObservation?, lastWall: Double?
+    /// How far the ground is from its light tone, 0, to its dark one, 1, on its way to the one Settings asks for;
+    /// how far the line is, which crosses by itself (`update`); and the system's appearance, watched, for Match
+    /// System.
+    private var shade = 0.0, inked = 0.0, dark = false, appearance: NSKeyValueObservation?, lastWall: Double?
+    /// The surface on the screen, which is the one picked in Settings but for the two seconds after another is
+    /// picked: then it is part of the way there (`turned`, from 0 to 1) from what was on the screen at that moment.
+    private var shown = surfaces[0], from = surfaces[0], picked = 0, turned = 1.0
     /// For Follow Day and Night: where the Sun last put the shade, the wall-clock moment it was looked up (none
     /// while another pick is the one chosen), and whether the Mac has been asked where it is.
     private var night = 0.0, sunAt: Double?, located = false
     /// The shade Settings asks for: Light's or Dark's, Dark Mode's under Match System, or the Sun's.
     private var wanted: Double {
-        switch Int(Self.powder.value) {
+        switch Int(Self.screen.value) {
         case 0: 0
         case 1: 1
         case 2: dark ? 1 : 0
@@ -266,9 +301,12 @@ final class Etching: SKScene {
     }()
 
     override func sceneDidLoad() {
+        picked = min(Int(Self.surface.value), Self.surfaces.count - 1)
+        (shown, from) = (Self.surfaces[picked], Self.surfaces[picked])
         dark = systemIsDark
-        night = Self.powder.value > 2.5 ? Self.nightfall(sun: Self.sun(at: Date.timeIntervalSinceReferenceDate)) : 0
+        night = Self.screen.value > 2.5 ? Self.nightfall(sun: Self.sun(at: Date.timeIntervalSinceReferenceDate)) : 0
         shade = wanted
+        inked = shade > 0.5 ? 1 : 0
         tint()
         appearance = NSApplication.shared.observe(\.effectiveAppearance) { [weak self] _, _ in MainActor.assumeIsolated { self?.dark = systemIsDark } }
         // The display's own pixels, and a texel to each; from the 14-inch size up, a texel to two each way, which
@@ -280,8 +318,8 @@ final class Etching: SKScene {
         sprite.size = size
         sprite.anchorPoint = .zero
         sprite.shader = SKShader(source: shaderCommon + Self.source(half: half), uniforms: [
-            SKUniform(name: "u_px", vectorFloat2: [Float(pixels.x), Float(pixels.y)]), SKUniform(name: "u_grains", float: Float(2560 / pixels.x)),
-            SKUniform(name: "u_grain", texture: Self.grain), texels, when, more, clock, show, clear, ghost, light, screen, ink])
+            SKUniform(name: "u_px", vectorFloat2: [Float(pixels.x), Float(pixels.y)]), SKUniform(name: "u_grain", texture: Self.grain),
+            texels, when, more, clock, show, clear, ghost, ground, ink, tooth])
         addChild(sprite)
 
         let defaults = UserDefaults.standard, hooks = ["etching.drawn", "etching.cleared", "etching.ghost"].map { defaults.object(forKey: $0) as? Double }
@@ -290,21 +328,19 @@ final class Etching: SKScene {
 
     /// Asks where the Mac is, once, and only while the Screen follows the Sun: the first time, macOS asks leave.
     private func locate() {
-        guard !located, view != nil, Self.powder.value > 2.5 else { return }
+        guard !located, view != nil, Self.screen.value > 2.5 else { return }
         located = true
         Location.shared.start()
     }
 
     override func didMove(to view: SKView) { locate() }
 
-    /// The powder and the dark inside, for the shade the screen is at: 152 of 255, bright, and 104, dim, the line
-    /// a third as light (docs/etching.md, "Look").
+    /// The ground, its tooth and the line, for the surface on the screen and where each is between its two tones.
     private func tint() {
-        func tone(_ r: Float, _ g: Float, _ b: Float) -> SIMD3<Float> { SIMD3(r, g, b) / 255 }
-        let mix = SIMD3<Float>(repeating: Float(simd_smoothstep(0, 1, shade)))
-        screen.vectorFloat3Value = simd_mix(tone(152, 154, 151), tone(104, 106, 104), mix)
-        ink.vectorFloat3Value = simd_mix(tone(50, 52, 54), tone(34, 35, 37), mix)
-        light.floatValue = simd_mix(0.05, 0.02, mix.x) // a dim screen lit as unevenly reads as a vignette
+        func eased(_ tones: Surface.Tones, _ along: Double) -> SIMD3<Float> { simd_mix(tones.light, tones.dark, SIMD3(repeating: Float(simd_smoothstep(0, 1, along)))) }
+        ground.vectorFloat3Value = eased(shown.ground, shade)
+        tooth.vectorFloat3Value = eased(shown.tooth, shade)
+        ink.vectorFloat3Value = eased(shown.line, inked)
     }
 
     /// Starts stamping a picture's route over its ghost, off the main thread. The ghost's cover is the one the
@@ -330,14 +366,25 @@ final class Etching: SKScene {
         let wall = currentTime + Date.timeIntervalSinceReferenceDate - ProcessInfo.processInfo.systemUptime
         let passed = min(max(wall - (lastWall ?? wall), 0), 0.1)
         lastWall = wall
-        if Self.powder.value < 2.5 {
+        if Self.screen.value < 2.5 {
             sunAt = nil
         } else if wall - (sunAt ?? -.infinity) >= 30 { // in which the Sun climbs or sinks an eighth of a degree at the most
             locate()
             (night, sunAt) = (Self.nightfall(sun: Self.sun(at: wall)), wall)
         }
-        if shade != wanted { // to another powder over two seconds, as Meander goes to the system's other mode
-            shade = abs(wanted - shade) <= passed / 2 ? wanted : shade + (wanted > shade ? passed / 2 : -passed / 2)
+        // To another tone, or another surface, over two seconds, under the picture, as Meander goes to the system's
+        // other mode. The ground goes by the shade. The line has its own way across, to the dark tone's once the
+        // shade is past a half and to the light tone's short of it: on three surfaces it is darker than the ground
+        // in one tone and lighter in the other, and going by the shade it would be the ground's own colour, and the
+        // picture gone, half-way through, which at dusk is a quarter of an hour.
+        // ponytail: crossing, the line still passes through the ground's colour, for an instant of its two seconds;
+        // take it round by another colour, or dip the whole picture, if that blink is ever seen at sunset.
+        func toward(_ aim: Double, from value: Double) -> Double { abs(aim - value) <= passed / 2 ? aim : value + (aim > value ? passed / 2 : -passed / 2) }
+        let chosen = min(Int(Self.surface.value), Self.surfaces.count - 1), lined = shade > 0.5 ? 1.0 : 0.0
+        if chosen != picked { (from, picked, turned) = (shown, chosen, 0) }
+        if shade != wanted || inked != lined || turned < 1 {
+            (shade, inked, turned) = (toward(wanted, from: shade), toward(lined, from: inked), toward(1, from: turned))
+            shown = from.mixed(with: Self.surfaces[picked], Float(simd_smoothstep(0, 1, turned)))
             tint()
         }
 
@@ -375,7 +422,7 @@ final class Etching: SKScene {
     }
 
     /// The shader: the textures of when each texel is first drawn and gone over again, against the clock, on the
-    /// powder. A texture a shader reads is smoothed whatever its filtering is set to, and a time smoothed between
+    /// ground. A texture a shader reads is smoothed whatever its filtering is set to, and a time smoothed between
     /// a drawn texel and a bare one is a time when nothing happened, so every read is at a texel's centre. With a
     /// texel to each pixel that is one read of each texture; with a texel to two each way (`half`) it is the four
     /// round the pixel, each compared with the clock on its own and only then mixed.
@@ -407,22 +454,43 @@ final class Etching: SKScene {
 
         void main() {
         \(read)
-            // The powder: its grain is its own size on the glass whatever the display's pixels (u_grains), with a
-            // slow unevenness across the whole screen, light from the upper left, and a few bright specks.
-            vec2 at = v_tex_coord * u_px * u_grains;
-            float fine = (texture2D(u_grain, fract(at / 512.0)).r - 0.502) * 0.1275;
+            // The ground's tooth, at the display's own pixels whatever their size, so nothing in it is ever
+            // magnified: a pixel's own noise; a soft tooth two or three pixels across; and sparse fibres a pixel
+            // wide, one to a cell of each of two lattices of unlike pitch. The soft tooth is the grain tile's red,
+            // read a texel to a pixel, twice, and from another part of the tile in each cell of each lattice, so
+            // that nothing repeats. A pixel far from its cell's fibre skips the working out: most of them, and
+            // half the cost. Nothing is larger than a fibre but the light from the upper left, of 2% each way.
+            vec2 px = floor(v_tex_coord * u_px), at = px + 0.5, cell = floor(at / 53.0);
+            vec4 n = hash42(px), h = hash42(cell + 17.0);
+            float soft = texture2D(u_grain, (mod(px + floor(h.zw * 512.0), 512.0) + 0.5) / 512.0).r - 1.004, fibres = 0.0;
+            vec2 d = at - (cell + 0.16 + 0.68 * h.xy) * 53.0;
+            if (dot(d, d) < 72.0) {
+                vec2 along = normalize(vec2(h.z, fract(h.z * 64.0)) - 0.5);
+                float reach = 3.0 + 4.0 * fract(h.w * 16.0);
+                fibres += (step(0.5, h.w) * 2.0 - 1.0) * max(0.0, 1.0 - length(d - along * clamp(dot(d, along), -reach, reach)));
+            }
+            at += 400.0;
+            cell = floor(at / 61.0);
+            h = hash42(cell + 130.0);
+            soft += texture2D(u_grain, (mod(px + floor(h.zw * 512.0), 512.0) + 0.5) / 512.0).r;
+            d = at - (cell + 0.16 + 0.68 * h.xy) * 61.0;
+            if (dot(d, d) < 72.0) {
+                vec2 along = normalize(vec2(h.z, fract(h.z * 64.0)) - 0.5);
+                float reach = 3.0 + 4.0 * fract(h.w * 16.0);
+                fibres += (step(0.5, h.w) * 2.0 - 1.0) * max(0.0, 1.0 - length(d - along * clamp(dot(d, along), -reach, reach)));
+            }
+            float tooth = u_tooth.x * (n.x + n.y - 1.0) * 2.449 + u_tooth.y * soft * 5.635 + u_tooth.z * fibres;
+            // A line drawn once is pale and one gone over is the line's own tone. Clearing lays the ground back,
+            // sooner in some places than others (by the tile's slow unevenness, stretched over the screen: a
+            // pattern in time, never seen at rest), down to a faint ghost of the whole line, which then fades
+            // away under the next picture's first minutes (u_ghost).
             float slow = (texture2D(u_grain, v_tex_coord).g - 0.502) * 0.0765;
-            vec2 cell = floor(at / 48.0);
-            vec4 h = hash42(cell);
-            float speck = max(0.0, 1.0 - distance(at, (cell + 0.15 + 0.7 * h.xy) * 48.0) / 1.6);
-            vec3 screen = u_screen * (1.0 + fine + slow + u_light * (v_tex_coord.y - v_tex_coord.x) + 0.3 * step(h.z, 0.12) * speck * speck);
-            // A line drawn once is pale and one gone over is the dark inside. Clearing lays the powder back, sooner
-            // in some places than others (by the slow unevenness), down to a faint ghost of the whole line, which
-            // then fades away under the next picture's first minutes (u_ghost).
             float gone = smoothstep(0.0, 0.4, u_clear - 0.6 * clamp(0.5 + slow * 20.0, 0.0, 1.0));
-            float a = max(mix(line, 0.08 * cover, gone), 0.08 * ghost * u_ghost * (1.0 - gone));
-            a = clamp(a * (1.0 + 6.0 * fine), 0.0, 1.0) * u_show;
-            gl_FragColor = vec4(mix(screen, u_ink, a), 1.0);
+            float a = max(mix(line, 0.08 * cover, gone), 0.08 * ghost * u_ghost * (1.0 - gone)) * u_show;
+            // The tooth is the ground's: a line darker than the ground takes it in its own measure, so its tone
+            // is even, and one lighter than the ground takes no more levels of it than the ground has.
+            vec3 tone = mix(u_ground, u_ink, a);
+            gl_FragColor = vec4(tone * (1.0 + 0.02 * (v_tex_coord.y - v_tex_coord.x)) + tooth * min(tone, u_ground), 1.0);
         }
         """
     }
