@@ -502,12 +502,15 @@ NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotificati
     }
 }
 // Match the lock screen, or put back the user's wallpaper if a crash left one of ours, once the scenes have drawn;
-// then keep the still fresh while the displays are awake (time-of-day scenes drift), and take one as they sleep,
-// just before a lock.
+// then keep the still fresh while the displays are awake (time-of-day scenes drift), unless no wallpaper has drawn
+// since the last (paused, frozen or covered), and take one as they sleep, just before a lock.
 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { LockScreen.update(windows) }
 // Each repeating timer has a tolerance, so macOS can wake for it along with others, which saves battery.
 Timer.scheduledTimer(withTimeInterval: 600, repeats: true) { _ in
-    MainActor.assumeIsolated { if !WallpaperView.screensAsleep { matchLockScreen(after: 0) } }
+    MainActor.assumeIsolated {
+        let drawn = windows.contains { ($0.contentView as? WallpaperView).map { $0.lastDrawn > LockScreen.taken } ?? false }
+        if !WallpaperView.screensAsleep, drawn { matchLockScreen(after: 0) }
+    }
 }.tolerance = 60
 // macOS gave that still to the Space in front only, so each other Space gets it as it comes to the front.
 NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { _ in

@@ -21,6 +21,8 @@ import UniformTypeIdentifiers
     private static var matching: Bool?
     /// Each display's latest still, by display UUID.
     private static var stills: [String: URL] = [:]
+    /// When the latest stills were taken: a wallpaper that hasn't drawn since needs no new one.
+    static private(set) var taken = Date.distantPast
 
     /// Matches or restores as the switch says; call it whenever the wallpaper or the displays change.
     static func update(_ windows: [NSWindow]) {
@@ -35,6 +37,7 @@ import UniformTypeIdentifiers
 
     /// Sets each display's system wallpaper to a still of the scene on it, saving the user's own first.
     static func match(_ windows: [NSWindow]) {
+        taken = Date()
         var saved = UserDefaults.standard.dictionary(forKey: savedKey) as? [String: String] ?? [:]
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         for window in windows {
