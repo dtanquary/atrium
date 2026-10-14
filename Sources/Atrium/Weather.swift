@@ -727,16 +727,31 @@ class WeatherScene: SKScene, BatteryPaced {
             cloud.node.position = CGPoint(x: x * w, y: y * h)
             cloud.node.zPosition = 1 + CGFloat(1 - cloud.away / 45) // nearer in front, all behind the hills
             let frame = cloud.node.frame
-            cloud.node.setValue(SKAttributeValue(vectorFloat4: [Float(frame.minX / w), Float(frame.minY / h), Float(frame.width / w), Float(frame.height / h)]),
-                                forAttribute: "a_screen")
-            cloud.node.setValue(SKAttributeValue(float: Float(1 - exp(-cloud.away / 45))), forAttribute: "a_far")
+            attribute("a_screen", of: cloud.node, to: [Float(frame.minX / w), Float(frame.minY / h), Float(frame.width / w), Float(frame.height / h)])
+            attribute("a_far", of: cloud.node, to: Float(1 - exp(-cloud.away / 45)))
             let dir = normalize(viewpoint.right * cloud.across + viewpoint.forward * cloud.away + Sky.Vector(0, 0, cloud.base + 0.6 - viewpoint.height))
-            cloud.node.setValue(SKAttributeValue(float: Float(smoothstep(0.8, 0.97, dot(dir, sunNow)))), forAttribute: "a_back")
+            attribute("a_back", of: cloud.node, to: Float(smoothstep(0.8, 0.97, dot(dir, sunNow))))
             let seed = cloud.node.userData?["seed"] as? SIMD2<Float> ?? .zero
-            cloud.node.setValue(SKAttributeValue(vectorFloat4: [seed.x, seed.y, Float(aspect), Float(1.1 * (1 - living))]), forAttribute: "a_cloud")
+            attribute("a_cloud", of: cloud.node, to: [seed.x, seed.y, Float(aspect), Float(1.1 * (1 - living))])
             photoCloudsShown[i] = cloud
         }
         castShadows(dt, drift: SIMD2(across, away))
+    }
+
+    /// Sets a cloud's shader attribute by changing the node's own value in place, and only when it differs: four new
+    /// `SKAttributeValue`s for every cloud every frame cost more than the changes they carried (as in Fish Tank).
+    private func attribute(_ name: String, of node: SKSpriteNode, to value: SIMD4<Float>) {
+        guard let current = node.value(forAttributeNamed: name) else {
+            return node.setValue(SKAttributeValue(vectorFloat4: value), forAttribute: name)
+        }
+        if current.vectorFloat4Value != value { current.vectorFloat4Value = value }
+    }
+
+    private func attribute(_ name: String, of node: SKSpriteNode, to value: Float) {
+        guard let current = node.value(forAttributeNamed: name) else {
+            return node.setValue(SKAttributeValue(float: value), forAttribute: name)
+        }
+        if current.floatValue != value { current.floatValue = value }
     }
 
     /// Clouds overhead and behind, out of the frame, which only show as shadows: the ground in view is mostly within
