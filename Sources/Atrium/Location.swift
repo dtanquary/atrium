@@ -43,8 +43,8 @@ import CoreLocation
         guard let fix = locations.last?.coordinate else { return }
         MainActor.assumeIsolated {
             coordinate = fix
-            UserDefaults.standard.set(fix.latitude, forKey: "latitude")
-            UserDefaults.standard.set(fix.longitude, forKey: "longitude")
+            UserDefaults.standard.setIfChanged(fix.latitude, forKey: "latitude")
+            UserDefaults.standard.setIfChanged(fix.longitude, forKey: "longitude")
         }
     }
 

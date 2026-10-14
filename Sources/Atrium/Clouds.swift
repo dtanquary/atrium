@@ -49,7 +49,7 @@ import SpriteKit
             guard http.statusCode == 200, let image = NSImage(data: data) else { return }
             try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? data.write(to: file)
-            UserDefaults.standard.set(http.value(forHTTPHeaderField: "ETag"), forKey: "clouds.etag")
+            UserDefaults.standard.setIfChanged(http.value(forHTTPHeaderField: "ETag"), forKey: "clouds.etag")
             if EarthFromOrbit.knobs[1].value > 0.5 { show(image) } // switched off meanwhile: just keep the file
         }
     }

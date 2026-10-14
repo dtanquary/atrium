@@ -106,8 +106,8 @@ struct Tour: Sendable {
         var index = seen[body, default: 0] % own.count
         if own.count > 1, own[index].file == last?.file { index = (index + 1) % own.count }
         seen[body] = index + 1
-        defaults.set(seen, forKey: prefix + ".seen")
-        defaults.set(Array((recent.filter { $0 != body } + [body]).suffix(bodies.count / 2)), forKey: prefix + ".recent")
+        defaults.setIfChanged(seen, forKey: prefix + ".seen")
+        defaults.setIfChanged(Array((recent.filter { $0 != body } + [body]).suffix(bodies.count / 2)), forKey: prefix + ".recent")
         return own[index]
     }
 
@@ -120,7 +120,7 @@ struct Tour: Sendable {
         var seen = UserDefaults.standard.dictionary(forKey: prefix + ".factsSeen") as? [String: Int] ?? [:]
         let start = seen[body, default: 0], count = min(wanted, all.count)
         seen[body] = (start + count) % all.count
-        UserDefaults.standard.set(seen, forKey: prefix + ".factsSeen")
+        UserDefaults.standard.setIfChanged(seen, forKey: prefix + ".factsSeen")
         return (0..<count).map { all[order[(start + $0) % all.count]] }
     }
 

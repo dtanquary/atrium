@@ -125,5 +125,5 @@ import Foundation
         return kind
     }
 
-    private func status(_ text: String) { UserDefaults.standard.set(text, forKey: "spaceport.status") }
+    private func status(_ text: String) { UserDefaults.standard.setIfChanged(text, forKey: "spaceport.status") }
 }

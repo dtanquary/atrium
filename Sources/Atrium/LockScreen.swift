@@ -58,7 +58,7 @@ import UniformTypeIdentifiers
                 try? FileManager.default.removeItem(at: old)
             }
         }
-        UserDefaults.standard.set(saved, forKey: savedKey)
+        UserDefaults.standard.setIfChanged(saved, forKey: savedKey)
     }
 
     /// Gives the Space that has just come to the front each display's latest still. Without this a Space keeps the

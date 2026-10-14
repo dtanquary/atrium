@@ -66,6 +66,15 @@ private enum KnobValues {
     }
 }
 
+extension UserDefaults {
+    /// Sets `value` for `key` only if it differs from what's stored. Every write empties `KnobValues` and runs every
+    /// observer of `didChangeNotification` (the power state, Shuffle, the lock screen, each live scene's knobs), so
+    /// anything written over and over by a scene or a fetch goes through this.
+    func setIfChanged(_ value: Any?, forKey key: String) {
+        if object(forKey: key) as? NSObject != value as? NSObject { set(value, forKey: key) }
+    }
+}
+
 /// Named colour palettes a wallpaper can be pinned to, stored by name under `key`; empty rolls one at random.
 /// Each option carries a few swatch colours for its dark and light looks. `standard` is the pick before the user
 /// makes one. Options with an entry in `photos` show that resource image for each look instead of their colours.

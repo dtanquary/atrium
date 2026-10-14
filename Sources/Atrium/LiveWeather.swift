@@ -50,11 +50,11 @@ import CoreLocation
             let time = Date().formatted(date: .omitted, time: .shortened)
             guard let (data, _) = try? await URLSession.shared.data(from: url.url!), let report = Self.conditions(from: data) else {
                 let last = UserDefaults.standard.string(forKey: "weather.status") ?? ""
-                UserDefaults.standard.set("Couldn't reach Open-Meteo at \(time). " + last.replacingOccurrences(of: #"^Couldn't reach.*?\. "#, with: "", options: .regularExpression),
+                UserDefaults.standard.setIfChanged("Couldn't reach Open-Meteo at \(time). " + last.replacingOccurrences(of: #"^Couldn't reach.*?\. "#, with: "", options: .regularExpression),
                                           forKey: "weather.status")
                 return
             }
-            UserDefaults.standard.set("Live: \(report.summary) · \(Self.place(spot)) · updated \(time)", forKey: "weather.status")
+            UserDefaults.standard.setIfChanged("Live: \(report.summary) · \(Self.place(spot)) · updated \(time)", forKey: "weather.status")
             latest = report
             updated = Date()
             NotificationCenter.default.post(name: Self.changed, object: nil)
