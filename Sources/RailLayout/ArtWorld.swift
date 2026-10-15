@@ -277,7 +277,7 @@ extension RailArt {
         Consist(key: "castle", name: "GWR Castle with chocolate-and-cream coaches", era: .britishSteam, vehicles: [gwrCastle, castleTender, gwrChocolateAndCreamCoach, gwrChocolateAndCreamCoach, gwrChocolateAndCreamCoach, gwrChocolateAndCreamCoach], cruise: 16, power: 2),
         Consist(key: "coronation", name: "LMS Princess Coronation with crimson coaches", era: .britishSteam, vehicles: [lmsPrincessCoronationStreamlined, coronationTender, lmsCrimsonCoach, lmsCrimsonCoach, lmsCrimsonCoach, lmsCrimsonCoach], cruise: 18, power: 2),
         Consist(key: "s8f", name: "LMS 8F with mineral wagons", era: .britishSteam, vehicles: [lms8F, v8fTender, v16TMineralWagon, v16TMineralWagon, v16TMineralWagon, v16TMineralWagon, v16TMineralWagon, v16TMineralWagon, v16TMineralWagon, v16TMineralWagon, v16TMineralWagon, v16TMineralWagon, brBrakeVan], cruise: 11, power: 2),
-        Consist(key: "hst", name: "InterCity 125", era: .britishDiesel, vehicles: [hstPowerCar, mark3Coach, mark3Coach, mark3Coach, mark3Coach, hstPowerCarRear], cruise: 20),
+        Consist(key: "hst", name: "HST with Mark 3 coaches", era: .britishDiesel, vehicles: [hstPowerCar, mark3Coach, mark3Coach, mark3Coach, mark3Coach, hstPowerCarRear], cruise: 20),
         Consist(key: "deltic", name: "Class 55 Deltic with blue and grey coaches", era: .britishDiesel, vehicles: [class55Deltic, mark1Coach, mark1Coach, mark1Coach, mark1Coach], cruise: 18),
         Consist(key: "c47", name: "Class 47 with mineral wagons", era: .britishDiesel, vehicles: [class47, v16TMineralWagon, v16TMineralWagon, v16TMineralWagon, v16TMineralWagon, v16TMineralWagon, v16TMineralWagon, v16TMineralWagon, v16TMineralWagon, v16TMineralWagon, v16TMineralWagon, brBrakeVan], cruise: 12),
     ]

@@ -61,10 +61,9 @@ public enum RailArt {
         ("up_yellow_m", 0xFFCC00, []), ("up_grey_m", 0x666666, []), ("csx_blue", 0x003462, []), ("csx_yellow", 0xF0B400, []),
         ("well", 0x4A4642, []), ("alum_car", 0xB9BAB4, []), ("rotary", 0xB5302A, []), ("coal_mod", 0x26231F, []),
         ("auto_white", 0xE6E6E2, []), ("auto_white_dk", 0xC4C4C0, []), ("auto_brown", 0x6B3A2A, []), ("auto_brown_dk", 0x5A3024, []),
-        ("auto_roof", 0xA7A9AA, []), ("amtrak_silver", 0xBFC3C7, []), ("amtrak_roof", 0x8A8D90, []), ("amtrak_roof_lt", 0x9A9DA0, []),
+        ("auto_roof", 0xA7A9AA, []), ("amtrak_roof_lt", 0x9A9DA0, []),
         ("amtrak_stripe", 0x2B5C8A, []), ("amfleet", 0xC4C7CA, []), ("amfleet_roof", 0x8E9195, []), ("amtrak_red", 0xC8102E, []),
-        ("alc_navy", 0x0E2A4F, []), ("alc_lblue", 0x3F7FC4, []), ("alc_white", 0xF4F4F4, []), ("alc_black", 0x111111, []),
-        ("alc_roof", 0x4A4E54, []), ("p42_grey", 0xB9BDC1, []), ("p42_blue", 0x1F5A96, []),
+        ("p42_grey", 0xB9BDC1, []), ("p42_blue", 0x1F5A96, []),
         // road vehicles
         ("v40_maroon", 0x5A1E24, []), ("v50_cream", 0xEDE6D2, []), ("v50_turq", 0x4AA8A0, []), ("v_glass", 0x3A4650, []),
         ("v50_red", 0xB02A2A, []), ("v_white", 0xE8E8E6, []), ("v_black", 0x1C1C1E, []), ("v_grey", 0x6A6C70, []),
@@ -495,21 +494,9 @@ extension RailArt {
     ]
     static let autorack = [[".kkk" + r(".", 26) + "kkk."], [r("p", 34)], [r("pPp", 11) + "p", r("p", 34)], [r("pPp", 11) + "p", r("p", 34)],
                            [r("p", 34)], [r("r", 34)]]
-    static let superliner = [
-        ["..kkkk" + r(".", 20) + "kkkk.."], [r("s", 32)], ["s" + r("sws", 10) + "s", r("s", 32)], [r("B", 32), r("s", 32)], [r("s", 32)],
-        ["s" + r("swws", 7) + "sss", r("s", 32)], [r("r", 32), r("r", 32), r("R", 32)],
-    ]
     static let amfleet = [
         ["..kkkk" + r(".", 20) + "kkkk.."], [r("r", 32), r("s", 32)], ["B" + r("BwwB", 7) + "BBB", r("s", 32)], [r("s", 32)],
         [r("q", 32), r("q", 32), r("Q", 32)],
-    ]
-    /// A Siemens ALC-42 Charger.
-    static let charger = [
-        ["..kkkkkk" + r(".", 14) + "kkkkkk.."],
-        [r("r", 29) + ".", r("r", 29) + "n", r("r", 29) + "h"],
-        [r("N", 12) + "W" + r("L", 15) + "..", r("N", 12) + "W" + r("L", 16) + ".", r("N", 12) + "W" + r("L", 15) + "h" + "."],
-        [r("N", 16) + "W" + r("N", 5) + "WKKKr" + "...", r("N", 22) + "KKKK" + "...."],
-        [r("G", 25) + ".....", r("G", 25) + ".....", "GFFGFF" + r("G", 19) + "....."],
     ]
     /// A GE P42DC Genesis.
     static let genesis = [
@@ -602,12 +589,8 @@ extension RailArt {
     static let gon = RailVehicle("Aluminium coal gondola", gondola, ["k": "truck", "g": "alum_car", "r": "rotary", "q": "coal_mod", "Q": "coal_glint"])
     static let autoW = RailVehicle("Autorack", autorack, ["k": "truck", "p": "auto_white", "P": "auto_white_dk", "r": "auto_roof"])
     static let autoB = RailVehicle("Autorack, brown", autorack, ["k": "truck", "p": "auto_brown", "P": "auto_brown_dk", "r": "auto_roof"])
-    static let superlinerCar = RailVehicle("Superliner", superliner, lv(truck, ["s": "amtrak_silver", "B": "amtrak_stripe", "r": "amtrak_roof",
-                                                                             "R": "amtrak_roof_lt"]))
     static let amfleetCar = RailVehicle("Amfleet I", amfleet, lv(truck, ["s": "amfleet", "B": "amtrak_stripe", "r": "amtrak_red", "q": "amfleet_roof",
                                                                       "Q": "amtrak_roof_lt"]))
-    static let alc42 = RailVehicle("Amtrak ALC-42", charger, lv(truck, ["r": "amtrak_red", "n": "alc_navy", "N": "alc_navy", "L": "alc_lblue",
-                                                                     "W": "alc_white", "K": "alc_black", "G": "alc_roof", "F": "fan"]))
     static let p42 = RailVehicle("Amtrak P42DC", genesis, lv(truck, ["r": "amtrak_red", "e": "p42_grey", "B": "p42_blue", "F": "fan"]))
     static let fordTruck = RailVehicle("Ford stake-bed truck", stakeTruck, ["a": "v50_red", "b": "flat_deck", "g": "v_glass"], width: 3, bogies: 0.6)
 
@@ -667,8 +650,6 @@ extension RailArt {
         Consist(key: "up_sd70", name: "Union Pacific SD70ACe, coal gondolas", era: .modern, vehicles: [upSD70] + Array(repeating: gon, count: 8), cruise: 12),
         Consist(key: "csx", name: "CSX ES44AH, autoracks and tank cars", era: .modern,
                 vehicles: [csxES44, autoW, autoB, autoW, tank, tank, autoB, tank, tank], cruise: 14),
-        Consist(key: "amtrak_alc", name: "Amtrak ALC-42 Phase VII, Superliners", era: .modern,
-                vehicles: [alc42] + Array(repeating: superlinerCar, count: 4), cruise: 17),
         Consist(key: "amtrak_p42", name: "Amtrak P42 Phase V, Amfleet I", era: .modern, vehicles: [p42] + Array(repeating: amfleetCar, count: 5), cruise: 18),
     ].map { ($0.key, $0) } + worldTrains.map { ($0.key, $0) })
 
