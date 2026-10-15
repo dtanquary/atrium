@@ -32,9 +32,8 @@
   const sections = document.querySelectorAll('[data-work]');
   const first = sections[0], n = sections.length;
   const firstWork = first.dataset.work, lastWork = sections[n - 1].dataset.work;
-  const now = {}; // what's set, so a scroll that changes nothing restyles nothing (each write restyles the whole page)
-  const set = (name, value) => { if (now[name] !== value) root.style.setProperty(name, now[name] = value); };
-  const smooth = t => (t = Math.min(1, Math.max(0, t)), still ? +(t >= 0.5) : t * t * (3 - 2 * t)); // Reduce Motion: a swap, not a zoom
+  const set = (name, value) => root.style.setProperty(name, value);
+  set('--last', n - 2); // the screen the zoom out starts on (laptop.css)
 
   // Portrait: the screen's own loops, and where each portrait crop is centred, as a share of the width. These mirror
   // media.sh's focal points, held clear of the edges the way its 3:4 slab is.
@@ -62,49 +61,49 @@
   /** Carries a loop's moment over to its twin, so the hand-over between them can't be seen. */
   const carry = (from, to) => { if (from && to && from.readyState >= 2 && to.readyState >= 1 && Math.abs(from.currentTime - to.currentTime) > 0.15) to.currentTime = from.currentTime; };
 
-  let sw, s0, y0, s1, y1; // the screen's width, and the laptop's scale and lift at the start and on the last screen
+  let W, H, room; // the window's width, the laptop's height (the large viewport) and the room it has (the small one)
 
-  /** Sizes the laptop to fit the dark around it, measured with the deck in perspective. */
+  /** Sizes the laptop to fit the dark around it, measured with the deck in perspective, and sets the zoom's ends
+   *  for laptop.css. Not on every resize: a phone's toolbars moving as it scrolls change none of these. */
   function fit() {
-    const W = innerWidth, H = innerHeight;
-    sw = portrait ? H * 2560 / 1662 : W; // portrait: the loops' own shape, as tall as the window
+    if (W === innerWidth && H === device.offsetHeight && room === first.offsetHeight) return;
+    W = innerWidth; H = device.offsetHeight; room = first.offsetHeight;
+    const sw = portrait ? H * 2560 / 1662 : W; // the screen's width; portrait: the loops' own shape, as tall as the laptop
     set('--u', `${sw / 100}px`);
     set('--h', `${H}px`);
-    set('--s', 1); set('--x', '0px'); set('--y', '0px');
+    device.style.animation = 'none'; // measured full size
     const below = front.getBoundingClientRect().bottom - H / 2; // centre of the screen to the laptop's front edge
+    device.style.animation = '';
     const above = H / 2 + 0.016 * sw; // centre of the screen to the top of the bezel
     const wide = (W - 40) / (sw * 1.032 * 1.1); // the bezel, and the base's front a tenth wider in perspective
     // Centred in the dark between the site's bar and the words below, as big as fits.
     const place = (bottom, cap) => {
-      const s = Math.min(cap, (H - 100 - bottom) / (above + below), wide);
-      return [s, (100 + H - bottom) / 2 - s * (below - above) / 2 - H / 2];
+      const s = Math.min(cap, (room - 100 - bottom) / (above + below), wide);
+      return [s, (100 + room - bottom) / 2 - s * (below - above) / 2 - H / 2];
     };
-    [s0, y0] = place(150, 0.62); // above the opening lines
-    [s1, y1] = place(portrait ? 190 : 200, s0); // above the download screen's words
+    const [s0, y0] = place(150, 0.62); // above the opening lines
+    const [s1, y1] = place(portrait ? 190 : 200, s0); // above the download screen's words
+    set('--s0', s0); set('--y0', `${y0}px`);
+    set('--s1', s1); set('--y1', `${y1}px`);
+    // Portrait: slide so the crop's centre meets the window's as the screen fills it.
+    set('--x0', `${portrait ? (0.5 - centre(firstWork)) * sw : 0}px`);
+    set('--x1', `${portrait ? (0.5 - centre(lastWork)) * sw : 0}px`);
   }
 
   let queued = false, handed = false, taken = false;
+  /** Portrait: which loop the laptop's screen plays, lined up with the full-window one at each hand-over. */
   function frame() {
     queued = false;
-    const f = scrollY / first.offsetHeight;
-    const e = smooth(f), z = smooth(f - (n - 2)); // in over the first screen, back out over the last
-    set('--s', z > 0 ? 1 + (s1 - 1) * z : s0 + (1 - s0) * e);
-    set('--y', `${z > 0 ? y1 * z : y0 * (1 - e)}px`);
-    set('--e', e);
-    set('--frame', Math.max(1 - e, z));
     if (!portrait) return;
-    // Slide so the portrait crop's centre meets the window's as the screen fills it.
-    set('--x', `${(0.5 - centre(z > 0 ? lastWork : firstWork)) * sw * (z > 0 ? 1 - z : e)}px`);
+    const f = scrollY / room;
     const end = f > n - 2; // past the last label: the closing loop
-    // The full-window wallpaper takes over in the last fifth of the zoom in, and hands back in the first of the zoom out.
-    set('--canvas', smooth((f - 0.8) / 0.2) * (1 - smooth((f - (n - 2)) / 0.2)));
     if (f > n - 3) closing.warm();
     // Line the twins up just before each hand-over, once per pass.
     if (f > 0.5 && f < 1 && !handed) { carry(opening, canvasLoop(firstWork)); handed = true; }
     if (f < 0.5) handed = false;
     if (end && !taken) { carry(canvasLoop(lastWork), closing); taken = true; }
     if (!end) taken = false;
-    const run = Math.max(1 - e, z) > 0 && !root.classList.contains('is-paused') && !document.hidden;
+    const run = (f < 1 || end) && !root.classList.contains('is-paused') && !document.hidden; // while the laptop shows
     for (const v of new Set([opening, closing])) {
       const on = v === (end ? closing : opening);
       v.style.opacity = on ? 1 : 0;
@@ -115,7 +114,7 @@
   fit();
   frame();
   addEventListener('scroll', queue, { passive: true });
-  addEventListener('resize', () => { fit(); frame(); });
+  addEventListener('resize', () => { fit(); queue(); });
   document.addEventListener('visibilitychange', queue);
   document.querySelector('.pause').addEventListener('click', queue); // site.js sets is-paused first
   document.addEventListener('DOMContentLoaded', queue); // once site.js has run and found the canvas's loops

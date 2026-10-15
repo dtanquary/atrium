@@ -1,14 +1,13 @@
 /* The opening (laptop.js): in the dark, a laptop opens its lid on the desktop, and the first screen of scrolling
    brings its screen up to fill the window; the last pulls back out to it. Scoped to html.laptop, which only
    laptop.js sets, so without that script none of this applies. Our own drawing of a laptop, with no logo.
-   laptop.js sets: --s, --x and --y, the laptop's scale and shift (small at the start, full screen through the
-   works, back out on the last screen); --e, the zoom in; --frame, how much of the laptop shows; --u, 1% of the
-   laptop screen's width (the window on landscape screens; on portrait ones a landscape screen as tall as the
-   window); --h, the window's height. --b is the bezel. */
+   laptop.js sets: --u, 1% of the laptop screen's width (the window on landscape screens; on portrait ones a
+   landscape screen as tall as the window); --h, the laptop's height; the zoom's ends (below). --b is the bezel.
+   The laptop is as tall as the large viewport (lvh), so a phone's toolbars growing and shrinking as it scrolls
+   don't resize it. */
 
 .laptop { --u: 1vw; --b: calc(1.6 * var(--u)); }
-.laptop .device { position: fixed; inset: 0; transform-style: preserve-3d; perspective: 10000px; perspective-origin: 50% -20%; /* far and a little high: the deck shows, without fanning out */
-  transform: translate(var(--x, 0px), var(--y, 0px)) scale(var(--s, 0.6)); }
+.laptop .device { position: fixed; inset: 0 0 auto; height: 100lvh; transform-style: preserve-3d; perspective: 10000px; perspective-origin: 50% -20%; } /* far and a little high: the deck shows, without fanning out */
 /* Portrait: the laptop's screen is landscape, as tall as the window and centred on it, so it overflows the sides. */
 .laptop.portrait .device { left: calc(50vw - 50 * var(--u)); right: auto; width: calc(100 * var(--u)); }
 
@@ -21,15 +20,15 @@
 .laptop .lid-back { background: linear-gradient(#36363c, #1d1d21); box-shadow: 0 0 0 1px #45454c; transform: translateZ(-1px) rotateY(180deg); }
 .laptop .screen { position: absolute; inset: 0; overflow: hidden; border-radius: calc(1.1 * var(--u)) calc(1.1 * var(--u)) calc(0.4 * var(--u)) calc(0.4 * var(--u)); background: #000; backface-visibility: hidden; transform: translateZ(1px); }
 .laptop .screen > .stage, .laptop .screen > .menubar, .laptop .screen > .dock { position: absolute; }
-.laptop .notch { position: absolute; top: 0; left: 50%; width: calc(9 * var(--u)); height: 28px; border-radius: 0 0 9px 9px; background: #0c0c0e; opacity: var(--frame, 1);
+.laptop .notch { position: absolute; top: 0; left: 50%; width: calc(9 * var(--u)); height: 28px; border-radius: 0 0 9px 9px; background: #0c0c0e;
   transform: translateX(-50%) translateZ(2px); backface-visibility: hidden; } /* just in front of the screen */
 /* The menu bar and Dock only show while the laptop does, there from the first moment like the notch, and fading
-   with the zoom (--frame). */
-.laptop .screen > .menubar, .laptop .screen > .dock { display: flex; opacity: var(--frame, 1); }
+   with the zoom. */
+.laptop .screen > .menubar, .laptop .screen > .dock { display: flex; }
 /* Portrait: the screen plays its own landscape loops (laptop.js), and the full-window wallpaper behind the works
-   fades in over the laptop only once the screen fills the window (--canvas). */
+   fades in over the laptop only once the screen fills the window. */
 .laptop .screen > .loop { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.laptop.portrait .stage { opacity: var(--canvas, 0); transition: none; }
+.laptop.portrait .stage { transition: none; }
 
 /* The base: a deck lying back from the hinge toward you, with its keyboard and trackpad, and a thin front edge.
    Its back edge is exactly as wide as the lid, meeting the lid's bottom corners, and perspective widens it toward
@@ -48,13 +47,40 @@
 .laptop .front::before { content: ''; position: absolute; top: 0; left: 50%; translate: -50% 0; width: 13%; height: 45%; border-radius: 0 0 var(--u) var(--u); background: #18181b; }
 
 /* Words: the opening lines centre under the laptop, and the download screen's sit in the dark below it. */
-.laptop .opening { left: 0; right: 0; bottom: 48px; align-items: center; text-align: center; opacity: calc(1 - 3 * var(--e, 0)); } /* gone before the zoom passes it */
+.laptop .opening { left: 0; right: 0; bottom: 48px; align-items: center; text-align: center; }
 .laptop .last { inset: auto 56px 44px; align-items: flex-end; }
 @media (max-width: 699px) {
   .laptop .opening { left: 24px; right: 24px; }
   .laptop .last { inset: auto 24px 36px; align-items: stretch; }
 }
 
+/* The zoom: in over the first screen of scrolling, back out over the last (--last screens down), each eased like
+   smoothstep. The scroll runs it, not a script, so the browser can run it off the main thread (Safari does from
+   26.4). laptop.js sets the ends: --s0 and --y0, the laptop's scale and lift at the start; --s1 and --y1, on the
+   last screen; --x0 and --x1, the slides that bring a portrait crop's centre to the window's. Each animation's
+   later partner takes over only once its own screen starts. */
+.laptop .device, .laptop .notch, .laptop .screen > .menubar, .laptop .screen > .dock, .laptop.portrait .stage, .laptop .opening {
+  animation-timeline: scroll(root); animation-timing-function: cubic-bezier(0.333, 0, 0.667, 1); }
+.laptop .device { animation-name: laptop-in, laptop-out; animation-fill-mode: both, forwards;
+  animation-range: 0 100svh, calc(var(--last) * 100svh) calc(var(--last) * 100svh + 100svh); }
+@keyframes laptop-in { from { transform: translate(0px, var(--y0)) scale(var(--s0)); } to { transform: translate(var(--x0), 0px) scale(1); } }
+@keyframes laptop-out { from { transform: translate(var(--x1), 0px) scale(1); } to { transform: translate(0px, var(--y1)) scale(var(--s1)); } }
+/* The notch, menu bar and Dock fade with the zoom. */
+.laptop .notch, .laptop .screen > .menubar, .laptop .screen > .dock { animation-name: fade-out, fade-in; animation-fill-mode: both, forwards;
+  animation-range: 0 100svh, calc(var(--last) * 100svh) calc(var(--last) * 100svh + 100svh); }
+/* Portrait: the full-window wallpaper takes over in the last fifth of the zoom in, and hands back in the first fifth
+   of the zoom out. */
+.laptop.portrait .stage { animation-name: fade-in, fade-out; animation-fill-mode: both, forwards;
+  animation-range: 80svh 100svh, calc(var(--last) * 100svh) calc(var(--last) * 100svh + 20svh); }
+/* The opening lines are gone a third of the way into the zoom, before it passes them (the curve is the smoothstep's
+   first 38.7%, tripled). */
+.laptop .opening { animation-name: fade-out; animation-fill-mode: both; animation-range: 0 38.7svh; animation-timing-function: cubic-bezier(0.333, 0, 0.667, 0.449); }
+@keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
 @media (prefers-reduced-motion: reduce) {
   .laptop .lid { transition: none; }
+  /* A swap halfway through each screen, not a zoom. */
+  .laptop .device, .laptop .notch, .laptop .screen > .menubar, .laptop .screen > .dock, .laptop.portrait .stage, .laptop .opening { animation-timing-function: steps(2, jump-none); }
+  .laptop .opening { animation-range: 0 100svh; }
 }
