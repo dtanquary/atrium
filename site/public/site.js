@@ -18,6 +18,7 @@ const pause = document.querySelector('.pause');
 const more = document.querySelector('.more'); // the glass pane with a card for every wallpaper
 const preview = document.querySelector('.preview'), clip = preview.querySelector('video'); // one card's wallpaper, moving
 const root = document.documentElement;
+const bar = document.querySelector('.top'); // the accent's only moving use is the bar's Download, so only the bar restyles as it moves
 let playing = !matchMedia('(prefers-reduced-motion: reduce)').matches; // Reduce Motion starts on the posters
 
 for (const el of sections) if (!el.style.getPropertyValue('--own')) el.style.setProperty('--own', accents[el.dataset.work]); // each label's medium word, unless lifted
@@ -37,7 +38,7 @@ for (const slug of new Set(sections.map(s => s.dataset.work))) {
   stage.append(v);
 }
 const all = Object.values(videos);
-const run = v => (playing && !document.hidden ? v.play().catch(() => {}) : v.pause());
+const run = v => (playing && !document.hidden ? v.paused && v.play().catch(() => {}) : v.pause());
 const sync = () => all.forEach(v => (+v.style.opacity > 0 ? run(v) : v.pause()));
 document.addEventListener('visibilitychange', () => { sync(); if (preview.open) run(clip); }); // pause with the tab, as the app pauses when covered
 
@@ -87,7 +88,7 @@ function mix(a, b, t) {
     v.style.zIndex = slug === b ? 2 : 1;
     o > 0 ? run(v) : v.pause();
   }
-  root.style.setProperty('--accent', t > 0 ? `color-mix(in oklch, ${accents[a]}, ${accents[b]} ${(t * 100).toFixed(1)}%)` : accents[a]);
+  bar.style.setProperty('--accent', t > 0 ? `color-mix(in oklch, ${accents[a]}, ${accents[b]} ${(t * 100).toFixed(1)}%)` : accents[a]);
 }
 
 const clamp = i => Math.min(sections.length - 1, Math.max(0, i));

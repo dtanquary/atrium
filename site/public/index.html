@@ -25,18 +25,17 @@
   .opening { position: absolute; left: 56px; bottom: 64px; display: flex; flex-direction: column; gap: 10px; }
   .tagline { font-size: 22px; font-weight: 300; }
   .fine { font-size: 13px; color: #d6d2e2; }
-  .label { position: absolute; left: 56px; top: 57.8%; display: flex; flex-direction: column; gap: 6px; }
+  /* Every label in the same place, under the site's bar, so each arrives the same way (Dave, 2026-10-15). Where the
+     art behind is bright, its words are lifted to hold contrast, never moved. */
+  .label { position: absolute; left: 56px; top: 130px; display: flex; flex-direction: column; gap: 6px; }
   .title { font-size: 17px; font-weight: 500; }
   .medium { font-size: 11px; letter-spacing: 0.12em; }
   .line { font-size: 14px; color: var(--text-2); }
-  [data-work=murmuration] .label { top: 24%; } /* in the open sky, clear of the pier */
-  /* Over Fish Tank's open water, not its bright sand; the words lift to hold 4.5:1 (the accent too, on the section). */
-  [data-work=fish-tank] .label, [data-work=meander] .label { top: 130px; } /* Meander's: on the old ground above the river's loops */
-  [data-work=fish-tank] .line, [data-work=meander] .line { color: #e4ecff; } /* Meander's too: over its palest old ground on phones */
-  [data-work=pixel-window-seat] .label { top: 81%; } /* on the carriage's dark table, clear of the curtain and its gold tie-back */
-  /* Etching: in the open sky beside the wave. Its powder is a mid grey, where only white words hold 4.5:1. */
-  [data-work=etching] .label { left: auto; right: 56px; top: 14%; color: #fff; }
-  [data-work=etching] .line { color: #fff; }
+  /* Lifted over Fish Tank's open water, Meander's old ground, Nebula's gas and Murmuration's sky (the accent too, on
+     the section). */
+  [data-work=fish-tank] .line, [data-work=meander] .line, [data-work=nebula] .line, [data-work=murmuration] .line { color: #e4ecff; }
+  /* Etching: its powder is a mid grey, where only white words hold 4.5:1. */
+  [data-work=etching] .label, [data-work=etching] .line { color: #fff; }
   .last { position: absolute; inset: 130px 56px auto; display: flex; justify-content: space-between; gap: 48px; }
   .last > div { display: flex; flex-direction: column; gap: 14px; max-width: 560px; }
   /* Over Fish Tank's open water on phones, the dark under the laptop on desktops: lifted to hold 4.5:1 on the water. */
@@ -45,12 +44,12 @@
   .last .row { display: flex; gap: 18px; align-items: baseline; white-space: nowrap; }
   .last .features { width: 400px; font-size: 14px; line-height: 1.5; color: #e4ecff; gap: 8px; padding-top: 6px; }
   .show-more { align-self: flex-start; background: none; border: 0; border-bottom: 1px solid rgb(242 241 238 / 0.45); padding: 0 0 2px; font: inherit; font-size: 14px; color: var(--text); cursor: pointer; }
-  /* Each label fades in as its section rises into place and out as it leaves, wherever the label sits in it;
+  /* Each label fades in as its section rises into place, and out soon after, before it reaches the site's bar;
      where scroll-driven animations are missing, labels simply pass. */
   @supports (animation-timeline: view()) {
     section { view-timeline-name: --section; }
     .label { animation: pass linear both; animation-timeline: --section; }
-    @keyframes pass { 0%, 25% { opacity: 0; } 45%, 55% { opacity: 1; } 75%, 100% { opacity: 0; } }
+    @keyframes pass { 0%, 25% { opacity: 0; } 45%, 50% { opacity: 1; } 54%, 100% { opacity: 0; } }
   }
 
   /* Liquid Glass, as macOS 26 draws it: a clear pane that blurs and brightens what's behind it, lit along its rim
@@ -116,9 +115,7 @@
     .opening { left: 24px; right: 24px; bottom: 48px; gap: 8px; }
     .tagline { font-size: 20px; }
     .fine { font-size: 12px; }
-    .label, [data-work] .label { left: 24px; right: 24px; top: 130px; }
-    [data-work=etching] .label { left: 34%; top: 45%; } /* in the hollow of the wave, under its claws */
-    @keyframes pass { 0%, 25% { opacity: 0; } 45%, 50% { opacity: 1; } 54%, 100% { opacity: 0; } } /* gone before they reach the site's bar */
+    .label { left: 24px; right: 24px; }
     .last { inset: 88px 24px auto; flex-direction: column; gap: 28px; }
     /* Download and the pane's button share a line. */
     .last > div:first-child { display: grid; grid-template-columns: auto 1fr; gap: 12px 22px; align-items: baseline; }
@@ -140,9 +137,6 @@
     .preview > div { padding: 10px; }
     .preview video { border-radius: 17px; }
   }
-  /* Meander's label keeps to the old ground above the river, whose first loop climbs to 19% of the picture's height by
-     the end of the 12 s: on portrait screens, and in windows too narrow to hold its words left of that loop. */
-  @media (max-aspect-ratio: 1/1), (max-width: 1199px) { [data-work=meander] .label { top: max(56px, calc(18svh - 66px)); } }
 </style>
 <script type="module" src="site.js"></script>
 </head>
@@ -175,7 +169,7 @@
   <section data-work="pixel-window-seat">
     <div class="label"><h2 class="title">Pixel Window Seat</h2><p class="medium">Pixel art</p><p class="line">a slow train through endless country, in the light of the real Sun</p></div>
   </section>
-  <section data-work="murmuration">
+  <section data-work="murmuration" style="--own: #ffe6cc">
     <div class="label"><h2 class="title">Murmuration</h2><p class="medium">Simulation</p><p class="line">tens of thousands of starlings at sunset</p></div>
   </section>
   <section data-work="fish-tank" style="--own: #c8dfff">

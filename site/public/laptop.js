@@ -32,7 +32,8 @@
   const sections = document.querySelectorAll('[data-work]');
   const first = sections[0], n = sections.length;
   const firstWork = first.dataset.work, lastWork = sections[n - 1].dataset.work;
-  const set = (name, value) => root.style.setProperty(name, value);
+  const now = {}; // what's set, so a scroll that changes nothing restyles nothing (each write restyles the whole page)
+  const set = (name, value) => { if (now[name] !== value) root.style.setProperty(name, now[name] = value); };
   const smooth = t => (t = Math.min(1, Math.max(0, t)), still ? +(t >= 0.5) : t * t * (3 - 2 * t)); // Reduce Motion: a swap, not a zoom
 
   // Portrait: the screen's own loops, and where each portrait crop is centred, as a share of the width. These mirror
