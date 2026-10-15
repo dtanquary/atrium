@@ -96,12 +96,12 @@ final class Layout {
         self.view = view
         self.seed = seed
         var rng = Dice(seed)
-        let (w, h) = (Double(view.w), Double(view.h)), margin = 10.0
+        let (w, h) = (Double(view.w), Double(view.h)), e = Self.edge
         let side = w / 2 + h
         (lo, hi) = (SIMD2(repeating: -side / 2), SIMD2(repeating: side / 2))
         let (lo, hi) = (lo, hi)
         func onScreen(_ poly: [SIMD2<Double>]) -> Bool {
-            poly.allSatisfy { let q = view.project([$0.x, $0.y, 0]); return q.x > margin && q.x < w - margin && q.y > margin && q.y < h - margin }
+            poly.allSatisfy { let q = view.project([$0.x, $0.y, 0]); return q.x > e.side - 2 && q.x < w - e.side + 2 && q.y > e.top - 2 && q.y < h - e.bottom + 2 }
         }
         let order = trains.sorted { RailArt.consist($0).minRadius > RailArt.consist($1).minRadius }
         guard !order.isEmpty else { return }
@@ -125,7 +125,7 @@ final class Layout {
                     poly = p
                 } else {
                     // the first loop big, the rest any size that fits; a shape gets a few goes before a plain loop
-                    let least = loops.isEmpty ? 0.8 : 0
+                    let least = loops.isEmpty ? 0.8 * (1 - Double(attempt) / Double(attempts)) : 0
                     var shaped: [SIMD2<Double>]?
                     if notches, rng.chance(0.75) { for _ in 0..<8 where shaped == nil { shaped = Self.loopRect(&rng, R, w, h, least: least, notches: true) } }
                     guard let p = shaped ?? Self.loopRect(&rng, R, w, h, least: least, notches: false) else { continue }
@@ -263,27 +263,34 @@ final class Layout {
         return (pts, S, pieces, R.min()!)
     }
 
-    /// For iso: a loop round a rectangle on the world's axes, at least `least` of as tall as the screen allows. A w by
-    /// h rectangle spans w + h pixels across the screen and (w + h) / 2 down it; where that's wider than the screen,
-    /// its left and right corners are cut off square to the screen's sides, so a loop can fill the screen. With
+    /// How far loops keep from the screen's edges, in art pixels: clear of the menu bar at the top and the Dock at the
+    /// bottom, so no train runs under them. ponytail: fixed for a Dock at the bottom; read the screen's visible frame
+    /// if one at the side, or hidden, matters.
+    static let edge = (side: 12.0, top: 20.0, bottom: 20.0)
+
+    /// For iso: a loop round a rectangle on the world's axes, at least `least` of the biggest. An a by b rectangle
+    /// spans a + b pixels across the screen and (a + b) / 2 down it, so one that fits whole leaves the screen's corners
+    /// empty; this one may be as big as the screen's height and half its width again, and any corner that runs off
+    /// the screen is cut off square to that edge (across or up the screen), so a loop can run near all four edges. With
     /// `notches`, notches come out of other corners (one makes an L, two on one side a T, two at opposite corners
     /// steps, all four a cross), or bays out of the middle of a side (a U) or of two opposite sides (an H, a model
     /// railway's dogbone), which lengthen the loop by twice their depth. A notch or bay is at least a curve's width
     /// (2R + 4) each way, and every straight keeps that much, so each step can be rounded. Some plain corners are cut
     /// at 45 degrees.
-    static func loopRect(_ rng: inout Dice, _ R: Double, _ w: Double, _ h: Double, least: Double, notches: Bool, margin: Double = 12) -> [SIMD2<Double>]? {
-        let (U, V) = (w / 2 - margin, h - 2 * margin), gap = 2 * R + 4 // on the screen: |x - y| <= U, |x + y| <= V
-        let side0 = notches ? 2 * gap : gap, lo = max(2 * side0, least * 2 * V), hi = 2 * V
+    static func loopRect(_ rng: inout Dice, _ R: Double, _ w: Double, _ h: Double, least: Double, notches: Bool) -> [SIMD2<Double>]? {
+        // on the screen: |x - y| <= U, and x + y from vTop to vBottom (a point's y on the screen is (x + y) / 2 + h / 2)
+        let U = w / 2 - edge.side, (vTop, vBottom) = (2 * edge.top - h, h - 2 * edge.bottom), V = (vBottom - vTop) / 2
+        let gap = 2 * R + 4, side0 = notches ? 2 * gap : gap, hi = 2 * V + U, lo = max(2 * side0, least * hi)
         guard hi > lo else { return nil }
         let span = rng.uniform(lo, hi), a0 = rng.uniform(side0, span - side0)
         let (a, b) = rng.chance(0.5) ? (a0, span - a0) : (span - a0, a0)
-        let sv = V - span / 2, su = max(U - span / 2, 0) + 0.15 * span
-        let v = rng.uniform(-sv, sv), u = rng.uniform(-su, su), (cx, cy) = ((u + v) / 2, (v - u) / 2)
+        let sv = max(V - span / 2, 0) + 0.1 * span, su = max(U - span / 2, 0) + 0.15 * span
+        let v = (vTop + vBottom) / 2 + rng.uniform(-sv, sv), u = rng.uniform(-su, su), (cx, cy) = ((u + v) / 2, (v - u) / 2)
         // corners: 0 at the top of the screen, 1 at the right, 2 at the bottom, 3 at the left; side k runs from corner k
         let pts: [SIMD2<Double>] = [[cx - a / 2, cy - b / 2], [cx + a / 2, cy - b / 2], [cx + a / 2, cy + b / 2], [cx - a / 2, cy + b / 2]]
         let sides = [a, b, a, b]
         func off(_ e: Double) -> Double { e > 0 ? max(e, R) : 0 }
-        let forced = [0, off(u + span / 2 - U), 0, off(span / 2 - U - u)] // how far the right and left corners run off
+        let forced = [off(vTop - v + span / 2), off(u + span / 2 - U), off(v + span / 2 - vBottom), off(span / 2 - U - u)] // how far each runs off
         var notched = Set<Int>(), baySides: [Int] = []
         if notches {
             let turn = rng.below(4), shape = rng.pick([[0], [0], [0, 1], [0, 2], [0, 1, 2, 3], [], [], []])
