@@ -89,9 +89,10 @@ final class Layout {
     var trains: [String] { loops.flatMap(\.keys) }
 
     /// Loops for the trains, the largest radius first. Each is a rectangle on the world's axes (which run on the
-    /// screen's diagonals), some corners cut at 45 degrees, every corner rounded. A train that gets no loop of its
+    /// screen's diagonals), or half the time, if `notches`, one with notches out of its corners (an L, a T,
+    /// steps or a cross), some corners cut at 45 degrees, every corner rounded. A train that gets no loop of its
     /// own may run on one behind another (at most two to a loop) under block signals, if `share`.
-    init(seed: Int, view: RailView, trains: [String], share: Bool, tries: Int = 900) {
+    init(seed: Int, view: RailView, trains: [String], share: Bool, notches: Bool = true, tries: Int = 900) {
         self.view = view
         self.seed = seed
         var rng = Dice(seed)
@@ -123,7 +124,7 @@ final class Layout {
                     guard let p = Self.crossRect(&rng, loops[rng.below(loops.count)], R, lo, hi) else { continue }
                     poly = p
                 } else {
-                    guard let p = Self.diamondRect(&rng, R, w, h) else { continue }
+                    guard let p = notches && rng.chance(0.75) ? Self.notchedRect(&rng, R, w, h) : Self.diamondRect(&rng, R, w, h) else { continue }
                     poly = p
                 }
                 if !onScreen(poly) { continue }
@@ -275,6 +276,42 @@ final class Layout {
             if rng.chance(0.35), min(l0, l1) > 2 * cut + 2 * R { out += [p + (p0 - p) / l0 * cut, p + (p2 - p) / l1 * cut] } else { out.append(p) }
         }
         return out
+    }
+
+    /// For iso: a rectangle whose diamond fits the screen with notches out of its corners: one makes an L, two on one
+    /// side a T, two at opposite corners steps, all four a cross. Every notch is at least a curve's width (2R + 4)
+    /// each way and leaves that much beside it, so each step can be rounded; some corners are cut at 45 degrees.
+    static func notchedRect(_ rng: inout Dice, _ R: Double, _ w: Double, _ h: Double, margin: Double = 12) -> [SIMD2<Double>]? {
+        let gap = 2 * R + 4, room = min(w - 2 * margin, 2 * (h - 2 * margin))
+        guard room >= 4 * gap else { return nil }
+        var a = rng.uniform(2 * gap, room - 2 * gap), b = rng.uniform(2 * gap, room - a)
+        if rng.chance(0.5) { (a, b) = (b, a) }
+        let su = (w / 2 - margin) - (a + b) / 2, sv = (h - 2 * margin) - (a + b) / 2
+        guard su >= 0, sv >= 0 else { return nil }
+        let u = rng.uniform(-su, su), v = rng.uniform(-sv, sv), (cx, cy) = ((u + v) / 2, (v - u) / 2)
+        let pts: [SIMD2<Double>] = [[cx - a / 2, cy - b / 2], [cx + a / 2, cy - b / 2], [cx + a / 2, cy + b / 2], [cx - a / 2, cy + b / 2]]
+        let sides = [a, b, a, b] // side k runs from corner k to corner k + 1
+        let turn = rng.below(4), notched = Set(rng.pick([[0], [0], [0, 1], [0, 2], [0, 1, 2, 3]]).map { ($0 + turn) % 4 })
+        func depth(_ side: Int, shared: Bool) -> Double? { // a notch's reach along a side, leaving a curve's width
+            let most = shared ? (sides[side] - gap) / 2 : sides[side] - gap
+            return most >= gap ? rng.uniform(gap, most) : nil
+        }
+        var out: [SIMD2<Double>] = []
+        for k in 0..<4 {
+            let (p, back, on) = (pts[k], (k + 3) % 4, k) // the sides coming in and going on
+            guard notched.contains(k) else { out.append(p); continue }
+            guard let nIn = depth(back, shared: notched.contains(back)), let nOut = depth(on, shared: notched.contains((k + 1) % 4)) else { return nil }
+            let tIn = normalize(pts[back] - p), tOut = normalize(pts[(k + 1) % 4] - p)
+            out += [p + tIn * nIn, p + tIn * nIn + tOut * nOut, p + tOut * nOut]
+        }
+        var cut: [SIMD2<Double>] = []
+        let n = out.count
+        for k in 0..<n {
+            let (p0, p1, p2) = (out[(k + n - 1) % n], out[k], out[(k + 1) % n])
+            let (l0, l1) = (length(p1 - p0), length(p2 - p1)), c = rng.uniform(0.8 * R, 1.4 * R)
+            if rng.chance(0.35), min(l0, l1) > 2 * c + 2 * R { cut += [p1 + (p0 - p1) / l0 * c, p1 + (p2 - p1) / l1 * c] } else { cut.append(p1) }
+        }
+        return cut
     }
 
     /// A rectangle inside another loop, at least `clear` from its track all round: a loop in a loop.

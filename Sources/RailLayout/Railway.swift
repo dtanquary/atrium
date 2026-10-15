@@ -22,19 +22,21 @@ public final class Railway {
 
     /// Grows a layout from `seed` for up to `count` of the era's trains on a canvas `width` by `height` art
     /// pixels, lays its scenery, and draws what stands still. A layout often can't fit every train, or a station,
-    /// so up to six are grown from seeds drawn from this one, now and then with a short train for an inner loop
-    /// in place of the third, and the first with everything is kept, else the first with most (a station and its
-    /// town counting as much as a train).
+    /// so up to nine are grown from seeds drawn from this one, now and then with a short train for an inner loop
+    /// in place of the third, all but the first three with plain loops only, and the first with everything is kept,
+    /// else the first with most (a station and its town counting as much as a train).
     public init(seed: Int, width: Int, height: Int, era: RailEra, count: Int, season: RailSeason) {
         (w, h, self.era) = (width, height, era)
         view = RailView(w: width, h: height)
         var best: (score: Int, layout: Layout, scenery: Scenery)?
-        for attempt in 0..<6 {
-            let s = seed &* 8 &+ attempt
+        for attempt in 0..<9 {
+            let s = seed &* 16 &+ attempt
             var trains = Self.pick(era, count: count, seed: s)
             let short = RailArt.trains(of: era, short: true)
             if trains.count == 3, attempt % 3 == 2, !short.isEmpty { trains[2] = short[(s & 0xFFFF) % short.count].key }
-            let layout = Layout(seed: s, view: view, trains: trains, share: true), scenery = Scenery(layout, era: era, season: season)
+            // the first three tries may have L, T and stepped loops; a long freight may need the room a plain one leaves
+            let layout = Layout(seed: s, view: view, trains: trains, share: true, notches: attempt < 3)
+            let scenery = Scenery(layout, era: era, season: season)
             let score = layout.starves ? -1 : layout.trains.count + (scenery.station == nil ? 0 : 1) // a town is worth a train
             if best == nil || score > best!.score { best = (score, layout, scenery) }
             if score == trains.count + 1 { break }
