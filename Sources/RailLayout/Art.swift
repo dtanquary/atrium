@@ -24,7 +24,8 @@ public enum RailArt {
 
     /// Every material: name, colour and flags (W window, D dome glass, H headlight, L lamp, S snow on top, A snow
     /// all over, F flat). Index 0 is empty. The grassy ones have an autumn (`_a`) and a dormant winter (`_w`) form.
-    static let table: [(name: String, hex: UInt32, flags: Flags)] = [
+    static let table = materials + containerMaterials
+    private static let materials: [(name: String, hex: UInt32, flags: Flags)] = [
         // running gear and shared
         ("truck", 0x2A2A2C, []), ("truckgrey", 0x6E6E6A, []), ("alum", 0xA8ABA8, []), ("cabglass", 0x2E3A44, []),
         ("window", 0x34404A, .window), ("headlight", 0xF4E8C0, .headlight), ("black", 0x2A2B2E, []),
@@ -49,8 +50,25 @@ public enum RailArt {
         ("pfe_orange_dk", 0xC8641A, []), ("pfe_roof", 0xA8ABA8, []), ("hatch", 0x6E7072, []), ("hopper", 0x2E2F33, []),
         ("coal_dk", 0x1B1B1D, []), ("coal_ridge", 0x34373C, []), ("tank", 0x1C1C1C, []), ("tank_hl", 0x3A3A3A, []),
         ("cab_yellow", 0xF2B800, []), ("cab_red", 0xB02A22, []),
+        // transition freight, 1945-57 (estimates but for UP's)
+        ("sf_blue", 0x1E2C5A, []), ("sf_frt_yellow", 0xF2B80A, []), ("roof_blk", 0x262626, []), ("nyc_dk", 0x3D4245, []),
+        ("nyc_lt", 0xA3A6A4, []), ("prr_dgle", 0x1F2A23, []), ("prr_top", 0x2C3830, []), ("prr_car", 0x7A3A2A, []),
+        ("sf_brown", 0x6A3427, []), ("sf_brown_dk", 0x582A20, []), ("sfrd", 0xEE9B2C, []), ("sfrd_dk", 0xCC8424, []),
+        ("flat_deck", 0x7E6B54, []), ("lumber", 0xCBA978, []), ("lumber_lt", 0xD8BC90, []), ("nw_black", 0x212226, []),
+        ("nw_ridge", 0x34363C, []), ("nw_smokebox", 0x4A4E54, []),
+        // modern (estimates but for UP's published colours and CSX's blue)
+        ("bnsf_orange", 0xE8641E, []), ("bnsf_yellow", 0xF4C20D, []), ("bnsf_black", 0x1C1C1C, []), ("truck_dk", 0x2A2A2A, []),
+        ("up_yellow_m", 0xFFCC00, []), ("up_grey_m", 0x666666, []), ("csx_blue", 0x003462, []), ("csx_yellow", 0xF0B400, []),
+        ("well", 0x4A4642, []), ("alum_car", 0xB9BAB4, []), ("rotary", 0xB5302A, []), ("coal_mod", 0x26231F, []),
+        ("auto_white", 0xE6E6E2, []), ("auto_white_dk", 0xC4C4C0, []), ("auto_brown", 0x6B3A2A, []), ("auto_brown_dk", 0x5A3024, []),
+        ("auto_roof", 0xA7A9AA, []), ("amtrak_silver", 0xBFC3C7, []), ("amtrak_roof", 0x8A8D90, []), ("amtrak_roof_lt", 0x9A9DA0, []),
+        ("amtrak_stripe", 0x2B5C8A, []), ("amfleet", 0xC4C7CA, []), ("amfleet_roof", 0x8E9195, []), ("amtrak_red", 0xC8102E, []),
+        ("alc_navy", 0x0E2A4F, []), ("alc_lblue", 0x3F7FC4, []), ("alc_white", 0xF4F4F4, []), ("alc_black", 0x111111, []),
+        ("alc_roof", 0x4A4E54, []), ("p42_grey", 0xB9BDC1, []), ("p42_blue", 0x1F5A96, []),
         // road vehicles
         ("v40_maroon", 0x5A1E24, []), ("v50_cream", 0xEDE6D2, []), ("v50_turq", 0x4AA8A0, []), ("v_glass", 0x3A4650, []),
+        ("v50_red", 0xB02A2A, []), ("v_white", 0xE8E8E6, []), ("v_black", 0x1C1C1E, []), ("v_grey", 0x6A6C70, []),
+        ("v_silver", 0xA8AAAE, []), ("v_blue", 0x2A4A8A, []), ("v_red", 0xA82424, []),
         // buildings
         ("sp_wall", 0xD8B860, []), ("sp_trim", 0x6E4E30, []), ("sp_roof", 0x4E6A3A, .snowTop), ("brick", 0x8E4A3A, []),
         ("brick_dk", 0x74382C, []), ("slate", 0x4A5058, .snowTop), ("canopy", 0x6E6E6A, .snowTop),
@@ -60,9 +78,13 @@ public enum RailArt {
         ("wall_blue", 0x8EA2B0, []), ("wall_brick", 0x9A5A44, []), ("door", 0x5A4232, []), ("house_win", 0x3C4650, .window),
         ("chimney", 0x7A4A3A, .snowTop), ("platform", 0xB0ACA4, .snowTop), ("platform_edge", 0xD8D4C8, .snowTop),
         ("wood_tank", 0x8A5A3A, []), ("wood_tank_dk", 0x6A4430, []), ("tank_roof", 0x4A3A2E, .snowTop), ("timber", 0x5A4632, []),
+        ("conc_tower", 0xA8A49C, .snowTop), ("conc_dark", 0x8A8680, []), ("elevator", 0xC8C4B8, .snowTop), ("elevator_dk", 0xA8A498, []),
+        ("freight_wall", 0x7A5A44, []), ("freight_door", 0x4A3828, []), ("dock", 0x6E5A44, .snowTop), ("tower_wall", 0x8E4A3A, []),
+        ("silo", 0xD8D6D0, .snowTop), ("silo_dk", 0xB8B6B0, []), ("shelter_glass", 0x6A8090, []), ("shelter_roof", 0x5A5E64, .snowTop),
+        ("roof_charcoal", 0x4A4A4C, .snowTop), ("roof_brown", 0x6A5A4C, .snowTop), ("roof_pale", 0xC8C8C4, .snowTop), ("wall_beige", 0xD8CCB4, []),
         // lineside
         ("post", 0x3A3634, []), ("post_white", 0xE8E4DC, []), ("pole", 0x5A4A3A, []), ("crossarm", 0x4A3C30, []),
-        ("lamp", 0xF0E8D0, .lamp), ("sig_head", 0x1A1A1C, []), ("concrete", 0xA8A49C, .snowTop), ("steel", 0x4E5258, []),
+        ("lamp", 0xF0E8D0, .lamp), ("sig_head", 0x1A1A1C, []), ("cl_head", 0x1A1A1C, []), ("concrete", 0xA8A49C, .snowTop), ("steel", 0x4E5258, []),
         ("steel_lt", 0x6A6E74, []), ("deck", 0x5A5650, .snowTop),
         // nature
         ("leaf", 0x4A6A24, .snowTop), ("leaf_lt", 0x6E8E3A, .snowTop), ("leaf_dk", 0x3E541A, .snowTop), ("trunk", 0x5A4232, []),
@@ -79,6 +101,18 @@ public enum RailArt {
         ("bank_a", 0x86924A, [.snowAll, .flat]), ("bank_dk_a", 0x6E783A, [.snowAll, .flat]),
         ("bank_w", 0xA09264, [.snowAll, .flat]), ("bank_dk_w", 0x857850, [.snowAll, .flat]),
     ]
+
+    /// Double-stack boxes in plain colours, and each one's shaded side at 0.8.
+    private static let containerMaterials: [(name: String, hex: UInt32, flags: Flags)] = containers.flatMap { name, hex in
+        let dim: (UInt32) -> UInt32 = { UInt32(Double($0) * 0.8) }
+        let dark: UInt32 = dim(hex >> 16 & 0xFF) << 16 | dim(hex >> 8 & 0xFF) << 8 | dim(hex & 0xFF)
+        return [("cn_" + name, hex, Flags.snowTop), ("cn_" + name + "_dk", dark, Flags())]
+    }
+
+    /// Container colours, after the lines' own (all estimates); no names, marks or lettering.
+    static let containers: [(String, UInt32)] = [("orange", 0xE8731E), ("yellow", 0xD9B23A), ("navy", 0x1F3A6B), ("blue", 0x2C5FA8),
+                                                 ("magenta", 0xB5176F), ("green", 0x2F6E3F), ("maroon", 0x6E2430), ("white", 0xE8E8E4),
+                                                 ("grey", 0xA9AEB2)]
 
     /// A material's index by name; 0 is empty.
     static let index: [String: UInt8] = Dictionary(uniqueKeysWithValues: table.enumerated().map { ($1.name, UInt8($0 + 1)) })
@@ -159,19 +193,88 @@ struct RailVehicle: Sendable {
 public struct Consist: Sendable {
     public let key: String, name: String, era: RailEra
     let vehicles: [RailVehicle], cruise: Double
+    /// How many vehicles at the front are its power (locomotives and tenders), which a train shortened to fit keeps.
+    var power = 1
+
+    init(key: String, name: String, era: RailEra, vehicles: [RailVehicle], cruise: Double, power: Int = 1) {
+        (self.key, self.name, self.era, self.vehicles, self.cruise, self.power) = (key, name, era, vehicles, cruise, power)
+        stops = !["bigboy", "gp9", "switcher", "up_f3", "sf_frt", "prr_gp9", "nw_a", "bnsf", "up_sd70", "csx"].contains(key)
+    }
     /// Freight trains run through the station; passenger trains stop.
-    var freight: Bool { ["bigboy", "gp9", "switcher"].contains(key) }
+    var freight: Bool { !stops }
+    /// Passenger trains stop at the station, and the New York Central's way freight at the freight house.
+    var stops: Bool
     /// Nothing over 20 px: it takes the tightest curve, on a loop inside another.
     public var short: Bool { vehicles.allSatisfy { $0.length <= 20 } }
     /// Couplers and all, as the track sees it.
     var length: Double { Double(vehicles.reduce(0) { $0 + $1.length + 2 } - 2) }
     /// The tightest curve it looks right on: model-railway compression, half again the longest car and more.
     var minRadius: Double { max(32, 1.6 * Double(vehicles.map(\.length).max()!)) }
+
+    /// Its caboose, last, if it has one.
+    private var caboose: RailVehicle? { vehicles.last.flatMap { $0.name.lowercased().contains("caboose") ? $0 : nil } }
+    /// The cars between its power and its caboose.
+    var cars: Int { vehicles.count - power - (caboose == nil ? 0 : 1) }
+
+    /// The same train with only its first `n` cars, keeping its power and caboose: a long train shortened to fit a
+    /// layout. Its key carries the count, as "sf_frt#5".
+    func shortened(to n: Int) -> Consist {
+        var c = Consist(key: key.split(separator: "#")[0] + "#\(n)", name: name, era: era,
+                        vehicles: Array(vehicles.prefix(power + n)) + (caboose.map { [$0] } ?? []), cruise: cruise, power: power)
+        c.stops = stops
+        return c
+    }
+
+    /// The most cars, five or more, it can keep and still be no longer than `length`; nil if it has no more than five
+    /// cars to begin with or can't get that short.
+    func cars(fitting length: Double) -> Int? {
+        guard cars > 5 else { return nil }
+        return stride(from: cars - 1, through: 5, by: -1).first { shortened(to: $0).length <= length }
+    }
 }
 
 /// A layout's era: its trains, buildings, crossings and signals.
 public enum RailEra: Int, CaseIterable, Sendable {
-    case streamliners, steam
+    case streamliners, steam, transition, modern
+}
+
+/// What an era puts by the line: ballast and ties; its street lamps' colour; what stands at the station; its level
+/// crossing (a wigwag; flashers and short gates; today's gates with three lamps on the arm, over concrete panels);
+/// its signals; whether a pole line runs along the road; its houses' walls and roofs; the buildings beside the line;
+/// its share of conifers; and the scenery's dice.
+struct EraLook {
+    enum Station { case depot, brick, freight, shelter }
+    enum Crossing { case wigwag, gates, modern }
+    enum Signals { case semaphore, searchlight, colour }
+    let ballast: UInt32, tie: UInt32, lamp: UInt32
+    let station: Station, crossing: Crossing, signals: Signals, poles: Bool
+    let walls: [String], roofs: [String], extras: [String], conifers: Double, dice: Int
+    /// Concrete crossing panels and the joints between them, in place of planks.
+    var panels: (UInt32, UInt32)? = nil
+
+    static let walls = ["wall_white", "wall_cream", "wall_yellow", "wall_grey", "wall_blue", "wall_brick"]
+    static let roofs = ["roof_green", "roof_red", "roof_black", "roof_grey"]
+}
+
+extension RailEra {
+    var look: EraLook {
+        switch self {
+        // cinders, lightened to read, and creosoted ties; incandescent lamps
+        case .steam: EraLook(ballast: 0x4E4844, tie: 0x3E3028, lamp: 0xFFAE54, station: .depot, crossing: .wigwag, signals: .semaphore,
+                             poles: true, walls: EraLook.walls, roofs: EraLook.roofs, extras: [], conifers: 0.45, dice: 1)
+        // granite and weathered ties; mercury lamps
+        case .streamliners: EraLook(ballast: 0x8A8884, tie: 0x6A6058, lamp: 0xC8E4F0, station: .brick, crossing: .gates, signals: .searchlight,
+                                    poles: true, walls: EraLook.walls, roofs: EraLook.roofs, extras: [], conifers: 0.35, dice: 2)
+        // trap rock and creosoted ties; mercury lamps; a freight house and dock (every train is a freight)
+        case .transition: EraLook(ballast: 0x55535A, tie: 0x3E3028, lamp: 0xC8E4F0, station: .freight, crossing: .gates, signals: .searchlight,
+                                  poles: true, walls: EraLook.walls, roofs: EraLook.roofs, extras: ["coaling", "elevator", "tower"], conifers: 0.35, dice: 3)
+        // granite and pale concrete ties; LED lamps; a low platform with a shelter; colour lights; no pole line
+        case .modern: EraLook(ballast: 0x8A8884, tie: 0xB4B0A8, lamp: 0xFFD5A1, station: .shelter, crossing: .modern, signals: .colour,
+                              poles: false, walls: ["wall_white", "wall_beige", "wall_grey", "wall_cream", "wall_blue"],
+                              roofs: ["roof_charcoal", "roof_brown", "roof_pale", "roof_grey"], extras: ["silos"], conifers: 0.35, dice: 4,
+                              panels: (0xB0ACA4, 0x77736C))
+        }
+    }
 }
 
 extension RailArt {
@@ -307,6 +410,98 @@ extension RailArt {
         [".CCCC" + r(".", 13), ".CCCC" + r(".", 13), ".CCCC" + "...mm....m..."],
     ]
     static let slopeTender = [[".kkk....kkk."], [r("b", 12)], [r("b", 12)], ["....bbbbbbbb", "....qqQqqqqq", "....qQqqqQqq"]]
+    // MARK: transition freight, 1945-57
+    /// An F-unit cab, freight: a lower side, b middle, u upper, n nose sides, t nose top, R roof.
+    static let fa = [
+        trucks25,
+        [r("a", 18) + "nnnnnn" + ".", r("a", 24) + "t", r("a", 24) + "h"],
+        [r("b", 18) + "nnnnn" + "..", r("b", 23) + "t" + ".", r("b", 23) + "t" + "."],
+        [r("u", 18) + "nccn" + "c" + "..", r("u", 22) + "c" + ".."],
+        [r("R", 22) + "...", "RFFRFF" + r("R", 16) + "...", r("R", 11) + "ff" + r("R", 9) + "...", "RFFRFF" + r("R", 16) + "...", r("R", 22) + "..."],
+    ]
+    static let fb = [trucks25, [r("a", 25)], [r("b", 25)], [r("u", 25)],
+                     [r("R", 25), "RFFRFF" + r("R", 19), r("R", 11) + "ff" + r("R", 12), "RFFRFF" + r("R", 19), r("R", 25)]]
+    /// A GP9 run long hood forward, as the Pennsylvania ran them: the cab and short hood at the back.
+    static let gp9Long = [
+        ["...kkkkk" + r(".", 12) + "kkkkk..."], [r("b", 28)],
+        ["...." + "bccb" + r(".", 20), r("b", 28), "h" + r("b", 26) + "h"],
+        ["...." + "bccb" + r(".", 20), "...." + "bbbb" + r("R", 20), "...." + "bbbb" + r("R", 14) + "FFRFFR"],
+        ["...." + "RRRR" + r(".", 20)],
+    ]
+    static let box24 = [
+        [".kkk" + r(".", 16) + "kkk."], [r("R", 10) + "DDDD" + r("R", 10), r("R", 24)], [r("R", 10) + "DDDD" + r("R", 10), r("R", 24)],
+        [r("R", 24)], [r("K", 24), r("K", 24), r("P", 24)],
+    ]
+    /// A bulkhead flat with lumber.
+    static let flat = [[".kkk" + r(".", 14) + "kkk."], [r("e", 22)], ["e.llllll.llllll.llll.e"], ["e.LLLLLL.LLLLLL.LLLL.e"]]
+    /// The N&W class A, 2-6-6-4: 121 ft 9 in with its tender, drawn 36 + 20 at about the Big Boy's squeeze (the split
+    /// between engine and tender is an estimate). The cab over a four-wheel trailing truck, two sets of three drivers,
+    /// one pair of leading wheels, the stack near the smokebox.
+    static let classA = [
+        ["..kkkk....ddrdddrdd..ddrdddrdd.kk.pp", "..." + r("k", 31) + "pp"],
+        ["." + r("C", 7) + r("a", 24) + "xx..", "." + r("C", 7) + r("b", 24) + "xx.."],
+        ["." + r("C", 7) + r(".", 28), "." + r("C", 7) + r("b", 24) + "xx..", "." + r("C", 7) + r("b", 24) + "xh.."],
+        ["." + "CccCccC" + r(".", 28), "." + r("C", 7) + r("b", 24) + "xx..", "." + r("C", 7) + r("b", 24) + "xx.."],
+        ["." + r("C", 7) + r(".", 28), "." + r("C", 7) + r("b", 24) + "x...", "." + r("C", 7) + r("B", 24) + "x..."],
+        ["." + r("C", 7) + r(".", 28), "." + r("C", 7) + r(".", 28), "." + r("C", 7) + "...mmm......mm........mm...."],
+    ]
+    /// Twelve wheels, two three-axle trucks; the coal at the front, by the cab.
+    static let tender12 = [
+        ["..kkkkkk....kkkkkk.."], [r("b", 20)], [r("b", 20)], [r("b", 20)],
+        [r("b", 20), r("b", 10) + "qqQqqqqQqq", "bbbHHbbbbb" + "qQqqqQqqqq", r("b", 10) + "qqqqQqqqqQ", r("b", 20)],
+        [r(".", 20), r(".", 12) + "qqQqqq..", r(".", 12) + "qQqqqq.."],
+    ]
+
+    // MARK: modern
+    /// A GE Evolution or EMD SD70ACe hood unit, compressed to 30: l sill, b lower hood side, B upper, m cab front, n nose top.
+    static let hood30 = [
+        ["..kkkkkk" + r(".", 14) + "kkkkkk.."], [r("l", 30)],
+        [r(".", 21) + "bbbbbm" + "...", r("b", 26) + "m" + "bbb", r("b", 26) + "m" + "bbh"],
+        [r(".", 21) + "BccccB" + "...", r("B", 26) + "m" + "nnn"],
+        [r(".", 21) + "RRRRRR" + "...", r("R", 27) + "...", "FFRFFR" + r("R", 21) + "..."],
+        [r(".", 30), r(".", 10) + "RRRRR" + r(".", 15)],
+    ]
+    /// BNSF's Heritage III: its black lower edge striped with yellow.
+    static let hood30BNSF = [hood30[0], [r("yyll", 7) + "yy", r("l", 30)]] + Array(hood30[2...])
+    /// A well car with a 40 ft box below and a 53 ft box on top.
+    static let well = [
+        ["kkk" + r("w", 22) + "kkk"], ["w" + r("A", 26) + "w"], ["." + r("AAa", 8) + "AA" + ".", "." + r("A", 26) + "."],
+        [".." + r("CCc", 8) + "..", ".." + r("C", 24) + ".."], [".." + r("CCc", 8) + "..", ".." + r("C", 24) + ".."],
+    ]
+    /// An aluminium coal gondola, its rotary coupler end in red.
+    static let gondola = [
+        [".kkk" + r(".", 14) + "kkk."], ["r" + r("g", 21)], ["r" + r("g", 21), "r" + r("q", 20) + "g"],
+        [r(".", 22), "..." + "qqqq" + "...." + "qqqq" + r(".", 7), "..." + "qQqq" + "...." + "qqQq" + r(".", 7)],
+    ]
+    static let autorack = [[".kkk" + r(".", 26) + "kkk."], [r("p", 34)], [r("pPp", 11) + "p", r("p", 34)], [r("pPp", 11) + "p", r("p", 34)],
+                           [r("p", 34)], [r("r", 34)]]
+    static let superliner = [
+        ["..kkkk" + r(".", 20) + "kkkk.."], [r("s", 32)], ["s" + r("sws", 10) + "s", r("s", 32)], [r("B", 32), r("s", 32)], [r("s", 32)],
+        ["s" + r("swws", 7) + "sss", r("s", 32)], [r("r", 32), r("r", 32), r("R", 32)],
+    ]
+    static let amfleet = [
+        ["..kkkk" + r(".", 20) + "kkkk.."], [r("r", 32), r("s", 32)], ["B" + r("BwwB", 7) + "BBB", r("s", 32)], [r("s", 32)],
+        [r("q", 32), r("q", 32), r("Q", 32)],
+    ]
+    /// A Siemens ALC-42 Charger.
+    static let charger = [
+        ["..kkkkkk" + r(".", 14) + "kkkkkk.."],
+        [r("r", 29) + ".", r("r", 29) + "n", r("r", 29) + "h"],
+        [r("N", 12) + "W" + r("L", 15) + "..", r("N", 12) + "W" + r("L", 16) + ".", r("N", 12) + "W" + r("L", 15) + "h" + "."],
+        [r("N", 16) + "W" + r("N", 5) + "WKKKr" + "...", r("N", 22) + "KKKK" + "...."],
+        [r("G", 25) + ".....", r("G", 25) + ".....", "GFFGFF" + r("G", 19) + "....."],
+    ]
+    /// A GE P42DC Genesis.
+    static let genesis = [
+        ["..kkkkk" + r(".", 15) + "kkkkk.."],
+        [r("r", 28) + ".", r("e", 29), r("e", 28) + "h"],
+        [r("e", 27) + "..", r("e", 28) + "."],
+        ["BBBeBBBBeBBBBeBBBBeBBBB" + "cc" + "....", r("B", 25) + "...."],
+        [r("B", 22) + ".......", r("B", 22) + ".......", "BFFBFFB" + r("B", 15) + "......."],
+    ]
+    /// A Ford "Big Job" stake-bed truck, 23 ft: the transition era's road vehicle.
+    static let stakeTruck = [[r("a", 10)], ["bbbbbb..ga", "b....b..ga"], [r(".", 8) + "aa"]]
+
     /// A road car, 3 wide.
     static let car = [["aaaaaaa"], [".gwwg..", ".rrrr.."]]
 
@@ -348,9 +543,65 @@ extension RailArt {
                                                              "a": "bb_board", "b": "bb_black", "B": "bb_ridge", "x": "bb_smokebox", "h": "headlight", "m": "bb_dome"], bogies: 0.6)
     static let swTender = RailVehicle("Slope-back tender", slopeTender, ["k": "truck", "b": "bb_black", "q": "coal", "Q": "coal_glint"])
 
-    static func roadCar(_ era: RailEra) -> RailVehicle {
-        let (body, roof) = era == .steam ? ("v40_maroon", "v40_maroon") : ("v50_turq", "v50_cream")
-        return RailVehicle("road car", car, ["a": body, "g": "v_glass", "w": "v_glass", "r": roof], width: 3, bogies: 0.6)
+    static let redCab = RailVehicle("Red caboose", caboose, ["k": "truck", "y": "car_red", "w": "window", "R": "roof_black"])
+    static let upF3a = RailVehicle("UP F3 A", fa, lv(truck, ["k": "truckgrey", "a": "up_yellow", "b": "up_yellow", "u": "up_yellow", "n": "up_yellow",
+                                                         "t": "up_nose", "R": "up_grey", "F": "fan", "f": "fan_lt"]))
+    static let upF3b = RailVehicle("UP F3 B", fb, lv(truck, ["k": "truckgrey", "a": "up_yellow", "b": "up_yellow", "u": "up_yellow", "R": "up_grey",
+                                                         "F": "fan", "f": "fan_lt"]))
+    /// Santa Fe freight: dark blue with a yellow nose and a yellow stripe low on the side (the one along the top is
+    /// left out: a third of the side in yellow read as a wasp), and the blue roof of 1954 on, which reads from above as
+    /// black did not.
+    static let sfF7aFrt = RailVehicle("Santa Fe F7 A, freight", fa, lv(truck, ["a": "sf_frt_yellow", "b": "sf_blue", "u": "sf_blue", "n": "sf_frt_yellow",
+                                                                           "t": "sf_frt_yellow", "R": "sf_blue", "F": "fan", "f": "fan_lt"]))
+    static let sfF7bFrt = RailVehicle("Santa Fe F7 B, freight", fb, lv(truck, ["a": "sf_frt_yellow", "b": "sf_blue", "u": "sf_blue", "R": "sf_blue",
+                                                                           "F": "fan", "f": "fan_lt"]))
+    static let nycF7a = RailVehicle("NYC F7 A", fa, lv(truck, ["a": "nyc_dk", "b": "nyc_lt", "u": "nyc_dk", "n": "nyc_dk", "t": "nyc_dk", "R": "nyc_dk",
+                                                           "F": "fan", "f": "fan_lt"]))
+    static let prrGP9 = RailVehicle("PRR GP9", gp9Long, lv(truck, ["b": "prr_dgle", "R": "prr_top", "F": "fan"]))
+    static let sfBox = RailVehicle("Santa Fe 50 ft boxcar", box24, ["k": "truck", "R": "sf_brown", "D": "sf_brown_dk", "K": "roof_blk", "P": "runboard"])
+    static let sfrd = RailVehicle("SFRD reefer", reefer, ["k": "truck", "o": "sfrd", "d": "sfrd_dk", "A": "roof_blk", "h": "hatch"])
+    static let flatcar = RailVehicle("Lumber flat", flat, ["k": "truck", "e": "flat_deck", "l": "lumber", "L": "lumber_lt"])
+    static let n5c = RailVehicle("PRR N5c caboose", caboose, ["k": "truck", "y": "prr_car", "w": "window", "R": "roof_blk"])
+    static let nwA = RailVehicle("N&W class A", classA, ["k": "bb_drivers", "d": "bb_drivers", "r": "bb_rod", "p": "black", "C": "nw_black",
+                                                         "c": "cabglass", "a": "nw_ridge", "b": "nw_black", "B": "nw_ridge", "x": "nw_smokebox",
+                                                         "h": "headlight", "m": "nw_ridge"], bogies: 0.7)
+    static let nwTender = RailVehicle("N&W tender, 12 wheels", tender12, ["k": "truck", "b": "nw_black", "q": "coal", "Q": "coal_glint", "H": "nw_ridge"])
+    static let bnsfES44 = RailVehicle("BNSF ES44AC", hood30BNSF, lv(truck, ["k": "truck_dk", "l": "bnsf_black", "y": "bnsf_yellow", "b": "bnsf_orange",
+                                                                         "B": "bnsf_orange", "m": "bnsf_orange", "R": "bnsf_orange", "n": "bnsf_yellow",
+                                                                         "F": "fan"]))
+    static let upSD70 = RailVehicle("UP SD70ACe", hood30, lv(truck, ["k": "truckgrey", "l": "up_yellow_m", "b": "up_yellow_m", "B": "up_grey_m",
+                                                                  "m": "up_yellow_m", "R": "up_grey_m", "n": "up_grey_m", "F": "fan"]))
+    static let csxES44 = RailVehicle("CSX ES44AH", hood30, lv(truck, ["l": "csx_blue", "b": "csx_blue", "B": "csx_blue", "m": "csx_yellow",
+                                                                   "R": "csx_blue", "n": "csx_yellow", "F": "fan"]))
+    /// Each well car a different pair of boxes.
+    static let wells = [("orange", "navy"), ("white", "maroon"), ("blue", "grey"), ("green", "orange"), ("magenta", "white"),
+                        ("yellow", "blue"), ("grey", "green"), ("maroon", "yellow")].map { a, c in
+        RailVehicle("Double-stack well car, \(a) and \(c)", well, ["k": "truck", "w": "well", "A": "cn_" + a, "a": "cn_" + a + "_dk",
+                                                                 "C": "cn_" + c, "c": "cn_" + c + "_dk"])
+    }
+    static let gon = RailVehicle("Aluminium coal gondola", gondola, ["k": "truck", "g": "alum_car", "r": "rotary", "q": "coal_mod", "Q": "coal_glint"])
+    static let autoW = RailVehicle("Autorack", autorack, ["k": "truck", "p": "auto_white", "P": "auto_white_dk", "r": "auto_roof"])
+    static let autoB = RailVehicle("Autorack, brown", autorack, ["k": "truck", "p": "auto_brown", "P": "auto_brown_dk", "r": "auto_roof"])
+    static let superlinerCar = RailVehicle("Superliner", superliner, lv(truck, ["s": "amtrak_silver", "B": "amtrak_stripe", "r": "amtrak_roof",
+                                                                             "R": "amtrak_roof_lt"]))
+    static let amfleetCar = RailVehicle("Amfleet I", amfleet, lv(truck, ["s": "amfleet", "B": "amtrak_stripe", "r": "amtrak_red", "q": "amfleet_roof",
+                                                                      "Q": "amtrak_roof_lt"]))
+    static let alc42 = RailVehicle("Amtrak ALC-42", charger, lv(truck, ["r": "amtrak_red", "n": "alc_navy", "N": "alc_navy", "L": "alc_lblue",
+                                                                     "W": "alc_white", "K": "alc_black", "G": "alc_roof", "F": "fan"]))
+    static let p42 = RailVehicle("Amtrak P42DC", genesis, lv(truck, ["r": "amtrak_red", "e": "p42_grey", "B": "p42_blue", "F": "fan"]))
+    static let fordTruck = RailVehicle("Ford stake-bed truck", stakeTruck, ["a": "v50_red", "b": "flat_deck", "g": "v_glass"], width: 3, bogies: 0.6)
+
+    /// The road vehicle, by era and seed: a 1940s or 1950s car, a stake-bed truck, or today's cars, mostly white.
+    static func roadVehicle(_ era: RailEra, seed: Int) -> RailVehicle {
+        let paint: [(String, String)]
+        switch era {
+        case .steam: paint = [("v40_maroon", "v40_maroon")]
+        case .streamliners: paint = [("v50_turq", "v50_cream")]
+        case .transition: return fordTruck
+        case .modern: paint = ["v_white", "v_white", "v_white", "v_black", "v_grey", "v_silver", "v_blue", "v_red"].map { ($0, $0) }
+        }
+        let (body, roof) = paint[Int(hsh(seed, 77) * Double(paint.count))]
+        return RailVehicle("road car, \(body)", car, ["a": body, "g": "v_glass", "w": "v_glass", "r": roof], width: 3, bogies: 0.6)
     }
 
     /// Every train, by key.
@@ -361,14 +612,41 @@ extension RailArt {
         Consist(key: "gn", name: "Great Northern F7 streamliner", era: .streamliners,
                 vehicles: [gnF7aCar, gnF7bCar, gnCoachCar, gnDomeCar, gnCoachCar], cruise: 16),
         Consist(key: "bigboy", name: "Union Pacific Big Boy, mixed freight", era: .steam,
-                vehicles: [bb, bbTender, box, pfe, hop, hop, tank, box, pfe, cab], cruise: 13),
+                vehicles: [bb, bbTender, box, pfe, hop, hop, tank, box, pfe, cab], cruise: 13, power: 2),
         Consist(key: "gs4", name: "Southern Pacific GS-4 Daylight", era: .steam, vehicles: [spGS4, spTender, spCar, spCar, spCar], cruise: 17),
         Consist(key: "hiawatha", name: "Milwaukee Road Hiawatha", era: .steam, vehicles: [mwHudson, mwTender, mwCar, mwCar, mwCar], cruise: 18),
         // short trains, for a tight inner loop
         Consist(key: "rdc", name: "Budd RDC pair", era: .streamliners, vehicles: [rdcCar, rdcCar], cruise: 15),
         Consist(key: "gp9", name: "Union Pacific GP9 local", era: .streamliners, vehicles: [upGP9, shortBox, hop, shortBox], cruise: 12),
         Consist(key: "switcher", name: "0-6-0 switcher with short cars", era: .steam, vehicles: [sw, swTender, shortBox, hop], cruise: 11),
+        // transition freight, 1945-57: freights all but the New York Central's way freight, which stops at the freight
+        // house as a passenger train does at a station; speeds differ a little, so a train sharing a loop sometimes
+        // closes up on the one ahead and waits at a signal
+        Consist(key: "up_f3", name: "Union Pacific F3 with PFE reefers", era: .transition,
+                vehicles: [upF3a, upF3b] + Array(repeating: pfe, count: 7) + [cab], cruise: 13, power: 2),
+        Consist(key: "sf_frt", name: "Santa Fe F7 freight", era: .transition,
+                vehicles: [sfF7aFrt, sfF7bFrt, sfBox, sfrd, sfBox, sfrd, sfBox, sfrd, sfBox, redCab], cruise: 15, power: 2),
+        Consist(key: "prr_gp9", name: "Pennsylvania GP9 with coal hoppers", era: .transition,
+                vehicles: [prrGP9] + Array(repeating: hop, count: 7) + [n5c], cruise: 11),
+        Consist(key: "nyc_f7", name: "New York Central F7 way freight", era: .transition,
+                vehicles: [nycF7a, box, tank, flatcar, box, tank, flatcar, box, redCab], cruise: 14),
+        Consist(key: "nw_a", name: "Norfolk and Western class A, hopper drag", era: .transition,
+                vehicles: [nwA, nwTender] + Array(repeating: hop, count: 9) + [redCab], cruise: 12, power: 2),
+        // modern
+        Consist(key: "bnsf", name: "BNSF ES44AC Heritage III, double-stacks", era: .modern, vehicles: [bnsfES44] + wells, cruise: 15),
+        Consist(key: "up_sd70", name: "Union Pacific SD70ACe, coal gondolas", era: .modern, vehicles: [upSD70] + Array(repeating: gon, count: 8), cruise: 12),
+        Consist(key: "csx", name: "CSX ES44AH, autoracks and tank cars", era: .modern,
+                vehicles: [csxES44, autoW, autoB, autoW, tank, tank, autoB, tank, tank], cruise: 14),
+        Consist(key: "amtrak_alc", name: "Amtrak ALC-42 Phase VII, Superliners", era: .modern,
+                vehicles: [alc42] + Array(repeating: superlinerCar, count: 4), cruise: 17),
+        Consist(key: "amtrak_p42", name: "Amtrak P42 Phase V, Amfleet I", era: .modern, vehicles: [p42] + Array(repeating: amfleetCar, count: 5), cruise: 18),
     ].map { ($0.key, $0) })
+
+    /// A train by key, shortened if its key says so ("sf_frt#5").
+    static func consist(_ key: String) -> Consist {
+        let parts = key.split(separator: "#"), base = trains[String(parts[0])]!
+        return parts.count > 1 ? base.shortened(to: Int(parts[1])!) : base
+    }
 
     /// Each era's trains, in the order a layout tries them: the main line's, or the short ones for an inner loop.
     public static func trains(of era: RailEra, short: Bool = false) -> [Consist] {

@@ -4,7 +4,7 @@ A model railway seen from above in pixel art: one to three trains of one era run
 
 Dave asked for it on 2026-10-15: "a top down procedurally generate model train track and train layout, I loved playing with model trains when I was little ... in the pixel style we have been doing ... relatively simple procedural loop layouts that fill the screen and have 1-3 trains able to run along them in various well know styles, santa fe, etc". It was researched by five agents, mocked up in Python as geometry ([Mock-ups](#mock-ups)), and on seeing the sheets he said "yes to everything you are showing me, it looks awesome". It was built the same day behind the `unfinished` switch.
 
-- **Source:** `Sources/Atrium/PixelRailway.swift` (the scene: its canvas, the clock, the weather, Settings and the fade to a new layout) and `Sources/RailLayout/`, its own module built with `-O`: `Art.swift` (materials, every vehicle as slices, the trains), `Render.swift` (the views, the voxel ray march, the canvas, the scenery models), `Layout.swift` (the loops and their crossings), `Scenery.swift` (everything round the track), `Static.swift` (the picture under the trains), `Sim.swift` (the trains, signals and the road), `Railway.swift` (the whole, and drawing the moving things each frame).
+- **Source:** `Sources/Atrium/PixelRailway.swift` (the scene: its canvas, the clock, the weather, Settings and the fade to a new layout) and `Sources/RailLayout/`, its own module built with `-O`: `Art.swift` (materials, every vehicle as slices, the trains, and what each era puts by the line), `Season.swift` (the time of year), `Render.swift` (the views, the voxel ray march, the canvas, the scenery models), `Layout.swift` (the loops and their crossings), `Scenery.swift` (everything round the track), `Static.swift` (the picture under the trains), `Sim.swift` (the trains, signals and the road), `Railway.swift` (the whole, and drawing the moving things each frame).
 - **Data:** none. Every layout is made from the clock; every vehicle and building is a few strings of slices.
 - **Tests:** `Tests/AtriumTests/RailwayTests.swift` writes one layout in each view and era, by day, at night and in snow, to `$TMPDIR/atrium-railway/` (`RAILWAY_SEED=` picks another).
 - **Pictures of it:** `docs/images/pixel-railway.jpg`.
@@ -28,6 +28,9 @@ Dave asked for it on 2026-10-15: "a top down procedurally generate model train t
 | First eras | US streamliners and US steam; the others come after |
 | The mock-ups | "yes to everything you are showing me, it looks awesome" |
 | Which view stays (later the same day, from sheets of three layouts in each) | "Both, top-down standard" |
+| The next two eras (from their sheets: transition freight 1945–57, and today's US) | "Build both as drawn" |
+| Long freights, which in isometric never fit three to a layout | "Shorten to fit": a train a layout can't take at full length drops cars, down to about five |
+| The N&W class A, first drawn on the Big Boy's slices | "Give it its own shape" (a 2-6-6-4, 36 + 20 px at the Big Boy's compression) |
 
 The lead's calls, not ruled on: model-railway compression (locomotives 25–38 px, cars 16–30, three to five cars to a passenger train and eight and a caboose to the freight); Size changes the art pixel (3, 4 or 5 points on a 982-point-high screen), not the drawings; every vehicle baked at 64 headings from its slices as first drawn; the simulation stepped at a fixed 1/60 s; "Great Northern streamliner", not "Empire Builder" (an Amtrak mark); the disclaimer's wording.
 
@@ -39,11 +42,13 @@ The lead's calls, not ruled on: model-railway compression (locomotives 25–38 p
 
 **Units and views.** One world unit is one top-down art pixel, 2 ft at model-railway compression (an F7 is 25 by 5). y runs down the screen, z up. The 3/4 view puts a point at (x, y − z): each unit of height shows one pixel up the screen. Isometric puts it at (x − y + W/2, (x + y)/2 + H/2 − z), the layout on the world's axes so its straights run on the 2:1 diagonals. Depth (larger is nearer) is y + z, or x + y + z in iso; anything flat takes the depth where its pixel's ray meets its plane, so coplanar layers never fight. In 3/4, track centrelines sit on pixel centres.
 
-**Layout** (`Layout.swift`). The trains go largest radius first, each needing max(32, 1.6 × its longest vehicle). A plan is drawn first: twice-around (twice as likely), loop in a loop, or two side by side. A loop is the outline of a union of one to three random rectangles on a 2-unit raster, 40% of its corners cut at 45° by 0.8–1.6 R, every corner rounded by the largest arc up to 1.15 R that fits; it's thrown away if any curve is under 0.98 R or the loop is shorter than 2.2 trains. A twice-around's second loop is built across one of the first's straights at right angles. Wherever two loops come within 14 units they must cross cleanly, at 40° or more and straight for 12 either side. Of a pair that cross twice, one crossing becomes a bridge, the upper loop ramping up 1:6 to a deck 7 high. Diamonds closer than the longest train and 40 along any loop are reserved together. A train that gets no loop of its own runs on the longest one with room behind another, if blocks can be laid on it that the two can never hold all of ([Layout.planBlocks](../Sources/RailLayout/Layout.swift): the fewest, four or more and more than the trains, each train spanning at most its length over the shortest block and one more, and reserving one ahead), so they never lock, with no block beginning from 40 before a diamond to a train-length past it. In iso each loop is one rectangle on the world's axes, kept on the screen.
+**Layout** (`Layout.swift`). The trains go largest radius first, each needing max(32, 1.6 × its longest vehicle). A plan is drawn first: twice-around (twice as likely), loop in a loop, or two side by side. A loop is the outline of a union of one to three random rectangles on a 2-unit raster, 40% of its corners cut at 45° by 0.8–1.6 R, every corner rounded by the largest arc up to 1.15 R that fits; it's thrown away if any curve is under 0.98 R or the loop is shorter than 2.2 trains. A twice-around's second loop is built across one of the first's straights at right angles. A long freight that a loop is too short for drops cars, keeping its locomotives and caboose, down to five; it is offered a shorter loop only after half the tries at full length, so trains run long where there's room. Wherever two loops come within 14 units they must cross cleanly, at 40° or more and straight for 12 either side. Of a pair that cross twice, one crossing becomes a bridge, the upper loop ramping up 1:6 to a deck 7 high. Diamonds closer than the longest train and 40 along any loop are reserved together. A train that gets no loop of its own runs on the longest one with room behind another, if blocks can be laid on it that the two can never hold all of ([Layout.planBlocks](../Sources/RailLayout/Layout.swift): the fewest, four or more and more than the trains, each train spanning at most its length over the shortest block and one more, and reserving one ahead), so they never lock, with no block beginning from 40 before a diamond to a train-length past it. In iso each loop is one rectangle on the world's axes, kept on the screen.
 
-**Fitting everything** (`Railway.swift`). A layout often can't place every train, or a station. So each is grown from up to six seeds drawn from the period's, the third of them with a short train in place of the third big one (it takes the tightest curve, 32, and prefers a loop inside another: a rectangle 2R + 4 to 4R a side, every point of its edge inside the bigger loop and at least 22 from its track), and the first with every train and a station is kept, else the first with most, a station and its town counting as much as a train (a layout without its town looks bare). Over 20 periods on Dave's laptop canvas, top-down: a station on all 20 in both eras, and three trains on 20 (streamliners) and 19 (steam). Isometric fits fewer: a station on 15 of 20 in each, three trains on 9 and 11.
+**Fitting everything** (`Railway.swift`). A layout often can't place every train, or a station. So each is grown from up to six seeds drawn from the period's, the third of them with a short train in place of the third big one (it takes the tightest curve, 32, and prefers a loop inside another: a rectangle 2R + 4 to 4R a side, every point of its edge inside the bigger loop and at least 22 from its track), and the first with every train and a station is kept, else the first with most, a station and its town counting as much as a train (a layout without its town looks bare). Over 20 periods on Dave's laptop canvas, top-down: three trains and a station on 19 or 20 of 20 in every era. Isometric fits fewer: a station on 15 to 18 of 20, three trains on 9 (streamliners) and 11 (steam), but only 3 and 4 with the transition and today's long freights, since usually one big loop fits and two trains at most share it.
 
 **Scenery** (`Scenery.swift`), all from the seed. The station goes on the clearest straight of 76 units or more, passenger loops first: a platform 4 wide, 4–8 off the centreline; for steam a Southern Pacific style wooden depot and a water tank, for streamliners a brick station with a canopy over 60% of the platform. The main road crosses the track at right angles just past the platform's far end, so a train standing at the platform never blocks it, with crossbucks and a wigwag (steam) or flasher masts and short gates (streamliners), and a pole line. The main road is 7 wide with a gravel shoulder. Off it the town is a small grid of streets 5 wide with kerbs: parallel to the track at 22 and 50 either side (the 50s only beyond a 22), each running up to 70 each way while there's room, joined by cross streets at 34 and 66 along, with up to 28 gabled houses along them. A pond takes the largest clear disc, inside a loop if it can; a hill with a cutting, a stone headwall and a dark bore sits on a long curve; about 230 trees are thrown as darts, thicker in clumps, more conifers for steam. A broadleaf is a dark trunk (#3E3630) forking into three or four branches up to a light, ragged crown of fine twigs (#948A80), which is what shows when it's bare, with whatever leaves are out on the day laid over it. Signals: one past the platform on a lone train's loop, a home signal at each diamond, and on a loop two trains share one at each block's entrance, never from a diamond's approach to a train-length past it, and where it can be helped not where a train held at it would stand on the road, at the platform or in the tunnel. A long train on a short loop needs 9 to 17 blocks, most of whose signals would only ever show clear, so the trains are run for ten minutes as the layout is built and only the signals one of them stops at are drawn, with the starting signal past the platform: two or three to a loop. Semaphores for steam, searchlights for streamliners. A station where a standing train would hold a diamond gets no stop.
+
+**Eras** (`Art.swift`'s `EraLook`). Each layout keeps to one era. Steam: cinders, a wooden depot and water tank, a wigwag, semaphores, incandescent lamps, more conifers. Streamliners: granite, a brick station with a canopy, flashers and short gates, searchlights, mercury lamps. Transition freight, 1945–57: trap rock, a freight house and timber dock where the New York Central's way freight stops (every other train is a freight), flashers and gates, searchlights, a stake-bed truck on the road, and where there's room a concrete coaling tower with a water tank, a grain elevator, and an interlocking tower beside a diamond. Today: granite and pale concrete ties, a low platform with a glass shelter, longer gate arms with three red lamps over concrete crossing panels, colour-light signals, LED lamps, no pole line, concrete silos, and cars mostly white. Tall buildings are squashed to fit (a real coaling tower or elevator stands 100 ft, 50 px), and stand on the side of the track further up the screen so they don't hide it.
 
 **Seasons** (`Season.swift`). The scene works out the time of year where you are from A Tree for the Year's calendar (`Phenology`: a white oak's dates at 42°N, spring 4 days later and autumn 3 days sooner a degree further from the equator, latitude held to 28–50°, half a year on south of the equator) and its grass greenness, a whole day at a time, and passes it in. The grass runs from straw (#9A8C5E) to summer green (#5A9636) with the greenness, through autumn's olive (#7E8A44); the pond, conifers, hill and banks have their own colours each season. Every leaf turns, browns and falls on its own day, the tops and some trees first, in wine, orange or yellow by tree; new leaves are lime; a quarter of the oaks hold a few buff leaves through winter. Snow lies when the weather says a centimetre or more does (or while previewing it), over whatever the season is.
 
@@ -67,7 +72,7 @@ Why (the research, not legal advice): Union Pacific sued model makers in 2004 ov
 | Size | Small, Medium (Pixel City's pixel: 4 points on a 982-point-high screen) or Large: the art pixel, so more room for track when smaller |
 | Trains | One, up to two, or up to three (the standard): two may share a loop under block signals, or the third be a short train on a tight inner loop; a train that still doesn't fit is left off |
 | New layout every | Hour, 3 hours (standard), 6 hours, or Day |
-| Eras | US streamliners (Santa Fe F7 warbonnet with Hi-Levels; Union Pacific E9 with an Astra Dome; Great Northern F7 streamliner; for an inner loop, a Budd RDC pair or a Union Pacific GP9 local) and US steam (Union Pacific Big Boy with mixed freight and a caboose; Southern Pacific GS-4 Daylight; Milwaukee Road Hiawatha; for an inner loop, an 0-6-0 switcher with short cars); none ticked counts as both |
+| Eras | US streamliners (Santa Fe F7 warbonnet with Hi-Levels; Union Pacific E9 with an Astra Dome; Great Northern F7 streamliner; for an inner loop, a Budd RDC pair or a Union Pacific GP9 local), US steam (Union Pacific Big Boy with mixed freight and a caboose; Southern Pacific GS-4 Daylight; Milwaukee Road Hiawatha; for an inner loop, an 0-6-0 switcher with short cars), US transition freight (Union Pacific F3 with PFE reefers; Santa Fe F7 freight; Pennsylvania GP9 with coal hoppers; New York Central F7 way freight; Norfolk and Western class A with a hopper drag) and US today (BNSF ES44AC Heritage III with double-stacks; Union Pacific SD70ACe with coal gondolas; CSX ES44AH with autoracks and tank cars; Amtrak ALC-42 Phase VII with Superliners; Amtrak P42 Phase V with Amfleet I); none ticked counts as all |
 | Seasons | The real time of year where you are, always; snow on the ground when Open-Meteo says there's a centimetre or more where you are (the request every weather wallpaper shares) |
 | Preview | A day of the year; snow; a time of day |
 
@@ -84,11 +89,11 @@ Why (the research, not legal advice): Union Pacific sued model makers in 2004 ov
 
 ## Still open
 
-From the mock-ups' review: stripes still thin out at some headings (better with four rays a pixel, not gone); three diamonds near each other are reserved together, so a train can wait up to 7 s for a train on another diamond; headlight pools are faint on grass; a train held behind one standing at the station waits up to 30 s. The other eras (transition freight, modern US, Britain, Germany and the Alps, European high speed, the Shinkansen) are to come, and switches and sidings after them. The long disclaimer goes into About and NOTICE when Pixel Railway is shown to everyone.
+From the mock-ups' review: stripes still thin out at some headings (better with four rays a pixel, not gone); three diamonds near each other are reserved together, so a train can wait up to 7 s for a train on another diamond; headlight pools are faint on grass; a train held behind one standing at the station waits up to 30 s. The international eras (Britain, Germany and the Alps, European high speed, the Shinkansen) are to come, and switches and sidings after them. The long disclaimer goes into About and NOTICE when Pixel Railway is shown to everyone.
 
 ## Next ideas
 
-- The other eras the research shortlisted, with overhead wire for the electric ones (a 1-pixel line at 35–45% over the track, T-masts every 80–100 px).
+- The international eras the research shortlisted, with overhead wire for the electric ones (a 1-pixel line at 35–45% over the track, T-masts every 80–100 px).
 - Switches and sidings, after Dave has lived with loops.
 
 ## Sources
@@ -422,3 +427,50 @@ The research behind it, by the agent that found it: rail-us (American trains, pa
 - https://liamappelbe.medium.com/how-to-generate-slither-link-puzzles-6c65510b2ba1
 - https://www.gamedeveloper.com/programming/generating-procedural-racetracks
 - https://forum.trains.com/t/whats-your-max-grade/199019
+
+### Transition freight and today (rail-craft, round 5)
+- https://utahrails.net/up/up-diesel-paint-classic-era.php
+- https://bbcrc.org/pfe-reefer-home.html
+- https://forum.trains.com/t/roof-colors/248184
+- https://utahrails.net/caboose/caboose-paint.php
+- https://sfrhms.org/files/funits/f7notes.htm
+- https://sfrhms.org/files/funits/ftnotes.htm
+- https://sfrhms.org/files/KJordan/SFRHMS%20Painting%20Guide.pdf
+- https://oklahomarailwaymuseum.org/exhibits/conx-50020-sante-fe-6919-boxcar/
+- https://www.psrm.org/?p=382
+- https://forum.trains.com/t/dgle/292843
+- https://en.wikipedia.org/wiki/EMD_GP9
+- https://rgvrrm.org/about/railroad/prr477822/
+- https://www.trains.com/?p=42221
+- https://forum.trains.com/t/gp7-nyc/180736
+- https://utahrails.net/up/up-freight-paint.php
+- https://rrmodelcraftsman.com/utlx-x-3-tank-cars-arrive-from-rapido-trains/
+- https://en.wikipedia.org/wiki/Norfolk_and_Western_class_A
+- https://www.railpictures.net/photo/678898/
+- https://en.wikipedia.org/wiki/BNSF_Railway
+- https://utahrails.net/up/up-paint-html.php
+- https://en.wikipedia.org/wiki/Union_Pacific_Railroad
+- https://www.brandcolorcode.com/csx-transportation
+- https://forum.trains.com/t/csx-yn3-paint/140001
+- https://en.wikipedia.org/wiki/Siemens_Charger
+- https://en.wikipedia.org/wiki/Amtrak_paint_schemes
+- https://en.wikipedia.org/wiki/Superliner_(railcar
+- https://en.wikipedia.org/wiki/Amfleet
+- https://www.freightcourse.com/?p=3424
+- https://www.marineinsight.com/shipping-giant-maersk-gives-its-boxes-a-blue-makeover-after-5-decades/
+- https://freightcaramerica.com/coal-bethgon-ii/
+- https://www.trainz.com/products/atlas-20002815-ho-somerset-railroad-trainman-aluminum-coal-gondola-831
+- https://freightcaramerica.com/wp-content/uploads/2021/04/Flat-Car_AutoRack_Product-Sheet.pdf
+- https://en.wikipedia.org/wiki/Autorack
+- https://forum.trains.com/t/difference-in-types-of-ballast/205874
+- https://www.vintagestreetlights.com/bio/page2.html
+- https://www.jonroma.net/media/signaling/railway-signaling/1951/A%20History%20of%20Flashing-Light%20Crossing%20Signals-%20What%20They%20Are%20and%20Why.pdf
+- https://railroadsignals.us/signals/searchlights/
+- https://en.wikipedia.org/wiki/Coaling_tower
+- https://distinctlymontana.com/montanas-grain-elevators
+- https://www.hoosiervalley.org/explore/grasselli-tower/about-interlocking-towers
+- https://en.wikipedia.org/wiki/Ford_F-Series_(first_generation
+- https://www.rtands.com/?p=55161
+- https://mutcd.fhwa.dot.gov/htm/2003/part8/part8d.htm
+- https://www.npr.org/sections/thetwo-way/2016/06/21/482936520/bright-bluish-white-led-streetlamps-bad-for-our-health-ama-says
+- https://www.mychesco.com/a/news/regional/white-gray-black-still-rule-as-car-color-choices-shift-only-at-the-edges/

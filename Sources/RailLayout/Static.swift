@@ -7,8 +7,6 @@ struct Statics {
     var day: [SIMD3<Float>], night: [SIMD3<Float>], depth: [Float]
 
     static let snowField: [UInt32] = [0xF4F6FA, 0xECF0F7, 0xF7F9FC]
-    static let ballast: [RailEra: UInt32] = [.steam: 0x4E4844, .streamliners: 0x8A8884] // cinders, lightened to read; granite
-    static let tie: [RailEra: UInt32] = [.steam: 0x3E3028, .streamliners: 0x6A6058]      // creosoted; weathered
 
     init(_ lay: Layout, _ sc: Scenery, era: RailEra, season: RailSeason) {
         let view = lay.view, (w, h) = (view.w, view.h), winter = season.snow
@@ -105,17 +103,20 @@ struct Statics {
     /// 2.35 pixels at 2 ft a pixel), and planks for the bed and ties where a road crosses.
     static func stampTrack(_ canvas: inout Canvas, _ lp: Loop, _ roads: [[SIMD2<Double>]], _ view: RailView, era: RailEra, winter: Bool) {
         let snow = RailArt.colour(0xD8DCE0)
-        let bed = winter ? snow : RailArt.colour(ballast[era]!)
-        let tie = (winter ? snow : RailArt.colour(tie[era]!)) * 0.65 + bed * 0.35
-        let rail = RailArt.colour(winter ? 0x4A4642 : 0xA8A8A8), planks = RailArt.colour(0x5A4632)
+        let look = era.look
+        let bed = winter ? snow : RailArt.colour(look.ballast)
+        let tie = (winter ? snow : RailArt.colour(look.tie)) * 0.65 + bed * 0.35
+        // planks where a road crosses, or today's concrete panels 8 ft long with dark joints between
+        let rail = RailArt.colour(winter ? 0x4A4642 : 0xA8A8A8), planks = RailArt.colour(look.panels?.0 ?? 0x5A4632)
+        let joint = look.panels.map { RailArt.colour($0.1) }
         let onRoad = lp.P.map { p in roads.contains { rd in zip(rd, rd.dropFirst()).contains { a, b in
             let ab = b - a, t = min(max(dot(p - a, ab) / max(dot(ab, ab), 1e-9), 0), 1)
             return length(p - a - t * ab) < 3.6
         } } }
         // Within one pixel the track's nearest surface wins, and on it the rail over the tie over the bed: on a ramp
         // a pixel spans a little height, which would otherwise let the bed bury the rails.
-        var near = [Double](repeating: -.infinity, count: canvas.w * canvas.h), marks: [(i: Int, d: Double, layer: Int, c: SIMD3<Float>)] = []
-        func stamp(_ offsets: [Double], _ layer: Int, _ which: (Int) -> SIMD3<Float>?) {
+        var near = [Double](repeating: -.infinity, count: canvas.w * canvas.h), marks: [(i: Int, d: Double, layer: Double, c: SIMD3<Float>)] = []
+        func stamp(_ offsets: [Double], _ layer: Double, _ which: (Int) -> SIMD3<Float>?) {
             for i in lp.P.indices {
                 guard let c = which(i) else { continue }
                 let nrm = SIMD2(-lp.T[i].y, lp.T[i].x)
@@ -131,14 +132,15 @@ struct Statics {
         let wide = stride(from: -3.5, through: 3.5, by: 0.5).map { $0 }, ties = stride(from: -2.5, through: 2.5, by: 0.5).map { $0 }
         stamp(wide, 0) { onRoad[$0] ? nil : bed }
         stamp(wide, 1) { onRoad[$0] ? planks : nil }
+        if let joint { stamp(wide, 1.5) { $0 % 16 == 0 && onRoad[$0] ? joint : nil } }
         stamp(ties, 2) { $0 % 8 == 0 && !onRoad[$0] ? tie : nil }
         stamp([-1, 1], 3) { _ in rail }
-        var pick = [(layer: Int, d: Double, c: SIMD3<Float>)?](repeating: nil, count: near.count)
+        var pick = [(layer: Double, d: Double, c: SIMD3<Float>)?](repeating: nil, count: near.count)
         for m in marks where m.d >= near[m.i] - 0.6 {
             if let p = pick[m.i], (p.layer, p.d) > (m.layer, m.d) { continue }
             pick[m.i] = (m.layer, m.d, m.c)
         }
-        for (k, p) in pick.enumerated() { if let p { canvas.put(k % canvas.w, k / canvas.w, p.c, Float(near[k] + 0.01 * Double(p.layer + 1))) } }
+        for (k, p) in pick.enumerated() { if let p { canvas.put(k % canvas.w, k / canvas.w, p.c, Float(near[k] + 0.01 * (p.layer + 1))) } }
     }
 
     /// Ground points the Sun can't see: every voxel of every standing thing dropped along the Sun's rays onto a

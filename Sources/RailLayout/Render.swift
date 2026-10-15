@@ -127,7 +127,7 @@ struct RailLight {
 
     init(night: Bool, winter: Bool, era: RailEra) {
         (self.night, self.winter) = (night, winter)
-        lamp = RailArt.colour(era == .steam ? 0xFFAE54 : 0xC8E4F0) // incandescent; mercury vapour
+        lamp = RailArt.colour(era.look.lamp)
     }
 
     /// Top faces 1; sides by the Sun by day, a flat moonlight at night.
@@ -353,6 +353,98 @@ enum Models {
                 g[x, y, z] = m(hsh(seed, x, y, z) < 0.3 ? dark : lit)
             } }
         }
+        return g
+    }
+
+    /// A signal: a semaphore's tall post, a searchlight's two-high head, or a colour light's three lamps.
+    static func signal(_ kind: EraLook.Signals) -> Voxels {
+        switch kind {
+        case .semaphore: return post(8)
+        case .searchlight: return post(5, head: "sig_head")
+        case .colour:
+            var g = Voxels(1, 1, 8)
+            g.fill(0..<1, 0..<1, 0..<5, m("post")); g.fill(0..<1, 0..<1, 5..<8, m("cl_head"))
+            return g
+        }
+    }
+
+    /// A freight house's timber dock, 4 wide, at car-floor height.
+    static func dock(_ length: Int) -> Voxels {
+        var g = Voxels(length, 4, 2)
+        g.fill(0..<length, 0..<4, 0..<2, m("dock"))
+        return g
+    }
+
+    /// A long, low freight house: brown board walls, a door to every car length on both sides, a low gable.
+    static func freightHouse() -> Voxels {
+        let (w, d) = (24, 8)
+        var g = Voxels(w, d, 6)
+        g.fill(0..<w, 0..<d, 0..<4, m("freight_wall"))
+        for x in stride(from: 2, to: w - 2, by: 4) { for y in [0, d - 1] { g.fill(x..<(x + 2), y..<(y + 1), 0..<3, m("freight_door")) } }
+        g.fill(0..<w, 0..<d, 4..<5, m("roof_brown"))
+        g.fill(0..<w, 2..<(d - 2), 5..<6, m("roof_brown"))
+        return g
+    }
+
+    /// Today's platform shelter: glass sides, a flat dark roof.
+    static func shelter() -> Voxels {
+        var g = Voxels(7, 3, 4)
+        g.fill(0..<7, 0..<1, 0..<3, m("shelter_glass"))
+        for x in [0, 6] { g.fill(x..<(x + 1), 0..<3, 0..<3, m("shelter_glass")) }
+        g.fill(0..<7, 0..<3, 3..<4, m("shelter_roof"))
+        return g
+    }
+
+    /// A concrete coaling tower (compressed: real ones stand 100 ft), its chutes reaching over the track (+y) above
+    /// the trains, and a darker band where the bins are.
+    static func coalingTower() -> Voxels {
+        var g = Voxels(8, 10, 16)
+        g.fill(0..<8, 0..<6, 0..<15, m("conc_tower"))
+        g.fill(0..<8, 0..<6, 9..<11, m("conc_dark"))
+        g.fill(1..<7, 1..<5, 15..<16, m("conc_dark"))
+        for x in [2, 5] { g.fill(x..<(x + 1), 6..<10, 9..<10, m("steel")) }
+        return g
+    }
+
+    /// A concrete grain elevator: a row of four bins and a taller headhouse at one end (heights compressed).
+    static func elevator() -> Voxels {
+        var g = Voxels(22, 6, 22)
+        for b in 0..<4 {
+            let cx = 2.5 + Double(b) * 5
+            for x in (b * 5)..<(b * 5 + 5) { for y in 0..<6 where hypot(Double(x) + 0.5 - cx, Double(y) + 0.5 - 3) <= 2.6 {
+                g.fill(x..<(x + 1), y..<(y + 1), 0..<16, m("elevator"))
+            } }
+        }
+        g.fill(0..<22, 1..<5, 15..<16, m("elevator_dk")) // the gallery along the top
+        g.fill(17..<22, 0..<6, 0..<21, m("elevator"))
+        g.fill(17..<22, 0..<6, 21..<22, m("elevator_dk"))
+        for z in [4, 9, 14, 19] { g[19, 5, z] = m("house_win") }
+        return g
+    }
+
+    /// A two-storey interlocking tower: brick below, the operator's room above with windows all round, a hipped roof.
+    static func interlockingTower() -> Voxels {
+        var g = Voxels(7, 6, 10)
+        g.fill(0..<7, 0..<6, 0..<7, m("tower_wall"))
+        for x in [1, 3, 5] { for y in [0, 5] { g.fill(x..<(x + 1), y..<(y + 1), 4..<6, m("house_win")) } }
+        for y in [1, 3, 4] { for x in [0, 6] { g.fill(x..<(x + 1), y..<(y + 1), 4..<6, m("house_win")) } }
+        g.fill(3..<4, 0..<1, 0..<2, m("door"))
+        for k in 0..<3 { g.fill(k..<(7 - k), k..<(6 - k), (7 + k)..<(8 + k), m("roof_black")) }
+        return g
+    }
+
+    /// Today's concrete silos: three tall bins in a row and a leg up the middle.
+    static func silos() -> Voxels {
+        var g = Voxels(21, 7, 18)
+        for b in 0..<3 {
+            let cx = 3.5 + Double(b) * 7
+            for x in (b * 7)..<(b * 7 + 7) { for y in 0..<7 {
+                let r = hypot(Double(x) + 0.5 - cx, Double(y) + 0.5 - 3.5)
+                if r <= 3.5 { g.fill(x..<(x + 1), y..<(y + 1), 0..<14, m("silo")) }
+                if r <= 2.4 { g[x, y, 14] = m("silo_dk") }
+            } }
+        }
+        g.fill(10..<12, 3..<5, 14..<18, m("silo_dk"))
         return g
     }
 

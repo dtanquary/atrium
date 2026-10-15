@@ -93,7 +93,8 @@ final class Scenery {
     var blocks: [Int: [Double]] = [:]
 
     init(_ lay: Layout, era: RailEra, season: RailSeason) {
-        var rng = Dice(lay.seed * 7919 + (era == .steam ? 1 : 2))
+        let look = era.look
+        var rng = Dice(lay.seed * 7919 + look.dice)
         var G = Room(lay.lo - 30, lay.hi + 30)
         for lp in lay.loops { G.mark(stride(from: 0, to: lp.P.count, by: 4).map { lp.P[$0] }, 6.5) }
         let trackOcc = G.occ
@@ -102,13 +103,12 @@ final class Scenery {
             let q = view.project([p.x, p.y, 0])
             return q.x > -m && q.x < Double(view.w) + m && q.y > -m && q.y < Double(view.h) + m
         }
-        let semaphores = era == .steam
-        let signalModel = semaphores ? Models.post(8) : Models.post(5, head: "sig_head")
+        let signalModel = Models.signal(look.signals)
 
         // the station, on the longest clear straight of a passenger loop
         var best: (score: Double, li: Int, pc: Piece, side: Double, L: Double)?
         for (li, lp) in lay.loops.enumerated() {
-            let freight = lp.keys.allSatisfy { RailArt.trains[$0]!.freight }
+            let freight = lp.keys.allSatisfy { RailArt.consist($0).freight }
             let cs = lay.cross.compactMap { $0.s(on: li) }
             for pc in lp.pieces where pc.kind == .straight && pc.s1 - pc.s0 >= 76 {
                 if cs.contains(where: { pc.s0 - 30 < $0 && $0 < pc.s1 + 30 }) { continue }
@@ -128,15 +128,22 @@ final class Scenery {
         if let (_, li, pc, side, L) = best {
             let lp = lay.loops[li], d = pc.d, n = SIMD2(-d.y, d.x) * side, mid = (pc.a + pc.b) / 2
             let hF = atan2(d.y, d.x)
-            // a platform 4 wide, 4 to 8 off the centreline, its edge facing the track
-            things.append(Thing(grid: Models.platform(Int(L)), pos: mid + n * 6, heading: hF + (side < 0 ? .pi : 0), kind: .platform))
+            // a platform 4 wide, 4 to 8 off the centreline, its edge facing the track; a freight house's dock instead
+            let face = hF + (side > 0 ? .pi : 0) // +y toward the track
+            if look.station == .freight {
+                things.append(Thing(grid: Models.dock(Int(L)), pos: mid + n * 6, heading: face, kind: .platform))
+            } else {
+                things.append(Thing(grid: Models.platform(Int(L)), pos: mid + n * 6, heading: hF + (side < 0 ? .pi : 0), kind: .platform))
+            }
             G.mark(rectPoints(mid + n * 6, d, n, L, 4), 1)
             let bpos = mid + n * 15
-            if era == .steam {
-                things.append(Thing(grid: Models.depot(), pos: bpos, heading: hF + (side > 0 ? .pi : 0), kind: .station))
-            } else {
-                things.append(Thing(grid: Models.brickStation(), pos: bpos, heading: hF + (side > 0 ? .pi : 0), kind: .station))
+            switch look.station {
+            case .depot: things.append(Thing(grid: Models.depot(), pos: bpos, heading: face, kind: .station))
+            case .brick:
+                things.append(Thing(grid: Models.brickStation(), pos: bpos, heading: face, kind: .station))
                 things.append(Thing(grid: Models.canopy(Int(L * 0.6)), pos: mid + n * 6, heading: hF, kind: .canopy))
+            case .freight: things.append(Thing(grid: Models.freightHouse(), pos: mid + n * 12.5, heading: face, kind: .station))
+            case .shelter: things.append(Thing(grid: Models.shelter(), pos: mid + n * 6, heading: face, kind: .station, base: 1))
             }
             G.mark(rectPoints(bpos, d, n, 20, 9), 1)
             for k in [-0.35, 0, 0.35] {
@@ -246,8 +253,7 @@ final class Scenery {
                         }
                     }
                 }
-                let walls = ["wall_white", "wall_cream", "wall_yellow", "wall_grey", "wall_blue", "wall_brick"]
-                let roofs = ["roof_green", "roof_red", "roof_black", "roof_grey"]
+                let (walls, roofs) = (look.walls, look.roofs)
                 for (k, house) in houses.prefix(28).enumerated() {
                     // the door side (-y) faces the road: turned round if the road is on the other side
                     let facing = atan2(house.dv.y, house.dv.x) + (dot(house.toward, SIMD2(-house.dv.y, house.dv.x)) > 0 ? 0 : .pi)
@@ -266,7 +272,7 @@ final class Scenery {
                     let n = crossings[i].n
                     for sgn in [1.0, -1.0] {
                         let q = crossings[i].p + n * sgn * 7.5 + SIMD2(-n.y, n.x) * sgn * 5.5, hq = atan2(n.y, n.x)
-                        things.append(Thing(grid: era == .steam ? Models.crossbuck() : Models.flasher(), pos: q, heading: hq, kind: .crossing))
+                        things.append(Thing(grid: look.crossing == .wigwag ? Models.crossbuck() : Models.flasher(), pos: q, heading: hq, kind: .crossing))
                         crossings[i].masts.append((q, hq, sgn))
                     }
                     G.mark([crossings[i].p], 9)
@@ -325,7 +331,7 @@ final class Scenery {
         // train-length past it, and if it can be helped none where a train held at one would stand on the road, at
         // the platform or in the tunnel
         for (li, lp) in lay.loops.enumerated() where lp.keys.count >= 2 {
-            let lens = lp.keys.map { RailArt.trains[$0]!.length + 2 }, longest = lens.max()!
+            let lens = lp.keys.map { RailArt.consist($0).length + 2 }, longest = lens.max()!
             var prefer = crossings.filter { $0.loop == li }.map { ($0.s - 10, $0.s + longest + 10) }
             if let st = station, st.loop == li {
                 prefer.append((st.sStop - st.L - 6, st.sStop + 6))
@@ -346,8 +352,10 @@ final class Scenery {
             }
         }
 
+        placeExtras(lay, &G, &rng, look.extras, onScreen)
+
         // a pole line along the main road
-        if let rd = roads.first {
+        if let rd = roads.first, look.poles {
             let dv = normalize(rd[rd.count - 1] - rd[0]), nn = SIMD2(-dv.y, dv.x)
             for p in stride(from: 0, to: rd.count, by: 8).map({ rd[$0] }) {
                 let q = p - nn * 6.5
@@ -370,7 +378,7 @@ final class Scenery {
             trees.append(p)
         }
         for (k, p) in trees.enumerated() {
-            let conifer = hsh(k, lay.seed, 5) < (era == .steam ? 0.45 : 0.35)
+            let conifer = hsh(k, lay.seed, 5) < look.conifers
             let g = conifer ? Models.conifer(seed: k * 31 + lay.seed, season: season) : Models.tree(seed: k * 31 + lay.seed, season: season)
             things.append(Thing(grid: g, pos: p, kind: .tree))
         }
@@ -379,6 +387,63 @@ final class Scenery {
             for k in 0..<5 {
                 let a = hr.uniform(0, 2 * .pi), rr = hr.uniform(0.2, 0.6) * hill.r
                 things.append(Thing(grid: Models.conifer(seed: 900 + k + lay.seed, season: season), pos: hill.c + rr * SIMD2(cos(a), sin(a)), kind: .tree, base: nil))
+            }
+        }
+    }
+
+    /// The era's buildings beside the line, each on a straight with its +y side to the track, clear of everything placed
+    /// so far: a coaling tower with a water tank beyond it, a grain elevator or silos, and an interlocking tower beside a
+    /// diamond (only where there is one). Each is left out if no spot is clear.
+    private func placeExtras(_ lay: Layout, _ G: inout Room, _ rng: inout Dice, _ names: [String], _ onScreen: (SIMD2<Double>, Double) -> Bool) {
+        guard !names.isEmpty else { return }
+        // the model, its footprint along and across the track, the footprint's centre from the track, and how much
+        // nearer the track the model's centre is (the coaling tower's chutes reach out over it)
+        let extras: [String: (make: () -> Voxels, along: Double, across: Double, off: Double, shift: Double)] = [
+            "coaling": (Models.coalingTower, 8, 6, 12, 2), "elevator": (Models.elevator, 22, 6, 12, 0),
+            "silos": (Models.silos, 21, 7, 12.5, 0), "tower": (Models.interlockingTower, 7, 6, 11, 0),
+        ]
+        let up = { (p: SIMD2<Double>) in -lay.view.project([p.x, p.y, 0]).y } // how far up the screen
+        if let hill { G.mark([hill.c], hill.r + 2) }
+        let diamonds = lay.cross.filter { $0.kind == .diamond }
+        for name in names {
+            guard let e = extras[name], name != "tower" || !diamonds.isEmpty else { continue }
+            var best: (score: Double, c: SIMD2<Double>, d: SIMD2<Double>, n: SIMD2<Double>, side: Double)?
+            for lp in lay.loops {
+                for pc in lp.pieces where pc.kind == .straight {
+                    let L = pc.s1 - pc.s0
+                    for t in stride(from: e.along / 2 + 4, to: L - e.along / 2 - 4, by: 4) {
+                        if lp.Z[Int((pc.s0 + t) / step) % lp.Z.count] > 0 { continue }
+                        for side in [1.0, -1.0] {
+                            let d = pc.d, n = SIMD2(-d.y, d.x) * side, c = pc.a + d * t + n * e.off
+                            let body = rectPoints(c, d, n, e.along + 2, e.across + 2)
+                            guard body.allSatisfy({ G.free($0) && onScreen($0, -2) }) else { continue }
+                            var score = rng.uniform(0, 10)
+                            if up(c) > up(c - n * e.off) { score += 15 } // behind the track, so it stands clear of it
+                            if name == "tower" { // as near a diamond as it can stand
+                                let near = diamonds.map { x in length(c - lay.loops[x.a].P[Int(x.sa / step) % lay.loops[x.a].P.count]) }.min()!
+                                if near > 40 { continue }
+                                score -= near
+                            } else if let st = station { // away from the platform or freight house
+                                score += min(length(c - st.mid), 120) / 6
+                            }
+                            if best == nil || score > best!.score { best = (score, c, d, n, side) }
+                        }
+                    }
+                }
+            }
+            guard let b = best else { continue }
+            let face = atan2(b.d.y, b.d.x) + (b.side > 0 ? .pi : 0)
+            things.append(Thing(grid: e.make(), pos: b.c - b.n * e.shift, heading: face, kind: .station))
+            G.mark(rectPoints(b.c, b.d, b.n, e.along + 1, e.across + 1), 1.5)
+            if name == "coaling" { // its water tank a little further along, if there is room
+                for k in [14.0, -14, 22, -22] {
+                    let q = b.c + b.d * k + b.n * (11.5 - e.off), spot = rectPoints(q, b.d, b.n, 9, 9)
+                    if spot.allSatisfy({ G.free($0) && onScreen($0, -2) }) {
+                        things.append(Thing(grid: Models.waterTank(), pos: q, heading: face, kind: .tank))
+                        G.mark(rectPoints(q, b.d, b.n, 8, 8), 1.5)
+                        break
+                    }
+                }
             }
         }
     }

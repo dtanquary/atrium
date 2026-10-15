@@ -16,7 +16,7 @@ public final class Railway {
     private var frame: [UInt32], depth: [Float]
 
     /// The trains running, by their names in Settings.
-    public var names: [String] { layout.trains.map { RailArt.trains[$0]!.name } }
+    public var names: [String] { layout.trains.map { RailArt.consist($0).name } }
 
     /// Grows a layout from `seed` for up to `count` of the era's trains on a canvas `width` by `height` art
     /// pixels, lays its scenery, and draws what stands still. A layout often can't fit every train, or a station,
@@ -41,7 +41,7 @@ public final class Railway {
         Self.hideIdleSignals(layout, scenery)
         statics = Statics(layout, scenery, era: era, season: season)
         sim = Sim(layout, scenery)
-        roadCar = RailArt.roadCar(era)
+        roadCar = RailArt.roadVehicle(era, seed: layout.seed)
         frame = Array(repeating: 0, count: width * height)
         depth = statics.depth
     }
@@ -166,21 +166,23 @@ public final class Railway {
 
     private static let red = SIMD3<Float>(255, 42, 26), green = SIMD3<Float>(48, 224, 160)
 
-    /// The level crossing's flashers and gates (streamliners) or wigwags (steam), working while a train is near.
+    /// The level crossing's flashers and gates, or wigwags (steam), working while a train is near. Today's gate arms
+    /// are longer, with three red lamps on them: the tip's steady, the other two flashing in turn.
     private func crossingParts(_ night: Float) {
-        let on = sim.crossingOn, phase = Int(sim.t / 0.75) % 2
+        let on = sim.crossingOn, phase = Int(sim.t / 0.75) % 2, kind = era.look.crossing
         for cr in scenery.crossings {
             for m in cr.masts {
                 let a = SIMD2(cos(m.heading), sin(m.heading)), across = SIMD2(-a.y, a.x)
-                if era == .streamliners {
+                if kind != .wigwag {
                     for (e, lit) in [(-1.0, on && phase == 0), (1.0, on && phase == 1)] {
                         let q = m.pos + across * e
                         point([q.x, q.y, 2.5], lit ? Self.red : [40, 12, 10])
                     }
-                    let ang = on ? 0 : 1.35 // the gate arm over the approach lane: down while the crossing is on
-                    for k in 1...6 {
+                    let ang = on ? 0 : 1.35, modern = kind == .modern // the gate arm over the approach lane: down while the crossing is on
+                    for k in 1...(modern ? 7 : 6) {
                         let q = m.pos + across * m.side * (-Double(k) * cos(ang))
-                        point([q.x, q.y, 3.2 + Double(k) * sin(ang)], k % 2 == 1 ? [232, 228, 220] : [200, 32, 42])
+                        let lamp = modern && on && (k == 7 || k == 3 && phase == 0 || k == 5 && phase == 1)
+                        point([q.x, q.y, 3.2 + Double(k) * sin(ang)], lamp ? Self.red : k % 2 == 1 ? [232, 228, 220] : [200, 32, 42])
                     }
                 } else {
                     let swing = on ? sin(sim.t * 2 * .pi * 0.7) * 0.6 : 0 // a disc on a pendulum
@@ -209,9 +211,10 @@ public final class Railway {
             }
             // the lamp just in front of the head, toward oncoming trains, so the head doesn't hide it
             let p = sg.pos, face = p - SIMD2(cos(sg.heading), sin(sg.heading)) * 0.8
-            if era == .streamliners {
-                point([face.x, face.y, 6], stop ? Self.red : Self.green, eps: 0.6)
-            } else {
+            switch era.look.signals {
+            case .searchlight: point([face.x, face.y, 6], stop ? Self.red : Self.green, eps: 0.6)
+            case .colour: point([face.x, face.y, stop ? 7 : 5], stop ? Self.red : Self.green, eps: 0.6) // red at the top, green at the bottom
+            case .semaphore:
                 let t = SIMD2(cos(sg.heading), sin(sg.heading)), n = SIMD2(-t.y, t.x), ang = stop ? 0.0 : 1.0
                 for k in 1...3 {
                     let q = p - n * Double(k) * cos(ang)

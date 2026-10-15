@@ -36,7 +36,7 @@ private func save(_ railway: Railway, night: Float, _ name: String, scale: Int =
                 let clock = ContinuousClock(), began = clock.now
                 let railway = Railway(seed: seed, width: 378, height: 246, view: kind, era: era, count: 3, season: winter ? snowy : .summer)
                 let took = clock.now - began
-                let name = "\(kind == .iso ? "iso" : "tq")-\(era == .steam ? "steam" : "streamliners")\(winter ? "-snow" : "")"
+                let name = "\(kind == .iso ? "iso" : "tq")-\(era)\(winter ? "-snow" : "")"
                 print("Pixel Railway \(name), seed \(seed): built in \(took); \(railway.names.joined(separator: ", "))")
                 railway.advance(8)
                 try save(railway, night: 0, name)

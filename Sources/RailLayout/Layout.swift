@@ -135,14 +135,14 @@ final class Layout {
         func onScreen(_ poly: [SIMD2<Double>]) -> Bool {
             poly.allSatisfy { let q = view.project([$0.x, $0.y, 0]); return q.x > margin && q.x < w - margin && q.y > margin && q.y < h - margin }
         }
-        let order = trains.sorted { RailArt.trains[$0]!.minRadius > RailArt.trains[$1]!.minRadius }
+        let order = trains.sorted { RailArt.consist($0).minRadius > RailArt.consist($1).minRadius }
         guard !order.isEmpty else { return }
         plan = order.count > 1 ? rng.pick([.twice, .twice, .nest, .beside]) : .single
         let span = hi - lo
         var first = (lo, hi)
         switch plan {
         case .twice: // room on one side of the first loop for the second to reach out
-            let room = RailArt.trains[order[1]]!.minRadius + 30
+            let room = RailArt.consist(order[1]).minRadius + 30
             first = rng.chance(0.5) ? (lo, hi - [0, room]) : (lo + [0, room], hi)
         case .beside:
             let cut = lo.x + span.x * rng.uniform(0.5, 0.62)
@@ -150,8 +150,9 @@ final class Layout {
         default: break
         }
         for (ti, key) in order.enumerated() {
-            let consist = RailArt.trains[key]!, R = consist.minRadius, short = R <= 32
-            for attempt in 0..<(ti < 2 ? tries : short ? tries / 2 : tries / 4) { // a third loop if it fits
+            let consist = RailArt.consist(key), R = consist.minRadius, short = R <= 32
+            let attempts = ti < 2 ? tries : short ? tries / 2 : tries / 4 // a third loop if it fits
+            for attempt in 0..<attempts {
                 var mode = Plan.single
                 if !loops.isEmpty {
                     mode = [.twice: .twice, .nest: .nest][plan] ?? .beside
@@ -180,7 +181,13 @@ final class Layout {
                 }
                 if view.iso, !onScreen(poly) { continue }
                 let f = Self.fillet(poly, 1.15 * R)
-                guard f.rmin >= 0.98 * R, f.S[f.S.count - 1] >= 2.2 * consist.length else { continue }
+                guard f.rmin >= 0.98 * R else { continue }
+                // a loop 2.2 trains long; after half the tries, a long freight may drop cars to fit a shorter one
+                var placed = key
+                if f.S[f.S.count - 1] < 2.2 * consist.length {
+                    guard attempt > attempts / 2, let n = consist.cars(fitting: f.S[f.S.count - 1] / 2.2) else { continue }
+                    placed = consist.shortened(to: n).key
+                }
                 let loop = Loop(poly: poly, P: f.P, S: f.S, pieces: f.pieces, rmin: f.rmin)
                 var found: [Crossing] = [], ok = true
                 for (i, q) in loops.enumerated() {
@@ -189,7 +196,7 @@ final class Layout {
                 }
                 guard ok else { continue }
                 loop.region = region
-                loop.keys = [key]
+                loop.keys = [placed]
                 loops.append(loop)
                 cross += found
                 break
@@ -198,14 +205,23 @@ final class Layout {
         makeBridge()
         groupCrossings()
         if share {
-            for key in order where !loops.contains(where: { $0.keys.contains(key) }) {
-                let consist = RailArt.trains[key]!
-                let fit = loops.indices.filter { li in
-                    let lens = (loops[li].keys + [key]).map { RailArt.trains[$0]!.length + 2 }
-                    return loops[li].keys.count < 2 && loops[li].rmin >= 0.98 * consist.minRadius
-                        && Self.planBlocks(loops[li].L, lens, must: diamondZones(li, longest: lens.max()!)) != nil
+            let placed = Set(loops.flatMap(\.keys).map { String($0.split(separator: "#")[0]) })
+            for key in order where !placed.contains(key) {
+                // the longest loop with room behind its train, at full length or, failing that, shortened
+                let consist = RailArt.consist(key)
+                func fits(_ li: Int, _ joining: Consist) -> Bool {
+                    let lens = loops[li].keys.map { RailArt.consist($0).length + 2 } + [joining.length + 2]
+                    return Self.planBlocks(loops[li].L, lens, must: diamondZones(li, longest: lens.max()!)) != nil
                 }
-                fit.max { loops[$0].L < loops[$1].L }.map { loops[$0].keys.append(key) }
+                let open = loops.indices.filter { loops[$0].keys.count < 2 && loops[$0].rmin >= 0.98 * consist.minRadius }
+                if let li = open.filter({ fits($0, consist) }).max(by: { loops[$0].L < loops[$1].L }) {
+                    loops[li].keys.append(key)
+                } else if consist.cars > 5 {
+                    let options = open.compactMap { li in
+                        stride(from: consist.cars - 1, through: 5, by: -1).first { fits(li, consist.shortened(to: $0)) }.map { (li, $0) }
+                    }
+                    if let (li, n) = options.max(by: { $0.1 < $1.1 }) { loops[li].keys.append(consist.shortened(to: n).key) }
+                }
             }
             groupCrossings()
         }
@@ -481,7 +497,7 @@ final class Layout {
     /// Diamonds closer than the longest train (and margins) along any loop are one reservation group.
     private func groupCrossings() {
         let ds = cross.indices.filter { cross[$0].kind == .diamond }
-        let longest = trains.map { RailArt.trains[$0]!.length + 2 }.max() ?? 0
+        let longest = trains.map { RailArt.consist($0).length + 2 }.max() ?? 0
         var parent = Array(ds.indices)
         func find(_ i: Int) -> Int { var i = i; while parent[i] != i { i = parent[i] }; return i }
         for i in ds.indices { for j in (i + 1)..<ds.count {

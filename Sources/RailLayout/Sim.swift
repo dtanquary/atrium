@@ -24,7 +24,7 @@ struct Sim {
     init(_ lay: Layout, _ sc: Scenery) {
         (self.lay, self.sc) = (lay, sc)
         for (li, lp) in lay.loops.enumerated() {
-            for key in lp.keys { let c = RailArt.trains[key]!; trains.append(Train(loop: li, consist: c, v: c.cruise)) }
+            for key in lp.keys { let c = RailArt.consist(key); trains.append(Train(loop: li, consist: c, v: c.cruise)) }
         }
         diamonds = lay.cross.filter { $0.kind == .diamond }
         place()
