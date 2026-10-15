@@ -124,7 +124,11 @@ final class Layout {
                     guard let p = Self.crossRect(&rng, loops[rng.below(loops.count)], R, lo, hi) else { continue }
                     poly = p
                 } else {
-                    guard let p = notches && rng.chance(0.75) ? Self.notchedRect(&rng, R, w, h) : Self.diamondRect(&rng, R, w, h) else { continue }
+                    // the first loop big, the rest any size that fits; a shape gets a few goes before a plain loop
+                    let least = loops.isEmpty ? 0.8 : 0
+                    var shaped: [SIMD2<Double>]?
+                    if notches, rng.chance(0.75) { for _ in 0..<8 where shaped == nil { shaped = Self.loopRect(&rng, R, w, h, least: least, notches: true) } }
+                    guard let p = shaped ?? Self.loopRect(&rng, R, w, h, least: least, notches: false) else { continue }
                     poly = p
                 }
                 if !onScreen(poly) { continue }
@@ -259,59 +263,84 @@ final class Layout {
         return (pts, S, pieces, R.min()!)
     }
 
-    /// For iso: one rectangle on the world's axes (a corner or two cut) whose diamond fits the screen. A w by h
-    /// rectangle spans w + h pixels across the screen and (w + h) / 2 down it.
-    static func diamondRect(_ rng: inout Dice, _ R: Double, _ w: Double, _ h: Double, margin: Double = 12) -> [SIMD2<Double>]? {
-        let room = min(w - 2 * margin, 2 * (h - 2 * margin))
-        var a = rng.uniform(2 * R + 4, room - 2 * R - 4), b = rng.uniform(2 * R + 4, room - a)
-        if rng.chance(0.5) { (a, b) = (b, a) }
-        let su = (w / 2 - margin) - (a + b) / 2, sv = (h - 2 * margin) - (a + b) / 2
-        guard su >= 0, sv >= 0 else { return nil }
-        let u = rng.uniform(-su, su), v = rng.uniform(-sv, sv), (cx, cy) = ((u + v) / 2, (v - u) / 2)
+    /// For iso: a loop round a rectangle on the world's axes, at least `least` of as tall as the screen allows. A w by
+    /// h rectangle spans w + h pixels across the screen and (w + h) / 2 down it; where that's wider than the screen,
+    /// its left and right corners are cut off square to the screen's sides, so a loop can fill the screen. With
+    /// `notches`, notches come out of other corners (one makes an L, two on one side a T, two at opposite corners
+    /// steps, all four a cross), or bays out of the middle of a side (a U) or of two opposite sides (an H, a model
+    /// railway's dogbone), which lengthen the loop by twice their depth. A notch or bay is at least a curve's width
+    /// (2R + 4) each way, and every straight keeps that much, so each step can be rounded. Some plain corners are cut
+    /// at 45 degrees.
+    static func loopRect(_ rng: inout Dice, _ R: Double, _ w: Double, _ h: Double, least: Double, notches: Bool, margin: Double = 12) -> [SIMD2<Double>]? {
+        let (U, V) = (w / 2 - margin, h - 2 * margin), gap = 2 * R + 4 // on the screen: |x - y| <= U, |x + y| <= V
+        let side0 = notches ? 2 * gap : gap, lo = max(2 * side0, least * 2 * V), hi = 2 * V
+        guard hi > lo else { return nil }
+        let span = rng.uniform(lo, hi), a0 = rng.uniform(side0, span - side0)
+        let (a, b) = rng.chance(0.5) ? (a0, span - a0) : (span - a0, a0)
+        let sv = V - span / 2, su = max(U - span / 2, 0) + 0.15 * span
+        let v = rng.uniform(-sv, sv), u = rng.uniform(-su, su), (cx, cy) = ((u + v) / 2, (v - u) / 2)
+        // corners: 0 at the top of the screen, 1 at the right, 2 at the bottom, 3 at the left; side k runs from corner k
         let pts: [SIMD2<Double>] = [[cx - a / 2, cy - b / 2], [cx + a / 2, cy - b / 2], [cx + a / 2, cy + b / 2], [cx - a / 2, cy + b / 2]]
+        let sides = [a, b, a, b]
+        func off(_ e: Double) -> Double { e > 0 ? max(e, R) : 0 }
+        let forced = [0, off(u + span / 2 - U), 0, off(span / 2 - U - u)] // how far the right and left corners run off
+        var notched = Set<Int>(), baySides: [Int] = []
+        if notches {
+            let turn = rng.below(4), shape = rng.pick([[0], [0], [0, 1], [0, 2], [0, 1, 2, 3], [], [], []])
+            if shape.isEmpty {
+                baySides = rng.chance(0.5) ? [turn] : [turn % 2, turn % 2 + 2]
+            } else {
+                notched = Set(shape.map { ($0 + turn) % 4 }).filter { forced[$0] == 0 }
+                guard !notched.isEmpty else { return nil }
+            }
+        }
+        // what each corner takes from the side behind it and the side after it
+        var take = [(back: Double, on: Double)](repeating: (0, 0), count: 4)
+        for k in 0..<4 {
+            let back = (k + 3) % 4
+            if notched.contains(k) {
+                func depth(_ side: Int, _ shared: Bool) -> Double? {
+                    let room = sides[side] - gap - forced[side] - forced[(side + 1) % 4], most = shared ? room / 2 : room
+                    return most >= gap ? rng.uniform(gap, most) : nil
+                }
+                guard let nIn = depth(back, notched.contains(back)), let nOut = depth(k, notched.contains((k + 1) % 4)) else { return nil }
+                take[k] = (nIn, nOut)
+            } else if forced[k] > 0 {
+                take[k] = (forced[k], forced[k])
+            } else {
+                let c = rng.uniform(0.8 * R, 1.4 * R)
+                if rng.chance(0.35) { take[k] = (c, c) }
+            }
+        }
+        for k in 0..<4 where sides[k] - take[k].on - take[(k + 1) % 4].back < gap { // too little straight left
+            for e in [k, (k + 1) % 4] where !notched.contains(e) && forced[e] == 0 { take[e] = (0, 0) }
+            if sides[k] - take[k].on - take[(k + 1) % 4].back < gap { return nil }
+        }
+        // each bay: where along its side it starts and ends, and how deep it reaches in
+        var bays: [Int: (s0: Double, s1: Double, depth: Double)] = [:]
+        for k in baySides {
+            let from = take[k].on + gap, to = sides[k] - take[(k + 1) % 4].back - gap
+            let across = sides[(k + 1) % 4], most = baySides.count == 2 ? (across - gap) / 2 : across - gap
+            guard to - from >= gap, most >= gap else { return nil }
+            let width = rng.uniform(gap, to - from), s0 = rng.uniform(from, to - width)
+            bays[k] = (s0, s0 + width, rng.uniform(gap, most))
+        }
         var out: [SIMD2<Double>] = []
         for k in 0..<4 {
-            let (p, p0, p2) = (pts[k], pts[(k + 3) % 4], pts[(k + 1) % 4])
-            let (l0, l1) = (length(p - p0), length(p2 - p)), cut = rng.uniform(0.8 * R, 1.4 * R)
-            if rng.chance(0.35), min(l0, l1) > 2 * cut + 2 * R { out += [p + (p0 - p) / l0 * cut, p + (p2 - p) / l1 * cut] } else { out.append(p) }
+            let p = pts[k], tIn = normalize(pts[(k + 3) % 4] - p), tOut = normalize(pts[(k + 1) % 4] - p)
+            if notched.contains(k) {
+                out += [p + tIn * take[k].back, p + tIn * take[k].back + tOut * take[k].on, p + tOut * take[k].on]
+            } else if take[k].back > 0 {
+                out += [p + tIn * take[k].back, p + tOut * take[k].on]
+            } else {
+                out.append(p)
+            }
+            if let bay = bays[k] {
+                let inward = normalize(pts[(k + 2) % 4] - pts[(k + 1) % 4])
+                out += [p + tOut * bay.s0, p + tOut * bay.s0 + inward * bay.depth, p + tOut * bay.s1 + inward * bay.depth, p + tOut * bay.s1]
+            }
         }
         return out
-    }
-
-    /// For iso: a rectangle whose diamond fits the screen with notches out of its corners: one makes an L, two on one
-    /// side a T, two at opposite corners steps, all four a cross. Every notch is at least a curve's width (2R + 4)
-    /// each way and leaves that much beside it, so each step can be rounded; some corners are cut at 45 degrees.
-    static func notchedRect(_ rng: inout Dice, _ R: Double, _ w: Double, _ h: Double, margin: Double = 12) -> [SIMD2<Double>]? {
-        let gap = 2 * R + 4, room = min(w - 2 * margin, 2 * (h - 2 * margin))
-        guard room >= 4 * gap else { return nil }
-        var a = rng.uniform(2 * gap, room - 2 * gap), b = rng.uniform(2 * gap, room - a)
-        if rng.chance(0.5) { (a, b) = (b, a) }
-        let su = (w / 2 - margin) - (a + b) / 2, sv = (h - 2 * margin) - (a + b) / 2
-        guard su >= 0, sv >= 0 else { return nil }
-        let u = rng.uniform(-su, su), v = rng.uniform(-sv, sv), (cx, cy) = ((u + v) / 2, (v - u) / 2)
-        let pts: [SIMD2<Double>] = [[cx - a / 2, cy - b / 2], [cx + a / 2, cy - b / 2], [cx + a / 2, cy + b / 2], [cx - a / 2, cy + b / 2]]
-        let sides = [a, b, a, b] // side k runs from corner k to corner k + 1
-        let turn = rng.below(4), notched = Set(rng.pick([[0], [0], [0, 1], [0, 2], [0, 1, 2, 3]]).map { ($0 + turn) % 4 })
-        func depth(_ side: Int, shared: Bool) -> Double? { // a notch's reach along a side, leaving a curve's width
-            let most = shared ? (sides[side] - gap) / 2 : sides[side] - gap
-            return most >= gap ? rng.uniform(gap, most) : nil
-        }
-        var out: [SIMD2<Double>] = []
-        for k in 0..<4 {
-            let (p, back, on) = (pts[k], (k + 3) % 4, k) // the sides coming in and going on
-            guard notched.contains(k) else { out.append(p); continue }
-            guard let nIn = depth(back, shared: notched.contains(back)), let nOut = depth(on, shared: notched.contains((k + 1) % 4)) else { return nil }
-            let tIn = normalize(pts[back] - p), tOut = normalize(pts[(k + 1) % 4] - p)
-            out += [p + tIn * nIn, p + tIn * nIn + tOut * nOut, p + tOut * nOut]
-        }
-        var cut: [SIMD2<Double>] = []
-        let n = out.count
-        for k in 0..<n {
-            let (p0, p1, p2) = (out[(k + n - 1) % n], out[k], out[(k + 1) % n])
-            let (l0, l1) = (length(p1 - p0), length(p2 - p1)), c = rng.uniform(0.8 * R, 1.4 * R)
-            if rng.chance(0.35), min(l0, l1) > 2 * c + 2 * R { cut += [p1 + (p0 - p1) / l0 * c, p1 + (p2 - p1) / l1 * c] } else { cut.append(p1) }
-        }
-        return cut
     }
 
     /// A rectangle inside another loop, at least `clear` from its track all round: a loop in a loop.
@@ -319,7 +348,7 @@ final class Layout {
         let lo = host.P.reduce(SIMD2(repeating: Double.infinity), simd_min), hi = host.P.reduce(SIMD2(repeating: -Double.infinity), simd_max)
         let span = hi - lo - 2 * clear
         guard min(span.x, span.y) >= 2 * R + 4 else { return nil }
-        let w = rng.uniform(2 * R + 4, min(span.x, 4 * R)), h = rng.uniform(2 * R + 4, min(span.y, 4 * R))
+        let w = rng.uniform(2 * R + 4, min(span.x, 6 * R)), h = rng.uniform(2 * R + 4, min(span.y, 6 * R))
         let x0 = rng.uniform(lo.x + clear, hi.x - clear - w), y0 = rng.uniform(lo.y + clear, hi.y - clear - h)
         let pts: [SIMD2<Double>] = [[x0, y0], [x0 + w, y0], [x0 + w, y0 + h], [x0, y0 + h]]
         let edge = (0..<4).flatMap { k in (0..<12).map { pts[k] + (pts[(k + 1) % 4] - pts[k]) * Double($0) / 11 } }
@@ -334,11 +363,11 @@ final class Layout {
         let straights = A.pieces.filter { $0.kind == .straight && (abs($0.d.x) < 1e-6 || abs($0.d.y) < 1e-6) && $0.s1 - $0.s0 > 2 * R + 2 + 28 }
         guard !straights.isEmpty else { return nil }
         let pc = rng.pick(straights), L = pc.s1 - pc.s0
-        let width = rng.uniform(2 * R + 2, min(L - 28, 4 * R)), t1 = rng.uniform(14, L - 14 - width)
+        let width = rng.uniform(2 * R + 2, min(L - 28, 6 * R)), t1 = rng.uniform(14, L - 14 - width)
         let (p1, p2) = (pc.a + pc.d * t1, pc.a + pc.d * (t1 + width))
         var n = SIMD2(-pc.d.y, pc.d.x)
         if insidePoly(pc.a + pc.d * (t1 + width / 2) + n * 3, A.poly) { n = -n } // n points out of A
-        let dOut = rng.uniform(R + 14, 3 * R), dIn = rng.uniform(R + 14, 2.6 * R)
+        let dOut = rng.uniform(R + 14, 5 * R), dIn = rng.uniform(R + 14, 4 * R)
         let pts = [p1 - n * dIn, p2 - n * dIn, p2 + n * dOut, p1 + n * dOut]
         return pts.allSatisfy { $0.x >= lo.x && $0.x <= hi.x && $0.y >= lo.y && $0.y <= hi.y } ? pts : nil
     }
