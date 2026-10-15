@@ -8,9 +8,9 @@ import RailLayout
 /// layout fades in every few hours. The layout, its scenery and the drawing are in the RailLayout module
 /// (docs/pixel-railway.md); this is the canvas, the clock and Settings.
 final class PixelRailway: SKScene {
-    nonisolated static let look = Knob(key: "railway.view", label: "View", range: 0...1, standard: 0, section: "Layout",
+    nonisolated static let look = Knob(key: "railway.view", label: "View", range: 0...1, standard: 1, section: "Layout",
                                        format: .choice(["Top-down", "Isometric"]))
-    nonisolated static let scale = Knob(key: "railway.size", label: "Size", range: 0...2, standard: 1, section: "Layout",
+    nonisolated static let scale = Knob(key: "railway.size", label: "Size", range: 0...2, standard: 0, section: "Layout",
                                         format: .choice(["Small", "Medium", "Large"]))
     nonisolated static let count = Knob(key: "railway.trains", label: "Trains", range: 0...2, standard: 2, section: "Layout",
                                         format: .choice(["One", "Up to two", "Up to three"]))

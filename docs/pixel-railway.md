@@ -28,6 +28,7 @@ Dave asked for it on 2026-10-15: "a top down procedurally generate model train t
 | First eras | US streamliners and US steam; the others come after |
 | The mock-ups | "yes to everything you are showing me, it looks awesome" |
 | Which view stays (later the same day, from sheets of three layouts in each) | "Both, top-down standard" |
+| The standard view and size, that evening, after living with it | "lets default to isometric view its nicer looking, also default to small view (able to see more)" |
 | The next two eras (from their sheets: transition freight 1945–57, and today's US) | "Build both as drawn" |
 | Long freights, which in isometric never fit three to a layout | "Shorten to fit": a train a layout can't take at full length drops cars, down to about five |
 | The N&W class A, first drawn on the Big Boy's slices | "Give it its own shape" (a 2-6-6-4, 36 + 20 px at the Big Boy's compression) |
@@ -68,8 +69,8 @@ Why (the research, not legal advice): Union Pacific sued model makers in 2004 ov
 
 | Setting | Does |
 |---|---|
-| View | Top-down (3/4) or Isometric |
-| Size | Small, Medium (Pixel City's pixel: 4 points on a 982-point-high screen) or Large: the art pixel, so more room for track when smaller |
+| View | Isometric (the standard) or top-down (3/4) |
+| Size | Small (the standard: 3 points on a 982-point-high screen), Medium (Pixel City's pixel, 4) or Large: the art pixel, so more room for track when smaller |
 | Trains | One, up to two, or up to three (the standard): two may share a loop under block signals, or the third be a short train on a tight inner loop; a train that still doesn't fit is left off |
 | New layout every | Hour, 3 hours (standard), 6 hours, or Day |
 | Eras | US streamliners (Santa Fe F7 warbonnet with Hi-Levels; Union Pacific E9 with an Astra Dome; Great Northern F7 streamliner; for an inner loop, a Budd RDC pair or a Union Pacific GP9 local), US steam (Union Pacific Big Boy with mixed freight and a caboose; Southern Pacific GS-4 Daylight; Milwaukee Road Hiawatha; for an inner loop, an 0-6-0 switcher with short cars), US transition freight (Union Pacific F3 with PFE reefers; Santa Fe F7 freight; Pennsylvania GP9 with coal hoppers; New York Central F7 way freight; Norfolk and Western class A with a hopper drag) and US today (BNSF ES44AC Heritage III with double-stacks; Union Pacific SD70ACe with coal gondolas; CSX ES44AH with autoracks and tank cars; Amtrak ALC-42 Phase VII with Superliners; Amtrak P42 Phase V with Amfleet I); none ticked counts as all |
