@@ -22,7 +22,7 @@ public final class Railway {
     /// pixels, lays its scenery, and draws what stands still. A layout often can't fit every train, or a station,
     /// so up to six are grown from seeds drawn from this one, now and then with a short train for an inner loop
     /// in place of the third, and the first with everything (else the one with most) is kept.
-    public init(seed: Int, width: Int, height: Int, view kind: RailViewKind, era: RailEra, count: Int, winter: Bool) {
+    public init(seed: Int, width: Int, height: Int, view kind: RailViewKind, era: RailEra, count: Int, season: RailSeason) {
         (w, h, self.era) = (width, height, era)
         view = RailView(kind: kind, w: width, h: height)
         var best: (score: Int, layout: Layout, scenery: Scenery)?
@@ -31,17 +31,41 @@ public final class Railway {
             var trains = Self.pick(era, count: count, seed: s)
             let short = RailArt.trains(of: era, short: true)
             if trains.count == 3, attempt % 3 == 2, !short.isEmpty { trains[2] = short[(s & 0xFFFF) % short.count].key }
-            let layout = Layout(seed: s, view: view, trains: trains, share: true), scenery = Scenery(layout, era: era, winter: winter)
+            let layout = Layout(seed: s, view: view, trains: trains, share: true), scenery = Scenery(layout, era: era, season: season)
             let score = layout.trains.count * 2 + (scenery.station == nil ? 0 : 1)
             if best == nil || score > best!.score { best = (score, layout, scenery) }
             if score == trains.count * 2 + 1 { break }
         }
         (layout, scenery) = (best!.layout, best!.scenery)
-        statics = Statics(layout, scenery, era: era, winter: winter)
+        Self.hideIdleSignals(layout, scenery)
+        statics = Statics(layout, scenery, era: era, season: season)
         sim = Sim(layout, scenery)
         roadCar = RailArt.roadCar(era)
         frame = Array(repeating: 0, count: width * height)
         depth = statics.depth
+    }
+
+    /// A loop two trains share needs many blocks for none of them ever to lock, but most of their signals would
+    /// only ever show clear. So the trains are run for ten minutes first, and only the signals one of them stops at
+    /// stay, with the starting signal past the platform; the rest are still in the running, just not drawn.
+    static func hideIdleSignals(_ layout: Layout, _ scenery: Scenery) {
+        guard !scenery.blocks.isEmpty else { return }
+        var sim = Sim(layout, scenery), used = Set<SIMD2<Int>>()
+        for _ in 0..<(600 * 60) {
+            sim.step()
+            for tr in sim.trains where tr.v < 0.05 && tr.dwell <= 0 {
+                guard let B = scenery.blocks[tr.loop] else { continue }
+                let L = layout.loops[tr.loop].L, k = B.indices.min { wrap(B[$0] - tr.s, L) < wrap(B[$1] - tr.s, L) }!
+                if wrap(B[k] - tr.s, L) < 8 { used.insert(SIMD2(tr.loop, k)) }
+            }
+        }
+        for i in scenery.signals.indices {
+            guard case .block(let k) = scenery.signals[i].role else { continue }
+            let li = scenery.signals[i].loop
+            if k == 0, scenery.station?.loop == li { used.insert(SIMD2(li, k)) }
+            scenery.signals[i].shown = used.contains(SIMD2(li, k))
+        }
+        scenery.things.removeAll { $0.guards.map { !used.contains($0) } ?? false }
     }
 
     /// Up to `count` of an era's main-line trains, picked by `seed`.
@@ -171,7 +195,7 @@ public final class Railway {
 
     /// Each signal's aspect: a searchlight's red or green, or a semaphore's arm level for stop and raised for clear.
     private func signalParts(_ night: Float) {
-        for sg in scenery.signals {
+        for sg in scenery.signals where sg.shown {
             guard let mine = sim.trains.firstIndex(where: { $0.loop == sg.loop }) else { continue }
             let stop: Bool
             switch sg.role {

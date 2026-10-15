@@ -19,10 +19,11 @@ public enum RailArt {
         static let lamp = Flags(rawValue: 8)        // a lamp head, lit at night in the era's lamp colour
         static let snowTop = Flags(rawValue: 16)    // snow lies on its top faces
         static let snowAll = Flags(rawValue: 32)    // snow on every face (the hill, the banks)
+        static let flat = Flags(rawValue: 64)       // shaded flat: a bank's 1:1 steps would read as a checkerboard
     }
 
     /// Every material: name, colour and flags (W window, D dome glass, H headlight, L lamp, S snow on top, A snow
-    /// all over). Index 0 is empty.
+    /// all over, F flat). Index 0 is empty. The grassy ones have an autumn (`_a`) and a dormant winter (`_w`) form.
     static let table: [(name: String, hex: UInt32, flags: Flags)] = [
         // running gear and shared
         ("truck", 0x2A2A2C, []), ("truckgrey", 0x6E6E6A, []), ("alum", 0xA8ABA8, []), ("cabglass", 0x2E3A44, []),
@@ -65,9 +66,18 @@ public enum RailArt {
         ("steel_lt", 0x6A6E74, []), ("deck", 0x5A5650, .snowTop),
         // nature
         ("leaf", 0x4A6A24, .snowTop), ("leaf_lt", 0x6E8E3A, .snowTop), ("leaf_dk", 0x3E541A, .snowTop), ("trunk", 0x5A4232, []),
-        ("conifer", 0x2A4628, .snowTop), ("conifer_dk", 0x22382A, .snowTop), ("twig", 0x3E3630, []), ("twig_mass", 0x6A5E54, []),
+        ("conifer", 0x2A4628, .snowTop), ("conifer_dk", 0x22382A, .snowTop), ("twig", 0x3E3630, []), ("twig_lt", 0x948A80, []),
         ("hill", 0x557F33, .snowAll), ("hill_lt", 0x6A9440, .snowAll), ("hill_dk", 0x4A7230, .snowAll),
-        ("tunnel", 0x121214, []), ("portal", 0x8A8884, .snowTop), ("bank", 0x6A8A3A, .snowAll),
+        ("tunnel", 0x121214, []), ("portal", 0x8A8884, .snowTop), ("bank", 0x6E8E3E, [.snowAll, .flat]), ("bank_dk", 0x58762F, [.snowAll, .flat]),
+        // the seasons: new leaves, autumn's colours turning and full, dead and held leaves, conifers
+        ("leaf_lime", 0x849236, .snowTop), ("aut_wine", 0x7A2820, .snowTop), ("aut_orange", 0xC8641E, .snowTop), ("aut_yellow", 0xD8A830, .snowTop),
+        ("turn_wine", 0x624922, .snowTop), ("turn_orange", 0x896721, .snowTop), ("turn_yellow", 0x91892A, .snowTop),
+        ("dead_leaf", 0x987A5A, .snowTop), ("held_leaf", 0xBCA480, .snowTop),
+        ("conifer_a", 0x2A4426, .snowTop), ("conifer_w", 0x24382A, .snowTop), ("conifer_dk_w", 0x1E3024, .snowTop),
+        ("hill_a", 0x7E8A44, .snowAll), ("hill_lt_a", 0x8E9A50, .snowAll), ("hill_dk_a", 0x6E783A, .snowAll),
+        ("hill_w", 0x9A8C5E, .snowAll), ("hill_lt_w", 0xA89A68, .snowAll), ("hill_dk_w", 0x8A7C50, .snowAll),
+        ("bank_a", 0x86924A, [.snowAll, .flat]), ("bank_dk_a", 0x6E783A, [.snowAll, .flat]),
+        ("bank_w", 0xA09264, [.snowAll, .flat]), ("bank_dk_w", 0x857850, [.snowAll, .flat]),
     ]
 
     /// A material's index by name; 0 is empty.
@@ -77,7 +87,8 @@ public enum RailArt {
     static let flags: [Flags] = [[]] + table.map(\.flags)
     /// The colour each material turns in snow, on the faces snow lies on.
     static let snowTone: [SIMD3<Float>] = [.zero] + table.map {
-        colour(["hill": 0xE4EAF3, "hill_dk": 0xCCD6E6, "bank": 0xE4EAF3][$0.name] ?? 0xF4F6FA)
+        let base = $0.name.hasSuffix("_a") || $0.name.hasSuffix("_w") ? String($0.name.dropLast(2)) : $0.name
+        return colour(["hill": 0xE4EAF3, "hill_dk": 0xCCD6E6, "bank": 0xE4EAF3, "bank_dk": 0xD4DCEA][base] ?? 0xF4F6FA)
     }
 
     static func colour(_ hex: UInt32) -> SIMD3<Float> {

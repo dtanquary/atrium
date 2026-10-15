@@ -6,21 +6,21 @@ import simd
 struct Statics {
     var day: [SIMD3<Float>], night: [SIMD3<Float>], depth: [Float]
 
-    static let grass: [UInt32] = [0x5A9636, 0x54902F, 0x62A03E], snowField: [UInt32] = [0xF4F6FA, 0xECF0F7, 0xF7F9FC]
+    static let snowField: [UInt32] = [0xF4F6FA, 0xECF0F7, 0xF7F9FC]
     static let ballast: [RailEra: UInt32] = [.steam: 0x4E4844, .streamliners: 0x8A8884] // cinders, lightened to read; granite
     static let tie: [RailEra: UInt32] = [.steam: 0x3E3028, .streamliners: 0x6A6058]      // creosoted; weathered
 
-    init(_ lay: Layout, _ sc: Scenery, era: RailEra, winter: Bool) {
-        let view = lay.view, (w, h) = (view.w, view.h)
+    init(_ lay: Layout, _ sc: Scenery, era: RailEra, season: RailSeason) {
+        let view = lay.view, (w, h) = (view.w, view.h), winter = season.snow
         let dayLight = RailLight(night: false, winter: winter, era: era), nightLight = RailLight(night: true, winter: winter, era: era)
         var base = Canvas(w: w, h: h)
         let ground = (0..<(w * h)).map { view.ground($0 % w, $0 / w) }
-        base.rgb = Self.groundColours(lay, sc, ground, winter: winter)
+        base.rgb = Self.groundColours(lay, sc, ground, season: season)
         for y in 0..<h { for x in 0..<w { base.depth[y * w + x] = Float(view.pixelDepth(x, y, 0)) } }
 
-        var things = sc.things + Scenery.bridges(lay)
+        var things = sc.things + Scenery.bridges(lay, season: season)
         if let hill = sc.hill {
-            things.append(Thing(grid: Scenery.hillModel(hill, lay.loops[hill.loop], sun: view.sun), pos: hill.c, kind: .hill))
+            things.append(Thing(grid: Scenery.hillModel(hill, lay.loops[hill.loop], sun: view.sun, season: season), pos: hill.c, kind: .hill))
         }
         for i in things.indices where things[i].base == nil { things[i].base = sc.hill.map { Scenery.hillHeight($0, things[i].pos) - 1 } ?? 0 }
         for lp in lay.loops { Self.stampTrack(&base, lp, sc.roads, view, era: era, winter: winter) }
@@ -28,7 +28,7 @@ struct Statics {
         var day = base, night = base
         night.rgb = base.rgb.map(nightLight.ground)
         let shade = Self.shadows(things, view, ground)
-        for i in day.rgb.indices where shade[i] { day.rgb[i] *= RailLight.shadow }
+        for i in day.rgb.indices where shade[i] && day.depth[i] <= Float(view.pixelDepth(i % w, i / w, 0)) + 0.1 { day.rgb[i] *= RailLight.shadow } // on the ground only
         var pools = [Float](repeating: 0, count: w * h)
         for q in sc.lamps { Self.pool(&pools, q, view) }
         for i in pools.indices where pools[i] > 0 { night.rgb[i] += pools[i] * nightLight.lamp * 0.55 }
@@ -49,10 +49,10 @@ struct Statics {
         (self.day, self.night, depth) = (day.rgb, night.rgb, day.depth)
     }
 
-    /// Grass, a pond (ice in winter), and roads, by day.
-    static func groundColours(_ lay: Layout, _ sc: Scenery, _ ground: [SIMD2<Double>], winter: Bool) -> [SIMD3<Float>] {
-        let view = lay.view, w = view.w
-        let tones = (winter ? snowField : grass).map(RailArt.colour)
+    /// Grass in the season's colours or snow, a pond (ice in winter), and roads, by day.
+    static func groundColours(_ lay: Layout, _ sc: Scenery, _ ground: [SIMD2<Double>], season: RailSeason) -> [SIMD3<Float>] {
+        let view = lay.view, w = view.w, winter = season.snow
+        let tones = winter ? snowField.map(RailArt.colour) : season.grass
         var col = ground.map { p -> SIMD3<Float> in
             let n = sin(p.x / 9.1 + sin(p.y / 13.7)) * cos(p.y / 8.3 - p.x / 17.0) + 0.5 * sin((p.x + p.y) / 5.3)
             return n > 0.55 ? tones[1] : n < -0.75 ? tones[2] : tones[0]
@@ -67,17 +67,20 @@ struct Statics {
                     if d < rr { col[i] = RailArt.colour(0xBFD3E0) }
                     if d < rr - 2, sin(p.x / 4.1 + cos(p.y / 3.3)) * cos(p.y / 3.7 - p.x / 6.1) > 0.35 { col[i] = RailArt.colour(0xF4F6FA) }
                 } else {
-                    if d < rr + 1.2 { col[i] = RailArt.colour(0x4A7A2C) }
-                    if d < rr { col[i] = RailArt.colour(0x3C6E8A) }
-                    if d < rr - 3.5 { col[i] = RailArt.colour(0x356580) }
+                    if d < rr + 1.2 { col[i] = tones[0] * 0.82 }
+                    if d < rr { col[i] = season.pond }
+                    if d < rr - 3.5 { col[i] = season.pond * 0.9 }
                     let g = sin(floor(p.x) * 12.9898 + floor(p.y) * 78.233) * 43758.5453
                     if d < rr - 2, g - floor(g) > 0.965 { col[i] = RailArt.colour(0x6E9AB4) }
                 }
             }
         }
-        // roads: each pixel's distance to the nearest, worked out only near each stretch of one
-        var near = [Double](repeating: .infinity, count: ground.count)
-        for rd in sc.roads {
+        // roads, worked out only near each stretch of one: asphalt, and at its edges the main road's gravel
+        // shoulder or a street's kerbs (snow banks in winter), every road's edges before any asphalt so junctions
+        // stay clear
+        var asphalt = [Bool](repeating: false, count: ground.count), edge = [UInt32?](repeating: nil, count: ground.count)
+        for (rd, half) in zip(sc.roads, sc.roadHalf) {
+            let rim = half > 3 ? 1.0 : 0.8, rimColour: UInt32 = winter ? 0xC6D2E4 : half > 3 ? 0x8C8270 : 0xA8A49A
             for (a, b) in zip(rd, rd.dropFirst()) {
                 let (lo, hi) = (simd_min(a, b) - 5, simd_max(a, b) + 5)
                 var (x0, y0, x1, y1) = (Int.max, Int.max, Int.min, Int.min)
@@ -87,14 +90,13 @@ struct Statics {
                 }
                 let ab = b - a, l2 = max(dot(ab, ab), 1e-9)
                 for y in clamped(y0, y1 + 1, view.h) { for x in clamped(x0, x1 + 1, w) {
-                    let i = y * w + x, p = ground[i], t = min(max(dot(p - a, ab) / l2, 0), 1)
-                    near[i] = min(near[i], length(p - a - t * ab))
+                    let i = y * w + x, p = ground[i], t = min(max(dot(p - a, ab) / l2, 0), 1), d = length(p - a - t * ab)
+                    if d < half { asphalt[i] = true } else if d < half + rim, edge[i] == nil { edge[i] = rimColour }
                 } }
             }
         }
-        for i in near.indices where near[i] < 4.6 {
-            let d = near[i]
-            if winter { col[i] = RailArt.colour(d < 3.5 ? 0x6E6C68 : 0xC6D2E4) } else if d < 4.5 { col[i] = RailArt.colour(d < 3.5 ? 0x57575A : 0x8C8270) }
+        for i in col.indices {
+            if asphalt[i] { col[i] = RailArt.colour(winter ? 0x6E6C68 : 0x57575A) } else if let e = edge[i] { col[i] = RailArt.colour(e) }
         }
         return col
     }
@@ -110,22 +112,33 @@ struct Statics {
             let ab = b - a, t = min(max(dot(p - a, ab) / max(dot(ab, ab), 1e-9), 0), 1)
             return length(p - a - t * ab) < 3.6
         } } }
-        let n = lp.P.count
-        func stamp(_ offsets: [Double], _ eps: Double, _ which: (Int) -> SIMD3<Float>?) {
-            for i in 0..<n {
+        // Within one pixel the track's nearest surface wins, and on it the rail over the tie over the bed: on a ramp
+        // a pixel spans a little height, which would otherwise let the bed bury the rails.
+        var near = [Double](repeating: -.infinity, count: canvas.w * canvas.h), marks: [(i: Int, d: Double, layer: Int, c: SIMD3<Float>)] = []
+        func stamp(_ offsets: [Double], _ layer: Int, _ which: (Int) -> SIMD3<Float>?) {
+            for i in lp.P.indices {
                 guard let c = which(i) else { continue }
                 let nrm = SIMD2(-lp.T[i].y, lp.T[i].x)
                 for o in offsets {
                     let q = lp.P[i] + o * nrm, s = view.project([q.x, q.y, lp.Z[i]]), x = Int(floor(s.x)), y = Int(floor(s.y))
-                    canvas.put(x, y, c, Float(view.pixelDepth(x, y, lp.Z[i]) + eps))
+                    guard x >= 0, x < canvas.w, y >= 0, y < canvas.h else { continue }
+                    let k = y * canvas.w + x, d = view.pixelDepth(x, y, lp.Z[i])
+                    near[k] = max(near[k], d)
+                    marks.append((k, d, layer, c))
                 }
             }
         }
         let wide = stride(from: -3.5, through: 3.5, by: 0.5).map { $0 }, ties = stride(from: -2.5, through: 2.5, by: 0.5).map { $0 }
-        stamp(wide, 0.01) { onRoad[$0] ? nil : bed }
-        stamp(wide, 0.01) { onRoad[$0] ? planks : nil }
-        stamp(ties, 0.02) { $0 % 8 == 0 && !onRoad[$0] ? tie : nil }
-        stamp([-1, 1], 0.03) { _ in rail }
+        stamp(wide, 0) { onRoad[$0] ? nil : bed }
+        stamp(wide, 1) { onRoad[$0] ? planks : nil }
+        stamp(ties, 2) { $0 % 8 == 0 && !onRoad[$0] ? tie : nil }
+        stamp([-1, 1], 3) { _ in rail }
+        var pick = [(layer: Int, d: Double, c: SIMD3<Float>)?](repeating: nil, count: near.count)
+        for m in marks where m.d >= near[m.i] - 0.6 {
+            if let p = pick[m.i], (p.layer, p.d) > (m.layer, m.d) { continue }
+            pick[m.i] = (m.layer, m.d, m.c)
+        }
+        for (k, p) in pick.enumerated() { if let p { canvas.put(k % canvas.w, k / canvas.w, p.c, Float(near[k] + 0.01 * Double(p.layer + 1))) } }
     }
 
     /// Ground points the Sun can't see: every voxel of every standing thing dropped along the Sun's rays onto a

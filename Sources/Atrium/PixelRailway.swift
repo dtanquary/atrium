@@ -23,17 +23,21 @@ final class PixelRailway: SKScene {
     nonisolated static let snow = Knob(key: "railway.snow", label: "Snow on the ground when there's snow where you are", range: 0...1, standard: 1,
                                        section: "Seasons", format: .toggle)
     nonisolated static let previewSnow = Knob(key: "railway.previewSnow", label: "Preview snow", range: 0...1, standard: 0, section: "Preview", format: .toggle)
+    nonisolated static let previewDay = Knob(key: "railway.previewDay", label: "Preview a day of the year", range: 0...1, standard: 0, section: "Preview",
+                                             format: .toggle)
+    nonisolated static let day = Knob(key: "railway.day", label: "Day", range: 0...364, standard: 290, section: "Preview", format: .date,
+                                      shownWhen: "railway.previewDay")
     nonisolated static let previewTime = Knob(key: "railway.previewTime", label: "Preview a time of day", range: 0...1, standard: 0, section: "Preview",
                                               format: .toggle)
     nonisolated static let previewHour = Knob(key: "railway.previewHour", label: "Time", range: 0...24, standard: 21, section: "Preview", format: .clock,
                                               shownWhen: "railway.previewTime")
-    nonisolated static let knobs = [look, scale, count, every, streamliners, steam, snow, previewSnow, previewTime, previewHour]
+    nonisolated static let knobs = [look, scale, count, every, streamliners, steam, snow, previewDay, day, previewSnow, previewTime, previewHour]
     /// Under the eras in Settings, the only place the railroads are named.
     nonisolated static let names = (section: "Eras", text: "Names say which real train each is drawn after. Atrium isn't affiliated with or endorsed by any railroad.")
 
     /// What a layout is built from: everything that, changed, makes a new one.
     struct Plan: Equatable {
-        var seed: Int, w: Int, h: Int, pixel: CGFloat, view: RailViewKind, era: RailEra, count: Int, winter: Bool
+        var seed: Int, w: Int, h: Int, pixel: CGFloat, view: RailViewKind, era: RailEra, count: Int, season: RailSeason
     }
 
     private let plan: Plan
@@ -81,14 +85,25 @@ final class PixelRailway: SKScene {
         let ticked = [(streamliners, RailEra.streamliners), (steam, .steam)].filter { $0.0.value > 0.5 }.map(\.1)
         let eras = ticked.isEmpty ? RailEra.allCases : ticked
         let era = eras[Int((UInt64(truncatingIfNeeded: seed) &* 0x9E37_79B9_7F4A_7C15) >> 33) % eras.count]
-        let snowing = (LiveWeather.shared.latest?.snowDepth ?? 0) > 0.01 && snow.value > 0.5
         return Plan(seed: seed, w: Int((size.width / pixel).rounded(.up)), h: Int((size.height / pixel).rounded(.up)), pixel: pixel,
-                    view: look.value > 0.5 ? .iso : .topDown, era: era, count: Int(count.value) + 1,
-                    winter: previewSnow.value > 0.5 || snowing)
+                    view: look.value > 0.5 ? .iso : .topDown, era: era, count: Int(count.value) + 1, season: season(date))
+    }
+
+    /// The time of year where you are, or on the previewed day: A Tree for the Year's oak, moved for your latitude,
+    /// and its grass; snow where the weather says a centimetre or more lies, or while previewing it. Whole days,
+    /// so the leaves turn and fall a day at a time.
+    static func season(_ date: Date) -> RailSeason {
+        let latitude = Location.shared.coordinate.latitude
+        let when = previewDay.value > 0.5 ? Calendar.current.startOfDay(for: Calendar.current.date(from: DateComponents(year: Calendar.current.component(.year, from: date)))!)
+            .addingTimeInterval(day.value * 86400 + 43200) : date
+        let oak = Phenology.whiteOak.moved(latitude: latitude, warmer: 0), d = Phenology.day(when, latitude: latitude).rounded(.down)
+        let snowing = snow.value > 0.5 && (LiveWeather.shared.latest?.snowDepth ?? 0) > 0.01
+        return RailSeason(day: d, breaks: oak.breaks, full: oak.full, onset: oak.onset, peak: oak.peak, bare: oak.bare,
+                          green: TreeScene.greenness(day: d, oak), snow: previewSnow.value > 0.5 || snowing)
     }
 
     nonisolated static func build(_ plan: Plan) -> Railway {
-        Railway(seed: plan.seed, width: plan.w, height: plan.h, view: plan.view, era: plan.era, count: plan.count, winter: plan.winter)
+        Railway(seed: plan.seed, width: plan.w, height: plan.h, view: plan.view, era: plan.era, count: plan.count, season: plan.season)
     }
 
     /// How dark it is, 0 by day to 1 at night, by the Sun where you are, or at the preview hour.

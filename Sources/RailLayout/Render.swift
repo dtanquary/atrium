@@ -182,7 +182,8 @@ struct Canvas {
         // depth as if the foot sat exactly on its pixel's ray, as the sprite was marched
         let base = Float(view.pixelDepth(ax, ay, p.z))
         for k in 0..<m.count {
-            let c = light.colour(m.mat[k], light.shade(m.normal[k], view), top: m.top[k], lit: lit)
+            let shade = RailArt.flags[Int(m.mat[k])].contains(.flat) ? 0.92 : light.shade(m.normal[k], view)
+            let c = light.colour(m.mat[k], shade, top: m.top[k], lit: lit)
             put(Int(m.dx[k]) + ax, Int(m.dy[k]) + ay, c, m.dd[k] + base)
         }
     }
@@ -303,30 +304,44 @@ enum Models {
         return g
     }
 
-    /// A broadleaf tree; bare in winter, its crown a grey-brown mass of fine twigs with darker branches in it and
-    /// a ragged edge.
-    static func tree(seed: Int, winter: Bool) -> Voxels {
+    /// A broadleaf tree on the season's day: a dark trunk forking into 3 or 4 branches up to a light, ragged crown
+    /// of fine twigs (what shows when it's bare), with the leaves that are out laid over it.
+    static func tree(seed: Int, season: RailSeason) -> Voxels {
         var rng = Dice(seed)
         let r = rng.uniform(2.2, 3.4), rz = rng.uniform(2.0, 2.8), c = rng.uniform(3.5, 5.0)
         let n = Int(2 * r) + 3, nz = Int(c + rz) + 2, mid = n / 2
-        var g = Voxels(n, n, nz)
+        var g = Voxels(n, n, nz), crown: [(Int, Int, Int)] = []
         for x in 0..<n { for y in 0..<n { for z in 0..<nz {
             let dx = Double(x - mid) / r, dy = Double(y - mid) / r, dz = (Double(z) + 0.5 - c) / rz
             let e = dx * dx + dy * dy + dz * dz
             guard e <= 1 + 0.25 * (hsh(seed, x, y, z) - 0.5) else { continue }
-            if winter {
-                if e > 0.82 * 0.82, hsh(seed, x, y, z, 7) < 0.35 { continue }
-                g[x, y, z] = m(hsh(seed, x, y, z, 9) < 0.22 ? "twig" : "twig_mass")
-            } else {
-                let t = hsh(seed, x, y, z, 3)
-                g[x, y, z] = m(Double(z) + 0.5 > c + 0.4 * rz && t < 0.6 ? "leaf_lt" : t < 0.25 ? "leaf_dk" : "leaf")
-            }
+            crown.append((x, y, z))
+            if e > 0.5, hsh(seed, x, y, z, 4) < (Double(z) + 0.5 > c ? 0.65 : 0.4) { g[x, y, z] = m("twig_lt") }
         } } }
-        g.fill(mid..<(mid + 1), mid..<(mid + 1), 0..<Int(c), m("trunk"))
+        let fork = max(2, Int(c - rz * 0.6))
+        g.fill(mid..<(mid + 1), mid..<(mid + 1), 0..<(fork + 1), m("twig"))
+        for k in 0..<(3 + rng.below(2)) {
+            let a = rng.uniform(0, 2 * .pi) + Double(k) * 1.7
+            for i in 0..<6 {
+                let t = 0.15 + 0.8 * Double(i) / 5
+                let x = Int((Double(mid) + cos(a) * r * 0.9 * t).rounded()), y = Int((Double(mid) + sin(a) * r * 0.9 * t).rounded())
+                let z = Int((Double(fork) + (c + rz * 0.5 - Double(fork)) * t).rounded())
+                if x >= 0, x < n, y >= 0, y < n, z >= 0, z < nz { g[x, y, z] = m("twig") }
+            }
+        }
+        for (x, y, z) in crown {
+            guard var leaf = season.leaf(seed: seed, x, y, z, nz: nz) else { continue }
+            if leaf == "green" {
+                let t = hsh(seed, x, y, z, 3)
+                leaf = Double(z) + 0.5 > c + 0.4 * rz && t < 0.6 ? "leaf_lt" : t < 0.25 ? "leaf_dk" : "leaf"
+            }
+            g[x, y, z] = m(leaf)
+        }
         return g
     }
 
-    static func conifer(seed: Int) -> Voxels {
+    static func conifer(seed: Int, season: RailSeason) -> Voxels {
+        let (lit, dark) = season.conifer
         var rng = Dice(seed)
         let height = 7 + rng.below(5), rb = rng.uniform(2.2, 3.0)
         let n = Int(2 * rb) + 3, mid = n / 2
@@ -335,7 +350,7 @@ enum Models {
         for z in 1..<height {
             let rr = rb * (1 - Double(z - 1) / Double(height - 1)) + 0.35
             for x in 0..<n { for y in 0..<n where hypot(Double(x - mid), Double(y - mid)) <= rr {
-                g[x, y, z] = m(hsh(seed, x, y, z) < 0.3 ? "conifer_dk" : "conifer")
+                g[x, y, z] = m(hsh(seed, x, y, z) < 0.3 ? dark : lit)
             } }
         }
         return g

@@ -6,6 +6,8 @@ import simd
 struct Thing {
     enum Kind { case platform, station, canopy, lamp, tank, signal, house, crossing, pole, tree, deck, abutment, bank, hill }
     var grid: Voxels, pos: SIMD2<Double>, heading = 0.0, kind: Kind, lit = true, base: Double? = 0
+    /// The block a signal's post guards, (loop, block), so a signal no train stops at can be taken out.
+    var guards: SIMD2<Int>? = nil
 }
 
 /// A lineside signal: on a lone train's loop just past the platform (red while that train is just past it), at a
@@ -13,6 +15,8 @@ struct Thing {
 struct Signal {
     enum Role { case lone, block(Int), home(group: Int) }
     let loop: Int, s: Double, role: Role, pos: SIMD2<Double>, heading: Double
+    /// Drawn: a block signal no train is ever held at is left out, as it would only ever show clear.
+    var shown = true
 }
 
 /// A road over the track: where, along which road, and the masts at each approach (place, heading, side).
@@ -73,16 +77,22 @@ func rectPoints(_ c: SIMD2<Double>, _ along: SIMD2<Double>, _ across: SIMD2<Doub
 /// Everything round the track, from the layout's seed: a station and its town, the road over the line and its
 /// level crossing, a pond, a hill with a tunnel, signals, a pole line, lamps and trees.
 final class Scenery {
-    struct Station { let loop: Int, piece: Piece, side: Double, mid: SIMD2<Double>, L: Double, sStop: Double }
+    struct Station {
+        let loop: Int, piece: Piece, side: Double, mid: SIMD2<Double>, L: Double, sStop: Double
+        /// A train standing at the platform would hold a diamond, so trains run through instead.
+        var noStop = false
+    }
     struct Hill { let loop: Int, c: SIMD2<Double>, r: Double, h: Double, seed: Int }
 
     var things: [Thing] = [], roads: [[SIMD2<Double>]] = [], lamps: [SIMD2<Double>] = []
+    /// Each road's half width: the main road 3.5 with a gravel shoulder, the town's streets 2.5 with kerbs.
+    var roadHalf: [Double] = []
     var crossings: [RoadCrossing] = [], signals: [Signal] = [], poles: [SIMD2<Double>] = []
     var pond: (c: SIMD2<Double>, r: Double, seed: Int)?, hill: Hill?, station: Station?
     /// Where each block starts, on loops two trains share.
     var blocks: [Int: [Double]] = [:]
 
-    init(_ lay: Layout, era: RailEra, winter: Bool) {
+    init(_ lay: Layout, era: RailEra, season: RailSeason) {
         var rng = Dice(lay.seed * 7919 + (era == .steam ? 1 : 2))
         var G = Room(lay.lo - 30, lay.hi + 30)
         for lp in lay.loops { G.mark(stride(from: 0, to: lp.P.count, by: 4).map { lp.P[$0] }, 6.5) }
@@ -170,7 +180,7 @@ final class Scenery {
                 }
                 let line = halves[1].reversed() + halves[0].dropFirst()
                 if line.count > 6 {
-                    roads.append(Array(line))
+                    roads.append(Array(line)); roadHalf.append(3.5)
                     G.mark(Array(line), 4.5)
                 }
                 // level crossings: wherever the road meets a track
@@ -201,8 +211,8 @@ final class Scenery {
                         }
                         guard ext[1]! + ext[-1]! >= 28 else { continue }
                         let pts = stride(from: -ext[-1]!, through: ext[1]!, by: 2).map { start + d * $0 }
-                        roads.append(pts); reach[t] = (-ext[-1]!, ext[1]!)
-                        G.mark(pts, 4.5)
+                        roads.append(pts); roadHalf.append(2.5); reach[t] = (-ext[-1]!, ext[1]!)
+                        G.mark(pts, 3.5)
                     }
                     for (t1, t2) in [(22.0, 50.0), (-22, -50)] {
                         guard let r1 = reach[t1], let r2 = reach[t2] else { continue }
@@ -212,21 +222,21 @@ final class Scenery {
                             let seg = (0..<count).map { a + (b - a) * Double($0) / Double(count - 1) }
                             let inner = seg.filter { min(length($0 - a), length($0 - b)) > 6 }
                             if !inner.isEmpty, inner.flatMap({ rectPoints($0, n, d, 2, 9) }).allSatisfy(G.free) {
-                                roads.append(seg)
-                                G.mark(seg, 4.5)
+                                roads.append(seg); roadHalf.append(2.5)
+                                G.mark(seg, 3.5)
                             }
                         }
                     }
                 }
                 // houses along the streets, both sides, and along the main road
                 var houses: [(c: SIMD2<Double>, dv: SIMD2<Double>, toward: SIMD2<Double>, w: Int, d: Int)] = []
-                for rd in roads where rd.count >= 4 {
+                for (ri, rd) in roads.enumerated() where rd.count >= 4 {
                     let dv = normalize(rd[rd.count - 1] - rd[0]), nn = SIMD2(-dv.y, dv.x), total = length(rd[rd.count - 1] - rd[0])
                     for sside in [1.0, -1.0] {
                         var t = 6.0
                         while t < total - 6 {
                             let hw = 6 + rng.below(4), hd = 5 + rng.below(3)
-                            let c = rd[0] + dv * (t + Double(hw) / 2) + nn * sside * (5.5 + Double(hd) / 2)
+                            let c = rd[0] + dv * (t + Double(hw) / 2) + nn * sside * (roadHalf[ri] + 2 + Double(hd) / 2)
                             let pts = rectPoints(c, dv, nn, Double(hw + 1), Double(hd))
                             if pts.allSatisfy({ G.free($0) && onScreen($0, 2) }), length(c - mid) < 150 {
                                 houses.append((c, dv, nn * sside, hw, hd))
@@ -311,34 +321,28 @@ final class Scenery {
             }
         }
 
-        // blocks on loops two trains share, a signal at each block's entrance, none where a train held at one
-        // would stand on a diamond, the road, the platform or in the tunnel
+        // blocks on loops two trains share, a signal at each block's entrance: none from a diamond's approach to a
+        // train-length past it, and if it can be helped none where a train held at one would stand on the road, at
+        // the platform or in the tunnel
         for (li, lp) in lay.loops.enumerated() where lp.keys.count >= 2 {
             let lens = lp.keys.map { RailArt.trains[$0]!.length + 2 }, longest = lens.max()!
-            guard let nb = Layout.blockCount(lp.L, lay.sharedLengths(li, lp.keys)) else { continue }
-            let lb = lp.L / Double(nb)
-            var bad: [(Double, Double)] = []
-            for c in lay.cross where c.kind == .diamond { if let s0 = c.s(on: li) { bad.append((s0 - 12, s0 + longest + 12)) } }
-            for cr in crossings where cr.loop == li { bad.append((cr.s - 10, cr.s + longest + 10)) }
-            let st = station?.loop == li ? station : nil
-            if let st { bad.append((st.sStop - st.L - 6, st.sStop + 6)) }
+            var prefer = crossings.filter { $0.loop == li }.map { ($0.s - 10, $0.s + longest + 10) }
+            if let st = station, st.loop == li {
+                prefer.append((st.sStop - st.L - 6, st.sStop + 6))
+                // a train standing at the platform mustn't hold a diamond either: then trains run through
+                if lay.diamondZones(li, longest: 0).contains(where: { wrap(st.sStop - $0.0, lp.L) <= longest + 45 }) { station!.noStop = true }
+            }
             if let hill, hill.loop == li {
-                for k in stride(from: 0, to: lp.P.count, by: 32) where Self.hillHeight(hill, lp.P[k]) >= 8 { bad.append((lp.S[k] - 8, lp.S[k] + 8)) }
+                for k in stride(from: 0, to: lp.P.count, by: 32) where Self.hillHeight(hill, lp.P[k]) >= 8 { prefer.append((lp.S[k] - 8, lp.S[k] + 8)) }
             }
-            func ok(_ x: Double) -> Bool { bad.allSatisfy { !(0...($0.1 - $0.0)).contains(wrap(x - $0.0, lp.L)) } }
-            let b0 = st.map { $0.sStop + 8 } ?? 0
-            var bounds: [Double] = []
-            for k in 0..<nb {
-                var x = b0 + Double(k) * lb
-                if let nudge = stride(from: 0, to: lb * 0.6, by: 1).first(where: { ok(x + $0) }) { x += nudge }
-                bounds.append((wrap(x, lp.L) * 100).rounded() / 100)
-            }
-            bounds = Array(Set(bounds)).sorted()
+            let b0 = station.flatMap { $0.loop == li ? $0.sStop + 8 : nil } ?? 0
+            func plan(_ b0: Double) -> [Double]? { Layout.planBlocks(lp.L, lens, must: lay.diamondZones(li, longest: longest), prefer: prefer, from: b0) }
+            guard let bounds = plan(b0) ?? plan(0) else { lp.keys.removeLast(); continue } // (the layout checked from 0)
             blocks[li] = bounds
             for (k, x) in bounds.enumerated() {
                 let (p, t) = lp.at(x), q = SIMD2(p.x, p.y) + SIMD2(-t.y, t.x) * 5.5, hq = atan2(t.y, t.x)
                 signals.append(Signal(loop: li, s: x, role: .block(k), pos: q, heading: hq))
-                things.append(Thing(grid: signalModel, pos: q, heading: hq, kind: .signal))
+                things.append(Thing(grid: signalModel, pos: q, heading: hq, kind: .signal, guards: SIMD2(li, k)))
             }
         }
 
@@ -367,14 +371,14 @@ final class Scenery {
         }
         for (k, p) in trees.enumerated() {
             let conifer = hsh(k, lay.seed, 5) < (era == .steam ? 0.45 : 0.35)
-            let g = conifer ? Models.conifer(seed: k * 31 + lay.seed) : Models.tree(seed: k * 31 + lay.seed, winter: winter)
+            let g = conifer ? Models.conifer(seed: k * 31 + lay.seed, season: season) : Models.tree(seed: k * 31 + lay.seed, season: season)
             things.append(Thing(grid: g, pos: p, kind: .tree))
         }
         if let hill { // a few conifers on the hill
             var hr = Dice(lay.seed + 5)
             for k in 0..<5 {
                 let a = hr.uniform(0, 2 * .pi), rr = hr.uniform(0.2, 0.6) * hill.r
-                things.append(Thing(grid: Models.conifer(seed: 900 + k + lay.seed), pos: hill.c + rr * SIMD2(cos(a), sin(a)), kind: .tree, base: nil))
+                things.append(Thing(grid: Models.conifer(seed: 900 + k + lay.seed, season: season), pos: hill.c + rr * SIMD2(cos(a), sin(a)), kind: .tree, base: nil))
             }
         }
     }
@@ -395,7 +399,7 @@ final class Scenery {
 
     /// The hill as voxel columns, with a cutting up to each portal, a stone headwall and a dark bore; its grass
     /// lighter on the slopes facing the Sun.
-    static func hillModel(_ hill: Hill, _ loop: Loop, sun: SIMD3<Double>) -> Voxels {
+    static func hillModel(_ hill: Hill, _ loop: Loop, sun: SIMD3<Double>, season: RailSeason) -> Voxels {
         let n = Int(2 * hill.r + 6), top = Int(ceil(hill.h)) + 3
         var g = Voxels(n, n, top)
         func at(_ i: Int, _ j: Int) -> SIMD2<Double> { hill.c + SIMD2(Double(i) - Double(n) / 2 + 0.5, Double(j) - Double(n) / 2 + 0.5) }
@@ -414,7 +418,7 @@ final class Scenery {
                 return (h[hi.0 * n + hi.1] - h[lo.0 * n + lo.1]) / max(span, 1)
             }
             let normal = normalize(SIMD3(-slope(i, j, true), -slope(i, j, false), 1)), lit = dot(normal, sun)
-            g.fill(i..<(i + 1), j..<(j + 1), 0..<tz, RailArt.mat(lit > 0.86 ? "hill_lt" : lit > 0.6 ? "hill" : "hill_dk"))
+            g.fill(i..<(i + 1), j..<(j + 1), 0..<tz, RailArt.mat(season.grassy(lit > 0.86 ? "hill_lt" : lit > 0.6 ? "hill" : "hill_dk")))
             var (k, dt) = (0, Double.infinity)
             for (q, idx) in near.enumerated() { let d = length(at(i, j) - loop.P[idx]); if d < dt { (k, dt) = (q, d) } }
             let hk = near.isEmpty ? 0 : ht[k]
@@ -432,7 +436,7 @@ final class Scenery {
     }
 
     /// The deck over the lower line, its abutments, and a grassy bank under each ramp.
-    static func bridges(_ lay: Layout) -> [Thing] {
+    static func bridges(_ lay: Layout, season: RailSeason) -> [Thing] {
         var out: [Thing] = []
         for c in lay.cross where c.kind == .bridge {
             let up = lay.loops[c.upper], sUp = c.a == c.upper ? c.sa : c.sb
@@ -447,13 +451,27 @@ final class Scenery {
                 a.fill(0..<3, 0..<9, 0..<Int(bridgeHeight), RailArt.mat("concrete"))
                 out.append(Thing(grid: a, pos: [q.x, q.y], heading: hd, kind: .abutment))
             }
-            for ss in stride(from: sUp - 8 - ramp - 2, to: sUp + 8 + ramp + 2, by: 1.5) where abs(ss - sUp) >= 11.5 {
-                let (q, tq) = up.at(ss)
-                guard q.z >= 1 else { continue }
-                var b = Voxels(4, 9, Int(floor(q.z)))
-                b.fill(0..<4, 0..<9, 0..<Int(floor(q.z)), RailArt.mat("bank"))
-                out.append(Thing(grid: b, pos: [q.x, q.y], heading: atan2(tq.y, tq.x), kind: .bank))
-            }
+            // the bank under each ramp: one smooth heightfield, its top just under the track, sloping 1:1 at the
+            // sides, kept clear of the line beneath
+            let q = stride(from: sUp - 8 - ramp - 2, to: sUp + 8 + ramp + 2, by: 0.5).filter { abs($0 - sUp) >= 11.5 }.map { up.at($0).p }.filter { $0.z > 0.3 }
+            guard !q.isEmpty else { continue }
+            let lo = q.reduce(SIMD2(repeating: Double.infinity)) { simd_min($0, SIMD2($1.x, $1.y)) }, hi = q.reduce(SIMD2(repeating: -Double.infinity)) { simd_max($0, SIMD2($1.x, $1.y)) }
+            let (x0, y0) = (floor(lo.x) - 12, floor(lo.y) - 12), nx = Int(ceil(hi.x) + 12 - x0), ny = Int(ceil(hi.y) + 12 - y0)
+            let others = lay.loops.indices.filter { $0 != c.upper }.flatMap { j in stride(from: 0, to: lay.loops[j].P.count, by: 2).map { lay.loops[j].P[$0] } }
+            var top = [Int](repeating: 0, count: nx * ny), inner = [Bool](repeating: false, count: nx * ny)
+            for i in 0..<nx { for j in 0..<ny {
+                let p = SIMD2(x0 + Double(i) + 0.5, y0 + Double(j) + 0.5)
+                var (dmin, zt) = (Double.infinity, 0.0)
+                for t in q { let d = length(SIMD2(t.x, t.y) - p); if d < dmin { (dmin, zt) = (d, t.z) } }
+                var h = dmin <= 4.5 ? zt - 0.15 : zt - 0.15 - (dmin - 4.5)
+                if h >= 1, others.contains(where: { length($0 - p) < 5.5 }) { h = 0 }
+                top[i + nx * j] = Int(floor(max(h, 0))); inner[i + nx * j] = dmin <= 4.5
+            } }
+            guard let tallest = top.max(), tallest >= 1 else { continue }
+            var b = Voxels(nx, ny, tallest)
+            let (bank, flank) = (RailArt.mat(season.grassy("bank")), RailArt.mat(season.grassy("bank_dk")))
+            for i in 0..<nx { for j in 0..<ny { for z in 0..<top[i + nx * j] { b[i, j, z] = inner[i + nx * j] ? bank : flank } } }
+            out.append(Thing(grid: b, pos: [x0 + Double(nx) / 2, y0 + Double(ny) / 2], kind: .bank))
         }
         return out
     }

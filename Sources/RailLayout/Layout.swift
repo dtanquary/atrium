@@ -200,9 +200,10 @@ final class Layout {
         if share {
             for key in order where !loops.contains(where: { $0.keys.contains(key) }) {
                 let consist = RailArt.trains[key]!
-                let fit = loops.indices.filter {
-                    loops[$0].keys.count < 2 && loops[$0].rmin >= 0.98 * consist.minRadius
-                        && Self.blockCount(loops[$0].L, sharedLengths($0, loops[$0].keys + [key])) != nil
+                let fit = loops.indices.filter { li in
+                    let lens = (loops[li].keys + [key]).map { RailArt.trains[$0]!.length + 2 }
+                    return loops[li].keys.count < 2 && loops[li].rmin >= 0.98 * consist.minRadius
+                        && Self.planBlocks(loops[li].L, lens, must: diamondZones(li, longest: lens.max()!)) != nil
                 }
                 fit.max { loops[$0].L < loops[$1].L }.map { loops[$0].keys.append(key) }
             }
@@ -210,18 +211,39 @@ final class Layout {
         }
     }
 
-    /// What the blocks of loop `li` must hold for these trains. A train takes a diamond only with the blocks to clear
-    /// it by its own length, so a loop with a diamond must hold one more train-length besides.
-    func sharedLengths(_ li: Int, _ keys: [String]) -> [Double] {
-        let lens = keys.map { RailArt.trains[$0]!.length + 2 }
-        return lens + (cross.contains { $0.kind == .diamond && ($0.a == li || $0.b == li) } ? [lens.max()!] : [])
+    /// Stretches of loop `li` where no block may begin: from a diamond's approach to a train-length past it, so a
+    /// train never stands at a block signal holding a diamond (which, with a train waiting for that diamond, could
+    /// lock them both).
+    func diamondZones(_ li: Int, longest: Double) -> [(Double, Double)] {
+        cross.filter { $0.kind == .diamond }.compactMap { c in c.s(on: li).map { ($0 - 40, $0 + longest + 12) } }
     }
 
-    /// Blocks for trains sharing a one-way loop: at least 4, more than the trains, and more than all of them can
-    /// hold at once (each spans at most ceil(length / block) + 1 blocks and reserves 1 ahead), so one is always
-    /// free and they can't deadlock. Nil if the loop is too short.
-    static func blockCount(_ L: Double, _ lengths: [Double]) -> Int? {
-        (max(4, lengths.count + 2)...20).first { n in n > lengths.reduce(0) { $0 + Int(ceil($1 / (L / Double(n)))) + 2 } }
+    /// Where blocks begin for trains sharing a one-way loop of length L: the fewest blocks (4 or more, more than
+    /// the trains) such that the trains together can never hold every one, each spanning at most ceil(length /
+    /// shortest block) + 1 and reserving one ahead, so they can't lock. No block begins in a `must` zone, nor in a
+    /// `prefer` one if that can be helped; a boundary that can't move out of one is left out, for a longer block.
+    /// Nil if there's no such plan.
+    static func planBlocks(_ L: Double, _ lens: [Double], must: [(Double, Double)], prefer: [(Double, Double)] = [], from b0: Double = 0) -> [Double]? {
+        let least = max(4, lens.count + 1)
+        func clear(_ x: Double, _ zones: [(Double, Double)]) -> Bool { zones.allSatisfy { !(0...($0.1 - $0.0)).contains(wrap(x - $0.0, L)) } }
+        for zones in [must + prefer, must] {
+            for n in least..<24 {
+                let lb = L / Double(n)
+                for shift in stride(from: 0.0, to: lb, by: 2) {
+                    var bounds = Set<Double>()
+                    for k in 0..<n {
+                        let x = b0 + shift + Double(k) * lb
+                        if let nudge = stride(from: 0.0, to: lb * 0.45, by: 1).first(where: { clear(x + $0, zones) }) {
+                            bounds.insert((wrap(x + nudge, L) * 100).rounded() / 100)
+                        }
+                    }
+                    guard bounds.count >= least else { continue }
+                    let b = bounds.sorted(), gaps = zip(b, b.dropFirst() + [b[0] + L]).map { $1 - $0 }, shortest = gaps.min()!
+                    if shortest > 1, b.count > lens.reduce(0, { $0 + Int(ceil($1 / shortest)) + 2 }) { return b }
+                }
+            }
+        }
+        return nil
     }
 
     // MARK: drawing loops
