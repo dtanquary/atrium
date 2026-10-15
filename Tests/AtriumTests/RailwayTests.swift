@@ -1,5 +1,6 @@
 import Foundation
 import ImageIO
+import simd
 import Testing
 import UniformTypeIdentifiers
 @testable import RailLayout
@@ -30,7 +31,7 @@ private func save(_ railway: Railway, night: Float, _ name: String, scale: Int =
         for era in RailEra.allCases {
             for winter in [false, true] {
                 let clock = ContinuousClock(), began = clock.now
-                let railway = Railway(seed: seed, width: 378, height: 246, view: kind, era: era, trains: Railway.pick(era, count: 3, seed: seed), winter: winter)
+                let railway = Railway(seed: seed, width: 378, height: 246, view: kind, era: era, count: 3, winter: winter)
                 let took = clock.now - began
                 let name = "\(kind == .iso ? "iso" : "tq")-\(era == .steam ? "steam" : "streamliners")\(winter ? "-snow" : "")"
                 print("Pixel Railway \(name), seed \(seed): built in \(took); \(railway.names.joined(separator: ", "))")
@@ -38,6 +39,36 @@ private func save(_ railway: Railway, night: Float, _ name: String, scale: Int =
                 try save(railway, night: 0, name)
                 if !winter { try save(railway, night: 1, name + "-night") }
             }
+        }
+    }
+}
+
+/// With its retries a top-down layout nearly always fits three trains and a station, and the trains never lock:
+/// over ten simulated minutes, never all standing (but at a platform) for 10 s, and none held at a signal for 2
+/// minutes. Prints how often each view and era fits everything, and how long a railway takes to build.
+@Test func railwayFitsItsTrainsAndNeverLocks() throws {
+    for kind in [RailViewKind.topDown, .iso] {
+        for era in RailEra.allCases {
+            var (all, stations, longest, took) = (0, 0, 0.0, Duration.zero)
+            let clock = ContinuousClock()
+            for seed in 1...20 {
+                let began = clock.now
+                let railway = Railway(seed: seed, width: 378, height: 246, view: kind, era: era, count: 3, winter: false)
+                took += clock.now - began
+                if railway.layout.trains.count == 3 { all += 1 }
+                if railway.scenery.station != nil { stations += 1 }
+                var sim = railway.sim, still = 0.0
+                for _ in 0..<(600 * 60) {
+                    sim.step()
+                    still = sim.trains.allSatisfy { $0.v < 0.05 && $0.dwell <= 0 } ? still + Sim.dt : 0
+                    #expect(still < 10, "\(kind) \(era) seed \(seed): every train standing at \(sim.t) s")
+                    longest = max(longest, sim.trains.map(\.stopped).max()!)
+                    if still >= 10 { break }
+                }
+                #expect(longest < 120, "\(kind) \(era) seed \(seed): a train held \(longest) s")
+            }
+            print("Pixel Railway \(kind) \(era): 3 trains on \(all)/20, a station on \(stations)/20, longest hold \(Int(longest)) s, built in \(took / 20) each")
+            if kind == .topDown { #expect(all >= 16 && stations >= 16) }
         }
     }
 }

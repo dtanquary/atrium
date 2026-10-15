@@ -44,7 +44,7 @@ struct Sim {
             let atStation = sc.station?.loop == li
             let a = atStation ? mine.first { !trains[$0].consist.freight } ?? mine[0] : mine[0], b = mine.first { $0 != a }!
             if atStation, !trains[a].consist.freight, let st = sc.station {
-                trains[a].s = st.sStop; trains[a].dwell = 6; trains[a].served = true
+                trains[a].s = st.sStop; trains[a].dwell = 10; trains[a].served = true
             } else {
                 trains[a].s = rng.uniform(0, lay.loops[li].L)
             }
@@ -126,9 +126,15 @@ struct Sim {
                 let list = need[g]!
                 var free = holder[g] == nil
                 if free, sc.blocks[li] != nil {
-                    // on a block-signalled loop, take a diamond only with every block needed to clear it, so the
-                    // train never waits at a signal with its tail on the diamond (that wait could close a circle)
-                    let far = list.map { trains[i].s + $0.a + $0.half }.max()! + trains[i].length + 4
+                    // on a block-signalled loop, take a diamond only with every block needed to clear it, and every
+                    // diamond of the group it will pass while still holding it, so the train never waits at a signal
+                    // with its tail on a diamond, nor needs a block the train behind holds (either could close a circle)
+                    let len = trains[i].length
+                    let group = diamonds.filter { $0.group == g }.compactMap { c in c.s(on: li).map { (a: centred($0 - trains[i].s, L), half: c.half) } }
+                        .filter { $0.a >= -(len + $0.half) }.sorted { $0.a < $1.a }
+                    var end = list.map { $0.a + $0.half }.max()!
+                    for d in group where d.a - d.half <= end + len + brake + 10 { end = max(end, d.a + d.half) }
+                    let far = trains[i].s + end + len + 4
                     var ks = [block(li, trains[i].s)]
                     while ks[ks.count - 1] != block(li, far) { ks.append((ks[ks.count - 1] + 1) % sc.blocks[li]!.count) }
                     if ks.allSatisfy({ blockHolder[SIMD2(li, $0)].map { $0 == i } ?? true }) {
@@ -171,7 +177,7 @@ struct Sim {
                 }
             }
             if trains[i].dwell > 0 {
-                trains[i].dwell -= dt; trains[i].v = 0; trains[i].stopped += dt
+                trains[i].dwell -= dt; trains[i].v = 0; trains[i].stopped = 0 // a station stop isn't a hold
                 continue
             }
             if let target {

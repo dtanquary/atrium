@@ -149,7 +149,9 @@ public struct Consist: Sendable {
     public let key: String, name: String, era: RailEra
     let vehicles: [RailVehicle], cruise: Double
     /// Freight trains run through the station; passenger trains stop.
-    var freight: Bool { key == "bigboy" }
+    var freight: Bool { ["bigboy", "gp9", "switcher"].contains(key) }
+    /// Nothing over 20 px: it takes the tightest curve, on a loop inside another.
+    public var short: Bool { vehicles.allSatisfy { $0.length <= 20 } }
     /// Couplers and all, as the track sees it.
     var length: Double { Double(vehicles.reduce(0) { $0 + $1.length + 2 } - 2) }
     /// The tightest curve it looks right on: model-railway compression, half again the longest car and more.
@@ -271,6 +273,29 @@ extension RailArt {
         [".kkk" + r(".", 8) + "kkk."], [r("y", 16)], [r("y", 16)], ["yywyyyyyyyyyywyy", r("y", 16)], [r("R", 16)],
         [r(".", 16), r(".", 6) + "ywwy" + r(".", 6), r(".", 6) + "yyyy" + r(".", 6)], [r(".", 16), r(".", 6) + "RRRR" + r(".", 6)],
     ]
+    // MARK: short stock for a tight inner loop: nothing over 20 px, so its radius floor is 32
+    /// A Budd Rail Diesel Car, fluted stainless, a cab at each end.
+    static let rdc = [
+        ["..kkk..........kkk.."], [r("d", 20), r("s", 20)], ["c" + "sswwsswwsswwsswwss" + "c", r("s", 20)],
+        [r("s", 20), r("s", 20), r("s", 19) + "h"], [r("S", 20), "SffS" + r("L", 12) + "SffS", r("S", 20)],
+    ]
+    /// A hood unit: the long hood behind the cab, the short hood ahead, walkways either side.
+    static let gp9 = [
+        ["...kkkk......kkkk..."], [r("y", 20)], [r(".", 12) + "yccy" + "....", r("y", 20), r("y", 19) + "h"],
+        [r(".", 12) + "GccG" + "....", r("G", 16) + "....", "GffGff" + r("G", 10) + "...."], [r(".", 12) + "GGGG" + "...."],
+    ]
+    static let box18 = [
+        [".kkk" + r(".", 10) + "kkk."], [r("R", 7) + "DDDD" + r("R", 7), r("R", 18)], [r("R", 7) + "DDDD" + r("R", 7), r("R", 18)],
+        [r("R", 18)], [r("R", 18), r("R", 18), r("P", 18)],
+    ]
+    /// An 0-6-0.
+    static let switcher = [
+        ["..ddrddrddd...kk.p", ".." + r("k", 15) + "p"], [".CCCC" + r("a", 11) + "xx", ".CCCC" + r("b", 11) + "xx"],
+        [".CCCC" + r(".", 13), ".CCCC" + r("b", 11) + "xx", ".CCCC" + r("b", 11) + "xh"],
+        [".CccC" + r(".", 13), ".CCCC" + r("b", 11) + "x.", ".CCCC" + r("B", 11) + "x."],
+        [".CCCC" + r(".", 13), ".CCCC" + r(".", 13), ".CCCC" + "...mm....m..."],
+    ]
+    static let slopeTender = [[".kkk....kkk."], [r("b", 12)], [r("b", 12)], ["....bbbbbbbb", "....qqQqqqqq", "....qQqqqQqq"]]
     /// A road car, 3 wide.
     static let car = [["aaaaaaa"], [".gwwg..", ".rrrr.."]]
 
@@ -305,6 +330,14 @@ extension RailArt {
     static let tank = RailVehicle("Tank car", tankCar, ["k": "truck", "T": "tank", "J": "tank_hl"])
     static let cab = RailVehicle("UP caboose", caboose, ["k": "truck", "y": "cab_yellow", "w": "window", "R": "cab_red"])
 
+    static let rdcCar = RailVehicle("Budd RDC", rdc, lv(truck, ["s": "sf_silver", "d": "sf_flute", "S": "sf_roof", "L": "sf_flute_lt", "f": "fan"]))
+    static let upGP9 = RailVehicle("UP GP9", gp9, lv(truck, ["y": "up_yellow", "G": "up_grey", "f": "fan"]))
+    static let shortBox = RailVehicle("Short boxcar", box18, ["k": "truck", "R": "car_red", "D": "car_red_dk", "P": "runboard"])
+    static let sw = RailVehicle("0-6-0 switcher", switcher, ["k": "bb_drivers", "d": "bb_drivers", "r": "bb_rod", "p": "black", "C": "bb_black", "c": "cabglass",
+                                                             "a": "bb_board", "b": "bb_black", "B": "bb_ridge", "x": "bb_smokebox", "h": "headlight", "m": "bb_dome"], bogies: 0.6)
+    static let swTender = RailVehicle("Slope-back tender", slopeTender, ["k": "truck", "b": "bb_black", "q": "coal", "Q": "coal_glint"])
+    static let redCab = RailVehicle("Red caboose", caboose, ["k": "truck", "y": "car_red", "w": "window", "R": "roof_black"])
+
     static func roadCar(_ era: RailEra) -> RailVehicle {
         let (body, roof) = era == .steam ? ("v40_maroon", "v40_maroon") : ("v50_turq", "v50_cream")
         return RailVehicle("road car", car, ["a": body, "g": "v_glass", "w": "v_glass", "r": roof], width: 3, bogies: 0.6)
@@ -321,10 +354,14 @@ extension RailArt {
                 vehicles: [bb, bbTender, box, pfe, hop, hop, tank, box, pfe, cab], cruise: 13),
         Consist(key: "gs4", name: "Southern Pacific GS-4 Daylight", era: .steam, vehicles: [spGS4, spTender, spCar, spCar, spCar], cruise: 17),
         Consist(key: "hiawatha", name: "Milwaukee Road Hiawatha", era: .steam, vehicles: [mwHudson, mwTender, mwCar, mwCar, mwCar], cruise: 18),
+        // short trains, for a tight inner loop
+        Consist(key: "rdc", name: "Budd RDC pair", era: .streamliners, vehicles: [rdcCar, rdcCar], cruise: 15),
+        Consist(key: "gp9", name: "Union Pacific GP9 local", era: .streamliners, vehicles: [upGP9, shortBox, hop, shortBox, cab], cruise: 12),
+        Consist(key: "switcher", name: "0-6-0 switcher with short cars", era: .steam, vehicles: [sw, swTender, shortBox, hop, shortBox, redCab], cruise: 11),
     ].map { ($0.key, $0) })
 
-    /// Each era's trains, in the order a layout tries them.
-    public static func trains(of era: RailEra) -> [Consist] {
-        trains.values.filter { $0.era == era }.sorted { $0.key < $1.key }
+    /// Each era's trains, in the order a layout tries them: the main line's, or the short ones for an inner loop.
+    public static func trains(of era: RailEra, short: Bool = false) -> [Consist] {
+        trains.values.filter { $0.era == era && $0.short == short }.sorted { $0.key < $1.key }
     }
 }

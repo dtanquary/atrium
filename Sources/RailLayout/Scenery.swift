@@ -145,9 +145,8 @@ final class Scenery {
                 things.append(Thing(grid: signalModel, pos: q, heading: hF, kind: .signal))
             }
 
-            // the main road: across the track just past the platform's end, at right angles
-            let end: Double = rng.chance(0.5) ? 1 : -1
-            let cx = mid + d * end * (L / 2 + 9), sCross = pc.s0 + dot(cx - pc.a, d)
+            // the main road: past the platform's far end, so a train standing at the platform clears it
+            let cx = mid + d * (L / 2 + 9), sCross = pc.s0 + dot(cx - pc.a, d)
             if pc.s0 + 12 < sCross, sCross < pc.s1 - 12 {
                 var halves: [[SIMD2<Double>]] = []
                 for sgn in [1.0, -1.0] {
@@ -302,7 +301,7 @@ final class Scenery {
         // would stand on a diamond, the road, the platform or in the tunnel
         for (li, lp) in lay.loops.enumerated() where lp.keys.count >= 2 {
             let lens = lp.keys.map { RailArt.trains[$0]!.length + 2 }, longest = lens.max()!
-            guard let nb = Layout.blockCount(lp.L, lens) else { continue }
+            guard let nb = Layout.blockCount(lp.L, lay.sharedLengths(li, lp.keys)) else { continue }
             let lb = lp.L / Double(nb)
             var bad: [(Double, Double)] = []
             for c in lay.cross where c.kind == .diamond { if let s0 = c.s(on: li) { bad.append((s0 - 12, s0 + longest + 12)) } }

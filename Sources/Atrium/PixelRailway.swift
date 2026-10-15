@@ -33,7 +33,7 @@ final class PixelRailway: SKScene {
 
     /// What a layout is built from: everything that, changed, makes a new one.
     struct Plan: Equatable {
-        var seed: Int, w: Int, h: Int, pixel: CGFloat, view: RailViewKind, era: RailEra, trains: [String], winter: Bool
+        var seed: Int, w: Int, h: Int, pixel: CGFloat, view: RailViewKind, era: RailEra, count: Int, winter: Bool
     }
 
     private let plan: Plan
@@ -83,12 +83,12 @@ final class PixelRailway: SKScene {
         let era = eras[Int((UInt64(truncatingIfNeeded: seed) &* 0x9E37_79B9_7F4A_7C15) >> 33) % eras.count]
         let snowing = (LiveWeather.shared.latest?.snowDepth ?? 0) > 0.01 && snow.value > 0.5
         return Plan(seed: seed, w: Int((size.width / pixel).rounded(.up)), h: Int((size.height / pixel).rounded(.up)), pixel: pixel,
-                    view: look.value > 0.5 ? .iso : .topDown, era: era, trains: Railway.pick(era, count: Int(count.value) + 1, seed: seed),
+                    view: look.value > 0.5 ? .iso : .topDown, era: era, count: Int(count.value) + 1,
                     winter: previewSnow.value > 0.5 || snowing)
     }
 
     nonisolated static func build(_ plan: Plan) -> Railway {
-        Railway(seed: plan.seed, width: plan.w, height: plan.h, view: plan.view, era: plan.era, trains: plan.trains, winter: plan.winter)
+        Railway(seed: plan.seed, width: plan.w, height: plan.h, view: plan.view, era: plan.era, count: plan.count, winter: plan.winter)
     }
 
     /// How dark it is, 0 by day to 1 at night, by the Sun where you are, or at the preview hour.

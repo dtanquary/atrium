@@ -191,18 +191,26 @@ final class Layout {
                 break
             }
         }
+        makeBridge()
+        groupCrossings()
         if share {
             for key in order where !loops.contains(where: { $0.keys.contains(key) }) {
                 let consist = RailArt.trains[key]!
-                let fit = loops.filter {
-                    $0.keys.count < 2 && $0.rmin >= 0.98 * consist.minRadius
-                        && Self.blockCount($0.L, $0.keys.map { RailArt.trains[$0]!.length + 2 } + [consist.length + 2]) != nil
+                let fit = loops.indices.filter {
+                    loops[$0].keys.count < 2 && loops[$0].rmin >= 0.98 * consist.minRadius
+                        && Self.blockCount(loops[$0].L, sharedLengths($0, loops[$0].keys + [key])) != nil
                 }
-                fit.max { $0.L < $1.L }?.keys.append(key)
+                fit.max { loops[$0].L < loops[$1].L }.map { loops[$0].keys.append(key) }
             }
+            groupCrossings()
         }
-        makeBridge()
-        groupCrossings()
+    }
+
+    /// What the blocks of loop `li` must hold for these trains. A train takes a diamond only with the blocks to clear
+    /// it by its own length, so a loop with a diamond must hold one more train-length besides.
+    func sharedLengths(_ li: Int, _ keys: [String]) -> [Double] {
+        let lens = keys.map { RailArt.trains[$0]!.length + 2 }
+        return lens + (cross.contains { $0.kind == .diamond && ($0.a == li || $0.b == li) } ? [lens.max()!] : [])
     }
 
     /// Blocks for trains sharing a one-way loop: at least 4, more than the trains, and more than all of them can

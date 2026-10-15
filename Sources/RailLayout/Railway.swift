@@ -18,13 +18,25 @@ public final class Railway {
     /// The trains running, by their names in Settings.
     public var names: [String] { layout.trains.map { RailArt.trains[$0]!.name } }
 
-    /// Grows a layout from `seed` for `trains` (keys from `RailArt.trains`) on a canvas `width` by `height` art
-    /// pixels, lays its scenery, and draws what stands still. A train that won't fit is left off.
-    public init(seed: Int, width: Int, height: Int, view kind: RailViewKind, era: RailEra, trains: [String], winter: Bool) {
+    /// Grows a layout from `seed` for up to `count` of the era's trains on a canvas `width` by `height` art
+    /// pixels, lays its scenery, and draws what stands still. A layout often can't fit every train, or a station,
+    /// so up to six are grown from seeds drawn from this one, now and then with a short train for an inner loop
+    /// in place of the third, and the first with everything (else the one with most) is kept.
+    public init(seed: Int, width: Int, height: Int, view kind: RailViewKind, era: RailEra, count: Int, winter: Bool) {
         (w, h, self.era) = (width, height, era)
         view = RailView(kind: kind, w: width, h: height)
-        layout = Layout(seed: seed, view: view, trains: trains, share: true)
-        scenery = Scenery(layout, era: era, winter: winter)
+        var best: (score: Int, layout: Layout, scenery: Scenery)?
+        for attempt in 0..<6 {
+            let s = seed &* 8 &+ attempt
+            var trains = Self.pick(era, count: count, seed: s)
+            let short = RailArt.trains(of: era, short: true)
+            if trains.count == 3, attempt % 3 == 2, !short.isEmpty { trains[2] = short[(s & 0xFFFF) % short.count].key }
+            let layout = Layout(seed: s, view: view, trains: trains, share: true), scenery = Scenery(layout, era: era, winter: winter)
+            let score = layout.trains.count * 2 + (scenery.station == nil ? 0 : 1)
+            if best == nil || score > best!.score { best = (score, layout, scenery) }
+            if score == trains.count * 2 + 1 { break }
+        }
+        (layout, scenery) = (best!.layout, best!.scenery)
         statics = Statics(layout, scenery, era: era, winter: winter)
         sim = Sim(layout, scenery)
         roadCar = RailArt.roadCar(era)
@@ -32,8 +44,8 @@ public final class Railway {
         depth = statics.depth
     }
 
-    /// Up to `count` of an era's trains, picked by `seed`.
-    public static func pick(_ era: RailEra, count: Int, seed: Int) -> [String] {
+    /// Up to `count` of an era's main-line trains, picked by `seed`.
+    static func pick(_ era: RailEra, count: Int, seed: Int) -> [String] {
         var rng = Dice(seed &* 31 &+ era.rawValue)
         var keys = RailArt.trains(of: era).map(\.key)
         for i in stride(from: keys.count - 1, to: 0, by: -1) { keys.swapAt(i, rng.below(i + 1)) }
@@ -90,9 +102,9 @@ public final class Railway {
         if d >= depth[i] - 1e-4 { frame[i] = c; depth[i] = d }
     }
 
-    private func point(_ p: SIMD3<Double>, _ c: SIMD3<Float>) {
+    private func point(_ p: SIMD3<Double>, _ c: SIMD3<Float>, eps: Double = 0.05) {
         let q = view.project(p), x = Int(floor(q.x)), y = Int(floor(q.y))
-        put(x, y, pack(c), Float(view.pixelDepth(x, y, p.z) + 0.05))
+        put(x, y, pack(c), Float(view.pixelDepth(x, y, p.z) + eps))
     }
 
     /// A vehicle at the nearest of 64 headings, its middle at `c`.
@@ -170,16 +182,17 @@ public final class Railway {
                 stop = 0 <= past && past < 70 || 0 <= over && over < tr.length
             case .home(let group): stop = sim.holder[group].map { $0 != mine } ?? false
             }
-            let p = sg.pos
+            // the lamp just in front of the head, toward oncoming trains, so the head doesn't hide it
+            let p = sg.pos, face = p - SIMD2(cos(sg.heading), sin(sg.heading)) * 0.8
             if era == .streamliners {
-                point([p.x, p.y, 6.5], stop ? Self.red : Self.green)
+                point([face.x, face.y, 6], stop ? Self.red : Self.green, eps: 0.6)
             } else {
                 let t = SIMD2(cos(sg.heading), sin(sg.heading)), n = SIMD2(-t.y, t.x), ang = stop ? 0.0 : 1.0
                 for k in 1...3 {
                     let q = p - n * Double(k) * cos(ang)
                     point([q.x, q.y, 7.5 + Double(k) * sin(ang)], k < 3 ? [200, 30, 30] : [232, 228, 220])
                 }
-                if night > 0.5 { point([p.x, p.y, 6.5], stop ? Self.red : Self.green) }
+                if night > 0.5 { point([face.x, face.y, 6.5], stop ? Self.red : Self.green, eps: 0.6) }
             }
         }
     }
