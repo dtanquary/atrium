@@ -2,10 +2,10 @@
 // dissolves one section's work into the next, and the page's accent follows. The page lists its sections as
 // one-screen-tall elements with data-work and lays out its own words.
 
-/** Each work's accent: its render's dominant hue at oklch L 0.82, C ≤ 0.11, measured in the design handoff (Pixel Window Seat's and Meander's
- *  the same way, later; Etching's render is a mid grey with no hue to take, where L 0.82 holds under 3:1, so its accent is white). */
+/** Each work's accent: its render's dominant hue at oklch L 0.82, C ≤ 0.11, measured in the design handoff (Pixel Window Seat's,
+ *  Meander's and Etching's the same way, later; Etching's blueprint blue only fits in sRGB at C 0.09). */
 const accents = {
-  nebula: '#95d0d9', meander: '#68d4f6', etching: '#ffffff',
+  nebula: '#95d0d9', meander: '#68d4f6', etching: '#a1c6ff',
   'pixel-window-seat': '#bcbaff', murmuration: '#ecb799', 'fish-tank': '#9bc5ff',
 };
 const media = new URL('media/', import.meta.url);
