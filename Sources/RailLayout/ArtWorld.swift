@@ -270,6 +270,76 @@ extension RailArt {
             ["yccbbbbbbbbbbbbbbbbbbccy", "ycbbbbbbbbbbbbbbbbbbbbcy", "ycbbbbbbbbbbbbbbbbbbbbcy", "ycbbbbbbbbbbbbbbbbbbbbcy", "yccbbbbbbbbbbbbbbbbbbccy"],
             ["RRRRRRRRRRRRRRRRRRRRRRRR", "RRRRRRRRRRRRRRRRRRRRRRRR", "RFFRRRRRRRRRRRRRRRRRRFFR", "RRRRRRRRRRRRRRRRRRRRRRRR", "RRRRRRRRRRRRRRRRRRRRRRRR"]],
         ["F": "fan", "R": "rail_blue", "b": "rail_blue", "c": "cabglass", "g": "truckgrey", "h": "headlight", "k": "truck", "w": "window", "y": "warn_yellow"])
+    static let db103 = RailVehicle("DB 103", [
+            ["..kkkkkk........kkkkkk..", "..kkkkkk........kkkkkk..", "..kkkkkk........kkkkkk..", "..kkkkkk........kkkkkk..", "..kkkkkk........kkkkkk.."],
+            ["ffffffffffffffffffffffff", "rrrrrrrrrrrrrrrrrrrrrrrr", "rrrrrrrrrrrrrrrrrrrrrrrr", "rrrrrrrrrrrrrrrrrrrrrrrr", "ffffffffffffffffffffffff"],
+            ["rrrrrrrrrrrrrrrrrrrrrrrr", "rrrrrrrrrrrrrrrrrrrrrrrr", "hrrrrrrrrrrrrrrrrrrrrrrh", "rrrrrrrrrrrrrrrrrrrrrrrr", "rrrrrrrrrrrrrrrrrrrrrrrr"],
+            ["..ceeeeeeeeeeeeeeeeeec..", "..ceeeeeeeeeeeeeeeeeec..", "..ceeeeeeeeeeeeeeeeeec..", "..ceeeeeeeeeeeeeeeeeec..", "..ceeeeeeeeeeeeeeeeeec.."],
+            ["...RRRRRRRRRRRRRRRRRR...", "...RRRRRRRRRRRRRRRRRR...", "...RRRRRRRRRRRRRRRRRR...", "...RRRRRRRRRRRRRRRRRR...", "...RRRRRRRRRRRRRRRRRR..."],
+            ["........................", "........................", "......P.........P.......", "........................", "........................"],
+            ["........................", "........................", "......P.........P.......", "........................", "........................"],
+            ["........................", "......PP........PP......", "......PP........PP......", "......PP........PP......", "........................"]],
+        ["P": "panto", "R": "tee_roof", "c": "cabglass", "e": "tee_beige", "f": "db_frame", "g": "truckgrey", "h": "headlight", "k": "truck", "r": "purpurrot", "w": "window"])
+    static let teeRheingoldCar = RailVehicle("TEE Rheingold car", [
+            ["..kkkk.....................kkkk..", "..kkkk.....................kkkk..", "..kkkk.....................kkkk..", "..kkkk.....................kkkk..", "..kkkk.....................kkkk.."],
+            ["rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr", "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr", "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr", "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr", "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr"],
+            ["eewweewweewweewweewweewweewweewwe", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eewweewweewweewweewweewweewweewwe"],
+            ["eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"],
+            ["RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR", "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR", "QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ", "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR", "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR"]],
+        ["Q": "tee_roof_lt", "R": "tee_roof", "c": "cabglass", "e": "tee_beige", "g": "truckgrey", "h": "headlight", "k": "truck", "r": "purpurrot", "w": "window"])
+    static let teeRheingoldDomeCar = RailVehicle("TEE Rheingold dome car", [
+            ["..kkkk.....................kkkk..", "..kkkk.....................kkkk..", "..kkkk.....................kkkk..", "..kkkk.....................kkkk..", "..kkkk.....................kkkk.."],
+            ["rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr", "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr", "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr", "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr", "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr"],
+            ["eewweewweewweewweewweewweewweewwe", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eewweewweewweewweewweewweewweewwe"],
+            ["eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"],
+            ["RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR", "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR", "QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ", "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR", "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR"],
+            [".................................", "..........RDDDDDDDDDDDR..........", "..........RDDDDDDDDDDDR..........", "..........RDDDDDDDDDDDR..........", "................................."]],
+        ["D": "dome_glass", "Q": "tee_roof_lt", "R": "tee_roof", "c": "cabglass", "e": "tee_beige", "g": "truckgrey", "h": "headlight", "k": "truck", "r": "purpurrot", "w": "window"])
+    static let dbV200 = RailVehicle("DB V 200", [
+            ["..kkkk...........kkkk..", "..kkkk...........kkkk..", "..kkkk...........kkkk..", "..kkkk...........kkkk..", "..kkkk...........kkkk.."],
+            ["fffffffffffffffffffffff", "rrrrrrrrrrrrrrrrrrrrrrr", "rrrrrrrrrrrrrrrrrrrrrrr", "rrrrrrrrrrrrrrrrrrrrrrr", "fffffffffffffffffffffff"],
+            ["rrrrrrrrrrrrrrrrrrrrrrr", "rrrrrrrrrrrrrrrrrrrrrrr", "hrrrrrrrrrrrrrrrrrrrrrh", "rrrrrrrrrrrrrrrrrrrrrrr", "rrrrrrrrrrrrrrrrrrrrrrr"],
+            [".crrrrrrrrrrrrrrrrrrrc.", ".crrrrrrrrrrrrrrrrrrrc.", ".crrrrrrrrrrrrrrrrrrrc.", ".crrrrrrrrrrrrrrrrrrrc.", ".crrrrrrrrrrrrrrrrrrrc."],
+            [".fffffffffffffffffffff.", ".AAAAAAAAAAAAAAAAAAAAA.", ".AAAAAAAAAAAAAAAAAAAAA.", ".AAAAAAAAAAAAAAAAAAAAA.", ".fffffffffffffffffffff."]],
+        ["A": "v200_roof", "c": "cabglass", "f": "db_frame", "g": "truckgrey", "h": "headlight", "k": "truck", "r": "purpurrot", "w": "window"])
+    static let dbGreenCoach = RailVehicle("DB green coach", [
+            ["..kkkk.....................kkkk..", "..kkkk.....................kkkk..", "..kkkk.....................kkkk..", "..kkkk.....................kkkk..", "..kkkk.....................kkkk.."],
+            ["GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG"],
+            ["GGwwGGwwGGwwGGwwGGwwGGwwGGwwGGwwG", "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "GGwwGGwwGGwwGGwwGGwwGGwwGGwwGGwwG"],
+            ["GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG", "GGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG"],
+            ["RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR", "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR", "QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ", "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR", "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR"]],
+        ["G": "chrom_green", "Q": "dzug_roof_lt", "R": "dzug_roof", "c": "cabglass", "g": "truckgrey", "h": "headlight", "k": "truck", "w": "window"])
+    static let dbClass01 = RailVehicle("DB class 01", [
+            [".kk..ddrddrddd..kk.kk.", ".kkkkkkkkkkkkkkkkkkkpp", ".kkkkkkkkkkkkkkkkkkkpp", ".kkkkkkkkkkkkkkkkkkkpp", ".kk..ddrddrddd..kk.kk."],
+            [".CCCCaaaaaaaaaaaaaaaxx", ".CCCCbbbbbbbbbbbbbbbxx", ".CCCCbbbbbbbbbbbbbbbxx", ".CCCCbbbbbbbbbbbbbbbxx", ".CCCCaaaaaaaaaaaaaaaxx"],
+            [".CCCC.................", ".CCCCbbbbbbbbbbbbbbbxx", ".CCCCbbbbbbbbbbbbbbbxh", ".CCCCbbbbbbbbbbbbbbbxx", ".CCCC................."],
+            [".CccC.................", ".CCCCbbbbbbbbbbbbbbbx.", ".CCCCBBBBBBBBBBBBBBBx.", ".CCCCbbbbbbbbbbbbbbbx.", ".CccC................."],
+            [".RRRR.................", ".RRRR.................", ".RRRR...m....m.....u..", ".RRRR.................", ".RRRR................."]],
+        ["B": "db_ridge", "C": "db_black", "R": "db_black", "a": "db_red", "b": "db_black", "c": "cabglass", "d": "db_red", "h": "headlight", "k": "bb_drivers", "m": "db_black", "p": "black", "r": "bb_rod", "u": "db_black", "x": "loco_black"], bogies: 0.7)
+    static let v01Tender = RailVehicle("01 tender", [
+            [".kk.kk..kk.kk.", ".kk.kk..kk.kk.", ".kk.kk..kk.kk.", ".kk.kk..kk.kk.", ".kk.kk..kk.kk."],
+            ["aaaaaaaaaaaaaa", "bbbbbbbbbbbbbb", "bbbbbbbbbbbbbb", "bbbbbbbbbbbbbb", "aaaaaaaaaaaaaa"],
+            ["bbbbbbbbbbbbbb", "bbbbbbbbbbbbbb", "bbbbbbbbbbbbbb", "bbbbbbbbbbbbbb", "bbbbbbbbbbbbbb"],
+            ["bbbbbbbbbbbbbb", "bbbbqqqqqqqqqq", "bbbbqqqqqqqqqq", "bbbbqqqqqqqqqq", "bbbbbbbbbbbbbb"],
+            ["..............", "......qQqq....", "......qQqq....", "......qQqq....", ".............."]],
+        ["Q": "coal_glint", "a": "db_red", "b": "db_black", "k": "db_red", "q": "coal_uk"])
+    static let sbbCrocodile = RailVehicle("SBB Crocodile", [
+            [".kddrdd..........ddrddk.", ".kkkkkkkkkkkkkkkkkkkkkk.", ".kkkkkkkkkkkkkkkkkkkkkk.", ".kkkkkkkkkkkkkkkkkkkkkk.", ".kddrdd..........ddrddk."],
+            [".......bbbbbbbbbb.......", "bbbbbbbbbbbbbbbbbbbbbbbb", "hbbbbbbbbbbbbbbbbbbbbbbh", "bbbbbbbbbbbbbbbbbbbbbbbb", ".......bbbbbbbbbb......."],
+            [".......bbbbbbbbbb.......", "bbbbbbbbbbbbbbbbbbbbbbbb", "bbbbbbbbbbbbbbbbbbbbbbbb", "bbbbbbbbbbbbbbbbbbbbbbbb", ".......bbbbbbbbbb......."],
+            [".......bcbbbbbbcb.......", ".......bbbbbbbbbb.......", ".......bbbbbbbbbb.......", ".......bbbbbbbbbb.......", ".......bcbbbbbbcb......."],
+            [".......RRRRRRRRRR.......", ".......RRRRRRRRRR.......", ".......RRRRRRRRRR.......", ".......RRRRRRRRRR.......", ".......RRRRRRRRRR......."],
+            ["........................", "........................", "........P.....P.........", "........................", "........................"],
+            ["........................", "........................", "........P.....P.........", "........................", "........................"],
+            ["........................", "........PP....PP........", "........PP....PP........", "........PP....PP........", "........................"]],
+        ["P": "panto", "R": "croc_roof", "b": "croc_green", "c": "cabglass", "d": "bb_drivers", "g": "truckgrey", "h": "headlight", "k": "truck", "r": "bb_rod", "w": "window"], bogies: 0.6)
+    static let goodsWagon = RailVehicle("Goods wagon", [
+            [".kk......kk.", ".kk......kk.", ".kk......kk.", ".kk......kk.", ".kk......kk."],
+            ["WWWWWWWWWWWW", "WWWWWWWWWWWW", "WWWWWWWWWWWW", "WWWWWWWWWWWW", "WWWWWWWWWWWW"],
+            ["WWWWWDDWWWWW", "WWWWWWWWWWWW", "WWWWWWWWWWWW", "WWWWWWWWWWWW", "WWWWWDDWWWWW"],
+            ["WWWWWWWWWWWW", "WWWWWWWWWWWW", "WWWWWWWWWWWW", "WWWWWWWWWWWW", "WWWWWWWWWWWW"],
+            ["RRRRRRRRRRRR", "RRRRRRRRRRRR", "QQQQQQQQQQQQ", "RRRRRRRRRRRR", "RRRRRRRRRRRR"]],
+        ["D": "wagon_brown_dk", "Q": "wagon_roof", "R": "wagon_roof", "W": "wagon_brown", "k": "truck"], bogies: 0.6)
 
     static let worldTrains: [Consist] = [
         Consist(key: "a3", name: "LNER A3 with teak coaches", era: .britishSteam, vehicles: [lnerA3, a3Tender, lnerTeakCoach, lnerTeakCoach, lnerTeakCoach, lnerTeakCoach], cruise: 17, power: 2),
@@ -280,5 +350,9 @@ extension RailArt {
         Consist(key: "hst", name: "HST with Mark 3 coaches", era: .britishDiesel, vehicles: [hstPowerCar, mark3Coach, mark3Coach, mark3Coach, mark3Coach, hstPowerCarRear], cruise: 20),
         Consist(key: "deltic", name: "Class 55 Deltic with blue and grey coaches", era: .britishDiesel, vehicles: [class55Deltic, mark1Coach, mark1Coach, mark1Coach, mark1Coach], cruise: 18),
         Consist(key: "c47", name: "Class 47 with mineral wagons", era: .britishDiesel, vehicles: [class47, v16TMineralWagon, v16TMineralWagon, v16TMineralWagon, v16TMineralWagon, v16TMineralWagon, v16TMineralWagon, v16TMineralWagon, v16TMineralWagon, v16TMineralWagon, v16TMineralWagon, brBrakeVan], cruise: 12),
+        Consist(key: "tee", name: "DB 103 with the TEE Rheingold", era: .germanAlps, vehicles: [db103, teeRheingoldCar, teeRheingoldDomeCar, teeRheingoldCar, teeRheingoldCar], cruise: 19),
+        Consist(key: "v200", name: "DB V 200 with green coaches", era: .germanAlps, vehicles: [dbV200, dbGreenCoach, dbGreenCoach, dbGreenCoach, dbGreenCoach], cruise: 16),
+        Consist(key: "db01", name: "DB class 01 with green coaches", era: .germanAlps, vehicles: [dbClass01, v01Tender, dbGreenCoach, dbGreenCoach, dbGreenCoach, dbGreenCoach], cruise: 16, power: 2),
+        Consist(key: "croc", name: "SBB Crocodile with goods wagons", era: .germanAlps, vehicles: [sbbCrocodile, goodsWagon, goodsWagon, goodsWagon, goodsWagon, goodsWagon, goodsWagon, goodsWagon, goodsWagon, goodsWagon, goodsWagon], cruise: 10),
     ]
 }

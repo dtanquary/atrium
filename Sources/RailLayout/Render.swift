@@ -460,6 +460,17 @@ enum Models {
         return g
     }
 
+    /// A small German station building: cream render, a steep hipped tile roof, 14 by 6.
+    static func germanStation() -> Voxels {
+        let (w, d) = (14, 6)
+        var g = Voxels(w, d, 8)
+        g.fill(0..<w, 0..<d, 0..<4, m("wall_cream"))
+        for x in stride(from: 2, to: w - 1, by: 3) { g.fill(x..<(x + 1), 0..<1, 1..<3, m("house_win")); g.fill(x..<(x + 1), (d - 1)..<d, 1..<3, m("house_win")) }
+        g.fill((w / 2)..<(w / 2 + 1), (d - 1)..<d, 0..<2, m("door"))
+        for k in 0..<3 { g.fill(k..<(w - k), k..<(d - k), (4 + k)..<(5 + k), m("clay_tile")) }
+        return g
+    }
+
     /// A platform canopy on posts, its valance in light stone with dark stone posts (the GWR's colours).
     static func britishCanopy(_ length: Int) -> Voxels {
         var g = Voxels(length, 5, 6)
@@ -519,6 +530,23 @@ enum Models {
         var g = Voxels(1, 5, 7)
         g.fill(0..<1, 2..<3, 0..<6, m("post"))
         for y in 0..<5 { for z in 2..<7 where abs(y - 2) == abs(z - 4) { g[0, y, z] = m("post_white") } }
+        return g
+    }
+
+    /// A German crossing: the red and white St Andrew's cross on its post, one lamp head above.
+    static func andreasCross() -> Voxels {
+        var g = Voxels(1, 5, 9)
+        g.fill(0..<1, 2..<3, 0..<8, m("post"))
+        for y in 0..<5 { for z in 2..<7 where abs(y - 2) == abs(z - 4) { g[0, y, z] = m((y + z) % 2 == 1 ? "gate_red" : "post_white") } }
+        g[0, 2, 8] = m("sig_head")
+        return g
+    }
+
+    /// An overhead-line mast 4 off the track (at +y) with its arm reaching over the centreline.
+    static func mast() -> Voxels {
+        var g = Voxels(1, 5, 9)
+        g.fill(0..<1, 4..<5, 0..<9, m("mast"))
+        g.fill(0..<1, 0..<5, 8..<9, m("mast"))
         return g
     }
 

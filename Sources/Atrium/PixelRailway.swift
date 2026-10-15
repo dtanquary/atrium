@@ -28,6 +28,9 @@ final class PixelRailway: SKScene {
                                                range: 0...1, standard: 1, section: "Eras", format: .toggle)
     nonisolated static let britishDiesel = Knob(key: "railway.britishDiesel", label: "British InterCity: HST, Deltic, Class 47",
                                                 range: 0...1, standard: 1, section: "Eras", format: .toggle)
+    nonisolated static let germanAlps = Knob(key: "railway.germanAlps",
+                                             label: "Germany and the Alps: DB 103 with the TEE Rheingold, V 200, class 01, SBB Crocodile",
+                                             range: 0...1, standard: 1, section: "Eras", format: .toggle)
     nonisolated static let snow = Knob(key: "railway.snow", label: "Snow on the ground when there's snow where you are", range: 0...1, standard: 1,
                                        section: "Seasons", format: .toggle)
     nonisolated static let previewSnow = Knob(key: "railway.previewSnow", label: "Preview snow", range: 0...1, standard: 0, section: "Preview", format: .toggle)
@@ -39,7 +42,7 @@ final class PixelRailway: SKScene {
                                               format: .toggle)
     nonisolated static let previewHour = Knob(key: "railway.previewHour", label: "Time", range: 0...24, standard: 21, section: "Preview", format: .clock,
                                               shownWhen: "railway.previewTime")
-    nonisolated static let knobs = [scale, count, every, streamliners, steam, transition, modern, britishSteam, britishDiesel, snow, previewDay, day, previewSnow, previewTime, previewHour]
+    nonisolated static let knobs = [scale, count, every, streamliners, steam, transition, modern, britishSteam, britishDiesel, germanAlps, snow, previewDay, day, previewSnow, previewTime, previewHour]
     /// Under the eras in Settings, the only place the railroads are named.
     nonisolated static let names = (section: "Eras", text: "Names say which real train each is drawn after. Atrium isn't affiliated with or endorsed by any railroad.")
 
@@ -90,7 +93,8 @@ final class PixelRailway: SKScene {
         let pixel = max(2, (size.height / 240).rounded()) + CGFloat(scale.value) - 1 // points per art pixel
         let hours = [1.0, 3, 6, 24][Int(every.value)]
         let seed = Int(date.timeIntervalSince1970 / (hours * 3600))
-        let ticked = [(streamliners, RailEra.streamliners), (steam, .steam), (transition, .transition), (modern, .modern), (britishSteam, .britishSteam), (britishDiesel, .britishDiesel)].filter { $0.0.value > 0.5 }.map(\.1)
+        let ticked = [(streamliners, RailEra.streamliners), (steam, .steam), (transition, .transition), (modern, .modern), (britishSteam, .britishSteam),
+                      (britishDiesel, .britishDiesel), (germanAlps, .germanAlps)].filter { $0.0.value > 0.5 }.map(\.1)
         let eras = ticked.isEmpty ? RailEra.allCases : ticked
         let era = eras[Int((UInt64(truncatingIfNeeded: seed) &* 0x9E37_79B9_7F4A_7C15) >> 33) % eras.count]
         return Plan(seed: seed, w: Int((size.width / pixel).rounded(.up)), h: Int((size.height / pixel).rounded(.up)), pixel: pixel,

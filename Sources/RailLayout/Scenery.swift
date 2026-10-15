@@ -147,6 +147,7 @@ final class Scenery {
             case .british:
                 things.append(Thing(grid: Models.britishStation(), pos: mid + n * 13, heading: face, kind: .station))
                 things.append(Thing(grid: Models.britishCanopy(Int(L * 0.4)), pos: mid + n * 6, heading: hF, kind: .canopy))
+            case .german: things.append(Thing(grid: Models.germanStation(), pos: mid + n * 14, heading: face, kind: .station))
             }
             G.mark(rectPoints(bpos, d, n, 20, 9), 1)
             for k in [-0.35, 0, 0.35] {
@@ -279,6 +280,7 @@ final class Scenery {
                         case .wigwag: Models.crossbuck()
                         case .britishGates: Models.gatepost()
                         case .britishHalfBarriers: Models.lightMast()
+                        case .germanBarrier: Models.andreasCross()
                         default: Models.flasher()
                         }
                         things.append(Thing(grid: mast, pos: q, heading: hq, kind: .crossing))
@@ -362,6 +364,22 @@ final class Scenery {
         }
 
         placeExtras(lay, &G, &rng, look.extras, onScreen)
+
+        // overhead line: a mast every 70 along each loop, on the side away from the signals (or the platform)
+        if look.wire {
+            for (li, lp) in lay.loops.enumerated() {
+                let side = station.map { $0.loop == li && $0.side < 0 } == true ? 1.0 : -1.0
+                for x in stride(from: 10.0, to: lp.L - 10, by: 70) {
+                    let (p, t) = lp.at(x), n = SIMD2(-t.y, t.x), q = SIMD2(p.x, p.y) + n * side * 4.5
+                    if let hill, Self.hillHeight(hill, q) > 0.5 { continue }
+                    if roads.contains(where: { rd in zip(rd, rd.dropFirst()).contains { Self.segmentDistance(q, $0.0, $0.1) < 5 } }) { continue }
+                    if lay.loops.indices.contains(where: { j in j != li && stride(from: 0, to: lay.loops[j].P.count, by: 4).contains { length(lay.loops[j].P[$0] - q) < 4.5 } }) { continue }
+                    if lay.cross.contains(where: { c in c.kind == .bridge && c.s(on: li).map { abs(centred(x - $0, lp.L)) < 14 } == true }) { continue }
+                    things.append(Thing(grid: Models.mast(), pos: SIMD2(p.x, p.y) + n * side * 2.5, heading: atan2(t.y, t.x) + (side > 0 ? 0 : .pi),
+                                        kind: .pole, base: p.z))
+                }
+            }
+        }
 
         // a pole line along the main road
         if let rd = roads.first, look.poles {
@@ -517,6 +535,12 @@ final class Scenery {
         var (best, k) = (Double.infinity, 0)
         for i in loop.P.indices { let d = length_squared(loop.P[i] - p); if d < best { (best, k) = (d, i) } }
         return k
+    }
+
+    /// How far `p` is from the segment a–b.
+    static func segmentDistance(_ p: SIMD2<Double>, _ a: SIMD2<Double>, _ b: SIMD2<Double>) -> Double {
+        let ab = b - a, t = min(max(dot(p - a, ab) / max(length_squared(ab), 1e-12), 0), 1)
+        return length(p - (a + ab * t))
     }
 
     static func hillHeight(_ hill: Hill, _ p: SIMD2<Double>) -> Double {

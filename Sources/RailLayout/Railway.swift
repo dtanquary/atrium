@@ -14,6 +14,8 @@ public final class Railway {
     /// The picture under the trains at the last night level drawn, packed, and that level.
     private var under: [UInt32] = [], underNight: Float = -1
     private var frame: [UInt32], depth: [Float]
+    /// The contact wire, where the era has one: each pixel it crosses and its nearest depth there.
+    private let wire: [(i: Int, d: Float)]
 
     /// The trains running, by their names in Settings.
     public var names: [String] { layout.trains.map { RailArt.consist($0).name } }
@@ -43,8 +45,30 @@ public final class Railway {
         statics = Statics(layout, scenery, era: era, season: season)
         sim = Sim(layout, scenery)
         roadCar = RailArt.roadVehicle(era, seed: layout.seed)
+        wire = era.look.wire ? Self.wire(layout, scenery, view) : []
         frame = Array(repeating: 0, count: width * height)
         depth = statics.depth
+    }
+
+    /// The contact wire over every loop, 8.3 over the rail head (just over a raised pantograph), a point every half
+    /// unit, left out in the tunnel and under a bridge's deck: each pixel it crosses, at its nearest depth there.
+    static func wire(_ lay: Layout, _ sc: Scenery, _ view: RailView) -> [(i: Int, d: Float)] {
+        var nearest: [Int: Float] = [:]
+        for (li, lp) in lay.loops.enumerated() {
+            let decks = lay.cross.filter { $0.kind == .bridge && $0.upper != li && $0.s(on: li) != nil }.map { c in
+                let p = lay.loops[c.upper].at(c.s(on: c.upper)!).p
+                return SIMD2(p.x, p.y)
+            }
+            for k in stride(from: 0, to: lp.P.count, by: 2) {
+                let p = lp.P[k], z = lp.Z[k] + 8.3
+                if let hill = sc.hill, hill.loop == li, Scenery.hillHeight(hill, p) >= 8 { continue }
+                if decks.contains(where: { length($0 - p) <= 9 }) { continue }
+                let q = view.project([p.x, p.y, z]), x = Int(floor(q.x)), y = Int(floor(q.y))
+                guard x >= 0, x < view.w, y >= 0, y < view.h else { continue }
+                nearest[y * view.w + x] = max(nearest[y * view.w + x] ?? -.infinity, Float(view.pixelDepth(x, y, z)))
+            }
+        }
+        return nearest.map { ($0.key, $0.value) }
     }
 
     /// A loop two trains share needs many blocks for none of them ever to lock, but most of their signals would
@@ -103,6 +127,10 @@ public final class Railway {
                 let t = SIMD2(cos(heading), sin(heading)), n = SIMD2(-t.y, t.x)
                 for e in [-1.0, 1.0] { let q = SIMD2(at.x, at.y) + t * 3.6 + n * e * 0.8; point([q.x, q.y, 0.8], [255, 240, 200]) }
             }
+        }
+        for (i, d) in wire where d >= depth[i] - 1e-4 { // the contact wire, thin enough to see through
+            frame[i] = pack(unpack(frame[i]) * 0.58 + (SIMD3<Float>(58, 58, 58) + SIMD3<Float>(-38, -36, -28) * night) * 0.42)
+            depth[i] = d
         }
         crossingParts(night)
         signalParts(night)
@@ -182,13 +210,15 @@ public final class Railway {
                     for k in stride(from: 0.5, to: 11, by: 0.5) { let q = m.pos + d * k; point([q.x, q.y, 0.9], [232, 228, 220]); point([q.x, q.y, 1.9], [232, 228, 220]) }
                     let q = m.pos + d * 5.5
                     point([q.x, q.y, 2.8], [200, 32, 42])
-                } else if kind == .britishHalfBarriers { // a half barrier: a steady amber, then two reds flashing in turn
+                } else if kind == .britishHalfBarriers || kind == .germanBarrier { // a half barrier
                     let ang = here ? 0 : 1.35
                     for k in 1...6 {
                         let q = m.pos + across * m.side * (-Double(k) * cos(ang))
                         point([q.x, q.y, 3.2 + Double(k) * sin(ang)], k % 2 == 1 ? [200, 32, 42] : [232, 228, 220])
                     }
-                    if amber {
+                    if kind == .germanBarrier { // the one lamp over the cross: yellow, then a steady red
+                        point([m.pos.x, m.pos.y, 8.5], here ? (amber ? Self.amber : Self.red) : [40, 12, 10], eps: 0.6)
+                    } else if amber { // British: a steady amber, then two reds flashing in turn
                         point([m.pos.x, m.pos.y, 3.5], Self.amber, eps: 0.6)
                     } else {
                         for (e, lit) in [(-1.0, here && phase == 0), (1.0, here && phase == 1)] { let q = m.pos + across * e; point([q.x, q.y, 3.5], lit ? Self.red : [40, 12, 10], eps: 0.6) }

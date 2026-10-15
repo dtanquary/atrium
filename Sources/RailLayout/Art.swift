@@ -243,26 +243,27 @@ public struct Consist: Sendable {
 
 /// A layout's era: its trains, buildings, crossings and signals.
 public enum RailEra: Int, CaseIterable, Sendable {
-    case streamliners, steam, transition, modern, britishSteam, britishDiesel
+    case streamliners, steam, transition, modern, britishSteam, britishDiesel, germanAlps
 }
 
 /// What an era puts by the line: ballast and ties; its street lamps' colour; what stands at the station; its level
 /// crossing (a wigwag; flashers and short gates; today's gates with three lamps on the arm, over concrete panels);
 /// its signals; whether a pole line runs along the road; its houses' walls and roofs; the buildings beside the line;
-/// its share of conifers; and the scenery's dice.
+/// its share of conifers; the scenery's dice; and whether overhead wire runs over the track.
 struct EraLook {
-    enum Station { case depot, brick, freight, shelter, british }
+    enum Station { case depot, brick, freight, shelter, british, german }
     /// A wigwag; flashers and short gates; today's gates with lamps on the arm; British timber gates swung across the
-    /// road; British automatic half barriers.
-    enum Crossing { case wigwag, gates, modern, britishGates, britishHalfBarriers }
+    /// road; British automatic half barriers; German half barriers under a St Andrew's cross.
+    enum Crossing { case wigwag, gates, modern, britishGates, britishHalfBarriers, germanBarrier }
     enum Signals { case semaphore, searchlight, colour }
     let ballast: UInt32, tie: UInt32, lamp: UInt32
     let station: Station, crossing: Crossing, signals: Signals, poles: Bool
     let walls: [String], roofs: [String], extras: [String], conifers: Double, dice: Int
     /// Concrete crossing panels and the joints between them, in place of planks.
     var panels: (UInt32, UInt32)? = nil
-    /// Hedgerows round the fields (fewer trees then); a distant signal before each stop signal drawn.
-    var hedges = false, distants = false
+    /// Hedgerows round the fields (fewer trees then); a distant signal before each stop signal drawn; masts and a
+    /// contact wire over every loop.
+    var hedges = false, distants = false, wire = false
 
     static let walls = ["wall_white", "wall_cream", "wall_yellow", "wall_grey", "wall_blue", "wall_brick"]
     static let roofs = ["roof_green", "roof_red", "roof_black", "roof_grey"]
@@ -292,6 +293,10 @@ extension RailEra {
         case .britishDiesel: EraLook(ballast: 0x8A8884, tie: 0x6A6058, lamp: 0xFF9C1A, station: .british, crossing: .britishHalfBarriers, signals: .colour,
                                      poles: true, walls: ["wall_brick", "cotswold", "wall_cream", "wall_white"], roofs: ["slate", "clay_tile", "roof_grey", "slate"],
                                      extras: ["signalbox"], conifers: 0.12, dice: 6, hedges: true)
+        // Germany and the Alps: overhead wire, a rendered station with a hipped tile roof, half barriers, more conifers
+        case .germanAlps: EraLook(ballast: 0x8A8884, tie: 0x6A6058, lamp: 0xC8E4F0, station: .german, crossing: .germanBarrier, signals: .colour,
+                                  poles: false, walls: ["wall_white", "wall_cream", "wall_beige"], roofs: ["clay_tile", "clay_tile", "slate", "roof_red"],
+                                  extras: [], conifers: 0.5, dice: 7, wire: true)
         }
     }
 }
@@ -605,6 +610,7 @@ extension RailArt {
         // small cars: an Austin 7 or Morris Minor; a 1970s or 80s saloon
         case .britishSteam: return smallCar([("v_black", 4), ("v40_green", 5), ("v40_maroon", 5), ("uk_cream", 5), ("uk_grey", 4)], seed)
         case .britishDiesel: return smallCar([("v70_brown", 6), ("v70_orange", 6), ("v70_beige", 6), ("v_white", 6), ("v_red", 5)], seed)
+        case .germanAlps: return smallCar([("v60_blue", 5), ("v60_beige", 5), ("v60_red", 5), ("v40_black", 5)], seed)
         }
         let (body, roof) = paint[Int(hsh(seed, 77) * Double(paint.count))]
         return RailVehicle("road car, \(body)", car, ["a": body, "g": "v_glass", "w": "v_glass", "r": roof], width: 3, bogies: 0.6)
