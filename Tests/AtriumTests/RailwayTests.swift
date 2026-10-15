@@ -153,3 +153,32 @@ private func save(_ railway: Railway, night: Float, _ name: String, scale: Int =
         CGImageDestinationFinalize(out)
     }
 }
+
+/// Over an hour of running, a train held at a block signal is always held at one that's drawn: the signals no
+/// train stops at are left out, but two trains at different speeds close up at a different place each lap.
+@Test func railwayDrawsEverySignalATrainWaitsAt() throws {
+    var misses: [String] = [], checked = 0
+    for era in RailEra.allCases {
+        for seed in 1...4 {
+            let railway = Railway(seed: seed, width: 378, height: 246, view: .topDown, era: era, count: 3, season: .summer)
+            let sc = railway.scenery, lay = railway.layout
+            guard !sc.blocks.isEmpty else { continue }
+            checked += 1
+            let shown = Set(sc.signals.compactMap { sg -> SIMD2<Int>? in
+                guard case .block(let k) = sg.role, sg.shown else { return nil }
+                return SIMD2(sg.loop, k)
+            })
+            var sim = railway.sim
+            for _ in 0..<(3600 * 60) {
+                sim.step()
+                for tr in sim.trains where tr.v < 0.05 && tr.dwell <= 0 {
+                    guard let B = sc.blocks[tr.loop] else { continue }
+                    let L = lay.loops[tr.loop].L, k = B.indices.min { wrap(B[$0] - tr.s, L) < wrap(B[$1] - tr.s, L) }!
+                    if wrap(B[k] - tr.s, L) < 8, !shown.contains(SIMD2(tr.loop, k)) { misses.append("\(era) seed \(seed) block \(k) at \(Int(sim.t)) s") }
+                }
+            }
+        }
+    }
+    print("Pixel Railway: \(checked) layouts with shared loops run an hour; held at a hidden signal: \(Set(misses).count)")
+    #expect(misses.isEmpty, "\(Set(misses).sorted().prefix(8))")
+}
