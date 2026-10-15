@@ -13,9 +13,10 @@
   const portrait = !matchMedia('(min-aspect-ratio: 1/1)').matches;
   const root = document.documentElement;
   const add = (cls, parent) => parent.appendChild(Object.assign(document.createElement('div'), { className: cls }));
-  const device = document.createElement('div');
-  device.className = 'device';
-  device.setAttribute('aria-hidden', 'true');
+  const zoom = document.createElement('div'); // what the zoom moves (laptop.css)
+  zoom.className = 'zoom';
+  zoom.setAttribute('aria-hidden', 'true');
+  const device = add('device', zoom);
   add('deck', device);
   const front = add('front', device);
   const lid = add('lid', device);
@@ -24,7 +25,7 @@
   const screen = add('screen', lid);
   screen.append(...document.querySelectorAll(portrait ? '.menubar, .dock' : '.stage, .menubar, .dock'));
   add('notch', lid); // its own surface on the lid, not inside the screen, so Safari draws it while the lid swings
-  document.body.prepend(device);
+  document.body.prepend(zoom);
   root.classList.add('laptop');
   root.classList.toggle('portrait', portrait);
   if (still) root.classList.add('is-paused'); // as site.js will, which runs after this
@@ -34,6 +35,16 @@
   const firstWork = first.dataset.work, lastWork = sections[n - 1].dataset.work;
   const set = (name, value) => root.style.setProperty(name, value);
   set('--last', n - 2); // the screen the zoom out starts on (laptop.css)
+  // The zoom's keyframes, for laptop.css: in over the first screen, held, out over the last, as shares of the scroll
+  // from the first to the last. Eased like smoothstep, or under Reduce Motion a swap halfway through a screen.
+  const a = 100 / (n - 1), b = 100 - a;
+  const ease = `animation-timing-function: ${still ? 'steps(2, jump-none)' : 'cubic-bezier(0.333, 0, 0.667, 1)'}`;
+  document.head.appendChild(document.createElement('style')).textContent = `
+    @keyframes laptop { 0% { transform: translate(0px, var(--y0)) scale(var(--s0)); ${ease} }
+      ${a}% { transform: translate(var(--x0), 0px) scale(1); animation-timing-function: step-end }
+      ${b}% { transform: translate(var(--x1), 0px) scale(1); ${ease} } 100% { transform: translate(0px, var(--y1)) scale(var(--s1)); } }
+    @keyframes frame { 0% { opacity: 1; ${ease} } ${a}%, ${b}% { opacity: 0; ${ease} } 100% { opacity: 1; } }
+    @keyframes canvas { 0%, ${0.8 * a}% { opacity: 0; ${ease} } ${a}%, ${b}% { opacity: 1; ${ease} } ${b + 0.2 * a}%, 100% { opacity: 0; } }`;
 
   // Portrait: the screen's own loops, and where each portrait crop is centred, as a share of the width. These mirror
   // media.sh's focal points, held clear of the edges the way its 3:4 slab is.
@@ -66,14 +77,14 @@
   /** Sizes the laptop to fit the dark around it, measured with the deck in perspective, and sets the zoom's ends
    *  for laptop.css. Not on every resize: a phone's toolbars moving as it scrolls change none of these. */
   function fit() {
-    if (W === innerWidth && H === device.offsetHeight && room === first.offsetHeight) return;
-    W = innerWidth; H = device.offsetHeight; room = first.offsetHeight;
+    if (W === innerWidth && H === zoom.offsetHeight && room === first.offsetHeight) return;
+    W = innerWidth; H = zoom.offsetHeight; room = first.offsetHeight;
     const sw = portrait ? H * 2560 / 1662 : W; // the screen's width; portrait: the loops' own shape, as tall as the laptop
     set('--u', `${sw / 100}px`);
     set('--h', `${H}px`);
-    device.style.animation = 'none'; // measured full size
+    zoom.style.animation = 'none'; // measured full size
     const below = front.getBoundingClientRect().bottom - H / 2; // centre of the screen to the laptop's front edge
-    device.style.animation = '';
+    zoom.style.animation = '';
     const above = H / 2 + 0.016 * sw; // centre of the screen to the top of the bezel
     const wide = (W - 40) / (sw * 1.032 * 1.1); // the bezel, and the base's front a tenth wider in perspective
     // Centred in the dark between the site's bar and the words below, as big as fits.
