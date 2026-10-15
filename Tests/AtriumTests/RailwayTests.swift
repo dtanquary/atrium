@@ -59,7 +59,8 @@ private func save(_ railway: Railway, night: Float, _ name: String, scale: Int =
 
 /// With its retries a top-down layout nearly always fits three trains and a station, and the trains never lock:
 /// over ten simulated minutes, never all standing (but at a platform) for 10 s, and none held at a signal for 2
-/// minutes. Prints how often each view and era fits everything, and how long a railway takes to build.
+/// minutes. On the laptop canvas at the Small size, the standard. Prints how often each view and era fits
+/// everything, and how long a railway takes to build.
 @Test func railwayFitsItsTrainsAndNeverLocks() throws {
     for kind in [RailViewKind.topDown, .iso] {
         for era in RailEra.allCases {
@@ -67,7 +68,7 @@ private func save(_ railway: Railway, night: Float, _ name: String, scale: Int =
             let clock = ContinuousClock()
             for seed in 1...20 {
                 let began = clock.now
-                let railway = Railway(seed: seed, width: 378, height: 246, view: kind, era: era, count: 3, season: .summer)
+                let railway = Railway(seed: seed, width: 504, height: 328, view: kind, era: era, count: 3, season: .summer)
                 took += clock.now - began
                 if railway.layout.trains.count == 3 { all += 1 }
                 if railway.scenery.station != nil { stations += 1 }
@@ -182,3 +183,4 @@ private func save(_ railway: Railway, night: Float, _ name: String, scale: Int =
     print("Pixel Railway: \(checked) layouts with shared loops run an hour; held at a hidden signal: \(Set(misses).count)")
     #expect(misses.isEmpty, "\(Set(misses).sorted().prefix(8))")
 }
+

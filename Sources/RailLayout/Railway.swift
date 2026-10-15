@@ -33,7 +33,7 @@ public final class Railway {
             let short = RailArt.trains(of: era, short: true)
             if trains.count == 3, attempt % 3 == 2, !short.isEmpty { trains[2] = short[(s & 0xFFFF) % short.count].key }
             let layout = Layout(seed: s, view: view, trains: trains, share: true), scenery = Scenery(layout, era: era, season: season)
-            let score = layout.trains.count + (scenery.station == nil ? 0 : 1) // a town is worth a train
+            let score = layout.starves ? -1 : layout.trains.count + (scenery.station == nil ? 0 : 1) // a town is worth a train
             if best == nil || score > best!.score { best = (score, layout, scenery) }
             if score == trains.count + 1 { break }
         }

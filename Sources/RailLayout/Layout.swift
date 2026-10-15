@@ -227,6 +227,23 @@ final class Layout {
         }
     }
 
+    /// Whether a train could hold a diamond group for ever: on some loop, the stretches where its train needs the group
+    /// (from braking distance short of each diamond to a train-length past it) join up all the way round, so it
+    /// never lets go and the other loop's train starves. Such a layout is passed over.
+    var starves: Bool {
+        let diamonds = cross.filter { $0.kind == .diamond }
+        for (li, lp) in loops.enumerated() where !lp.keys.isEmpty {
+            let trains = lp.keys.map(RailArt.consist), longest = trains.map(\.length).max()!
+            let approach = trains.map { $0.cruise * $0.cruise / 16 + 10 }.max()!
+            for g in Set(diamonds.map(\.group)) {
+                let zones = diamonds.filter { $0.group == g }.compactMap { c in c.s(on: li).map { ($0 - longest - c.half, $0 + c.half + approach) } }
+                guard zones.count > 1 else { continue }
+                if stride(from: 0, to: lp.L, by: 1).allSatisfy({ x in zones.contains { wrap(x - $0.0, lp.L) <= $0.1 - $0.0 } }) { return true }
+            }
+        }
+        return false
+    }
+
     /// Stretches of loop `li` where no block may begin: from a diamond's approach to a train-length past it, so a
     /// train never stands at a block signal holding a diamond (which, with a train waiting for that diamond, could
     /// lock them both).
