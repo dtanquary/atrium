@@ -98,7 +98,10 @@ final class PixelRailway: SKScene {
     /// and its grass; snow where the weather says a centimetre or more lies, or while previewing it. Whole days,
     /// so the leaves turn and fall a day at a time.
     static func season(_ date: Date) -> RailSeason {
-        let latitude = Location.shared.coordinate.latitude
+        // to the nearest degree: each location fix comes back a few metres different, and the exact latitude moves the
+        // oak's dates by a fraction of a day, which made every new scene's fix look like a new season and rebuild it
+        // ponytail: a fix wobbling across a half degree could still flip it, once
+        let latitude = Location.shared.coordinate.latitude.rounded()
         let when = previewDay.value > 0.5 ? Calendar.current.startOfDay(for: Calendar.current.date(from: DateComponents(year: Calendar.current.component(.year, from: date)))!)
             .addingTimeInterval(day.value * 86400 + 43200) : date
         let oak = Phenology.whiteOak.moved(latitude: latitude, warmer: 0), d = Phenology.day(when, latitude: latitude).rounded(.down)
