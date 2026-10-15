@@ -21,7 +21,8 @@ public final class Railway {
     /// Grows a layout from `seed` for up to `count` of the era's trains on a canvas `width` by `height` art
     /// pixels, lays its scenery, and draws what stands still. A layout often can't fit every train, or a station,
     /// so up to six are grown from seeds drawn from this one, now and then with a short train for an inner loop
-    /// in place of the third, and the first with everything (else the one with most) is kept.
+    /// in place of the third, and the first with everything is kept, else the first with most (a station and its
+    /// town counting as much as a train).
     public init(seed: Int, width: Int, height: Int, view kind: RailViewKind, era: RailEra, count: Int, season: RailSeason) {
         (w, h, self.era) = (width, height, era)
         view = RailView(kind: kind, w: width, h: height)
@@ -32,9 +33,9 @@ public final class Railway {
             let short = RailArt.trains(of: era, short: true)
             if trains.count == 3, attempt % 3 == 2, !short.isEmpty { trains[2] = short[(s & 0xFFFF) % short.count].key }
             let layout = Layout(seed: s, view: view, trains: trains, share: true), scenery = Scenery(layout, era: era, season: season)
-            let score = layout.trains.count * 2 + (scenery.station == nil ? 0 : 1)
+            let score = layout.trains.count + (scenery.station == nil ? 0 : 1) // a town is worth a train
             if best == nil || score > best!.score { best = (score, layout, scenery) }
-            if score == trains.count * 2 + 1 { break }
+            if score == trains.count + 1 { break }
         }
         (layout, scenery) = (best!.layout, best!.scenery)
         Self.hideIdleSignals(layout, scenery)
