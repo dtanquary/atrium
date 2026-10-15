@@ -1,0 +1,354 @@
+import Foundation
+import simd
+
+/// How the layout is seen: from above and a little in front, each unit of height one pixel up the screen ("3/4"
+/// top-down); or isometric 2:1, the layout on the world's axes so its straights run on the diagonals.
+public enum RailViewKind: Int, Sendable { case topDown, iso }
+
+/// Maps the world (x, y, z; 1 unit = 1 top-down art pixel, y down the screen, z up) to the screen and back.
+struct RailView {
+    let kind: RailViewKind, w: Int, h: Int
+    var iso: Bool { kind == .iso }
+    /// A pixel's ray, toward the viewer: every world point along it projects to the same pixel.
+    var ray: SIMD3<Double> { iso ? [1, 1, 1] : [0, 1, 1] }
+
+    func project(_ p: SIMD3<Double>) -> SIMD2<Double> {
+        iso ? [p.x - p.y + Double(w) / 2, (p.x + p.y) / 2 + Double(h) / 2 - p.z] : [p.x, p.y - p.z]
+    }
+
+    /// Larger is nearer the viewer; only compared along one pixel's ray.
+    func depth(_ p: SIMD3<Double>) -> Double { iso ? p.x + p.y + p.z : p.y + p.z }
+
+    /// The depth where pixel (x, y)'s ray meets the plane at height z: flat things in one pixel share it, so
+    /// coplanar layers never fight.
+    func pixelDepth(_ x: Int, _ y: Int, _ z: Double) -> Double {
+        iso ? 2 * (Double(y) + 0.5 - Double(h) / 2) + 3 * z : Double(y) + 0.5 + 2 * z
+    }
+
+    /// The world offset at a fixed height that moves the screen point by (dx, dy).
+    func unproject(_ dx: Double, _ dy: Double) -> SIMD2<Double> { iso ? [dy + dx / 2, dy - dx / 2] : [dx, dy] }
+
+    /// Where pixel (x, y)'s centre meets the ground.
+    func ground(_ x: Int, _ y: Int) -> SIMD2<Double> {
+        let (px, py) = (Double(x) + 0.5, Double(y) + 0.5)
+        guard iso else { return [px, py] }
+        let (a, b) = (px - Double(w) / 2, py - Double(h) / 2)
+        return [b + a / 2, b - a / 2]
+    }
+
+    /// The direction the Sun's light comes from: from the upper left in top-down, from the left in iso.
+    var sun: SIMD3<Double> { normalize(iso ? SIMD3(-0.30, 0.60, 0.74) : SIMD3(-0.55, -0.45, 0.70)) }
+}
+
+/// A voxel model seen in one view: every pixel of its sprite, as offsets from the pixel its centre falls on.
+struct Marched {
+    var dx: [Int16] = [], dy: [Int16] = [], mat: [UInt8] = [], top: [Bool] = []
+    var normal: [SIMD3<Double>] = []
+    /// Depth relative to the model's foot.
+    var dd: [Float] = []
+    var count: Int { mat.count }
+
+    /// Marches each sprite pixel's ray down through the model, top first, from just above it: the first filled
+    /// cell is what shows, and which of the cell's indices changed from the step before says which face. The
+    /// model's footprint is centred on its position, turned by `heading`, and tipped by `slope` (rise per unit
+    /// along) on a ramp. `smooth` shades every face as a top: the hill's steps would otherwise show as terraces
+    /// wherever its width puts a step's front between two of the ray's samples (its grass is already lit by slope).
+    init(_ g: Voxels, _ view: RailView, heading: Double, slope: Double = 0, smooth: Bool = false) {
+        let (lx, ly, lz) = (Double(g.nx), Double(g.ny), Double(g.nz))
+        let (c, s) = (cos(heading), sin(heading)), (hx, hy) = (lx / 2, ly / 2)
+        let lean = abs(slope) * hx
+        var lo = SIMD2<Double>(repeating: .infinity), hi = SIMD2<Double>(repeating: -.infinity)
+        let origin = view.project(.zero)
+        for u in [-hx, hx] { for v in [-hy, hy] { for z in [min(0, -lean), lz + lean] {
+            let p = view.project([u * c - v * s, u * s + v * c, z]) - origin
+            lo = simd_min(lo, p); hi = simd_max(hi, p)
+        } } }
+        let (x0, y0) = (Int(floor(lo.x)) - 1, Int(floor(lo.y)) - 1), (x1, y1) = (Int(ceil(hi.x)) + 1, Int(ceil(hi.y)) + 1)
+        let r = view.ray, zlo = min(0, -lean) - 0.5, tmax = lz + lean + 0.5
+        let steps = Int(ceil((tmax - zlo) / 0.25 - 1e-9))
+        for py in y0..<y1 {
+            for px in x0..<x1 {
+                let gxy = view.unproject(Double(px), Double(py))
+                var prev = SIMD3<Int>(Int.min, Int.min, Int.min)
+                for k in 0..<steps {
+                    let t = tmax - 0.25 * Double(k)
+                    let wx = gxy.x + t * r.x, wy = gxy.y + t * r.y, wz = t * r.z
+                    let u = wx * c + wy * s, v = -wx * s + wy * c, zl = wz - slope * u
+                    let cell = SIMD3(Int(floor(u + hx)), Int(floor(v + hy)), Int(floor(zl)))
+                    defer { prev = cell }
+                    guard cell.x >= 0, cell.x < g.nx, cell.y >= 0, cell.y < g.ny, cell.z >= 0, cell.z < g.nz else { continue }
+                    let m = g[cell.x, cell.y, cell.z]
+                    guard m > 0 else { continue }
+                    let first = k == 0
+                    let (dz, dyc, dxc) = (first ? false : cell.z != prev.z, first ? false : cell.y != prev.y, first ? false : cell.x != prev.x)
+                    let isTop = smooth || dz || first || !(dyc || dxc)
+                    var n = SIMD3<Double>.zero
+                    if isTop { n.z = 1 } else if dyc { n.y = Double((prev.y - cell.y).signum()) } else { n.x = Double((prev.x - cell.x).signum()) }
+                    dx.append(Int16(px)); dy.append(Int16(py)); mat.append(m); top.append(isTop)
+                    normal.append([n.x * c - n.y * s, n.x * s + n.y * c, n.z])
+                    dd.append(Float(view.depth([gxy.x + t * r.x, gxy.y + t * r.y, t * r.z])))
+                    break
+                }
+            }
+        }
+    }
+}
+
+/// The light a picture is drawn in: day or night, summer or snow, and the era's lamps.
+struct RailLight {
+    let night: Bool, winter: Bool
+    let lamp: SIMD3<Float>
+    static let window = RailArt.colour(0xFFAE54), headlight = RailArt.colour(0xFFD9A0)
+    static let nightMul = SIMD3<Float>(0.25, 0.26, 0.36), nightAdd = SIMD3<Float>(18, 15, 34)
+    static let shadow = SIMD3<Float>(0.80, 0.85, 0.92)
+
+    init(night: Bool, winter: Bool, era: RailEra) {
+        (self.night, self.winter) = (night, winter)
+        lamp = RailArt.colour(era == .steam ? 0xFFAE54 : 0xC8E4F0) // incandescent; mercury vapour
+    }
+
+    /// Top faces 1; sides by the Sun by day, a flat moonlight at night.
+    func shade(_ n: SIMD3<Double>, _ view: RailView) -> Float {
+        if night { return n.z > 0.5 ? 1 : 0.82 }
+        let s = view.sun
+        return Float((0.7 + 0.3 * max(0, dot(n, s))) / (0.7 + 0.3 * s.z))
+    }
+
+    /// A material's colour seen with this shade; snow lies on top faces of what takes it. `lit` says whether a
+    /// window is lit tonight.
+    func colour(_ m: UInt8, _ shade: Float, top: Bool, lit: Bool = true) -> SIMD3<Float> {
+        let flags = RailArt.flags[Int(m)]
+        var c = RailArt.rgb[Int(m)]
+        if winter, flags.contains(.snowAll) || flags.contains(.snowTop) && top { c = RailArt.snowTone[Int(m)] }
+        c *= shade
+        if night {
+            c = c * Self.nightMul + Self.nightAdd
+            if flags.contains(.window), lit { c = Self.window * 0.92 }
+            if flags.contains(.dome) { c = Self.window * 0.55 + c * 0.3 }
+            if flags.contains(.headlight) { c = [255, 246, 220] }
+            if flags.contains(.lamp) { c = simd_min(lamp * 1.1, SIMD3(repeating: 255)) }
+        }
+        return c
+    }
+
+    /// Ground colours by night.
+    func ground(_ c: SIMD3<Float>) -> SIMD3<Float> { night ? c * Self.nightMul + Self.nightAdd : c }
+}
+
+/// A picture being built: colour and depth for every pixel.
+struct Canvas {
+    let w: Int, h: Int
+    var rgb: [SIMD3<Float>], depth: [Float]
+
+    init(w: Int, h: Int) {
+        (self.w, self.h) = (w, h)
+        rgb = Array(repeating: .zero, count: w * h)
+        depth = Array(repeating: -1e9, count: w * h)
+    }
+
+    /// Plots where at least as near as what's there: the later of two at one depth wins.
+    @inline(__always) mutating func put(_ x: Int, _ y: Int, _ c: SIMD3<Float>, _ d: Float) {
+        guard x >= 0, x < w, y >= 0, y < h else { return }
+        let i = y * w + x
+        if d >= depth[i] - 1e-4 { rgb[i] = c; depth[i] = d }
+    }
+
+    /// A marched model with its foot at `at`, coloured in `light`.
+    mutating func sprite(_ m: Marched, at p: SIMD3<Double>, _ view: RailView, _ light: RailLight, lit: Bool = true) {
+        let q = view.project(p), ax = Int(floor(q.x)), ay = Int(floor(q.y))
+        // depth as if the foot sat exactly on its pixel's ray, as the sprite was marched
+        let base = Float(view.pixelDepth(ax, ay, p.z))
+        for k in 0..<m.count {
+            let c = light.colour(m.mat[k], light.shade(m.normal[k], view), top: m.top[k], lit: lit)
+            put(Int(m.dx[k]) + ax, Int(m.dy[k]) + ay, c, m.dd[k] + base)
+        }
+    }
+
+    /// World points as single pixels, flat at their height, blended over what's there by `alpha`.
+    mutating func points(_ ps: [SIMD3<Double>], _ c: SIMD3<Float>, _ view: RailView, eps: Double = 0.05, alpha: Float = 1) {
+        for p in ps {
+            let q = view.project(p), x = Int(floor(q.x)), y = Int(floor(q.y))
+            guard x >= 0, x < w, y >= 0, y < h else { continue }
+            let colour = alpha < 1 ? c * alpha + rgb[y * w + x] * (1 - alpha) : c
+            put(x, y, colour, Float(view.pixelDepth(x, y, p.z) + eps))
+        }
+    }
+}
+
+/// Deterministic 0..<1 from integers, for anything that must come out the same in every view and light.
+func hsh(_ keys: Int...) -> Double {
+    var h: UInt64 = 0x9E37_79B9_7F4A_7C15
+    for v in keys {
+        h = (h ^ UInt64(UInt32(truncatingIfNeeded: v))) &* 0xBF58_476D_1CE4_E5B9
+        h ^= h >> 29
+    }
+    return Double(h & 0xFF_FFFF) / Double(0x100_0000)
+}
+
+/// A seeded generator (SplitMix64) with the draws a layout needs: the same seed gives the same layout.
+struct Dice {
+    private var state: UInt64
+    init(_ seed: Int) { state = UInt64(bitPattern: Int64(seed)) &* 0x9E37_79B9_7F4A_7C15 &+ 0x0123_4567_89AB_CDEF }
+    private mutating func next() -> UInt64 {
+        state &+= 0x9E37_79B9_7F4A_7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+        return z ^ (z >> 31)
+    }
+    /// From 0 up to, not including, 1.
+    mutating func unit() -> Double { Double(next() >> 11) * 0x1p-53 }
+    mutating func uniform(_ low: Double, _ high: Double) -> Double { low + (high - low) * unit() }
+    /// 0 up to, not including, n.
+    mutating func below(_ n: Int) -> Int { Int(unit() * Double(n)) }
+    mutating func pick<T>(_ xs: [T]) -> T { xs[below(xs.count)] }
+    mutating func chance(_ p: Double) -> Bool { unit() < p }
+}
+
+// MARK: - Scenery models (voxels: x along, y across, z up)
+
+enum Models {
+    private static func m(_ name: String) -> UInt8 { RailArt.mat(name) }
+
+    /// A gabled house, its ridge along x; windows along both long walls, a door on the -y side (the street's).
+    static func house(_ w: Int, _ d: Int, wall: String, roof: String, seed: Int, walls: Int = 3) -> Voxels {
+        var g = Voxels(w, d, walls + d / 2 + 2)
+        g.fill(0..<w, 0..<d, 0..<walls, m(wall))
+        for x in 1..<(w - 1) where x % 2 == 1 && hsh(seed, x) < 0.8 {
+            g[x, 0, 1] = m("house_win"); g[x, d - 1, 1] = m("house_win")
+        }
+        g[w / 2, 0, 0] = m("door")
+        for k in 0...(d / 2) where Double(k) <= Double(d - 1) / 2 { g.fill(0..<w, k..<(d - k), (walls + k)..<(walls + k + 1), m(roof)) }
+        let cx = hsh(seed, 99) < 0.5 ? 1 : w - 2, top = walls + (d - 1) / 2
+        g.fill(cx..<(cx + 1), (d / 2)..<(d / 2 + 1), walls..<(top + 2), m("chimney"))
+        return g
+    }
+
+    /// A Southern Pacific style wooden combination depot: yellow walls, brown trim, a green hipped roof, a bay
+    /// window toward the track (+y).
+    static func depot() -> Voxels {
+        let (w, d) = (16, 7)
+        var g = Voxels(w, d, 7)
+        g.fill(0..<w, 0..<6, 0..<3, m("sp_wall"))
+        g.fill(0..<w, 0..<6, 0..<1, m("sp_trim"))
+        g.fill(0..<1, 0..<6, 0..<3, m("sp_trim")); g.fill((w - 1)..<w, 0..<6, 0..<3, m("sp_trim"))
+        g.fill(6..<10, 6..<7, 0..<3, m("sp_wall"))
+        g.fill(7..<9, 6..<7, 1..<2, m("house_win"))
+        for x in [2, 4, 11, 13] { g[x, 0, 1] = m("house_win"); g[x, 5, 1] = m("house_win") }
+        g[5, 0, 0] = m("door"); g[10, 5, 0] = m("door")
+        for k in 0..<4 { g.fill(k..<(w - k), k..<(d - k), (3 + k)..<(4 + k), m("sp_roof")) }
+        return g
+    }
+
+    static func brickStation() -> Voxels {
+        let (w, d) = (18, 7)
+        var g = Voxels(w, d, 6)
+        g.fill(0..<w, 0..<d, 0..<4, m("brick"))
+        g.fill(0..<w, 0..<d, 0..<1, m("brick_dk"))
+        for x in stride(from: 2, to: w - 2, by: 3) { g.fill(x..<(x + 1), 0..<1, 1..<3, m("house_win")); g.fill(x..<(x + 1), (d - 1)..<d, 1..<3, m("house_win")) }
+        g.fill((w / 2)..<(w / 2 + 1), (d - 1)..<d, 0..<2, m("door"))
+        g.fill(0..<w, 0..<d, 4..<5, m("slate"))
+        g.fill(2..<(w - 2), 2..<(d - 2), 5..<6, m("slate"))
+        return g
+    }
+
+    static func canopy(_ length: Int) -> Voxels {
+        var g = Voxels(length, 5, 6)
+        for x in stride(from: 1, to: length - 1, by: 6) { g.fill(x..<(x + 1), 2..<3, 0..<5, m("steel")) }
+        g.fill(0..<length, 0..<5, 5..<6, m("canopy"))
+        return g
+    }
+
+    /// 4 wide, its edge facing the track (+y).
+    static func platform(_ length: Int) -> Voxels {
+        var g = Voxels(length, 4, 1)
+        g.fill(0..<length, 0..<4, 0..<1, m("platform"))
+        g.fill(0..<length, 3..<4, 0..<1, m("platform_edge"))
+        return g
+    }
+
+    static func waterTank() -> Voxels {
+        var g = Voxels(7, 7, 12)
+        for (x, y) in [(1, 1), (1, 5), (5, 1), (5, 5)] { g.fill(x..<(x + 1), y..<(y + 1), 0..<5, m("timber")) }
+        for x in 0..<7 { for y in 0..<7 {
+            let r = hypot(Double(x - 3), Double(y - 3))
+            if r <= 3.2 { g.fill(x..<(x + 1), y..<(y + 1), 5..<10, m("wood_tank")); g[x, y, 6] = m("wood_tank_dk"); g[x, y, 8] = m("wood_tank_dk") }
+            if r <= 2.4 { g[x, y, 10] = m("tank_roof") }
+            if r <= 1.2 { g[x, y, 11] = m("tank_roof") }
+        } }
+        g[6, 3, 7] = m("timber") // the spout
+        return g
+    }
+
+    /// A broadleaf tree; bare in winter, a thin crown of twigs round the trunk's top.
+    static func tree(seed: Int, winter: Bool) -> Voxels {
+        var rng = Dice(seed)
+        let r = rng.uniform(2.2, 3.4), rz = rng.uniform(2.0, 2.8), c = rng.uniform(3.5, 5.0)
+        let n = Int(2 * r) + 3, nz = Int(c + rz) + 2, mid = n / 2
+        var g = Voxels(n, n, nz)
+        for x in 0..<n { for y in 0..<n { for z in 0..<nz {
+            let dx = Double(x - mid) / r, dy = Double(y - mid) / r, dz = (Double(z) + 0.5 - c) / rz
+            let e = dx * dx + dy * dy + dz * dz
+            guard e <= 1 + 0.25 * (hsh(seed, x, y, z) - 0.5) else { continue }
+            if winter {
+                if e > 0.5, hsh(seed, x, y, z, 7) < 0.14 { g[x, y, z] = m("twig") }
+            } else {
+                let t = hsh(seed, x, y, z, 3)
+                g[x, y, z] = m(Double(z) + 0.5 > c + 0.4 * rz && t < 0.6 ? "leaf_lt" : t < 0.25 ? "leaf_dk" : "leaf")
+            }
+        } } }
+        g.fill(mid..<(mid + 1), mid..<(mid + 1), 0..<Int(c), m("trunk"))
+        return g
+    }
+
+    static func conifer(seed: Int) -> Voxels {
+        var rng = Dice(seed)
+        let height = 7 + rng.below(5), rb = rng.uniform(2.2, 3.0)
+        let n = Int(2 * rb) + 3, mid = n / 2
+        var g = Voxels(n, n, height)
+        g[mid, mid, 0] = m("trunk")
+        for z in 1..<height {
+            let rr = rb * (1 - Double(z - 1) / Double(height - 1)) + 0.35
+            for x in 0..<n { for y in 0..<n where hypot(Double(x - mid), Double(y - mid)) <= rr {
+                g[x, y, z] = m(hsh(seed, x, y, z) < 0.3 ? "conifer_dk" : "conifer")
+            } }
+        }
+        return g
+    }
+
+    static func pole() -> Voxels {
+        var g = Voxels(3, 1, 10)
+        g.fill(1..<2, 0..<1, 0..<10, m("pole"))
+        g.fill(0..<3, 0..<1, 9..<10, m("crossarm"))
+        return g
+    }
+
+    static func lamp() -> Voxels {
+        var g = Voxels(1, 1, 7)
+        g.fill(0..<1, 0..<1, 0..<6, m("post"))
+        g[0, 0, 6] = m("lamp")
+        return g
+    }
+
+    /// A signal post `h` high, with a head on top if it has one.
+    static func post(_ h: Int, head: String? = nil) -> Voxels {
+        var g = Voxels(1, head == nil ? 1 : 2, h + (head == nil ? 0 : 2))
+        g.fill(0..<1, 0..<1, 0..<h, m("post"))
+        if let head { g.fill(0..<1, 0..<2, h..<(h + 2), m(head)) }
+        return g
+    }
+
+    /// A crossbuck, edge-on from the track: a post and a white X across the road (y).
+    static func crossbuck() -> Voxels {
+        var g = Voxels(1, 5, 7)
+        g.fill(0..<1, 2..<3, 0..<6, m("post"))
+        for y in 0..<5 { for z in 2..<7 where abs(y - 2) == abs(z - 4) { g[0, y, z] = m("post_white") } }
+        return g
+    }
+
+    static func flasher() -> Voxels {
+        var g = crossbuck()
+        g[0, 1, 2] = m("sig_head"); g[0, 3, 2] = m("sig_head")
+        return g
+    }
+}

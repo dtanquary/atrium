@@ -596,6 +596,8 @@ struct WallpaperPage: View {
             ForEach(sections, id: \.self) { section in
                 if let retitled = wallpaper.retitled, retitled.section == section {
                     Section { rows(section) } header: { SectionTitle(wallpaper: wallpaper, section: section, menu: retitled.when) }
+                } else if let note = wallpaper.footnote, note.section == section {
+                    Section { rows(section) } header: { Text(section) } footer: { Text(note.text) }
                 } else {
                     Section(section) { rows(section) }
                 }
