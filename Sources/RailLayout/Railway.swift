@@ -112,7 +112,7 @@ public final class Railway {
         let q = Int((heading / (2 * .pi / 64)).rounded()) & 63
         let key = "\(v.name) \(q) \(slope)"
         let painted = bakes[key] ?? {
-            let p = Painted(Marched(v.grid, view, heading: Double(q) * 2 * .pi / 64, slope: slope), view, era: era)
+            let p = Painted(Marched(v.grid, view, heading: Double(q) * 2 * .pi / 64, slope: slope, fine: true), view, era: era)
             bakes[key] = p
             return p
         }()

@@ -158,7 +158,11 @@ final class Layout {
                     if loops.count > 1 || attempt > tries / 2 { mode = rng.pick(short ? [.nest, .nest, .beside, .twice] : [.twice, .nest, .beside]) }
                 }
                 var poly: [SIMD2<Double>], region: Region?
-                if mode == .twice {
+                if mode == .nest, short || loops.allSatisfy({ $0.region == nil }) { // the short train's tight inner loop
+                    let host = rng.chance(0.6) ? loops.max { $0.L < $1.L }! : loops[rng.below(loops.count)]
+                    guard let p = Self.innerRect(&rng, host, R) else { continue }
+                    poly = view.iso ? p : p.map { floor($0) + 0.5 }
+                } else if mode == .twice {
                     guard let p = Self.crossRect(&rng, loops[rng.below(loops.count)], R, lo, hi) else { continue }
                     poly = view.iso ? p : p.map { floor($0) + 0.5 }
                 } else if view.iso, mode != .nest {
@@ -340,6 +344,20 @@ final class Layout {
             if rng.chance(0.35), min(l0, l1) > 2 * cut + 2 * R { out += [p + (p0 - p) / l0 * cut, p + (p2 - p) / l1 * cut] } else { out.append(p) }
         }
         return out
+    }
+
+    /// A rectangle inside another loop, at least `clear` from its track all round: a loop in a loop.
+    static func innerRect(_ rng: inout Dice, _ host: Loop, _ R: Double, clear: Double = 22) -> [SIMD2<Double>]? {
+        let lo = host.P.reduce(SIMD2(repeating: Double.infinity), simd_min), hi = host.P.reduce(SIMD2(repeating: -Double.infinity), simd_max)
+        let span = hi - lo - 2 * clear
+        guard min(span.x, span.y) >= 2 * R + 4 else { return nil }
+        let w = rng.uniform(2 * R + 4, min(span.x, 4 * R)), h = rng.uniform(2 * R + 4, min(span.y, 4 * R))
+        let x0 = rng.uniform(lo.x + clear, hi.x - clear - w), y0 = rng.uniform(lo.y + clear, hi.y - clear - h)
+        let pts: [SIMD2<Double>] = [[x0, y0], [x0 + w, y0], [x0 + w, y0 + h], [x0, y0 + h]]
+        let edge = (0..<4).flatMap { k in (0..<12).map { pts[k] + (pts[(k + 1) % 4] - pts[k]) * Double($0) / 11 } }
+        guard edge.allSatisfy({ insidePoly($0, host.poly) }) else { return nil }
+        let track = stride(from: 0, to: host.P.count, by: 4).map { host.P[$0] }
+        return edge.allSatisfy { q in track.allSatisfy { length($0 - q) >= clear } } ? pts : nil
     }
 
     /// A rectangle whose two sides cross one of A's straights at right angles, a twice-around: it reaches into A

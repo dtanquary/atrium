@@ -65,7 +65,7 @@ public enum RailArt {
         ("steel_lt", 0x6A6E74, []), ("deck", 0x5A5650, .snowTop),
         // nature
         ("leaf", 0x4A6A24, .snowTop), ("leaf_lt", 0x6E8E3A, .snowTop), ("leaf_dk", 0x3E541A, .snowTop), ("trunk", 0x5A4232, []),
-        ("conifer", 0x2A4628, .snowTop), ("conifer_dk", 0x22382A, .snowTop), ("twig", 0x48403A, []),
+        ("conifer", 0x2A4628, .snowTop), ("conifer_dk", 0x22382A, .snowTop), ("twig", 0x3E3630, []), ("twig_mass", 0x6A5E54, []),
         ("hill", 0x557F33, .snowAll), ("hill_lt", 0x6A9440, .snowAll), ("hill_dk", 0x4A7230, .snowAll),
         ("tunnel", 0x121214, []), ("portal", 0x8A8884, .snowTop), ("bank", 0x6A8A3A, .snowAll),
     ]
@@ -336,7 +336,6 @@ extension RailArt {
     static let sw = RailVehicle("0-6-0 switcher", switcher, ["k": "bb_drivers", "d": "bb_drivers", "r": "bb_rod", "p": "black", "C": "bb_black", "c": "cabglass",
                                                              "a": "bb_board", "b": "bb_black", "B": "bb_ridge", "x": "bb_smokebox", "h": "headlight", "m": "bb_dome"], bogies: 0.6)
     static let swTender = RailVehicle("Slope-back tender", slopeTender, ["k": "truck", "b": "bb_black", "q": "coal", "Q": "coal_glint"])
-    static let redCab = RailVehicle("Red caboose", caboose, ["k": "truck", "y": "car_red", "w": "window", "R": "roof_black"])
 
     static func roadCar(_ era: RailEra) -> RailVehicle {
         let (body, roof) = era == .steam ? ("v40_maroon", "v40_maroon") : ("v50_turq", "v50_cream")
@@ -356,8 +355,8 @@ extension RailArt {
         Consist(key: "hiawatha", name: "Milwaukee Road Hiawatha", era: .steam, vehicles: [mwHudson, mwTender, mwCar, mwCar, mwCar], cruise: 18),
         // short trains, for a tight inner loop
         Consist(key: "rdc", name: "Budd RDC pair", era: .streamliners, vehicles: [rdcCar, rdcCar], cruise: 15),
-        Consist(key: "gp9", name: "Union Pacific GP9 local", era: .streamliners, vehicles: [upGP9, shortBox, hop, shortBox, cab], cruise: 12),
-        Consist(key: "switcher", name: "0-6-0 switcher with short cars", era: .steam, vehicles: [sw, swTender, shortBox, hop, shortBox, redCab], cruise: 11),
+        Consist(key: "gp9", name: "Union Pacific GP9 local", era: .streamliners, vehicles: [upGP9, shortBox, hop, shortBox], cruise: 12),
+        Consist(key: "switcher", name: "0-6-0 switcher with short cars", era: .steam, vehicles: [sw, swTender, shortBox, hop], cruise: 11),
     ].map { ($0.key, $0) })
 
     /// Each era's trains, in the order a layout tries them: the main line's, or the short ones for an inner loop.

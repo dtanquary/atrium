@@ -53,7 +53,10 @@ struct Marched {
     /// model's footprint is centred on its position, turned by `heading`, and tipped by `slope` (rise per unit
     /// along) on a ramp. `smooth` shades every face as a top: the hill's steps would otherwise show as terraces
     /// wherever its width puts a step's front between two of the ray's samples (its grass is already lit by slope).
-    init(_ g: Voxels, _ view: RailView, heading: Double, slope: Double = 0, smooth: Bool = false) {
+    /// `fine` takes four rays a pixel, for the trains: a pixel shows what most of them hit, and where two things
+    /// tie, the one rarer in the whole sprite, so a stripe or a row of windows one voxel high doesn't break into
+    /// dots at headings where it falls between pixel centres.
+    init(_ g: Voxels, _ view: RailView, heading: Double, slope: Double = 0, smooth: Bool = false, fine: Bool = false) {
         let (lx, ly, lz) = (Double(g.nx), Double(g.ny), Double(g.nz))
         let (c, s) = (cos(heading), sin(heading)), (hx, hy) = (lx / 2, ly / 2)
         let lean = abs(slope) * hx
@@ -66,30 +69,50 @@ struct Marched {
         let (x0, y0) = (Int(floor(lo.x)) - 1, Int(floor(lo.y)) - 1), (x1, y1) = (Int(ceil(hi.x)) + 1, Int(ceil(hi.y)) + 1)
         let r = view.ray, zlo = min(0, -lean) - 0.5, tmax = lz + lean + 0.5
         let steps = Int(ceil((tmax - zlo) / 0.25 - 1e-9))
-        for py in y0..<y1 {
-            for px in x0..<x1 {
-                let gxy = view.unproject(Double(px), Double(py))
-                var prev = SIMD3<Int>(Int.min, Int.min, Int.min)
-                for k in 0..<steps {
-                    let t = tmax - 0.25 * Double(k)
-                    let wx = gxy.x + t * r.x, wy = gxy.y + t * r.y, wz = t * r.z
-                    let u = wx * c + wy * s, v = -wx * s + wy * c, zl = wz - slope * u
-                    let cell = SIMD3(Int(floor(u + hx)), Int(floor(v + hy)), Int(floor(zl)))
-                    defer { prev = cell }
-                    guard cell.x >= 0, cell.x < g.nx, cell.y >= 0, cell.y < g.ny, cell.z >= 0, cell.z < g.nz else { continue }
-                    let m = g[cell.x, cell.y, cell.z]
-                    guard m > 0 else { continue }
-                    let first = k == 0
-                    let (dz, dyc, dxc) = (first ? false : cell.z != prev.z, first ? false : cell.y != prev.y, first ? false : cell.x != prev.x)
-                    let isTop = smooth || dz || first || !(dyc || dxc)
-                    var n = SIMD3<Double>.zero
-                    if isTop { n.z = 1 } else if dyc { n.y = Double((prev.y - cell.y).signum()) } else { n.x = Double((prev.x - cell.x).signum()) }
-                    dx.append(Int16(px)); dy.append(Int16(py)); mat.append(m); top.append(isTop)
-                    normal.append([n.x * c - n.y * s, n.x * s + n.y * c, n.z])
-                    dd.append(Float(view.depth([gxy.x + t * r.x, gxy.y + t * r.y, t * r.z])))
-                    break
-                }
+        typealias Hit = (m: UInt8, top: Bool, n: SIMD3<Double>, dd: Float)
+        func cast(_ px: Int, _ py: Int, _ ox: Double = 0, _ oy: Double = 0) -> Hit? {
+            let gxy = view.unproject(Double(px) + ox, Double(py) + oy)
+            var prev = SIMD3<Int>(Int.min, Int.min, Int.min)
+            for k in 0..<steps {
+                let t = tmax - 0.25 * Double(k)
+                let wx = gxy.x + t * r.x, wy = gxy.y + t * r.y, wz = t * r.z
+                let u = wx * c + wy * s, v = -wx * s + wy * c, zl = wz - slope * u
+                let cell = SIMD3(Int(floor(u + hx)), Int(floor(v + hy)), Int(floor(zl)))
+                defer { prev = cell }
+                guard cell.x >= 0, cell.x < g.nx, cell.y >= 0, cell.y < g.ny, cell.z >= 0, cell.z < g.nz else { continue }
+                let m = g[cell.x, cell.y, cell.z]
+                guard m > 0 else { continue }
+                let first = k == 0
+                let (dz, dyc, dxc) = (first ? false : cell.z != prev.z, first ? false : cell.y != prev.y, first ? false : cell.x != prev.x)
+                let isTop = smooth || dz || first || !(dyc || dxc)
+                var n = SIMD3<Double>.zero
+                if isTop { n.z = 1 } else if dyc { n.y = Double((prev.y - cell.y).signum()) } else { n.x = Double((prev.x - cell.x).signum()) }
+                // its depth as seen along the ray through the pixel's centre
+                let at = SIMD3(gxy.x + t * r.x, gxy.y + t * r.y, t * r.z) - SIMD3(view.unproject(ox, oy), 0)
+                return (m, isTop, [n.x * c - n.y * s, n.x * s + n.y * c, n.z], Float(view.depth(at)))
             }
+            return nil
+        }
+        func add(_ px: Int, _ py: Int, _ h: Hit) {
+            dx.append(Int16(px)); dy.append(Int16(py)); mat.append(h.m); top.append(h.top); normal.append(h.n); dd.append(h.dd)
+        }
+        guard fine else {
+            for py in y0..<y1 { for px in x0..<x1 { if let h = cast(px, py) { add(px, py, h) } } }
+            return
+        }
+        var pixels: [(px: Int, py: Int, hits: [Hit])] = [], seen = [Int](repeating: 0, count: 256)
+        for py in y0..<y1 { for px in x0..<x1 {
+            let hits = [(-0.25, -0.25), (0.25, -0.25), (-0.25, 0.25), (0.25, 0.25)].compactMap { cast(px, py, $0.0, $0.1) }
+            guard hits.count >= 2 else { continue }
+            for h in hits { seen[Int(h.m)] += 1 }
+            pixels.append((px, py, hits))
+        } }
+        for (px, py, hits) in pixels {
+            var count = [UInt8: Int]()
+            for h in hits { count[h.m, default: 0] += 1 }
+            let most = count.values.max()!
+            let pick = count.filter { $0.value == most }.keys.min { (seen[Int($0)], $0) < (seen[Int($1)], $1) }!
+            add(px, py, hits.first { $0.m == pick }!)
         }
     }
 }
@@ -280,7 +303,8 @@ enum Models {
         return g
     }
 
-    /// A broadleaf tree; bare in winter, a thin crown of twigs round the trunk's top.
+    /// A broadleaf tree; bare in winter, its crown a grey-brown mass of fine twigs with darker branches in it and
+    /// a ragged edge.
     static func tree(seed: Int, winter: Bool) -> Voxels {
         var rng = Dice(seed)
         let r = rng.uniform(2.2, 3.4), rz = rng.uniform(2.0, 2.8), c = rng.uniform(3.5, 5.0)
@@ -291,7 +315,8 @@ enum Models {
             let e = dx * dx + dy * dy + dz * dz
             guard e <= 1 + 0.25 * (hsh(seed, x, y, z) - 0.5) else { continue }
             if winter {
-                if e > 0.5, hsh(seed, x, y, z, 7) < 0.14 { g[x, y, z] = m("twig") }
+                if e > 0.82 * 0.82, hsh(seed, x, y, z, 7) < 0.35 { continue }
+                g[x, y, z] = m(hsh(seed, x, y, z, 9) < 0.22 ? "twig" : "twig_mass")
             } else {
                 let t = hsh(seed, x, y, z, 3)
                 g[x, y, z] = m(Double(z) + 0.5 > c + 0.4 * rz && t < 0.6 ? "leaf_lt" : t < 0.25 ? "leaf_dk" : "leaf")

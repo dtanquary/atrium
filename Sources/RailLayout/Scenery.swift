@@ -182,25 +182,39 @@ final class Scenery {
                         }
                     }
                 }
-                // side streets parallel to the track, off the main road, wherever there's room
+                // a grid off the main road: streets parallel to the track at 22 and 50 either side, joined by cross
+                // streets parallel to the main road where both reach
                 if let main = roads.first {
-                    for t in [22.0, 48, -22] {
+                    var reach: [Double: (Double, Double)] = [:]
+                    for t in [22.0, 50, -22, -50] {
                         let start = cx + n * t
-                        guard main.contains(where: { length($0 - start) <= 1.5 }) else { continue }
-                        var pts: [SIMD2<Double>] = []
-                        for (way, dirv) in [(1.0, d), (-1.0, -d)] {
-                            var run: [SIMD2<Double>] = []
-                            for k in stride(from: 2.0, to: 56, by: 2) {
-                                let p = start + dirv * k
+                        guard main.contains(where: { length($0 - start) <= 1.5 }), abs(t) != 50 || reach[t < 0 ? -22 : 22] != nil else { continue }
+                        var ext: [Double: Double] = [:]
+                        for sgn in [1.0, -1.0] {
+                            var ok = 0.0
+                            for k in stride(from: 2.0, to: 72, by: 2) {
+                                let p = start + d * sgn * k
                                 if k >= 8, !rectPoints(p, d, n, 2, 9).allSatisfy(G.free) || !onScreen(p, -2) { break }
-                                run.append(p)
+                                ok = k
                             }
-                            if run.count > 8 { pts = way > 0 ? run.reversed() + [start] + pts : pts + run }
+                            ext[sgn] = ok > 16 ? ok : 0
                         }
-                        pts.sort { dot($0 - start, d) < dot($1 - start, d) }
-                        if pts.count > 14 {
-                            roads.append(pts)
-                            G.mark(Array(pts.dropFirst().dropLast()), 4.5)
+                        guard ext[1]! + ext[-1]! >= 28 else { continue }
+                        let pts = stride(from: -ext[-1]!, through: ext[1]!, by: 2).map { start + d * $0 }
+                        roads.append(pts); reach[t] = (-ext[-1]!, ext[1]!)
+                        G.mark(pts, 4.5)
+                    }
+                    for (t1, t2) in [(22.0, 50.0), (-22, -50)] {
+                        guard let r1 = reach[t1], let r2 = reach[t2] else { continue }
+                        let (lo, hi) = (max(r1.0, r2.0) + 6, min(r1.1, r2.1) - 6)
+                        for k in [-34.0, 34, -66, 66] where lo <= k && k <= hi {
+                            let (a, b) = (cx + n * t1 + d * k, cx + n * t2 + d * k), count = Int(abs(t2 - t1) / 2) + 1
+                            let seg = (0..<count).map { a + (b - a) * Double($0) / Double(count - 1) }
+                            let inner = seg.filter { min(length($0 - a), length($0 - b)) > 6 }
+                            if !inner.isEmpty, inner.flatMap({ rectPoints($0, n, d, 2, 9) }).allSatisfy(G.free) {
+                                roads.append(seg)
+                                G.mark(seg, 4.5)
+                            }
                         }
                     }
                 }
@@ -224,7 +238,7 @@ final class Scenery {
                 }
                 let walls = ["wall_white", "wall_cream", "wall_yellow", "wall_grey", "wall_blue", "wall_brick"]
                 let roofs = ["roof_green", "roof_red", "roof_black", "roof_grey"]
-                for (k, house) in houses.prefix(18).enumerated() {
+                for (k, house) in houses.prefix(28).enumerated() {
                     // the door side (-y) faces the road: turned round if the road is on the other side
                     let facing = atan2(house.dv.y, house.dv.x) + (dot(house.toward, SIMD2(-house.dv.y, house.dv.x)) > 0 ? 0 : .pi)
                     let g = Models.house(house.w, house.d, wall: rng.pick(walls), roof: rng.pick(roofs), seed: k + lay.seed)
