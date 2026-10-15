@@ -32,6 +32,8 @@ Dave asked for it on 2026-10-15: "a top down procedurally generate model train t
 | The next two eras (from their sheets: transition freight 1945–57, and today's US) | "Build both as drawn" |
 | Long freights, which in isometric never fit three to a layout | "Shorten to fit": a train a layout can't take at full length drops cars, down to about five |
 | The N&W class A, first drawn on the Big Boy's slices | "Give it its own shape" (a 2-6-6-4, 36 + 20 px at the Big Boy's compression) |
+| The international groups (from their sheets: Britain's age of steam and InterCity, Germany and the Alps, European high speed, the Shinkansen) | "Build all five", Britain first |
+| The Deltic, drawn in its 1960s green beside the 1976–96 HST | "BR blue" |
 
 The lead's calls, not ruled on: model-railway compression (locomotives 25–38 px, cars 16–30, three to five cars to a passenger train and eight and a caboose to the freight); Size changes the art pixel (3, 4 or 5 points on a 982-point-high screen), not the drawings; every vehicle baked at 64 headings from its slices as first drawn; the simulation stepped at a fixed 1/60 s; "Great Northern streamliner", not "Empire Builder" (an Amtrak mark); the disclaimer's wording.
 
@@ -49,7 +51,7 @@ The lead's calls, not ruled on: model-railway compression (locomotives 25–38 p
 
 **Scenery** (`Scenery.swift`), all from the seed. The station goes on the clearest straight of 76 units or more, passenger loops first: a platform 4 wide, 4–8 off the centreline; for steam a Southern Pacific style wooden depot and a water tank, for streamliners a brick station with a canopy over 60% of the platform. The main road crosses the track at right angles just past the platform's far end, so a train standing at the platform never blocks it, with crossbucks and a wigwag (steam) or flasher masts and short gates (streamliners), and a pole line. The main road is 7 wide with a gravel shoulder. Off it the town is a small grid of streets 5 wide with kerbs: parallel to the track at 22 and 50 either side (the 50s only beyond a 22), each running up to 70 each way while there's room, joined by cross streets at 34 and 66 along, with up to 28 gabled houses along them. A pond takes the largest clear disc, inside a loop if it can; a hill with a cutting, a stone headwall and a dark bore sits on a long curve; about 230 trees are thrown as darts, thicker in clumps, more conifers for steam. A broadleaf is a dark trunk (#3E3630) forking into three or four branches up to a light, ragged crown of fine twigs (#948A80), which is what shows when it's bare, with whatever leaves are out on the day laid over it. Signals: one past the platform on a lone train's loop, a home signal at each diamond, and on a loop two trains share one at each block's entrance, never from a diamond's approach to a train-length past it, and where it can be helped not where a train held at it would stand on the road, at the platform or in the tunnel. A long train on a short loop needs 9 to 17 blocks, most of whose signals would only ever show clear, so the trains are run for ten minutes as the layout is built and only the signals one of them stops at are drawn, with the starting signal past the platform: two or three to a loop. Trains at different speeds close up at different places, but over two hours on 35 layouts with a shared loop no train was ever held at a signal not drawn (a test, `railwayDrawsEverySignalATrainWaitsAt`, runs an hour of 15 of them). Semaphores for steam, searchlights for streamliners. A station where a standing train would hold a diamond gets no stop.
 
-**Eras** (`Art.swift`'s `EraLook`). Each layout keeps to one era. Steam: cinders, a wooden depot and water tank, a wigwag, semaphores, incandescent lamps, more conifers. Streamliners: granite, a brick station with a canopy, flashers and short gates, searchlights, mercury lamps. Transition freight, 1945–57: trap rock, a freight house and timber dock where the New York Central's way freight stops (every other train is a freight), flashers and gates, searchlights, a stake-bed truck on the road, and where there's room a concrete coaling tower with a water tank, a grain elevator, and an interlocking tower beside a diamond. Today: granite and pale concrete ties, a low platform with a glass shelter, longer gate arms with three red lamps over concrete crossing panels, colour-light signals, LED lamps, no pole line, concrete silos, and cars mostly white. Tall buildings are squashed to fit (a real coaling tower or elevator stands 100 ft, 50 px), and stand on the side of the track further up the screen so they don't hide it.
+**Eras** (`Art.swift`'s `EraLook`). Each layout keeps to one era. Steam: cinders, a wooden depot and water tank, a wigwag, semaphores, incandescent lamps, more conifers. Streamliners: granite, a brick station with a canopy, flashers and short gates, searchlights, mercury lamps. Transition freight, 1945–57: trap rock, a freight house and timber dock where the New York Central's way freight stops (every other train is a freight), flashers and gates, searchlights, a stake-bed truck on the road, and where there's room a concrete coaling tower with a water tank, a grain elevator, and an interlocking tower beside a diamond. Today: granite and pale concrete ties, a low platform with a glass shelter, longer gate arms with three red lamps over concrete crossing panels, colour-light signals, LED lamps, no pole line, concrete silos, and cars mostly white. Britain, both eras: a small brick station with a slate hip and a canopy whose valance is in the GWR's light stone, a signal box by the level crossing, hedgerows round fields of 40 to 64 (about a third of their edges left open, a tree in some, fewer trees elsewhere), brick, stone and thatch, low-pressure sodium lamps, small cars (an Austin 7 or Morris Minor; a 1970s or 80s saloon). In the age of steam, white timber gates with a red disc that swing across the road while a train comes, and semaphores with a distant signal 36 before each stop signal drawn, its yellow arm at caution while that one is at danger; in the InterCity era, automatic half barriers with a steady amber and then two reds flashing in turn, and colour lights. The international trains' slices were written out from the mock-up's `art.py` into `ArtWorld.swift` by a script, so they match it row for row; there are more than 255 materials now, so voxels hold 16-bit indices. Tall buildings are squashed to fit (a real coaling tower or elevator stands 100 ft, 50 px), and stand on the side of the track further up the screen so they don't hide it.
 
 **Seasons** (`Season.swift`). The scene works out the time of year where you are from A Tree for the Year's calendar (`Phenology`: a white oak's dates at 42°N, spring 4 days later and autumn 3 days sooner a degree further from the equator, latitude held to 28–50°, half a year on south of the equator) and its grass greenness, a whole day at a time, and passes it in. The grass runs from straw (#9A8C5E) to summer green (#5A9636) with the greenness, through autumn's olive (#7E8A44); the pond, conifers, hill and banks have their own colours each season. Every leaf turns, browns and falls on its own day, the tops and some trees first, in wine, orange or yellow by tree; new leaves are lime; a quarter of the oaks hold a few buff leaves through winter. Snow lies when the weather says a centimetre or more does (or while previewing it), over whatever the season is.
 
@@ -73,7 +75,7 @@ Why (the research, not legal advice): Union Pacific sued model makers in 2004 ov
 | Size | Small (the standard: 3 points on a 982-point-high screen), Medium (Pixel City's pixel, 4) or Large: the art pixel, so more room for track when smaller |
 | Trains | One, up to two, or up to three (the standard): two may share a loop under block signals, or the third be a short train on a tight inner loop; a train that still doesn't fit is left off |
 | New layout every | Hour, 3 hours (standard), 6 hours, or Day |
-| Eras | US streamliners (Santa Fe F7 warbonnet with Hi-Levels; Union Pacific E9 with an Astra Dome; Great Northern F7 streamliner; for an inner loop, a Budd RDC pair or a Union Pacific GP9 local), US steam (Union Pacific Big Boy with mixed freight and a caboose; Southern Pacific GS-4 Daylight; Milwaukee Road Hiawatha; for an inner loop, an 0-6-0 switcher with short cars), US transition freight (Union Pacific F3 with PFE reefers; Santa Fe F7 freight; Pennsylvania GP9 with coal hoppers; New York Central F7 way freight; Norfolk and Western class A with a hopper drag) and US today (BNSF ES44AC Heritage III with double-stacks; Union Pacific SD70ACe with coal gondolas; CSX ES44AH with autoracks and tank cars; Amtrak ALC-42 Phase VII with Superliners; Amtrak P42 Phase V with Amfleet I); none ticked counts as all |
+| Eras | US streamliners (Santa Fe F7 warbonnet with Hi-Levels; Union Pacific E9 with an Astra Dome; Great Northern F7 streamliner; for an inner loop, a Budd RDC pair or a Union Pacific GP9 local), US steam (Union Pacific Big Boy with mixed freight and a caboose; Southern Pacific GS-4 Daylight; Milwaukee Road Hiawatha; for an inner loop, an 0-6-0 switcher with short cars), Britain's age of steam (LNER A3 and A4 with teak coaches, GWR Castle with chocolate and cream, LMS Princess Coronation with crimson coaches, LMS 8F with mineral wagons), British InterCity (the HST, a Deltic in BR blue, a Class 47 with mineral wagons), US transition freight (Union Pacific F3 with PFE reefers; Santa Fe F7 freight; Pennsylvania GP9 with coal hoppers; New York Central F7 way freight; Norfolk and Western class A with a hopper drag) and US today (BNSF ES44AC Heritage III with double-stacks; Union Pacific SD70ACe with coal gondolas; CSX ES44AH with autoracks and tank cars; Amtrak ALC-42 Phase VII with Superliners; Amtrak P42 Phase V with Amfleet I); none ticked counts as all |
 | Seasons | The real time of year where you are, always; snow on the ground when Open-Meteo says there's a centimetre or more where you are (the request every weather wallpaper shares) |
 | Preview | A day of the year; snow; a time of day |
 
@@ -475,3 +477,36 @@ The research behind it, by the agent that found it: rail-us (American trains, pa
 - https://mutcd.fhwa.dot.gov/htm/2003/part8/part8d.htm
 - https://www.npr.org/sections/thetwo-way/2016/06/21/482936520/bright-bluish-white-led-streetlamps-bad-for-our-health-ama-says
 - https://www.mychesco.com/a/news/regional/white-gray-black-still-rule-as-car-color-choices-shift-only-at-the-edges/
+
+### Britain (rail-craft, international round)
+- https://www.w3schools.com/colors/colors_british.asp
+- https://lner.info/article/liveries/livery.php
+- https://en.wikipedia.org/wiki/British_Rail_corporate_liveries
+- https://en.wikipedia.org/wiki/LNER_Class_A3_4472_Flying_Scotsman
+- https://www.rmweb.co.uk/forums/topic/180467-what-might-be-the-real-lner-garter-blue-answer-humbrol-enamel-no-221continues-as-the-paint-job/
+- https://en.wikipedia.org/wiki/LNER_Class_A4_4468_Mallard
+- https://en.wikipedia.org/wiki/Great_Western_Railway
+- https://en.wikipedia.org/wiki/GWR_4073_Class
+- https://en.wikipedia.org/wiki/LMS_Princess_Coronation_Class
+- https://en.wikipedia.org/wiki/LMS_Stanier_Class_8F
+- https://accurascale.com/products/br-16t-mineral-1-109-br-freight-grey-original-text-on-black-panels-pack-j
+- https://alextrack.co.uk/model_railways/2mm_finescale/freight_wagons/brake_vans_br_standard.html
+- https://en.wikipedia.org/wiki/Brake_van
+- https://www.e-paint.co.uk/uk-organisations-colours.asp?cOrg=BR
+- https://en.wikipedia.org/wiki/British_Rail_Class_43_(HST
+- https://en.wikipedia.org/wiki/British_Rail_Mark_3
+- https://en.wikipedia.org/wiki/InterCity_(British_Rail
+- https://en.wikipedia.org/wiki/Brunswick_green
+- https://en.wikipedia.org/wiki/British_Rail_Class_55
+- https://en.wikipedia.org/wiki/British_Rail_Mark_1
+- https://en.wikipedia.org/wiki/British_Rail_Class_47
+- https://en.wikipedia.org/wiki/Level_crossings_in_the_United_Kingdom
+- https://en.wikipedia.org/wiki/UK_railway_signalling
+- https://www.railsigns.uk/sect2page4.html
+- https://heritage.dorsetcouncil.gov.uk/Monument/MDO47638
+- https://www.rmweb.co.uk/forums/topic/1944-gwr-light-dark-stone/page/2/
+- https://sas-space.sas.ac.uk/6429/1/SBT-combined1.pdf
+- https://www.newforestnpa.gov.uk/document/tile-and-slate-roofing/
+- https://vintagestreetlights.com/history/lps.html
+- https://en.wikipedia.org/wiki/Austin_7
+- https://en.wikipedia.org/wiki/Morris_Minor

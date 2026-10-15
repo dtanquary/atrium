@@ -24,7 +24,7 @@ public enum RailArt {
 
     /// Every material: name, colour and flags (W window, D dome glass, H headlight, L lamp, S snow on top, A snow
     /// all over, F flat). Index 0 is empty. The grassy ones have an autumn (`_a`) and a dormant winter (`_w`) form.
-    static let table = materials + containerMaterials
+    static let table = materials + containerMaterials + worldMaterials
     private static let materials: [(name: String, hex: UInt32, flags: Flags)] = [
         // running gear and shared
         ("truck", 0x2A2A2C, []), ("truckgrey", 0x6E6E6A, []), ("alum", 0xA8ABA8, []), ("cabglass", 0x2E3A44, []),
@@ -115,7 +115,7 @@ public enum RailArt {
                                                  ("grey", 0xA9AEB2)]
 
     /// A material's index by name; 0 is empty.
-    static let index: [String: UInt8] = Dictionary(uniqueKeysWithValues: table.enumerated().map { ($1.name, UInt8($0 + 1)) })
+    static let index: [String: UInt16] = Dictionary(uniqueKeysWithValues: table.enumerated().map { ($1.name, UInt16($0 + 1)) })
     /// Colours as floats, and flags, by index (0 is empty).
     static let rgb: [SIMD3<Float>] = [.zero] + table.map { colour($0.hex) }
     static let flags: [Flags] = [[]] + table.map(\.flags)
@@ -129,26 +129,26 @@ public enum RailArt {
         SIMD3(Float(hex >> 16 & 0xFF), Float(hex >> 8 & 0xFF), Float(hex & 0xFF))
     }
 
-    static func mat(_ name: String) -> UInt8 { index[name]! }
+    static func mat(_ name: String) -> UInt16 { index[name]! }
 }
 
-/// A box of material indices, x along (the front at high x), y across, z up.
+/// A box of material indices (16 bits: there are more than 255 materials), x along (the front at high x), y across, z up.
 struct Voxels: Sendable {
     let nx: Int, ny: Int, nz: Int
-    var cells: [UInt8]
+    var cells: [UInt16]
 
     init(_ nx: Int, _ ny: Int, _ nz: Int) {
         (self.nx, self.ny, self.nz) = (nx, ny, nz)
-        cells = [UInt8](repeating: 0, count: nx * ny * nz)
+        cells = [UInt16](repeating: 0, count: nx * ny * nz)
     }
 
-    subscript(x: Int, y: Int, z: Int) -> UInt8 {
+    subscript(x: Int, y: Int, z: Int) -> UInt16 {
         get { cells[x + nx * (y + ny * z)] }
         set { cells[x + nx * (y + ny * z)] = newValue }
     }
 
     /// Fills x in `xs`, y in `ys`, z in `zs` (half-open, as Python's slices) with `m`.
-    mutating func fill(_ xs: Range<Int>, _ ys: Range<Int>, _ zs: Range<Int>, _ m: UInt8) {
+    mutating func fill(_ xs: Range<Int>, _ ys: Range<Int>, _ zs: Range<Int>, _ m: UInt16) {
         for z in zs where z < nz { for y in ys where y < ny { for x in xs where x < nx { self[x, y, z] = m } } }
     }
 }
@@ -159,11 +159,14 @@ struct RailVehicle: Sendable {
     let grid: Voxels
     /// The bogie centres' spacing as a fraction of the length (their pivots stand at ±bogies/2 of it).
     let bogies: Double
+    /// Shares a bogie with an articulated neighbour, so no gap between them (the TGV's trailers).
+    let articulated: Bool
     var length: Int { grid.nx }
 
-    init(_ name: String, _ layers: [[String]], _ livery: [Character: String], width: Int = 5, bogies: Double = 0.75) {
+    init(_ name: String, _ layers: [[String]], _ livery: [Character: String], width: Int = 5, bogies: Double = 0.75, articulated: Bool = false) {
         self.name = name
         self.bogies = bogies
+        self.articulated = articulated
         let rows = layers.map { RailVehicle.expand($0, width) }
         let length = rows[0][0].count
         var grid = Voxels(length, width, rows.count)
@@ -198,7 +201,8 @@ public struct Consist: Sendable {
 
     init(key: String, name: String, era: RailEra, vehicles: [RailVehicle], cruise: Double, power: Int = 1) {
         (self.key, self.name, self.era, self.vehicles, self.cruise, self.power) = (key, name, era, vehicles, cruise, power)
-        stops = !["bigboy", "gp9", "switcher", "up_f3", "sf_frt", "prr_gp9", "nw_a", "bnsf", "up_sd70", "csx"].contains(key)
+        stops = !["bigboy", "gp9", "switcher", "up_f3", "sf_frt", "prr_gp9", "nw_a", "bnsf", "up_sd70", "csx",
+                  "s8f", "c47", "croc", "vectron", "ef210"].contains(key)
     }
     /// Freight trains run through the station; passenger trains stop.
     var freight: Bool { !stops }
@@ -207,12 +211,17 @@ public struct Consist: Sendable {
     /// Nothing over 20 px: it takes the tightest curve, on a loop inside another.
     public var short: Bool { vehicles.allSatisfy { $0.length <= 20 } }
     /// Couplers and all, as the track sees it.
-    var length: Double { Double(vehicles.reduce(0) { $0 + $1.length + 2 } - 2) }
+    var length: Double { Double(vehicles.reduce(0) { $0 + $1.length } + zip(vehicles, vehicles.dropFirst()).reduce(0) { $0 + Self.gap($1.0, $1.1) }) }
+
+    /// The space between two vehicles: none between articulated cars, which share a bogie; else 2.
+    static func gap(_ a: RailVehicle, _ b: RailVehicle) -> Int { a.articulated && b.articulated ? 0 : 2 }
     /// The tightest curve it looks right on: model-railway compression, half again the longest car and more.
     var minRadius: Double { max(32, 1.6 * Double(vehicles.map(\.length).max()!)) }
 
     /// Its caboose, last, if it has one.
-    private var caboose: RailVehicle? { vehicles.last.flatMap { $0.name.lowercased().contains("caboose") ? $0 : nil } }
+    private var caboose: RailVehicle? {
+        vehicles.last.flatMap { $0.name.lowercased().contains("caboose") || $0.name.lowercased().contains("brake van") ? $0 : nil }
+    }
     /// The cars between its power and its caboose.
     var cars: Int { vehicles.count - power - (caboose == nil ? 0 : 1) }
 
@@ -235,7 +244,7 @@ public struct Consist: Sendable {
 
 /// A layout's era: its trains, buildings, crossings and signals.
 public enum RailEra: Int, CaseIterable, Sendable {
-    case streamliners, steam, transition, modern
+    case streamliners, steam, transition, modern, britishSteam, britishDiesel
 }
 
 /// What an era puts by the line: ballast and ties; its street lamps' colour; what stands at the station; its level
@@ -243,14 +252,18 @@ public enum RailEra: Int, CaseIterable, Sendable {
 /// its signals; whether a pole line runs along the road; its houses' walls and roofs; the buildings beside the line;
 /// its share of conifers; and the scenery's dice.
 struct EraLook {
-    enum Station { case depot, brick, freight, shelter }
-    enum Crossing { case wigwag, gates, modern }
+    enum Station { case depot, brick, freight, shelter, british }
+    /// A wigwag; flashers and short gates; today's gates with lamps on the arm; British timber gates swung across the
+    /// road; British automatic half barriers.
+    enum Crossing { case wigwag, gates, modern, britishGates, britishHalfBarriers }
     enum Signals { case semaphore, searchlight, colour }
     let ballast: UInt32, tie: UInt32, lamp: UInt32
     let station: Station, crossing: Crossing, signals: Signals, poles: Bool
     let walls: [String], roofs: [String], extras: [String], conifers: Double, dice: Int
     /// Concrete crossing panels and the joints between them, in place of planks.
     var panels: (UInt32, UInt32)? = nil
+    /// Hedgerows round the fields (fewer trees then); a distant signal before each stop signal drawn.
+    var hedges = false, distants = false
 
     static let walls = ["wall_white", "wall_cream", "wall_yellow", "wall_grey", "wall_blue", "wall_brick"]
     static let roofs = ["roof_green", "roof_red", "roof_black", "roof_grey"]
@@ -273,6 +286,13 @@ extension RailEra {
                               poles: false, walls: ["wall_white", "wall_beige", "wall_grey", "wall_cream", "wall_blue"],
                               roofs: ["roof_charcoal", "roof_brown", "roof_pale", "roof_grey"], extras: ["silos"], conifers: 0.35, dice: 4,
                               panels: (0xB0ACA4, 0x77736C))
+        // Britain: low-pressure sodium lamps, a signal box by the level crossing, hedgerows, brick, stone and thatch
+        case .britishSteam: EraLook(ballast: 0x4E4844, tie: 0x3E3028, lamp: 0xFF9C1A, station: .british, crossing: .britishGates, signals: .semaphore,
+                                    poles: true, walls: ["wall_brick", "cotswold", "wall_cream", "wall_white"], roofs: ["slate", "clay_tile", "thatch", "slate"],
+                                    extras: ["signalbox"], conifers: 0.12, dice: 5, hedges: true, distants: true)
+        case .britishDiesel: EraLook(ballast: 0x8A8884, tie: 0x6A6058, lamp: 0xFF9C1A, station: .british, crossing: .britishHalfBarriers, signals: .colour,
+                                     poles: true, walls: ["wall_brick", "cotswold", "wall_cream", "wall_white"], roofs: ["slate", "clay_tile", "roof_grey", "slate"],
+                                     extras: ["signalbox"], conifers: 0.12, dice: 6, hedges: true)
         }
     }
 }
@@ -599,9 +619,19 @@ extension RailArt {
         case .streamliners: paint = [("v50_turq", "v50_cream")]
         case .transition: return fordTruck
         case .modern: paint = ["v_white", "v_white", "v_white", "v_black", "v_grey", "v_silver", "v_blue", "v_red"].map { ($0, $0) }
+        // small cars: an Austin 7 or Morris Minor; a 1970s or 80s saloon
+        case .britishSteam: return smallCar([("v_black", 4), ("v40_green", 5), ("v40_maroon", 5), ("uk_cream", 5), ("uk_grey", 4)], seed)
+        case .britishDiesel: return smallCar([("v70_brown", 6), ("v70_orange", 6), ("v70_beige", 6), ("v_white", 6), ("v_red", 5)], seed)
         }
         let (body, roof) = paint[Int(hsh(seed, 77) * Double(paint.count))]
         return RailVehicle("road car, \(body)", car, ["a": body, "g": "v_glass", "w": "v_glass", "r": roof], width: 3, bogies: 0.6)
+    }
+
+    /// A small car, 3 wide and 4 to 6 long, one of `paints` (its colour and length) by seed.
+    private static func smallCar(_ paints: [(String, Int)], _ seed: Int) -> RailVehicle {
+        let (body, L) = paints[Int(hsh(seed, 77) * Double(paints.count))]
+        return RailVehicle("small car, \(body) \(L)", [[r("a", L)], ["." + r("g", L - 3) + "..", "." + r("r", L - 3) + ".."]],
+                           ["a": body, "g": "v_glass", "r": body], width: 3, bogies: 0.6)
     }
 
     /// Every train, by key.
@@ -640,7 +670,7 @@ extension RailArt {
         Consist(key: "amtrak_alc", name: "Amtrak ALC-42 Phase VII, Superliners", era: .modern,
                 vehicles: [alc42] + Array(repeating: superlinerCar, count: 4), cruise: 17),
         Consist(key: "amtrak_p42", name: "Amtrak P42 Phase V, Amfleet I", era: .modern, vehicles: [p42] + Array(repeating: amfleetCar, count: 5), cruise: 18),
-    ].map { ($0.key, $0) })
+    ].map { ($0.key, $0) } + worldTrains.map { ($0.key, $0) })
 
     /// A train by key, shortened if its key says so ("sf_frt#5").
     static func consist(_ key: String) -> Consist {

@@ -42,7 +42,7 @@ struct RailView {
 
 /// A voxel model seen in one view: every pixel of its sprite, as offsets from the pixel its centre falls on.
 struct Marched {
-    var dx: [Int16] = [], dy: [Int16] = [], mat: [UInt8] = [], top: [Bool] = []
+    var dx: [Int16] = [], dy: [Int16] = [], mat: [UInt16] = [], top: [Bool] = []
     var normal: [SIMD3<Double>] = []
     /// Depth relative to the model's foot.
     var dd: [Float] = []
@@ -69,7 +69,7 @@ struct Marched {
         let (x0, y0) = (Int(floor(lo.x)) - 1, Int(floor(lo.y)) - 1), (x1, y1) = (Int(ceil(hi.x)) + 1, Int(ceil(hi.y)) + 1)
         let r = view.ray, zlo = min(0, -lean) - 0.5, tmax = lz + lean + 0.5
         let steps = Int(ceil((tmax - zlo) / 0.25 - 1e-9))
-        typealias Hit = (m: UInt8, top: Bool, n: SIMD3<Double>, dd: Float)
+        typealias Hit = (m: UInt16, top: Bool, n: SIMD3<Double>, dd: Float)
         func cast(_ px: Int, _ py: Int, _ ox: Double = 0, _ oy: Double = 0) -> Hit? {
             let gxy = view.unproject(Double(px) + ox, Double(py) + oy)
             var prev = SIMD3<Int>(Int.min, Int.min, Int.min)
@@ -100,7 +100,7 @@ struct Marched {
             for py in y0..<y1 { for px in x0..<x1 { if let h = cast(px, py) { add(px, py, h) } } }
             return
         }
-        var pixels: [(px: Int, py: Int, hits: [Hit])] = [], seen = [Int](repeating: 0, count: 256)
+        var pixels: [(px: Int, py: Int, hits: [Hit])] = [], seen = [Int](repeating: 0, count: RailArt.table.count + 1)
         for py in y0..<y1 { for px in x0..<x1 {
             let hits = [(-0.25, -0.25), (0.25, -0.25), (-0.25, 0.25), (0.25, 0.25)].compactMap { cast(px, py, $0.0, $0.1) }
             guard hits.count >= 2 else { continue }
@@ -108,7 +108,7 @@ struct Marched {
             pixels.append((px, py, hits))
         } }
         for (px, py, hits) in pixels {
-            var count = [UInt8: Int]()
+            var count = [UInt16: Int]()
             for h in hits { count[h.m, default: 0] += 1 }
             let most = count.values.max()!
             let pick = count.filter { $0.value == most }.keys.min { (seen[Int($0)], $0) < (seen[Int($1)], $1) }!
@@ -139,7 +139,7 @@ struct RailLight {
 
     /// A material's colour seen with this shade; snow lies on top faces of what takes it. `lit` says whether a
     /// window is lit tonight.
-    func colour(_ m: UInt8, _ shade: Float, top: Bool, lit: Bool = true) -> SIMD3<Float> {
+    func colour(_ m: UInt16, _ shade: Float, top: Bool, lit: Bool = true) -> SIMD3<Float> {
         let flags = RailArt.flags[Int(m)]
         var c = RailArt.rgb[Int(m)]
         if winter, flags.contains(.snowAll) || flags.contains(.snowTop) && top { c = RailArt.snowTone[Int(m)] }
@@ -232,7 +232,7 @@ struct Dice {
 // MARK: - Scenery models (voxels: x along, y across, z up)
 
 enum Models {
-    private static func m(_ name: String) -> UInt8 { RailArt.mat(name) }
+    private static func m(_ name: String) -> UInt16 { RailArt.mat(name) }
 
     /// A gabled house, its ridge along x; windows along both long walls, a door on the -y side (the street's).
     static func house(_ w: Int, _ d: Int, wall: String, roof: String, seed: Int, walls: Int = 3) -> Voxels {
@@ -445,6 +445,60 @@ enum Models {
             } }
         }
         g.fill(10..<12, 3..<5, 14..<18, m("silo_dk"))
+        return g
+    }
+
+    /// A British signal box: a brick base, a glazed timber top with windows all round, a hipped slate roof (6 x 4).
+    static func signalBox() -> Voxels {
+        var g = Voxels(6, 4, 7)
+        g.fill(0..<6, 0..<4, 0..<3, m("brick"))
+        g.fill(0..<6, 0..<4, 3..<5, m("box_glass"))
+        for x in [0, 5] { for y in [0, 3] { g.fill(x..<(x + 1), y..<(y + 1), 3..<5, m("timber")) } }
+        g.fill(0..<6, 0..<4, 5..<6, m("slate"))
+        g.fill(1..<5, 1..<3, 6..<7, m("slate"))
+        return g
+    }
+
+    /// A small British country station: brick, a hipped slate roof, windows to the platform (+y), 12 x 5.
+    static func britishStation() -> Voxels {
+        let (w, d) = (12, 5)
+        var g = Voxels(w, d, 6)
+        g.fill(0..<w, 0..<d, 0..<3, m("brick"))
+        for x in [2, 4, 7, 9] { g[x, 0, 1] = m("house_win"); g[x, d - 1, 1] = m("house_win") }
+        g.fill(6..<7, (d - 1)..<d, 0..<2, m("door"))
+        for k in 0..<3 { g.fill(k..<(w - k), k..<(d - k), (3 + k)..<(4 + k), m("slate")) }
+        return g
+    }
+
+    /// A platform canopy on posts, its valance in light stone with dark stone posts (the GWR's colours).
+    static func britishCanopy(_ length: Int) -> Voxels {
+        var g = Voxels(length, 5, 6)
+        for x in stride(from: 2, to: length - 1, by: 6) { g.fill(x..<(x + 1), 2..<3, 0..<5, m("stone_dk")) }
+        g.fill(0..<length, 0..<5, 5..<6, m("slate"))
+        for y in [0, 4] { for x in stride(from: 0, to: length, by: 2) { g[x, y, 4] = m("stone_lt") } } // the valance's cut edge
+        return g
+    }
+
+    /// The white post a British crossing gate hangs on.
+    static func gatepost() -> Voxels {
+        var g = Voxels(1, 1, 3)
+        g.fill(0..<1, 0..<1, 0..<3, m("post_white"))
+        return g
+    }
+
+    /// A British half-barrier crossing's lights: a post with a head of lamps across the road (+y).
+    static func lightMast() -> Voxels {
+        var g = Voxels(1, 3, 5)
+        g.fill(0..<1, 1..<2, 0..<4, m("post"))
+        g.fill(0..<1, 0..<3, 3..<4, m("sig_head"))
+        return g
+    }
+
+    /// A hedgerow: 2 wide, 2 high, darker underneath.
+    static func hedge(_ length: Int, season: RailSeason) -> Voxels {
+        var g = Voxels(length, 2, 2)
+        g.fill(0..<length, 0..<2, 0..<1, m("hedge_dk"))
+        g.fill(0..<length, 0..<2, 1..<2, m(season.kind == .winter ? "hedge_w" : "hedge"))
         return g
     }
 

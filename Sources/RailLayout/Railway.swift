@@ -39,6 +39,7 @@ public final class Railway {
         }
         (layout, scenery) = (best!.layout, best!.scenery)
         Self.hideIdleSignals(layout, scenery)
+        if era.look.distants { scenery.addDistants(layout) }
         statics = Statics(layout, scenery, era: era, season: season)
         sim = Sim(layout, scenery)
         roadCar = RailArt.roadVehicle(era, seed: layout.seed)
@@ -164,16 +165,35 @@ public final class Railway {
         }
     }
 
-    private static let red = SIMD3<Float>(255, 42, 26), green = SIMD3<Float>(48, 224, 160)
+    private static let red = SIMD3<Float>(255, 42, 26), green = SIMD3<Float>(48, 224, 160), amber = SIMD3<Float>(255, 176, 0)
 
     /// The level crossing's flashers and gates, or wigwags (steam), working while a train is near. Today's gate arms
     /// are longer, with three red lamps on them: the tip's steady, the other two flashing in turn.
     private func crossingParts(_ night: Float) {
         let on = sim.crossingOn, phase = Int(sim.t / 0.75) % 2, kind = era.look.crossing
         for cr in scenery.crossings {
+            // this crossing's own state: on while a train is near; amber first, while every train near is still far off
+            let near = sim.trains.indices.filter { sim.trains[$0].loop == cr.loop }.map { sim.zone($0, cr.s, 4, 40) }.filter(\.0)
+            let here = !near.isEmpty, amber = here && near.allSatisfy { $0.1 > 22 }
             for m in cr.masts {
                 let a = SIMD2(cos(m.heading), sin(m.heading)), across = SIMD2(-a.y, a.x)
-                if kind != .wigwag {
+                if kind == .britishGates { // a white timber gate with its red disc, across the road while a train comes, else along the verge
+                    let d = here ? -across * m.side : a * m.side
+                    for k in stride(from: 0.5, to: 11, by: 0.5) { let q = m.pos + d * k; point([q.x, q.y, 0.9], [232, 228, 220]); point([q.x, q.y, 1.9], [232, 228, 220]) }
+                    let q = m.pos + d * 5.5
+                    point([q.x, q.y, 2.8], [200, 32, 42])
+                } else if kind == .britishHalfBarriers { // a half barrier: a steady amber, then two reds flashing in turn
+                    let ang = here ? 0 : 1.35
+                    for k in 1...6 {
+                        let q = m.pos + across * m.side * (-Double(k) * cos(ang))
+                        point([q.x, q.y, 3.2 + Double(k) * sin(ang)], k % 2 == 1 ? [200, 32, 42] : [232, 228, 220])
+                    }
+                    if amber {
+                        point([m.pos.x, m.pos.y, 3.5], Self.amber, eps: 0.6)
+                    } else {
+                        for (e, lit) in [(-1.0, here && phase == 0), (1.0, here && phase == 1)] { let q = m.pos + across * e; point([q.x, q.y, 3.5], lit ? Self.red : [40, 12, 10], eps: 0.6) }
+                    }
+                } else if kind != .wigwag {
                     for (e, lit) in [(-1.0, on && phase == 0), (1.0, on && phase == 1)] {
                         let q = m.pos + across * e
                         point([q.x, q.y, 2.5], lit ? Self.red : [40, 12, 10])
@@ -196,19 +216,28 @@ public final class Railway {
         }
     }
 
-    /// Each signal's aspect: a searchlight's red or green, or a semaphore's arm level for stop and raised for clear.
+    /// Whether a signal shows stop: its block occupied, a train just past it, or its diamond held by another loop's
+    /// train; a distant shows caution while the signal it warns of is at stop.
+    private func stops(_ sg: Signal) -> Bool {
+        guard let mine = sim.trains.firstIndex(where: { $0.loop == sg.loop }) else { return false }
+        switch sg.role {
+        case .block(let k): return sim.occupied(sg.loop, k)
+        case .lone:
+            let tr = sim.trains[mine], L = layout.loops[sg.loop].L
+            let past = centred(tr.s - tr.length - sg.s, L), over = centred(tr.s - sg.s, L)
+            return 0 <= past && past < 70 || 0 <= over && over < tr.length
+        case .home(let group): return sim.holder[group].map { $0 != mine } ?? false
+        case .distant(let i): return stops(scenery.signals[i])
+        }
+    }
+
+    /// Each signal's aspect: a searchlight's red or green, a colour light's red at the top or green at the bottom, or
+    /// a semaphore's arm level for stop and raised for clear (a distant's yellow with its black chevron).
     private func signalParts(_ night: Float) {
         for sg in scenery.signals where sg.shown {
-            guard let mine = sim.trains.firstIndex(where: { $0.loop == sg.loop }) else { continue }
-            let stop: Bool
-            switch sg.role {
-            case .block(let k): stop = sim.occupied(sg.loop, k)
-            case .lone:
-                let tr = sim.trains[mine], L = layout.loops[sg.loop].L
-                let past = centred(tr.s - tr.length - sg.s, L), over = centred(tr.s - sg.s, L)
-                stop = 0 <= past && past < 70 || 0 <= over && over < tr.length
-            case .home(let group): stop = sim.holder[group].map { $0 != mine } ?? false
-            }
+            let stop = stops(sg)
+            var distant = false
+            if case .distant = sg.role { distant = true }
             // the lamp just in front of the head, toward oncoming trains, so the head doesn't hide it
             let p = sg.pos, face = p - SIMD2(cos(sg.heading), sin(sg.heading)) * 0.8
             switch era.look.signals {
@@ -218,9 +247,10 @@ public final class Railway {
                 let t = SIMD2(cos(sg.heading), sin(sg.heading)), n = SIMD2(-t.y, t.x), ang = stop ? 0.0 : 1.0
                 for k in 1...3 {
                     let q = p - n * Double(k) * cos(ang)
-                    point([q.x, q.y, 7.5 + Double(k) * sin(ang)], k < 3 ? [200, 30, 30] : [232, 228, 220])
+                    let arm: SIMD3<Float> = distant ? (k < 3 ? [232, 184, 0] : [24, 24, 24]) : (k < 3 ? [200, 30, 30] : [232, 228, 220])
+                    point([q.x, q.y, 7.5 + Double(k) * sin(ang)], arm)
                 }
-                if night > 0.5 { point([face.x, face.y, 6.5], stop ? Self.red : Self.green, eps: 0.6) }
+                if night > 0.5 { point([face.x, face.y, 6.5], stop ? (distant ? Self.amber : Self.red) : Self.green, eps: 0.6) }
             }
         }
     }

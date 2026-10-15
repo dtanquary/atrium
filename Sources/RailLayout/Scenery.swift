@@ -13,7 +13,7 @@ struct Thing {
 /// A lineside signal: on a lone train's loop just past the platform (red while that train is just past it), at a
 /// block's entrance on a loop two trains share, or at a diamond's home point.
 struct Signal {
-    enum Role { case lone, block(Int), home(group: Int) }
+    enum Role { case lone, block(Int), home(group: Int), distant(of: Int) }
     let loop: Int, s: Double, role: Role, pos: SIMD2<Double>, heading: Double
     /// Drawn: a block signal no train is ever held at is left out, as it would only ever show clear.
     var shown = true
@@ -144,6 +144,9 @@ final class Scenery {
                 things.append(Thing(grid: Models.canopy(Int(L * 0.6)), pos: mid + n * 6, heading: hF, kind: .canopy))
             case .freight: things.append(Thing(grid: Models.freightHouse(), pos: mid + n * 12.5, heading: face, kind: .station))
             case .shelter: things.append(Thing(grid: Models.shelter(), pos: mid + n * 6, heading: face, kind: .station, base: 1))
+            case .british:
+                things.append(Thing(grid: Models.britishStation(), pos: mid + n * 13, heading: face, kind: .station))
+                things.append(Thing(grid: Models.britishCanopy(Int(L * 0.4)), pos: mid + n * 6, heading: hF, kind: .canopy))
             }
             G.mark(rectPoints(bpos, d, n, 20, 9), 1)
             for k in [-0.35, 0, 0.35] {
@@ -272,7 +275,13 @@ final class Scenery {
                     let n = crossings[i].n
                     for sgn in [1.0, -1.0] {
                         let q = crossings[i].p + n * sgn * 7.5 + SIMD2(-n.y, n.x) * sgn * 5.5, hq = atan2(n.y, n.x)
-                        things.append(Thing(grid: look.crossing == .wigwag ? Models.crossbuck() : Models.flasher(), pos: q, heading: hq, kind: .crossing))
+                        let mast = switch look.crossing {
+                        case .wigwag: Models.crossbuck()
+                        case .britishGates: Models.gatepost()
+                        case .britishHalfBarriers: Models.lightMast()
+                        default: Models.flasher()
+                        }
+                        things.append(Thing(grid: mast, pos: q, heading: hq, kind: .crossing))
                         crossings[i].masts.append((q, hq, sgn))
                     }
                     G.mark([crossings[i].p], 9)
@@ -365,11 +374,13 @@ final class Scenery {
             for q in poles { things.append(Thing(grid: Models.pole(), pos: q, heading: atan2(nn.y, nn.x), kind: .pole)); G.mark([q], 2) }
         }
 
-        // trees: dart throwing in what's left, thicker in clumps
+        if look.hedges { placeHedges(lay, &G, &rng, onScreen, season: season) }
+
+        // trees: dart throwing in what's left, thicker in clumps (fewer among hedgerows)
         if let hill { G.mark([hill.c], hill.r + 1) }
         let gap = G.distance()
         var trees: [SIMD2<Double>] = []
-        for _ in 0..<6000 where trees.count < 230 {
+        for _ in 0..<6000 where trees.count < (look.hedges ? 100 : 230) {
             let p = SIMD2(rng.uniform(G.o.x, G.o.x + Double(G.nx)), rng.uniform(G.o.y, G.o.y + Double(G.ny)))
             guard let (i, j) = G.cell(p), gap[i * G.nx + j] >= 4, onScreen(p, 4) else { continue }
             let clump = 0.5 + 0.5 * sin(p.x / 23 + Double(lay.seed)) * cos(p.y / 19 - Double(lay.seed))
@@ -401,12 +412,15 @@ final class Scenery {
         let extras: [String: (make: () -> Voxels, along: Double, across: Double, off: Double, shift: Double)] = [
             "coaling": (Models.coalingTower, 8, 6, 12, 2), "elevator": (Models.elevator, 22, 6, 12, 0),
             "silos": (Models.silos, 21, 7, 12.5, 0), "tower": (Models.interlockingTower, 7, 6, 11, 0),
+            "signalbox": (Models.signalBox, 6, 4, 10, 0),
         ]
         let up = { (p: SIMD2<Double>) in -lay.view.project([p.x, p.y, 0]).y } // how far up the screen
         if let hill { G.mark([hill.c], hill.r + 2) }
-        let diamonds = lay.cross.filter { $0.kind == .diamond }
+        let diamonds = lay.cross.filter { $0.kind == .diamond }.map { x in lay.loops[x.a].P[Int(x.sa / step) % lay.loops[x.a].P.count] }
         for name in names {
-            guard let e = extras[name], name != "tower" || !diamonds.isEmpty else { continue }
+            // a tower stands by a diamond, a signal box by the level crossing; neither without one
+            let targets = name == "tower" ? diamonds : name == "signalbox" ? crossings.map(\.p) : []
+            guard let e = extras[name], targets.isEmpty == !["tower", "signalbox"].contains(name) else { continue }
             var best: (score: Double, c: SIMD2<Double>, d: SIMD2<Double>, n: SIMD2<Double>, side: Double)?
             for lp in lay.loops {
                 for pc in lp.pieces where pc.kind == .straight {
@@ -419,8 +433,8 @@ final class Scenery {
                             guard body.allSatisfy({ G.free($0) && onScreen($0, -2) }) else { continue }
                             var score = rng.uniform(0, 10)
                             if up(c) > up(c - n * e.off) { score += 15 } // behind the track, so it stands clear of it
-                            if name == "tower" { // as near a diamond as it can stand
-                                let near = diamonds.map { x in length(c - lay.loops[x.a].P[Int(x.sa / step) % lay.loops[x.a].P.count]) }.min()!
+                            if !targets.isEmpty { // as near its diamond or level crossing as it can stand
+                                let near = targets.map { length(c - $0) }.min()!
                                 if near > 40 { continue }
                                 score -= near
                             } else if let st = station { // away from the platform or freight house
@@ -445,6 +459,56 @@ final class Scenery {
                     }
                 }
             }
+        }
+    }
+
+    /// Hedgerows round fields of 40 to 64, about a third of the field edges left open, broken wherever anything else
+    /// stands, a tree in some.
+    private func placeHedges(_ lay: Layout, _ G: inout Room, _ rng: inout Dice, _ onScreen: (SIMD2<Double>, Double) -> Bool, season: RailSeason) {
+        if let hill { G.mark([hill.c], hill.r + 2) }
+        let size = [Double(G.nx), Double(G.ny)]
+        var lines: [[Double]] = []
+        for axis in 0..<2 {
+            var xs: [Double] = [], x = G.o[axis] + rng.uniform(4, 40)
+            while x < G.o[axis] + size[axis] { xs.append(x); x += rng.uniform(40, 64) }
+            lines.append(xs)
+        }
+        for axis in 0..<2 {
+            let other = 1 - axis, cuts = [G.o[other]] + lines[other] + [G.o[other] + size[other]]
+            for x in lines[axis] {
+                for (t0, t1) in zip(cuts, cuts.dropFirst()) {
+                    if rng.chance(0.35) { continue }
+                    let P = stride(from: t0 + 0.5, to: t1, by: 1).map { t -> SIMD2<Double> in axis == 0 ? [x, t] : [t, x] }
+                    let ok = P.map { G.free($0) && onScreen($0, 2) }
+                    var a = 0
+                    while a < P.count {
+                        guard ok[a] else { a += 1; continue }
+                        var b = a
+                        while b < P.count, ok[b] { b += 1 }
+                        if b - a >= 8 {
+                            let c = (P[a] + P[b - 1]) / 2
+                            things.append(Thing(grid: Models.hedge(b - a, season: season), pos: c, heading: axis == 0 ? .pi / 2 : 0, kind: .tree))
+                            for p in stride(from: a + 3, to: b - 3, by: 11).map({ P[$0] }) where rng.chance(0.4) {
+                                things.append(Thing(grid: Models.tree(seed: Int(p.x * 7 + p.y * 13) + lay.seed, season: season), pos: p, kind: .tree))
+                            }
+                            G.mark(stride(from: a, to: b, by: 2).map { P[$0] }, 1)
+                        }
+                        a = b
+                    }
+                }
+            }
+        }
+    }
+
+    /// A distant signal 36 before each stop signal drawn, at caution while that one is at danger (Britain's steam era).
+    func addDistants(_ lay: Layout) {
+        for (i, sg) in signals.enumerated() where sg.shown {
+            if case .distant = sg.role { continue }
+            let lp = lay.loops[sg.loop]
+            let home: Double = if case .home = sg.role { 14 } else { 0 }
+            let x = wrap(sg.s - home - 36, lp.L), (p, t) = lp.at(x), q = SIMD2(p.x, p.y) + SIMD2(-t.y, t.x) * 5.5, hq = atan2(t.y, t.x)
+            signals.append(Signal(loop: sg.loop, s: x, role: .distant(of: i), pos: q, heading: hq))
+            things.append(Thing(grid: Models.signal(.semaphore), pos: q, heading: hq, kind: .signal, base: p.z))
         }
     }
 
