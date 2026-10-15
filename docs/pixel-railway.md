@@ -38,8 +38,9 @@ Dave asked for it on 2026-10-15: "a top down procedurally generate model train t
 | The Shinkansen group, whose railways license their trains' likeness at any age | "Keep it, older trains only": the 0 and 200 series and JR Freight, named in Settings with no lettering, looked at again before the App Store |
 | Top-down, after the international round | "lets cut the top down view entirely and go with just isometric, it will allow us to focus our effort where we get the most": isometric only, with no View setting |
 | The L, T and stepped loops only top-down had | "yes, port the L and T shaped loops to isometric" |
+| Size, after living with it | "only have the size be "small" the other sizes are too zoomed in, so just lock to "small" and remove the option entirely" |
 
-The lead's calls, not ruled on: model-railway compression (locomotives 25–38 px, cars 16–30, three to five cars to a passenger train and eight and a caboose to the freight); Size changes the art pixel (3, 4 or 5 points on a 982-point-high screen), not the drawings; every vehicle baked at 64 headings from its slices as first drawn; the simulation stepped at a fixed 1/60 s; "Great Northern streamliner", not "Empire Builder" (an Amtrak mark); the disclaimer's wording.
+The lead's calls, not ruled on: model-railway compression (locomotives 25–38 px, cars 16–30, three to five cars to a passenger train and eight and a caboose to the freight); the art pixel is 3 points on a 982-point-high screen, one smaller than Pixel City's; every vehicle baked at 64 headings from its slices as first drawn; the simulation stepped at a fixed 1/60 s; "Great Northern streamliner", not "Empire Builder" (an Amtrak mark); the disclaimer's wording.
 
 ## Mock-ups
 
@@ -77,7 +78,6 @@ A second round looked at the trains outside the US. A registered design on a tra
 
 | Setting | Does |
 |---|---|
-| Size | Small (the standard: 3 points on a 982-point-high screen), Medium (Pixel City's pixel, 4) or Large: the art pixel, so more room for track when smaller |
 | Trains | One, up to two, or up to three (the standard): two may share a loop under block signals, or the third be a short train on a tight inner loop; a train that still doesn't fit is left off |
 | New layout every | Hour, 3 hours (standard), 6 hours, or Day |
 | Eras | US streamliners (Santa Fe F7 warbonnet with Hi-Levels; Union Pacific E9 with an Astra Dome; Great Northern F7 streamliner; for an inner loop, a Budd RDC pair or a Union Pacific GP9 local), US steam (Union Pacific Big Boy with mixed freight and a caboose; Southern Pacific GS-4 Daylight; Milwaukee Road Hiawatha; for an inner loop, an 0-6-0 switcher with short cars), Germany and the Alps (DB 103 with the TEE Rheingold, DB V 200 and DB class 01 with green coaches, SBB Crocodile with goods wagons), Britain's age of steam (LNER A3 and A4 with teak coaches, GWR Castle with chocolate and cream, LMS Princess Coronation with crimson coaches, LMS 8F with mineral wagons), British InterCity (the HST with Mark 3 coaches, a Deltic in BR blue, a Class 47 with mineral wagons), US transition freight (Union Pacific F3 with PFE reefers; Santa Fe F7 freight; Pennsylvania GP9 with coal hoppers; New York Central F7 way freight; Norfolk and Western class A with a hopper drag) and US today (BNSF ES44AC Heritage III with double-stacks; Union Pacific SD70ACe with coal gondolas; CSX ES44AH with autoracks and tank cars; Amtrak P42 Phase V with Amfleet I); none ticked counts as all |

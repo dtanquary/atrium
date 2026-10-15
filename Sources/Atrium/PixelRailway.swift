@@ -8,8 +8,6 @@ import RailLayout
 /// layout fades in every few hours. The layout, its scenery and the drawing are in the RailLayout module
 /// (docs/pixel-railway.md); this is the canvas, the clock and Settings.
 final class PixelRailway: SKScene {
-    nonisolated static let scale = Knob(key: "railway.size", label: "Size", range: 0...2, standard: 0, section: "Layout",
-                                        format: .choice(["Small", "Medium", "Large"]))
     nonisolated static let count = Knob(key: "railway.trains", label: "Trains", range: 0...2, standard: 2, section: "Layout",
                                         format: .choice(["One", "Up to two", "Up to three"]))
     nonisolated static let every = Knob(key: "railway.every", label: "New layout every", range: 0...3, standard: 1, section: "Layout",
@@ -42,7 +40,7 @@ final class PixelRailway: SKScene {
                                               format: .toggle)
     nonisolated static let previewHour = Knob(key: "railway.previewHour", label: "Time", range: 0...24, standard: 21, section: "Preview", format: .clock,
                                               shownWhen: "railway.previewTime")
-    nonisolated static let knobs = [scale, count, every, streamliners, steam, transition, modern, britishSteam, britishDiesel, germanAlps, snow, previewDay, day, previewSnow, previewTime, previewHour]
+    nonisolated static let knobs = [count, every, streamliners, steam, transition, modern, britishSteam, britishDiesel, germanAlps, snow, previewDay, day, previewSnow, previewTime, previewHour]
     /// Under the eras in Settings, the only place the railroads are named.
     nonisolated static let names = (section: "Eras", text: "Names say which real train each is drawn after. Atrium isn't affiliated with or endorsed by any railroad.")
 
@@ -88,9 +86,10 @@ final class PixelRailway: SKScene {
     }
 
     /// The layout for now: a new seed each period of Settings' New Layout Every, an era from those ticked, and the
-    /// trains of that era, at the size Settings picks (Medium is Pixel City's pixel).
+    /// trains of that era, its art pixel one point smaller than Pixel City's (3 points on a 982-point-high screen), so
+    /// there's room for long loops.
     static func plan(_ size: CGSize, at date: Date = Date()) -> Plan {
-        let pixel = max(2, (size.height / 240).rounded()) + CGFloat(scale.value) - 1 // points per art pixel
+        let pixel = max(2, (size.height / 240).rounded()) - 1 // points per art pixel
         let hours = [1.0, 3, 6, 24][Int(every.value)]
         let seed = Int(date.timeIntervalSince1970 / (hours * 3600))
         let ticked = [(streamliners, RailEra.streamliners), (steam, .steam), (transition, .transition), (modern, .modern), (britishSteam, .britishSteam),
