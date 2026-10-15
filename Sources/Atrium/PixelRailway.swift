@@ -3,13 +3,11 @@ import RailLayout
 
 @MainActor func pixelRailway(size: CGSize) -> SKScene { PixelRailway(size: size) }
 
-/// Pixel Railway: a model railway seen from above in pixel art, one to three trains of one era running on their
+/// Pixel Railway: a model railway in isometric pixel art, one to three trains of one era running on their
 /// loops through the countryside, under the real Sun and, if Settings has it, the real snow where you are. A new
 /// layout fades in every few hours. The layout, its scenery and the drawing are in the RailLayout module
 /// (docs/pixel-railway.md); this is the canvas, the clock and Settings.
 final class PixelRailway: SKScene {
-    nonisolated static let look = Knob(key: "railway.view", label: "View", range: 0...1, standard: 1, section: "Layout",
-                                       format: .choice(["Top-down", "Isometric"]))
     nonisolated static let scale = Knob(key: "railway.size", label: "Size", range: 0...2, standard: 0, section: "Layout",
                                         format: .choice(["Small", "Medium", "Large"]))
     nonisolated static let count = Knob(key: "railway.trains", label: "Trains", range: 0...2, standard: 2, section: "Layout",
@@ -41,13 +39,13 @@ final class PixelRailway: SKScene {
                                               format: .toggle)
     nonisolated static let previewHour = Knob(key: "railway.previewHour", label: "Time", range: 0...24, standard: 21, section: "Preview", format: .clock,
                                               shownWhen: "railway.previewTime")
-    nonisolated static let knobs = [look, scale, count, every, streamliners, steam, transition, modern, britishSteam, britishDiesel, snow, previewDay, day, previewSnow, previewTime, previewHour]
+    nonisolated static let knobs = [scale, count, every, streamliners, steam, transition, modern, britishSteam, britishDiesel, snow, previewDay, day, previewSnow, previewTime, previewHour]
     /// Under the eras in Settings, the only place the railroads are named.
     nonisolated static let names = (section: "Eras", text: "Names say which real train each is drawn after. Atrium isn't affiliated with or endorsed by any railroad.")
 
     /// What a layout is built from: everything that, changed, makes a new one.
     struct Plan: Equatable {
-        var seed: Int, w: Int, h: Int, pixel: CGFloat, view: RailViewKind, era: RailEra, count: Int, season: RailSeason
+        var seed: Int, w: Int, h: Int, pixel: CGFloat, era: RailEra, count: Int, season: RailSeason
     }
 
     private let plan: Plan
@@ -96,7 +94,7 @@ final class PixelRailway: SKScene {
         let eras = ticked.isEmpty ? RailEra.allCases : ticked
         let era = eras[Int((UInt64(truncatingIfNeeded: seed) &* 0x9E37_79B9_7F4A_7C15) >> 33) % eras.count]
         return Plan(seed: seed, w: Int((size.width / pixel).rounded(.up)), h: Int((size.height / pixel).rounded(.up)), pixel: pixel,
-                    view: look.value > 0.5 ? .iso : .topDown, era: era, count: Int(count.value) + 1, season: season(date))
+                    era: era, count: Int(count.value) + 1, season: season(date))
     }
 
     /// The time of year where you are, or on the previewed day: A Tree for the Year's oak, moved for your latitude,
@@ -116,7 +114,7 @@ final class PixelRailway: SKScene {
     }
 
     nonisolated static func build(_ plan: Plan) -> Railway {
-        Railway(seed: plan.seed, width: plan.w, height: plan.h, view: plan.view, era: plan.era, count: plan.count, season: plan.season)
+        Railway(seed: plan.seed, width: plan.w, height: plan.h, era: plan.era, count: plan.count, season: plan.season)
     }
 
     /// How dark it is, 0 by day to 1 at night, by the Sun where you are, or at the preview hour.

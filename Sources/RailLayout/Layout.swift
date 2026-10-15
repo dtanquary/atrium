@@ -15,36 +15,6 @@ struct Piece {
     var c = SIMD2<Double>.zero, r = 0.0, turn = 0.0
 }
 
-/// A raster of 2-unit cells, for the rectangles a loop is drawn round.
-struct Region {
-    let w: Int, h: Int, off: SIMD2<Double>
-    var cells: [Bool]
-    static let q = 2.0
-
-    init(w: Int, h: Int, off: SIMD2<Double>) { (self.w, self.h, self.off) = (w, h, off); cells = Array(repeating: false, count: w * h) }
-
-    subscript(x: Int, y: Int) -> Bool {
-        get { x >= 0 && x < w && y >= 0 && y < h && cells[y * w + x] }
-        set { cells[y * w + x] = newValue }
-    }
-
-    var any: Bool { cells.contains(true) }
-
-    /// Cells with all four neighbours set, `times` over.
-    func eroded(_ times: Int) -> Region {
-        var e = self
-        for _ in 0..<times {
-            let was = e
-            for y in 0..<h { for x in 0..<w { e[x, y] = was[x, y] && was[x - 1, y] && was[x + 1, y] && was[x, y - 1] && was[x, y + 1] } }
-        }
-        return e
-    }
-
-    func contains(_ p: SIMD2<Double>) -> Bool {
-        self[Int(floor((p.x - off.x) / Self.q)), Int(floor((p.y - off.y) / Self.q))]
-    }
-}
-
 /// One loop of track. `s` runs the way its trains go.
 final class Loop {
     let poly: [SIMD2<Double>]
@@ -53,7 +23,6 @@ final class Loop {
     let P: [SIMD2<Double>], S: [Double], T: [SIMD2<Double>]
     var Z: [Double]
     let pieces: [Piece], rmin: Double
-    var region: Region?
     /// The trains on it, by key: one, or two under block signals.
     var keys: [String] = []
     var L: Double { S[S.count - 1] }
@@ -111,44 +80,31 @@ struct Crossing {
 
 /// The track: a loop for each train or two, and where they cross.
 final class Layout {
+    /// How a loop sits by those before it: across one of their straights, inside one, or on its own.
     enum Plan { case twice, nest, beside, single }
     let view: RailView, seed: Int
-    var lo = SIMD2<Double>.zero, hi = SIMD2<Double>.zero
-    var loops: [Loop] = [], cross: [Crossing] = [], plan = Plan.single
+    /// The world's corners that can come on the screen.
+    let lo: SIMD2<Double>, hi: SIMD2<Double>
+    var loops: [Loop] = [], cross: [Crossing] = []
     var trains: [String] { loops.flatMap(\.keys) }
 
-    /// Loops for the trains, the largest radius first. Each is a union of 1-3 rectangles (on the world's axes,
-    /// which in iso run on the diagonals), some corners cut at 45 degrees, every corner rounded. A train that gets
-    /// no loop of its own may run on one behind another (at most two to a loop) under block signals, if `share`.
+    /// Loops for the trains, the largest radius first. Each is a rectangle on the world's axes (which run on the
+    /// screen's diagonals), some corners cut at 45 degrees, every corner rounded. A train that gets no loop of its
+    /// own may run on one behind another (at most two to a loop) under block signals, if `share`.
     init(seed: Int, view: RailView, trains: [String], share: Bool, tries: Int = 900) {
         self.view = view
         self.seed = seed
         var rng = Dice(seed)
         let (w, h) = (Double(view.w), Double(view.h)), margin = 10.0
-        if view.iso {
-            let side = w / 2 + h
-            (lo, hi) = ([-side / 2, -side / 2], [side / 2, side / 2])
-        } else {
-            (lo, hi) = ([margin, margin], [w - margin, h - margin])
-        }
+        let side = w / 2 + h
+        (lo, hi) = (SIMD2(repeating: -side / 2), SIMD2(repeating: side / 2))
         let (lo, hi) = (lo, hi)
         func onScreen(_ poly: [SIMD2<Double>]) -> Bool {
             poly.allSatisfy { let q = view.project([$0.x, $0.y, 0]); return q.x > margin && q.x < w - margin && q.y > margin && q.y < h - margin }
         }
         let order = trains.sorted { RailArt.consist($0).minRadius > RailArt.consist($1).minRadius }
         guard !order.isEmpty else { return }
-        plan = order.count > 1 ? rng.pick([.twice, .twice, .nest, .beside]) : .single
-        let span = hi - lo
-        var first = (lo, hi)
-        switch plan {
-        case .twice: // room on one side of the first loop for the second to reach out
-            let room = RailArt.consist(order[1]).minRadius + 30
-            first = rng.chance(0.5) ? (lo, hi - [0, room]) : (lo + [0, room], hi)
-        case .beside:
-            let cut = lo.x + span.x * rng.uniform(0.5, 0.62)
-            first = rng.chance(0.5) ? (lo, [cut, hi.y]) : ([lo.x + span.x - (cut - lo.x), lo.y], hi)
-        default: break
-        }
+        let plan: Plan = order.count > 1 ? rng.pick([.twice, .twice, .nest, .beside]) : .single
         for (ti, key) in order.enumerated() {
             let consist = RailArt.consist(key), R = consist.minRadius, short = R <= 32
             let attempts = ti < 2 ? tries : short ? tries / 2 : tries / 4 // a third loop if it fits
@@ -158,28 +114,19 @@ final class Layout {
                     mode = [.twice: .twice, .nest: .nest][plan] ?? .beside
                     if loops.count > 1 || attempt > tries / 2 { mode = rng.pick(short ? [.nest, .nest, .beside, .twice] : [.twice, .nest, .beside]) }
                 }
-                var poly: [SIMD2<Double>], region: Region?
-                if mode == .nest, short || loops.allSatisfy({ $0.region == nil }) { // the short train's tight inner loop
+                let poly: [SIMD2<Double>]
+                if mode == .nest { // the short train's tight inner loop
                     let host = rng.chance(0.6) ? loops.max { $0.L < $1.L }! : loops[rng.below(loops.count)]
                     guard let p = Self.innerRect(&rng, host, R) else { continue }
-                    poly = view.iso ? p : p.map { floor($0) + 0.5 }
+                    poly = p
                 } else if mode == .twice {
                     guard let p = Self.crossRect(&rng, loops[rng.below(loops.count)], R, lo, hi) else { continue }
-                    poly = view.iso ? p : p.map { floor($0) + 0.5 }
-                } else if view.iso, mode != .nest {
-                    guard let p = Self.diamondRect(&rng, R, w, h) else { continue }
                     poly = p
                 } else {
-                    var inside: Region?
-                    if mode == .nest {
-                        guard let host = loops[rng.below(loops.count)].region else { continue }
-                        inside = host.eroded(10)
-                    }
-                    let box = loops.isEmpty ? first : (lo, hi)
-                    guard let r = Self.rectUnion(&rng, box.0, box.1, R, inside: inside) else { continue }
-                    (poly, region) = (view.iso ? r.poly : r.poly.map { $0 + 0.5 }, r.region) // centrelines on pixel centres
+                    guard let p = Self.diamondRect(&rng, R, w, h) else { continue }
+                    poly = p
                 }
-                if view.iso, !onScreen(poly) { continue }
+                if !onScreen(poly) { continue }
                 let f = Self.fillet(poly, 1.15 * R)
                 guard f.rmin >= 0.98 * R else { continue }
                 // a loop 2.2 trains long; after half the tries, a long freight may drop cars to fit a shorter one
@@ -195,7 +142,6 @@ final class Layout {
                     found += c.map { Crossing(a: i, b: loops.count, sa: $0.sa, sb: $0.sb, angle: $0.angle) }
                 }
                 guard ok else { continue }
-                loop.region = region
                 loop.keys = [placed]
                 loops.append(loop)
                 cross += found
@@ -280,76 +226,6 @@ final class Layout {
     }
 
     // MARK: drawing loops
-
-    /// A loop round the union of 1-3 random rectangles within lo...hi, some corners cut at 45 degrees; nil if they
-    /// make holes, touch only at a corner, or leave `inside`.
-    static func rectUnion(_ rng: inout Dice, _ lo: SIMD2<Double>, _ hi: SIMD2<Double>, _ R: Double, inside: Region?) -> (poly: [SIMD2<Double>], region: Region)? {
-        let q = Region.q, off = floor(lo / q) * q
-        var reg = Region(w: Int(floor((hi.x - off.x) / q)) + 2, h: Int(floor((hi.y - off.y) / q)) + 2, off: off)
-        for _ in 0..<rng.pick([1, 2, 2, 3]) {
-            let w = rng.uniform(2 * R + 4, (hi.x - lo.x) * 0.92), h = rng.uniform(2 * R + 4, (hi.y - lo.y) * 0.92)
-            var (x0, y0): (Double, Double)
-            if reg.any {
-                let set = reg.cells.indices.filter { reg.cells[$0] }, j = set[rng.below(set.count)]
-                let (cx, cy) = (Double(j % reg.w) * q + off.x, Double(j / reg.w) * q + off.y)
-                (x0, y0) = (cx - rng.uniform(0, w), cy - rng.uniform(0, h))
-            } else {
-                (x0, y0) = (rng.uniform(lo.x, hi.x - w), rng.uniform(lo.y, hi.y - h))
-            }
-            (x0, y0) = (max(lo.x, x0), max(lo.y, y0))
-            let (x1, y1) = (min(hi.x, x0 + w), min(hi.y, y0 + h))
-            guard x1 - x0 >= 2 * R + 4, y1 - y0 >= 2 * R + 4 else { continue }
-            for y in Int(floor((y0 - off.y) / q))..<Int(floor((y1 - off.y) / q)) {
-                for x in Int(floor((x0 - off.x) / q))..<Int(floor((x1 - off.x) / q)) { reg[x, y] = true }
-            }
-        }
-        guard reg.any else { return nil }
-        for y in -1..<reg.h { for x in -1..<reg.w { // corners touching only diagonally
-            let (a, b, c, d) = (reg[x, y], reg[x + 1, y], reg[x, y + 1], reg[x + 1, y + 1])
-            if a && d && !b && !c || b && c && !a && !d { return nil }
-        } }
-        guard var poly = outline(reg) else { return nil }
-        if let inside {
-            for j in reg.cells.indices where reg.cells[j] {
-                if !inside.contains([Double(j % reg.w) * q + off.x + 1, Double(j / reg.w) * q + off.y + 1]) { return nil }
-            }
-        }
-        var out: [SIMD2<Double>] = []
-        let n = poly.count
-        for k in 0..<n {
-            let (p0, p1, p2) = (poly[(k + n - 1) % n], poly[k], poly[(k + 1) % n])
-            let (l0, l1) = (length(p1 - p0), length(p2 - p1))
-            let cut = rng.uniform(0.8 * R, 1.6 * R), take = rng.chance(0.4) && min(l0, l1) > 2 * cut + 2 * R
-            if take { out += [p1 + (p0 - p1) / l0 * cut, p1 + (p2 - p1) / l1 * cut] } else { out.append(p1) }
-        }
-        poly = out
-        return (poly, reg)
-    }
-
-    /// The corners of a region's boundary, as one loop clockwise on the screen; nil if it has holes or several pieces.
-    static func outline(_ reg: Region) -> [SIMD2<Double>]? {
-        var next: [SIMD2<Int>: SIMD2<Int>] = [:], start: SIMD2<Int>?
-        for (edge, ends) in [((0, -1), (0, 0, 1, 0)), ((1, 0), (1, 0, 1, 1)), ((0, 1), (1, 1, 0, 1)), ((-1, 0), (0, 1, 0, 0))] {
-            for y in 0..<reg.h { for x in 0..<reg.w where reg[x, y] && !reg[x + edge.0, y + edge.1] {
-                let a = SIMD2(x + ends.0, y + ends.1)
-                next[a] = SIMD2(x + ends.2, y + ends.3)
-                if start == nil { start = a }
-            } }
-        }
-        guard let start else { return nil }
-        var loop = [start], at = next[start]!
-        while at != start {
-            loop.append(at)
-            guard loop.count <= next.count, let n = next[at] else { return nil }
-            at = n
-        }
-        guard loop.count == next.count else { return nil }
-        let n = loop.count
-        return (0..<n).compactMap { k in
-            let (a, b, c) = (loop[(k + n - 1) % n], loop[k], loop[(k + 1) % n])
-            return b &- a == c &- b ? nil : SIMD2(reg.off.x + Double(b.x) * Region.q, reg.off.y + Double(b.y) * Region.q)
-        }
-    }
 
     /// A closed path through the polygon sampled a quarter unit apart, each corner rounded by the largest arc up
     /// to `rmax` that fits: the samples, their distance along it, its pieces and the tightest radius.

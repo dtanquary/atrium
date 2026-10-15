@@ -1,43 +1,33 @@
 import Foundation
 import simd
 
-/// How the layout is seen: from above and a little in front, each unit of height one pixel up the screen ("3/4"
-/// top-down); or isometric 2:1, the layout on the world's axes so its straights run on the diagonals.
-public enum RailViewKind: Int, Sendable { case topDown, iso }
-
-/// Maps the world (x, y, z; 1 unit = 1 top-down art pixel, y down the screen, z up) to the screen and back.
+/// Maps the world (x, y, z; z up) to the screen and back: isometric 2:1, the layout on the world's axes so its
+/// straights run on the diagonals.
 struct RailView {
-    let kind: RailViewKind, w: Int, h: Int
-    var iso: Bool { kind == .iso }
+    let w: Int, h: Int
     /// A pixel's ray, toward the viewer: every world point along it projects to the same pixel.
-    var ray: SIMD3<Double> { iso ? [1, 1, 1] : [0, 1, 1] }
+    let ray: SIMD3<Double> = [1, 1, 1]
 
-    func project(_ p: SIMD3<Double>) -> SIMD2<Double> {
-        iso ? [p.x - p.y + Double(w) / 2, (p.x + p.y) / 2 + Double(h) / 2 - p.z] : [p.x, p.y - p.z]
-    }
+    func project(_ p: SIMD3<Double>) -> SIMD2<Double> { [p.x - p.y + Double(w) / 2, (p.x + p.y) / 2 + Double(h) / 2 - p.z] }
 
     /// Larger is nearer the viewer; only compared along one pixel's ray.
-    func depth(_ p: SIMD3<Double>) -> Double { iso ? p.x + p.y + p.z : p.y + p.z }
+    func depth(_ p: SIMD3<Double>) -> Double { p.x + p.y + p.z }
 
     /// The depth where pixel (x, y)'s ray meets the plane at height z: flat things in one pixel share it, so
     /// coplanar layers never fight.
-    func pixelDepth(_ x: Int, _ y: Int, _ z: Double) -> Double {
-        iso ? 2 * (Double(y) + 0.5 - Double(h) / 2) + 3 * z : Double(y) + 0.5 + 2 * z
-    }
+    func pixelDepth(_ x: Int, _ y: Int, _ z: Double) -> Double { 2 * (Double(y) + 0.5 - Double(h) / 2) + 3 * z }
 
     /// The world offset at a fixed height that moves the screen point by (dx, dy).
-    func unproject(_ dx: Double, _ dy: Double) -> SIMD2<Double> { iso ? [dy + dx / 2, dy - dx / 2] : [dx, dy] }
+    func unproject(_ dx: Double, _ dy: Double) -> SIMD2<Double> { [dy + dx / 2, dy - dx / 2] }
 
     /// Where pixel (x, y)'s centre meets the ground.
     func ground(_ x: Int, _ y: Int) -> SIMD2<Double> {
-        let (px, py) = (Double(x) + 0.5, Double(y) + 0.5)
-        guard iso else { return [px, py] }
-        let (a, b) = (px - Double(w) / 2, py - Double(h) / 2)
+        let (a, b) = (Double(x) + 0.5 - Double(w) / 2, Double(y) + 0.5 - Double(h) / 2)
         return [b + a / 2, b - a / 2]
     }
 
-    /// The direction the Sun's light comes from: from the upper left in top-down, from the left in iso.
-    var sun: SIMD3<Double> { normalize(iso ? SIMD3(-0.30, 0.60, 0.74) : SIMD3(-0.55, -0.45, 0.70)) }
+    /// The direction the Sun's light comes from: the left.
+    let sun = normalize(SIMD3<Double>(-0.30, 0.60, 0.74))
 }
 
 /// A voxel model seen in one view: every pixel of its sprite, as offsets from the pixel its centre falls on.

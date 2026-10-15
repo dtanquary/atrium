@@ -23,9 +23,9 @@ public final class Railway {
     /// so up to six are grown from seeds drawn from this one, now and then with a short train for an inner loop
     /// in place of the third, and the first with everything is kept, else the first with most (a station and its
     /// town counting as much as a train).
-    public init(seed: Int, width: Int, height: Int, view kind: RailViewKind, era: RailEra, count: Int, season: RailSeason) {
+    public init(seed: Int, width: Int, height: Int, era: RailEra, count: Int, season: RailSeason) {
         (w, h, self.era) = (width, height, era)
-        view = RailView(kind: kind, w: width, h: height)
+        view = RailView(w: width, h: height)
         var best: (score: Int, layout: Layout, scenery: Scenery)?
         for attempt in 0..<6 {
             let s = seed &* 8 &+ attempt
