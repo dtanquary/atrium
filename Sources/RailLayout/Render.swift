@@ -481,6 +481,13 @@ enum Models {
     }
 
     /// The white post a British crossing gate hangs on.
+    /// A switch stand: a short post; its target, drawn as the points move, sits on top.
+    static func switchStand() -> Voxels {
+        var g = Voxels(1, 1, 2)
+        g.fill(0..<1, 0..<1, 0..<2, m("post"))
+        return g
+    }
+
     static func gatepost() -> Voxels {
         var g = Voxels(1, 1, 3)
         g.fill(0..<1, 0..<1, 0..<3, m("post_white"))

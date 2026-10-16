@@ -56,30 +56,31 @@ private func save(_ railway: Railway, night: Float, _ name: String, scale: Int =
 }
 
 /// With its retries a layout nearly always fits three trains and a station, and the trains never lock: over ten
-/// simulated minutes, never all standing (but at a platform) for 10 s, and none held at a signal for 2 minutes.
-/// On the laptop canvas at the Small size, the standard. Prints how often each era fits everything, and how long a
-/// railway takes to build.
+/// simulated minutes with swaps as often as the standard, never all standing (but at a platform) for 10 s,
+/// and none held at a signal for 2 minutes. On Dave's laptop canvas. Prints how often each era fits everything, how
+/// often every loop is joined to the branch, and how long a railway takes to build.
 @Test func railwayFitsItsTrainsAndNeverLocks() throws {
     for era in RailEra.allCases {
-        var (all, stations, longest, took) = (0, 0, 0.0, Duration.zero)
+        var (all, stations, joined, longest, took) = (0, 0, 0, 0.0, Duration.zero)
         let clock = ContinuousClock()
         for seed in 1...20 {
             let began = clock.now
-            let railway = Railway(seed: seed, width: 504, height: 328, era: era, count: 3, season: .summer)
+            let railway = Railway(seed: seed, width: 504, height: 328, era: era, count: 3, season: .summer, swaps: 40...90)
             took += clock.now - began
             if railway.layout.trains.count == 3 { all += 1 }
+            if railway.layout.joined.count == railway.layout.loops.count { joined += 1 }
             if railway.scenery.station != nil { stations += 1 }
             var sim = railway.sim, still = 0.0
             for _ in 0..<(600 * 60) {
                 sim.step()
                 still = sim.trains.allSatisfy { $0.v < 0.05 && $0.dwell <= 0 } ? still + Sim.dt : 0
                 #expect(still < 10, "\(era) seed \(seed): every train standing at \(sim.t) s")
-                longest = max(longest, sim.trains.map(\.stopped).max()!)
+                longest = max(longest, sim.trains.map(\.stopped).max() ?? 0)
                 if still >= 10 { break }
             }
             #expect(longest < 120, "\(era) seed \(seed): a train held \(longest) s")
         }
-        print("Pixel Railway \(era): 3 trains on \(all)/20, a station on \(stations)/20, longest hold \(Int(longest)) s, built in \(took / 20) each")
+        print("Pixel Railway \(era): 3 trains on \(all)/20, a station on \(stations)/20, every loop joined on \(joined)/20, longest hold \(Int(longest)) s, built in \(took / 20) each")
         #expect(all >= 16 && stations >= 16)
     }
 }
@@ -125,7 +126,7 @@ private func save(_ railway: Railway, night: Float, _ name: String, scale: Int =
     var misses: [String] = [], checked = 0
     for era in RailEra.allCases {
         for seed in 1...4 {
-            let railway = Railway(seed: seed, width: 378, height: 246, era: era, count: 3, season: .summer)
+            let railway = Railway(seed: seed, width: 504, height: 328, era: era, count: 3, season: .summer, swaps: 40...90)
             let sc = railway.scenery, lay = railway.layout
             guard !sc.blocks.isEmpty else { continue }
             checked += 1
@@ -137,14 +138,45 @@ private func save(_ railway: Railway, night: Float, _ name: String, scale: Int =
             for _ in 0..<(3600 * 60) {
                 sim.step()
                 for tr in sim.trains where tr.v < 0.05 && tr.dwell <= 0 {
-                    guard let B = sc.blocks[tr.loop] else { continue }
-                    let L = lay.loops[tr.loop].L, k = B.indices.min { wrap(B[$0] - tr.s, L) < wrap(B[$1] - tr.s, L) }!
-                    if wrap(B[k] - tr.s, L) < 8, !shown.contains(SIMD2(tr.loop, k)) { misses.append("\(era) seed \(seed) block \(k) at \(Int(sim.t)) s") }
+                    guard let li = tr.loop, let B = sc.blocks[li] else { continue }
+                    let L = lay.loops[li].L, k = B.indices.min { wrap(B[$0] - tr.s, L) < wrap(B[$1] - tr.s, L) }!
+                    if wrap(B[k] - tr.s, L) < 8, !shown.contains(SIMD2(li, k)) { misses.append("\(era) seed \(seed) block \(k) at \(Int(sim.t)) s") }
                 }
             }
         }
     }
-    print("Pixel Railway: \(checked) layouts with shared loops run an hour; held at a hidden signal: \(Set(misses).count)")
+    print("Pixel Railway: \(checked) layouts with blocks run an hour; held at a hidden signal: \(Set(misses).count)")
     #expect(misses.isEmpty, "\(Set(misses).sorted().prefix(8))")
 }
 
+
+/// With swaps as often as Settings has them as standard, over half an hour on four layouts an era: trains leave by the branch or into a
+/// tunnel and others arrive, never one already on the layout, no loop ever holds more trains than its blocks were
+/// planned for, and nothing locks.
+@Test func railwaySwapsTrainsWithoutLocking() {
+    var problems: [String] = []
+    for era in RailEra.allCases {
+        var (swaps, longest) = (0, 0.0)
+        for seed in 1...4 {
+            let railway = Railway(seed: seed, width: 504, height: 328, era: era, count: 3, season: .summer, swaps: 40...90)
+            let sc = railway.scenery
+            var sim = railway.sim, still = 0.0
+            for _ in 0..<(1800 * 60) {
+                sim.step()
+                still = sim.trains.allSatisfy { $0.v < 0.05 && $0.dwell <= 0 } ? still + Sim.dt : 0
+                longest = max(longest, sim.trains.map(\.stopped).max() ?? 0)
+                let keys = sim.trains.map { $0.consist.key.split(separator: "#")[0] }
+                if still >= 10 { problems.append("\(era) \(seed): every train standing at \(Int(sim.t)) s"); break }
+                if Set(keys).count != keys.count { problems.append("\(era) \(seed): a train twice at \(Int(sim.t)) s"); break }
+                if let li = sc.capacity.keys.first(where: { li in sim.trains.filter { $0.loop == li }.count > sc.capacity[li]! }) {
+                    problems.append("\(era) \(seed): loop \(li) over its \(sc.capacity[li]!) at \(Int(sim.t)) s"); break
+                }
+            }
+            if railway.layout.branch != nil || !sc.yards.isEmpty, sim.swaps < 5 { problems.append("\(era) \(seed): only \(sim.swaps) swaps") }
+            swaps += sim.swaps
+        }
+        if longest >= 120 { problems.append("\(era): a train held \(Int(longest)) s") }
+        print("Pixel Railway \(era): \(swaps) swaps in four half hours, longest hold \(Int(longest)) s")
+    }
+    #expect(problems.isEmpty, "\(problems.prefix(8))")
+}

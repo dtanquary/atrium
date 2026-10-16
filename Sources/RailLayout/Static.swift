@@ -17,11 +17,25 @@ struct Statics {
         for y in 0..<h { for x in 0..<w { base.depth[y * w + x] = Float(view.pixelDepth(x, y, 0)) } }
 
         var things = sc.things + Scenery.bridges(lay, season: season)
-        if let hill = sc.hill {
+        for hill in sc.hills {
             things.append(Thing(grid: Scenery.hillModel(hill, lay.loops[hill.loop], sun: view.sun, season: season), pos: hill.c, kind: .hill))
         }
-        for i in things.indices where things[i].base == nil { things[i].base = sc.hill.map { Scenery.hillHeight($0, things[i].pos) - 1 } ?? 0 }
-        for lp in lay.loops { Self.stampTrack(&base, lp, sc.roads, view, era: era, winter: winter) }
+        for i in things.indices where things[i].base == nil { things[i].base = (sc.hills.map { Scenery.hillHeight($0, things[i].pos) }.max() ?? 1) - 1 }
+        // every loop, the branch and the crossovers, without their switch rails at the turnouts (drawn as they're set)
+        var gaps: [Int: [(Double, Double)]] = [:]
+        if let br = lay.branch { gaps[br.loop, default: []] += [(br.sD, br.sD + switchLength), (br.sA - switchLength, br.sA)] }
+        for x in lay.links { gaps[x.a, default: []].append((x.sa, x.sa + switchLength)); gaps[x.b, default: []].append((x.sb - switchLength, x.sb)) }
+        for (li, lp) in lay.loops.enumerated() {
+            let g = gaps[li] ?? []
+            Self.stampTrack(&base, lp.P, lp.T, lp.Z, sc.roads, view, era: era, winter: winter) { k in g.contains { wrap(lp.S[k] - $0.0, lp.L) <= $0.1 - $0.0 } }
+        }
+        var paths: [(RailPath, [(Double, Double)])] = lay.links.map { ($0.path, [(0, switchLength), ($0.path.L - switchLength, $0.path.L)]) }
+        if let br = lay.branch {
+            paths += [(br.out, [(0, switchLength), (br.curve - switchLength, br.curve)]), (br.inn, [(br.straight, br.straight + switchLength), (br.inn.L - switchLength, br.inn.L)])]
+        }
+        for (path, g) in paths {
+            Self.stampTrack(&base, path.P, path.T, [Double](repeating: 0, count: path.P.count), sc.roads, view, era: era, winter: winter) { k in g.contains { $0.0 <= path.S[k] && path.S[k] <= $0.1 } }
+        }
 
         var day = base, night = base
         night.rgb = base.rgb.map(nightLight.ground)
@@ -99,9 +113,11 @@ struct Statics {
         return col
     }
 
-    /// A loop's track: a bed 7 units wide, a tie every 2 units, rails a unit either side of the centreline (gauge
-    /// 2.35 pixels at 2 ft a pixel), and planks for the bed and ties where a road crosses.
-    static func stampTrack(_ canvas: inout Canvas, _ lp: Loop, _ roads: [[SIMD2<Double>]], _ view: RailView, era: RailEra, winter: Bool) {
+    /// A track's samples P (tangents T, heights Z): a bed 7 units wide, a tie every 2 units, rails a unit either side
+    /// of the centreline (gauge 2.35 pixels at 2 ft a pixel) but where `bare` (at a turnout, drawn as it's set), and
+    /// planks for the bed and ties where a road crosses.
+    static func stampTrack(_ canvas: inout Canvas, _ P: [SIMD2<Double>], _ T: [SIMD2<Double>], _ Z: [Double], _ roads: [[SIMD2<Double>]],
+                           _ view: RailView, era: RailEra, winter: Bool, bare: (Int) -> Bool = { _ in false }) {
         let snow = RailArt.colour(0xD8DCE0)
         let look = era.look
         let bed = winter ? snow : RailArt.colour(look.ballast)
@@ -109,7 +125,7 @@ struct Statics {
         // planks where a road crosses, or today's concrete panels 8 ft long with dark joints between
         let rail = RailArt.colour(winter ? 0x4A4642 : 0xA8A8A8), planks = RailArt.colour(look.panels?.0 ?? 0x5A4632)
         let joint = look.panels.map { RailArt.colour($0.1) }
-        let onRoad = lp.P.map { p in roads.contains { rd in zip(rd, rd.dropFirst()).contains { a, b in
+        let onRoad = P.map { p in roads.contains { rd in zip(rd, rd.dropFirst()).contains { a, b in
             let ab = b - a, t = min(max(dot(p - a, ab) / max(dot(ab, ab), 1e-9), 0), 1)
             return length(p - a - t * ab) < 3.6
         } } }
@@ -117,13 +133,13 @@ struct Statics {
         // a pixel spans a little height, which would otherwise let the bed bury the rails.
         var near = [Double](repeating: -.infinity, count: canvas.w * canvas.h), marks: [(i: Int, d: Double, layer: Double, c: SIMD3<Float>)] = []
         func stamp(_ offsets: [Double], _ layer: Double, _ which: (Int) -> SIMD3<Float>?) {
-            for i in lp.P.indices {
+            for i in P.indices {
                 guard let c = which(i) else { continue }
-                let nrm = SIMD2(-lp.T[i].y, lp.T[i].x)
+                let nrm = SIMD2(-T[i].y, T[i].x)
                 for o in offsets {
-                    let q = lp.P[i] + o * nrm, s = view.project([q.x, q.y, lp.Z[i]]), x = Int(floor(s.x)), y = Int(floor(s.y))
+                    let q = P[i] + o * nrm, s = view.project([q.x, q.y, Z[i]]), x = Int(floor(s.x)), y = Int(floor(s.y))
                     guard x >= 0, x < canvas.w, y >= 0, y < canvas.h else { continue }
-                    let k = y * canvas.w + x, d = view.pixelDepth(x, y, lp.Z[i])
+                    let k = y * canvas.w + x, d = view.pixelDepth(x, y, Z[i])
                     near[k] = max(near[k], d)
                     marks.append((k, d, layer, c))
                 }
@@ -134,7 +150,8 @@ struct Statics {
         stamp(wide, 1) { onRoad[$0] ? planks : nil }
         if let joint { stamp(wide, 1.5) { $0 % 16 == 0 && onRoad[$0] ? joint : nil } }
         stamp(ties, 2) { $0 % 8 == 0 && !onRoad[$0] ? tie : nil }
-        stamp([-1, 1], 3) { _ in rail }
+        let bare = P.indices.map(bare)
+        stamp([-1, 1], 3) { bare[$0] ? nil : rail }
         var pick = [(layer: Double, d: Double, c: SIMD3<Float>)?](repeating: nil, count: near.count)
         for m in marks where m.d >= near[m.i] - 0.6 {
             if let p = pick[m.i], (p.layer, p.d) > (m.layer, m.d) { continue }

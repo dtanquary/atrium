@@ -178,6 +178,24 @@ struct RailVehicle: Sendable {
         self.grid = grid
     }
 
+    init(name: String, grid: Voxels, bogies: Double, articulated: Bool) {
+        (self.name, self.grid, self.bogies, self.articulated) = (name, grid, bogies, articulated)
+    }
+
+    /// With its pantographs down, for a layout with no wire: each pantograph's head folded flat onto the roof where
+    /// its arm stood, the arm and the layers above the roof gone. Itself if it carries none.
+    var lowered: RailVehicle {
+        let panto = RailArt.mat("panto")
+        let zs = (0..<grid.nz).filter { z in (0..<grid.ny).contains { y in (0..<grid.nx).contains { grid[$0, y, z] == panto } } }
+        guard let z0 = zs.first, let z1 = zs.last else { return self }
+        var g = Voxels(grid.nx, grid.ny, z0 + 1)
+        for z in 0...z0 { for y in 0..<grid.ny { for x in 0..<grid.nx {
+            let c = grid[x, y, z]
+            g[x, y, z] = z < z0 ? c : grid[x, y, z1] == panto ? panto : c == panto ? 0 : c
+        } } }
+        return RailVehicle(name: name + ", pantographs down", grid: g, bogies: bogies, articulated: articulated)
+    }
+
     private static func expand(_ rows: [String], _ width: Int) -> [String] {
         switch (width, rows.count) {
         case (5, 1): Array(repeating: rows[0], count: 5)
@@ -229,6 +247,13 @@ public struct Consist: Sendable {
     func shortened(to n: Int) -> Consist {
         var c = Consist(key: key.split(separator: "#")[0] + "#\(n)", name: name, era: era,
                         vehicles: Array(vehicles.prefix(power + n)) + (caboose.map { [$0] } ?? []), cruise: cruise, power: power)
+        c.stops = stops
+        return c
+    }
+
+    /// The same train with its pantographs down, for a layout with no wire.
+    var lowered: Consist {
+        var c = Consist(key: key, name: name, era: era, vehicles: vehicles.map(\.lowered), cruise: cruise, power: power)
         c.stops = stops
         return c
     }

@@ -12,6 +12,10 @@ final class PixelRailway: SKScene {
                                         format: .choice(["One", "Up to two", "Up to three"]))
     nonisolated static let every = Knob(key: "railway.every", label: "New layout every", range: 0...3, standard: 1, section: "Layout",
                                         format: .choice(["Hour", "3 hours", "6 hours", "Day"]))
+    nonisolated static let swaps = Knob(key: "railway.swaps", label: "A train leaves and another comes", range: 0...3, standard: 1, section: "Layout",
+                                        format: .choice(["Never", "Often", "Every few minutes", "Now and then"]))
+    nonisolated static let mix = Knob(key: "railway.mix", label: "Trains come from every era ticked, not only the layout's", range: 0...1, standard: 1,
+                                      section: "Eras", format: .toggle)
     nonisolated static let streamliners = Knob(key: "railway.streamliners", label: "US streamliners: Santa Fe, Union Pacific, Great Northern",
                                                range: 0...1, standard: 1, section: "Eras", format: .toggle)
     nonisolated static let steam = Knob(key: "railway.steam", label: "US steam: Union Pacific Big Boy, Southern Pacific Daylight, Milwaukee Road Hiawatha",
@@ -40,13 +44,15 @@ final class PixelRailway: SKScene {
                                               format: .toggle)
     nonisolated static let previewHour = Knob(key: "railway.previewHour", label: "Time", range: 0...24, standard: 21, section: "Preview", format: .clock,
                                               shownWhen: "railway.previewTime")
-    nonisolated static let knobs = [count, every, streamliners, steam, transition, modern, britishSteam, britishDiesel, germanAlps, snow, previewDay, day, previewSnow, previewTime, previewHour]
+    nonisolated static let knobs = [count, every, swaps, streamliners, steam, transition, modern, britishSteam, britishDiesel, germanAlps, mix, snow, previewDay, day, previewSnow, previewTime, previewHour]
     /// Under the eras in Settings, the only place the railroads are named.
     nonisolated static let names = (section: "Eras", text: "Names say which real train each is drawn after. Atrium isn't affiliated with or endorsed by any railroad.")
 
     /// What a layout is built from: everything that, changed, makes a new one.
     struct Plan: Equatable {
         var seed: Int, w: Int, h: Int, pixel: CGFloat, era: RailEra, count: Int, season: RailSeason
+        /// How many seconds between swaps (nil: none), and the eras arrivals come from.
+        var swaps: ClosedRange<Double>?, eras: [RailEra]
     }
 
     private let plan: Plan
@@ -97,7 +103,8 @@ final class PixelRailway: SKScene {
         let eras = ticked.isEmpty ? RailEra.allCases : ticked
         let era = eras[Int((UInt64(truncatingIfNeeded: seed) &* 0x9E37_79B9_7F4A_7C15) >> 33) % eras.count]
         return Plan(seed: seed, w: Int((size.width / pixel).rounded(.up)), h: Int((size.height / pixel).rounded(.up)), pixel: pixel,
-                    era: era, count: Int(count.value) + 1, season: season(date))
+                    era: era, count: Int(count.value) + 1, season: season(date), swaps: [nil, 40...90, 120...180, 300...420][Int(swaps.value)],
+                    eras: mix.value > 0.5 ? eras : [era])
     }
 
     /// The time of year where you are, or on the previewed day: A Tree for the Year's oak, moved for your latitude,
@@ -117,7 +124,8 @@ final class PixelRailway: SKScene {
     }
 
     nonisolated static func build(_ plan: Plan) -> Railway {
-        Railway(seed: plan.seed, width: plan.w, height: plan.h, era: plan.era, count: plan.count, season: plan.season)
+        Railway(seed: plan.seed, width: plan.w, height: plan.h, era: plan.era, count: plan.count, season: plan.season, swaps: plan.swaps,
+                eras: plan.eras, mix: plan.eras.count > 1)
     }
 
     /// How dark it is, 0 by day to 1 at night, by the Sun where you are, or at the preview hour.

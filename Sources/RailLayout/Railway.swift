@@ -16,6 +16,10 @@ public final class Railway {
     private var frame: [UInt32], depth: [Float]
     /// The contact wire, where the era has one: each pixel it crosses and its nearest depth there.
     private let wire: [(i: Int, d: Float)]
+    /// Each turnout's switch rails as set each way (normal, reverse), pixels and depths, and the rail's colour by day
+    /// and by night.
+    private var switchRails: [Turnout: [[(i: Int, d: Float)]]] = [:]
+    private let rail: (day: SIMD3<Float>, night: SIMD3<Float>)
 
     /// The trains running, by their names in Settings.
     public var names: [String] { layout.trains.map { RailArt.consist($0).name } }
@@ -24,10 +28,16 @@ public final class Railway {
     /// pixels, lays its scenery, and draws what stands still. A layout often can't fit every train, or a station,
     /// so up to nine are grown from seeds drawn from this one, now and then with a short train for an inner loop
     /// in place of the third, all but the first three with plain loops only, and the first with everything is kept,
-    /// else the first with most (a station and its town counting as much as a train).
-    public init(seed: Int, width: Int, height: Int, era: RailEra, count: Int, season: RailSeason) {
+    /// else the first with most (a station and its town counting as much as a train). With `swaps` (how many seconds
+    /// between them), trains leave by a branch off the screen and others arrive, half of them from the layout's era
+    /// and half from any of `eras`, or all from its own unless `mix`; then layouts where crossovers join every loop to
+    /// the branch's are preferred, and a loop still not joined swaps its train in its tunnel.
+    public init(seed: Int, width: Int, height: Int, era: RailEra, count: Int, season: RailSeason,
+                swaps: ClosedRange<Double>? = nil, eras: [RailEra] = RailEra.allCases, mix: Bool = true) {
         (w, h, self.era) = (width, height, era)
         view = RailView(w: width, h: height)
+        let own = RailArt.trains.values.filter { $0.era == era }.map(\.key).sorted()
+        let pool = mix ? RailArt.trains.values.filter { eras.contains($0.era) || $0.era == era }.map(\.key).sorted() : own
         var best: (score: Int, layout: Layout, scenery: Scenery)?
         for attempt in 0..<9 {
             let s = seed &* 16 &+ attempt
@@ -36,34 +46,74 @@ public final class Railway {
             if trains.count == 3, attempt % 3 == 2, !short.isEmpty { trains[2] = short[(s & 0xFFFF) % short.count].key }
             // the first three tries may have L, T and stepped loops; a long freight may need the room a plain one leaves
             let layout = Layout(seed: s, view: view, trains: trains, share: true, notches: attempt < 3)
-            let scenery = Scenery(layout, era: era, season: season)
-            let score = layout.starves ? -1 : layout.trains.count + (scenery.station == nil ? 0 : 1) // a town is worth a train
+            if swaps != nil, !layout.starves {
+                var rng = Dice(s &+ 1)
+                layout.branch = layout.makeBranch(pool: pool, rng: &rng)
+                layout.links = layout.makeLinks(pool: pool)
+            }
+            let scenery = Scenery(layout, era: era, season: season, pool: pool, transfers: swaps != nil)
+            // everything fitted first (a town is worth a train), then a branch, then every loop joined to it
+            let joined = layout.joined.count, all = joined == layout.loops.count
+            let score = layout.starves ? -1 : (layout.trains.count + (scenery.station == nil ? 0 : 1)) * 100 + (all ? 50 : 0) + (layout.branch == nil ? 0 : 10) + joined
             if best == nil || score > best!.score { best = (score, layout, scenery) }
-            if score == trains.count + 1 { break }
+            if score / 100 == trains.count + 1, swaps == nil || all { break }
         }
         (layout, scenery) = (best!.layout, best!.scenery)
-        Self.hideIdleSignals(layout, scenery)
+        let make = { Sim(best!.layout, best!.scenery, every: swaps, pool: pool, own: own, wired: era.look.wire) }
+        Self.hideIdleSignals(layout, scenery, make())
         if era.look.distants { scenery.addDistants(layout) }
         statics = Statics(layout, scenery, era: era, season: season)
-        sim = Sim(layout, scenery)
+        sim = make()
         roadCar = RailArt.roadVehicle(era, seed: layout.seed)
         wire = era.look.wire ? Self.wire(layout, scenery, view) : []
         frame = Array(repeating: 0, count: width * height)
         depth = statics.depth
+        let steel = RailArt.colour(season.snow ? 0x4A4642 : 0xA8A8A8)
+        rail = (steel, RailLight(night: true, winter: season.snow, era: era).ground(steel))
+        switchRails = Self.switchRails(layout, view)
+    }
+
+    /// Each turnout's switch rails both ways, a rail either side of the centreline along the first `switchLength` of
+    /// each route through it: the loop's (or at the apex, leaving) and the branch's or crossover's.
+    static func switchRails(_ lay: Layout, _ view: RailView) -> [Turnout: [[(i: Int, d: Float)]]] {
+        func rails(_ at: (Double) -> (p: SIMD3<Double>, t: SIMD2<Double>), _ u0: Double, _ u1: Double) -> [(i: Int, d: Float)] {
+            stride(from: u0, through: u1, by: step).flatMap { u -> [(i: Int, d: Float)] in
+                let (p, t) = at(u), n = SIMD2(-t.y, t.x)
+                return [-1.0, 1.0].compactMap { e in
+                    let q = SIMD2(p.x, p.y) + n * e, s = view.project([q.x, q.y, p.z]), x = Int(floor(s.x)), y = Int(floor(s.y))
+                    guard x >= 0, x < view.w, y >= 0, y < view.h else { return nil }
+                    return (y * view.w + x, Float(view.pixelDepth(x, y, p.z) + 0.045))
+                }
+            }
+        }
+        guard let br = lay.branch else { return [:] }
+        let lp = lay.loops[br.loop], o = br.out, n = br.inn
+        var out: [Turnout: [[(i: Int, d: Float)]]] = [
+            .D: [rails(lp.at, br.sD, br.sD + switchLength), rails(o.at, 0, switchLength)],
+            .A: [rails(lp.at, br.sA - switchLength, br.sA), rails(n.at, n.L - switchLength, n.L)],
+            .M: [rails(o.at, br.curve - switchLength, br.curve), rails(n.at, br.straight, br.straight + switchLength)],
+        ]
+        for (k, x) in lay.links.enumerated() {
+            let a = lay.loops[x.a], b = lay.loops[x.b], c = x.path
+            out[.link(k)] = [rails(a.at, x.sa, x.sa + switchLength) + rails(b.at, x.sb - switchLength, x.sb),
+                             rails(c.at, 0, switchLength) + rails(c.at, c.L - switchLength, c.L)]
+        }
+        return out
     }
 
     /// The contact wire over every loop, 8.3 over the rail head (just over a raised pantograph), a point every half
     /// unit, left out in the tunnel and under a bridge's deck: each pixel it crosses, at its nearest depth there.
     static func wire(_ lay: Layout, _ sc: Scenery, _ view: RailView) -> [(i: Int, d: Float)] {
         var nearest: [Int: Float] = [:]
-        for (li, lp) in lay.loops.enumerated() {
+        let paths = Scenery.paths(lay).map { P in (P, [Double](repeating: 0, count: P.count)) }
+        for (li, (P, Z)) in (lay.loops.map { ($0.P, $0.Z) } + paths).enumerated() {
             let decks = lay.cross.filter { $0.kind == .bridge && $0.upper != li && $0.s(on: li) != nil }.map { c in
                 let p = lay.loops[c.upper].at(c.s(on: c.upper)!).p
                 return SIMD2(p.x, p.y)
             }
-            for k in stride(from: 0, to: lp.P.count, by: 2) {
-                let p = lp.P[k], z = lp.Z[k] + 8.3
-                if let hill = sc.hill, hill.loop == li, Scenery.hillHeight(hill, p) >= 8 { continue }
+            for k in stride(from: 0, to: P.count, by: 2) {
+                let p = P[k], z = Z[k] + 8.3
+                if sc.hills.contains(where: { $0.loop == li && Scenery.hillHeight($0, p) >= 8 }) { continue }
                 if decks.contains(where: { length($0 - p) <= 9 }) { continue }
                 let q = view.project([p.x, p.y, z]), x = Int(floor(q.x)), y = Int(floor(q.y))
                 guard x >= 0, x < view.w, y >= 0, y < view.h else { continue }
@@ -75,22 +125,24 @@ public final class Railway {
 
     /// A loop two trains share needs many blocks for none of them ever to lock, but most of their signals would
     /// only ever show clear. So the trains are run for ten minutes first, and only the signals one of them stops at
-    /// stay, with the starting signal past the platform; the rest are still in the running, just not drawn.
-    static func hideIdleSignals(_ layout: Layout, _ scenery: Scenery) {
+    /// stay, with the starting signal past the platform and every one on a loop the swaps use; the rest are still
+    /// in the running, just not drawn.
+    static func hideIdleSignals(_ layout: Layout, _ scenery: Scenery, _ sim: Sim) {
         guard !scenery.blocks.isEmpty else { return }
-        var sim = Sim(layout, scenery), used = Set<SIMD2<Int>>()
+        var sim = sim, used = Set<SIMD2<Int>>()
         for _ in 0..<(600 * 60) {
             sim.step()
             for tr in sim.trains where tr.v < 0.05 && tr.dwell <= 0 {
-                guard let B = scenery.blocks[tr.loop] else { continue }
-                let L = layout.loops[tr.loop].L, k = B.indices.min { wrap(B[$0] - tr.s, L) < wrap(B[$1] - tr.s, L) }!
-                if wrap(B[k] - tr.s, L) < 8 { used.insert(SIMD2(tr.loop, k)) }
+                guard let li = tr.loop, let B = scenery.blocks[li] else { continue }
+                let L = layout.loops[li].L, k = B.indices.min { wrap(B[$0] - tr.s, L) < wrap(B[$1] - tr.s, L) }!
+                if wrap(B[k] - tr.s, L) < 8 { used.insert(SIMD2(li, k)) }
             }
         }
         for i in scenery.signals.indices {
             guard case .block(let k) = scenery.signals[i].role else { continue }
             let li = scenery.signals[i].loop
-            if k == 0, scenery.station?.loop == li { used.insert(SIMD2(li, k)) }
+            // on a loop the swaps use, trains of every length come and go, so a train may stop at any of them
+            if k == 0 && scenery.station?.loop == li || scenery.planLength[li] != nil { used.insert(SIMD2(li, k)) }
             scenery.signals[i].shown = used.contains(SIMD2(li, k))
         }
         scenery.things.removeAll { $0.guards.map { !used.contains($0) } ?? false }
@@ -121,6 +173,15 @@ public final class Railway {
         frame.withUnsafeMutableBufferPointer { f in under.withUnsafeBufferPointer { f.baseAddress!.update(from: $0.baseAddress!, count: $0.count) } }
         depth.withUnsafeMutableBufferPointer { d in statics.depth.withUnsafeBufferPointer { d.baseAddress!.update(from: $0.baseAddress!, count: $0.count) } }
         let poses = sim.poses()
+        let steel = pack(rail.day + (rail.night - rail.day) * night)
+        for (turnout, ways) in switchRails { // the points as they're set
+            for (i, d) in ways[sim.reversed.contains(turnout) ? 1 : 0] where d >= depth[i] - 1e-4 { frame[i] = steel; depth[i] = d }
+        }
+        for sw in scenery.switches { // each stand's target: green for the loop (or at the apex, leaving), yellow for the other way
+            var c: SIMD3<Float> = sim.reversed.contains(sw.turnout) ? [240, 190, 40] : [60, 170, 90]
+            if night > 0.5 { c = c * 0.8 + 40 }
+            for dx in [0, 0.9] { for dy in [0, 0.9] { for z in [2.2, 3.1] { point([sw.pos.x + dx, sw.pos.y + dy, z], c, eps: 0.3) } } }
+        }
         if night > 0 { for p in poses where p.lead { headlight(p.c, p.heading, Double(p.vehicle.length), night) } }
         for p in poses { sprite(p.vehicle, p.c, p.heading, (p.slope * 8).rounded() / 8, night) }
         if let (at, heading) = sim.carPose() {
@@ -251,14 +312,16 @@ public final class Railway {
     /// Whether a signal shows stop: its block occupied, a train just past it, or its diamond held by another loop's
     /// train; a distant shows caution while the signal it warns of is at stop.
     private func stops(_ sg: Signal) -> Bool {
+        if case .block(let k) = sg.role { return sim.occupied(sg.loop, k) }
+        if case .branch = sg.role { return !sim.branchClear }
         guard let mine = sim.trains.firstIndex(where: { $0.loop == sg.loop }) else { return false }
         switch sg.role {
-        case .block(let k): return sim.occupied(sg.loop, k)
+        case .block, .branch: return false
         case .lone:
             let tr = sim.trains[mine], L = layout.loops[sg.loop].L
             let past = centred(tr.s - tr.length - sg.s, L), over = centred(tr.s - sg.s, L)
             return 0 <= past && past < 70 || 0 <= over && over < tr.length
-        case .home(let group): return sim.holder[group].map { $0 != mine } ?? false
+        case .home(let group): return sim.holder[group].map { $0 != sim.trains[mine].id } ?? false
         case .distant(let i): return stops(scenery.signals[i])
         }
     }

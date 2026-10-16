@@ -11,9 +11,9 @@ struct Thing {
 }
 
 /// A lineside signal: on a lone train's loop just past the platform (red while that train is just past it), at a
-/// block's entrance on a loop two trains share, or at a diamond's home point.
+/// block's entrance on a loop two trains share, at a diamond's home point, or on the branch short of the junction.
 struct Signal {
-    enum Role { case lone, block(Int), home(group: Int), distant(of: Int) }
+    enum Role { case lone, block(Int), home(group: Int), distant(of: Int), branch }
     let loop: Int, s: Double, role: Role, pos: SIMD2<Double>, heading: Double
     /// Drawn: a block signal no train is ever held at is left out, as it would only ever show clear.
     var shown = true
@@ -88,15 +88,30 @@ final class Scenery {
     /// Each road's half width: the main road 3.5 with a gravel shoulder, the town's streets 2.5 with kerbs.
     var roadHalf: [Double] = []
     var crossings: [RoadCrossing] = [], signals: [Signal] = [], poles: [SIMD2<Double>] = []
-    var pond: (c: SIMD2<Double>, r: Double, seed: Int)?, hill: Hill?, station: Station?
-    /// Where each block starts, on loops two trains share.
+    var pond: (c: SIMD2<Double>, r: Double, seed: Int)?, hills: [Hill] = [], station: Station?
+    /// Where each block starts, on loops two trains share or that trains pass through on their way to or from the
+    /// branch.
     var blocks: [Int: [Double]] = [:]
+    /// The hidden yard in the tunnel of each loop no crossover joins, where its train swaps.
+    var yards: [Int: Yard] = [:]
+    /// On loops the swaps use: the longest train their blocks are planned for, and how many trains may be on it at once.
+    var planLength: [Int: Double] = [:], capacity: [Int: Int] = [:]
+    /// Each turnout's switch stand, whose target shows which way it's set.
+    var switches: [(turnout: Turnout, pos: SIMD2<Double>)] = []
 
-    init(_ lay: Layout, era: RailEra, season: RailSeason) {
+    /// With `transfers`, every loop the branch can't reach gets a tunnel with a hidden yard; `pool` is every train
+    /// that may arrive.
+    init(_ lay: Layout, era: RailEra, season: RailSeason, pool: [String] = [], transfers: Bool = false) {
         let look = era.look
         var rng = Dice(lay.seed * 7919 + look.dice)
         var G = Room(lay.lo - 30, lay.hi + 30)
         for lp in lay.loops { G.mark(stride(from: 0, to: lp.P.count, by: 4).map { lp.P[$0] }, 6.5) }
+        let paths = Self.paths(lay)
+        for p in paths { G.mark(stride(from: 0, to: p.count, by: 4).map { p[$0] }, 6.5) }
+        // where turnouts are on each loop: no station on their straight, nor a road across them
+        var turnouts: [Int: [Double]] = [:]
+        if let br = lay.branch { turnouts[br.loop, default: []] += [br.sD, br.sA] }
+        for x in lay.links { turnouts[x.a, default: []].append(x.sa); turnouts[x.b, default: []].append(x.sb) }
         let trackOcc = G.occ
         let view = lay.view
         func onScreen(_ p: SIMD2<Double>, _ m: Double = 4) -> Bool {
@@ -109,7 +124,7 @@ final class Scenery {
         var best: (score: Double, li: Int, pc: Piece, side: Double, L: Double)?
         for (li, lp) in lay.loops.enumerated() {
             let freight = lp.keys.allSatisfy { RailArt.consist($0).freight }
-            let cs = lay.cross.compactMap { $0.s(on: li) }
+            let cs = lay.cross.compactMap { $0.s(on: li) } + (turnouts[li] ?? [])
             for pc in lp.pieces where pc.kind == .straight && pc.s1 - pc.s0 >= 76 {
                 if cs.contains(where: { pc.s0 - 30 < $0 && $0 < pc.s1 + 30 }) { continue }
                 if (Int(pc.s0 / step)..<min(Int(pc.s1 / step), lp.Z.count)).contains(where: { lp.Z[$0] > 0 }) { continue }
@@ -175,12 +190,17 @@ final class Scenery {
                     for t in stride(from: 2.0, to: 400, by: 2) {
                         let p = cx + n * sgn * t
                         guard p.x > lay.lo.x - 20, p.x < lay.hi.x + 20, p.y > lay.lo.y - 20, p.y < lay.hi.y + 20, onScreen(p, 16) else { break }
-                        // another track ahead: cross only at right angles on a straight, else stop short
-                        if t > 12, let (lq, k) = lay.loops.lazy.compactMap({ lq -> (Loop, Int)? in
-                            let k = Self.nearest(lq, p); return length(lq.P[k] - p) < 9 ? (lq, k) : nil
+                        // another track ahead: cross only at right angles on a straight clear of turnouts, never the
+                        // branch or a crossover, else stop short
+                        if t > 12, paths.contains(where: { pa in stride(from: 0, to: pa.count, by: 4).contains { length(pa[$0] - p) < 9 } }) {
+                            if pts.count > 1 { pts.removeLast() }
+                            break
+                        }
+                        if t > 12, let (lj, lq, k) = lay.loops.enumerated().lazy.compactMap({ lj, lq -> (Int, Loop, Int)? in
+                            let k = Self.nearest(lq, p); return length(lq.P[k] - p) < 9 ? (lj, lq, k) : nil
                         }).first {
-                            let pp = lq.piece(at: lq.S[k])
-                            if !(pp.kind == .straight && abs(dot(pp.d, n)) > 0.99 && min(lq.S[k] - pp.s0, pp.s1 - lq.S[k]) > 14 && lq.Z[k] == 0) {
+                            let pp = lq.piece(at: lq.S[k]), sw = (turnouts[lj] ?? []).contains { abs(centred($0 - lq.S[k], lq.L)) < 25 }
+                            if sw || !(pp.kind == .straight && abs(dot(pp.d, n)) > 0.99 && min(lq.S[k] - pp.s0, pp.s1 - lq.S[k]) > 14 && lq.Z[k] == 0) {
                                 if pts.count > 1 { pts.removeLast() }
                                 break
                             }
@@ -306,26 +326,54 @@ final class Scenery {
             G.mark([pb.p], r + 2)
         }
 
-        // a hill with a tunnel through the middle of a long curve
-        var hills: [(score: Double, li: Int, c: SIMD2<Double>, r: Double)] = []
-        for (li, lp) in lay.loops.enumerated() {
-            for pc in lp.pieces where pc.kind == .arc && abs(pc.turn) >= 80 * .pi / 180 {
-                let sMid = (pc.s0 + pc.s1) / 2, k = min(Int(sMid / step), lp.P.count - 1)
-                if (max(0, k - 200)..<min(k + 200, lp.Z.count)).contains(where: { lp.Z[$0] > 0 }) { continue }
-                if lay.cross.contains(where: { c in c.s(on: li).map { abs($0 - sMid) < 80 } ?? false }) { continue }
-                let pm = lp.P[k], out = normalize(pm - pc.c), rh = rng.uniform(24, 30), hc = pm - out * rh * 0.15
-                let disc = rectPoints(hc, [1, 0], [0, 1], 2 * rh + 6, 2 * rh + 6, 2).filter { length($0 - hc) <= rh + 3 }
-                let others = lay.loops.enumerated().filter { $0.offset != li }.map(\.element)
-                if others.contains(where: { lq in stride(from: 0, to: lq.P.count, by: 4).contains { length(lq.P[$0] - hc) < rh + 10 } }) { continue }
-                // roads, buildings, the pond: not under the hill
-                if disc.contains(where: { p in G.cell(p).map { G.occ[$0.0 * G.nx + $0.1] && !trackOcc[$0.0 * G.nx + $0.1] } ?? false }) { continue }
-                if let st = station, st.loop == li, length(st.mid - hc) < rh + st.L / 2 + 10 { continue }
-                guard Double(disc.filter { onScreen($0, -6) }.count) / Double(disc.count) > 0.95 else { continue }
-                hills.append((rng.uniform(0, 1) + abs(pc.turn), li, hc, rh))
+        // a hill with a tunnel through the middle of a long curve; with transfers, one on each loop the branch can't
+        // reach (its train swaps in the tunnel), smaller if a full one won't fit
+        func hillSpots(_ only: Int? = nil, small: Bool = false) -> [(score: Double, li: Int, c: SIMD2<Double>, r: Double)] {
+            var out: [(score: Double, li: Int, c: SIMD2<Double>, r: Double)] = []
+            for (li, lp) in lay.loops.enumerated() where only == nil || only == li {
+                for pc in lp.pieces where pc.kind == .arc && abs(pc.turn) >= 80 * .pi / 180 {
+                    let sMid = (pc.s0 + pc.s1) / 2, k = min(Int(sMid / step), lp.P.count - 1)
+                    if (max(0, k - 200)..<min(k + 200, lp.Z.count)).contains(where: { lp.Z[$0] > 0 }) { continue }
+                    if lay.cross.contains(where: { c in c.s(on: li).map { abs($0 - sMid) < 80 } ?? false }) { continue }
+                    let pm = lp.P[k], out_ = normalize(pm - pc.c), rh = small ? rng.uniform(16, 20) : rng.uniform(24, 30), hc = pm - out_ * rh * 0.15
+                    let disc = rectPoints(hc, [1, 0], [0, 1], 2 * rh + 6, 2 * rh + 6, 2).filter { length($0 - hc) <= rh + 3 }
+                    let others = lay.loops.enumerated().filter { $0.offset != li }.map { $0.element.P } + paths
+                    if others.contains(where: { o in stride(from: 0, to: o.count, by: 4).contains { length(o[$0] - hc) < rh + 10 } }) { continue }
+                    // roads, buildings, the pond: not under the hill
+                    if disc.contains(where: { p in G.cell(p).map { G.occ[$0.0 * G.nx + $0.1] && !trackOcc[$0.0 * G.nx + $0.1] } ?? false }) { continue }
+                    if let st = station, st.loop == li, length(st.mid - hc) < rh + st.L / 2 + 10 { continue }
+                    guard Double(disc.filter { onScreen($0, -6) }.count) / Double(disc.count) > 0.95 else { continue }
+                    out.append((rng.uniform(0, 1) + abs(pc.turn), li, hc, rh))
+                }
+            }
+            return out
+        }
+        if transfers {
+            for li in lay.loops.indices where !lay.joined.contains(li) {
+                let spots = (hillSpots(li).isEmpty ? hillSpots(li, small: true) : hillSpots(li)).filter { h in hills.allSatisfy { length(h.c - $0.c) > h.r + $0.r + 8 } }
+                if let h = spots.max(by: { $0.score < $1.score }) { hills.append(Hill(loop: h.li, c: h.c, r: h.r, h: rng.uniform(13, 16), seed: lay.seed + 31 * hills.count)) }
             }
         }
-        if let h = hills.max(by: { $0.score < $1.score }) {
-            hill = Hill(loop: h.li, c: h.c, r: h.r, h: rng.uniform(13, 16), seed: lay.seed)
+        if hills.isEmpty, let h = hillSpots().max(by: { $0.score < $1.score }) { // every loop joined: the one hill, for its tunnel
+            hills.append(Hill(loop: h.li, c: h.c, r: h.r, h: rng.uniform(13, 16), seed: lay.seed))
+        }
+        // the hidden yard in each such tunnel: a facing turnout just inside one portal, a trailing one just inside the
+        // other, and two hidden sidings off them long enough for any train
+        if transfers {
+            let longest = (pool + lay.trains).map { RailArt.consist($0).length }.max()! + 40
+            for h in hills where !lay.joined.contains(h.loop) {
+                let lp = lay.loops[h.loop], inside = lp.P.map { Self.hillHeight(h, $0) >= 9 }
+                guard let k0 = inside.indices.first(where: { inside[$0] && !inside[($0 + inside.count - 1) % inside.count] }) else { continue }
+                var n = 0
+                while n < inside.count, inside[(k0 + n) % inside.count] { n += 1 }
+                let s0 = lp.S[k0], s1 = s0 + Double(n) * step
+                guard s1 - s0 >= 24 else { continue }
+                func siding(_ s: Double, ahead: Bool) -> RailPath {
+                    let (p, t) = lp.at(s)
+                    return RailPath(stride(from: 0, to: longest, by: step).map { SIMD2(p.x, p.y) + t * (ahead ? $0 : $0 - longest) }, hidden: true)
+                }
+                yards[h.loop] = Yard(loop: h.loop, sD: wrap(s0 + 6, lp.L), sA: wrap(s1 - 6, lp.L), out: siding(s0 + 6, ahead: true), inn: siding(s1 - 6, ahead: false))
+            }
         }
 
         // home signals at the diamonds, on the right 14 short of them
@@ -339,27 +387,96 @@ final class Scenery {
         }
 
         // blocks on loops two trains share, a signal at each block's entrance: none from a diamond's approach to a
-        // train-length past it, and if it can be helped none where a train held at one would stand on the road, at
-        // the platform or in the tunnel
-        for (li, lp) in lay.loops.enumerated() where lp.keys.count >= 2 {
-            let lens = lp.keys.map { RailArt.consist($0).length + 2 }, longest = lens.max()!
+        // train-length past it, none within 20 short of where the branch or a crossover lands (so no train stands
+        // fouling one), and if it can be helped none where a train held at one would stand on the road, at the platform
+        // or in the tunnel. Every loop the swaps use has blocks even with one train, planned for one more train than
+        // lives on it if trains pass through it on their way to or from the branch, as long as the longest that may
+        // come, so a train passing through can't lock it (`capacity`: how many it may hold at once).
+        func plan(_ li: Int, _ lens: [Double]) -> [Double]? {
+            let lp = lay.loops[li], longest = lens.max()!
             var prefer = crossings.filter { $0.loop == li }.map { ($0.s - 10, $0.s + longest + 10) }
-            if let st = station, st.loop == li {
-                prefer.append((st.sStop - st.L - 6, st.sStop + 6))
-                // a train standing at the platform mustn't hold a diamond either: then trains run through
-                if lay.diamondZones(li, longest: 0).contains(where: { wrap(st.sStop - $0.0, lp.L) <= longest + 45 }) { station!.noStop = true }
+            if let st = station, st.loop == li { prefer.append((st.sStop - st.L - 6, st.sStop + 6)) }
+            for h in hills where h.loop == li {
+                for k in stride(from: 0, to: lp.P.count, by: 32) where Self.hillHeight(h, lp.P[k]) >= 8 { prefer.append((lp.S[k] - 8, lp.S[k] + 8)) }
             }
-            if let hill, hill.loop == li {
-                for k in stride(from: 0, to: lp.P.count, by: 32) where Self.hillHeight(hill, lp.P[k]) >= 8 { prefer.append((lp.S[k] - 8, lp.S[k] + 8)) }
-            }
+            var must = lay.diamondZones(li, longest: longest)
+            if let br = lay.branch, br.loop == li { must.append((br.sA - 20, br.sA + 6)) }
+            must += lay.links.filter { $0.b == li }.map { ($0.sb - 20, $0.sb + 6) }
+            if let y = yards[li] { must.append((y.sA - 20, y.sA + 6)) }
             let b0 = station.flatMap { $0.loop == li ? $0.sStop + 8 : nil } ?? 0
-            func plan(_ b0: Double) -> [Double]? { Layout.planBlocks(lp.L, lens, must: lay.diamondZones(li, longest: longest), prefer: prefer, from: b0) }
-            guard let bounds = plan(b0) ?? plan(0) else { lp.keys.removeLast(); continue } // (the layout checked from 0)
+            return Layout.planBlocks(lp.L, lens, must: must, prefer: prefer, from: b0) ?? Layout.planBlocks(lp.L, lens, must: must, prefer: prefer)
+        }
+        let every = lay.trains + pool
+        func longestFit(_ li: Int) -> Double { every.map(RailArt.consist).filter { $0.minRadius <= lay.loops[li].rmin / 0.98 + 1e-6 }.map(\.length).max()! }
+        func own(_ li: Int) -> Double { lay.loops[li].keys.map { RailArt.consist($0).length }.max()! }
+        for _ in 0..<2 { // with the crossovers; if a loop can't take them, without
+            guard let br = lay.branch else { break }
+            let net = Set([br.loop] + lay.links.flatMap { [$0.a, $0.b] })
+            // the loops trains pass through: the branch's, if others are joined to it, and any between
+            var through = Set<Int>()
+            for li in net where li != br.loop {
+                var prev: [Int: Int] = [li: li], todo = [li]
+                while !todo.isEmpty {
+                    let lj = todo.removeFirst()
+                    for x in lay.links where x.a == lj && prev[x.b] == nil { prev[x.b] = lj; todo.append(x.b) }
+                }
+                guard var lj = prev[br.loop] else { continue }
+                through.insert(br.loop)
+                while lj != li { through.insert(lj); lj = prev[lj]! }
+            }
+            (planLength, capacity) = ([:], [:])
+            var ok = true
+            for li in net.sorted() {
+                let n = lay.loops[li].keys.count, more = through.contains(li) ? [(longestFit(li), n + 1), (own(li), n + 1)] : []
+                guard let (len, cap) = (more + [(longestFit(li), n), (own(li), n)]).first(where: { plan(li, Array(repeating: $0.0, count: max($0.1, 1))) != nil }) else { ok = false; break }
+                (planLength[li], capacity[li]) = (len, cap)
+            }
+            if ok { break }
+            (planLength, capacity) = ([:], [:])
+            if lay.links.isEmpty { lay.branch = nil } else { lay.links = [] }
+        }
+        for li in yards.keys.sorted() where planLength[li] == nil { // a loop swapping in its tunnel: blocks for its own trains
+            let n = lay.loops[li].keys.count
+            if let len = [longestFit(li), own(li)].first(where: { plan(li, Array(repeating: $0, count: n)) != nil }) {
+                (planLength[li], capacity[li]) = (len, n)
+            } else if n == 1 { // alone: blocks only so its replacement can ask for its way out
+                (planLength[li], capacity[li]) = (longestFit(li), 1)
+            } else {
+                yards[li] = nil
+            }
+        }
+        for (li, lp) in lay.loops.enumerated() where lp.keys.count >= 2 || planLength[li] != nil {
+            let lens = planLength[li].map { Array(repeating: $0, count: max(capacity[li]!, 1)) } ?? lp.keys.map { RailArt.consist($0).length + 2 }
+            if let st = station, st.loop == li {
+                // a train standing at the platform mustn't hold a diamond either: then trains run through
+                if lay.diamondZones(li, longest: 0).contains(where: { wrap(st.sStop - $0.0, lp.L) <= lens.max()! + 45 }) { station!.noStop = true }
+            }
+            var bounds = plan(li, lens)
+            if bounds == nil, let y = yards[li], capacity[li] == 1 { bounds = (0..<4).map { wrap(y.sA + 30 + Double($0) * lp.L / 4, lp.L) }.sorted() }
+            guard let bounds else { lp.keys.removeLast(); continue } // (the layout checked from 0)
             blocks[li] = bounds
             for (k, x) in bounds.enumerated() {
                 let (p, t) = lp.at(x), q = SIMD2(p.x, p.y) + SIMD2(-t.y, t.x) * 5.5, hq = atan2(t.y, t.x)
                 signals.append(Signal(loop: li, s: x, role: .block(k), pos: q, heading: hq))
                 things.append(Thing(grid: signalModel, pos: q, heading: hq, kind: .signal, guards: SIMD2(li, k)))
+            }
+        }
+
+        // the switch stands, beside each turnout away from its track, and the branch's home signal
+        if let br = lay.branch {
+            for (turnout, q) in [(Turnout.D, br.D - br.n * 4.5 + br.d * 3), (.A, br.A - br.n * 4.5 - br.d * 3), (.M, br.M + br.n * 3 + br.d * 4.5)] {
+                switches.append((turnout, q)); things.append(Thing(grid: Models.switchStand(), pos: q, kind: .pole))
+            }
+            let (p, t) = br.inn.at(br.home), q = SIMD2(p.x, p.y) + SIMD2(-t.y, t.x) * 5.5, hq = atan2(t.y, t.x)
+            signals.append(Signal(loop: br.loop, s: 0, role: .branch, pos: q, heading: hq))
+            things.append(Thing(grid: signalModel, pos: q, heading: hq, kind: .signal))
+            for (i, x) in lay.links.enumerated() {
+                let P = x.path.P
+                for (end, inward) in [(P[0], P[min(4, P.count - 1)] - P[0]), (P[P.count - 1], P[P.count - 1] - P[max(P.count - 5, 0)])] {
+                    let t = normalize(inward), side = wedge(t, P[P.count / 2] - end) >= 0 ? 1.0 : -1.0, m = SIMD2(-t.y, t.x) * side
+                    let q = end - m * 4.5 + (end == P[0] ? t : -t) * 3
+                    switches.append((.link(i), q)); things.append(Thing(grid: Models.switchStand(), pos: q, kind: .pole))
+                }
             }
         }
 
@@ -371,7 +488,7 @@ final class Scenery {
                 let side = station.map { $0.loop == li && $0.side < 0 } == true ? 1.0 : -1.0
                 for x in stride(from: 10.0, to: lp.L - 10, by: 70) {
                     let (p, t) = lp.at(x), n = SIMD2(-t.y, t.x), q = SIMD2(p.x, p.y) + n * side * 4.5
-                    if let hill, Self.hillHeight(hill, q) > 0.5 { continue }
+                    if hills.contains(where: { Self.hillHeight($0, q) > 0.5 }) { continue }
                     if roads.contains(where: { rd in zip(rd, rd.dropFirst()).contains { Self.segmentDistance(q, $0.0, $0.1) < 5 } }) { continue }
                     if lay.loops.indices.contains(where: { j in j != li && stride(from: 0, to: lay.loops[j].P.count, by: 4).contains { length(lay.loops[j].P[$0] - q) < 4.5 } }) { continue }
                     if lay.cross.contains(where: { c in c.kind == .bridge && c.s(on: li).map { abs(centred(x - $0, lp.L)) < 14 } == true }) { continue }
@@ -395,7 +512,7 @@ final class Scenery {
         if look.hedges { placeHedges(lay, &G, &rng, onScreen, season: season) }
 
         // trees: dart throwing in what's left, thicker in clumps (fewer among hedgerows)
-        if let hill { G.mark([hill.c], hill.r + 1) }
+        for h in hills { G.mark([h.c], h.r + 1) }
         let gap = G.distance()
         var trees: [SIMD2<Double>] = []
         for _ in 0..<6000 where trees.count < (look.hedges ? 100 : 230) {
@@ -411,11 +528,11 @@ final class Scenery {
             let g = conifer ? Models.conifer(seed: k * 31 + lay.seed, season: season) : Models.tree(seed: k * 31 + lay.seed, season: season)
             things.append(Thing(grid: g, pos: p, kind: .tree))
         }
-        if let hill { // a few conifers on the hill
-            var hr = Dice(lay.seed + 5)
+        for (j, hill) in hills.enumerated() { // a few conifers on each hill
+            var hr = Dice(lay.seed + 5 + 97 * j)
             for k in 0..<5 {
                 let a = hr.uniform(0, 2 * .pi), rr = hr.uniform(0.2, 0.6) * hill.r
-                things.append(Thing(grid: Models.conifer(seed: 900 + k + lay.seed, season: season), pos: hill.c + rr * SIMD2(cos(a), sin(a)), kind: .tree, base: nil))
+                things.append(Thing(grid: Models.conifer(seed: 900 + k + lay.seed + 7 * j, season: season), pos: hill.c + rr * SIMD2(cos(a), sin(a)), kind: .tree, base: nil))
             }
         }
     }
@@ -433,7 +550,7 @@ final class Scenery {
             "signalbox": (Models.signalBox, 6, 4, 10, 0),
         ]
         let up = { (p: SIMD2<Double>) in -lay.view.project([p.x, p.y, 0]).y } // how far up the screen
-        if let hill { G.mark([hill.c], hill.r + 2) }
+        for h in hills { G.mark([h.c], h.r + 2) }
         let diamonds = lay.cross.filter { $0.kind == .diamond }.map { x in lay.loops[x.a].P[Int(x.sa / step) % lay.loops[x.a].P.count] }
         for name in names {
             // a tower stands by a diamond, a signal box by the level crossing; neither without one
@@ -483,7 +600,7 @@ final class Scenery {
     /// Hedgerows round fields of 40 to 64, about a third of the field edges left open, broken wherever anything else
     /// stands, a tree in some.
     private func placeHedges(_ lay: Layout, _ G: inout Room, _ rng: inout Dice, _ onScreen: (SIMD2<Double>, Double) -> Bool, season: RailSeason) {
-        if let hill { G.mark([hill.c], hill.r + 2) }
+        for h in hills { G.mark([h.c], h.r + 2) }
         let size = [Double(G.nx), Double(G.ny)]
         var lines: [[Double]] = []
         for axis in 0..<2 {
@@ -535,6 +652,12 @@ final class Scenery {
         var (best, k) = (Double.infinity, 0)
         for i in loop.P.indices { let d = length_squared(loop.P[i] - p); if d < best { (best, k) = (d, i) } }
         return k
+    }
+
+    /// The branch's track that shows and the crossovers', besides the loops.
+    static func paths(_ lay: Layout) -> [[SIMD2<Double>]] {
+        guard let br = lay.branch else { return [] }
+        return [br.out.P.filter { lay.onScreen($0, 8) }, br.inn.P.filter { lay.onScreen($0, 8) }] + lay.links.map(\.path.P)
     }
 
     /// How far `p` is from the segment a–b.

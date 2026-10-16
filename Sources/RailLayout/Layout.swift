@@ -87,6 +87,8 @@ final class Layout {
     let lo: SIMD2<Double>, hi: SIMD2<Double>
     var loops: [Loop] = [], cross: [Crossing] = []
     var trains: [String] { loops.flatMap(\.keys) }
+    /// For swapping trains: the branch they leave and arrive by, and crossovers joining loops to its loop.
+    var branch: Branch?, links: [Link] = []
 
     /// Loops for the trains, the largest radius first. Each is a rectangle on the world's axes (which run on the
     /// screen's diagonals), or half the time, if `notches`, one with notches out of its corners (an L, a T,
@@ -182,17 +184,10 @@ final class Layout {
     /// (from braking distance short of each diamond to a train-length past it) join up all the way round, so it
     /// never lets go and the other loop's train starves. Such a layout is passed over.
     var starves: Bool {
-        let diamonds = cross.filter { $0.kind == .diamond }
-        for (li, lp) in loops.enumerated() where !lp.keys.isEmpty {
-            let trains = lp.keys.map(RailArt.consist), longest = trains.map(\.length).max()!
-            let approach = trains.map { $0.cruise * $0.cruise / 16 + 10 }.max()!
-            for g in Set(diamonds.map(\.group)) {
-                let zones = diamonds.filter { $0.group == g }.compactMap { c in c.s(on: li).map { ($0 - longest - c.half, $0 + c.half + approach) } }
-                guard zones.count > 1 else { continue }
-                if stride(from: 0, to: lp.L, by: 1).allSatisfy({ x in zones.contains { wrap(x - $0.0, lp.L) <= $0.1 - $0.0 } }) { return true }
-            }
+        loops.indices.contains { li in
+            let trains = loops[li].keys.map(RailArt.consist)
+            return !trains.isEmpty && covers(li, length: trains.map(\.length).max()!, cruise: trains.map(\.cruise).max()!)
         }
-        return false
     }
 
     /// Stretches of loop `li` where no block may begin: from a diamond's approach to a train-length past it, so a
