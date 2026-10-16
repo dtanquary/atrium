@@ -7,7 +7,7 @@ Dave asked for it on 2026-10-15: "a top down procedurally generate model train t
 - **Source:** `Sources/Atrium/PixelRailway.swift` (the scene: its canvas, the clock, the weather, Settings and the fade to a new layout) and `Sources/RailLayout/`, its own module built with `-O`: `Art.swift` (materials, every vehicle as slices, the trains, and what each era puts by the line), `Season.swift` (the time of year), `Render.swift` (the view, the voxel ray march, the canvas, the scenery models), `Layout.swift` (the loops and their crossings), `Scenery.swift` (everything round the track), `Static.swift` (the picture under the trains), `Sim.swift` (the trains, signals and the road), `Railway.swift` (the whole, and drawing the moving things each frame).
 - **Data:** none. Every layout is made from the clock; every vehicle and building is a few strings of slices.
 - **Tests:** `Tests/AtriumTests/RailwayTests.swift` writes one layout in each era, by day, at night and in snow, to `$TMPDIR/atrium-railway/` (`RAILWAY_SEED=` picks another).
-- **Pictures of it:** `docs/images/pixel-railway.jpg`.
+- **Pictures of it:** `docs/images/pixel-railway.jpg`, also the Settings page and menu tile (`preview-pixel-railway.jpg`): US transition freight from seed 4 on the laptop's 504 by 328 canvas, three trains, swaps every 40–90 s, in summer, 40 s in, drawn 6 device pixels to the art pixel (2x Retina) and cropped to 3024 by 1964. Picked from seeds 1–6 in every era.
 
 ## Dave's decisions (2026-10-15)
 
