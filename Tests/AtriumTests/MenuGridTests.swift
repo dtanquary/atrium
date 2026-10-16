@@ -102,7 +102,7 @@ func menuShot() throws {
     after(0.7) { mouse(.mouseMoved).map(grid.mouseMoved) }
     after(1.6) {
         hovered = grid.hover.name
-        grown = grid.grown?.player != nil
+        grown = grid.grown != nil
         // A capture of the menu's window alone comes out empty, so this takes its part of the screen, desktop and all.
         if let area = grid.window?.frame.insetBy(dx: -12, dy: -12), let screen = NSScreen.screens.first {
             let capture = Process()

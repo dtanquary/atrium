@@ -93,17 +93,30 @@ import SwiftUI
     @Published var name: String?
 }
 
-/// A wallpaper's name in the bottom corner of its tile, white on a soft shade.
-struct TileName: View {
-    let name: String, size: Double
+/// What lies over a tile's picture: its name in the bottom corner, white on a soft shade, the tick on the one on the
+/// desktop, and the faint light round its edge.
+struct TileFace: View {
+    let name: String, on: Bool
 
     var body: some View {
-        Text(name).font(.system(size: size, weight: .semibold)).foregroundStyle(.white.opacity(0.95))
+        let shape = RoundedRectangle(cornerRadius: MenuGrid.radius, style: .continuous)
+        Text(name).font(.system(size: 8, weight: .semibold)).foregroundStyle(.white.opacity(0.95))
             .lineLimit(1).minimumScaleFactor(0.8)
-            .shadow(color: .black.opacity(0.45), radius: size / 6, y: size / 16)
-            .padding(.horizontal, size * 0.65).padding(.top, size * 1.4).padding(.bottom, size * 0.5)
+            .shadow(color: .black.opacity(0.45), radius: 1.3, y: 0.5)
+            .padding(.leading, 5.2).padding(.trailing, on ? 22 : 5.2) // clear of the tick
+            .padding(.top, 11.2).padding(.bottom, 4)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(LinearGradient(colors: [.black.opacity(0), .black.opacity(0.5)], startPoint: .top, endPoint: .bottom))
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            .clipShape(shape)
+            .overlay(shape.strokeBorder(MenuGrid.edge))
+            .overlay(alignment: .bottomTrailing) {
+                if on {
+                    Image(systemName: "checkmark").font(.system(size: 8, weight: .heavy)).foregroundStyle(.white)
+                        .frame(width: 15, height: 15).background(Color.accentColor, in: .circle)
+                        .padding(1.5).background(.white.opacity(0.92), in: .circle).padding(2.5)
+                }
+            }
             .accessibilityHidden(true) // the tile says it
     }
 }
@@ -141,17 +154,8 @@ struct MenuGridPictures: View {
         return Image(nsImage: MenuGrid.still(MenuGrid.picture(wallpaper, light: scheme == .light)))
             .resizable().scaledToFill()
             .frame(width: frame.width, height: frame.height)
-            // Grown, its name is drawn over the loop instead (`GrownTile`), at a size to read.
-            .overlay(alignment: .bottom) { TileName(name: wallpaper.name, size: 8).padding(.trailing, on ? 17 : 0).opacity(over ? 0 : 1) }
             .clipShape(shape)
-            .overlay(shape.strokeBorder(MenuGrid.edge))
-            .overlay(alignment: .bottomTrailing) {
-                if on {
-                    Image(systemName: "checkmark").font(.system(size: 8, weight: .heavy)).foregroundStyle(.white)
-                        .frame(width: 15, height: 15).background(Color.accentColor, in: .circle)
-                        .padding(1.5).background(.white.opacity(0.92), in: .circle).padding(2.5)
-                }
-            }
+            .overlay(TileFace(name: wallpaper.name, on: on))
             // The ring round the wallpaper on the desktop, 2 points clear of its tile.
             .overlay(RoundedRectangle(cornerRadius: MenuGrid.radius + 4.5, style: .continuous).strokeBorder(Color.accentColor, lineWidth: 2.5)
                 .padding(-4.5).opacity(on ? 1 : 0))
@@ -168,43 +172,42 @@ struct MenuGridPictures: View {
 }
 
 /// What lies over the tile under the pointer once it has grown: its loop, held on the first frame, which is the picture
-/// it grew from, until `play`, unless Reduce Motion is on; and the tile's name and edge at a size to read.
+/// it grew from, until `play`; and its face, drawn small and scaled up as the tile's own is, so the text sits exactly
+/// where it did (set larger, text runs narrower).
 final class GrownTile: NSView {
     /// Plays the loop, from a file on disk and off the main thread, so the menu never waits on it.
-    private(set) var player: AVQueuePlayer?
-    private var looper: AVPlayerLooper?
+    let player = AVQueuePlayer()
+    private let looper: AVPlayerLooper
+    private let video: AVPlayerLayer
 
-    init(_ wallpaper: Wallpaper, at frame: CGRect) {
+    init(loop: URL, name: String, on: Bool, at frame: CGRect) {
+        looper = AVPlayerLooper(player: player, templateItem: AVPlayerItem(url: loop))
+        video = AVPlayerLayer(player: player)
         super.init(frame: frame)
         wantsLayer = true
         layer?.cornerRadius = MenuGrid.radius * MenuGrid.magnify
         layer?.cornerCurve = .continuous
         layer?.masksToBounds = true
         alphaValue = 0
-        if let loop = MenuGrid.loop(wallpaper), !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-            let player = AVQueuePlayer()
-            player.isMuted = true
-            player.preventsDisplaySleepDuringVideoPlayback = false
-            looper = AVPlayerLooper(player: player, templateItem: AVPlayerItem(url: loop))
-            let video = AVPlayerLayer(player: player)
-            video.videoGravity = .resizeAspectFill // as the picture fills its tile
-            let view = NSView(frame: bounds)
-            view.layer = video
-            view.wantsLayer = true
-            addSubview(view)
-            self.player = player
-        }
-        let shape = RoundedRectangle(cornerRadius: MenuGrid.radius * MenuGrid.magnify, style: .continuous)
-        let name = NSHostingView(rootView: TileName(name: wallpaper.name, size: 12)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-            .overlay(shape.strokeBorder(MenuGrid.edge)))
-        name.frame = bounds
-        addSubview(name)
+        player.isMuted = true
+        player.preventsDisplaySleepDuringVideoPlayback = false
+        video.videoGravity = .resizeAspectFill // as the picture fills its tile
+        let view = NSView(frame: bounds)
+        view.layer = video
+        view.wantsLayer = true
+        addSubview(view)
+        let face = NSHostingView(rootView: TileFace(name: name, on: on)
+            .frame(width: MenuGrid.tile.width, height: MenuGrid.tile.height)
+            .scaleEffect(MenuGrid.magnify, anchor: .topLeading)
+            .frame(width: frame.width, height: frame.height, alignment: .topLeading))
+        face.frame = bounds
+        addSubview(face)
     }
 
     required init?(coder: NSCoder) { fatalError("made in code") }
 
-    func play() { player?.play() }
+    /// Whether the loop's first frame is up: until then it would show its face over the tile's own.
+    var ready: Bool { video.isReadyForDisplay }
 }
 
 /// The grid as a menu item's view. A menu sends an item's view the mouse but draws no highlight for it and doesn't
@@ -247,22 +250,30 @@ final class MenuGridView: NSView {
     }
 
     /// Grows the tile at `index` and plays its loop, or with nil lets the one grown go. The tile springs open on its
-    /// picture; once the spring has settled, its loop, held on that same first frame, fades in over it and then plays.
-    /// On a timer, as timers keep going while a menu tracks the mouse.
+    /// picture; once the spring has settled and the loop's first frame, that same picture, is up, the loop fades in over
+    /// it and then plays. None plays with Reduce Motion on, or for a wallpaper without a loop. On timers, as they keep
+    /// going while a menu tracks the mouse.
     private func grow(_ index: Int?) {
         let name = index.map { scenes[$0].name }
         guard name != hover.name else { return }
         hover.name = name
         grown?.removeFromSuperview()
         grown = nil
-        guard let index else { return }
-        let tile = GrownTile(scenes[index], at: MenuGrid.grown(index, count: scenes.count))
+        guard let index, let loop = MenuGrid.loop(scenes[index]), !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
+        let on = scenes[index].name == UserDefaults.standard.string(forKey: "scene") ?? defaultScene.name
+        let tile = GrownTile(loop: loop, name: scenes[index].name, on: on, at: MenuGrid.grown(index, count: scenes.count))
         addSubview(tile)
         grown = tile
-        RunLoop.main.add(Timer(timeInterval: 0.32, repeats: false) { [weak tile] _ in
+        reveal(tile, after: 0.32)
+    }
+
+    private func reveal(_ tile: GrownTile, after seconds: Double) {
+        RunLoop.main.add(Timer(timeInterval: seconds, repeats: false) { [weak self, weak tile] _ in
             MainActor.assumeIsolated {
-                NSAnimationContext.runAnimationGroup { $0.duration = 0.12; tile?.animator().alphaValue = 1 } completionHandler: {
-                    tile?.play()
+                guard let self, let tile, tile === self.grown else { return }
+                guard tile.ready else { return self.reveal(tile, after: 0.05) }
+                NSAnimationContext.runAnimationGroup { $0.duration = 0.12; tile.animator().alphaValue = 1 } completionHandler: {
+                    tile.player.play()
                 }
             }
         }, forMode: .common)
