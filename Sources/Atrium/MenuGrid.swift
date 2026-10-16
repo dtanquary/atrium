@@ -2,9 +2,9 @@ import AppKit
 import ImageIO
 import SwiftUI
 
-/// The status menu's wallpapers as a grid of their stills, six across, in place of a row of text for each: the one under
-/// the pointer grows to twice its size and its name reads out above them, resting on it for a moment shows it on the
-/// desktop until the pointer leaves the grid, a ring marks the one on the desktop, and a click keeps another.
+/// The status menu's wallpapers as a grid of their stills, six across, each named in its corner, in place of a row of
+/// text for each: the one on the desktop is named above them and ringed, the one under the pointer grows and plays
+/// live, and a click shows another.
 /// It is one menu item's view, so the menu's own arrow keys and type-to-select pass it by: Settings → General →
 /// Wallpapers in the menu → Names puts the list of names back for them and for VoiceOver.
 @MainActor enum MenuGrid {
@@ -37,8 +37,8 @@ import SwiftUI
         (0..<count).first { frame($0).insetBy(dx: -gap / 2, dy: -gap / 2).contains(point) }
     }
 
-    /// How much the tile under the pointer grows.
-    static let magnify = 2.0
+    /// How much the tile under the pointer grows, and a tile's corners.
+    static let magnify = 2.1, radius = 9.0
 
     /// Where a tile grows from: its own edge or corner at the sides of the grid, so it stays inside the menu.
     static func anchor(_ index: Int, count: Int) -> UnitPoint {
@@ -46,6 +46,16 @@ import SwiftUI
         return UnitPoint(x: column == 0 ? 0 : column == across - 1 ? 1 : 0.5,
                          y: row == 0 ? 0 : row == (count - 1) / across ? 1 : 0.5)
     }
+
+    /// Where a tile ends up once it has grown.
+    static func grown(_ index: Int, count: Int) -> CGRect {
+        let tile = frame(index), at = anchor(index, count: count), more = magnify - 1
+        return CGRect(x: tile.minX - more * tile.width * at.x, y: tile.minY - more * tile.height * at.y,
+                      width: tile.width * magnify, height: tile.height * magnify)
+    }
+
+    /// The faint light round a tile's edge.
+    static let edge = LinearGradient(colors: [.white.opacity(0.32), .white.opacity(0.12)], startPoint: .top, endPoint: .bottom)
 
     private static var stills: [URL: NSImage] = [:]
 
@@ -69,6 +79,21 @@ import SwiftUI
     @Published var name: String?
 }
 
+/// A wallpaper's name in the bottom corner of its tile, white on a soft shade.
+struct TileName: View {
+    let name: String, size: Double
+
+    var body: some View {
+        Text(name).font(.system(size: size, weight: .semibold)).foregroundStyle(.white.opacity(0.95))
+            .lineLimit(1).minimumScaleFactor(0.8)
+            .shadow(color: .black.opacity(0.45), radius: size / 6, y: size / 16)
+            .padding(.horizontal, size * 0.65).padding(.top, size * 1.4).padding(.bottom, size * 0.5)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(LinearGradient(colors: [.black.opacity(0), .black.opacity(0.5)], startPoint: .top, endPoint: .bottom))
+            .accessibilityHidden(true) // the tile says it
+    }
+}
+
 /// The grid's drawing: the caption, then a tile for each wallpaper where `MenuGrid.frame` puts it.
 struct MenuGridPictures: View {
     @ObservedObject var hover: MenuGridHover
@@ -79,19 +104,16 @@ struct MenuGridPictures: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        let named = hover.name ?? current
         ZStack(alignment: .topLeading) {
             HStack {
-                Text(named).font(.system(size: 13, weight: .semibold))
+                Text(current).font(.system(size: 13, weight: .semibold))
                 Spacer()
-                if named == current {
-                    Label("On Desktop", systemImage: "checkmark").font(.system(size: 11, weight: .medium))
-                        .padding(.horizontal, 8).frame(height: 20).glassEffect(.regular, in: .capsule)
-                }
+                Label("On Desktop", systemImage: "checkmark").font(.system(size: 11, weight: .medium))
+                    .padding(.horizontal, 8).frame(height: 20).glassEffect(.regular, in: .capsule)
             }
             .frame(width: MenuGrid.width - 2 * MenuGrid.inset, height: MenuGrid.caption)
             .offset(x: MenuGrid.inset, y: MenuGrid.top)
-            .accessibilityHidden(true) // each tile says its own name
+            .accessibilityHidden(true) // the tile says it too
             ForEach(Array(scenes.enumerated()), id: \.element.name) { index, wallpaper in
                 tile(wallpaper, at: MenuGrid.frame(index), growing: MenuGrid.anchor(index, count: scenes.count))
             }
@@ -101,13 +123,14 @@ struct MenuGridPictures: View {
 
     private func tile(_ wallpaper: Wallpaper, at frame: CGRect, growing anchor: UnitPoint) -> some View {
         let on = wallpaper.name == current, over = wallpaper.name == hover.name
-        let shape = RoundedRectangle(cornerRadius: 9, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: MenuGrid.radius, style: .continuous)
         return Image(nsImage: MenuGrid.still(wallpaper.preview(light: scheme == .light)))
             .resizable().scaledToFill()
             .frame(width: frame.width, height: frame.height)
+            // Grown, its name is drawn over the live copy instead (`GrownTile`), at a size to read.
+            .overlay(alignment: .bottom) { TileName(name: wallpaper.name, size: 8).padding(.trailing, on ? 17 : 0).opacity(over ? 0 : 1) }
             .clipShape(shape)
-            .overlay(shape.strokeBorder(LinearGradient(colors: [.white.opacity(0.32), .white.opacity(0.12)],
-                                                       startPoint: .top, endPoint: .bottom)))
+            .overlay(shape.strokeBorder(MenuGrid.edge))
             .overlay(alignment: .bottomTrailing) {
                 if on {
                     Image(systemName: "checkmark").font(.system(size: 8, weight: .heavy)).foregroundStyle(.white)
@@ -116,7 +139,7 @@ struct MenuGridPictures: View {
                 }
             }
             // The ring round the wallpaper on the desktop, 2 points clear of its tile.
-            .overlay(RoundedRectangle(cornerRadius: 13.5, style: .continuous).strokeBorder(Color.accentColor, lineWidth: 2.5)
+            .overlay(RoundedRectangle(cornerRadius: MenuGrid.radius + 4.5, style: .continuous).strokeBorder(Color.accentColor, lineWidth: 2.5)
                 .padding(-4.5).opacity(on ? 1 : 0))
             .shadow(color: .black.opacity(over ? 0.55 : 0.28), radius: over ? 16 : 1, y: over ? 12 : 1)
             .scaleEffect(over ? MenuGrid.magnify : 1, anchor: anchor)
@@ -130,22 +153,51 @@ struct MenuGridPictures: View {
     }
 }
 
+/// What lies over the tile under the pointer once it has grown: the wallpaper running live, unless Reduce Motion is on,
+/// and the tile's name and edge at a size to read.
+final class GrownTile: NSView {
+    /// The live copy, once built.
+    private(set) var live: WallpaperView?
+
+    init(_ wallpaper: Wallpaper, at frame: CGRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.cornerRadius = MenuGrid.radius * MenuGrid.magnify
+        layer?.cornerCurve = .continuous
+        layer?.masksToBounds = true
+        alphaValue = 0
+        let shape = RoundedRectangle(cornerRadius: MenuGrid.radius * MenuGrid.magnify, style: .continuous)
+        let name = NSHostingView(rootView: TileName(name: wallpaper.name, size: 12)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            .overlay(shape.strokeBorder(MenuGrid.edge)))
+        name.frame = bounds
+        addSubview(name)
+    }
+
+    required init?(coder: NSCoder) { fatalError("made in code") }
+
+    /// Builds the live copy under the name.
+    // ponytail: built on the main thread as the pointer arrives, so Fish Tank and Weather hitch the menu for about half a
+    // second; build off the main thread if that grates
+    func play(_ wallpaper: Wallpaper) {
+        let view = WallpaperView.live(wallpaper)
+        view.frame = bounds
+        addSubview(view, positioned: .below, relativeTo: subviews.first)
+        live = view
+    }
+}
+
 /// The grid as a menu item's view. A menu sends an item's view the mouse but draws no highlight for it and doesn't
 /// close on a click in it, so this follows the pointer itself, with a tracking area that works while Atrium isn't the
 /// app in front, and picks on mouse-up as the menu's own rows do.
 final class MenuGridView: NSView {
     let hover = MenuGridHover()
     private let pick: (String) -> Void
-    /// Puts a wallpaper on the desktop for a moment, or with nil the desktop's own back.
-    private let preview: @MainActor (String?) -> Void
-    /// Counts down the rest on a tile before it shows on the desktop.
-    private var dwell: Timer?
-    /// How long the pointer rests on a tile before it shows on the desktop: long enough that sweeping across the grid
-    /// builds nothing.
-    static let rest = 0.4
+    /// The tile under the pointer at its full size, playing.
+    private(set) var grown: GrownTile?
 
-    init(pick: @escaping (String) -> Void, preview: @escaping @MainActor (String?) -> Void = { _ in }) {
-        (self.pick, self.preview) = (pick, preview)
+    init(pick: @escaping (String) -> Void) {
+        self.pick = pick
         super.init(frame: NSRect(x: 0, y: 0, width: MenuGrid.width, height: MenuGrid.height(count: scenes.count)))
         let pictures = NSHostingView(rootView: MenuGridPictures(hover: hover) { [weak self] in self?.choose($0) })
         pictures.frame = bounds
@@ -161,45 +213,47 @@ final class MenuGridView: NSView {
     /// Every click is this view's, not the SwiftUI view's inside it.
     override func hitTest(_ point: NSPoint) -> NSView? { super.hitTest(point).map { _ in self } }
 
-    override func viewDidMoveToWindow() { // a menu that closes under the pointer sends no exit
-        hover.name = nil
-        dwell?.invalidate()
-        // After a pick, which closes the menu first and then keeps the wallpaper previewed, so this finds nothing to undo.
-        RunLoop.main.perform(inModes: [.common]) { [preview] in MainActor.assumeIsolated { preview(nil) } }
-    }
+    override func viewDidMoveToWindow() { grow(nil) } // a menu that closes under the pointer sends no exit
     override func mouseEntered(with event: NSEvent) { mouseMoved(with: event) }
-
-    override func mouseExited(with event: NSEvent) {
-        hover.name = nil
-        dwell?.invalidate()
-        preview(nil)
-    }
-
-    override func mouseMoved(with event: NSEvent) {
-        let name = name(at: event)
-        guard name != hover.name else { return }
-        hover.name = name
-        dwell?.invalidate()
-        guard let name else { return } // over the caption the desktop stays as it is
-        // On a timer, as timers run while a menu tracks the mouse.
-        let dwell = Timer(timeInterval: Self.rest, repeats: false) { [weak self] _ in
-            MainActor.assumeIsolated { self?.preview(name) }
-        }
-        RunLoop.main.add(dwell, forMode: .common)
-        self.dwell = dwell
-    }
+    override func mouseExited(with event: NSEvent) { grow(nil) }
+    override func mouseMoved(with event: NSEvent) { grow(index(at: event)) }
 
     override func mouseUp(with event: NSEvent) {
-        if let name = name(at: event) { choose(name) }
+        if let index = index(at: event) { choose(scenes[index].name) }
     }
 
-    private func name(at event: NSEvent) -> String? {
-        MenuGrid.index(at: convert(event.locationInWindow, from: nil), count: scenes.count).map { scenes[$0].name }
+    private func index(at event: NSEvent) -> Int? {
+        MenuGrid.index(at: convert(event.locationInWindow, from: nil), count: scenes.count)
+    }
+
+    /// Grows the tile at `index` and sets its wallpaper playing in it, or with nil lets the one grown go. The tile springs
+    /// open first; its live copy starts building on the run loop's next pass, once the spring is under way, unless the
+    /// pointer has moved on by then, and fades in over the still once the spring has settled. On timers and the run
+    /// loop, as they keep going while a menu tracks the mouse.
+    private func grow(_ index: Int?) {
+        let name = index.map { scenes[$0].name }
+        guard name != hover.name else { return }
+        hover.name = name
+        grown?.removeFromSuperview()
+        grown = nil
+        guard let index else { return }
+        let wallpaper = scenes[index], tile = GrownTile(wallpaper, at: MenuGrid.grown(index, count: scenes.count))
+        addSubview(tile)
+        grown = tile
+        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            RunLoop.main.perform(inModes: [.common]) { [weak self, weak tile] in
+                MainActor.assumeIsolated { if let tile, tile === self?.grown { tile.play(wallpaper) } }
+            }
+        }
+        RunLoop.main.add(Timer(timeInterval: 0.25, repeats: false) { [weak tile] _ in
+            MainActor.assumeIsolated {
+                NSAnimationContext.runAnimationGroup { $0.duration = 0.2; tile?.animator().alphaValue = 1 }
+            }
+        }, forMode: .common)
     }
 
     /// Closes the menu and shows the wallpaper, as picking a row of a menu does.
     private func choose(_ name: String) {
-        dwell?.invalidate()
         enclosingMenuItem?.menu?.cancelTracking()
         pick(name)
     }

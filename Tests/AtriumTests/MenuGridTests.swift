@@ -31,10 +31,7 @@ import Testing
     for count in [28, 31, 40] {
         let bounds = CGRect(x: 0, y: 0, width: MenuGrid.width, height: MenuGrid.height(count: count))
         for index in 0..<count {
-            let frame = MenuGrid.frame(index), anchor = MenuGrid.anchor(index, count: count), grow = MenuGrid.magnify - 1
-            let grown = CGRect(x: frame.minX - grow * frame.width * anchor.x, y: frame.minY - grow * frame.height * anchor.y,
-                               width: frame.width * MenuGrid.magnify, height: frame.height * MenuGrid.magnify)
-            #expect(bounds.contains(grown), "tile \(index) of \(count)")
+            #expect(bounds.contains(MenuGrid.grown(index, count: count)), "tile \(index) of \(count)")
         }
     }
 }
@@ -42,7 +39,8 @@ import Testing
 /// Opens a menu holding the grid on screen for a moment and captures it, since a menu's glass only renders for real.
 ///
 ///     MENU_SHOT=1 swift test --filter menuShot           # → $TMPDIR/atrium-menu.png
-///     MENU_SHOT="Nebula" swift test --filter menuShot    # with the pointer resting on that wallpaper, then a click on it
+///     MENU_SHOT="Nebula" swift test --filter menuShot    # with the pointer over that wallpaper, then a click on it
+/// (the live copy in its grown tile draws nothing here, the test itself holding the main queue SpriteKit draws on)
 ///     SNAPSHOT_APPEARANCE=light MENU_SHOT=1 …            # in Light Mode
 ///
 /// The pointer and the click are events handed to the grid as the menu would hand them, at the middle of the tile
@@ -55,8 +53,8 @@ func menuShot() throws {
     NSApplication.shared.setActivationPolicy(.accessory)
     if let look = env["SNAPSHOT_APPEARANCE"] { NSApp.appearance = NSAppearance(named: look == "light" ? .aqua : .darkAqua) }
     let wanted = scenes.firstIndex { $0.name == env["MENU_SHOT"] }
-    var hovered: String?, picked: String?, previews: [String?] = []
-    let menu = NSMenu(), grid = MenuGridView(pick: { picked = $0 }, preview: { previews.append($0) }), item = NSMenuItem()
+    var hovered: String?, picked: String?, grown = false
+    let menu = NSMenu(), grid = MenuGridView { picked = $0 }, item = NSMenuItem()
     func mouse(_ type: NSEvent.EventType) -> NSEvent? {
         guard let wanted, let window = grid.window else { return nil }
         let tile = MenuGrid.frame(wanted), inWindow = grid.convert(grid.bounds, to: nil)
@@ -77,6 +75,7 @@ func menuShot() throws {
     after(0.7) { mouse(.mouseMoved).map(grid.mouseMoved) }
     after(1.6) {
         hovered = grid.hover.name
+        grown = grid.grown?.live != nil
         // A capture of the menu's window alone comes out empty, so this takes its part of the screen, desktop and all.
         if let area = grid.window?.frame.insetBy(dx: -12, dy: -12), let screen = NSScreen.screens.first {
             let capture = Process()
@@ -95,12 +94,9 @@ func menuShot() throws {
     }
     let screen = try #require(NSScreen.main).visibleFrame
     menu.popUp(positioning: nil, at: NSPoint(x: screen.maxX - MenuGrid.width - 40, y: screen.maxY - 8), in: nil)
-    RunLoop.main.run(until: Date() + 0.2) // for the closed menu's call to put the desktop back
     if let wanted {
         #expect(hovered == scenes[wanted].name && picked == scenes[wanted].name, "over \(hovered ?? "none"), picked \(picked ?? "none")")
-        // Resting on the tile previewed it on the desktop, and the menu closing put the desktop's own back (which after
-        // a pick finds nothing to undo).
-        #expect(previews.contains(scenes[wanted].name) && previews.last == .some(nil), "previews \(previews)")
+        #expect(grown == !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, "the tile under the pointer plays live")
     }
     print("The menu → \(path)")
 }

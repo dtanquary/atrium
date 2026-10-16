@@ -671,19 +671,28 @@ struct LivePreview: NSViewRepresentable {
     @MainActor static weak var shown: WallpaperView?
 
     func makeNSView(context: Context) -> WallpaperView {
-        let view = WallpaperView()
-        view.batteryRate = wallpaper.batteryRate
-        view.batteryScale = wallpaper.batteryScale
+        let view = WallpaperView.live(wallpaper)
         Self.shown = view
-        applyPowerState(to: [view])
-        let scene = wallpaper.make(NSScreen.main?.frame.size ?? CGSize(width: 1512, height: 982))
-        (scene as? HeadStart)?.headStart() // one that starts from nothing opens with something to judge its settings by
-        scene.scaleMode = .aspectFill
-        view.presentScene(scene)
         return view
     }
 
     func updateNSView(_ view: WallpaperView, context: Context) {}
+}
+
+extension WallpaperView {
+    /// A copy of `wallpaper` running live at its frame rate, built at the main display's size and scaled to fill: behind
+    /// a Settings page (`LivePreview`) and in the menu's tile under the pointer.
+    static func live(_ wallpaper: Wallpaper) -> WallpaperView {
+        let view = WallpaperView()
+        view.batteryRate = wallpaper.batteryRate
+        view.batteryScale = wallpaper.batteryScale
+        applyPowerState(to: [view])
+        let scene = wallpaper.make(NSScreen.main?.frame.size ?? CGSize(width: 1512, height: 982))
+        (scene as? HeadStart)?.headStart() // one that starts from nothing opens with something to judge it by
+        scene.scaleMode = .aspectFill
+        view.presentScene(scene)
+        return view
+    }
 }
 
 /// The title of a section that goes by another name while the wallpaper's menu `menu` is at one pick
