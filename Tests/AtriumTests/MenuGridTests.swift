@@ -26,6 +26,19 @@ import Testing
     #expect(abs(MenuGrid.frame(count - 1).maxY + MenuGrid.bottom - MenuGrid.height(count: count)) < 0.001)
 }
 
+/// The tile under the pointer grows from its own side of the grid, so it never leaves the menu.
+@MainActor @Test func magnifiedTilesStayInTheMenu() {
+    for count in [28, 31, 40] {
+        let bounds = CGRect(x: 0, y: 0, width: MenuGrid.width, height: MenuGrid.height(count: count))
+        for index in 0..<count {
+            let frame = MenuGrid.frame(index), anchor = MenuGrid.anchor(index, count: count), grow = MenuGrid.magnify - 1
+            let grown = CGRect(x: frame.minX - grow * frame.width * anchor.x, y: frame.minY - grow * frame.height * anchor.y,
+                               width: frame.width * MenuGrid.magnify, height: frame.height * MenuGrid.magnify)
+            #expect(bounds.contains(grown), "tile \(index) of \(count)")
+        }
+    }
+}
+
 /// Opens a menu holding the grid on screen for a moment and captures it, since a menu's glass only renders for real.
 ///
 ///     MENU_SHOT=1 swift test --filter menuShot           # → $TMPDIR/atrium-menu.png

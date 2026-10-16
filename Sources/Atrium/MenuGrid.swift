@@ -2,8 +2,9 @@ import AppKit
 import ImageIO
 import SwiftUI
 
-/// The status menu's wallpapers as a grid of their stills, five across, in place of a row of text for each: the name
-/// of the one under the pointer reads out above them, a ring marks the one on the desktop, and a click shows another.
+/// The status menu's wallpapers as a grid of their stills, six across, in place of a row of text for each: the one under
+/// the pointer grows to twice its size and its name reads out above them, a ring marks the one on the desktop, and a
+/// click shows another.
 /// It is one menu item's view, so the menu's own arrow keys and type-to-select pass it by: Settings → General →
 /// Wallpapers in the menu → Names puts the list of names back for them and for VoiceOver.
 @MainActor enum MenuGrid {
@@ -13,10 +14,10 @@ import SwiftUI
 
     // Where everything sits, in points from the top left. The pictures are drawn by it and the tile under the pointer
     // is found by it, so the two can't disagree.
-    static let width = 400.0, inset = 14.0, gap = 8.0, top = 6.0, bottom = 10.0, across = 5
+    static let width = 600.0, inset = 14.0, gap = 8.0, top = 6.0, bottom = 10.0, across = 6
     /// The line above the tiles that names a wallpaper, and the space under it.
     static let caption = 26.0, captionGap = 6.0
-    /// A tile: a fifth of the width between the insets, in the shape of a still (1200 × 779).
+    /// A tile: a sixth of the width between the insets, in the shape of a still (1200 × 779).
     static let tile = CGSize(width: (width - 2 * inset - Double(across - 1) * gap) / Double(across),
                              height: (width - 2 * inset - Double(across - 1) * gap) / Double(across) * 779 / 1200)
 
@@ -36,14 +37,25 @@ import SwiftUI
         (0..<count).first { frame($0).insetBy(dx: -gap / 2, dy: -gap / 2).contains(point) }
     }
 
+    /// How much the tile under the pointer grows.
+    static let magnify = 2.0
+
+    /// Where a tile grows from: its own edge or corner at the sides of the grid, so it stays inside the menu.
+    static func anchor(_ index: Int, count: Int) -> UnitPoint {
+        let column = index % across, row = index / across
+        return UnitPoint(x: column == 0 ? 0 : column == across - 1 ? 1 : 0.5,
+                         y: row == 0 ? 0 : row == (count - 1) / across ? 1 : 0.5)
+    }
+
     private static var stills: [URL: NSImage] = [:]
 
-    /// A still shrunk to a tile, kept for as long as the app runs, so each 1200-pixel JPEG is decoded once.
+    /// A still shrunk to a tile, sharp at twice the size on a Retina display, kept for as long as the app runs, so each
+    /// 1200-pixel JPEG is decoded once.
     // ponytail: the first opening of the menu decodes them all; warm them at launch if that ever shows as a pause
     static func still(_ url: URL) -> NSImage {
         if let kept = stills[url] { return kept }
         let options = [kCGImageSourceCreateThumbnailFromImageAlways: true,
-                       kCGImageSourceThumbnailMaxPixelSize: Int(tile.width * 3)] as CFDictionary
+                       kCGImageSourceThumbnailMaxPixelSize: Int(tile.width * 2 * magnify)] as CFDictionary
         let image = CGImageSourceCreateWithURL(url as CFURL, nil)
             .flatMap { CGImageSourceCreateThumbnailAtIndex($0, 0, options) }
             .map { NSImage(cgImage: $0, size: tile) } ?? NSImage()
@@ -81,13 +93,13 @@ struct MenuGridPictures: View {
             .offset(x: MenuGrid.inset, y: MenuGrid.top)
             .accessibilityHidden(true) // each tile says its own name
             ForEach(Array(scenes.enumerated()), id: \.element.name) { index, wallpaper in
-                tile(wallpaper, at: MenuGrid.frame(index))
+                tile(wallpaper, at: MenuGrid.frame(index), growing: MenuGrid.anchor(index, count: scenes.count))
             }
         }
         .frame(width: MenuGrid.width, height: MenuGrid.height(count: scenes.count), alignment: .topLeading)
     }
 
-    private func tile(_ wallpaper: Wallpaper, at frame: CGRect) -> some View {
+    private func tile(_ wallpaper: Wallpaper, at frame: CGRect, growing anchor: UnitPoint) -> some View {
         let on = wallpaper.name == current, over = wallpaper.name == hover.name
         let shape = RoundedRectangle(cornerRadius: 9, style: .continuous)
         return Image(nsImage: MenuGrid.still(wallpaper.preview(light: scheme == .light)))
@@ -106,8 +118,8 @@ struct MenuGridPictures: View {
             // The ring round the wallpaper on the desktop, 2 points clear of its tile.
             .overlay(RoundedRectangle(cornerRadius: 13.5, style: .continuous).strokeBorder(Color.accentColor, lineWidth: 2.5)
                 .padding(-4.5).opacity(on ? 1 : 0))
-            .shadow(color: .black.opacity(over ? 0.5 : 0.28), radius: over ? 11 : 1, y: over ? 10 : 1)
-            .scaleEffect(over ? 1.08 : 1)
+            .shadow(color: .black.opacity(over ? 0.55 : 0.28), radius: over ? 16 : 1, y: over ? 12 : 1)
+            .scaleEffect(over ? MenuGrid.magnify : 1, anchor: anchor)
             .animation(reduceMotion ? nil : .spring(response: 0.22, dampingFraction: 0.62), value: over)
             .offset(x: frame.minX, y: frame.minY)
             .zIndex(over ? 1 : 0)
