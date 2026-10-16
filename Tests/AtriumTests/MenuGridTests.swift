@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import Testing
 @testable import Atrium
 
@@ -6,8 +7,35 @@ import Testing
 @MainActor @Test func everyWallpaperHasAStillForTheMenu() {
     for wallpaper in allScenes {
         for light in [false, true] {
-            #expect(MenuGrid.still(wallpaper.preview(light: light)).size.width > 0, "\(wallpaper.name)")
+            #expect(MenuGrid.still(MenuGrid.picture(wallpaper, light: light)).size.width > 0, "\(wallpaper.name)")
         }
+    }
+}
+
+/// Every wallpaper shown has a loop for its tile, and the tile's picture is that loop's first frame as the app decodes
+/// it, so nothing jumps when the tile under the pointer starts to play. Run `site/media.sh tiles` if this fails.
+@MainActor @Test func everyTilePictureIsItsLoopsFirstFrame() async throws {
+    let size = (width: 120, height: 78)
+    func pixels(_ image: CGImage) -> [UInt8] {
+        var bytes = [UInt8](repeating: 0, count: size.width * size.height * 4)
+        let context = CGContext(data: &bytes, width: size.width, height: size.height, bitsPerComponent: 8, bytesPerRow: size.width * 4,
+                                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
+        context?.interpolationQuality = .high
+        context?.draw(image, in: CGRect(x: 0, y: 0, width: size.width, height: size.height))
+        return bytes
+    }
+    for wallpaper in scenes {
+        let loop = try #require(MenuGrid.loop(wallpaper), "\(wallpaper.name) has no menu-*.mp4")
+        let generator = AVAssetImageGenerator(asset: AVURLAsset(url: loop))
+        (generator.requestedTimeToleranceBefore, generator.requestedTimeToleranceAfter) = (.zero, .zero)
+        let first = try await generator.image(at: .zero).image
+        let source = try #require(CGImageSourceCreateWithURL(MenuGrid.picture(wallpaper, light: false) as CFURL, nil))
+        let picture = try #require(CGImageSourceCreateImageAtIndex(source, 0, nil))
+        let difference = zip(pixels(first), pixels(picture)).enumerated().filter { $0.offset % 4 != 3 }
+            .map { Double(Int($0.element.0) - Int($0.element.1)) }
+        let shift = difference.reduce(0, +) / Double(difference.count), mean = difference.map(abs).reduce(0, +) / Double(difference.count)
+        // JPEG's noise on fine detail comes to 1 to 3.5 levels in all, but it shifts no colour: under half a level.
+        #expect(abs(shift) < 1 && mean < 5, "\(wallpaper.name): the picture is \(mean) levels off its loop's first frame, shifted \(shift)")
     }
 }
 
@@ -40,7 +68,6 @@ import Testing
 ///
 ///     MENU_SHOT=1 swift test --filter menuShot           # → $TMPDIR/atrium-menu.png
 ///     MENU_SHOT="Nebula" swift test --filter menuShot    # with the pointer over that wallpaper, then a click on it
-/// (the live copy in its grown tile draws nothing here, the test itself holding the main queue SpriteKit draws on)
 ///     SNAPSHOT_APPEARANCE=light MENU_SHOT=1 …            # in Light Mode
 ///
 /// The pointer and the click are events handed to the grid as the menu would hand them, at the middle of the tile
@@ -75,7 +102,7 @@ func menuShot() throws {
     after(0.7) { mouse(.mouseMoved).map(grid.mouseMoved) }
     after(1.6) {
         hovered = grid.hover.name
-        grown = grid.grown?.live != nil
+        grown = grid.grown?.player != nil
         // A capture of the menu's window alone comes out empty, so this takes its part of the screen, desktop and all.
         if let area = grid.window?.frame.insetBy(dx: -12, dy: -12), let screen = NSScreen.screens.first {
             let capture = Process()
@@ -96,7 +123,7 @@ func menuShot() throws {
     menu.popUp(positioning: nil, at: NSPoint(x: screen.maxX - MenuGrid.width - 40, y: screen.maxY - 8), in: nil)
     if let wanted {
         #expect(hovered == scenes[wanted].name && picked == scenes[wanted].name, "over \(hovered ?? "none"), picked \(picked ?? "none")")
-        #expect(grown == !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, "the tile under the pointer plays live")
+        #expect(grown == !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, "the tile under the pointer has its loop")
     }
     print("The menu → \(path)")
 }

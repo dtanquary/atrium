@@ -118,6 +118,24 @@ encode() {
     ffmpeg -nostdin -loglevel error -y -i "$1" -vf "$2" -frames:v 1 -q:v 4 "$3.jpg"
 }
 
+# The app's menu tile for a wallpaper: its preview loop at the size of the tile under the pointer, and that file's own
+# first frame as the tile's picture, so the picture is exactly where the loop starts. The matrix is tagged so the app's
+# decoder reads the colours as ffmpeg wrote them. Args: slug.
+tile() {
+    to=Sources/Atrium/Resources/menu-$1
+    ffmpeg -nostdin -loglevel error -y -i "$OUT/preview-$1.hevc.mp4" -vf "scale=400:-2:flags=lanczos" -an -pix_fmt yuv420p \
+        -colorspace smpte170m -color_primaries bt709 -color_trc iec61966-2-1 -color_range tv -g 60 -movflags +faststart \
+        -c:v libx265 -crf 26 -preset slow -tag:v hvc1 -x265-params log-level=error "$to.mp4"
+    ffmpeg -nostdin -loglevel error -y -i "$to.mp4" -frames:v 1 -q:v 2 "$to.jpg"
+}
+
+# `site/media.sh tiles` remakes every menu tile from the preview loops already made, and nothing else.
+if [ "$1" = tiles ]; then
+    echo "$PREVIEWS" | while IFS='|' read -r slug rest; do tile "$slug"; done
+    ls -l Sources/Atrium/Resources/menu-* | awk '{s += $5} END {print "   " NR " files, " s / 1e6 " MB"}'
+    exit
+fi
+
 echo "$WORKS" | while IFS='|' read -r slug scene focal seconds extra; do
     [ $# -gt 0 ] && ! echo " $* " | grep -q " $slug " && continue
     dir="$TMP/$slug"
@@ -141,5 +159,6 @@ echo "$PREVIEWS" | while IFS='|' read -r slug scene seconds extra; do
     [ $# -gt 0 ] && ! echo " $* " | grep -qE " (previews|preview-$slug) " && continue
     render "$TMP/preview-$slug" "$scene" "$seconds" "$extra"
     encode "$TMP/preview-$slug/master.mp4" "scale=1280:-2:flags=lanczos" "$OUT/preview-$slug"
+    tile "$slug"
     ls -lh "$OUT/preview-$slug".* | awk '{print "   " $5 "\t" $9}'
 done

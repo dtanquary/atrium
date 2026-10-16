@@ -1,10 +1,11 @@
 import AppKit
+import AVFoundation
 import ImageIO
 import SwiftUI
 
 /// The status menu's wallpapers as a grid of their stills, six across, each named in its corner, in place of a row of
-/// text for each: the one on the desktop is named above them and ringed, the one under the pointer grows and plays
-/// live, and a click shows another.
+/// text for each: the one on the desktop is named above them and ringed, the one under the pointer grows and plays its
+/// loop from the picture it shows, and a click shows another.
 /// It is one menu item's view, so the menu's own arrow keys and type-to-select pass it by: Settings → General →
 /// Wallpapers in the menu → Names puts the list of names back for them and for VoiceOver.
 @MainActor enum MenuGrid {
@@ -56,6 +57,19 @@ import SwiftUI
 
     /// The faint light round a tile's edge.
     static let edge = LinearGradient(colors: [.white.opacity(0.32), .white.opacity(0.12)], startPoint: .top, endPoint: .bottom)
+
+    /// A wallpaper's loop for its tile (`menu-<name>.mp4`, made by `site/media.sh tiles` from the site's preview loop), or
+    /// nil for one without, an unfinished wallpaper.
+    static func loop(_ wallpaper: Wallpaper) -> URL? {
+        let url = resource("menu-" + wallpaper.name.lowercased().replacingOccurrences(of: " ", with: "-") + ".mp4")
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
+    /// A tile's picture: its loop's first frame (`menu-<name>.jpg`), so nothing jumps when the loop starts, in Light Mode
+    /// too, or the Settings still for a wallpaper without a loop.
+    static func picture(_ wallpaper: Wallpaper, light: Bool) -> URL {
+        loop(wallpaper)?.deletingPathExtension().appendingPathExtension("jpg") ?? wallpaper.preview(light: light)
+    }
 
     private static var stills: [URL: NSImage] = [:]
 
@@ -124,10 +138,10 @@ struct MenuGridPictures: View {
     private func tile(_ wallpaper: Wallpaper, at frame: CGRect, growing anchor: UnitPoint) -> some View {
         let on = wallpaper.name == current, over = wallpaper.name == hover.name
         let shape = RoundedRectangle(cornerRadius: MenuGrid.radius, style: .continuous)
-        return Image(nsImage: MenuGrid.still(wallpaper.preview(light: scheme == .light)))
+        return Image(nsImage: MenuGrid.still(MenuGrid.picture(wallpaper, light: scheme == .light)))
             .resizable().scaledToFill()
             .frame(width: frame.width, height: frame.height)
-            // Grown, its name is drawn over the live copy instead (`GrownTile`), at a size to read.
+            // Grown, its name is drawn over the loop instead (`GrownTile`), at a size to read.
             .overlay(alignment: .bottom) { TileName(name: wallpaper.name, size: 8).padding(.trailing, on ? 17 : 0).opacity(over ? 0 : 1) }
             .clipShape(shape)
             .overlay(shape.strokeBorder(MenuGrid.edge))
@@ -153,11 +167,12 @@ struct MenuGridPictures: View {
     }
 }
 
-/// What lies over the tile under the pointer once it has grown: the wallpaper running live, unless Reduce Motion is on,
-/// and the tile's name and edge at a size to read.
+/// What lies over the tile under the pointer once it has grown: its loop, held on the first frame, which is the picture
+/// it grew from, until `play`, unless Reduce Motion is on; and the tile's name and edge at a size to read.
 final class GrownTile: NSView {
-    /// The live copy, once built.
-    private(set) var live: WallpaperView?
+    /// Plays the loop, from a file on disk and off the main thread, so the menu never waits on it.
+    private(set) var player: AVQueuePlayer?
+    private var looper: AVPlayerLooper?
 
     init(_ wallpaper: Wallpaper, at frame: CGRect) {
         super.init(frame: frame)
@@ -166,6 +181,19 @@ final class GrownTile: NSView {
         layer?.cornerCurve = .continuous
         layer?.masksToBounds = true
         alphaValue = 0
+        if let loop = MenuGrid.loop(wallpaper), !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            let player = AVQueuePlayer()
+            player.isMuted = true
+            player.preventsDisplaySleepDuringVideoPlayback = false
+            looper = AVPlayerLooper(player: player, templateItem: AVPlayerItem(url: loop))
+            let video = AVPlayerLayer(player: player)
+            video.videoGravity = .resizeAspectFill // as the picture fills its tile
+            let view = NSView(frame: bounds)
+            view.layer = video
+            view.wantsLayer = true
+            addSubview(view)
+            self.player = player
+        }
         let shape = RoundedRectangle(cornerRadius: MenuGrid.radius * MenuGrid.magnify, style: .continuous)
         let name = NSHostingView(rootView: TileName(name: wallpaper.name, size: 12)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
@@ -176,15 +204,7 @@ final class GrownTile: NSView {
 
     required init?(coder: NSCoder) { fatalError("made in code") }
 
-    /// Builds the live copy under the name.
-    // ponytail: built on the main thread as the pointer arrives, so Fish Tank and Weather hitch the menu for about half a
-    // second; build off the main thread if that grates
-    func play(_ wallpaper: Wallpaper) {
-        let view = WallpaperView.live(wallpaper)
-        view.frame = bounds
-        addSubview(view, positioned: .below, relativeTo: subviews.first)
-        live = view
-    }
+    func play() { player?.play() }
 }
 
 /// The grid as a menu item's view. A menu sends an item's view the mouse but draws no highlight for it and doesn't
@@ -226,10 +246,9 @@ final class MenuGridView: NSView {
         MenuGrid.index(at: convert(event.locationInWindow, from: nil), count: scenes.count)
     }
 
-    /// Grows the tile at `index` and sets its wallpaper playing in it, or with nil lets the one grown go. The tile springs
-    /// open first; its live copy starts building on the run loop's next pass, once the spring is under way, unless the
-    /// pointer has moved on by then, and fades in over the still once the spring has settled. On timers and the run
-    /// loop, as they keep going while a menu tracks the mouse.
+    /// Grows the tile at `index` and plays its loop, or with nil lets the one grown go. The tile springs open on its
+    /// picture; once the spring has settled, its loop, held on that same first frame, fades in over it and then plays.
+    /// On a timer, as timers keep going while a menu tracks the mouse.
     private func grow(_ index: Int?) {
         let name = index.map { scenes[$0].name }
         guard name != hover.name else { return }
@@ -237,17 +256,14 @@ final class MenuGridView: NSView {
         grown?.removeFromSuperview()
         grown = nil
         guard let index else { return }
-        let wallpaper = scenes[index], tile = GrownTile(wallpaper, at: MenuGrid.grown(index, count: scenes.count))
+        let tile = GrownTile(scenes[index], at: MenuGrid.grown(index, count: scenes.count))
         addSubview(tile)
         grown = tile
-        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
-            RunLoop.main.perform(inModes: [.common]) { [weak self, weak tile] in
-                MainActor.assumeIsolated { if let tile, tile === self?.grown { tile.play(wallpaper) } }
-            }
-        }
-        RunLoop.main.add(Timer(timeInterval: 0.25, repeats: false) { [weak tile] _ in
+        RunLoop.main.add(Timer(timeInterval: 0.32, repeats: false) { [weak tile] _ in
             MainActor.assumeIsolated {
-                NSAnimationContext.runAnimationGroup { $0.duration = 0.2; tile?.animator().alphaValue = 1 }
+                NSAnimationContext.runAnimationGroup { $0.duration = 0.12; tile?.animator().alphaValue = 1 } completionHandler: {
+                    tile?.play()
+                }
             }
         }, forMode: .common)
     }
