@@ -45,6 +45,11 @@ final class PixelRailway: SKScene {
     nonisolated static let previewHour = Knob(key: "railway.previewHour", label: "Time", range: 0...24, standard: 21, section: "Preview", format: .clock,
                                               shownWhen: "railway.previewTime")
     nonisolated static let knobs = [count, every, swaps, streamliners, steam, transition, modern, britishSteam, britishDiesel, germanAlps, mix, snow, previewDay, day, previewSnow, previewTime, previewHour]
+    /// Settings' New Layout Now: every copy moves on to another layout at once, by a count added to the period's seed,
+    /// and keeps it until the period's up.
+    static let newLayout: (section: String, title: String, run: @MainActor () -> Void) = ("Layout", "New Layout Now", {
+        UserDefaults.standard.set(UserDefaults.standard.integer(forKey: "railway.reroll") + 1, forKey: "railway.reroll")
+    })
     /// Under the eras in Settings, the only place the railroads are named.
     nonisolated static let names = (section: "Eras", text: "Names say which real train each is drawn after. Atrium isn't affiliated with or endorsed by any railroad.")
 
@@ -98,7 +103,8 @@ final class PixelRailway: SKScene {
     static func plan(_ size: CGSize, at date: Date = Date()) -> Plan {
         let pixel = max(2, (size.height / 240).rounded()) - 1 // points per art pixel
         let hours = [1.0, 3, 6, 24][Int(every.value)], pinned = ProcessInfo.processInfo.environment
-        let seed = pinned["RAILWAY_SEED"].flatMap(Int.init) ?? Int(date.timeIntervalSince1970 / (hours * 3600))
+        let seed = pinned["RAILWAY_SEED"].flatMap(Int.init)
+            ?? Int(date.timeIntervalSince1970 / (hours * 3600)) &+ UserDefaults.standard.integer(forKey: "railway.reroll") &* 7919
         let ticked = [(streamliners, RailEra.streamliners), (steam, .steam), (transition, .transition), (modern, .modern), (britishSteam, .britishSteam),
                       (britishDiesel, .britishDiesel), (germanAlps, .germanAlps)].filter { $0.0.value > 0.5 }.map(\.1)
         let eras = ticked.isEmpty ? RailEra.allCases : ticked

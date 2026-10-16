@@ -557,7 +557,7 @@ struct WallpaperPage: View {
         wallpaper.knobs.map(\.section).reduce(into: []) { if !$0.contains($1) && $1 != "Colors" { $0.append($1) } }
     }
 
-    /// A section's rows: its knobs, and the wallpaper's status line under the knob it belongs to.
+    /// A section's rows: its knobs, and the wallpaper's status line under the knob it belongs to, then its button.
     @ViewBuilder private func rows(_ section: String) -> some View {
         ForEach(wallpaper.knobs.filter { $0.section == section }, id: \.key) { knob in
             KnobRow(knob: knob)
@@ -566,6 +566,7 @@ struct WallpaperPage: View {
                 LookPalette(choice: $0, menu: knob, timing: wallpaper.knobs.filter { $0.section == "Colors" })
             }
         }
+        if let button = wallpaper.button, button.section == section { Button(button.title, action: button.run) }
     }
 
     var body: some View {

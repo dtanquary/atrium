@@ -25,6 +25,8 @@ struct Wallpaper {
     var retitled: (section: String, title: String, when: String, at: Double)?
     /// A line of small print at the foot of one section of its settings (Pixel Railway's word on the railroads' names).
     var footnote: (section: String, text: String)?
+    /// A button at the foot of one section of its settings (Pixel Railway's New Layout Now).
+    var button: (section: String, title: String, run: @MainActor () -> Void)?
     /// Its scene changes between Light and Dark Mode by itself, while it runs: it watches the system's appearance
     /// and eases to its other look (Meander, whose river then carries on). The app builds no new scene for it
     /// when the appearance changes, as it does for every other wallpaper.
@@ -129,7 +131,7 @@ struct Refresh {
     Wallpaper(name: "Pixel Spaceport", icon: "location.north.fill", tint: .orange, blurb: "A pixel-art launch site that never stops.",
               make: pixelSpaceport, knobs: PixelCity.spaceportKnobs, status: (key: "spaceport.status", below: "spaceport.live"), refresh: .launches),
     Wallpaper(name: "Pixel Railway", icon: "tram.fill", tint: .green, blurb: "A model railway in isometric pixel art, its trains running through the seasons.",
-              make: pixelRailway, knobs: PixelRailway.knobs, footnote: PixelRailway.names, batteryRate: 20),
+              make: pixelRailway, knobs: PixelRailway.knobs, footnote: PixelRailway.names, button: PixelRailway.newLayout, batteryRate: 20),
     Wallpaper(name: "Pixel Window Seat", icon: "airplane", tint: .blue, blurb: "A pixel-art window seat on a plane, a train or the space station.",
               make: pixelWindowSeat, knobs: PixelWindowSeat.knobs,
               status: (key: "weather.status", below: TrainWeather.follow.key), // the train's weather
