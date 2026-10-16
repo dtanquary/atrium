@@ -183,7 +183,10 @@ public final class Railway {
             guard !f.hidden, !r.hidden else { continue }
             let stack = stacks[v.name] ?? Self.stack(v.grid)
             stacks[v.name] = stack
-            let t = normalize(SIMD2(f.p.x - r.p.x, f.p.y - r.p.y)), c = (f.p + r.p) / 2
+            // coming in from off the screen, both bogies can stand at the path's first point: no heading yet
+            let along = SIMD2(f.p.x - r.p.x, f.p.y - r.p.y)
+            guard length(along) > 0.5 else { continue }
+            let t = along / length(along), c = (f.p + r.p) / 2
             let q = SIMD2(c.x, c.y) + t * stack.u, z = c.z + (f.p.z - r.p.z) / b * stack.u + stack.z
             if scenery.hills.contains(where: { Scenery.hillHeight($0, q) >= z }) { continue }
             puffs.append(([q.x, q.y, z], sim.t))

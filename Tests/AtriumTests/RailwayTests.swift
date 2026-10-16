@@ -180,3 +180,20 @@ private func save(_ railway: Railway, night: Float, _ name: String, scale: Int =
     }
     #expect(problems.isEmpty, "\(problems.prefix(8))")
 }
+
+/// Steam engines leaving and arriving, run and drawn as the wallpaper does for twenty minutes: every puff of smoke
+/// is somewhere (an engine coming in from off the screen has both bogies at the path's first point, which once gave
+/// a puff no heading and crashed the app).
+@Test func railwaySmokesThroughSwaps() {
+    for era in [RailEra.steam, .britishSteam] {
+        for seed in 1...3 {
+            let railway = Railway(seed: seed, width: 504, height: 328, era: era, count: 3, season: .summer, swaps: 40...90)
+            var px = [UInt32](repeating: 0, count: railway.w * railway.h)
+            for _ in 0..<1200 {
+                railway.advance(0.25); railway.advance(0.25); railway.advance(0.25); railway.advance(0.25)
+                px.withUnsafeMutableBufferPointer { railway.draw(night: 0, into: $0) }
+            }
+            #expect(railway.sim.swaps >= 3, "\(era) seed \(seed): \(railway.sim.swaps) swaps")
+        }
+    }
+}
