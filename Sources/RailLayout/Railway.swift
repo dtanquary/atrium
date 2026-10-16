@@ -320,7 +320,8 @@ public final class Railway {
     private static let red = SIMD3<Float>(255, 42, 26), green = SIMD3<Float>(48, 224, 160), amber = SIMD3<Float>(255, 176, 0)
 
     /// The level crossing's flashers and gates, or wigwags (steam), working while a train is near. Today's gate arms
-    /// are longer, with three red lamps on them: the tip's steady, the other two flashing in turn.
+    /// are longer, with three red lamps on them: the tip's steady, the other two flashing in turn. A Japanese crossing's
+    /// arm is yellow and black, its two red lamps under the X board.
     private func crossingParts(_ night: Float) {
         let on = sim.crossingOn, phase = Int(sim.t / 0.75) % 2, kind = era.look.crossing
         for cr in scenery.crossings {
@@ -347,6 +348,13 @@ public final class Railway {
                     } else {
                         for (e, lit) in [(-1.0, here && phase == 0), (1.0, here && phase == 1)] { let q = m.pos + across * e; point([q.x, q.y, 3.5], lit ? Self.red : [40, 12, 10], eps: 0.6) }
                     }
+                } else if kind == .japanese {
+                    let ang = here ? 0 : 1.35
+                    for k in 1...6 {
+                        let q = m.pos + across * m.side * (-Double(k) * cos(ang))
+                        point([q.x, q.y, 3.2 + Double(k) * sin(ang)], k % 2 == 1 ? [242, 196, 0] : [26, 26, 26])
+                    }
+                    for (e, lit) in [(-1.0, here && phase == 0), (1.0, here && phase == 1)] { let q = m.pos + across * e; point([q.x, q.y, 4.5], lit ? Self.red : [40, 12, 10], eps: 0.6) }
                 } else if kind != .wigwag {
                     for (e, lit) in [(-1.0, on && phase == 0), (1.0, on && phase == 1)] {
                         let q = m.pos + across * e
@@ -407,6 +415,7 @@ public final class Railway {
                     point([q.x, q.y, 7.5 + Double(k) * sin(ang)], arm)
                 }
                 if night > 0.5 { point([face.x, face.y, 6.5], stop ? (distant ? Self.amber : Self.red) : Self.green, eps: 0.6) }
+            case .cab: return // in the driver's cab
             }
         }
     }

@@ -12,9 +12,9 @@ The photos are cropped, cut out, relit or recolored from their originals. Adapte
 under CC BY-SA.
 
 Pixel Railway's trains are drawn after the paint schemes of real railroads, without their logos or lettering.
-Railroad and train names, and train designs, such as Santa Fe, Union Pacific, BNSF, Amtrak, Deutsche Bahn and SBB,
-are trademarks or designs of their owners, used only to say which train a picture shows. Atrium isn't affiliated
-with, sponsored by or endorsed by any of them.
+Railroad and train names, and train designs, such as Santa Fe, Union Pacific, BNSF, Amtrak, Deutsche Bahn, SBB, TGV,
+ICE and Shinkansen, are trademarks or designs of their owners, used only to say which train a picture shows. Atrium
+isn't affiliated with, sponsored by or endorsed by any of them.
 
 Black Hole's light-bending tables (Sources/Atrium/BlackHole.swift) are laid out with three expressions adapted from
 Eric Bruneton's black_hole_shader (https://github.com/ebruneton/black_hole_shader, black_hole/functions.glsl), which

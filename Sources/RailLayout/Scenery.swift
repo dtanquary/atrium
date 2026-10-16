@@ -88,6 +88,8 @@ final class Scenery {
     /// Each road's half width: the main road 3.5 with a gravel shoulder, the town's streets 2.5 with kerbs.
     var roadHalf: [Double] = []
     var crossings: [RoadCrossing] = [], signals: [Signal] = [], poles: [SIMD2<Double>] = []
+    /// Where the road goes over a high-speed line, on a bridge.
+    var roadBridges: [RoadCrossing] = []
     var pond: (c: SIMD2<Double>, r: Double, seed: Int)?, hills: [Hill] = [], station: Station?
     /// Where each block starts, on loops two trains share or that trains pass through on their way to or from the
     /// branch.
@@ -120,7 +122,22 @@ final class Scenery {
         }
         let signalModel = Models.signal(look.signals)
 
-        // the station, on the longest clear straight of a passenger loop
+        // a road over a high-speed line goes up onto a bridge: its ramps need every other track 20 clear either side
+        func bridged(_ lq: Loop) -> Bool { look.bridges && lq.keys.contains { RailArt.highSpeed.contains(String($0.split(separator: "#")[0])) } }
+        func bridgeRoom(_ c: SIMD2<Double>, _ n: SIMD2<Double>, _ lj: Int, _ s0: Double) -> Bool {
+            stride(from: -20.0, through: 20, by: 2).allSatisfy { u in
+                let q = c + n * u
+                return lay.loops.indices.allSatisfy { li in
+                    let lp = lay.loops[li]
+                    return stride(from: 0, to: lp.P.count, by: 2).allSatisfy { j in
+                        length(lp.P[j] - q) >= 8 || li == lj && abs(centred(lp.S[j] - s0, lp.L)) < 16
+                    }
+                } && paths.allSatisfy { pa in stride(from: 0, to: pa.count, by: 2).allSatisfy { length(pa[$0] - q) >= 8 } }
+            }
+        }
+
+        // the station, on the longest clear straight of a passenger loop (where a high-speed line's has room for the
+        // road's bridge, if one can)
         var best: (score: Double, li: Int, pc: Piece, side: Double, L: Double)?
         for (li, lp) in lay.loops.enumerated() {
             let freight = lp.keys.allSatisfy { RailArt.consist($0).freight }
@@ -135,7 +152,8 @@ final class Scenery {
                     let town = rectPoints(mid + n * 32, pc.d, n, L + 30, 36, 2)
                     guard G.freeShare(probe) > 0.93, plat.allSatisfy({ onScreen($0, -1) }) else { continue }
                     let room = Double(town.filter { G.free($0) && onScreen($0, -4) }.count) / Double(town.count)
-                    let score = L + 120 * room + rng.uniform(0, 30) - (freight ? 60 : 0)
+                    let cx = mid + pc.d * (L / 2 + 9), road = !bridged(lp) || bridgeRoom(cx, n, li, pc.s0 + dot(cx - pc.a, pc.d))
+                    let score = L + 120 * room + rng.uniform(0, 30) - (freight ? 60 : 0) - (road ? 0 : 150)
                     if best == nil || score > best!.score { best = (score, li, pc, side, L) }
                 }
             }
@@ -163,6 +181,7 @@ final class Scenery {
                 things.append(Thing(grid: Models.britishStation(), pos: mid + n * 13, heading: face, kind: .station))
                 things.append(Thing(grid: Models.britishCanopy(Int(L * 0.4)), pos: mid + n * 6, heading: hF, kind: .canopy))
             case .german: things.append(Thing(grid: Models.germanStation(), pos: mid + n * 14, heading: face, kind: .station))
+            case .covered: things.append(Thing(grid: Models.canopy(Int(L * 0.85)), pos: mid + n * 6, heading: hF, kind: .canopy))
             }
             G.mark(rectPoints(bpos, d, n, 20, 9), 1)
             for k in [-0.35, 0, 0.35] {
@@ -183,7 +202,7 @@ final class Scenery {
 
             // the main road: past the platform's far end, so a train standing at the platform clears it
             let cx = mid + d * (L / 2 + 9), sCross = pc.s0 + dot(cx - pc.a, d)
-            if pc.s0 + 12 < sCross, sCross < pc.s1 - 12 {
+            if pc.s0 + 12 < sCross, sCross < pc.s1 - 12, !bridged(lp) || bridgeRoom(cx, n, li, sCross) {
                 var halves: [[SIMD2<Double>]] = []
                 for sgn in [1.0, -1.0] {
                     var pts = [cx]
@@ -200,7 +219,8 @@ final class Scenery {
                             let k = Self.nearest(lq, p); return length(lq.P[k] - p) < 9 ? (lj, lq, k) : nil
                         }).first {
                             let pp = lq.piece(at: lq.S[k]), sw = (turnouts[lj] ?? []).contains { abs(centred($0 - lq.S[k], lq.L)) < 25 }
-                            if sw || !(pp.kind == .straight && abs(dot(pp.d, n)) > 0.99 && min(lq.S[k] - pp.s0, pp.s1 - lq.S[k]) > 14 && lq.Z[k] == 0) {
+                            if sw || !(pp.kind == .straight && abs(dot(pp.d, n)) > 0.99 && min(lq.S[k] - pp.s0, pp.s1 - lq.S[k]) > 14 && lq.Z[k] == 0)
+                                || bridged(lq) && !bridgeRoom(lq.P[k], n, lj, lq.S[k]) {
                                 if pts.count > 1 { pts.removeLast() }
                                 break
                             }
@@ -214,15 +234,17 @@ final class Scenery {
                     roads.append(Array(line)); roadHalf.append(3.5)
                     G.mark(Array(line), 4.5)
                 }
-                // level crossings: wherever the road meets a track
+                // level crossings wherever the road meets a track, or over a high-speed line a bridge
                 for (lj, lq) in lay.loops.enumerated() {
                     for p in line {
                         let k = Self.nearest(lq, p)
-                        if length(lq.P[k] - p) < 1.1, !crossings.contains(where: { $0.loop == lj && abs($0.s - lq.S[k]) < 5 }) {
-                            crossings.append(RoadCrossing(loop: lj, s: lq.S[k], p: lq.P[k], road: roads.count - 1, n: n))
+                        if length(lq.P[k] - p) < 1.1, !(crossings + roadBridges).contains(where: { $0.loop == lj && abs($0.s - lq.S[k]) < 5 }) {
+                            let rc = RoadCrossing(loop: lj, s: lq.S[k], p: lq.P[k], road: roads.count - 1, n: n)
+                            if bridged(lq) { roadBridges.append(rc) } else { crossings.append(rc) }
                         }
                     }
                 }
+                for b in roadBridges { things.append(Thing(grid: Models.roadBridge(season), pos: b.p, heading: atan2(b.n.y, b.n.x), kind: .deck)) }
                 // a grid off the main road: streets parallel to the track at 22 and 50 either side, joined by cross
                 // streets parallel to the main road where both reach
                 if let main = roads.first {
@@ -301,6 +323,7 @@ final class Scenery {
                         case .britishGates: Models.gatepost()
                         case .britishHalfBarriers: Models.lightMast()
                         case .germanBarrier: Models.andreasCross()
+                        case .japanese: Models.japaneseMast()
                         default: Models.flasher()
                         }
                         things.append(Thing(grid: mast, pos: q, heading: hq, kind: .crossing))
@@ -648,6 +671,28 @@ final class Scenery {
     }
 
     /// The sample of `loop` nearest `p`.
+    /// A road bridge: its deck's top over the rail, the deck's half length, the abutments' and the ramps' (toy, 1:1.2).
+    static let roadBridge = (H: 10.0, deck: 5.0, abut: 6.5, ramp: 12.0)
+
+    /// The road's height `d` along it from the middle of the line it bridges.
+    static func roadBridgeHeight(_ d: Double) -> Double {
+        let d = abs(d), B = roadBridge
+        return d <= B.abut ? B.H : max(0, B.H * (B.abut + B.ramp - d) / B.ramp)
+    }
+
+    /// The roads as laid on the ground, with their half widths: each cut where it rises onto a bridge.
+    var groundRoads: [(road: [SIMD2<Double>], half: Double)] {
+        zip(roads, roadHalf).flatMap { rd, half -> [([SIMD2<Double>], Double)] in
+            var out: [[SIMD2<Double>]] = [[]]
+            for p in rd {
+                if roadBridges.contains(where: { abs(dot(p - $0.p, $0.n)) < Self.roadBridge.abut + Self.roadBridge.ramp && abs(dot(p - $0.p, SIMD2(-$0.n.y, $0.n.x))) < 5 }) {
+                    if !out[out.count - 1].isEmpty { out.append([]) }
+                } else { out[out.count - 1].append(p) }
+            }
+            return out.filter { $0.count > 1 }.map { ($0, half) }
+        }
+    }
+
     static func nearest(_ loop: Loop, _ p: SIMD2<Double>) -> Int {
         var (best, k) = (Double.infinity, 0)
         for i in loop.P.indices { let d = length_squared(loop.P[i] - p); if d < best { (best, k) = (d, i) } }

@@ -33,6 +33,10 @@ final class PixelRailway: SKScene {
     nonisolated static let germanAlps = Knob(key: "railway.germanAlps",
                                              label: "Germany and the Alps: DB 103 with the TEE Rheingold, V 200, class 01, SBB Crocodile",
                                              range: 0...1, standard: 1, section: "Eras", format: .toggle)
+    nonisolated static let highSpeed = Knob(key: "railway.highSpeed", label: "European high speed: TGV Sud-Est, ICE 1, SBB Re 460",
+                                            range: 0...1, standard: 1, section: "Eras", format: .toggle)
+    nonisolated static let shinkansen = Knob(key: "railway.shinkansen", label: "Japan: Shinkansen 0 and 200 series, JR Freight EF210",
+                                             range: 0...1, standard: 1, section: "Eras", format: .toggle)
     nonisolated static let snow = Knob(key: "railway.snow", label: "Snow on the ground when there's snow where you are", range: 0...1, standard: 1,
                                        section: "Seasons", format: .toggle)
     nonisolated static let previewSnow = Knob(key: "railway.previewSnow", label: "Preview snow", range: 0...1, standard: 0, section: "Preview", format: .toggle)
@@ -44,7 +48,7 @@ final class PixelRailway: SKScene {
                                               format: .toggle)
     nonisolated static let previewHour = Knob(key: "railway.previewHour", label: "Time", range: 0...24, standard: 21, section: "Preview", format: .clock,
                                               shownWhen: "railway.previewTime")
-    nonisolated static let knobs = [count, every, swaps, streamliners, steam, transition, modern, britishSteam, britishDiesel, germanAlps, mix, snow, previewDay, day, previewSnow, previewTime, previewHour]
+    nonisolated static let knobs = [count, every, swaps, streamliners, steam, transition, modern, britishSteam, britishDiesel, germanAlps, highSpeed, shinkansen, mix, snow, previewDay, day, previewSnow, previewTime, previewHour]
     /// Settings' New Layout Now: every copy moves on to another layout at once, by a count added to the period's seed,
     /// and keeps it until the period's up.
     static let newLayout: (section: String, title: String, run: @MainActor () -> Void) = ("Layout", "New Layout Now", {
@@ -106,7 +110,7 @@ final class PixelRailway: SKScene {
         let seed = pinned["RAILWAY_SEED"].flatMap(Int.init)
             ?? Int(date.timeIntervalSince1970 / (hours * 3600)) &+ UserDefaults.standard.integer(forKey: "railway.reroll") &* 7919
         let ticked = [(streamliners, RailEra.streamliners), (steam, .steam), (transition, .transition), (modern, .modern), (britishSteam, .britishSteam),
-                      (britishDiesel, .britishDiesel), (germanAlps, .germanAlps)].filter { $0.0.value > 0.5 }.map(\.1)
+                      (britishDiesel, .britishDiesel), (germanAlps, .germanAlps), (highSpeed, .highSpeed), (shinkansen, .shinkansen)].filter { $0.0.value > 0.5 }.map(\.1)
         let eras = ticked.isEmpty ? RailEra.allCases : ticked
         let era = pinned["RAILWAY_ERA"].flatMap { e in RailEra.allCases.first { "\($0)" == e } }
             ?? eras[Int((UInt64(truncatingIfNeeded: seed) &* 0x9E37_79B9_7F4A_7C15) >> 33) % eras.count]

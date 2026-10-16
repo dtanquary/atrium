@@ -83,6 +83,7 @@ extension RailArt {
         ("flat_steel", 0x4A4C4E, []),
         ("jnr_cream", 0xECE0D1, []),
         ("jnr_blue", 0x003F6C, []),
+        ("jnr_green14", 0x246029, []),
         ("shin_roof", 0xA9ADB0, []),
         ("shin_roof_lt", 0xB8BCBE, []),
         ("n700_white", 0xF4F5F2, []),
@@ -340,6 +341,165 @@ extension RailArt {
             ["WWWWWWWWWWWW", "WWWWWWWWWWWW", "WWWWWWWWWWWW", "WWWWWWWWWWWW", "WWWWWWWWWWWW"],
             ["RRRRRRRRRRRR", "RRRRRRRRRRRR", "QQQQQQQQQQQQ", "RRRRRRRRRRRR", "RRRRRRRRRRRR"]],
         ["D": "wagon_brown_dk", "Q": "wagon_roof", "R": "wagon_roof", "W": "wagon_brown", "k": "truck"], bogies: 0.6)
+    static let tgvSudEstPowerCar = RailVehicle("TGV Sud-Est power car", [
+            ["..kkkk..............kkkk....", "..kkkk..............kkkk....", "..kkkk..............kkkk....", "..kkkk..............kkkk....", "..kkkk..............kkkk...."],
+            ["oooooooooooooooooooooooooo..", "ooooooooooooooooooooooooooo.", "oooooooooooooooooooooooooooh", "ooooooooooooooooooooooooooo.", "oooooooooooooooooooooooooo.."],
+            ["ooooooooooooooooooooooWWW...", "oooooooooooooooooooooooWWo..", "oooooooooooooooooooooooWWo..", "oooooooooooooooooooooooWWo..", "ooooooooooooooooooooooWWW..."],
+            ["oooooooooooooooooooc........", "oooooooooooooooooocc........", "oooooooooooooooooocc........", "oooooooooooooooooocc........", "oooooooooooooooooooc........"],
+            ["WWWWWWWWWWWWWWWWWW..........", "RRRRRRRRRRRRRRRRRR..........", "RRRRRRRRRRRRRRRRRR..........", "RRRRRRRRRRRRRRRRRR..........", "WWWWWWWWWWWWWWWWWW.........."],
+            ["............................", "............................", "...P........................", "............................", "............................"],
+            ["............................", "............................", "...P........................", "............................", "............................"],
+            ["............................", "...PP.......................", "...PP.......................", "...PP.......................", "............................"]],
+        ["P": "panto", "R": "tgv_roof", "W": "tgv_white", "c": "cabglass", "g": "truckgrey", "h": "headlight", "k": "truck", "o": "tgv_orange", "w": "window"])
+    static let tgvSudEstTrailer = RailVehicle("TGV Sud-Est trailer", [
+            ["kkk.................kkk", "kkk.................kkk", "kkk.................kkk", "kkk.................kkk", "kkk.................kkk"],
+            ["ooooooooooooooooooooooo", "ooooooooooooooooooooooo", "ooooooooooooooooooooooo", "ooooooooooooooooooooooo", "ooooooooooooooooooooooo"],
+            ["oowwoowwoowwoowwoowwooo", "ooooooooooooooooooooooo", "ooooooooooooooooooooooo", "ooooooooooooooooooooooo", "oowwoowwoowwoowwoowwooo"],
+            ["ooooooooooooooooooooooo", "ooooooooooooooooooooooo", "ooooooooooooooooooooooo", "ooooooooooooooooooooooo", "ooooooooooooooooooooooo"],
+            ["WWWWWWWWWWWWWWWWWWWWWWW", "RRRRRRRRRRRRRRRRRRRRRRR", "QQQQQQQQQQQQQQQQQQQQQQQ", "RRRRRRRRRRRRRRRRRRRRRRR", "WWWWWWWWWWWWWWWWWWWWWWW"]],
+        ["Q": "tgv_white", "R": "tgv_roof", "W": "tgv_white", "c": "cabglass", "g": "truckgrey", "h": "headlight", "k": "truck", "n": "tgv_grey", "o": "tgv_orange", "w": "window"], articulated: true)
+    static let tgvSudEstPowerCarRear = RailVehicle("TGV Sud-Est power car, rear", [
+            ["....kkkk..............kkkk..", "....kkkk..............kkkk..", "....kkkk..............kkkk..", "....kkkk..............kkkk..", "....kkkk..............kkkk.."],
+            ["..oooooooooooooooooooooooooo", ".ooooooooooooooooooooooooooo", "hooooooooooooooooooooooooooo", ".ooooooooooooooooooooooooooo", "..oooooooooooooooooooooooooo"],
+            ["...WWWoooooooooooooooooooooo", "..oWWooooooooooooooooooooooo", "..oWWooooooooooooooooooooooo", "..oWWooooooooooooooooooooooo", "...WWWoooooooooooooooooooooo"],
+            ["........cooooooooooooooooooo", "........ccoooooooooooooooooo", "........ccoooooooooooooooooo", "........ccoooooooooooooooooo", "........cooooooooooooooooooo"],
+            ["..........WWWWWWWWWWWWWWWWWW", "..........RRRRRRRRRRRRRRRRRR", "..........RRRRRRRRRRRRRRRRRR", "..........RRRRRRRRRRRRRRRRRR", "..........WWWWWWWWWWWWWWWWWW"],
+            ["............................", "............................", "........................P...", "............................", "............................"],
+            ["............................", "............................", "........................P...", "............................", "............................"],
+            ["............................", ".......................PP...", ".......................PP...", ".......................PP...", "............................"]],
+        ["P": "panto", "R": "tgv_roof", "W": "tgv_white", "c": "cabglass", "g": "truckgrey", "h": "tail", "k": "truck", "o": "tgv_orange", "w": "window"])
+    static let ice1PowerCar = RailVehicle("ICE 1 power car", [
+            ["..kkkk..............kkkk..", "..kkkk..............kkkk..", "..kkkk..............kkkk..", "..kkkk..............kkkk..", "..kkkk..............kkkk.."],
+            ["vvvvvvvvvvvvvvvvvvvvvvvvv.", "iiiiiiiiiiiiiiiiiiiiiiiiih", "iiiiiiiiiiiiiiiiiiiiiiiiih", "iiiiiiiiiiiiiiiiiiiiiiiiih", "vvvvvvvvvvvvvvvvvvvvvvvvv."],
+            ["oooooooooooooooooooooooo..", "iiiiiiiiiiiiiiiiiiiiiiiii.", "iiiiiiiiiiiiiiiiiiiiiiiii.", "iiiiiiiiiiiiiiiiiiiiiiiii.", "oooooooooooooooooooooooo.."],
+            ["nnnnnnnnnnnnnnnnnnnnii....", "iiiiiiiiiiiiiiiiiiiicc....", "iiiiiiiiiiiiiiiiiiiicc....", "iiiiiiiiiiiiiiiiiiiicc....", "nnnnnnnnnnnnnnnnnnnnii...."],
+            ["iiiiiiiiiiiiiiiiiiii......", "iiiiiiiiiiiiiiiiiiii......", "iiiiiiiiiiiiiiiiiiii......", "iiiiiiiiiiiiiiiiiiii......", "iiiiiiiiiiiiiiiiiiii......"],
+            ["RRRRRRRRRRRRRRRRRRR.......", "RRRRRRRRRRRRRRRRRRR.......", "RRRRRRRRRRRRRRRRRRR.......", "RRRRRRRRRRRRRRRRRRR.......", "RRRRRRRRRRRRRRRRRRR......."],
+            ["..........................", "..........................", "....P.....................", "..........................", ".........................."],
+            ["..........................", "....PP....................", "....PP....................", "....PP....................", ".........................."]],
+        ["P": "panto", "Q": "ice_roof_lt", "R": "ice_white", "c": "cabglass", "g": "truckgrey", "h": "headlight", "i": "ice_white", "k": "truck", "n": "ice_band", "o": "orientrot", "v": "pastell", "w": "window"])
+    static let ice1Car = RailVehicle("ICE 1 car", [
+            ["..kkkk.....................kkkk..", "..kkkk.....................kkkk..", "..kkkk.....................kkkk..", "..kkkk.....................kkkk..", "..kkkk.....................kkkk.."],
+            ["vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv", "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv"],
+            ["ooooooooooooooooooooooooooooooooo", "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", "ooooooooooooooooooooooooooooooooo"],
+            ["nnwwnnwwnnwwnnwwnnwwnnwwnnwwnnwwn", "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", "nnwwnnwwnnwwnnwwnnwwnnwwnnwwnnwwn"],
+            ["iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii"],
+            ["RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR", "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR", "QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ", "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR", "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR"]],
+        ["P": "panto", "Q": "ice_roof_lt", "R": "ice_white", "c": "cabglass", "g": "truckgrey", "h": "headlight", "i": "ice_white", "k": "truck", "n": "ice_band", "o": "orientrot", "v": "pastell", "w": "window"])
+    static let ice1Bistro = RailVehicle("ICE 1 bistro", [
+            ["..kkkk.....................kkkk..", "..kkkk.....................kkkk..", "..kkkk.....................kkkk..", "..kkkk.....................kkkk..", "..kkkk.....................kkkk.."],
+            ["vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv", "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", "vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv"],
+            ["ooooooooooooooooooooooooooooooooo", "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", "ooooooooooooooooooooooooooooooooo"],
+            ["nnwwnnwwnnwwnnwwnnwwnnwwnnwwnnwwn", "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", "nnwwnnwwnnwwnnwwnnwwnnwwnnwwnnwwn"],
+            ["iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii"],
+            ["iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii", "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii"],
+            ["RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR", "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR", "QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ", "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR", "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR"]],
+        ["P": "panto", "Q": "ice_roof_lt", "R": "ice_white", "c": "cabglass", "g": "truckgrey", "h": "headlight", "i": "ice_white", "k": "truck", "n": "ice_band", "o": "orientrot", "v": "pastell", "w": "window"])
+    static let ice1PowerCarRear = RailVehicle("ICE 1 power car, rear", [
+            ["..kkkk..............kkkk..", "..kkkk..............kkkk..", "..kkkk..............kkkk..", "..kkkk..............kkkk..", "..kkkk..............kkkk.."],
+            [".vvvvvvvvvvvvvvvvvvvvvvvvv", "hiiiiiiiiiiiiiiiiiiiiiiiii", "hiiiiiiiiiiiiiiiiiiiiiiiii", "hiiiiiiiiiiiiiiiiiiiiiiiii", ".vvvvvvvvvvvvvvvvvvvvvvvvv"],
+            ["..oooooooooooooooooooooooo", ".iiiiiiiiiiiiiiiiiiiiiiiii", ".iiiiiiiiiiiiiiiiiiiiiiiii", ".iiiiiiiiiiiiiiiiiiiiiiiii", "..oooooooooooooooooooooooo"],
+            ["....iinnnnnnnnnnnnnnnnnnnn", "....cciiiiiiiiiiiiiiiiiiii", "....cciiiiiiiiiiiiiiiiiiii", "....cciiiiiiiiiiiiiiiiiiii", "....iinnnnnnnnnnnnnnnnnnnn"],
+            ["......iiiiiiiiiiiiiiiiiiii", "......iiiiiiiiiiiiiiiiiiii", "......iiiiiiiiiiiiiiiiiiii", "......iiiiiiiiiiiiiiiiiiii", "......iiiiiiiiiiiiiiiiiiii"],
+            [".......RRRRRRRRRRRRRRRRRRR", ".......RRRRRRRRRRRRRRRRRRR", ".......RRRRRRRRRRRRRRRRRRR", ".......RRRRRRRRRRRRRRRRRRR", ".......RRRRRRRRRRRRRRRRRRR"],
+            ["..........................", "..........................", ".....................P....", "..........................", ".........................."],
+            ["..........................", "....................PP....", "....................PP....", "....................PP....", ".........................."]],
+        ["P": "panto", "Q": "ice_roof_lt", "R": "ice_white", "c": "cabglass", "g": "truckgrey", "h": "tail", "i": "ice_white", "k": "truck", "n": "ice_band", "o": "orientrot", "v": "pastell", "w": "window"])
+    static let sbbRe460 = RailVehicle("SBB Re 460", [
+            ["..kkkk...........kkkk..", "..kkkk...........kkkk..", "..kkkk...........kkkk..", "..kkkk...........kkkk..", "..kkkk...........kkkk.."],
+            ["rrrrrrrrrrrrrrrrrrrrrrr", "rrrrrrrrrrrrrrrrrrrrrrr", "hrrrrrrrrrrrrrrrrrrrrrh", "rrrrrrrrrrrrrrrrrrrrrrr", "rrrrrrrrrrrrrrrrrrrrrrr"],
+            ["rrrrrrrrrrrrrrrrrrrrrrr", "rrrrrrrrrrrrrrrrrrrrrrr", "rrrrrrrrrrrrrrrrrrrrrrr", "rrrrrrrrrrrrrrrrrrrrrrr", "rrrrrrrrrrrrrrrrrrrrrrr"],
+            [".crrrrrrrrrrrrrrrrrrrc.", "ccrrrrrrrrrrrrrrrrrrrcc", "ccrrrrrrrrrrrrrrrrrrrcc", "ccrrrrrrrrrrrrrrrrrrrcc", ".crrrrrrrrrrrrrrrrrrrc."],
+            [".RRRRRRRRRRRRRRRRRRRRR.", ".RRRRRRRRRRRRRRRRRRRRR.", ".RRRRRRRRRRRRRRRRRRRRR.", ".RRRRRRRRRRRRRRRRRRRRR.", ".RRRRRRRRRRRRRRRRRRRRR."],
+            [".......................", ".......................", ".....P.................", ".......................", "......................."],
+            [".......................", ".......................", ".....P.................", ".......................", "......................."],
+            [".......................", ".....PP................", ".....PP................", ".....PP................", "......................."]],
+        ["P": "panto", "R": "loco_roof", "c": "cabglass", "g": "truckgrey", "h": "headlight", "k": "truck", "r": "sbb_red", "w": "window"])
+    static let sbbCoach = RailVehicle("SBB coach", [
+            ["..kkkk.....................kkkk..", "..kkkk.....................kkkk..", "..kkkk.....................kkkk..", "..kkkk.....................kkkk..", "..kkkk.....................kkkk.."],
+            ["eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"],
+            ["nnwwnnwwnnwwnnwwnnwwnnwwnnwwnnwwn", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "nnwwnnwwnnwwnnwwnnwwnnwwnnwwnnwwn"],
+            ["eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"],
+            ["RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR", "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR", "QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ", "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR", "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR"]],
+        ["Q": "tgv_roof", "R": "loco_roof", "c": "cabglass", "e": "ew4_grey", "g": "truckgrey", "h": "headlight", "k": "truck", "n": "ew4_dark", "w": "window"])
+    static let v0SeriesEndCar = RailVehicle("0 series end car", [
+            ["..kkkk...................kkkk..", "..kkkk...................kkkk..", "..kkkk...................kkkk..", "..kkkk...................kkkk..", "..kkkk...................kkkk.."],
+            ["bbbbbbbbbbbbbbbbbbbbbbbbbbbb...", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbb..", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbb..", "bbbbbbbbbbbbbbbbbbbbbbbbbbbb..."],
+            ["eeeeeeeeeeeeeeeeeeeeeeeeeee....", "eeeeeeeeeeeeeeeeeeeeeeeeeeeee..", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeh.", "eeeeeeeeeeeeeeeeeeeeeeeeeeeee..", "eeeeeeeeeeeeeeeeeeeeeeeeeee...."],
+            ["bbwwbbwwbbwwbbwwbbwwbbwwbbe....", "eeeeeeeeeeeeeeeeeeeeeeeeecc....", "eeeeeeeeeeeeeeeeeeeeeeeeecc....", "eeeeeeeeeeeeeeeeeeeeeeeeecc....", "bbwwbbwwbbwwbbwwbbwwbbwwbbe...."],
+            ["RRRRRRRRRRRRRRRRRRRRRRRR.......", "RRRRRRRRRRRRRRRRRRRRRRRRR......", "QQQQQQQQQQQQQQQQQQQQQQQQQ......", "RRRRRRRRRRRRRRRRRRRRRRRRR......", "RRRRRRRRRRRRRRRRRRRRRRRR......."]],
+        ["P": "panto", "Q": "shin_roof_lt", "R": "shin_roof", "b": "jnr_blue", "c": "cabglass", "e": "jnr_cream", "g": "truckgrey", "h": "headlight", "k": "truck", "w": "window"])
+    static let v0SeriesCarWithPantograph = RailVehicle("0 series car with pantograph", [
+            ["..kkkk...................kkkk..", "..kkkk...................kkkk..", "..kkkk...................kkkk..", "..kkkk...................kkkk..", "..kkkk...................kkkk.."],
+            ["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"],
+            ["eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"],
+            ["bbwwbbwwbbwwbbwwbbwwbbwwbbwwbbb", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "bbwwbbwwbbwwbbwwbbwwbbwwbbwwbbb"],
+            ["RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR", "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR", "QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ", "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR", "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR"],
+            ["...............................", "...............................", "..............P................", "...............................", "..............................."],
+            ["...............................", "...............................", "..............P................", "...............................", "..............................."],
+            ["...............................", "..............PP...............", "..............PP...............", "..............PP...............", "..............................."]],
+        ["P": "panto", "Q": "shin_roof_lt", "R": "shin_roof", "b": "jnr_blue", "c": "cabglass", "e": "jnr_cream", "g": "truckgrey", "h": "headlight", "k": "truck", "w": "window"])
+    static let v0SeriesCar = RailVehicle("0 series car", [
+            ["..kkkk...................kkkk..", "..kkkk...................kkkk..", "..kkkk...................kkkk..", "..kkkk...................kkkk..", "..kkkk...................kkkk.."],
+            ["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"],
+            ["eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"],
+            ["bbwwbbwwbbwwbbwwbbwwbbwwbbwwbbb", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "bbwwbbwwbbwwbbwwbbwwbbwwbbwwbbb"],
+            ["RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR", "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR", "QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ", "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR", "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR"]],
+        ["P": "panto", "Q": "shin_roof_lt", "R": "shin_roof", "b": "jnr_blue", "c": "cabglass", "e": "jnr_cream", "g": "truckgrey", "h": "headlight", "k": "truck", "w": "window"])
+    static let v0SeriesEndCarRear = RailVehicle("0 series end car, rear", [
+            ["..kkkk...................kkkk..", "..kkkk...................kkkk..", "..kkkk...................kkkk..", "..kkkk...................kkkk..", "..kkkk...................kkkk.."],
+            ["...bbbbbbbbbbbbbbbbbbbbbbbbbbbb", "..bbbbbbbbbbbbbbbbbbbbbbbbbbbbb", ".bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "..bbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "...bbbbbbbbbbbbbbbbbbbbbbbbbbbb"],
+            ["....eeeeeeeeeeeeeeeeeeeeeeeeeee", "..eeeeeeeeeeeeeeeeeeeeeeeeeeeee", ".heeeeeeeeeeeeeeeeeeeeeeeeeeeee", "..eeeeeeeeeeeeeeeeeeeeeeeeeeeee", "....eeeeeeeeeeeeeeeeeeeeeeeeeee"],
+            ["....ebbwwbbwwbbwwbbwwbbwwbbwwbb", "....cceeeeeeeeeeeeeeeeeeeeeeeee", "....cceeeeeeeeeeeeeeeeeeeeeeeee", "....cceeeeeeeeeeeeeeeeeeeeeeeee", "....ebbwwbbwwbbwwbbwwbbwwbbwwbb"],
+            [".......RRRRRRRRRRRRRRRRRRRRRRRR", "......RRRRRRRRRRRRRRRRRRRRRRRRR", "......QQQQQQQQQQQQQQQQQQQQQQQQQ", "......RRRRRRRRRRRRRRRRRRRRRRRRR", ".......RRRRRRRRRRRRRRRRRRRRRRRR"]],
+        ["P": "panto", "Q": "shin_roof_lt", "R": "shin_roof", "b": "jnr_blue", "c": "cabglass", "e": "jnr_cream", "g": "truckgrey", "h": "tail", "k": "truck", "w": "window"])
+    static let v200SeriesEndCar = RailVehicle("200 series end car", [
+            ["..kkkk...................kkkk..", "..kkkk...................kkkkbb", "..kkkk...................kkkkbb", "..kkkk...................kkkkbb", "..kkkk...................kkkk.."],
+            ["bbbbbbbbbbbbbbbbbbbbbbbbbbbb...", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbb..", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbb..", "bbbbbbbbbbbbbbbbbbbbbbbbbbbb..."],
+            ["eeeeeeeeeeeeeeeeeeeeeeeeeee....", "eeeeeeeeeeeeeeeeeeeeeeeeeeeee..", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeh.", "eeeeeeeeeeeeeeeeeeeeeeeeeeeee..", "eeeeeeeeeeeeeeeeeeeeeeeeeee...."],
+            ["bbwwbbwwbbwwbbwwbbwwbbwwbbe....", "eeeeeeeeeeeeeeeeeeeeeeeeecc....", "eeeeeeeeeeeeeeeeeeeeeeeeecc....", "eeeeeeeeeeeeeeeeeeeeeeeeecc....", "bbwwbbwwbbwwbbwwbbwwbbwwbbe...."],
+            ["RRRRRRRRRRRRRRRRRRRRRRRR.......", "RRRRRRRRRRRRRRRRRRRRRRRRR......", "QQQQQQQQQQQQQQQQQQQQQQQQQ......", "RRRRRRRRRRRRRRRRRRRRRRRRR......", "RRRRRRRRRRRRRRRRRRRRRRRR......."]],
+        ["P": "panto", "Q": "shin_roof_lt", "R": "shin_roof", "b": "jnr_green14", "c": "cabglass", "e": "jnr_cream", "g": "truckgrey", "h": "headlight", "k": "truck", "w": "window"])
+    static let v200SeriesCarWithPantograph = RailVehicle("200 series car with pantograph", [
+            ["..kkkk...................kkkk..", "..kkkk...................kkkk..", "..kkkk...................kkkk..", "..kkkk...................kkkk..", "..kkkk...................kkkk.."],
+            ["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"],
+            ["eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"],
+            ["bbwwbbwwbbwwbbwwbbwwbbwwbbwwbbb", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "bbwwbbwwbbwwbbwwbbwwbbwwbbwwbbb"],
+            ["RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR", "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR", "QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ", "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR", "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR"],
+            ["...............................", "...............................", "..............P................", "...............................", "..............................."],
+            ["...............................", "...............................", "..............P................", "...............................", "..............................."],
+            ["...............................", "..............PP...............", "..............PP...............", "..............PP...............", "..............................."]],
+        ["P": "panto", "Q": "shin_roof_lt", "R": "shin_roof", "b": "jnr_green14", "c": "cabglass", "e": "jnr_cream", "g": "truckgrey", "h": "headlight", "k": "truck", "w": "window"])
+    static let v200SeriesCar = RailVehicle("200 series car", [
+            ["..kkkk...................kkkk..", "..kkkk...................kkkk..", "..kkkk...................kkkk..", "..kkkk...................kkkk..", "..kkkk...................kkkk.."],
+            ["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"],
+            ["eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"],
+            ["bbwwbbwwbbwwbbwwbbwwbbwwbbwwbbb", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", "bbwwbbwwbbwwbbwwbbwwbbwwbbwwbbb"],
+            ["RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR", "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR", "QQQQQQQQQQQQQQQQQQQQQQQQQQQQQQQ", "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR", "RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR"]],
+        ["P": "panto", "Q": "shin_roof_lt", "R": "shin_roof", "b": "jnr_green14", "c": "cabglass", "e": "jnr_cream", "g": "truckgrey", "h": "headlight", "k": "truck", "w": "window"])
+    static let v200SeriesEndCarRear = RailVehicle("200 series end car, rear", [
+            ["..kkkk...................kkkk..", "bbkkkk...................kkkk..", "bbkkkk...................kkkk..", "bbkkkk...................kkkk..", "..kkkk...................kkkk.."],
+            ["...bbbbbbbbbbbbbbbbbbbbbbbbbbbb", "..bbbbbbbbbbbbbbbbbbbbbbbbbbbbb", ".bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "..bbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "...bbbbbbbbbbbbbbbbbbbbbbbbbbbb"],
+            ["....eeeeeeeeeeeeeeeeeeeeeeeeeee", "..eeeeeeeeeeeeeeeeeeeeeeeeeeeee", ".heeeeeeeeeeeeeeeeeeeeeeeeeeeee", "..eeeeeeeeeeeeeeeeeeeeeeeeeeeee", "....eeeeeeeeeeeeeeeeeeeeeeeeeee"],
+            ["....ebbwwbbwwbbwwbbwwbbwwbbwwbb", "....cceeeeeeeeeeeeeeeeeeeeeeeee", "....cceeeeeeeeeeeeeeeeeeeeeeeee", "....cceeeeeeeeeeeeeeeeeeeeeeeee", "....ebbwwbbwwbbwwbbwwbbwwbbwwbb"],
+            [".......RRRRRRRRRRRRRRRRRRRRRRRR", "......RRRRRRRRRRRRRRRRRRRRRRRRR", "......QQQQQQQQQQQQQQQQQQQQQQQQQ", "......RRRRRRRRRRRRRRRRRRRRRRRRR", ".......RRRRRRRRRRRRRRRRRRRRRRRR"]],
+        ["P": "panto", "Q": "shin_roof_lt", "R": "shin_roof", "b": "jnr_green14", "c": "cabglass", "e": "jnr_cream", "g": "truckgrey", "h": "tail", "k": "truck", "w": "window"])
+    static let jrFreightEF210 = RailVehicle("JR Freight EF210", [
+            ["..kkkkk.........kkkkk..", "..kkkkk.........kkkkk..", "..kkkkk.........kkkkk..", "..kkkkk.........kkkkk..", "..kkkkk.........kkkkk.."],
+            ["bbbbbbbbbbbbbbbbbbbbbbb", "bbbbbbbbbbbbbbbbbbbbbbb", "hbbbbbbbbbbbbbbbbbbbbbh", "bbbbbbbbbbbbbbbbbbbbbbb", "bbbbbbbbbbbbbbbbbbbbbbb"],
+            ["WWWWWWWWWWWWWWWWWWWWWWW", "bbbbbbbbbbbbbbbbbbbbbbb", "bbbbbbbbbbbbbbbbbbbbbbb", "bbbbbbbbbbbbbbbbbbbbbbb", "WWWWWWWWWWWWWWWWWWWWWWW"],
+            ["bcbbbbbbbbbbbbbbbbbbbcb", "ccbbbbbbbbbbbbbbbbbbbcc", "ccbbbbbbbbbbbbbbbbbbbcc", "ccbbbbbbbbbbbbbbbbbbbcc", "bcbbbbbbbbbbbbbbbbbbbcb"],
+            ["RRRRRRRRRRRRRRRRRRRRRRR", "RRRRRRRRRRRRRRRRRRRRRRR", "RRRRRRRRRRRRRRRRRRRRRRR", "RRRRRRRRRRRRRRRRRRRRRRR", "RRRRRRRRRRRRRRRRRRRRRRR"],
+            [".......................", ".......................", ".....P..........P......", ".......................", "......................."],
+            [".......................", ".......................", ".....P..........P......", ".......................", "......................."],
+            [".......................", ".....PP.........PP.....", ".....PP.........PP.....", ".....PP.........PP.....", "......................."]],
+        ["P": "panto", "R": "loco_roof", "W": "hiun", "b": "ef210_blue", "c": "cabglass", "g": "truckgrey", "h": "headlight", "k": "truck", "w": "window"])
+    static let kokiFlatWith12FtBoxes = RailVehicle("Koki flat with 12 ft boxes", [
+            [".kkk.................kkk.", ".kkk.................kkk.", ".kkk.................kkk.", ".kkk.................kkk.", ".kkk.................kkk."],
+            ["fffffffffffffffffffffffff", "fffffffffffffffffffffffff", "fffffffffffffffffffffffff", "fffffffffffffffffffffffff", "fffffffffffffffffffffffff"],
+            [".........................", ".AAAA.AAAA.AAAA.AAAA.AAAA", ".AAAA.AAAA.AAAA.AAAA.AAAA", ".AAAA.AAAA.AAAA.AAAA.AAAA", "........................."],
+            [".........................", ".AAAA.AAAA.AAAA.AAAA.AAAA", ".AAAA.AAAA.AAAA.AAAA.AAAA", ".AAAA.AAAA.AAAA.AAAA.AAAA", "........................."]],
+        ["A": "jrf_red", "f": "koki", "k": "truck"])
 
     static let worldTrains: [Consist] = [
         Consist(key: "a3", name: "LNER A3 with teak coaches", era: .britishSteam, vehicles: [lnerA3, a3Tender, lnerTeakCoach, lnerTeakCoach, lnerTeakCoach, lnerTeakCoach], cruise: 17, power: 2),
@@ -354,5 +514,11 @@ extension RailArt {
         Consist(key: "v200", name: "DB V 200 with green coaches", era: .germanAlps, vehicles: [dbV200, dbGreenCoach, dbGreenCoach, dbGreenCoach, dbGreenCoach], cruise: 16),
         Consist(key: "db01", name: "DB class 01 with green coaches", era: .germanAlps, vehicles: [dbClass01, v01Tender, dbGreenCoach, dbGreenCoach, dbGreenCoach, dbGreenCoach], cruise: 16, power: 2),
         Consist(key: "croc", name: "SBB Crocodile with goods wagons", era: .germanAlps, vehicles: [sbbCrocodile, goodsWagon, goodsWagon, goodsWagon, goodsWagon, goodsWagon, goodsWagon, goodsWagon, goodsWagon, goodsWagon, goodsWagon], cruise: 10),
+        Consist(key: "tgv", name: "TGV Sud-Est", era: .highSpeed, vehicles: [tgvSudEstPowerCar, tgvSudEstTrailer, tgvSudEstTrailer, tgvSudEstTrailer, tgvSudEstTrailer, tgvSudEstPowerCarRear], cruise: 22),
+        Consist(key: "ice1", name: "ICE 1", era: .highSpeed, vehicles: [ice1PowerCar, ice1Car, ice1Bistro, ice1Car, ice1Car, ice1PowerCarRear], cruise: 21),
+        Consist(key: "re460", name: "SBB Re 460 with coaches", era: .highSpeed, vehicles: [sbbRe460, sbbCoach, sbbCoach, sbbCoach, sbbCoach], cruise: 17),
+        Consist(key: "shin0", name: "Shinkansen 0 series", era: .shinkansen, vehicles: [v0SeriesEndCar, v0SeriesCarWithPantograph, v0SeriesCar, v0SeriesEndCarRear], cruise: 20),
+        Consist(key: "shin200", name: "Shinkansen 200 series", era: .shinkansen, vehicles: [v200SeriesEndCar, v200SeriesCarWithPantograph, v200SeriesCar, v200SeriesEndCarRear], cruise: 21),
+        Consist(key: "ef210", name: "JR Freight EF210 with container flats", era: .shinkansen, vehicles: [jrFreightEF210, kokiFlatWith12FtBoxes, kokiFlatWith12FtBoxes, kokiFlatWith12FtBoxes, kokiFlatWith12FtBoxes, kokiFlatWith12FtBoxes, kokiFlatWith12FtBoxes, kokiFlatWith12FtBoxes, kokiFlatWith12FtBoxes], cruise: 13),
     ]
 }

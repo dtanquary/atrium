@@ -27,14 +27,14 @@ struct Statics {
         for x in lay.links { gaps[x.a, default: []].append((x.sa, x.sa + switchLength)); gaps[x.b, default: []].append((x.sb - switchLength, x.sb)) }
         for (li, lp) in lay.loops.enumerated() {
             let g = gaps[li] ?? []
-            Self.stampTrack(&base, lp.P, lp.T, lp.Z, sc.roads, view, era: era, winter: winter) { k in g.contains { wrap(lp.S[k] - $0.0, lp.L) <= $0.1 - $0.0 } }
+            Self.stampTrack(&base, lp.P, lp.T, lp.Z, sc.groundRoads.map(\.road), view, era: era, winter: winter) { k in g.contains { wrap(lp.S[k] - $0.0, lp.L) <= $0.1 - $0.0 } }
         }
         var paths: [(RailPath, [(Double, Double)])] = lay.links.map { ($0.path, [(0, switchLength), ($0.path.L - switchLength, $0.path.L)]) }
         if let br = lay.branch {
             paths += [(br.out, [(0, switchLength), (br.curve - switchLength, br.curve)]), (br.inn, [(br.straight, br.straight + switchLength), (br.inn.L - switchLength, br.inn.L)])]
         }
         for (path, g) in paths {
-            Self.stampTrack(&base, path.P, path.T, [Double](repeating: 0, count: path.P.count), sc.roads, view, era: era, winter: winter) { k in g.contains { $0.0 <= path.S[k] && path.S[k] <= $0.1 } }
+            Self.stampTrack(&base, path.P, path.T, [Double](repeating: 0, count: path.P.count), sc.groundRoads.map(\.road), view, era: era, winter: winter) { k in g.contains { $0.0 <= path.S[k] && path.S[k] <= $0.1 } }
         }
 
         var day = base, night = base
@@ -91,7 +91,7 @@ struct Statics {
         // shoulder or a street's kerbs (snow banks in winter), every road's edges before any asphalt so junctions
         // stay clear
         var asphalt = [Bool](repeating: false, count: ground.count), edge = [UInt32?](repeating: nil, count: ground.count)
-        for (rd, half) in zip(sc.roads, sc.roadHalf) {
+        for (rd, half) in sc.groundRoads {
             let rim = half > 3 ? 1.0 : 0.8, rimColour: UInt32 = winter ? 0xC6D2E4 : half > 3 ? 0x8C8270 : 0xA8A49A
             for (a, b) in zip(rd, rd.dropFirst()) {
                 let (lo, hi) = (simd_min(a, b) - 5, simd_max(a, b) + 5)

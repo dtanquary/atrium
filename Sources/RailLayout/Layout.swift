@@ -166,7 +166,9 @@ final class Layout {
                     let lens = loops[li].keys.map { RailArt.consist($0).length + 2 } + [joining.length + 2]
                     return Self.planBlocks(loops[li].L, lens, must: diamondZones(li, longest: lens.max()!)) != nil
                 }
-                let open = loops.indices.filter { loops[$0].keys.count < 2 && loops[$0].rmin >= 0.98 * consist.minRadius }
+                let open = loops.indices.filter { li in
+                    loops[li].keys.count < 2 && loops[li].rmin >= 0.98 * consist.minRadius && !loops[li].keys.contains { RailArt.gauges($0, key) }
+                }
                 if let li = open.filter({ fits($0, consist) }).max(by: { loops[$0].L < loops[$1].L }) {
                     loops[li].keys.append(key)
                 } else if consist.cars > 5 {

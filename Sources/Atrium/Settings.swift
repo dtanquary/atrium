@@ -507,7 +507,7 @@ struct AboutPage: View {
                     .foregroundStyle(.secondary)
             }
             Section("Names") {
-                Text("Pixel Railway's trains are drawn after the paint schemes of real railroads, without their logos or lettering. Railroad and train names, and train designs, such as Santa Fe, Union Pacific, BNSF, Amtrak, Deutsche Bahn and SBB, are trademarks or designs of their owners, used only to say which train a picture shows. Atrium isn't affiliated with, sponsored by or endorsed by any of them.")
+                Text("Pixel Railway's trains are drawn after the paint schemes of real railroads, without their logos or lettering. Railroad and train names, and train designs, such as Santa Fe, Union Pacific, BNSF, Amtrak, Deutsche Bahn, SBB, TGV, ICE and Shinkansen, are trademarks or designs of their owners, used only to say which train a picture shows. Atrium isn't affiliated with, sponsored by or endorsed by any of them.")
                     .font(.callout).foregroundStyle(.secondary)
             }
         }

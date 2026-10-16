@@ -268,7 +268,7 @@ public struct Consist: Sendable {
 
 /// A layout's era: its trains, buildings, crossings and signals.
 public enum RailEra: Int, CaseIterable, Sendable {
-    case streamliners, steam, transition, modern, britishSteam, britishDiesel, germanAlps
+    case streamliners, steam, transition, modern, britishSteam, britishDiesel, germanAlps, highSpeed, shinkansen
 }
 
 /// What an era puts by the line: ballast and ties; its street lamps' colour; what stands at the station; its level
@@ -276,19 +276,22 @@ public enum RailEra: Int, CaseIterable, Sendable {
 /// its signals; whether a pole line runs along the road; its houses' walls and roofs; the buildings beside the line;
 /// its share of conifers; the scenery's dice; and whether overhead wire runs over the track.
 struct EraLook {
-    enum Station { case depot, brick, freight, shelter, british, german }
+    /// `covered`: a long canopy over the platform, the high-speed lines' and the Shinkansen's.
+    enum Station { case depot, brick, freight, shelter, british, german, covered }
     /// A wigwag; flashers and short gates; today's gates with lamps on the arm; British timber gates swung across the
-    /// road; British automatic half barriers; German half barriers under a St Andrew's cross.
-    enum Crossing { case wigwag, gates, modern, britishGates, britishHalfBarriers, germanBarrier }
-    enum Signals { case semaphore, searchlight, colour }
+    /// road; British automatic half barriers; German half barriers under a St Andrew's cross; a Japanese crossing's
+    /// yellow and black arm and its two red lamps.
+    enum Crossing { case wigwag, gates, modern, britishGates, britishHalfBarriers, germanBarrier, japanese }
+    /// `cab`: signals in the driver's cab, as on high-speed lines, so none by the line (the blocks are still there).
+    enum Signals { case semaphore, searchlight, colour, cab }
     let ballast: UInt32, tie: UInt32, lamp: UInt32
     let station: Station, crossing: Crossing, signals: Signals, poles: Bool
     let walls: [String], roofs: [String], extras: [String], conifers: Double, dice: Int
     /// Concrete crossing panels and the joints between them, in place of planks.
     var panels: (UInt32, UInt32)? = nil
     /// Hedgerows round the fields (fewer trees then); a distant signal before each stop signal drawn; masts and a
-    /// contact wire over every loop.
-    var hedges = false, distants = false, wire = false
+    /// contact wire over every loop; and the road over a high-speed line on a bridge, never a level crossing.
+    var hedges = false, distants = false, wire = false, bridges = false
 
     static let walls = ["wall_white", "wall_cream", "wall_yellow", "wall_grey", "wall_blue", "wall_brick"]
     static let roofs = ["roof_green", "roof_red", "roof_black", "roof_grey"]
@@ -322,6 +325,16 @@ extension RailEra {
         case .germanAlps: EraLook(ballast: 0x8A8884, tie: 0x6A6058, lamp: 0xC8E4F0, station: .german, crossing: .germanBarrier, signals: .colour,
                                   poles: false, walls: ["wall_white", "wall_cream", "wall_beige"], roofs: ["clay_tile", "clay_tile", "slate", "roof_red"],
                                   extras: [], conifers: 0.5, dice: 7, wire: true)
+        // European high speed: wire, concrete ties on granite, LED lamps, a long covered platform, signals in the cab
+        // and the road over the high-speed line on a bridge; a German level crossing on any other loop
+        case .highSpeed: EraLook(ballast: 0x8A8884, tie: 0xB4B0A8, lamp: 0xFFE7CC, station: .covered, crossing: .germanBarrier, signals: .cab,
+                                 poles: false, walls: ["wall_white", "wall_cream", "wall_beige", "wall_grey"],
+                                 roofs: ["clay_tile", "roof_charcoal", "slate", "roof_pale"], extras: [], conifers: 0.3, dice: 8,
+                                 panels: (0xB0ACA4, 0x77736C), wire: true, bridges: true)
+        // Japan: slab track, a pole line, ibushi and Sekishu tiles, a Japanese level crossing on the narrow-gauge line
+        case .shinkansen: EraLook(ballast: 0x9C9A94, tie: 0x8E8C86, lamp: 0xFFE7CC, station: .covered, crossing: .japanese, signals: .cab,
+                                  poles: true, walls: ["wall_white", "wall_beige", "wall_grey"], roofs: ["ibushi", "sekishu", "ibushi", "roof_grey"],
+                                  extras: [], conifers: 0.5, dice: 9, panels: (0x6A6A6C, 0x4A4A4C), wire: true, bridges: true)
         }
     }
 }
@@ -636,6 +649,9 @@ extension RailArt {
         case .britishSteam: return smallCar([("v_black", 4), ("v40_green", 5), ("v40_maroon", 5), ("uk_cream", 5), ("uk_grey", 4)], seed)
         case .britishDiesel: return smallCar([("v70_brown", 6), ("v70_orange", 6), ("v70_beige", 6), ("v_white", 6), ("v_red", 5)], seed)
         case .germanAlps: return smallCar([("v60_blue", 5), ("v60_beige", 5), ("v60_red", 5), ("v40_black", 5)], seed)
+        // a Golf-sized hatchback; a kei car or kei truck
+        case .highSpeed: return smallCar([("v_grey", 6), ("v_white", 6), ("v_black", 6), ("v_silver", 6)], seed)
+        case .shinkansen: return smallCar([("kei_pearl", 5), ("kei_silver", 5), ("v_black", 5), ("kei_truck", 5)], seed)
         }
         let (body, roof) = paint[Int(hsh(seed, 77) * Double(paint.count))]
         return RailVehicle("road car, \(body)", car, ["a": body, "g": "v_glass", "w": "v_glass", "r": roof], width: 3, bogies: 0.6)
@@ -688,6 +704,16 @@ extension RailArt {
     static func consist(_ key: String) -> Consist {
         let parts = key.split(separator: "#"), base = trains[String(parts[0])]!
         return parts.count > 1 ? base.shortened(to: Int(parts[1])!) : base
+    }
+
+    /// Trains whose loops the road meets only on a bridge (no level crossings on a high-speed line), and Japan's
+    /// narrow-gauge freight, which never shares a loop with a standard-gauge Shinkansen.
+    static let highSpeed: Set<String> = ["tgv", "ice1", "shin0", "shin200"], narrowGauge: Set<String> = ["ef210"]
+    static let shinkansen: Set<String> = ["shin0", "shin200"]
+    /// Whether two trains can't share a loop: the narrow gauge and a Shinkansen.
+    static func gauges(_ a: String, _ b: String) -> Bool {
+        let (x, y) = (String(a.split(separator: "#")[0]), String(b.split(separator: "#")[0]))
+        return narrowGauge.contains(x) && shinkansen.contains(y) || narrowGauge.contains(y) && shinkansen.contains(x)
     }
 
     /// Each era's trains, in the order a layout tries them: the main line's, or the short ones for an inner loop.

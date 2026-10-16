@@ -355,6 +355,7 @@ enum Models {
             var g = Voxels(1, 1, 8)
             g.fill(0..<1, 0..<1, 0..<5, m("post")); g.fill(0..<1, 0..<1, 5..<8, m("cl_head"))
             return g
+        case .cab: return Voxels(1, 1, 1) // nothing by the line
         }
     }
 
@@ -546,6 +547,39 @@ enum Models {
         g.fill(0..<1, 2..<3, 0..<8, m("post"))
         for y in 0..<5 { for z in 2..<7 where abs(y - 2) == abs(z - 4) { g[0, y, z] = m((y + z) % 2 == 1 ? "gate_red" : "post_white") } }
         g[0, 2, 8] = m("sig_head")
+        return g
+    }
+
+    /// A road over a high-speed line: the deck and its parapets over the track, concrete abutments, ramps banked with
+    /// grass, its length along x.
+    static func roadBridge(_ season: RailSeason) -> Voxels {
+        let B = Scenery.roadBridge, half = Int(B.abut + B.ramp), H = Int(B.H)
+        var g = Voxels(2 * half, 9, H + 1)
+        for i in 0..<(2 * half) {
+            let d = abs(Double(i) + 0.5 - Double(half)), x = i..<(i + 1)
+            if d <= B.deck {
+                for y in [0, 8] { g.fill(x, y..<(y + 1), (H - 1)..<(H + 1), m("concrete")) }
+            } else if d <= B.abut {
+                g.fill(x, 0..<9, 0..<H, m("concrete"))
+            } else {
+                let h = Int(Scenery.roadBridgeHeight(d).rounded())
+                guard h >= 1 else { continue }
+                g.fill(x, 0..<9, 0..<h, m(season.grassy("bank")))
+                g.fill(x, 1..<8, (h - 1)..<h, m("road_top"))
+                continue
+            }
+            g.fill(x, 1..<8, (H - 1)..<H, m("road_top"))
+        }
+        return g
+    }
+
+    /// A Japanese crossing: a yellow and black striped post, the yellow X board, two red lamps below it.
+    static func japaneseMast() -> Voxels {
+        var g = Voxels(1, 5, 8)
+        g.fill(0..<1, 2..<3, 0..<6, m("jp_yellow"))
+        for z in stride(from: 1, to: 6, by: 2) { g[0, 2, z] = m("jp_black") }
+        for y in 0..<5 { for z in 5..<8 where abs(y - 2) == abs(z - 6) * 2 || y == 2 && z == 6 { g[0, y, z] = m("jp_yellow") } }
+        g[0, 1, 4] = m("sig_head"); g[0, 3, 4] = m("sig_head")
         return g
     }
 

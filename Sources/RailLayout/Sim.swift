@@ -103,10 +103,15 @@ struct Sim {
 
     /// The car on the road: timed to arrive at the stop line a second after the crossing first comes on.
     private mutating func setUpRoad() {
-        guard let cr = sc.crossings.first, cr.road < sc.roads.count else { return }
+        guard let cr = sc.crossings.first ?? sc.roadBridges.first, cr.road < sc.roads.count else { return }
         let P = sc.roads[cr.road]
         var S = [0.0]
         for (a, b) in zip(P, P.dropFirst()) { S.append(S[S.count - 1] + length(b - a)) }
+        if sc.crossings.isEmpty { // a road that only bridges the line: the car just drives, up and over
+            road = (P, S, -.infinity)
+            car = (S[S.count - 1] / 3, Self.roadSpeed, 0)
+            return
+        }
         let k = P.indices.min { length(P[$0] - cr.p) < length(P[$1] - cr.p) }!
         road = (P, S, S[k] - 10.5)
         var probe = self
@@ -411,7 +416,8 @@ struct Sim {
 
     /// Who arrives: half the time one of the layout's own era, else one from the whole pool; never one on the layout,
     /// nor (if there's a choice) the one that just left; fit for every loop and crossover on its way (and the
-    /// branch's curves if it comes by the branch), and never one whose diamond zones would cover its loop.
+    /// branch's curves if it comes by the branch), and never one whose diamond zones would cover its loop; a high-speed
+    /// train never by a loop with a level crossing, nor Japan's narrow-gauge freight where a Shinkansen runs.
     private func arrival(_ way: [Int], _ links: [Int]?, _ rng: inout Dice) -> String {
         let here = Set(trains.map { $0.consist.key.split(separator: "#")[0] })
         func fits(_ k: String) -> Bool {
@@ -419,6 +425,8 @@ struct Sim {
             if here.contains(Substring(k)) || lay.covers(way[way.count - 1], length: c.length, cruise: c.cruise) { return false }
             if way.contains(where: { c.minRadius > lay.loops[$0].rmin / 0.98 + 1e-6 || c.length > (sc.planLength[$0] ?? 0) + 1e-6 }) { return false }
             if let links, let br = lay.branch, c.minRadius > br.R + 1e-6 { return false }
+            if RailArt.highSpeed.contains(k), way.contains(where: { li in sc.crossings.contains { $0.loop == li } }) { return false }
+            if trains.contains(where: { tr in (tr.loop.map(way.contains) ?? false || way.contains(tr.home)) && RailArt.gauges(k, tr.consist.key) }) { return false }
             return (links ?? []).allSatisfy { c.minRadius <= lay.links[$0].R + 1e-6 }
         }
         let lists = rng.chance(0.5) ? [own, pool] : [pool, own]
@@ -519,6 +527,7 @@ struct Sim {
         let k = min(max(S.firstIndex { $0 >= s } ?? S.count - 1, 1), P.count - 1)
         let f = min(max((s - S[k - 1]) / max(S[k] - S[k - 1], 1e-9), 0), 1)
         let t = normalize(P[k] - P[k - 1]), at = (s <= 0 ? P[0] : s >= S[S.count - 1] ? P[P.count - 1] : P[k - 1] + (P[k] - P[k - 1]) * f) + SIMD2(-t.y, t.x) * 1.8
-        return ([at.x, at.y, 0], atan2(t.y, t.x))
+        let z = sc.roadBridges.filter { abs(dot(at - $0.p, SIMD2(-$0.n.y, $0.n.x))) < 5 }.map { Scenery.roadBridgeHeight(dot(at - $0.p, $0.n)) }.max() ?? 0
+        return ([at.x, at.y, z], atan2(t.y, t.x))
     }
 }
