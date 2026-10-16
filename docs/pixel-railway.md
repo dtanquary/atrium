@@ -7,7 +7,7 @@ Dave asked for it on 2026-10-15: "a top down procedurally generate model train t
 - **Source:** `Sources/Atrium/PixelRailway.swift` (the scene: its canvas, the clock, the weather, Settings and the fade to a new layout) and `Sources/RailLayout/`, its own module built with `-O`: `Art.swift` (materials, every vehicle as slices, the trains, and what each era puts by the line), `Season.swift` (the time of year), `Render.swift` (the view, the voxel ray march, the canvas, the scenery models), `Layout.swift` (the loops and their crossings), `Scenery.swift` (everything round the track), `Static.swift` (the picture under the trains), `Sim.swift` (the trains, signals and the road), `Railway.swift` (the whole, and drawing the moving things each frame).
 - **Data:** none. Every layout is made from the clock; every vehicle and building is a few strings of slices.
 - **Tests:** `Tests/AtriumTests/RailwayTests.swift` writes one layout in each era, by day, at night and in snow, to `$TMPDIR/atrium-railway/` (`RAILWAY_SEED=` picks another).
-- **Pictures of it:** `docs/images/pixel-railway.jpg`, also the Settings page and menu tile (`preview-pixel-railway.jpg`): US transition freight from seed 4 on the laptop's 504 by 328 canvas, three trains, swaps every 40–90 s, in summer, 40 s in, drawn 6 device pixels to the art pixel (2x Retina) and cropped to 3024 by 1964. Picked from seeds 1–6 in every era.
+- **Pictures of it:** `docs/images/pixel-railway*.jpg`, `pixel-railway.webp`, and the Settings page's and menu tile's `preview-pixel-railway.jpg` (see Checking it).
 
 ## Dave's decisions (2026-10-15)
 
@@ -79,7 +79,7 @@ The swaps: once a quiet spell is up (Settings), the train that's been on the lay
 
 ## Rights
 
-The trains are drawn after real railroads' paint schemes, with no heralds, numbers or lettering. Their names appear only in Settings, under which the page says: "Names say which real train each is drawn after. Atrium isn't affiliated with or endorsed by any railroad." The longer disclaimer, for About and NOTICE: "Pixel Railway's trains are drawn after the paint schemes of real railroads, without their logos or lettering. Railroad and train names, and train designs, such as Santa Fe, Union Pacific, BNSF, Amtrak, ICE, TGV and Shinkansen, are trademarks or designs of their owners, used only to say which train a picture shows. Atrium isn't affiliated with, sponsored by or endorsed by any of them." The README, the site and the App Store say "paint schemes of real railroads", with no railroad names in headings, keywords or captions. If an App Store reviewer objects under guideline 5.2.1, that build uses descriptive names.
+The trains are drawn after real railroads' paint schemes, with no heralds, numbers or lettering. Their names appear only in Settings, under which the page says: "Names say which real train each is drawn after. Atrium isn't affiliated with or endorsed by any railroad." The longer disclaimer, in Settings → About (under Names) and NOTICE since Pixel Railway was shown to everyone, names only railroads whose trains it draws (ICE, TGV and Shinkansen join when those trains do): "Pixel Railway's trains are drawn after the paint schemes of real railroads, without their logos or lettering. Railroad and train names, and train designs, such as Santa Fe, Union Pacific, BNSF, Amtrak, Deutsche Bahn and SBB, are trademarks or designs of their owners, used only to say which train a picture shows. Atrium isn't affiliated with, sponsored by or endorsed by any of them." The README, the site and the App Store say "paint schemes of real railroads", with no railroad names in headings, keywords or captions. If an App Store reviewer objects under guideline 5.2.1, that build uses descriptive names.
 
 Why (the research, not legal advice): Union Pacific sued model makers in 2004 over its marks; UP and Amtrak hold registrations for model trains; BNSF owns the Santa Fe, Great Northern and Burlington names and in 2023 made an airline drop the Northern Pacific name; Santa Fe's Warbonnet (Reg. 2000826) and UP's colours (Reg. 2148551) are registered for rail services only. The research reads a plain name that says which train a picture shows as US nominative fair use, which a logo or lettering would not be; no railroad's terms ask for a licence just to name one. Not checked then: the British, European and Japanese registers, and designs on recent train shapes.
 
@@ -109,9 +109,17 @@ A second round looked at the trains outside the US. A registered design on a tra
 - The pools of lamplight and the headlights light only the ground.
 - One swap at a time; the trips to and from the branch take most of each cycle, so more often would mean two at once.
 
+## Checking it
+
+`RAILWAY_SEED=` and `RAILWAY_ERA=` (an era's case name) in the environment pin the scene's layout, as the period's seed and the era from those ticked would. The pictures were all taken by the snapshot test at 2x Retina (1512 by 982 points, a 504 by 328 canvas), with the standard settings (up to three trains, swaps Often, every era ticked) and `SNAPSHOT_SECONDS=40`, so the trains have spread out from where they start:
+- `pixel-railway.jpg`, the README's moving picture, the card and the Settings picture: `RAILWAY_SEED=4 RAILWAY_ERA=transition SNAPSHOT_DEFAULTS="railway.previewTime=1,railway.previewHour=12,railway.previewDay=1,railway.day=196"`. Picked from seeds 1 to 6 in every era: the trains and the town still read at the size of a menu tile. The site's loop (`site/media.sh preview-pixel-railway`) starts 40 s in with the same settings.
+- `pixel-railway-night.jpg`: the same at `railway.previewHour=22`.
+- `pixel-railway-britain.jpg`: `RAILWAY_SEED=2 RAILWAY_ERA=britishSteam`, `railway.day=298` (autumn's peak), noon.
+- `pixel-railway-snow.jpg`: `RAILWAY_SEED=1 RAILWAY_ERA=germanAlps`, `railway.day=20,railway.previewSnow=1`, noon.
+
 ## Still open
 
-From the mock-ups' review: stripes still thin out at some headings (better with four rays a pixel, not gone); three diamonds near each other are reserved together, so a train can wait up to 7 s for a train on another diamond; headlight pools are faint on grass; a train held behind one standing at the station waits up to 30 s. European high speed and the Shinkansen are to come (their trains keep to loops the road doesn't cross), and switches and sidings after them. The long disclaimer goes into About and NOTICE when Pixel Railway is shown to everyone.
+From the mock-ups' review: stripes still thin out at some headings (better with four rays a pixel, not gone); three diamonds near each other are reserved together, so a train can wait up to 7 s for a train on another diamond; headlight pools are faint on grass; a train held behind one standing at the station waits up to 30 s. European high speed and the Shinkansen are to come (their trains keep to loops the road doesn't cross), and switches and sidings after them.
 
 ## Next ideas
 

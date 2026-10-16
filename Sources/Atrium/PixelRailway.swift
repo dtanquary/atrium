@@ -93,15 +93,17 @@ final class PixelRailway: SKScene {
 
     /// The layout for now: a new seed each period of Settings' New Layout Every, an era from those ticked, and the
     /// trains of that era, its art pixel one point smaller than Pixel City's (3 points on a 982-point-high screen), so
-    /// there's room for long loops.
+    /// there's room for long loops. `RAILWAY_SEED=` and `RAILWAY_ERA=` in the environment pin the layout, for the
+    /// README's and the website's pictures.
     static func plan(_ size: CGSize, at date: Date = Date()) -> Plan {
         let pixel = max(2, (size.height / 240).rounded()) - 1 // points per art pixel
-        let hours = [1.0, 3, 6, 24][Int(every.value)]
-        let seed = Int(date.timeIntervalSince1970 / (hours * 3600))
+        let hours = [1.0, 3, 6, 24][Int(every.value)], pinned = ProcessInfo.processInfo.environment
+        let seed = pinned["RAILWAY_SEED"].flatMap(Int.init) ?? Int(date.timeIntervalSince1970 / (hours * 3600))
         let ticked = [(streamliners, RailEra.streamliners), (steam, .steam), (transition, .transition), (modern, .modern), (britishSteam, .britishSteam),
                       (britishDiesel, .britishDiesel), (germanAlps, .germanAlps)].filter { $0.0.value > 0.5 }.map(\.1)
         let eras = ticked.isEmpty ? RailEra.allCases : ticked
-        let era = eras[Int((UInt64(truncatingIfNeeded: seed) &* 0x9E37_79B9_7F4A_7C15) >> 33) % eras.count]
+        let era = pinned["RAILWAY_ERA"].flatMap { e in RailEra.allCases.first { "\($0)" == e } }
+            ?? eras[Int((UInt64(truncatingIfNeeded: seed) &* 0x9E37_79B9_7F4A_7C15) >> 33) % eras.count]
         return Plan(seed: seed, w: Int((size.width / pixel).rounded(.up)), h: Int((size.height / pixel).rounded(.up)), pixel: pixel,
                     era: era, count: Int(count.value) + 1, season: season(date), swaps: [nil, 40...90, 120...180, 300...420][Int(swaps.value)],
                     eras: mix.value > 0.5 ? eras : [era])

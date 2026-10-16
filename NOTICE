@@ -11,6 +11,11 @@ Use 2.0 (compatible with CC BY 4.0). Every one is credited, with its author, lic
 The photos are cropped, cut out, relit or recolored from their originals. Adapted copies of CC BY-SA photos stay
 under CC BY-SA.
 
+Pixel Railway's trains are drawn after the paint schemes of real railroads, without their logos or lettering.
+Railroad and train names, and train designs, such as Santa Fe, Union Pacific, BNSF, Amtrak, Deutsche Bahn and SBB,
+are trademarks or designs of their owners, used only to say which train a picture shows. Atrium isn't affiliated
+with, sponsored by or endorsed by any of them.
+
 Black Hole's light-bending tables (Sources/Atrium/BlackHole.swift) are laid out with three expressions adapted from
 Eric Bruneton's black_hole_shader (https://github.com/ebruneton/black_hole_shader, black_hole/functions.glsl), which
 is under the BSD 3-Clause License:
