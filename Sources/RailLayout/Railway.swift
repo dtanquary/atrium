@@ -20,6 +20,12 @@ public final class Railway {
     /// and by night.
     private var switchRails: [Turnout: [[(i: Int, d: Float)]]] = [:]
     private let rail: (day: SIMD3<Float>, night: SIMD3<Float>)
+    /// Steam engines' exhaust: each puff where it left the stack and when, and how far each train has run since
+    /// its last.
+    private var puffs: [(p: SIMD3<Double>, t: Double)] = [], chuffed: [Int: Double] = [:]
+    /// Each steam engine's stack: how far ahead of its middle, and how high.
+    private var stacks: [String: (u: Double, z: Double)] = [:]
+    private static let puffLife = 1.8, chuff = 5.0 // s; px run between puffs
 
     /// The trains running, by their names in Settings.
     public var names: [String] { layout.trains.map { RailArt.consist($0).name } }
@@ -159,7 +165,40 @@ public final class Railway {
     /// Runs the trains on by `dt` seconds, in fixed steps.
     public func advance(_ dt: Double) {
         owed = min(owed + dt, 0.25)
-        while owed >= Sim.dt { sim.step(); owed -= Sim.dt }
+        while owed >= Sim.dt { sim.step(); exhaust(); owed -= Sim.dt }
+    }
+
+    /// A puff from each steam engine's stack every few pixels it runs (so slowly as it pulls away), none while it
+    /// stands, is hidden, or is in a tunnel.
+    private func exhaust() {
+        puffs.removeAll { sim.t - $0.t > Self.puffLife }
+        for tr in sim.trains {
+            let vs = tr.consist.vehicles
+            guard vs.count > 1, vs[1].name.lowercased().contains("tender") else { continue } // a steam engine leads
+            let run = (chuffed[tr.id] ?? 0) + tr.v * Sim.dt
+            chuffed[tr.id] = run.truncatingRemainder(dividingBy: Self.chuff)
+            guard run >= Self.chuff else { continue }
+            let v = vs[0], len = Double(v.length), b = v.bogies * len
+            let f = sim.at(tr, tr.s - len / 2 + b / 2), r = sim.at(tr, tr.s - len / 2 - b / 2)
+            guard !f.hidden, !r.hidden else { continue }
+            let stack = stacks[v.name] ?? Self.stack(v.grid)
+            stacks[v.name] = stack
+            let t = normalize(SIMD2(f.p.x - r.p.x, f.p.y - r.p.y)), c = (f.p + r.p) / 2
+            let q = SIMD2(c.x, c.y) + t * stack.u, z = c.z + (f.p.z - r.p.z) / b * stack.u + stack.z
+            if scenery.hills.contains(where: { Scenery.hillHeight($0, q) >= z }) { continue }
+            puffs.append(([q.x, q.y, z], sim.t))
+        }
+    }
+
+    /// Where a steam engine's exhaust leaves it: the frontmost of the highest cells in its front half, its stack
+    /// (or on a streamliner, the casing over it).
+    static func stack(_ g: Voxels) -> (u: Double, z: Double) {
+        for z in stride(from: g.nz - 1, through: 0, by: -1) {
+            for x in stride(from: g.nx - 1, through: g.nx / 2, by: -1) where (0..<g.ny).contains(where: { g[x, $0, z] > 0 }) {
+                return (Double(x) + 0.5 - Double(g.nx) / 2, Double(z) + 1)
+            }
+        }
+        return (Double(g.nx) / 4, Double(g.nz))
     }
 
     /// Draws the layout with its trains where they are now into `out` (premultiplied RGBA, rows from the bottom,
@@ -197,6 +236,7 @@ public final class Railway {
         }
         crossingParts(night)
         signalParts(night)
+        smoke(night)
         for y in 0..<h { // rows from the bottom
             frame.withUnsafeBufferPointer { src in
                 (out.baseAddress! + (h - 1 - y) * w).update(from: src.baseAddress! + y * w, count: w)
@@ -253,6 +293,24 @@ public final class Railway {
             let k: Float = along < 8 ? 0.5 : along < 15 ? 0.3 : 0.15
             frame[i] = pack(unpack(frame[i]) + head * k)
         }
+        }
+    }
+
+    /// The puffs, each a disc that rises, spreads and fades, left where it was blown out as its train runs on: pale
+    /// grey, its lower right in shadow, and dim at night. They thin what's behind them and hide behind what's in front.
+    private func smoke(_ night: Float) {
+        let lit = SIMD3<Float>(228, 228, 224) + (SIMD3<Float>(78, 80, 92) - SIMD3<Float>(228, 228, 224)) * night
+        for puff in puffs {
+            let age = sim.t - puff.t, f = age / Self.puffLife
+            let r = 1 + 2.6 * f.squareRoot(), a = Float(0.9 * (1 - f * f)), z = puff.p.z + 8 * (1 - exp(-1.6 * age))
+            let c = view.project([puff.p.x, puff.p.y, z])
+            for y in clamped(Int(floor(c.y - r)), Int(ceil(c.y + r)) + 1, h) { for x in clamped(Int(floor(c.x - r)), Int(ceil(c.x + r)) + 1, w) {
+                let dx = Double(x) + 0.5 - c.x, dy = Double(y) + 0.5 - c.y, i = y * w + x
+                guard dx * dx + dy * dy <= r * r, Float(view.pixelDepth(x, y, z)) >= depth[i] - 0.5 else { continue }
+                let tone = dx + dy > r * 0.6 ? lit * 0.82 : lit
+                frame[i] = pack(unpack(frame[i]) * (1 - a) + tone * a)
+            }
+            }
         }
     }
 
