@@ -379,7 +379,7 @@ Open Atrium and a short welcome lets you try the wallpapers. After that it lives
 ## Using it
 
 Atrium's icon in the menu bar is a TV with sparkles (✨📺). Use it to:
-- **Pick** a wallpaper from the grid of pictures: its name shows as the pointer passes over it. To move through them with the arrow keys, by typing a name, or with VoiceOver, set Settings → General → **Wallpapers in the menu** to Names, a list in words.
+- **Pick** a wallpaper from the grid of pictures: its picture grows and its name shows as the pointer passes over it, and resting on it for a moment shows it on your desktop until you move off the grid. To move through them with the arrow keys, by typing a name, or with VoiceOver, set Settings → General → **Wallpapers in the menu** to Names, a list in words.
 - **Pause** the wallpaper on its current frame, and **Resume** it. The icon dims while it's paused, a wallpaper you pick meanwhile is held still too, and quitting Atrium ends the pause. While Settings → Power is already freezing it (in Low Power Mode, unless changed), the menu says so in its place.
 - Turn on **Shuffle** to move on to a random wallpaper every so often, and choose **Next Wallpaper** to skip ahead. Settings → General sets how often (every 5 minutes to every day, or on every unlock) and which wallpapers take part.
 - Open **Settings…** (⌘,): a page for each wallpaper, with palettes, sliders and switches that update live, plus General, Power and About.

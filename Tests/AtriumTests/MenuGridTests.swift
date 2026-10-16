@@ -42,7 +42,7 @@ import Testing
 /// Opens a menu holding the grid on screen for a moment and captures it, since a menu's glass only renders for real.
 ///
 ///     MENU_SHOT=1 swift test --filter menuShot           # → $TMPDIR/atrium-menu.png
-///     MENU_SHOT="Nebula" swift test --filter menuShot    # with the pointer over that wallpaper, then a click on it
+///     MENU_SHOT="Nebula" swift test --filter menuShot    # with the pointer resting on that wallpaper, then a click on it
 ///     SNAPSHOT_APPEARANCE=light MENU_SHOT=1 …            # in Light Mode
 ///
 /// The pointer and the click are events handed to the grid as the menu would hand them, at the middle of the tile
@@ -55,8 +55,8 @@ func menuShot() throws {
     NSApplication.shared.setActivationPolicy(.accessory)
     if let look = env["SNAPSHOT_APPEARANCE"] { NSApp.appearance = NSAppearance(named: look == "light" ? .aqua : .darkAqua) }
     let wanted = scenes.firstIndex { $0.name == env["MENU_SHOT"] }
-    var hovered: String?, picked: String?
-    let menu = NSMenu(), grid = MenuGridView { picked = $0 }, item = NSMenuItem()
+    var hovered: String?, picked: String?, previews: [String?] = []
+    let menu = NSMenu(), grid = MenuGridView(pick: { picked = $0 }, preview: { previews.append($0) }), item = NSMenuItem()
     func mouse(_ type: NSEvent.EventType) -> NSEvent? {
         guard let wanted, let window = grid.window else { return nil }
         let tile = MenuGrid.frame(wanted), inWindow = grid.convert(grid.bounds, to: nil)
@@ -95,6 +95,12 @@ func menuShot() throws {
     }
     let screen = try #require(NSScreen.main).visibleFrame
     menu.popUp(positioning: nil, at: NSPoint(x: screen.maxX - MenuGrid.width - 40, y: screen.maxY - 8), in: nil)
-    if let wanted { #expect(hovered == scenes[wanted].name && picked == scenes[wanted].name, "over \(hovered ?? "none"), picked \(picked ?? "none")") }
+    RunLoop.main.run(until: Date() + 0.2) // for the closed menu's call to put the desktop back
+    if let wanted {
+        #expect(hovered == scenes[wanted].name && picked == scenes[wanted].name, "over \(hovered ?? "none"), picked \(picked ?? "none")")
+        // Resting on the tile previewed it on the desktop, and the menu closing put the desktop's own back (which after
+        // a pick finds nothing to undo).
+        #expect(previews.contains(scenes[wanted].name) && previews.last == .some(nil), "previews \(previews)")
+    }
     print("The menu → \(path)")
 }

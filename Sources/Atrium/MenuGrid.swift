@@ -3,8 +3,8 @@ import ImageIO
 import SwiftUI
 
 /// The status menu's wallpapers as a grid of their stills, six across, in place of a row of text for each: the one under
-/// the pointer grows to twice its size and its name reads out above them, a ring marks the one on the desktop, and a
-/// click shows another.
+/// the pointer grows to twice its size and its name reads out above them, resting on it for a moment shows it on the
+/// desktop until the pointer leaves the grid, a ring marks the one on the desktop, and a click keeps another.
 /// It is one menu item's view, so the menu's own arrow keys and type-to-select pass it by: Settings → General →
 /// Wallpapers in the menu → Names puts the list of names back for them and for VoiceOver.
 @MainActor enum MenuGrid {
@@ -136,9 +136,16 @@ struct MenuGridPictures: View {
 final class MenuGridView: NSView {
     let hover = MenuGridHover()
     private let pick: (String) -> Void
+    /// Puts a wallpaper on the desktop for a moment, or with nil the desktop's own back.
+    private let preview: @MainActor (String?) -> Void
+    /// Counts down the rest on a tile before it shows on the desktop.
+    private var dwell: Timer?
+    /// How long the pointer rests on a tile before it shows on the desktop: long enough that sweeping across the grid
+    /// builds nothing.
+    static let rest = 0.4
 
-    init(pick: @escaping (String) -> Void) {
-        self.pick = pick
+    init(pick: @escaping (String) -> Void, preview: @escaping @MainActor (String?) -> Void = { _ in }) {
+        (self.pick, self.preview) = (pick, preview)
         super.init(frame: NSRect(x: 0, y: 0, width: MenuGrid.width, height: MenuGrid.height(count: scenes.count)))
         let pictures = NSHostingView(rootView: MenuGridPictures(hover: hover) { [weak self] in self?.choose($0) })
         pictures.frame = bounds
@@ -154,12 +161,32 @@ final class MenuGridView: NSView {
     /// Every click is this view's, not the SwiftUI view's inside it.
     override func hitTest(_ point: NSPoint) -> NSView? { super.hitTest(point).map { _ in self } }
 
-    override func viewDidMoveToWindow() { hover.name = nil } // a menu that closes under the pointer sends no exit
+    override func viewDidMoveToWindow() { // a menu that closes under the pointer sends no exit
+        hover.name = nil
+        dwell?.invalidate()
+        // After a pick, which closes the menu first and then keeps the wallpaper previewed, so this finds nothing to undo.
+        RunLoop.main.perform(inModes: [.common]) { [preview] in MainActor.assumeIsolated { preview(nil) } }
+    }
     override func mouseEntered(with event: NSEvent) { mouseMoved(with: event) }
-    override func mouseExited(with event: NSEvent) { hover.name = nil }
+
+    override func mouseExited(with event: NSEvent) {
+        hover.name = nil
+        dwell?.invalidate()
+        preview(nil)
+    }
 
     override func mouseMoved(with event: NSEvent) {
-        hover.name = name(at: event)
+        let name = name(at: event)
+        guard name != hover.name else { return }
+        hover.name = name
+        dwell?.invalidate()
+        guard let name else { return } // over the caption the desktop stays as it is
+        // On a timer, as timers run while a menu tracks the mouse.
+        let dwell = Timer(timeInterval: Self.rest, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.preview(name) }
+        }
+        RunLoop.main.add(dwell, forMode: .common)
+        self.dwell = dwell
     }
 
     override func mouseUp(with event: NSEvent) {
@@ -172,6 +199,7 @@ final class MenuGridView: NSView {
 
     /// Closes the menu and shows the wallpaper, as picking a row of a menu does.
     private func choose(_ name: String) {
+        dwell?.invalidate()
         enclosingMenuItem?.menu?.cancelTracking()
         pick(name)
     }

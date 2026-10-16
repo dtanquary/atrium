@@ -201,11 +201,12 @@ if !scenes.contains(where: { $0.name == current }) {
 @MainActor func currentScene(size: CGSize) -> SKScene { currentWallpaper().make(size) }
 
 /// Shows the desktop's wallpaper, built afresh, in `view`, at that wallpaper's frame rate: crossfading with `fade`.
-@MainActor func presentCurrent(in view: WallpaperView, size: CGSize, fade: Bool) {
-    view.batteryRate = currentWallpaper().batteryRate
-    view.batteryScale = currentWallpaper().batteryScale
+/// `wallpaper` stands in for it while the menu previews another.
+@MainActor func presentCurrent(in view: WallpaperView, size: CGSize, fade: Bool, wallpaper: Wallpaper = currentWallpaper()) {
+    view.batteryRate = wallpaper.batteryRate
+    view.batteryScale = wallpaper.batteryScale
     applyPowerState(to: [view])
-    let scene = currentScene(size: size)
+    let scene = wallpaper.make(size)
     if fade { view.presentScene(scene, transition: .crossFade(withDuration: 0.8)) } else { view.presentScene(scene) }
 }
 
@@ -242,11 +243,32 @@ if !scenes.contains(where: { $0.name == current }) {
     }
 }
 
-/// Puts a wallpaper on the desktop and remembers it.
+/// Puts a wallpaper on the desktop and remembers it. One the menu is already previewing keeps running.
 @MainActor func show(_ name: String) {
+    let previewed = previewing == name
+    previewing = nil
     current = name
     UserDefaults.standard.set(name, forKey: "scene")
-    switchScene()
+    if previewed { matchLockScreen(after: 1.5) } else { switchScene() }
+}
+
+/// The wallpaper the menu's grid has put on the desktop while the pointer rests on its tile, not remembered.
+var previewing: String?
+
+/// Crossfades every display to a wallpaper for the menu's preview without remembering it, or with nil back to the
+/// desktop's own, built afresh.
+// ponytail: each preview builds the scene on the main thread, so Fish Tank or Weather hitch the menu for about half a
+// second; build off the main thread if that grates
+@MainActor func previewOnDesktop(_ name: String?) {
+    let name = name == current ? nil : name
+    guard name != previewing else { return }
+    previewing = name
+    let wallpaper = scenes.first { $0.name == name } ?? currentWallpaper()
+    for window in windows {
+        if let view = window.contentView as? WallpaperView {
+            presentCurrent(in: view, size: window.frame.size, fade: true, wallpaper: wallpaper)
+        }
+    }
 }
 
 /// Crossfades every display to the chosen scene in its existing window.
@@ -334,7 +356,7 @@ if !scenes.contains(where: { $0.name == current }) {
     /// The wallpapers as pictures: one item, kept from one opening of the menu to the next.
     private lazy var grid = {
         let item = NSMenuItem()
-        item.view = MenuGridView { show($0) }
+        item.view = MenuGridView(pick: { show($0) }, preview: { previewOnDesktop($0) })
         return item
     }()
 
