@@ -35,7 +35,7 @@ Found: `flatten="paper"` takes a colour print's graded sky to bare paper and kee
 
 | | Picture | Source and licence | Minutes | Notes |
 |---|---|---|---|---|
-| ✓ B1 | Garabit Viaduct: Eiffel, *Notice sur le viaduc de Garabit*, 1888 | Internet Archive TA624282EIF leaf 0034 (uploaded by the University of Seville's library), `licenseurl` Public Domain Mark | 29 / 46 | fine has stray lines in the sky |
+| ✓ B1 | Garabit Viaduct: Eiffel, *Notice sur le viaduc de Garabit*, 1888 | Internet Archive TA624282EIF leaf 0034 (uploaded by the University of Seville's library), `licenseurl` Public Domain Mark | 29 / 46 | fine has stray lines in the sky; shipped with `lift=0.45` (24 / 41) |
 | ✓ B2 | Harbour Crane: "Mr. Kier's Moveable Crane … Ramsgate", Mutlow, 1802 | Wellcome V0024542, PDM | 31 / 59 | |
 | ✓ B3 | Locomotive: Armengaud, *Moteurs à vapeur*, Pl. 38, Buddicom's locomotive-tender, 1862 | Internet Archive CHEPFL_LIPR_AXB233_03 leaf 0082 (EPFL), PDM | 68 / 117 | |
 | ✓ B4 | Steam Plough: Usher's patent, C. J. Light, 1852 | Wellcome V0024680, PDM | 29 / 52 | |
@@ -43,7 +43,7 @@ Found: `flatten="paper"` takes a colour print's graded sky to bare paper and kee
 | ✓ B6 | Lake House: H. L. Gay, house for S. W. Allerton, Lake Geneva, c. 1884 | Art Institute of Chicago 215760, "CC0 Public Domain Designation" | 61 / 94 | finial and weathervane painted out |
 | ✓ B7 | Neuilly Machine: Perronet, Pl. XVI, 1782 | Internet Archive chepfl-lipr-axd-20-01 leaf 0117 (EPFL), PDM | 90 / 167 | |
 | ✓ B8 | Sawmill: van Zyl, *Theatrum machinarum universale*, Pl. LI, 1734 | Internet Archive chepfl-lipr-axd-19 leaf 0182 (EPFL), PDM | fine only, 104 | |
-| ✓ B9 | Crawler Tractor: B. Holt, US patent 874,008, 1907 | US Patent and Trademark Office | 27 / 54 | noisy scan; a "12" to paint out |
+| ✓ B9 | Crawler Tractor: B. Holt, US patent 874,008, 1907 | US Patent and Trademark Office | 27 / 54 | noisy scan; shipped with a numeral painted out and kept whole |
 
 Reserves, not baked: Sully's wheel-cutting engine (*Encyclopédie*, Wellcome V0023819, PDM); the *Ernestina*'s hull framing, HAER sheets 15 to 17. Dropped: a Cooper Hewitt locomotive (a watercolour: blobs); the Brooklyn Bridge's one HAER sheet (a thin strip); patents of Sholes, Singer, Otis, Hoe, Hallidie, Ericsson (small, crowded or upright); Wellcome's railway bridges and aqueduct (very wide strips) and windmills (upright); Adler & Sullivan's station (dimension lettering); van Zyl's wheel plans at leaves 113 and 125 (star-like polygons). Not reached: Harrison, Middendorf, Telford, Belidor, Leupold (no licence field), the Deutsches Museum, TU Berlin, SMK, Nationalmuseum, NARA's cyanotypes (needs an API key).
 
@@ -56,7 +56,7 @@ Reserves, not baked: Sully's wheel-cutting engine (*Encyclopédie*, Wellcome V00
 | ✓ W3 | Jet Fighter: Lockheed, D143,822, 1944 (the P-80) | USPTO | 17 / 27 | |
 | ✓ W4 | Attack Bomber: Douglas, D128,027, 1939 (the A-20) | USPTO | 25 / 47 | |
 | W5 | Pursuit Airplane: McDonnell, D134,426, 1942 (the XP-67) | USPTO | 31 / 54 | |
-| ✓ W6 | Torpedo Boat: Föreningen Sveriges Flotta's model drawing of a 20 m Swedish motor torpedo boat, 1946 | Sjöhistoriska museet; CC BY-SA 4.0 as read at Europeana's copy of the record (916109/smm_sm_object_2003_23_2_1), **to be read at DigitaltMuseum 011024769716 before it ships** | 34 / 51 | |
+| ✓ W6 | Torpedo Boat: Föreningen Sveriges Flotta's model drawing of a 20 m Swedish motor torpedo boat, 1946 | Sjöhistoriska museet; CC BY-SA 4.0, read at Europeana's copy of the record (916109/smm_sm_object_2003_23_2_1) and then by the lead at the holder's own page, DigitaltMuseum 011024769716 | 34 / 51 | |
 | ✓ W7 | Airliner: Lockheed, D92,654, 1934 (the Electra) | USPTO | 16 / 27 | |
 | ✓ W8 | Twin-Tail Bomber: Consolidated, D129,529, 1940, plan view (the B-24) | USPTO | 16 / 23 | |
 | W9 | Liberty Ship: HAER VA-132 sheet 19, the lines of the *Arthur M. Huddell* | Library of Congress, HAER: federal | 27 / 32 | 2.39 : 1, kept whole |
@@ -78,3 +78,26 @@ Names: Dave chose plain names over the aircraft's own (some are trademarks). Dro
 | R1 | Mount Desert Island: Des Barres, *The Atlantic Neptune*, 1776 | Leventhal (commonwealth:3f462w459), as M1 | 46 / 82 | count the compass rose's points |
 
 Dave on the holders whose words are not "public domain" (Leventhal, Kartverket, Fisk's host): "Ship, credited". Dropped: Holmes's Sheets VI (tonal) and IX (thin strips); Holmes on Commons as "IA dr_…" (David Rumsey's scans, NC); the Gulf Stream chart (CC BY-NC-SA at Leventhal); the USGS relief map of 1911 (a grid of squiggles); the Sierra Nevada of 1870; Mount Rainier of 1914 (colour bands); the Bright Angel quadrangle (lettering tangles the contours); Keller's *Schweiz*. Not reached, the hosts blocking scripts: the Dufour map (swisstopo's own licence, not on the list), the National Library of Scotland, the Library of Congress (the Lewis and Clark map), NYPL; moon and Mars maps had no allowed holder found.
+
+## Dinosaurs, and the PBY Catalina
+
+Dave, seeing the Horse Skeleton and the Megatherium: "how about dinosaur skeletons, you got me thinking about that now that i see animal skeletons as an option, i think dinosaur skeletons would be awesome to add", and "if we add dinosaurs we have to add t rex skull". Then "Can you add a PBY catalina if possible to the ww2 planes". The sheets: `dinosaurs.jpg` (D1 to D9, R1, R2), `trex.jpg` (D10, D10b) and `catalina.jpg` (W10). None needs keeping whole but the two T. rex: every plate has bare paper round the animal. **Dave took all fourteen** (2026-11-01), the two reserves and the Catalina too.
+
+| | Picture | Source and licence | Minutes | Notes |
+|---|---|---|---|---|
+| ✓ D10 | T. rex Skull: H. F. Osborn, "Crania of Tyrannosaurus and Allosaurus", *Memoirs of the AMNH* n.s. 1(1), 1912, the text figure on p. 54 (AMNH 5027) | AMNH Digital Library, hdl.handle.net/2246/49 (the PDF, `pdfimages -j -f 54 -l 54`); **no licence at the record**, public domain by age (US, 1912) | 30 / 53 | kept whole (1.41); Dave's must-have |
+| ✓ D10b | T. rex: Osborn, Bulletin AMNH 22, art. 16, pl. XXXIX, 1906, drawn by L. M. Sterling, with a man's skeleton for scale | Internet Archive bulletin-american-museum-natural-history-22-281-296, and AMNH 2246/1473; **no licence at either**, public domain by age (US, 1906) | 28 / 44 | kept whole (1.82) |
+| ✓ D1 | Stegosaurus: O. C. Marsh, *The Dinosaurs of North America*, USGS 16th Annual Report, pl. LII, 1896 | Internet Archive dinosaursofnort00mars (Smithsonian Libraries); a US government work: "USGS-authored or produced data and information are considered to be in the U.S. Public Domain." | 34 / 54 | the best of the round |
+| ✓ D2 | Triceratops: Marsh, 1896 | as D1 | 24 / 38 | |
+| ✓ D3 | Ceratosaurus: Marsh, 1896 | as D1 | 21 / 34 | |
+| ✓ D4 | Brontosaurus: Marsh, 1896 | as D1 | 21 / 35 | small on its sheet |
+| ✓ D5 | Claosaurus: Marsh, 1896 | as D1 | 22 / 36 | |
+| ✓ D6 | Iguanodon: Marsh, 1896, after Boulenger | as D1 | 21 / 28 | overlaps D7 |
+| ✓ D7 | Iguanodon, the Brussels mount: *A Guide to the Fossil Reptiles*, British Museum (Natural History), 1905, fig. 18 | Internet Archive guidetofossilrep8190bmnh (NHM Library, London): "Public domain. The BHL considers that this work is no longer under copyright protection" | 32 / 58 | the boldest |
+| ✓ D8 | Scelidosaurus: the same guide, fig. 15 | as D7 | 22 / 33 | |
+| ✓ D9 | Cryptocleidus (a plesiosaur): C. W. Andrews, *Marine Reptiles of the Oxford Clay*, pt. 1, British Museum, 1910, text-fig. 94 | Internet Archive descriptivecatal01brit: "NOT_IN_COPYRIGHT" | 20 / 31 | |
+| ✓ R1 | Sea Dragons: W. D. Conybeare, the Plesiosaurus and Ichthyosaurus, *Transactions of the Geological Society*, 1824 | Internet Archive, no rights field; public domain by age | 37 / 62 | small labelled bones below; reserve |
+| ✓ R2 | Struthiomimus and Ornitholestes: Osborn, Bulletin AMNH 35, pl. XXVI, 1917 | no rights field anywhere | 23 / 33 | overlapping skeletons; reserve |
+| ✓ W10 | Catalina: AN 01-5MA-2, *Handbook of Erection and Maintenance Instructions*, PBY-5 and PBY-5A, 15 May 1945, fig. 1, the front view over the side view | Internet Archive handbook-of-erection-and-maint.-instructions-navy-pby-5, "Public Domain Mark 1.0" (a user's upload; the scan's footers name a seller of manual scans, and its files a shadow library); a US Navy and Army Air Forces publication | 16 / 26 | weaker chain than an institution's; reserve: the Bureau of Aeronautics' PBY-6A data sheet (Wayback Machine) |
+
+Dropped: Osborn's 1906 skull figure (dotted outlines, labels on the bone), the 1912 frontispiece and the 1913 model (photographs), Gilmore's Stegosaurus and Ceratosaurus (photographs or tonal), Marsh's thinner skeletons, Owen's Dimorphodon (faint, creased), the Berlin Archaeopteryx (a photograph), Hatcher's Diplodocus (CC BY-NC at BioStor). For the Catalina: no Consolidated design patent found for the PBY (Google Patents refused), no three-view at NASA's server, the San Diego Air & Space Museum's paintings carry large star insignia.

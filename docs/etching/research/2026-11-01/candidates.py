@@ -138,6 +138,44 @@ MAPS = {
                (0.20, 0.18, 0.95, 0.93), 1.3, dict(lift=0.3)),
 }
 
+# ---- dinosaurs (the T. rex skull is rexskull, D10, and the whole T. rex rex, D10b) ----
+# the dinosaur round, 2026-11-01. An Internet Archive book's file is its own JPEG of that leaf, `https://archive.org/download/<id>/page/n<leaf>.jpg`.
+# Marsh's plates are printed sideways (rot=90); their crops sit inside each plate's ruled frame, below its running head and above its caption.
+IA = "https://archive.org/download/%s/page/n%d.jpg"
+MARSH = "dinosaursofnort00mars"
+DINOSAURS = {
+    "brontosaurus": ("marsh-n284.jpg", IA % (MARSH, 284), (0.10, 0.10, 0.935, 0.885), 0.7, dict(rot=90, blank=[(0.85, 0.0, 1.0, 0.04)])),
+    "stegosaurus": ("marsh-n324.jpg", IA % (MARSH, 324), (0.10, 0.115, 0.94, 0.895), 0.7, dict(rot=90)),
+    "triceratops": ("marsh-n400.jpg", IA % (MARSH, 400), (0.10, 0.11, 0.93, 0.89), 0.7, dict(rot=90)),
+    "ceratosaurus": ("marsh-n172.jpg", IA % (MARSH, 172), (0.10, 0.10, 0.925, 0.89), 0.7, dict(rot=90, blank=[(0.97, 0.0, 1.0, 1.0)])),
+    "claosaurus": ("marsh-n412.jpg", IA % (MARSH, 412), (0.10, 0.10, 0.93, 0.88), 0.7, dict(rot=90)),
+    "iguanodonmarsh": ("marsh-n456.jpg", IA % (MARSH, 456), (0.10, 0.07, 0.92, 0.92), 0.7, dict(rot=90, blank=[(0.92, 0.0, 1.0, 1.0), (0.0, 0.0, 1.0, 0.025)])),
+    "struthiomimus": ("osborn1917-n44.jpg", IA % ("bulletin-american-museum-natural-history-35-733-771", 44), (0.0, 0.065, 1.0, 0.885), 0.8, dict(blank=[(0.62, 0.48, 0.70, 0.52), (0.44, 0.94, 0.52, 0.98), (0.88, 0.48, 0.96, 0.52), (0.76, 0.46, 0.80, 0.50), (0.805, 0.52, 0.85, 1.0), (0.585, 0.80, 0.61, 1.0), (0.585, 0.55, 0.61, 0.70), (0.05, 0.83, 0.09, 1.0), (0.585, 0.0, 0.61, 0.27)])),
+    "plesiosaurus": ("conybeare1824-n600.jpg", IA % ("per_geological-society-london-trans_transactions-of-the-geological-society_1824_1", 600), (0.035, 0.03, 0.962, 0.86), 1.0, dict(blank=[(0.75, 0.036, 1.0, 0.084), (0.40, 0.0, 0.68, 0.06), (0.44, 0.40, 0.68, 0.455), (0.72, 0.585, 0.97, 0.625), (0.32, 0.935, 0.52, 0.97), (0.69, 0.80, 0.84, 0.84), (0.86, 0.82, 0.99, 0.88), (0.6, 0.95, 0.85, 1.0), (0.985, 0.0, 1.0, 1.0)])),
+    "cryptocleidus": ("andrews1910-n217.jpg", IA % ("descriptivecatal01brit", 217), (0.145, 0.10, 0.85, 0.93), 0.8, dict(rot=-90, lift=0.2, blank=[(0.45, 0.19, 0.58, 0.25), (0.2, 0.80, 0.87, 0.86), (0.0, 0.0, 0.06, 1.0), (0.0, 0.0, 1.0, 0.02)])),
+    "scelidosaurus": ("guide1905-n50.jpg", IA % ("guidetofossilrep8190bmnh", 50), (0.015, 0.12, 0.97, 0.497), 0.8, dict(lift=0.15, blank=[(0.9, 0.1, 1.0, 0.2)])),
+    # T. rex: Osborn's own drawings of AMNH 5027 and 973. The 1912 memoir's file is the figure as embedded in the AMNH digital library's PDF
+    # (`pdfimages -j -f 54 -l 54`, the second image on p. 54, Fig. 2 of the skull in side view), renamed.
+    "rexskull": ("osborn1912-p54.jpg", "https://digitallibrary.amnh.org/server/api/core/bitstreams/c56a5e80-9468-4703-979e-fabbe65344f0/content", (0.0, 0.0, 1.0, 1.0), 1.0,
+                 dict(lift=0.3, blank=[(0.072, 0.63, 0.282, 0.6625), (0.282, 0.6275, 0.372, 0.655), (0.212, 0.852, 0.30, 0.90), (0.30, 0.855, 0.40, 0.89),   # the rows of foramina dots
+                                       (0.41, 0.835, 0.43, 0.855), (0.45, 0.77, 0.465, 0.79), (0.48, 0.80, 0.495, 0.82), (0.07, 0.565, 0.118, 0.595), (0.25, 0.567, 0.29, 0.592),
+                                       (0.41, 0.865, 0.45, 0.89), (0.47, 0.61, 0.51, 0.64), (0.462, 0.672, 0.492, 0.70), (0.535, 0.60, 0.57, 0.63), (0.0, 0.70, 0.10, 0.80),
+                                       (0.555, 0.0, 0.645, 0.065), (0.84, 0.0, 1.0, 0.095), (0.48, 0.10, 0.53, 0.14), (0.33, 0.2, 0.40, 0.272), (0.14, 0.30, 0.235, 0.355), (0.17, 0.33, 0.255, 0.375),
+                                        (0.03, 0.45, 0.11, 0.49), (0.0, 0.545, 0.06, 0.585), (0.0, 0.70, 0.09, 0.88), (0.07, 0.78, 0.18, 0.84), (0.745, 0.905, 0.85, 1.0), (0.86, 0.85, 1.0, 1.0), (0.91, 0.735, 0.95, 0.78)])),
+    "rexskull1906": ("osborn1906-n4.jpg", IA % ("bulletin-american-museum-natural-history-22-281-296", 4), (0.06, 0.31, 0.765, 0.668), 0.8,
+                     dict(lift=0.15, blank=[(0.10, 0.40, 0.19, 0.50), (0.09, 0.52, 0.155, 0.61), (0.48, 0.33, 0.53, 0.41), (0.355, 0.41, 0.405, 0.49), (0.665, 0.23, 0.725, 0.31), (0.58, 0.14, 0.62, 0.20),
+                                            (0.81, 0.06, 0.90, 0.135), (0.62, 0.68, 0.72, 0.76), (0.40, 0.87, 0.45, 0.94), (0.88, 0.82, 1.0, 1.0)])),
+    "rex": ("osborn1906-n16.jpg", IA % ("bulletin-american-museum-natural-history-22-281-296", 16), (0.085, 0.015, 1.0, 0.905), 0.8,
+            dict(lift=0.15, blank=[(0.89, 0.86, 0.99, 0.945), (0.55, 0.90, 0.64, 1.0)])),   # the plate's scale and caption cropped away; the man for scale kept
+    "iguanodon": ("guide1905-n52.jpg", IA % ("guidetofossilrep8190bmnh", 52), (0.0, 0.275, 0.92, 0.612), 1.0, dict(blank=[(0.54, 0.42, 0.6, 0.5), (0.545, 0.54, 0.58, 0.58), (0.1, 0.0, 0.16, 0.04)])),
+}
+
+# ---- the PBY Catalina (W10) ----
+CATALINA = {
+    "pby": ("ia-an015ma2-n11.jpg", "https://archive.org/download/handbook-of-erection-and-maint.-instructions-navy-pby-5/page/n11.jpg", (0.05, 0.505, 0.88, 0.87), 1.0,
+            dict(lift=0.25, blank=[(0.46, 0.0, 0.55, 0.025), (0.0, 0.025, 1.0, 0.095), (0.503, 0.0, 0.518, 0.121), (0.03, 0.095, 0.047, 0.232), (0.972, 0.095, 0.99, 0.228), (0.475, 0.095, 0.6, 0.121), (0.618, 0.12, 0.73, 0.168), (0.42, 0.461, 0.61, 0.51), (0.508, 0.461, 0.517, 0.735), (0.2, 0.51, 0.8, 0.553), (0.205, 0.548, 0.372, 0.566), (0.205, 0.566, 0.2145, 0.775), (0.366, 0.566, 0.372, 0.652), (0.4, 0.582, 0.575, 0.608), (0.1, 0.645, 0.318, 0.659), (0.1, 0.659, 0.205, 0.738), (0.1, 0.738, 0.271, 0.746), (0.1, 0.746, 0.205, 0.895), (0.1, 0.86, 0.249, 0.874), (0.1, 0.874, 0.249, 0.905), (0.249, 0.895, 0.257, 0.905), (0.1, 0.905, 0.93, 1.0), (0.205, 0.815, 0.2145, 0.905), (0.508, 0.785, 0.517, 0.822), (0.508, 0.836, 0.517, 0.86), (0.508, 0.868, 0.517, 0.905), (0.59, 0.868, 0.6, 0.905), (0.597, 0.858, 0.93, 0.872), (0.765, 0.548, 0.781, 0.584), (0.79, 0.578, 0.93, 0.594), (0.825, 0.594, 0.93, 0.858), (0.755, 0.772, 0.825, 0.812), (0.725, 0.812, 0.83, 0.862), (0.77, 0.762, 0.778, 0.772), (0.985, 0.87, 1.0, 0.9), (0.0, 0.94, 0.05, 1.0), (0.262, 0.896, 0.275, 0.905), (0.414, 0.896, 0.427, 0.905), (0.443, 0.868, 0.452, 0.905), (0.778, 0.762, 0.8, 0.772)])),   # the front view over the side view; the plan view above, and every dimension, painted out
+}
+
 # The maps researcher's despeckle step, called first thing in darkness() as `if specks: im = despeckled(im, specks)`.
 import numpy as np
 from PIL import Image
