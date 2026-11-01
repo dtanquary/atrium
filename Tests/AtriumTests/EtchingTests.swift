@@ -66,9 +66,10 @@ import Testing
     #expect(listed[wave - 1] == "Glass Furnaces" && listed[wave + 1] == "Harbour Crane" && listed[flea - 1] == "Elliptical Wing" && listed[flea + 1] == "Flying Boat", "\(listed)")
 }
 
-/// A route stamped for a 14-inch screen: the line covers a fifth of it, the first row of bytes is the bottom of the
-/// screen (where the stylus starts, at the frame's lower left corner, at the very start of the clock), and times
-/// run on to the clock's end. Prints how long decoding and stamping take.
+/// A route stamped for a 14-inch screen, fitted: the line covers a fifth of it, the first row of bytes is the bottom
+/// of the screen, nothing is drawn outside the picture's own rectangle (the frame every route begins with, and the
+/// stylus's ways about by it, are not drawn and take no time), so the first line drawn is drawn at the very start of
+/// the clock and the last a little before its end. Prints how long decoding and stamping take.
 @Test func lineRouteStampsItsTextures() throws {
     let file = try Data(contentsOf: resource("etching-wave.route")), clock = ContinuousClock()
     var route: LineRoute!, stamped: LineRoute.Stamped!
@@ -86,10 +87,14 @@ import Testing
     func time(_ p: Int) -> Int { Int(when[p * 4]) << 16 | Int(when[p * 4 + 1]) << 8 | Int(when[p * 4 + 2]) }
     let drawn = (0..<w * h).filter { when[$0 * 4 + 3] > 127 }
     #expect(Double(drawn.count) / Double(w * h) > 0.12 && Double(drawn.count) / Double(w * h) < 0.3, "the line covers \(drawn.count) texels")
-    #expect(drawn.allSatisfy { time($0) <= Int(LineRoute.end) } && drawn.map(time).max()! > Int(LineRoute.end * 0.999))
-    // the start: cell (68, 619) of 640 rows, so near the bottom, which is the first rows of bytes
-    let first = try #require(drawn.min { time($0) < time($1) }), (fx, fy) = (first % w, first / w)
-    #expect(time(first) < 200 && abs(Double(fx) - (68.5 * scale + dx)) < 4 && abs(Double(fy) - (Double(h) - (619.5 * scale + dy))) < 4, "starts at \(fx), \(fy)")
+    #expect(drawn.allSatisfy { time($0) <= Int(LineRoute.end) } && drawn.map(time).max()! > Int(LineRoute.end * 0.95))
+    // nothing outside the picture's rectangle, (74, 26) to (949, 614) in cells, where the frame six cells round it ran;
+    // a texel is drawn by a line up to two-thirds of a cell's width beyond the rectangle's edge
+    let (left, right) = (74 * scale + dx, 949 * scale + dx), (bottom, top) = (Double(h) - (614 * scale + dy), Double(h) - (26 * scale + dy))
+    let stray = drawn.filter { let (px, py) = (Double($0 % w) + 0.5, Double($0 / w) + 0.5); return px < left - 4 || px > right + 4 || py < bottom - 4 || py > top + 4 }
+    #expect([route.rect.x, route.rect.y, route.rect.w, route.rect.h] == [74, 26, 875, 588] && stray.isEmpty, "\(stray.count) texels drawn outside the picture")
+    let first = try #require(drawn.min { time($0) < time($1) })
+    #expect(time(first) < 200, "the first line is drawn at \(time(first))")
     // going over a line again is recorded, later than its first drawing, for a good share of the line
     let twice = drawn.filter { again[$0 * 4] != 255 || again[$0 * 4 + 1] != 255 }
     #expect(Double(twice.count) / Double(drawn.count) > 0.2 && twice.allSatisfy { Int(again[$0 * 4]) << 8 | Int(again[$0 * 4 + 1]) >= time($0) >> 8 })

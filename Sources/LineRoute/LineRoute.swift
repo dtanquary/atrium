@@ -145,7 +145,10 @@ public struct LineRoute: Sendable {
     /// takes no time, and the clock it would have taken comes off every time after it: a picture scaled up until
     /// it is cut off there is finished before the route's clock is, and nothing in it waits for a stylus that is
     /// out of sight. Even at `haste` the frame alone held a bare screen for 15 s. Under a cover the line is
-    /// stamped all the same, for a display that has none. A route that fits inside is stamped to its own clock.
+    /// stamped all the same, for a display that has none. A step wholly outside the picture's own rectangle (`rect`)
+    /// is not stamped at all and takes no time either: that is the frame every route begins with, six cells round
+    /// the picture, and the stylus's ways about by it, which are no part of the picture and showed round one fitted
+    /// inside the screen. A route that fits inside is otherwise stamped to its own clock.
     // ponytail: where a later line overlaps an earlier one's edge by less than a quarter of a texel's cover, that
     // sliver shows with the earlier line; store a time per pass if lines ever cross thickly enough to see it.
     public func stamp(width: Int, height: Int, scale: Double, dx: Double, dy: Double, covered: Double = 0, over ghost: Data? = nil) -> Stamped {
@@ -153,6 +156,7 @@ public struct LineRoute: Sendable {
         var first = [UInt32](repeating: never, count: count), second = [UInt32](repeating: never, count: count), cover = [UInt8](repeating: 0, count: count)
         let reach = Float(Self.line / 2 * scale) + 0.5, unit = Self.end / clock, gap = UInt32(Self.apart * unit)
         let top = Float(Double(height) - covered) // of what shows, rows counted from the bottom
+        let (left, right) = (Float(rect.x), Float(rect.x + rect.w)), (upper, lower) = (Float(rect.y), Float(rect.y + rect.h)) // in cells, top row first
         first.withUnsafeMutableBufferPointer { first in second.withUnsafeMutableBufferPointer { second in cover.withUnsafeMutableBufferPointer { cover in
             var saved = 0.0
             for i in 1..<max(x.count, 1) {
@@ -164,9 +168,10 @@ public struct LineRoute: Sendable {
                 // out of sight by its own line, whatever of its width reaches in: a row of hatching just off the
                 // edge would otherwise be waited for and show a sliver
                 let unseen = max(ax, bx) < 0 || min(ax, bx) > Float(width) || max(ay, by) < 0 || min(ay, by) > top
-                let from = t[i - 1] - saved, took = unseen ? 0 : t[i] - t[i - 1]
+                let outside = max(x[i - 1], x[i]) < left || min(x[i - 1], x[i]) > right || max(y[i - 1], y[i]) < upper || min(y[i - 1], y[i]) > lower
+                let from = t[i - 1] - saved, took = unseen || outside ? 0 : t[i] - t[i - 1]
                 saved += t[i] - t[i - 1] - took
-                guard x0 <= x1, y0 <= y1 else { continue }
+                guard x0 <= x1, y0 <= y1, !outside else { continue }
                 for py in y0...y1 {
                     for px in x0...x1 {
                         let qx = Float(px) + 0.5 - ax, qy = Float(py) + 0.5 - ay
