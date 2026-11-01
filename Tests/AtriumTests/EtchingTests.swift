@@ -24,14 +24,16 @@ import Testing
 /// the steps its heading promises, on the standard grid or the fine one of twice as many cells each way, and the
 /// fine one takes the longer. The Picture menu's pick is stored by place, so each picture is where it was put.
 @MainActor @Test func etchingHasEveryPictureAtBothWidths() throws {
-    #expect(Etching.pictures.count == 69 && Etching.picture.range.upperBound == 69)
+    #expect(Etching.pictures.count == 83 && Etching.picture.range.upperBound == 83)
     #expect(Etching.pictures.map(\.file) == ["wave", "rhinoceros", "flea", "interlace", "flyer", "mishima", "velocipede", "airship", "polyhedra", "kajikazawa", "stars", "bands", "pontneuf",
                                              "rotonda", "ant", "fanlight", "crystal", "stjerneborg", "telescope", "press", "waterworks", "steamer", "balloons", "cayley", "roadengine",
                                              "draught", "centres", "screw", "bear", "wing", "fountain", "furnaces", "peacocks", "dragon",
                                              "spring", "fusee", "twister", "sector", "hammers", "rack",
                                              "venuscomb", "seaserpent", "maze", "nautilus", "horseskeleton", "clams", "elephant", "fujiatsea",
                                              "garabit", "crane", "buddicom", "plough", "schooner", "allerton", "neuilly", "sawmill", "holt",
-                                             "b17", "spitfire", "p80", "a20", "electra", "b24", "mtb", "craterlake", "sognefjord", "iceland", "mississippi", "yosemite"])
+                                             "b17", "spitfire", "p80", "a20", "electra", "b24", "mtb", "craterlake", "sognefjord", "iceland", "mississippi", "yosemite",
+                                             "rexskull", "rex", "stegosaurus", "triceratops", "ceratosaurus", "brontosaurus", "claosaurus", "iguanodonmarsh", "iguanodon",
+                                             "scelidosaurus", "cryptocleidus", "plesiosaurus", "struthiomimus", "pby"])
     #expect(!Etching.pictures.contains { $0.name.contains("Notre") }) // the Waterworks is a pump house; the bridge's name is no part of the picture
     for (place, picture) in Etching.pictures.enumerated() {
         let alone = Etching.fineOnly[place], seconds = Etching.seconds.map { $0[place] }
@@ -61,7 +63,7 @@ import Testing
     #expect(zip(listed, listed.dropFirst()).allSatisfy { bare($0).localizedStandardCompare(bare($1)) == .orderedAscending }, "\(listed)")
     #expect(listed.prefix(4) == ["Air Balloons", "Airliner", "Airship", "An Ant"] && listed.last == "Yosemite Valley", "\(listed)")
     let wave = try #require(listed.firstIndex(of: "The Great Wave")), flea = try #require(listed.firstIndex(of: "A Flea"))
-    #expect(listed[wave - 1] == "Glass Furnaces" && listed[wave + 1] == "Harbour Crane" && listed[flea - 1] == "Elliptical Wing" && listed[flea + 1] == "Flying Machine", "\(listed)")
+    #expect(listed[wave - 1] == "Glass Furnaces" && listed[wave + 1] == "Harbour Crane" && listed[flea - 1] == "Elliptical Wing" && listed[flea + 1] == "Flying Boat", "\(listed)")
 }
 
 /// A route stamped for a 14-inch screen: the line covers a fifth of it, the first row of bytes is the bottom of the
