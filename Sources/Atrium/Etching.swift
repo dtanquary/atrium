@@ -33,6 +33,13 @@ final class Etching: SKScene, BatteryPaced {
         ("Glass Furnaces", "furnaces"), ("Peacock Clock", "peacocks"), ("Dragon Engine", "dragon"),
         ("Leonardo's Clock Spring", "spring"), ("Leonardo's Fusee", "fusee"), ("Leonardo's Thread Twister", "twister"),
         ("Leonardo's Sector Gear", "sector"), ("Leonardo's Hammer Winch", "hammers"), ("Leonardo's Rack and Lever", "rack"),
+        ("Venus Comb", "venuscomb"), ("Sea Serpent", "seaserpent"), ("Labyrinth Garden", "maze"), ("Nautilus", "nautilus"),
+        ("Horse Skeleton", "horseskeleton"), ("Giant Clams", "clams"), ("Elephant", "elephant"), ("Fuji from the Sea (Fine only)", "fujiatsea"),
+        ("Garabit Viaduct", "garabit"), ("Harbour Crane", "crane"), ("Locomotive", "buddicom"), ("Steam Plough", "plough"), ("Schooner", "schooner"),
+        ("Lake House", "allerton"), ("Neuilly Machine", "neuilly"), ("Sawmill (Fine only)", "sawmill"), ("Crawler Tractor", "holt"),
+        ("Bombing Airplane", "b17"), ("Elliptical Wing", "spitfire"), ("Jet Fighter", "p80"), ("Attack Bomber", "a20"), ("Airliner", "electra"),
+        ("Twin-Tail Bomber", "b24"), ("Torpedo Boat", "mtb"),
+        ("Crater Lake", "craterlake"), ("Sognefjord", "sognefjord"), ("Iceland", "iceland"), ("Mississippi Meanders", "mississippi"), ("Yosemite Valley", "yosemite"),
     ]
     /// The Picture menu's order, which is not the one its picks are stored by: Random, then every picture by its
     /// name, a leading "The", "A" or "An" left out of the comparison. Worked out from the names, so a new picture
@@ -42,8 +49,9 @@ final class Etching: SKScene, BatteryPaced {
         return [0] + pictures.indices.sorted { sorting(pictures[$0].name).localizedStandardCompare(sorting(pictures[$1].name)) == .orderedAscending }.map { $0 + 1 }
     }()
     /// The pictures that are whole or not at all, by their files: cut off at a display's edges one would lose what
-    /// makes it (the Airship, both rounded ends of its hull), so it is fitted inside whatever Fill the screen says.
-    nonisolated static let whole: Set = ["airship"]
+    /// makes it (the Airship, both rounded ends of its hull; the Elephant's back and feet; the Schooner's topmasts
+    /// and keel; the Crawler Tractor's tail wheel), so it is fitted inside whatever Fill the screen says.
+    nonisolated static let whole: Set = ["airship", "elephant", "schooner", "holt"]
     /// Which picture: Random, a different one each time, or one of the set over and over. Picking one clears the
     /// screen for it there and then.
     nonisolated static let picture = Knob(key: "etching.picture", label: "Picture", range: 0...Double(pictures.count), standard: 0, section: "Drawing",

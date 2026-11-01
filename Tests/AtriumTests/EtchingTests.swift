@@ -24,24 +24,28 @@ import Testing
 /// the steps its heading promises, on the standard grid or the fine one of twice as many cells each way, and the
 /// fine one takes the longer. The Picture menu's pick is stored by place, so each picture is where it was put.
 @MainActor @Test func etchingHasEveryPictureAtBothWidths() throws {
-    #expect(Etching.pictures.count == 40 && Etching.picture.range.upperBound == 40)
+    #expect(Etching.pictures.count == 69 && Etching.picture.range.upperBound == 69)
     #expect(Etching.pictures.map(\.file) == ["wave", "rhinoceros", "flea", "interlace", "flyer", "mishima", "velocipede", "airship", "polyhedra", "kajikazawa", "stars", "bands", "pontneuf",
                                              "rotonda", "ant", "fanlight", "crystal", "stjerneborg", "telescope", "press", "waterworks", "steamer", "balloons", "cayley", "roadengine",
                                              "draught", "centres", "screw", "bear", "wing", "fountain", "furnaces", "peacocks", "dragon",
-                                             "spring", "fusee", "twister", "sector", "hammers", "rack"])
+                                             "spring", "fusee", "twister", "sector", "hammers", "rack",
+                                             "venuscomb", "seaserpent", "maze", "nautilus", "horseskeleton", "clams", "elephant", "fujiatsea",
+                                             "garabit", "crane", "buddicom", "plough", "schooner", "allerton", "neuilly", "sawmill", "holt",
+                                             "b17", "spitfire", "p80", "a20", "electra", "b24", "mtb", "craterlake", "sognefjord", "iceland", "mississippi", "yosemite"])
     #expect(!Etching.pictures.contains { $0.name.contains("Notre") }) // the Waterworks is a pump house; the bridge's name is no part of the picture
     for (place, picture) in Etching.pictures.enumerated() {
         let alone = Etching.fineOnly[place], seconds = Etching.seconds.map { $0[place] }
         #expect(alone == picture.name.hasSuffix("(Fine only)"), "\(picture.name)")
         for (fine, grid) in [(false, 1024), (true, 2048)] where fine || !alone {
             let file = try Data(contentsOf: resource("etching-\(picture.file)\(fine ? "-fine" : "").route")), route = try #require(LineRoute(file), "\(picture.name)")
-            #expect(route.columns == grid && route.rows == grid * 5 / 8 && route.x.count == route.steps + 1 && route.steps > 50_000, "\(picture.name), fine \(fine)")
+            #expect(route.columns == grid && route.rows == grid * 5 / 8 && route.x.count == route.steps + 1 && route.steps > 40_000, "\(picture.name), fine \(fine)")
             #expect(route.rect.x > 0 && route.rect.y > 0 && route.rect.x + route.rect.w < grid && route.rect.y + route.rect.h < grid * 5 / 8)
         }
-        // (the least is Cayley's machine, all outline: 1.25 times as long fine)
-        #expect(seconds[0] > 1200 && (alone ? seconds[1] == seconds[0] : seconds[1] > 1.2 * seconds[0]), "\(picture.name) takes \(seconds)")
+        // (the least is Cayley's machine, all outline: 1.25 times as long fine; the quickest the Elliptical Wing, 12 minutes
+        // and 44,000 steps at the standard line)
+        #expect(seconds[0] > 600 && (alone ? seconds[1] == seconds[0] : seconds[1] > 1.2 * seconds[0]), "\(picture.name) takes \(seconds)")
     }
-    #expect(Etching.fineOnly.count { $0 } == 1)
+    #expect(Etching.fineOnly.count { $0 } == 3)
     #expect(Etching.choices(detailed: true) == Array(Etching.pictures.indices) && Etching.choices(detailed: false) == Etching.pictures.indices.filter { !Etching.fineOnly[$0] })
     // at the top of the Speed slider the longest, fine, is done in a few minutes
     #expect(Etching.seconds[1].max()! / Etching.speed.range.upperBound < 300)
@@ -55,9 +59,9 @@ import Testing
     let listed = order.dropFirst().map { names[$0] }
     func bare(_ name: String) -> String { name.split(separator: " ", maxSplits: 1).first.map { ["The", "A", "An"].contains($0) } == true ? String(name.drop { $0 != " " }.dropFirst()) : name }
     #expect(zip(listed, listed.dropFirst()).allSatisfy { bare($0).localizedStandardCompare(bare($1)) == .orderedAscending }, "\(listed)")
-    #expect(listed.prefix(4) == ["Air Balloons", "Airship", "An Ant", "Bridge Centres"] && listed.last == "Woven Bands", "\(listed)")
+    #expect(listed.prefix(4) == ["Air Balloons", "Airliner", "Airship", "An Ant"] && listed.last == "Yosemite Valley", "\(listed)")
     let wave = try #require(listed.firstIndex(of: "The Great Wave")), flea = try #require(listed.firstIndex(of: "A Flea"))
-    #expect(listed[wave - 1] == "Glass Furnaces" && listed[wave + 1] == "Interlace" && listed[flea - 1] == "Dragon Engine" && listed[flea + 1] == "Flying Machine", "\(listed)")
+    #expect(listed[wave - 1] == "Glass Furnaces" && listed[wave + 1] == "Harbour Crane" && listed[flea - 1] == "Elliptical Wing" && listed[flea + 1] == "Flying Machine", "\(listed)")
 }
 
 /// A route stamped for a 14-inch screen: the line covers a fifth of it, the first row of bytes is the bottom of the
