@@ -40,7 +40,8 @@ PICTURES = {   # name: file, source, crop as fractions of the file, tone gamma, 
                   (0.10, 0.30, 0.835, 0.72), 1.0, {}),
     "flyer": ("machines-wright-flying-machine-1906-uspto-sheet1.png", "https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/0821393",
               (0.17, 0.215, 0.80, 0.765), 1.0, dict(rot=-90)),
-    "mishima": ("56346-DP141065.jpg", "https://images.metmuseum.org/CRDImages/as/original/DP141065.jpg", (0.005, 0.012, 0.985, 0.975), 1.0, {}),
+    "mishima": ("56346-DP141065.jpg", "https://images.metmuseum.org/CRDImages/as/original/DP141065.jpg", (0.005, 0.012, 0.985, 0.975), 1.0,
+                dict(fine=dict(lift=0.2, flatten="paper"))),   # the fine line on the print flattened: its tree and the land below as outlines, not solid hatching (2026-11-01)
     # the second set, 2026-10-12
     "velocipede": ("US0059915-p1.png", "https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/0059915", (0.16, 0.15, 0.73, 0.42), 1.0, {}),
     "airship": ("US0621195-p1.png", "https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/0621195", (0.15, 0.15, 0.72, 0.87), 1.0,
