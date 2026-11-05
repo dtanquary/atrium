@@ -1,6 +1,6 @@
 # Schlieren
 
-Rising heat as a colour schlieren camera sees it, after the photos of Gary Settles (Penn State), Andrew Davidhazy (RIT) and Ted Kinsman (RIT). Warm air is thinner than the air around it, so it bends light slightly. A schlieren camera focuses its light source onto a colour filter, the "cutoff", so each point of the picture takes whatever colour the filter has where that point's rays were bent to. The two edges of a plume bend light opposite ways, so they come out in opposite colours, and the air the heat hasn't touched shows the filter's centre. Candles, a mug of coffee or a radiator heat a simulated room. The flames are drawn in their own colour on top, since they give off their own light, and the objects are black silhouettes, each edge wrapped in a thin coloured fringe.
+Rising heat as a colour schlieren camera sees it, after the photos of Gary Settles (Penn State), Andrew Davidhazy (RIT) and Ted Kinsman (RIT). Warm air is thinner than the air around it, so it bends light slightly. A schlieren camera focuses its light source onto a colour filter, the "cutoff", so each point of the picture takes whatever colour the filter has where that point's rays were bent to. The two edges of a plume bend light opposite ways, so they come out in opposite colours, and the air the heat hasn't touched shows the filter's centre. Candles, a mug of coffee or a radiator just below the frame heat a simulated room. The flames are drawn in their own colour on top, since they give off their own light, and the objects are black silhouettes, each edge wrapped in a thin coloured fringe.
 
 ![Warm air off a radiator in the dark field, Candlelight palette](images/schlieren.jpg)
 
@@ -33,9 +33,9 @@ Rising heat as a colour schlieren camera sees it, after the photos of Gary Settl
 
 3. **Palettes.** Five colours from one side of the filter to the other: far left, left, centre, right, far right. Four are after named photos (Candlelight: Settles' dark bands; Spectrum: Davidhazy; Tricolour: Settles' red field; Pastel: Kinsman; Ember: Settles' kettle), three are jewel tones. Light Mode lifts the centre colour 55% toward white for the bright-field filters, which is how Kinsman's photos look. The dark field stays dark.
 4. **The air** (`AirSim`).
-   - Velocity runs on a coarse grid, 64 rows for the frame plus 8 above it, so plumes leave the picture before they meet the sim's edge. That's 99×72 at 16:10. It uses FlameSim's scheme (Stam's stable fluids, red-black SOR with 16 iterations, vorticity confinement), with its own sources and boundaries.
+   - Velocity runs on a coarse grid, 64 rows for the frame plus 8 above it, so plumes leave the picture before they meet the sim's edge. That's 99×72 at 16:10. Warm air adds 3 rows below the frame for its radiator (99×75). It uses FlameSim's scheme (Stam's stable fluids, red-black SOR with 16 iterations, vorticity confinement), with its own sources and boundaries.
    - Vorticity confinement is 5. At 2 a single taper stayed a smooth column to the top of the frame. At 5 it kinks and starts to billow in the upper third, as Settles' still-air photo does.
-   - Temperature, θ = ΔT/T0, runs on a grid three times finer (297×216) by MacCormack advection (Selle et al. 2008), limited to the cells it read so it can't overshoot. Schlieren is a derivative, so numerical diffusion erases exactly the thin edges it shows. A plain semi-Lagrangian field lost them.
+   - Temperature, θ = ΔT/T0, runs on a grid three times finer (297×216, or 297×225 for Warm air) by MacCormack advection (Selle et al. 2008), limited to the cells it read so it can't overshoot. Schlieren is a derivative, so numerical diffusion erases exactly the thin edges it shows. A plain semi-Lagrangian field lost them.
    - Buoyancy is g·θ/(1 + θ), against the room's mean. The edges are open: pressure 0 past them, with velocity copied into the ghost ring. Open edges let a drift of the whole field build up, which went unstable within 10 s of sim time in the prototype. So the mean velocity is removed every step, as in a still room.
    - A 2D slice can't spread heat sideways in depth, as a real plume does. Drag (1.2/s), cooling (1/s, 0.35 for the radiator) and a little diffusion (3e-5 m²/s, explicit, in as many passes as keep it under 0.25 a pass) stand in for it, so plumes don't accelerate forever.
    - Flame gas above θ 0.8 is quenched toward it at 12/s. Gas hundreds of degrees hotter than the plume mixes down within a couple of centimetres (θ ≈ 1 by the tip, NIST). Without it, a thin thread of flame-hot gas rose through each plume and drew it as narrow ribbons cycling through every colour, where the photos show broad, smooth bands.
@@ -45,7 +45,7 @@ Rising heat as a colour schlieren camera sees it, after the photos of Gary Settl
    - **Candles:** four birthday candles 6.4 mm across, with 6×16 mm flames, in a 0.13 m frame, about Davidhazy's.
    - **Candle:** one 21 mm taper (NIST's, with a 42 mm flame; ours is 34 mm tall) in a 0.32 m frame.
    - **Mug:** 84 mm across and 95 mm tall, in a 0.34 m frame. Its coffee surface, just below the rim, is at θ 0.15 (about 70 °C). Its walls are at 0.05 in a 2 mm layer; at 0.1 and 4 mm they glowed far brighter than Kinsman's thin halo.
-   - **Warm air:** a radiator along the bottom with five hotter patches at θ 0.2.
+   - **Warm air:** a radiator just below the frame with five hotter patches at θ 0.2 along its top, so the plumes rise from the screen's bottom edge (`floor`, and `u_visible` gives the shader the frame's offset and height in the sim). It was a black bar along the bottom, 4.5% of the height, until 2026-11-05: on the desktop it read as the picture stopping short of the screen's edge.
 
    - A flame is `stamp`ed each step from a table made once. It's a teardrop of gas at θ 3 (about 1150 K). Above it sits the first 2.5 flame heights of its plume: a Gaussian across, starting half a flame wide at the flame's middle and widening 0.3 m per metre, with θ = 1.1/(1 + 2.5z/height), fading to nothing at the cone's top and just below the flame. That gives the V the photos show at the base. A round halo round the flame instead made a bulb wider than the plume above it, which no photo shows.
    - Warm patches (the mug, the radiator) are drawn each step, since they ripple. Their heat comes off in a few wandering spots (two sines across them) rather than evenly, so a mug sheds several columns.
@@ -121,6 +121,7 @@ Two research agents, 2026-09-28. The notes are summarised here. The photos (30, 
 ## Dave's feedback and decisions
 - 2026-09-28: picked from the "physics as colour" ideas after Crystals was cut. He asked for the colour schlieren version, with a lot of research images, recreated with high fidelity and colour customisation.
 - 2026-10-14: Warm air became the standard Heat in place of Candles: "set 'warm air' to be the default, its more interesting looking". The README, menu and site pictures were retaken in it.
+- 2026-11-05: "the schlieren wallpaper doesnt seem to go all the way flush to the bottom of the screen": Warm air's radiator was a black bar along the bottom. It now sits just below the frame.
 
 ## Ideas / next steps
 - **A hand:** the classic Settles shot, a black hand with its warm boundary layer rising off the fingertips. It needs a sensitive rig (span 10–30 µrad) and a good silhouette.
