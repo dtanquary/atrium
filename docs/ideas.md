@@ -16,6 +16,8 @@ Picked by Dave on 2026-10-10, researched and mocked up that day, and built on 20
 - **Peg Board.** Dave asked on 2026-10-12, with research and mock-ups first, for a clone of the peg-light toy of 1967, "with lights, showing various lighting patterns and what not". A black sheet of holes with glowing coloured pegs placed one at a time: a grown snow crystal or a picture built outline first, then a slow light show, then the sheet clears. Built the same day and hidden as `unfinished` until he has tried it: [peg-board.md](peg-board.md).
 - **Ant Colony.** Dave asked on 2026-10-12, again with research and mock-ups first, for a colony of ants seen from the side through glass, "as it slowly forms and gets bigger". A nest dug through the day by the wall clock, a new one each morning, in blue gel lit from its base or in sand, with ants that walk on the tunnels' walls and carry out what is dug. Built the same day and hidden as `unfinished` until he has tried it: [ant-colony.md](ant-colony.md). An ant drawn by one shader (for hundreds of them) and ants on the glass seen from above are its own next ideas.
 
+- **Jellyfish.** Dave ran it through the new-wallpaper process on 2026-11-07: the shader-drawn version that "Left out on purpose" below left room for, "a shader-drawn bell on black, dim and bioluminescent". Researched and mocked up that day, nothing built: [jellyfish.md](jellyfish.md).
+
 ## Parked
 In the order they were proposed, most promising first.
 
