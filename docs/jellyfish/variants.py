@@ -3,7 +3,21 @@ TILE = {"width": 640, "height": 400}  # a piece of the screen, two fifths of a 1
 DESK = {"width": 1512, "height": 982}  # a 14-inch desktop, scaled down to the tile
 DEEP = ["periphylla", "atolla", "periphylla", "comb", "atolla", "periphylla"]
 
+FILM = {"width": 756, "height": 491, "t": 10.0, "frames": 600, "fps": 30}  # 20 s at half a 14-inch display's pixels
+D = {"look": "fluor", "species": ["crystal"], "count": 16, "seed": 21, "pitch": 12}
+E = {"look": "gallery", "species": ["moon"], "count": 28, "seed": 22, "pitch": 12}
+F = {"look": "glow", "species": ["moon"], "count": 28, "seed": 22}
+
 SHEETS = {
+    # Round 2: Dave's three picks from sheet 1, as groups in motion (docs/jellyfish.md, Dave's feedback).
+    "round2-still": [
+        ("D  Crystal jellies under blue light", {**D, "t": 30.0, **DESK}),
+        ("E  Moon jellies in the lit blue tank", {**E, "t": 30.0, **DESK}),
+        ("F  Moon jellies with a steady blue glow", {**F, "t": 30.0, **DESK}),
+    ],
+    "film-d": [("", {**D, **FILM})],
+    "film-e": [("", {**E, **FILM})],
+    "film-f": [("", {**F, **FILM})],
     "tune": [(k, {"look": "deep", "species": [k], "single": True, "size": 0.32, "tilt": 0.35, "heading": 0.0, "t": 7.0,
                   "width": 320, "height": 200}) for k in ("moon", "nettle", "crystal", "atolla", "periphylla", "comb")],
     # Round 1, question 1: what light shows them.

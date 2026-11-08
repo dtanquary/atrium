@@ -6,9 +6,9 @@ It began in [ideas.md](ideas.md) under "Left out on purpose": "Photo cut-outs of
 
 - **Source:** none yet.
 - **Data:** none. Everything is drawn; reference photos stay references.
-- **Research:** [the method](jellyfish/research-method.md) (swimming numbers, bioluminescence, how to draw it, cost measured with a SpriteKit probe) and [the look](jellyfish/research-look.md) (species, palettes, brightness, names). Every figure in them is marked checked or unchecked.
+- **Research:** [the method](jellyfish/research-method.md) (swimming numbers, bioluminescence, how to draw it, cost measured with a SpriteKit probe), [the look](jellyfish/research-look.md) (species, palettes, brightness, names) and [how real groups move](jellyfish/research-motion.md), measured from nine freely licensed clips of real tanks and a wild bloom. Every figure in them is marked checked or unchecked.
 - **Scripts:** `jellyfish/mock.swift` draws the mock-ups with SpriteKit as the app would; `sheet.py` lays out the sheets and films from the variants in `variants.py`.
-- **Where it stands (2026-11-07):** round 1 of mock-ups waits for Dave's picks.
+- **Where it stands (2026-11-07):** round 2, groups in natural motion in the three lights Dave picked, waits for his word.
 
 ## Names and look-alikes
 - **Jellyfish** is the name proposed: plain, like Fireflies. "Jellies" sits beside Apple's own Palau Jellies and Alaskan Jellies aerials, and "Deep Sea" is too near Space Tour's deep space. JELLYFISH is registered in the US for unrelated goods only, checked through third-party mirrors ([research-look.md](jellyfish/research-look.md) §6).
@@ -31,6 +31,37 @@ Each question, with my recommendation:
 
 [sheet5-desk.jpg](jellyfish/sheet5-desk.jpg) is A at full size under a menu bar and desktop folders.
 
+## Mock-ups, round 2 (2026-11-07)
+Groups only, in Dave's three lights, with the motion rebuilt and then set to what the footage measured ([research-motion.md](jellyfish/research-motion.md)). [round2-still.jpg](jellyfish/round2-still.jpg) is one moment of each; the films are what to judge: [film-d.mp4](jellyfish/film-d.mp4) (16 crystal jellies), [film-e.mp4](jellyfish/film-e.mp4) (28 moon jellies in the lit tank) and [film-f.mp4](jellyfish/film-f.mp4) (the same 28 with the steady glow), each 20 s in real time at half a 14-inch display's pixels.
+
+What changed from round 1, each against the footage:
+- **Poses in 3D.** Each bell's axis points any way in 3D and keeps changing: a slow drift of the axis between pulses, a rock of about ±6° with each pulse, and turns of 11 to 40° in two squeezes of five. Righting goes as the sine of the tilt, so a tipped bell comes back slowly and an upside-down one hardly at all, and the tank's current turns the bells it carries.
+- **The pulse.** A pulse every 1.6 s at 15 cm, each jelly at its own rate and each pulse a little different. The squeeze is 39% of the cycle and re-opening the rest, with no long coast. Moon jellies go about 0.2 diameters a pulse.
+- **The group.** Jellies spread through a tank as deep as the view, coming nearer and going back, carried round by a current of 2 cm/s at its rim. A jelly that touches another stops pulsing for a second or two, then turns 45 to 90° away. A few rest for 6 to 10 s and sink.
+- **Tentacles and arms** hang along a spine laid out from where the bell's axis pointed as the margin passed, so a turn, a tumble or a tilt toward the camera all run down them. The moon jellies' arms flick out at each squeeze. Crystal jellies' tentacles stream about three diameters behind in loose bundles of uneven strands, and they pulse in irregular bursts.
+- **A slight upward look** of 12° into the tanks of D and E, as people look into a tall jelly tank; it shows more undersides and their four gonads.
+
+The simulation measured as the footage was, over 120 s of 28 moon jellies:
+
+| | Simulation | Footage |
+|---|---|---|
+| Side-on bells from vertical, median | 34° | 26° |
+| Side-on bells 45° or more over | 34% | 34% |
+| Axis turn rate, median (90th pct) | 7.0°/s (24) | 6.5°/s (18) |
+| Nearest neighbour on screen, median | 0.76 diameters | 1.0 diameters |
+| Screen covered by bells | 14% | 16 to 46% |
+| Dome-down, of side-on bells | 6% | about 45% on a tank's downward side; most up in another tank |
+
+The face-on, oblique and side-on shares don't compare: the footage classed blobs by silhouette, and a side-on moon jelly with its arms hanging reads as oblique there.
+
+Questions for round 2:
+1. Does the motion read as natural now, in each film? If not, which jelly at which moment looks wrong.
+2. D, E and F as one wallpaper with a Look menu, E following Light Mode and F or D in Dark Mode, or fewer?
+3. How many: 28 moon jellies and 16 crystal jellies here, as dense as the footage's tanks.
+
+## Dave's feedback
+- **2026-11-07, on round 1:** "the single jellifish is very underwhelming, we need to focus on groups that are moving"; "sheet-1 is the best, and within that items D, E, and F are what we should focus in on"; "we need to really focus on natural movement, do more research if needed, its not quite there yet". So round 2 is groups in motion only, in three lights: crystal jellies under blue light with their green rings (D), moon jellies in the lit blue tank (E), and the steady blue glow (F), which no real jelly makes and the sheet said so. The deep species, the single close-up and the other sheets' questions are set aside. Motion gets its own research, measured from footage of real groups.
+
 ## What the mock-ups showed
 - **Deep jellies are small.** At 6 to 15 cm, a camera 1 to 6 m off made them specks. The camera is now set back by the animals' size: about 45 cm to 4 m for the deep set, and half as far again for moon jellies.
 - **At the real pace they leave.** In the model a 15 cm helmet jelly climbs about 19 cm in 20 s, off the top of the view. A build needs them to come back in, or, for a tank, what aquariums do: a kreisel's slow circular current, which keeps jellies off the walls and in front of the glass.
@@ -50,6 +81,7 @@ Each question, with my recommendation:
 - **Not measured:** the mock's cost. It loops over every tentacle and marches 40 steps, where the method's probe measured 0.45 to 0.75 ms of GPU for ten jellies with 24 steps and only the nearest tentacles looked up.
 
 ## Still open
+- Round 2's open points: the crystal jellies' green ring still outshines their bells; the share of bells upside down is the weakest measurement (22 bells, one side of one tank); the touch behaviour comes from one filmed meeting.
 - Dave's picks for the four questions above.
 - The comb jelly is the weakest drawing: its rows read as dots at a distance.
 - The moon jelly's four gonads read as a cross seen side-on; seen from above they'd be its four rings.

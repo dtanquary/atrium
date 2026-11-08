@@ -5,9 +5,9 @@
 //   swiftc -O mock.swift -o $TMPDIR/jelly-mock && $TMPDIR/jelly-mock '<json>'
 //
 // The JSON: look (deep, rov, dark, fluor, gallery, glow), species (names below), count, seed, t (seconds), width and
-// height (points, drawn at 2x), out (a .png, or a path prefix with times/frames). Optional: single (one jelly,
-// centred, `size` its bell's share of the screen's width, `tilt`), times (one picture each), frames and fps (a film),
-// speed, glow (indices of jellies caught glowing, in the dark look).
+// height (points, drawn at 2x), out (a .png, or a path prefix with times/frames). Optional: times (one picture each),
+// frames and fps (a film), speed, current (the tank's, m/s at its rim), glow (indices of jellies caught glowing).
+// Round 1's sheets were drawn by this file as it was at 1760d8a.
 import Foundation
 import Metal
 import SpriteKit
@@ -17,11 +17,10 @@ struct Config: Decodable {
     var species: [String]
     var count: Int?, seed: UInt64?, t: Double?, width: Double?, height: Double?
     var out: String
-    var single: Bool?, size: Double?, tilt: Double?, heading: Double?
     var times: [Double]?, frames: Int?, fps: Double?, speed: Double?
+    var current: Double?
+    var pitch: Double? // degrees the camera looks up into the tank, as people look into a tall jelly tank
     var glow: [Int]?
-    var near: Bool?
-    var turn: Double? // a single jelly turns by this many radians in its first squeeze after 1 s
 }
 
 /// SplitMix64: the same layout for the same seed.
@@ -44,14 +43,20 @@ struct Species {
     var contraction = 0.4, relaxation = 1.4
     var perPulse = 0.35 // bell diameters travelled a pulse
     var slip = 0.0 // the sea nettle slips back as it re-opens
-    var box: (w: Double, above: Double, below: Double) // the sprite in bell radii round the margin's centre
+    var box: (w: Double, above: Double, below: Double) // the sprite in bell radii round the margin's centre, straight
     var shape: [String: String]
+    // How it moves (research-motion.md, measured from footage of real groups): the squeeze's share of each pulse, how
+    // often a pulse turns it and by how much, the lasting wobble of every pulse and its rocking (±, display only), the
+    // slow drift of its axis between pulses (rms rad/s), how often it rests and for how long, how fast it sinks while
+    // resting, how strongly it rights itself, and how much its tentacles sag.
+    var share = 0.39, turnChance = 0.4, turnAngle = 0.2...0.7, wobble = 0.06, rock = 0.11, drift = 0.09
+    var restChance = 0.03, rest = 6.0...10.0, sink = 0.002, righting = 0.055, sag = 0.15
     var body: SIMD3<Double>, organ: SIMD3<Double>, tent: SIMD3<Double>, arm: SIMD3<Double>
     var comb = false
 }
 
 let common: [String: String] = [
-    "NT": "0", "TLEN": "1.0", "TW": "0.01", "TRAIL": "3.0", "SPREAD": "0.0", "SWAY": "0.15",
+    "NT": "0", "TLEN": "1.0", "TW": "0.01", "TRAIL": "3.0", "SPREAD": "0.0", "SWAY": "0.15", "CONVERGE": "0.0", "TVARY": "0.0",
     "NOA": "0", "ALEN": "1.0", "AW": "0.1", "ASPREAD": "0.0", "ASWAY": "0.2", "TWIST": "1.5",
     "HEIGHT": "0.45", "RISE": "0.3", "SHRINK": "0.14", "PE": "2.0", "PQ": "2.0", "INNERR": "0.94", "INNERH": "0.55",
     "FLAP": "0.27", "LAPPETS": "0", "LAPDEPTH": "0.0", "NC": "16.0", "CANALSHARP": "16.0", "CANALK": "0.6",
@@ -63,7 +68,7 @@ func v(_ hex: Int) -> SIMD3<Double> { SIMD3(Double(hex >> 16 & 255), Double(hex 
 /// Colours are the look research's samples (research-look.md §1, §3), as a dim lamp shows them.
 let species: [String: Species] = [
     // Aurelia: a flat saucer, four horseshoe gonads, a fringe of short tentacles, four short frilled oral arms.
-    "moon": Species(diameter: 0.12...0.25, period: 5.0, box: (2.6, 0.8, 1.6), shape: [
+    "moon": Species(diameter: 0.12...0.25, period: 1.6, perPulse: 0.22, box: (2.6, 0.8, 1.6), shape: [
         "NT": "120", "TLEN": "0.32", "TW": "0.006", "SWAY": "0.25", "NOA": "4", "ALEN": "1.0", "AW": "0.17",
         "ASPREAD": "0.22", "ASWAY": "0.25", "TWIST": "3.0", "HEIGHT": "0.42", "RISE": "0.32", "NC": "32.0", "CANALSHARP": "10.0", "CANALK": "0.5", "GONADS": "1",
     ], body: v(0xC8C0DA), organ: v(0xD0B5DC), tent: v(0xB8B8D0), arm: v(0xC4B8D8)),
@@ -75,10 +80,12 @@ let species: [String: Species] = [
         "LAPPETS": "32", "LAPDEPTH": "0.05", "NC": "16.0", "CANALSHARP": "4.0", "CANALK": "0.2", "STRIPES": "16",
     ], body: v(0x977241), organ: v(0x70542F), tent: v(0x8A2A1E), arm: v(0xAFB3C8)),
     // Aequorea victoria: a clear glass wheel of a hundred fine canals and many long fine tentacles.
-    "crystal": Species(diameter: 0.08...0.2, period: 2.2, contraction: 0.35, relaxation: 1.0, box: (2.6, 0.7, 3.4), shape: [
-        "NT": "100", "TLEN": "3.0", "TW": "0.004", "SWAY": "0.2", "SPREAD": "0.03", "NOA": "1", "ALEN": "0.35", "AW": "0.3",
-        "ASWAY": "0.05", "HEIGHT": "0.36", "RISE": "0.26", "SHRINK": "0.12", "NC": "100.0", "CANALSHARP": "40.0", "CANALK": "1.2",
-    ], body: v(0x9FB4C8), organ: v(0x9FB4C8), tent: v(0x8FA4B8), arm: v(0xA8B8CC)),
+    // It glides with its tentacles streaming 3-4 diameters straight behind and pulses in irregular bursts.
+    "crystal": Species(diameter: 0.08...0.2, period: 1.8, perPulse: 0.25, box: (2.6, 0.7, 3.4), shape: [
+        "NT": "36", "TLEN": "7.0", "TW": "0.005", "SWAY": "0.06", "CONVERGE": "0.3", "TVARY": "0.7", "NOA": "1", "ALEN": "0.35", "AW": "0.3",
+        "ASWAY": "0.05", "HEIGHT": "0.36", "RISE": "0.26", "SHRINK": "0.12", "NC": "60.0", "CANALSHARP": "16.0", "CANALK": "2.2",
+    ], restChance: 0.25, rest: 0.8...3.0, righting: 0.02, sag: 0.05,
+       body: v(0x9FB4C8), organ: v(0x9FB4C8), tent: v(0x8FA4B8), arm: v(0xA8B8CC)),
     // Atolla wyvillei: a flat red crown, a groove round it, lappets, short tentacles and one long trailing one.
     "atolla": Species(diameter: 0.06...0.15, period: 3.0, box: (2.6, 0.6, 12.5), shape: [
         "NT": "20", "TLEN": "0.9", "TW": "0.018", "SWAY": "0.1", "SPREAD": "0.25", "HEIGHT": "0.32", "RISE": "0.2",
@@ -112,7 +119,7 @@ let looks: [String: Look] = [
     "deep": Look(lamp: [0.75, 0.62, 0.55], gain: 0.55, top: [0.012, 0.01, 0.014], bottom: [0.006, 0.005, 0.008], snow: 0.08),
     "rov": Look(lamp: [0.95, 0.95, 1.0], gain: 1.1, snow: 0.45, falloff: true),
     "dark": Look(lit: false, events: true, gain: 1.0, snow: 0.0),
-    "fluor": Look(ring: true, lamp: [0.25, 0.45, 1.0], pale: 0.0, gain: 0.35, glow: [0, 1.0, 0.76],
+    "fluor": Look(ring: true, lamp: [0.3, 0.5, 1.0], pale: 0.0, gain: 0.85, glow: [0, 1.0, 0.76],
                   top: [0, 0.012, 0.03], bottom: [0, 0.004, 0.012], snow: 0.05),
     "gallery": Look(lamp: [0.75, 0.95, 1.0], pale: 0.55, gain: 0.5, cap: 0.75,
                     top: [0.09, 0.35, 0.86], bottom: [0.01, 0.09, 0.26], snow: 0.12),
@@ -139,7 +146,24 @@ float strand(float d, float w, float px) {
     float ww = max(w, px);
     return (w / ww) * (1.0 - smoothstep(ww * 0.5, ww * 0.5 + px, abs(d)));
 }
-float softplus(float x, float k) { return k * log(1.0 + exp(min(x / k, 30.0))); }
+float cr(float a, float b, float c, float d, float f) {
+    return b + 0.5 * f * (c - a + f * (2.0 * a - 5.0 * b + 4.0 * c - d + f * (3.0 * (b - c) + d - a)));
+}
+// Where the trailing body hangs at local height y (below the margin, y < 0): its sideways offset, and how far along
+// the spine it is. The spine is four points below the margin (a.xy, a.zw, b.xy, b.zw, bell radii, each lower than the
+// last), equally spaced along `len`, laid out by the CPU from where the bell's axis pointed a moment ago.
+vec2 spineAt(float y, vec4 a, vec4 b, float len) {
+    float x0 = -a.x, x1 = 0.0, x2 = a.x, x3 = a.z, x4 = b.x, x5 = b.z, x6 = 2.0 * b.z - b.x;
+    vec2 r = vec2(0.0, -y);
+    if (y < 0.0) {
+        float f;
+        if (y >= a.y) { f = y / min(a.y, -1e-4); r = vec2(cr(x0, x1, x2, x3, f), f * 0.25 * len); }
+        else if (y >= a.w) { f = (y - a.y) / min(a.w - a.y, -1e-4); r = vec2(cr(x1, x2, x3, x4, f), (0.25 + 0.25 * f) * len); }
+        else if (y >= b.y) { f = (y - a.w) / min(b.y - a.w, -1e-4); r = vec2(cr(x2, x3, x4, x5, f), (0.5 + 0.25 * f) * len); }
+        else { f = (y - b.y) / min(b.w - b.y, -1e-4); r = vec2(f <= 1.0 ? cr(x3, x4, x5, x6, f) : mix(x4, x5, f), (0.75 + 0.25 * f) * len); }
+    }
+    return r;
+}
 """
 
 /// The medusa: a bell marched in 24 steps (tissue seen edge-on makes the rim), tentacles and oral arms that follow
@@ -148,12 +172,12 @@ let medusa = shaderCommon + """
 void main() {
     vec2 q = vec2((v_tex_coord.x - 0.5) * a_box.x, v_tex_coord.y * a_box.y - a_box.z);
     float px = a_box.w, t = u_t;
-    float tilt = a_pose.x, seed = a_pose.y, bright = a_pose.z;
-    float S = squeezeAt(t, a_pulse), Sm = squeezeAt(t - 0.15, a_pulse);
+    float tilt = a_pose.x, seed = a_pose.y, bright = a_pose.z, amp = a_pose.w;
+    float S = amp * squeezeAt(t, a_pulse), Sm = amp * squeezeAt(t - 0.15, a_pulse);
     float A = 1.0 - SHRINK * S, C = HEIGHT + RISE * S, Am = 1.0 - SHRINK * Sm;
     float cb = cos(tilt), sb = sin(tilt);
     float tissue = 0.0, skin = 0.0, organ = 0.0, ringPts = 0.0, spots = 0.0, wave = 0.0;
-    if (q.y > -0.5 && q.y < C + 1.3 && abs(q.x) < 1.35) {
+    if (q.y > -1.15 && q.y < C + 1.3 && abs(q.x) < 1.35) {
         float dz = 2.6 / float(STEPS);
         float jitter = hash21(v_tex_coord * 913.0 + seed);
         for (int i = 0; i < STEPS; i++) {
@@ -181,10 +205,10 @@ void main() {
             #if GONADS
             for (int k = 0; k < 4; k++) {
                 float ang = 1.5708 * float(k) + 0.785;
-                vec2 c = 0.33 * A * vec2(cos(ang), sin(ang));
+                vec2 c = 0.34 * A * vec2(cos(ang), sin(ang));
                 vec2 d = vec2(q.x, Zb) - c;
-                float ring = length(d) - 0.15 * A;
-                float open = smoothstep(0.55, 0.0, dot(normalize(d + 1e-4), vec2(cos(ang), sin(ang))));
+                float ring = length(d) - 0.16 * A;
+                float open = smoothstep(-0.95, -0.7, dot(normalize(d + 1e-4), vec2(cos(ang), sin(ang)))); // the gap faces the middle
                 organ += exp(-pow(ring / 0.04, 2.0)) * open * exp(-pow((Yb - inH * 0.95) / 0.09, 2.0)) * dz * 5.0;
             }
             #endif
@@ -207,25 +231,27 @@ void main() {
         }
     }
     float tent = 0.0, arm = 0.0;
-    float turnS = a_turn.x, dth = a_turn.y;
     for (int i = 0; i < NT; i++) {
         float fi = float(i);
         float phi = 6.2832 * (fi + 0.4 * hash11(fi * 7.13 + seed)) / float(NT);
         float rootY = -LAPDEPTH * 0.7 - Am * sin(phi) * sb;
-        float s = (rootY - q.y) / max(cb, 0.3);
-        float r = (1.0 - SHRINK * squeezeAt(t - 0.15 - s / TRAIL, a_pulse)) * (1.0 + SPREAD * s);
-        float x = r * cos(phi) - sin(dth) * softplus(s - TRAIL * turnS, 0.4)
-            + SWAY * s * (vnoise(vec2(s * 0.7 - t * 0.25, fi * 3.7 + seed)) - 0.5);
-        float w = TW * (1.0 - 0.6 * clamp(s / TLEN, 0.0, 1.0));
-        float fade = smoothstep(-0.02, 0.06, s) * (1.0 - smoothstep(TLEN * 0.5, TLEN, s));
-        tent += strand(q.x - x, w, px) * fade * (0.7 + 0.3 * sin(phi));
+        vec2 sp = spineAt(q.y - rootY, a_sp1, a_sp2, SPLEN);
+        float s = sp.y;
+        float own = hash11(fi * 3.31 + seed * 0.7), tl = TLEN * (1.0 - TVARY * own * 0.6);
+        float r = (1.0 - SHRINK * amp * squeezeAt(t - 0.15 - s / TRAIL, a_pulse)) * (1.0 + SPREAD * s)
+            * (1.0 - CONVERGE * smoothstep(0.0, TLEN * 0.6, s));
+        float x = r * cos(phi) + sp.x + SWAY * s * (vnoise(vec2(s * 0.7 - t * 0.25, fi * 3.7 + seed)) - 0.5);
+        float w = TW * (1.0 - 0.6 * clamp(s / tl, 0.0, 1.0));
+        float fade = smoothstep(-0.02, 0.06, s) * (1.0 - smoothstep(tl * 0.5, tl, s));
+        tent += strand(q.x - x, w, px) * fade * (0.7 + 0.3 * sin(phi)) * (1.0 - TVARY * 0.8 * hash11(fi * 9.7 + seed));
     }
     #if LONGT
     {
         float phi = 6.2832 * hash11(seed * 3.1);
         float rootY = -LAPDEPTH * 0.7 - Am * sin(phi) * sb;
-        float s = (rootY - q.y) / max(cb, 0.3);
-        float x = cos(phi) * (1.0 - SHRINK * squeezeAt(t - 0.15 - s / TRAIL, a_pulse)) - sin(dth) * softplus(s - TRAIL * turnS, 0.4)
+        vec2 sp = spineAt(q.y - rootY, a_sp1, a_sp2, SPLEN);
+        float s = sp.y;
+        float x = cos(phi) * (1.0 - SHRINK * squeezeAt(t - 0.15 - s / TRAIL, a_pulse)) + sp.x
             + 1.2 * sin(s * 0.35 + seed - t * 0.05) * min(s, 4.0) / 4.0;
         float fade = smoothstep(-0.02, 0.06, s) * (1.0 - smoothstep(6.0, 10.0, s));
         tent += 0.6 * strand(q.x - x, 0.02, px) * fade;
@@ -235,10 +261,12 @@ void main() {
         float fk = float(k);
         float phi = 1.5708 * fk + 0.785 + 0.3 * hash11(fk + seed);
         float rootY = C * INNERH * 0.4 - 0.14 * sin(phi) * sb;
-        float s = (rootY - q.y) / max(cb, 0.3);
+        // The arms trail slower than the tentacles: the spine at 1/0.6 the delay, scaled back to their length.
+        vec2 sp = spineAt((q.y - rootY) / 0.6, a_sp1, a_sp2, SPLEN);
+        float s = 0.6 * sp.y;
         float lag = s / (TRAIL * 0.6);
-        float x = 0.14 * cos(phi) * (1.0 - 0.5 * SHRINK * squeezeAt(t - lag, a_pulse)) + ASPREAD * s * cos(phi)
-            - sin(dth) * softplus(s - TRAIL * 0.6 * turnS, 0.4) + ASWAY * s * (vnoise(vec2(s * 0.5 - t * 0.15, fk * 5.3 + seed)) - 0.5);
+        float x = 0.14 * cos(phi) * (1.0 + 1.5 * amp * squeezeAt(t - lag, a_pulse) * min(s, 1.0)) + ASPREAD * s * cos(phi)
+            + 0.6 * sp.x + ASWAY * s * (vnoise(vec2(s * 0.5 - t * 0.15, fk * 5.3 + seed)) - 0.5);
         float twist = 0.35 + 0.65 * abs(cos(s * TWIST + fk * 1.3 + t * 0.1));
         float w = AW * twist * (1.0 - 0.5 * clamp(s / ALEN, 0.0, 1.0));
         float d = abs(q.x - x);
@@ -253,7 +281,7 @@ void main() {
     col += BODY * (tissue * 0.22 + skin * 2.6) + ORGAN * organ * 1.5 + TENT * tent * 0.8 + ARM * arm * 0.7;
     #endif
     #if STEADY
-    col += GLOWC * (tissue * 0.18 + skin * 2.2 + tent * 0.5 + arm * 0.4);
+    col += GLOWC * (tissue * 0.18 + skin * 2.2 + organ * 0.9 + tent * 0.5 + arm * 0.4);
     #endif
     #if RING
     col += GLOWC * min(ringPts, 2.5) / max(GAIN, 0.01) * 0.6;
@@ -331,14 +359,17 @@ func source(_ base: String, _ defines: [String: String]) -> String {
     defines.sorted { $0.key < $1.key }.map { "#define \($0.key) \($0.value)\n" }.joined() + base
 }
 
-/// One jelly in metres, seen by a camera 50° across.
+/// One jelly in metres, seen by a camera 50° across from the origin, looking along +z: its place, the way its bell's
+/// apex points, its pulses (each a little different, some followed by a rest) and its turns.
 struct Jelly {
     var kind: String, sp: Species
-    var x: Double, y: Double, z: Double, d: Double // metres
-    var heading: Double, tilt: Double, seed: Double
-    var t0: Double, period: Double
-    var drift: SIMD2<Double>
-    var turnAt = -100.0, turn = 0.0
+    var p: SIMD3<Double>, axis: SIMD3<Double>, d: Double
+    var seed: Double, amp: Double, basePeriod: Double
+    var lastStart: Double, period: Double, nextStart: Double
+    var turnAxis = SIMD3<Double>(1, 0, 0), turnAngle = 0.0, turnStart = -100.0, turnTime = 0.5
+    var spin = SIMD3<Double>.zero // the axis's slow drift, rad/s
+    var touchedAt = -100.0
+    var history: [SIMD3<Double>] = [] // the axis at every 1/60 s step, newest last
     var glow = 0.0, glowFront = 1.0
     var node: SKSpriteNode? = nil
 }
@@ -351,61 +382,69 @@ let fov = tan(25 * Double.pi / 180) * 2 // view width per metre of depth
 func pxPerMetre(_ z: Double) -> Double { Double(W) / (fov * z) }
 let speed = cfg.speed ?? 1
 var rng = Rand(s: cfg.seed ?? 1)
+let up = SIMD3<Double>(0, 1, 0)
+let dt = 1.0 / 60
 
 /// The speed profile of one pulse, normalised so a pulse goes `perPulse` diameters: the surge while squeezing, a
 /// slip back while re-opening (the sea nettle), and the softer second push of the recaptured vortex (Gemmell 2013).
-func velocityShape(_ tau: Double, _ sp: Species) -> Double {
-    let tc = sp.contraction, tr = sp.relaxation
+func velocityShape(_ tau: Double, _ sp: Species, _ period: Double) -> Double {
+    let tc = sp.share * period, tr = period - tc
     var v = tau < tc + 0.25 ? pow(sin(.pi * tau / (tc + 0.25)), 2) : 0
     if tau > tc && tau < tc + tr { v -= sp.slip * 4 * pow(sin(.pi * (tau - tc) / tr), 2) }
-    let r0 = tc + 0.6 * tr
-    if tau > r0 && tau < r0 + 1.4 { v += 0.35 * pow(sin(.pi * (tau - r0) / 1.4), 2) }
+    let r0 = tc + 0.6 * tr, push = max(0.5, 0.8 * tr)
+    if tau > r0 && tau < r0 + push { v += 0.35 * pow(sin(.pi * (tau - r0) / push), 2) }
     return v
 }
 func shapeArea(_ sp: Species, _ period: Double) -> Double {
-    stride(from: 0.0, to: period, by: 1.0 / 240).reduce(0) { $0 + velocityShape($1, sp) / 240 }
+    stride(from: 0.0, to: period, by: 1.0 / 240).reduce(0) { $0 + velocityShape($1, sp, period) / 240 }
 }
+func norm(_ v: SIMD3<Double>) -> SIMD3<Double> { v / max((v * v).sum().squareRoot(), 1e-9) }
+func dot(_ a: SIMD3<Double>, _ b: SIMD3<Double>) -> Double { (a * b).sum() }
+func cross(_ a: SIMD3<Double>, _ b: SIMD3<Double>) -> SIMD3<Double> {
+    SIMD3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x)
+}
+/// Rodrigues: v turned by angle about the unit axis k.
+func rotate(_ v: SIMD3<Double>, _ k: SIMD3<Double>, _ angle: Double) -> SIMD3<Double> {
+    v * cos(angle) + cross(k, v) * sin(angle) + k * dot(k, v) * (1 - cos(angle))
+}
+func gauss() -> Double { (-2 * log(max(rng.next(), 1e-12))).squareRoot() * cos(2 * .pi * rng.next()) }
+func randomUnit() -> SIMD3<Double> {
+    let z = rng.range(-1...1), a = rng.range(0...(2 * .pi)), r = (1 - z * z).squareRoot()
+    return SIMD3(r * cos(a), r * sin(a), z)
+}
+
+// The tank: as far back as the animals are big, as a tank's window frames them, and its slow circling current.
+let meanD = cfg.species.map { species[$0]!.diameter }.reduce(0) { $0 + ($1.lowerBound + $1.upperBound) / 2 } / Double(cfg.species.count)
+let scale = meanD / 0.1
+let (zNear, zFar) = (0.65 * scale, 2.2 * scale)
+let zMid = (zNear + zFar) / 2
+let current = cfg.current ?? 0.02
+let pitch = (cfg.pitch ?? 0) * .pi / 180
+/// A direction as the camera sees it: looking up into the tank shows a bell's underside.
+func seen(_ a: SIMD3<Double>) -> SIMD3<Double> { rotate(a, SIMD3(1, 0, 0), pitch) }
+func halfW(_ z: Double) -> Double { fov * z / 2 }
+func halfH(_ z: Double) -> Double { fov * z / 2 * hPt / wPt }
 
 var jellies: [Jelly] = []
-func addJelly(_ kind: String, x: Double, y: Double, z: Double, d: Double? = nil) {
-    let sp = species[kind]!
-    let dia = d ?? rng.range(sp.diameter)
-    let period = sp.period * pow(dia / 0.15, 0.5) * rng.range(0.9...1.1)
-    jellies.append(Jelly(kind: kind, sp: sp, x: x, y: y, z: z, d: dia,
-                         heading: cfg.heading ?? rng.range(-1.0...1.0), tilt: cfg.tilt ?? rng.range(-0.25...0.6),
-                         seed: rng.range(0...50), t0: rng.range(0...period), period: period,
-                         drift: [rng.range(-0.004...0.004), -0.0015]))
-}
-
-if cfg.single == true {
-    // Its own real size, and the camera as far back as makes it `size` of the screen's width; a pulse starts at 1 s.
-    let kind = cfg.species[0], sp = species[kind]!
-    let d = (sp.diameter.lowerBound + sp.diameter.upperBound) / 2, z = d / ((cfg.size ?? 0.3) * fov)
-    let middle = (sp.box.below - sp.box.above) / 2 * d / 2 // the margin placed so its box is centred
-    addJelly(kind, x: 0, y: min(middle, fov * z * hPt / wPt * 0.3), z: z, d: d)
-    jellies[0].period = sp.period * pow(d / 0.15, 0.5)
-    jellies[0].t0 = 1
-    jellies[0].drift = .zero
-} else {
-    // Three bands of depth: one or two near, a few in the middle, more far off (research-method.md §4), the camera
-    // as far back as the animals are big, as a tank's window or an ROV's camera frames them.
-    let n = cfg.count ?? 10
-    let scale = cfg.species.map { species[$0]!.diameter }.reduce(0) { $0 + ($1.lowerBound + $1.upperBound) / 2 } / Double(cfg.species.count) / 0.1
-    var bands: [ClosedRange<Double>] = []
-    for i in 0..<n { bands.append(i < n / 8 ? 0.35...0.55 : i < n * 4 / 10 ? 0.65...1.3 : 1.5...3.2) }
-    if cfg.near == true { bands[0] = 0.22...0.26 }
-    bands = bands.map { ($0.lowerBound * scale)...($0.upperBound * scale) }
-    // A jittered grid, shuffled, so they spread over the screen as a tank shows them rather than bunching by chance.
+do {
+    // Spread through the tank's volume on a jittered grid so they don't bunch by chance; more far than near.
+    let n = cfg.count ?? 12
     let cols = Int((Double(n) * wPt / hPt).squareRoot().rounded(.up)), rows = (n + cols - 1) / cols
     var cells = Array(0..<(cols * rows))
     for i in cells.indices.reversed() { cells.swapAt(i, Int(rng.next() * Double(i + 1))) }
-    for (i, band) in bands.enumerated() {
-        let z = rng.range(band)
-        let halfW = fov * z / 2, halfH = halfW * hPt / wPt
+    for i in 0..<n {
+        let kind = cfg.species[i % cfg.species.count], sp = species[kind]!
+        let z = zNear + (zFar - zNear) * pow(rng.next(), 0.7)
         let (cx, cy) = (Double(cells[i] % cols), Double(cells[i] / cols))
         let u = (cx + rng.range(0.2...0.8)) / Double(cols) * 2 - 1, w = (cy + rng.range(0.2...0.8)) / Double(rows) * 2 - 1
-        let near = i < n / 8 // a near one's bell would rise off the top, and its tentacles hang far down
-        addJelly(cfg.species[i % cfg.species.count], x: u * (near ? 0.6 : 0.9) * halfW, y: (near ? w * 0.25 - 0.05 : w * 0.7) * halfH, z: z)
+        let dia = rng.range(sp.diameter)
+        let period = sp.period * pow(dia / 0.15, 0.5) * rng.range(0.8...1.3)
+        let start = -rng.range(0...period)
+        let axis = norm(randomUnit() + SIMD3(0, 0.5, 0))
+        jellies.append(Jelly(kind: kind, sp: sp, p: SIMD3(u * (0.85 * halfW(z) - dia / 2), w * 0.75 * halfH(z), z), axis: axis, d: dia,
+                             seed: rng.range(0...50), amp: rng.range(0.85...1.1), basePeriod: period,
+                             lastStart: start, period: period, nextStart: start + period,
+                             history: Array(repeating: axis, count: 600)))
     }
 }
 for i in cfg.glow ?? [] where i < jellies.count {
@@ -413,36 +452,93 @@ for i in cfg.glow ?? [] where i < jellies.count {
     jellies[i].glowFront = 0.8
 }
 
-/// Steps every jelly from its start to time t in 1/60 s substeps, so any frame rate gives the same picture: the
-/// pulse's surge along its axis, turns made only while squeezing, the current and a slow sink.
+/// Steps every jelly in 1/60 s substeps, so any frame rate gives the same picture. Each pulse is a little longer or
+/// shorter than the last; some turn the bell in any direction, all wobble it a little, and a few are followed by a
+/// rest in which it sinks. Between, the bell rights itself slowly, the tank's current carries it round, and
+/// neighbours and the tank's sides push it gently away.
 var simTime = 0.0
 func advance(to t: Double) {
-    let dt = 1.0 / 60
     while simTime + dt <= t {
         for i in jellies.indices {
             var j = jellies[i]
-            let area = shapeArea(j.sp, j.period)
-            let tau = (simTime - j.t0).truncatingRemainder(dividingBy: j.period)
-            let tauP = tau < 0 ? tau + j.period : tau
-            if tauP < dt, cfg.single == true, let turn = cfg.turn, j.turnAt < 0, simTime > 1 {
-                j.turn = turn
-                j.turnAt = simTime + j.sp.contraction / 2
+            let sp = j.sp
+            if simTime >= j.nextStart {
+                j.lastStart = j.nextStart
+                j.period = j.basePeriod * rng.range(0.92...1.08)
+                j.nextStart = j.lastStart + j.period
+                let big = rng.next() < sp.turnChance
+                j.turnAngle = big ? rng.range(sp.turnAngle) * (rng.next() < 0.5 ? -1 : 1) : sp.wobble * gauss()
+                j.turnAxis = norm(cross(j.axis, randomUnit()))
+                j.turnStart = j.lastStart
+                j.turnTime = sp.share * j.period
+                if rng.next() < sp.restChance { j.nextStart += rng.range(sp.rest) }
             }
-            if tauP < dt && cfg.single != true && rng.next() < 0.35 { // a turn, made during this squeeze
-                let away = abs(j.heading) > 0.5 ? -copysign(1, j.heading) : (rng.next() < 0.5 ? -1 : 1)
-                j.turn = away * rng.range(0.17...0.6)
-                j.turnAt = simTime + j.sp.contraction / 2
+            if simTime >= j.turnStart && simTime < j.turnStart + j.turnTime {
+                j.axis = norm(rotate(j.axis, j.turnAxis, j.turnAngle * dt / j.turnTime))
             }
-            if simTime >= j.turnAt - j.sp.contraction / 2 && simTime < j.turnAt + j.sp.contraction / 2 {
-                j.heading += j.turn * dt / j.sp.contraction
+            // Between turns the axis drifts slowly in any direction (an Ornstein-Uhlenbeck spin, 2 s to forget).
+            j.spin += -j.spin * (dt / 2) + SIMD3(gauss(), gauss(), gauss()) * (sp.drift * (2 * dt / 2).squareRoot())
+            j.spin -= j.axis * dot(j.spin, j.axis)
+            let w = (j.spin * j.spin).sum().squareRoot()
+            if w > 1e-6 { j.axis = norm(rotate(j.axis, j.spin / w, w * dt)) }
+            // Righting by gravity on a bottom-light bell goes as the sine of its tilt: weak lying over, weaker upside down.
+            let tilt = acos(max(-1, min(1, dot(j.axis, up))))
+            if tilt > 1e-3 && tilt < .pi - 1e-3 { j.axis = norm(rotate(j.axis, norm(cross(j.axis, up)), sp.righting * sin(tilt) * dt)) }
+            // The tank's circling current turns what it carries at its own rate, so bells tip over going down its far side.
+            j.axis = norm(rotate(j.axis, SIMD3(0, 0, 1), current / halfW(zMid) * dt))
+            let tau = simTime - j.lastStart
+            let swimming = tau < j.period
+            var v = swimming ? j.axis * (velocityShape(tau, sp, j.period) / shapeArea(sp, j.period) * sp.perPulse * j.d * j.amp) : .zero
+            v.y -= swimming ? sp.sink * 0.3 : sp.sink
+            v += SIMD3(-(j.p.y) , j.p.x, 0) * (current / halfW(zMid)) // the kreisel's slow turn, round the view's middle
+            for k in jellies.indices where k != i {
+                let gap = j.p - jellies[k].p, dist = (gap * gap).sum().squareRoot(), touch = (j.d + jellies[k].d) * 0.5
+                if dist < touch {
+                    v += norm(gap) * (touch - dist) * 0.8
+                    // Touching (Albert 2011, and one meeting filmed): it stops pulsing for a moment, then turns away.
+                    if simTime - j.touchedAt > 6 {
+                        j.touchedAt = simTime
+                        let pause = rng.range(1...2)
+                        j.nextStart = max(j.nextStart, simTime + pause)
+                        j.turnAxis = norm(cross(j.axis, norm(gap)))
+                        j.turnAngle = rng.range(0.8...1.5)
+                        j.turnStart = simTime + pause * 0.5
+                        j.turnTime = 2
+                    }
+                }
             }
-            let v = velocityShape(tauP, j.sp) / area * j.sp.perPulse * j.d
-            j.x += -sin(j.heading) * v * dt + j.drift.x * dt
-            j.y += cos(j.heading) * v * dt + j.drift.y * dt
+            let (hx, hy) = (halfW(j.p.z) * 0.92 - j.d / 2, halfH(j.p.z) * 0.8) // the sides keep a whole bell in view
+            v.x -= max(0, abs(j.p.x) - hx) * copysign(0.3, j.p.x)
+            v.y -= max(0, abs(j.p.y) - hy) * copysign(0.3, j.p.y)
+            v.z += max(0, zNear - j.p.z) * 1.0 - max(0, j.p.z - zFar) * 0.3
+            j.p += v * dt
+            j.history.removeFirst()
+            j.history.append(j.axis)
             jellies[i] = j
         }
         simTime += dt
     }
+}
+
+/// The spine the tentacles and arms hang along, in the sprite's own frame and bell radii: each point is where the
+/// trailing body would be if every bit of it hung back along the way the bell's axis pointed when the margin passed it
+/// (a delay of arc length over the trailing speed), with a little sag. Four points along `len`, each kept lower than
+/// the last.
+func spine(_ j: Jelly, heading: Double, len: Double, trail: Double, kPx: Double, rPx: Double) -> [SIMD2<Double>] {
+    var pos = SIMD3<Double>.zero, pts: [SIMD2<Double>] = []
+    let steps = 32, ds = len / Double(steps)
+    for n in 1...steps {
+        let sigma = (Double(n) - 0.5) * ds
+        let back = min(Int(sigma / trail / dt), j.history.count - 1)
+        let dir = norm(-j.history[j.history.count - 1 - back] + SIMD3(0, -j.sp.sag, 0))
+        pos += dir * ds
+        if n % (steps / 4) == 0 {
+            let x = pos.x * (j.d / 2) * kPx, y = pos.y * (j.d / 2) * kPx // screen pixels from the margin
+            let lx = (x * cos(heading) + y * sin(heading)) / rPx, ly = (-x * sin(heading) + y * cos(heading)) / rPx
+            pts.append(SIMD2(lx, min(ly, (pts.last?.y ?? 0) - 0.03 * len)))
+        }
+    }
+    return pts
 }
 
 let time = SKUniform(name: "u_t", float: 0)
@@ -457,8 +553,10 @@ func shader(for j: Jelly) -> SKShader {
     d["RING"] = look.ring && j.kind == "crystal" ? "1" : "0"
     d["SPOTS"] = look.events && j.kind == "periphylla" ? "1" : "0"
     d["PINWHEEL"] = look.events && j.kind == "atolla" ? "1" : "0"
+    let tlen = Double(d["TLEN"]!)!, alen = Double(d["ALEN"]!)!
+    d["SPLEN"] = String(format: "%.3f", max(tlen, Double(d["NOA"]!)! > 0 ? alen / 0.6 : 0, d["LONGT"] == "1" ? 10 : 0))
     let s = SKShader(source: source(j.sp.comb ? combShader : medusa, d), uniforms: [time])
-    s.attributes = ["a_box", "a_pose", "a_pulse", "a_turn", "a_glow"].map { SKAttribute(name: $0, type: .vectorFloat4) }
+    s.attributes = ["a_box", "a_pose", "a_pulse", "a_glow", "a_sp1", "a_sp2"].map { SKAttribute(name: $0, type: .vectorFloat4) }
     shaders[j.kind] = s
     return s
 }
@@ -470,7 +568,7 @@ backdrop.position = CGPoint(x: wPt / 2, y: hPt / 2)
 backdrop.shader = SKShader(source: source(water, ["TOP": glsl(look.top), "BOTTOM": glsl(look.bottom), "SNOW": String(format: "%.3f", look.snow)]),
                            uniforms: [time, SKUniform(name: "u_px", vectorFloat2: [Float(W), Float(H)])])
 scene.addChild(backdrop)
-for i in jellies.indices.sorted(by: { jellies[$0].z > jellies[$1].z }) {
+for i in jellies.indices {
     let n = SKSpriteNode(color: .white, size: .zero)
     n.blendMode = .add
     n.shader = shader(for: jellies[i])
@@ -478,28 +576,38 @@ for i in jellies.indices.sorted(by: { jellies[$0].z > jellies[$1].z }) {
     jellies[i].node = n
 }
 
-/// Places every sprite for time t: its size from its depth, its pose, and the pulse and last turn its shader draws.
+/// Places every sprite for time t: where its bell is on screen and how big, which way its axis points (a turn in the
+/// screen's plane and a tilt toward or away from us), its pulse, and the spine its tentacles hang along.
 func place(_ t: Double) {
     time.floatValue = Float(t)
     for j in jellies {
-        let k = pxPerMetre(j.z), rPx = j.d / 2 * k
-        // A turn swings the far tentacles out sideways until the bend has run down them: widen the box to hold them.
-        let (bw, above, below) = (j.sp.box.w + 2 * abs(sin(j.turn)) * j.sp.box.below, j.sp.box.above, j.sp.box.below)
+        let k = pxPerMetre(j.p.z), rPx = j.d / 2 * k
+        // It rocks a few degrees in step with each pulse, about an axis of its own across it.
+        let phase = max(0, min(1, (t - j.lastStart) / j.period))
+        let across = norm(cross(j.axis, SIMD3(sin(j.seed), 0.3, cos(j.seed))))
+        let shown = seen(rotate(j.axis, across, j.sp.rock * sin(2 * .pi * phase)))
+        let heading = atan2(-shown.x, shown.y), tilt = asin(max(-0.97, min(0.97, -shown.z)))
+        let defs = common.merging(j.sp.shape) { $1 }
+        let tlen = Double(defs["TLEN"]!)!, alen = Double(defs["ALEN"]!)!, trail = Double(defs["TRAIL"]!)!
+        let len = max(tlen, Double(defs["NOA"]!)! > 0 ? alen / 0.6 : 0, defs["LONGT"] == "1" ? 10 : 0)
+        let pts = spine(j, heading: heading, len: len, trail: trail, kPx: k, rPx: rPx)
+        let reach = pts.map { abs($0.x) }.max()! + 1.4 + (Double(defs["SPREAD"]!)! * tlen)
+        let bw = max(j.sp.box.w, 2 * reach), above = j.sp.box.above + abs(sin(tilt))
+        let below = max(1.0 + abs(sin(tilt)), -pts[3].y * min(1, max(tlen, alen) / len) + 0.4)
         let n = j.node!
         n.size = CGSize(width: bw * rPx / 2, height: (above + below) * rPx / 2)
         n.anchorPoint = CGPoint(x: 0.5, y: below / (above + below))
-        // A single jelly is followed at its mean pace, as a diver's camera would: its surge and coast show against the frame.
-        let follow = cfg.single == true ? j.sp.perPulse * j.d / j.period * t : 0
-        let h0 = cfg.heading ?? 0
-        n.position = CGPoint(x: wPt / 2 + (j.x + sin(h0) * follow) * k / 2, y: hPt / 2 + (j.y - cos(h0) * follow) * k / 2)
-        n.zRotation = CGFloat(j.heading)
-        let z = j.z * 0.1 / ((j.sp.diameter.lowerBound + j.sp.diameter.upperBound) / 2) // depth as if all were 10 cm
+        n.position = CGPoint(x: wPt / 2 + j.p.x * k / 2, y: hPt / 2 + j.p.y * k / 2)
+        n.zRotation = CGFloat(heading)
+        let z = j.p.z * 0.1 / ((j.sp.diameter.lowerBound + j.sp.diameter.upperBound) / 2) // depth as if all were 10 cm
         let fog = look.falloff ? 1.2 / (1 + pow(z / 0.45, 2)) * 1.6 : exp(-(z - 0.45) / 2.2)
+        let gap = j.nextStart - j.lastStart // a rest after this pulse makes the gap longer than the pulse
         n.setValue(SKAttributeValue(vectorFloat4: [Float(bw), Float(above + below), Float(below), Float(1 / rPx)]), forAttribute: "a_box")
-        n.setValue(SKAttributeValue(vectorFloat4: [Float(j.tilt), Float(j.seed), Float(fog), 0]), forAttribute: "a_pose")
-        n.setValue(SKAttributeValue(vectorFloat4: [Float(j.t0), Float(j.period), Float(j.sp.contraction), Float(j.sp.relaxation)]), forAttribute: "a_pulse")
-        n.setValue(SKAttributeValue(vectorFloat4: [Float(t - j.turnAt), Float(j.turn), 0, 0]), forAttribute: "a_turn")
+        n.setValue(SKAttributeValue(vectorFloat4: [Float(tilt), Float(j.seed), Float(fog), Float(j.amp)]), forAttribute: "a_pose")
+        n.setValue(SKAttributeValue(vectorFloat4: [Float(j.lastStart), Float(gap), Float(j.sp.share * j.period), Float((1 - j.sp.share) * j.period)]), forAttribute: "a_pulse")
         n.setValue(SKAttributeValue(vectorFloat4: [Float(j.glow), Float(j.kind == "atolla" ? t * 3.1 : j.glowFront), 0, 0]), forAttribute: "a_glow")
+        n.setValue(SKAttributeValue(vectorFloat4: [Float(pts[0].x), Float(pts[0].y), Float(pts[1].x), Float(pts[1].y)]), forAttribute: "a_sp1")
+        n.setValue(SKAttributeValue(vectorFloat4: [Float(pts[2].x), Float(pts[2].y), Float(pts[3].x), Float(pts[3].y)]), forAttribute: "a_sp2")
     }
 }
 
@@ -532,6 +640,49 @@ func render(at t: Double, to path: String) {
     let dest = CGImageDestinationCreateWithURL(URL(fileURLWithPath: path) as CFURL, "public.png" as CFString, 1, nil)!
     CGImageDestinationAddImage(dest, ctx.makeImage()!, nil)
     CGImageDestinationFinalize(dest)
+}
+
+if ProcessInfo.processInfo.environment["JSTATS"] != nil {
+    // Poses, spacing and cover over 120 s, sampled every half second, measured as research-motion.md measured footage.
+    var fromUp: [Double] = [], face = 0, oblique = 0, side = 0, down = 0, sideCount = 0, near: [Double] = [], cover: [Double] = []
+    var turnRate: [Double] = []
+    var t = cfg.t ?? 20
+    advance(to: t)
+    var last = jellies.map(\.axis)
+    for _ in 0..<240 {
+        t += 0.5
+        advance(to: t)
+        var area = 0.0
+        var spots: [(SIMD2<Double>, Double)] = []
+        for (n, j) in jellies.enumerated() {
+            let k = pxPerMetre(j.p.z), r = j.d / 2 * k
+            turnRate.append(acos(max(-1, min(1, dot(j.axis, last[n])))) / 0.5 * 180 / .pi)
+            let a = seen(j.axis), facing = abs(a.z)
+            if facing > 0.75 { face += 1 } else if facing > 0.55 { oblique += 1 } else {
+                side += 1; sideCount += 1
+                let tilt = acos(max(-1, min(1, a.y))) * 180 / .pi
+                fromUp.append(min(tilt, 180 - tilt))
+                if a.y < -0.3 { down += 1 }
+            }
+            area += .pi * r * r * (0.4 + 0.6 * facing)
+            spots.append((SIMD2(j.p.x * k, j.p.y * k), 2 * r))
+        }
+        last = jellies.map(\.axis)
+        cover.append(min(1, area / Double(W * H)))
+        for (n, a) in spots.enumerated() {
+            let d = spots.enumerated().filter { $0.offset != n }.map { (($0.element.0 - a.0) * ($0.element.0 - a.0)).sum().squareRoot() / ((a.1 + $0.element.1) / 2) }.min() ?? 0
+            near.append(d)
+        }
+    }
+    func median(_ x: [Double]) -> Double { let s = x.sorted(); return s.isEmpty ? 0 : s[s.count / 2] }
+    func pct(_ x: [Double], _ p: Double) -> Double { let s = x.sorted(); return s.isEmpty ? 0 : s[Int(Double(s.count - 1) * p)] }
+    let all = Double(face + oblique + side)
+    print(String(format: "views face/oblique/side %.0f/%.0f/%.0f%%  (footage 10/49/41)", 100 * Double(face) / all, 100 * Double(oblique) / all, 100 * Double(side) / all))
+    print(String(format: "side-on bells from vertical: median %.0f°, 45° or more %.0f%%, dome-down %.0f%%  (footage 26°, 34%%, ~45%% on the downward side)",
+                 median(fromUp), 100 * Double(fromUp.filter { $0 >= 45 }.count) / Double(max(1, sideCount)), 100 * Double(down) / Double(max(1, sideCount))))
+    print(String(format: "axis turn rate median %.1f°/s, 90th %.1f  (footage 6.5, 18)", median(turnRate), pct(turnRate, 0.9)))
+    print(String(format: "nearest neighbour median %.2f D (25th %.2f), cover %.0f%%  (footage 1.0 D (0.8), 16-46%%)", median(near), pct(near, 0.25), 100 * median(cover)))
+    exit(0)
 }
 
 if let times = cfg.times {

@@ -84,7 +84,7 @@ def film(name, out):
     stem = os.path.join(TMP, name)
     subprocess.run([MOCK, json.dumps({**kw, "out": stem})], check=True)
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(kw.get("fps", 30)), "-i", f"{stem}-%04d.png",
-                    "-c:v", "libx264", "-crf", "20", "-preset", "slow", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
+                    "-c:v", "libx264", "-crf", "27", "-preset", "slow", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
                     f"{out}/{name}.mp4"], check=True)
 
 
