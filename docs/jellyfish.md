@@ -4,11 +4,19 @@ Jellyfish drifting and pulsing in dark water, drawn by shaders rather than cut o
 
 It began in [ideas.md](ideas.md) under "Left out on purpose": "Photo cut-outs of big animals never moved convincingly in the Fish Tank's Ocean Voyager and Shallow Reef ... Jellyfish would have to be drawn by a shader, not cut out, to be worth another try." Dave ran it through the new-wallpaper process on 2026-11-07, as "A shader-drawn bell on black, dim and bioluminescent, is the version worth a mock-up." That day two agents researched it and one round of mock-ups was drawn. Nothing is built.
 
-- **Source:** none yet.
+- **Source:** `Sources/Atrium/Jellyfish.swift`: the scene, its motion and its shaders, all in one file.
 - **Data:** none. Everything is drawn; reference photos stay references.
 - **Research:** [the method](jellyfish/research-method.md) (swimming numbers, bioluminescence, how to draw it, cost measured with a SpriteKit probe), [the look](jellyfish/research-look.md) (species, palettes, brightness, names) and [how real groups move](jellyfish/research-motion.md), measured from nine freely licensed clips of real tanks and a wild bloom. Every figure in them is marked checked or unchecked.
 - **Scripts:** `jellyfish/mock.swift` draws the mock-ups with SpriteKit as the app would; `sheet.py` lays out the sheets and films from the variants in `variants.py`.
-- **Where it stands (2026-11-07):** round 2, groups in natural motion in the three lights Dave picked, waits for his word.
+- **Where it stands (2026-11-07):** Dave has chosen from round 2; the build has begun, hidden behind the `unfinished` switch.
+
+## Dave's decisions (2026-11-07)
+- **Groups, not a single jelly:** "the single jellifish is very underwhelming, we need to focus on groups that are moving". The deep species, the close-up and the ROV and lights-off looks are set aside.
+- **Three looks,** from round 1's sheet 1, D, E and F, after round 2's films ("its looking good, lets offer all 3 options"): crystal jellies under blue light with their green rings (D); moon jellies in the lit blue tank (E); the same moon jellies with a steady blue glow (F). F is made up, and the sheet said so.
+- **Two automatic modes:** "an auto mode for system along with a mode that follows day/night where E is the light mode, F or D is dark". So a Look menu of five: follow Light and Dark Mode, follow day and night where you are, or one of the three always. **As decided in the build:** which dark look the automatic modes use is a setting, F by default, since F is the same moon jellies as E and the change is then only the light.
+- **Natural motion first:** "we need to really focus on natural movement". The motion is set to what research-motion.md measured from footage, and is judged in films before stills.
+
+Still his to decide, once it runs on his desktop: the density (28 moon jellies, 16 crystal jellies in the films), the pace, and whether the crystal jellies' rings should give way more to their bells.
 
 ## Names and look-alikes
 - **Jellyfish** is the name proposed: plain, like Fireflies. "Jellies" sits beside Apple's own Palau Jellies and Alaskan Jellies aerials, and "Deep Sea" is too near Space Tour's deep space. JELLYFISH is registered in the US for unrelated goods only, checked through third-party mirrors ([research-look.md](jellyfish/research-look.md) §6).
@@ -58,6 +66,42 @@ Questions for round 2:
 1. Does the motion read as natural now, in each film? If not, which jelly at which moment looks wrong.
 2. D, E and F as one wallpaper with a Look menu, E following Light Mode and F or D in Dark Mode, or fewer?
 3. How many: 28 moon jellies and 16 crystal jellies here, as dense as the footage's tanks.
+
+## The build so far
+**Step 1 (2026-11-07): the whole of round 2, in the app, hidden.** The mock's model, already judged by Dave in films, was ported whole rather than in steps: the bell, the pulse, the motion measured from footage, the spine the tentacles hang along, the touch and turn away, and all three looks with their automatic modes. What changed on the way in:
+- **Cost.** As ported it drew in 5.35 ms of GPU. Each part now runs only where it can be seen: the bell is marched only inside its outline and only through its own depth, in 20 steps rather than the mock's 40; the gonads only near their height; tentacles and arms only within their reach down the spine; and each pixel looks at the four strands nearest it on each side of the ring rather than all of them. That came to 1.56 ms, with no change to be seen in the picture.
+- **Time.** The pulse reaches the shader as seconds since it began, not as a clock, so it stays exact however long the scene runs; the sway and the marine snow take the scene's own clock wrapped hourly.
+- **Groups.** Moon jellies and crystal jellies are two groups, each with its own shader and a fade. A group is filled only when it's to be seen, run 10 s at once so its poses, pulses and tentacles are already under way, and emptied when it has faded out.
+- **The look.** One shader draws a moon jelly lit and glowing and mixes the two by how lit the tank is, so Light and Dark Mode, or dusk, change only the light; the crystal jellies fade in as their own group. The scene watches the appearance itself (`followsAppearance`), and checks the Sun every minute.
+
+## Settings
+- **Look** (`jellyfish.look`, a menu): lit tank in Light Mode, glow in Dark Mode (the standard); lit tank in Light Mode, crystal jellies in Dark Mode; lit tank by day, glow at night; lit tank by day, crystal jellies at night; lit tank; glow; crystal jellies. Each pick says what it does, rather than a second menu for the dark look that would show for only four of the seven picks, which a knob can't express. By day means the Sun where you are: the tank's light eases through civil twilight, from 6° below the horizon to 1° above.
+- **Jellyfish** (`jellyfish.count`, 0.5 to 1.5×): 28 moon jellies or 16 crystal jellies at 1×. A change refills the tank.
+- **Speed** (`jellyfish.speed`, 0.5 to 1.5×): the scene's clock, so pulses, turns and drift keep their proportions.
+
+## Cost
+Measured by the render test at 2x Retina on an M3 Max, debug build (release CPU is lower), with the seed pinned:
+
+| Look | CPU | GPU |
+|---|---|---|
+| Lit tank, 28 moon jellies | 1.77 ms | 1.56 ms |
+| Glow, 28 moon jellies | 1.91 ms | 1.59 ms |
+| Crystal jellies, 16 | 1.11 ms | 1.62 ms |
+
+No `batteryRate` yet: a near bell's margin moves about 3 device pixels a frame at 20 fps in the squeeze, a little over the 2 that can't be seen, so 20 fps waits on Dave seeing it side by side, as research-method.md advised.
+
+## Checking it
+```sh
+defaults write com.dtanquary.atrium unfinished -bool true   # show hidden wallpapers, then relaunch
+SNAPSHOT_SCENE="Jellyfish" SNAPSHOT_APPEARANCE=light SNAPSHOT_DEFAULTS="jellyfish.seed=22" swift test --filter everySceneRenders   # the lit tank
+SNAPSHOT_SCENE="Jellyfish" SNAPSHOT_APPEARANCE=dark SNAPSHOT_DEFAULTS="jellyfish.seed=22" swift test --filter everySceneRenders    # the glow
+SNAPSHOT_SCENE="Jellyfish" SNAPSHOT_DEFAULTS="jellyfish.seed=21,jellyfish.look=6" swift test --filter everySceneRenders          # crystal jellies
+```
+`jellyfish.seed` (any whole number but 0) pins the tank's layout and every pulse and turn, for pictures that can be taken again; unset, each load is new. The Settings pictures are `preview-jellyfish.jpg` (the glow, Dark Mode's standard) and `preview-jellyfish-light.jpg` (the lit tank), from the first two commands. The mock and its statistics, which measure poses, turns, spacing and cover as research-motion.md measured footage, stay in `docs/jellyfish/` (`JSTATS=1` on `mock.swift`).
+
+## Shortcuts
+- The sway and the marine snow jump once an hour where the shader's clock wraps.
+- Every pair of jellies is checked for touching every step; fine at 42 at most.
 
 ## Dave's feedback
 - **2026-11-07, on round 1:** "the single jellifish is very underwhelming, we need to focus on groups that are moving"; "sheet-1 is the best, and within that items D, E, and F are what we should focus in on"; "we need to really focus on natural movement, do more research if needed, its not quite there yet". So round 2 is groups in motion only, in three lights: crystal jellies under blue light with their green rings (D), moon jellies in the lit blue tank (E), and the steady blue glow (F), which no real jelly makes and the sheet said so. The deep species, the single close-up and the other sheets' questions are set aside. Motion gets its own research, measured from footage of real groups.
