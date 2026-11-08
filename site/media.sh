@@ -29,7 +29,6 @@ PREVIEWS='ant-colony|Ant Colony|4|SNAPSHOT_DEFAULTS=antcolony.day=20261013,antco
 aurora|Aurora|8|SNAPSHOT_DEFAULTS=aurora.palette=Purple,aurora.speed=2
 black-hole|Black Hole|2.5|SNAPSHOT_DEFAULTS=blackhole.speed=2
 dappled-light|Dappled Light|4|SNAPSHOT_DEFAULTS=dappled.previewTime=1,dappled.previewHour=17.5,dappled.weather=1
-deep-space-tour|Deep Space Tour|4|SNAPSHOT_DEFAULTS=deep.photo=deep-pillars-webb.heic
 earth-from-orbit|Earth from Orbit|4|SNAPSHOT_DEFAULTS=latitude=25,longitude=78,earth.previewStorm=1
 etching|Etching|4|SNAPSHOT_DEFAULTS=etching.drawn=0.6908,etching.picture=1,etching.speed=8
 fireflies|Fireflies|8|
@@ -49,7 +48,7 @@ pixel-spaceport|Pixel Spaceport|19|SNAPSHOT_DEFAULTS=spaceport.previewTime=1,spa
 pixel-window-seat|Pixel Window Seat|5|SEAT_AT=30500 SNAPSHOT_DEFAULTS=seat.previewTime=1,seat.previewHour=10.5
 rain-on-glass|Rain on Glass|4|SNAPSHOT_DEFAULTS=rain.palette=Hamburg SNAPSHOT_APPEARANCE=dark
 schlieren|Schlieren|40|SNAPSHOT_DEFAULTS=schlieren.palette=Candlelight,schlieren.filter=0,schlieren.source=3
-solar-system-tour|Solar System Tour|4|SNAPSHOT_DEFAULTS=solar.photo=solar-jupiter-marble.heic
+space-tour|Space Tour|4|SNAPSHOT_DEFAULTS=solar.photo=solar-jupiter-marble.heic
 turing-patterns|Turing Patterns|40|SNAPSHOT_DEFAULTS=turing.pattern=4,turing.palette=Lagoon
 weather|Weather|4|SNAPSHOT_DEFAULTS=weather.lock=2,weather.previewTime=1,weather.previewHour=18.7
 wind|Wind|4|SNAPSHOT_DEFAULTS=wind.zoom=2,wind.map=2'

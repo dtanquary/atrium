@@ -1,10 +1,10 @@
 import SpriteKit
 
-@MainActor func solarSystemTour(size: CGSize) -> SKScene { PhotoTour(size: size, tour: .solarSystem) }
-@MainActor func deepSpaceTour(size: CGSize) -> SKScene { PhotoTour(size: size, tour: .deepSpace) }
+@MainActor func spaceTour(size: CGSize) -> SKScene { PhotoTour(size: size) }
 
-/// A set of photos to tour: its views from `<prefix>-photos.tsv`, its facts from `<prefix>-facts.tsv`, and its settings
-/// under `<prefix>.…`. Solar System Tour's are worlds; Deep Space Tour's are nebulae, galaxies and the rest.
+/// A set of Space Tour's photos: its views from `<prefix>-photos.tsv`, its facts from `<prefix>-facts.tsv`, and what
+/// the tour has shown of them under `<prefix>.…`. The Solar System's are worlds; deep space's are nebulae, galaxies and
+/// the rest. The settings are the tour's, shared by both, and keep Solar System Tour's `solar.` keys.
 struct Tour: Sendable {
     /// One view, a row of the photos table. `body` is what the tour moves between (a world, a nebula) and `group` what
     /// Show holds it on (the same world; a kind of object). A `disc` is a whole world on black, shown whole and never
@@ -17,35 +17,57 @@ struct Tour: Sendable {
         let focus: SIMD2<Double>, zoom: Double
     }
 
-    static let solarSystem = Tour(prefix: "solar", show: "solar.body", surfaceSwitch: true)
-    static let deepSpace = Tour(prefix: "deep", show: "deep.show", surfaceSwitch: false)
+    static let solarSystem = Tour(prefix: "solar", show: "solar.body")
+    static let deepSpace = Tour(prefix: "deep", show: "deep.show")
+    /// The set a view is from.
+    static func of(_ view: View) -> Tour { view.file.hasPrefix("deep-") ? deepSpace : solarSystem }
 
     let prefix: String
     let views: [View]
     /// What the tour moves between, and what Show can hold it on, in the table's order.
     let bodies: [String], groups: [String]
     let facts: [String: [String]]
-    let seconds: Knob, zoom: Knob, brightness: Knob
-    /// Fill the screen with every photo that's big enough (the default), or show each whole, worlds on black.
-    let framing: Knob
-    /// The caption: which lines, how many facts and how they're laid out, where, how big, and how far from the edges.
-    let captionLines: Knob, factCount: Knob, factLayout: Knob, captionPlace: Knob, captionSize: Knob, captionMargin: Knob
-    /// Solar System Tour's switch for views from the ground.
-    let surface: Knob?
-    /// The group the tour is held on, by name; empty tours them all.
+    /// The group the tour is held on, by name, while Show is at this set; empty tours them all.
     let showKey: String
+    var held: String { Tour.which.value > 0.5 ? UserDefaults.standard.string(forKey: showKey) ?? "" : "" }
 
-    var knobs: [Knob] {
-        [seconds, zoom, framing] + (surface.map { [$0] } ?? []) + [brightness, captionLines, factCount, factLayout, captionPlace, captionSize, captionMargin]
-    }
-    /// The pick for Settings: every group, each with its thumbnail (`<prefix>-thumb-<name>.jpg`).
-    var showChoice: PaletteChoice {
+    /// Which photos: both sets, or one, each with a grid under it to hold the tour on one of its groups.
+    static let which = Knob(key: "solar.tour", label: "Photos of", range: 0...2, standard: 0, section: "Show",
+                            format: .choice(["Everything", "The Solar System", "Deep space"]))
+    static let seconds = Knob(key: "solar.seconds", label: "Each view for", range: 20...300, standard: 60, section: "Tour", format: .seconds)
+    static let zoom = Knob(key: "solar.zoom", label: "Zoom", range: 1...1.6, standard: 1.25, section: "Tour", format: .times)
+    /// Fill the screen with every photo that's big enough (the default), or show each whole, worlds on black.
+    static let framing = Knob(key: "solar.framing", label: "Framing", range: 0...1, standard: 0, section: "Tour",
+                              format: .choice(["Fill the screen", "Show the whole photo"]))
+    /// Views from the ground, all of them the Solar System's.
+    static let surface = Knob(key: "solar.surface", label: "Views from the surface", range: 0...1, standard: 1, section: "Tour",
+                              format: .toggle, hiddenWhen: which.key, hiddenAt: 2)
+    static let brightness = Knob(key: "solar.brightness", label: "Brightness", range: 0.4...1.2, standard: 1, section: "Tour", format: .times)
+    /// The caption: which lines, how many facts and how they're laid out, where, how big, and how far from the edges.
+    static let captionLines = Knob(key: "solar.captionLines", label: "Show", range: 0...3, standard: 3, section: "Caption",
+                                   format: .choice(["Nothing", "The name", "The name and a line on the photo", "The name, the photo and facts"]))
+    static let factCount = Knob(key: "solar.factCount", label: "Facts", range: 0...2, standard: 1, section: "Caption",
+                                format: .choice(["One at a time", "Two at a time", "Three at a time"]), shownWhen: captionLines.key)
+    static let factLayout = Knob(key: "solar.factLayout", label: "Facts laid out", range: 0...1, standard: 0, section: "Caption",
+                                 format: .choice(["On one line", "One per line"]), shownWhen: captionLines.key)
+    static let captionPlace = Knob(key: "solar.captionPlace", label: "Position", range: 0...5, standard: 3, section: "Caption",
+                                   format: .choice(["Top left", "Top center", "Top right", "Bottom left", "Bottom center", "Bottom right"]),
+                                   shownWhen: captionLines.key)
+    static let captionSize = Knob(key: "solar.captionSize", label: "Size", range: 0.6...2, standard: 1, section: "Caption", format: .times,
+                                  shownWhen: captionLines.key)
+    static let captionMargin = Knob(key: "solar.captionMargin", label: "Margin", range: 16...240, standard: 52, section: "Caption",
+                                    format: .points, shownWhen: captionLines.key)
+    static let knobs = [which, seconds, zoom, framing, surface, brightness, captionLines, factCount, factLayout, captionPlace, captionSize, captionMargin]
+
+    /// The grid under Show's menu at `pick`: every group, each with its thumbnail (`<prefix>-thumb-<name>.jpg`).
+    func showChoice(at pick: Double) -> PaletteChoice {
         PaletteChoice(key: showKey, options: groups.map { ($0, [[0.05, 0.07, 0.2], [0.3, 0.2, 0.45]], [[0.05, 0.07, 0.2], [0.3, 0.2, 0.45]]) },
-                      photos: Dictionary(uniqueKeysWithValues: groups.map { ($0, (thumb($0), thumb($0))) }), title: "Show")
+                      photos: Dictionary(uniqueKeysWithValues: groups.map { ($0, (thumb($0), thumb($0))) }), title: "Show",
+                      shownWhen: Tour.which.key, shownAt: pick)
     }
     func thumb(_ group: String) -> String { "\(prefix)-thumb-\(group.lowercased().replacingOccurrences(of: " ", with: "-")).jpg" }
 
-    init(prefix: String, show: String, surfaceSwitch: Bool) {
+    init(prefix: String, show: String) {
         func rows(_ file: String) -> [[String]] {
             ((try? String(contentsOf: resource(file), encoding: .utf8)) ?? "").split(separator: "\n").filter { !$0.hasPrefix("#") }
                 .map { $0.split(separator: "\t", omittingEmptySubsequences: false).map(String.init) }
@@ -61,37 +83,25 @@ struct Tour: Sendable {
         bodies = unique(views.map(\.body))
         groups = unique(views.map(\.group))
         facts = rows("\(prefix)-facts.tsv").reduce(into: [:]) { if $1.count == 2 { $0[$1[0], default: []].append($1[1]) } }
-        seconds = Knob(key: prefix + ".seconds", label: "Each view for", range: 20...300, standard: 60, section: "Tour", format: .seconds)
-        zoom = Knob(key: prefix + ".zoom", label: "Zoom", range: 1...1.6, standard: 1.25, section: "Tour", format: .times)
-        captionLines = Knob(key: prefix + ".captionLines", label: "Show", range: 0...3, standard: 3, section: "Caption",
-                            format: .choice(["Nothing", "The name", "The name and a line on the photo", "The name, the photo and facts"]))
-        factCount = Knob(key: prefix + ".factCount", label: "Facts", range: 0...2, standard: 1, section: "Caption",
-                         format: .choice(["One at a time", "Two at a time", "Three at a time"]), shownWhen: prefix + ".captionLines")
-        factLayout = Knob(key: prefix + ".factLayout", label: "Facts laid out", range: 0...1, standard: 0, section: "Caption",
-                          format: .choice(["On one line", "One per line"]), shownWhen: prefix + ".captionLines")
-        captionPlace = Knob(key: prefix + ".captionPlace", label: "Position", range: 0...5, standard: 3, section: "Caption",
-                            format: .choice(["Top left", "Top center", "Top right", "Bottom left", "Bottom center", "Bottom right"]),
-                            shownWhen: prefix + ".captionLines")
-        captionSize = Knob(key: prefix + ".captionSize", label: "Size", range: 0.6...2, standard: 1, section: "Caption", format: .times,
-                           shownWhen: prefix + ".captionLines")
-        captionMargin = Knob(key: prefix + ".captionMargin", label: "Margin", range: 16...240, standard: 52, section: "Caption",
-                             format: .points, shownWhen: prefix + ".captionLines")
-        framing = Knob(key: prefix + ".framing", label: "Framing", range: 0...1, standard: 0, section: "Tour",
-                       format: .choice(["Fill the screen", "Show the whole photo"]))
-        brightness = Knob(key: prefix + ".brightness", label: "Brightness", range: 0.4...1.2, standard: 1, section: "Tour", format: .times)
-        surface = surfaceSwitch && views.contains(where: { $0.kind == .surface }) ? Knob(key: prefix + ".surface", label: "Views from the surface", range: 0...1, standard: 1,
-                                       section: "Tour", format: .toggle) : nil
         showKey = show
+    }
+
+    /// The tour's next view: from the set Show is at, or with Everything, the Solar System's or deep space's at even
+    /// odds, so neither drowns out the other. `<prefix>.photo` pins one photo by file name, for trying one out.
+    static func next(after last: View?) -> View? {
+        let both = [solarSystem, deepSpace]
+        if let pinned = both.lazy.compactMap({ tour in UserDefaults.standard.string(forKey: tour.prefix + ".photo").flatMap { file in
+            tour.views.first { $0.file == file } } }).first { return pinned }
+        return [both, [solarSystem], [deepSpace]][Int(which.value)].randomElement()?.pickNext(after: last)
     }
 
     /// The next body and which of its views: one in the group held in Settings, or else one not seen lately, likelier
     /// the more views it has (up to three times); then that body's next view, in the order of the table, remembered
-    /// across launches. `<prefix>.photo` pins one photo by file name, for trying one out.
+    /// across launches.
     func pickNext(after last: View?) -> View? {
         let defaults = UserDefaults.standard
-        if let file = defaults.string(forKey: prefix + ".photo"), let pinned = views.first(where: { $0.file == file }) { return pinned }
-        var usable = (surface?.value ?? 1) > 0.5 ? views : views.filter { $0.kind != .surface }
-        let held = defaults.string(forKey: showKey) ?? ""
+        var usable = Tour.surface.value > 0.5 ? views : views.filter { $0.kind != .surface }
+        let held = held
         // Held on a world seen only from the ground (Eros, Dimorphos), the switch gives way rather than show nothing.
         if groups.contains(held), !usable.contains(where: { $0.group == held }) { usable = views }
         let candidates = groups.contains(held) ? unique(usable.filter { $0.group == held }.map(\.body)) : unique(usable.map(\.body))
@@ -127,18 +137,16 @@ struct Tour: Sendable {
     private func unique(_ names: [String]) -> [String] { names.reduce(into: []) { if !$0.contains($1) { $0.append($1) } } }
 }
 
-/// A slow tour of a `Tour`'s photos, the best spacecraft and telescopes have taken: each drifts and zooms for a minute,
-/// then dissolves into the next. The tour moves from body to body rather than photo to photo, so Saturn comes round
-/// no more often than Io, and each visit shows the next of its photos. In Solar System Tour the Sun and the Moon are
-/// live: today's Sun from SDO (`TheSun`) and the Moon as it is right now (`TheMoon`), run inside this scene. Settings
-/// can hold the tour on one group.
+/// Space Tour: a slow tour of the best photos spacecraft and telescopes have taken, of the Solar System and deep space.
+/// Each drifts and zooms for a minute, then dissolves into the next. The tour moves from body to body rather than
+/// photo to photo, so Saturn comes round no more often than Io, and each visit shows the next of its photos. The Sun
+/// and the Moon are live: today's Sun from SDO (`TheSun`) and the Moon as it is right now (`TheMoon`), run inside this
+/// scene. Settings can keep the tour to one set, and hold it on one group of that set.
 final class PhotoTour: SKScene {
     typealias View = Tour.View
-    let tour: Tour
 
-    init(size: CGSize, tour: Tour) {
-        self.tour = tour
-        still = UserDefaults.standard.object(forKey: tour.prefix + ".at") as? Double
+    override init(size: CGSize) {
+        still = UserDefaults.standard.object(forKey: "solar.at") as? Double
         super.init(size: size)
     }
 
@@ -191,6 +199,12 @@ final class PhotoTour: SKScene {
     private var current: Shown?
     private var next: Shown?
     private var loading = false
+    /// Counts the cuts begun, so one begun before Show changed is dropped.
+    private var cuts = 0
+    /// What Show keeps the tour to, and whether a change of it should move the tour on as soon as the next view is ready.
+    private var shownHolds = ""
+    private var rush = false
+    private var holds: String { "\(Tour.which.value) \(Tour.solarSystem.held) \(Tour.deepSpace.held)" }
     private var time = 0.0
     private var lastUpdate: TimeInterval?
     private let caption = SKNode()
@@ -203,8 +217,8 @@ final class PhotoTour: SKScene {
     /// Screen pixels per point, for how sharp a photo can be shown. The render test and the desktop are both 2x.
     private let pixelScale = Double(NSScreen.main?.backingScaleFactor ?? 2)
 
-    private var seconds: Double { max(tour.seconds.value, Self.fade * 2) }
-    /// Holds the motion at this point, 0 to 1, for snapshots of a photo's start or end (`<prefix>.at`).
+    private var seconds: Double { max(Tour.seconds.value, Self.fade * 2) }
+    /// Holds the motion at this point, 0 to 1, for snapshots of a photo's start or end (`solar.at`).
     private let still: Double?
 
     override func sceneDidLoad() {
@@ -224,14 +238,15 @@ final class PhotoTour: SKScene {
         caption.position = CGPoint(x: 44, y: 60)
         caption.alpha = 0
         addChild(caption)
+        shownHolds = holds
         applyKnobs()
         NotificationCenter.default.addObserver(self, selector: #selector(applyKnobs), name: UserDefaults.didChangeNotification, object: nil)
 
         // The first view straight away, so the wallpaper never opens on black, then the next in the background.
-        guard let first = tour.pickNext(after: nil) else { return }
+        guard let first = Tour.next(after: nil) else { return }
         var shown = Shown(view: first)
-        let fills = tour.framing.value < 0.5
-        if first.kind == .live { shown.scene = liveScene(first) } else if let cut = Self.cut(first, size: size, pixelScale: pixelScale, zoom: tour.zoom.value, fill: fills) { shown = Shown(cut) }
+        let fills = Tour.framing.value < 0.5
+        if first.kind == .live { shown.scene = liveScene(first) } else if let cut = Self.cut(first, size: size, pixelScale: pixelScale, zoom: Tour.zoom.value, fill: fills) { shown = Shown(cut) }
         shown.start = 0
         show(shown, in: 0)
         current = shown
@@ -245,12 +260,13 @@ final class PhotoTour: SKScene {
     }
 
     @objc private func applyKnobs() {
-        brightnessUniform.floatValue = Float(tour.brightness.value)
-        let layout = [tour.captionLines, tour.factCount, tour.factLayout, tour.captionPlace, tour.captionSize, tour.captionMargin].map(\.value)
+        brightnessUniform.floatValue = Float(Tour.brightness.value)
+        if holds != shownHolds { shownHolds = holds; moveOn() }
+        let layout = [Tour.captionLines, Tour.factCount, Tour.factLayout, Tour.captionPlace, Tour.captionSize, Tour.captionMargin].map(\.value)
         guard layout != captionLayout, let view = captionView else { return } // any defaults change lands here; most aren't ours
         captionLayout = layout
-        if tour.captionLines.value > 2.5, shownFacts.count != Int(tour.factCount.value) + 1 {
-            shownFacts = tour.nextFacts(view.body, count: Int(tour.factCount.value) + 1)
+        if Tour.captionLines.value > 2.5, shownFacts.count != Int(Tour.factCount.value) + 1 {
+            shownFacts = Tour.of(view).nextFacts(view.body, count: Int(Tour.factCount.value) + 1)
         }
         layoutCaption()
         if caption.alpha == 0, !caption.hasActions(), next?.start == nil { fadeInCaption() } // turned back on mid-view
@@ -262,10 +278,11 @@ final class PhotoTour: SKScene {
         for live in [current?.scene, next?.scene].compactMap({ $0 }) { live.update(currentTime) }
         guard let current, let began = current.start else { return }
         place(current, in: 0)
-        if next == nil, !loading, time - began > Self.fade { load() }
+        if next == nil, !loading, rush || time - began > Self.fade { load() }
         guard var next else { return }
         if next.start == nil {
-            guard time - began >= seconds else { return }
+            guard rush || time - began >= seconds else { return }
+            rush = false
             next.start = time
             next.scene?.isHidden = false
             self.next = next
@@ -284,9 +301,20 @@ final class PhotoTour: SKScene {
         showCaption(next.view)
     }
 
+    /// Show changed: drops the view that was next and dissolves to one from the new pick as soon as it's ready, unless
+    /// a dissolve is already under way.
+    private func moveOn() {
+        guard next?.start == nil else { return }
+        if let scene = next?.scene, scene !== current?.scene { scene.removeFromParent() }
+        next = nil
+        cuts += 1
+        loading = false
+        rush = true
+    }
+
     /// Picks the next view and cuts its photo in the background, or builds its live scene, hidden until its turn.
     private func load() {
-        guard let view = tour.pickNext(after: current?.view) else { return }
+        guard let view = Tour.next(after: current?.view) else { return }
         if view.kind == .live {
             var shown = Shown(view: view)
             shown.scene = current?.view.file == view.file ? current?.scene : liveScene(view)
@@ -296,10 +324,11 @@ final class PhotoTour: SKScene {
             return
         }
         loading = true
-        let size = size, scale = pixelScale, zoom = tour.zoom.value, fill = tour.framing.value < 0.5
+        cuts += 1
+        let size = size, scale = pixelScale, zoom = Tour.zoom.value, fill = Tour.framing.value < 0.5, cutting = cuts
         Task { [weak self] in
             let cut = await Task.detached { Self.cut(view, size: size, pixelScale: scale, zoom: zoom, fill: fill) }.value
-            guard let self else { return }
+            guard let self, cuts == cutting else { return }
             loading = false
             guard let cut else { return }
             let shown = Shown(cut)
@@ -342,14 +371,14 @@ final class PhotoTour: SKScene {
     /// A new view's caption, with its next facts, faded in once the view has arrived.
     private func showCaption(_ view: View) {
         captionView = view
-        shownFacts = tour.captionLines.value > 2.5 ? tour.nextFacts(view.body, count: Int(tour.factCount.value) + 1) : []
-        captionLayout = [tour.captionLines, tour.factCount, tour.factLayout, tour.captionPlace, tour.captionSize, tour.captionMargin].map(\.value)
+        shownFacts = Tour.captionLines.value > 2.5 ? Tour.of(view).nextFacts(view.body, count: Int(Tour.factCount.value) + 1) : []
+        captionLayout = [Tour.captionLines, Tour.factCount, Tour.factLayout, Tour.captionPlace, Tour.captionSize, Tour.captionMargin].map(\.value)
         layoutCaption()
         fadeInCaption()
     }
 
     private func fadeInCaption() {
-        guard tour.captionLines.value > 0.5 else { return }
+        guard Tour.captionLines.value > 0.5 else { return }
         caption.run(.sequence([.wait(forDuration: 1.5), .customAction(withDuration: 3) { [weak self] _, t in
             self?.setCaption(Double(t) / 3)
         }]))
@@ -360,13 +389,13 @@ final class PhotoTour: SKScene {
     /// The shader's shadow behind it follows.
     private func layoutCaption() {
         caption.removeAllChildren()
-        guard let view = captionView, tour.captionLines.value > 0.5 else { caption.removeAllActions(); setCaption(0); return }
+        guard let view = captionView, Tour.captionLines.value > 0.5 else { caption.removeAllActions(); setCaption(0); return }
         var rows: [(text: String, size: CGFloat, weight: NSFont.Weight, alpha: CGFloat)] = [(view.body, 26, .semibold, 0.82)]
-        if tour.captionLines.value > 1.5 { rows.append((liveCaption(view) ?? view.caption, 13, .regular, 0.6)) }
-        if tour.captionLines.value > 2.5, !shownFacts.isEmpty {
-            rows += (tour.factLayout.value > 0.5 ? shownFacts : [shownFacts.joined(separator: "  ·  ")]).map { ($0, 12, .regular, 0.45) }
+        if Tour.captionLines.value > 1.5 { rows.append((liveCaption(view) ?? view.caption, 13, .regular, 0.6)) }
+        if Tour.captionLines.value > 2.5, !shownFacts.isEmpty {
+            rows += (Tour.factLayout.value > 0.5 ? shownFacts : [shownFacts.joined(separator: "  ·  ")]).map { ($0, 12, .regular, 0.45) }
         }
-        let scale = CGFloat(tour.captionSize.value), place = Int(tour.captionPlace.value), column = place % 3
+        let scale = CGFloat(Tour.captionSize.value), place = Int(Tour.captionPlace.value), column = place % 3
         var baseline: CGFloat = 0
         for (i, row) in rows.enumerated() {
             if i > 0 { baseline -= (rows[i - 1].size * 0.3 + row.size * 1.3) * scale } // the last line's descent, then this one's height
@@ -378,7 +407,7 @@ final class PhotoTour: SKScene {
             caption.addChild(label)
         }
         caption.position = .zero
-        let block = caption.calculateAccumulatedFrame(), margin = CGFloat(tour.captionMargin.value)
+        let block = caption.calculateAccumulatedFrame(), margin = CGFloat(Tour.captionMargin.value)
         caption.position = CGPoint(x: [margin, size.width / 2, size.width - margin][column],
                                    y: place < 3 ? size.height - margin - block.maxY : margin - block.minY)
         let shade = block.offsetBy(dx: caption.position.x, dy: caption.position.y)
@@ -520,6 +549,11 @@ private extension SIMD3 where Scalar == Double {
 }
 
 extension Knob {
-    /// The same knob under another Settings section, for a scene shown inside another wallpaper.
-    func `in`(_ section: String) -> Knob { var knob = self; knob.section = section; return knob }
+    /// The same knob under another Settings section, for the Sun's and the Moon's live views in Space Tour, hidden while
+    /// it shows only deep space.
+    func `in`(_ section: String) -> Knob {
+        var knob = self
+        (knob.section, knob.hiddenWhen, knob.hiddenAt) = (section, Tour.which.key, 2)
+        return knob
+    }
 }

@@ -160,13 +160,11 @@ struct Refresh {
     Wallpaper(name: "A Tree for the Year", icon: "tree.fill", tint: .green, blurb: "One tree on a hill, through your real seasons and weather.",
               make: treeForTheYear, knobs: TreeScene.treeKnobs, status: (key: "weather.status", below: "tree.lock"),
               refresh: .weather, unfinished: true),
-    Wallpaper(name: "Deep Space Tour", icon: "star.circle.fill", tint: .blue,
-              blurb: "Slow pans across the best real photos of nebulae, galaxies and the two black holes ever seen.", make: deepSpaceTour,
-              knobs: Tour.deepSpace.knobs, palettes: Tour.deepSpace.showChoice, batteryRate: 20),
-    Wallpaper(name: "Solar System Tour", icon: "smallcircle.filled.circle", tint: .orange,
-              blurb: "Slow pans across the best photos of every world, with the live Sun and Moon.", make: solarSystemTour,
-              knobs: Tour.solarSystem.knobs + ([TheSun.wavelengthKnob] + TheSun.knobs).map { $0.in("The Sun") } + TheMoon.knobs.map { $0.in("The Moon") },
-              palettes: Tour.solarSystem.showChoice, batteryRate: 20),
+    Wallpaper(name: "Space Tour", icon: "smallcircle.filled.circle", tint: .orange,
+              blurb: "Slow pans across the best real photos of the Solar System and deep space, with the live Sun and Moon.",
+              make: spaceTour,
+              knobs: Tour.knobs + ([TheSun.wavelengthKnob] + TheSun.knobs).map { $0.in("The Sun") } + TheMoon.knobs.map { $0.in("The Moon") },
+              looks: [Tour.solarSystem.showChoice(at: 1), Tour.deepSpace.showChoice(at: 2)], batteryRate: 20),
 ].sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
 
 /// The wallpapers people see: all but the unfinished ones, unless `unfinished` is set for working on them, and

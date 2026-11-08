@@ -496,8 +496,8 @@ struct AboutPage: View {
                 group("Weather", "Hills, clouds and Moon from the BLM, NASA, Poly Haven and Wikimedia Commons", "weather-credits.tsv")
                 group("Rain on Glass", "Backdrops from Poly Haven, Wikimedia Commons and the NPS", "rain-credits.tsv")
                 group("Fish Tank", "Reef photos from iNaturalist, Wikimedia Commons and NOAA", "reef-credits.tsv")
-                group("Solar System Tour", "Photos from NASA, ESA, JAXA and the people who processed them", "solar-photos.tsv")
-                group("Deep Space Tour", "Photos from ESA/Hubble, ESA/Webb, ESO, NOIRLab, Euclid, Chandra and the EHT", "deep-photos.tsv")
+                group("Space Tour: the Solar System", "Photos from NASA, ESA, JAXA and the people who processed them", "solar-photos.tsv")
+                group("Space Tour: deep space", "Photos from ESA/Hubble, ESA/Webb, ESO, NOIRLab, Euclid, Chandra and the EHT", "deep-photos.tsv")
                 group("Black Hole", "The Milky Way from ESO, and the HYG catalogue's stars", "blackhole-credits.tsv")
                 group("Etching", "Prints, plates, drawings and maps from The Met, Wellcome Collection, the Rijksmuseum, the Biblioteca Nacional de España, the Library of Congress, the US Patent Office and more libraries, museums and map collections", "etching-credits.tsv")
             } header: {
@@ -599,12 +599,14 @@ struct WallpaperPage: View {
                 }
             }
             ForEach(sections, id: \.self) { section in
-                if let retitled = wallpaper.retitled, retitled.section == section {
-                    Section { rows(section) } header: { SectionTitle(wallpaper: wallpaper, section: section, menu: retitled.when) }
-                } else if let note = wallpaper.footnote, note.section == section {
-                    Section { rows(section) } header: { Text(section) } footer: { Text(note.text) }
-                } else {
-                    Section(section) { rows(section) }
+                SectionGate(rows: wallpaper.knobs.filter { $0.section == section }) {
+                    if let retitled = wallpaper.retitled, retitled.section == section {
+                        Section { rows(section) } header: { SectionTitle(wallpaper: wallpaper, section: section, menu: retitled.when) }
+                    } else if let note = wallpaper.footnote, note.section == section {
+                        Section { rows(section) } header: { Text(section) } footer: { Text(note.text) }
+                    } else {
+                        Section(section) { rows(section) }
+                    }
                 }
             }
             if let refresh = wallpaper.refresh {
@@ -802,6 +804,26 @@ struct RandomOnly<Content: View>: View {
 
     var body: some View {
         if chosen.isEmpty { content }
+    }
+}
+
+/// A section of a wallpaper's settings, left out while one switch or menu hides every row in it (Space Tour's Sun and
+/// Moon while it shows only deep space): a form keeps the title of a section with no rows showing.
+struct SectionGate<Content: View>: View {
+    private let gate: String?, at: Double?
+    @AppStorage private var hide: Double
+    @ViewBuilder let content: Content
+
+    init(rows: [Knob], @ViewBuilder content: () -> Content) {
+        let first = rows.first
+        gate = rows.allSatisfy { $0.hiddenWhen == first?.hiddenWhen && $0.hiddenAt == first?.hiddenAt } ? first?.hiddenWhen : nil
+        at = first?.hiddenAt
+        _hide = AppStorage(wrappedValue: 0, gate ?? first?.key ?? "scene") // an empty key crashes KVO, so its own, unused
+        self.content = content()
+    }
+
+    var body: some View {
+        if gate == nil || !Knob.on(hide, at: at) { content }
     }
 }
 

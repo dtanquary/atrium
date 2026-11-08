@@ -473,14 +473,32 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
     #expect(Power.fps(pick: 0, plugged: 3, fast: false, cap: nil, heat: .critical) == 0)
 }
 
-/// Held on a world seen only from the ground, with Views from the surface off, Solar System Tour still shows it
+/// Held on a world seen only from the ground, with Views from the surface off, Space Tour still shows it
 /// rather than nothing.
 @MainActor @Test func tourHeldOnGroundOnlyWorldShowsIt() {
     let defaults = UserDefaults.standard
-    defer { ["solar.body", "solar.surface", "solar.seen", "solar.recent"].forEach(defaults.removeObject) }
+    defer { ["solar.tour", "solar.body", "solar.surface", "solar.seen", "solar.recent"].forEach(defaults.removeObject) }
+    defaults.set(1.0, forKey: "solar.tour")
     defaults.set("Eros", forKey: "solar.body")
     defaults.set(0.0, forKey: "solar.surface")
-    #expect(Tour.solarSystem.pickNext(after: nil)?.group == "Eros")
+    #expect(Tour.next(after: nil)?.group == "Eros")
+}
+
+/// Space Tour's Show keeps to the photos it's set to, shows both with Everything, and ignores a world held for the
+/// Solar System while it's at Everything.
+@MainActor @Test func spaceTourKeepsToShow() {
+    let defaults = UserDefaults.standard
+    defer { ["solar.tour", "solar.body", "solar.seen", "solar.recent", "deep.seen", "deep.recent"].forEach(defaults.removeObject) }
+    func sets(_ pick: Double) -> Set<String> {
+        defaults.set(pick, forKey: "solar.tour")
+        return Set((0..<60).compactMap { _ in Tour.next(after: nil).map { Tour.of($0).prefix } })
+    }
+    defaults.set("Saturn", forKey: "solar.body")
+    #expect(sets(0) == ["solar", "deep"])
+    #expect(sets(1) == ["solar"])
+    #expect(sets(2) == ["deep"])
+    defaults.set(0.0, forKey: "solar.tour")
+    #expect(!(0..<30).allSatisfy { _ in Tour.next(after: nil)?.body == "Saturn" })
 }
 
 /// Knob values are cached for scenes that read them every frame, but a change shows at once, to a scene's own

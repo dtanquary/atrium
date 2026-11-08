@@ -87,7 +87,7 @@ Apple's rule for App Management (macOS 13 on): apps signed by the same team may 
 - **The App Store build** is updated by the store. Apple's documentation says it sends only changed files, but an Apple engineer said in January 2026 that the page assumes iOS ([forum thread](https://developer.apple.com/forums/thread/810624)); measure it once two builds are in TestFlight.
 
 ## Ideas
-- **Photos out of the app.** Solar System Tour (197 MB) and Deep Space Tour (148 MB) are 345 MB of the 403. Downloaded on first use, the first install would be about 60 MB. It costs the tours working offline out of the box, and touches `resource(_:)`, both scenes, Settings and Welcome. Apple's hosted asset packs are for App Store and TestFlight apps only, and On-Demand Resources doesn't exist on the Mac, so it would be plain downloads with hashes carried in the signed app. It would also lift the ceiling below.
+- **Photos out of the app.** Space Tour's photos (197 MB of the Solar System, 148 MB of deep space) are 345 MB of the 403. Downloaded on first use, the first install would be about 60 MB. It costs the tours working offline out of the box, and touches `resource(_:)`, both scenes, Settings and Welcome. Apple's hosted asset packs are for App Store and TestFlight apps only, and On-Demand Resources doesn't exist on the Mac, so it would be plain downloads with hashes carried in the signed app. It would also lift the ceiling below.
 - **GitHub's 2 GiB a file** is a ceiling on the disk image: about nine more photo tours of today's size.
 - Show an update's size before it's fetched; staple the notarization ticket to the app as well as the image.
 

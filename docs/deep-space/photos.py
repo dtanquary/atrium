@@ -1,9 +1,9 @@
-"""Deep Space Tour's views: nebulae, star clusters, dying stars, galaxies, deep fields and the two black holes ever
-imaged. Cut by ../solar-system/prep.py with TOUR=deep; see ../solar-system.md and ../deep-space.md for what the keys mean. `body` is the
+"""Space Tour's deep-space views: nebulae, star clusters, dying stars, galaxies, deep fields and the two black holes ever
+imaged. Cut by ../solar-system/prep.py with TOUR=deep; see ../space-tour.md and ../deep-space.md for what the keys mean. `body` is the
 object the tour moves between; `group` is what Settings → Show holds it on. Each object's views in the order the tour
 shows them, best first. Real photos only: no artist's impressions, simulations or catalogue maps."""
 
-HEADER = """# Deep Space Tour's views, cut by docs/solar-system/prep.py (TOUR=deep) from these originals. Public domain, CC BY or
+HEADER = """# Space Tour's deep-space views, cut by docs/solar-system/prep.py (TOUR=deep) from these originals. Public domain, CC BY or
 # CC BY-SA; CC BY and CC BY-SA require this attribution. file\tbody\tcredit\tlicence\tsource\tcaption\tkind\tfocus x,y[,zoom]\tgroup
 """
 

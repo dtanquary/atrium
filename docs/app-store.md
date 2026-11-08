@@ -21,7 +21,7 @@ The plan for putting Atrium on the Mac App Store alongside the notarized DMG on 
 | Putting back a macOS wallpaper on quit (`/System/Library/Desktop Pictures`, the default Aerial's still) | works, once the quit pauses (see below) |
 | Putting back a wallpaper from the user's own folders | **fails**: the sandbox can't read it, so `setDesktopImageURL` can't hand it to macOS. Tried with a file in `~/Library/Application Support` |
 | Settings | macOS **moves** `~/Library/Preferences/com.dtanquary.atrium.plist` into the container at the first sandboxed launch. So someone who moves from the DMG to the App Store keeps their settings, with no migration code |
-| Location prompt, Open at Login, Shuffle on unlock, Solar System Tour's live Sun | not tried; no reason to expect trouble, but check them in TestFlight |
+| Location prompt, Open at Login, Shuffle on unlock, Space Tour's live Sun | not tried; no reason to expect trouble, but check them in TestFlight |
 
 Two bugs turned up along the way and are fixed for both builds (0.95.5): quitting didn't put the default wallpaper back (macOS drops a wallpaper set just before its app exits), and an update's relaunch lost the saved wallpaper. Both are in `AppDelegate.applicationWillTerminate` and `Updater.relaunch`.
 

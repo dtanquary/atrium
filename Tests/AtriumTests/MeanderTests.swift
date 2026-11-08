@@ -408,7 +408,7 @@ private func seeded(_ seed: Double, _ others: [String: Double] = [:]) -> [String
         #expect(Set(keys).count == keys.count, "\(wallpaper.name) stores two settings under one key")
         #expect(Set(wallpaper.looks.map { "\($0.shownWhen ?? "") \($0.shownAt ?? -1)" }).count == wallpaper.looks.count, "\(wallpaper.name) has two sets of swatches for one pick")
     }
-    #expect(allScenes.filter { !$0.looks.isEmpty }.map(\.name) == ["Meander"]) // a new one: look at its Settings page, then add it here
+    #expect(allScenes.filter { !$0.looks.isEmpty }.map(\.name) == ["Meander", "Space Tour"]) // a new one: look at its Settings page, then add it here
 }
 
 /// Meander's settings hang together: a row that shows for one look hangs on a pick the Look menu has, and a menu's

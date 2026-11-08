@@ -188,6 +188,27 @@ if let name = UserDefaults.standard.string(forKey: "sun.wavelength") {
     if let i = TheSun.wavelengths.firstIndex(where: { $0.name == name }) { UserDefaults.standard.set(Double(i + 1), forKey: TheSun.wavelengthKnob.key) }
     UserDefaults.standard.removeObject(forKey: "sun.wavelength")
 }
+// ponytail: Solar System Tour and Deep Space Tour became Space Tour on 2026-11-07; drop this move after a while. Someone
+// on one of them stays on its photos with its settings (the shared ones keep Solar System Tour's keys), and someone who
+// skipped one in Shuffle gets the other.
+do {
+    let defaults = UserDefaults.standard, old = ["Solar System Tour", "Deep Space Tour"]
+    var skip = defaults.string(forKey: Shuffle.skipKey)?.split(separator: ",").map(String.init) ?? []
+    let skipped = old.filter(skip.contains), on = old.firstIndex(of: defaults.string(forKey: "scene") ?? "")
+    if let pick = on ?? (skipped.count == 1 ? old.firstIndex { $0 != skipped[0] } : nil) { defaults.set(Double(pick + 1), forKey: Tour.which.key) }
+    if on != nil { defaults.set("Space Tour", forKey: "scene") }
+    if on == 1 {
+        for knob in Tour.knobs where ![Tour.which.key, Tour.surface.key].contains(knob.key) {
+            defaults.set(defaults.object(forKey: "deep" + knob.key.dropFirst("solar".count)), forKey: knob.key) // nil clears it
+        }
+    }
+    if !skipped.isEmpty {
+        skip.removeAll(where: old.contains)
+        if skipped.count == 2 { skip.append("Space Tour") }
+        defaults.set(skip.joined(separator: ","), forKey: Shuffle.skipKey)
+    }
+    if old.contains(defaults.string(forKey: SettingsView.pageKey) ?? "") { defaults.set("Space Tour", forKey: SettingsView.pageKey) }
+}
 var current = UserDefaults.standard.string(forKey: "scene") ?? defaultScene.name
 // A wallpaper that's been cut or hidden as unfinished gives way to the default.
 if !scenes.contains(where: { $0.name == current }) {
