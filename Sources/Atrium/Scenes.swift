@@ -140,6 +140,8 @@ struct Refresh {
               make: fireflies, knobs: Fireflies.knobs, batteryRate: 20),
     Wallpaper(name: "Murmuration", icon: "bird.fill", tint: .brown, blurb: "Starlings swirling over a sunset.",
               make: murmuration, knobs: murmurationKnobs),
+    Wallpaper(name: "Sea Sparkle", icon: "water.waves", tint: .cyan, blurb: "Surf glowing blue with bioluminescent plankton, under the stars.",
+              make: seaSparkle, knobs: SeaSparkle.knobs, batteryScale: 0.5, unfinished: true),
     Wallpaper(name: "Campfire", icon: "flame.fill", tint: .red, blurb: "A campfire in a forest clearing, under the real stars.",
               make: campfire, unfinished: true),
     Wallpaper(name: "Game of Life", icon: "square.grid.3x3.fill", tint: .orange, blurb: "Conway's cells that never die out.",
