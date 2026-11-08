@@ -595,7 +595,7 @@ NEW_SMALL_WORLDS = [
          source='https://www.nasa.gov/solar-system/darts-final-images-prior-to-impact/',
          caption='Moonlet of the asteroid Didymos, 12 km out, two seconds before DART hit it · 2022'),
     dict(name='dimorphos-whole', src=O + 'dimorphos-dart-whole-moonlet-68km-0401930040.png', kind='surface', body='Dimorphos', quality=70, flip=True,
-         credit='NASA/Johns Hopkins APL', licence='Public domain', source='https://www.nasa.gov/solar-system/darts-final-images-prior-to-impact/',
+         vignette=0.3, credit='NASA/Johns Hopkins APL', licence='Public domain', source='https://www.nasa.gov/solar-system/darts-final-images-prior-to-impact/',
          caption='Moonlet of the asteroid Didymos, 68 km out · DART, 2022'),
     dict(name='eros-250m', src=O + 'eros-near-final-descent-250m-20010212e.tif', kind='surface', body='Eros', quality=80, vignette=0.3,
          credit='NASA/JHUAPL', licence='Public domain', source='https://near.jhuapl.edu/iod/20010212e/index.html',

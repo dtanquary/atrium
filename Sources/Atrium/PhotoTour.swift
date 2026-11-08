@@ -156,6 +156,10 @@ final class PhotoTour: SKScene {
     nonisolated private static let fade = 6.0
     /// The most a photo is ever magnified, in screen pixels per photo pixel: past this it would look soft.
     nonisolated private static let maxMagnification = 1.5
+    /// How far in a close-up or a view from the ground shown whole on black fades out, as a fraction of its short side,
+    /// so its edges melt into the black rather than showing a lighter square (Dimorphos from 68 km, whose background is
+    /// a dark grey; on a 5K screen, Juno's close-ups of Jupiter).
+    nonisolated private static let wholeEdge = 0.06
 
     /// A view on screen: its photo cut to what the motion shows (`texture`, and `region` of the photo in its pixels,
     /// y down), and the motion from `from` to `to`, each a centre in photo pixels and a scale in points per photo pixel.
@@ -164,6 +168,8 @@ final class PhotoTour: SKScene {
         let view: View
         var texture: SKTexture?, region = CGRect.zero
         var from = SIMD3<Double>(), to = SIMD3<Double>()
+        /// How far in from the texture's edges it fades to black, in texels: 0 but for a photo shown whole on black.
+        var feather = 0.0
         var scene: SKScene?
         /// When it began to show, in scene seconds; nil while it waits its turn.
         var start: Double?
@@ -173,19 +179,19 @@ final class PhotoTour: SKScene {
             view = cut.view
             texture = SKTexture(cgImage: cut.image)
             region = cut.region
-            (from, to) = (cut.from, cut.to)
+            (from, to, feather) = (cut.from, cut.to, cut.feather)
         }
     }
 
     /// A photo planned and cut in the background, ready for `Shown`.
     private struct Cut: @unchecked Sendable { // ponytail: CGImage is immutable, so safe to hand across
-        let view: View, image: CGImage, region: CGRect, from: SIMD3<Double>, to: SIMD3<Double>
+        let view: View, image: CGImage, region: CGRect, from: SIMD3<Double>, to: SIMD3<Double>, feather: Double
     }
 
     // SpriteKit leaves a texture uniform undeclared while it's nil, so both start black.
     private let aUniform = SKUniform(name: "u_a", texture: PhotoTour.black), bUniform = SKUniform(name: "u_b", texture: PhotoTour.black)
     private static let black = SKTexture(data: Data(repeating: 0, count: 4), size: CGSize(width: 1, height: 1))
-    /// Per view: texel offset x, y, texels per point, and the texture's width and height.
+    /// Per view: texel offset x, y, texels per point and the edge fade in texels; and the texture's width and height.
     private let aPlace = SKUniform(name: "u_pa", vectorFloat4: .zero), bPlace = SKUniform(name: "u_pb", vectorFloat4: .zero)
     private let aSize = SKUniform(name: "u_sa", vectorFloat2: [1, 1]), bSize = SKUniform(name: "u_sb", vectorFloat2: [1, 1])
     /// How far the dissolve to `next` has got, and whether each is a photo (1) or a live view showing through (0).
@@ -365,7 +371,7 @@ final class PhotoTour: SKScene {
         let s = Double(texture.size().width) / shown.region.width // texels per photo pixel
         let x = (centre.x - Double(size.width) / 2 / k - shown.region.minX) * s
         let y = (shown.region.maxY - centre.y - Double(size.height) / 2 / k) * s // the texture's rows run bottom up
-        (slot == 0 ? aPlace : bPlace).vectorFloat4Value = [Float(x), Float(y), Float(s / k), 0]
+        (slot == 0 ? aPlace : bPlace).vectorFloat4Value = [Float(x), Float(y), Float(s / k), Float(shown.feather)]
     }
 
     /// A new view's caption, with its next facts, faded in once the view has arrived.
@@ -447,7 +453,7 @@ final class PhotoTour: SKScene {
         let (sw, sh) = (Double(size.width), Double(size.height))
         let z = view.zoom > 0 ? view.zoom : zoom
         let focus = view.focus * SIMD2(w, h), middle = SIMD2(w, h) / 2
-        var wide: Double, tight: Double, fromCentre: SIMD2<Double>, toCentre: SIMD2<Double>
+        var wide: Double, tight: Double, fromCentre: SIMD2<Double>, toCentre: SIMD2<Double>, faded = false
         func jitter(_ k: Double) -> SIMD2<Double> { SIMD2(.random(in: -1...1) * sw, .random(in: -1...1) * sh) * 0.04 / k }
         // A close-up fills the screen, unless that would magnify it past the limit: a small photo from the ground (Huygens on
         // Titan, Eros from 250 m) is shown whole instead, as a world on black would be.
@@ -474,6 +480,7 @@ final class PhotoTour: SKScene {
             wide = tight / z
             toCentre = middle + (focus - middle) * 0.5 // only halfway, so the world stays whole and near the middle
             fromCentre = middle + jitter(wide)
+            faded = view.kind != .disc // a whole world sits in its own black margin already
         }
         var from: SIMD3<Double> = [fromCentre.x, fromCentre.y, wide], to: SIMD3<Double> = [toCentre.x, toCentre.y, tight]
         if Bool.random() { swap(&from, &to) }
@@ -482,7 +489,8 @@ final class PhotoTour: SKScene {
         func seen(_ f: SIMD3<Double>) -> CGRect {
             CGRect(x: f.x - sw / 2 / f.z, y: f.y - sh / 2 / f.z, width: sw / f.z, height: sh / f.z)
         }
-        let region = seen(from).union(seen(to)).insetBy(dx: -4, dy: -4).integral
+        // A faded photo is cut whole, so its fade runs along its own edges.
+        let region = faded ? CGRect(x: 0, y: 0, width: w, height: h) : seen(from).union(seen(to)).insetBy(dx: -4, dy: -4).integral
             .intersection(CGRect(x: 0, y: 0, width: w, height: h))
         let s = min(wide * pixelScale, 1) // texels per photo pixel
         let (tw, th) = (max(Int((region.width * s).rounded(.up)), 1), max(Int((region.height * s).rounded()), 1))
@@ -494,11 +502,12 @@ final class PhotoTour: SKScene {
         context.draw(part, in: CGRect(x: 0, y: 0, width: tw, height: th))
         guard let cutImage = context.makeImage() else { return nil }
         return Cut(view: view, image: cutImage, region: CGRect(x: region.minX, y: region.minY, width: Double(tw) / s, height: Double(th) / s),
-                   from: from, to: to)
+                   from: from, to: to, feather: faded ? wholeEdge * Double(min(tw, th)) : 0)
     }
 
     /// Both views, each sampled with Catmull-Rom in nine bilinear taps (Sigg and Hadwiger's trick), which stays sharp
-    /// as the photo slowly magnifies where plain bilinear would blur and pulse; black outside each photo. Live views
+    /// as the photo slowly magnifies where plain bilinear would blur and pulse; black outside each photo, and a photo
+    /// shown whole fading to it over its last `u_pa.w` texels (a smoothstep each way, as prep.py's `feather`). Live views
     /// leave their part clear. A soft shadow sits behind the caption.
     private static let shader = """
     vec3 crTaps(float t) { // the three tap positions along one axis, in texels
@@ -512,6 +521,10 @@ final class PhotoTour: SKScene {
                     f * f * (-0.5 + 0.5 * f));
     }
     float insideOf(vec2 t, vec2 size) { return step(0.0, t.x) * step(0.0, t.y) * step(t.x, size.x) * step(t.y, size.y); }
+    float edgeFade(vec2 t, vec2 size, float width) { // 1 where width is 0
+        vec2 e = clamp(min(t, size - t) / max(width, 0.001), 0.0, 1.0);
+        return mix(1.0, e.x * e.x * (3.0 - 2.0 * e.x) * e.y * e.y * (3.0 - 2.0 * e.y), step(0.001, width));
+    }
 
     void main() {
         vec2 pts = v_tex_coord * u_size;
@@ -520,7 +533,7 @@ final class PhotoTour: SKScene {
         vec3 a = (texture2D(u_a, vec2(px.x, py.x)).rgb * wx.x + texture2D(u_a, vec2(px.y, py.x)).rgb * wx.y + texture2D(u_a, vec2(px.z, py.x)).rgb * wx.z) * wy.x
                + (texture2D(u_a, vec2(px.x, py.y)).rgb * wx.x + texture2D(u_a, vec2(px.y, py.y)).rgb * wx.y + texture2D(u_a, vec2(px.z, py.y)).rgb * wx.z) * wy.y
                + (texture2D(u_a, vec2(px.x, py.z)).rgb * wx.x + texture2D(u_a, vec2(px.y, py.z)).rgb * wx.y + texture2D(u_a, vec2(px.z, py.z)).rgb * wx.z) * wy.z;
-        a *= insideOf(ta, u_sa);
+        a *= insideOf(ta, u_sa) * edgeFade(ta, u_sa, u_pa.w);
         vec3 b = vec3(0.0);
         if (u_fade > 0.0) {
             vec2 tb = u_pb.xy + pts * u_pb.z;
@@ -528,7 +541,7 @@ final class PhotoTour: SKScene {
             b = (texture2D(u_b, vec2(px.x, py.x)).rgb * wx.x + texture2D(u_b, vec2(px.y, py.x)).rgb * wx.y + texture2D(u_b, vec2(px.z, py.x)).rgb * wx.z) * wy.x
               + (texture2D(u_b, vec2(px.x, py.y)).rgb * wx.x + texture2D(u_b, vec2(px.y, py.y)).rgb * wx.y + texture2D(u_b, vec2(px.z, py.y)).rgb * wx.z) * wy.y
               + (texture2D(u_b, vec2(px.x, py.z)).rgb * wx.x + texture2D(u_b, vec2(px.y, py.z)).rgb * wx.y + texture2D(u_b, vec2(px.z, py.z)).rgb * wx.z) * wy.z;
-            b *= insideOf(tb, u_sb);
+            b *= insideOf(tb, u_sb) * edgeFade(tb, u_sb, u_pb.w);
         }
         float oa = u_opaque.x * (1.0 - u_fade), ob = u_opaque.y * u_fade;
         vec3 col = max(a, 0.0) * oa + max(b, 0.0) * ob; // premultiplied: a live view shows through the rest
