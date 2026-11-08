@@ -80,6 +80,9 @@ struct Refresh {
 /// Every wallpaper, finished or not. The list sorts itself by name, so the menu and Settings show them alphabetically
 /// wherever an entry sits here.
 @MainActor let allScenes: [Wallpaper] = [
+    Wallpaper(name: "Jellyfish", icon: "bubbles.and.sparkles.fill", tint: .cyan,
+              blurb: "Moon jellies and crystal jellies drifting in a tank, lit, glowing, or following the day.",
+              make: jellyfish, knobs: Jellyfish.knobs, followsAppearance: true, unfinished: true),
     Wallpaper(name: "Fish Tank", icon: "fish.fill", tint: .teal, blurb: "A bright reef tank of real fish and corals.",
               make: { FishTank(size: $0) }, knobs: FishTank.knobs),
     Wallpaper(name: "Flowing Gradient", icon: "swirl.circle.righthalf.filled", tint: .pink,
