@@ -48,7 +48,7 @@ pixel-spaceport|Pixel Spaceport|19|SNAPSHOT_DEFAULTS=spaceport.previewTime=1,spa
 pixel-window-seat|Pixel Window Seat|5|SEAT_AT=30500 SNAPSHOT_DEFAULTS=seat.previewTime=1,seat.previewHour=10.5
 rain-on-glass|Rain on Glass|4|SNAPSHOT_DEFAULTS=rain.palette=Hamburg SNAPSHOT_APPEARANCE=dark
 schlieren|Schlieren|40|SNAPSHOT_DEFAULTS=schlieren.palette=Candlelight,schlieren.filter=0,schlieren.source=3
-space-tour|Space Tour|4|SNAPSHOT_DEFAULTS=solar.photo=solar-jupiter-marble.heic
+space-tour|Space Tour|4|SNAPSHOT_DEFAULTS=deep.photo=deep-pillars-webb.heic
 turing-patterns|Turing Patterns|40|SNAPSHOT_DEFAULTS=turing.pattern=4,turing.palette=Lagoon
 weather|Weather|4|SNAPSHOT_DEFAULTS=weather.lock=2,weather.previewTime=1,weather.previewHour=18.7
 wind|Wind|4|SNAPSHOT_DEFAULTS=wind.zoom=2,wind.map=2'
@@ -58,7 +58,6 @@ CARDS='ant-colony|ant-colony
 aurora|aurora-purple
 black-hole|black-hole
 dappled-light|dappled-light-golden
-deep-space-tour|deep-space-pillars
 earth-from-orbit|earth-from-orbit
 etching|etching
 fireflies|fireflies
@@ -78,7 +77,7 @@ pixel-spaceport|pixel-spaceport
 pixel-window-seat|pixel-window-seat
 rain-on-glass|rain-on-glass-night
 schlieren|schlieren
-solar-system-tour|solar-system-jupiter
+space-tour|space-tour
 turing-patterns|turing-patterns
 weather|weather-sunset
 wind|wind'
