@@ -3,9 +3,9 @@
 // one-screen-tall elements with data-work and lays out its own words.
 
 /** Each work's accent: its render's dominant hue at oklch L 0.82, C ≤ 0.11, measured in the design handoff (Pixel Window Seat's,
- *  Meander's and Etching's the same way, later; Etching's is its Stegosaurus on dark paper, hue 79.5). */
+ *  Black Hole's and Schlieren's the same way, later: the render's chroma-weighted mean hue at L 0.82, C 0.11). */
 const accents = {
-  nebula: '#95d0d9', meander: '#68d4f6', etching: '#eabc6e',
+  'black-hole': '#f9b379', schlieren: '#e5bf6d', nebula: '#95d0d9',
   'pixel-window-seat': '#bcbaff', murmuration: '#ecb799', 'fish-tank': '#9bc5ff',
 };
 const media = new URL('media/', import.meta.url);

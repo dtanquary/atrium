@@ -16,8 +16,8 @@ TMP=${TMPDIR:-/tmp}/atrium-site-media
 LOOP=12 FADE=2 # seconds: the loop, and the crossfade from its tail into its head that hides the seam
 
 # slug|scene|focal x % for the phone crop|seconds in before recording|extra environment
-WORKS='meander|Meander|50|2.5|SNAPSHOT_DEFAULTS="meander.seed=11,meander.colors=Survey Blue,meander.size=34,meander.speed=4" SNAPSHOT_APPEARANCE=dark
-etching|Etching|45|4|SNAPSHOT_DEFAULTS=etching.picture=72,etching.detail=1,etching.drawn=0.6,etching.speed=20,etching.surface=0,etching.screen=1
+WORKS='black-hole|Black Hole|50|2.5|SNAPSHOT_DEFAULTS=blackhole.speed=2
+schlieren|Schlieren|50|10|SNAPSHOT_DEFAULTS=schlieren.palette=Candlelight,schlieren.filter=0,schlieren.source=3
 nebula|Nebula|54|4|SNAPSHOT_DEFAULTS=nebula.palette=Hubble
 pixel-window-seat|Pixel Window Seat|70|5|TRAIN_AT=12000 SNAPSHOT_DEFAULTS=seat.orbit=2,seat.country=3,seat.previewTime=1,seat.previewHour=18.7
 murmuration|Murmuration|44|20|SNAPSHOT_DEFAULTS=murmuration.light=5,murmuration.ground=0 MURMURATION_SEED=3
