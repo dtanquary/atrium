@@ -17,7 +17,6 @@ Picked by Dave on 2026-10-10, researched and mocked up that day, and built on 20
 - **Ant Colony.** Dave asked on 2026-10-12, again with research and mock-ups first, for a colony of ants seen from the side through glass, "as it slowly forms and gets bigger". A nest dug through the day by the wall clock, a new one each morning, in blue gel lit from its base or in sand, with ants that walk on the tunnels' walls and carry out what is dug. Built the same day and hidden as `unfinished` until he has tried it: [ant-colony.md](ant-colony.md). An ant drawn by one shader (for hundreds of them) and ants on the glass seen from above are its own next ideas.
 
 - **Jellyfish.** Dave ran it through the new-wallpaper process on 2026-11-07: the shader-drawn version that "Left out on purpose" below left room for, "a shader-drawn bell on black, dim and bioluminescent". Researched and mocked up that day, nothing built: [jellyfish.md](jellyfish.md).
-- **Sea Sparkle.** Dave asked for it on 2026-11-07, "a bioluminescence shoreline ... in high fidelity without killing the battery": Open Sea's night-shore look below, as a wallpaper of its own. Surf that glows cyan where it breaks, drawn by one shader. Researched and mocked up that day, nothing built: [sea-sparkle.md](sea-sparkle.md).
 
 ## Parked
 In the order they were proposed, most promising first.
@@ -25,7 +24,7 @@ In the order they were proposed, most promising first.
 - **Valley Fog.** Layered photo ridgelines at dawn with fog flowing slowly between them, lit by Weather's sky. The same cut-out-and-relight approach as Aurora and Weather. It could thicken with the live humidity. The softest, dimmest idea here, which is what Zen Garden wasn't.
 - **The Planets, live.** Jupiter as a telescope shows it now: NASA maps lit by a shader, as The Moon does, with the four big moons and their shadows in their real places. Jupiter turns in under ten hours, so it is visibly alive. Saturn with its real ring tilt and Mars could follow. It would nest in Solar System Tour beside The Moon and The Sun.
 - **Earth Today.** Real full-disc photos from the weather satellite over the user's hemisphere, played as the last day's loop, as The Sun does with SDO's. NOAA's GOES images are public domain and come every ten minutes; cover and licences outside the Americas (Himawari, Meteosat) need checking. It could nest in Earth from Orbit.
-- **Open Sea.** Ocean to the horizon under Weather's sky, with the real Moon and its glitter path, and swell (height, period, direction) from Open-Meteo's marine feed for the nearest coast. The risk is water that looks real inside the 2 ms GPU budget. A night shore with glowing surf could be one of its looks.
+- **Open Sea.** Ocean to the horizon under Weather's sky, with the real Moon and its glitter path, and swell (height, period, direction) from Open-Meteo's marine feed for the nearest coast. The risk is water that looks real inside the 2 ms GPU budget. A night shore with glowing surf was tried on its own as Sea Sparkle and cut (see below).
 - **Cloud Chamber.** Particle tracks condensing in mist: short fat alphas, thin wandering betas, straight muons, in their real proportions, with a slider for how busy it is. Cheap to draw, and it belongs with Schlieren, Turing Patterns and Game of Life. Crystals showed that correct physics doesn't make a thing pretty, so it needs mock-ups first.
 - **Ink.** Suminagashi: rings of ink floating on water, slowly stirred. It is flat by nature, so Schlieren's fluid solver is physically right for it. Flowing Gradient's and Lava Lamp's family, with palettes. Incense smoke on black is a near relation on the same solver.
 - **Snowfall.** Fireflies' engine (a photo ground, particles in depth, fog, wind) with snow in a forest at blue hour, or under a lamp. It could follow the live weather.
@@ -35,6 +34,7 @@ In the order they were proposed, most promising first.
 
 ## Left out on purpose
 - **Jellyfish, koi, a fish school:** big animals, or nearly. Photo cut-outs of big animals never moved convincingly in the Fish Tank's Ocean Voyager and Shallow Reef, cut on 2026-10-07. Jellyfish would have to be drawn by a shader, not cut out, to be worth another try.
+- **Sea Sparkle, a bioluminescent shoreline:** built on 2026-11-08 and cut the same night, "just does not look good at all compared to the others". Surf drawn by one shader read as glowing stripes on a flat sea. Breaking waves would need real faces, curls and foam (a heightfield or filmed surf), which the budget didn't leave room for. Its research and mock-ups are in git history before the cut (1028d91).
 - **Soap film:** its interference colours are the ones that went olive once Crystals was dimmed for calm.
 - **Ferrofluid, sand patterns (Chladni figures):** bright and sharp, as Zen Garden was.
 - **A fireplace or a candle:** Campfire is still unfinished; fire comes after that one works.
