@@ -15,8 +15,9 @@ OUT=${OUT:-site/public/media} # OUT=/some/dir to try a roll without replacing th
 TMP=${TMPDIR:-/tmp}/atrium-site-media
 LOOP=12 FADE=2 # seconds: the loop, and the crossfade from its tail into its head that hides the seam
 
-# slug|scene|focal x % for the phone crop|seconds in before recording|extra environment
-WORKS='black-hole|Black Hole|50|2.5|SNAPSHOT_DEFAULTS=blackhole.speed=2
+# slug|scene|focal x % for the phone crop|seconds in before recording|extra environment|extra environment for a second
+# master that the phone and laptop loops are cut from instead, when the desktop look doesn't fit a phone
+WORKS='black-hole|Black Hole|50|2.5|SNAPSHOT_DEFAULTS=blackhole.size=2.5,blackhole.speed=2.5|SNAPSHOT_DEFAULTS=blackhole.speed=2.5
 schlieren|Schlieren|50|10|SNAPSHOT_DEFAULTS=schlieren.palette=Candlelight,schlieren.filter=0,schlieren.source=3
 nebula|Nebula|54|4|SNAPSHOT_DEFAULTS=nebula.palette=Hubble
 pixel-window-seat|Pixel Window Seat|70|5|TRAIN_AT=12000 SNAPSHOT_DEFAULTS=seat.orbit=2,seat.country=3,seat.previewTime=1,seat.previewHour=18.7
@@ -93,18 +94,18 @@ fi
 # Renders LOOP + FADE seconds of a scene into $1/master.mp4, with the last FADE seconds crossfaded into the first
 # FADE, so the loop's end runs straight into its start. Args: dir scene seconds-in extra-environment.
 render() {
-    dir=$1
-    rm -rf "$dir" && mkdir -p "$dir"
+    rd=$1
+    rm -rf "$rd" && mkdir -p "$rd"
     echo "== $2: rendering $((LOOP + FADE)) s"
     # $4 is a list of NAME=value words, read as the shell reads them so one can be quoted (a palette's name with a space in it)
-    eval "env SNAPSHOT_SCENE=\"\$2\" SNAPSHOT_DIR=\"\$dir\" SNAPSHOT_SECONDS=\"\$3\" SNAPSHOT_MOVIE=$((LOOP + FADE)) \
-        SNAPSHOT_MOVIE_FPS=30 $4 swift test -c release -Xswiftc -enable-testing --filter everySceneRenders" </dev/null >"$dir/test.log" 2>&1 ||
-        { tail -20 "$dir/test.log"; exit 1; }
+    eval "env SNAPSHOT_SCENE=\"\$2\" SNAPSHOT_DIR=\"\$rd\" SNAPSHOT_SECONDS=\"\$3\" SNAPSHOT_MOVIE=$((LOOP + FADE)) \
+        SNAPSHOT_MOVIE_FPS=30 $4 swift test -c release -Xswiftc -enable-testing --filter everySceneRenders" </dev/null >"$rd/test.log" 2>&1 ||
+        { tail -20 "$rd/test.log"; exit 1; }
     echo "== $2: looping and encoding"
-    ffmpeg -nostdin -loglevel error -y -framerate 30 -start_number 1 -i "$dir/$2-%03d.png" -filter_complex \
+    ffmpeg -nostdin -loglevel error -y -framerate 30 -start_number 1 -i "$rd/$2-%03d.png" -filter_complex \
         "[0]split[a][b];[a]trim=start=$FADE,setpts=PTS-STARTPTS[main];[b]trim=end=$FADE,setpts=PTS-STARTPTS[head];[main][head]xfade=transition=fade:duration=$FADE:offset=$((LOOP - FADE)),format=yuv420p" \
-        -c:v libx264 -crf 10 -preset fast "$dir/master.mp4"
-    rm -f "$dir"/*.png # about 2 GB a work; the master is enough to re-encode from
+        -c:v libx264 -crf 10 -preset fast "$rd/master.mp4"
+    rm -f "$rd"/*.png # about 2 GB a work; the master is enough to re-encode from
 }
 
 # Encodes $1 through the filter $2 as $3.av1.mp4, $3.hevc.mp4 and a poster of its first frame, $3.jpg.
@@ -134,10 +135,12 @@ if [ "$1" = tiles ]; then
     exit
 fi
 
-echo "$WORKS" | while IFS='|' read -r slug scene focal seconds extra; do
+echo "$WORKS" | while IFS='|' read -r slug scene focal seconds extra phone; do
     [ $# -gt 0 ] && ! echo " $* " | grep -q " $slug " && continue
     dir="$TMP/$slug"
     render "$dir" "$scene" "$seconds" "$extra"
+    small=$dir # the master the phone and laptop loops come from
+    [ -n "$phone" ] && { render "$dir-phone" "$scene" "$seconds" "$phone"; small=$dir-phone; }
     w=$(ffprobe -v error -select_streams v -show_entries stream=width -of csv=p=0 "$dir/master.mp4")
     h=$(ffprobe -v error -select_streams v -show_entries stream=height -of csv=p=0 "$dir/master.mp4")
     slab=$((h * 3 / 4 / 2 * 2)) x=$((w * focal / 100 - h * 3 / 8))
@@ -145,11 +148,11 @@ echo "$WORKS" | while IFS='|' read -r slug scene focal seconds extra; do
     [ $x -gt $((w - slab)) ] && x=$((w - slab))
     for size in desktop phone laptop; do
         case $size in
-            desktop) vf="scale=2560:-2:flags=lanczos" ;;
-            phone) vf="crop=$slab:$h:$x:0,scale=1080:1440:flags=lanczos" ;;
-            laptop) vf="scale=960:-2:flags=lanczos" ;; # the small laptop's screen on portrait phones (laptop.js)
+            desktop) vf="scale=2560:-2:flags=lanczos" src=$dir ;;
+            phone) vf="crop=$slab:$h:$x:0,scale=1080:1440:flags=lanczos" src=$small ;;
+            laptop) vf="scale=960:-2:flags=lanczos" src=$small ;; # the small laptop's screen on portrait phones (laptop.js)
         esac
-        encode "$dir/master.mp4" "$vf" "$OUT/$slug-$size"
+        encode "$src/master.mp4" "$vf" "$OUT/$slug-$size"
     done
     ls -lh "$OUT/$slug"-* | awk '{print "   " $5 "\t" $9}'
 done
