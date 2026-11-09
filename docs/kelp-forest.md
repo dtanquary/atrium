@@ -160,6 +160,8 @@ The README's pictures and the site's (2026-11-09) are the four commands above at
 
 - **2026-11-09, on step 2:** "I just saw the shifting view transition and its super slick, I love it I hope we can keep that". Asked what would bring it within budget: "if we can only pick 1 view for optimization sake, it would be level view", then "I would prefer we keep both kelp views if possible". And "sometimes on the looking up view a new kelp branch kind of snaps in there out of nowhere": a frond's link passing behind the camera, hidden in step 3.
 
+- **2026-11-09, once it was shown to everyone:** "on the website, lets replace pixel window seat with kelp forest dusk view frontal, its really good I want to showcase that". So the level view at dusk is one of atrium.show's six works on the canvas, after Nebula (`site/CLAUDE.md`).
+
 ## Still open
 - Photo cards of single blades for the near tier. Two candidates found on Wikimedia Commons, licences read from Commons' own field (checked): *Giant Kelp - Macrocystis pyrifera (43168362051).jpg* (CC BY-SA 2.0), a close-up of a blade's ridges and toothed edge in air; *CAS Macrocystis 1.JPG* (CC BY-SA 3.0, EncycloPetey), whole blades backlit in the California Academy of Sciences' tank. Neither is cut out yet; the public-domain *Giantkelp2 300.jpg* shows fronds with their floats from above.
 - Fish: a mid-distance school of blacksmith fits the colours (research-method.md §3); not in round 1.
