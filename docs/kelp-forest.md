@@ -47,6 +47,8 @@ The plan. The mock-up drew every blade per pixel, at hundreds of milliseconds a 
 
 **Step 2 (2026-11-09): the crash, and moving between the views.** Switching the View crashed the app inside SpriteKit as it took the lock screen's still (`SKView.texture(from:)`, copying per-sprite shader attributes for a batch of thousands of kelp sprites). It didn't reproduce offscreen, so the attributes are gone: each sprite's distance, height and seed now ride in its colour (`v_color_mix`, with its colour blend at 1), which SpriteKit batches through its ordinary path, and the picture is the same to within 2 of 255. Then Dave's third View, "Moving between the two": one forest with plants from 4 m (for looking up) to 30 m (for looking level), held level for four minutes, tipped up to 58° over 40 s with a smooth start and stop, held, and tipped back, in real seconds whatever the Speed. The tilt is a uniform in both shaders now rather than a constant, and the exposure eases with it, from the level view's to the looking-up view's.
 
+**Step 3 (2026-11-09): pulled toward budget, and nothing flung across the screen.** Sampled live on Dave's Mac, about half of each frame's own work went to sending every one of the look's colours to the shaders every frame (the moving view set them all for its tilt): each uniform set marks every sprite using the shader, about 2,500 of them, and cost about 0.7 ms a frame by itself. Now a uniform is set only when it changes, the kelp shader gets its tilt and exposure in one uniform (so a tilting frame marks its sprites once) and no longer gets the clock it never read, a sprite's visibility is touched only when it changes, and a blade's width only when its distance has moved a percent. The scene's own work a frame fell from 0.61 to 0.33 ms level, 0.89 to 0.70 looking up, and 1.44 to 0.48 in the moving view. And a link of a frond passing near or behind the camera (looking up, the nearest fronds' lower parts) is hidden with its blades: it projected nowhere sensible, and a branch could snap in across the view for a frame, as Dave saw. The pictures are the same but for those, within 3 of 255 at the 99.9th percentile. Then, on Dave's pick of the savings that can't be seen ("do just #1 for now"): a stipe sprite for every two links rather than every one, with the blades placed along the same straight runs (no kinks show at full size), and far fronds stepped every other 60th of a second, as steps of 1/30 s. Measured live beside Nebula in the same run, its CPU went from 2.8 to 2.6 times Nebula's level, 4.4 to 4.2 looking up, and 4.1 to 3.6 in the moving view. The rest is SpriteKit's own work for its sprites, most of them blades: drawing fronds beyond about 7 m as cards, which halves the blade sprites looking up, is the next saving, and the one that can be seen (their blades would sway with the frond rather than each streaming on its own), so it waits on Dave.
+
 ## Mock-ups, round 1 (2026-11-08)
 Drawn by `mock.swift` through SKRenderer, as the render test draws a wallpaper. The world is in metres: a floor 8.5 to 12 m down, a camera 60–64° across. A full-screen shader draws the water (fogged by colour with distance, brighter looking up), the underside of the surface with Snell's window and the canopy lying on it, the floor with soft caustics, and shafts of sunlight fanning out from the Sun where the canopy lets it through. Each frond is a sprite whose shader hangs its blades along a spine of eight points: each blade on a short stalk with its float, at its own bearing round the stipe, twisting as a ribbon does, streaming with the water past it and fluttering by centimetres; few, small worn blades low down and a dense ruff high up, as research-method.md §1 has it.
 
@@ -117,6 +119,20 @@ Measured by the render test at 2x Retina on an M3 Max, release build (`swift tes
 | Moving between them, level, teal | 2.80 ms | 1.68 ms |
 | Moving between them, looking up, teal | 2.67 ms | 1.55 ms |
 
+Live, as the app shows it on the desktop (`LIVE_COST=1 … --filter liveCost`, 30 fps, 15 s, on battery, after step 3's first half), beside two wallpapers for scale:
+
+| | CPU ms/s | GPU ms/s | energy |
+|---|---|---|---|
+| Level | 28.8 | 135 | 87 mW |
+| Looking up | 45.3 | 109 | 156 mW |
+| Moving between them, holding level | 42.0 | 140 | 138 mW |
+| Nebula | 10.3 | 120 | 17 mW |
+| Jellyfish | 20.9 | 263 | 56 mW |
+
+So its GPU is Nebula's, and its CPU (about 1 to 1.5 ms a frame) 1.4 to 2 times Jellyfish's, almost all of it SpriteKit's own work for 2,000 to 3,300 sprites. The render-test figures above were taken before step 3 on a quiet Mac; on battery with Atrium running beside it the same test read 1.6 to 3.8 ms of CPU, too noisy to compare.
+
+Live figures move with whatever else the Mac is doing (the scheduler puts the work on efficiency cores when it's busy, where it takes longer and less energy), so compare a view with Nebula measured in the same run: after the whole of step 3, 2.6 times Nebula's CPU level, 4.2 looking up and 3.6 in the moving view.
+
 A debug build reads about 12 ms of CPU. Looking up and moving between the views are over on CPU: their near plants are many (the moving view's forest has plants from 4 m, for looking up), and each blade is a sprite posed every frame. The next saving is to draw the farther of them as cards. No `batteryRate`: a near stipe moves far over 2 device pixels a frame at 20 fps (research-method.md §5).
 
 ## Checking it
@@ -140,6 +156,8 @@ SNAPSHOT_SCENE="Kelp Forest" SNAPSHOT_APPEARANCE=light SNAPSHOT_DEFAULTS="kelp.s
 - **2026-11-08, on round 2:** "all of your previews look awesome, A, B, C, D, E, F all great, and film 5 level dusk also looks awesome". Every light in both views is a pick.
 
 - **2026-11-09, on step 1 on his desktop:** "atrium crashd when i toggled between kelp view modes", inside SpriteKit as it took the lock screen's still; then "after fixing that, can you add a mode to the kelp view where it can be straight on, above, or auto cycle btween the two". Fixed and added in step 2: the View menu's third pick moves between level and looking up.
+
+- **2026-11-09, on step 2:** "I just saw the shifting view transition and its super slick, I love it I hope we can keep that". Asked what would bring it within budget: "if we can only pick 1 view for optimization sake, it would be level view", then "I would prefer we keep both kelp views if possible". And "sometimes on the looking up view a new kelp branch kind of snaps in there out of nowhere": a frond's link passing behind the camera, hidden in step 3.
 
 ## Still open
 - Photo cards of single blades for the near tier. Two candidates found on Wikimedia Commons, licences read from Commons' own field (checked): *Giant Kelp - Macrocystis pyrifera (43168362051).jpg* (CC BY-SA 2.0), a close-up of a blade's ridges and toothed edge in air; *CAS Macrocystis 1.JPG* (CC BY-SA 3.0, EncycloPetey), whole blades backlit in the California Academy of Sciences' tank. Neither is cut out yet; the public-domain *Giantkelp2 300.jpg* shows fronds with their floats from above.

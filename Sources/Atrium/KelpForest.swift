@@ -102,7 +102,8 @@ final class KelpForest: SKScene {
     private let uGlow = SKUniform(name: "u_glow", vectorFloat3: .zero), uSand = SKUniform(name: "u_sand", vectorFloat3: .zero)
     private let uSunDir = SKUniform(name: "u_sundir", vectorFloat3: .zero)
     private let uLook = SKUniform(name: "u_look", vectorFloat4: .zero) // rays, snow, caustics, exposure
-    private let uPitch = SKUniform(name: "u_pitch", float: 0)
+    /// The tilt (radians) and exposure: for the kelp, in one uniform, so a tilting frame marks its sprites once.
+    private let uView = SKUniform(name: "u_view", vectorFloat4: .zero)
     private let uTime = SKUniform(name: "u_t", float: 0), uSurge = SKUniform(name: "u_surge", vectorFloat2: .zero)
     private let uPx: SKUniform
 
@@ -138,17 +139,17 @@ final class KelpForest: SKScene {
         water.anchorPoint = .zero
         water.zPosition = -1000
         water.shader = SKShader(source: defines + Self.common + Self.waterSource, uniforms: [
-            uExt, uDeep, uUp, uSky, uSun, uKelp, uGlow, uSand, uSunDir, uLook, uPitch, uTime, uSurge, uPx,
+            uExt, uDeep, uUp, uSky, uSun, uKelp, uGlow, uSand, uSunDir, uLook, uView, uTime, uSurge, uPx,
             SKUniform(name: "u_canopy", texture: sharedTexture("kelp-canopy") { Self.canopy() }),
         ])
         addChild(water)
         let kelp = SKShader(source: defines + Self.common + Self.kelpSource, uniforms: [
-            uExt, uDeep, uUp, uSun, uKelp, uGlow, uSunDir, uLook, uPitch, uTime, uPx,
+            uExt, uDeep, uUp, uSun, uKelp, uGlow, uSunDir, uView, uPx,
         ])
         plant(with: kelp)
         settleLook(at: true)
         // Run the sea a while first, so the forest has settled into it: 30 s in steps of 1/30 s.
-        for k in 0..<900 { step(at: simTime + Double(k - 900) / 30, dt: 1.0 / 30) }
+        for k in 0..<900 { step(at: simTime + Double(k - 900) / 30, dt: 1.0 / 30, farDt: 1.0 / 30) }
         pose(at: simTime)
     }
 
@@ -214,18 +215,21 @@ final class KelpForest: SKScene {
         apply(lightLook.mixed(Self.dusk, duskShown))
     }
 
+    /// Sets the look's uniforms, only those that changed: each change marks every sprite using the shader, and the
+    /// kelp's are thousands (sending them all every frame cost about 0.7 ms each, sampled live).
     private func apply(_ l: Look) {
-        uExt.vectorFloat3Value = l.ext; uDeep.vectorFloat3Value = l.deep; uUp.vectorFloat3Value = l.up
-        uSky.vectorFloat3Value = l.sky; uSun.vectorFloat3Value = l.sun; uKelp.vectorFloat3Value = l.kelp
-        uGlow.vectorFloat3Value = l.glow; uSand.vectorFloat3Value = l.sand
+        func set(_ u: SKUniform, _ v: SIMD3<Float>) { if u.vectorFloat3Value != v { u.vectorFloat3Value = v } }
+        func set4(_ u: SKUniform, _ v: SIMD4<Float>) { if u.vectorFloat4Value != v { u.vectorFloat4Value = v } }
+        set(uExt, l.ext); set(uDeep, l.deep); set(uUp, l.up); set(uSky, l.sky); set(uSun, l.sun)
+        set(uKelp, l.kelp); set(uGlow, l.glow); set(uSand, l.sand)
         // The exposure goes with how far the camera is tipped up: looking up into the light needs less.
-        let up = Float(simd_clamp((pitch - 20) / (58 - 20), 0, 1))
-        uLook.vectorFloat4Value = [l.rays, l.snow, l.caustics, l.expo[0] + (l.expo[1] - l.expo[0]) * up]
-        uPitch.floatValue = Float(pitch * .pi / 180)
+        let up = Float(simd_clamp((pitch - 20) / (58 - 20), 0, 1)), expo = l.expo[0] + (l.expo[1] - l.expo[0]) * up
+        set4(uLook, [l.rays, l.snow, l.caustics, expo])
+        set4(uView, [Float(pitch * .pi / 180), expo, 0, 0])
         shownLook = l
         // The Sun under water, bent toward the vertical by refraction, a little to one side of where we look.
         let zen = Double(90 - l.sunElevation) * .pi / 180, inWater = asin(sin(zen) / 1.333), az = 10 * Double.pi / 180
-        uSunDir.vectorFloat3Value = SIMD3(Float(sin(inWater) * sin(az)), Float(cos(inWater)), Float(sin(inWater) * cos(az)))
+        set(uSunDir, SIMD3(Float(sin(inWater) * sin(az)), Float(cos(inWater)), Float(sin(inWater) * cos(az))))
     }
 
     // MARK: - The forest
@@ -273,7 +277,7 @@ final class KelpForest: SKScene {
                 frond.restPpm = mid.ppm
                 let depthZ = CGFloat(-mid.dist)
                 if near {
-                    for _ in 0..<Self.links {
+                    for _ in 0..<Self.links / 2 {
                         let s = SKSpriteNode(texture: atlas.stipe)
                         s.anchorPoint = CGPoint(x: 0.5, y: 0)
                         s.zPosition = depthZ
@@ -362,7 +366,10 @@ final class KelpForest: SKScene {
         // Steps of 1/60 s at fixed times, so the forest moves the same at any frame rate.
         let first = (simTime / step).rounded(.down) + 1
         simTime += dt
-        for k in stride(from: first, through: (simTime / step).rounded(.down), by: 1).prefix(12) { self.step(at: k * step, dt: step) }
+        // Far fronds every other step, as steps of 1/30 s: far off, a 30th of a second's sway is under a pixel or two.
+        for k in stride(from: first, through: (simTime / step).rounded(.down), by: 1).prefix(12) {
+            self.step(at: k * step, dt: step, farDt: Int(k) % 2 == 0 ? 2 * step : nil)
+        }
         // A change of look eases over a few seconds.
         let target = Float(wanted.dusk)
         if abs(target - duskShown) > 0.001 || shownLit < 0 {
@@ -386,9 +393,10 @@ final class KelpForest: SKScene {
     /// Steps every frond: buoyancy, more high up where the floats are, and each frond's own slight lean away from the
     /// others in its plant; drag toward the water's velocity as |u − v|^0.6 (u − v); links that don't stretch; a little
     /// stiffness, so a slack frond curves rather than zigzags; and the surface, which it floats along.
-    private func step(at t: Double, dt: Double) {
+    private func step(at t: Double, dt near: Double, farDt: Double?) {
         let n = Self.links, top = spot.depth - 0.03
         for f in fronds.indices {
+            guard let dt = fronds[f].near ? near : farDt else { continue }
             let l = fronds[f].len / Double(n)
             let phases = sea.phases(at: fronds[f].base, t)
             var np = fronds[f].p
@@ -414,12 +422,15 @@ final class KelpForest: SKScene {
 
     /// Where a point is on the screen, in pixels at 2x from the bottom left; how far ahead it is, and how many pixels a
     /// metre there spans.
-    private func project(_ p: SIMD3<Double>) -> (px: SIMD2<Double>, ppm: Double, dist: Double) {
+    private func project(_ p: SIMD3<Double>) -> (px: SIMD2<Double>, ppm: Double, dist: Double, ahead: Double) {
         let rel = p - cam, pitch = self.pitch * .pi / 180
-        let zc = max(rel.y * sin(pitch) + rel.z * cos(pitch), 0.05), yc = rel.y * cos(pitch) - rel.z * sin(pitch)
+        let ahead = rel.y * sin(pitch) + rel.z * cos(pitch), zc = max(ahead, 0.05), yc = rel.y * cos(pitch) - rel.z * sin(pitch)
         let w = Double(size.width) * 2, h = Double(size.height) * 2, aspect = h / w
-        return (SIMD2(w / 2 + rel.x / zc / fovTan * w / 2, h / 2 + yc / zc / (fovTan * aspect) * h / 2), w / 2 / (fovTan * zc), simd_length(rel))
+        return (SIMD2(w / 2 + rel.x / zc / fovTan * w / 2, h / 2 + yc / zc / (fovTan * aspect) * h / 2), w / 2 / (fovTan * zc), simd_length(rel), ahead)
     }
+
+    /// Hides or shows a sprite, touching it only if that changes: every set tells SpriteKit's observers.
+    private func show(_ node: SKNode, _ on: Bool) { if node.isHidden == on { node.isHidden = !on } }
 
     /// Poses every frond's sprites from its chain: stipes from node to node; each blade at its place, at its bearing
     /// and lift, streamed by the water's flow past it and fluttering by a few degrees, foreshortened where it points
@@ -431,37 +442,50 @@ final class KelpForest: SKScene {
         uTime.floatValue = Float(t.truncatingRemainder(dividingBy: 3600))
         for (node, at) in holdfasts {
             let p = project(at)
+            show(node, p.ahead > 0.3)
             node.position = CGPoint(x: p.px.x / 2, y: p.px.y / 2)
             node.size = CGSize(width: Atlas.holdfastSize.width * p.ppm / 2, height: Atlas.holdfastSize.height * p.ppm / 2)
         }
-        let w = Double(size.width) * 2, h = Double(size.height) * 2
+        let w = Double(size.width) * 2, h = Double(size.height) * 2, nearest = 0.3
+        var pts = [(px: SIMD2<Double>, ppm: Double, dist: Double, ahead: Double)](repeating: (.zero, 0, 0, 0), count: Self.links + 1)
         for f in fronds.indices {
             let fr = fronds[f]
-            let pts = fr.p.map { project($0) }
-            let xs = pts.map(\.px.x), ys = pts.map(\.px.y), reach = 1.2 * pts.map(\.ppm).max()!
-            let shown = xs.max()! > -reach && xs.min()! < w + reach && ys.max()! > -reach && ys.min()! < h + reach
+            var lo = SIMD2(Double.infinity, .infinity), hi = -lo, reach = 0.0
+            for k in 0...Self.links {
+                pts[k] = project(fr.p[k])
+                lo = simd_min(lo, pts[k].px); hi = simd_max(hi, pts[k].px); reach = max(reach, 1.2 * pts[k].ppm)
+            }
+            let shown = hi.x > -reach && lo.x < w + reach && hi.y > -reach && lo.y < h + reach
+            // A link passing near or behind the camera (looking up, the near fronds' lower parts) projects nowhere
+            // sensible: it and its blades are hidden rather than flung across the screen.
+            func clear(_ k: Int) -> Bool { shown && pts[k].ahead > nearest && pts[min(k + 1, Self.links)].ahead > nearest }
             if fr.near {
-                for (k, s) in fr.stipe.enumerated() {
-                    s.isHidden = !shown
-                    guard shown else { continue }
-                    let a = pts[k].px, b = pts[k + 1].px, d = b - a
+                // A stipe sprite for every two links, and the blades placed along the same straight runs.
+                for (j, s) in fr.stipe.enumerated() {
+                    let k = j * 2, on = clear(k) && pts[k + 2].ahead > nearest
+                    show(s, on)
+                    guard on else { continue }
+                    let a = pts[k].px, b = pts[k + 2].px, d = b - a
                     s.position = CGPoint(x: a.x / 2, y: a.y / 2)
                     s.zRotation = atan2(-d.x, d.y)
                     s.size = CGSize(width: max(0.012 * pts[k].ppm, 1.2) / 2, height: simd_length(d) / 2 + 0.5)
                 }
+                guard shown else { for b in fr.blades { show(b.node, false) }; continue }
                 // The water's flow past the frond on the screen, at a few places up it: 1 is about 15 cm/s.
                 let phases = sea.phases(at: fr.base, t)
-                let flows = stride(from: 0, through: Self.links, by: 2).map { k -> SIMD2<Double> in
-                    let rel = (sea.flow(phases, y: fr.p[k].y, t) - fr.v[k]) / 0.15
-                    return (project(fr.p[k] + rel * 0.2).px - pts[k].px) / (0.2 * pts[k].ppm)
+                var flows = [SIMD2<Double>](repeating: .zero, count: Self.links / 2 + 1)
+                for j in flows.indices {
+                    let k = j * 2, rel = (sea.flow(phases, y: fr.p[k].y, t) - fr.v[k]) / 0.15
+                    flows[j] = (project(fr.p[k] + rel * 0.2).px - pts[k].px) / (0.2 * pts[k].ppm)
                 }
                 for b in fr.blades {
-                    b.node.isHidden = !shown
-                    guard shown else { continue }
-                    let x = b.at / fr.len * Double(Self.links), k = min(Int(x), Self.links - 1), frac = x - Double(k)
-                    let at = pts[k].px + (pts[k + 1].px - pts[k].px) * frac
-                    let ppm = pts[k].ppm + (pts[k + 1].ppm - pts[k].ppm) * frac
-                    let tangent = simd_normalize(pts[k + 1].px - pts[k].px + SIMD2(0, 1e-6))
+                    let x = b.at / fr.len * Double(Self.links), k = min(Int(x / 2) * 2, Self.links - 2), frac = (x - Double(k)) / 2
+                    let on = clear(k) && pts[k + 2].ahead > nearest
+                    show(b.node, on)
+                    guard on else { continue }
+                    let at = pts[k].px + (pts[k + 2].px - pts[k].px) * frac
+                    let ppm = pts[k].ppm + (pts[k + 2].ppm - pts[k].ppm) * frac
+                    let tangent = simd_normalize(pts[k + 2].px - pts[k].px + SIMD2(0, 1e-6))
                     let normal = SIMD2(-tangent.y, tangent.x)
                     let fx = x / 2, fk = min(Int(fx), flows.count - 2), flow = flows[fk] + (flows[fk + 1] - flows[fk]) * (fx - Double(fk))
                     let az = b.az + 0.35 * sin(t * 0.45 + b.seed)
@@ -472,13 +496,16 @@ final class KelpForest: SKScene {
                     b.node.position = CGPoint(x: at.x / 2, y: at.y / 2)
                     b.node.zRotation = atan2(dir.y, dir.x) + flutter
                     b.node.xScale = min(max(fore, 0.25), 1) * ppm / fr.restPpm
-                    b.node.yScale = ppm / fr.restPpm
+                    // Its width follows only its distance, which changes slowly: set when it has moved a percent.
+                    let ys = ppm / fr.restPpm
+                    if abs(b.node.yScale - ys) > 0.01 * ys { b.node.yScale = ys }
                 }
             } else {
                 for (c, node) in fr.cards.enumerated() {
-                    node.isHidden = !shown
-                    guard shown else { continue }
-                    let k = c * 2, a = pts[k].px, b = pts[min(k + 2, Self.links)].px, d = b - a
+                    let k = c * 2, on = clear(k) && pts[min(k + 2, Self.links)].ahead > nearest
+                    show(node, on)
+                    guard on else { continue }
+                    let a = pts[k].px, b = pts[min(k + 2, Self.links)].px, d = b - a
                     let ppm = pts[k + 1].ppm
                     node.position = CGPoint(x: a.x / 2, y: a.y / 2)
                     node.zRotation = atan2(-d.x, d.y)
@@ -640,7 +667,7 @@ final class KelpForest: SKScene {
     static let waterSource = """
     void main() {
         vec2 uv = v_tex_coord;
-        vec3 d = rayDir(uv, u_pitch);
+        vec3 d = rayDir(uv, u_view.x);
         float t = u_t;
         vec2 sw = u_surge;
         vec3 col = vec3(0.0);
@@ -719,7 +746,7 @@ final class KelpForest: SKScene {
         if (alpha > 0.003) {
         vec3 m = c.rgb / max(alpha, 1e-3);
         vec2 suv = vec2(gl_FragCoord.x / u_px.x, 1.0 - gl_FragCoord.y / u_px.y);
-        vec3 d = rayDir(suv, u_pitch);
+        vec3 d = rayDir(suv, u_view.x);
         float back = smoothstep(-0.2, 0.9, dot(d, u_sundir));
         vec3 lit = lightAt(info.y, u_sun, u_ext);
         vec3 tint = mix(vec3(1.0), vec3(0.9, 1.0, 0.75), fract(info.z * 7.3) * 0.5);
@@ -728,7 +755,7 @@ final class KelpForest: SKScene {
         vec3 col = mix(front, through, back * 0.85 * (1.0 - m.b * 0.5));
         vec3 tr = exp(-u_ext * info.x);
         col = col * tr + waterCol(d, info.y, u_deep, u_up, u_ext, u_sundir) * (1.0 - tr);
-        col *= u_look.w;
+        col *= u_view.y;
         out = vec4(pow(max(col, vec3(0.0)), vec3(1.0 / 2.2)) * alpha, alpha);
         }
         gl_FragColor = out;
