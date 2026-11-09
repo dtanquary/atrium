@@ -21,7 +21,7 @@ final class Jellyfish: SKScene {
         Knob(key: "jellyfish.look", label: "Look", range: 0...Double(looks.count - 1), standard: 0, section: "Look",
              format: .choice(looks)),
         Knob(key: "jellyfish.count", label: "Jellyfish", range: 0.5...1.5, standard: 1, format: .times),
-        Knob(key: "jellyfish.speed", label: "Speed", range: 0.5...1.5, standard: 1, format: .times),
+        Knob(key: "jellyfish.speed", label: "Speed", range: 0.5...1.5, standard: 0.8, format: .times), // 1x is the real pace
     ]
 
     /// A species: its sizes and pulse, how it moves (research-motion.md: measured from footage of real groups), and
@@ -40,13 +40,13 @@ final class Jellyfish: SKScene {
         var defines: [String: String]
     }
 
-    static let moon = Species(count: 56, diameter: 0.12...0.25, period: 1.6, perPulse: 0.5, width: 2.6, above: 0.8,
+    static let moon = Species(count: 84, diameter: 0.12...0.25, period: 1.6, perPulse: 0.5, width: 2.6, above: 0.8,
                               tentacles: 0.32, arms: 1.0, defines: [
         "NT": "120", "TLEN": "0.32", "TW": "0.006", "SWAY": "0.25", "NOA": "4", "ALEN": "1.0", "AW": "0.17",
         "ASPREAD": "0.22", "ASWAY": "0.25", "TWIST": "3.0", "HEIGHT": "0.42", "RISE": "0.32", "SHRINK": "0.14",
         "NC": "32.0", "CANALSHARP": "10.0", "CANALK": "0.5", "GONADS": "1", "CONVERGE": "0.0", "TVARY": "0.0", "RING": "0",
     ])
-    static let crystal = Species(count: 32, diameter: 0.08...0.2, period: 1.8, perPulse: 0.35, restChance: 0.25, rest: 0.8...3.0,
+    static let crystal = Species(count: 48, diameter: 0.08...0.2, period: 1.8, perPulse: 0.35, restChance: 0.25, rest: 0.8...3.0,
                                  righting: 0.02, sag: 0.05, width: 2.6, above: 0.7, tentacles: 7, arms: 0.35, defines: [
         "NT": "36", "TLEN": "7.0", "TW": "0.005", "SWAY": "0.06", "NOA": "1", "ALEN": "0.35", "AW": "0.3",
         "ASPREAD": "0.0", "ASWAY": "0.05", "TWIST": "1.5", "HEIGHT": "0.36", "RISE": "0.26", "SHRINK": "0.12",
@@ -199,7 +199,7 @@ final class Jellyfish: SKScene {
 
     /// How near and far the tank runs, by the animals' size, as a tank's window frames them. Deep, so a crowd is mostly
     /// small bells further back, as in the footage's tanks: going from 28 moon jellies to 56 raised the cost of drawing
-    /// them by about half rather than doubling it.
+    /// them by about half rather than doubling it. (Dave then chose 84.)
     private func depths(_ sp: Species) -> (Double, Double) {
         let scale = (sp.diameter.lowerBound + sp.diameter.upperBound) / 2 / 0.1
         return (0.65 * scale, 3.5 * scale)
@@ -272,7 +272,7 @@ final class Jellyfish: SKScene {
             var v = swimming ? j.axis * (Self.surge(tau, sp.share * j.period, j.period) * sp.perPulse * j.d * j.amp) : .zero
             v.y -= swimming ? sp.sink * 0.3 : sp.sink
             v += SIMD3(-j.p.y, j.p.x, 0) * spin // the tank's slow turn, round the view's middle
-            // ponytail: every pair, every step (84 jellies at most, 1.5x); a grid of cells if the count ever grows much
+            // ponytail: every pair, every step (126 jellies at most, 1.5x); a grid of cells if the count ever grows much
             for k in group.jellies.indices where k != i {
                 let gap = j.p - group.jellies[k].p, dist = length(gap), touch = (j.d + group.jellies[k].d) * 0.5
                 if dist < touch {

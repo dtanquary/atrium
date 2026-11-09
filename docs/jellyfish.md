@@ -93,19 +93,18 @@ Cost is unchanged: 1.5 to 1.8 ms of GPU.
 
 ## Settings
 - **Look** (`jellyfish.look`, a menu): lit tank in Light Mode, glow in Dark Mode (the standard); lit tank in Light Mode, crystal jellies in Dark Mode; lit tank by day, glow at night; lit tank by day, crystal jellies at night; lit tank; glow; crystal jellies. Each pick says what it does, rather than a second menu for the dark look that would show for only four of the seven picks, which a knob can't express. By day means the Sun where you are: the tank's light eases through civil twilight, from 6° below the horizon to 1° above.
-- **Jellyfish** (`jellyfish.count`, 0.5 to 1.5×): 56 moon jellies or 32 crystal jellies at 1× (Dave: "at least 2x more" than the first 28 and 16). A change refills the tank.
-- **Speed** (`jellyfish.speed`, 0.5 to 1.5×): the scene's clock, so pulses, turns and drift keep their proportions.
+- **Jellyfish** (`jellyfish.count`, 0.5 to 1.5×): 84 moon jellies or 48 crystal jellies at 1×, Dave's pick from trying the slider (1.5× of step 3's 56 and 32, which were twice the first 28 and 16). A change refills the tank.
+- **Speed** (`jellyfish.speed`, 0.5 to 1.5×, standard 0.8×): the scene's clock, so pulses, turns and drift keep their proportions. 1× is the real pace; 0.8× is Dave's pick from trying it.
 
 ## Cost
 Measured by the render test at 2x Retina on an M3 Max, debug build (release CPU is lower), with the seed pinned:
 
 | Look | CPU | GPU |
 |---|---|---|
-| Lit tank, 56 moon jellies | 3.3–3.5 ms | 2.3–3.0 ms |
-| Glow, 56 moon jellies | 3.4 ms | 2.3–2.4 ms |
-| Crystal jellies, 32 | 2.0–2.4 ms | 2.6–3.0 ms |
+| Lit tank, 84 moon jellies | 4.9–5.1 ms | 3.9–4.2 ms |
+| Crystal jellies, 48 | 2.5 ms | 2.6–3.9 ms |
 
-Ranges are 4, 8 and 12 s in, measured while another render shared the GPU at times, so take the low ends. That is over the 2 ms of GPU a wallpaper aims for, the price of twice as many, and was 1.56 to 1.62 ms with 28 and 16. In a release build the moon jellies' CPU is 0.7 to 0.95 ms.
+At 4 and 8 s in, with Atrium quit: a copy on the desktop shares the GPU and more than doubled the readings. That is about twice the 2 ms of GPU a wallpaper aims for, the price of three times as many as at first: 28 moon jellies drew in 1.56 ms and 56 in 2.9. In a release build 56 moon jellies took 0.7 to 0.95 ms of CPU; 84 weren't measured there.
 
 No `batteryRate` yet: a near bell's margin moves about 3 device pixels a frame at 20 fps in the squeeze, a little over the 2 that can't be seen, so 20 fps waits on Dave seeing it side by side, as research-method.md advised.
 
@@ -129,6 +128,7 @@ swift test --filter jellyfishMove                    # speed and spread measured
 - **2026-11-08, on step 1 on his desktop:** "the overall movement of the jellyfish still doesnt seem very natural, they seem to not move very much at all as they pulse, please review video footage of dense jellyfish population and attempt to recreate that". So step 2: twice the travel per pulse, the group's loop round the tank, and the sides turning bells away.
 - **2026-11-08, on step 2's film beside step 1's:** "the new motion is much better".
 - **2026-11-08, on step 2 on his desktop:** "it looks much better, i just think that by default there should be a lot more of them, at least 2x more". So step 3.
+- **2026-11-08, on step 3, after trying the sliders:** "1.5x population and 0.8x speed is my ideal sweet spot in testing". So those are the standards: 84 moon jellies and 48 crystal jellies at 1×, and Speed at 0.8×, with 1× kept as the real pace.
 
 ## What the mock-ups showed
 - **Deep jellies are small.** At 6 to 15 cm, a camera 1 to 6 m off made them specks. The camera is now set back by the animals' size: about 45 cm to 4 m for the deep set, and half as far again for moon jellies.

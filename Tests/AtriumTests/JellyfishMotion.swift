@@ -11,7 +11,8 @@ import Testing
     let env = ProcessInfo.processInfo.environment
     UserDefaults.standard.set(Int(env["JELLY_SEED"] ?? "") ?? 22, forKey: "jellyfish.seed")
     UserDefaults.standard.set(Int(env["JELLY_LOOK"] ?? "") ?? 4, forKey: "jellyfish.look")
-    defer { ["jellyfish.seed", "jellyfish.look"].forEach(UserDefaults.standard.removeObject) }
+    UserDefaults.standard.set(1, forKey: "jellyfish.speed") // the real pace, as the footage was
+    defer { ["jellyfish.seed", "jellyfish.look", "jellyfish.speed"].forEach(UserDefaults.standard.removeObject) }
     let size = CGSize(width: 1512, height: 982), scene = Jellyfish(size: size)
     let fps = 30.0
     var frames: [[(p: CGPoint, d: Double, tilt: Double, heading: Double)]] = []
