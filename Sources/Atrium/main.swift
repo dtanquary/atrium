@@ -11,8 +11,16 @@ final class WallpaperView: SKView, SKViewDelegate {
     private static let log = Logger(subsystem: "com.dtanquary.atrium", category: "wallpaper")
     /// When it last drew a frame.
     var lastDrawn = Date()
-    /// Set while the displays sleep, Power Nap's dark wakes included: nothing draws then, and nothing needs to.
-    static var screensAsleep = false
+    /// Set while the displays sleep, Power Nap's dark wakes included: nothing draws then, and nothing needs to. Starts
+    /// set if no display is awake, since launched in a dark wake (relaunched after a build, or an update, while the Mac
+    /// slept) it never hears they went to sleep: taking them for awake, the watchdog replaced the view in every dark
+    /// wake all night, each new one made with no display and never drawing, until its wait had grown to 11 minutes
+    /// by the morning (2026-11-08). macOS counts a display active only while it's awake.
+    static var screensAsleep: Bool = {
+        var active: UInt32 = 0
+        CGGetActiveDisplayList(0, nil, &active)
+        return active == 0
+    }()
     /// Set by the menu's Pause: every display holds its frame until Resume. Not saved, so a relaunch runs again.
     static var paused = false
     /// How many views in a row `watch` has put in this one's place without a frame drawn since.
