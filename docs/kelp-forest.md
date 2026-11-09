@@ -8,7 +8,7 @@ Dave asked for it on 2026-11-08 by running the new-wallpaper process: "underwate
 - **Data:** none yet. The build would want 4 to 8 freely licensed photos of single giant kelp blades with their floats, to cut out as cards (research-method.md §6); none have been looked for.
 - **Research:** [the method](kelp-forest/research-method.md) (the plant, the forest, the water and the light in numbers; how kelp moves in swell, surge and current; how to draw it, with costs measured by a SpriteKit probe) and [the look](kelp-forest/research-look.md) (what the eye sees, the views, palettes sampled from real photos, brightness caps, feeds and licences, names). Every figure in them is marked checked or unchecked.
 - **Scripts:** `kelp-forest/mock.swift` draws the mock-ups with SpriteKit as the app would; `sheet.py` lays out the sheets and films from the variants in `variants.py`, and `python3 sheet.py stats <sheet>` measures each tile's brightness at desktop size.
-- **Where it stands (2026-11-08):** round 1 of mock-ups waits for Dave's picks.
+- **Where it stands (2026-11-08):** Dave has seen round 1's films and chosen giant kelp in the level and looking-up views; round 2 follows them.
 
 ## Names and look-alikes
 - **Kelp Forest** is the name proposed: the habitat's plain name, like Fish Tank and Jellyfish. It is also Monterey Bay Aquarium's exhibit name, a descriptive use; no US trademark for it turned up (third-party mirrors only, [research-look.md](kelp-forest/research-look.md) §6). Avoid "Seaforest", Sea Change Project's coinage for the Cape's kelp.
@@ -59,8 +59,11 @@ Each question, with my recommendation:
 - **An anchored camera sees the whole swell.** The water moves as one column, ±0.7 to 1 m on an ordinary day, and the kelp with it, so from a camera fixed to the floor the nearest plant swings a large part of the screen each way every 12 s ([film2-up.mp4](kelp-forest/film2-up.mp4) most of all). A diver is carried by the same swell and sees the forest nearly still, with a slow parallax between near and far. A camera carried part of the way with the water would be calmer and truer to dive footage; it is a question for round 2, judged in films.
 - **Cost:** the mock-up's per-pixel blades take hundreds of milliseconds of GPU a frame (the method research timed an early copy at about 360 ms), fine for pictures. The build would port its look, not its method: the hybrid the method research measured at about 1.2 ms of GPU and 0.55 to 0.75 ms of CPU (research-method.md §3, §5).
 
+## Dave's feedback
+- **2026-11-08, on round 1's films:** "film1-level and film2-up look awesome, film3-bull was meh, lets focus on the first two". So giant kelp, seen level through the forest and looking up into the canopy; bull kelp and the mixed edge are set aside.
+
 ## Still open
-- Dave's picks for the four questions above.
+- Dave's picks for the water (sheet 2); the views and the kelp are chosen (Dave's feedback).
 - Whether the camera stays fixed or is carried part of the way with the swell, as a diver is (What the mock-ups showed).
 - Photo cards of single blades: none found yet, and the near tier needs them.
 - Fish: a mid-distance school of blacksmith fits the colours (research-method.md §3); not in round 1.
