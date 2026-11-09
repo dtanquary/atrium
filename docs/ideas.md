@@ -17,6 +17,7 @@ Picked by Dave on 2026-10-10, researched and mocked up that day, and built on 20
 - **Ant Colony.** Dave asked on 2026-10-12, again with research and mock-ups first, for a colony of ants seen from the side through glass, "as it slowly forms and gets bigger". A nest dug through the day by the wall clock, a new one each morning, in blue gel lit from its base or in sand, with ants that walk on the tunnels' walls and carry out what is dug. Built the same day and hidden as `unfinished` until he has tried it: [ant-colony.md](ant-colony.md). An ant drawn by one shader (for hundreds of them) and ants on the glass seen from above are its own next ideas.
 
 - **Jellyfish.** Dave ran it through the new-wallpaper process on 2026-11-07: the shader-drawn version that "Left out on purpose" below left room for, "a shader-drawn bell on black, dim and bioluminescent". Researched and mocked up that day, nothing built: [jellyfish.md](jellyfish.md).
+- **Kelp Forest.** Dave asked on 2026-11-08: "underwater kelp, start with mockups and come up with a high fidelity design for me and we go from there". Giant kelp seen from inside the forest, swaying in the swell, drawn by shaders rather than cut out of photos, where a Kelp Forest tank of photo cut-outs had been dropped from the Fish Tank. Researched and mocked up that day, nothing built: [kelp-forest.md](kelp-forest.md).
 
 ## Parked
 In the order they were proposed, most promising first.
