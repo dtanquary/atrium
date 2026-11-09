@@ -114,8 +114,10 @@ Measured by the render test at 2x Retina on an M3 Max, release build (`swift tes
 | Level, dusk | 1.79 ms | 1.95 ms |
 | Looking up, teal | 2.21 ms | 1.45 ms |
 | Looking up, dusk | 2.26 ms | 1.47 ms |
+| Moving between them, level, teal | 2.80 ms | 1.68 ms |
+| Moving between them, looking up, teal | 2.67 ms | 1.55 ms |
 
-A debug build reads about 12 ms of CPU. Looking up is over on CPU: its near plants are many, and each blade is a sprite posed every frame. The next saving is to draw the farther of them as cards. No `batteryRate`: a near stipe moves far over 2 device pixels a frame at 20 fps (research-method.md §5).
+A debug build reads about 12 ms of CPU. Looking up and moving between the views are over on CPU: their near plants are many (the moving view's forest has plants from 4 m, for looking up), and each blade is a sprite posed every frame. The next saving is to draw the farther of them as cards. No `batteryRate`: a near stipe moves far over 2 device pixels a frame at 20 fps (research-method.md §5).
 
 ## Checking it
 ```sh
