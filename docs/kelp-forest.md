@@ -2,17 +2,41 @@
 
 A forest of giant kelp seen from inside it: rope-thin stipes rising in clumps from their holdfasts into blue-green haze, a blade on a gas float every few centimetres up each one, shafts of sunlight coming down through the canopy, and the whole forest swaying together in the swell, dragged by the water rather than springing back. Real species at their real sizes, in water whose colours are sampled from real photos.
 
-Dave asked for it on 2026-11-08 by running the new-wallpaper process: "underwater kelp, start with mockups and come up with a high fidelity design for me and we go from there". A Kelp Forest tank was next in line for the Fish Tank on 2026-10-07 and was dropped with that day's photo cut-outs of big animals ([fish-tank.md](fish-tank.md)); Jellyfish has since shown that shader-drawn water and bodies can work. Two agents researched it that day and one round of mock-ups was drawn. Nothing is built.
+Dave asked for it on 2026-11-08 by running the new-wallpaper process: "underwater kelp, start with mockups and come up with a high fidelity design for me and we go from there". A Kelp Forest tank was next in line for the Fish Tank on 2026-10-07 and was dropped with that day's photo cut-outs of big animals ([fish-tank.md](fish-tank.md)); Jellyfish has since shown that shader-drawn water and bodies can work. Two agents researched it that day and two rounds of mock-ups were drawn; Dave chose from them the same evening, and the build began hidden behind the `unfinished` switch.
 
-- **Source:** none yet.
-- **Data:** none yet. The build would want 4 to 8 freely licensed photos of single giant kelp blades with their floats, to cut out as cards (research-method.md §6); none have been looked for.
+- **Source:** `Sources/Atrium/KelpForest.swift` (being built).
+- **Data:** none. Blade cards are drawn at load; two freely licensed photos of real blades are candidates for photo cards later (Still open).
 - **Research:** [the method](kelp-forest/research-method.md) (the plant, the forest, the water and the light in numbers; how kelp moves in swell, surge and current; how to draw it, with costs measured by a SpriteKit probe) and [the look](kelp-forest/research-look.md) (what the eye sees, the views, palettes sampled from real photos, brightness caps, feeds and licences, names). Every figure in them is marked checked or unchecked.
 - **Scripts:** `kelp-forest/mock.swift` draws the mock-ups with SpriteKit as the app would; `sheet.py` lays out the sheets and films from the variants in `variants.py`, and `python3 sheet.py stats <sheet>` measures each tile's brightness at desktop size.
-- **Where it stands (2026-11-08):** Dave has seen round 1's films and chosen giant kelp in the level and looking-up views; round 2 follows them.
+- **Where it stands (2026-11-08):** Dave has chosen from both rounds; the build has begun, hidden behind the `unfinished` switch.
 
 ## Names and look-alikes
 - **Kelp Forest** is the name proposed: the habitat's plain name, like Fish Tank and Jellyfish. It is also Monterey Bay Aquarium's exhibit name, a descriptive use; no US trademark for it turned up (third-party mirrors only, [research-look.md](kelp-forest/research-look.md) §6). Avoid "Seaforest", Sea Change Project's coinage for the Cape's kelp.
 - **Every Mac already has filmed kelp,** in Apple's California Kelp Forest and Kelp Dark aerials. This one has to be what film can't: never repeating, a new forest each load, following the real Sun and Light and Dark Mode, tunable.
+
+## Dave's decisions (2026-11-08)
+- **Giant kelp, in two views:** of round 1's films, "film1-level and film2-up look awesome, film3-bull was meh, lets focus on the first two". So level through the forest (tipped up 20°, the recommended design) and looking up into the canopy are both views; bull kelp, the mixed edge, the aquarium, just under the canopy and among the holdfasts are set aside.
+- **Every light round 2 showed:** "all of your previews look awesome, A, B, C, D, E, F all great, and film 5 level dusk also looks awesome". So the Channel Islands' teal, golden and dusk are all picks in both views, with the teal following Light Mode and dusk Dark Mode as the standard, as recommended. **As decided in the build:** the Look menu follows Light and Dark Mode as its standard pick, as Jellyfish's does.
+- **The motion as the research models it:** each frond a chain dragged through a sea of swell, slow surge and current, as both films he liked showed it. The camera stays fixed to the floor (a carried one measured no calmer, Mock-ups round 2).
+
+Still his to decide, once it runs on his desktop: the density, the swell's strength and pace, and whether the swell should follow a real kelp forest's live sea (Open-Meteo's marine feed, CC BY 4.0).
+
+## What the real thing looks like
+From the two research reports, cut to what the build uses:
+- **Giant kelp** (*Macrocystis pyrifera*): clumps of 10–50 rope-thin stipes (about 0.5–1 cm) from a holdfast of root-like strands 10–50 cm across, plants 3–7 m apart in a deep forest; the longest frond about 1.4 × the depth − 0.8 m, its last quarter lying on the surface. A blade every 4–16 cm, 30–150 cm long and 5–15 cm wide, ridged across and toothed along its edge, each on a pear-shaped float 4–12 × 1–4 cm; few, small, worn blades low down and a dense ruff high up.
+- **The water:** green-teal coastal water with 8–12 m visibility; red is gone within a few metres, so only the nearest sunlit blades keep their gold and the rest take the water's colour.
+- **The light:** shafts made by the waves and the canopy's gaps, parallel in the water and so fanning from the Sun on screen; Snell's window 97° across overhead, dark mirror outside it; soft caustics on the floor.
+- **The motion:** the water moves nearly as one column, ±0.7–1 m on an ordinary day at 9–16 s, with a slower surge of 1–3 minutes and a current that wanders over minutes. A frond is dragged, not sprung: it rights itself over most of a minute. Blades stream with the water's speed past them and flutter by centimetres.
+
+## How it works
+The plan. The mock-up drew every blade per pixel, at hundreds of milliseconds a frame; the build keeps its look and its motion but draws each blade once, as a sprite, which the method research measured at about 1 ms of GPU and under 1 ms of CPU for several hundred (research-method.md §3).
+
+1. **The water**, one full-screen shader ported from the mock-up: fog by colour along each line of sight, brighter looking up and toward the Sun; the floor with one soft layer of caustics; the underside of the surface with Snell's window and the canopy; shafts of light where the canopy is open. The canopy is baked once at load into a small tiling texture rather than worked out with noise per pixel.
+2. **The sea** on the CPU, as the mock-up's: five swell components, a slow surge and a wandering current, with their phases in Double.
+3. **The forest**, a new one each load (seeded by `kelp.seed` for pictures): plants in clumps, each a holdfast and its fronds, every frond a chain of 14 buoyant links stepped at 60 Hz, run for a while at load so it has settled.
+4. **Near fronds** (the nearest few plants): each stipe drawn as thin sprites between its chain's points, and each blade a sprite of one of a few blade cards drawn at load (outline, float, ridges and teeth, as the mock-up's), posed every frame from its chain: its place, its angle from the water's flow past it, and its foreshortening. A shared shader colours the cards by the look (lit from the front, or glowing with the light through them), twists and ripples each blade within its card, and fogs it by distance.
+5. **Far fronds**: each segment of a frond a single card with its blades drawn in, bent and swayed by the same chain. Far off, a blade streaming on its own can't be seen.
+6. **Light and Dark Mode** change only the light (the look's colours, uniforms on every shader), so the forest stays as it is.
 
 ## Mock-ups, round 1 (2026-11-08)
 Drawn by `mock.swift` through SKRenderer, as the render test draws a wallpaper. The world is in metres: a floor 8.5 to 12 m down, a camera 60–64° across. A full-screen shader draws the water (fogged by colour with distance, brighter looking up), the underside of the surface with Snell's window and the canopy lying on it, the floor with soft caustics, and shafts of sunlight fanning out from the Sun where the canopy lets it through. Each frond is a sprite whose shader hangs its blades along a spine of eight points: each blade on a short stalk with its float, at its own bearing round the stipe, twisting as a ribbon does, streaming with the water past it and fluttering by centimetres; few, small worn blades low down and a dense ruff high up, as research-method.md §1 has it.
@@ -69,9 +93,9 @@ Giant kelp only, in the two views Dave liked in round 1's films: level through t
 
 ## Dave's feedback
 - **2026-11-08, on round 1's films:** "film1-level and film2-up look awesome, film3-bull was meh, lets focus on the first two". So giant kelp, seen level through the forest and looking up into the canopy; bull kelp and the mixed edge are set aside.
+- **2026-11-08, on round 2:** "all of your previews look awesome, A, B, C, D, E, F all great, and film 5 level dusk also looks awesome". Every light in both views is a pick.
 
 ## Still open
-- Dave's picks for the water (sheet 2); the views and the kelp are chosen (Dave's feedback).
 - Photo cards of single blades for the near tier. Two candidates found on Wikimedia Commons, licences read from Commons' own field (checked): *Giant Kelp - Macrocystis pyrifera (43168362051).jpg* (CC BY-SA 2.0), a close-up of a blade's ridges and toothed edge in air; *CAS Macrocystis 1.JPG* (CC BY-SA 3.0, EncycloPetey), whole blades backlit in the California Academy of Sciences' tank. Neither is cut out yet; the public-domain *Giantkelp2 300.jpg* shows fronds with their floats from above.
 - Fish: a mid-distance school of blacksmith fits the colours (research-method.md §3); not in round 1.
 - No `batteryRate`: a near stipe moves far over 2 device pixels a frame at 20 fps, so only a `batteryScale` on the water and far forest saves battery (research-method.md §5).
