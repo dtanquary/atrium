@@ -25,6 +25,7 @@ struct Config: Decodable {
     var plants: Int?, fronds: Int?, near: Double?, far: Double?
     var surge: Double?, period: Double?, current: Double?, canopy: Double?
     var sunElev: Double?, sunAz: Double?, rays: Double?, kelp: String?
+    var carry: Double? // how much of the swell carries the camera, 0 (fixed to the floor) to 1 (as the water moves)
     var expo: Double? // exposure, to hold a bright view to the look research's caps
     var tank: Double? // an aquarium: its back wall this far off, m, seen through a window of mullions
 }
@@ -68,7 +69,7 @@ let looks: [String: Look] = [
                    kelp: 0x6C4202, glow: 0xC08A10, sand: 0x8A6A30, kd: 0.5, rays: 1.4),
     "monterey": Look(ext: [0.3, 0.2, 0.22], deep: 0x4F6862, up: 0x74D5D6, sky: 0xC8F0EE, sun: 0xFFFFFF,
                      kelp: 0x6E6430, glow: 0x9E8E34, sand: 0x7A8070, kd: 0.5, snow: 0.6),
-    "dusk": Look(ext: [0.2, 0.1, 0.07], deep: 0x001E3E, up: 0x01587C, sky: 0x046489, sun: 0x6090B0,
+    "dusk": Look(ext: [0.12, 0.06, 0.045], deep: 0x001E3E, up: 0x01587C, sky: 0x046489, sun: 0x6090B0,
                  kelp: 0x050A12, glow: 0x0C2034, sand: 0x0A1A2A, kd: 0.5, rays: 0.5, snow: 0.12, expo: 0.4, caustics: 0, sunElev: 4),
 ]
 
@@ -105,7 +106,7 @@ let defines: [String: String] = [
     "EXT": glsl(look.ext), "KD": "\(look.kd)", "DEEP": glsl(lin(look.deep)), "UP": glsl(lin(look.up)),
     "SKY": glsl(lin(look.sky)), "SUN": glsl(lin(look.sun)), "KELP": glsl(lin(look.kelp)), "GLOW": glsl(lin(look.glow)),
     "SAND": glsl(lin(look.sand)), "RAYS": "\(look.rays)", "SNOW": "\(look.snow)", "EXPO": "\(look.expo)",
-    "SUNDIR": glsl(sunDir), "CANOPY": "\(cfg.canopy ?? 0.5)", "CAUS": "\(look.caustics)", "WALL": "\(cfg.tank ?? 0)",
+    "SUNDIR": glsl(sunDir), "CANOPY": "\(cfg.canopy ?? 0.5)", "CAUS": "\(look.caustics)", "WALL": "\(cfg.tank ?? 0)", "CARRY": "\(cfg.carry ?? 0)",
 ]
 
 let common = """
@@ -181,7 +182,7 @@ void main() {
     float dist = 400.0;
     if (d.y > 0.0) {
         float ts = (DEPTH - CAMY) / d.y;
-        vec2 q = vec2(d.x, d.z) * ts + sw;
+        vec2 q = vec2(d.x, d.z) * ts + u_cam - sw;
         // Ripples tip the surface a little; under the window's edge that makes it wobble.
         vec2 g = 0.045 / (1.0 + ts * 0.08) * vec2(sin(q.x * 1.7 + t * 1.1) + 0.7 * sin(q.x * 1.1 + q.y * 2.3 - t * 1.4),
                               sin(q.y * 1.9 - t * 1.2) + 0.7 * sin(q.y * 1.3 - q.x * 2.1 + t * 0.9));
@@ -202,11 +203,11 @@ void main() {
         dist = ts;
     } else {
         float tf = CAMY / -d.y;
-        vec2 p = vec2(d.x, d.z) * tf;
+        vec2 p = vec2(d.x, d.z) * tf + u_cam;
         float ripple = 0.9 + 0.1 * sin(p.x * 7.0 + 3.0 * vnoise(p * 1.3));
         float rock = smoothstep(0.55, 0.7, fbm(p * 0.25));
         vec3 alb = mix(SAND * ripple, SAND * vec3(0.45, 0.42, 0.36), rock);
-        vec2 sp = p + SUNDIR.xz / SUNDIR.y * DEPTH + sw;
+        vec2 sp = p + SUNDIR.xz / SUNDIR.y * DEPTH - sw;
         float shade = 1.0 - 0.75 * canopy(sp);
         float caus = pow(vnoise(p * 2.2 + vec2(t * 0.25, -t * 0.18)) * vnoise(p * 3.1 - vec2(t * 0.2, t * 0.3)) * 2.2, 2.0);
         col = alb * lightAt(0.0) * (0.25 + 0.75 * shade) * (0.75 + 0.9 * CAUS * caus * shade) * (0.4 + 0.6 * SUNDIR.y);
@@ -215,7 +216,7 @@ void main() {
     if (WALL > 0.0 && d.z > 0.0 && WALL / d.z < dist) {
         // The tank's back wall: cast rock, lit from the open top.
         float tw = WALL / d.z;
-        vec3 P = vec3(0.0, CAMY, 0.0) + d * tw;
+        vec3 P = vec3(u_cam.x, CAMY, u_cam.y) + d * tw;
         float r = fbm(P.xy * vec2(0.6, 0.9)) * 0.7 + fbm(P.xy * 3.0) * 0.3;
         col = SAND * vec3(0.55, 0.55, 0.5) * (0.4 + 0.8 * r) * lightAt(P.y) * (0.6 + 0.6 * vnoise(P.xy * 2.0 + t * 0.1));
         dist = tw;
@@ -228,8 +229,8 @@ void main() {
     vec2 ang = normalize(vec2(dot(d, e1), dot(d, e2)) + vec2(1e-5, 0.0));
     float streak = vnoise(ang * 7.0 + vec2(t * 0.025, sw.x * 0.3)) * vnoise(ang * 19.0 + vec2(7.0, -t * 0.04 + sw.y));
     float r = min(dist, 6.0);
-    vec3 Q = vec3(0.0, CAMY, 0.0) + d * r;
-    float open = 1.0 - canopy(Q.xz + SUNDIR.xz / SUNDIR.y * (DEPTH - Q.y) + sw);
+    vec3 Q = vec3(u_cam.x, CAMY, u_cam.y) + d * r;
+    float open = 1.0 - canopy(Q.xz + SUNDIR.xz / SUNDIR.y * (DEPTH - Q.y) - sw);
     float inscatter = 1.0 - exp(-0.1 * min(dist, 40.0));
     float toward = 0.2 + 1.6 * pow(max(dot(d, SUNDIR), 0.0), 3.0);
     col += RAYS * SUN * vec3(0.6, 0.9, 1.0) * lightAt(CAMY) * pow(streak, 2.5) * (0.3 + 0.7 * open) * inscatter * toward * 0.25;
@@ -238,7 +239,7 @@ void main() {
     vec2 px = uv * u_px;
     for (int i = 0; i < 3; i++) {
         float cell = 40.0 + 46.0 * float(i);
-        vec2 q = px / cell + vec2(sw.x * (0.6 + 0.5 * float(i)) + 0.05 * sin(t * 0.07 + float(i)), -t * (0.01 + 0.006 * float(i)));
+        vec2 q = px / cell + vec2((1.0 - CARRY) * sw.x * (0.6 + 0.5 * float(i)) + 0.05 * sin(t * 0.07 + float(i)), -t * (0.01 + 0.006 * float(i)));
         vec2 id = floor(q) + float(i) * 37.0;
         vec2 f = fract(q) - 0.5 - (vec2(hash21(id + 3.1), hash21(id + 7.7)) - 0.5) * 0.6;
         sn += step(hash21(id), 0.2) * exp(-dot(f, f) * cell * cell / (1.0 + 2.2 * float(i))) * (0.3 + 0.7 * hash21(id + 9.3)) * (0.4 + 0.5 * float(i));
@@ -279,7 +280,7 @@ void main() {
     float ppm0 = mix(a_m.x, a_m.y, s / len);
     float px = 1.0 / ppm0; // metres a pixel here
     // Light reaches this part of the frond only where the canopy overhead lets it through.
-    vec2 up = a_f.yz + SUNDIR.xz / SUNDIR.y * (DEPTH - s) + u_surge;
+    vec2 up = a_f.yz + SUNDIR.xz / SUNDIR.y * (DEPTH - s) - u_surge;
     vec3 lit = lightAt(s) * (0.3 + 0.7 * (1.0 - canopy(up)));
     vec2 suv = (a_box.zw + p) / u_px;
     vec3 d = rayDir(suv);
@@ -290,7 +291,7 @@ void main() {
     float sw = max(sr, px * 0.6);
     float stipe = (sr / sw) * (1.0 - smoothstep(sw, sw + px, sqrt(best) * px));
     stipe *= step(0.0, s) * step(s, len);
-    col = mix(KELP, GLOW, 0.3) * 0.8 * lit; alpha = stipe;
+    col = KELP * 0.6 * lit; alpha = stipe;
     // The holdfast: a mound of root-like haptera about 70 cm across where the stipes meet the rock.
     vec2 b0 = a_s1.xy; vec2 t0 = normalize(a_s1.zw - a_s1.xy);
     float hy = dot(p - b0, t0) * px; float hx = abs(dot(p - b0, vec2(-t0.y, t0.x))) * px;
@@ -344,6 +345,8 @@ void main() {
             float prof = smoothstep(0.0, 0.25, ab) * (1.0 - smoothstep(0.55, 1.0, ab) * 0.92) * (1.0 - smoothstep(0.97, 1.0, ab));
             float m = a * L * px;
             prof *= 1.0 + 0.07 * sin(m * 55.0 + hs * 20.0) + 0.05 * sin(m * 23.0 + hs * 7.0) + 0.08 * (vnoise(vec2(m * 30.0, hs * 9.0 + sign(b) * 3.0)) - 0.5);
+            // Its margin toothed every 2 cm or so, as a real blade's is [SAF] (fades out where a tooth is under a pixel).
+            prof *= 1.0 - 0.07 * fract(m / 0.022 + sign(b) * 0.5) * clamp(0.022 / px / 4.0 - 0.5, 0.0, 1.0);
             float hw = max(halfW * prof, 0.0);
             float cov = (1.0 - smoothstep(hw - 0.5, hw + 0.7, abs(b))) * step(0.0, a) * step(a, tip);
             cov *= min(1.0, halfW / 0.8); // fainter, not jagged, when thinner than a pixel
@@ -355,6 +358,10 @@ void main() {
             // when we look toward the Sun, more at its thin margins, less where another blade lies behind it.
             float across = b / max(hw, 1e-3);
             float rug = vnoise(vec2(m * 26.0, across * 3.0) + hs * 50.0) * 0.6 + vnoise(vec2(m * 70.0, across * 6.0) + hs * 20.0) * 0.4;
+            // Corrugations: ridges across the blade about 3 cm apart, wandering, lit on one side and shaded on the
+            // other (the close-up photo of a blade, research-look.md §1), fading out where they're under a pixel.
+            float ridge = sin((m + 0.012 * sin(across * 2.5 + hs * 9.0)) * 210.0 + hs * 30.0);
+            rug = mix(rug, rug * (0.72 + 0.28 * ridge), clamp(0.03 / px / 6.0 - 0.3, 0.0, 1.0));
             float streak = 0.85 + 0.15 * vnoise(vec2(m * 3.0, across * 9.0) + hs * 11.0);
             float thin = clamp(1.0 - abs(across), 0.0, 1.0);
             vec3 tint = mix(vec3(1.0), vec3(0.9, 1.0, 0.75), h3 * 0.5) * (0.6 + 0.6 * h4);
@@ -378,7 +385,7 @@ void main() {
     vec2 tgT = normalize(a_s4.zw - a_s4.xy);
     vec2 nT = vec2(-tgT.y, tgT.x);
     float pT = 1.0 / a_m.y;
-    vec3 litT = lightAt(DEPTH - 0.3) * (0.3 + 0.7 * (1.0 - canopy(a_f.yz + u_surge)));
+    vec3 litT = lightAt(DEPTH - 0.3) * (0.3 + 0.7 * (1.0 - canopy(a_f.yz - u_surge)));
     for (int j = 0; j < 20; j++) {
         float hj = hash11(float(j) * 3.71 + a_f.x * 51.3); float h2 = hash11(hj * 31.7 + 2.1); float h3 = hash11(hj * 17.3 + 5.9);
         float ang = (hj - 0.5) * 1.1;
@@ -459,9 +466,9 @@ func flowAt(_ p: SIMD3<Double>, _ t: Double) -> SIMD3<Double> {
 }
 
 /// How far the surface water is carried from its rest, for the canopy and ripples drawn on it.
-func surfaceShift(_ t: Double) -> SIMD2<Double> {
+func surfaceShift(_ t: Double, at y: Double = depth) -> SIMD2<Double> {
     var d = SIMD2<Double>.zero
-    for s in swells { d -= s.dir * (s.a * cosh(s.k * depth) / s.sinhKH * sin(s.phase - s.omega * t)) }
+    for s in swells { d -= s.dir * (s.a * cosh(s.k * y) / s.sinhKH * sin(s.phase - s.omega * t)) }
     return d + SIMD2(beat.x * sin(beat.omega * t + beat.phase), 0)
 }
 
@@ -547,7 +554,7 @@ func advance(to t: Double) {
 }
 
 func project(_ p: SIMD3<Double>) -> (px: SIMD2<Double>, z: Double, dist: Double) {
-    let rel = p - SIMD3(0, camY, 0)
+    let rel = p - cam
     let zc = rel.y * sin(pitch) + rel.z * cos(pitch), yc = rel.y * cos(pitch) - rel.z * sin(pitch)
     let z = max(zc, 0.05)
     return (SIMD2(W / 2 + rel.x / z / tanH * W / 2, H / 2 + yc / z / (tanH * aspect) * H / 2), z, (rel * rel).sum().squareRoot())
@@ -556,6 +563,10 @@ func project(_ p: SIMD3<Double>) -> (px: SIMD2<Double>, z: Double, dist: Double)
 let bladeLen = 0.9, bladeGap = 0.1
 let time = SKUniform(name: "u_t", float: 0)
 let surgeU = SKUniform(name: "u_surge", vectorFloat2: .zero)
+let camU = SKUniform(name: "u_cam", vectorFloat2: .zero)
+/// Where the camera is: on the spot, or carried part of the way with the water as a diver is.
+let carry = cfg.carry ?? 0
+var cam = SIMD3<Double>(0, camY, 0)
 let pxU = SKUniform(name: "u_px", vectorFloat2: SIMD2(Float(W), Float(H)))
 
 let scene = SKScene(size: CGSize(width: wPt, height: hPt))
@@ -563,7 +574,7 @@ scene.backgroundColor = .black
 let backdrop = SKSpriteNode(color: .black, size: scene.size)
 backdrop.position = CGPoint(x: wPt / 2, y: hPt / 2)
 backdrop.zPosition = -1000
-backdrop.shader = SKShader(source: source(water), uniforms: [time, surgeU, pxU])
+backdrop.shader = SKShader(source: source(water), uniforms: [time, surgeU, camU, pxU])
 scene.addChild(backdrop)
 
 if let wall = cfg.tank {
@@ -605,8 +616,10 @@ for i in fronds.indices {
 func place(_ t: Double) {
     advance(to: t)
     time.floatValue = Float(t)
-    let sh = surfaceShift(t)
+    let sh = surfaceShift(t), ch = surfaceShift(t, at: camY) * carry
     surgeU.vectorFloat2Value = SIMD2(Float(sh.x), Float(sh.y))
+    cam = SIMD3(ch.x, camY, ch.y)
+    camU.vectorFloat2Value = SIMD2(Float(ch.x), Float(ch.y))
     for fr in fronds {
         let pts = stride(from: 0, through: segments, by: 2).map { fr.p[$0] }
         let proj = pts.map { project($0) }

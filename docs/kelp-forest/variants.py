@@ -12,6 +12,18 @@ LOW = {"pitch": 6, "camY": 0.6, "depth": 12, "near": 3, "plants": 12}
 SHALLOW_UP = {"expo": 0.55, "pitch": 40, "camY": 1.5, "depth": 9, "near": 3, "plants": 14}
 
 SHEETS = {
+    # Round 2: Dave's two views (round 1's films 1 and 2), giant kelp only (docs/kelp-forest.md, Dave's feedback).
+    "round2-light": [
+        ("A  Level, Channel Islands (Light Mode)", {"look": "channel", "seed": 5, "t": 20, **LEVEL, "pitch": 20, "camY": 2.5, "expo": 0.8, **DESK}),
+        ("B  Level, golden", {"look": "golden", "seed": 5, "t": 20, **LEVEL, "pitch": 20, "camY": 2.5, "expo": 0.9, **DESK}),
+        ("C  Level, dusk (Dark Mode)", {"look": "dusk", "seed": 5, "t": 20, **LEVEL, "pitch": 20, "camY": 2.5, "expo": 0.5, **DESK}),
+        ("D  Looking up, Channel Islands (Light Mode)", {"look": "channel", "seed": 5, "t": 20, **UP, **DESK}),
+        ("E  Looking up, golden", {"look": "golden", "seed": 5, "t": 20, **UP, "expo": 0.45, **DESK}),
+        ("F  Looking up, dusk (Dark Mode)", {"look": "dusk", "seed": 5, "t": 20, **UP, "expo": 0.3, **DESK}),
+    ],
+    # Measured, not committed: no calmer than film2-up (docs/kelp-forest.md, round 2).
+    "film4-up-carried": [("", {"look": "channel", "seed": 5, "t": 20, **UP, "carry": 0.8, **FILM})],
+    "film5-level-dusk": [("", {"look": "dusk", "seed": 5, "t": 20, **LEVEL, "pitch": 20, "camY": 2.5, "expo": 0.5, **FILM})],
     # Round 1, question 1: where we look from.
     "sheet1-view": [
         ("A  Level through the forest, into the haze", {"look": "channel", "seed": 5, "t": 20, **LEVEL, **DESK}),

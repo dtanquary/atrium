@@ -35,6 +35,14 @@ Each question, with my recommendation:
 
 [sheet5-desk.jpg](kelp-forest/sheet5-desk.jpg) is the recommended design at full size under a menu bar and desktop folders: tipped up 20°, between A and B, in the Channel Islands' water (median 134, 99th percentile 180, max 204).
 
+## Mock-ups, round 2 (2026-11-08)
+Giant kelp only, in the two views Dave liked in round 1's films: level through the forest (tipped up 20°, the recommended design) and looking up into the canopy. Near blades now carry the ridges across them and the toothed margins of a real blade, from two photos found for the build's cards (Still open), and stipes are darker than their blades, and the canopy on the surface moves with the water rather than against it, which round 1 had backwards.
+
+1. **The light, in both views** ([round2-light.jpg](kelp-forest/round2-light.jpg)): the Channel Islands' teal (Light Mode), golden, and dusk (Dark Mode), each held to its caps. **Recommended:** Channel Islands by day and dusk in Dark Mode, as one forest whose light changes; golden as a pick.
+2. **Dark Mode in motion** ([film5-level-dusk.mp4](kelp-forest/film5-level-dusk.mp4)): the level view at dusk, 20 s. The dusk water is clearer than round 1's, so the fronds stay silhouettes against it, as in the Cape Town photo, rather than sinking into it.
+
+**The camera carried with the swell made no difference**, so it isn't a question. Round 1 suggested that a camera carried part of the way with the water, as a diver is, would calm the near plants. Rendered at 80% of the water's motion and measured as the mean change of each pixel from one frame to the next, the looking-up film moved 0.83 against 0.86 fixed to the floor (95th percentile 1.20 against 1.16). What moves on screen is the fronds' own streaming and turning blades, not the swell carrying the plants. `carry` stays in mock.swift; its film isn't committed. The level film moves 0.34 a frame, the looking-up one 0.86: the near plants in the looking-up view are 4 m off where the level view's are 6 m.
+
 ## What the mock-ups showed
 - **Brightness at desktop size**, the brightest of R, G and B out of 255 (median, 99th, 99.9th percentile, max), against the look research's caps:
 
@@ -56,7 +64,7 @@ Each question, with my recommendation:
 - **The gold is small.** At the level view's distances the water takes the kelp's colour within a few metres, so only the nearest blades read gold, as the look research predicted. The forest stays in one teal family; the price is that the kelp's own colour is mostly hidden.
 - **Drawn blades read as drawn up close.** At 5 m and more the procedural blades pass; nearer (views C, D and E) they are flat, even shapes. The method research's photo cards of real blades are the fix in a build.
 - **A level view with too many plants is a tangle of grass**, not a forest. Ten clumps of 6 to 16 fronds, the nearest 6 m off, keep open water between them; fewer reads as bars.
-- **An anchored camera sees the whole swell.** The water moves as one column, ±0.7 to 1 m on an ordinary day, and the kelp with it, so from a camera fixed to the floor the nearest plant swings a large part of the screen each way every 12 s ([film2-up.mp4](kelp-forest/film2-up.mp4) most of all). A diver is carried by the same swell and sees the forest nearly still, with a slow parallax between near and far. A camera carried part of the way with the water would be calmer and truer to dive footage; it is a question for round 2, judged in films.
+- **An anchored camera sees the whole swell.** The water moves as one column, ±0.7 to 1 m on an ordinary day, and the kelp with it, so from a camera fixed to the floor the nearest plant swings a large part of the screen each way every 12 s ([film2-up.mp4](kelp-forest/film2-up.mp4) most of all). A diver is carried by the same swell and sees the forest nearly still, with a slow parallax between near and far. Round 2 tried a camera carried with the water, and it was no calmer (Mock-ups, round 2).
 - **Cost:** the mock-up's per-pixel blades take hundreds of milliseconds of GPU a frame (the method research timed an early copy at about 360 ms), fine for pictures. The build would port its look, not its method: the hybrid the method research measured at about 1.2 ms of GPU and 0.55 to 0.75 ms of CPU (research-method.md §3, §5).
 
 ## Dave's feedback
@@ -64,8 +72,7 @@ Each question, with my recommendation:
 
 ## Still open
 - Dave's picks for the water (sheet 2); the views and the kelp are chosen (Dave's feedback).
-- Whether the camera stays fixed or is carried part of the way with the swell, as a diver is (What the mock-ups showed).
-- Photo cards of single blades: none found yet, and the near tier needs them.
+- Photo cards of single blades for the near tier. Two candidates found on Wikimedia Commons, licences read from Commons' own field (checked): *Giant Kelp - Macrocystis pyrifera (43168362051).jpg* (CC BY-SA 2.0), a close-up of a blade's ridges and toothed edge in air; *CAS Macrocystis 1.JPG* (CC BY-SA 3.0, EncycloPetey), whole blades backlit in the California Academy of Sciences' tank. Neither is cut out yet; the public-domain *Giantkelp2 300.jpg* shows fronds with their floats from above.
 - Fish: a mid-distance school of blacksmith fits the colours (research-method.md §3); not in round 1.
 - No `batteryRate`: a near stipe moves far over 2 device pixels a frame at 20 fps, so only a `batteryScale` on the water and far forest saves battery (research-method.md §5).
 
