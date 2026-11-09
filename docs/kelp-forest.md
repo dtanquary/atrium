@@ -38,6 +38,13 @@ The plan. The mock-up drew every blade per pixel, at hundreds of milliseconds a 
 5. **Far fronds**: each segment of a frond a single card with its blades drawn in, bent and swayed by the same chain. Far off, a blade streaming on its own can't be seen.
 6. **Light and Dark Mode** change only the light (the look's colours, uniforms on every shader), so the forest stays as it is.
 
+## The build so far
+**Step 1 (2026-11-08): both views and every look, hidden.** The plan above, in `KelpForest.swift`:
+- **The water** is the mock-up's shader with the look as uniforms, so Light and Dark Mode or dusk ease the colours without touching the forest. The canopy, which the mock-up worked out with noise three times a pixel, is drawn once at load into a 256-texel texture over 128 m; the canopy's blades on the surface (looking up) are still worked out per pixel, only where it's thick and within 30 m.
+- **The forest** is the mock-up's: plants more far than near, 6 to 10 fronds a holdfast, each a chain of 14 links in the same sea, run 30 s at load in steps of 1/30 s so it has settled. Plants nearer than 2.5 m beyond the nearest are drawn a sprite a blade, posed every frame from the chain (its place, its bearing and lift, the flow past it, a flutter of a few degrees, foreshortened where it points toward or away from us), with a sprite a link of stipe; the rest a card for every two links with its blades drawn in, bent from node to node. All of it is one texture of cards drawn in Core Graphics at load (`Atlas`), so it draws as one batch.
+- **The kelp shader** colours each card by the look: lit from our side, or glowing gold when we look toward the light, fogged by distance along each pixel's own line of sight (`gl_FragCoord`), with the empty parts of a card skipping the work: that alone took the GPU from 3.5 to 2.5 ms.
+- **The views** are round 2's: level, tipped up 20°, from 2.5 m over a floor 12 m down, plants 6 to 30 m off; and looking up 58° from 2 m in 10 m of water, plants 3.5 to 14 m off, since only the near ones reach into that view.
+
 ## Mock-ups, round 1 (2026-11-08)
 Drawn by `mock.swift` through SKRenderer, as the render test draws a wallpaper. The world is in metres: a floor 8.5 to 12 m down, a camera 60–64° across. A full-screen shader draws the water (fogged by colour with distance, brighter looking up), the underside of the surface with Snell's window and the canopy lying on it, the floor with soft caustics, and shafts of sunlight fanning out from the Sun where the canopy lets it through. Each frond is a sprite whose shader hangs its blades along a spine of eight points: each blade on a short stalk with its float, at its own bearing round the stipe, twisting as a ribbon does, streaming with the water past it and fluttering by centimetres; few, small worn blades low down and a dense ruff high up, as research-method.md §1 has it.
 
@@ -90,6 +97,36 @@ Giant kelp only, in the two views Dave liked in round 1's films: level through t
 - **A level view with too many plants is a tangle of grass**, not a forest. Ten clumps of 6 to 16 fronds, the nearest 6 m off, keep open water between them; fewer reads as bars.
 - **An anchored camera sees the whole swell.** The water moves as one column, ±0.7 to 1 m on an ordinary day, and the kelp with it, so from a camera fixed to the floor the nearest plant swings a large part of the screen each way every 12 s ([film2-up.mp4](kelp-forest/film2-up.mp4) most of all). A diver is carried by the same swell and sees the forest nearly still, with a slow parallax between near and far. Round 2 tried a camera carried with the water, and it was no calmer (Mock-ups, round 2).
 - **Cost:** the mock-up's per-pixel blades take hundreds of milliseconds of GPU a frame (the method research timed an early copy at about 360 ms), fine for pictures. The build would port its look, not its method: the hybrid the method research measured at about 1.2 ms of GPU and 0.55 to 0.75 ms of CPU (research-method.md §3, §5).
+
+## Settings
+- **Look** (`kelp.look`, a menu): teal in Light Mode and dusk in Dark Mode (the standard); teal by day and dusk at night; golden in Light Mode and dusk in Dark Mode; golden by day and dusk at night; teal; golden; dusk. By day means the Sun where you are, the light easing through civil twilight from 6° below the horizon to 1° above, as Jellyfish's. A change eases over a few seconds.
+- **View** (`kelp.view`, a menu): level through the forest, or looking up into the canopy. A change plants a new forest seen from there.
+- **Swell** (`kelp.swell`, 0.25 to 2×): the sea's height, 1 m at 1×. **Speed** (`kelp.speed`, 0.5 to 2×): the scene's clock.
+
+## Cost
+Measured by the render test at 2x Retina on an M3 Max, release build (`swift test -c release -Xswiftc -enable-testing`), seed 5, on a quiet Mac:
+
+| View, look | CPU | GPU |
+|---|---|---|
+| Level, teal | 1.89 ms | 1.93 ms |
+| Level, dusk | 1.79 ms | 1.95 ms |
+| Looking up, teal | 2.21 ms | 1.45 ms |
+| Looking up, dusk | 2.26 ms | 1.47 ms |
+
+A debug build reads about 12 ms of CPU. Looking up is over on CPU: its near plants are many, and each blade is a sprite posed every frame. The next saving is to draw the farther of them as cards. No `batteryRate`: a near stipe moves far over 2 device pixels a frame at 20 fps (research-method.md §5).
+
+## Checking it
+```sh
+defaults write com.dtanquary.atrium unfinished -bool true   # show hidden wallpapers, then relaunch
+SNAPSHOT_SCENE="Kelp Forest" SNAPSHOT_APPEARANCE=light SNAPSHOT_DEFAULTS="kelp.seed=5" swift test --filter everySceneRenders   # level, teal
+SNAPSHOT_SCENE="Kelp Forest" SNAPSHOT_APPEARANCE=dark SNAPSHOT_DEFAULTS="kelp.seed=5" swift test --filter everySceneRenders    # level, dusk
+SNAPSHOT_SCENE="Kelp Forest" SNAPSHOT_APPEARANCE=light SNAPSHOT_DEFAULTS="kelp.seed=5,kelp.view=1" swift test --filter everySceneRenders   # looking up
+```
+`kelp.seed` (any whole number but 0) pins the forest and the sea, for pictures that can be taken again; unset, each load is new. The Settings pictures are `preview-kelp-forest.jpg` (dusk, Dark Mode's standard) and `preview-kelp-forest-light.jpg` (teal), from the first two commands.
+
+## Shortcuts
+- `ponytail:` each kelp sprite's fog and light are fixed at its place at rest; a near frond swaying ±1 m at 6 m changes its fog by a few percent.
+- `ponytail:` the snow, caustics and ripples jump once an hour where the shader's clock wraps.
 
 ## Dave's feedback
 - **2026-11-08, on round 1's films:** "film1-level and film2-up look awesome, film3-bull was meh, lets focus on the first two". So giant kelp, seen level through the forest and looking up into the canopy; bull kelp and the mixed edge are set aside.
