@@ -94,7 +94,7 @@ Cost is unchanged: 1.5 to 1.8 ms of GPU.
 ## Settings
 - **Look** (`jellyfish.look`, a menu): lit tank in Light Mode, glow in Dark Mode (the standard); lit tank in Light Mode, crystal jellies in Dark Mode; lit tank by day, glow at night; lit tank by day, crystal jellies at night; lit tank; glow; crystal jellies. Each pick says what it does, rather than a second menu for the dark look that would show for only four of the seven picks, which a knob can't express. By day means the Sun where you are: the tank's light eases through civil twilight, from 6° below the horizon to 1° above.
 - **Jellyfish** (`jellyfish.count`, 0.5 to 1.5×): 84 moon jellies or 48 crystal jellies at 1×, Dave's pick from trying the slider (1.5× of step 3's 56 and 32, which were twice the first 28 and 16). A change refills the tank.
-- **Speed** (`jellyfish.speed`, 0.5 to 1.5×, standard 0.8×): the scene's clock, so pulses, turns and drift keep their proportions. 1× is the real pace; 0.8× is Dave's pick from trying it.
+- **Speed** (`jellyfish.speed`, 0.5 to 1.5×): the scene's clock, so pulses, turns and drift keep their proportions. 1× is 0.8 of the real pace (`Jellyfish.pace`), Dave's pick from trying it, so the slider runs from 0.4 to 1.2 of the real pace.
 
 ## Cost
 Measured by the render test at 2x Retina on an M3 Max, debug build (release CPU is lower), with the seed pinned:
@@ -128,7 +128,8 @@ swift test --filter jellyfishMove                    # speed and spread measured
 - **2026-11-08, on step 1 on his desktop:** "the overall movement of the jellyfish still doesnt seem very natural, they seem to not move very much at all as they pulse, please review video footage of dense jellyfish population and attempt to recreate that". So step 2: twice the travel per pulse, the group's loop round the tank, and the sides turning bells away.
 - **2026-11-08, on step 2's film beside step 1's:** "the new motion is much better".
 - **2026-11-08, on step 2 on his desktop:** "it looks much better, i just think that by default there should be a lot more of them, at least 2x more". So step 3.
-- **2026-11-08, on step 3, after trying the sliders:** "1.5x population and 0.8x speed is my ideal sweet spot in testing". So those are the standards: 84 moon jellies and 48 crystal jellies at 1×, and Speed at 0.8×, with 1× kept as the real pace.
+- **2026-11-08, on step 3, after trying the sliders:** "1.5x population and 0.8x speed is my ideal sweet spot in testing". So 84 moon jellies and 48 crystal jellies became 1× of Jellyfish, and Speed's standard 0.8×, with 1× kept as the real pace.
+- **2026-11-09, on that:** "about 1.5x population and 0.8x speed being the ideal default, we should rebalance all sliders from there and call that 1.0 1.0 for the values". So Speed's 1× is now 0.8 of the real pace, with 0.5 to 1.5× round it, as Jellyfish already was.
 
 ## What the mock-ups showed
 - **Deep jellies are small.** At 6 to 15 cm, a camera 1 to 6 m off made them specks. The camera is now set back by the animals' size: about 45 cm to 4 m for the deep set, and half as far again for moon jellies.

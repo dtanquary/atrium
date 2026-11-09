@@ -21,8 +21,10 @@ final class Jellyfish: SKScene {
         Knob(key: "jellyfish.look", label: "Look", range: 0...Double(looks.count - 1), standard: 0, section: "Look",
              format: .choice(looks)),
         Knob(key: "jellyfish.count", label: "Jellyfish", range: 0.5...1.5, standard: 1, format: .times),
-        Knob(key: "jellyfish.speed", label: "Speed", range: 0.5...1.5, standard: 0.8, format: .times), // 1x is the real pace
+        Knob(key: "jellyfish.speed", label: "Speed", range: 0.5...1.5, standard: 1, format: .times),
     ]
+    /// Speed's 1x as a share of the real pace: Dave's pick from trying the slider.
+    nonisolated static let pace = 0.8
 
     /// A species: its sizes and pulse, how it moves (research-motion.md: measured from footage of real groups), and
     /// the defines its shader is built with. A moon jelly pulses every 1.6 s at 15 cm, the squeeze 39% of it, and goes
@@ -208,7 +210,7 @@ final class Jellyfish: SKScene {
     // MARK: - Motion
 
     override func update(_ currentTime: TimeInterval) {
-        let dt = frameTime(currentTime, &lastTime) * Self.knobs[2].value
+        let dt = frameTime(currentTime, &lastTime) * Self.knobs[2].value * Self.pace
         // Steps of 1/60 s at fixed times, so the scene moves the same at any frame rate.
         let first = (simTime / Self.step).rounded(.down) + 1
         simTime += dt
