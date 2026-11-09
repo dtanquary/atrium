@@ -6,11 +6,11 @@ import SpriteKit
 
 /// Moon jellies or crystal jellies drifting in a tank, drawn by one shader a jelly rather than cut out of photos, and
 /// moving as footage of real groups measured (docs/jellyfish/research-motion.md): each pulse a quick squeeze and a
-/// slow re-opening, each bell turning and tumbling in 3D, the group carried round by the tank's slow current. Three
-/// looks: moon jellies in a lit blue tank, the same moon jellies with a steady blue glow (made up: no jelly glows
-/// steadily), and crystal jellies under blue light with their fluorescent green rings. The Look menu can follow Light
-/// and Dark Mode or the Sun where you are, the lit tank by day; between moon looks only the light changes, and the
-/// crystal jellies fade in and out as their own group.
+/// slow re-opening, each bell turning and tumbling in 3D, the group swimming and carried round the tank in a slow
+/// loop. Three looks: moon jellies in a lit blue tank, the same moon jellies with a steady blue glow (made up: no
+/// jelly glows steadily), and crystal jellies under blue light with their fluorescent green rings. The Look menu can
+/// follow Light and Dark Mode or the Sun where you are, the lit tank by day; between moon looks only the light
+/// changes, and the crystal jellies fade in and out as their own group.
 final class Jellyfish: SKScene {
     nonisolated static let looks = [
         "Lit tank in Light Mode, glow in Dark Mode", "Lit tank in Light Mode, crystal jellies in Dark Mode",
@@ -26,7 +26,9 @@ final class Jellyfish: SKScene {
 
     /// A species: its sizes and pulse, how it moves (research-motion.md: measured from footage of real groups), and
     /// the defines its shader is built with. A moon jelly pulses every 1.6 s at 15 cm, the squeeze 39% of it, and goes
-    /// about 0.2 diameters a pulse; a crystal jelly glides with its tentacles streaming behind and pulses in bursts.
+    /// half a diameter a pulse, between the footage's 0.2 (a floor: measured against the group, which swims too) and a
+    /// lone lab jelly's 0.57 (Gemmell 2013); a crystal jelly glides with its tentacles streaming behind and pulses in
+    /// bursts.
     struct Species {
         var count: Int, diameter: ClosedRange<Double>, period: Double, perPulse: Double
         var share = 0.39, turnChance = 0.4, turnAngle = 0.2...0.7, wobble = 0.06, rock = 0.11, drift = 0.09
@@ -38,13 +40,13 @@ final class Jellyfish: SKScene {
         var defines: [String: String]
     }
 
-    static let moon = Species(count: 28, diameter: 0.12...0.25, period: 1.6, perPulse: 0.22, width: 2.6, above: 0.8,
+    static let moon = Species(count: 28, diameter: 0.12...0.25, period: 1.6, perPulse: 0.5, width: 2.6, above: 0.8,
                               tentacles: 0.32, arms: 1.0, defines: [
         "NT": "120", "TLEN": "0.32", "TW": "0.006", "SWAY": "0.25", "NOA": "4", "ALEN": "1.0", "AW": "0.17",
         "ASPREAD": "0.22", "ASWAY": "0.25", "TWIST": "3.0", "HEIGHT": "0.42", "RISE": "0.32", "SHRINK": "0.14",
         "NC": "32.0", "CANALSHARP": "10.0", "CANALK": "0.5", "GONADS": "1", "CONVERGE": "0.0", "TVARY": "0.0", "RING": "0",
     ])
-    static let crystal = Species(count: 16, diameter: 0.08...0.2, period: 1.8, perPulse: 0.25, restChance: 0.25, rest: 0.8...3.0,
+    static let crystal = Species(count: 16, diameter: 0.08...0.2, period: 1.8, perPulse: 0.35, restChance: 0.25, rest: 0.8...3.0,
                                  righting: 0.02, sag: 0.05, width: 2.6, above: 0.7, tentacles: 7, arms: 0.35, defines: [
         "NT": "36", "TLEN": "7.0", "TW": "0.005", "SWAY": "0.06", "NOA": "1", "ALEN": "0.35", "AW": "0.3",
         "ASPREAD": "0.0", "ASWAY": "0.05", "TWIST": "1.5", "HEIGHT": "0.36", "RISE": "0.26", "SHRINK": "0.12",
@@ -74,6 +76,7 @@ final class Jellyfish: SKScene {
 
     private static let step = 1.0 / 60, kept = 600 // 10 s of the axis's history, for the longest tentacles
     private static let fov = 2 * tan(25 * Double.pi / 180) // view width per metre of depth
+    private static let wallTurn = 0.6 // how fast a side's current turns a bell away, rad/s at the side
     private let current = 0.02 // the tank's current at its rim, m/s (display tanks run 1-3 cm/s: research-motion.md)
     private let pitch = 12 * Double.pi / 180 // looking a little up into the tank, as people do: more undersides show
 
@@ -226,13 +229,14 @@ final class Jellyfish: SKScene {
     }
 
     /// Steps one group 1/60 s. Each pulse is a little longer or shorter than the last; some turn the bell in any
-    /// direction, all wobble it, and a few are followed by a rest. Between, the axis drifts slowly, the bell rights
-    /// itself as the sine of its tilt (weak lying over, weaker upside down), the tank's current carries it round and
-    /// turns it with it, and neighbours and the tank's sides push it gently away. One that touches another stops
-    /// pulsing for a moment, then turns away (Albert 2011, and one meeting filmed).
+    /// direction, all wobble it, and a few are followed by a rest. Between, the axis drifts slowly, the bell turns
+    /// toward the group's slow loop round the view (as the sine of how far off it is, so one pointing the other way
+    /// comes round slowly), the tank's current carries it round and turns it with it, and neighbours and the tank's
+    /// sides push it gently away and turn it from them. One that touches another stops pulsing for a moment, then
+    /// turns away (Albert 2011, and one meeting filmed).
     private func move(_ group: Group, at now: Double) {
         let sp = group.species, (near, far) = depths(sp), dt = Self.step
-        let up = SIMD3<Double>(0, 1, 0), aspect = Double(size.width / size.height), spin = current / (Self.fov * (near + far) / 4)
+        let aspect = Double(size.width / size.height), spin = current / (Self.fov * (near + far) / 4)
         for i in group.jellies.indices {
             var j = group.jellies[i]
             if now >= j.nextStart {
@@ -252,8 +256,14 @@ final class Jellyfish: SKScene {
             j.spin -= j.axis * dot(j.spin, j.axis)
             let w = length(j.spin)
             if w > 1e-6 { j.axis = norm(turned(j.axis, j.spin / w, w * dt)) }
-            let tilt = acos(max(-1, min(1, dot(j.axis, up))))
-            if tilt > 1e-3 && tilt < .pi - 1e-3 { j.axis = norm(turned(j.axis, norm(cross(j.axis, up)), sp.righting * sin(tilt) * dt)) }
+            let half = Self.fov * j.p.z / 2
+            let (hx, hy) = (half * 0.92 - j.d / 2, half / aspect * 0.8) // the sides keep a whole bell in view
+            // The bell is drawn round the group's slow loop: up one side, across the top, down the other and back
+            // across the bottom (Albert 2011: one end of an aggregation swims up, the other down), weakly near the
+            // middle. Drawn only upward, the group gathered in the top half and the upright ones pulsed against it.
+            let loop = SIMD3(-0.5 * j.p.y / hy, j.p.x / hx, 1e-3), goal = norm(loop), pull = min(1, 1.5 * length(loop))
+            let tilt = acos(max(-1, min(1, dot(j.axis, goal))))
+            if tilt > 1e-3 && tilt < .pi - 1e-3 { j.axis = norm(turned(j.axis, norm(cross(j.axis, goal)), sp.righting * pull * sin(tilt) * dt)) }
             j.axis = norm(turned(j.axis, SIMD3(0, 0, 1), spin * dt))
 
             let tau = now - j.lastStart, swimming = tau < j.period
@@ -274,11 +284,16 @@ final class Jellyfish: SKScene {
                     }
                 }
             }
-            let half = Self.fov * j.p.z / 2
-            let (hx, hy) = (half * 0.92 - j.d / 2, half / aspect * 0.8) // the sides keep a whole bell in view
             v.x -= max(0, abs(j.p.x) - hx) * copysign(0.3, j.p.x)
             v.y -= max(0, abs(j.p.y) - hy) * copysign(0.3, j.p.y)
             v.z += max(0, near - j.p.z) - max(0, j.p.z - far) * 0.3
+            // Within a bell of a side, the tank's current along it turns the bell away, as a kreisel's wall flow does:
+            // without it the loop carries them into the sides, and they ride round pressed against them.
+            let reach = 1 * j.d, close = { (gap: Double) in max(0, min(1, 1 - gap / reach)) }
+            let away = SIMD3(-copysign(close(hx - abs(j.p.x)), j.p.x), -copysign(close(hy - abs(j.p.y)), j.p.y), 0)
+            if length(away) > 0.01, dot(j.axis, norm(away)) < 0.9 {
+                j.axis = norm(turned(j.axis, norm(cross(j.axis, away)), Self.wallTurn * min(1, length(away)) * dt))
+            }
             j.p += v * dt
             j.head = (j.head + 1) % Self.kept
             j.history[j.head] = j.axis

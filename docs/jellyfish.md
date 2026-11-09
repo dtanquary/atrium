@@ -8,7 +8,7 @@ It began in [ideas.md](ideas.md) under "Left out on purpose": "Photo cut-outs of
 - **Data:** none. Everything is drawn; reference photos stay references.
 - **Research:** [the method](jellyfish/research-method.md) (swimming numbers, bioluminescence, how to draw it, cost measured with a SpriteKit probe), [the look](jellyfish/research-look.md) (species, palettes, brightness, names) and [how real groups move](jellyfish/research-motion.md), measured from nine freely licensed clips of real tanks and a wild bloom. Every figure in them is marked checked or unchecked.
 - **Scripts:** `jellyfish/mock.swift` draws the mock-ups with SpriteKit as the app would; `sheet.py` lays out the sheets and films from the variants in `variants.py`.
-- **Where it stands (2026-11-07):** Dave has chosen from round 2; the build has begun, hidden behind the `unfinished` switch.
+- **Where it stands (2026-11-08):** built and hidden behind the `unfinished` switch; the motion was reworked after Dave's first look on his desktop (step 2 below).
 
 ## Dave's decisions (2026-11-07)
 - **Groups, not a single jelly:** "the single jellifish is very underwhelming, we need to focus on groups that are moving". The deep species, the close-up and the ROV and lights-off looks are set aside.
@@ -74,6 +74,21 @@ Questions for round 2:
 - **Groups.** Moon jellies and crystal jellies are two groups, each with its own shader and a fade. A group is filled only when it's to be seen, run 10 s at once so its poses, pulses and tentacles are already under way, and emptied when it has faded out.
 - **The look.** One shader draws a moon jelly lit and glowing and mixes the two by how lit the tank is, so Light and Dark Mode, or dusk, change only the light; the crystal jellies fade in as their own group. The scene watches the appearance itself (`followsAppearance`), and checks the Sun every minute.
 
+**Step 2 (2026-11-08): getting somewhere as they pulse.** Dave, on his desktop: "they seem to not move very much at all as they pulse". Measured as the footage was (`jellyfishMoveAsFootage`, two minutes of 28 moon jellies), they crossed the screen at 0.08 diameters a second relative to the group, against the footage's 0.14, and 56% of them sat in the top third with 10% in the bottom: drawn only upward, the upright ones swam to the top and pulsed against it going nowhere. Steady-camera clips reviewed this round (research-motion.md, addendum) show a lone jelly can pulse nearly in place for seconds too, so speed alone wasn't it: a whole group pinned to the top was. A lone lab jelly goes about 0.57 diameters a pulse (derived from Gemmell 2013). Three changes:
+- **Half a diameter a pulse** for moon jellies (was 0.22), 0.35 for crystal jellies (was 0.25): between the footage's figure, a floor since it's measured against a group that swims too, and the lab's.
+- **The group's loop.** Each bell is drawn round a slow loop through the view, up one side, across the top, down the other and back across the bottom, weakly near the middle and with the sideways legs half as strong as the upright ones, as wild aggregations swim up at one end and down at the other (Albert 2011, p479). It replaces righting toward up, and leaves as many bells pointing down as up.
+- **The sides turn a bell away** within a bell's width of them, as a kreisel's wall flow does; without it the loop carried them into the sides to ride round pressed against them.
+
+| | Step 1 | Step 2 | Footage |
+|---|---|---|---|
+| Speed relative to the group, median | 0.08 D/s | 0.18 D/s (0.15 at seed 7) | 0.14 D/s (a floor) |
+| Top third / bottom third of the screen | 56% / 10% | 25% / 35% (31% / 26% at seed 7) | jellies everywhere |
+| Pointing within 45° of up / of down | 41% / 1% | 22% / 16% | about half dome-down on a tank's downward side |
+| Side-on bells from vertical, median | 36° | 37° | 26° |
+| Face-on bells | 18% | 21% | 10% |
+
+Cost is unchanged: 1.5 to 1.8 ms of GPU.
+
 ## Settings
 - **Look** (`jellyfish.look`, a menu): lit tank in Light Mode, glow in Dark Mode (the standard); lit tank in Light Mode, crystal jellies in Dark Mode; lit tank by day, glow at night; lit tank by day, crystal jellies at night; lit tank; glow; crystal jellies. Each pick says what it does, rather than a second menu for the dark look that would show for only four of the seven picks, which a knob can't express. By day means the Sun where you are: the tank's light eases through civil twilight, from 6° below the horizon to 1° above.
 - **Jellyfish** (`jellyfish.count`, 0.5 to 1.5×): 28 moon jellies or 16 crystal jellies at 1×. A change refills the tank.
@@ -96,6 +111,7 @@ defaults write com.dtanquary.atrium unfinished -bool true   # show hidden wallpa
 SNAPSHOT_SCENE="Jellyfish" SNAPSHOT_APPEARANCE=light SNAPSHOT_DEFAULTS="jellyfish.seed=22" swift test --filter everySceneRenders   # the lit tank
 SNAPSHOT_SCENE="Jellyfish" SNAPSHOT_APPEARANCE=dark SNAPSHOT_DEFAULTS="jellyfish.seed=22" swift test --filter everySceneRenders    # the glow
 SNAPSHOT_SCENE="Jellyfish" SNAPSHOT_DEFAULTS="jellyfish.seed=21,jellyfish.look=6" swift test --filter everySceneRenders          # crystal jellies
+swift test --filter jellyfishMove                    # speed and spread measured as the footage was; JELLY_SEED and JELLY_LOOK pick another
 ```
 `jellyfish.seed` (any whole number but 0) pins the tank's layout and every pulse and turn, for pictures that can be taken again; unset, each load is new. The Settings pictures are `preview-jellyfish.jpg` (the glow, Dark Mode's standard) and `preview-jellyfish-light.jpg` (the lit tank), from the first two commands. The mock and its statistics, which measure poses, turns, spacing and cover as research-motion.md measured footage, stay in `docs/jellyfish/` (`JSTATS=1` on `mock.swift`).
 
@@ -105,6 +121,9 @@ SNAPSHOT_SCENE="Jellyfish" SNAPSHOT_DEFAULTS="jellyfish.seed=21,jellyfish.look=6
 
 ## Dave's feedback
 - **2026-11-07, on round 1:** "the single jellifish is very underwhelming, we need to focus on groups that are moving"; "sheet-1 is the best, and within that items D, E, and F are what we should focus in on"; "we need to really focus on natural movement, do more research if needed, its not quite there yet". So round 2 is groups in motion only, in three lights: crystal jellies under blue light with their green rings (D), moon jellies in the lit blue tank (E), and the steady blue glow (F), which no real jelly makes and the sheet said so. The deep species, the single close-up and the other sheets' questions are set aside. Motion gets its own research, measured from footage of real groups.
+
+- **2026-11-08, on step 1 on his desktop:** "the overall movement of the jellyfish still doesnt seem very natural, they seem to not move very much at all as they pulse, please review video footage of dense jellyfish population and attempt to recreate that". So step 2: twice the travel per pulse, the group's loop round the tank, and the sides turning bells away.
+- **2026-11-08, on step 2's film beside step 1's:** "the new motion is much better".
 
 ## What the mock-ups showed
 - **Deep jellies are small.** At 6 to 15 cm, a camera 1 to 6 m off made them specks. The camera is now set back by the animals' size: about 45 cm to 4 m for the deep set, and half as far again for moon jellies.
@@ -127,6 +146,7 @@ SNAPSHOT_SCENE="Jellyfish" SNAPSHOT_DEFAULTS="jellyfish.seed=21,jellyfish.look=6
 ## Still open
 - Round 2's open points: the crystal jellies' green ring still outshines their bells; the share of bells upside down is the weakest measurement (22 bells, one side of one tank); the touch behaviour comes from one filmed meeting.
 - Dave's picks for the four questions above.
+- After step 2, side-on bells lie further from vertical than the footage's (37° against 26°), and twice as many face the camera (21% against 10%). A stronger pull round the loop didn't change either.
 - The comb jelly is the weakest drawing: its rows read as dots at a distance.
 - The moon jelly's four gonads read as a cross seen side-on; seen from above they'd be its four rings.
 - Whether "bioluminescent" in the brief means C (true and mostly black) or F (made up and lovely).

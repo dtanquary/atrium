@@ -189,3 +189,11 @@ None of the footage is in the repo; it was measured only. Copying any of it into
 - Fossette S et al. 2015, "Current-oriented swimming by jellyfish and its role in bloom maintenance", *Curr Biol* 25:342–347 (search summary). https://doi.org/10.1016/j.cub.2014.11.050
 - Malul D et al. 2024, "Directional swimming patterns in jellyfish aggregations", *Curr Biol* 34:4033–4038 (search summary). https://doi.org/10.1016/j.cub.2024.07.038
 - Colin SP, Costello JH 2002, *J Exp Biol* 205:427–437: not read (blocked).
+
+## Addendum, 2026-11-08: steady cameras, and the scene measured the same way
+After Dave found the built scene's jellies "seem to not move very much at all as they pulse", I looked again at the footage above beside the scene, and at two steadier clips, by eye from frame sheets at 1 to 10 fps:
+- **Pazifische Ohrenqualle (Zoo Leipzig)** (Fiver, der Hellseher, CC BY-SA 4.0, 4.8 s, 4K): one *Aurelia labiata* tilted 30–45°, pulsing about three times. It stays within about a quarter of a diameter of where it started while its bell squeezes hard, rocks and swings its fringe. https://commons.wikimedia.org/wiki/File:Pazifische_Ohrenqualle_(Zoo_Leipzig).webm
+- **Fortbewegung einer Ohrenqualle** (C. Reinboth, CC BY 4.0, 5.7 s): a small moon jelly in a dark tank, turning in place more than travelling. https://commons.wikimedia.org/wiki/File:Fortbewegung_einer_Ohrenqualle.webm
+- Looked at but not used: *Aurelia aurita-Moon jellyfish* (Gh5046, public domain): close-ups with a moving camera; *Jellyfish in a aquarium* (Amada44, CC BY-SA 3.0): *Mastigias*, not moon jellies; *Jellyfish at Monterey Bay Aquarium 1 2017-11-21* (Fastily, CC BY-SA 4.0): sea nettles.
+
+So a lone jelly can pulse nearly in place for a few seconds. What the scene got wrong showed only once it was measured as the footage was (`jellyfishMoveAsFootage` in the tests): 0.08 diameters a second relative to the group against the footage's 0.14, and 56% of the jellies in the top third, the upright ones swimming against the top. The footage's tanks are full top to bottom. docs/jellyfish.md, step 2, has what changed and the numbers after.
