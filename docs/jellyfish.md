@@ -16,7 +16,7 @@ It began in [ideas.md](ideas.md) under "Left out on purpose": "Photo cut-outs of
 - **Two automatic modes:** "an auto mode for system along with a mode that follows day/night where E is the light mode, F or D is dark". So a Look menu of five: follow Light and Dark Mode, follow day and night where you are, or one of the three always. **As decided in the build:** which dark look the automatic modes use is a setting, F by default, since F is the same moon jellies as E and the change is then only the light.
 - **Natural motion first:** "we need to really focus on natural movement". The motion is set to what research-motion.md measured from footage, and is judged in films before stills.
 
-Still his to decide, once it runs on his desktop: the density (28 moon jellies, 16 crystal jellies in the films), the pace, and whether the crystal jellies' rings should give way more to their bells.
+Still his to decide, once it runs on his desktop: the pace, and whether the crystal jellies' rings should give way more to their bells.
 
 ## Names and look-alikes
 - **Jellyfish** is the name proposed: plain, like Fireflies. "Jellies" sits beside Apple's own Palau Jellies and Alaskan Jellies aerials, and "Deep Sea" is too near Space Tour's deep space. JELLYFISH is registered in the US for unrelated goods only, checked through third-party mirrors ([research-look.md](jellyfish/research-look.md) §6).
@@ -89,9 +89,11 @@ Questions for round 2:
 
 Cost is unchanged: 1.5 to 1.8 ms of GPU.
 
+**Step 3 (2026-11-08): twice as many.** Dave, on step 2 on his desktop: "it looks much better, i just think that by default there should be a lot more of them, at least 2x more". So 56 moon jellies and 32 crystal jellies at 1× (up to 84 and 48 at 1.5×). Twice as many in the same tank doubled the cost of drawing them (3.4 to 4.1 ms of GPU), most of it in the near bells, which are the biggest. So the tank now runs 3.5 times the animals' size deep rather than 2.2, and the added jellies are mostly the small, distant ones the Monterey footage is full of, with about as many near the glass as before. Speed and spread measure as in step 2 (0.16 to 0.17 diameters a second relative to the group; 27 to 28% of them in the top third, 31 to 32% in the bottom). Two savings came out of it with no change to the picture: the axis history is kept already turned by the camera's pitch, rather than turned 32 times a jelly every frame, and the tentacles' spine is laid out in 16 steps rather than 32; together they cut the scene's own update from 2.5 to 1.5 ms in a debug build (0.1 ms in release). Sixteen march steps through the bell instead of 20 was tried and not kept: it showed grain and softened the rims.
+
 ## Settings
 - **Look** (`jellyfish.look`, a menu): lit tank in Light Mode, glow in Dark Mode (the standard); lit tank in Light Mode, crystal jellies in Dark Mode; lit tank by day, glow at night; lit tank by day, crystal jellies at night; lit tank; glow; crystal jellies. Each pick says what it does, rather than a second menu for the dark look that would show for only four of the seven picks, which a knob can't express. By day means the Sun where you are: the tank's light eases through civil twilight, from 6° below the horizon to 1° above.
-- **Jellyfish** (`jellyfish.count`, 0.5 to 1.5×): 28 moon jellies or 16 crystal jellies at 1×. A change refills the tank.
+- **Jellyfish** (`jellyfish.count`, 0.5 to 1.5×): 56 moon jellies or 32 crystal jellies at 1× (Dave: "at least 2x more" than the first 28 and 16). A change refills the tank.
 - **Speed** (`jellyfish.speed`, 0.5 to 1.5×): the scene's clock, so pulses, turns and drift keep their proportions.
 
 ## Cost
@@ -99,9 +101,11 @@ Measured by the render test at 2x Retina on an M3 Max, debug build (release CPU 
 
 | Look | CPU | GPU |
 |---|---|---|
-| Lit tank, 28 moon jellies | 1.77 ms | 1.56 ms |
-| Glow, 28 moon jellies | 1.91 ms | 1.59 ms |
-| Crystal jellies, 16 | 1.11 ms | 1.62 ms |
+| Lit tank, 56 moon jellies | 3.3–3.5 ms | 2.3–3.0 ms |
+| Glow, 56 moon jellies | 3.4 ms | 2.3–2.4 ms |
+| Crystal jellies, 32 | 2.0–2.4 ms | 2.6–3.0 ms |
+
+Ranges are 4, 8 and 12 s in, measured while another render shared the GPU at times, so take the low ends. That is over the 2 ms of GPU a wallpaper aims for, the price of twice as many, and was 1.56 to 1.62 ms with 28 and 16. In a release build the moon jellies' CPU is 0.7 to 0.95 ms.
 
 No `batteryRate` yet: a near bell's margin moves about 3 device pixels a frame at 20 fps in the squeeze, a little over the 2 that can't be seen, so 20 fps waits on Dave seeing it side by side, as research-method.md advised.
 
@@ -117,13 +121,14 @@ swift test --filter jellyfishMove                    # speed and spread measured
 
 ## Shortcuts
 - The sway and the marine snow jump once an hour where the shader's clock wraps.
-- Every pair of jellies is checked for touching every step; fine at 42 at most.
+- Every pair of jellies is checked for touching every step; fine at 84 at most.
 
 ## Dave's feedback
 - **2026-11-07, on round 1:** "the single jellifish is very underwhelming, we need to focus on groups that are moving"; "sheet-1 is the best, and within that items D, E, and F are what we should focus in on"; "we need to really focus on natural movement, do more research if needed, its not quite there yet". So round 2 is groups in motion only, in three lights: crystal jellies under blue light with their green rings (D), moon jellies in the lit blue tank (E), and the steady blue glow (F), which no real jelly makes and the sheet said so. The deep species, the single close-up and the other sheets' questions are set aside. Motion gets its own research, measured from footage of real groups.
 
 - **2026-11-08, on step 1 on his desktop:** "the overall movement of the jellyfish still doesnt seem very natural, they seem to not move very much at all as they pulse, please review video footage of dense jellyfish population and attempt to recreate that". So step 2: twice the travel per pulse, the group's loop round the tank, and the sides turning bells away.
 - **2026-11-08, on step 2's film beside step 1's:** "the new motion is much better".
+- **2026-11-08, on step 2 on his desktop:** "it looks much better, i just think that by default there should be a lot more of them, at least 2x more". So step 3.
 
 ## What the mock-ups showed
 - **Deep jellies are small.** At 6 to 15 cm, a camera 1 to 6 m off made them specks. The camera is now set back by the animals' size: about 45 cm to 4 m for the deep set, and half as far again for moon jellies.
