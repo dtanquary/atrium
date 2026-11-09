@@ -20,7 +20,7 @@ LOOP=12 FADE=2 # seconds: the loop, and the crossfade from its tail into its hea
 WORKS='black-hole|Black Hole|50|2.5|SNAPSHOT_DEFAULTS=blackhole.size=2.5,blackhole.speed=2.5|SNAPSHOT_DEFAULTS=blackhole.speed=2.5
 schlieren|Schlieren|50|10|SNAPSHOT_DEFAULTS=schlieren.palette=Candlelight,schlieren.filter=0,schlieren.source=3
 nebula|Nebula|54|4|SNAPSHOT_DEFAULTS=nebula.palette=Hubble
-pixel-window-seat|Pixel Window Seat|70|5|TRAIN_AT=12000 SNAPSHOT_DEFAULTS=seat.orbit=2,seat.country=3,seat.previewTime=1,seat.previewHour=18.7
+kelp-forest|Kelp Forest|58|5|SNAPSHOT_DEFAULTS=kelp.seed=5,kelp.look=6
 murmuration|Murmuration|44|20|SNAPSHOT_DEFAULTS=murmuration.light=5,murmuration.ground=0 MURMURATION_SEED=3
 fish-tank|Fish Tank|42|4|SNAPSHOT_APPEARANCE=light'
 

@@ -2,11 +2,11 @@
 // dissolves one section's work into the next, and the page's accent follows. The page lists its sections as
 // one-screen-tall elements with data-work and lays out its own words.
 
-/** Each work's accent: its render's dominant hue at oklch L 0.82, C ≤ 0.11, measured in the design handoff (Pixel Window Seat's,
+/** Each work's accent: its render's dominant hue at oklch L 0.82, C ≤ 0.11, measured in the design handoff (Kelp Forest's,
  *  Black Hole's and Schlieren's the same way, later: the render's chroma-weighted mean hue at L 0.82, C 0.11). */
 const accents = {
   'black-hole': '#f7b477', schlieren: '#e5bf6d', nebula: '#95d0d9',
-  'pixel-window-seat': '#bcbaff', murmuration: '#ecb799', 'fish-tank': '#9bc5ff',
+  'kelp-forest': '#7acfff', murmuration: '#ecb799', 'fish-tank': '#9bc5ff',
 };
 const media = new URL('media/', import.meta.url);
 const kind = matchMedia('(max-aspect-ratio: 1/1)').matches ? 'phone' : 'desktop';

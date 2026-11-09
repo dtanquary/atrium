@@ -48,7 +48,7 @@
 
   // Portrait: the screen's own loops, and where each portrait crop is centred, as a share of the width. These mirror
   // media.sh's focal points, held clear of the edges the way its 3:4 slab is.
-  const focal = { 'black-hole': 0.5, schlieren: 0.5, nebula: 0.54, 'pixel-window-seat': 0.7, murmuration: 0.44, 'fish-tank': 0.42 };
+  const focal = { 'black-hole': 0.5, schlieren: 0.5, nebula: 0.54, 'kelp-forest': 0.58, murmuration: 0.44, 'fish-tank': 0.42 };
   const centre = slug => Math.min(0.757, Math.max(0.243, focal[slug] ?? 0.5));
   const loop = slug => {
     const v = document.createElement('video');
