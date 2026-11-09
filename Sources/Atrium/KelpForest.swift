@@ -17,11 +17,11 @@ final class KelpForest: SKScene {
         "Golden in Light Mode, dusk in Dark Mode", "Golden by day, dusk at night",
         "Teal", "Golden", "Dusk",
     ]
-    nonisolated static let views = ["Level through the forest", "Looking up into the canopy"]
+    nonisolated static let views = ["Level through the forest", "Looking up into the canopy", "Moving between the two"]
     nonisolated static let knobs = [
         Knob(key: "kelp.look", label: "Look", range: 0...Double(looks.count - 1), standard: 0, section: "Look",
              format: .choice(looks)),
-        Knob(key: "kelp.view", label: "View", range: 0...1, standard: 0, section: "Look", format: .choice(views)),
+        Knob(key: "kelp.view", label: "View", range: 0...Double(views.count - 1), standard: 0, section: "Look", format: .choice(views)),
         Knob(key: "kelp.swell", label: "Swell", range: 0.25...2, standard: 1, section: "Sea", format: .times),
         Knob(key: "kelp.speed", label: "Speed", range: 0.5...2, standard: 1, section: "Sea", format: .times),
     ]
@@ -67,20 +67,28 @@ final class KelpForest: SKScene {
     // MARK: - Views
 
     /// Where the camera stands: metres above the floor, the water's depth, how far it's tipped up, and where the plants
-    /// stand. Both as the mock-ups Dave chose (round 2's A and D).
-    struct View { var camY: Double, depth: Double, pitch: Double, near: Double, far: Double, plants: Int }
+    /// stand. The first two as the mock-ups Dave chose (round 2's A and D). The third moves between them, as a diver
+    /// looks up and back: it holds level for four minutes, tips up over 40 s, holds, and tips back, over one forest
+    /// with plants both near (for looking up) and far (for looking level).
+    struct View { var camY: Double, depth: Double, pitch: Double, near: Double, far: Double, plants: Int, up: Double? = nil }
     static let viewsAt = [View(camY: 2.5, depth: 12, pitch: 20, near: 6, far: 30, plants: 10),
-                          View(camY: 2, depth: 10, pitch: 58, near: 3.5, far: 14, plants: 11)]
+                          View(camY: 2, depth: 10, pitch: 58, near: 3.5, far: 14, plants: 11),
+                          View(camY: 2.5, depth: 12, pitch: 20, near: 4, far: 30, plants: 12, up: 58)]
+    static let hold = 240.0, tilt = 40.0
 
     // MARK: - State
 
     private var viewIndex: Int
     private var spot: View { Self.viewsAt[viewIndex] }
+    /// How far the camera is tipped up now, in degrees, and seconds of the cycle between level and looking up.
+    private var pitch = 20.0, cycle = 0.0
+    private var holdfasts: [(node: SKSpriteNode, at: SIMD3<Double>)] = []
+    private var shownLook = KelpForest.teal
     private let fovTan = tan(32 * Double.pi / 180) // half the view's width, as a slope: 64° across
     private var cam: SIMD3<Double>
     private var sea: Sea
     private var fronds: [Frond] = []
-    private var simTime = 0.0, lastTime: TimeInterval?
+    private var simTime = 0.0, lastTime: TimeInterval?, lastCycle: TimeInterval?
     private var rng: SplitMix
     private var atlas: Atlas!
     private let water = SKSpriteNode(color: .black, size: .zero)
@@ -94,6 +102,7 @@ final class KelpForest: SKScene {
     private let uGlow = SKUniform(name: "u_glow", vectorFloat3: .zero), uSand = SKUniform(name: "u_sand", vectorFloat3: .zero)
     private let uSunDir = SKUniform(name: "u_sundir", vectorFloat3: .zero)
     private let uLook = SKUniform(name: "u_look", vectorFloat4: .zero) // rays, snow, caustics, exposure
+    private let uPitch = SKUniform(name: "u_pitch", float: 0)
     private let uTime = SKUniform(name: "u_t", float: 0), uSurge = SKUniform(name: "u_surge", vectorFloat2: .zero)
     private let uPx: SKUniform
 
@@ -122,19 +131,20 @@ final class KelpForest: SKScene {
     private func setUp() {
         atlas = Atlas.shared()
         cam = SIMD3(0, spot.camY, 0)
+        pitch = spot.pitch
+        cycle = UserDefaults.standard.double(forKey: "kelp.cycleAt") // for pictures: seconds into the cycle
         sea = Sea(height: Self.knobs[2].value, depth: spot.depth, rng: &rng)
         water.size = size
         water.anchorPoint = .zero
         water.zPosition = -1000
         water.shader = SKShader(source: defines + Self.common + Self.waterSource, uniforms: [
-            uExt, uDeep, uUp, uSky, uSun, uKelp, uGlow, uSand, uSunDir, uLook, uTime, uSurge, uPx,
+            uExt, uDeep, uUp, uSky, uSun, uKelp, uGlow, uSand, uSunDir, uLook, uPitch, uTime, uSurge, uPx,
             SKUniform(name: "u_canopy", texture: sharedTexture("kelp-canopy") { Self.canopy() }),
         ])
         addChild(water)
         let kelp = SKShader(source: defines + Self.common + Self.kelpSource, uniforms: [
-            uExt, uDeep, uUp, uSun, uKelp, uGlow, uSunDir, uLook, uTime, uPx,
+            uExt, uDeep, uUp, uSun, uKelp, uGlow, uSunDir, uLook, uPitch, uTime, uPx,
         ])
-        kelp.attributes = [SKAttribute(name: "a_card", type: .vectorFloat4), SKAttribute(name: "a_info", type: .vectorFloat4)]
         plant(with: kelp)
         settleLook(at: true)
         // Run the sea a while first, so the forest has settled into it: 30 s in steps of 1/30 s.
@@ -154,6 +164,7 @@ final class KelpForest: SKScene {
             viewIndex = Int(Self.knobs[1].value)
             removeAllChildren()
             fronds = []
+            holdfasts = []
             setUp()
             return
         }
@@ -164,7 +175,7 @@ final class KelpForest: SKScene {
     /// The view's fixed numbers, written into both shaders.
     private var defines: String {
         let d: [String: String] = [
-            "TANH": "\(fovTan)", "ASPECT": "\(Double(size.height / size.width))", "PITCH": "\(spot.pitch * .pi / 180)",
+            "TANH": "\(fovTan)", "ASPECT": "\(Double(size.height / size.width))",
             "CAMY": "\(spot.camY)", "DEPTH": "\(spot.depth)",
         ]
         return d.sorted { $0.key < $1.key }.map { "#define \($0.key) \($0.value)\n" }.joined()
@@ -207,7 +218,11 @@ final class KelpForest: SKScene {
         uExt.vectorFloat3Value = l.ext; uDeep.vectorFloat3Value = l.deep; uUp.vectorFloat3Value = l.up
         uSky.vectorFloat3Value = l.sky; uSun.vectorFloat3Value = l.sun; uKelp.vectorFloat3Value = l.kelp
         uGlow.vectorFloat3Value = l.glow; uSand.vectorFloat3Value = l.sand
-        uLook.vectorFloat4Value = [l.rays, l.snow, l.caustics, l.expo[viewIndex]]
+        // The exposure goes with how far the camera is tipped up: looking up into the light needs less.
+        let up = Float(simd_clamp((pitch - 20) / (58 - 20), 0, 1))
+        uLook.vectorFloat4Value = [l.rays, l.snow, l.caustics, l.expo[0] + (l.expo[1] - l.expo[0]) * up]
+        uPitch.floatValue = Float(pitch * .pi / 180)
+        shownLook = l
         // The Sun under water, bent toward the vertical by refraction, a little to one side of where we look.
         let zen = Double(90 - l.sunElevation) * .pi / 180, inWater = asin(sin(zen) / 1.333), az = 10 * Double.pi / 180
         uSunDir.vectorFloat3Value = SIMD3(Float(sin(inWater) * sin(az)), Float(cos(inWater)), Float(sin(inWater) * cos(az)))
@@ -262,7 +277,7 @@ final class KelpForest: SKScene {
                         let s = SKSpriteNode(texture: atlas.stipe)
                         s.anchorPoint = CGPoint(x: 0.5, y: 0)
                         s.zPosition = depthZ
-                        info(s, card: atlas.stipe, dist: mid.dist, height: len / 2, seed: 0)
+                        info(s, dist: mid.dist, height: len / 2, seed: 0)
                         s.shader = shader
                         addChild(s)
                         frond.stipe.append(s)
@@ -279,7 +294,7 @@ final class KelpForest: SKScene {
                             let w = length / Atlas.bladeLength
                             node.size = CGSize(width: Atlas.bladeCard.width * w * mid.ppm / 2, height: Atlas.bladeCard.height * w * mid.ppm / 2)
                             node.zPosition = depthZ
-                            info(node, card: atlas.blades[card], dist: mid.dist, height: u, seed: .random(in: 0...1, using: &rng))
+                            info(node, dist: mid.dist, height: u, seed: .random(in: 0...1, using: &rng))
                             node.shader = shader
                             addChild(node)
                             frond.blades.append(Blade(node: node, at: u, az: .random(in: 0...(2 * .pi), using: &rng),
@@ -296,7 +311,7 @@ final class KelpForest: SKScene {
                         let node = SKSpriteNode(texture: card)
                         node.anchorPoint = Atlas.cardAnchor
                         node.zPosition = depthZ
-                        info(node, card: card, dist: mid.dist, height: (f + 1 / Double(Self.links)) * len, seed: .random(in: 0...1, using: &rng))
+                        info(node, dist: mid.dist, height: (f + 1 / Double(Self.links)) * len, seed: .random(in: 0...1, using: &rng))
                         node.shader = shader
                         addChild(node)
                         frond.cards.append(node)
@@ -310,18 +325,19 @@ final class KelpForest: SKScene {
             holdfast.anchorPoint = CGPoint(x: 0.5, y: 0.1)
             holdfast.size = CGSize(width: Atlas.holdfastSize.width * at.ppm / 2, height: Atlas.holdfastSize.height * at.ppm / 2)
             holdfast.zPosition = CGFloat(-at.dist) + 0.01
-            info(holdfast, card: atlas.holdfast, dist: at.dist, height: 0.2, seed: 0.5)
+            info(holdfast, dist: at.dist, height: 0.2, seed: 0.5)
+            holdfasts.append((holdfast, SIMD3(x, 0, z)))
         }
     }
 
-    /// Sets a sprite's fixed numbers for the kelp shader: the card's place in the texture, and how far off it is, how
-    /// high, and a number of its own.
+    /// Sets a sprite's fixed numbers for the kelp shader, carried in its colour (the shader's `v_color_mix`): how far
+    /// off it is (to 64 m), how high (to 16 m), and a number of its own. Not as attributes: SpriteKit crashed copying
+    /// thousands of sprites' attribute values while taking the lock screen's still (docs/kelp-forest.md, Dave's feedback).
     // ponytail: fog and light are fixed at each sprite's place at rest; a near frond swaying ±1 m at 6 m changes its fog
-    // by a few percent. Set them each frame (an attribute a sprite) if a near one is seen to glow or darken wrongly.
-    private func info(_ node: SKSpriteNode, card: SKTexture, dist: Double, height: Double, seed: Double) {
-        let r = card.textureRect()
-        node.setValue(SKAttributeValue(vectorFloat4: [Float(r.minX), Float(r.minY), Float(r.width), Float(r.height)]), forAttribute: "a_card")
-        node.setValue(SKAttributeValue(vectorFloat4: [Float(dist), Float(height), Float(seed), 0]), forAttribute: "a_info")
+    // by a few percent. Set them each frame (its colour) if a near one is seen to glow or darken wrongly.
+    private func info(_ node: SKSpriteNode, dist: Double, height: Double, seed: Double) {
+        node.color = NSColor(red: min(dist / 64, 1), green: min(max(height, 0) / 16, 1), blue: seed, alpha: 1)
+        node.colorBlendFactor = 1
     }
 
     /// A frond at rest: up from its holdfast, leaning its own way, and whatever is longer than the water is deep lying
@@ -356,6 +372,14 @@ final class KelpForest: SKScene {
             shownLit = 1
         }
         if simTime - lastSun > 60 { settleLook(at: false) }
+        if let up = spot.up {
+            // Level, then tipping up, looking up, then tipping back, in real seconds whatever the Speed.
+            cycle = (cycle + frameTime(currentTime, &lastCycle)).truncatingRemainder(dividingBy: 2 * (Self.hold + Self.tilt))
+            let into = cycle - Self.hold, back = cycle - 2 * Self.hold - Self.tilt
+            let f = into < 0 ? 0 : back < 0 ? simd_smoothstep(0, Self.tilt, into) : 1 - simd_smoothstep(0, Self.tilt, back)
+            pitch = spot.pitch + (up - spot.pitch) * f
+            apply(shownLook)
+        }
         pose(at: simTime)
     }
 
@@ -391,7 +415,7 @@ final class KelpForest: SKScene {
     /// Where a point is on the screen, in pixels at 2x from the bottom left; how far ahead it is, and how many pixels a
     /// metre there spans.
     private func project(_ p: SIMD3<Double>) -> (px: SIMD2<Double>, ppm: Double, dist: Double) {
-        let rel = p - cam, pitch = spot.pitch * .pi / 180
+        let rel = p - cam, pitch = self.pitch * .pi / 180
         let zc = max(rel.y * sin(pitch) + rel.z * cos(pitch), 0.05), yc = rel.y * cos(pitch) - rel.z * sin(pitch)
         let w = Double(size.width) * 2, h = Double(size.height) * 2, aspect = h / w
         return (SIMD2(w / 2 + rel.x / zc / fovTan * w / 2, h / 2 + yc / zc / (fovTan * aspect) * h / 2), w / 2 / (fovTan * zc), simd_length(rel))
@@ -405,6 +429,11 @@ final class KelpForest: SKScene {
         uSurge.vectorFloat2Value = [Float(sh.x), Float(sh.y)]
         // ponytail: the snow, caustics and ripples jump once an hour where this wraps; carry their phase on the CPU if a jump shows
         uTime.floatValue = Float(t.truncatingRemainder(dividingBy: 3600))
+        for (node, at) in holdfasts {
+            let p = project(at)
+            node.position = CGPoint(x: p.px.x / 2, y: p.px.y / 2)
+            node.size = CGSize(width: Atlas.holdfastSize.width * p.ppm / 2, height: Atlas.holdfastSize.height * p.ppm / 2)
+        }
         let w = Double(size.width) * 2, h = Double(size.height) * 2
         for f in fronds.indices {
             let fr = fronds[f]
@@ -566,9 +595,9 @@ final class KelpForest: SKScene {
         return s;
     }
     // The way the camera looks through a point of the screen (uv 0 to 1, from the bottom left).
-    vec3 rayDir(vec2 uv) {
+    vec3 rayDir(vec2 uv, float pitch) {
         vec3 d = normalize(vec3((uv.x * 2.0 - 1.0) * TANH, (uv.y * 2.0 - 1.0) * TANH * ASPECT, 1.0));
-        float c = cos(PITCH); float s = sin(PITCH);
+        float c = cos(pitch); float s = sin(pitch);
         return vec3(d.x, d.y * c + d.z * s, -d.y * s + d.z * c);
     }
     // The canopy's blades seen from below: one in each cell of a 45 cm grid where the canopy is thick enough, about
@@ -611,7 +640,7 @@ final class KelpForest: SKScene {
     static let waterSource = """
     void main() {
         vec2 uv = v_tex_coord;
-        vec3 d = rayDir(uv);
+        vec3 d = rayDir(uv, u_pitch);
         float t = u_t;
         vec2 sw = u_surge;
         vec3 col = vec3(0.0);
@@ -682,23 +711,23 @@ final class KelpForest: SKScene {
     /// gold when we look toward the light, fogged by distance along its own line of sight.
     static let kelpSource = """
     void main() {
-        vec2 local = (v_tex_coord - a_card.xy) / a_card.zw;
-        vec4 c = texture2D(u_texture, a_card.xy + clamp(local, 0.0, 1.0) * a_card.zw);
+        vec4 c = texture2D(u_texture, v_tex_coord);
+        vec3 info = v_color_mix.rgb * vec3(64.0, 16.0, 1.0); // how far off, how high, a number of its own
         float alpha = c.a;
         vec4 out = vec4(0.0);
         // Most of a card is empty water: only its kelp is worth the light and the fog.
         if (alpha > 0.003) {
         vec3 m = c.rgb / max(alpha, 1e-3);
         vec2 suv = vec2(gl_FragCoord.x / u_px.x, 1.0 - gl_FragCoord.y / u_px.y);
-        vec3 d = rayDir(suv);
+        vec3 d = rayDir(suv, u_pitch);
         float back = smoothstep(-0.2, 0.9, dot(d, u_sundir));
-        vec3 lit = lightAt(a_info.y, u_sun, u_ext);
-        vec3 tint = mix(vec3(1.0), vec3(0.9, 1.0, 0.75), fract(a_info.z * 7.3) * 0.5);
+        vec3 lit = lightAt(info.y, u_sun, u_ext);
+        vec3 tint = mix(vec3(1.0), vec3(0.9, 1.0, 0.75), fract(info.z * 7.3) * 0.5);
         vec3 front = u_kelp * tint * lit * m.r;
         vec3 through = u_glow * tint * lit * (0.45 + 0.55 * m.g) * (0.5 + 0.5 * m.r);
         vec3 col = mix(front, through, back * 0.85 * (1.0 - m.b * 0.5));
-        vec3 tr = exp(-u_ext * a_info.x);
-        col = col * tr + waterCol(d, a_info.y, u_deep, u_up, u_ext, u_sundir) * (1.0 - tr);
+        vec3 tr = exp(-u_ext * info.x);
+        col = col * tr + waterCol(d, info.y, u_deep, u_up, u_ext, u_sundir) * (1.0 - tr);
         col *= u_look.w;
         out = vec4(pow(max(col, vec3(0.0)), vec3(1.0 / 2.2)) * alpha, alpha);
         }

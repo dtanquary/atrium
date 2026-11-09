@@ -45,6 +45,8 @@ The plan. The mock-up drew every blade per pixel, at hundreds of milliseconds a 
 - **The kelp shader** colours each card by the look: lit from our side, or glowing gold when we look toward the light, fogged by distance along each pixel's own line of sight (`gl_FragCoord`), with the empty parts of a card skipping the work: that alone took the GPU from 3.5 to 2.5 ms.
 - **The views** are round 2's: level, tipped up 20°, from 2.5 m over a floor 12 m down, plants 6 to 30 m off; and looking up 58° from 2 m in 10 m of water, plants 3.5 to 14 m off, since only the near ones reach into that view.
 
+**Step 2 (2026-11-09): the crash, and moving between the views.** Switching the View crashed the app inside SpriteKit as it took the lock screen's still (`SKView.texture(from:)`, copying per-sprite shader attributes for a batch of thousands of kelp sprites). It didn't reproduce offscreen, so the attributes are gone: each sprite's distance, height and seed now ride in its colour (`v_color_mix`, with its colour blend at 1), which SpriteKit batches through its ordinary path, and the picture is the same to within 2 of 255. Then Dave's third View, "Moving between the two": one forest with plants from 4 m (for looking up) to 30 m (for looking level), held level for four minutes, tipped up to 58° over 40 s with a smooth start and stop, held, and tipped back, in real seconds whatever the Speed. The tilt is a uniform in both shaders now rather than a constant, and the exposure eases with it, from the level view's to the looking-up view's.
+
 ## Mock-ups, round 1 (2026-11-08)
 Drawn by `mock.swift` through SKRenderer, as the render test draws a wallpaper. The world is in metres: a floor 8.5 to 12 m down, a camera 60–64° across. A full-screen shader draws the water (fogged by colour with distance, brighter looking up), the underside of the surface with Snell's window and the canopy lying on it, the floor with soft caustics, and shafts of sunlight fanning out from the Sun where the canopy lets it through. Each frond is a sprite whose shader hangs its blades along a spine of eight points: each blade on a short stalk with its float, at its own bearing round the stipe, twisting as a ribbon does, streaming with the water past it and fluttering by centimetres; few, small worn blades low down and a dense ruff high up, as research-method.md §1 has it.
 
@@ -100,7 +102,7 @@ Giant kelp only, in the two views Dave liked in round 1's films: level through t
 
 ## Settings
 - **Look** (`kelp.look`, a menu): teal in Light Mode and dusk in Dark Mode (the standard); teal by day and dusk at night; golden in Light Mode and dusk in Dark Mode; golden by day and dusk at night; teal; golden; dusk. By day means the Sun where you are, the light easing through civil twilight from 6° below the horizon to 1° above, as Jellyfish's. A change eases over a few seconds.
-- **View** (`kelp.view`, a menu): level through the forest, or looking up into the canopy. A change plants a new forest seen from there.
+- **View** (`kelp.view`, a menu): level through the forest (0), looking up into the canopy (1), or moving between the two (2). A change plants a new forest seen from there.
 - **Swell** (`kelp.swell`, 0.25 to 2×): the sea's height, 1 m at 1×. **Speed** (`kelp.speed`, 0.5 to 2×): the scene's clock.
 
 ## Cost
@@ -121,7 +123,10 @@ defaults write com.dtanquary.atrium unfinished -bool true   # show hidden wallpa
 SNAPSHOT_SCENE="Kelp Forest" SNAPSHOT_APPEARANCE=light SNAPSHOT_DEFAULTS="kelp.seed=5" swift test --filter everySceneRenders   # level, teal
 SNAPSHOT_SCENE="Kelp Forest" SNAPSHOT_APPEARANCE=dark SNAPSHOT_DEFAULTS="kelp.seed=5" swift test --filter everySceneRenders    # level, dusk
 SNAPSHOT_SCENE="Kelp Forest" SNAPSHOT_APPEARANCE=light SNAPSHOT_DEFAULTS="kelp.seed=5,kelp.view=1" swift test --filter everySceneRenders   # looking up
+SNAPSHOT_SCENE="Kelp Forest" SNAPSHOT_APPEARANCE=light SNAPSHOT_DEFAULTS="kelp.seed=5,kelp.view=2,kelp.cycleAt=260" swift test --filter everySceneRenders   # moving between them, half tipped up
 ```
+`kelp.cycleAt` is the seconds into the moving view's cycle at which it starts: 0 level, 240 to 280 tipping up, 280 to 520 looking up, 520 to 560 tipping back.
+
 `kelp.seed` (any whole number but 0) pins the forest and the sea, for pictures that can be taken again; unset, each load is new. The Settings pictures are `preview-kelp-forest.jpg` (dusk, Dark Mode's standard) and `preview-kelp-forest-light.jpg` (teal), from the first two commands.
 
 ## Shortcuts
@@ -131,6 +136,8 @@ SNAPSHOT_SCENE="Kelp Forest" SNAPSHOT_APPEARANCE=light SNAPSHOT_DEFAULTS="kelp.s
 ## Dave's feedback
 - **2026-11-08, on round 1's films:** "film1-level and film2-up look awesome, film3-bull was meh, lets focus on the first two". So giant kelp, seen level through the forest and looking up into the canopy; bull kelp and the mixed edge are set aside.
 - **2026-11-08, on round 2:** "all of your previews look awesome, A, B, C, D, E, F all great, and film 5 level dusk also looks awesome". Every light in both views is a pick.
+
+- **2026-11-09, on step 1 on his desktop:** "atrium crashd when i toggled between kelp view modes", inside SpriteKit as it took the lock screen's still; then "after fixing that, can you add a mode to the kelp view where it can be straight on, above, or auto cycle btween the two". Fixed and added in step 2: the View menu's third pick moves between level and looking up.
 
 ## Still open
 - Photo cards of single blades for the near tier. Two candidates found on Wikimedia Commons, licences read from Commons' own field (checked): *Giant Kelp - Macrocystis pyrifera (43168362051).jpg* (CC BY-SA 2.0), a close-up of a blade's ridges and toothed edge in air; *CAS Macrocystis 1.JPG* (CC BY-SA 3.0, EncycloPetey), whole blades backlit in the California Academy of Sciences' tank. Neither is cut out yet; the public-domain *Giantkelp2 300.jpg* shows fronds with their floats from above.
