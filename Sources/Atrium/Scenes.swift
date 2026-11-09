@@ -82,10 +82,10 @@ struct Refresh {
 @MainActor let allScenes: [Wallpaper] = [
     Wallpaper(name: "Jellyfish", icon: "bubbles.and.sparkles.fill", tint: .cyan,
               blurb: "Moon jellies and crystal jellies drifting in a tank, lit, glowing, or following the day.",
-              make: jellyfish, knobs: Jellyfish.knobs, followsAppearance: true, unfinished: true),
+              make: jellyfish, knobs: Jellyfish.knobs, followsAppearance: true),
     Wallpaper(name: "Kelp Forest", icon: "leaf.fill", tint: .green,
               blurb: "Giant kelp swaying in the swell, shafts of sunlight coming down through the canopy.",
-              make: kelpForest, knobs: KelpForest.knobs, followsAppearance: true, unfinished: true),
+              make: kelpForest, knobs: KelpForest.knobs, followsAppearance: true),
     Wallpaper(name: "Fish Tank", icon: "fish.fill", tint: .teal, blurb: "A bright reef tank of real fish and corals.",
               make: { FishTank(size: $0) }, knobs: FishTank.knobs),
     Wallpaper(name: "Flowing Gradient", icon: "swirl.circle.righthalf.filled", tint: .pink,

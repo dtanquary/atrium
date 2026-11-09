@@ -4,11 +4,11 @@ A forest of giant kelp seen from inside it: rope-thin stipes rising in clumps fr
 
 Dave asked for it on 2026-11-08 by running the new-wallpaper process: "underwater kelp, start with mockups and come up with a high fidelity design for me and we go from there". A Kelp Forest tank was next in line for the Fish Tank on 2026-10-07 and was dropped with that day's photo cut-outs of big animals ([fish-tank.md](fish-tank.md)); Jellyfish has since shown that shader-drawn water and bodies can work. Two agents researched it that day and two rounds of mock-ups were drawn; Dave chose from them the same evening, and the build began hidden behind the `unfinished` switch.
 
-- **Source:** `Sources/Atrium/KelpForest.swift` (being built).
+- **Source:** `Sources/Atrium/KelpForest.swift`.
 - **Data:** none. Blade cards are drawn at load; two freely licensed photos of real blades are candidates for photo cards later (Still open).
 - **Research:** [the method](kelp-forest/research-method.md) (the plant, the forest, the water and the light in numbers; how kelp moves in swell, surge and current; how to draw it, with costs measured by a SpriteKit probe) and [the look](kelp-forest/research-look.md) (what the eye sees, the views, palettes sampled from real photos, brightness caps, feeds and licences, names). Every figure in them is marked checked or unchecked.
 - **Scripts:** `kelp-forest/mock.swift` draws the mock-ups with SpriteKit as the app would; `sheet.py` lays out the sheets and films from the variants in `variants.py`, and `python3 sheet.py stats <sheet>` measures each tile's brightness at desktop size.
-- **Where it stands (2026-11-08):** Dave has chosen from both rounds; the build has begun, hidden behind the `unfinished` switch.
+- **Where it stands (2026-11-09):** shown to everyone from 0.122.0, when Dave asked for it and Jellyfish to go on the website and the README; it was built behind the `unfinished` switch.
 
 ## Names and look-alikes
 - **Kelp Forest** is the name proposed: the habitat's plain name, like Fish Tank and Jellyfish. It is also Monterey Bay Aquarium's exhibit name, a descriptive use; no US trademark for it turned up (third-party mirrors only, [research-look.md](kelp-forest/research-look.md) §6). Avoid "Seaforest", Sea Change Project's coinage for the Cape's kelp.
@@ -137,7 +137,6 @@ A debug build reads about 12 ms of CPU. Looking up and moving between the views 
 
 ## Checking it
 ```sh
-defaults write com.dtanquary.atrium unfinished -bool true   # show hidden wallpapers, then relaunch
 SNAPSHOT_SCENE="Kelp Forest" SNAPSHOT_APPEARANCE=light SNAPSHOT_DEFAULTS="kelp.seed=5" swift test --filter everySceneRenders   # level, teal
 SNAPSHOT_SCENE="Kelp Forest" SNAPSHOT_APPEARANCE=dark SNAPSHOT_DEFAULTS="kelp.seed=5" swift test --filter everySceneRenders    # level, dusk
 SNAPSHOT_SCENE="Kelp Forest" SNAPSHOT_APPEARANCE=light SNAPSHOT_DEFAULTS="kelp.seed=5,kelp.view=1" swift test --filter everySceneRenders   # looking up
@@ -146,6 +145,8 @@ SNAPSHOT_SCENE="Kelp Forest" SNAPSHOT_APPEARANCE=light SNAPSHOT_DEFAULTS="kelp.s
 `kelp.cycleAt` is the seconds into the moving view's cycle at which it starts: 0 level, 240 to 280 tipping up, 280 to 520 looking up, 520 to 560 tipping back.
 
 `kelp.seed` (any whole number but 0) pins the forest and the sea, for pictures that can be taken again; unset, each load is new. The Settings pictures are `preview-kelp-forest.jpg` (dusk, Dark Mode's standard) and `preview-kelp-forest-light.jpg` (teal), from the first two commands.
+
+The README's pictures and the site's (2026-11-09) are the four commands above at `SNAPSHOT_SECONDS=5` with `swift test -c release -Xswiftc -enable-testing`: `kelp-forest.jpg` level in teal (the hero, cut to the card and `preview-kelp-forest-light.jpg`), `kelp-forest-dusk.jpg` (cut to `preview-kelp-forest.jpg`), `kelp-forest-looking-up.jpg` and `kelp-forest-tipping-up.jpg`. The 12 s loop, the card and the menu tile are `site/media.sh preview-kelp-forest card-kelp-forest`, from 5 s into the level view in teal.
 
 ## Shortcuts
 - `ponytail:` each kelp sprite's fog and light are fixed at its place at rest; a near frond swaying ±1 m at 6 m changes its fog by a few percent.

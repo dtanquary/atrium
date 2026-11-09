@@ -8,7 +8,7 @@ It began in [ideas.md](ideas.md) under "Left out on purpose": "Photo cut-outs of
 - **Data:** none. Everything is drawn; reference photos stay references.
 - **Research:** [the method](jellyfish/research-method.md) (swimming numbers, bioluminescence, how to draw it, cost measured with a SpriteKit probe), [the look](jellyfish/research-look.md) (species, palettes, brightness, names) and [how real groups move](jellyfish/research-motion.md), measured from nine freely licensed clips of real tanks and a wild bloom. Every figure in them is marked checked or unchecked.
 - **Scripts:** `jellyfish/mock.swift` draws the mock-ups with SpriteKit as the app would; `sheet.py` lays out the sheets and films from the variants in `variants.py`.
-- **Where it stands (2026-11-08):** built and hidden behind the `unfinished` switch; the motion was reworked after Dave's first look on his desktop (step 2 below).
+- **Where it stands (2026-11-09):** shown to everyone from 0.122.0, when Dave asked for it and Kelp Forest to go on the website and the README; it was built behind the `unfinished` switch, and the motion was reworked after his first look on his desktop (step 2 below).
 
 ## Dave's decisions (2026-11-07)
 - **Groups, not a single jelly:** "the single jellifish is very underwhelming, we need to focus on groups that are moving". The deep species, the close-up and the ROV and lights-off looks are set aside.
@@ -110,13 +110,14 @@ No `batteryRate` yet: a near bell's margin moves about 3 device pixels a frame a
 
 ## Checking it
 ```sh
-defaults write com.dtanquary.atrium unfinished -bool true   # show hidden wallpapers, then relaunch
 SNAPSHOT_SCENE="Jellyfish" SNAPSHOT_APPEARANCE=light SNAPSHOT_DEFAULTS="jellyfish.seed=22" swift test --filter everySceneRenders   # the lit tank
 SNAPSHOT_SCENE="Jellyfish" SNAPSHOT_APPEARANCE=dark SNAPSHOT_DEFAULTS="jellyfish.seed=22" swift test --filter everySceneRenders    # the glow
 SNAPSHOT_SCENE="Jellyfish" SNAPSHOT_DEFAULTS="jellyfish.seed=21,jellyfish.look=6" swift test --filter everySceneRenders          # crystal jellies
 swift test --filter jellyfishMove                    # speed and spread measured as the footage was; JELLY_SEED and JELLY_LOOK pick another
 ```
 `jellyfish.seed` (any whole number but 0) pins the tank's layout and every pulse and turn, for pictures that can be taken again; unset, each load is new. The Settings pictures are `preview-jellyfish.jpg` (the glow, Dark Mode's standard) and `preview-jellyfish-light.jpg` (the lit tank), from the first two commands. The mock and its statistics, which measure poses, turns, spacing and cover as research-motion.md measured footage, stay in `docs/jellyfish/` (`JSTATS=1` on `mock.swift`).
+
+The README's pictures and the site's (2026-11-09) are the first three commands at `SNAPSHOT_SECONDS=5` with `swift test -c release -Xswiftc -enable-testing`: `jellyfish.jpg` the lit tank (the hero, cut to the card and `preview-jellyfish-light.jpg`), `jellyfish-glow.jpg` (cut to `preview-jellyfish.jpg`) and `jellyfish-crystal.jpg`; and `jellyfish-crowd.jpg`, the lit tank with `jellyfish.count=1.5` added. The 12 s loop, the card and the menu tile are `site/media.sh preview-jellyfish card-jellyfish`, from 5 s into the lit tank.
 
 ## Shortcuts
 - The sway and the marine snow jump once an hour where the shader's clock wraps.
