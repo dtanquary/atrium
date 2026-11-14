@@ -286,10 +286,11 @@ if !scenes.contains(where: { $0.name == current }) {
     matchLockScreen(after: 1.5)
 }
 
-/// With Match the lock screen on, takes a fresh still once the scene has settled.
-@MainActor func matchLockScreen(after seconds: Double) {
+/// With Match the lock screen on, takes a fresh still once the scene has settled; `forBar`, a small one that only
+/// dresses the menu bar (`LockScreen.match`).
+@MainActor func matchLockScreen(after seconds: Double, forBar: Bool = false) {
     DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
-        if LockScreen.knob.value > 0.5 { LockScreen.match(windows) }
+        if LockScreen.knob.value > 0.5 { LockScreen.match(windows, forBar: forBar) }
     }
 }
 
@@ -561,7 +562,12 @@ if let source = IOPSNotificationCreateRunLoopSource({ _ in
 // the unlock; the name isn't documented, but has been the same for years.
 Shuffle.reschedule()
 DistributedNotificationCenter.default().addObserver(forName: .init("com.apple.screenIsUnlocked"), object: nil, queue: .main) { _ in
-    MainActor.assumeIsolated { if Shuffle.onUnlock, let name = Shuffle.next() { show(name) } }
+    MainActor.assumeIsolated {
+        if Shuffle.onUnlock, let name = Shuffle.next() { return show(name) }
+        // macOS dresses the menu bar again five seconds after an unlock, by the lock screen's still, which can be
+        // ten minutes behind the wallpaper: after that, by the wallpaper as it is.
+        matchLockScreen(after: 6, forBar: true)
+    }
 }
 NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { _ in
     MainActor.assumeIsolated {
@@ -580,14 +586,15 @@ Timer.scheduledTimer(withTimeInterval: 600, repeats: true) { _ in
         if !WallpaperView.screensAsleep, drawn { matchLockScreen(after: 0) }
     }
 }.tolerance = 60
-// And at once when the wallpaper on the desktop has changed picture altogether (Space Tour, each minute): the menu
-// bar is dressed by the still, and the last photo's would leave it black on light over a black sky, or the reverse.
+// And when the wallpaper on the desktop has changed picture altogether (Space Tour, each minute), a small one for the
+// menu bar, which is dressed by the still: the last photo's would leave it black on light over a black sky, or the
+// reverse. Not a still for the lock screen each time: macOS keeps every one, 17.8 MB apiece.
 NotificationCenter.default.addObserver(forName: .pictureChanged, object: nil, queue: .main) { note in
     let poster = (note.object as AnyObject?).map(ObjectIdentifier.init) // the scene itself can't cross to the main actor
     MainActor.assumeIsolated {
         // Not for the copy Settings runs behind a wallpaper's page.
         let onDesktop = windows.contains { ($0.contentView as? SKView)?.scene.map(ObjectIdentifier.init) == poster }
-        if onDesktop { matchLockScreen(after: 0) }
+        if onDesktop { matchLockScreen(after: 0, forBar: true) }
     }
 }
 // macOS gave that still to the Space in front only, so each other Space gets it as it comes to the front.
