@@ -126,6 +126,8 @@ import SwiftUI
     @Published var name: String?
     @Published var settings = false
     @Published var star = false
+    /// The wallpaper an Option-click has just picked, ringed and named at once while it is still being built.
+    @Published var picked: String?
 }
 
 /// What lies over a tile's picture: its name in the bottom corner, white on a soft shade, the tick on the one on the
@@ -168,8 +170,10 @@ struct MenuGridPictures: View {
     /// Shows a wallpaper, opens its page of Settings, and stars the one on the desktop, for VoiceOver's press: the
     /// mouse goes through `MenuGridView`.
     let pick: (String) -> Void, settings: () -> Void, star: () -> Void
-    @AppStorage("scene") private var current = defaultScene.name
+    @AppStorage("scene") private var saved = defaultScene.name
     @AppStorage(Favorites.key) private var starred = ""
+    /// The wallpaper on the desktop, or the one about to be.
+    private var current: String { hover.picked ?? saved }
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -387,12 +391,23 @@ final class MenuGridView: NSView {
         }, forMode: .common)
     }
 
-    /// Shows the wallpaper and closes the menu, as picking a row of a menu does. Left open, the grown tile takes the
-    /// tick as it plays: the tiles under it follow the saved wallpaper themselves.
+    /// Shows the wallpaper and closes the menu, as picking a row of a menu does. Left open, the ring, the tick and the
+    /// name above move to it at once and it is shown a moment later: building a wallpaper holds the main thread, half a
+    /// second for the heaviest (Fish Tank) on each display, and until it's done the click would seem to have missed.
     private func choose(_ name: String, closing: Bool = true) {
-        if closing { enclosingMenuItem?.menu?.cancelTracking() }
-        pick(name)
-        grown?.on = hover.name == name
+        guard !closing else {
+            enclosingMenuItem?.menu?.cancelTracking()
+            return pick(name)
+        }
+        hover.picked = name
+        grown?.on = hover.name == name // the grown tile draws its own face over the loop
+        RunLoop.main.add(Timer(timeInterval: 0.03, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.pick(name)
+                if self.hover.picked == name { self.hover.picked = nil } // the saved wallpaper says it from here
+            }
+        }, forMode: .common) // which a menu tracking the mouse runs
     }
 
     private func openSettings() {

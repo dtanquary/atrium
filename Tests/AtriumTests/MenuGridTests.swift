@@ -101,7 +101,7 @@ func menuShot() throws {
     let wanted = order.firstIndex { $0.name == env["MENU_SHOT"] }
     let pill = env["MENU_SHOT"] == "Settings"
     var hovered: String?, picked: String?, grown = false, lit = false, opened = false
-    var optionPicked: String?, stayedOpen = false, ticked = false, starred = false
+    var optionPicked: String?, stayedOpen = false, ticked = false, starred = false, ringedFirst = false
     let menu = NSMenu(), grid = MenuGridView(settings: { opened = true }) { picked = $0 }, item = NSMenuItem()
     func mouse(_ type: NSEvent.EventType, at place: CGRect? = nil, _ modifiers: NSEvent.ModifierFlags = []) -> NSEvent? {
         guard let place = place ?? wanted.map(MenuGrid.frame), let window = grid.window else { return nil }
@@ -139,16 +139,19 @@ func menuShot() throws {
             try? bitmap.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
         }
         mouse(.leftMouseUp, .option).map(grid.mouseUp) // which shows it and leaves the menu open
-    }
-    after(2.0) {
-        (optionPicked, stayedOpen, ticked) = (picked, grid.window?.isVisible == true, grid.grown?.on == true)
-        picked = nil
-        mouse(.leftMouseUp, at: MenuGrid.settings).map(grid.mouseUp) // which asks for Settings and closes the menu
-        mouse(.leftMouseUp).map(grid.mouseUp) // which closes the menu, as a pick does
-        let before = Favorites.names.contains(current)
-        mouse(.leftMouseUp, at: MenuGrid.star(after: current)).map(grid.mouseUp) // last, as it moves the tiles
-        starred = Favorites.names.contains(current) != before
-        menu.cancelTracking()
+        ringedFirst = grid.hover.picked == env["MENU_SHOT"] && picked == nil // before the wallpaper is built
+        // Counted from here, as the capture takes a while: the wallpaper is shown a moment after the click.
+        after(0.4) {
+            (optionPicked, stayedOpen, ticked) = (picked, grid.window?.isVisible == true, grid.grown?.on == true)
+            ringedFirst = ringedFirst && grid.hover.picked == nil
+            picked = nil
+            mouse(.leftMouseUp, at: MenuGrid.settings).map(grid.mouseUp) // which asks for Settings and closes the menu
+            mouse(.leftMouseUp).map(grid.mouseUp) // which closes the menu, as a pick does
+            let before = Favorites.names.contains(current)
+            mouse(.leftMouseUp, at: MenuGrid.star(after: current)).map(grid.mouseUp) // last, as it moves the tiles
+            starred = Favorites.names.contains(current) != before
+            menu.cancelTracking()
+        }
     }
     let screen = try #require(NSScreen.main).visibleFrame
     menu.popUp(positioning: nil, at: NSPoint(x: screen.maxX - MenuGrid.width - 40, y: screen.maxY - 8), in: nil)
@@ -161,6 +164,7 @@ func menuShot() throws {
         #expect(grown == moves, "the tile under the pointer has its loop")
         #expect(optionPicked == order[wanted].name && stayedOpen, "an Option-click picked \(optionPicked ?? "none"), menu open: \(stayedOpen)")
         #expect(ticked == moves, "the grown tile takes the tick as it plays")
+        #expect(ringedFirst, "an Option-click rings the wallpaper at once, and shows it a moment later")
     }
     print("The menu → \(path)")
 }
