@@ -53,7 +53,7 @@ rain-on-glass|Rain on Glass|4|SNAPSHOT_DEFAULTS=rain.palette=Hamburg SNAPSHOT_AP
 schlieren|Schlieren|40|SNAPSHOT_DEFAULTS=schlieren.palette=Candlelight,schlieren.filter=0,schlieren.source=3
 space-tour|Space Tour|4|SNAPSHOT_DEFAULTS=deep.photo=deep-pillars-webb.heic
 turing-patterns|Turing Patterns|40|SNAPSHOT_DEFAULTS=turing.pattern=4,turing.palette=Lagoon
-weather|Weather|4|SNAPSHOT_DEFAULTS=weather.lock=2,weather.previewTime=1,weather.previewHour=18.7
+weather|Weather|4|SNAPSHOT_DEFAULTS=weather.lock=2,weather.previewTime=1,weather.previewHour=17.1
 wind|Wind|4|SNAPSHOT_DEFAULTS=wind.zoom=2,wind.map=2'
 
 # Every wallpaper in the app, as 16:10 stills for the cards on the glass pane: slug|screenshot in docs/images.
