@@ -406,6 +406,7 @@ Atrium's icon in the menu bar is a TV with sparkles (✨📺). Use it to:
 - **Pick** a wallpaper from the grid of pictures, each named in its corner: the one under the pointer grows and plays a short loop of it. To move through them with the arrow keys, by typing a name, or with VoiceOver, set Settings → General → **Wallpapers in the menu** to Names, a list in words.
 - **Pause** the wallpaper on its current frame, and **Resume** it. The icon dims while it's paused, a wallpaper you pick meanwhile is held still too, and quitting Atrium ends the pause. While Settings → Power is already freezing it (in Low Power Mode, unless changed), the menu says so in its place.
 - Turn on **Shuffle** to move on to a random wallpaper every so often, and choose **Next Wallpaper** to skip ahead. Settings → General sets how often (every 5 minutes to every day, or on every unlock) and which wallpapers take part.
+- Choose **Previous Wallpaper** to go back to the one you had before, whether you changed it or Shuffle did. Choose it again to flip between the two.
 - Open **Settings…** (⌘,): a page for each wallpaper, with palettes, sliders and switches that update live, plus General, Power and About.
 - Turn on **Open at Login**, here or in Settings → General. macOS may ask you to approve it in System Settings → General → Login Items.
 - Turn on **Full Speed on Battery** to run on battery as fast as when plugged in.

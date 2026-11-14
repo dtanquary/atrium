@@ -271,8 +271,9 @@ if !scenes.contains(where: { $0.name == current }) {
     }
 }
 
-/// Puts a wallpaper on the desktop and remembers it.
+/// Puts a wallpaper on the desktop and remembers it, and the one it took over from for the menu's Previous Wallpaper.
 @MainActor func show(_ name: String) {
+    if name != current { UserDefaults.standard.set(current, forKey: "scene.previous") }
     current = name
     UserDefaults.standard.set(name, forKey: "scene")
     switchScene()
@@ -357,7 +358,7 @@ if !scenes.contains(where: { $0.name == current }) {
     }
 }
 
-/// The menu bar icon: pick, pause or shuffle wallpapers, open Settings, toggle Open at Login, quit.
+/// The menu bar icon: pick, pause or shuffle wallpapers, go back to the last one, open Settings, toggle Open at Login, quit.
 @MainActor final class StatusMenu: NSObject, NSMenuDelegate {
     let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     /// The wallpapers as pictures: one item, kept from one opening of the menu to the next.
@@ -403,6 +404,11 @@ if !scenes.contains(where: { $0.name == current }) {
         let shuffle = menu.addItem(withTitle: "Shuffle", action: #selector(toggleShuffle), keyEquivalent: "")
         shuffle.target = self
         shuffle.state = Shuffle.on.value > 0.5 ? .on : .off
+        if let previous {
+            let back = menu.addItem(withTitle: "Previous Wallpaper", action: #selector(previousWallpaper), keyEquivalent: "")
+            back.target = self
+            back.toolTip = previous
+        }
         if Shuffle.on.value > 0.5 {
             menu.addItem(withTitle: "Next Wallpaper", action: #selector(nextWallpaper), keyEquivalent: "").target = self
         }
@@ -463,6 +469,18 @@ if !scenes.contains(where: { $0.name == current }) {
 
     @objc func nextWallpaper() {
         if let name = Shuffle.next() { show(name) }
+    }
+
+    /// The wallpaper the one on the desktop took over from, picked or shuffled to, if it's still one to show.
+    private var previous: String? {
+        UserDefaults.standard.string(forKey: "scene.previous").flatMap { name in
+            name != current && scenes.contains { $0.name == name } ? name : nil
+        }
+    }
+
+    /// Goes back to it, which makes the one left the previous: chosen again, it flips between the two.
+    @objc func previousWallpaper() {
+        if let previous { show(previous) }
     }
 }
 
