@@ -330,39 +330,21 @@ final class NightSky: SKScene, BatteryPaced {
         moonGlow.zPosition = 3
         addChild(moonGlow)
 
-        // A sphere lit from u_light (in the disc's frame), with the big maria where they sit seen from the north.
-        // ponytail: maria are hand-placed soft blobs; swap in a real albedo map for more fidelity
+        // NASA's map of the near side (Weather's), north up, on a sphere lit from u_light in the disc's frame.
         moon.shader = SKShader(source: moonShade + """
-            float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
-            float noise(vec2 x) {
-                vec2 i = floor(x);
-                vec2 f = fract(x);
-                f = f * f * (3.0 - 2.0 * f);
-                return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y);
-            }
-            float mare(vec2 p, vec2 c, float r) {
-                return smoothstep(r * 1.2, r * 0.4, length(p - c) + 0.5 * r * (noise(p * 7.0) - 0.5));
-            }
             void main() {
                 vec2 p = v_tex_coord * 2.0 - 1.0;
                 float r2 = dot(p, p);
                 vec3 n = vec3(p, sqrt(max(0.0, 1.0 - r2)));
-                // Procellarum, Imbrium and Frigoris down the west; Serenitatis to Nectaris down the east.
-                float dark = mare(p, vec2(-0.58, 0.05), 0.34) + mare(p, vec2(-0.45, -0.25), 0.22)
-                    + mare(p, vec2(-0.28, 0.42), 0.30) + mare(p, vec2(-0.05, 0.68), 0.16)
-                    + mare(p, vec2(0.20, 0.40), 0.18) + mare(p, vec2(0.34, 0.14), 0.21)
-                    + mare(p, vec2(0.70, 0.30), 0.12) + mare(p, vec2(0.56, -0.13), 0.15)
-                    + mare(p, vec2(0.34, -0.33), 0.11) + mare(p, vec2(-0.16, -0.36), 0.16)
-                    + mare(p, vec2(-0.50, -0.40), 0.10);
-                float mottle = 0.9 + 0.1 * noise(p * 22.0);
-                vec3 surface = vec3(0.93, 0.91, 0.86) * (1.0 - 0.3 * min(dark, 1.0)) * mottle * (0.85 + 0.15 * n.z);
-                // Light to display (a square root, as Weather's film curve does), with a little earthshine on the dark side.
+                // Light to display (a square root, as Weather's film curve does), and earthshine on the dark side:
+                // faint and blue, with the seas still showing in it.
                 float lit = sqrt(moonShade(n, u_light));
-                vec3 colour = surface * lit + vec3(0.03, 0.035, 0.05) * (1.0 - min(lit, 1.0));
+                vec3 surface = texture2D(u_map, v_tex_coord).rgb;
+                vec3 colour = surface * (1.9 * lit + vec3(0.2, 0.23, 0.32) * (1.0 - min(lit, 1.0)));
                 float a = smoothstep(1.0, 0.93, r2);
                 gl_FragColor = vec4(colour * a, a);
             }
-            """, uniforms: [moonLight])
+            """, uniforms: [moonLight, SKUniform(name: "u_map", texture: sharedTexture("weather-moon.png"))])
         moon.zPosition = 4
         addChild(moon)
     }

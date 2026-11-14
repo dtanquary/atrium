@@ -33,8 +33,8 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
 - **Planets:** `Sky.planet(_:_:)` gives Mercury to Saturn. Each is a glow sprite with a fixed size and colour and an "ISS"-style label as its child.
 - **Sun:** a 48 pt disc and a 360 pt glow, blended toward orange below 12° altitude. It's hidden below the horizon or out of view, and otherwise sits among the stars: in mid-November, in Libra.
 - **Moon:** a 46 pt disc (exaggerated; the real Moon is about 5 pt at this scale) drawn by a shader.
-  - The shader treats the disc as a sphere lit from `u_light`, with 11 hand-placed maria blobs.
-  - Its shading is `moonShade` (Shaders.swift, shared with Weather): McEwen's lunar-Lambert, as in The Moon, so the light fades toward the terminator instead of stopping at an edge. It's shown as its square root (light to display), over an opaque disc with a little earthshine.
+  - The shader treats the disc as a sphere lit from `u_light`, wearing NASA's map of the near side (`weather-moon.png`, Weather's, from LRO; since 2026-11-14, in place of 11 hand-placed blobs for the seas).
+  - Its shading is `moonShade` (Shaders.swift, shared with Weather): McEwen's lunar-Lambert, as in The Moon, so the light fades toward the terminator instead of stopping at an edge. It's shown as its square root (light to display), over an opaque disc with a little blue earthshine on the dark side, faint enough that the seas only just show in it.
   - The disc is rotated so its north points to the celestial pole on screen (`screenAngle` toward `poleH`).
   - The light direction is measured from the Moon's north using `skyAngle`, which works in the local frame of someone facing the Moon with their head upright. That keeps it correct however the disc is turned.
   - The phase angle comes from `Sky.moonPhase(jd).lit` (`acos(2·lit − 1)`).
@@ -103,7 +103,6 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
 - `ponytail:` **precession.** It's ignored since J2000, about 0.35° by 2026. It shifts the whole sky together, so nothing looks wrong relative to itself.
 - `ponytail:` **no topocentric parallax for the Moon.** It can sit up to about 1° off its true place against the stars. `Sky.moon(_:latitude:longitude:)` has it now, if Night Sky wants it.
 - `ponytail:` **fixed planet sizes.** Real brightness swings (Mars from about magnitude −2.9 to +1.8).
-- `ponytail:` **hand-placed maria.** A real lunar albedo map would add fidelity.
 - `ponytail:` **fallback location.** The time-zone guess can be about 15° off in latitude until CoreLocation answers.
 - **Twinkle actions.** They set absolute alphas, so anything that fades the bright stars has to go through a parent node, not the star sprites themselves.
 - **Moon light and turned discs.** The Moon's light vector must be measured from the Moon's north, not from screen up, or it breaks when the disc is rotated.
@@ -137,7 +136,6 @@ A research agent compared drawn recipes, real skylines and traced photos, each a
 ## Ideas / next steps
 - Real planet magnitudes, from distance and phase.
 - Topocentric Moon parallax.
-- A real lunar albedo texture.
 - A meteor rate that follows the showers (Perseids, Geminids).
 - Satellite flares and more satellites.
 - Stars that dim near the horizon (extinction).
