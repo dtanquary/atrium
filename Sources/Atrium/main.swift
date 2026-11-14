@@ -576,14 +576,17 @@ NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotificati
     }
 }
 // Match the lock screen, or put back the user's wallpaper if a crash left one of ours, once the scenes have drawn;
-// then keep the still fresh while the displays are awake (time-of-day scenes drift), unless no wallpaper has drawn
-// since the last (paused, frozen or covered), and take one as they sleep, just before a lock.
+// then keep up with the wallpaper while the displays are awake (time-of-day scenes drift), unless none has drawn
+// since the lock screen's last still (paused, frozen or covered): a small still for the menu bar every ten minutes,
+// and the lock screen's own at the sixth of them, an hour on, since macOS keeps every one of those at 17.8 MB
+// (`LockScreen`). And take one as the displays sleep, just before a lock.
 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { LockScreen.update(windows) }
 // Each repeating timer has a tolerance, so macOS can wake for it along with others, which saves battery.
 Timer.scheduledTimer(withTimeInterval: 600, repeats: true) { _ in
     MainActor.assumeIsolated {
         let drawn = windows.contains { ($0.contentView as? WallpaperView).map { $0.lastDrawn > LockScreen.taken } ?? false }
-        if !WallpaperView.screensAsleep, drawn { matchLockScreen(after: 0) }
+        // 55 minutes: the timer may run a minute late or early of the hour.
+        if !WallpaperView.screensAsleep, drawn { matchLockScreen(after: 0, forBar: Date().timeIntervalSince(LockScreen.taken) < 3300) }
     }
 }.tolerance = 60
 // And when the wallpaper on the desktop has changed picture altogether (Space Tour, each minute), a small one for the

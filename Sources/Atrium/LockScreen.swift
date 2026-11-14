@@ -32,7 +32,8 @@ import UniformTypeIdentifiers
     private static var matching: Bool?
     /// Each display's latest still, by display UUID.
     private static var stills: [String: URL] = [:]
-    /// When the latest stills were taken: a wallpaper that hasn't drawn since needs no new one.
+    /// When the lock screen's stills were last taken: a wallpaper that hasn't drawn since needs no new one, and one
+    /// that has gets only a small one for the menu bar until they are an hour old.
     static private(set) var taken = Date.distantPast
     /// Until when the wallpaper windows let the system wallpaper through (`reread`).
     private static var seeThroughUntil = Date.distantPast
@@ -50,7 +51,8 @@ import UniformTypeIdentifiers
 
     /// Sets each display's system wallpaper to a still of the scene on it, saving the user's own first.
     ///
-    /// `forBar` is for a wallpaper that has changed picture between two stills: macOS is shown a small still of it,
+    /// `forBar` is for a wallpaper that has changed between two of the lock screen's stills, which are an hour apart
+    /// (every ten minutes, Space Tour's next photo, an unlock): macOS is shown a small still of it,
     /// enough to dress the menu bar by and a hundredth of the size to keep, and then given the lock screen's own
     /// still back, which it has already and keeps nothing new for. The bar stays as the small one left it.
     static func match(_ windows: [NSWindow], forBar: Bool = false) {
