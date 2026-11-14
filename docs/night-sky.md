@@ -40,7 +40,11 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
   - The phase angle comes from `Sky.moonPhase(jd).lit` (`acos(2·lit − 1)`).
   - Glow alpha = 0.5 · lit.
 - **ISS:** in `update(_:)`, using `ISS.shared.position()` → `Sky.lookDirection` → `place()`. It's shown only while sunlit (the real naked-eye condition), with a label as a child.
-- **Meteors:** a painted 140×2 pt streak every 15–75 s (`wait 45 ± 30`), fading over 0.7 s.
+- **Meteors:** a painted 140×2 pt streak, fading over 0.7 s, every 15–75 s on a night with no shower (`awaitMeteor`).
+  - **The real showers** (since 2026-11-14): `NightSky.showers` lists eleven, from the International Meteor Organization's Working List (its 2026 calendar, table 5): Quadrantids, Lyrids, Eta and Delta Aquariids, Perseids, Orionids, Southern and Northern Taurids, Leonids, Geminids and Ursids, each with the Sun's ecliptic longitude at its peak, its days of activity either side, its radiant and its peak rate. `hourly` gives a shower's rate now: its peak rate at the peak, falling in a straight line of the logarithm to one an hour at each end of its activity.
+  - **How many:** a dark sky away from any shower really gives about 8 an hour, shown here as 80. Each shower adds its rate times the sine of its radiant's height, so none while the radiant is down. The wait between meteors is 45 s ÷ ((8 + showers) ÷ 8)^0.7: on Leonid night about 25 s, at the Geminids' peak with Gemini high about 5 s (in life the Geminids would be one every 2 s at this scale, which is a screen of streaks).
+  - **Which way:** each meteor belongs to a shower as often as that shower's share of the real rate, and then runs straight away from the radiant along a great circle, 11° to 23° of sky when a quarter of the way round from it and shorter nearer (one beside its radiant is coming almost at you). The rest fall any way down, as all did before.
+  - **Radiants:** a 3 pt ring with the shower's name, at the radiant, while the shower gives two an hour or more and the radiant is in view; under the Labels switch.
 - **Landscape:** off unless Settings turns it on. `Landscape` (end of NightSky.swift) lists the silhouettes, and `paintGround` paints the one picked into the `ground` node, the first time it's shown and again when the pick changes.
   - **Pine ridge** is drawn: a hill ridge with stands of conifers, rolled afresh each time.
   - **The rest are real skylines**: Monument Valley, the Teton Range, Shiprock, Devils Tower and Mount Fuji. Each is a `sky-<case>.txt` of about 120 to 540 points, degrees right of the view's centre and degrees above the horizon, as seen from the spot its header names. The points go through the same stereographic projection as the stars, so the skyline stands as wide and as tall as it would among them, on any display. Only Shiprock and Fuji are really seen looking south; the others face east, west and north-west.
@@ -72,7 +76,7 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
 | key | label | range | default | drives |
 |---|---|---|---|---|
 | `sky.constellations` | Constellation lines | toggle | on | `constellations.isHidden` |
-| `sky.planetLabels` | Planet labels | toggle | on | the planet nodes' label children |
+| `sky.planetLabels` | Labels | toggle | on | the planets' names and the meteor showers' radiants (it was Planet labels until 2026-11-14; the key kept its name) |
 | `sky.landscape` | Show a landscape | toggle | off | `ground.isHidden`, and `horizonY` (12% up, or the bottom edge) through `u_horizon` |
 | `sky.ground` | Landscape (shown while the switch is on) | menu | Pine ridge | which `Landscape` is painted, stored as its place in the list |
 | `sky.previewTime` | Preview a time of day | toggle | off | `skyDate` uses the preview hour |
@@ -82,7 +86,7 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
 
 ## Tuning constants
 - **View:** a 120° field of view (`scale`), horizon at 12% (`landHorizon`).
-- **Timing:** refresh every 5 s; meteors every 45 ± 30 s.
+- **Timing:** refresh every 5 s; meteors every 45 ± 30 s away from a shower.
 - **Stars:**
   - size `11 − 1.55·V`, minimum 2.2 pt
   - alpha `1.2 − 0.14·V`, clamped between 0.35 and 1
@@ -136,7 +140,7 @@ A research agent compared drawn recipes, real skylines and traced photos, each a
 ## Ideas / next steps
 - Real planet magnitudes, from distance and phase.
 - Topocentric Moon parallax.
-- A meteor rate that follows the showers (Perseids, Geminids).
+- Each shower's own activity curve and its radiant's drift (see the `ponytail:` on `hourly`), and their speeds: Leonids at 71 km/s are quick, Taurids at 27 slow and often bright.
 - Satellite flares and more satellites.
 - Stars that dim near the horizon (extinction).
 - Twinkling tied to how high a star sits.
@@ -155,3 +159,6 @@ A research agent compared drawn recipes, real skylines and traced photos, each a
   - Polaris' altitude equals the latitude
   - an ISS directly overhead points straight up
   - every real skyline's file is there and spans the view (`skylinesSpanTheView`)
+  - the photo's bright stars are where the catalogue's are (`skyPhotoLinesUpWithTheStars`)
+  - the Perseids, Geminids and Quadrantids are each the strongest shower on their night, and March has none (`showersPeakOnTheirNights`)
+- To see where meteors go, set `awaitMeteor`'s 45 to 0.2 for a moment, render `SNAPSHOT_MOVIE=8` and lay the frames over each other, keeping the lighter pixel: the streaks should point back at the ringed radiants.

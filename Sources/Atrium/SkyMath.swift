@@ -110,6 +110,12 @@ enum Sky {
         normalize(equatorial(fromEcliptic: -heliocentric("Earth", centuries(jd))))
     }
 
+    /// The Sun's ecliptic longitude (J2000) in degrees, 0..<360: what meteor showers are dated by.
+    static func sunLongitude(_ jd: Double) -> Double {
+        let earth = heliocentric("Earth", centuries(jd))
+        return (atan2(-earth.y, -earth.x) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360)
+    }
+
     /// Geocentric Moon, as a direction.
     // ponytail: no topocentric parallax, so the Moon can sit up to ~1° off its true place against the stars; use
     // `moon(_:latitude:longitude:)` where that matters (eclipses)

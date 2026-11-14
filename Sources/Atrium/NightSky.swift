@@ -13,7 +13,7 @@ final class NightSky: SKScene, BatteryPaced {
     nonisolated static let knobs = [
         Knob(key: "sky.constellations", label: "Constellation lines", range: 0...1, standard: 1, section: "Show",
              format: .toggle),
-        Knob(key: "sky.planetLabels", label: "Planet labels", range: 0...1, standard: 1, section: "Show", format: .toggle),
+        Knob(key: "sky.planetLabels", label: "Labels", range: 0...1, standard: 1, section: "Show", format: .toggle),
         Knob(key: "sky.landscape", label: "Show a landscape", range: 0...1, standard: 0, section: "Landscape",
              format: .toggle),
         Knob(key: "sky.ground", label: "Landscape", range: 0...Double(Landscape.allCases.count - 1), standard: 0,
@@ -34,6 +34,10 @@ final class NightSky: SKScene, BatteryPaced {
     private let moonGlow = SKSpriteNode()
     private let moonLight = SKUniform(name: "u_light", vectorFloat3: [0, 0, 1])
     private let iss = SKSpriteNode()
+    /// Each meteor shower's radiant, ringed and named while the shower is active and its radiant is up.
+    private let radiants = SKNode()
+    /// Each shower's radiant in horizon coordinates, and how many of its meteors an hour reach this sky now.
+    private var falling: [(radiant: Sky.Vector, hourly: Double)] = []
     private let photoFrame = SKUniform(name: "u_toPhoto", matrixFloat3x3: matrix_identity_float3x3)
     private let twilightUniform = SKUniform(name: "u_twilight", float: 0)
     private let sunUniform = SKUniform(name: "u_sun", vectorFloat3: [0, 0, 1])
@@ -68,13 +72,21 @@ final class NightSky: SKScene, BatteryPaced {
         iss.zPosition = 4
         iss.addChild(label("ISS", alpha: 0.6))
         addChild(iss)
+        radiants.zPosition = 3
+        addChild(radiants)
+        for shower in Self.showers {
+            let ring = SKShapeNode(circleOfRadius: 3)
+            ring.strokeColor = NSColor(white: 1, alpha: 0.3)
+            ring.addChild(label(shower.name, alpha: 0.4))
+            radiants.addChild(ring)
+        }
         addHorizon()
 
         run(.repeatForever(.sequence([.wait(forDuration: 5), .run { [weak self] in self?.refresh() }])))
         applySettings()
         NotificationCenter.default.addObserver(self, selector: #selector(applySettings),
                                                name: UserDefaults.didChangeNotification, object: nil)
-        run(.repeatForever(.sequence([.wait(forDuration: 45, withRange: 60), .run { [weak self] in self?.meteor() }])))
+        awaitMeteor()
     }
 
     override func didMove(to view: SKView) {
@@ -90,11 +102,11 @@ final class NightSky: SKScene, BatteryPaced {
         place(iss, at: look)
     }
 
-    /// Shows or hides the constellation lines, planet labels and landscape as Settings says, and redraws for a
-    /// preview time.
+    /// Shows or hides the constellation lines, labels and landscape as Settings says, and redraws for a preview time.
     @objc private func applySettings() {
         constellations.isHidden = Self.knobs[0].value < 0.5
         for planet in planets { planet.node.children.forEach { $0.isHidden = Self.knobs[1].value < 0.5 } } // their labels
+        radiants.isHidden = Self.knobs[1].value < 0.5
         ground.isHidden = Self.knobs[2].value < 0.5
         let pick = Landscape.allCases[min(Int(Self.knobs[3].value), Landscape.allCases.count - 1)]
         if !ground.isHidden, pick != landscape { paintGround(pick) }
@@ -120,7 +132,16 @@ final class NightSky: SKScene, BatteryPaced {
         return CGPoint(x: Double(size.width) / 2 + k * right, y: Double(horizonY) + k * h.z)
     }
 
-    /// Shows a node at a horizon direction if it's above the horizon and on screen.
+    /// The horizon direction under a point on screen: `project` backwards.
+    private func unproject(_ point: CGPoint) -> Sky.Vector {
+        let (x, y) = ((Double(point.x) - Double(size.width) / 2) / scale, (Double(point.y) - Double(horizonY)) / scale)
+        let r2 = x * x + y * y
+        let (right, up, forward) = (4 * x / (4 + r2), 4 * y / (4 + r2), (4 - r2) / (4 + r2))
+        return facingSouth ? [-right, -forward, up] : [right, forward, up]
+    }
+
+    /// Shows a node at a horizon direction if it's above the horizon and on screen, its name on whichever side of it
+    /// has the room.
     private func place(_ node: SKNode, at h: Sky.Vector) {
         guard h.z > -0.01, let point = project(h), frame.insetBy(dx: -30, dy: -30).contains(point) else {
             node.isHidden = true
@@ -128,6 +149,10 @@ final class NightSky: SKScene, BatteryPaced {
         }
         node.isHidden = false
         node.position = point
+        guard let name = node.children.first as? SKLabelNode else { return }
+        let left = point.x + 12 + name.frame.width > size.width
+        name.horizontalAlignmentMode = left ? .right : .left
+        name.position.x = left ? -8 : 8
     }
 
     /// Screen angle of the direction from one sky point toward another, e.g. from the Moon toward the Sun.
@@ -154,6 +179,17 @@ final class NightSky: SKScene, BatteryPaced {
         let sunAltitude = asin(sunH.z) * 180 / .pi
         for star in stars { place(star.node, at: toHorizon * star.position) }
         for (planet, node) in planets { place(node, at: toHorizon * Sky.planet(planet, jd)) }
+
+        // Meteor showers: each one's radiant, named while it gives two an hour or more, and how many of its meteors
+        // reach this sky, fewer the lower its radiant stands.
+        let sunLongitude = Sky.sunLongitude(jd)
+        falling = zip(Self.showers, radiants.children).map { shower, ring in
+            let radiant = toHorizon * Sky.direction(shower.ra, shower.dec)
+            let hourly = Self.hourly(shower, sunLongitude: sunLongitude)
+            place(ring, at: radiant)
+            if hourly < 2 { ring.isHidden = true }
+            return (radiant, hourly * max(0, radiant.z))
+        }
 
         // Sunrise and sunset glow peaks with the Sun just below the horizon.
         twilightUniform.floatValue = Float(simd_smoothstep(-16, -4, sunAltitude) * (1 - simd_smoothstep(4, 14, sunAltitude)))
@@ -430,23 +466,72 @@ final class NightSky: SKScene, BatteryPaced {
         }
     }
 
-    /// A short bright streak across the upper sky.
+    typealias Shower = (name: String, peak: Double, before: Double, after: Double, ra: Double, dec: Double, rate: Double)
+
+    /// The year's main meteor showers, from the International Meteor Organization's Working List of Visual Meteor
+    /// Showers (its 2026 calendar, table 5): the Sun's ecliptic longitude at the peak (J2000, degrees), the days it's
+    /// active before and after, the radiant's right ascension and declination, and the meteors an hour at the peak
+    /// with the radiant overhead.
+    nonisolated static let showers: [Shower] = [
+        ("Quadrantids", 283.15, 6, 9, 230, 49, 80), ("Lyrids", 32.32, 8, 8, 271, 34, 18),
+        ("Eta Aquariids", 45.5, 17, 22, 338, -1, 50), ("Delta Aquariids", 128, 19, 23, 340, -16, 25),
+        ("Perseids", 140, 27, 11, 48, 58, 100), ("Orionids", 208, 19, 17, 95, 16, 20),
+        ("Southern Taurids", 223, 46, 15, 52, 15, 7), ("Northern Taurids", 230, 23, 28, 58, 22, 5),
+        ("Leonids", 235.27, 11, 13, 152, 22, 15), ("Geminids", 262.2, 10, 6, 112, 33, 150),
+        ("Ursids", 270.7, 5, 4, 217, 76, 10),
+    ]
+
+    /// How many meteors an hour a shower gives with its radiant overhead and the Sun at `sunLongitude`: its peak rate
+    /// at its peak, falling to one an hour at each end of its activity, and none beyond.
+    // ponytail: a straight line in the logarithm from the peak to each end, and a radiant that stays put. Real showers
+    // keep a low base under a sharper peak and their radiants drift a degree a day: give each its own curve if the
+    // nights either side of a peak need to be right.
+    nonisolated static func hourly(_ shower: Shower, sunLongitude: Double) -> Double {
+        let days = ((sunLongitude - shower.peak + 540).truncatingRemainder(dividingBy: 360) - 180) / 0.9856
+        let span = days < 0 ? shower.before : shower.after
+        return abs(days) > span ? 0 : pow(shower.rate, 1 - abs(days) / span)
+    }
+
+    /// Lights a meteor after a wait, again and again. Away from any shower a dark sky really gives about 8 an hour;
+    /// here that's 80, one every 45 s or so. A shower adds to it, by less than in life: at the Geminids' peak, 150 an
+    /// hour on top of the 8 comes to one every 5 s, not every 2.
+    private func awaitMeteor() {
+        let wait = 45 / pow(falling.reduce(8) { $0 + $1.hourly } / 8, 0.7)
+        run(.sequence([.wait(forDuration: wait, withRange: wait * 4 / 3), .run { [weak self] in
+            self?.meteor()
+            self?.awaitMeteor()
+        }]))
+    }
+
+    private let streak = paint(CGSize(width: 140, height: 2)) { ctx in
+        let colours = [CGColor(gray: 1, alpha: 0), CGColor(gray: 1, alpha: 0.9)] as CFArray
+        ctx.drawLinearGradient(CGGradient(colorsSpace: nil, colors: colours, locations: [0, 1])!,
+                               start: .zero, end: CGPoint(x: 140, y: 0), options: [])
+    }
+
+    /// A short bright streak across the upper sky: out of a shower's radiant as often as that shower's share of the
+    /// meteors falling now, straight away from it and further the further round the sky it is (one near its radiant
+    /// is coming almost at you), and otherwise any way down.
     private func meteor() {
-        let streak = SKSpriteNode(texture: paint(CGSize(width: 140, height: 2)) { ctx in
-            let colours = [CGColor(gray: 1, alpha: 0), CGColor(gray: 1, alpha: 0.9)] as CFArray
-            ctx.drawLinearGradient(CGGradient(colorsSpace: nil, colors: colours, locations: [0, 1])!,
-                                   start: .zero, end: CGPoint(x: 140, y: 0), options: [])
-        }, size: CGSize(width: 140, height: 2))
-        let angle = CGFloat.random(in: -2.6 ... -0.5)
-        streak.zRotation = angle
-        streak.position = CGPoint(x: .random(in: size.width * 0.1...size.width * 0.9),
-                                  y: .random(in: size.height * 0.5...size.height * 0.95))
-        streak.alpha = 0
-        streak.zPosition = 5
-        addChild(streak)
+        let node = SKSpriteNode(texture: streak, size: CGSize(width: 140, height: 2))
+        node.position = CGPoint(x: .random(in: size.width * 0.1...size.width * 0.9),
+                                y: .random(in: size.height * 0.5...size.height * 0.95))
+        var (angle, travel) = (CGFloat.random(in: -2.6 ... -0.5), CGFloat.random(in: 180...360))
+        var lot = Double.random(in: 0..<falling.reduce(8) { $0 + $1.hourly }) // 8 an hour belong to no shower
+        if let shower = falling.first(where: { lot -= $0.hourly; return lot < 0 }) {
+            let here = unproject(node.position), away = here * dot(here, shower.radiant) - shower.radiant
+            let turn = Double.random(in: 0.2...0.4) * length(away) // 11° to 23° of sky, a quarter of the way round
+            if length(away) > 0.1, let end = project(normalize(here + normalize(away) * tan(turn))) {
+                (angle, travel) = (atan2(end.y - node.position.y, end.x - node.position.x),
+                                   hypot(end.x - node.position.x, end.y - node.position.y))
+            }
+        }
+        node.zRotation = angle
+        node.alpha = 0
+        node.zPosition = 5
+        addChild(node)
         batteryRate = nil
-        let travel = CGFloat.random(in: 180...360)
-        streak.run(.sequence([
+        node.run(.sequence([
             .group([.moveBy(x: cos(angle) * travel, y: sin(angle) * travel, duration: 0.7),
                     .sequence([.fadeIn(withDuration: 0.1), .fadeOut(withDuration: 0.6)])]),
             .run { [weak self] in self?.batteryRate = 15 },

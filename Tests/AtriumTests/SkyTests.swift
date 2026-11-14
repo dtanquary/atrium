@@ -65,6 +65,20 @@ func eclipsesLineUp(time: String, latitude: Double, longitude: Double) {
     }
 }
 
+/// The meteor showers peak on their nights: on 13 August the Perseids are the strongest and near their full hundred
+/// an hour, on 14 December the Geminids, on 3 January the Quadrantids, and in mid-March there are none.
+@Test func showersPeakOnTheirNights() {
+    func strongest(_ month: Int, _ day: Int) -> (name: String, hourly: Double) {
+        let noon = DateComponents(calendar: Calendar(identifier: .gregorian), timeZone: .gmt, year: 2026, month: month, day: day, hour: 12)
+        let sun = Sky.sunLongitude(Sky.julianDate(noon.date!))
+        return NightSky.showers.map { ($0.name, NightSky.hourly($0, sunLongitude: sun)) }.max { $0.1 < $1.1 }!
+    }
+    #expect(strongest(8, 13).name == "Perseids" && strongest(8, 13).hourly > 70)
+    #expect(strongest(12, 14).name == "Geminids" && strongest(12, 14).hourly > 100)
+    #expect(strongest(1, 3).name == "Quadrantids" && strongest(1, 3).hourly > 40)
+    #expect(strongest(3, 15).hourly == 0)
+}
+
 /// Night Sky's photograph of the whole sky has its stars where the catalogue puts ours: turned by `NightSky.toPhoto`,
 /// the 20 brightest land on bright spots in it. Without the turn they miss by two or three degrees and none does.
 @Test func skyPhotoLinesUpWithTheStars() throws {
