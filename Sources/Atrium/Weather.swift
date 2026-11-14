@@ -254,7 +254,12 @@ class WeatherScene: SKScene, BatteryPaced {
         let dark = smoothstep(-0.07, -0.25, light.sun.z)
         starsUniform.vectorFloat2Value.x = Float(dark * (1 - 0.6 * moonUp) * visible)
         sunDisc.vectorFloat3Value = light.sun.z > -0.02 ? SIMD3<Float>(light.sunColour) : .zero
-        cloudSun.vectorFloat3Value = SIMD3<Float>(light.sunAtCloud)
+        // What comes through a deck is a low Sun's light mixed with the whole sky's and scattered many times, so most
+        // of its colour has gone: left as it reaches the cloud, an overcast sunrise was rust-brown and a sunset maroon.
+        let clouds = conditions.clouds
+        let wash = Double(clouds.deck * clouds.cover) * smoothstep(0.35, 0.05, light.sun.z) * 0.75
+        let throughDeck = light.sunAtCloud * (1 - wash) + Sky.Vector(repeating: light.sunAtCloud.sum() / 3) * wash
+        cloudSun.vectorFloat3Value = SIMD3<Float>(throughDeck)
         photoCloudSun.vectorFloat3Value = SIMD3<Float>(light.sunAtCloud * 0.18)
         photoCloudShade.vectorFloat3Value = SIMD3<Float>(light.ambient * 0.5 + light.sunAtCloud * max(light.sun.z, 0) * 0.03)
         // Rain shows the light around it; snow is white in whatever light there is. Tone-mapped like the shaders.
@@ -263,10 +268,10 @@ class WeatherScene: SKScene, BatteryPaced {
         rainColour.vectorFloat3Value = display(around * 0.8)
         snowColour.vectorFloat3Value = display(around * 1.6 + Sky.Vector(repeating: 0.002))
         // Low cloud at night glows faintly orange-grey with the lights of towns beneath it.
-        let clouds = conditions.clouds, night = smoothstep(-0.02, -0.15, light.sun.z)
+        let night = smoothstep(-0.02, -0.15, light.sun.z)
         let skyglow = Sky.Vector(0.4, 0.32, 0.24) * night * Double(clouds.deck) * Double(clouds.cover)
         cloudAmbient.vectorFloat3Value = SIMD3<Float>(light.ambient + skyglow)
-        let underside = (light.sunAtCloud * max(light.sun.z, 0) * 0.12 + (light.ambient + skyglow) * 0.22) * exp(-0.6 * (Double(clouds.thickness) - 1))
+        let underside = (throughDeck * max(light.sun.z, 0) * 0.12 + (light.ambient + skyglow) * 0.22) * exp(-0.6 * (Double(clouds.thickness) - 1))
             * Sky.Vector(0.92, 0.97, 1.08) * 0.78 // as it looks near the horizon
         // A storm's dark base ends in a bright band on the horizon where the sky beyond it is clear.
         let underDeck: Float = conditions.kind == .fog ? 0.3 : conditions.kind == .storm ? 0.45 : clouds.cover > 0.9 ? 0.92 : clouds.deck * clouds.cover
@@ -477,7 +482,8 @@ class WeatherScene: SKScene, BatteryPaced {
         vec3 cl = vec3(0.0);
         vec2 st0 = vec2(uv.x, (u_cam.z + 0.01 - u_cam.w) / (1.0 - u_cam.w));
         vec3 haze = mix(decode(texture2D(u_before, st0).rgb), decode(texture2D(u_after, st0).rgb), u_blend);
-        haze = mix(min(haze, vec3(mix(40.0, 1.5, u_deck.a))), vec3(dot(min(haze, vec3(1.5)), vec3(0.3, 0.5, 0.2))) * 0.08 + u_deck.rgb * 0.9, u_deck.a); // as it looks under the deck
+        vec3 under = vec3(dot(min(haze, vec3(1.5)), vec3(0.3, 0.5, 0.2))) * 0.08 + u_deck.rgb * 0.9; // the deck's own underside, far off
+        haze = mix(min(haze, vec3(mix(40.0, 1.5, u_deck.a))), under, u_deck.a); // as it looks under the deck
         if (rd.z > 0.0 && u_cloud.x > 0.0) {
             float tBase = u_cloud.y / rd.z;
             float lod = clamp(log2(tBase / 6.0) * 0.4, 0.0, 1.0);
@@ -512,13 +518,19 @@ class WeatherScene: SKScene, BatteryPaced {
             flashTex = 0.15 + 1.7 * smoothstep(0.3, 0.8, na1.g * 0.5 + nb1.r * 0.5);
             base *= mix(1.0, 0.55 + 0.9 * lumps, u_cloud.w) * exp(-0.6 * (u_cloud.z - 1.0));
             vec3 lit = u_sunCol * 0.3 * shadow;
-            float litFrac = clamp(top * high * face * 1.5 + (1.0 - high) * face, 0.0, 1.0);
+            // A low Sun lights the sides of heaped cloud, but not the underside of a deck: lit so, an overcast sky
+            // away from the Sun took its colour whole, rust-brown at sunrise, and before it rose went near black.
+            float litFrac = clamp(top * high * face * 1.5 + (1.0 - high) * face * (1.0 - u_cloud.w), 0.0, 1.0);
             cl = (mix(base, lit, litFrac) * (1.0 - 0.3 * u_cloud.w * d) + u_sunCol * shadow * thin * hg(c, 0.75) * 1.2) * a;
             T = 1.0 - a;
             // Distant cloud fades into the horizon haze, as a real sky ends in a pale band, not a cut-out edge. Under
-            // a deck that band is the deck's own grey (u_deck), only a little brighter toward the Sun.
+            // a deck that band is the deck's own grey (u_deck), only a little brighter toward the Sun. With the Sun
+            // low, the clear sky beyond a deck shows in the band alone, and above it far cloud fades to the deck's own
+            // grey: the horizon's colour in each column, carried up, stood over a storm's sunset as pillars. By day
+            // the horizon is one pale colour, and its lift up the sky is part of a storm's slate.
             float far = 1.0 - exp(-tBase / mix(45.0, 25.0, u_cloud.w));
-            cl = mix(cl, haze * (1.0 - T), far);
+            float above = (1.0 - smoothstep(0.2, 0.35, u_sun.z)) * min(u_deck.a * 2.0, 1.0) * smoothstep(0.02, 0.2, rd.z);
+            cl = mix(cl, mix(haze, under, above) * (1.0 - T), far);
         }
         // High cirrus at 8 km: fine streaks along the wind, still lit pink after sunset down here.
         if (rd.z > 0.0 && u_high > 0.0) {
