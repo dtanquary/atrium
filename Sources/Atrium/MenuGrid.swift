@@ -5,7 +5,8 @@ import SwiftUI
 
 /// The status menu's wallpapers as a grid of their stills, six across, each named in its corner, in place of a row of
 /// text for each: the one on the desktop is named above them and ringed, the one under the pointer grows and plays its
-/// loop from the picture it shows, and a click shows another.
+/// loop from the picture it shows, and a click shows another and closes the menu (with Option held it stays open, to
+/// try several).
 /// It is one menu item's view, so the menu's own arrow keys and type-to-select pass it by: Settings → General →
 /// Wallpapers in the menu → Names puts the list of names back for them and for VoiceOver.
 @MainActor enum MenuGrid {
@@ -171,6 +172,19 @@ struct MenuGridPictures: View {
     }
 }
 
+/// A tile's face at the grown tile's size: drawn small and scaled up, as the tile's own is.
+struct GrownFace: View {
+    let name: String
+    var on: Bool
+
+    var body: some View {
+        TileFace(name: name, on: on)
+            .frame(width: MenuGrid.tile.width, height: MenuGrid.tile.height)
+            .scaleEffect(MenuGrid.magnify, anchor: .topLeading)
+            .frame(width: MenuGrid.tile.width * MenuGrid.magnify, height: MenuGrid.tile.height * MenuGrid.magnify, alignment: .topLeading)
+    }
+}
+
 /// What lies over the tile under the pointer once it has grown: its loop, held on the first frame, which is the picture
 /// it grew from, until `play`; and its face, drawn small and scaled up as the tile's own is, so the text sits exactly
 /// where it did (set larger, text runs narrower).
@@ -179,10 +193,17 @@ final class GrownTile: NSView {
     let player = AVQueuePlayer()
     private let looper: AVPlayerLooper
     private let video: AVPlayerLayer
+    private let face: NSHostingView<GrownFace>
+    /// Whether it's the wallpaper on the desktop: an Option-click makes it so while it plays.
+    var on: Bool {
+        get { face.rootView.on }
+        set { face.rootView.on = newValue }
+    }
 
     init(loop: URL, name: String, on: Bool, at frame: CGRect) {
         looper = AVPlayerLooper(player: player, templateItem: AVPlayerItem(url: loop))
         video = AVPlayerLayer(player: player)
+        face = NSHostingView(rootView: GrownFace(name: name, on: on))
         super.init(frame: frame)
         wantsLayer = true
         layer?.cornerRadius = MenuGrid.radius * MenuGrid.magnify
@@ -196,10 +217,6 @@ final class GrownTile: NSView {
         view.layer = video
         view.wantsLayer = true
         addSubview(view)
-        let face = NSHostingView(rootView: TileFace(name: name, on: on)
-            .frame(width: MenuGrid.tile.width, height: MenuGrid.tile.height)
-            .scaleEffect(MenuGrid.magnify, anchor: .topLeading)
-            .frame(width: frame.width, height: frame.height, alignment: .topLeading))
         face.frame = bounds
         addSubview(face)
     }
@@ -241,8 +258,9 @@ final class MenuGridView: NSView {
     override func mouseExited(with event: NSEvent) { grow(nil) }
     override func mouseMoved(with event: NSEvent) { grow(index(at: event)) }
 
+    /// A click on a tile shows its wallpaper and closes the menu; with Option held the menu stays open, to try another.
     override func mouseUp(with event: NSEvent) {
-        if let index = index(at: event) { choose(scenes[index].name) }
+        if let index = index(at: event) { choose(scenes[index].name, closing: !event.modifierFlags.contains(.option)) }
     }
 
     private func index(at event: NSEvent) -> Int? {
@@ -279,9 +297,11 @@ final class MenuGridView: NSView {
         }, forMode: .common)
     }
 
-    /// Closes the menu and shows the wallpaper, as picking a row of a menu does.
-    private func choose(_ name: String) {
-        enclosingMenuItem?.menu?.cancelTracking()
+    /// Shows the wallpaper and closes the menu, as picking a row of a menu does. Left open, the grown tile takes the
+    /// tick as it plays: the tiles under it follow the saved wallpaper themselves.
+    private func choose(_ name: String, closing: Bool = true) {
+        if closing { enclosingMenuItem?.menu?.cancelTracking() }
         pick(name)
+        grown?.on = hover.name == name
     }
 }

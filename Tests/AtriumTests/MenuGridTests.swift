@@ -67,11 +67,12 @@ import Testing
 /// Opens a menu holding the grid on screen for a moment and captures it, since a menu's glass only renders for real.
 ///
 ///     MENU_SHOT=1 swift test --filter menuShot           # → $TMPDIR/atrium-menu.png
-///     MENU_SHOT="Nebula" swift test --filter menuShot    # with the pointer over that wallpaper, then a click on it
+///     MENU_SHOT="Nebula" swift test --filter menuShot    # with the pointer over that wallpaper, then clicks on it
 ///     SNAPSHOT_APPEARANCE=light MENU_SHOT=1 …            # in Light Mode
 ///
-/// The pointer and the click are events handed to the grid as the menu would hand them, at the middle of the tile
-/// worked out from where the grid sits in the menu's window: the real pointer stays where it is.
+/// The pointer and the clicks are events handed to the grid as the menu would hand them, at the middle of the tile
+/// worked out from where the grid sits in the menu's window: the real pointer stays where it is. An Option-click
+/// has to show the wallpaper and leave the menu open, and a plain click pick.
 @MainActor @Test(.enabled(if: ProcessInfo.processInfo.environment["MENU_SHOT"] != nil))
 func menuShot() throws {
     let env = ProcessInfo.processInfo.environment
@@ -81,13 +82,14 @@ func menuShot() throws {
     if let look = env["SNAPSHOT_APPEARANCE"] { NSApp.appearance = NSAppearance(named: look == "light" ? .aqua : .darkAqua) }
     let wanted = scenes.firstIndex { $0.name == env["MENU_SHOT"] }
     var hovered: String?, picked: String?, grown = false
+    var optionPicked: String?, stayedOpen = false, ticked = false
     let menu = NSMenu(), grid = MenuGridView { picked = $0 }, item = NSMenuItem()
-    func mouse(_ type: NSEvent.EventType) -> NSEvent? {
-        guard let wanted, let window = grid.window else { return nil }
-        let tile = MenuGrid.frame(wanted), inWindow = grid.convert(grid.bounds, to: nil)
-        return .mouseEvent(with: type, location: NSPoint(x: inWindow.minX + tile.midX, y: inWindow.maxY - tile.midY), modifierFlags: [],
-                           timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil,
-                           eventNumber: 0, clickCount: 1, pressure: 0)
+    func mouse(_ type: NSEvent.EventType, _ modifiers: NSEvent.ModifierFlags = []) -> NSEvent? {
+        guard let place = wanted.map(MenuGrid.frame), let window = grid.window else { return nil }
+        let inWindow = grid.convert(grid.bounds, to: nil)
+        return .mouseEvent(with: type, location: NSPoint(x: inWindow.minX + place.midX, y: inWindow.maxY - place.midY),
+                           modifierFlags: modifiers, timestamp: ProcessInfo.processInfo.systemUptime,
+                           windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 0)
     }
     menu.autoenablesItems = false
     item.view = grid
@@ -116,14 +118,22 @@ func menuShot() throws {
             grid.cacheDisplay(in: grid.bounds, to: bitmap)
             try? bitmap.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
         }
+        mouse(.leftMouseUp, .option).map(grid.mouseUp) // which shows it and leaves the menu open
+    }
+    after(2.0) {
+        (optionPicked, stayedOpen, ticked) = (picked, grid.window?.isVisible == true, grid.grown?.on == true)
+        picked = nil
         mouse(.leftMouseUp).map(grid.mouseUp) // which closes the menu, as a pick does
         menu.cancelTracking()
     }
     let screen = try #require(NSScreen.main).visibleFrame
     menu.popUp(positioning: nil, at: NSPoint(x: screen.maxX - MenuGrid.width - 40, y: screen.maxY - 8), in: nil)
     if let wanted {
+        let moves = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         #expect(hovered == scenes[wanted].name && picked == scenes[wanted].name, "over \(hovered ?? "none"), picked \(picked ?? "none")")
-        #expect(grown == !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion, "the tile under the pointer has its loop")
+        #expect(grown == moves, "the tile under the pointer has its loop")
+        #expect(optionPicked == scenes[wanted].name && stayedOpen, "an Option-click picked \(optionPicked ?? "none"), menu open: \(stayedOpen)")
+        #expect(ticked == moves, "the grown tile takes the tick as it plays")
     }
     print("The menu → \(path)")
 }
