@@ -68,11 +68,12 @@ import Testing
 ///
 ///     MENU_SHOT=1 swift test --filter menuShot           # → $TMPDIR/atrium-menu.png
 ///     MENU_SHOT="Nebula" swift test --filter menuShot    # with the pointer over that wallpaper, then clicks on it
+///     MENU_SHOT="Settings" swift test --filter menuShot  # with the pointer over the Settings pill
 ///     SNAPSHOT_APPEARANCE=light MENU_SHOT=1 …            # in Light Mode
 ///
 /// The pointer and the clicks are events handed to the grid as the menu would hand them, at the middle of the tile
 /// worked out from where the grid sits in the menu's window: the real pointer stays where it is. An Option-click
-/// has to show the wallpaper and leave the menu open, and a plain click pick.
+/// has to show the wallpaper and leave the menu open, a click on the pill ask for Settings, and a plain click pick.
 @MainActor @Test(.enabled(if: ProcessInfo.processInfo.environment["MENU_SHOT"] != nil))
 func menuShot() throws {
     let env = ProcessInfo.processInfo.environment
@@ -81,11 +82,12 @@ func menuShot() throws {
     NSApplication.shared.setActivationPolicy(.accessory)
     if let look = env["SNAPSHOT_APPEARANCE"] { NSApp.appearance = NSAppearance(named: look == "light" ? .aqua : .darkAqua) }
     let wanted = scenes.firstIndex { $0.name == env["MENU_SHOT"] }
-    var hovered: String?, picked: String?, grown = false
+    let pill = env["MENU_SHOT"] == "Settings"
+    var hovered: String?, picked: String?, grown = false, lit = false, opened = false
     var optionPicked: String?, stayedOpen = false, ticked = false
-    let menu = NSMenu(), grid = MenuGridView { picked = $0 }, item = NSMenuItem()
-    func mouse(_ type: NSEvent.EventType, _ modifiers: NSEvent.ModifierFlags = []) -> NSEvent? {
-        guard let place = wanted.map(MenuGrid.frame), let window = grid.window else { return nil }
+    let menu = NSMenu(), grid = MenuGridView(settings: { opened = true }) { picked = $0 }, item = NSMenuItem()
+    func mouse(_ type: NSEvent.EventType, at place: CGRect? = nil, _ modifiers: NSEvent.ModifierFlags = []) -> NSEvent? {
+        guard let place = place ?? wanted.map(MenuGrid.frame), let window = grid.window else { return nil }
         let inWindow = grid.convert(grid.bounds, to: nil)
         return .mouseEvent(with: type, location: NSPoint(x: inWindow.minX + place.midX, y: inWindow.maxY - place.midY),
                            modifierFlags: modifiers, timestamp: ProcessInfo.processInfo.systemUptime,
@@ -101,10 +103,11 @@ func menuShot() throws {
     func after(_ seconds: Double, _ work: @escaping @MainActor () -> Void) {
         RunLoop.main.add(Timer(timeInterval: seconds, repeats: false) { _ in MainActor.assumeIsolated(work) }, forMode: .common)
     }
-    after(0.7) { mouse(.mouseMoved).map(grid.mouseMoved) }
+    after(0.7) { mouse(.mouseMoved, at: pill ? MenuGrid.settings : nil).map(grid.mouseMoved) }
     after(1.6) {
         hovered = grid.hover.name
         grown = grid.grown != nil
+        lit = grid.hover.settings
         // A capture of the menu's window alone comes out empty, so this takes its part of the screen, desktop and all.
         if let area = grid.window?.frame.insetBy(dx: -12, dy: -12), let screen = NSScreen.screens.first {
             let capture = Process()
@@ -123,11 +126,14 @@ func menuShot() throws {
     after(2.0) {
         (optionPicked, stayedOpen, ticked) = (picked, grid.window?.isVisible == true, grid.grown?.on == true)
         picked = nil
+        mouse(.leftMouseUp, at: MenuGrid.settings).map(grid.mouseUp) // which asks for Settings and closes the menu
         mouse(.leftMouseUp).map(grid.mouseUp) // which closes the menu, as a pick does
         menu.cancelTracking()
     }
     let screen = try #require(NSScreen.main).visibleFrame
     menu.popUp(positioning: nil, at: NSPoint(x: screen.maxX - MenuGrid.width - 40, y: screen.maxY - 8), in: nil)
+    #expect(opened, "a click on the pill opens Settings")
+    #expect(lit == pill, "the pill is lit under the pointer and only then")
     if let wanted {
         let moves = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         #expect(hovered == scenes[wanted].name && picked == scenes[wanted].name, "over \(hovered ?? "none"), picked \(picked ?? "none")")

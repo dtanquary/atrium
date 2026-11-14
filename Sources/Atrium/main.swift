@@ -364,7 +364,7 @@ if !scenes.contains(where: { $0.name == current }) {
     /// The wallpapers as pictures: one item, kept from one opening of the menu to the next.
     private lazy var grid = {
         let item = NSMenuItem()
-        item.view = MenuGridView { show($0) }
+        item.view = MenuGridView(settings: { SettingsWindow.shared.open(page: current) }) { show($0) }
         return item
     }()
 

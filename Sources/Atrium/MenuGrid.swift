@@ -6,7 +6,7 @@ import SwiftUI
 /// The status menu's wallpapers as a grid of their stills, six across, each named in its corner, in place of a row of
 /// text for each: the one on the desktop is named above them and ringed, the one under the pointer grows and plays its
 /// loop from the picture it shows, and a click shows another and closes the menu (with Option held it stays open, to
-/// try several).
+/// try several). The pill beside the name opens Settings on that wallpaper's page.
 /// It is one menu item's view, so the menu's own arrow keys and type-to-select pass it by: Settings → General →
 /// Wallpapers in the menu → Names puts the list of names back for them and for VoiceOver.
 @MainActor enum MenuGrid {
@@ -22,6 +22,9 @@ import SwiftUI
     /// A tile: a sixth of the width between the insets, in the shape of a still (1200 × 779).
     static let tile = CGSize(width: (width - 2 * inset - Double(across - 1) * gap) / Double(across),
                              height: (width - 2 * inset - Double(across - 1) * gap) / Double(across) * 779 / 1200)
+
+    /// The pill at the caption's right that opens the wallpaper on the desktop's page of Settings.
+    static let settings = CGRect(x: width - inset - 86, y: top + (caption - 20) / 2, width: 86, height: 20)
 
     static func height(count: Int) -> Double {
         let rows = Double((count + across - 1) / across)
@@ -89,9 +92,10 @@ import SwiftUI
     }
 }
 
-/// The wallpaper the pointer is over, set by `MenuGridView` and drawn by `MenuGridPictures`.
+/// The wallpaper the pointer is over, or the Settings pill, set by `MenuGridView` and drawn by `MenuGridPictures`.
 @MainActor final class MenuGridHover: ObservableObject {
     @Published var name: String?
+    @Published var settings = false
 }
 
 /// What lies over a tile's picture: its name in the bottom corner, white on a soft shade, the tick on the one on the
@@ -125,23 +129,28 @@ struct TileFace: View {
 /// The grid's drawing: the caption, then a tile for each wallpaper where `MenuGrid.frame` puts it.
 struct MenuGridPictures: View {
     @ObservedObject var hover: MenuGridHover
-    /// Shows a wallpaper, for VoiceOver's press: the mouse goes through `MenuGridView`.
-    let pick: (String) -> Void
+    /// Shows a wallpaper, and opens its page of Settings, for VoiceOver's press: the mouse goes through `MenuGridView`.
+    let pick: (String) -> Void, settings: () -> Void
     @AppStorage("scene") private var current = defaultScene.name
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack(alignment: .topLeading) {
-            HStack {
-                Text(current).font(.system(size: 13, weight: .semibold))
-                Spacer()
-                Label("On Desktop", systemImage: "checkmark").font(.system(size: 11, weight: .medium))
-                    .padding(.horizontal, 8).frame(height: 20).glassEffect(.regular, in: .capsule)
-            }
-            .frame(width: MenuGrid.width - 2 * MenuGrid.inset, height: MenuGrid.caption)
-            .offset(x: MenuGrid.inset, y: MenuGrid.top)
-            .accessibilityHidden(true) // the tile says it too
+            Text(current).font(.system(size: 13, weight: .semibold))
+                .frame(width: MenuGrid.settings.minX - MenuGrid.inset - MenuGrid.gap, height: MenuGrid.caption, alignment: .leading)
+                .offset(x: MenuGrid.inset, y: MenuGrid.top)
+                .accessibilityHidden(true) // the tile says it too
+            // Lit like the menu's own row under the pointer, so it reads as one more thing to choose.
+            Label("Settings", systemImage: "slider.horizontal.3").font(.system(size: 11, weight: .medium))
+                .foregroundStyle(hover.settings ? .white : .primary)
+                .frame(width: MenuGrid.settings.width, height: MenuGrid.settings.height)
+                .glassEffect(hover.settings ? .regular.tint(.accentColor) : .regular, in: .capsule)
+                .offset(x: MenuGrid.settings.minX, y: MenuGrid.settings.minY)
+                .accessibilityElement()
+                .accessibilityLabel("\(current) Settings")
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction { settings() }
             ForEach(Array(scenes.enumerated()), id: \.element.name) { index, wallpaper in
                 tile(wallpaper, at: MenuGrid.frame(index), growing: MenuGrid.anchor(index, count: scenes.count))
             }
@@ -232,14 +241,17 @@ final class GrownTile: NSView {
 /// app in front, and picks on mouse-up as the menu's own rows do.
 final class MenuGridView: NSView {
     let hover = MenuGridHover()
-    private let pick: (String) -> Void
+    private let pick: (String) -> Void, settings: () -> Void
     /// The tile under the pointer at its full size, playing.
     private(set) var grown: GrownTile?
 
-    init(pick: @escaping (String) -> Void) {
+    /// `pick` shows a wallpaper; `settings` opens Settings on the page of the one on the desktop.
+    init(settings: @escaping () -> Void = {}, pick: @escaping (String) -> Void) {
         self.pick = pick
+        self.settings = settings
         super.init(frame: NSRect(x: 0, y: 0, width: MenuGrid.width, height: MenuGrid.height(count: scenes.count)))
-        let pictures = NSHostingView(rootView: MenuGridPictures(hover: hover) { [weak self] in self?.choose($0) })
+        let pictures = NSHostingView(rootView: MenuGridPictures(hover: hover, pick: { [weak self] in self?.choose($0) },
+                                                                settings: { [weak self] in self?.openSettings() }))
         pictures.frame = bounds
         addSubview(pictures)
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.activeAlways, .mouseMoved, .mouseEnteredAndExited, .inVisibleRect],
@@ -253,14 +265,23 @@ final class MenuGridView: NSView {
     /// Every click is this view's, not the SwiftUI view's inside it.
     override func hitTest(_ point: NSPoint) -> NSView? { super.hitTest(point).map { _ in self } }
 
-    override func viewDidMoveToWindow() { grow(nil) } // a menu that closes under the pointer sends no exit
+    override func viewDidMoveToWindow() { grow(nil); hover.settings = false } // a menu that closes under the pointer sends no exit
     override func mouseEntered(with event: NSEvent) { mouseMoved(with: event) }
-    override func mouseExited(with event: NSEvent) { grow(nil) }
-    override func mouseMoved(with event: NSEvent) { grow(index(at: event)) }
+    override func mouseExited(with event: NSEvent) { grow(nil); hover.settings = false }
+
+    override func mouseMoved(with event: NSEvent) {
+        grow(index(at: event))
+        let over = MenuGrid.settings.contains(convert(event.locationInWindow, from: nil))
+        if over != hover.settings { hover.settings = over }
+    }
 
     /// A click on a tile shows its wallpaper and closes the menu; with Option held the menu stays open, to try another.
     override func mouseUp(with event: NSEvent) {
-        if let index = index(at: event) { choose(scenes[index].name, closing: !event.modifierFlags.contains(.option)) }
+        if let index = index(at: event) {
+            choose(scenes[index].name, closing: !event.modifierFlags.contains(.option))
+        } else if MenuGrid.settings.contains(convert(event.locationInWindow, from: nil)) {
+            openSettings()
+        }
     }
 
     private func index(at event: NSEvent) -> Int? {
@@ -303,5 +324,10 @@ final class MenuGridView: NSView {
         if closing { enclosingMenuItem?.menu?.cancelTracking() }
         pick(name)
         grown?.on = hover.name == name
+    }
+
+    private func openSettings() {
+        enclosingMenuItem?.menu?.cancelTracking()
+        settings()
     }
 }
