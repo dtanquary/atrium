@@ -493,19 +493,26 @@ final class NightSky: SKScene, BatteryPaced {
     nonisolated static func starGrid() -> [UInt8] {
         let (w, h) = (2048, 1024)
         var cells = [UInt8](repeating: 0, count: w * h * 4)
-        let packed = try? Data(contentsOf: resource("blackhole-stars.lzfse")) as NSData
-        let bytes = ((try? packed?.decompressed(using: .lzfse)) as Data?).map { [UInt8]($0) } ?? [], count = bytes.count / 6
-        for i in 0..<count {
-            let magnitude = Double(bytes[4 * count + i]) / 255 * 12.5 - 1.5
-            guard magnitude > 5.3 else { continue } // the brighter ones are sprites
-            func place(_ run: Int) -> Double { Double(Int(bytes[run * 2 * count + 2 * i]) | Int(bytes[run * 2 * count + 2 * i + 1]) << 8) / 65535 }
-            let y = min(place(1) * Double(h), Double(h) - 0.001)
-            let across = Self.cells(row: y.rounded(.down)), x = min(place(0) * across, across - 0.001)
-            let at = (Int(y) * w + Int(x)) * 4, bright = UInt8(max(1, (11 - magnitude) / 5.7 * 255))
+        for star in starFile() where star.magnitude > 5.3 { // the brighter ones are sprites
+            let y = min(star.up * Double(h), Double(h) - 0.001)
+            let across = Self.cells(row: y.rounded(.down)), x = min(star.round * across, across - 0.001)
+            let at = (Int(y) * w + Int(x)) * 4, bright = UInt8(max(1, (11 - star.magnitude) / 5.7 * 255))
             guard bright > cells[at + 2] else { continue }
-            cells[at..<at + 4] = [UInt8((x - x.rounded(.down)) * 256), UInt8((y - y.rounded(.down)) * 256), bright, bytes[5 * count + i]]
+            cells[at..<at + 4] = [UInt8((x - x.rounded(.down)) * 256), UInt8((y - y.rounded(.down)) * 256), bright, star.colour]
         }
         return cells
+    }
+
+    /// Every star in Black Hole's file, as docs/black-hole/sky.py packs it: longitude and latitude in that scene's
+    /// frame, each as 0 to 1 (−180° to 180° round, −90° to 90° up), magnitude, and the B−V byte. `toStars` is that
+    /// frame, so if the file is ever baked for another view the two part company: `starFileIsInNightSkysFrame` fails.
+    nonisolated static func starFile() -> [(round: Double, up: Double, magnitude: Double, colour: UInt8)] {
+        let packed = try? Data(contentsOf: resource("blackhole-stars.lzfse")) as NSData
+        let bytes = ((try? packed?.decompressed(using: .lzfse)) as Data?).map { [UInt8]($0) } ?? [], count = bytes.count / 6
+        return (0..<count).map { i in
+            func place(_ run: Int) -> Double { Double(Int(bytes[run * 2 * count + 2 * i]) | Int(bytes[run * 2 * count + 2 * i + 1]) << 8) / 65535 }
+            return (place(0), place(1), Double(bytes[4 * count + i]) / 255 * 12.5 - 1.5, bytes[5 * count + i])
+        }
     }
 
     /// How many cells a row of the star grid holds. The shader works out the same number: the band is a whole number

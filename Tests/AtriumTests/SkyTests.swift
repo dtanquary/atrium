@@ -90,6 +90,23 @@ func eclipsesLineUp(time: String, latitude: Double, longitude: Double) {
     #expect(NightSky.comet(noon(11, 25)) == nil && NightSky.comet(noon(12, 20)) != nil)
 }
 
+/// Night Sky's fainter stars come from Black Hole's star file, which is baked already turned to that scene's view, and
+/// `NightSky.toStars` is that turn. Bake the file for another view and Night Sky's stars would all land in the wrong
+/// places with nothing to say so; this says so: each of the 20 brightest stars of Night Sky's own catalogue has to be
+/// in the file within a tenth of a degree of where the turn puts it.
+@Test func starFileIsInNightSkysFrame() {
+    let bright = NightSky.starFile().filter { $0.magnitude < 2.5 }.map { star -> Sky.Vector in
+        let (round, up) = ((star.round - 0.5) * 2 * .pi, (star.up - 0.5) * .pi)
+        return [cos(up) * sin(round), sin(up), cos(up) * cos(round)] // longitude is atan2(x, z), latitude asin(y)
+    }
+    #expect(bright.count > 50)
+    for star in NightSky.catalogue.sorted(by: { $0.magnitude < $1.magnitude }).prefix(20) {
+        let turned = NightSky.toStars * star.direction
+        let nearest = bright.map { acos(min(1, dot($0, turned))) * 180 / .pi }.min() ?? 180
+        #expect(nearest < 0.1, "a magnitude \(star.magnitude) star is \(nearest)° from any in the file")
+    }
+}
+
 /// The star grid's rows hold the number of cells the shader expects, and nearly every faint star keeps its cell.
 @Test func faintStarsKeepTheirCells() {
     // none of the sixteen bands' counts is within a tenth of a whole number, where a GPU's cosine could round the other way

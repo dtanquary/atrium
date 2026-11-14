@@ -11,6 +11,10 @@ to the scene's own frame, so the app does no astronomy.
                           longitude across and latitude up, north at the top. Stored lighter than it is, as
                           value^0.6, so the dark sky keeps its steps; the shader undoes it.
 
+Night Sky draws its fainter stars from blackhole-stars.lzfse too, and undoes this frame's turn with a matrix of its
+own (NightSky.toStars). Change the turn here and that must change with it, or Night Sky's stars land in the wrong
+places: the test starFileIsInNightSkysFrame fails until it does.
+
 The scene's frame: longitude 0, latitude 0 is straight through the hole from the camera, latitude is up the screen
 and longitude runs to the right. The sky is turned as in the mock-up Dave picked (sheet 3, tile K: bh.py's
 sky_rot = (35, -55, 12)), which puts the Milky Way's band down the right of the screen, with its bright centre
