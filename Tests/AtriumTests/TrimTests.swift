@@ -46,7 +46,7 @@ import Testing
 
 /// At scale 1 a trimmed scene draws byte for byte what it drew before it had a trim: the same scene, at the same
 /// moment, with what its trim holds put straight on the scene in the trim's place.
-@MainActor @Test(arguments: ["Night Sky", "Nebula", "Galaxy", "Meander", "Aurora", "Dappled Light"])
+@MainActor @Test(arguments: ["Nebula", "Galaxy", "Meander", "Aurora", "Dappled Light"])
 func trimAtFullScaleDrawsAsBefore(name: String) throws {
     let device = try #require(MTLCreateSystemDefaultDevice()), queue = try #require(device.makeCommandQueue())
     let size = CGSize(width: 600, height: 390), (w, h) = (1200, 780)

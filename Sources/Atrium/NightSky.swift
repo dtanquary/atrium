@@ -6,7 +6,7 @@ import simd
 /// The real sky above you right now, facing the equator, as it would be with the daylight switched off: stars, the
 /// Milky Way, constellations, planets, the Moon in its true phase, the ISS, and the odd meteor. It's dark at noon too,
 /// with the Sun drawn among the stars it hides, and a warm band low toward it around sunrise and sunset.
-final class NightSky: SKScene, BatteryPaced, Trimmable {
+final class NightSky: SKScene, BatteryPaced {
     /// 15 fps on battery, where the ISS, the fastest steady thing, moves up to 2.4 px a frame; the battery's rate
     /// while a meteor crosses, at 1,000 px a second, for its 0.7 s.
     var batteryRate: Int? = 15 { didSet { batteryRateChanged(from: oldValue) } }
@@ -29,15 +29,12 @@ final class NightSky: SKScene, BatteryPaced, Trimmable {
     private let constellations = SKShapeNode()
     private var planets: [(planet: Sky.Planet, node: SKSpriteNode)] = []
     private let sun = SKSpriteNode()
-    /// Holds the sky behind everything, which alone is drawn at a lower resolution when trimmed: the stars, lines and
-    /// labels over it stay sharp.
-    let trim = TrimNode()
     private let sunGlow = SKSpriteNode()
     private let moon = SKSpriteNode(color: .white, size: CGSize(width: 46, height: 46))
     private let moonGlow = SKSpriteNode()
     private let moonLight = SKUniform(name: "u_light", vectorFloat3: [0, 0, 1])
     private let iss = SKSpriteNode()
-    private let galacticUniform = SKUniform(name: "u_galactic", matrixFloat3x3: matrix_identity_float3x3)
+    private let photoFrame = SKUniform(name: "u_toPhoto", matrixFloat3x3: matrix_identity_float3x3)
     private let twilightUniform = SKUniform(name: "u_twilight", float: 0)
     private let sunUniform = SKUniform(name: "u_sun", vectorFloat3: [0, 0, 1])
 
@@ -203,14 +200,14 @@ final class NightSky: SKScene, BatteryPaced, Trimmable {
         moonGlow.alpha = 0.5 * lit
         if !moon.isHidden { moon.zRotation = screenAngle(from: moonH, toward: poleH) - .pi / 2 }
 
-        // The Milky Way shader maps screen → sky → galactic: plane (right, up, forward) → horizon → equatorial → galactic.
+        // The background maps screen → sky → the photo: plane (right, up, forward) → horizon → equatorial → its frame.
         let basis = facingSouth
             ? simd_double3x3(columns: ([-1, 0, 0], [0, 0, 1], [0, -1, 0]))
             : simd_double3x3(columns: ([1, 0, 0], [0, 0, 1], [0, 1, 0]))
-        let toGalactic = Sky.galactic * toHorizon.transpose * basis
-        galacticUniform.matrixFloat3x3Value = simd_float3x3(columns: (SIMD3<Float>(toGalactic.columns.0),
-                                                                     SIMD3<Float>(toGalactic.columns.1),
-                                                                     SIMD3<Float>(toGalactic.columns.2)))
+        let toPhoto = Self.toPhoto * toHorizon.transpose * basis
+        photoFrame.matrixFloat3x3Value = simd_float3x3(columns: (SIMD3<Float>(toPhoto.columns.0),
+                                                                 SIMD3<Float>(toPhoto.columns.1),
+                                                                 SIMD3<Float>(toPhoto.columns.2)))
     }
 
     // MARK: Building the scene
@@ -370,22 +367,22 @@ final class NightSky: SKScene, BatteryPaced, Trimmable {
         addChild(moon)
     }
 
-    /// Dark sky, brighter toward the horizon, with the Milky Way painted where it really is. Around sunrise and sunset
-    /// a warm band glows low toward the Sun.
+    /// J2000 equatorial → the frame of the sky's photograph, `sky-milky-way.heic`: ESO/S. Brunier's panorama of the
+    /// whole sky (eso0932a, CC BY 4.0), a plate carrée in galactic coordinates with the galactic centre in the middle.
+    /// The photo sits 3.8° off true galactic coordinates. This turn, fitted to 516 of the catalogue's stars found in
+    /// it, puts its stars under ours to within 0.14°, a point and a half on a 1512-point display.
+    nonisolated static let toPhoto = simd_double3x3(rows: [
+        [0.998018, 0.055626, -0.029440], [-0.055074, 0.998297, 0.019237], [0.030460, -0.017578, 0.999381],
+    ]) * Sky.galactic
+
+    /// Dark sky, a little lighter toward the horizon, behind a photograph of the real one turned to where it is now:
+    /// the Milky Way and its dust, the Magellanic Clouds, Andromeda, the nebulae, and the stars too faint for the
+    /// catalogue. Around sunrise and sunset a warm band glows low toward the Sun.
     private func addSkyBackground() {
         let sky = SKSpriteNode(color: .black, size: size)
         sky.anchorPoint = .zero
         sky.shader = SKShader(source: """
-            float hash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
-            float noise(vec3 x) {
-                vec3 i = floor(x);
-                vec3 f = fract(x);
-                f = f * f * (3.0 - 2.0 * f);
-                return mix(mix(mix(hash(i), hash(i + vec3(1.0, 0.0, 0.0)), f.x),
-                               mix(hash(i + vec3(0.0, 1.0, 0.0)), hash(i + vec3(1.0, 1.0, 0.0)), f.x), f.y),
-                           mix(mix(hash(i + vec3(0.0, 0.0, 1.0)), hash(i + vec3(1.0, 0.0, 1.0)), f.x),
-                               mix(hash(i + vec3(0.0, 1.0, 1.0)), hash(i + vec3(1.0, 1.0, 1.0)), f.x), f.y), f.z);
-            }
+            float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
             void main() {
                 vec2 p = (v_tex_coord * u_size - vec2(0.5 * u_size.x, u_horizon)) / u_scale;
                 float r2 = dot(p, p);
@@ -393,31 +390,29 @@ final class NightSky: SKScene, BatteryPaced, Trimmable {
                 float height = smoothstep(-0.05, 0.7, d.y);
                 vec3 colour = mix(vec3(0.05, 0.065, 0.12), vec3(0.006, 0.01, 0.028), height);
 
-                vec3 g = u_galactic * d;
-                float b = asin(clamp(g.z, -1.0, 1.0));
-                float l = atan(g.y, g.x);
-                float disc = exp(-b * b / 0.03) * (0.45 + 0.55 * cos(l) * cos(l * 0.5));
-                float bulge = exp(-l * l / 0.2 - b * b / 0.05);
-                float clouds = 0.5 * noise(g * 7.0) + 0.3 * noise(g * 17.0) + 0.2 * noise(g * 43.0);
-                float lane = 1.0 - 0.75 * exp(-(b - 0.015) * (b - 0.015) / 0.0012) * smoothstep(1.6, 0.3, abs(l));
-                colour += vec3(0.6, 0.62, 0.72) * 0.14 * (disc + bulge) * clouds * clouds * 1.6 * lane;
+                // The photo, less its own sky glow, dimming toward the horizon as the real sky does through more air.
+                vec3 g = u_toPhoto * d;
+                vec2 at = vec2(0.5 - atan(g.y, g.x) / 6.2831853, 0.5 + asin(clamp(g.z, -1.0, 1.0)) / 3.1415927);
+                // A film's shoulder keeps the galactic centre from burning out while the fainter arms stay in sight.
+                vec3 photo = max(texture2D(u_photo, at).rgb - 0.05, 0.0);
+                colour += (1.0 - exp(-1.5 * photo)) * mix(0.45, 1.0, smoothstep(0.0, 0.3, d.y));
 
                 // Sunrise and sunset: a warm band low in the sky, strongest toward the Sun's azimuth.
                 float sunward = exp((dot(normalize(d.xz), normalize(u_sun.xz + vec2(0.0, 0.0001))) - 1.0) * 2.5);
                 float low = exp(-max(d.y, 0.0) * 6.0);
                 colour += u_twilight * low * (vec3(0.14, 0.07, 0.15) + vec3(0.95, 0.4, 0.1) * sunward);
 
-                colour += (hash(vec3(v_tex_coord * u_size, 1.0)) - 0.5) / 255.0; // dither away banding
+                colour += (hash(v_tex_coord * u_size) - 0.5) / 255.0; // dither away banding
                 gl_FragColor = vec4(colour, 1.0);
             }
             """, uniforms: [
                 SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]),
                 horizonUniform,
                 SKUniform(name: "u_scale", float: Float(scale)),
-                galacticUniform, twilightUniform, sunUniform,
+                SKUniform(name: "u_photo", texture: sharedTexture("sky-milky-way.heic")),
+                photoFrame, twilightUniform, sunUniform,
             ])
-        trim.content.addChild(sky)
-        addChild(trim)
+        addChild(sky)
     }
 
     /// Paints a silhouette along the bottom, in place of the one before.

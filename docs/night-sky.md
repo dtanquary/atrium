@@ -1,6 +1,6 @@
 # Night Sky
 
-The real sky above the viewer right now, looking toward the equator: about 2,900 stars, the Milky Way, constellation lines, the five naked-eye planets, the Moon in its true phase and tilt, the ISS when it's overhead and sunlit, and an occasional meteor. The sky fills the screen down to the horizon unless Settings puts a landscape under it. It's the sky with the daylight switched off: as dark at noon as at midnight, with the Sun drawn among the stars it hides, and a warm band low toward it around sunrise and sunset.
+The real sky above the viewer right now, looking toward the equator: about 2,900 stars over a photograph of the whole sky (the Milky Way and its dust, the Magellanic Clouds, Andromeda, the Orion Nebula and the rest, each where it really is), constellation lines, the five naked-eye planets, the Moon in its true phase and tilt, the ISS when it's overhead and sunlit, and an occasional meteor. The sky fills the screen down to the horizon unless Settings puts a landscape under it. It's the sky with the daylight switched off: as dark at noon as at midnight, with the Sun drawn among the stars it hides, and a warm band low toward it around sunrise and sunset.
 
 - **Files:**
   - `Sources/Atrium/NightSky.swift`: the scene.
@@ -9,6 +9,7 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
   - `Sources/Atrium/ISS.swift`: see [earth-from-orbit.md](earth-from-orbit.md).
   - `Sources/Atrium/Resources/stars.txt` and `constellations.txt`.
   - `Sources/Atrium/Resources/sky-*.txt`: the real skylines, made by `docs/night-sky/horizon.py`.
+  - `Sources/Atrium/Resources/sky-milky-way.heic`: the photograph of the whole sky, made by `docs/night-sky/sky.py`.
   - `Tests/AtriumTests/SkyTests.swift`.
 - **Entry:** `nightSky(size:)` builds `final class NightSky: SKScene`. Its entry in Scenes.swift is "Night Sky", icon `moon.stars.fill`, tint `.blue`, `knobs: NightSky.knobs`.
 - **Kind:** hybrid. The background and the Moon are SKShaders; stars, planets, the Sun, the ISS, labels and meteors are sprites; the landscape, when one is switched on, is a Core Graphics texture.
@@ -18,7 +19,11 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
 - **Frames.** Equatorial directions are J2000 unit vectors. `Sky.horizonMatrix(jd:latitude:longitude:)` turns them into (east, north, up). `refresh()` recomputes every position every 5 s, and on any settings change.
 - **Background shader** (`addSkyBackground`): each pixel is un-projected back onto the sphere, as (right, up, forward).
   - A night gradient, a little lighter toward the horizon.
-  - The Milky Way is computed in galactic coordinates through `u_galactic` (screen → horizon → equatorial → galactic, built in `refresh()`): a disc, a bulge toward the galactic centre, three octaves of 3D value noise, and a dust lane.
+  - **The photograph of the whole sky** (`u_photo`, since 2026-11-14): ESO/S. Brunier's panorama, a plate carrée in galactic coordinates with the galactic centre in the middle, 4096 × 2048 (11 pixels a degree, where a 1512-point display at 2x shows 23 to 30). Each pixel's direction goes screen → horizon → equatorial → the photo's frame through `u_toPhoto`, built in `refresh()`, and is looked up by its longitude and latitude there. It replaced a drawn Milky Way (a disc, a bulge, three octaves of 3D noise and one dust lane).
+    - **Lining it up** (`NightSky.toPhoto`): the photo sits 3.8° off true galactic coordinates, enough to put Sirius two and a half degrees from its own picture. The turn that fixes it was fitted to the catalogue: the 700 brightest stars were looked for in the photo, 516 found, and the best rotation leaves them 0.14° out at the median and 0.34° at worst (a point and a half, and four, on a 1512-point display), evenly over the sky. So each star sprite sits on its own star in the photo, and the photo's halo round a bright star reads as that star's glow.
+    - **Its own stars are turned down to 30%** (`sky.py`). Stretched over a screen the photo's faint stars are soft dots of much the same brightness, tens of thousands of them, and at full strength they drowned the catalogue's stars and the constellation lines: Orion couldn't be picked out. A 9-pixel median takes the stars out and keeps what's spread out; 30% of what it took goes back, as a faint dusting that's denser toward the Milky Way.
+    - **Venus and Jupiter are painted out.** They stood in Aquarius and Sagittarius on the nights it was shot (2008–09) and would be two bright stars that aren't there. They were found as the only bright spots in the photo with no catalogue star and no deep-sky object under them; the rest of that list was Omega Centauri, Andromeda, the Magellanic Clouds, and the Beehive, M41, NGC 2516 and Coma clusters. Each is covered with the sky beside it at the same galactic latitude.
+    - **In the shader:** the photo less 0.05 (its own sky glow) goes through a film's shoulder, `1 − exp(−1.5·x)`, so the galactic centre doesn't burn out and the faint winter arm still shows, and fades to 45% in the lowest 17° above the horizon, as the real sky does through more air.
   - A twilight band of warm light sits low in the sky, strongest toward the Sun's azimuth (`u_twilight`, `u_sun` in the same right/up/forward frame).
   - ±½/255 dither against banding.
 - **Stars:** `stars.txt` holds 2,887 stars to magnitude 5.5, as `RA Dec V B−V` in degrees, J2000.
@@ -60,6 +65,7 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
 ## Data and licences
 - `stars.txt`: Yale Bright Star Catalogue, 5th ed. (CDS V/50), public domain. Credit is in the file header.
 - `constellations.txt`: d3-celestial (Olaf Frohn), BSD 3-Clause. The full licence notice is kept in the header and must stay there.
+- `sky-milky-way.heic`: ESO/S. Brunier, "The Milky Way panorama" (eso0932a), CC BY 4.0, credited in About with what was changed (its stars dimmed, two planets removed, resized). `docs/night-sky/sky.py` makes it from ESO's 6000 × 3000 JPEG; 0.9 MB.
 - `sky-*.txt`: horizon angles worked out from elevation data by `docs/night-sky/horizon.py`. The US sites use the USGS 3D Elevation Program (public domain; USGS asks for credit, which About gives), down to 1 m lidar over the buttes and the tower. Fuji uses NASA's SRTMGL1 v3 (30 m, CC0), fetched from ESA's STEP mirror. Each file's header names the viewpoint and the source.
 
 ## Settings
@@ -84,14 +90,14 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
 - **Sprite sizes:** Moon 46 pt, Moon glow 220 pt, Sun 48 pt, Sun glow 360 pt.
 
 ## Performance
-- About 0.64 ms CPU and 0.90 ms GPU per frame (release build, 2x, 1512×982).
-- The GPU cost is the full-screen background shader: 3D noise for the Milky Way on every pixel.
+- About 0.55 ms CPU and 0.19 ms GPU per frame (debug build, 2x, 1512×982, measured 2026-11-14). With the drawn Milky Way it was 0.71 ms of GPU the same day: its 3D noise on every pixel was most of the frame, and the photo is one lookup.
+- The photo is 34 MB as a texture, shared by every copy (`sharedTexture`) and let go with the last.
 - The CPU cost is mostly SpriteKit handling about 2,900 star sprites, which batch because they share one texture. `refresh()` only runs every 5 s.
 - Re-stroking the constellations was about 45% of the CPU frame (`sample` of the render test) until 2026-10-14, when the path dropped the runs that are wholly off screen: 162 segments of 325 on a night in October, and the render's CPU went from about 0.3 to 0.14 ms a frame, pixel for pixel the same.
 - Well within the 2 ms budget.
 
 - **On battery it runs at 15 fps at most, and at the battery's rate while a meteor crosses** (`batteryRate`, dropped as `meteor()` lights one and back once it has gone, 0.7 s later; 2026-10-13). The ISS is the fastest steady thing, up to about 36 device pixels (2x on a 14-inch MacBook Pro, 3024 × 1964) a second: 2.4 px a frame at 15 fps. Stars twinkle at 1.3 Hz at most and positions move every 5 s. A meteor crosses 180–360 points in 0.7 s, up to 1,030 px a second, every 15–75 s.
-- **On battery it draws the sky behind the stars at half the screen's resolution each way** (`batteryScale` in Scenes.swift, under the same condition as its battery rate, with Settings → Power's Lighter drawing on battery, on unless changed; 2026-10-14). That cuts the GPU's work a frame by 62% (0.75 to 0.28 ms, frames drawn back to back at 3024 × 1964), about 26 ms of GPU time a second at 15 fps. Side by side at 100% (`trimShots` in TrimShots.swift) it can't be told from full resolution, the Milky Way included: the stars, lines and labels are sprites over it and stay sharp.
+- **It no longer draws its sky at half resolution on battery** (`batteryScale`, 2026-10-14 to 2026-11-14). That saved 62% of the drawn Milky Way's GPU time and couldn't be told from full resolution. The photo costs a quarter as much to begin with, and its fine stars would soften.
 
 ## Gotchas and shortcuts
 - `ponytail:` **precession.** It's ignored since J2000, about 0.35° by 2026. It shifts the whole sky together, so nothing looks wrong relative to itself.
@@ -111,6 +117,7 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
 - **Switches.** He asked for the constellation and planet-label switches.
 - **Landscape (2026-10-05).** He asked for a switch to turn the landscape off, and for more silhouettes to choose between. Off means no ground at all, not a flat one: the horizon drops to the bottom edge. Once he had the switch he asked for off to be the default ("i think we should default to no landscape", "it looks nice without a landscape there imo"), so the landscapes are an extra for those who want one.
 - **Preview.** Added so he could see the daytime look on demand; now it shows the sky of any hour today.
+- **Making it look really cool (2026-11-14).** With the move back to Night Sky he asked to "see if there is anything else we can do to enhance that experience, comets, nebula, whatever you can think of that would make it look really cool". The nebulae came as real ones: the photograph of the whole sky was already in the app for Space Tour (though that copy fades to black at its edges, which would cut a dark seam through Taurus, so this one is made from ESO's original).
 
 ## Landscapes: what was looked at (2026-10-05)
 A research agent compared drawn recipes, real skylines and traced photos, each as a strip against night, twilight and day skies.

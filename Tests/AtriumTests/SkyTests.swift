@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import Testing
 import simd
 @testable import Atrium
@@ -63,4 +63,30 @@ func eclipsesLineUp(time: String, latitude: Double, longitude: Double) {
         #expect(zip(across, across.dropFirst()).allSatisfy { $0 <= $1 }, "\(land) doubles back")
         #expect(up.allSatisfy { (0...15).contains($0) } && (up.max() ?? 0) > 3, "\(land) is flat or implausibly tall")
     }
+}
+
+/// Night Sky's photograph of the whole sky has its stars where the catalogue puts ours: turned by `NightSky.toPhoto`,
+/// the 20 brightest land on bright spots in it. Without the turn they miss by two or three degrees and none does.
+@Test func skyPhotoLinesUpWithTheStars() throws {
+    let source = try #require(CGImageSourceCreateWithURL(resource("sky-milky-way.heic") as CFURL, nil))
+    let image = try #require(CGImageSourceCreateImageAtIndex(source, 0, nil))
+    let (w, h) = (image.width, image.height)
+    var grey = [UInt8](repeating: 0, count: w * h)
+    let context = try #require(CGContext(data: &grey, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w,
+                                         space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue))
+    context.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+    /// The brightest pixel within `reach` of a point, and the mean over the same square.
+    func light(_ x: Int, _ y: Int, reach: Int) -> (peak: Double, mean: Double) {
+        let values = (y - reach...y + reach).flatMap { row in (x - reach...x + reach).map { Double(grey[row * w + $0]) } }
+        return (values.max()!, values.reduce(0, +) / Double(values.count))
+    }
+    var found = 0, looked = 0
+    for star in NightSky.catalogue.sorted(by: { $0.magnitude < $1.magnitude }).prefix(20) {
+        let g = NightSky.toPhoto * star.direction
+        let (x, y) = (Int((0.5 - atan2(g.y, g.x) / (2 * .pi)) * Double(w)), Int((0.5 - asin(g.z) / .pi) * Double(h)))
+        guard (45..<w - 45).contains(x), (45..<h - 45).contains(y) else { continue } // the photo's seam and poles
+        looked += 1
+        if light(x, y, reach: 5).peak - light(x, y, reach: 40).mean > 60 { found += 1 } // half a degree, in 3.5°
+    }
+    #expect(looked >= 18 && found >= looked - 1, "\(found) of \(looked) bright stars are on their own picture")
 }

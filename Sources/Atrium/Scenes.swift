@@ -127,7 +127,7 @@ struct Refresh {
     Wallpaper(name: "Ant Colony", icon: "ant.fill", tint: .blue, blurb: "Ants digging a new nest every day, seen through the glass.",
               make: antColony, knobs: AntColony.knobs, batteryRate: 20),
     Wallpaper(name: "Night Sky", icon: "moon.stars.fill", tint: .blue, blurb: "The stars above you right now, day or night.",
-              make: nightSky, knobs: NightSky.knobs, batteryScale: 0.5),
+              make: nightSky, knobs: NightSky.knobs),
     Wallpaper(name: "Earth from Orbit", icon: "globe.americas.fill", tint: .cyan, blurb: "Day and night sweeping over the globe.",
               make: earthFromOrbit, knobs: EarthFromOrbit.knobs, refresh: .earth),
     Wallpaper(name: "Weather", icon: "cloud.sun.fill", tint: .blue, blurb: "Real hills under your live local weather.",
