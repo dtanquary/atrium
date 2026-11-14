@@ -580,9 +580,19 @@ Timer.scheduledTimer(withTimeInterval: 600, repeats: true) { _ in
         if !WallpaperView.screensAsleep, drawn { matchLockScreen(after: 0) }
     }
 }.tolerance = 60
+// And at once when the wallpaper on the desktop has changed picture altogether (Space Tour, each minute): the menu
+// bar is dressed by the still, and the last photo's would leave it black on light over a black sky, or the reverse.
+NotificationCenter.default.addObserver(forName: .pictureChanged, object: nil, queue: .main) { note in
+    let poster = (note.object as AnyObject?).map(ObjectIdentifier.init) // the scene itself can't cross to the main actor
+    MainActor.assumeIsolated {
+        // Not for the copy Settings runs behind a wallpaper's page.
+        let onDesktop = windows.contains { ($0.contentView as? SKView)?.scene.map(ObjectIdentifier.init) == poster }
+        if onDesktop { matchLockScreen(after: 0) }
+    }
+}
 // macOS gave that still to the Space in front only, so each other Space gets it as it comes to the front.
 NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { _ in
-    MainActor.assumeIsolated { LockScreen.spaceChanged() }
+    MainActor.assumeIsolated { LockScreen.spaceChanged(windows) }
 }
 // Rebuild a long-running wallpaper so the clocks its shaders animate by stay small: quietly once the displays sleep,
 // or with a crossfade for displays that never do.

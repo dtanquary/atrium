@@ -227,6 +227,9 @@ extension BatteryPaced {
 extension Notification.Name {
     /// Posted by a `BatteryPaced` scene whose `batteryRate` has changed.
     static let batteryRateChanged = Notification.Name("AtriumBatteryRateChanged")
+    /// Posted by a scene that now shows another picture altogether (Space Tour, on its next photo), for the app to take
+    /// the lock screen's still again now and not when the next is due: macOS dresses the menu bar by that still.
+    static let pictureChanged = Notification.Name("AtriumPictureChanged")
 }
 
 /// A scene that is one full-screen GPU shader. Besides `u_now` (see `WallpaperTime`) and `v_tex_coord`, the shader

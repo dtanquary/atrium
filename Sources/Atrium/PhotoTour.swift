@@ -305,6 +305,7 @@ final class PhotoTour: SKScene {
         self.current = next
         self.next = nil
         showCaption(next.view)
+        NotificationCenter.default.post(name: .pictureChanged, object: self)
     }
 
     /// Show changed: drops the view that was next and dissolves to one from the new pick as soon as it's ready, unless
