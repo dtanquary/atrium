@@ -39,6 +39,7 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
   - The light direction is measured from the Moon's north using `skyAngle`, which works in the local frame of someone facing the Moon with their head upright. That keeps it correct however the disc is turned.
   - The phase angle comes from `Sky.moonPhase(jd).lit` (`acos(2·lit − 1)`).
   - Glow alpha = 0.5 · lit.
+- **Names in the photo** (`sights`, since 2026-11-14): fourteen things worth pointing out get a faint name beside them, under the Labels switch: the Orion, Rosette, Lagoon, Carina and North America nebulae, the Pleiades, the Beehive and Double clusters, Omega Centauri, the Andromeda Galaxy, the Magellanic Clouds, the Coalsack and the center of the Milky Way. From 40°N on a November night that's four at a time. A name sits to the right of what it names, or to the left where the screen's edge is near (`place`), which planets and radiants get too.
 - **ISS:** in `update(_:)`, using `ISS.shared.position()` → `Sky.lookDirection` → `place()`. It's shown only while sunlit (the real naked-eye condition), with a label as a child.
 - **Meteors:** a painted 140×2 pt streak, fading over 0.7 s, every 15–75 s on a night with no shower (`awaitMeteor`).
   - **The real showers** (since 2026-11-14): `NightSky.showers` lists eleven, from the International Meteor Organization's Working List (its 2026 calendar, table 5): Quadrantids, Lyrids, Eta and Delta Aquariids, Perseids, Orionids, Southern and Northern Taurids, Leonids, Geminids and Ursids, each with the Sun's ecliptic longitude at its peak, its days of activity either side, its radiant and its peak rate. `hourly` gives a shower's rate now: its peak rate at the peak, falling in a straight line of the logarithm to one an hour at each end of its activity.
@@ -76,7 +77,7 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
 | key | label | range | default | drives |
 |---|---|---|---|---|
 | `sky.constellations` | Constellation lines | toggle | on | `constellations.isHidden` |
-| `sky.planetLabels` | Labels | toggle | on | the planets' names and the meteor showers' radiants (it was Planet labels until 2026-11-14; the key kept its name) |
+| `sky.planetLabels` | Labels | toggle | on | the planets' names, the names of things in the photo, and the meteor showers' radiants (it was Planet labels until 2026-11-14; the key kept its name) |
 | `sky.landscape` | Show a landscape | toggle | off | `ground.isHidden`, and `horizonY` (12% up, or the bottom edge) through `u_horizon` |
 | `sky.ground` | Landscape (shown while the switch is on) | menu | Pine ridge | which `Landscape` is painted, stored as its place in the list |
 | `sky.previewTime` | Preview a time of day | toggle | off | `skyDate` uses the preview hour |
@@ -120,7 +121,8 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
 - **Switches.** He asked for the constellation and planet-label switches.
 - **Landscape (2026-10-05).** He asked for a switch to turn the landscape off, and for more silhouettes to choose between. Off means no ground at all, not a flat one: the horizon drops to the bottom edge. Once he had the switch he asked for off to be the default ("i think we should default to no landscape", "it looks nice without a landscape there imo"), so the landscapes are an extra for those who want one.
 - **Preview.** Added so he could see the daytime look on demand; now it shows the sky of any hour today.
-- **Making it look really cool (2026-11-14).** With the move back to Night Sky he asked to "see if there is anything else we can do to enhance that experience, comets, nebula, whatever you can think of that would make it look really cool". The nebulae came as real ones: the photograph of the whole sky was already in the app for Space Tour (though that copy fades to black at its edges, which would cut a dark seam through Taurus, so this one is made from ESO's original).
+- **Making it look really cool (2026-11-14).** With the move back to Night Sky he asked to "see if there is anything else we can do to enhance that experience, comets, nebula, whatever you can think of that would make it look really cool". The nebulae came as real ones: the photograph of the whole sky was already in the app for Space Tour (though that copy fades to black at its edges, which would cut a dark seam through Taurus, so this one is made from ESO's original). With it came names for what's in it, the Moon's real face, and meteors from the real showers.
+- **Comets were looked at and left out (2026-11-14).** Real ones are there for the asking: NASA JPL's Small-Body Database answers `https://ssd-api.jpl.nasa.gov/sbdb_query.api?fields=full_name,e,q,i,om,w,tp,M1,K1&sb-kind=c&sb-cdata={"AND":["q|LT|4","tp|RG|<a year back>|<a year on>"]}` with about fifty comets' orbits and brightness in 5 KB, and Kepler's equation does the rest. But worked through for tonight, the brightest was C/2024 T5 (ATLAS) at magnitude 13, a thousand times fainter than the faintest star drawn here, and over the year only C/2025 R3 (PANSTARRS) came near the naked eye, about magnitude 8 for a few weeks in April. A real comet would be on screen a few weeks a year, and a made-up one goes against real over made up. Dave to say which he'd rather have.
 
 ## Landscapes: what was looked at (2026-10-05)
 A research agent compared drawn recipes, real skylines and traced photos, each as a strip against night, twilight and day skies.
@@ -141,6 +143,8 @@ A research agent compared drawn recipes, real skylines and traced photos, each a
 - Real planet magnitudes, from distance and phase.
 - Topocentric Moon parallax.
 - Each shower's own activity curve and its radiant's drift (see the `ponytail:` on `hourly`), and their speeds: Leonids at 71 km/s are quick, Taurids at 27 slow and often bright.
+- Real comets, when one is bright enough (see the decisions above for the feed and what it would show).
+- Names for the brightest stars, and for the constellations beside their lines.
 - Satellite flares and more satellites.
 - Stars that dim near the horizon (extinction).
 - Twinkling tied to how high a star sits.

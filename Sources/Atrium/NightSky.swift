@@ -34,6 +34,16 @@ final class NightSky: SKScene, BatteryPaced {
     private let moonGlow = SKSpriteNode()
     private let moonLight = SKUniform(name: "u_light", vectorFloat3: [0, 0, 1])
     private let iss = SKSpriteNode()
+    /// What's worth pointing out in the sky's photograph, by right ascension and declination (J2000, degrees).
+    private static let sights: [(name: String, ra: Double, dec: Double)] = [
+        ("Orion Nebula", 83.82, -5.39), ("Rosette Nebula", 97.98, 4.95), ("Pleiades", 56.75, 24.12),
+        ("Beehive Cluster", 130.1, 19.67), ("Andromeda Galaxy", 10.68, 41.27), ("Double Cluster", 34.75, 57.13),
+        ("North America Nebula", 314.75, 44.33), ("Lagoon Nebula", 270.9, -24.38),
+        ("Center of the Milky Way", 266.42, -29.01), ("Omega Centauri", 201.7, -47.48), ("Carina Nebula", 161.27, -59.68),
+        ("Coalsack", 192.5, -62.5), ("Large Magellanic Cloud", 80.89, -69.76), ("Small Magellanic Cloud", 13.19, -72.83),
+    ]
+    /// Their names, each on an empty node at its place.
+    private let sightNames = SKNode()
     /// Each meteor shower's radiant, ringed and named while the shower is active and its radiant is up.
     private let radiants = SKNode()
     /// Each shower's radiant in horizon coordinates, and how many of its meteors an hour reach this sky now.
@@ -72,6 +82,13 @@ final class NightSky: SKScene, BatteryPaced {
         iss.zPosition = 4
         iss.addChild(label("ISS", alpha: 0.6))
         addChild(iss)
+        sightNames.zPosition = 3
+        addChild(sightNames)
+        for sight in Self.sights {
+            let spot = SKNode()
+            spot.addChild(label(sight.name, alpha: 0.3))
+            sightNames.addChild(spot)
+        }
         radiants.zPosition = 3
         addChild(radiants)
         for shower in Self.showers {
@@ -107,6 +124,7 @@ final class NightSky: SKScene, BatteryPaced {
         constellations.isHidden = Self.knobs[0].value < 0.5
         for planet in planets { planet.node.children.forEach { $0.isHidden = Self.knobs[1].value < 0.5 } } // their labels
         radiants.isHidden = Self.knobs[1].value < 0.5
+        sightNames.isHidden = radiants.isHidden
         ground.isHidden = Self.knobs[2].value < 0.5
         let pick = Landscape.allCases[min(Int(Self.knobs[3].value), Landscape.allCases.count - 1)]
         if !ground.isHidden, pick != landscape { paintGround(pick) }
@@ -179,6 +197,7 @@ final class NightSky: SKScene, BatteryPaced {
         let sunAltitude = asin(sunH.z) * 180 / .pi
         for star in stars { place(star.node, at: toHorizon * star.position) }
         for (planet, node) in planets { place(node, at: toHorizon * Sky.planet(planet, jd)) }
+        for (sight, spot) in zip(Self.sights, sightNames.children) { place(spot, at: toHorizon * Sky.direction(sight.ra, sight.dec)) }
 
         // Meteor showers: each one's radiant, named while it gives two an hour or more, and how many of its meteors
         // reach this sky, fewer the lower its radiant stands.
