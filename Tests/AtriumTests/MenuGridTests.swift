@@ -64,16 +64,28 @@ import Testing
     }
 }
 
+/// Starred wallpapers lead the menu, by name as the rest are, and a starred name that is no longer a wallpaper counts
+/// for nothing.
+@MainActor @Test func favoritesLeadTheMenu() {
+    let names = scenes.map(\.name), starred = ["Nebula", "Gone", "Fish Tank"]
+    let order = Favorites.ordered(scenes, starred: starred).map(\.name)
+    #expect(Array(order.prefix(2)) == ["Fish Tank", "Nebula"])
+    #expect(Array(order.dropFirst(2)) == names.filter { !starred.contains($0) })
+    #expect(Favorites.ordered(scenes, starred: []).map(\.name) == names)
+}
+
 /// Opens a menu holding the grid on screen for a moment and captures it, since a menu's glass only renders for real.
 ///
 ///     MENU_SHOT=1 swift test --filter menuShot           # → $TMPDIR/atrium-menu.png
 ///     MENU_SHOT="Nebula" swift test --filter menuShot    # with the pointer over that wallpaper, then clicks on it
 ///     MENU_SHOT="Settings" swift test --filter menuShot  # with the pointer over the Settings pill
+///     MENU_FAVORITES="Nebula,Live Sky" MENU_SHOT=1 …     # with those starred, so leading the grid
 ///     SNAPSHOT_APPEARANCE=light MENU_SHOT=1 …            # in Light Mode
 ///
 /// The pointer and the clicks are events handed to the grid as the menu would hand them, at the middle of the tile
 /// worked out from where the grid sits in the menu's window: the real pointer stays where it is. An Option-click
-/// has to show the wallpaper and leave the menu open, a click on the pill ask for Settings, and a plain click pick.
+/// has to show the wallpaper and leave the menu open, a click on the pill ask for Settings, a plain click pick, and a
+/// click on the star give the wallpaper on the desktop a star or take it away.
 @MainActor @Test(.enabled(if: ProcessInfo.processInfo.environment["MENU_SHOT"] != nil))
 func menuShot() throws {
     let env = ProcessInfo.processInfo.environment
@@ -81,10 +93,15 @@ func menuShot() throws {
     try? FileManager.default.removeItem(atPath: path)
     NSApplication.shared.setActivationPolicy(.accessory)
     if let look = env["SNAPSHOT_APPEARANCE"] { NSApp.appearance = NSAppearance(named: look == "light" ? .aqua : .darkAqua) }
-    let wanted = scenes.firstIndex { $0.name == env["MENU_SHOT"] }
+    // The stars are the user's own in the app, and this test's while it runs.
+    let kept = UserDefaults.standard.string(forKey: Favorites.key)
+    UserDefaults.standard.set(env["MENU_FAVORITES"] ?? "", forKey: Favorites.key)
+    defer { UserDefaults.standard.set(kept, forKey: Favorites.key) }
+    let order = Favorites.ordered(), current = UserDefaults.standard.string(forKey: "scene") ?? defaultScene.name
+    let wanted = order.firstIndex { $0.name == env["MENU_SHOT"] }
     let pill = env["MENU_SHOT"] == "Settings"
     var hovered: String?, picked: String?, grown = false, lit = false, opened = false
-    var optionPicked: String?, stayedOpen = false, ticked = false
+    var optionPicked: String?, stayedOpen = false, ticked = false, starred = false
     let menu = NSMenu(), grid = MenuGridView(settings: { opened = true }) { picked = $0 }, item = NSMenuItem()
     func mouse(_ type: NSEvent.EventType, at place: CGRect? = nil, _ modifiers: NSEvent.ModifierFlags = []) -> NSEvent? {
         guard let place = place ?? wanted.map(MenuGrid.frame), let window = grid.window else { return nil }
@@ -128,17 +145,21 @@ func menuShot() throws {
         picked = nil
         mouse(.leftMouseUp, at: MenuGrid.settings).map(grid.mouseUp) // which asks for Settings and closes the menu
         mouse(.leftMouseUp).map(grid.mouseUp) // which closes the menu, as a pick does
+        let before = Favorites.names.contains(current)
+        mouse(.leftMouseUp, at: MenuGrid.star(after: current)).map(grid.mouseUp) // last, as it moves the tiles
+        starred = Favorites.names.contains(current) != before
         menu.cancelTracking()
     }
     let screen = try #require(NSScreen.main).visibleFrame
     menu.popUp(positioning: nil, at: NSPoint(x: screen.maxX - MenuGrid.width - 40, y: screen.maxY - 8), in: nil)
     #expect(opened, "a click on the pill opens Settings")
+    #expect(starred, "a click on the star stars the wallpaper on the desktop, or takes its star away")
     #expect(lit == pill, "the pill is lit under the pointer and only then")
     if let wanted {
         let moves = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        #expect(hovered == scenes[wanted].name && picked == scenes[wanted].name, "over \(hovered ?? "none"), picked \(picked ?? "none")")
+        #expect(hovered == order[wanted].name && picked == order[wanted].name, "over \(hovered ?? "none"), picked \(picked ?? "none")")
         #expect(grown == moves, "the tile under the pointer has its loop")
-        #expect(optionPicked == scenes[wanted].name && stayedOpen, "an Option-click picked \(optionPicked ?? "none"), menu open: \(stayedOpen)")
+        #expect(optionPicked == order[wanted].name && stayedOpen, "an Option-click picked \(optionPicked ?? "none"), menu open: \(stayedOpen)")
         #expect(ticked == moves, "the grown tile takes the tick as it plays")
     }
     print("The menu → \(path)")

@@ -386,13 +386,21 @@ if !scenes.contains(where: { $0.name == current }) {
         if MenuGrid.pictures {
             menu.addItem(grid)
         } else {
-            for scene in scenes {
+            // The starred ones first, with a line under them, as they lead the grid.
+            let order = Favorites.ordered(), starred = Favorites.names, lead = order.prefix { starred.contains($0.name) }.count
+            for (index, scene) in order.enumerated() {
+                if index == lead, lead > 0 { menu.addItem(.separator()) }
                 let entry = menu.addItem(withTitle: scene.name, action: #selector(pick), keyEquivalent: "")
                 entry.target = self
                 entry.state = scene.name == current ? .on : .off
             }
         }
         menu.addItem(.separator())
+        // The pictures have a star beside the name for this: the names get a row, for the keyboard.
+        if !MenuGrid.pictures {
+            let title = Favorites.names.contains(current) ? "Remove from Favorites" : "Add to Favorites"
+            menu.addItem(withTitle: title, action: #selector(toggleFavorite), keyEquivalent: "").target = self
+        }
         // Pause sits with Shuffle: the two that act on whatever is showing.
         // Already held still by Settings → Power, Pause would change nothing: a greyed line says why it's still.
         let power = powerKnob()
@@ -426,6 +434,10 @@ if !scenes.contains(where: { $0.name == current }) {
 
     @objc func pick(_ sender: NSMenuItem) {
         show(sender.title)
+    }
+
+    @objc func toggleFavorite() {
+        Favorites.toggle(current)
     }
 
     /// Holds every display on its current frame, as Freeze does, until Resume. A wallpaper picked or shuffled to

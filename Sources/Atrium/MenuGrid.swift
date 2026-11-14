@@ -6,7 +6,8 @@ import SwiftUI
 /// The status menu's wallpapers as a grid of their stills, six across, each named in its corner, in place of a row of
 /// text for each: the one on the desktop is named above them and ringed, the one under the pointer grows and plays its
 /// loop from the picture it shows, and a click shows another and closes the menu (with Option held it stays open, to
-/// try several). The pill beside the name opens Settings on that wallpaper's page.
+/// try several). The pill beside the name opens Settings on that wallpaper's page, and the star after the name makes
+/// it a favourite: those lead the grid, ahead of the rest.
 /// It is one menu item's view, so the menu's own arrow keys and type-to-select pass it by: Settings → General →
 /// Wallpapers in the menu → Names puts the list of names back for them and for VoiceOver.
 @MainActor enum MenuGrid {
@@ -25,6 +26,13 @@ import SwiftUI
 
     /// The pill at the caption's right that opens the wallpaper on the desktop's page of Settings.
     static let settings = CGRect(x: width - inset - 86, y: top + (caption - 20) / 2, width: 86, height: 20)
+
+    /// The star after the name that makes the wallpaper on the desktop a favourite, or no longer one. The name is set
+    /// in the menu's own type, so its width as AppKit measures it is its width as drawn.
+    static func star(after name: String) -> CGRect {
+        let text = (name as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 13, weight: .semibold)]).width
+        return CGRect(x: inset + text.rounded(.up) + 3, y: top + (caption - 22) / 2, width: 22, height: 22)
+    }
 
     static func height(count: Int) -> Double {
         let rows = Double((count + across - 1) / across)
@@ -92,16 +100,38 @@ import SwiftUI
     }
 }
 
-/// The wallpaper the pointer is over, or the Settings pill, set by `MenuGridView` and drawn by `MenuGridPictures`.
+/// The wallpapers the user has starred, which lead the menu's grid and its list of names.
+@MainActor enum Favorites {
+    /// Their names, comma separated, as Shuffle keeps the ones it leaves out.
+    static let key = "favorites"
+    static var names: [String] { (UserDefaults.standard.string(forKey: key) ?? "").split(separator: ",").map(String.init) }
+
+    /// Stars a wallpaper, or takes its star away.
+    static func toggle(_ name: String) {
+        var names = names
+        if let index = names.firstIndex(of: name) { names.remove(at: index) } else { names.append(name) }
+        UserDefaults.standard.set(names.joined(separator: ","), forKey: key)
+    }
+
+    /// The wallpapers in the menu's order: the starred ones, then the rest, each run by name as `scenes` is. A starred
+    /// name that is no longer a wallpaper counts for nothing.
+    static func ordered(_ all: [Wallpaper] = scenes, starred: [String] = Favorites.names) -> [Wallpaper] {
+        all.filter { starred.contains($0.name) } + all.filter { !starred.contains($0.name) }
+    }
+}
+
+/// What the pointer is over, set by `MenuGridView` and drawn by `MenuGridPictures`: a wallpaper, the Settings pill or
+/// the star.
 @MainActor final class MenuGridHover: ObservableObject {
     @Published var name: String?
     @Published var settings = false
+    @Published var star = false
 }
 
 /// What lies over a tile's picture: its name in the bottom corner, white on a soft shade, the tick on the one on the
-/// desktop, and the faint light round its edge.
+/// desktop, a star in the top corner of a favourite, and the faint light round its edge.
 struct TileFace: View {
-    let name: String, on: Bool
+    let name: String, on: Bool, starred: Bool
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: MenuGrid.radius, style: .continuous)
@@ -122,25 +152,44 @@ struct TileFace: View {
                         .padding(1.5).background(.white.opacity(0.92), in: .circle).padding(2.5)
                 }
             }
+            .overlay(alignment: .topTrailing) {
+                if starred {
+                    Image(systemName: "star.fill").font(.system(size: 7.5)).foregroundStyle(.yellow)
+                        .shadow(color: .black.opacity(0.6), radius: 1.2, y: 0.5).padding(4.5)
+                }
+            }
             .accessibilityHidden(true) // the tile says it
     }
 }
 
-/// The grid's drawing: the caption, then a tile for each wallpaper where `MenuGrid.frame` puts it.
+/// The grid's drawing: the caption, then a tile for each wallpaper where `MenuGrid.frame` puts it, the starred first.
 struct MenuGridPictures: View {
     @ObservedObject var hover: MenuGridHover
-    /// Shows a wallpaper, and opens its page of Settings, for VoiceOver's press: the mouse goes through `MenuGridView`.
-    let pick: (String) -> Void, settings: () -> Void
+    /// Shows a wallpaper, opens its page of Settings, and stars the one on the desktop, for VoiceOver's press: the
+    /// mouse goes through `MenuGridView`.
+    let pick: (String) -> Void, settings: () -> Void, star: () -> Void
     @AppStorage("scene") private var current = defaultScene.name
+    @AppStorage(Favorites.key) private var starred = ""
     @Environment(\.colorScheme) private var scheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
+        let favorites = starred.split(separator: ",").map(String.init), order = Favorites.ordered(starred: favorites)
+        let favorite = favorites.contains(current), at = MenuGrid.star(after: current)
+        return ZStack(alignment: .topLeading) {
             Text(current).font(.system(size: 13, weight: .semibold))
                 .frame(width: MenuGrid.settings.minX - MenuGrid.inset - MenuGrid.gap, height: MenuGrid.caption, alignment: .leading)
                 .offset(x: MenuGrid.inset, y: MenuGrid.top)
                 .accessibilityHidden(true) // the tile says it too
+            Image(systemName: favorite ? "star.fill" : "star").font(.system(size: 12, weight: .medium))
+                .foregroundStyle(favorite ? Color.yellow : hover.star ? Color.primary : Color.secondary)
+                .frame(width: at.width, height: at.height)
+                .background(.primary.opacity(hover.star ? 0.12 : 0), in: .circle)
+                .offset(x: at.minX, y: at.minY)
+                .accessibilityElement()
+                .accessibilityLabel(favorite ? "Remove \(current) from Favorites" : "Add \(current) to Favorites")
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction { star() }
             // Lit like the menu's own row under the pointer, so it reads as one more thing to choose.
             Label("Settings", systemImage: "slider.horizontal.3").font(.system(size: 11, weight: .medium))
                 .foregroundStyle(hover.settings ? .white : .primary)
@@ -151,21 +200,22 @@ struct MenuGridPictures: View {
                 .accessibilityLabel("\(current) Settings")
                 .accessibilityAddTraits(.isButton)
                 .accessibilityAction { settings() }
-            ForEach(Array(scenes.enumerated()), id: \.element.name) { index, wallpaper in
-                tile(wallpaper, at: MenuGrid.frame(index), growing: MenuGrid.anchor(index, count: scenes.count))
+            ForEach(Array(order.enumerated()), id: \.element.name) { index, wallpaper in
+                tile(wallpaper, starred: favorites.contains(wallpaper.name), at: MenuGrid.frame(index),
+                     growing: MenuGrid.anchor(index, count: order.count))
             }
         }
         .frame(width: MenuGrid.width, height: MenuGrid.height(count: scenes.count), alignment: .topLeading)
     }
 
-    private func tile(_ wallpaper: Wallpaper, at frame: CGRect, growing anchor: UnitPoint) -> some View {
+    private func tile(_ wallpaper: Wallpaper, starred: Bool, at frame: CGRect, growing anchor: UnitPoint) -> some View {
         let on = wallpaper.name == current, over = wallpaper.name == hover.name
         let shape = RoundedRectangle(cornerRadius: MenuGrid.radius, style: .continuous)
         return Image(nsImage: MenuGrid.still(MenuGrid.picture(wallpaper, light: scheme == .light)))
             .resizable().scaledToFill()
             .frame(width: frame.width, height: frame.height)
             .clipShape(shape)
-            .overlay(TileFace(name: wallpaper.name, on: on))
+            .overlay(TileFace(name: wallpaper.name, on: on, starred: starred))
             // The ring round the wallpaper on the desktop, 2 points clear of its tile.
             .overlay(RoundedRectangle(cornerRadius: MenuGrid.radius + 4.5, style: .continuous).strokeBorder(Color.accentColor, lineWidth: 2.5)
                 .padding(-4.5).opacity(on ? 1 : 0))
@@ -173,9 +223,11 @@ struct MenuGridPictures: View {
             .scaleEffect(over ? MenuGrid.magnify : 1, anchor: anchor)
             .animation(reduceMotion ? nil : .spring(response: 0.22, dampingFraction: 0.62), value: over)
             .offset(x: frame.minX, y: frame.minY)
+            // A wallpaper starred, or no longer, slides to its new place, and those between make room.
+            .animation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.86), value: frame.origin)
             .zIndex(over ? 1 : 0)
             .accessibilityElement()
-            .accessibilityLabel(wallpaper.name)
+            .accessibilityLabel(starred ? "\(wallpaper.name), favorite" : wallpaper.name)
             .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
             .accessibilityAction { pick(wallpaper.name) }
     }
@@ -185,9 +237,10 @@ struct MenuGridPictures: View {
 struct GrownFace: View {
     let name: String
     var on: Bool
+    let starred: Bool
 
     var body: some View {
-        TileFace(name: name, on: on)
+        TileFace(name: name, on: on, starred: starred)
             .frame(width: MenuGrid.tile.width, height: MenuGrid.tile.height)
             .scaleEffect(MenuGrid.magnify, anchor: .topLeading)
             .frame(width: MenuGrid.tile.width * MenuGrid.magnify, height: MenuGrid.tile.height * MenuGrid.magnify, alignment: .topLeading)
@@ -209,10 +262,10 @@ final class GrownTile: NSView {
         set { face.rootView.on = newValue }
     }
 
-    init(loop: URL, name: String, on: Bool, at frame: CGRect) {
+    init(loop: URL, name: String, on: Bool, starred: Bool, at frame: CGRect) {
         looper = AVPlayerLooper(player: player, templateItem: AVPlayerItem(url: loop))
         video = AVPlayerLayer(player: player)
-        face = NSHostingView(rootView: GrownFace(name: name, on: on))
+        face = NSHostingView(rootView: GrownFace(name: name, on: on, starred: starred))
         super.init(frame: frame)
         wantsLayer = true
         layer?.cornerRadius = MenuGrid.radius * MenuGrid.magnify
@@ -251,7 +304,8 @@ final class MenuGridView: NSView {
         self.settings = settings
         super.init(frame: NSRect(x: 0, y: 0, width: MenuGrid.width, height: MenuGrid.height(count: scenes.count)))
         let pictures = NSHostingView(rootView: MenuGridPictures(hover: hover, pick: { [weak self] in self?.choose($0) },
-                                                                settings: { [weak self] in self?.openSettings() }))
+                                                                settings: { [weak self] in self?.openSettings() },
+                                                                star: { [weak self] in self?.star() }))
         pictures.frame = bounds
         addSubview(pictures)
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.activeAlways, .mouseMoved, .mouseEnteredAndExited, .inVisibleRect],
@@ -265,27 +319,42 @@ final class MenuGridView: NSView {
     /// Every click is this view's, not the SwiftUI view's inside it.
     override func hitTest(_ point: NSPoint) -> NSView? { super.hitTest(point).map { _ in self } }
 
-    override func viewDidMoveToWindow() { grow(nil); hover.settings = false } // a menu that closes under the pointer sends no exit
+    override func viewDidMoveToWindow() { leave() } // a menu that closes under the pointer sends no exit
     override func mouseEntered(with event: NSEvent) { mouseMoved(with: event) }
-    override func mouseExited(with event: NSEvent) { grow(nil); hover.settings = false }
+    override func mouseExited(with event: NSEvent) { leave() }
 
     override func mouseMoved(with event: NSEvent) {
         grow(index(at: event))
-        let over = MenuGrid.settings.contains(convert(event.locationInWindow, from: nil))
-        if over != hover.settings { hover.settings = over }
+        let point = convert(event.locationInWindow, from: nil)
+        let settings = MenuGrid.settings.contains(point), star = MenuGrid.star(after: current).contains(point)
+        if settings != hover.settings { hover.settings = settings }
+        if star != hover.star { hover.star = star }
     }
+
+    /// The pointer is over nothing of the grid's.
+    private func leave() {
+        grow(nil)
+        (hover.settings, hover.star) = (false, false)
+    }
+
+    /// The wallpaper on the desktop, and the wallpapers in the order their tiles are in.
+    private var current: String { UserDefaults.standard.string(forKey: "scene") ?? defaultScene.name }
+    private var order: [Wallpaper] { Favorites.ordered() }
 
     /// A click on a tile shows its wallpaper and closes the menu; with Option held the menu stays open, to try another.
     override func mouseUp(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
         if let index = index(at: event) {
-            choose(scenes[index].name, closing: !event.modifierFlags.contains(.option))
-        } else if MenuGrid.settings.contains(convert(event.locationInWindow, from: nil)) {
+            choose(order[index].name, closing: !event.modifierFlags.contains(.option))
+        } else if MenuGrid.settings.contains(point) {
             openSettings()
+        } else if MenuGrid.star(after: current).contains(point) {
+            star()
         }
     }
 
     private func index(at event: NSEvent) -> Int? {
-        MenuGrid.index(at: convert(event.locationInWindow, from: nil), count: scenes.count)
+        MenuGrid.index(at: convert(event.locationInWindow, from: nil), count: order.count)
     }
 
     /// Grows the tile at `index` and plays its loop, or with nil lets the one grown go. The tile springs open on its
@@ -293,14 +362,14 @@ final class MenuGridView: NSView {
     /// it and then plays. None plays with Reduce Motion on, or for a wallpaper without a loop. On timers, as they keep
     /// going while a menu tracks the mouse.
     private func grow(_ index: Int?) {
-        let name = index.map { scenes[$0].name }
+        let order = order, name = index.map { order[$0].name }
         guard name != hover.name else { return }
         hover.name = name
         grown?.removeFromSuperview()
         grown = nil
-        guard let index, let loop = MenuGrid.loop(scenes[index]), !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
-        let on = scenes[index].name == UserDefaults.standard.string(forKey: "scene") ?? defaultScene.name
-        let tile = GrownTile(loop: loop, name: scenes[index].name, on: on, at: MenuGrid.grown(index, count: scenes.count))
+        guard let index, let name, let loop = MenuGrid.loop(order[index]), !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
+        let tile = GrownTile(loop: loop, name: name, on: name == current, starred: Favorites.names.contains(name),
+                             at: MenuGrid.grown(index, count: order.count))
         addSubview(tile)
         grown = tile
         reveal(tile, after: 0.32)
@@ -329,5 +398,11 @@ final class MenuGridView: NSView {
     private func openSettings() {
         enclosingMenuItem?.menu?.cancelTracking()
         settings()
+    }
+
+    /// Stars the wallpaper on the desktop, or takes its star away, and the tiles slide to their new places.
+    private func star() {
+        Favorites.toggle(current)
+        grow(nil) // whichever tile had grown may have moved
     }
 }
