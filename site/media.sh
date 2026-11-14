@@ -40,7 +40,7 @@ game-of-life|Game of Life|30|
 jellyfish|Jellyfish|5|SNAPSHOT_DEFAULTS=jellyfish.seed=22 SNAPSHOT_APPEARANCE=light
 kelp-forest|Kelp Forest|5|SNAPSHOT_DEFAULTS=kelp.seed=5 SNAPSHOT_APPEARANCE=light
 lava-lamp|Lava Lamp|40|SNAPSHOT_DEFAULTS=lava.palette=Coral LAVA_SEED=11
-night-sky|Night Sky|4|SNAPSHOT_DEFAULTS=sky.previewTime=1,sky.previewHour=20.5,sky.landscape=1,sky.ground=0
+night-sky|Night Sky|4|SNAPSHOT_DEFAULTS=sky.previewTime=1,sky.previewHour=17.45
 meander|Meander|2.5|SNAPSHOT_DEFAULTS=meander.seed=13,meander.colors=Rainforest,meander.speed=2 SNAPSHOT_APPEARANCE=dark
 murmuration|Murmuration|20|SNAPSHOT_DEFAULTS=murmuration.light=5,murmuration.ground=0 MURMURATION_SEED=3
 nebula|Nebula|4|SNAPSHOT_DEFAULTS=nebula.palette=Hubble

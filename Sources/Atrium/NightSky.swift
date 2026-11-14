@@ -169,6 +169,7 @@ final class NightSky: SKScene, BatteryPaced {
         node.position = point
         guard let name = node.children.first as? SKLabelNode else { return }
         let left = point.x + 12 + name.frame.width > size.width
+        guard left != (name.horizontalAlignmentMode == .right) else { return } // the ISS comes through here every frame
         name.horizontalAlignmentMode = left ? .right : .left
         name.position.x = left ? -8 : 8
     }
