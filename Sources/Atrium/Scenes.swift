@@ -227,8 +227,9 @@ extension BatteryPaced {
 extension Notification.Name {
     /// Posted by a `BatteryPaced` scene whose `batteryRate` has changed.
     static let batteryRateChanged = Notification.Name("AtriumBatteryRateChanged")
-    /// Posted by a scene that now shows another picture altogether (Space Tour, on its next photo), for the app to take
-    /// the lock screen's still again now and not when the next is due: macOS dresses the menu bar by that still.
+    /// Posted by a scene that now shows another picture altogether (Space Tour, on its next photo), for the app to show
+    /// macOS a small still of it now: macOS dresses the menu bar by the still, and the next for the lock screen may be
+    /// ten minutes off.
     static let pictureChanged = Notification.Name("AtriumPictureChanged")
 }
 
