@@ -14,6 +14,7 @@ final class NightSky: SKScene, BatteryPaced {
         Knob(key: "sky.constellations", label: "Constellation lines", range: 0...1, standard: 1, section: "Show",
              format: .toggle),
         Knob(key: "sky.planetLabels", label: "Labels", range: 0...1, standard: 1, section: "Show", format: .toggle),
+        Knob(key: "sky.comets", label: "Comets (made up)", range: 0...1, standard: 0, section: "Show", format: .toggle),
         Knob(key: "sky.landscape", label: "Show a landscape", range: 0...1, standard: 0, section: "Landscape",
              format: .toggle),
         Knob(key: "sky.ground", label: "Landscape", range: 0...Double(Landscape.allCases.count - 1), standard: 0,
@@ -34,6 +35,8 @@ final class NightSky: SKScene, BatteryPaced {
     private let moonGlow = SKSpriteNode()
     private let moonLight = SKUniform(name: "u_light", vectorFloat3: [0, 0, 1])
     private let iss = SKSpriteNode()
+    private let comet = SKSpriteNode(color: .white, size: .zero)
+    private let cometLook = SKUniform(name: "u_look", vectorFloat2: [0, 1]) // how bright, and which way its dust tail curls
     /// What's worth pointing out in the sky's photograph, by right ascension and declination (J2000, degrees).
     private static let sights: [(name: String, ra: Double, dec: Double)] = [
         ("Orion Nebula", 83.82, -5.39), ("Rosette Nebula", 97.98, 4.95), ("Pleiades", 56.75, 24.12),
@@ -49,6 +52,7 @@ final class NightSky: SKScene, BatteryPaced {
     /// Each shower's radiant in horizon coordinates, and how many of its meteors an hour reach this sky now.
     private var falling: [(radiant: Sky.Vector, hourly: Double)] = []
     private let photoFrame = SKUniform(name: "u_toPhoto", matrixFloat3x3: matrix_identity_float3x3)
+    private let starFrame = SKUniform(name: "u_toStars", matrixFloat3x3: matrix_identity_float3x3)
     private let twilightUniform = SKUniform(name: "u_twilight", float: 0)
     private let sunUniform = SKUniform(name: "u_sun", vectorFloat3: [0, 0, 1])
 
@@ -82,6 +86,7 @@ final class NightSky: SKScene, BatteryPaced {
         iss.zPosition = 4
         iss.addChild(label("ISS", alpha: 0.6))
         addChild(iss)
+        addComet()
         sightNames.zPosition = 3
         addChild(sightNames)
         for sight in Self.sights {
@@ -125,8 +130,8 @@ final class NightSky: SKScene, BatteryPaced {
         for planet in planets { planet.node.children.forEach { $0.isHidden = Self.knobs[1].value < 0.5 } } // their labels
         radiants.isHidden = Self.knobs[1].value < 0.5
         sightNames.isHidden = radiants.isHidden
-        ground.isHidden = Self.knobs[2].value < 0.5
-        let pick = Landscape.allCases[min(Int(Self.knobs[3].value), Landscape.allCases.count - 1)]
+        ground.isHidden = Self.knobs[3].value < 0.5
+        let pick = Landscape.allCases[min(Int(Self.knobs[4].value), Landscape.allCases.count - 1)]
         if !ground.isHidden, pick != landscape { paintGround(pick) }
         horizonY = ground.isHidden ? 0 : landHorizon
         horizonUniform.floatValue = Float(horizonY)
@@ -136,8 +141,8 @@ final class NightSky: SKScene, BatteryPaced {
 
     /// Now, or today at the preview hour while previewing a time of day.
     private var skyDate: Date {
-        guard Self.knobs[4].value > 0.5 else { return Date() }
-        return Calendar.current.startOfDay(for: Date()).addingTimeInterval(Self.knobs[5].value * 3600)
+        guard Self.knobs[5].value > 0.5 else { return Date() }
+        return Calendar.current.startOfDay(for: Date()).addingTimeInterval(Self.knobs[6].value * 3600)
     }
 
     // MARK: Projection
@@ -200,6 +205,18 @@ final class NightSky: SKScene, BatteryPaced {
         for (planet, node) in planets { place(node, at: toHorizon * Sky.planet(planet, jd)) }
         for (sight, spot) in zip(Self.sights, sightNames.children) { place(spot, at: toHorizon * Sky.direction(sight.ra, sight.dec)) }
 
+        // The made-up comet, while one is passing and Settings has them on: its tails stream away from the Sun, and
+        // it shrinks as it fades. The sprite holds the head a tenth of the way along.
+        if Self.knobs[2].value > 0.5, let visitor = Self.comet(jd, north: here.latitude >= 0) {
+            let at = toHorizon * visitor.direction, long = visitor.tail * visitor.bright * .pi / 180 * scale * 1.15 / 0.9
+            place(comet, at: at)
+            comet.size = CGSize(width: long, height: long / 2)
+            comet.zRotation = screenAngle(from: at, toward: sunH) + .pi
+            cometLook.vectorFloat2Value = [Float(visitor.bright), Float(visitor.curl)]
+        } else {
+            comet.isHidden = true
+        }
+
         // Meteor showers: each one's radiant, named while it gives two an hour or more, and how many of its meteors
         // reach this sky, fewer the lower its radiant stands.
         let sunLongitude = Sky.sunLongitude(jd)
@@ -256,14 +273,16 @@ final class NightSky: SKScene, BatteryPaced {
         moonGlow.alpha = 0.5 * lit
         if !moon.isHidden { moon.zRotation = screenAngle(from: moonH, toward: poleH) - .pi / 2 }
 
-        // The background maps screen → sky → the photo: plane (right, up, forward) → horizon → equatorial → its frame.
+        // The background maps screen → sky → the photo, and the fainter stars' grid: plane (right, up, forward) →
+        // horizon → equatorial → each one's frame.
         let basis = facingSouth
             ? simd_double3x3(columns: ([-1, 0, 0], [0, 0, 1], [0, -1, 0]))
             : simd_double3x3(columns: ([1, 0, 0], [0, 0, 1], [0, 1, 0]))
-        let toPhoto = Self.toPhoto * toHorizon.transpose * basis
-        photoFrame.matrixFloat3x3Value = simd_float3x3(columns: (SIMD3<Float>(toPhoto.columns.0),
-                                                                 SIMD3<Float>(toPhoto.columns.1),
-                                                                 SIMD3<Float>(toPhoto.columns.2)))
+        for (uniform, frame) in [(photoFrame, Self.toPhoto), (starFrame, Self.toStars)] {
+            let turn = frame * toHorizon.transpose * basis
+            uniform.matrixFloat3x3Value = simd_float3x3(columns: (SIMD3<Float>(turn.columns.0), SIMD3<Float>(turn.columns.1),
+                                                                  SIMD3<Float>(turn.columns.2)))
+        }
     }
 
     // MARK: Building the scene
@@ -355,6 +374,50 @@ final class NightSky: SKScene, BatteryPaced {
         }
     }
 
+    /// A comet that isn't there, for whoever turns Comets on in Settings: one visits for ten days in every 37,
+    /// counted from 11 November 2026, in the evening sky and the morning sky by turns. It closes from 75° to 45° from
+    /// the Sun, brightening, and draws away again, on the side of the Sun's path that stands higher for a viewer in
+    /// the north or the south, so it's well up in this view at dusk or dawn (a real one keeps nearer the Sun, which
+    /// from here sets beyond the screen's edge). Nil between visits. Real comets were looked at first: one bright
+    /// enough for this sky comes for a few weeks in a year or two (docs/night-sky.md).
+    nonisolated static func comet(_ jd: Double, north: Bool = true) -> (direction: Sky.Vector, bright: Double, tail: Double, curl: Double)? {
+        let days = jd - 2461355.5, visit = (days / 37).rounded(.down), passed = (days - visit * 37) / 10
+        guard passed < 1 else { return nil }
+        func chance(_ n: Double) -> Double { // 0 to 1, this visit's own
+            let x = sin(visit * 12.9898 + n * 78.233) * 43758.5453
+            return x - x.rounded(.down)
+        }
+        let evening = visit.truncatingRemainder(dividingBy: 2) == 0, apart = 45 + 30 * (1 - sin(.pi * passed))
+        let longitude = Sky.sunLongitude(jd) + (evening ? apart : -apart) // east of the Sun sets after it
+        let latitude = (north ? 1 : -1) * (4 + 14 * chance(1)) + (chance(2) - 0.5) * 12 * (2 * passed - 1)
+        return (Sky.equatorial(fromEcliptic: Sky.direction(longitude, latitude)), pow(sin(.pi * passed), 0.6),
+                14 + 12 * chance(3), chance(4) < 0.5 ? -1 : 1)
+    }
+
+    /// The comet's picture: a greenish head, a thin straight blue tail of gas and a broad pale one of dust that curls
+    /// to one side, all added to the sky behind. Along the sprite, 0 is the head and 1 the tails' end.
+    private func addComet() {
+        comet.anchorPoint = CGPoint(x: 0.1, y: 0.5)
+        comet.zPosition = 3
+        comet.isHidden = true
+        comet.shader = SKShader(source: """
+            void main() {
+                vec2 p = vec2(v_tex_coord.x - 0.1, (v_tex_coord.y - 0.5) * 0.5) / 0.9;
+                float along = max(p.x, 0.0);
+                float end = smoothstep(0.0, 0.03, p.x) * (1.0 - smoothstep(0.7, 1.0, p.x));
+                float head = exp(-dot(p, p) / 0.0002) + 0.6 * exp(-dot(p, p) / 0.002);
+                float gasWide = 0.006 + 0.02 * along;
+                float gas = exp(-p.y * p.y / (gasWide * gasWide)) * exp(-1.6 * along) * end;
+                float curled = p.y - u_look.y * 0.16 * along * along;
+                float dustWide = 0.012 + 0.1 * along;
+                float dust = exp(-curled * curled / (dustWide * dustWide)) * exp(-2.2 * along) * end;
+                vec3 colour = vec3(0.75, 1.0, 0.9) * head + vec3(0.5, 0.68, 1.0) * 0.6 * gas + vec3(1.0, 0.94, 0.84) * 0.8 * dust;
+                gl_FragColor = vec4(colour * u_look.x, 0.0);
+            }
+            """, uniforms: [cometLook])
+        addChild(comet)
+    }
+
     /// The Sun: a bright disc in a wide warm glow, among the stars, drawn only when it's up and in view.
     private func addSun() {
         sunGlow.texture = glow
@@ -413,9 +476,48 @@ final class NightSky: SKScene, BatteryPaced {
         [0.998018, 0.055626, -0.029440], [-0.055074, 0.998297, 0.019237], [0.030460, -0.017578, 0.999381],
     ]) * Sky.galactic
 
-    /// Dark sky, a little lighter toward the horizon, behind a photograph of the real one turned to where it is now:
-    /// the Milky Way and its dust, the Magellanic Clouds, Andromeda, the nebulae, and the stars too faint for the
-    /// catalogue. Around sunrise and sunset a warm band glows low toward the Sun.
+    /// J2000 equatorial → the frame the fainter stars' file is in (Black Hole's `blackhole-stars.lzfse`, which
+    /// docs/black-hole/sky.py bakes already turned to that scene's view): there a star's longitude is atan2(x, z)
+    /// and its latitude asin(y).
+    nonisolated static let toStars = simd_double3x3(rows: [
+        [0.739411, -0.372160, 0.561042], [-0.372160, 0.468501, 0.801252], [0.561042, 0.801252, -0.207912],
+    ]) * Sky.galactic
+
+    /// The stars too faint for sprites: the HYG catalogue's 113,000 from magnitude 5.3 to 11, as a grid the shader
+    /// can find a star in, so each is drawn as a sharp point however large the screen. A row every 0.18° of latitude,
+    /// in bands of 32; a band's rows hold as many cells as make them 0.18° wide at its edge nearer the equator
+    /// (2,048 round the middle, 200 in the last band), so a star has about the same room to shine all over the sky. A
+    /// cell holds at most one star, the brightest that falls in it: where it sits in the cell (across, up), how
+    /// bright (1 for magnitude 11 up to 255 for 5.3; 0 for no star) and its B−V colour (0 for −0.4 up to 255 for 2).
+    // ponytail: stars that share a cell with a brighter one are dropped, a few in a hundred, in the Milky Way's crowds
+    nonisolated static func starGrid() -> [UInt8] {
+        let (w, h) = (2048, 1024)
+        var cells = [UInt8](repeating: 0, count: w * h * 4)
+        let packed = try? Data(contentsOf: resource("blackhole-stars.lzfse")) as NSData
+        let bytes = ((try? packed?.decompressed(using: .lzfse)) as Data?).map { [UInt8]($0) } ?? [], count = bytes.count / 6
+        for i in 0..<count {
+            let magnitude = Double(bytes[4 * count + i]) / 255 * 12.5 - 1.5
+            guard magnitude > 5.3 else { continue } // the brighter ones are sprites
+            func place(_ run: Int) -> Double { Double(Int(bytes[run * 2 * count + 2 * i]) | Int(bytes[run * 2 * count + 2 * i + 1]) << 8) / 65535 }
+            let y = min(place(1) * Double(h), Double(h) - 0.001)
+            let across = Self.cells(row: y.rounded(.down)), x = min(place(0) * across, across - 0.001)
+            let at = (Int(y) * w + Int(x)) * 4, bright = UInt8(max(1, (11 - magnitude) / 5.7 * 255))
+            guard bright > cells[at + 2] else { continue }
+            cells[at..<at + 4] = [UInt8((x - x.rounded(.down)) * 256), UInt8((y - y.rounded(.down)) * 256), bright, bytes[5 * count + i]]
+        }
+        return cells
+    }
+
+    /// How many cells a row of the star grid holds. The shader works out the same number: the band is a whole number
+    /// and none of the sixteen cosines comes within a tenth of the next whole number, so the two can't disagree.
+    nonisolated static func cells(row: Double) -> Double {
+        (2048 * cos((abs(row - 511.5) / 32).rounded(.down) * 32 * .pi / 1024)).rounded(.down)
+    }
+
+    /// Dark sky, a little lighter toward the horizon, behind the real one turned to where it is now: a photograph
+    /// for what's spread out (the Milky Way and its dust, the Magellanic Clouds, Andromeda, the nebulae) and the
+    /// catalogue's grid for the stars too faint for sprites. Around sunrise and sunset a warm band glows low toward
+    /// the Sun.
     private func addSkyBackground() {
         let sky = SKSpriteNode(color: .black, size: size)
         sky.anchorPoint = .zero
@@ -433,7 +535,33 @@ final class NightSky: SKScene, BatteryPaced {
                 vec2 at = vec2(0.5 - atan(g.y, g.x) / 6.2831853, 0.5 + asin(clamp(g.z, -1.0, 1.0)) / 3.1415927);
                 // A film's shoulder keeps the galactic centre from burning out while the fainter arms stay in sight.
                 vec3 photo = max(texture2D(u_photo, at).rgb - 0.05, 0.0);
-                colour += (1.0 - exp(-1.5 * photo)) * mix(0.45, 1.0, smoothstep(0.0, 0.3, d.y));
+                float air = mix(0.45, 1.0, smoothstep(0.0, 0.3, d.y));
+                colour += (1.0 - exp(-1.5 * photo)) * air;
+
+                // The fainter stars, from the catalogue's grid: any star near enough to light this pixel is in one
+                // of the two cells nearest it in each of the two rows nearest it. This projection keeps shapes, so
+                // a round star stays round, and `points` is how many screen points a radian of sky covers here.
+                vec3 s = u_toStars * d;
+                float lat = asin(clamp(s.y, -1.0, 1.0));
+                float round = atan(s.x, s.z) / 6.2831853 + 0.5;
+                float row = (lat / 3.1415927 + 0.5) * 1024.0;
+                float points = u_scale * (4.0 + r2) / 4.0;
+                for (int k = 0; k < 4; k++) {
+                    float r = clamp(floor(row - 0.5) + floor(float(k) / 2.0), 0.0, 1023.0);
+                    float across = floor(2048.0 * cos(floor(abs(r - 511.5) / 32.0) * 0.09817477));
+                    float c = mod(floor(round * across - 0.5) + mod(float(k), 2.0), across);
+                    vec4 star = texture2D(u_stars, (vec2(c, r) + 0.5) / vec2(2048.0, 1024.0));
+                    if (star.b > 0.0) {
+                        float east = (c + (star.r * 255.0 + 0.5) / 256.0) / across - round;
+                        vec2 off = vec2((east - floor(east + 0.5)) * 6.2831853 * cos(lat),
+                                        ((r + (star.g * 255.0 + 0.5) / 256.0) / 1024.0 - 0.5) * 3.1415927 - lat) * points;
+                        float bv = star.a * 2.4 - 0.4;
+                        vec3 hue = mix(mix(vec3(0.72, 0.8, 1.0), vec3(1.0, 0.97, 0.92), smoothstep(-0.2, 0.5, bv)),
+                                       vec3(1.0, 0.8, 0.6), smoothstep(0.6, 1.6, bv));
+                        float size = 0.3 + 0.22 * star.b;
+                        colour += hue * air * (0.07 + 0.5 * star.b * star.b) * exp(-dot(off, off) / (2.0 * size * size));
+                    }
+                }
 
                 // Sunrise and sunset: a warm band low in the sky, strongest toward the Sun's azimuth.
                 float sunward = exp((dot(normalize(d.xz), normalize(u_sun.xz + vec2(0.0, 0.0001))) - 1.0) * 2.5);
@@ -448,7 +576,12 @@ final class NightSky: SKScene, BatteryPaced {
                 horizonUniform,
                 SKUniform(name: "u_scale", float: Float(scale)),
                 SKUniform(name: "u_photo", texture: sharedTexture("sky-milky-way.heic")),
-                photoFrame, twilightUniform, sunUniform,
+                SKUniform(name: "u_stars", texture: sharedTexture("sky-stars") {
+                    let grid = SKTexture(data: Data(Self.starGrid()), size: CGSize(width: 2048, height: 1024))
+                    grid.filteringMode = .nearest
+                    return grid
+                }),
+                photoFrame, starFrame, twilightUniform, sunUniform,
             ])
         addChild(sky)
     }

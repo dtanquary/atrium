@@ -79,6 +79,29 @@ func eclipsesLineUp(time: String, latitude: Double, longitude: Double) {
     #expect(strongest(3, 15).hourly == 0)
 }
 
+/// The made-up comet comes and goes: on 16 November 2026, half-way through its first visit, it's at its brightest and
+/// about 45° from the Sun; nine days later it has gone, and it's back for the next visit on 20 December.
+@Test func madeUpCometComesAndGoes() throws {
+    func noon(_ month: Int, _ day: Int) -> Double {
+        Sky.julianDate(DateComponents(calendar: Calendar(identifier: .gregorian), timeZone: .gmt, year: 2026, month: month, day: day, hour: 0).date!)
+    }
+    let peak = try #require(NightSky.comet(noon(11, 16)))
+    #expect(peak.bright > 0.99 && (44...52).contains(acos(dot(peak.direction, Sky.sun(noon(11, 16)))) * 180 / .pi))
+    #expect(NightSky.comet(noon(11, 25)) == nil && NightSky.comet(noon(12, 20)) != nil)
+}
+
+/// The star grid's rows hold the number of cells the shader expects, and nearly every faint star keeps its cell.
+@Test func faintStarsKeepTheirCells() {
+    // none of the sixteen bands' counts is within a tenth of a whole number, where a GPU's cosine could round the other way
+    for band in 0..<16 {
+        let exact = 2048 * cos(Double(band) * 32 * .pi / 1024)
+        #expect(exact - exact.rounded(.down) > 0.1 || band == 0, "band \(band) holds \(exact) cells")
+        #expect(NightSky.cells(row: 511.5 + Double(band) * 32 + 0.5) == exact.rounded(.down))
+    }
+    let grid = NightSky.starGrid(), kept = stride(from: 2, to: grid.count, by: 4).count { grid[$0] > 0 }
+    #expect(kept > 105_000 && kept < 113_300, "\(kept) stars in the grid")
+}
+
 /// Night Sky's photograph of the whole sky has its stars where the catalogue puts ours: turned by `NightSky.toPhoto`,
 /// the 20 brightest land on bright spots in it. Without the turn they miss by two or three degrees and none does.
 @Test func skyPhotoLinesUpWithTheStars() throws {
