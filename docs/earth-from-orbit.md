@@ -4,11 +4,11 @@ The whole Earth seen from high above the viewer's own location, like a geostatio
 
 - **Files:**
   - `Sources/Atrium/EarthFromOrbit.swift`: the scene.
-  - `Sources/Atrium/ISS.swift`: `ISS.shared`, the live position, shared with [Live Sky](live-sky.md).
+  - `Sources/Atrium/ISS.swift`: `ISS.shared`, the live position, shared with [Night Sky](night-sky.md).
   - `Sources/Atrium/Clouds.swift`: `Clouds.shared`, the live global cloud map.
   - `Sources/Atrium/Storms.swift`: `Storms.shared`, where thunderstorms are around the viewer.
   - `Sources/Atrium/Resources/earth-day.jpg` (486 KB) and `earth-night.jpg` (263 KB), both about 2048×1024.
-  - Astronomy comes from `SkyMath.swift` and location from `Location.swift`; see [live-sky.md](live-sky.md).
+  - Astronomy comes from `SkyMath.swift` and location from `Location.swift`; see [night-sky.md](night-sky.md).
 - **Entry:** `earthFromOrbit(size:)` builds `final class EarthFromOrbit: SKScene`. Its entry in Scenes.swift is "Earth from Orbit", icon `globe.americas.fill`, tint `.cyan`, `knobs: EarthFromOrbit.knobs`.
 - **Kind:** hybrid. The globe is one sprite with an SKShader sampling two textures; the stars, ISS marker, label and orbit ring are nodes.
 
@@ -68,7 +68,7 @@ The whole Earth seen from high above the viewer's own location, like a geostatio
 
 ## Time, live data and appearance
 - **Time:** always real time (`Date()`). There's no preview seam.
-- **Location:** `Location.start()` is called in `didMove`. The view centres on the saved fix, or on the time-zone fallback; see [live-sky.md](live-sky.md).
+- **Location:** `Location.start()` is called in `didMove`. The view centres on the saved fix, or on the time-zone fallback; see [night-sky.md](night-sky.md).
 - **Appearance:** one look. It ignores Light/Dark Mode.
 
 ## Data and licences

@@ -448,7 +448,7 @@ final class PixelOrbit: SKScene, BatteryPaced {
             // in the Earth's shadow, since a camera set for the sunlit Earth sees none.
             let dark = 1 - lit * 0.85
             func spot(_ v: Sky.Vector) -> (x: Int, y: Int)? { lens.spot([dot(v, eye.right), dot(v, eye.up), dot(v, eye.ahead)]) }
-            for star in LiveSky.catalogue {
+            for star in NightSky.catalogue {
                 let v = ours(star.direction)
                 guard asin(v.z) > -dip + 0.05, let at = spot(v), ringOf[at.y * gw + at.x] < 0 else { continue } // clear of the Earth and its air
                 let shine = Float(min(1, pow(2.512, 1.2 - star.magnitude) * 2.2 + 0.22)) * dark

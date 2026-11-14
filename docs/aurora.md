@@ -92,7 +92,7 @@ CPU 0.5–0.7 ms and GPU 1.0–1.45 ms per frame (release build, 2x, 2026-09-25)
 - `SNAPSHOT_SECONDS` moves the curtains (`u_phase`, advanced by SKActions) and the twinkle (`u_now`).
 
 ## Dave's feedback and decisions
-- It was one of the four scenes Dave picked for the picker's first round (with Flowing Gradient, Rain on Glass and Night Sky, later renamed Live Sky), then built by the shaders agent.
+- It was one of the four scenes Dave picked for the picker's first round (with Flowing Gradient, Rain on Glass and Night Sky, later renamed Night Sky), then built by the shaders agent.
 - 2026-09-24, Dave asked for other aurora colours, but "keep it in the realm of what real colors they can be … green, red, pink, purple, blue, yellow, and white". He also asked for "some gradients to it … so you get more than one color in an aurora". Hence four-colour height gradients built from real emissions, and Random as the default.
 - The parent agent judged it to read well at launch.
 - 2026-09-25, Dave asked for a photoreal ground, "glistening snow hills and norwegian mountain background", with the same approach as Weather. Three research agents: landscape photos, measurements of 63 real aurora-over-mountain photos, and aurora rendering techniques (for the next pass). Of ten licensed candidates, three were cut and relit (night composites in the scratchpad): the Tetons (NPS, PD), south of Tromsø on Kvaløya (Lars Tiede, CC BY 2.0: the most on-brief, snow hills with birches, but hazy and murky once relit) and Raftsund in Lofoten (Clemensfranz, CC BY 2.5: striking peaks but no snow in front). A real night photo lost: dark, noisy, and its lake has the aurora's reflection baked in. Dave picked the Tetons. Then: "the edges of the aurora get really close to the top of the mountains, it looks odd", so the curtains went up (lower edges from 0.4 to 0.5) and the range down (summit from 0.42 to 0.38). In the new sky, the curtains' distances keep their lower edges above the summits.
@@ -109,7 +109,7 @@ CPU 0.5–0.7 ms and GPU 1.0–1.45 ms per frame (release build, 2x, 2026-09-25)
 - **Settings:** Activity (Quiet to Storm, or Live from NOAA's hemispheric power feed, `services.swpc.noaa.gov/text/aurora-nowcast-hemi-power.txt`, as seen from northern Norway: from Dave's latitude the real sky would be dark most nights), Substorms, Speed. Details in the techniques notes.
 - **Snow sparkle:** none of the 47 real snow photos shows any at this scale; Dave asked for glistening, so it stays subtle. Make it rarer and static if it reads as noise.
 - **Ground:** a still lake mirroring the live sky; a Norwegian alternative (Raftsund) if the Tetons ever grate; a faint rim of light on the summits' snow from the aurora behind them.
-- **Stars:** the real catalogue (Live Sky's) for true clustering and the Milky Way.
+- **Stars:** the real catalogue (Night Sky's) for true clustering and the Milky Way.
 - **Night only:** follow the real Sun (dimmer or absent by day), as Flowing Gradient's mood does.
 
 ## Sources

@@ -7,7 +7,7 @@ A full-screen, photoreal Moon as it is right now from where the viewer stands: i
   - `Sources/Atrium/Resources/moon-colour.heic` (1.3 MB), `moon-east.heic` (1.1 MB), `moon-north.heic` (0.8 MB) and `moon-height.heic` (0.3 MB): the near side at 16 pixels a degree, 3200×2880. See Data below.
   - `Tests/AtriumTests/MoonTests.swift`.
   - The Moon's position comes from `Sky.moonPosition` and `Sky.moon(_:latitude:longitude:)` in `SkyMath.swift` (Meeus ch. 47, about 10″), the Sun from `Sky.sun`, and the sky from Weather's `Atmosphere` in `WeatherSky.swift`.
-- **Entry:** since 2026-09-27, the Moon's live view in Space Tour (see [space-tour.md](space-tour.md)), which builds `TheMoon(size:)` and runs it nested in its own scene, passing it `update(_:)` and `didMove(to:)`. Its settings are under The Moon on Solar System Tour's page. Until then it was its own wallpaper, "The Moon", right after Live Sky, icon `moonphase.waxing.gibbous`, tint `.gray`.
+- **Entry:** since 2026-09-27, the Moon's live view in Space Tour (see [space-tour.md](space-tour.md)), which builds `TheMoon(size:)` and runs it nested in its own scene, passing it `update(_:)` and `didMove(to:)`. Its settings are under The Moon on Solar System Tour's page. Until then it was its own wallpaper, "The Moon", right after Night Sky, icon `moonphase.waxing.gibbous`, tint `.gray`.
 - **Kind:** a baked shader. `MoonBaker` renders the lit Moon with an SKShader into a texture through its own `SKRenderer`, and the scene shows it as one sprite.
 
 ## How it works
@@ -33,7 +33,7 @@ A full-screen, photoreal Moon as it is right now from where the viewer stands: i
   - **Colour:** LROC's colour at half saturation (closer to what the eye sees), with a contrast of albedo^1.37 in linear light to match the tones of NASA's own renders. Then linear to 0.8, a soft shoulder to white, sRGB gamma, and ±½/255 dither.
 - **Backdrops** (`moon.backdrop`):
   - **Black.**
-  - **Stars:** the Yale catalogue (`LiveSky.catalogue`) around the Moon's real place, projected gnomonically on a far wider scale than the Moon (about 40° of sky top to bottom), faint (1.8–5 pt, alpha 0.3–0.85), in their B−V colours. The Moon's disc hides them.
+  - **Stars:** the Yale catalogue (`NightSky.catalogue`) around the Moon's real place, projected gnomonically on a far wider scale than the Moon (about 40° of sky top to bottom), faint (1.8–5 pt, alpha 0.3–0.85), in their B−V colours. The Moon's disc hides them.
   - **Sky:** the physical sky where the Moon is, from `Atmosphere.march` at the Moon's azimuth and at its altitude −0.2, 0 and +0.2 rad, as a three-texel gradient. Partial auto-exposure `0.4·(L/0.1)^0.25` makes it pale blue by day, deep blue or violet at dusk, and black at night. It's laid over everything with `.screen` blending: the air is in front of the Moon, and screen never clips its bright side. The dark side takes the sky's colour, as a daytime Moon's does. The Moon is tinted by the air it's seen through, `Atmosphere.sunlight` at its altitude over that at the zenith, so it rises orange. Stars fade as the sky brightens.
 
 ## Time, live data and appearance

@@ -1,58 +1,52 @@
-# Live Sky
+# Night Sky
 
-The real sky above the viewer right now, looking toward the equator: about 2,900 stars, the Milky Way, constellation lines, the five naked-eye planets, the Moon in its true phase and tilt, the ISS when it's overhead and sunlit, and an occasional meteor. The sky fills the screen down to the horizon unless Settings puts a landscape under it. It stays a night sky, but it reacts to the Sun: deep blue by day with only the brightest objects, the Sun drawn when it's in view, and sunrise and sunset glow at their real times.
+The real sky above the viewer right now, looking toward the equator: about 2,900 stars, the Milky Way, constellation lines, the five naked-eye planets, the Moon in its true phase and tilt, the ISS when it's overhead and sunlit, and an occasional meteor. The sky fills the screen down to the horizon unless Settings puts a landscape under it. It's the sky with the daylight switched off: as dark at noon as at midnight, with the Sun drawn among the stars it hides, and a warm band low toward it around sunrise and sunset.
 
 - **Files:**
-  - `Sources/Atrium/LiveSky.swift`: the scene.
+  - `Sources/Atrium/NightSky.swift`: the scene.
   - `Sources/Atrium/SkyMath.swift`: `enum Sky`, the positional astronomy. Shared with Earth from Orbit, Weather and Flowing Gradient.
   - `Sources/Atrium/Location.swift`: `Location.shared`, the viewer's position. Shared with every live scene.
   - `Sources/Atrium/ISS.swift`: see [earth-from-orbit.md](earth-from-orbit.md).
   - `Sources/Atrium/Resources/stars.txt` and `constellations.txt`.
-  - `Sources/Atrium/Resources/sky-*.txt`: the real skylines, made by `docs/live-sky/horizon.py`.
+  - `Sources/Atrium/Resources/sky-*.txt`: the real skylines, made by `docs/night-sky/horizon.py`.
   - `Tests/AtriumTests/SkyTests.swift`.
-- **Entry:** `liveSky(size:)` builds `final class LiveSky: SKScene`. Its entry in Scenes.swift is "Live Sky", icon `moon.stars.fill`, tint `.blue`, `knobs: LiveSky.knobs`.
+- **Entry:** `nightSky(size:)` builds `final class NightSky: SKScene`. Its entry in Scenes.swift is "Night Sky", icon `moon.stars.fill`, tint `.blue`, `knobs: NightSky.knobs`.
 - **Kind:** hybrid. The background and the Moon are SKShaders; stars, planets, the Sun, the ISS, labels and meteors are sprites; the landscape, when one is switched on, is a Core Graphics texture.
 
 ## How it works
 - **Projection.** A stereographic projection centred on the horizon point the view faces: south, or north when latitude < 0 (`facingSouth`). Great circles through the centre stay straight, so the horizon is a straight line. `scale` gives about a 120° horizontal field of view; `horizonY` sits on the screen's bottom edge, so the sky fills the screen and nothing in it is below the horizon, or 12% up (`landHorizon`) while a landscape shows. `project()` returns nil for points behind the viewer (`1 + forward <= 0.2`). `place()` hides a node that's below the horizon (z < −0.01) or more than 30 pt off-screen.
 - **Frames.** Equatorial directions are J2000 unit vectors. `Sky.horizonMatrix(jd:latitude:longitude:)` turns them into (east, north, up). `refresh()` recomputes every position every 5 s, and on any settings change.
 - **Background shader** (`addSkyBackground`): each pixel is un-projected back onto the sphere, as (right, up, forward).
-  - It mixes a night gradient and a day gradient by `u_day`.
-  - The Milky Way is computed in galactic coordinates through `u_galactic` (screen → horizon → equatorial → galactic, built in `refresh()`): a disc, a bulge toward the galactic centre, three octaves of 3D value noise, and a dust lane. It fades by day.
+  - A night gradient, a little lighter toward the horizon.
+  - The Milky Way is computed in galactic coordinates through `u_galactic` (screen → horizon → equatorial → galactic, built in `refresh()`): a disc, a bulge toward the galactic centre, three octaves of 3D value noise, and a dust lane.
   - A twilight band of warm light sits low in the sky, strongest toward the Sun's azimuth (`u_twilight`, `u_sun` in the same right/up/forward frame).
-  - A halo around the Sun by day, and ±½/255 dither against banding.
+  - ±½/255 dither against banding.
 - **Stars:** `stars.txt` holds 2,887 stars to magnitude 5.5, as `RA Dec V B−V` in degrees, J2000.
   - Size is `max(2.2, 11 − 1.55·V)` points, colour comes from B−V (`starColour`), and alpha from V.
   - Stars brighter than V 2 twinkle with fade actions.
-  - Stars are grouped into 16 parent layers by half magnitude (`starLayers`), so daylight fades a whole magnitude band by setting one layer's alpha. The twinkle actions keep owning each star's own alpha, and the two don't fight.
-- **Constellations:** one `SKShapeNode` path, rebuilt each refresh from `constellations.txt` polylines. A segment breaks where it dips below the horizon. SpriteKit strokes a shape node's whole path again every frame, path unchanged or not, so the path holds only the unbroken runs with a segment on screen, each run whole (cutting off just its off-screen segments moved pixels along the rest), and nothing while the lines are switched off or faded out by day.
-- **Planets:** `Sky.planet(_:_:)` gives Mercury to Saturn. Each is a glow sprite with a fixed size, colour and typical magnitude (used only for daytime fading) and an "ISS"-style label as its child.
-- **Sun:** a 48 pt disc and a 360 pt glow, blended toward orange below 12° altitude. It's hidden below the horizon or out of view.
+- **Constellations:** one `SKShapeNode` path, rebuilt each refresh from `constellations.txt` polylines. A segment breaks where it dips below the horizon. SpriteKit strokes a shape node's whole path again every frame, path unchanged or not, so the path holds only the unbroken runs with a segment on screen, each run whole (cutting off just its off-screen segments moved pixels along the rest), and nothing while the lines are switched off.
+- **Planets:** `Sky.planet(_:_:)` gives Mercury to Saturn. Each is a glow sprite with a fixed size and colour and an "ISS"-style label as its child.
+- **Sun:** a 48 pt disc and a 360 pt glow, blended toward orange below 12° altitude. It's hidden below the horizon or out of view, and otherwise sits among the stars: in mid-November, in Libra.
 - **Moon:** a 46 pt disc (exaggerated; the real Moon is about 5 pt at this scale) drawn by a shader.
   - The shader treats the disc as a sphere lit from `u_light`, with 11 hand-placed maria blobs.
-  - Its shading is `moonShade` (Shaders.swift, shared with Weather): McEwen's lunar-Lambert, as in The Moon, so the light fades toward the terminator instead of stopping at an edge. By night it's shown as its square root (light to display), over an opaque disc with a little earthshine. By day (`u_day`) the shade is used as it is and also as the disc's alpha, and the earthshine goes, so the dark side is sky and the lit part fades into the blue.
+  - Its shading is `moonShade` (Shaders.swift, shared with Weather): McEwen's lunar-Lambert, as in The Moon, so the light fades toward the terminator instead of stopping at an edge. It's shown as its square root (light to display), over an opaque disc with a little earthshine.
   - The disc is rotated so its north points to the celestial pole on screen (`screenAngle` toward `poleH`).
   - The light direction is measured from the Moon's north using `skyAngle`, which works in the local frame of someone facing the Moon with their head upright. That keeps it correct however the disc is turned.
   - The phase angle comes from `Sky.moonPhase(jd).lit` (`acos(2·lit − 1)`).
-  - Glow alpha = 0.5 · lit · (1 − 0.7 · day).
+  - Glow alpha = 0.5 · lit.
 - **ISS:** in `update(_:)`, using `ISS.shared.position()` → `Sky.lookDirection` → `place()`. It's shown only while sunlit (the real naked-eye condition), with a label as a child.
 - **Meteors:** a painted 140×2 pt streak every 15–75 s (`wait 45 ± 30`), fading over 0.7 s.
-- **Landscape:** off unless Settings turns it on. `Landscape` (end of LiveSky.swift) lists the silhouettes, and `paintGround` paints the one picked into the `ground` node, the first time it's shown and again when the pick changes.
+- **Landscape:** off unless Settings turns it on. `Landscape` (end of NightSky.swift) lists the silhouettes, and `paintGround` paints the one picked into the `ground` node, the first time it's shown and again when the pick changes.
   - **Pine ridge** is drawn: a hill ridge with stands of conifers, rolled afresh each time.
   - **The rest are real skylines**: Monument Valley, the Teton Range, Shiprock, Devils Tower and Mount Fuji. Each is a `sky-<case>.txt` of about 120 to 540 points, degrees right of the view's centre and degrees above the horizon, as seen from the spot its header names. The points go through the same stereographic projection as the stars, so the skyline stands as wide and as tall as it would among them, on any display. Only Shiprock and Fuji are really seen looking south; the others face east, west and north-west.
   - Faint compass letters (SE, S, SW, or NW, N, NE) sit on the ground, or just above the bottom edge without one.
 
 ## Time, live data and appearance
 - **Time:** `skyDate` is `Date()`, or today at `sky.previewHour` while `sky.previewTime` is on.
-- **Daylight:**
-  - `day = smoothstep(−14°, 4°, sun altitude)`
-  - the faintest magnitude still shown is `limit = 6 − 4.5·day`, so about magnitude 1.5 at noon
-  - planets fade by the same rule using their fixed magnitudes
-  - constellation alpha = 1 − day
-  - twilight glow = `smoothstep(−16, −4) · (1 − smoothstep(4, 14))`
+- **Daylight:** there is none. Nothing fades with the Sun's height; the one thing that follows it is the twilight glow, `smoothstep(−16, −4) · (1 − smoothstep(4, 14))` of its altitude in degrees.
 - **Location:** `Location.shared`, from CoreLocation. It asks for When In Use permission on the first `start()`, from `didMove`. The last fix is saved in UserDefaults (`latitude`, `longitude`). Before the first fix, it falls back to 40°N and a longitude guessed from the standard time-zone offset (DST removed). It's read on every refresh.
 - **Network:** only the ISS. Polling starts in `didMove`, once a minute. See [earth-from-orbit.md](earth-from-orbit.md).
-- **Appearance:** one look. It ignores Light/Dark Mode, because the sky is inherently dark.
+- **Appearance:** one look. It ignores Light/Dark Mode, because the sky is dark.
 
 ## Astronomy (SkyMath.swift)
 - **Planets:** JPL "Approximate Positions of the Planets", table 1 Keplerian elements (1800–2050), with Kepler's equation solved by Newton's method in 5 iterations. Earth's elements give the Sun.
@@ -66,7 +60,7 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
 ## Data and licences
 - `stars.txt`: Yale Bright Star Catalogue, 5th ed. (CDS V/50), public domain. Credit is in the file header.
 - `constellations.txt`: d3-celestial (Olaf Frohn), BSD 3-Clause. The full licence notice is kept in the header and must stay there.
-- `sky-*.txt`: horizon angles worked out from elevation data by `docs/live-sky/horizon.py`. The US sites use the USGS 3D Elevation Program (public domain; USGS asks for credit, which About gives), down to 1 m lidar over the buttes and the tower. Fuji uses NASA's SRTMGL1 v3 (30 m, CC0), fetched from ESA's STEP mirror. Each file's header names the viewpoint and the source.
+- `sky-*.txt`: horizon angles worked out from elevation data by `docs/night-sky/horizon.py`. The US sites use the USGS 3D Elevation Program (public domain; USGS asks for credit, which About gives), down to 1 m lidar over the buttes and the tower. Fuji uses NASA's SRTMGL1 v3 (30 m, CC0), fetched from ESA's STEP mirror. Each file's header names the viewpoint and the source.
 
 ## Settings
 | key | label | range | default | drives |
@@ -87,9 +81,7 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
   - size `11 − 1.55·V`, minimum 2.2 pt
   - alpha `1.2 − 0.14·V`, clamped between 0.35 and 1
   - bright stars twinkle to 60% over 0.15–0.5 s
-- **Daylight:** `day` smoothstep between −14° and 4°; the magnitude limit runs from 6 at night to 1.5 by day.
 - **Sprite sizes:** Moon 46 pt, Moon glow 220 pt, Sun 48 pt, Sun glow 360 pt.
-- **Planet magnitudes:** Mercury 0, Venus −4.2, Mars 0.5, Jupiter −2.2, Saturn 0.7.
 
 ## Performance
 - About 0.64 ms CPU and 0.90 ms GPU per frame (release build, 2x, 1512×982).
@@ -103,26 +95,26 @@ The real sky above the viewer right now, looking toward the equator: about 2,900
 
 ## Gotchas and shortcuts
 - `ponytail:` **precession.** It's ignored since J2000, about 0.35° by 2026. It shifts the whole sky together, so nothing looks wrong relative to itself.
-- `ponytail:` **no topocentric parallax for the Moon.** It can sit up to about 1° off its true place against the stars. `Sky.moon(_:latitude:longitude:)` has it now, if Live Sky wants it.
-- `ponytail:` **fixed planet magnitudes.** Real ones swing (Mars from about −2.9 to +1.8). They only affect daytime fading.
+- `ponytail:` **no topocentric parallax for the Moon.** It can sit up to about 1° off its true place against the stars. `Sky.moon(_:latitude:longitude:)` has it now, if Night Sky wants it.
+- `ponytail:` **fixed planet sizes.** Real brightness swings (Mars from about magnitude −2.9 to +1.8).
 - `ponytail:` **hand-placed maria.** A real lunar albedo map would add fidelity.
 - `ponytail:` **fallback location.** The time-zone guess can be about 15° off in latitude until CoreLocation answers.
-- **Twinkle actions.** They set absolute alphas, which is why daylight fading goes through the parent layers. Don't fade the star sprites themselves.
+- **Twinkle actions.** They set absolute alphas, so anything that fades the bright stars has to go through a parent node, not the star sprites themselves.
 - **Moon light and turned discs.** The Moon's light vector must be measured from the Moon's north, not from screen up, or it breaks when the disc is rotated.
 - **Render tests** never call `didMove`, so the snapshot has no ISS and no location request.
 
 ## Dave's feedback and decisions
-- **Name.** He asked for Night Sky based on his real location; it was renamed Live Sky once it followed the day. The code, file and type were renamed, and a saved "Night Sky" selection is migrated in main.swift.
-- **Daytime behaviour.** He chose option 3: stay a night sky but react to the Sun. The tag `night-sky-always-dark` keeps the always-dark version, in case he wants separate Day and Night wallpapers (`git show night-sky-always-dark:Sources/Wallpaper/NightSky.swift`).
+- **Name.** He asked for Night Sky based on his real location; it became Live Sky once it followed the day, and Night Sky again on 2026-11-14 (below). The code, file, type, pictures and this doc were renamed each time, and a saved "Live Sky" (the wallpaper on the desktop, Settings' page, Shuffle's skipped list) is moved in main.swift.
+- **Daytime behaviour.** At first he chose to stay a night sky but react to the Sun: deep blue by day with only the brightest objects showing. On 2026-11-14 he asked whether Live Sky and Weather should be merged: "I feel like the live sky one is a bit redundant". They overlapped only by day, where Weather's physical sky does the same job far better, and a merge would have cost the star chart its 120° view, its lines and labels, and its sky on a cloudy night. He took the other way out, "move live sky back to night sky": always dark, the Sun drawn among the stars, so Weather is what's out the window and Night Sky is what's behind the daylight and the clouds. The warm band at sunrise and sunset stayed, as the one sign of the hour. The tag `night-sky-always-dark` is the first always-dark version, before any of this.
 - **Moon.** "Show the moon phase as it would from my location" meant that the Moon itself should be accurate. A bottom-left phase badge was added, then removed at his request as redundant. Don't bring back a HUD for this.
-- **Moon's terminator (2026-10-03).** In Weather he saw the half Moon end in a hard edge by day, where the real one fades into the sky, and asked for Live Sky to be checked too. Both now share `moonShade`. Live Sky had also drawn the dark side as a black half-disc on the blue day sky.
+- **Moon's terminator (2026-10-03).** In Weather he saw the half Moon end in a hard edge by day, where the real one fades into the sky, and asked for this one to be checked too. Both now share `moonShade`.
 - **Switches.** He asked for the constellation and planet-label switches.
 - **Landscape (2026-10-05).** He asked for a switch to turn the landscape off, and for more silhouettes to choose between. Off means no ground at all, not a flat one: the horizon drops to the bottom edge. Once he had the switch he asked for off to be the default ("i think we should default to no landscape", "it looks nice without a landscape there imo"), so the landscapes are an extra for those who want one.
-- **Preview.** Added so he could see the daytime look on demand.
+- **Preview.** Added so he could see the daytime look on demand; now it shows the sky of any hour today.
 
 ## Landscapes: what was looked at (2026-10-05)
 A research agent compared drawn recipes, real skylines and traced photos, each as a strip against night, twilight and day skies.
-- **Real skylines won.** They cost a few KB of text, scale to any width and look real. The method is in `docs/live-sky/horizon.py`: walk outward from the viewpoint along each bearing and keep the highest angle the ground reaches.
+- **Real skylines won.** They cost a few KB of text, scale to any width and look real. The method is in `docs/night-sky/horizon.py`: walk outward from the viewpoint along each bearing and keep the highest angle the ground reaches.
   - The National Map's `exportImage` keeps pixels square in degrees: ask for a square image of a box that isn't square in degrees and it quietly widens the box in latitude, which gives a plausible but wrong skyline. The script asks for 2000 × 2000·cos(latitude). It also fails above about 2000 pixels a side, so the script fetches nested squares.
   - To add one: a line in the script's `SITES`, run it, add a case to `Landscape` whose name matches the file, and look at it in a snapshot.
 - **Skylines computed and turned down:** the Sierra crest from the Alabama Hills, and Monte Rosa to the Matterhorn from above Zermatt or Gornergrat (walls 10° to 12° high that hide the low sky, with no one shape); Torres del Paine (16°, and SRTM puts a false needle in it); Kilimanjaro from Amboseli (a low dome); Table Mountain across Table Bay (needs its angles stretched 1.5× to read); Monument Valley from US-163 (weaker than the visitor centre's view). Yosemite's walls stand 12° and more from any classic viewpoint.
@@ -148,8 +140,8 @@ A research agent compared drawn recipes, real skylines and traced photos, each a
 - The viewer's own horizon, from the same elevation data around where they are.
 
 ## Checking it
-- `SNAPSHOT_SCENE="Live Sky" swift test` renders the current moment at the fallback location, because the test process has its own defaults domain.
-- To render a set time: `SNAPSHOT_DEFAULTS="sky.previewTime=1,sky.previewHour=18.8" SNAPSHOT_SCENE="Live Sky" swift test`. Try 13 for noon, about 18.8 for sunset at the test's fallback longitude of −90°, and 23 for night. To hide things, add `sky.constellations=0,sky.planetLabels=0,sky.landscape=0`.
+- `SNAPSHOT_SCENE="Night Sky" swift test` renders the current moment at the fallback location, because the test process has its own defaults domain.
+- To render a set time: `SNAPSHOT_DEFAULTS="sky.previewTime=1,sky.previewHour=18.8" SNAPSHOT_SCENE="Night Sky" swift test`. Try 13 for the Sun among the stars, about 16.9 for a November sunset's glow at the test's fallback longitude of −90°, and 23 for night. To hide things, add `sky.constellations=0,sky.planetLabels=0,sky.landscape=0`.
 - A landscape: add `sky.landscape=1,sky.ground=1` (the number is its place in `Landscape`, 0 for the pines).
 - `swift test --filter SkyTests`:
   - positions matched against Horizons

@@ -119,7 +119,7 @@ final class TheMoon: SKScene {
         let scale = Double(size.height) / 2 / tan(20 * Double.pi / 180)
         let reach = Double(hypot(size.width, size.height)) / 2 / scale
         let (right, up) = (-seen.skyEast, seen.skyNorth)
-        for star in LiveSky.catalogue {
+        for star in NightSky.catalogue {
             let forward = dot(star.direction, seen.toMoon)
             guard forward > 0.5 else { continue }
             let (x, y) = (dot(star.direction, right) / forward, dot(star.direction, up) / forward)
@@ -127,7 +127,7 @@ final class TheMoon: SKScene {
             let diameter = max(1.8, 5 - 0.6 * star.magnitude)
             let sprite = SKSpriteNode(texture: Self.glow, size: CGSize(width: diameter, height: diameter))
             sprite.position = CGPoint(x: x * scale, y: y * scale)
-            sprite.color = LiveSky.starColour(star.bv)
+            sprite.color = NightSky.starColour(star.bv)
             sprite.colorBlendFactor = 1
             sprite.alpha = min(0.85, max(0.3, 1 - 0.12 * star.magnitude))
             stars.addChild(sprite)

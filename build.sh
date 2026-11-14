@@ -2,7 +2,7 @@
 # Builds build/Atrium.app, a menu-bar-only app. Run it with: open build/Atrium.app
 # APP_STORE=1 ./build.sh builds the Mac App Store variant instead: no updater, and sandboxed (see docs/app-store.md).
 set -e
-VERSION=0.122.1 # semantic versioning; see "Versioning" in CLAUDE.md
+VERSION=0.123.0 # semantic versioning; see "Versioning" in CLAUDE.md
 PRERELEASE=beta # until 1.0, then e.g. "rc 1" while a release candidate: shown in Settings → About; VERSION stays three numbers, as macOS requires
 cd "$(dirname "$0")"
 
@@ -11,7 +11,7 @@ cd "$(dirname "$0")"
 swift build -c release ${APP_STORE:+-Xswiftc -DAPP_STORE} -Xlinker -platform_version -Xlinker macos -Xlinker 26.0 -Xlinker "$(xcrun --show-sdk-version)"
 BUILD=$(git rev-list --count HEAD 2>/dev/null || echo 0)
 
-LOCATION="Wallpapers like Live Sky, Weather, Wind and Dappled Light show the real sky, weather and light where you are. Without your location, Atrium guesses from your time zone."
+LOCATION="Wallpapers like Night Sky, Weather, Wind and Dappled Light show the real sky, weather and light where you are. Without your location, Atrium guesses from your time zone."
 APP=build/Atrium.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"

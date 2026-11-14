@@ -1,14 +1,14 @@
-"""Horizon profiles for Live Sky's landscapes, from public-domain elevation data.
+"""Horizon profiles for Night Sky's landscapes, from public-domain elevation data.
 
-    python3 docs/live-sky/horizon.py <site> [...]     # sites are listed in SITES below; "all" runs every one
+    python3 docs/night-sky/horizon.py <site> [...]     # sites are listed in SITES below; "all" runs every one
 
 From the observer's point it walks outward along 4,801 bearings across the view and keeps the highest angle the
 ground reaches on each, with the Earth's curve and standard refraction. It writes
 Sources/Atrium/Resources/sky-<site>.txt: "azimuth-offset altitude" in degrees, one pair per line (offset 0 is the
-centre of the view, which is 120 degrees across), simplified to 0.03 degrees. `Landscape` in LiveSky.swift draws it
+centre of the view, which is 120 degrees across), simplified to 0.03 degrees. `Landscape` in NightSky.swift draws it
 through the sky's own projection. Look at it with:
 
-    SNAPSHOT_DEFAULTS="sky.landscape=1,sky.ground=1" SNAPSHOT_SCENE="Live Sky" swift test
+    SNAPSHOT_DEFAULTS="sky.landscape=1,sky.ground=1" SNAPSHOT_SCENE="Night Sky" swift test
 
 Data: USGS 3DEP (public domain) through the National Map's ImageServer for US sites, NASA SRTMGL1 v3 (public domain,
 30 m: soft nearer than about 8 km and spiky in steep granite) from ESA's STEP mirror elsewhere. Both are cached in

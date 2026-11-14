@@ -326,7 +326,7 @@ class WeatherScene: SKScene, BatteryPaced {
         sunNow = sun
         turnStars()
         guard let at = viewpoint.screen(moon), moon.z > -0.01 else { moonPlace.vectorFloat4Value = [0, 0, 0, 0]; return }
-        // Light it from the real Sun, and turn it so its north points to the celestial pole, as in Live Sky.
+        // Light it from the real Sun, and turn it so its north points to the celestial pole, as in Night Sky.
         func angle(toward target: Sky.Vector) -> Double {
             let step = normalize(moon + (target - moon * dot(moon, target)) * 0.02)
             guard let next = viewpoint.screen(step) else { return 0 }

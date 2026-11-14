@@ -168,12 +168,17 @@ final class WallpaperView: SKView, SKViewDelegate {
 }
 
 var windows: [NSWindow] = []
-// ponytail: one-off moves of settings saved before the app became Atrium and Night Sky became Live Sky; drop after a while
+// ponytail: a one-off move of settings saved before the app became Atrium; drop after a while
 if UserDefaults.standard.object(forKey: "scene") == nil,
    let old = UserDefaults.standard.persistentDomain(forName: "com.dtanquary.wallpaper") {
     for (key, value) in old { UserDefaults.standard.set(value, forKey: key) }
 }
-if UserDefaults.standard.string(forKey: "scene") == "Night Sky" { UserDefaults.standard.set("Live Sky", forKey: "scene") }
+// ponytail: Live Sky went back to being Night Sky on 2026-11-14; drop this move after a while
+for key in ["scene", SettingsView.pageKey, Shuffle.skipKey] {
+    if let old = UserDefaults.standard.string(forKey: key), old.contains("Live Sky") {
+        UserDefaults.standard.set(old.replacingOccurrences(of: "Live Sky", with: "Night Sky"), forKey: key)
+    }
+}
 // ponytail: The Sun Today and The Moon became views in Solar System on 2026-09-27, which became Solar System Tour on
 // 2026-09-28; drop these moves after a while
 if let body = ["The Sun Today": "The Sun", "The Moon": "The Moon"][UserDefaults.standard.string(forKey: "scene") ?? ""] {

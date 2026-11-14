@@ -119,7 +119,7 @@ Each palette is one family. The deep ones are given at shipping brightness, scal
 | Nebula | 30 | 110 | 150 | 168 |
 | Galaxy | 21 | 116 | 171 | 203 |
 | Flowing Gradient, dark | 105 | 126 | 137 | 138 |
-| Live Sky | 10 | 30 | 48 | 65 |
+| Night Sky | 10 | 30 | 48 | 65 |
 
 So, on black:
 

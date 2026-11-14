@@ -1,12 +1,12 @@
 import SpriteKit
 import simd
 
-@MainActor func liveSky(size: CGSize) -> SKScene { LiveSky(size: size) }
+@MainActor func nightSky(size: CGSize) -> SKScene { NightSky(size: size) }
 
-/// The real sky above you right now, facing the equator: stars, Milky Way, constellations, planets, the Moon in
-/// its true phase, the ISS, and the odd meteor. It stays a night sky but reacts to the Sun: deep blue by day with
-/// only the brightest stars and planets, the Sun drawn when it's in view, and sunrise and sunset glow on time.
-final class LiveSky: SKScene, BatteryPaced, Trimmable {
+/// The real sky above you right now, facing the equator, as it would be with the daylight switched off: stars, the
+/// Milky Way, constellations, planets, the Moon in its true phase, the ISS, and the odd meteor. It's dark at noon too,
+/// with the Sun drawn among the stars it hides, and a warm band low toward it around sunrise and sunset.
+final class NightSky: SKScene, BatteryPaced, Trimmable {
     /// 15 fps on battery, where the ISS, the fastest steady thing, moves up to 2.4 px a frame; the battery's rate
     /// while a meteor crosses, at 1,000 px a second, for its 0.7 s.
     var batteryRate: Int? = 15 { didSet { batteryRateChanged(from: oldValue) } }
@@ -27,8 +27,7 @@ final class LiveSky: SKScene, BatteryPaced, Trimmable {
     private var stars: [(node: SKSpriteNode, position: Sky.Vector)] = []
     private var constellationLines: [[Sky.Vector]] = []
     private let constellations = SKShapeNode()
-    private let starLayers = (0..<16).map { _ in SKNode() } // by half magnitude, so daylight can fade the faint ones
-    private var planets: [(planet: Sky.Planet, node: SKSpriteNode, magnitude: Double)] = []
+    private var planets: [(planet: Sky.Planet, node: SKSpriteNode)] = []
     private let sun = SKSpriteNode()
     /// Holds the sky behind everything, which alone is drawn at a lower resolution when trimmed: the stars, lines and
     /// labels over it stay sharp.
@@ -39,7 +38,6 @@ final class LiveSky: SKScene, BatteryPaced, Trimmable {
     private let moonLight = SKUniform(name: "u_light", vectorFloat3: [0, 0, 1])
     private let iss = SKSpriteNode()
     private let galacticUniform = SKUniform(name: "u_galactic", matrixFloat3x3: matrix_identity_float3x3)
-    private let dayUniform = SKUniform(name: "u_day", float: 0)
     private let twilightUniform = SKUniform(name: "u_twilight", float: 0)
     private let sunUniform = SKUniform(name: "u_sun", vectorFloat3: [0, 0, 1])
 
@@ -64,7 +62,6 @@ final class LiveSky: SKScene, BatteryPaced, Trimmable {
         constellations.strokeColor = NSColor(red: 0.55, green: 0.7, blue: 1, alpha: 0.1)
         constellations.lineWidth = 1
         constellations.zPosition = 1
-        starLayers.forEach(addChild)
         addStars()
         addPlanets()
         addSun()
@@ -156,22 +153,12 @@ final class LiveSky: SKScene, BatteryPaced, Trimmable {
         let jd = Sky.julianDate(skyDate)
         toHorizon = Sky.horizonMatrix(jd: jd, latitude: here.latitude, longitude: here.longitude)
 
-        // Daylight: the sky turns deep blue and everything fainter than `limit` fades out.
         let sunH = toHorizon * Sky.sun(jd)
         let sunAltitude = asin(sunH.z) * 180 / .pi
-        let day = simd_smoothstep(-14, 4, sunAltitude)
-        let limit = 6 - 4.5 * day // faintest magnitude still showing
-        let visibility = { (magnitude: Double) in CGFloat(min(1, max(0, limit - magnitude))) }
-        for (i, layer) in starLayers.enumerated() { layer.alpha = visibility(Double(i) / 2 - 1.75) }
         for star in stars { place(star.node, at: toHorizon * star.position) }
-        for (planet, node, magnitude) in planets {
-            place(node, at: toHorizon * Sky.planet(planet, jd))
-            node.alpha = visibility(magnitude)
-        }
-        constellations.alpha = CGFloat(1 - day)
+        for (planet, node) in planets { place(node, at: toHorizon * Sky.planet(planet, jd)) }
 
         // Sunrise and sunset glow peaks with the Sun just below the horizon.
-        dayUniform.floatValue = Float(day)
         twilightUniform.floatValue = Float(simd_smoothstep(-16, -4, sunAltitude) * (1 - simd_smoothstep(4, 14, sunAltitude)))
         sunUniform.vectorFloat3Value = facingSouth ? [Float(-sunH.x), Float(sunH.z), Float(-sunH.y)]
                                                    : [Float(sunH.x), Float(sunH.z), Float(sunH.y)]
@@ -182,12 +169,12 @@ final class LiveSky: SKScene, BatteryPaced, Trimmable {
 
         // SpriteKit strokes the whole path again every frame, so leave out the lines it can't show: each unbroken
         // run of a constellation goes in whole (cutting one changes the pixels of the rest) or not at all, when every
-        // segment of it is off one side of the screen, as is all of it while the lines are hidden or faded out.
+        // segment of it is off one side of the screen, as is all of it while the lines are hidden.
         let path = CGMutablePath(), screen = frame.insetBy(dx: -30, dy: -30)
         func onScreen(_ a: CGPoint, _ b: CGPoint) -> Bool {
             max(a.x, b.x) >= screen.minX && min(a.x, b.x) <= screen.maxX && max(a.y, b.y) >= screen.minY && min(a.y, b.y) <= screen.maxY
         }
-        for strip in constellationLines where !constellations.isHidden && day < 1 {
+        for strip in constellationLines where !constellations.isHidden {
             var run: [CGPoint] = [], shows = false // the run above the horizon so far; whether any of it shows
             for point in strip + [nil] { // nil ends the last run
                 let h = point.map { toHorizon * $0 }
@@ -213,9 +200,8 @@ final class LiveSky: SKScene, BatteryPaced, Trimmable {
         place(moon, at: moonH)
         moonGlow.position = moon.position
         moonGlow.isHidden = moon.isHidden
-        moonGlow.alpha = 0.5 * lit * (1 - 0.7 * day)
+        moonGlow.alpha = 0.5 * lit
         if !moon.isHidden { moon.zRotation = screenAngle(from: moonH, toward: poleH) - .pi / 2 }
-
 
         // The Milky Way shader maps screen → sky → galactic: plane (right, up, forward) → horizon → equatorial → galactic.
         let basis = facingSouth
@@ -284,7 +270,7 @@ final class LiveSky: SKScene, BatteryPaced, Trimmable {
                 let back = SKAction.fadeAlpha(to: star.alpha, duration: .random(in: 0.15...0.5))
                 star.run(.repeatForever(.sequence([dim, back, .wait(forDuration: 0.5, withRange: 1.5)])))
             }
-            starLayers[min(15, max(0, Int((magnitude + 2) * 2)))].addChild(star)
+            addChild(star)
             stars.append((star, direction))
         }
         constellationLines = Self.rows("constellations.txt").map { line in
@@ -296,28 +282,27 @@ final class LiveSky: SKScene, BatteryPaced, Trimmable {
     }
 
     private func addPlanets() {
-        // Diameter, colour, and a typical magnitude for fading them by day.
-        // ponytail: fixed magnitudes; real ones swing with distance and phase (Mars most, ~-2.9 to +1.8)
-        let looks: [Sky.Planet: (CGFloat, NSColor, Double)] = [
-            .mercury: (7, NSColor(red: 1, green: 0.93, blue: 0.85, alpha: 1), 0),
-            .venus: (13, NSColor(red: 1, green: 0.98, blue: 0.9, alpha: 1), -4.2),
-            .mars: (9, NSColor(red: 1, green: 0.62, blue: 0.45, alpha: 1), 0.5),
-            .jupiter: (12, NSColor(red: 1, green: 0.95, blue: 0.86, alpha: 1), -2.2),
-            .saturn: (9, NSColor(red: 1, green: 0.9, blue: 0.7, alpha: 1), 0.7),
+        // ponytail: fixed sizes; real brightness swings with distance and phase (Mars most, magnitude -2.9 to +1.8)
+        let looks: [Sky.Planet: (CGFloat, NSColor)] = [
+            .mercury: (7, NSColor(red: 1, green: 0.93, blue: 0.85, alpha: 1)),
+            .venus: (13, NSColor(red: 1, green: 0.98, blue: 0.9, alpha: 1)),
+            .mars: (9, NSColor(red: 1, green: 0.62, blue: 0.45, alpha: 1)),
+            .jupiter: (12, NSColor(red: 1, green: 0.95, blue: 0.86, alpha: 1)),
+            .saturn: (9, NSColor(red: 1, green: 0.9, blue: 0.7, alpha: 1)),
         ]
         for planet in Sky.Planet.allCases {
-            let (diameter, colour, magnitude) = looks[planet]!
+            let (diameter, colour) = looks[planet]!
             let node = SKSpriteNode(texture: glow, size: CGSize(width: diameter, height: diameter))
             node.color = colour
             node.colorBlendFactor = 1
             node.zPosition = 3
             node.addChild(label(planet.rawValue, alpha: 0.4))
             addChild(node)
-            planets.append((planet, node, magnitude))
+            planets.append((planet, node))
         }
     }
 
-    /// The Sun: a bright disc in a wide warm glow, drawn only when it's up and in view.
+    /// The Sun: a bright disc in a wide warm glow, among the stars, drawn only when it's up and in view.
     private func addSun() {
         sunGlow.texture = glow
         sunGlow.size = CGSize(width: 360, height: 360)
@@ -374,22 +359,19 @@ final class LiveSky: SKScene, BatteryPaced, Trimmable {
                     + mare(p, vec2(-0.50, -0.40), 0.10);
                 float mottle = 0.9 + 0.1 * noise(p * 22.0);
                 vec3 surface = vec3(0.93, 0.91, 0.86) * (1.0 - 0.3 * min(dark, 1.0)) * mottle * (0.85 + 0.15 * n.z);
-                // Light to display (a square root, as Weather's film curve does) by night. By day the sky in front of
-                // the Moon outshines its dim ground near the terminator, its dark side and the earthshine on it, so the
-                // lit part fades into the blue.
-                float shade = moonShade(n, u_light);
-                float lit = mix(sqrt(shade), shade, u_day);
-                vec3 colour = surface * lit + vec3(0.03, 0.035, 0.05) * (1.0 - min(lit, 1.0)) * (1.0 - u_day);
+                // Light to display (a square root, as Weather's film curve does), with a little earthshine on the dark side.
+                float lit = sqrt(moonShade(n, u_light));
+                vec3 colour = surface * lit + vec3(0.03, 0.035, 0.05) * (1.0 - min(lit, 1.0));
                 float a = smoothstep(1.0, 0.93, r2);
-                gl_FragColor = vec4(colour * a, a * mix(1.0, min(lit, 1.0), u_day));
+                gl_FragColor = vec4(colour * a, a);
             }
-            """, uniforms: [moonLight, dayUniform])
+            """, uniforms: [moonLight])
         moon.zPosition = 4
         addChild(moon)
     }
 
-    /// Dark sky, brighter toward the horizon, with the Milky Way painted where it really is. By day it's deep blue
-    /// and the Milky Way fades; around sunrise and sunset a warm band glows low toward the Sun.
+    /// Dark sky, brighter toward the horizon, with the Milky Way painted where it really is. Around sunrise and sunset
+    /// a warm band glows low toward the Sun.
     private func addSkyBackground() {
         let sky = SKSpriteNode(color: .black, size: size)
         sky.anchorPoint = .zero
@@ -409,9 +391,7 @@ final class LiveSky: SKScene, BatteryPaced, Trimmable {
                 float r2 = dot(p, p);
                 vec3 d = vec3(4.0 * p, 4.0 - r2) / (4.0 + r2); // back onto the sphere: (right, up, forward)
                 float height = smoothstep(-0.05, 0.7, d.y);
-                vec3 night = mix(vec3(0.05, 0.065, 0.12), vec3(0.006, 0.01, 0.028), height);
-                vec3 day = mix(vec3(0.15, 0.29, 0.52), vec3(0.03, 0.1, 0.3), height);
-                vec3 colour = mix(night, day, u_day);
+                vec3 colour = mix(vec3(0.05, 0.065, 0.12), vec3(0.006, 0.01, 0.028), height);
 
                 vec3 g = u_galactic * d;
                 float b = asin(clamp(g.z, -1.0, 1.0));
@@ -420,13 +400,12 @@ final class LiveSky: SKScene, BatteryPaced, Trimmable {
                 float bulge = exp(-l * l / 0.2 - b * b / 0.05);
                 float clouds = 0.5 * noise(g * 7.0) + 0.3 * noise(g * 17.0) + 0.2 * noise(g * 43.0);
                 float lane = 1.0 - 0.75 * exp(-(b - 0.015) * (b - 0.015) / 0.0012) * smoothstep(1.6, 0.3, abs(l));
-                colour += vec3(0.6, 0.62, 0.72) * 0.14 * (disc + bulge) * clouds * clouds * 1.6 * lane * (1.0 - u_day);
+                colour += vec3(0.6, 0.62, 0.72) * 0.14 * (disc + bulge) * clouds * clouds * 1.6 * lane;
 
                 // Sunrise and sunset: a warm band low in the sky, strongest toward the Sun's azimuth.
                 float sunward = exp((dot(normalize(d.xz), normalize(u_sun.xz + vec2(0.0, 0.0001))) - 1.0) * 2.5);
                 float low = exp(-max(d.y, 0.0) * 6.0);
                 colour += u_twilight * low * (vec3(0.14, 0.07, 0.15) + vec3(0.95, 0.4, 0.1) * sunward);
-                colour += u_day * 0.15 * pow(max(dot(d, u_sun), 0.0), 6.0) * vec3(0.7, 0.8, 1.0); // bright around the Sun
 
                 colour += (hash(vec3(v_tex_coord * u_size, 1.0)) - 0.5) / 255.0; // dither away banding
                 gl_FragColor = vec4(colour, 1.0);
@@ -435,7 +414,7 @@ final class LiveSky: SKScene, BatteryPaced, Trimmable {
                 SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]),
                 horizonUniform,
                 SKUniform(name: "u_scale", float: Float(scale)),
-                galacticUniform, dayUniform, twilightUniform, sunUniform,
+                galacticUniform, twilightUniform, sunUniform,
             ])
         trim.content.addChild(sky)
         addChild(trim)
@@ -499,7 +478,7 @@ final class LiveSky: SKScene, BatteryPaced, Trimmable {
     }
 }
 
-/// The silhouettes Live Sky can stand on, named as Settings lists them. It stores the pick by its place here, so add
+/// The silhouettes Night Sky can stand on, named as Settings lists them. It stores the pick by its place here, so add
 /// new ones at the end.
 enum Landscape: String, CaseIterable {
     case pines = "Pine ridge", monument = "Monument Valley", tetons = "Teton Range", shiprock = "Shiprock",
@@ -507,10 +486,10 @@ enum Landscape: String, CaseIterable {
 
     var name: String { rawValue }
 
-    /// A real skyline, from `sky-<case>.txt` (made by docs/live-sky/horizon.py): degrees right of the view's centre
+    /// A real skyline, from `sky-<case>.txt` (made by docs/night-sky/horizon.py): degrees right of the view's centre
     /// and degrees above the horizon, as seen from the place its header names. Empty for the pines, which are drawn.
     var profile: [(azimuth: CGFloat, altitude: CGFloat)] {
-        LiveSky.rows("sky-\(self).txt").compactMap { row in
+        NightSky.rows("sky-\(self).txt").compactMap { row in
             let f = row.split(separator: " ").compactMap { Double($0) }
             return f.count == 2 ? (f[0] * .pi / 180, f[1] * .pi / 180) : nil
         }

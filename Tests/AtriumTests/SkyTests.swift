@@ -54,7 +54,7 @@ func eclipsesLineUp(time: String, latitude: Double, longitude: Double) {
     #expect(acos(min(dot(Sky.moon(jd), Sky.sun(jd)), 1)) * 180 / .pi > 0.4)
 }
 
-/// Every real skyline Live Sky offers is in Resources, runs left to right and spans the whole view, so none can paint
+/// Every real skyline Night Sky offers is in Resources, runs left to right and spans the whole view, so none can paint
 /// an empty ground or one that stops short of the screen's edge.
 @Test func skylinesSpanTheView() {
     for land in Landscape.allCases where land != .pines {
