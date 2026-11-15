@@ -105,10 +105,29 @@ Cost is unchanged: 1.5 to 1.8 ms of GPU.
 
 - **9. No jelly's history is copied any more** (the review's ninth, done second as the other saving). Each `Jelly` held the last 600 steps of its axis in an array of its own, for the spine its tentacles hang along. `move` works on a copy of each jelly and writes it back, so the first write to that array found it shared and duplicated all 19 KB of it: for every jelly, every step. The histories are now one array a group, written in place, and as long as the spine looks back and no longer: 34 steps for moon jellies and 141 for crystal jellies, where 600 were kept. The picture is the same to the byte in all three looks. In a release build, 84 moon jellies step in 0.03 ms where they took 0.07 to 0.08, and filling a tank (when the scene is built, at each tick of the Jellyfish slider, and when Settings opens its live copy) stalls for 16 ms where it took 42; 48 crystal jellies, 0.02 ms from 0.04 to 0.05, and 8.5 ms from 23. The review guessed more (0.05 to 0.2 ms a step, a stall of 60 to 150 ms). The ten seconds a new tank is run ahead stay as they were: at 16 ms they are one frame, and shortening them would change every pinned picture. The whole frame's CPU, SpriteKit's own work included, is 0.64 to 0.74 ms in a release build with 84 jellies, before and after: the first time 84 were measured there, and well inside 2 ms.
 
+- **2. Each jelly carries its way, pulses less often, and is drawn round its dome.** Dave, watching step 3 on his desktop: "They dont seem to move far at all given how much they pulse, if they pulse a lot they should move more or just pulse less and move less, or be more of a sea of less movement but its just not compelling". Worked through in a port of the motion, the travel was about right in body lengths (0.43 of a diameter a pulse); the fault was how it was delivered. A jelly's speed was set afresh every step from where it was in its pulse, with nothing carried over: 78% of a pulse's travel came in the squeeze, its speed sat under a fifth of its mean for 38% of every pulse, and its dome, drawn from the margin up, slid back as the bell re-opened. Of three ways out (more travel a pulse; fewer strokes with glide; a sea of less movement) the second was taken:
+  - *Momentum.* A jelly now has a speed of its own through the water (`way`), pushed along its axis through the squeeze and slowed by drag always, the drag sized to bleed it over 0.45 of a pulse (`glide`) and the push so that each stroke carries it its distance however the strokes fall (`carried`). Its speed dips to about a third of its mean just before the next stroke and peaks at twice it, as a real one's does (about 2: Gemmell 2013, with a third of each pulse's distance made after the bell re-opens); it had been nothing and 3.3 times. A turning bell skids, and one that rests or is touched coasts to a stop. `surge`, whose second push ran past the end of the pulse and was cut off at its peak, is gone.
+  - *Fewer, longer strokes.* A moon jelly of 15 cm pulses every 2.5 s (was 1.6), squeezes for a quarter of it (was 39%, so the squeeze itself still lasts 0.6 s) and goes 0.6 of a diameter a pulse (was 0.5). **This departs from the display footage**, whose jellies pulse every 1.6 s, on Dave's word above; 2.5 s is what wild moon jellies of 15 to 25 cm pulse at (2.4 to 2.6 s, Rakow & Graham 2006), and 0.6 of a diameter is a lone lab jelly's 0.57. On screen at Speed 1× a stroke now comes every 3.6 s at the median where one came every 2.3. The crystal jellies keep their pulse and gain the glide.
+  - *Turns ease in and out* over their squeeze, where they switched on and off.
+  - *Axes ease toward the plane of the glass* (`flatten`, 0.08 a second). A bell facing us pulses without getting anywhere on screen, and 21 to 23% of them faced us where footage has 10%; now 9%.
+  - *The bell is drawn round its middle,* half its height above its margin, where its mass is: so the dome glides and the margin does the moving. Pinned by its margin, the dome lunged a tenth of a diameter and slipped back.
+
+  Measured as the footage was (`jellyfishMoveAsFootage`, seeds 22 and 7), before and after:
+
+  | | Step 3 | Step 4 | Footage |
+  |---|---|---|---|
+  | Speed relative to the group, median | 0.18 and 0.15 D/s | 0.20 and 0.18 D/s | 0.14 D/s (a floor) |
+  | Facing us | 21% and 23% | 9% and 9% | 10% |
+  | Of the faster ones, travelling within 30° of their axis | 90% and 92% | 78% and 76% | 53% (9 of 17) |
+  | Top third / bottom third of the screen | 34% / 29% and 26% / 28% | 31% / 28% and 27% / 32% | jellies everywhere |
+  | Side-on bells from vertical, median | 41° and 45° | 41° and 41° | 26° |
+
+  And followed on screen through 10 s of the lit tank, as the review followed one: a near jelly's speed ran from 2 to 10 device pixels a second between strokes up to 110 to 138 at each, every 2.3 s; one now falls away from 70 to 100 at a stroke to 10 or 12 just before the next. It costs nothing: one more vector a jelly, and less arithmetic a step than `surge` was.
+
 ## Settings
 - **Look** (`jellyfish.look`, a menu): lit tank in Light Mode, glow in Dark Mode (the standard); lit tank in Light Mode, crystal jellies in Dark Mode; lit tank by day, glow at night; lit tank by day, crystal jellies at night; lit tank; glow; crystal jellies. Each pick says what it does, rather than a second menu for the dark look that would show for only four of the seven picks, which a knob can't express. By day means the Sun where you are: the tank's light eases through civil twilight, from 6° below the horizon to 1° above.
 - **Jellyfish** (`jellyfish.count`, 0.5 to 1.5×): 84 moon jellies or 48 crystal jellies at 1×, Dave's pick from trying the slider (1.5× of step 3's 56 and 32, which were twice the first 28 and 16). A change refills the tank.
-- **Speed** (`jellyfish.speed`, 0.5 to 1.5×): the scene's clock, so pulses, turns and drift keep their proportions. 1× is 0.8 of the real pace (`Jellyfish.pace`), Dave's pick from trying it, so the slider runs from 0.4 to 1.2 of the real pace.
+- **Speed** (`jellyfish.speed`, 0.5 to 1.5×): the scene's clock, so pulses, turns and drift keep their proportions. 1× is 0.8 of the real pace (`Jellyfish.pace`), Dave's pick from trying it, so the slider runs from 0.4 to 1.2 of the real pace. (His pick was made with a stroke every 1.6 s; step 4 made it every 2.5 s, so the pace is his to try again.)
 
 ## Cost
 Measured by the render test at 2x Retina on an M3 Max, debug build (release CPU is lower), with the seed pinned:
@@ -149,6 +168,8 @@ The README's pictures and the site's (2026-11-09) are the first three commands a
 - **2026-11-08, on step 3, after trying the sliders:** "1.5x population and 0.8x speed is my ideal sweet spot in testing". So 84 moon jellies and 48 crystal jellies became 1× of Jellyfish, and Speed's standard 0.8×, with 1× kept as the real pace.
 - **2026-11-09, on that:** "about 1.5x population and 0.8x speed being the ideal default, we should rebalance all sliders from there and call that 1.0 1.0 for the values". So Speed's 1× is now 0.8 of the real pace, with 0.5 to 1.5× round it, as Jellyfish already was.
 
+- **2026-11-14, on step 3 on his desktop:** "They dont seem to move far at all given how much they pulse, if they pulse a lot they should move more or just pulse less and move less, or be more of a sea of less movement but its just not compelling". So step 4's second change: fewer strokes, each carried further, with the way kept between them. The count stays at 84: his pick.
+
 ## What the mock-ups showed
 - **Deep jellies are small.** At 6 to 15 cm, a camera 1 to 6 m off made them specks. The camera is now set back by the animals' size: about 45 cm to 4 m for the deep set, and half as far again for moon jellies.
 - **At the real pace they leave.** In the model a 15 cm helmet jelly climbs about 19 cm in 20 s, off the top of the view. A build needs them to come back in, or, for a tank, what aquariums do: a kreisel's slow circular current, which keeps jellies off the walls and in front of the glass.
@@ -170,7 +191,8 @@ The README's pictures and the site's (2026-11-09) are the first three commands a
 ## Still open
 - Round 2's open points: the crystal jellies' green ring still outshines their bells; the share of bells upside down is the weakest measurement (22 bells, one side of one tank); the touch behaviour comes from one filmed meeting.
 - Dave's picks for the four questions above.
-- After step 2, side-on bells lie further from vertical than the footage's (37° against 26°), and twice as many face the camera (21% against 10%). A stronger pull round the loop didn't change either.
+- Side-on bells lie further from vertical than the footage's (41° against 26°); a stronger pull round the loop didn't change it. (Twice as many faced the camera as in the footage until step 4 eased their axes toward the glass.)
+- More jellies travel along their axis than the footage's: 77% of the faster ones against 53%.
 - The comb jelly is the weakest drawing: its rows read as dots at a distance.
 - The moon jelly's four gonads read as a cross seen side-on; seen from above they'd be its four rings.
 - Whether "bioluminescent" in the brief means C (true and mostly black) or F (made up and lovely).

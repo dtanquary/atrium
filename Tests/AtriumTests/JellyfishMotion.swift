@@ -5,7 +5,14 @@ import Testing
 
 /// Runs the moon jellies for two minutes and measures them on screen as docs/jellyfish/research-motion.md measured
 /// footage, then checks they get somewhere as they pulse and fill the tank rather than gathering at the top (where,
-/// drawn only upward, they once pulsed against it going nowhere: 56% of them in the top third).
+/// drawn only upward, they once pulsed against it going nowhere: 56% of them in the top third), and that few face us:
+/// a bell facing the camera pulses without getting anywhere on screen, and a fifth of them did where footage has a
+/// tenth, until their axes were eased toward the glass.
+///
+/// The pulse itself no longer follows the display footage's (a stroke every 1.6 s, 0.2 of a diameter each at least):
+/// on Dave's word that they pulsed a lot for how far they went, a stroke comes every 2.5 s, as wild ones of this size
+/// pulse, and carries 0.6 of a diameter. So what is held to the footage is the speed across the screen, not the beat;
+/// `jellyfishGlideBetweenStrokes` checks how a stroke is spent.
 ///
 ///     JELLY_SEED=7 JELLY_LOOK=6 swift test --filter jellyfishMove   # another layout, or the crystal jellies
 @MainActor @Test func jellyfishMoveAsFootage() {
@@ -26,12 +33,17 @@ import Testing
     }
     // Speed over 1 s in each jelly's own diameters, less the group's median step, as the handheld footage had to be.
     let n = frames[0].count, w = Int(fps)
-    var relative: [Double] = [], fromVertical: [Double] = [], top = 0, bottom = 0, all = 0
+    var relative: [Double] = [], fromVertical: [Double] = [], top = 0, bottom = 0, all = 0, facing = 0, faster = 0, along = 0
     for f in stride(from: w, to: frames.count, by: w / 3) {
         let step = (0..<n).map { CGPoint(x: frames[f][$0].p.x - frames[f - w][$0].p.x, y: frames[f][$0].p.y - frames[f - w][$0].p.y) }
         let (mx, my) = (step.map(\.x).sorted()[n / 2], step.map(\.y).sorted()[n / 2])
         for (i, jelly) in frames[f].enumerated() {
-            relative.append(hypot(step[i].x - mx, step[i].y - my) / jelly.d)
+            let (dx, dy) = (step[i].x - mx, step[i].y - my)
+            relative.append(hypot(dx, dy) / jelly.d)
+            if abs(sin(jelly.tilt)) > 0.75 { facing += 1 } else if relative.last! > 0.12 { // the faster ones: along their axis line?
+                faster += 1
+                if abs(-sin(jelly.heading) * dx + cos(jelly.heading) * dy) > cos(.pi / 6) * hypot(dx, dy) { along += 1 }
+            }
             if abs(sin(jelly.tilt)) < 0.55 { // side-on: the axis line's angle from vertical
                 let a = abs(jelly.heading.truncatingRemainder(dividingBy: .pi)) * 180 / .pi
                 fromVertical.append(min(a, 180 - a))
@@ -41,11 +53,30 @@ import Testing
         }
     }
     let speed = relative.sorted()[relative.count / 2], (upper, lower) = (Double(top) / Double(all), Double(bottom) / Double(all))
+    let faceOn = Double(facing) / Double(all)
     print(String(format: "jellyfish: %.2f diameters/s relative to the group (footage 0.14, lone jellies 0.3-0.4); top third %.0f%%, " +
-                 "bottom third %.0f%%; side-on bells %.0f° from vertical (footage 26°)",
-                 speed, 100 * upper, 100 * lower, fromVertical.sorted()[fromVertical.count / 2]))
+                 "bottom third %.0f%%; side-on bells %.0f° from vertical (footage 26°); facing us %.0f%% (footage 10%%); " +
+                 "of the faster ones, %.0f%% travel within 30° of their axis (footage 53%%)",
+                 speed, 100 * upper, 100 * lower, fromVertical.sorted()[fromVertical.count / 2], 100 * faceOn, 100 * Double(along) / Double(max(1, faster))))
     #expect(speed > 0.1 && speed < 0.4)
     #expect(upper < 0.45 && lower > 0.15)
+    #expect(faceOn < 0.15)
+}
+
+/// One moon jelly's speed through a run of pulses: each stroke carries it the distance it should, and it glides on
+/// between them, never under 0.3 of its mean speed nor over 2.3 times it (a real one peaks at about twice: Gemmell
+/// 2013). Its speed used to be set afresh from the pulse's phase, and fell to nothing for a quarter of every pulse.
+@MainActor @Test func jellyfishGlideBetweenStrokes() {
+    let sp = Jellyfish.moon, reach = sp.perPulse * 0.15
+    var way = SIMD3<Double>.zero, speeds: [Double] = []
+    for k in 0..<Int(10 * sp.period / Jellyfish.step) {
+        let t = Double(k) * Jellyfish.step
+        way = Jellyfish.carried(way, axis: SIMD3(0, 1, 0), tau: t.truncatingRemainder(dividingBy: sp.period), period: sp.period, reach: reach, sp)
+        if t >= 5 * sp.period { speeds.append(way.y) }
+    }
+    let mean = speeds.reduce(0, +) / Double(speeds.count)
+    #expect(abs(mean * sp.period / reach - 1) < 0.03)
+    #expect(speeds.min()! > 0.3 * mean && speeds.max()! < 2.3 * mean)
 }
 
 /// Draws the lit tank and the crystal jellies twice, the second time with half a bell radius of room added round

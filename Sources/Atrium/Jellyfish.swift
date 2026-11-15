@@ -27,13 +27,17 @@ final class Jellyfish: SKScene {
     nonisolated static let pace = 0.8
 
     /// A species: its sizes and pulse, how it moves (research-motion.md: measured from footage of real groups), and
-    /// the defines its shader is built with. A moon jelly pulses every 1.6 s at 15 cm, the squeeze 39% of it, and goes
-    /// half a diameter a pulse, between the footage's 0.2 (a floor: measured against the group, which swims too) and a
-    /// lone lab jelly's 0.57 (Gemmell 2013); a crystal jelly glides with its tentacles streaming behind and pulses in
-    /// bursts.
+    /// the defines its shader is built with. A moon jelly pulses every 2.5 s at 15 cm, as wild ones of 15 to 25 cm do
+    /// (Rakow & Graham 2006), the squeeze a quarter of it, and goes 0.6 of a diameter a pulse, a lone lab jelly's 0.57
+    /// (Gemmell 2013): fewer, longer strokes than the display tanks' 1.6 s, on Dave's word that they pulsed a lot for
+    /// how far they went. A crystal jelly glides with its tentacles streaming behind and pulses in bursts.
     struct Species {
         var count: Int, diameter: ClosedRange<Double>, period: Double, perPulse: Double
         var share = 0.39, turnChance = 0.4, turnAngle = 0.2...0.7, wobble = 0.06, rock = 0.11, drift = 0.09
+        /// How long a bell carries its way through the water, as a share of its pulse; and how fast its axis eases
+        /// toward the plane of the glass, a second: a bell facing us pulses without getting anywhere on screen, and
+        /// about a fifth of them did where footage has a tenth.
+        var glide = 0.45, flatten = 0.08
         var restChance = 0.03, rest = 6.0...10.0, sink = 0.002, righting = 0.055, sag = 0.15
         /// The tentacles', arms' and spine's lengths in bell radii and the tentacles' trailing speed (radii a second),
         /// as the shader has them.
@@ -43,11 +47,12 @@ final class Jellyfish: SKScene {
         /// The bell's height in radii, relaxed and at the tallest a squeeze makes it (the biggest pulses are 1.1 of
         /// the usual), and how far the strands sway, as the shader has them.
         var low: Double { Double(defines["HEIGHT"]!)! }
-        var tall: Double { low + 1.1 * Double(defines["RISE"]!)! }
+        var rise: Double { Double(defines["RISE"]!)! }
+        var tall: Double { low + 1.1 * rise }
         var sway: Double { Double(defines["SWAY"]!)! }
     }
 
-    static let moon = Species(count: 84, diameter: 0.12...0.25, period: 1.6, perPulse: 0.5, tentacles: 0.32, arms: 1.0, defines: [
+    static let moon = Species(count: 84, diameter: 0.12...0.25, period: 2.5, perPulse: 0.6, share: 0.25, tentacles: 0.32, arms: 1.0, defines: [
         "NT": "120", "TLEN": "0.32", "TW": "0.006", "SWAY": "0.25", "NOA": "4", "ALEN": "1.0", "AW": "0.17",
         "ASPREAD": "0.22", "ASWAY": "0.25", "TWIST": "3.0", "HEIGHT": "0.42", "RISE": "0.32", "SHRINK": "0.14",
         "NC": "32.0", "CANALSHARP": "10.0", "CANALK": "0.5", "GONADS": "1", "CONVERGE": "0.0", "TVARY": "0.0", "RING": "0",
@@ -66,6 +71,7 @@ final class Jellyfish: SKScene {
     private struct Jelly {
         let node: SKSpriteNode
         var p: SIMD3<Double>, axis: SIMD3<Double>, d: Double
+        var way = SIMD3<Double>.zero // its own speed through the water, m/s: carried from step to step
         let seed: Double, amp: Double, basePeriod: Double
         var lastStart: Double, period: Double, nextStart: Double
         var turnAxis = SIMD3<Double>(1, 0, 0), turnAngle = 0.0, turnStart = -100.0, turnTime = 0.5
@@ -90,7 +96,7 @@ final class Jellyfish: SKScene {
 
     /// Room added round every sprite's box, in bell radii: for the test that the box cuts nothing off.
     static var slack = 0.0
-    nonisolated private static let step = 1.0 / 60
+    nonisolated static let step = 1.0 / 60
     private static let fov = 2 * tan(25 * Double.pi / 180) // view width per metre of depth
     private static let wallTurn = 0.6 // how fast a side's current turns a bell away, rad/s at the side
     private let current = 0.02 // the tank's current at its rim, m/s (display tanks run 1-3 cm/s: research-motion.md)
@@ -252,8 +258,9 @@ final class Jellyfish: SKScene {
     /// Steps one group 1/60 s. Each pulse is a little longer or shorter than the last; some turn the bell in any
     /// direction, all wobble it, and a few are followed by a rest. Between, the axis drifts slowly, the bell turns
     /// toward the group's slow loop round the view (as the sine of how far off it is, so one pointing the other way
-    /// comes round slowly), the tank's current carries it round and turns it with it, and neighbours and the tank's
-    /// sides push it gently away and turn it from them. One that touches another stops pulsing for a moment, then
+    /// comes round slowly) and eases toward the plane of the glass, each stroke adds to the way the bell carries
+    /// through the water (`carried`), the tank's current carries it round and turns it with it, and neighbours and
+    /// the tank's sides push it gently away and turn it from them. One that touches another stops pulsing for a moment, then
     /// turns away (Albert 2011, and one meeting filmed).
     private func move(_ group: Group, at now: Double) {
         let sp = group.species, (near, far) = depths(sp), dt = Self.step
@@ -271,8 +278,9 @@ final class Jellyfish: SKScene {
                 (j.turnStart, j.turnTime) = (j.lastStart, sp.share * j.period)
                 if Double.random(in: 0...1, using: &rng) < sp.restChance { j.nextStart += .random(in: sp.rest, using: &rng) }
             }
-            if now >= j.turnStart && now < j.turnStart + j.turnTime {
-                j.axis = norm(turned(j.axis, j.turnAxis, j.turnAngle * dt / j.turnTime))
+            if now >= j.turnStart && now < j.turnStart + j.turnTime { // a turn eases in and out, as the stroke making it does
+                let rate = 1 - cos(2 * .pi * (now - j.turnStart) / j.turnTime)
+                j.axis = norm(turned(j.axis, j.turnAxis, j.turnAngle * rate * dt / j.turnTime))
             }
             j.spin += -j.spin * (dt / 2) + SIMD3(gauss(), gauss(), gauss()) * (sp.drift * dt.squareRoot())
             j.spin -= j.axis * dot(j.spin, j.axis)
@@ -286,11 +294,12 @@ final class Jellyfish: SKScene {
             let loop = SIMD3(-0.5 * j.p.y / hy, j.p.x / hx, 1e-3), goal = norm(loop), pull = min(1, 1.5 * length(loop))
             let tilt = acos(max(-1, min(1, dot(j.axis, goal))))
             if tilt > 1e-3 && tilt < .pi - 1e-3 { j.axis = norm(turned(j.axis, norm(cross(j.axis, goal)), sp.righting * pull * sin(tilt) * dt)) }
-            j.axis = norm(turned(j.axis, SIMD3(0, 0, 1), spin * dt))
+            j.axis = norm(turned(j.axis, SIMD3(0, 0, 1), spin * dt) * SIMD3(1, 1, 1 - sp.flatten * dt))
 
-            let tau = now - j.lastStart, swimming = tau < j.period
-            var v = swimming ? j.axis * (Self.surge(tau, sp.share * j.period, j.period) * sp.perPulse * j.d * j.amp) : .zero
-            v.y -= swimming ? sp.sink * 0.3 : sp.sink
+            let tau = now - j.lastStart
+            j.way = Self.carried(j.way, axis: j.axis, tau: tau, period: j.period, reach: sp.perPulse * j.d * j.amp, sp)
+            var v = j.way
+            v.y -= tau < j.period ? sp.sink * 0.3 : sp.sink
             v += SIMD3(-j.p.y, j.p.x, 0) * spin // the tank's slow turn, round the view's middle
             // ponytail: every pair, every step (126 jellies at most, 1.5x); a grid of cells if the count ever grows much
             for k in group.jellies.indices where k != i {
@@ -322,14 +331,15 @@ final class Jellyfish: SKScene {
         }
     }
 
-    /// The speed through one pulse, as a share of the pulse's distance a second: the surge while squeezing, and the
-    /// softer second push of the vortex it recaptures while re-opening (Gemmell 2013), with no long coast.
-    private static func surge(_ tau: Double, _ squeeze: Double, _ period: Double) -> Double {
-        let open = period - squeeze, r0 = squeeze + 0.6 * open, push = max(0.5, 0.8 * open)
-        var v = tau < squeeze + 0.25 ? pow(sin(.pi * tau / (squeeze + 0.25)), 2) : 0
-        if tau > r0 && tau < r0 + push { v += 0.35 * pow(sin(.pi * (tau - r0) / push), 2) }
-        let area = (squeeze + 0.25) / 2 + 0.35 * push / 2 // each sine-squared hump's area is half its width
-        return v / area
+    /// A jelly's own speed through the water a step on, `tau` seconds into a pulse: thrust along its axis through the
+    /// squeeze, and drag always, sized so each pulse carries it `reach` metres however the pulses fall. So it glides
+    /// on between strokes (down to about a third of its mean speed, up to twice it at the stroke, as a real one's
+    /// about twice: Gemmell 2013), skids through a turn, and coasts to a stop when it rests. Set afresh from the
+    /// pulse's phase, as it was, its speed fell to nothing for a quarter of every pulse.
+    static func carried(_ way: SIMD3<Double>, axis: SIMD3<Double>, tau: Double, period: Double, reach: Double, _ sp: Species) -> SIMD3<Double> {
+        let squeeze = sp.share * period, glide = sp.glide * period
+        let thrust = tau < squeeze ? 2 * pow(sin(.pi * tau / squeeze), 2) / squeeze : 0 // its area over the squeeze is 1
+        return way + (axis * (thrust * reach / glide) - way / glide) * step
     }
 
     /// Places a group's sprites: where each bell is on screen and how big, which way its axis points (a turn in the
@@ -355,7 +365,10 @@ final class Jellyfish: SKScene {
                             0.14 * lean - 0.22 * sp.low - 0.6 * Self.height(pts, sp.arms / 0.6 / sp.spine) + 0.02) + Self.slack
             j.node.size = CGSize(width: width * r, height: (above + below) * r)
             j.node.anchorPoint = CGPoint(x: 0.5, y: below / (above + below))
-            j.node.position = CGPoint(x: w / 2 + j.p.x * k, y: h / 2 + j.p.y * k)
+            // A jelly's place is its bell's middle, half its height above its margin, where its mass is: so the dome
+            // glides and the margin does the moving. Pinned by its margin, the dome lunged and slipped back.
+            let back = 0.5 * (sp.low + sp.rise * j.amp * squeeze(j, sp)) * r
+            j.node.position = CGPoint(x: w / 2 + j.p.x * k - back * shown.x, y: h / 2 + j.p.y * k - back * shown.y)
             j.node.zRotation = heading
             let (near, far) = depths(sp)
             let fog = exp(-(j.p.z - near) / (far - near) * 0.9)
@@ -384,6 +397,12 @@ final class Jellyfish: SKScene {
             }
         }
         return pts
+    }
+
+    /// How far a bell is squeezed now, 0 relaxed to 1, as the shader's `squeezeAt` has it.
+    private func squeeze(_ j: Jelly, _ sp: Species) -> Double {
+        let tau = (simTime - j.lastStart).truncatingRemainder(dividingBy: j.nextStart - j.lastStart), squeeze = sp.share * j.period
+        return simd_smoothstep(0, squeeze, tau) * (1 - simd_smoothstep(squeeze, j.period, tau))
     }
 
     /// The spine's height `f` of the way along it, as the shader's `spineY` has it.
