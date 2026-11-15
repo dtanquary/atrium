@@ -150,7 +150,7 @@ enum BlackBody {
 /// edge and cools outward, and its colour is that of a glowing body at each temperature; the three disc colours
 /// are three temperatures. Streaks in it are knots of gas drawn out by the disc's own shear: the inside laps the
 /// outside, so each knot winds into an arc, and new ones are born as the old thin away.
-final class BlackHole: SKScene {
+final class BlackHole: SKScene, BatteryPaced {
     /// The view: how far out the camera is, how far it's tilted from the disc's axis (90° is edge on), where the
     /// disc ends, and the field of view across the screen. Dave picked the one view; the size slider is the field.
     struct View {
@@ -404,6 +404,11 @@ final class BlackHole: SKScene {
     private var discTime: Double
     private var firstGeneration: Int
     private var lastUpdate: TimeInterval?
+    /// The ceiling on battery. The fastest thing on screen is the disc's inner edge, seen edge on in front: about 30
+    /// device pixels a second at the standard Size and Speed, and Size times Speed that. So 15 fps while that is 2 px
+    /// a frame or less at 15 (Size times Speed at most 1) with the sky still, and 20 past it or once Drift is on: at
+    /// Drift 4× and 15 the stars are 2.4 px dashes and the Milky Way's glow steps as far each frame.
+    private(set) var batteryRate: Int? = 20 { didSet { batteryRateChanged(from: oldValue) } }
 
     /// `checks` draws the prototype's test pattern in place of the picture, for the test that compares the two:
     /// checks on the disc in distance and angle, and 5° squares on the sky (docs/black-hole/proto/render.py). With
@@ -504,6 +509,7 @@ final class BlackHole: SKScene {
     /// Pushes the Settings sliders into the shader. Size is the field of view: the hole is `size` times as wide.
     @objc private func applySettings() {
         for knob in Self.knobs { knobUniforms[knob.key]?.floatValue = Float(knob.value) }
+        batteryRate = Self.size.value * Self.speed.value <= 1 && Self.drift.value == 0 ? 15 : 20
         lens.floatValue = Float(tan((field ?? View().field) * .pi / 360) / (field == nil ? Self.size.value : 1))
         // Until the glow is made again for a new Size, the one there is stretched to fit: it follows the disc at once.
         if let made = haloFor.first { haloFit.floatValue = lens.floatValue / made }
@@ -650,6 +656,13 @@ final class BlackHole: SKScene {
         float e = uc * sqrt(1.0 - uc) * sqrt(1.0 + off2) / max(sqrt(off2), 1e-5);
         float e2 = e * e;
         bool escapes = e2 < 0.14814815;
+        // How many pixels out from the shadow's edge this one is, and how much of it lies outside: what lies beyond
+        // the edge (the hairline, the finer images of the disc and the sky) is drawn by that share, so the edge is
+        // smooth and not a staircase of whole pixels.
+        // (fwidth is the sum of the slopes across and up: 4/π too much on average, taken off here.)
+        // (Only near the edge: at the shadow's middle e2 grows without end and its slope can't place the edge.)
+        float edge = (0.14814815 - e2) / max(fwidth(e2) * 0.785, 1e-12);
+        float outside = e2 < 0.3 ? clamp(0.5 + edge, 0.0, 1.0) : 0.0;
         // The turn it has already made on its way in from infinity to the camera (first order in the hole's size,
         // good to 1e-5 with the camera 30 radii or more out), then to its nearest point.
         float w = sqrt(max(e2 - uc * uc, 1e-12));
@@ -662,9 +675,14 @@ final class BlackHole: SKScene {
         float after = turnToNearest(texture2D(u_turns, vec2((entry + 1.5) / 1024.0, 0.5)));
         float toNearest = mix(before, after, column - entry);
         // How much further round a ray one pixel over goes, in radians. Toward the shadow's edge it grows without
-        // end, and with every half-turn more comes another, thinner image of the disc.
+        // end, and with every half-turn more comes another, thinner image of the disc. It is table B's slope times
+        // how far `column` moves for a step in e2, worked out here, times e2's slope across the pixel: the slope of
+        // `column` itself grows too fast there for the GPU's, which it takes once for each 2 × 2 block of pixels, so
+        // the hairline round the shadow (below) came out a pixel wide in one block and two in the next.
         // (fwidth is the sum of the slopes across and up: 4/π too much on average, taken off here.)
-        float crowding = 2.0 * abs(after - before) * fwidth(column) * 0.785;
+        float rest = max(1.0 - e2 * 6.75, 1e-9);
+        float perE2 = 1023.0 * 6.75 / (50.0 * sqrt(max(-log(rest), 1e-9) / 50.0) * rest);
+        float crowding = 2.0 * abs(after - before) * perE2 * fwidth(e2) * 0.785;
         float furthest = (1.0 + e2) / (1.0 / 3.0 + 2.0 * e2 * sqrt(e2));
         // The disc's plane cuts the ray's plane along a line this far round from the camera.
         float cut = mod(atan(-u_view.z, u_view.y * y.y), 3.1415927);
@@ -754,11 +772,15 @@ final class BlackHole: SKScene {
             // as stray dots, so there they give way to what they average to: a quarter of every half-turn is lit,
             // and it comes to 0.14 of the disc's light at 5 radii. That is the hairline round the shadow.
             // ponytail: 0.14 was worked out for a disc from 3 to 11 radii; a view with another outer edge needs its own.
-            float piled = smoothstep(0.6, 1.4, crowding);
-            if (escapes && piled > 0.0) {
+            // `piled` is how much of the pixel lies where they do, its outer edge drawn as smooth as the shadow's:
+            // `crowding` falls as one over the distance from the edge, so it passes 1 at `edge` times `crowding`
+            // pixels out (about one, at every size). Inside the shadow's edge it is all hairline, by `outside`.
+            float piled = escapes ? clamp(0.5 + edge * (crowding - 1.0), 0.0, 1.0) : 1.0;
+            if (outside > 0.0 && piled > 0.0) {
                 float seen = pow(0.83666 / (1.0 - 0.063246 * lean / e), u_beaming) * 0.998 * streakHeat(0.5);
                 light = mix(light, vec4(0.14 * discLight(texture2D(u_heat, heatAt(seen * u_peak.x)).rgb, seen, 0.5, 0.2, u_view.w).rgb, 0.2), piled);
             }
+            light.rgb *= outside;
             if (hit0) {
                 float spin = sqrt(0.5 * u0 * u0 * u0) / 6.2831853;
                 float round = atan(on0.y, on0.x) / 6.2831853;
@@ -824,6 +846,7 @@ final class BlackHole: SKScene {
                         behind += hue * starLight(\(reach), star.b + 0.03475 * u_twinkle * swell, room, u_stars * magnified\(thinned));
                     }
                 }
+                behind *= outside;
             }
             // Galaxy's stretch, asinh on brightness with the colour kept: it lifts the disc's faint outer part, holds
             // the bright side without bleaching it and leaves black black. Brightness here is the strongest channel,

@@ -78,17 +78,19 @@ def stars(path):
 
 
 def glow(path, wide=2048, high=1024):
-    # An opening (the least of each 9 x 9 patch, then the most of those) takes out anything smaller than half a
-    # degree, which is every star and none of the dust lanes; then a blur for the patches' square corners. What it
-    # took out is the photo's stars. Their light belongs in the glow (away from the galaxy's centre the Milky Way
-    # is nothing else), but not their places, so it goes back spread over a degree, the brightest held down first.
+    # An opening (the least of each 5 x 5 patch, then the most of those) takes out anything smaller than 0.3 of a
+    # degree, which is nearly every star and none of the dust lanes; then a blur for the patches' square corners,
+    # as little as the map's 2048 columns can hold without aliasing (2.5 px of the 6000). What it took out is the
+    # photo's stars. Their light belongs in the glow (away from the galaxy's centre the Milky Way is nothing else),
+    # but not their places, so it goes back spread over a degree, the brightest held down first. (It was a 9 x 9
+    # opening and a 5 px blur until 2026-11-15, which left the dust a soft wash with no edges to its rifts.)
     pan = Image.open(path).convert('RGB')
-    opened = pan.filter(ImageFilter.MinFilter(9)).filter(ImageFilter.MaxFilter(9))
+    opened = pan.filter(ImageFilter.MinFilter(5)).filter(ImageFilter.MaxFilter(5))
     points = np.clip((np.asarray(pan, dtype=np.float32) - np.asarray(opened, dtype=np.float32)) / 255, 0, 0.5)
     h, w, _ = points.shape
     spread = np.exp(-2 * np.pi ** 2 * 15.0 ** 2 * (np.fft.fftfreq(h)[:, None] ** 2 + np.fft.rfftfreq(w)[None, :] ** 2))
     haze = np.fft.irfft2(np.fft.rfft2(points, axes=(0, 1)) * spread[..., None], s=(h, w), axes=(0, 1))
-    a = np.asarray(opened.filter(ImageFilter.GaussianBlur(5)), dtype=np.float32) / 255 + np.clip(haze, 0, None).astype(np.float32)
+    a = np.asarray(opened.filter(ImageFilter.GaussianBlur(2.5)), dtype=np.float32) / 255 + np.clip(haze, 0, None).astype(np.float32)
     lon = ((np.arange(wide) + 0.5) / wide - 0.5) * 2 * np.pi
     lat = (0.5 - (np.arange(high) + 0.5) / high) * np.pi                      # the top row is straight up
     lon, lat = np.meshgrid(lon, lat)
@@ -98,10 +100,14 @@ def glow(path, wide=2048, high=1024):
     i, j = np.floor(x).astype(int), np.floor(y).astype(int)
     fx, fy = (x - i)[..., None], (y - j)[..., None]
     out = ((a[j, i % w] * (1 - fx) + a[j, (i + 1) % w] * fx) * (1 - fy) + (a[j + 1, i % w] * (1 - fx) + a[j + 1, (i + 1) % w] * fx) * fy)
+    # At the best quality: the shader raises this to the 3.667 and the lens stretches it, so anything less shows the
+    # encoder's block edges, as patches of colour 64 px of the map across and as a straight step across the sky on
+    # the screen's midline, where the map's equator (which the camera looks along) is one. At 80 the step there was
+    # 1.8 times the rows round it; 99 still left the blocks faintly; 100 leaves none, in 1.4 MB.
     target = os.path.join(RESOURCES, 'blackhole-glow.heic')
     with tempfile.NamedTemporaryFile(suffix='.png') as png:
         Image.fromarray((np.clip(out, 0, 1) ** 0.6 * 255 + 0.5).astype(np.uint8)).save(png.name)
-        subprocess.run(['/usr/bin/sips', '-s', 'format', 'heic', '-s', 'formatOptions', '80', png.name, '--out', target],
+        subprocess.run(['/usr/bin/sips', '-s', 'format', 'heic', '-s', 'formatOptions', '100', png.name, '--out', target],
                        check=True, stdout=subprocess.DEVNULL)
     print(f'glow {wide} x {high}, {os.path.getsize(target)} bytes -> {target}')
 
