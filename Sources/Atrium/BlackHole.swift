@@ -150,7 +150,7 @@ enum BlackBody {
 /// edge and cools outward, and its colour is that of a glowing body at each temperature; the three disc colours
 /// are three temperatures. Streaks in it are knots of gas drawn out by the disc's own shear: the inside laps the
 /// outside, so each knot winds into an arc, and new ones are born as the old thin away.
-final class BlackHole: SKScene {
+final class BlackHole: SKScene, BatteryPaced {
     /// The view: how far out the camera is, how far it's tilted from the disc's axis (90° is edge on), where the
     /// disc ends, and the field of view across the screen. Dave picked the one view; the size slider is the field.
     struct View {
@@ -404,6 +404,11 @@ final class BlackHole: SKScene {
     private var discTime: Double
     private var firstGeneration: Int
     private var lastUpdate: TimeInterval?
+    /// The ceiling on battery. The fastest thing on screen is the disc's inner edge, seen edge on in front: about 30
+    /// device pixels a second at the standard Size and Speed, and Size times Speed that. So 15 fps while that is 2 px
+    /// a frame or less at 15 (Size times Speed at most 1), and 20 past it. The sky's drift doesn't count: each star
+    /// is drawn as the streak it left in the frame, so it joins up at any rate.
+    private(set) var batteryRate: Int? = 20 { didSet { batteryRateChanged(from: oldValue) } }
 
     /// `checks` draws the prototype's test pattern in place of the picture, for the test that compares the two:
     /// checks on the disc in distance and angle, and 5° squares on the sky (docs/black-hole/proto/render.py). With
@@ -504,6 +509,7 @@ final class BlackHole: SKScene {
     /// Pushes the Settings sliders into the shader. Size is the field of view: the hole is `size` times as wide.
     @objc private func applySettings() {
         for knob in Self.knobs { knobUniforms[knob.key]?.floatValue = Float(knob.value) }
+        batteryRate = Self.size.value * Self.speed.value <= 1 ? 15 : 20
         lens.floatValue = Float(tan((field ?? View().field) * .pi / 360) / (field == nil ? Self.size.value : 1))
         // Until the glow is made again for a new Size, the one there is stretched to fit: it follows the disc at once.
         if let made = haloFor.first { haloFit.floatValue = lens.floatValue / made }
