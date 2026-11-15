@@ -237,6 +237,10 @@ final class EarthFromOrbit: SKScene, BatteryPaced {
         return CGPoint(x: centre.x + CGFloat(v.x) * radius, y: centre.y + CGFloat(v.y) * radius)
     }
 
+    /// The day map for a month, 1 to 12: the Blue Marble of that month in 2004, so the snow and the green are the
+    /// season's. A new month comes in when the app rebuilds a wallpaper that has run 12 hours.
+    nonisolated static func dayMap(month: Int) -> String { String(format: "earth-day-%02d.heic", month) }
+
     /// Points the view at the viewer's location, and moves the Sun and the stars to where they are now.
     private func refresh() {
         let here = Location.shared.coordinate
@@ -295,12 +299,12 @@ final class EarthFromOrbit: SKScene, BatteryPaced {
                 return texture
             }
         }
-        globe.texture = texture("earth-day.heic")
+        globe.texture = texture(Self.dayMap(month: Calendar.current.component(.month, from: Self.now)))
         globe.size = CGSize(width: radius * 2 * margin, height: radius * 2 * margin)
         globe.position = centre
         globe.zPosition = 1
-        // Earth textures: NASA Blue Marble Next Generation, September 2004, with topography and no bathymetry, its sea
-        // baked to one deep blue (day), and Black Marble 2016 (night lights), both public domain, at 4096 x 2048.
+        // Earth textures: NASA Blue Marble Next Generation, the month's map of 2004, with topography and no bathymetry,
+        // its sea baked to one deep blue (day), and Black Marble 2016 (night lights), both public domain, at 4096 x 2048.
         // Clouds come live from Clouds.shared.
         globe.shader = SKShader(source: """
             void main() {
