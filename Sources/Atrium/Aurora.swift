@@ -129,13 +129,17 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
     let setting = { (key: String) in Float(auroraKnobs.first { $0.key == key }!.value) }
     let (arc, bytes, slope) = auroraArc(&rng)
     let sky = AuroraCurtains(arc: bytes, slope: slope, rng: rng, activity: Int(setting("aurora.activity")))
+    // the photo is opaque below its skyline's lowest point (0.26 of the height on a 14-inch display), so the sky's
+    // sprite stops a couple of points under it, on a whole point, and the shader maps its own rows onto the screen's
+    let ground = AuroraGround.frame(in: size)
+    let base = max(0, (ground.maxY - AuroraGround.skyline * ground.height - 2).rounded(.down)) / size.height
     if let at = Float(ProcessInfo.processInfo.environment["AURORA_SURGE"] ?? "") { sky.substorms.sinceOnset = at } // for snapshots
     let scene = shaderScene(size: size, source: shaderCommon + """
     vec2 arcAt(float x) { return vec2((fract(x) * 4096.0 + 0.5) / 4097.0, 0.5); }
 
     void main() {
         float aspect = u_size.x / u_size.y;
-        vec2 uv = v_tex_coord;
+        vec2 uv = vec2(v_tex_coord.x, \(base) + \(1 - base) * v_tex_coord.y);   // the sprite starts at `base`
         vec2 p = uv * vec2(aspect, 1.0);
         float t = u_now;
         // a level camera facing north, its eye level where the photo's is
@@ -207,7 +211,7 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
         vec3 col = 1.0 - exp(-(sky + (star * tint + light * 0.7) * ext));
         col = pow(col, vec3(1.0 / 2.2));
         col = grade(col, 0.3, u_hue, u_saturation, u_contrast, u_brightness);
-        col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0;
+        col += (hash21(uv * u_size * 2.0) - 0.5) / 128.0;
         gl_FragColor = vec4(col, 1.0);
     }
     """, uniforms: [
@@ -215,7 +219,9 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
     ] + sky.uniforms + colours + [crown], knobs: gradeKnobs("aurora"))
     let phase = SKUniform(name: "u_phase", float: 0), poolA = SKUniform(name: "u_poolA", vectorFloat4: .zero)
     let poolB = SKUniform(name: "u_poolB", vectorFloat4: .zero), glow = SKUniform(name: "u_glow", vectorFloat3: .zero)
-    (scene as! ShaderScene).sprite.shader?.addUniform(phase)
+    let sprite = (scene as! ShaderScene).sprite!
+    sprite.shader?.addUniform(phase)
+    (sprite.position.y, sprite.size.height) = (base * size.height, (1 - base) * size.height)
     func light() {
         let pool = sky.pool()
         poolA.vectorFloat4Value = SIMD4(pool[0..<4]); poolB.vectorFloat4Value = SIMD4(pool[4..<8])
@@ -480,24 +486,31 @@ struct Substorms {
 /// commons.wikimedia.org/wiki/File:Teton_Point_Turnout_in_Winter_(52098766554).jpg) with the sky cut out, stored as its
 /// albedo at half scale: its own daylight, haze and colour cast were taken out offline. `aurora-ground-aux` holds each
 /// point's distance in red (log, estimated with Depth Anything V2) and open snow in green.
-@MainActor private enum AuroraGround {
+@MainActor enum AuroraGround {
     static var photo: SKTexture { sharedTexture("aurora-ground.heic") }
     static var aux: SKTexture { sharedTexture("aurora-ground-aux.png") }
     /// Where the highest summit sits: down from the top of the photo as a fraction of its height, and up the screen.
     static let summit = 60.0 / 1390, peak = 0.38
+    /// The photo's width over its height (4096 × 1390), and how far down from its top the sky reaches at the
+    /// skyline's lowest point: below that row the photo is opaque all the way across.
+    static let aspect = 4096.0 / 1390, skyline = 380.0 / 1390
+
+    /// Where the photo goes on a screen of `size`: full width (or wider, on a tall screen, so the range still fits), its
+    /// highest summit at `peak` of the height, cropped at the bottom.
+    static func frame(in size: CGSize) -> CGRect {
+        let peak = size.height * Self.peak, width = max(size.width, peak / (1 - summit) * aspect), height = width / aspect
+        return CGRect(x: (size.width - width) / 2, y: peak + summit * height - height, width: width, height: height)
+    }
 }
 
 /// The snowy range and the flats in front of it, as seen on a real long exposure: lit by starlight and by the aurora
 /// above each part of it (`u_poolA`/`u_poolB`, from `AuroraCurtains`), bluer and greyer as the eye sees in the dark,
 /// hazing into the glow above the skyline with distance, and glinting where near snow catches the light.
 @MainActor private func auroraGround(size: CGSize, grade: [SKUniform]) -> SKNode {
-    let texture = AuroraGround.photo, photo = texture.size(), aspect = photo.width / max(photo.height, 1)
-    let peak = size.height * AuroraGround.peak, summit = AuroraGround.summit
-    let width = max(size.width, peak / (1 - summit) * aspect), height = width / aspect
-    let top = peak + summit * height
-    let ground = SKSpriteNode(texture: texture, size: CGSize(width: width, height: height))
+    let frame = AuroraGround.frame(in: size)
+    let ground = SKSpriteNode(texture: AuroraGround.photo, size: frame.size)
     ground.anchorPoint = CGPoint(x: 0.5, y: 1)
-    ground.position = CGPoint(x: size.width / 2, y: top)
+    ground.position = CGPoint(x: frame.midX, y: frame.maxY)
     ground.zPosition = 1
     ground.shader = SKShader(source: shaderCommon + """
     void main() {
@@ -524,7 +537,7 @@ struct Substorms {
     }
     """, uniforms: [
         SKUniform(name: "u_aux", texture: AuroraGround.aux), SKUniform(name: "u_width", float: Float(size.width)),
-        SKUniform(name: "u_frame", vectorFloat4: [Float((size.width - width) / 2), Float(top - height), Float(width), Float(height)]),
+        SKUniform(name: "u_frame", vectorFloat4: [Float(frame.minX), Float(frame.minY), Float(frame.width), Float(frame.height)]),
         WallpaperTime.now,
     ] + grade)
     return ground

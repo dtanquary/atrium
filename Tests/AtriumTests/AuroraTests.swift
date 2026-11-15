@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import Testing
 @testable import Atrium
 
@@ -43,4 +43,20 @@ import Testing
     let dubhe = stars.min { hypot($0.position.x - 907.5, $0.position.y - 539.5) < hypot($1.position.x - 907.5, $1.position.y - 539.5) }
     #expect(dubhe.map { hypot($0.position.x - 907.5, $0.position.y - 539.5) < 1.5 } == true)
     #expect(dubhe.map { d in stars.filter { $0.size.width > d.size.width }.count < 6 } == true)
+}
+
+/// Aurora's sky stops just under the photo's skyline (`AuroraGround.skyline`), so the photo must be opaque all the
+/// way across below that row, and not above it: a photo baked again with a lower notch in its skyline would show a
+/// black gap there.
+@MainActor @Test func auroraGroundIsOpaqueBelowItsSkyline() throws {
+    let image = try #require(NSImage(contentsOf: resource("aurora-ground.heic"))?.cgImage(forProposedRect: nil, context: nil, hints: nil))
+    let (w, h) = (image.width, image.height)
+    #expect(Double(w) / Double(h) == AuroraGround.aspect)
+    let context = try #require(CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                         bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+    context.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+    let pixels = context.data!.assumingMemoryBound(to: UInt8.self)
+    let row = Int((AuroraGround.skyline * Double(h)).rounded()) // the first opaque row, down from the top
+    func opaque(_ y: Int) -> Bool { (0..<w).allSatisfy { pixels[(y * w + $0) * 4 + 3] == 255 } }
+    #expect(!opaque(row - 1) && (row..<h).allSatisfy(opaque))
 }
