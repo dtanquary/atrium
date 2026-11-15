@@ -191,6 +191,24 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
     #expect(nodes.allSatisfy { $0 > 10 } && nodes.last == nodes.first)
 }
 
+/// Pixel City's clouds drift in three rows at three paces, and each is solid from its foot to its top in every
+/// column: no sky shows through a hole in one, whatever the humps it was heaped from.
+@MainActor @Test func pixelCityCloudsAreSolid() throws {
+    let looks = PixelCity(size: CGSize(width: 1512, height: 982), spaceport: true).cloudLooks
+    #expect(looks.count == 11 && Set(looks.map(\.speed)).count == 3)
+    for look in looks {
+        let picture = try #require(look.picture), (w, h) = (picture.width, picture.height)
+        var rgba = [UInt8](repeating: 0, count: w * h * 4)
+        let context = try #require(CGContext(data: &rgba, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                                             space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.draw(picture, in: CGRect(x: 0, y: 0, width: w, height: h))
+        for x in 0..<w {
+            let solid = (0..<h).map { rgba[($0 * w + x) * 4 + 3] > 0 }
+            if let top = solid.firstIndex(of: true), let foot = solid.lastIndex(of: true) { #expect(!solid[top...foot].contains(false)) }
+        }
+    }
+}
+
 /// Pixel City's automatic move goes to a different city every time and saves it, so Settings and every display
 /// follow; in a view, it hands over to a new scene of that city.
 @MainActor @Test func pixelCityMovesOn() {

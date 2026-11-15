@@ -125,6 +125,8 @@ final class PixelCity: SKScene, BatteryPaced {
     private var parks: [(x: Int, width: Int)] = []
     private var stars: [(x: Int, y: Int, brightness: Float)] = []
     private var clouds: [Cloud] = []
+    /// Each cloud's picture as last painted, and how fast it drifts, for the tests.
+    var cloudLooks: [(picture: CGImage?, speed: Float)] { clouds.map { ($0.node.texture?.cgImage(), $0.speed) } }
     private var cars: [Car] = []
     private var carLooks: [(day: SKTexture, night: SKTexture, length: Int, height: Int)] = []
     private var carPictures: [(day: Pixels, night: Pixels)] = [] // the same, as pixels, for the water to mirror
@@ -309,15 +311,26 @@ final class PixelCity: SKScene, BatteryPaced {
             (Int.random(in: 0..<w, using: &rng), Int.random(in: skyBase + 30..<h, using: &rng), Float.random(in: 0.35...1, using: &rng))
         }
 
-        for _ in 0..<3 {
-            let cloud = Cloud(mask: cloudMask(&rng), x: Float.random(in: 0...Float(w), using: &rng),
-                              speed: Float.random(in: 0.5...1.2, using: &rng))
-            cloud.node.anchorPoint = CGPoint(x: 0.5, y: 0)
-            cloud.node.size = CGSize(width: cloud.mask[0].count, height: cloud.mask.count)
-            cloud.node.position.y = CGFloat(Int(Float(h) * Float.random(in: 0.68...0.88, using: &rng)))
-            cloud.node.zPosition = 1
-            canvas.addChild(cloud.node)
-            clouds.append(cloud)
+        // Three rows of cloud, far to near: small flat ones low over the horizon, middling ones, and two big heaps
+        // high up, each row drifting faster than the one behind it, so they slide past each other. A row keeps its
+        // spacing, since all of it wraps round the same span. Their own draws, so nothing else laid out moves them.
+        var weather = SeededRandom(state: 7 + UInt64(city.rawValue))
+        let room = Float(h - skyBase)
+        for (count, wide, tall, low, high, pace) in [(6, 18...40, 4...7, 0.06, 0.2, 0.2), (3, 50...75, 16...24, 0.3, 0.46, 0.5),
+                                                     (2, 90...130, 30...40, 0.5, 0.66, 1.0)] as [(Int, ClosedRange<Int>, ClosedRange<Int>, Float, Float, Float)] {
+            let start = Float.random(in: 0..<Float(w + 140), using: &weather), speed = pace * .random(in: 0.85...1.15, using: &weather)
+            for i in 0..<count {
+                let (width, height) = (Int.random(in: wide, using: &weather), Int.random(in: tall, using: &weather))
+                let x = (start + (Float(i) + .random(in: -0.15...0.15, using: &weather)) * Float(w + 140) / Float(count))
+                let cloud = Cloud(width: width, height: height, density: cloudField(width, height, &weather),
+                                  x: x.truncatingRemainder(dividingBy: Float(w + 140)) - 70, speed: speed)
+                cloud.node.anchorPoint = CGPoint(x: 0.5, y: 0)
+                cloud.node.size = CGSize(width: width, height: height)
+                cloud.node.position.y = CGFloat(min(skyBase + Int(room * .random(in: low...high, using: &weather)), h - height - 3))
+                cloud.node.zPosition = 1 + CGFloat(pace) / 100 // nearer rows in front
+                canvas.addChild(cloud.node)
+                clouds.append(cloud)
+            }
         }
 
         let paints = [rgb(196, 58, 52), rgb(58, 98, 186), rgb(222, 222, 216), rgb(236, 188, 48),
@@ -1037,11 +1050,9 @@ final class PixelCity: SKScene, BatteryPaced {
         waterTints.first?.vectorFloat3Value = mix(top * 0.6, rgb(8, 22, 36), 0.35)
         waterTints.last?.vectorFloat3Value = horizon
 
-        // Sprites that change colour with the light.
-        let dusk = smoothstep(14, 2, el) * (1 - night)
-        let light = mix(mix(rgb(250, 250, 252), horizon, dusk * 0.6), rgb(47, 50, 78), night)
-        let shade = mix(mix(rgb(196, 206, 226), top, dusk * 0.5), rgb(29, 31, 54), night)
-        for cloud in clouds { cloud.node.texture = cloud.texture(light: light, shade: shade) } // solid, so they hide the stars
+        // Sprites that change colour with the light. Clouds are lit as the Spaceport's smoke is, so the two agree.
+        let light = vapour()
+        for cloud in clouds { cloud.node.texture = cloud.texture(light) } // solid, so they hide the stars
         for car in cars { car.node.texture = night > 0.5 ? carLooks[car.look].night : carLooks[car.look].day }
         trafficShown = [] // so the strip the water mirrors is painted again in this light
         for car in cars { car.beam.alpha = CGFloat(smoothstep(0.3, 0.8, night)) }
@@ -1897,8 +1908,9 @@ final class PixelCity: SKScene, BatteryPaced {
 
         for i in clouds.indices {
             clouds[i].x += clouds[i].speed * dt
-            if clouds[i].x - Float(clouds[i].mask[0].count) / 2 > Float(w) { clouds[i].x = -Float(clouds[i].mask[0].count) / 2 }
-            clouds[i].node.position.x = CGFloat(clouds[i].x.rounded(.down))
+            if clouds[i].x > Float(w + 70) { clouds[i].x -= Float(w + 140) } // off the right edge and round to the left, as `layOut` spaced them
+            let x = CGFloat(clouds[i].x.rounded(.down))
+            if clouds[i].node.position.x != x { clouds[i].node.position.x = x } // a pixel every second or more
         }
 
         if planeDirection == 0, clock >= nextPlane, city != .spaceport { // nothing flies over a launch site
@@ -2169,19 +2181,32 @@ final class PixelCity: SKScene, BatteryPaced {
          picture(["t" + String(repeating: ".", count: length - 2) + "h"], ["t": rgb(255, 50, 50), "h": rgb(255, 250, 215)]))
     }
 
-    /// A cloud outline: a few overlapping circles with a flat base.
-    private func cloudMask(_ rng: inout SeededRandom) -> [[Bool]] {
-        let width = Int.random(in: 40...60, using: &rng) / 2 * 2, height = 16
-        let puffs = (0..<6).map { _ in
-            (x: Float.random(in: 9...Float(width - 9), using: &rng), y: Float.random(in: 4...7, using: &rng), r: Float.random(in: 4...7.5, using: &rng))
-        }
-        return (0..<height).map { y in
-            (0..<width).map { x in
-                let base = (Float(x) - Float(width) / 2) / (Float(width) / 2 - 1), rise = (Float(y) - 1) / 4
-                return y >= 1 && (base * base + rise * rise <= 1 // a long flat body…
-                    || puffs.contains { (Float(x) - $0.x) * (Float(x) - $0.x) + (Float(y) - $0.y) * (Float(y) - $0.y) <= $0.r * $0.r }) // …with puffs on top
+    /// A cloud's field of density, rows from the bottom, as the Spaceport's smoke is one: a long low hump for its body
+    /// and round humps heaped on it, highest over the middle, cut flat along the bottom row.
+    private func cloudField(_ width: Int, _ height: Int, _ rng: inout SeededRandom) -> [Float] {
+        var field = [Float](repeating: 0, count: width * height)
+        func hump(_ cx: Float, _ cy: Float, _ rx: Float, _ ry: Float) {
+            for y in 0..<height {
+                for x in 0..<width {
+                    let (dx, dy) = ((Float(x) + 0.5 - cx) / rx, (Float(y) + 0.5 - cy) / ry)
+                    field[y * width + x] += max(0, 1 - dx * dx - dy * dy)
+                }
             }
         }
+        let (wide, tall) = (Float(width), Float(height))
+        hump(wide / 2, 0, wide * 0.42, tall * 0.55)
+        let count = Int(wide * 0.8 / max(2.5, tall * 0.25)) // about one a radius apart, so they run together
+        for i in 0..<count { // spread along it, so the top domes
+            let u = 0.1 + 0.8 * (Float(i) + .random(in: 0.2...0.8, using: &rng)) / Float(count), dome = sin(u * .pi) // 0 at the ends, 1 in the middle
+            let r = max(2.5, tall * Float.random(in: 0.22...0.34, using: &rng) * (0.65 + 0.35 * dome))
+            let (cx, cy) = (wide * u, min(tall * (0.15 + 0.5 * dome) * .random(in: 0.75...1, using: &rng), tall - r))
+            hump(cx, cy, r, r)
+            guard height >= 12 else { continue }
+            // A smaller bulge on its upper edge, so a heap has lobes.
+            let (turn, small) = (Float.random(in: 0.35...2.8, using: &rng), r * .random(in: 0.35...0.45, using: &rng))
+            hump(cx + 0.8 * r * cos(turn), min(cy + 0.8 * r * sin(turn), tall - small), small, small)
+        }
+        return field
     }
 
     // MARK: - The Spaceport
@@ -2809,6 +2834,20 @@ final class PixelCity: SKScene, BatteryPaced {
         }
     }
 
+    /// The light smoke and cloud are painted in: three flat tones in the sky's light and the Sun's (a rim lit from
+    /// the Sun's side, which `side` gives, the body and a shaded underside), and the Sun's own colours for them
+    /// after sunset, which reach whatever is high enough (by `twilight` at most): the Earth's shadow climbs as the
+    /// Sun sinks, 26 rows a degree from the ground to the row `shadow`.
+    private func vapour() -> (tones: [RGB], sunlit: [RGB], twilight: Float, shadow: Float, side: Int) {
+        let steam = rgb(246, 246, 248), side = (keyRight - keyLeft).sum() >= 0 ? 1 : -1
+        let tones = [pointwiseMin(steam * (ambient * 1.12 + keyTop * 0.5 + (keyRight + keyLeft) * 0.7), .one),
+                     pointwiseMin(steam * (ambient * 0.98 + keyTop * 0.22), .one),
+                     steam * ambient * 0.88 * RGB(0.92, 0.95, 1)]
+        let el = Float(sunAt.elevation), twilight = smoothstep(3, 0, el) * smoothstep(-11, -7, el)
+        let shadow = Float(ground) + max(0, -el - 0.2) * 26
+        return (tones, [rgb(255, 232, 196), rgb(255, 186, 140), rgb(190, 120, 128)], twilight, shadow, side)
+    }
+
     /// Paints the smoke into its own canvas. Every puff adds a round hump to a field of density; where that is
     /// thick enough there is cloud, drawn in three flat tones: a rim lit from the Sun's side, the body, and a
     /// shaded underside. It takes the light it is in: the Sun's after sunset if it's high enough to be above the
@@ -2844,14 +2883,7 @@ final class PixelCity: SKScene, BatteryPaced {
         smoked = y0 <= y1 ? y0..<y1 + 1 : 0..<0
         guard x0 <= x1, y0 <= y1 else { return }
 
-        let steam = rgb(246, 246, 248), side = (keyRight - keyLeft).sum() >= 0 ? 1 : -1
-        let tones = [pointwiseMin(steam * (ambient * 1.12 + keyTop * 0.5 + (keyRight + keyLeft) * 0.7), .one),
-                     pointwiseMin(steam * (ambient * 0.98 + keyTop * 0.22), .one),
-                     steam * ambient * 0.88 * RGB(0.92, 0.95, 1)]
-        // After sunset the Sun still reaches what is high enough: the Earth's shadow climbs as the Sun sinks.
-        let el = Float(sunAt.elevation), twilight = smoothstep(3, 0, el) * smoothstep(-11, -7, el)
-        let shadow = Float(ground) + max(0, -el - 0.2) * 26
-        let sunlit = [rgb(255, 232, 196), rgb(255, 186, 140), rgb(190, 120, 128)]
+        let (tones, sunlit, twilight, shadow, side) = vapour()
         let fires = flames()
         let flood = night, floodlit: [Float] = [1, 0.9, 0.72] // the pad's floodlights are on all night, rocket or no rocket
         // The pad's floodlights, and the smaller lights round each landing zone, which light a landing's dust.
@@ -3369,18 +3401,51 @@ private struct Puff {
 
 @MainActor private struct Cloud {
     let node = SKSpriteNode()
-    let mask: [[Bool]] // rows from the bottom
+    let width: Int, height: Int
     var x: Float
     let speed: Float
+    /// Which of smoke's three tones (see `vapour`) each pixel takes, rows from the bottom, or -1 where it's clear:
+    /// with the Sun on the left, and on the right. Worked out once, so a repaint only colours them.
+    let shapes: [[Int]]
 
-    /// Two-tone pixel cloud: shaded base, lit body, highlighted top edge.
-    func texture(light: RGB, shade: RGB) -> SKTexture {
-        var px = Pixels(mask[0].count, mask.count)
-        for y in mask.indices {
-            for x in mask[y].indices where mask[y][x] {
-                let topEdge = y + 1 == mask.count || !mask[y + 1][x]
-                px.plot(x, y, topEdge ? pointwiseMin(light * 1.05, .one) : y <= 3 ? shade : light)
+    /// A cloud from its field of density: solid from its foot to its top in every column, with no holes. The rim
+    /// is where it is much thinner two pixels up toward the Sun and the shade where it is much thinner two down and
+    /// away, as the smoke's are, and the shade runs along the bottom fifth of it too, deeper under a tall heap.
+    init(width: Int, height: Int, density: [Float], x: Float, speed: Float) {
+        (self.width, self.height, self.x, self.speed) = (width, height, x, speed)
+        let cloudy = (0..<width).map { x in (0..<height).filter { density[$0 * width + x] >= 0.14 } }
+        let (feet, tops) = (cloudy.map { $0.first ?? height }, cloudy.map { $0.last ?? -1 })
+        shapes = [-1, 1].map { side in
+            var pick = [Int](repeating: -1, count: width * height)
+            for y in 0..<height {
+                for x in 0..<width where y >= feet[x] && y <= tops[x] {
+                    let d = density[y * width + x]
+                    let (tx, ax) = (min(max(x + 2 * side, 0), width - 1), min(max(x - 2 * side, 0), width - 1))
+                    let toward = y + 2 < height ? density[(y + 2) * width + tx] : 0, away = y >= 2 ? density[(y - 2) * width + ax] : 0
+                    let shade = 5 * (y - feet[x]) < tops[x] - feet[x] || 1 + d > 1.3 * (1 + away)
+                    pick[y * width + x] = 1 + d > 1.22 * (1 + toward) ? 0 : shade ? 2 : 1
+                }
             }
+            // No lone pixels of rim or shade, which read as specks on something this still.
+            for y in 1..<max(1, height - 1) {
+                for x in 1..<max(1, width - 1) where pick[y * width + x] != 1 && pick[y * width + x] >= 0 {
+                    let t = pick[y * width + x]
+                    if ![pick[y * width + x - 1], pick[y * width + x + 1], pick[(y - 1) * width + x], pick[(y + 1) * width + x]].contains(t) { pick[y * width + x] = 1 }
+                }
+            }
+            return pick
+        }
+    }
+
+    /// The cloud in the light of the moment.
+    func texture(_ light: (tones: [RGB], sunlit: [RGB], twilight: Float, shadow: Float, side: Int)) -> SKTexture {
+        var px = Pixels(width, height)
+        let (pick, foot) = (shapes[light.side > 0 ? 1 : 0], Float(node.position.y))
+        for y in 0..<height {
+            // In flat steps through the Earth's shadow, as a still thing in pixel art is, where moving smoke can be smooth.
+            let up = (light.twilight * smoothstep(light.shadow - 14, light.shadow + 14, foot + Float(y)) * 4).rounded() / 4
+            let tones = (0..<3).map { mix(light.tones[$0], light.sunlit[$0], up) }
+            for x in 0..<width where pick[y * width + x] >= 0 { px.plot(x, y, tones[pick[y * width + x]]) }
         }
         return px.texture()
     }
