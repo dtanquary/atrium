@@ -15,14 +15,17 @@ private let evenings: [(name: String, sun: Double, balance: SIMD3<Float>)] = [
 /// exposure of a wavy sea averages the sky well above the horizon, where calm water is a mirror. `waves` is how slow
 /// ripples move the water: how far they bend its reflection, how fast they drift, and how much they brighten and darken
 /// it, which is all the smooth long-exposure sea can show. `perch` is where the flock goes down to roost at the end of
-/// an evening (metres, from the eye): among the pier's legs, or into the reeds on the far shore.
+/// an evening (metres, from the eye): among the pier's legs, or into the reeds on the far shore. `lift` brightens the
+/// land's darkest tones, those under about 0.6% of its photo's sky, by that much again: the pond's far shore was nearly
+/// black in its photo, and went to one flat black bar; lifted, its tundra and grass show. Brighter tones aren't lifted,
+/// so the photo's bright water at the land's edge doesn't rim it with light.
 /// - Brighton's West Pier: "Tide bears the last glow - Brighton, UK" by sagesolar, CC BY 4.0,
 ///   https://commons.wikimedia.org/wiki/File:Tide_bears_the_last_glow_-_Brighton,_UK.jpg
 /// - A marsh pond: "Sunset over a tundra pond" by USFWS Alaska, public domain,
 ///   https://commons.wikimedia.org/wiki/File:Sunset_over_a_tundra_pond_(53708107535).jpg
-private let grounds: [(name: String, file: String, horizon: Float, sky: Float, rough: Float, waves: SIMD3<Float>, perch: SIMD3<Float>)] = [
-    ("Brighton West Pier", "murmuration-pier", 780.0 / 1533, 0.1252, 0.12, [0.03, 2.5, 0.22], [-26, 265, 8]),
-    ("Marsh pond", "murmuration-marsh", 15.0 / 706, 0.2635, 0.005, [0.05, 3.5, 0.12], [30, 420, -1]),
+private let grounds: [(name: String, file: String, horizon: Float, sky: Float, rough: Float, waves: SIMD3<Float>, perch: SIMD3<Float>, lift: Float)] = [
+    ("Brighton West Pier", "murmuration-pier", 780.0 / 1533, 0.1252, 0.12, [0.03, 2.5, 0.22], [-26, 265, 8], 0),
+    ("Marsh pond", "murmuration-marsh", 15.0 / 706, 0.2635, 0.005, [0.05, 3.5, 0.12], [30, 420, -1], 4.7),
 ]
 
 private let lightKnob = Knob(key: "murmuration.light", label: "Light", range: 0...5, standard: 0, section: "Scene",
@@ -128,7 +131,7 @@ final class Murmuration: SKScene, BatteryPaced {
             SKUniform(name: "u_aux", texture: photo.aux), before, after, blend,
             SKUniform(name: "u_cam", vectorFloat4: lens), balance, self.land,
             SKUniform(name: "u_birds", texture: birds.reflection),
-            SKUniform(name: "u_rough", float: ground.rough),
+            SKUniform(name: "u_rough", float: ground.rough), SKUniform(name: "u_lift", float: ground.lift),
             SKUniform(name: "u_noise", texture: CloudNoise.texture), SKUniform(name: "u_waves", vectorFloat3: ground.waves),
             WallpaperTime.now,
         ])
@@ -337,6 +340,7 @@ final class Murmuration: SKScene, BatteryPaced {
         // Land and pier: the photo's shading in our horizon's colour, keeping a little of its own, and darker than the
         // photo's long exposure made it, as a silhouette against a sunset is (under 4% of the sky in photos).
         vec3 shot = pow(photo.rgb / max(photo.a, 0.004), vec3(2.2));
+        shot += min(shot, vec3(0.0015)) * u_lift; // the darkest tones lifted (`lift`)
         float lw = dot(u_land, vec3(0.2126, 0.7152, 0.0722));
         vec3 land = mix(dot(shot, vec3(0.2126, 0.7152, 0.0722)) * u_land, shot * lw, 0.3) * 0.35;
         // Waves tilt toward us, so rough water reflects sky higher than the mirror image, and a spread of it.
