@@ -35,24 +35,30 @@ final class Jellyfish: SKScene {
         var count: Int, diameter: ClosedRange<Double>, period: Double, perPulse: Double
         var share = 0.39, turnChance = 0.4, turnAngle = 0.2...0.7, wobble = 0.06, rock = 0.11, drift = 0.09
         var restChance = 0.03, rest = 6.0...10.0, sink = 0.002, righting = 0.055, sag = 0.15
-        /// The sprite round the margin's centre, in bell radii, for a straight jelly; and the tentacles', arms' and
-        /// spine's lengths and the tentacles' trailing speed (radii a second), as the shader has them.
-        var width: Double, above: Double, tentacles: Double, arms: Double, trail = 3.0
+        /// The tentacles', arms' and spine's lengths in bell radii and the tentacles' trailing speed (radii a second),
+        /// as the shader has them.
+        var tentacles: Double, arms: Double, trail = 3.0
         var spine: Double { max(tentacles, arms / 0.6) }
         var defines: [String: String]
+        /// The bell's height in radii, relaxed and at the tallest a squeeze makes it (the biggest pulses are 1.1 of
+        /// the usual), and how far the strands sway, as the shader has them.
+        var low: Double { Double(defines["HEIGHT"]!)! }
+        var tall: Double { low + 1.1 * Double(defines["RISE"]!)! }
+        var sway: Double { Double(defines["SWAY"]!)! }
     }
 
-    static let moon = Species(count: 84, diameter: 0.12...0.25, period: 1.6, perPulse: 0.5, width: 2.6, above: 0.8,
-                              tentacles: 0.32, arms: 1.0, defines: [
+    static let moon = Species(count: 84, diameter: 0.12...0.25, period: 1.6, perPulse: 0.5, tentacles: 0.32, arms: 1.0, defines: [
         "NT": "120", "TLEN": "0.32", "TW": "0.006", "SWAY": "0.25", "NOA": "4", "ALEN": "1.0", "AW": "0.17",
         "ASPREAD": "0.22", "ASWAY": "0.25", "TWIST": "3.0", "HEIGHT": "0.42", "RISE": "0.32", "SHRINK": "0.14",
         "NC": "32.0", "CANALSHARP": "10.0", "CANALK": "0.5", "GONADS": "1", "CONVERGE": "0.0", "TVARY": "0.0", "RING": "0",
+        "UNDER": "0.02",
     ])
     static let crystal = Species(count: 48, diameter: 0.08...0.2, period: 1.8, perPulse: 0.35, restChance: 0.25, rest: 0.8...3.0,
-                                 righting: 0.02, sag: 0.05, width: 2.6, above: 0.7, tentacles: 7, arms: 0.35, defines: [
+                                 righting: 0.02, sag: 0.05, tentacles: 7, arms: 0.35, defines: [
         "NT": "36", "TLEN": "7.0", "TW": "0.005", "SWAY": "0.06", "NOA": "1", "ALEN": "0.35", "AW": "0.3",
         "ASPREAD": "0.0", "ASWAY": "0.05", "TWIST": "1.5", "HEIGHT": "0.36", "RISE": "0.26", "SHRINK": "0.12",
         "NC": "60.0", "CANALSHARP": "16.0", "CANALK": "2.2", "GONADS": "0", "CONVERGE": "0.3", "TVARY": "0.7", "RING": "1",
+        "UNDER": "0.08", // its ring's points glow a little below the margin
     ])
 
     /// One jelly in metres, seen by a camera 50° across from the origin, looking along +z: its place, the way its
@@ -76,6 +82,8 @@ final class Jellyfish: SKScene {
         init(_ species: Species, _ shader: SKShader) { (self.species, self.shader) = (species, shader) }
     }
 
+    /// Room added round every sprite's box, in bell radii: for the test that the box cuts nothing off.
+    static var slack = 0.0
     private static let step = 1.0 / 60, kept = 600 // 10 s of the axis's history, for the longest tentacles
     private static let fov = 2 * tan(25 * Double.pi / 180) // view width per metre of depth
     private static let wallTurn = 0.6 // how fast a side's current turns a bell away, rad/s at the side
@@ -84,6 +92,7 @@ final class Jellyfish: SKScene {
 
     private let lit = SKUniform(name: "u_lit", float: 1), crystalShown = SKUniform(name: "u_crystal", float: 0)
     private let clock = SKUniform(name: "u_t", float: 0)
+    private let water = SKSpriteNode(color: .black, size: .zero)
     private var groups: [Group] = []
     private var simTime = 0.0, lastTime: TimeInterval?, sunLit = 1.0, lastSun = -100.0, lastCount = Jellyfish.knobs[1].value
     /// Seeded from `jellyfish.seed` when it's set (for pictures that can be taken again), at random otherwise.
@@ -92,7 +101,7 @@ final class Jellyfish: SKScene {
 
     override func sceneDidLoad() {
         backgroundColor = .black
-        let water = SKSpriteNode(color: .black, size: size)
+        water.size = size
         water.anchorPoint = .zero
         water.zPosition = -10
         water.shader = SKShader(source: shaderCommon + Self.waterSource, uniforms: [
@@ -219,6 +228,7 @@ final class Jellyfish: SKScene {
         let ease = min(1, dt / 1.5) // a change of look eases over a few seconds
         lit.floatValue += Float((target.lit - Double(lit.floatValue)) * ease)
         crystalShown.floatValue += Float((target.crystal - Double(crystalShown.floatValue)) * ease)
+        water.isHidden = lit.floatValue < 0.002 && crystalShown.floatValue < 0.002 // the glow's water is black, as the scene is behind it
         // ponytail: the sway and the snow jump once an hour where this wraps; carry their phase on the CPU if a jump shows
         clock.floatValue = Float(simTime.truncatingRemainder(dividingBy: 3600))
         if simTime - lastSun > 60 { settle(at: false) }
@@ -327,10 +337,15 @@ final class Jellyfish: SKScene {
             let shown = turned(turned(j.axis, across, sp.rock * sin(2 * .pi * phase)), SIMD3(1, 0, 0), pitch)
             let heading = atan2(-shown.x, shown.y), tilt = asin(max(-0.97, min(0.97, -shown.z)))
             let pts = spine(j, sp, heading: heading)
-            let reach = pts.map { abs($0.x) }.max()! + 1.4
-            let width = max(sp.width, 2 * reach), above = sp.above + abs(sin(tilt))
-            let hanging: Double = -pts[3].y * min(1, max(sp.tentacles, sp.arms) / sp.spine) + 0.4
-            let below: Double = max(1 + abs(sin(tilt)), hanging)
+            // The box holds what the shader draws and little else, since every pixel of it costs: the bell at its
+            // tallest and widest, the fringe from the ring down to the strands' tips and as far aside as the spine
+            // carries them, and the arms from their roots to theirs. `jellyfishBoxHoldsWhatIsDrawn` checks it.
+            let lean = abs(sin(tilt)), aside = pts.map { abs($0.x) }, last = min(3, Int((4 * sp.tentacles / sp.spine).rounded(.up)) - 1)
+            let fringe = 1.06 + 1.1 * aside[...last].max()! + sp.sway * sp.tentacles / 2
+            let width = 2 * max(1.1, fringe, 0.7 + 0.66 * aside.max()!) + Self.slack
+            let above = sp.tall * cos(tilt) + 1.04 * lean + 0.05 + Self.slack
+            let below = max(1.04 * lean + 0.06, lean - Self.height(pts, sp.tentacles / sp.spine) + 0.02,
+                            0.14 * lean - 0.22 * sp.low - 0.6 * Self.height(pts, sp.arms / 0.6 / sp.spine) + 0.02) + Self.slack
             j.node.size = CGSize(width: width * r, height: (above + below) * r)
             j.node.anchorPoint = CGPoint(x: 0.5, y: below / (above + below))
             j.node.position = CGPoint(x: w / 2 + j.p.x * k, y: h / 2 + j.p.y * k)
@@ -362,6 +377,12 @@ final class Jellyfish: SKScene {
             }
         }
         return pts
+    }
+
+    /// The spine's height `f` of the way along it, as the shader's `spineY` has it.
+    private static func height(_ pts: [SIMD2<Double>], _ f: Double) -> Double {
+        let k = max(0, min(4, f * 4)), i = min(3, Int(k)), from = i == 0 ? 0 : pts[i - 1].y
+        return from + (pts[i].y - from) * (k - Double(i))
     }
 
     private func gauss() -> Double {
@@ -434,7 +455,7 @@ final class Jellyfish: SKScene {
     }
     """
 
-    /// One jelly. The bell is marched through in 24 steps, so its rim is bright where the line of sight grazes the
+    /// One jelly. The bell is marched through in 20 steps, so its rim is bright where the line of sight grazes the
     /// tissue rather than painted on; its margin lags the squeeze. Tentacles and oral arms hang along the spine, and
     /// each pixel looks at only the strands nearest it (four either side, front and back of the ring), so a hundred
     /// cost no more than eight. A moon jelly is drawn lit (`u_lit` 1) or glowing (0), or between as the light changes;
@@ -448,12 +469,23 @@ final class Jellyfish: SKScene {
         float A = 1.0 - SHRINK * S, C = HEIGHT + RISE * S, Am = 1.0 - SHRINK * Sm;
         float cb = cos(tilt), sb = sin(tilt);
         float tissue = 0.0, skin = 0.0, organ = 0.0, ringPts = 0.0;
-        float wide = max(A, Am) + 0.04, deep = wide * cb + C * abs(sb) + 0.04;
-        if (abs(q.x) < wide && q.y > -wide * abs(sb) - 0.06 && q.y < C * cb + wide * abs(sb) + 0.04) {
-            float dz = 2.0 * deep / 20.0;
-            float jitter = hash21(v_tex_coord * 913.0 + seed);
+        float wide = max(A, Am) + 0.04;
+        // Where the line of sight enters and leaves the bell: its outline as an ellipsoid grown 0.08 past its skin's
+        // glow, cut by a plane just under its margin. Only between the two is there anything to march through, and
+        // where they miss (the corners of the bell's box) there is nothing.
+        float gw = 1.0 / pow(max(A, Am) + 0.08, 2.0), gh = 1.0 / pow(C + 0.08, 2.0);
+        float qa = sb * sb * gh + cb * cb * gw, qb = q.y * sb * cb * (gh - gw);
+        float disc = qb * qb - qa * (q.x * q.x * gw + q.y * q.y * (cb * cb * gh + sb * sb * gw) - 1.0);
+        float z0 = (-qb - sqrt(max(disc, 0.0))) / qa, z1 = (-qb + sqrt(max(disc, 0.0))) / qa;
+        float zm = (-UNDER - q.y * cb) / (abs(sb) > 1e-4 ? sb : 1e-4);
+        if (sb < -1e-4) { z1 = min(z1, zm); } else { z0 = max(z0, zm); }
+        if (disc > 0.0 && z1 > z0 && abs(q.x) < wide && q.y > -wide * abs(sb) - 0.06 && q.y < C * cb + wide * abs(sb) + 0.04) {
+            float dz = (z1 - z0) / 20.0;
+            // Each pixel starts its steps at its own depth, afresh every frame: by where it is on screen, not in the
+            // sprite's box, so the picture is the same whatever the box.
+            float jitter = hash42(gl_FragCoord.xy + seed + 71.0 * fract(t * 3.7)).x;
             for (int i = 0; i < 20; i++) {
-                float z = deep - dz * (float(i) + jitter);
+                float z = z1 - dz * (float(i) + jitter);
                 float Yb = q.y * cb + z * sb;
                 float Zb = -q.y * sb + z * cb;
                 float rho = length(vec2(q.x, Zb));
@@ -468,10 +500,10 @@ final class Jellyfish: SKScene {
                     * below * smoothstep(C + 0.03, C - 0.01, Yb);
                 skin += sk * (1.0 + CANALK * pow(abs(cos(phi * NC * 0.5)), CANALSHARP) * (1.0 - hn)) * dz;
                 #if GONADS
-                if (abs(Yb - inH * 0.95) < 0.25 && rho < 0.62 * A) for (int k = 0; k < 4; k++) {
-                    float ang = 1.5708 * float(k) + 0.785;
-                    vec2 d = vec2(q.x, Zb) - 0.34 * A * vec2(cos(ang), sin(ang));
-                    float open = smoothstep(-0.95, -0.7, dot(normalize(d + 1e-4), vec2(cos(ang), sin(ang)))); // the gap faces the middle
+                if (abs(Yb - inH * 0.95) < 0.25 && rho < 0.62 * A) {
+                    // Four rings round the middle, each a mirror image of the next: folded onto one.
+                    vec2 d = abs(vec2(q.x, Zb)) - 0.2404 * A;
+                    float open = smoothstep(-0.95, -0.7, dot(normalize(d + 1e-4), vec2(0.7071))); // the gap faces the middle
                     organ += exp(-pow((length(d) - 0.16 * A) / 0.04, 2.0)) * open * exp(-pow((Yb - inH * 0.95) / 0.09, 2.0)) * dz * 5.0;
                 }
                 #endif
@@ -487,11 +519,16 @@ final class Jellyfish: SKScene {
         vec2 mid = spineAt(q.y, a_sp1, a_sp2, SPLEN);
         float r0 = max((1.0 - CONVERGE * smoothstep(0.0, TLEN * 0.6, mid.y)), 0.2);
         float reach = Am * abs(sb) + 0.06;
-        if (q.y < reach && q.y > spineY(TLEN / SPLEN, a_sp1, a_sp2) - reach - 0.1 && abs(q.x - mid.x) < r0 + 0.25)
+        // A strand shows from its root down to its tip, and the four looked at root within three slots of this pixel's
+        // own place on the ring: outside that band (most of a tilted bell's face) none of them is here.
+        float tip = spineY(TLEN / SPLEN, a_sp1, a_sp2), slots = 18.85 / float(NT) * abs(sb);
+        float across = clamp((q.x - mid.x) / r0, -1.0, 1.0), rise = Am * sqrt(1.0 - across * across) * sb;
+        if (q.y < reach && q.y > tip - reach - 0.1 && abs(q.x - mid.x) < r0 + 0.25)
         for (int side = 0; side < 2; side++) {
-            float around = acos(clamp((q.x - mid.x) / r0, -1.0, 1.0)) / 6.2832 * float(NT);
+            float under = q.y + (side == 0 ? rise : -rise); // this pixel's height from the root above it
+            float around = acos(across) / 6.2832 * float(NT);
             float centre = side == 0 ? around : float(NT) - around;
-            for (int n = -2; n < 2; n++) {
+            if (under < 0.02 + slots && under > tip - slots) for (int n = -2; n < 2; n++) {
                 float fi = wrapf(floor(centre) + float(n), float(NT));
                 float phi = 6.2832 * (fi + 0.4 * hash11(fi * 7.13 + seed)) / float(NT);
                 float rootY = -Am * sin(phi) * sb;
@@ -504,7 +541,9 @@ final class Jellyfish: SKScene {
                     * (1.0 - TVARY * 0.8 * hash11(fi * 9.7 + seed));
             }
         }
-        if (q.y < C * 0.22 + 0.2 && q.y > spineY(ALEN / 0.6 / SPLEN, a_sp1, a_sp2) * 0.6 - reach - 0.15 && abs(q.x - 0.6 * mid.x) < 0.7)
+        // The arms root within 0.14 radii of the bell's axis, and show from just above their roots to their tips.
+        if (q.y < C * 0.22 + 0.14 * abs(sb) + 0.06 && q.y > 0.6 * spineY(ALEN / 0.6 / SPLEN, a_sp1, a_sp2) + C * 0.22 - 0.14 * abs(sb) - 0.02
+            && abs(q.x - 0.6 * mid.x) < 0.7)
         for (int k = 0; k < NOA; k++) {
             float fk = float(k);
             float phi = 1.5708 * fk + 0.785 + 0.3 * hash11(fk + seed);

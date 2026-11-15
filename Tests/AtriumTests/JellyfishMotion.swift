@@ -1,3 +1,4 @@
+import Metal
 import SpriteKit
 import Testing
 @testable import Atrium
@@ -45,4 +46,42 @@ import Testing
                  speed, 100 * upper, 100 * lower, fromVertical.sorted()[fromVertical.count / 2]))
     #expect(speed > 0.1 && speed < 0.4)
     #expect(upper < 0.45 && lower > 0.15)
+}
+
+/// Draws the lit tank and the crystal jellies twice, the second time with half a bell radius of room added round
+/// every sprite's box, and checks the two pictures match. The box is cut close to what the shader draws, since every
+/// pixel of it costs: so a part that grows (a longer fringe, a wider margin) has to grow the box with it, or it is
+/// cut off square. A few pixels differ by rounding, where a strand's edge falls; a cut differs by hundreds.
+@MainActor @Test func jellyfishBoxHoldsWhatIsDrawn() throws {
+    let device = try #require(MTLCreateSystemDefaultDevice()), queue = try #require(device.makeCommandQueue())
+    let (w, h) = (1512, 982) // a pixel a point: enough to see a cut, and a quarter of the bytes to compare
+    let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: w, height: h, mipmapped: false)
+    descriptor.usage = [.renderTarget, .shaderRead]
+    descriptor.storageMode = .shared
+    let texture = try #require(device.makeTexture(descriptor: descriptor)), pass = MTLRenderPassDescriptor()
+    pass.colorAttachments[0].texture = texture
+    pass.colorAttachments[0].loadAction = .clear
+    pass.colorAttachments[0].storeAction = .store
+    defer { ["jellyfish.seed", "jellyfish.look"].forEach(UserDefaults.standard.removeObject); Jellyfish.slack = 0 }
+    for look in [4, 6] { // the lit tank's moon jellies, and the crystal jellies
+        UserDefaults.standard.set(22, forKey: "jellyfish.seed")
+        UserDefaults.standard.set(look, forKey: "jellyfish.look")
+        func picture(slack: Double) throws -> [UInt8] {
+            Jellyfish.slack = slack
+            let renderer = SKRenderer(device: device)
+            renderer.scene = Jellyfish(size: CGSize(width: w, height: h))
+            renderer.update(atTime: 1000)
+            let buffer = try #require(queue.makeCommandBuffer())
+            renderer.render(withViewport: CGRect(x: 0, y: 0, width: w, height: h), commandBuffer: buffer, renderPassDescriptor: pass)
+            buffer.commit()
+            buffer.waitUntilCompleted()
+            var pixels = [UInt8](repeating: 0, count: w * h * 4)
+            texture.getBytes(&pixels, bytesPerRow: w * 4, from: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0)
+            return pixels
+        }
+        let tight = try picture(slack: 0), roomy = try picture(slack: 0.5)
+        let differing = zip(tight, roomy).count { abs(Int($0) - Int($1)) > 6 }
+        print("jellyfish look \(look): \(differing) of the picture's bytes differ with a roomier box")
+        #expect(differing < 50)
+    }
 }
