@@ -884,8 +884,8 @@ class WeatherScene: SKScene, BatteryPaced {
         float v = 1.0 - uv.y;
         // A low Sun lights the side of a cloud toward it (a_sun.xy, on its picture), and the faces of its puffs that
         // turn toward it: the slope of the thickness times the alpha (blurred, and sharp at the edge) is a rough
-        // outward normal, measured over 0.8% of the width (the GPU's own slopes came out as orange peel, from the
-        // texture's 8-bit steps and the billowing). In the picture's own units, so it mirrors with a mirrored cloud.
+        // outward normal, measured over 2% of the width (the GPU's own slopes came out as orange peel, and 0.8% on the
+        // unblurred alpha came out mottled). In the picture's own units, so it mirrors with a mirrored cloud.
         float e = 0.02;
         vec4 cx = texture2D(u_texture, uv + vec2(e, 0.0)), cy = texture2D(u_texture, uv + vec2(0.0, e / a_cloud.z));
         vec2 nrm = -vec2(cx.g / max(cx.a, 0.05) - packed.g, cy.g / max(cy.a, 0.05) - packed.g) / e;
