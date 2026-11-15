@@ -82,7 +82,7 @@ The whole Earth seen from high above the viewer's own location, like a geostatio
   ```python
   from PIL import Image; import numpy as np
   Image.MAX_IMAGE_PIXELS = None
-  a = np.asarray(Image.open('world.topo.200409.3x21600x10800.jpg')  # and so for each month.convert('RGB')).astype(np.float32) / 255
+  a = np.asarray(Image.open('world.topo.200409.3x21600x10800.jpg').convert('RGB')).astype(np.float32) / 255  # and so for each month
   sea = (a[..., 2] - a[..., 0] > 0.01) & (a.mean(-1) < 0.15)
   a = np.where(sea[..., None], np.maximum(a, [0.027, 0.08, 0.2]), a)
   Image.fromarray((a * 255 + 0.5).astype(np.uint8)).resize((4096, 2048), Image.LANCZOS).save('earth-day.png')
