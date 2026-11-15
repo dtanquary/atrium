@@ -196,12 +196,13 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
                 light += (hue * green + u_crown * u_red * red) * path + hue * glow * column;
             }
         }
-        // airglow, grey-teal and brighter toward the horizon, then stars: a faint tail and a few bright ones,
-        // clumped as real star fields are, each from orange to blue-white; all through the tone curve of a photo
+        // airglow, grey-teal and brighter toward the horizon, then a faint tail of stars too dim for the catalogue
+        // (the real ones are sprites, `AuroraStars`), clumped as real star fields are, each from orange to blue-white;
+        // all through the tone curve of a photo
         vec3 sky = mix(vec3(0.016, 0.022, 0.025), vec3(0.0052, 0.007, 0.0116), 1.0 - exp(-el * 5.0));
         vec2 pts = uv * u_size;
         float clump = 0.35 + 1.3 * noise(p * 3.5 + 17.0);
-        float star = starField(pts, 11.0, 0.3 * clump, t) * 0.2 + starField(pts + 5.0, 6.0, 0.35 * clump, t) * 0.05;
+        float star = starField(pts + 5.0, 6.0, 0.5 * clump, t) * 0.09;
         vec3 tint = mix(vec3(1.0, 0.75, 0.5), vec3(0.8, 0.88, 1.0), hash42(floor(pts / 11.0) + 3.0).x); // hash21 repeats every 550 pt
         vec3 col = 1.0 - exp(-(sky + (star * tint + light * 0.7) * ext));
         col = pow(col, vec3(1.0 / 2.2));
@@ -221,6 +222,9 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
         glow.vectorFloat3Value = [0.016, 0.022, 0.025] + tint * 0.004 * pool.reduce(0, +) / 8
     }
     light()
+    let stars = AuroraStars(size: size, at: ProcessInfo.processInfo.environment["AURORA_TIME"].flatMap(Double.init).map(Date.init(timeIntervalSince1970:)))
+    stars.alpha = CGFloat(min(setting("aurora.brightness"), 1)) // as the Look's brightness dims the sky
+    scene.addChild(stars)
     scene.addChild(auroraGround(size: size, grade: (scene as! ShaderScene).knobs.map(\.uniform) + [
         poolA, poolB, glow, onLand, SKUniform(name: "u_star", vectorFloat3: unit([0.55, 0.72, 1.0]) * 0.02),
     ]))
@@ -254,6 +258,7 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
         speed = setting("aurora.speed")
         rearranging = setting("aurora.rearrange") > 0.5
         sky.substorms.activity = Int(setting("aurora.activity"))
+        stars.alpha = CGFloat(min(setting("aurora.brightness"), 1))
         since = 0
         light()
         if k >= 1, waited >= setting("aurora.fadeMinutes").rounded() * 60 {
@@ -405,6 +410,69 @@ struct Substorms {
             recovery = .random(in: 300...600, using: &rng)
         }
         level = rest + a.strength * (simd_smoothstep(0, 120, sinceOnset) - simd_smoothstep(120, 120 + recovery, sinceOnset))
+    }
+}
+
+/// The real stars to V 5.5 (Night Sky's catalogue) over Teton Point, 43.7° N 110.6° W, where the photo was taken, as
+/// they stand now, seen through the sky's camera facing north: brighter ones larger, tinted by their colour, and
+/// dimmed and reddened through more air low down as the sky shader dims its light. They're sprites over the sky and
+/// under the ground, so they stay sharp while the sky draws at half resolution, and they're moved every 4 s (the sky
+/// turns 0.017° in that time, half a device pixel). Polaris, 43.7° up, sits just above the top of the screen, and the
+/// Big Dipper and Cassiopeia wheel round it through the view.
+@MainActor final class AuroraStars: SKNode {
+    private let size: CGSize, pinned: Date?
+    private(set) var sprites: [SKSpriteNode] = []
+
+    /// The sky now, or held at `pinned` (`AURORA_TIME`, seconds since 1970, for snapshots).
+    init(size: CGSize, at pinned: Date? = nil) {
+        (self.size, self.pinned) = (size, pinned)
+        super.init()
+        zPosition = 0.5
+        place()
+        run(.repeatForever(.sequence([.wait(forDuration: 4), .run { [weak self] in self?.place() }])))
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    private static let dot = paint(CGSize(width: 8, height: 8)) { ctx in
+        let white = { (a: CGFloat) in CGColor(srgbRed: 1, green: 1, blue: 1, alpha: a) }
+        let g = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB), colors: [white(1), white(1), white(0.3), white(0)] as CFArray,
+                           locations: [0, 0.15, 0.35, 1])!
+        ctx.drawRadialGradient(g, startCenter: CGPoint(x: 4, y: 4), startRadius: 0, endCenter: CGPoint(x: 4, y: 4), endRadius: 4, options: [])
+    }
+
+    private func place() {
+        let toHorizon = Sky.horizonMatrix(jd: Sky.julianDate(pinned ?? Date()), latitude: 43.7, longitude: -110.6)
+        let focal = Double(size.width) / (2 * Double(auroraLens)), eye = Double(size.height) * Double(auroraHorizon)
+        var n = 0
+        for star in NightSky.catalogue {
+            let h = toHorizon * star.direction // east, north, up
+            guard h.y > 0.1, h.z > 0 else { continue }
+            let p = CGPoint(x: Double(size.width) / 2 + focal * h.x / h.y, y: eye + focal * h.z / h.y)
+            guard p.x > -4, p.x < size.width + 4, p.y < size.height + 4 else { continue }
+            if n == sprites.count {
+                let s = SKSpriteNode(texture: Self.dot)
+                s.colorBlendFactor = 1
+                s.blendMode = .add
+                addChild(s)
+                sprites.append(s)
+            }
+            // the air as the sky shader has it (Kasten and Young), relative to the zenith's; then flux against a 2nd
+            // magnitude star, square-rooted for the eye: a solid core, larger for brighter stars
+            let el = asin(h.z), air = 1 / (sin(el) + 0.50572 * pow(el * 180 / .pi + 6.07995, -1.6364))
+            let ext = exp(-0.921 * (air - 1) * SIMD3<Double>(0.10, 0.15, 0.25))
+            let flux = pow(10, -0.4 * (star.magnitude - 2)) * ext.y, d = min(7, 2.2 + 3 * log10(1 + flux * 4))
+            let c = NightSky.starColour(star.bv).usingColorSpace(.sRGB)!
+            let tint = SIMD3(0.5 + 0.5 * c.redComponent, 0.5 + 0.5 * c.greenComponent, 0.5 + 0.5 * c.blueComponent) * ext / ext.y
+            let s = sprites[n]
+            n += 1
+            s.size = CGSize(width: d, height: d)
+            s.position = p
+            s.color = NSColor(red: min(tint.x, 1), green: min(tint.y, 1), blue: min(tint.z, 1), alpha: 1)
+            s.alpha = min(1, 0.35 + 0.6 * flux.squareRoot())
+            s.isHidden = false
+        }
+        for s in sprites[n...] { s.isHidden = true }
     }
 }
 
