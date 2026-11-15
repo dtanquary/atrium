@@ -990,12 +990,12 @@ final class PixelCity: SKScene, BatteryPaced {
         for star in Self.brightStars where starlight > 0 {
             let at = seen(star.direction)
             guard at.elevation > 0 else { continue }
-            let p = place(at, over: skyBase), brightness = Float(min(1, max(0.35, 1.1 - 0.2 * star.magnitude)))
+            let p = place(at, over: skyBase), brightness = Float(min(1, max(0.5, 1.3 - 0.2 * star.magnitude)))
             // The city's glow drowns the stars near the horizon.
             let clear = smoothstep(0.1, 0.6, Float(p.y - skyBase) / Float(h - skyBase)) * 0.8
             let a = starlight * brightness * clear
             px.plot(p.x, p.y, rgb(255, 248, 232), a)
-            if star.magnitude < 0.9 { // a small cross on the brightest: Sirius, Vega, Capella, Rigel, Betelgeuse…
+            if star.magnitude < 1.5 { // a small cross on the brightest 22: Sirius, Vega, Capella, Rigel, Betelgeuse, Aldebaran…
                 for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] { px.plot(p.x + dx, p.y + dy, rgb(200, 210, 255), a * 0.35) }
             }
         }
