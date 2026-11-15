@@ -624,8 +624,7 @@ final class PixelTrain: SKScene {
             let pane = Int(1.6 * ppm), pillar = Int(0.6 * ppm), (sill, head, roof) = (Int(1.6 * ppm), Int(2.4 * ppm), Int(3.8 * ppm))
             for i in max(left, 0)..<min(left + 2 * coach + gap, gw) {
                 let along = (i - left) % (coach + gap)
-                guard along < coach else { continue }
-                for up in max(0, -foot)..<min(roof, glass.h - foot) {
+                for up in max(0, -foot)..<min(along < coach ? roof : roof - gap, glass.h - foot) { // (between the coaches, the gangway)
                     let window = up >= sill && up < head && along > pillar && along < coach - pillar && (along - pillar) % (pane + pillar) < pane
                     out[(foot + up) * gw + i] = window ? blend(traffic[traffic.count - 1], lamp, UInt32(255 * night)) : traffic[traffic.count - 1]
                 }
