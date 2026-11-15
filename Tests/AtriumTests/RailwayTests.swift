@@ -264,3 +264,20 @@ private func save(_ railway: Railway, night: Float, _ name: String, scale: Int =
     }
     #expect(square <= 2, "\(square) of 10 towns on a straight up or across the screen")
 }
+
+/// Small things: the lamp pools' and headlights' steps are dithered only near their edges (a step's middle stays
+/// solid), and the pond's glints move on from one 0.4 s tick to the next.
+@Test func railwaySmallThingsMove() {
+    let levels: [Float] = [0, 0.14, 0.32, 0.55]
+    let at = { (t: Float) in Set((0..<16).map { dithered(t, $0 % 4, $0 / 4, levels) }) }
+    #expect(at(1.0) == [0.14] && at(1.2) == [0.14] && at(1.5) == [0.14, 0.32] && at(3.4) == [0.55])
+    let railway = Railway(seed: 4, width: 504, height: 328, era: .transition, count: 3, season: .summer)
+    let glints = railway.statics.glints
+    #expect(glints.count > 20)
+    var a = [UInt32](repeating: 0, count: railway.w * railway.h), b = a
+    a.withUnsafeMutableBufferPointer { railway.draw(night: 0, into: $0) }
+    railway.advance(0.25); railway.advance(0.25) // into the next tick (it steps at most 0.25 s at a time)
+    b.withUnsafeMutableBufferPointer { railway.draw(night: 0, into: $0) }
+    let row = { (i: Int) in (railway.h - 1 - i / railway.w) * railway.w + i % railway.w } // rows from the bottom
+    #expect(glints.filter { a[row($0)] != b[row($0)] }.count > glints.count / 5)
+}

@@ -26,7 +26,9 @@ public final class Railway {
     private var shadedIn: [UInt32], frameCount: UInt32 = 0
     /// Steam engines' exhaust: each puff where it left the stack and when, and how far each train has run since
     /// its last.
-    private var puffs: [(p: SIMD3<Double>, t: Double)] = [], chuffed: [Int: Double] = [:]
+    private var puffs: [(p: SIMD3<Double>, t: Double, size: Double)] = [], chuffed: [Int: Double] = [:]
+    /// The chimneys a thin wisp rises from in winter: one or two.
+    private let wisps: [SIMD3<Double>]
     /// Each steam engine's stack: how far ahead of its middle, and how high.
     private var stacks: [String: (u: Double, z: Double)] = [:]
     private static let puffLife = 1.8, chuff = 5.0 // s; px run between puffs
@@ -83,6 +85,8 @@ public final class Railway {
         let steel = RailArt.colour(season.snow ? 0x4A4642 : 0xA8A8A8)
         rail = (steel, RailLight(night: true, winter: season.snow, era: era).ground(steel))
         switchRails = Self.switchRails(layout, view)
+        let (all, seed) = (scenery.chimneys, layout.seed), chimneys = all.indices.sorted { hsh($0, seed, 41) < hsh($1, seed, 41) }.map { all[$0] }
+        wisps = season.snow || season.kind == .winter ? Array(chimneys.prefix(1 + seed & 1)) : []
     }
 
     /// Each turnout's switch rails both ways, a rail either side of the centreline along the first `switchLength` of
@@ -178,6 +182,7 @@ public final class Railway {
     /// stands, is hidden, or is in a tunnel.
     private func exhaust() {
         puffs.removeAll { sim.t - $0.t > Self.puffLife }
+        if Int(sim.t / 0.45) != Int((sim.t - Sim.dt) / 0.45) { for c in wisps { puffs.append((c, sim.t, 0.4)) } } // a chimney's wisp
         for tr in sim.trains {
             let vs = tr.consist.vehicles
             guard vs.count > 1, vs[1].name.lowercased().contains("tender") else { continue } // a steam engine leads
@@ -195,7 +200,7 @@ public final class Railway {
             let t = along / length(along), c = (f.p + r.p) / 2
             let q = SIMD2(c.x, c.y) + t * stack.u, z = c.z + (f.p.z - r.p.z) / b * stack.u + stack.z
             if scenery.hills.contains(where: { Scenery.hillHeight($0, q) >= z }) { continue }
-            puffs.append(([q.x, q.y, z], sim.t))
+            puffs.append(([q.x, q.y, z], sim.t, 1))
         }
     }
 
@@ -223,6 +228,13 @@ public final class Railway {
         }
         frame.withUnsafeMutableBufferPointer { f in under.withUnsafeBufferPointer { f.baseAddress!.update(from: $0.baseAddress!, count: $0.count) } }
         depth.withUnsafeMutableBufferPointer { d in statics.depth.withUnsafeBufferPointer { d.baseAddress!.update(from: $0.baseAddress!, count: $0.count) } }
+        if night < 0.6 { // the pond: a few of its glints catch the light at a time, a new few every 0.4 s
+            let tick = Int(sim.t / 0.4), glint = pack(SIMD3<Float>(110, 154, 180) * (1 - night * 0.6) * warm)
+            for i in statics.glints { // by the ground's unit cell, so a glint is a short dash as the old fixed ones were
+                let g = view.ground(i % w, i / w)
+                if hsh(Int(floor(g.x)), Int(floor(g.y)), tick) < 0.5 { frame[i] = glint }
+            }
+        }
         let poses = sim.poses()
         let steel = pack(rail.day + (rail.night - rail.day) * night)
         for (turnout, ways) in switchRails { // the points as they're set
@@ -246,6 +258,7 @@ public final class Railway {
             frame[i] = pack(unpack(frame[i]) * 0.58 + (SIMD3<Float>(58, 58, 58) + SIMD3<Float>(-38, -36, -28) * night) * 0.42)
             depth[i] = d
         }
+        platformPeople(night)
         crossingParts(night)
         signalParts(night)
         smoke(night, warm)
@@ -315,10 +328,27 @@ public final class Railway {
             let i = y * w + x
             guard statics.depth[i] <= Float(view.pixelDepth(x, y, 0)) + 0.06 else { continue } // on the ground only
             let r = view.ground(x, y) - front, along = dot(r, t), across = abs(dot(r, n))
-            guard along > 0, along < 22, across < 2 + along * 0.22 else { continue }
-            let k: Float = along < 8 ? 0.5 : along < 15 ? 0.3 : 0.15
-            frame[i] = pack(unpack(frame[i]) + head * k)
+            guard along > 0 else { continue }
+            // three steps down its length and soft at its sides, dithered as the lamp pools are
+            let k = dithered(min(Float(22 - along) / 7 + 0.15, Float(2 + along * 0.22 - across) * 2 + 0.5), x, y, [0, 0.15, 0.3, 0.5])
+            if k > 0 { frame[i] = pack(unpack(frame[i]) + head * k) }
         }
+        }
+    }
+
+    /// Two or three people on the platform while a passenger train stands at it, getting on one by one before it goes.
+    private func platformPeople(_ night: Float) {
+        guard let st = scenery.station, !st.noStop else { return }
+        let d = st.piece.d, n = SIMD2(-d.y, d.x) * st.side
+        for tr in sim.trains where tr.loop == st.loop && tr.dwell > 0 {
+            for j in 0..<(2 + tr.id & 1) where tr.dwell > 4 + Double(j) * 3 {
+                // toward the platform's ends, past most canopies, and on its back half, where a train in front hides less
+                let along = (j % 2 == 0 ? 1.0 : -1.0) * (0.34 + 0.12 * hsh(tr.id, j, 7))
+                let at = st.mid + d * st.L * along + n * (6.6 + 1.2 * hsh(tr.id, j, 8))
+                let coat = [SIMD3<Float>(40, 52, 96), [150, 40, 36], [96, 70, 48], [60, 80, 60]][Int(hsh(tr.id, j, 9) * 4)]
+                point([at.x, at.y, 1.5], coat * (1 - 0.65 * night), eps: 0.3)
+                point([at.x, at.y, 2.5], SIMD3<Float>(224, 184, 150) * (1 - 0.65 * night), eps: 0.3)
+            }
         }
     }
 
@@ -326,9 +356,9 @@ public final class Railway {
     /// grey, its lower right in shadow, and dim at night. They thin what's behind them and hide behind what's in front.
     private func smoke(_ night: Float, _ warm: SIMD3<Float>) {
         let lit = (SIMD3<Float>(228, 228, 224) + (SIMD3<Float>(78, 80, 92) - SIMD3<Float>(228, 228, 224)) * night) * warm
-        for puff in puffs {
+        for puff in puffs { // a chimney's wisp is a smaller, fainter puff
             let age = sim.t - puff.t, f = age / Self.puffLife
-            let r = 1 + 2.6 * f.squareRoot(), a = Float(0.9 * (1 - f * f)), z = puff.p.z + 8 * (1 - exp(-1.6 * age))
+            let r = (1 + 2.6 * f.squareRoot()) * puff.size, a = Float(0.9 * (1 - f * f) * (puff.size < 1 ? 0.55 : 1)), z = puff.p.z + 8 * (1 - exp(-1.6 * age))
             let c = view.project([puff.p.x, puff.p.y, z])
             for y in clamped(Int(floor(c.y - r)), Int(ceil(c.y + r)) + 1, h) { for x in clamped(Int(floor(c.x - r)), Int(ceil(c.x + r)) + 1, w) {
                 let dx = Double(x) + 0.5 - c.x, dy = Double(y) + 0.5 - c.y, i = y * w + x

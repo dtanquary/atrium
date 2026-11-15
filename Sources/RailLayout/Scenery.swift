@@ -155,6 +155,8 @@ final class Scenery {
     var switches: [(turnout: Turnout, pos: SIMD2<Double>)] = []
     /// The farmland under it all, and each broadleaf tree's foot and seed, for the leaves it drops in autumn.
     var fields: Fields?, broadleaves: [(p: SIMD2<Double>, seed: Int)] = []
+    /// The top of each house's chimney.
+    var chimneys: [SIMD3<Double>] = []
 
     /// With `transfers`, every loop the branch can't reach gets a tunnel with a hidden yard; `pool` is every train
     /// that may arrive.
@@ -362,6 +364,9 @@ final class Scenery {
                     let facing = atan2(house.dv.y, house.dv.x) + (dot(house.toward, SIMD2(-house.dv.y, house.dv.x)) > 0 ? 0 : .pi)
                     let g = Models.house(house.w, house.d, wall: rng.pick(walls), roof: rng.pick(roofs), seed: k + lay.seed)
                     things.append(Thing(grid: g, pos: house.c, heading: facing, kind: .house, lit: hsh(k, lay.seed) < 0.75))
+                    // the top of its chimney, as `Models.house` stands it: one cell in from an end, on the ridge
+                    let cu = Double(hsh(k + lay.seed, 99) < 0.5 ? 1 : house.w - 2) + 0.5 - Double(house.w) / 2
+                    chimneys.append(SIMD3(house.c.x + cu * cos(facing), house.c.y + cu * sin(facing), Double(3 + (house.d - 1) / 2 + 2)))
                 }
                 // street lamps along the side streets
                 for rd in roads.dropFirst() {
