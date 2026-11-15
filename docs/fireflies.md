@@ -7,7 +7,7 @@ A broad meadow at blue hour: a real photo of a field running to a leafy treeline
   - `Resources/fireflies-meadow.heic` and `Resources/fireflies-meadow-aux.png`, credited in `Resources/fireflies-credits.tsv`
   - The helpers shared by the nature scenes are below `// MARK: - Shared by the nature scenes`: `frameTime`, `rgb`, `mixRGB`, `verticalGradient`, `backdrop`, `radialGlow`, `softDot`, `treeline`, `pine`, `broadleaf` and `grassFringe`. Murmuration, Night Sky, Pixel City and the Fish Tank use some of them, so keep their signatures.
 - **Entry:** `@MainActor func fireflies(size:)`, which returns `final class Fireflies: SKScene`. Registry entry: icon `sparkle`, tint `.yellow`, `knobs: Fireflies.knobs`.
-- **Kind:** SpriteKit. A sky shader, the photo drawn in five slices by distance with a relighting and fog shader, and a pool of firefly sprites sharing one shader.
+- **Kind:** SpriteKit. A sky shader, the photo drawn behind every firefly with a relighting and fog shader, and a pool of firefly sprites sharing one shader.
 
 ## Reference
 Dave picked three images for the mood (2026-09-25):
@@ -29,11 +29,11 @@ A research agent measured all three and read up on real fireflies. Its notes are
    - The lens (16 mm on a GF1) gives a focal length of 1.424 screen heights.
    - A ground plane fitted over the open field (`v = 0.3585 − 0.3387/D`, R² 0.987) gives the horizon, and with the eye 1.5 m up, 6.3 m per unit of the depth map's distance.
    - `project(x, y, d)` puts a point `d` metres away and `y` metres up at `horizon + focal·(y − eye)/d`. The bottom edge is about 6 m away, and the treeline's foot about 50 m.
-3. **Sky** (`skySource`):
+3. **Sky** (`skySource`), from the lowest point it shows between the trees (`MeadowPhoto.sky`, 0.46 of the height; the photo is opaque below 0.463) to the top:
    - Deep blue overhead, paler toward the treeline, with a faint warm afterglow (a little stronger to the right).
    - A few stars, which fade out with the fog.
    - Fog lightens it low down.
-4. **Ground** (`groundSource`), drawn five times, once per slice of distance (0–5, 5–9, 9–16, 16–28 and 28+ m, the last behind every firefly). Each slice sits at z `100 − its far edge`, so a firefly is drawn over its own slice and every farther one, and behind only the slices wholly nearer than it. In each slice:
+4. **Ground** (`groundSource`), drawn once, behind every firefly: flies fly over the photo's own ground (`lift`), so no grass is ever in front of one (see Gotchas, Depth slices). In it:
    - The albedo is lit by a dim blue skylight, `(0.03, 0.036, 0.042)`, with a 15% Purkinje shift toward blue-grey.
    - **Fog** is clear close by and thickens with the square of the log distance: `1 − exp(−fog·(0.1 + 2.2·far²)·wisps·low)`.
      - `low` thins it up the trees (down 85% by 70% of their height), so mist pools at their foot while the crowns stay a dark silhouette.
@@ -46,8 +46,7 @@ A research agent measured all three and read up on real fireflies. Its notes are
    - **Light from the fireflies:** up to eight glowing flies within 14 m light the grass round them (`u_lamps0`, `u_lamps1`, two 4×4 matrices, a fly to a column).
      - Each lights a pool half a metre round and a third as tall on screen (blades stand up), centred on the fly if it's in the grass and on the grass tops (0.3 m) under it if it's above them. It's the orb's cream times the photo's albedo, 0.15 at its middle at the height of a glow (about a skylight and a half on the grass; +15 to +25 of 255 on the near field), easing out to nothing at its edge (`(1 − r²)³`), and it falls with the fly's height (`1/(1 + 4y²)`).
      - A fly takes a light only as its glow starts (alpha under 0.1) and keeps it to the end, so none pops in or out (`grassLightNeverPops` checks it at 15 fps). Only flies under 0.7 m whose pool lands on screen take one; the ones nearer than about 6 m fly below the bottom edge. At standard density most of the low near glows get one; at 2× some don't.
-     - Only the four slices nearer than 28 m run it (a branch on `u_slice`), so a pool reaching past 16 m isn't cut off.
-   - Each pixel belongs to exactly one slice, so the other four skip all the work (an `if` on the slice); that halved the ground's cost.
+     - Only the grass nearer than 28 m runs it (`far < 0.43`), well past where a pool reaches.
 5. **Fireflies** (`Fly`, `spawn`, `rest`, `dress`, `flySource`).
    - There's a pool of 800 sprites. `fireflies.density` × 400 of them are active.
    - **Where they are:**
@@ -87,12 +86,12 @@ Time is accumulated from `frameTime` in `update(_:)`, so it pauses with the view
 CPU 0.54 ms and GPU 0.52 ms per frame (release build, 2x, 2026-09-26).
 - **CPU:** a loop over 800 flies that only touches the ones glowing, about 150. A few a frame get new attributes as they finish a glow.
 - **GPU:**
-  - the five ground slices, each covering the photo's rect; a pixel outside a slice costs one texture read, and inside, five noise calls and two reads
-  - the sky
+  - the ground, once over the photo's rect: five noise calls and two texture reads a pixel
+  - the sky, from 0.46 of the height up
   - the orbs
-  - the light on the grass: eight pools over the slices nearer than 28 m, about 0.05 ms (debug build, the fastest of eight runs at seed 2 while other builds ran, 2026-11-15: 0.46 → 0.51 ms; CPU no change within the noise)
+  - the light on the grass: eight pools over the grass nearer than 28 m, about 0.05 ms (debug build, the fastest of eight runs at seed 2 while other builds ran, 2026-11-15: 0.46 → 0.51 ms; CPU no change within the noise)
 
-  ponytail: crop each slice's sprite to the rows its distances occupy if the GPU cost matters.
+  Drawing the ground once instead of in five slices (each over the whole photo, four of them only to skip a pixel, and the nearest, 0–5 m, empty: the photo's bottom edge is about 6 m away), and starting the sky at the treeline's lowest point instead of the screen's bottom, took the GPU from 0.52 to 0.38 ms (0.55 to 0.40 at twice the fireflies; debug build, the fastest of six runs each, back to back, under load, 2026-11-15).
 - **Memory:** the photo is 4096×1461 RGBA, about 24 MB decoded, shared by every copy of the scene and let go with the last one showing it (`sharedTexture`).
 
 **On battery it runs at 20 fps at most** (`batteryRate` in Scenes.swift; 2026-10-13). The nearest flies, 3 m away, drift 0.05 m/s, about 50 device pixels (2x on a 14-inch MacBook Pro, 3024 × 1964) a second (14 for a typical fly 10 m off): 2.5 px a frame at 20 fps, and they are large soft orbs, which hide a step. The glow lasts 3 s and the stars twinkle at 0.64 Hz at most. At Speed 2× the nearest step 5 px.
@@ -100,8 +99,8 @@ CPU 0.54 ms and GPU 0.52 ms per frame (release build, 2x, 2026-09-26).
 ## Gotchas and shortcuts
 - **Fading:** orbs fade with node alpha, which a SpriteKit custom shader gets as `v_color_mix.a`.
 - **Metal naming:** `half` is a reserved word in Metal, so don't name a shader variable that.
-- **Depth slices:** a firefly is in front of or behind a whole slice, so it's drawn over grass up to a slice nearer than it (it's above that grass on screen, so it doesn't show), and only a slice wholly nearer hides it. With each slice at its middle distance, a low fly in the far half of its own slice was cut along that slice's far edge, a ruler-straight line through the orb.
-- **Flat ground plane:** the plane underestimates the far end of the field, which rises to the right. Flies there were placed inside the rising ground, behind the 16–28 m slice, and cut in half along its edge; `lift` puts them back on the photo's ground. Rendering seeds 1–6 with every slice behind every fly and comparing, the grass hid 1,150–6,500 pixels of fireflies a frame before, all of it cuts, and none after.
+- **Depth slices:** the ground was drawn in five slices by distance, each at z `100 − its middle distance`, so fireflies would pass behind nearer grass. A slice can only hide a whole band at once, so all it ever did was cut orbs along its edge, a ruler-straight line: a low fly in the far half of its own slice was cut along that slice's far edge. Each slice was moved to its far edge first, then (with `lift`, below) found to hide nothing, and drawn as one layer behind every fly.
+- **Flat ground plane:** the plane underestimates the far end of the field, which rises to the right. Flies there were placed inside the rising ground, behind the 16–28 m slice, and cut in half along its edge; `lift` puts them back on the photo's ground. Rendering seeds 1–6 with every slice behind every fly and comparing, the grass hid 1,150–6,500 pixels of fireflies a frame before, all of it cuts, and none after; at Fog 1 a bloomed glow (below) still met a slice's edge, until the slices went.
 - **Wheat, not grass:** the photo's field is young wheat. At blue hour it reads as a meadow.
 
 ## Dave's feedback and decisions
@@ -129,11 +128,11 @@ CPU 0.54 ms and GPU 0.52 ms per frame (release build, 2x, 2026-09-26).
   - **The out-of-focus firefly is a firefly** (it was a grey-teal stain with a ragged edge and blocky grain, left over from the painted look: "a smudge on the lens"). Now a faint cream disc, brighter at its rim. Only the halo alone changed; every orb, and the halo round an orb, is the same to the byte. The review asked whether the grey one was part of the orbs Dave likes: `2-side-by-side.jpg` in the session's shots shows both, for him to choose.
   - **No more orbs cut in half** by a straight edge: each slice now sits at its far edge, and flies are lifted over the photo's own ground where it rises above the plane. The review offered either softening the slices' edges or the lift; the lift alone left the cut along a fly's own slice, so it took both. With them the grass hides no firefly at all (see Gotchas).
   - **Lights in the mist bloom:** inside the fog band the far ones were crisp 2–4 px discs while the trees behind them were blurred by the same fog. Now their glow spreads in it. The review asked to check with Dave since it's the orb shader: the orbs themselves, and every glow outside the mist, are as they were (Fog 0 renders the same to the byte).
+  - **The sky and the ground draw only what shows,** a saving: the sky starts at the treeline's lowest point, not the screen's bottom, and the ground is one layer, not five slices that each covered the whole photo. The review suggested cropping each slice to its rows; once the slices hid no fly they had nothing left to do. GPU 0.52 → 0.38 ms. The picture is the same: the sky's dither moved by up to 2 of 255, the ground is the same to the byte at the standard settings, and at Fog 1 a straight cut through one bloomed glow went.
 
 ## Ideas / next steps
 - **Synchronous flashing,** like *Photinus carolinus*: bursts of 4–8 flashes 0.5 s apart, 6–9 s dark, relayed across the field at about 0.5 m/s.
 - **Follow the real evening:** fireflies come out at sunset, peak about 30 minutes later and thin out by 90–120 minutes.
-- Crop the ground slices to their rows.
 
 ## Checking it
 `SNAPSHOT_SCENE="Fireflies" SNAPSHOT_SECONDS=8 SNAPSHOT_DIR=/tmp/ff swift test`. Motion runs through `update(_:)`, so `SNAPSHOT_SECONDS` advances flights and flashes. The fog wisps and the grass's sway run on `u_now`, which moves with it too. The rustle's time wraps hourly: each patch keeps its own rhythm, so the jump can't be seen. `SNAPSHOT_DEFAULTS="fireflies.fog=1"` shows thick fog, and `fireflies.seed=2` the same field every time, for before and after pictures.
