@@ -7,7 +7,7 @@ import SpriteKit
 let auroraPalettes: [(name: String, colours: [SIMD3<Float>])] = [
     ("Green", [[0.58, 1.0, 0.5], [0.58, 1.0, 0.5], [0.45, 1.0, 0.6], [0.6, 0.25, 1.0]]),   // the classic
     ("Storm", [[1.0, 0.4, 0.75], [0.58, 1.0, 0.5], [0.8, 0.9, 0.45], [1.0, 0.25, 0.25]]),  // pink edge, green, red crown
-    ("Red", [[0.58, 1.0, 0.5], [1.0, 0.35, 0.3], [1.0, 0.15, 0.2], [0.75, 0.1, 0.3]]),       // as seen from mid-latitudes
+    ("Red", [[1.0, 0.45, 0.4], [1.0, 0.35, 0.3], [1.0, 0.15, 0.2], [0.75, 0.1, 0.3]]),       // as seen from mid-latitudes
     ("Pink", [[1.0, 0.25, 0.6], [1.0, 0.45, 0.75], [0.75, 0.4, 1.0], [0.5, 0.25, 1.0]]),
     ("Purple", [[0.9, 0.3, 0.8], [0.6, 0.35, 1.0], [0.45, 0.3, 1.0], [0.8, 0.2, 0.5]]),
     ("Blue", [[0.25, 0.9, 0.7], [0.3, 0.6, 1.0], [0.35, 0.4, 1.0], [0.55, 0.3, 1.0]]),      // sunlit nitrogen
@@ -117,7 +117,10 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
     func show(_ light: AuroraColours) {
         for (uniform, colour) in zip(colours, light.colours) { uniform.vectorFloat3Value = colour }
         crown.floatValue = light.crown
-        tint = unit(0.7 * light.colours[1] + 0.3 * light.colours[2])
+        // a red display's light on the snow is held to about 60%: as bright as a green one's, it put 3.7 times its
+        // red there and the snow went maroon from edge to edge. Pink loses a little, the rest nothing
+        let body = 0.7 * light.colours[1] + 0.3 * light.colours[2]
+        tint = unit(body) * (1 - 0.4 * min(max(body.x - max(body.y, body.z), 0), 1))
         onLand.vectorFloat3Value = tint * 0.016
     }
     var shown = pick.name
