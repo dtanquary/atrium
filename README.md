@@ -12,7 +12,7 @@ Screenshots show the wallpaper alone, with no desktop icons, menu bar or Dock. T
 
 - **Nature and weather:** [Fish Tank](#fish-tank) · [Weather](#weather) · [Dappled Light](#dappled-light) · [Rain on Glass](#rain-on-glass) · [Wind](#wind) · [Murmuration](#murmuration) · [Aurora](#aurora) · [Fireflies](#fireflies) · [Meander](#meander) · [Ant Colony](#ant-colony) · [Jellyfish](#jellyfish) · [Kelp Forest](#kelp-forest)
 - **Space:** [Space Tour](#space-tour) · [Nebula](#nebula) · [Galaxy](#galaxy) · [Black Hole](#black-hole) · [Night Sky](#night-sky) · [Earth from Orbit](#earth-from-orbit) · [Pixel Spaceport](#pixel-spaceport)
-- **Color, light and pattern:** [Flowing Gradient](#flowing-gradient) · [Lava Lamp](#lava-lamp) · [Schlieren](#schlieren) · [Turing Patterns](#turing-patterns) · [Game of Life](#game-of-life) · [Pixel City](#pixel-city) · [Pixel Railway](#pixel-railway) · [Pixel Window Seat](#pixel-window-seat) · [Etching](#etching) · [Peg Board](#peg-board)
+- **Color, light and pattern:** [Flowing Gradient](#flowing-gradient) · [Lava Lamp](#lava-lamp) · [Schlieren](#schlieren) · [Turing Patterns](#turing-patterns) · [Game of Life](#game-of-life) · [Pixel City](#pixel-city) · [Pixel Railway](#pixel-railway) · [Pixel Window Seat](#pixel-window-seat) · [Etching](#etching)
 
 ### Nature and weather
 
@@ -352,17 +352,6 @@ Old prints, plates, maps, blueprints, patent drawings, dinosaur skeletons and pa
 | The Crystal Palace's great fanlight, on a blueprint in its dark tone | Tycho Brahe's observatory, on paper in its dark tone |
 | ![Etching: the skull of a T. rex, from Henry Fairfield Osborn's drawing of 1912, a dark line on cream paper](docs/images/etching-trex.jpg) | ![Etching: a four-engined bomber seen from above, from Boeing's design patent of 1935, a blue line on a blueprint's white](docs/images/etching-bomber.jpg) |
 | A T. rex skull, from Henry Fairfield Osborn's drawing of 1912, in the finer line | Boeing's 1935 design patent for the bomber that became the B-17, on a blueprint in its light tone |
-
-#### Peg Board
-A black sheet of holes from edge to edge, with colored translucent pegs pushed through it one at a time and lit from behind. Each peg takes a second to light, and its glow spreads onto the paper around it. It builds one thing after another. Some are patterns, made fresh each time, of eight kinds that take turns: a snow crystal grown by a model of how real ones freeze, a reef of branching growths, a lacy hexagonal plate, tumbling blocks, the triangles inside Pascal's triangle, a hexaflake, a pinwheel and a rose. The others are eleven pictures drawn for the app, among them a sailboat, a butterfly, an owl, a rocket and a lighthouse, which go up outline first and are then filled in. A finished one stays for 30 seconds under a slow light show, a soft shadow that goes round, spreads out in rings or drifts across the pegs, with nothing flashing; then the sheet fades to dark and the next begins. In Settings you can show patterns only or pictures only, set the speed from half to 20 times the standard six pegs a second, hold a finished one for 10 seconds to 5 minutes, pick large, medium or small pegs (medium unless changed), soften the pegs from molded plastic with a bright rim down to plain glowing discs, and choose between two sets of peg colors, Calm and Vivid, or Random, which takes one of the two for each new sheet.
-
-| <img src="docs/images/peg-board.webp" alt="Peg Board, a pinwheel of blue, violet and pink pegs growing outward arm by arm, moving" width="1600"> | ![Peg Board, a reef of green and yellow branching growths rising from the bottom of the sheet](docs/images/peg-board-reef.jpg) |
-|---|---|
-| A pinwheel going in at 20× speed, the top of the Speed slider; at the standard speed it takes about four minutes | A reef, grown from the bottom of the sheet |
-| ![Peg Board, a rose of long violet petals around a ring of shorter pink ones and a clear middle](docs/images/peg-board-rose.jpg) | ![Peg Board, triangles nested inside triangles in violet, pink and orange](docs/images/peg-board-triangles.jpg) |
-| A rose, which goes in petal by petal | The triangles inside Pascal's triangle |
-| ![Peg Board, a butterfly half built: every outline up, the lower wings filled in pink](docs/images/peg-board-butterfly.jpg) | ![Peg Board, a sailboat at Large pegs](docs/images/peg-board-sailboat.jpg) |
-| A butterfly half built: the outlines go up first, then the filling | A sailboat with Large pegs |
 
 ## Settings
 

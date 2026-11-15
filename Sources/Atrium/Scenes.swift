@@ -122,8 +122,6 @@ struct Refresh {
               batteryRate: 12, batteryScale: 0.75),
     Wallpaper(name: "Etching", icon: "scribble.variable", tint: .gray, blurb: "Old etchings, engravings and woodcuts, drawn in one unbroken line.",
               make: etching, knobs: Etching.knobs, followsAppearance: true),
-    Wallpaper(name: "Peg Board", icon: "circle.grid.3x3.fill", tint: .purple, blurb: "Glowing colored pegs on a black sheet, placed one at a time.",
-              make: pegBoard, knobs: PegBoard.knobs, palettes: PegBoard.palette, batteryRate: 12),
     Wallpaper(name: "Ant Colony", icon: "ant.fill", tint: .blue, blurb: "Ants digging a new nest every day, seen through the glass.",
               make: antColony, knobs: AntColony.knobs, batteryRate: 20),
     Wallpaper(name: "Night Sky", icon: "moon.stars.fill", tint: .blue, blurb: "The stars above you right now, day or night.",

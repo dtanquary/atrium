@@ -14,8 +14,6 @@ let package = Package(
         // Etching's routes and the stamping of one into a display's worth of texels: the same again. A quarter
         // of a million steps are stamped as its scene is built, 120 ms optimised for a 14-inch screen.
         .target(name: "LineRoute", swiftSettings: [.unsafeFlags(["-O"])]),
-        // Peg Board's lattice: the snow crystal grown on it and the glow stamped as pegs go in. The same again.
-        .target(name: "PegLattice", swiftSettings: [.unsafeFlags(["-O"])]),
         // Ant Colony's nest and its ants: the same again. A nest is baked as its scene is built, 70 ms optimised for
         // a 14-inch screen, and its ants are stepped sixty times a second.
         .target(name: "AntNest", swiftSettings: [.unsafeFlags(["-O"])]),
@@ -23,7 +21,7 @@ let package = Package(
         // and its scenery marched through as its scene is built, and the trains are drawn into it every frame.
         .target(name: "RailLayout", swiftSettings: [.unsafeFlags(["-O"])]),
         // Resources are copied into the .app by build.sh and found with resource(_:), not Bundle.module.
-        .executableTarget(name: "Atrium", dependencies: ["TreeGrowth", "MeanderRiver", "LineRoute", "PegLattice", "AntNest", "RailLayout"], exclude: ["Resources"]),
+        .executableTarget(name: "Atrium", dependencies: ["TreeGrowth", "MeanderRiver", "LineRoute", "AntNest", "RailLayout"], exclude: ["Resources"]),
         .testTarget(name: "AtriumTests", dependencies: ["Atrium"]),
     ]
 )
