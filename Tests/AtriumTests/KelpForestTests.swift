@@ -29,3 +29,21 @@ import Testing
     }
     #expect(seen > 300 && hidden > 100, "view \(view): \(seen) on the screen, \(hidden) left alone") // or nothing was tested
 }
+
+/// On battery the water draws at half resolution and its marine snow, specks a pixel or two across, moves to a sprite
+/// of its own over it at full resolution, and back as the trim goes off; dusk has no snow to move.
+@MainActor @Test func kelpSnowStaysSharpWhenTrimmed() throws {
+    defer { UserDefaults.standard.removeObject(forKey: "kelp.look") }
+    for (look, snows) in [(4.0, true), (6.0, false)] { // teal, dusk
+        UserDefaults.standard.set(look, forKey: "kelp.look")
+        let scene = KelpForest(size: CGSize(width: 320, height: 200), view: 0)
+        let water = try #require(scene.trim.content.children.first as? SKSpriteNode)
+        let sprite = try #require(scene.children.compactMap { $0 as? SKSpriteNode }.first { $0.shader?.uniformNamed("u_speck") != nil })
+        func waterSnows() -> Bool { water.shader!.uniformNamed("u_look")!.vectorFloat4Value.y > 0 }
+        #expect(sprite.isHidden && waterSnows() == snows)
+        scene.trim.scale = 0.5
+        #expect(sprite.isHidden != snows && !waterSnows(), "look \(look): the snow didn't move to its sprite")
+        scene.trim.scale = 1
+        #expect(sprite.isHidden && waterSnows() == snows, "look \(look): the snow didn't come back to the water")
+    }
+}

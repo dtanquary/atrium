@@ -11,7 +11,7 @@ import SpriteKit
 /// moved it. The water is one shader; near fronds are a sprite a blade, posed every frame from their chain, and far
 /// fronds a card a link with its blades drawn in, all from one texture of cards drawn at load, so they draw as one
 /// batch. Colours are the look research's samples of real photos.
-final class KelpForest: SKScene {
+final class KelpForest: SKScene, Trimmable {
     nonisolated static let looks = [
         "Teal in Light Mode, dusk in Dark Mode", "Teal by day, dusk at night",
         "Golden in Light Mode, dusk in Dark Mode", "Golden by day, dusk at night",
@@ -61,7 +61,7 @@ final class KelpForest: SKScene {
                              kelp: lin(0x6C4202), glow: lin(0xC08A10), sand: lin(0x8A6A30), rays: 1.4, snow: 0.3, caustics: 1,
                              expo: [0.9, 0.45], sunElevation: 60)
     static let dusk = Look(ext: [0.12, 0.06, 0.045], deep: lin(0x001E3E), up: lin(0x01587C), sky: lin(0x046489), sun: lin(0x6090B0),
-                           kelp: lin(0x050A12), glow: lin(0x0C2034), sand: lin(0x0A1A2A), rays: 0.5, snow: 0.12, caustics: 0,
+                           kelp: lin(0x050A12), glow: lin(0x0C2034), sand: lin(0x0A1A2A), rays: 0.5, snow: 0, caustics: 0,
                            expo: [0.2, 0.12], sunElevation: 4)
 
     // MARK: - Views
@@ -92,7 +92,11 @@ final class KelpForest: SKScene {
     private var rng: SplitMix
     private var atlas: Atlas!
     private let water = SKSpriteNode(color: .black, size: .zero)
-    private var appearance: NSKeyValueObservation?
+    /// Holds the water, the softest part, which draws at half the screen's resolution on battery (`Trimmable`), and
+    /// the marine snow for then: specks a pixel or two across, which stay at the screen's own resolution over it.
+    let trim = TrimNode()
+    private let snow = SKSpriteNode(color: .black, size: .zero), uSpeck = SKUniform(name: "u_speck", vectorFloat3: .zero)
+    private var appearance: NSKeyValueObservation?, trimmed: NSKeyValueObservation?
     private var sunLit = 1.0, lastSun = -100.0, shownLit: Float = -1
     /// Whether the far fronds' chains have stepped since their cards were posed, and the tilt everything was last
     /// posed at: far cards and holdfasts are left alone on a frame when neither has changed.
@@ -108,7 +112,8 @@ final class KelpForest: SKScene {
     private let uGlow = SKUniform(name: "u_glow", vectorFloat3: .zero), uSand = SKUniform(name: "u_sand", vectorFloat3: .zero)
     private let uSunDir = SKUniform(name: "u_sundir", vectorFloat3: .zero)
     private let uLook = SKUniform(name: "u_look", vectorFloat4: .zero) // rays, snow, caustics, exposure
-    /// The tilt (radians) and exposure: for the kelp, in one uniform, so a tilting frame marks its sprites once.
+    /// The tilt (radians), the exposure, and the tilt's cosine and sine, which every pixel of both shaders would
+    /// otherwise work out for itself: in one uniform, so a tilting frame marks the kelp's sprites once.
     private let uView = SKUniform(name: "u_view", vectorFloat4: .zero)
     private let uTime = SKUniform(name: "u_t", float: 0), uSurge = SKUniform(name: "u_surge", vectorFloat2: .zero)
     private let uPx: SKUniform
@@ -132,6 +137,10 @@ final class KelpForest: SKScene {
         appearance = NSApplication.shared.observe(\.effectiveAppearance) { [weak self] _, _ in
             MainActor.assumeIsolated { self?.settleLook(at: false) }
         }
+        // The snow changes hands as the trim comes on or goes off.
+        trimmed = trim.observe(\.shouldEnableEffects) { [weak self] _, _ in
+            MainActor.assumeIsolated { if let self { self.apply(self.shownLook) } }
+        }
     }
 
     /// Builds the water and a new forest for the view picked.
@@ -143,12 +152,18 @@ final class KelpForest: SKScene {
         sea = Sea(height: Self.knobs[2].value, depth: spot.depth, rng: &rng)
         water.size = size
         water.anchorPoint = .zero
-        water.zPosition = -1000
         water.shader = SKShader(source: defines + Self.common + Self.waterSource, uniforms: [
             uExt, uDeep, uUp, uSky, uSun, uKelp, uGlow, uSand, uSunDir, uLook, uView, uTime, uSurge, uPx,
             SKUniform(name: "u_canopy", texture: sharedTexture("kelp-canopy") { Self.canopy() }),
         ])
-        addChild(water)
+        if water.parent == nil { trim.content.addChild(water) }
+        trim.zPosition = -1000
+        addChild(trim)
+        snow.size = size
+        snow.anchorPoint = .zero
+        snow.zPosition = -999
+        snow.shader = SKShader(source: defines + Self.common + Self.snowSource, uniforms: [uSpeck, uTime, uSurge, uPx, uView, uDeep, uUp, uExt, uSunDir])
+        addChild(snow)
         let kelp = SKShader(source: defines + Self.common + Self.kelpSource, uniforms: [
             uExt, uDeep, uUp, uSun, uKelp, uGlow, uSunDir, uView, uPx,
         ])
@@ -231,12 +246,20 @@ final class KelpForest: SKScene {
         set(uKelp, l.kelp); set(uGlow, l.glow); set(uSand, l.sand)
         // The exposure goes with how far the camera is tipped up: looking up into the light needs less.
         let up = Float(simd_clamp((pitch - 20) / (58 - 20), 0, 1)), expo = l.expo[0] + (l.expo[1] - l.expo[0]) * up
-        set4(uLook, [l.rays, l.snow, l.caustics, expo])
-        set4(uView, [Float(pitch * .pi / 180), expo, 0, 0])
+        set4(uView, [Float(pitch * .pi / 180), expo, Float(cos(pitch * .pi / 180)), Float(sin(pitch * .pi / 180))])
         shownLook = l
         // The Sun under water, bent toward the vertical by refraction, a little to one side of where we look.
         let zen = Double(90 - l.sunElevation) * .pi / 180, inWater = asin(sin(zen) / 1.333), az = 10 * Double.pi / 180
         set(uSunDir, SIMD3(Float(sin(inWater) * sin(az)), Float(cos(inWater)), Float(sin(inWater) * cos(az))))
+        // The water draws its own snow, but for when it's drawn at a lower resolution than the screen's (on battery):
+        // then a sprite over it does, given the light a speck adds (the shader's `waterCol` looking straight up).
+        let coarse = trim.shouldEnableEffects
+        set4(uLook, [l.rays, coarse ? 0 : l.snow, l.caustics, expo])
+        show(snow, coarse && l.snow > 0)
+        if !snow.isHidden {
+            let lift = min(exp(0.25 * (l.ext.sum() / 3) * Float(min(5, spot.depth - spot.camY))), 1.35) * (1 + 0.6 * Float(pow(cos(inWater), 5)))
+            set(uSpeck, l.snow * 0.6 * expo * lift * l.up)
+        }
     }
 
     // MARK: - The forest
@@ -641,11 +664,11 @@ final class KelpForest: SKScene {
         for (int i = 0; i < 4; i++) { s += a * kNoise(p); p = p * 2.03 + vec2(17.1, 9.3); a *= 0.5; }
         return s;
     }
-    // The way the camera looks through a point of the screen (uv 0 to 1, from the bottom left).
-    vec3 rayDir(vec2 uv, float pitch) {
+    // The way the camera looks through a point of the screen (uv 0 to 1, from the bottom left), tipped up by the
+    // angle whose cosine and sine are `tip`.
+    vec3 rayDir(vec2 uv, vec2 tip) {
         vec3 d = normalize(vec3((uv.x * 2.0 - 1.0) * TANH, (uv.y * 2.0 - 1.0) * TANH * ASPECT, 1.0));
-        float c = cos(pitch); float s = sin(pitch);
-        return vec3(d.x, d.y * c + d.z * s, -d.y * s + d.z * c);
+        return vec3(d.x, d.y * tip.x + d.z * tip.y, -d.y * tip.y + d.z * tip.x);
     }
     // The canopy's blades seen from below: one in each cell of a 45 cm grid where the canopy is thick enough, about
     // 1.6 m by 15 cm, lying mostly along the swell. Returns cover, and how near the blade's middle (its edges glow).
@@ -670,6 +693,18 @@ final class KelpForest: SKScene {
         }
         return vec2(c, edge);
     }
+    // Marine snow at a pixel: specks a pixel or two across in three layers, drifting up and carried by the surge.
+    float snowAt(vec2 px, vec2 sw, float t) {
+        float sn = 0.0;
+        for (int i = 0; i < 3; i++) {
+            float cell = 40.0 + 46.0 * float(i);
+            vec2 q = px / cell + vec2(sw.x * (0.6 + 0.5 * float(i)) + 0.05 * sin(t * 0.07 + float(i)), -t * (0.01 + 0.006 * float(i)));
+            vec2 id = floor(q) + float(i) * 37.0;
+            vec2 f = fract(q) - 0.5 - (vec2(kHash(id + 3.1), kHash(id + 7.7)) - 0.5) * 0.6;
+            sn += step(kHash(id), 0.2) * exp(-dot(f, f) * cell * cell / (1.0 + 2.2 * float(i))) * (0.3 + 0.7 * kHash(id + 9.3)) * (0.4 + 0.5 * float(i));
+        }
+        return sn;
+    }
     // Sunlight at height y, as a share of what reaches the camera's depth.
     vec3 lightAt(float y, vec3 sun, vec3 ext) { return sun * exp(0.5 * dot(ext, vec3(0.333)) * (clamp(y, 0.0, DEPTH) - CAMY)); }
     // What an endless line of sight from height y sees of the water itself: brighter looking up and toward the Sun.
@@ -687,7 +722,7 @@ final class KelpForest: SKScene {
     static let waterSource = """
     void main() {
         vec2 uv = v_tex_coord;
-        vec3 d = rayDir(uv, u_view.x);
+        vec3 d = rayDir(uv, u_view.zw);
         float t = u_t;
         vec2 sw = u_surge;
         vec3 col = vec3(0.0);
@@ -713,13 +748,17 @@ final class KelpForest: SKScene {
             dist = ts;
         } else {
             float tf = CAMY / -d.y;
-            vec2 p = vec2(d.x, d.z) * tf;
-            float ripple = 0.9 + 0.1 * sin(p.x * 7.0 + 3.0 * kNoise(p * 1.3));
-            float rock = smoothstep(0.55, 0.7, kFbm(p * 0.25));
-            vec3 alb = mix(u_sand * ripple, u_sand * vec3(0.45, 0.42, 0.36), rock);
-            float shade = 1.0 - 0.75 * texture2D(u_canopy, (p + u_sundir.xz / u_sundir.y * DEPTH - sw) / 128.0 + 0.5).r;
-            float caus = pow(kNoise(p * 2.2 + vec2(t * 0.25, -t * 0.18)) * kNoise(p * 3.1 - vec2(t * 0.2, t * 0.3)) * 2.2, 2.0);
-            col = alb * lightAt(0.0, u_sun, u_ext) * (0.25 + 0.75 * shade) * (0.75 + 0.9 * u_look.z * caus * shade) * (0.4 + 0.6 * u_sundir.y);
+            // Past 60 m the water lets through under half a level of the floor in any look: it is all fog, and not
+            // worth its sand and caustics (on a 16:10 screen that is all of the floor the level view shows).
+            if (tf < 60.0) {
+                vec2 p = vec2(d.x, d.z) * tf;
+                float ripple = 0.9 + 0.1 * sin(p.x * 7.0 + 3.0 * kNoise(p * 1.3));
+                float rock = smoothstep(0.55, 0.7, kFbm(p * 0.25));
+                vec3 alb = mix(u_sand * ripple, u_sand * vec3(0.45, 0.42, 0.36), rock);
+                float shade = 1.0 - 0.75 * texture2D(u_canopy, (p + u_sundir.xz / u_sundir.y * DEPTH - sw) / 128.0 + 0.5).r;
+                float caus = pow(kNoise(p * 2.2 + vec2(t * 0.25, -t * 0.18)) * kNoise(p * 3.1 - vec2(t * 0.2, t * 0.3)) * 2.2, 2.0);
+                col = alb * lightAt(0.0, u_sun, u_ext) * (0.25 + 0.75 * shade) * (0.75 + 0.9 * u_look.z * caus * shade) * (0.4 + 0.6 * u_sundir.y);
+            }
             dist = tf;
         }
         vec3 tr = exp(-u_ext * min(dist, 400.0));
@@ -737,19 +776,27 @@ final class KelpForest: SKScene {
         float toward = 0.2 + 1.6 * pow(max(dot(d, u_sundir), 0.0), 3.0);
         col += u_look.x * u_sun * vec3(0.6, 0.9, 1.0) * lightAt(CAMY, u_sun, u_ext) * pow(streak, 2.5) * (0.3 + 0.7 * open)
             * (1.0 - exp(-0.1 * min(dist, 40.0))) * toward * 0.25;
-        // Marine snow, lit by the water around it.
-        float sn = 0.0;
+        // Marine snow, lit by the water around it; none at dusk, where it couldn't be seen.
         vec2 px = uv * u_px;
-        for (int i = 0; i < 3; i++) {
-            float cell = 40.0 + 46.0 * float(i);
-            vec2 q = px / cell + vec2(sw.x * (0.6 + 0.5 * float(i)) + 0.05 * sin(t * 0.07 + float(i)), -t * (0.01 + 0.006 * float(i)));
-            vec2 id = floor(q) + float(i) * 37.0;
-            vec2 f = fract(q) - 0.5 - (vec2(kHash(id + 3.1), kHash(id + 7.7)) - 0.5) * 0.6;
-            sn += step(kHash(id), 0.2) * exp(-dot(f, f) * cell * cell / (1.0 + 2.2 * float(i))) * (0.3 + 0.7 * kHash(id + 9.3)) * (0.4 + 0.5 * float(i));
+        if (u_look.y > 0.0) {
+            col += u_look.y * snowAt(px, sw, t) * waterCol(vec3(0.0, 1.0, 0.0), CAMY, u_deep, u_up, u_ext, u_sundir) * 0.6;
         }
-        col += u_look.y * sn * waterCol(vec3(0.0, 1.0, 0.0), CAMY, u_deep, u_up, u_ext, u_sundir) * 0.6;
         col *= u_look.w;
         gl_FragColor = vec4(pow(max(col, vec3(0.0)), vec3(1.0 / 2.2)) + (kHash(px) - 0.5) / 255.0, 1.0);
+    }
+    """
+
+    /// The marine snow by itself, for when the water is drawn at a lower resolution than the screen's: added to the
+    /// picture (its alpha is nothing) as the water would have shown it, adding the speck's light to its own.
+    static let snowSource = """
+    void main() {
+        float sn = snowAt(v_tex_coord * u_px, u_surge, u_t);
+        vec3 add = vec3(0.0);
+        if (sn > 0.002) {
+            vec3 behind = waterCol(rayDir(v_tex_coord, u_view.zw), CAMY, u_deep, u_up, u_ext, u_sundir) * u_view.y;
+            add = pow(behind + u_speck * sn, vec3(1.0 / 2.2)) - pow(behind, vec3(1.0 / 2.2));
+        }
+        gl_FragColor = vec4(add, 0.0);
     }
     """
 
@@ -766,7 +813,7 @@ final class KelpForest: SKScene {
         if (alpha > 0.003) {
         vec3 m = c.rgb / max(alpha, 1e-3);
         vec2 suv = vec2(gl_FragCoord.x / u_px.x, 1.0 - gl_FragCoord.y / u_px.y);
-        vec3 d = rayDir(suv, u_view.x);
+        vec3 d = rayDir(suv, u_view.zw);
         float back = smoothstep(-0.2, 0.9, dot(d, u_sundir));
         vec3 lit = lightAt(info.y, u_sun, u_ext);
         vec3 tint = mix(vec3(1.0), vec3(0.9, 1.0, 0.75), fract(info.z * 7.3) * 0.5);
