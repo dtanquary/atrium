@@ -4,7 +4,7 @@ The northern lights as a long exposure records them: sheets of light 100 km up a
 
 - **Files:** `Sources/Atrium/Aurora.swift` (the palettes, the arc texture, the sky shader, `AuroraCurtains` and the ground), plus `Resources/aurora-ground.heic` and `Resources/aurora-ground-aux.png`. The shaders use the `shaderCommon` helpers `noise`, `hash21`, `starField(pts, cell, density, t)` and `grade`.
 - **Entry:** `@MainActor func aurora(size:)`, which builds `shaderScene(size:source:uniforms:knobs:)` for the sky and adds the ground sprite from `auroraGround`. Registry entry: icon `wind`, tint `.green`.
-- **Kind:** a full-screen SKShader for the sky under a photo sprite with its own shader for the ground. Swift side: the palette, a baked arc texture on each load, a clock (`u_phase`, advanced by an SKAction in scene time), and `AuroraCurtains`, which holds the curtains, replaces them one at a time, and re-measures their light on the land each second.
+- **Kind:** a full-screen SKShader for the sky under a photo sprite with its own shader for the ground. Swift side: the palette, a baked arc texture on each load, a clock (`u_phase`, advanced by an SKAction in scene time), and `AuroraCurtains`, which holds the curtains, replaces them one at a time, runs their substorms (`Substorms`), and re-measures their light on the land each second.
 
 ## How it works
 The research behind it (three agents on 2026-09-25: landscape photos, 63 measured real aurora photos, rendering techniques) is in the scratchpad notes, `aurora/notes/`. The targets it set, in linear light: sky 0.007 at the zenith to 0.021 at the horizon, grey-teal; aurora peak 0.45–0.55 at hue 92–105 and saturation 0.35–0.45, its mean about 0.12; one main arc covering 35–55% of the sky; snow 3–5× the sky and 0.06–0.15× the aurora's peak, barely green.
@@ -14,7 +14,7 @@ The research behind it (three agents on 2026-09-25: landscape photos, 63 measure
    - **Where the line of sight meets a sheet** is closed-form: `s = (dist + fold + 20·cos) / (cos(heading − normal) + 0.2·cos·tanEl)`, and the height seen there is `s·tanEl + s²/2R` (a round Earth). So an arc dips toward the horizon at the edges of the view, and a far one sits low.
    - **Folds** come from `u_arc`, one 4097×1 RGBA texture baked at load (`auroraArc`, about 5 ms): R a fold curve of 48 sines, G its slope, B a barcode of rays, A how high each ray reaches. Two octaves, read along the curtain at 3000 km and 500 km scales, drift opposite ways (0.6 and 0.35 km/s), so the shapes reshape rather than slide. Where the sheet is seen edge-on its light adds up along the line of sight: the path factor `√(1+m²)/√((cos − m·sin)² + 0.04)`, at most 3, makes the bright fold pillars.
    - **Emission by height:** green rising over a few km at `u_low` (98–110 km) and fading upward over 10–35 km (per ray), with no corner or step at the edge (either draws a hairline along it). Below the edge it falls off as a Gaussian whose width has three parts: the rise itself (8), the slab's depth along the line of sight (`0.17·sh²`: a line of sight crossing `sh` km of heights is a box that deep, variance `sh²/12`) and haze (`60·ax`). For an arc 15° up that is about 5 km from 10% to 90%, 40–45 device px at 2x: a real arc's lower border is its sharpest feature, 3–5 km. Then a faint glow scattered around the edge, which takes the curtain's brightness (`column`) but not the fold pillars' path factor, since scattered light is smooth; and the crown (`u_red`: 0.02, or 0.1 for Storm and 0.08 for Red) as a broad band at 240 ± 42 km in the crown colour, with no rays, since the 630 nm red takes 110 s to glow and smears them out.
-   - **Rays** are the barcode read at each ray's foot (`s·sin − 0.2·(h − 100)·sin(angle)`), so they lean together up the field lines, at 20000 km per texture (7–30 km apart) and ±15% (`u_rays`). They fade to their mean where they'd be finer than a pixel (`fwidth`) and where we look up through a thick slab.
+   - **Rays** are the barcode read at each ray's foot (`s·sin − 0.2·(h − 100)·sin(angle)`), so they lean together up the field lines, at 20000 km per texture (7–30 km apart) and ±15% at rest (`u_surge.x`, 0.3: the factor is `1 − 0.5·x + x·B`), ±35% at a surge's peak. They drift 0.5 km/s at rest, on `u_surge.y`, summed on the CPU in Double and wrapped, so a surge can speed them without a jump. They fade to their mean where they'd be finer than a pixel (`fwidth`) and where we look up through a thick slab.
    - **Colour** by height above the edge: the fringe tints only the lowest few km (and averages away through a thick slab, so Storm's pink stays a hem), then the body, then the upper colour from 20 to 70 km up. Palette colours are display colours, made linear (`^2.2`) for the light.
    - **Patches:** a slow read of the fold curve (`l/2500`) brightens and dims stretches of each curtain (0.4–1).
 3. **Air.** Kasten–Young air mass: low light is dimmed and reddened, and haze softens it.
@@ -31,7 +31,9 @@ The research behind it (three agents on 2026-09-25: landscape photos, 63 measure
    - Then the same grade and dither as the sky, premultiplied by the photo's alpha.
 
 ## Time and appearance
-The curtains move on `u_phase`, seconds of scene time advanced by a repeating `customAction`, so it pauses with the wallpaper and a Speed knob can scale it. Stars twinkle on `u_now` (see `WallpaperTime`), and so do the glints on the snow. There is no Light Mode look. Each load rolls a new arrangement of curtains and folds; the palette is Random unless pinned. `AURORA_SEED=n` in the environment repeats one arrangement (for snapshots).
+The curtains move on `u_phase`, seconds of scene time advanced by a repeating `customAction`, so it pauses with the wallpaper and a Speed knob can scale it. Stars twinkle on `u_now` (see `WallpaperTime`), and so do the glints on the snow. There is no Light Mode look. Each load rolls a new arrangement of curtains and folds; the palette is Random unless pinned. `AURORA_SEED=n` in the environment repeats one arrangement (for snapshots), and `AURORA_SURGE=s` starts it `s` seconds into a substorm (120 is the peak, 400 well into the recovery).
+
+**Substorms** (`Substorms`, 2026-11-15): a real display's life is quiet stretches and surges, not a steady pace. On phase time (so they follow Speed and stop at 0×): a quiet stretch, then over 2 minutes the curtains brighten up to 1.6 times (`u_lum`, and their light on the snow with them), their rays sharpen (contrast 0.3 to 0.7) and run up to three times as fast, and their lower edges drop 4 km; then they recover over 5–10 minutes (smoothsteps both ways). The level is 0 at rest and 1 at Moderate's peak. A load joins the cycle part way through a quiet stretch, so the first surge comes 2–20 minutes in at Moderate.
 
 ## Settings
 **Colors:** `aurora.palette`, Random by default. Each palette in `auroraPalettes` has four colours from bottom to top: fringe, body, upper and crown. They're all real emissions or mixes of them, the colours Dave listed after looking it up: green, red, pink, purple, blue, yellow and white.
@@ -47,7 +49,7 @@ The curtains move on `u_phase`, seconds of scene time advanced by a repeating `c
 | Yellow | green → yellow-green → gold → red | green and red overlapping |
 | White | pale greens and blues | a faint display, too dim for colour vision |
 
-The swatches run crown to fringe, top-left to bottom-right, as the sky does. On 2026-09-25 the greens (Green, Storm, and then Red's fringe) moved from a teal `(0.2, 1, 0.5)` to the yellow-green real photos measure, `(0.58, 1, 0.5)`, paler so the peak's saturation lands near 0.45.
+The swatches run crown to fringe, top-left to bottom-right, as the sky does. On 2026-09-25 the greens (Green, Storm, and Red's fringe until 2026-11-14) moved from a teal `(0.2, 1, 0.5)` to the yellow-green real photos measure, `(0.58, 1, 0.5)`, paler so the peak's saturation lands near 0.45.
 
 - **Motion:** `aurora.speed`, "Speed", 0–6×, default 1× (Dave: "default to a natural realistic speed"): scales `u_phase`, so 1× is a real display's pace (folds 0.35–0.6 km/s, rays 0.5 km/s), 0 freezes the curtains and 6× is a lively one. Stars keep twinkling. Shown as "1.0×" (`.times` now shows a decimal below 10).
 - **Motion, rearranging:** `aurora.rearrange`, "Slowly rearrange the curtains" (on), and `aurora.rearrangeMinutes`, "Every", 1–30 min (4). Dave asked for it on 2026-09-25, "so that if someone has that wallpaper set they will get a variety of aurora over time". Each time, `AuroraCurtains.rearrange()` retires one curtain and, unless the sky is to hold fewer (1, 2 or 3, weighted 2:2:1), brings a new one into a free slot: the main arc if no other bright one stays. They cross-fade at 1/90 of full brightness per second, so the sky is never empty and never cuts, and the display's heading wanders ±0.06 rad (within ±0.4) each time, so over 10–20 minutes it's a different aurora. It runs on phase time, so it follows Speed (and stops at 0×).
@@ -63,18 +65,21 @@ The swatches run crown to fringe, top-left to bottom-right, as the sky does. On 
 
 The contrast pivot is 0.3, as in Nebula, so the night sky stays black. See `docs/nebula.md` for how the grade works.
 
-Suggested knobs, not built yet:
+- **Motion, activity:** `aurora.activity`, "Activity", Quiet / Moderate / Active (stored 0–2), Moderate by default. It sets the substorms (above), from `Substorms.activities`:
 
-| Key | Label | Range | Default | Drives |
+| Activity | Level at rest | A surge's height | Quiet between surges | Surges come every |
 |---|---|---|---|---|
-| `aurora.activity` | Activity | Quiet / Moderate / Active / Storm / Live | Moderate | curtain count, brightness, folds, lower-edge height; Live from NOAA's hemispheric power |
-| `aurora.substorms` | Substorms | on/off | on | a 20–30 min quiet → surge → recovery cycle |
+| Quiet | −0.3 (0.82× as bright, rays ±9% at 0.4× the pace, edge 1.2 km higher) | 0.5 | 30–50 min | 40–60 min |
+| Moderate | 0 | 1 | 12–20 min | 20–30 min |
+| Active | 0.25 | 1 | 5–9 min | 12–20 min |
+
+  A change eases the resting level over up to a minute, and cuts a wait carried over from a quieter setting to the new one's longest, so turning to Active brings a surge within 9 minutes. Not built: Storm, and Live from NOAA's hemispheric power (Ideas).
 
 
 ## Tuning constants
 - Camera: eye level 0.26, lens 0.8. Main arc 220–330 km, others 180–380 km, lower edges 98–110 km, slabs 3–12 km.
 - Drift per second of phase: big folds 0.0002 of 3000 km, small folds −0.0007 of 500 km, rays 0.000025 of 20000 km (0.5 km/s), patches 0.00002.
-- Emission: lower edge `exp(−dh²/(8 + 0.17·sh² + 60·ax))` (`ax` the air mass less 1, over 20), upward `exp((4 − √(dh² + 16))/(10 + 25·a²))`, ray contrast `u_rays` 0.15, glow 0.015. Gain `u_gain` 0.7 before the tone curve.
+- Emission: lower edge `exp(−dh²/(8 + 0.17·sh² + 60·ax))` (`ax` the air mass less 1, over 20), upward `exp((4 − √(dh² + 16))/(10 + 25·a²))`, ray contrast 0.3 (`u_surge.x`, up to 0.7 in a surge), glow 0.015. Substorms: brightness `1 + 0.6·level`, lower edge `−4·level` km, rays `1 + 2·level` times their pace. Gain `u_gain` 0.7 before the tone curve.
 - Ground: `u_star` 0.02, `u_aurora` 0.016, range faces 0.25 of the flats' aurora light.
 
 ## Performance
@@ -105,10 +110,11 @@ CPU 0.5–0.7 ms and GPU 1.0–1.45 ms per frame (release build, 2x, 2026-09-25)
   - What it rests on is under Sources, below.
 - 2026-11-14, the review of every wallpaper (Dave asked for all its suggestions): the band read airbrushed, because its lower border faded into the sky over about 11 km (85–95 device px at 2x, 10 to 90%), twice a real arc's. The 2026-10-03 pass cut only the slab term; the rise (30) and haze (400) terms weren't touched. Now 8 and 60: about 5 km, 40–45 px, with the upward fade as it was. No hairline or fold kinks at 200% on any palette. Free: the same arithmetic.
 - 2026-11-14, the same review: Red was the weakest palette (one load in eight on Random): brick red over a khaki hem about 100 px thick, its fringe the green `(0.58, 1, 0.5)`, over maroon snow. Its own basis is a display where only the high red part rises above the horizon, which has no green hem, and Dave wants "colours in one family" (he called Lava Lamp's green-in-blue ugly). Now its fringe is a red-pink `(1, 0.45, 0.4)` and its light on the snow is held to about 60%. Every other palette but Pink renders byte for byte as before.
+- 2026-11-14, the same review: frames every half second over 6 s of the preview loop (filmed at 2×) were identical apart from the stars, so at 1× it was almost a still. Dave asked for "a natural realistic speed", so raising Speed wasn't the answer: a real display's life is quiet stretches and surges. Hence the substorms and the Activity knob above. At rest the picture is as before (6 pixels moved by 1 of 255); over 6 s at a surge's peak 2.3 times as much of the sky changes as at rest. Free at run time: one more uniform (`u_surge`, 21 of about 30) and a few multiplies a frame.
 
 ## Ideas / next steps
 - **Drift:** real arcs creep toward or away from the pole at 0.1–0.3 km/s; the curtains could drift their distances slowly within the clearance limits.
-- **Settings:** Activity (Quiet to Storm, or Live from NOAA's hemispheric power feed, `services.swpc.noaa.gov/text/aurora-nowcast-hemi-power.txt`, as seen from northern Norway: from Dave's latitude the real sky would be dark most nights), Substorms, Speed. Details in the techniques notes.
+- **Settings:** Activity's Storm, and Live, from NOAA's hemispheric power feed, `services.swpc.noaa.gov/text/aurora-nowcast-hemi-power.txt`, as seen from northern Norway: from Dave's latitude the real sky would be dark most nights). Details in the techniques notes.
 - **Snow sparkle:** none of the 47 real snow photos shows any at this scale; Dave asked for glistening, so it stays subtle. Make it rarer and static if it reads as noise.
 - **Ground:** a still lake mirroring the live sky; a Norwegian alternative (Raftsund) if the Tetons ever grate; a faint rim of light on the summits' snow from the aurora behind them.
 - **Stars:** the real catalogue (Night Sky's) for true clustering and the Milky Way.

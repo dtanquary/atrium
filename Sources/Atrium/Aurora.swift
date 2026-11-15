@@ -17,6 +17,7 @@ let auroraPalettes: [(name: String, colours: [SIMD3<Float>])] = [
 
 let auroraKnobs = [
     Knob(key: "aurora.speed", label: "Speed", range: 0...6, standard: 1, section: "Motion", format: .times),
+    Knob(key: "aurora.activity", label: "Activity", range: 0...2, standard: 1, section: "Motion", format: .choice(["Quiet", "Moderate", "Active"])),
     Knob(key: "aurora.rearrange", label: "Slowly rearrange the curtains", range: 0...1, standard: 1, section: "Motion", format: .toggle),
     Knob(key: "aurora.rearrangeMinutes", label: "Rearrange every", range: 1...30, standard: 4, section: "Motion", format: .minutes,
          shownWhen: "aurora.rearrange"),
@@ -125,8 +126,10 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
     }
     var shown = pick.name
     show(AuroraColours(shown))
+    let setting = { (key: String) in Float(auroraKnobs.first { $0.key == key }!.value) }
     let (arc, bytes, slope) = auroraArc(&rng)
-    let sky = AuroraCurtains(arc: bytes, slope: slope, rng: rng)
+    let sky = AuroraCurtains(arc: bytes, slope: slope, rng: rng, activity: Int(setting("aurora.activity")))
+    if let at = Float(ProcessInfo.processInfo.environment["AURORA_SURGE"] ?? "") { sky.substorms.sinceOnset = at } // for snapshots
     let scene = shaderScene(size: size, source: shaderCommon + """
     vec2 arcAt(float x) { return vec2((fract(x) * 4096.0 + 0.5) / 4097.0, 0.5); }
 
@@ -165,7 +168,7 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
                 float h = s * tanEl + s * s / 12742.0;             // the height we see, over a round Earth
                 float seen = smoothstep(0.02, 0.08, den) * smoothstep(0.0, 5.0, num);
                 // rays: read at each ray's foot, so they lean together up the field lines
-                float rx = (s * sn - 0.2 * (h - 100.0) * sp) / 20000.0 + u_offset[i] * 0.5 + u_phase * 0.000025;
+                float rx = (s * sn - 0.2 * (h - 100.0) * sp) / 20000.0 + u_offset[i] * 0.5 + u_surge.y;
                 vec4 r = texture2D(u_arc, arcAt(rx));
                 r.ba = mix(r.ba, vec2(0.3, 0.5), smoothstep(1.0, 4.0, fwidth(rx) * 4096.0));   // finer than a pixel
                 // seen from below, the line of sight crosses the slab over a range of heights, which blurs it
@@ -180,7 +183,7 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
                 // sight, a box: variance sh²/12) and haze soften the edge
                 float green = (dh < 0.0 ? exp(-dh * dh / (8.0 + 0.17 * sh * sh + 60.0 * ax))
                                         : exp((4.0 - sqrt(dh * dh + 16.0)) / (10.0 + 25.0 * r.a * r.a)))
-                              * (0.85 + 0.3 * r.b);
+                              * (1.0 - 0.5 * u_surge.x + u_surge.x * r.b);   // rays sharpen in a surge
                 float red = exp(-(h - 240.0) * (h - 240.0) / 3600.0);
                 float glow = (0.015 + 0.1 * ax) * exp(-abs(dh) / (15.0 + 100.0 * ax));   // scattered around the edge
                 // scattered light is smooth, so the glow takes the curtain's brightness without the fold pillars
@@ -225,8 +228,7 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
     // 1× is a real display's pace: folds drifting 0.35-0.6 km/s along the arc, rays 0.5 km/s
     // With Random picked and fading on, every few minutes the curtains (and their light on the snow) ease to
     // another palette over 90 s. With rearranging on, every few minutes (of phase, so it follows Speed) one curtain
-    // is replaced.
-    let setting = { (key: String) in Float(auroraKnobs.first { $0.key == key }!.value) }
+    // is replaced. Substorms come and go on the same clock (`Substorms`).
     var last: CGFloat = 0, since: Float = 0, waited: Float = 0, speed = setting("aurora.speed")
     var rearranging = setting("aurora.rearrange") > 0.5, untilNext: Float = 0
     var from = AuroraColours(shown), to = from, k: Float = 1
@@ -251,6 +253,7 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
         waited = random && setting("aurora.fade") > 0.5 ? waited + since : 0
         speed = setting("aurora.speed")
         rearranging = setting("aurora.rearrange") > 0.5
+        sky.substorms.activity = Int(setting("aurora.activity"))
         since = 0
         light()
         if k >= 1, waited >= setting("aurora.fadeMinutes").rounded() * 60 {
@@ -272,13 +275,21 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
     /// How bright each is now, and what it's easing to.
     var lum = SIMD4<Float>(), target = SIMD4<Float>()
     var phase: Float = 0
+    /// Quiet stretches and surges: in a surge the curtains brighten, their lower edges drop and their rays sharpen and
+    /// run faster.
+    var substorms: Substorms
+    /// How far the rays have drifted, in lengths of the arc texture (0.5 km a second at rest).
+    private var rays = 0.0
     /// The way the display runs; new curtains lie near it, and it wanders a little with each one.
     private var heading: Float
     private var rng: SplitMix
-    let uniforms = ["u_dist", "u_angle", "u_lum", "u_low", "u_thick", "u_offset"].map { SKUniform(name: $0, vectorFloat4: .zero) }
+    private let surge = SKUniform(name: "u_surge", vectorFloat2: [0.3, 0])
+    let uniforms: [SKUniform]
 
-    init(arc: [UInt8], slope: Float, rng: SplitMix) {
+    init(arc: [UInt8], slope: Float, rng: SplitMix, activity: Int) {
         (self.arc, self.slope, self.rng) = (arc, slope, rng)
+        uniforms = ["u_dist", "u_angle", "u_lum", "u_low", "u_thick", "u_offset"].map { SKUniform(name: $0, vectorFloat4: .zero) } + [surge]
+        substorms = Substorms(activity: activity, rng: SplitMix(state: ~rng.state)) // its own stream: the arrangement stays the seed's
         heading = .random(in: -0.35...0.35, using: &self.rng)
         spawn(0)
         if Float.random(in: 0...1, using: &self.rng) < 0.45 { spawn(1) }
@@ -310,15 +321,25 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
         if on.count - 1 < want, let slot = free.randomElement(using: &rng) { spawn(slot) }
     }
 
-    /// Moves each curtain's brightness toward its target, at most 1/90 per second of phase.
+    /// Moves each curtain's brightness toward its target, at most 1/90 per second of phase, and the substorms and
+    /// rays on by `dt` seconds of phase.
     func ease(_ dt: Float) {
-        guard lum != target else { return }
+        guard dt > 0 else { return }
+        let was = (lum, substorms.level)
+        substorms.advance(dt)
+        rays = (rays + Double(dt * 0.000025 * (1 + 2 * substorms.level))).truncatingRemainder(dividingBy: 1)
+        surge.vectorFloat2Value = [0.3 + 0.4 * substorms.level, Float(rays)]
         lum += simd_clamp(target - lum, SIMD4(repeating: -dt / 90), SIMD4(repeating: dt / 90))
-        sync()
+        if lum != was.0 || substorms.level != was.1 { sync() }
     }
 
+    /// How much brighter than at rest a substorm has made the curtains.
+    private var gain: Float { 1 + 0.6 * substorms.level }
+
     private func sync() {
-        for (uniform, value) in zip(uniforms, [dist, angle, lum, low, thick, offset]) { uniform.vectorFloat4Value = value }
+        for (uniform, value) in zip(uniforms, [dist, angle, lum * gain, low - 4 * substorms.level, thick, offset]) {
+            uniform.vectorFloat4Value = value
+        }
     }
 
     /// The arc texture at `x` (wrapping), as the shader's `texture2D(u_arc, arcAt(x))` reads it, to the nearest texel.
@@ -345,8 +366,45 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
                 let patches = 0.4 + 0.6 * simd_smoothstep(0.2, 0.75, patch)
                 b += lum[i] * pfh * patches * simd_smoothstep(0.02, 0.08, den)
             }
-            return b
+            return b * gain
         }
+    }
+}
+
+/// Substorms, as a real display lives: quiet stretches, then a surge over two minutes, in which the curtains brighten
+/// up to 1.6 times, their rays sharpen and run three times as fast and their lower edges drop 4 km, then a recovery
+/// over 5-10 minutes. `level` is 0 at rest and 1 at a surge's peak at Moderate, a surge every 20-30 minutes; Quiet rests
+/// below that (dimmer, calmer rays) with rarer, weaker surges, and Active above it with surges every 12-20 minutes.
+/// It runs on phase time, so it follows Speed and stops at 0×.
+struct Substorms {
+    /// By activity (Quiet, Moderate, Active): the level at rest, a surge's height above it, and the quiet between
+    /// surges in minutes.
+    static let activities: [(rest: Float, strength: Float, quiet: ClosedRange<Float>)] = [(-0.3, 0.5, 30...50), (0, 1, 12...20), (0.25, 1, 5...9)]
+    var activity: Int
+    /// Seconds of phase since the last surge began; negative while waiting for the next.
+    var sinceOnset: Float
+    private(set) var level: Float = 0
+    private var rest: Float, recovery: Float, rng: SplitMix
+
+    /// Joins the cycle part way through a quiet stretch, so the first surge can come within minutes of loading.
+    init(activity: Int, rng: SplitMix) {
+        self.activity = min(max(activity, 0), 2)
+        self.rng = rng
+        rest = Self.activities[self.activity].rest
+        sinceOnset = -.random(in: 2...Self.activities[self.activity].quiet.upperBound, using: &self.rng) * 60
+        recovery = .random(in: 300...600, using: &self.rng)
+        advance(0)
+    }
+
+    mutating func advance(_ dt: Float) {
+        let a = Self.activities[min(max(activity, 0), 2)]
+        rest += min(max(a.rest - rest, -dt / 60), dt / 60)
+        sinceOnset = max(sinceOnset + dt, -a.quiet.upperBound * 60) // a wait from a quieter setting is cut to this one's
+        if sinceOnset > 120 + recovery {
+            sinceOnset = -.random(in: a.quiet, using: &rng) * 60
+            recovery = .random(in: 300...600, using: &rng)
+        }
+        level = rest + a.strength * (simd_smoothstep(0, 120, sinceOnset) - simd_smoothstep(120, 120 + recovery, sinceOnset))
     }
 }
 
