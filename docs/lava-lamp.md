@@ -21,6 +21,7 @@ It follows how real lamps convect (the research agent's sources: [Wikipedia on l
 - **Stem (`stem`):** a segment from the anchor to the head, thick at the anchor and 0.3× under the head, so it necks just below it. Its field is softened to `2r²/(d² + r² + 0.00015)`: still 1 at its radius, but it peaks at 2 on the axis instead of spiking. With a plain `r²/d²`, or without the constant, every stem's axis and every vanishing thread showed as a hard seam in the shading.
 - **Pool:** a nearly flat surface near y ≈ 0.03 (heave `0.006·sin(4x + 0.1t) + 0.004·sin(9x - 0.13t)`) with a `1/d²` field, so heads rise off it on stems. Real pools are flat; the heads resting in it make the bumps.
 - The column indices are clamped (`b0[min(i, 3)]`), since the GPU may read both sides of a `?:`.
+- A stem whose radius is 0 is skipped (`if (k.z > 0.0)`). A stem lives only while its head rises (trip phase 0.06–0.32) or drips (0.54–0.72, on 65% of trips), so about 3 of the 8 are there in an average frame (a port of `layBlobs` over an hour: 3.06). The test is on a uniform, so every pixel takes the same path, and the picture is the same to the byte. Heads aren't skipped: a head's radius only reaches 0 at the very ends of its trip, buried in the pool, so there's nothing to skip. `lavaLampStemsThatAreGoneAreExactlyZero` checks a gone stem comes out as exactly 0.
 
 **Wobble:** `p + u_wobble·noise` before evaluating the field, so edges are soft and irregular rather than perfect ellipses.
 
@@ -88,7 +89,7 @@ Sections: Colors (swatches plus the cycle interval), Motion, Light, Look. The Lo
 - Satin sheen: 0.12 × pow(·, 18). Cycle fade: 60 s.
 
 ## Performance
-CPU about 0.5 ms and GPU 1.0 ms per frame (release, 2x): the stems add about 0.2 ms over plain balls, the lighting's second accumulator about 0.1. It was 1.86 ms of GPU until the blob layout moved to Swift. The research agent measured where the time went (seed 17, Coral, 40 s): removing the wobble noise saved 0.02 ms, the tails 0.09, all the wax shading 0.02, and cutting 8 blobs to 6 saved 0.27. Replacing the per-blob hashes, `height()` and `sin` with constants, keeping all 16 balls, took it from 1.77 to 0.66 ms. So summing the balls is cheap; recomputing each blob's position at every pixel wasn't. The CPU side is 8 blobs of arithmetic a frame. The colour-cycle fade adds nothing to the GPU (it only animates uniforms).
+CPU about 0.5 ms and GPU 1.0 ms per frame (release, 2x): the stems add about 0.2 ms over plain balls, the lighting's second accumulator about 0.1. Skipping the stems that are gone saves about 0.16 ms of GPU where most are gone (seed 11 at 33 s, 2 to 3 of 8 live: 1.08 to 0.92 ms, the medians of five runs each, alternating, under load from other builds) and nothing measurable where nearly all are live (103 s, 7 of 8); about 0.1 ms on average. It was 1.86 ms of GPU until the blob layout moved to Swift. The research agent measured where the time went (seed 17, Coral, 40 s): removing the wobble noise saved 0.02 ms, the tails 0.09, all the wax shading 0.02, and cutting 8 blobs to 6 saved 0.27. Replacing the per-blob hashes, `height()` and `sin` with constants, keeping all 16 balls, took it from 1.77 to 0.66 ms. So summing the balls is cheap; recomputing each blob's position at every pixel wasn't. The CPU side is 8 blobs of arithmetic a frame. The colour-cycle fade adds nothing to the GPU (it only animates uniforms).
 
 ## Gotchas and shortcuts
 - `ponytail:` the colour cycle is a straight RGB blend, so opposite pairings pass through a muddier middle for part of the minute. Blend in a perceptual space if it ever looks dull.
@@ -121,6 +122,7 @@ CPU about 0.5 ms and GPU 1.0 ms per frame (release, 2x): the stems add about 0.2
   - **Light Mode tints the liquid round the wax instead of adding to it** (2026-11-15): see Liquid above. Pixels with a channel at 255 in Light Mode went from 4.9–17.2% of the frame to 0.6–11.6% (seed 11 at 33 s, after the pool change), what is left being the wax's own cores.
   - **The dither no longer tiles** (2026-11-15): see Glass above. Same strength, no pattern.
   - **The window reflections shaped** (2026-11-15): see Window reflections above. No measurable cost.
+  - **Skip the stems that aren't there** (2026-11-15): see the wax field above. The review's low-confidence saving held up: about 0.1 ms of GPU on average, the picture the same to the byte.
 
 ## Ideas / next steps
 - A perceptual (OKLab-style) colour blend for the cycle.

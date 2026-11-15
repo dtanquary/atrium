@@ -207,8 +207,11 @@ final class LavaLamp: SKScene {
             vec4 h = i < 4 ? u_blobs0[min(i, 3)] : u_blobs1[max(i - 4, 0)];
             vec4 k = i < 4 ? u_blobs2[min(i, 3)] : u_blobs3[max(i - 4, 0)];
             vec3 b = ball(q, h.xy, h.z, h.w);
-            f += b + stem(q, k.xy, h.xy, k.z);
+            f += b;
             lp += b.x * (q - h.xy) * k.w;
+            // A stem lives only while its head rises or drips, about a third of a trip; on a uniform, so every pixel
+            // takes the same path.
+            if (k.z > 0.0) f += stem(q, k.xy, h.xy, k.z);
         }
         // the molten pool: a nearly flat surface, the heads resting in it make the bumps. Its lp only counts
         // below the surface, so the top of the pool stays pale and hot rather than dimming like the top of a blob.
