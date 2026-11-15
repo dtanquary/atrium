@@ -866,14 +866,25 @@ class WeatherScene: SKScene, BatteryPaced {
         float lum = packed.r;
         float tone = clamp((lum - a_lum.x) / max(a_lum.y - a_lum.x, 0.02), 0.0, 1.0);
         float v = 1.0 - uv.y;
+        // A low Sun lights the side of a cloud toward it (a_sun.xy, on its picture), and the faces of its puffs that
+        // turn toward it: the slope of the thickness times the alpha (blurred, and sharp at the edge) is a rough
+        // outward normal, measured over 0.8% of the width (the GPU's own slopes came out as orange peel, from the
+        // texture's 8-bit steps and the billowing). In the picture's own units, so it mirrors with a mirrored cloud.
+        float e = 0.02;
+        vec4 cx = texture2D(u_texture, uv + vec2(e, 0.0)), cy = texture2D(u_texture, uv + vec2(0.0, e / a_cloud.z));
+        vec2 nrm = -vec2(cx.g / max(cx.a, 0.05) - packed.g, cy.g / max(cy.a, 0.05) - packed.g) / e;
+        float lean = length(nrm);
+        float face = dot(nrm / max(lean, 0.0001), a_sun.xy / max(length(a_sun.xy), 0.0001)) * smoothstep(0.3, 3.0, lean) * smoothstep(0.1, 0.4, c.a);
+        float side = clamp(0.5 + dot(vec2(uv.x - 0.5, (uv.y - 0.5) * a_cloud.z), a_sun.xy) * 1.8 + 0.5 * (1.0 - length(a_sun.xy))
+                           + 0.35 * face * length(a_sun.xy), 0.0, 1.0);
         // Lit from above, as in the photo. A high Sun's light fills a cloud's shadows from inside; a low Sun's
-        // (a_sun.w) doesn't, and they take the sky's colour.
-        float t = (mix(0.3, 0.08, a_sun.w) + mix(0.7, 0.92, a_sun.w) * tone) * (1.0 - 0.5 * v * v);
+        // (a_sun.w) doesn't, and they take the sky's colour; and it lights the side toward it, which at sunset is
+        // the base as often as the top.
+        float t = (mix(0.3, 0.08, a_sun.w) + mix(0.7, 0.92, a_sun.w) * tone) * mix(1.0 - 0.5 * v * v, 0.25 + 0.75 * side, a_sun.w);
         t = mix(t, t * t * 0.9, a_back * 0.6);
-        // A low Sun beyond the cloud (a_sun.z) lights the side of it toward the Sun (a_sun.xy, on its picture) and
-        // shines through its thin edges, all round when it's straight behind. The body we see is in shade.
+        // A low Sun beyond the cloud (a_sun.z) lights the side of it toward the Sun and shines through its thin edges,
+        // all round when it's straight behind. The body we see is in shade.
         float thin = 1.0 - smoothstep(0.2, 0.8, packed.g);
-        float side = clamp(0.5 + dot(vec2(uv.x - 0.5, (uv.y - 0.5) * a_cloud.z), a_sun.xy) * 1.8 + 0.5 * (1.0 - length(a_sun.xy)), 0.0, 1.0);
         float back = side * side * (0.12 + 0.88 * thin) * (0.55 + 0.45 * tone);
         vec3 col = mix(u_cloudAmb * (1.0 - 0.2 * a_back), u_cloudSun, t);
         vec3 rim = u_cloudSun * a_back * 2.0 * smoothstep(0.15, 0.35, a) * (1.0 - a) * (1.0 - a_sun.z); // light through the thin edges
