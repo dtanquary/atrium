@@ -348,7 +348,7 @@ final class Schlieren: SKScene {
     """
 }
 
-/// The air in front of the camera: FlameSim's stable fluids (Stam 1999, with vorticity confinement) on a coarse grid,
+/// The air in front of the camera: stable fluids (Stam 1999, with vorticity confinement) on a coarse grid,
 /// carrying θ = ΔT/T0 on a grid three times finer by MacCormack advection, so the thin edges schlieren shows survive.
 /// Positions are in metres from the bottom-left. Hot air rises by g·θ/(1 + θ) against the room's mean, so the open
 /// edges can't build up a drift of the whole field; drag and cooling stand in for the third dimension a 2D slice

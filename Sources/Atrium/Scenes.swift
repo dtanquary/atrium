@@ -144,8 +144,6 @@ struct Refresh {
               make: fireflies, knobs: Fireflies.knobs, batteryRate: 20),
     Wallpaper(name: "Murmuration", icon: "bird.fill", tint: .brown, blurb: "Starlings swirling over a sunset.",
               make: murmuration, knobs: murmurationKnobs),
-    Wallpaper(name: "Campfire", icon: "flame.fill", tint: .red, blurb: "A campfire in a forest clearing, under the real stars.",
-              make: campfire, unfinished: true),
     Wallpaper(name: "Turing Patterns", icon: "circle.hexagongrid.fill", tint: .mint, blurb: "Coral, spots and stripes growing out of simple chemistry.",
               make: turingPatterns, knobs: TuringPatterns.knobs,
               palettes: PaletteChoice(key: "turing.palette", options: TuringPatterns.palettes.map { ($0.name, [$0.ink, $0.ink2, $0.glow], [$0.ink * 0.9, $0.ink2 * 0.9]) }),

@@ -16,10 +16,6 @@ import Testing
     #expect(abs(moved - expected) < expected * 0.5, "\(name) moved \(moved), expected about \(expected)")
 }
 
-@MainActor @Test func campfireShaderClockStaysSmall() {
-    #expect(Flames.shaderClock(6 * 86400 + 1.25) == 1.25)
-}
-
 /// `u_now` counts from the first frame after a restart, whatever the view's own clock says, so it stays small.
 @MainActor @Test func wallpaperTimeRestarts() {
     WallpaperTime.restart()

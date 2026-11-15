@@ -491,8 +491,6 @@ struct AboutPage: View {
                        "https://commons.wikimedia.org/wiki/File:Sunset_over_a_tundra_pond_(53708107535).jpg")
                 credit("Fireflies' meadow", "\"Field at dusk\" by Tristan Ferne", "https://www.flickr.com/photos/89056504@N00/7357684410",
                        license: "CC BY 2.0")
-                credit("Campfire's clearing", "\"Hochsal Forest\" by Adrian Kubasa, Poly Haven (CC0)", "https://polyhaven.com/a/hochsal_forest")
-                credit("Campfire's fire pit", "Scans by Sebastian Platen and Rico Cilliers, Poly Haven (CC0)", "https://polyhaven.com/a/stone_fire_pit")
                 group("Dappled Light", "Plaster, brick, siding, oak and leaves from Poly Haven and ambientCG (CC0)", "dappled-credits.tsv")
                 group("A Tree for the Year", "Hilltop, leaves and bark from Wikimedia Commons and ambientCG (CC0)", "tree-credits.tsv")
                 group("Weather", "Hills, clouds and Moon from the BLM, NASA, Poly Haven and Wikimedia Commons", "weather-credits.tsv")

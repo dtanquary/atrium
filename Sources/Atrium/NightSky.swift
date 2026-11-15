@@ -301,8 +301,7 @@ final class NightSky: SKScene, BatteryPaced {
             .split(separator: "\n").filter { !$0.hasPrefix("#") }.map(String.init)
     }
 
-    /// The Yale Bright Star Catalogue to V 5.5: direction (J2000), V magnitude and B−V colour index. Campfire's sky
-    /// uses it too.
+    /// The Yale Bright Star Catalogue to V 5.5: direction (J2000), V magnitude and B−V colour index.
     nonisolated static let catalogue: [(direction: Sky.Vector, magnitude: Double, bv: Double)] = rows("stars.txt").compactMap { row in
         let f = row.split(separator: " ").compactMap { Double($0) }
         return f.count == 4 ? (Sky.direction(f[0], f[1]), f[2], f[3]) : nil

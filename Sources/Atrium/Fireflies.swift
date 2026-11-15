@@ -273,7 +273,7 @@ private func smoothstep(_ a: CGFloat, _ b: CGFloat, _ x: CGFloat) -> CGFloat {
     return t * t * (3 - 2 * t)
 }
 
-// MARK: - Shared by the nature scenes (Fireflies, Campfire, Murmuration, Fish Tank)
+// MARK: - Shared by the nature scenes (Fireflies, Murmuration, Fish Tank)
 
 /// Seconds since the previous frame, clamped so a paused or restarted clock (wake from sleep, a new time base) can't
 /// produce a huge or negative jump.

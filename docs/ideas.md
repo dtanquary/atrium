@@ -38,5 +38,5 @@ In the order they were proposed, most promising first.
 - **Sea Sparkle, a bioluminescent shoreline:** built on 2026-11-08 and cut the same night, "just does not look good at all compared to the others". Surf drawn by one shader read as glowing stripes on a flat sea. Breaking waves would need real faces, curls and foam (a heightfield or filmed surf), which the budget didn't leave room for. Its research and mock-ups are in git history before the cut (1028d91).
 - **Soap film:** its interference colours are the ones that went olive once Crystals was dimmed for calm.
 - **Ferrofluid, sand patterns (Chladni figures):** bright and sharp, as Zen Garden was.
-- **A fireplace or a candle:** Campfire is still unfinished; fire comes after that one works.
+- **A fireplace or a candle:** Campfire was cut on 2026-11-14, because flames from a simulation never looked real beside its photo (the Cut note in [README.md](README.md#daves-direction-so-far)). A fire needs footage of a real one first.
 - **Live flights, live lightning, earthquakes:** as far as I know (unchecked) the flight and lightning feeds restrict reuse, and earthquakes are too sparse to be lively. Pixel City's Airport and Earth from Orbit's storms already cover the first two.

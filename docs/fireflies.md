@@ -5,7 +5,7 @@ A broad meadow at blue hour: a real photo of a field running to a leafy treeline
 - **Files:**
   - `Sources/Atrium/Fireflies.swift`
   - `Resources/fireflies-meadow.heic` and `Resources/fireflies-meadow-aux.png`, credited in `Resources/fireflies-credits.tsv`
-  - The helpers shared by the nature scenes are below `// MARK: - Shared by the nature scenes`: `frameTime`, `rgb`, `mixRGB`, `verticalGradient`, `backdrop`, `radialGlow`, `softDot`, `treeline`, `pine`, `broadleaf` and `grassFringe`. Campfire, Murmuration, Night Sky, Pixel City and the Fish Tank use some of them, so keep their signatures.
+  - The helpers shared by the nature scenes are below `// MARK: - Shared by the nature scenes`: `frameTime`, `rgb`, `mixRGB`, `verticalGradient`, `backdrop`, `radialGlow`, `softDot`, `treeline`, `pine`, `broadleaf` and `grassFringe`. Murmuration, Night Sky, Pixel City and the Fish Tank use some of them, so keep their signatures.
 - **Entry:** `@MainActor func fireflies(size:)`, which returns `final class Fireflies: SKScene`. Registry entry: icon `sparkle`, tint `.yellow`, `knobs: Fireflies.knobs`.
 - **Kind:** SpriteKit. A sky shader, the photo drawn in five slices by distance with a relighting and fog shader, and a pool of firefly sprites sharing one shader.
 
