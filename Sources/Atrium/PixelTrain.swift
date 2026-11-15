@@ -78,6 +78,9 @@ final class PixelTrain: SKScene {
     private var rain: TrainGlass, wetLight: UInt32 = 0 // rain on the glass, and the colour of its bright side
     private let texture: SKMutableTexture
     private let canvas = SKNode(), outside = SKSpriteNode(), cabin = SKSpriteNode()
+    // The Sun on the cabin (`PixelCarriage.sunlight`), over it, and how strongly it shines in before cloud takes any.
+    private let sunlit = [SKSpriteNode(), SKSpriteNode()]
+    private var beam: (strength: Float, shape: PixelCarriage.Beam)?
 
     /// How far the train has got, in metres along its line, and the scene time that was true at. Every copy of the
     /// scene shares it, as the airliner's copies share their flight, so each display's window looks out over the
@@ -119,6 +122,10 @@ final class PixelTrain: SKScene {
         (cabin.size, cabin.anchorPoint, cabin.zPosition, cabin.isHidden) = (CGSize(width: w, height: h), .zero, 2, windowSize == 3)
         canvas.addChild(outside)
         canvas.addChild(cabin)
+        for sprite in sunlit {
+            (sprite.anchorPoint, sprite.zPosition, sprite.isHidden) = (.zero, 3, true)
+            canvas.addChild(sprite)
+        }
 
         for k in TrainWorld.rings.indices {
             let perMetre = world.perMetre(k), tall = world.rows(k)
@@ -230,6 +237,15 @@ final class PixelTrain: SKScene {
         let drawn = above.sunSpot, inPane = drawn.x >= 0 && drawn.x < glass.w && drawn.y >= horizon && drawn.y < glass.h
         sunSpot = above.sun.elevation <= 0 ? nil : inPane ? (drawn.x, drawn.y - horizon) : (glass.w / 2, glass.h - horizon - 1)
         if clock == 0 { shade = shadeWanted(with: Self.travelled) }
+        // The Sun shining in at the window while it is up on our side and no weather has put the day out: a ray
+        // toward it climbs three of the window's rows for each row of the table, as the table is seen foreshortened,
+        // by the tangent of its height, and leans by that of its bearing from straight out. Its light is the Sun's
+        // colour, so warm at a low Sun.
+        let bearing = remainder(above.sun.azimuth - above.facing, 360) * .pi / 180, height = max(above.sun.elevation, 0.5) * .pi / 180
+        let shines = smoothstep(0, 3, above.el) * min(max(Float(cos(bearing)) * 4, 0), 1) * (1 - Float(weather?.gloom ?? 0))
+        let sunTint = PixelCity.sunColour(max(above.el, 0)), brightest = max(sunTint.x, sunTint.y, sunTint.z, 0.01)
+        beam = shines > 0.01 ? (shines, PixelCarriage.Beam(rise: 3 * tan(height), slant: 3 * min(max(tan(bearing), -2), 2),
+                                                               tint: SIMD3<Double>(1, 1, 1) + SIMD3<Double>(sunTint / brightest) * 0.4)) : nil
         hazed = reach
         relight()
         (bolt, storms) = (pack(rgb(214, 224, 255)), PixelWindowSeat.lightning.value > 0.5 ? mix(0.22, 0.8, night) : 0) // by day a flash hardly shows
@@ -300,6 +316,7 @@ final class PixelTrain: SKScene {
             }
         }
         (pole, wire) = (pack(lit(rgb(52, 44, 40))), pack(lit(rgb(44, 40, 40))))
+        for sprite in sunlit { sprite.alpha = CGFloat((beam?.strength ?? 0) * (1 - Float(shade) / 32)) } // (cloud over the Sun takes it off the table)
     }
 
     /// How far off things fade to the horizon's colour where the train is, to the nearest 200 m. The country's colours
@@ -322,7 +339,15 @@ final class PixelTrain: SKScene {
     var pane: (w: Int, h: Int) { (glass.w, glass.h) }
 
     /// The carriage round the pane (PixelCarriage.swift), in the light of the moment.
-    private func paintFrame() { cabin.texture = carriage.texture(night: Double(night), gloom: weather?.gloom ?? 0) }
+    private func paintFrame() {
+        cabin.texture = carriage.texture(night: Double(night), gloom: weather?.gloom ?? 0)
+        let lit = beam.map { carriage.kind == 0 ? [] : carriage.sunTextures(night: Double(night), gloom: weather?.gloom ?? 0, beam: $0.shape) } ?? []
+        for (k, sprite) in sunlit.enumerated() {
+            sprite.isHidden = k >= lit.count // (the plain window has nothing for the Sun to fall on)
+            guard k < lit.count else { continue }
+            (sprite.texture, sprite.position, sprite.size) = (lit[k].texture, CGPoint(x: lit[k].x, y: lit[k].y), CGSize(width: lit[k].w, height: lit[k].h))
+        }
+    }
 
     // MARK: - Motion (every frame)
 

@@ -68,12 +68,34 @@ struct PixelCarriage {
         return (0.22 + 0.78 * (1 - night), lamp, 0.5 * lamp * night * night)
     }
 
+    private typealias Tone = SIMD3<Double>
+
     /// The cabin with its colours dimmed to `dim` and its lamp `lamp` of the way on, as bytes of red, green, blue
     /// and alpha, rows from the top. Alpha 0 is glass.
     func picture(dim: Double, lamp glow: Double) -> [UInt8] {
-        typealias Tone = SIMD3<Double>
+        let (out, glass, _) = paint(dim: dim, lamp: glow)
+        var bytes = [UInt8](repeating: 0, count: w * h * 4)
+        for i in 0..<w * h where !glass[i] {
+            let c = out[i].clamped(lowerBound: .zero, upperBound: Tone(repeating: 255))
+            (bytes[i * 4], bytes[i * 4 + 1], bytes[i * 4 + 2], bytes[i * 4 + 3]) = (UInt8(c.x), UInt8(c.y), UInt8(c.z), 255)
+        }
+        return bytes
+    }
+
+    /// The curtain's width at a row of the canvas: 30 of the mock-ups' pixels, gathered in by a tie three fifths
+    /// of the way down and spreading a little below it.
+    private func curtain(_ y: Int) -> Double {
+        let t = Double(y - pane.y) / Double(pane.h), gathered = (t - Self.tie) / 0.16
+        return (30 - 15 * exp(-(gathered * gathered)) + (t > Self.tie ? 6 * (t - Self.tie) : 0)) * scale
+    }
+    private static let tie = 0.62
+
+    /// The cabin's colours, which pixels are glass, and what each pixel is that the Sun can light (`sunlight`): 1
+    /// the table's top, 2 the sill's, and 3, 4 and 5 the curtain's folds, darkest first.
+    private func paint(dim: Double, lamp glow: Double) -> (out: [Tone], glass: [Bool], lights: [UInt8]) {
         func c(_ r: Double, _ g: Double, _ b: Double) -> Tone { Tone(r, g, b) * dim }
         var out = [Tone](repeating: c(52, 56, 72), count: w * h), glass = [Bool](repeating: false, count: w * h)
+        var lights = [UInt8](repeating: 0, count: w * h)
         /// Each pixel of a box with rounded corners, cut as the mock-ups cut them: a corner's pixel is left out
         /// where its centre is more than `r` from the centre the corner turns about.
         func box(_ x0: Int, _ y0: Int, _ x1: Int, _ y1: Int, _ r: Int, _ put: (Int) -> Void) {
@@ -85,8 +107,10 @@ struct PixelCarriage {
                 }
             }
         }
-        /// A square-cornered box of one colour, over the glass too.
-        func fill(_ x0: Int, _ y0: Int, _ x1: Int, _ y1: Int, _ tone: Tone) { box(x0, y0, x1, y1, 0) { (out[$0], glass[$0]) = (tone, false) } }
+        /// A square-cornered box of one colour, over the glass too, which the Sun lights as `lit` says.
+        func fill(_ x0: Int, _ y0: Int, _ x1: Int, _ y1: Int, _ tone: Tone, lit: UInt8 = 0) {
+            box(x0, y0, x1, y1, 0) { (out[$0], glass[$0], lights[$0]) = (tone, false, lit) }
+        }
         let (x0, y0, x1, y1) = (pane.x, pane.y, pane.x + pane.w, pane.y + pane.h)
         // The frame, with the light along its top two rows.
         box(x0 - 5, y0 - 5, x1 + 5, y1 + 5, 11) { out[$0] = $0 / w < y0 - 3 ? c(150, 154, 168) : c(122, 126, 142) }
@@ -96,23 +120,22 @@ struct PixelCarriage {
         if kind > 0 {
             // A red curtain down the pane's left side, in three tones of fold that waver as they fall, gathered in
             // by a tie three fifths of the way down and spreading a little below it.
-            let cloth = [Tone(126, 62, 58), Tone(156, 80, 70), Tone(188, 104, 86)], tie = 0.62, scale = scale
+            let cloth = [Tone(126, 62, 58), Tone(156, 80, 70), Tone(188, 104, 86)], scale = scale
             for y in max(y0, 0)..<max(min(y1, h), max(y0, 0)) { // kept to the canvas: a pane can overhang a very small one
-                let t = Double(y - y0) / Double(pane.h), gathered = (t - tie) / 0.16
-                let wide = (30 - 15 * exp(-(gathered * gathered)) + (t > tie ? 6 * (t - tie) : 0)) * scale
+                let wide = curtain(y)
                 for x in max(x0, 0)..<max(min(x0 + Int(wide.rounded(.toNearestOrEven)), w), max(x0, 0)) {
                     var fold = (Double(x - x0) / max(wide, 1) * 5 + 0.3 * sin(Double(y) / (9 * scale))).truncatingRemainder(dividingBy: 3)
                     if fold < 0 { fold += 3 }
-                    (out[y * w + x], glass[y * w + x]) = (cloth[min(Int(fold), 2)] * dim, false)
+                    (out[y * w + x], glass[y * w + x], lights[y * w + x]) = (cloth[min(Int(fold), 2)] * dim, false, 3 + UInt8(min(Int(fold), 2)))
                 }
             }
-            let knot = y0 + Int(Double(pane.h) * tie)
+            let knot = y0 + Int(Double(pane.h) * Self.tie)
             fill(x0, knot - 1, x0 + px(16), knot + 2, c(214, 178, 96))
         }
         if kind == 1 {
             // The sill across the foot of the pane, lit along its top, and a little way over the frame each side.
             let sill = y1 - px(9)
-            fill(x0 - 3, sill, x1 + 3, sill + 2, c(170, 172, 182))
+            fill(x0 - 3, sill, x1 + 3, sill + 2, c(170, 172, 182), lit: 2)
             fill(x0 - 3, sill + 2, x1 + 3, y1 + 2, c(104, 108, 124))
         }
         if kind == 2 {
@@ -125,9 +148,9 @@ struct PixelCarriage {
                 let y = $0 / w, n = (y - far) / board
                 let tone = (y - far) % board == board - 1 ? c(92, 58, 44)
                     : unit(hash(($0 % w + n * 37) / streak, y, 31)) < 0.05 ? c(140, 94, 64) * 0.9 : n % 2 == 0 ? wood : wood * 0.93
-                (out[$0], glass[$0]) = (tone, false)
+                (out[$0], glass[$0], lights[$0]) = (tone, false, 1)
             }
-            fill(0, far, w, far + 1, c(172, 124, 86)) // the light along its far edge
+            fill(0, far, w, far + 1, c(172, 124, 86), lit: 1) // the light along its far edge
             // The lamp: a brass foot and stem under a shade, which is cream with its left side in shadow by day
             // and glows after dark, brightest at its rim.
             let brass = c(176, 140, 70) * (1 - 0.5 * glow) + Tone(176, 140, 70) * (0.5 * glow)
@@ -137,7 +160,7 @@ struct PixelCarriage {
                 let lit = Tone(255, 222, 160) * (0.86 + 0.14 * row.down)
                 box(x - row.half, row.y, x + row.half + 1, row.y + 1, 0) {
                     let unlit = $0 % w - (x - row.half) < 3 ? c(190, 170, 146) : c(226, 208, 178)
-                    (out[$0], glass[$0]) = (unlit * (1 - glow) + lit * glow, false)
+                    (out[$0], glass[$0], lights[$0]) = (unlit * (1 - glow) + lit * glow, false, 0)
                 }
             }
             // Its pool of light on the table, dithered away toward its edge.
@@ -151,10 +174,51 @@ struct PixelCarriage {
                 }
             }
         }
+        return (out, glass, lights)
+    }
 
+    /// The Sun shining in at the window, for `sunlight`: how many of the canvas's rows up the glass a ray toward
+    /// it climbs for each row of the table it crosses on the way, how many columns it moves sideways for each
+    /// (toward the Sun's side: more than 0 with the Sun to the right), and what it does to a colour it lights.
+    struct Beam { let rise: Double, slant: Double, tint: SIMD3<Double> }
+
+    /// What the Sun lights of the cabin, as bytes of red, green, blue and alpha, rows from the top, alpha 0 where
+    /// it doesn't reach: the window's shape laid on the table (or on the sill's top) as a slanting patch, its edge
+    /// dithered as the lamp's pool is, with the shadows of the curtain and the lamp in it; and the curtain, lit
+    /// through from behind, most on the folds turned to the Sun's side. The scene lays it over the cabin, faded by
+    /// how much of the Sun cloud leaves.
+    func sunlight(dim: Double, lamp glow: Double, beam: Beam) -> [UInt8] {
+        let (out, _, lights) = paint(dim: dim, lamp: glow)
+        let (x0, y0, x1) = (pane.x, pane.y, pane.x + pane.w), foot = kind == 1 ? pane.y + pane.h - px(9) : far // the row the light comes in over
+        let lamp = lamp, kind = kind, shade = kind == 2 ? shade(lamp.foot) : []
+        /// Whether the lamp stands in the way of the Sun, for a ray that passes its foot `up` rows above the table and
+        /// `dx` columns to its side.
+        func lampHides(_ up: Double, _ dx: Double) -> Bool {
+            guard up >= 0 else { return false }
+            if up < 2 { return abs(dx) <= Double(px(6)) + 0.5 }
+            if up < Double(px(20)) { return dx >= -1 && dx < 1 }
+            let row = lamp.foot - Int(up)
+            return shade.contains { $0.y == row && abs(dx) <= Double($0.half) + 0.5 }
+        }
         var bytes = [UInt8](repeating: 0, count: w * h * 4)
-        for i in 0..<w * h where !glass[i] {
-            let c = out[i].clamped(lowerBound: .zero, upperBound: Tone(repeating: 255))
+        for i in 0..<w * h where lights[i] != 0 {
+            let (x, y) = (i % w, i / w)
+            var tint = beam.tint
+            if lights[i] >= 3 {
+                let turned = beam.slant >= 0 ? Double(lights[i] - 3) : Double(5 - lights[i]) // (folds run dark to light, rightward)
+                tint = Tone(repeating: 1) + (beam.tint - 1) * (0.15 + 0.25 * turned)
+            } else {
+                // Where its ray toward the Sun meets the glass: so far up the window and so far across.
+                let depth = Double(y - foot) + 0.5, up = depth * beam.rise, across = Double(x) + 0.5 + depth * beam.slant
+                let row = foot - Int(up), drape = kind > 0 && row >= y0 ? curtain(row) : 0
+                let edge = min(across - Double(x0) - drape, Double(x1) - across, Double(foot - y0) - up)
+                guard edge + (bayer[y % 4][x % 4] - 0.5) * 4 > 0 else { continue }
+                if kind == 2, y > lamp.foot {
+                    let past = Double(y - lamp.foot), at = Double(x) + 0.5 + past * beam.slant - Double(lamp.x) - 0.5
+                    if lampHides(past * beam.rise, at) { continue }
+                }
+            }
+            let c = (out[i] * tint).clamped(lowerBound: .zero, upperBound: Tone(repeating: 255))
             (bytes[i * 4], bytes[i * 4 + 1], bytes[i * 4 + 2], bytes[i * 4 + 3]) = (UInt8(c.x), UInt8(c.y), UInt8(c.z), 255)
         }
         return bytes
@@ -163,11 +227,34 @@ struct PixelCarriage {
     /// The cabin as the texture of the scene's sprite of it, once night has fallen `night` of the way, under weather
     /// that has put the day out by `gloom`.
     func texture(night: Double, gloom: Double = 0) -> SKTexture {
-        let light = Self.light(night, gloom: gloom), bytes = picture(dim: light.dim, lamp: light.lamp)
-        var canvas = Pixels(w, h)
-        for i in 0..<w * h where bytes[i * 4 + 3] != 0 {
-            // (Half a step up, so that `Pixels`' floats come back down to the same whole number.)
-            canvas.plot(i % w, h - 1 - i / w, (RGB(Float(bytes[i * 4]), Float(bytes[i * 4 + 1]), Float(bytes[i * 4 + 2])) + 0.5) / 255)
+        let light = Self.light(night, gloom: gloom)
+        return texture(of: picture(dim: light.dim, lamp: light.lamp))
+    }
+
+    /// What the Sun lights of the cabin (`sunlight`), as textures for the sprites the scene lays over it: the
+    /// curtain, and the table's or the sill's top, each cut to the box it lights, with that box's place on the canvas
+    /// from its bottom left. (One sprite the canvas's size cost the GPU about 0.15 ms a frame for the whole canvas.)
+    func sunTextures(night: Double, gloom: Double = 0, beam: Beam) -> [(texture: SKTexture, x: Int, y: Int, w: Int, h: Int)] {
+        let light = Self.light(night, gloom: gloom), bytes = sunlight(dim: light.dim, lamp: light.lamp, beam: beam)
+        let below = kind == 1 ? pane.y + pane.h - px(9) : far, drape = pane.x + px(40) // (the curtain is above the one and left of the other)
+        return [{ x, y in y < below && x < drape }, { x, y in !(y < below && x < drape) }].compactMap { part in
+            let lit = (0..<w * h).filter { bytes[$0 * 4 + 3] != 0 && part($0 % w, $0 / w) }
+            guard let left = lit.map({ $0 % w }).min(), let right = lit.map({ $0 % w }).max(), let top = lit.first, let bottom = lit.last else { return nil }
+            let (x0, y0, x1, y1) = (left, top / w, right + 1, bottom / w + 1)
+            return (texture(of: bytes, x0, y0, x1, y1), x0, h - y1, x1 - x0, y1 - y0)
+        }
+    }
+
+    /// The box from `x0`, `y0` (rows from the top) up to `x1`, `y1` of a picture's bytes, as a texture.
+    private func texture(of bytes: [UInt8], _ x0: Int = 0, _ y0: Int = 0, _ x1: Int? = nil, _ y1: Int? = nil) -> SKTexture {
+        let (x1, y1) = (x1 ?? w, y1 ?? h)
+        var canvas = Pixels(x1 - x0, y1 - y0)
+        for y in y0..<y1 {
+            for x in x0..<x1 where bytes[(y * w + x) * 4 + 3] != 0 {
+                let i = y * w + x
+                // (Half a step up, so that `Pixels`' floats come back down to the same whole number.)
+                canvas.plot(x - x0, y1 - 1 - y, (RGB(Float(bytes[i * 4]), Float(bytes[i * 4 + 1]), Float(bytes[i * 4 + 2])) + 0.5) / 255)
+            }
         }
         return canvas.texture()
     }
