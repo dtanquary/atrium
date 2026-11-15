@@ -95,17 +95,3 @@ private func paperBeside(_ pixels: [SIMD3<Int>], _ w: Int) -> (lee: Double, lit:
     let paper = paperBeside(try picture(light: true), 640)
     #expect(paper.lee < paper.lit - 20)
 }
-
-/// On battery it runs at 10 fps while Speed is 2× or under, and at 15 above it, following the slider.
-@MainActor @Test func turingPatternsRateFollowsSpeed() {
-    defer { UserDefaults.standard.removeObject(forKey: "turing.speed") }
-    UserDefaults.standard.set(1.0, forKey: "turing.speed")
-    let scene = TuringPatterns(size: CGSize(width: 320, height: 200))
-    #expect(scene.batteryRate == 10)
-    UserDefaults.standard.set(3.0, forKey: "turing.speed")
-    scene.update(1)
-    #expect(scene.batteryRate == 15)
-    UserDefaults.standard.set(2.0, forKey: "turing.speed")
-    scene.update(2)
-    #expect(scene.batteryRate == 10)
-}

@@ -7,7 +7,7 @@ import SpriteKit
 /// wraps at the edges. Drift wanders its feed and kill rates round the patterns in order: coral branches, cells
 /// dividing into spots, spots swelling into a honeycomb of holes, then fingerprint stripes. Every pattern settles into
 /// a steady state, so Motion keeps disturbing it: Regrow dissolves patches that grow back, Flow carries it on a current.
-final class TuringPatterns: SKScene, BatteryPaced {
+final class TuringPatterns: SKScene {
     /// Feed and kill rates for each pattern, from Pearson, "Complex Patterns in a Simple System" (Science, 1993) and
     /// Karl Sims' reaction–diffusion tutorial. Only the slow, settling kinds: the moving waves and spirals are too busy.
     /// In Drift order: each leg between neighbours stays inside the pattern-forming region, so nothing dies out.
@@ -46,17 +46,12 @@ final class TuringPatterns: SKScene, BatteryPaced {
     private var kill: [Float] = [], flowX: [Float] = [], flowY: [Float] = [] // Motion's extra kill rate and current, per cell
     private var patches: [(x: Int, y: Int, age: Int)] = [] // Regrow's, age in steps
     private var flowing = false
-    /// Its ceiling on battery, from Speed: 10 fps up to 2×, whose 120 steps a second fit in the 12 a frame `update`
-    /// takes at most, and 15 above it, which 3×'s 180 a second need.
-    var batteryRate: Int? = 10 { didSet { batteryRateChanged(from: oldValue) } }
-    private static var pace: Int { knobs[2].value > 2 ? 15 : 10 }
     /// Each load's draws: its palette, where Drift starts, its seeds and Regrow's patches. ("turing.seed" is for the
     /// tests, which want the same pattern twice; nothing else sets it.)
     private var rng = SplitMix(state: UInt64(max(UserDefaults.standard.integer(forKey: "turing.seed"), 0)))
 
     override func sceneDidLoad() {
         if rng.state == 0 { rng.state = .random(in: 1...UInt64.max) }
-        batteryRate = Self.pace
         backgroundColor = .black
         cols = Int((size.width / cell).rounded(.up))
         rows = Int((size.height / cell).rounded(.up))
@@ -102,7 +97,6 @@ final class TuringPatterns: SKScene, BatteryPaced {
 
     override func update(_ currentTime: TimeInterval) {
         let dt = frameTime(currentTime, &lastTime)
-        batteryRate = Self.pace
         owed = min(owed + dt * stepsPerSecond * Self.knobs[2].value, 12)
         let count = Int(owed)
         guard count > 0 else { return }
