@@ -651,7 +651,7 @@ final class DappledLight: SKScene, BatteryPaced, Trimmable {
     float gap(vec2 dg, vec4 h, float size, float stretch, float open, float clump, float flutter, float sway, float t, vec4 src, vec2 term, float px) {
         float there = smoothstep(-0.03, 0.03, h.z - (0.78 - 0.4 * open + 0.6 * (clump - 0.5)));
         float tw = mod(t, 3600.0); // wrapped: a fast flutter coarsens first
-        float breathe = 1.0 - 0.2 * sway * (0.5 + 0.5 * sin(tw * (0.4 + 0.5 * fract(h.w * 7.3)) + h.w * 40.0));
+        float breathe = 1.0 - 0.2 * sway * (0.5 + 0.5 * sin(t * (0.4 + 0.5 * fract(h.w * 7.3)) + h.w * 40.0));
         float r = (0.1 + 0.3 * h.z) * (0.5 + 0.5 * open) * breathe;
         // A gap's image is as bright as the gap's area over the image's, (r / size)², so a wide gap near the wall makes
         // a bright, soft blob and a pinhole far out a faint, crisp disc; squeezed into the 0.2–1 of full sun that the
