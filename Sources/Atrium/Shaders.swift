@@ -84,7 +84,7 @@ vec3 grade(vec3 col, float pivot, float hue, float saturation, float contrast, f
 
 """
 
-/// How brightly the Sun lights a point on the Moon's disc, for the small Moons in Weather and Live Sky: McEwen's
+/// How brightly the Sun lights a point on the Moon's disc, for the small Moons in Weather and Night Sky: McEwen's
 /// lunar-Lambert, as in The Moon. A full Moon is flat to the limb; at other phases the light fades toward the
 /// terminator, as it does in the sky. `n` is the surface normal and `l` points at the Sun, with the viewer along +z.
 let moonShade = """

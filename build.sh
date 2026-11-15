@@ -11,7 +11,7 @@ cd "$(dirname "$0")"
 swift build -c release ${APP_STORE:+-Xswiftc -DAPP_STORE} -Xlinker -platform_version -Xlinker macos -Xlinker 26.0 -Xlinker "$(xcrun --show-sdk-version)"
 BUILD=$(git rev-list --count HEAD 2>/dev/null || echo 0)
 
-LOCATION="Wallpapers like Live Sky, Weather, Wind and Dappled Light show the real sky, weather and light where you are. Without your location, Atrium guesses from your time zone."
+LOCATION="Wallpapers like Night Sky, Weather, Wind and Dappled Light show the real sky, weather and light where you are. Without your location, Atrium guesses from your time zone."
 APP=build/Atrium.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"

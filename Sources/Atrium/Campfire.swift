@@ -247,7 +247,7 @@ struct FireCamera {
     static let bedRect = CGRect(x: 1640.0 / 4096, y: 1 - 2372.0 / 2660, width: 812.0 / 4096, height: 632.0 / 2660)
 }
 
-/// The real stars over the viewer right now (Live Sky's catalogue), seen through the campfire's camera turned to
+/// The real stars over the viewer right now (Night Sky's catalogue), seen through the campfire's camera turned to
 /// face the equator. Faint stars are small
 /// dim points and bright ones slightly larger, tinted by their colour, and all dim toward the horizon through
 /// more air. Positions are refreshed every 10 s (the sky turns about 0.04° in that time).
@@ -275,7 +275,7 @@ final class StarField: SKNode {
         let toHorizon = Sky.horizonMatrix(jd: Sky.julianDate(Date()), latitude: here.latitude, longitude: here.longitude)
         let south = here.latitude >= 0
         var n = 0
-        for star in LiveSky.catalogue where star.magnitude <= limit {
+        for star in NightSky.catalogue where star.magnitude <= limit {
             let h = toHorizon * star.direction
             let forward = south ? -h.y : h.y, right = south ? -h.x : h.x
             guard h.z > 0.02, forward > 0.1 else { continue }
@@ -297,7 +297,7 @@ final class StarField: SKNode {
             let d = max(1.3, min(5, 1.3 + 1.2 * log10(1 + flux * 3)))
             s.size = CGSize(width: d, height: d)
             s.position = p
-            let c = LiveSky.starColour(star.bv).usingColorSpace(.sRGB)!
+            let c = NightSky.starColour(star.bv).usingColorSpace(.sRGB)!
             s.color = NSColor(red: 0.5 + 0.5 * c.redComponent, green: 0.5 + 0.5 * c.greenComponent, blue: 0.5 + 0.5 * c.blueComponent, alpha: 1)
             s.alpha = min(1, 0.12 + 0.55 * sqrt(flux))
             s.isHidden = false

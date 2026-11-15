@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import Testing
 import simd
 @testable import Atrium
@@ -54,7 +54,7 @@ func eclipsesLineUp(time: String, latitude: Double, longitude: Double) {
     #expect(acos(min(dot(Sky.moon(jd), Sky.sun(jd)), 1)) * 180 / .pi > 0.4)
 }
 
-/// Every real skyline Live Sky offers is in Resources, runs left to right and spans the whole view, so none can paint
+/// Every real skyline Night Sky offers is in Resources, runs left to right and spans the whole view, so none can paint
 /// an empty ground or one that stops short of the screen's edge.
 @Test func skylinesSpanTheView() {
     for land in Landscape.allCases where land != .pines {
@@ -63,4 +63,84 @@ func eclipsesLineUp(time: String, latitude: Double, longitude: Double) {
         #expect(zip(across, across.dropFirst()).allSatisfy { $0 <= $1 }, "\(land) doubles back")
         #expect(up.allSatisfy { (0...15).contains($0) } && (up.max() ?? 0) > 3, "\(land) is flat or implausibly tall")
     }
+}
+
+/// The meteor showers peak on their nights: on 13 August the Perseids are the strongest and near their full hundred
+/// an hour, on 14 December the Geminids, on 3 January the Quadrantids, and in mid-March there are none.
+@Test func showersPeakOnTheirNights() {
+    func strongest(_ month: Int, _ day: Int) -> (name: String, hourly: Double) {
+        let noon = DateComponents(calendar: Calendar(identifier: .gregorian), timeZone: .gmt, year: 2026, month: month, day: day, hour: 12)
+        let sun = Sky.sunLongitude(Sky.julianDate(noon.date!))
+        return NightSky.showers.map { ($0.name, NightSky.hourly($0, sunLongitude: sun)) }.max { $0.1 < $1.1 }!
+    }
+    #expect(strongest(8, 13).name == "Perseids" && strongest(8, 13).hourly > 70)
+    #expect(strongest(12, 14).name == "Geminids" && strongest(12, 14).hourly > 100)
+    #expect(strongest(1, 3).name == "Quadrantids" && strongest(1, 3).hourly > 40)
+    #expect(strongest(3, 15).hourly == 0)
+}
+
+/// The made-up comet comes and goes: on 16 November 2026, half-way through its first visit, it's at its brightest and
+/// about 45° from the Sun; nine days later it has gone, and it's back for the next visit on 20 December.
+@Test func madeUpCometComesAndGoes() throws {
+    func noon(_ month: Int, _ day: Int) -> Double {
+        Sky.julianDate(DateComponents(calendar: Calendar(identifier: .gregorian), timeZone: .gmt, year: 2026, month: month, day: day, hour: 0).date!)
+    }
+    let peak = try #require(NightSky.comet(noon(11, 16)))
+    #expect(peak.bright > 0.99 && (44...52).contains(acos(dot(peak.direction, Sky.sun(noon(11, 16)))) * 180 / .pi))
+    #expect(NightSky.comet(noon(11, 25)) == nil && NightSky.comet(noon(12, 20)) != nil)
+}
+
+/// Night Sky's fainter stars come from Black Hole's star file, which is baked already turned to that scene's view, and
+/// `NightSky.toStars` is that turn. Bake the file for another view and Night Sky's stars would all land in the wrong
+/// places with nothing to say so; this says so: each of the 20 brightest stars of Night Sky's own catalogue has to be
+/// in the file within a tenth of a degree of where the turn puts it.
+@Test func starFileIsInNightSkysFrame() {
+    let bright = NightSky.starFile().filter { $0.magnitude < 2.5 }.map { star -> Sky.Vector in
+        let (round, up) = ((star.round - 0.5) * 2 * .pi, (star.up - 0.5) * .pi)
+        return [cos(up) * sin(round), sin(up), cos(up) * cos(round)] // longitude is atan2(x, z), latitude asin(y)
+    }
+    #expect(bright.count > 50)
+    for star in NightSky.catalogue.sorted(by: { $0.magnitude < $1.magnitude }).prefix(20) {
+        let turned = NightSky.toStars * star.direction
+        let nearest = bright.map { acos(min(1, dot($0, turned))) * 180 / .pi }.min() ?? 180
+        #expect(nearest < 0.1, "a magnitude \(star.magnitude) star is \(nearest)° from any in the file")
+    }
+}
+
+/// The star grid's rows hold the number of cells the shader expects, and nearly every faint star keeps its cell.
+@Test func faintStarsKeepTheirCells() {
+    // none of the sixteen bands' counts is within a tenth of a whole number, where a GPU's cosine could round the other way
+    for band in 0..<16 {
+        let exact = 2048 * cos(Double(band) * 32 * .pi / 1024)
+        #expect(exact - exact.rounded(.down) > 0.1 || band == 0, "band \(band) holds \(exact) cells")
+        #expect(NightSky.cells(row: 511.5 + Double(band) * 32 + 0.5) == exact.rounded(.down))
+    }
+    let grid = NightSky.starGrid(), kept = stride(from: 2, to: grid.count, by: 4).count { grid[$0] > 0 }
+    #expect(kept > 105_000 && kept < 113_300, "\(kept) stars in the grid")
+}
+
+/// Night Sky's photograph of the whole sky has its stars where the catalogue puts ours: turned by `NightSky.toPhoto`,
+/// the 20 brightest land on bright spots in it. Without the turn they miss by two or three degrees and none does.
+@Test func skyPhotoLinesUpWithTheStars() throws {
+    let source = try #require(CGImageSourceCreateWithURL(resource("sky-milky-way.heic") as CFURL, nil))
+    let image = try #require(CGImageSourceCreateImageAtIndex(source, 0, nil))
+    let (w, h) = (image.width, image.height)
+    var grey = [UInt8](repeating: 0, count: w * h)
+    let context = try #require(CGContext(data: &grey, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w,
+                                         space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue))
+    context.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+    /// The brightest pixel within `reach` of a point, and the mean over the same square.
+    func light(_ x: Int, _ y: Int, reach: Int) -> (peak: Double, mean: Double) {
+        let values = (y - reach...y + reach).flatMap { row in (x - reach...x + reach).map { Double(grey[row * w + $0]) } }
+        return (values.max()!, values.reduce(0, +) / Double(values.count))
+    }
+    var found = 0, looked = 0
+    for star in NightSky.catalogue.sorted(by: { $0.magnitude < $1.magnitude }).prefix(20) {
+        let g = NightSky.toPhoto * star.direction
+        let (x, y) = (Int((0.5 - atan2(g.y, g.x) / (2 * .pi)) * Double(w)), Int((0.5 - asin(g.z) / .pi) * Double(h)))
+        guard (45..<w - 45).contains(x), (45..<h - 45).contains(y) else { continue } // the photo's seam and poles
+        looked += 1
+        if light(x, y, reach: 5).peak - light(x, y, reach: 40).mean > 60 { found += 1 } // half a degree, in 3.5°
+    }
+    #expect(looked >= 18 && found >= looked - 1, "\(found) of \(looked) bright stars are on their own picture")
 }

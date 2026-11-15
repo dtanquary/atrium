@@ -79,8 +79,12 @@ import Testing
 ///     MENU_SHOT=1 swift test --filter menuShot           # → $TMPDIR/atrium-menu.png
 ///     MENU_SHOT="Nebula" swift test --filter menuShot    # with the pointer over that wallpaper, then clicks on it
 ///     MENU_SHOT="Settings" swift test --filter menuShot  # with the pointer over the Settings pill
-///     MENU_FAVORITES="Nebula,Live Sky" MENU_SHOT=1 …     # with those starred, so leading the grid
+///     MENU_FAVORITES="Nebula,Night Sky" MENU_SHOT=1 …     # with those starred, so leading the grid
 ///     SNAPSHOT_APPEARANCE=light MENU_SHOT=1 …            # in Light Mode
+///
+/// Run it with `--filter menuShot`, as above. Set for a whole `swift test`, two runs of four on 2026-11-14 ended early
+/// some minutes after it, with exit code 0, no failure and no closing line, about 40 tests never run: the cause wasn't
+/// found, and a run that ends without "Test run with … tests" hasn't passed.
 ///
 /// The pointer and the clicks are events handed to the grid as the menu would hand them, at the middle of the tile
 /// worked out from where the grid sits in the menu's window: the real pointer stays where it is. An Option-click

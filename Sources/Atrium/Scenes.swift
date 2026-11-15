@@ -126,8 +126,8 @@ struct Refresh {
               make: pegBoard, knobs: PegBoard.knobs, palettes: PegBoard.palette, batteryRate: 12),
     Wallpaper(name: "Ant Colony", icon: "ant.fill", tint: .blue, blurb: "Ants digging a new nest every day, seen through the glass.",
               make: antColony, knobs: AntColony.knobs, batteryRate: 20),
-    Wallpaper(name: "Live Sky", icon: "moon.stars.fill", tint: .blue, blurb: "The real sky above you, right now.",
-              make: liveSky, knobs: LiveSky.knobs, batteryScale: 0.5),
+    Wallpaper(name: "Night Sky", icon: "moon.stars.fill", tint: .blue, blurb: "The stars above you right now, day or night.",
+              make: nightSky, knobs: NightSky.knobs),
     Wallpaper(name: "Earth from Orbit", icon: "globe.americas.fill", tint: .cyan, blurb: "Day and night sweeping over the globe.",
               make: earthFromOrbit, knobs: EarthFromOrbit.knobs, refresh: .earth),
     Wallpaper(name: "Weather", icon: "cloud.sun.fill", tint: .blue, blurb: "Real hills under your live local weather.",
@@ -227,8 +227,9 @@ extension BatteryPaced {
 extension Notification.Name {
     /// Posted by a `BatteryPaced` scene whose `batteryRate` has changed.
     static let batteryRateChanged = Notification.Name("AtriumBatteryRateChanged")
-    /// Posted by a scene that now shows another picture altogether (Space Tour, on its next photo), for the app to take
-    /// the lock screen's still again now and not when the next is due: macOS dresses the menu bar by that still.
+    /// Posted by a scene that now shows another picture altogether (Space Tour, on its next photo), for the app to show
+    /// macOS a small still of it now: macOS dresses the menu bar by the still, and the next for the lock screen may be
+    /// ten minutes off.
     static let pictureChanged = Notification.Name("AtriumPictureChanged")
 }
 

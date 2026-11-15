@@ -168,12 +168,17 @@ final class WallpaperView: SKView, SKViewDelegate {
 }
 
 var windows: [NSWindow] = []
-// ponytail: one-off moves of settings saved before the app became Atrium and Night Sky became Live Sky; drop after a while
+// ponytail: a one-off move of settings saved before the app became Atrium; drop after a while
 if UserDefaults.standard.object(forKey: "scene") == nil,
    let old = UserDefaults.standard.persistentDomain(forName: "com.dtanquary.wallpaper") {
     for (key, value) in old { UserDefaults.standard.set(value, forKey: key) }
 }
-if UserDefaults.standard.string(forKey: "scene") == "Night Sky" { UserDefaults.standard.set("Live Sky", forKey: "scene") }
+// ponytail: Live Sky went back to being Night Sky on 2026-11-14; drop this move after a while
+for key in ["scene", "scene.previous", SettingsView.pageKey, Shuffle.skipKey, Favorites.key] {
+    if let old = UserDefaults.standard.string(forKey: key), old.contains("Live Sky") {
+        UserDefaults.standard.set(old.replacingOccurrences(of: "Live Sky", with: "Night Sky"), forKey: key)
+    }
+}
 // ponytail: The Sun Today and The Moon became views in Solar System on 2026-09-27, which became Solar System Tour on
 // 2026-09-28; drop these moves after a while
 if let body = ["The Sun Today": "The Sun", "The Moon": "The Moon"][UserDefaults.standard.string(forKey: "scene") ?? ""] {
@@ -287,10 +292,11 @@ if !scenes.contains(where: { $0.name == current }) {
     matchLockScreen(after: 1.5)
 }
 
-/// With Match the lock screen on, takes a fresh still once the scene has settled.
-@MainActor func matchLockScreen(after seconds: Double) {
+/// With Match the lock screen on, takes a fresh still once the scene has settled; `forBar`, a small one that only
+/// dresses the menu bar (`LockScreen.match`).
+@MainActor func matchLockScreen(after seconds: Double, forBar: Bool = false) {
     DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
-        if LockScreen.knob.value > 0.5 { LockScreen.match(windows) }
+        if LockScreen.knob.value > 0.5 { LockScreen.match(windows, forBar: forBar) }
     }
 }
 
@@ -591,7 +597,12 @@ if let source = IOPSNotificationCreateRunLoopSource({ _ in
 // the unlock; the name isn't documented, but has been the same for years.
 Shuffle.reschedule()
 DistributedNotificationCenter.default().addObserver(forName: .init("com.apple.screenIsUnlocked"), object: nil, queue: .main) { _ in
-    MainActor.assumeIsolated { if Shuffle.onUnlock, let name = Shuffle.next() { show(name) } }
+    MainActor.assumeIsolated {
+        if Shuffle.onUnlock, let name = Shuffle.next() { return show(name) }
+        // macOS dresses the menu bar again five seconds after an unlock, by the lock screen's still, which can be
+        // ten minutes behind the wallpaper: after that, by the wallpaper as it is.
+        matchLockScreen(after: 6, forBar: true)
+    }
 }
 NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { _ in
     MainActor.assumeIsolated {
@@ -600,24 +611,28 @@ NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotificati
     }
 }
 // Match the lock screen, or put back the user's wallpaper if a crash left one of ours, once the scenes have drawn;
-// then keep the still fresh while the displays are awake (time-of-day scenes drift), unless no wallpaper has drawn
-// since the last (paused, frozen or covered), and take one as they sleep, just before a lock.
+// then keep up with the wallpaper while the displays are awake (time-of-day scenes drift), unless none has drawn
+// since the lock screen's last still (paused, frozen or covered): a small still for the menu bar every ten minutes,
+// and the lock screen's own at the sixth of them, an hour on, since macOS keeps every one of those at 17.8 MB
+// (`LockScreen`). And take one as the displays sleep, just before a lock.
 DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { LockScreen.update(windows) }
 // Each repeating timer has a tolerance, so macOS can wake for it along with others, which saves battery.
 Timer.scheduledTimer(withTimeInterval: 600, repeats: true) { _ in
     MainActor.assumeIsolated {
         let drawn = windows.contains { ($0.contentView as? WallpaperView).map { $0.lastDrawn > LockScreen.taken } ?? false }
-        if !WallpaperView.screensAsleep, drawn { matchLockScreen(after: 0) }
+        // 55 minutes: the timer may run a minute late or early of the hour.
+        if !WallpaperView.screensAsleep, drawn { matchLockScreen(after: 0, forBar: Date().timeIntervalSince(LockScreen.taken) < 3300) }
     }
 }.tolerance = 60
-// And at once when the wallpaper on the desktop has changed picture altogether (Space Tour, each minute): the menu
-// bar is dressed by the still, and the last photo's would leave it black on light over a black sky, or the reverse.
+// And when the wallpaper on the desktop has changed picture altogether (Space Tour, each minute), a small one for the
+// menu bar, which is dressed by the still: the last photo's would leave it black on light over a black sky, or the
+// reverse. Not a still for the lock screen each time: macOS keeps every one, 17.8 MB apiece.
 NotificationCenter.default.addObserver(forName: .pictureChanged, object: nil, queue: .main) { note in
     let poster = (note.object as AnyObject?).map(ObjectIdentifier.init) // the scene itself can't cross to the main actor
     MainActor.assumeIsolated {
         // Not for the copy Settings runs behind a wallpaper's page.
         let onDesktop = windows.contains { ($0.contentView as? SKView)?.scene.map(ObjectIdentifier.init) == poster }
-        if onDesktop { matchLockScreen(after: 0) }
+        if onDesktop { matchLockScreen(after: 0, forBar: true) }
     }
 }
 // macOS gave that still to the Space in front only, so each other Space gets it as it comes to the front.

@@ -11,7 +11,7 @@ A pixel-art city that follows the real Sun and clock. The sky moves through dawn
 
 The launch site that was its seventh city for a day, the Spaceport, is now a wallpaper of its own, Pixel Spaceport, built by the same class: see [pixel-spaceport.md](pixel-spaceport.md).
 
-- **Files:** `Sources/Atrium/PixelCity.swift`, which holds everything: the scene, every city, the `Pixels` canvas, sprite art as strings, `SeededRandom`, the water's shader and its own low-precision `skyPosition()` for the Sun. It reads `Location.swift` ([live-sky.md](live-sky.md)) and, for the Airport's wind, `LiveWeather.swift` ([weather.md](weather.md)).
+- **Files:** `Sources/Atrium/PixelCity.swift`, which holds everything: the scene, every city, the `Pixels` canvas, sprite art as strings, `SeededRandom`, the water's shader and its own low-precision `skyPosition()` for the Sun. It reads `Location.swift` ([night-sky.md](night-sky.md)) and, for the Airport's wind, `LiveWeather.swift` ([weather.md](weather.md)).
 - **Entry:** `pixelCity(size:)` builds `final class PixelCity: SKScene`. Its entry in Scenes.swift is "Pixel City", icon `building.2.fill`, tint `.pink`, with `PixelCity.knobs`.
 - **Kind:** SpriteKit on a low-resolution canvas. Two backdrop textures are repainted every 30 s, the sky and the city in front of it, and sprites for the moving things all sit under a `canvas` node scaled up by the pixel size. Every texture uses `.nearest` filtering, so it stays crisp.
 
@@ -215,7 +215,7 @@ From the 2026-10-04 review, not yet done:
 - **More vehicles** (taxi, van, truck, bike) with ground shadows.
 - **Clouds:** layered, of varied size, lit from the Sun's side, their number from the real cloud cover.
 - **Weather** from `LiveWeather.shared`, which costs no extra calls: rain with a wet road, snow settling on roofs, fog eating the far rows, wind steering clouds and steam.
-- **The real night sky:** bright stars from Live Sky's catalogue, so Orion really rises over the skyline; the Moon from `SkyMath` (and delete `skyPosition`); the ISS.
+- **The real night sky:** bright stars from Night Sky's catalogue, so Orion really rises over the skyline; the Moon from `SkyMath` (and delete `skyPosition`); the ISS.
 - **A clock-and-temperature sign** on the landmark showing the real time and Open-Meteo temperature.
 - **The calendar:** street trees that follow the date, string lights in December.
 - **Colour:** authored ramps per time of day, snapped to about 40 colours, to end the muddy transitions.

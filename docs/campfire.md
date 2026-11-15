@@ -8,7 +8,7 @@ A campfire in a ring of upright stones, in a real forest clearing at night under
   - `Sources/Atrium/Campfire.swift`: the `Campfire` scene, the relighting shader, `FireCamera`, `CampfirePhoto` and `StarField`
   - `Sources/Atrium/CampfireFlames.swift`: `Flames`, `FlameSim`, `Sparks`, `coalBed` and `firePhoto`
   - `Resources/campfire-ground.heic`, `campfire-ground-aux.png`, `campfire-bed.png`, credited in `campfire-credits.tsv`
-  - Live Sky's catalogue, `LiveSky.catalogue` and `LiveSky.starColour`, for the stars
+  - Night Sky's catalogue, `NightSky.catalogue` and `NightSky.starColour`, for the stars
 - **Entry:** `campfire(size:)`, icon `flame.fill`, tint `.red`.
 - **Kind:** photo ground relit in a shader, a CPU fluid simulation drawn by a shader, SpriteKit sprites.
 
@@ -91,7 +91,7 @@ The research notes are in the session scratchpad (`notes/campfire-science.md` an
 - 2026-09-26: "start a fidelity pass on the campfire, same approach, do research on realistic looks, realistic forest backdrops, use our existing night sky star logic, and then try your best to create a realistic looking fire in the campfire".
 - Research agents covered fire physics and camera rendering, measurements from real footage, and backdrop photos.
 - **Backdrop:** Hochsal Forest was chosen for its soft, even light and open sky. Niederwihl Forest was the runner-up, a deeper forest with little sky.
-- **Stars:** from Live Sky's catalogue, which is "our existing night sky star logic".
+- **Stars:** from Night Sky's catalogue, which is "our existing night sky star logic".
 - **Flames:** the first build (0.20.0) had two engines behind a Settings choice. One was the simulation drawn softly; the other was the research agent's procedural shader, bright and crisp but smooth and patterned in motion.
 - Dave, asked to compare: "do whatever you think would look best". I lined up consecutive frames of both against real footage (the Claytor Lake clip). Real fire has a bright clipped body, many sharp pointed tongues and torn fragments, all gone within a frame or two. So I locked in a hybrid: the simulation for where the fire is and its motion, and the procedural recipe for the tongues and the crisp edge. The Settings choice and the procedural engine were removed. Smoke haze, glow, heat shimmer and bounce light were added at the same time.
 

@@ -13,12 +13,12 @@ struct WelcomeView: View {
         ("Nature and weather", ["Fish Tank", "Weather", "A Tree for the Year", "Dappled Light", "Rain on Glass", "Wind",
                                 "Murmuration", "Aurora", "Fireflies", "Meander", "Ant Colony", "Jellyfish", "Kelp Forest",
                                 "Campfire"]),
-        ("Space", ["Space Tour", "Nebula", "Galaxy", "Black Hole", "Live Sky", "Earth from Orbit", "Pixel Spaceport"]),
+        ("Space", ["Space Tour", "Nebula", "Galaxy", "Black Hole", "Night Sky", "Earth from Orbit", "Pixel Spaceport"]),
         ("Color, light and pattern", ["Flowing Gradient", "Lava Lamp", "Schlieren", "Turing Patterns", "Game of Life", "Pixel City",
                                       "Pixel Window Seat"]),
     ]
     /// Wallpapers that follow the sky, weather, light or seasons where you are, so they ask for your location.
-    static let local: Set<String> = ["Live Sky", "Earth from Orbit", "Weather", "A Tree for the Year", "Dappled Light", "Wind",
+    static let local: Set<String> = ["Night Sky", "Earth from Orbit", "Weather", "A Tree for the Year", "Dappled Light", "Wind",
                                      "Pixel City", "Pixel Spaceport", "Pixel Window Seat", "Campfire", "Space Tour", "Flowing Gradient"]
 
     @Environment(\.dismiss) private var dismiss
@@ -112,7 +112,7 @@ struct WelcomeView: View {
         VStack(spacing: 14) {
             Spacer()
             Image(systemName: "location.circle.fill").font(.system(size: 54)).foregroundStyle(.tint).accessibilityHidden(true)
-            Text("Live Sky, Weather, Dappled Light and the others follow where you are: the real stars overhead, today's weather, the Sun's angle on the wall, your seasons. Atrium only needs a rough location, and sends it rounded to about a kilometer. Without it, it guesses from your time zone.")
+            Text("Night Sky, Weather, Dappled Light and the others follow where you are: the real stars overhead, today's weather, the Sun's angle on the wall, your seasons. Atrium only needs a rough location, and sends it rounded to about a kilometer. Without it, it guesses from your time zone.")
                 .multilineTextAlignment(.center).frame(maxWidth: 520)
             Button("Allow Location…") {
                 Location.shared.start()
