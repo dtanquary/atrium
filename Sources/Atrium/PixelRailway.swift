@@ -143,15 +143,17 @@ final class PixelRailway: SKScene {
 
     /// How dark it is, 0 by day to 1 at night, by the Sun where you are, or at the preview hour; and the colour a low
     /// Sun lights things with, the pixel family's (`PixelCity.sunColour`), as much as it differs from the noon Sun's,
-    /// strongest from 6 degrees up to just under the horizon and gone by 14 degrees up and 5 below.
+    /// strongest from 6 degrees up to 1 up and gone by 14 degrees up and 1.5 below, as the family's Sun is; half as
+    /// strong on snow, which a full grade turns to sand.
     private func lightNow() -> (night: Float, warm: SIMD3<Float>) {
         let date = Self.previewTime.value > 0.5 ? Calendar.current.startOfDay(for: Date()).addingTimeInterval(Self.previewHour.value * 3600) : Date()
         let here = Location.shared.coordinate, jd = Sky.julianDate(date)
         let up = normalize(Sky.horizonMatrix(jd: jd, latitude: here.latitude, longitude: here.longitude) * Sky.sun(jd)).z
         let el = Float(asin(min(max(up, -1), 1)) * 180 / .pi)
         let hue = { (el: Float) in PixelCity.sunColour(el) / PixelCity.sunColour(el).x }
-        let glow = smoothstep(14, 6, el) * smoothstep(-5, -1, el)
-        let warm = 1 + (hue(max(el, 1)) / hue(30) - 1) * 0.3 * glow + SIMD3(0.08, 0.04, 0) * glow
+        let glow = smoothstep(14, 6, el) * smoothstep(-1.5, 1, el)
+        var warm = 1 + (hue(max(el, 1)) / hue(30) - 1) * 0.3 * glow + SIMD3(0.08, 0.04, 0) * glow
+        if plan.season.snow { warm = 1 + (warm - 1) * 0.5 }
         return (smoothstep(4, -8, el), (warm * 64).rounded(.toNearestOrEven) / 64) // in steps, so the picture under the trains is redrawn only as it moves
     }
 

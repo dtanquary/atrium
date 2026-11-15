@@ -250,6 +250,16 @@ private func save(_ railway: Railway, night: Float, _ name: String, scale: Int =
     let lit = shaded.indices.first { !shaded[$0] }!, cool = shaded.indices.first { shaded[$0] }!
     #expect(rgb(gold, lit).x / rgb(gold, lit).z > rgb(noon, lit).x / rgb(noon, lit).z * 1.2)
     #expect(rgb(gold, cool).z >= rgb(noon, cool).z && rgb(gold, cool).x / rgb(gold, cool).z < rgb(noon, cool).x / rgb(noon, cool).z)
+    // each house's roof, the first pixel above the ground down from over its middle, warms with the ground (the
+    // houses took the shadows' grade, as their own shadows lie on the ground behind them)
+    let (view, depth) = (railway.view, railway.statics.depth)
+    let roofs = railway.scenery.things.filter { $0.kind == .house }.compactMap { house -> Int? in
+        let top = view.project([house.pos.x, house.pos.y, (house.base ?? 0) + Double(house.grid.nz)]), x = Int(top.x)
+        guard x >= 0, x < railway.w else { return nil }
+        return (max(0, Int(top.y))..<railway.h).map { $0 * railway.w + x }.first { depth[$0] > Float(view.pixelDepth(x, $0 / railway.w, 0)) + 0.1 }
+    }
+    #expect(roofs.count > 3)
+    for roof in roofs { #expect(rgb(gold, roof).x / rgb(gold, roof).z > rgb(noon, roof).x / rgb(noon, roof).z * 1.2, "the roof at \(roof % railway.w), \(roof / railway.w)") }
 }
 
 /// The station and its town stand on a straight on the world's axes, where the houses show in isometric, not on a

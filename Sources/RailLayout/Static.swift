@@ -66,6 +66,7 @@ struct Statics {
             night.points(pts, [20, 22, 30], view, eps: 0, alpha: 0.45)
         }
         (self.day, self.night, depth) = (day.rgb, night.rgb, day.depth)
+        shaded = shaded.indices.map { shaded[$0] && depth[$0] <= Float(view.pixelDepth($0 % w, $0 / w, 0)) + 0.1 } // not what stands on it
         glints = glints.filter { depth[$0] <= Float(view.pixelDepth($0 % w, $0 / w, 0)) + 0.1 } // not under a tree
     }
 
