@@ -50,20 +50,22 @@ final class Jellyfish: SKScene {
         var rise: Double { Double(defines["RISE"]!)! }
         var tall: Double { low + 1.1 * rise }
         var sway: Double { Double(defines["SWAY"]!)! }
+        /// The margin's radius at its widest, the skirt flared at rest, as the shader's `rimLate` has it.
+        var rim: Double { 0.913 + Double(defines["SKIRT"]!)! * Double(defines["FLARE"]!)! }
     }
 
     static let moon = Species(count: 84, diameter: 0.12...0.25, period: 2.5, perPulse: 0.6, share: 0.25, tentacles: 0.32, arms: 1.0, defines: [
         "NT": "120", "TLEN": "0.32", "TW": "0.006", "SWAY": "0.25", "NOA": "4", "ALEN": "1.0", "AW": "0.17",
         "ASPREAD": "0.22", "ASWAY": "0.25", "TWIST": "3.0", "HEIGHT": "0.42", "RISE": "0.32", "SHRINK": "0.14",
         "NC": "32.0", "CANALSHARP": "10.0", "CANALK": "0.5", "GONADS": "1", "CONVERGE": "0.0", "TVARY": "0.0", "RING": "0",
-        "UNDER": "0.02",
+        "UNDER": "0.02", "SKIRT": "0.22", "FLARE": "0.82", "TUCK": "-0.5",
     ])
     static let crystal = Species(count: 48, diameter: 0.08...0.2, period: 1.8, perPulse: 0.35, restChance: 0.25, rest: 0.8...3.0,
                                  righting: 0.02, sag: 0.05, tentacles: 7, arms: 0.35, defines: [
         "NT": "36", "TLEN": "7.0", "TW": "0.005", "SWAY": "0.06", "NOA": "1", "ALEN": "0.35", "AW": "0.3",
         "ASPREAD": "0.0", "ASWAY": "0.05", "TWIST": "1.5", "HEIGHT": "0.36", "RISE": "0.26", "SHRINK": "0.12",
         "NC": "60.0", "CANALSHARP": "16.0", "CANALK": "2.2", "GONADS": "0", "CONVERGE": "0.3", "TVARY": "0.7", "RING": "1",
-        "UNDER": "0.08", // its ring's points glow a little below the margin
+        "UNDER": "0.08", "SKIRT": "0.22", "FLARE": "0.82", "TUCK": "-0.5", // its ring's points glow a little below the margin
     ])
 
     /// One jelly in metres, seen by a camera 50° across from the origin, looking along +z: its place, the way its
@@ -358,10 +360,10 @@ final class Jellyfish: SKScene {
             // tallest and widest, the fringe from the ring down to the strands' tips and as far aside as the spine
             // carries them, and the arms from their roots to theirs. `jellyfishBoxHoldsWhatIsDrawn` checks it.
             let lean = abs(sin(tilt)), aside = pts.map { abs($0.x) }, last = min(3, Int((4 * sp.tentacles / sp.spine).rounded(.up)) - 1)
-            let fringe = 1.06 + 1.1 * aside[...last].max()! + sp.sway * sp.tentacles / 2
+            let fringe = sp.rim + 0.06 + 1.1 * aside[...last].max()! + sp.sway * sp.tentacles / 2
             let width = 2 * max(1.1, fringe, 0.7 + 0.66 * aside.max()!) + Self.slack
-            let above = sp.tall * cos(tilt) + 1.04 * lean + 0.05 + Self.slack
-            let below = max(1.04 * lean + 0.06, lean - Self.height(pts, sp.tentacles / sp.spine) + 0.02,
+            let above = sp.tall * cos(tilt) + (sp.rim + 0.04) * lean + 0.05 + Self.slack
+            let below = max((sp.rim + 0.04) * lean + 0.06, lean - Self.height(pts, sp.tentacles / sp.spine) + 0.02,
                             0.14 * lean - 0.22 * sp.low - 0.6 * Self.height(pts, sp.arms / 0.6 / sp.spine) + 0.02) + Self.slack
             j.node.size = CGSize(width: width * r, height: (above + below) * r)
             j.node.anchorPoint = CGPoint(x: 0.5, y: below / (above + below))
@@ -451,6 +453,15 @@ final class Jellyfish: SKScene {
         float tau = wrapf(p.x - ago, p.y);
         return smoothstep(0.0, p.z, tau) * (1.0 - smoothstep(p.z, p.z + p.w, tau));
     }
+    // The bell's outer sixth is a straight skirt hinged on it (0.913 of its radius out, 0.408 of its height up), its
+    // angle following the squeeze 0.15 s late: flared out at rest, tucked under at the full squeeze. The sine of its
+    // angle from straight down for a squeeze; and the margin's radius `ago` seconds before 0.15 s ago, for the strands
+    // hanging from it, which take one look at the pulse rather than two.
+    float flapFor(float S) { return mix(FLARE, TUCK, min(S, 1.0)); }
+    float rimLate(float ago, vec4 p, float amp) {
+        float S = amp * squeezeAt(ago + 0.15, p);
+        return (1.0 - SHRINK * S) * (0.913 + SKIRT * flapFor(S));
+    }
     // A soft strand w wide at distance d, for pixels px wide, thinning in brightness rather than vanishing below a pixel.
     float strand(float d, float w, float px) {
         float ww = max(w, px);
@@ -482,31 +493,35 @@ final class Jellyfish: SKScene {
     """
 
     /// One jelly. The bell is marched through in 20 steps, so its rim is bright where the line of sight grazes the
-    /// tissue rather than painted on; its margin lags the squeeze. Tentacles and oral arms hang along the spine, and
-    /// each pixel looks at only the strands nearest it (four either side, front and back of the ring), so a hundred
-    /// cost no more than eight. A moon jelly is drawn lit (`u_lit` 1) or glowing (0), or between as the light changes;
-    /// a crystal jelly under a blue lamp, with its ring of fluorescent green points.
+    /// tissue rather than painted on; its outer sixth is a skirt that flaps, its angle lagging the squeeze. Tentacles
+    /// and oral arms hang along the spine, and each pixel looks at only the strands nearest it (four either side, front
+    /// and back of the ring), so a hundred cost no more than eight. A moon jelly is drawn lit (`u_lit` 1) or glowing
+    /// (0), or between as the light changes; a crystal jelly under a blue lamp, with its ring of fluorescent green
+    /// points.
     private static let medusaSource = """
     void main() {
         vec2 q = vec2((v_tex_coord.x - 0.5) * a_box.x, v_tex_coord.y * a_box.y - a_box.z);
         float px = a_box.w, t = u_t;
         float tilt = a_pose.x, seed = a_pose.y, bright = a_pose.z, amp = a_pose.w;
-        float S = amp * squeezeAt(0.0, a_pulse), Sm = amp * squeezeAt(0.15, a_pulse);
-        float A = 1.0 - SHRINK * S, C = HEIGHT + RISE * S, Am = 1.0 - SHRINK * Sm;
+        float S = amp * squeezeAt(0.0, a_pulse);
+        float A = 1.0 - SHRINK * S, C = HEIGHT + RISE * S;
+        // The skirt: its hinge, its angle, and the margin at its foot (tx out, ty up), where the fringe hangs from.
+        float sa = flapFor(amp * squeezeAt(0.15, a_pulse)), ca = sqrt(1.0 - sa * sa), ta = sa / ca, len = SKIRT * A;
+        float rh = 0.913 * A, yh = 0.408 * C, tx = rh + len * sa, ty = yh - len * ca;
         float cb = cos(tilt), sb = sin(tilt);
         float tissue = 0.0, skin = 0.0, organ = 0.0, ringPts = 0.0;
-        float wide = max(A, Am) + 0.04;
+        float wide = max(A, tx) + 0.04;
         // Where the line of sight enters and leaves the bell: its outline as an ellipsoid grown 0.08 past its skin's
         // glow, cut by a plane just under its margin. Only between the two is there anything to march through, and
         // where they miss (the corners of the bell's box) there is nothing.
-        float gw = 1.0 / pow(max(A, Am) + 0.08, 2.0), gh = 1.0 / pow(C + 0.08, 2.0);
+        float gw = 1.0 / pow(max(A, tx) + 0.08, 2.0), gh = 1.0 / pow(C + 0.08, 2.0);
         float qa = sb * sb * gh + cb * cb * gw, qb = q.y * sb * cb * (gh - gw);
         float disc = qb * qb - qa * (q.x * q.x * gw + q.y * q.y * (cb * cb * gh + sb * sb * gw) - 1.0);
         float z0 = (-qb - sqrt(max(disc, 0.0))) / qa, z1 = (-qb + sqrt(max(disc, 0.0))) / qa;
         float zm = (-UNDER - q.y * cb) / (abs(sb) > 1e-4 ? sb : 1e-4);
         if (sb < -1e-4) { z1 = min(z1, zm); } else { z0 = max(z0, zm); }
         if (disc > 0.0 && z1 > z0 && abs(q.x) < wide && q.y > -wide * abs(sb) - 0.06 && q.y < C * cb + wide * abs(sb) + 0.04) {
-            float dz = (z1 - z0) / 20.0;
+            float dz = (z1 - z0) / 20.0, inH = C * 0.55, thick = 0.283 * A;
             // Each pixel starts its steps at its own depth, afresh every frame: by where it is on screen, not in the
             // sprite's box, so the picture is the same whatever the box.
             float jitter = hash42(gl_FragCoord.xy + seed + 71.0 * fract(t * 3.7)).x;
@@ -517,12 +532,15 @@ final class Jellyfish: SKScene {
                 float rho = length(vec2(q.x, Zb));
                 float phi = atan(Zb, q.x);
                 float hn = clamp(Yb / C, 0.0, 1.0);
-                float outer = A * sqrt(max(1.0 - hn * hn, 0.0)) + (Am - A) * (1.0 - smoothstep(0.0, 0.27 * C, Yb));
-                float inH = C * 0.55;
-                float inner = A * 0.94 * sqrt(max(1.0 - (Yb / inH) * (Yb / inH), 0.0));
-                float below = smoothstep(-0.015, 0.015, Yb);
-                tissue += smoothstep(outer + 0.02, outer - 0.02, rho) * below * smoothstep(inner - 0.02, inner + 0.02, rho) * dz;
-                float sk = (exp(-pow((rho - outer) / 0.035, 2.0)) + 0.5 * exp(-pow((rho - inner) / 0.035, 2.0)) * step(Yb, inH))
+                // Above the hinge, half an ellipsoid; below it, the skirt, thinning to the margin. Its distances are
+                // taken square to it, as the ellipsoid's are across it.
+                bool flap = Yb < yh;
+                float outer = flap ? rh + (yh - Yb) * ta : A * sqrt(max(1.0 - hn * hn, 0.0));
+                float inner = flap ? outer - mix(thick, 0.06 * A, (yh - Yb) / (yh - ty)) : A * 0.94 * sqrt(max(1.0 - (Yb / inH) * (Yb / inH), 0.0));
+                float square = flap ? ca : 1.0, o = (rho - outer) * square, n = (rho - inner) * square;
+                float below = smoothstep(ty - 0.015, ty + 0.015, Yb);
+                tissue += smoothstep(0.02, -0.02, o) * below * smoothstep(-0.02, 0.02, n) * dz;
+                float sk = (exp(-pow(o / 0.035, 2.0)) + 0.5 * exp(-pow(n / 0.035, 2.0)) * step(Yb, inH))
                     * below * smoothstep(C + 0.03, C - 0.01, Yb);
                 skin += sk * (1.0 + CANALK * pow(abs(cos(phi * NC * 0.5)), CANALSHARP) * (1.0 - hn)) * dz;
                 #if GONADS
@@ -535,32 +553,32 @@ final class Jellyfish: SKScene {
                 #endif
                 #if RING
                 float idx = floor(phi / 6.2832 * 100.0 + 0.5);
-                float dphi = (phi - idx * 6.2832 / 100.0) * Am;
-                ringPts += exp(-(pow(rho - outer, 2.0) + Yb * Yb + dphi * dphi) / 0.0006) * dz * 45.0;
+                float dphi = (phi - idx * 6.2832 / 100.0) * tx;
+                ringPts += exp(-(pow(rho - tx, 2.0) + pow(Yb - ty, 2.0) + dphi * dphi) / 0.0006) * dz * 45.0;
                 #endif
             }
         }
         // The strands nearest this pixel: where a strand's root would sit for this x, front and back of the ring.
         float tent = 0.0, arm = 0.0;
         vec2 mid = spineAt(q.y, a_sp1, a_sp2, SPLEN);
-        float r0 = max((1.0 - CONVERGE * smoothstep(0.0, TLEN * 0.6, mid.y)), 0.2);
-        float reach = Am * abs(sb) + 0.06;
+        float r0 = max((1.0 - CONVERGE * smoothstep(0.0, TLEN * 0.6, mid.y)), 0.2) * tx;
+        float reach = tx * abs(sb) + ty * cb + 0.06, rim0 = rimLate(0.0, a_pulse, amp);
         // A strand shows from its root down to its tip, and the four looked at root within three slots of this pixel's
         // own place on the ring: outside that band (most of a tilted bell's face) none of them is here.
         float tip = spineY(TLEN / SPLEN, a_sp1, a_sp2), slots = 18.85 / float(NT) * abs(sb);
-        float across = clamp((q.x - mid.x) / r0, -1.0, 1.0), rise = Am * sqrt(1.0 - across * across) * sb;
+        float across = clamp((q.x - mid.x) / r0, -1.0, 1.0), rise = tx * sqrt(1.0 - across * across) * sb;
         if (q.y < reach && q.y > tip - reach - 0.1 && abs(q.x - mid.x) < r0 + 0.25)
         for (int side = 0; side < 2; side++) {
-            float under = q.y + (side == 0 ? rise : -rise); // this pixel's height from the root above it
+            float under = q.y - ty * cb + (side == 0 ? rise : -rise); // this pixel's height from the root above it
             float around = acos(across) / 6.2832 * float(NT);
             float centre = side == 0 ? around : float(NT) - around;
             if (under < 0.02 + slots && under > tip - slots) for (int n = -2; n < 2; n++) {
                 float fi = wrapf(floor(centre) + float(n), float(NT));
                 float phi = 6.2832 * (fi + 0.4 * hash11(fi * 7.13 + seed)) / float(NT);
-                float rootY = -Am * sin(phi) * sb;
+                float rootY = ty * cb - tx * sin(phi) * sb;
                 vec2 sp = spineAt(q.y - rootY, a_sp1, a_sp2, SPLEN);
                 float s = sp.y, own = hash11(fi * 3.31 + seed * 0.7), tl = TLEN * (1.0 - TVARY * own * 0.6);
-                float r = (1.0 - SHRINK * amp * squeezeAt(0.15 + s / 3.0, a_pulse)) * (1.0 - CONVERGE * smoothstep(0.0, TLEN * 0.6, s));
+                float r = (tx + rimLate(s / 3.0, a_pulse, amp) - rim0) * (1.0 - CONVERGE * smoothstep(0.0, TLEN * 0.6, s));
                 float x = r * cos(phi) + sp.x + SWAY * s * (noise(vec2(s * 0.7 - t * 0.25, fi * 3.7 + seed)) - 0.5);
                 float fade = smoothstep(-0.02, 0.06, s) * (1.0 - smoothstep(tl * 0.5, tl, s));
                 tent += strand(q.x - x, TW * (1.0 - 0.6 * clamp(s / tl, 0.0, 1.0)), px) * fade * (0.7 + 0.3 * sin(phi))
