@@ -90,7 +90,7 @@ final class Jellyfish: SKScene {
 
     /// Room added round every sprite's box, in bell radii: for the test that the box cuts nothing off.
     static var slack = 0.0
-    private static let step = 1.0 / 60
+    nonisolated private static let step = 1.0 / 60
     private static let fov = 2 * tan(25 * Double.pi / 180) // view width per metre of depth
     private static let wallTurn = 0.6 // how fast a side's current turns a bell away, rad/s at the side
     private let current = 0.02 // the tank's current at its rim, m/s (display tanks run 1-3 cm/s: research-motion.md)
