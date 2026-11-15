@@ -955,7 +955,11 @@ final class PixelCity: SKScene, BatteryPaced {
         // Sky: banded and dithered like old pixel art, glowing around a low sun.
         let band: Float = 0.4 // how much of each band is dithered into the next
         let sunSpot = place(sun)
-        let glow = smoothstep(-10, 0, el) * (1 - smoothstep(6, 20, el)) * 0.7 + 0.15 * smoothstep(0, 10, el)
+        // A high Sun has a small round halo, two flat rings dithered only on their last pixel, in place of the low
+        // Sun's wide oval: that oval's last ring, 0.4 of dither across a flat gradient, was a patch of loose dots.
+        let high = smoothstep(12, 22, el), rings = (6 + 3.5 * high, 6 + 7 * high)
+        let glow = smoothstep(-10, 0, el) * (1 - smoothstep(6, 20, el)) * 0.7 + 0.15 * smoothstep(0, 10, el) * (1 - high)
+        let fringe = 0.4 * smoothstep(0.15, 0.5, glow) // the oval's dither, narrower as it fades, so its last ring stays solid
         let glowColour = mix(rgb(255, 128, 64), rgb(255, 214, 150), smoothstep(-2, 10, el))
         let reach = mix(1, 0.35, smoothstep(4, 20, el)) // a low sun lights a wide band of sky, a high one a small halo
         for y in 0..<h {
@@ -971,7 +975,12 @@ final class PixelCity: SKScene, BatteryPaced {
                 if glow > 0 {
                     let gx = Float(x - sunSpot.x) / (90 * reach), gy = Float(y - sunSpot.y) / (40 * reach)
                     // Flat rings, dithered only where two meet: dithering all the way across left a halo of loose dots.
-                    c = mix(c, glowColour, (glow * exp(-(gx * gx + gy * gy)) * 5 + 0.3 + d * 0.4).rounded(.down) / 5)
+                    c = mix(c, glowColour, (glow * exp(-(gx * gx + gy * gy)) * 5 + 0.3 + d * fringe).rounded(.down) / 5)
+                }
+                if high > 0 {
+                    let r = Float((x - sunSpot.x) * (x - sunSpot.x) + (y - sunSpot.y) * (y - sunSpot.y)).squareRoot()
+                    func ring(_ edge: Float) -> Bool { r < edge - 1 || (r < edge && d >= 0.5) }
+                    if ring(rings.1) { c = mix(c, glowColour, ring(rings.0) ? 0.24 : 0.12) }
                 }
                 px.plot(x, y, pointwiseMin(c, .one))
             }
