@@ -407,6 +407,23 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
     #expect(low < 90 && high > 165, "clumps' alpha p10 \(low), p90 \(high)")
 }
 
+/// Dappled Light's twig, for every kind of tree and many rolls, keeps inside its texture (a leaf past the edge would
+/// cast a shadow cut off straight) and has leaves on it.
+@MainActor @Test func dappledLightTwigFits() throws {
+    let atlas = try #require(NSImage(contentsOf: resource("dappled-leaves.png"))?.cgImage(forProposedRect: nil, context: nil, hints: nil))
+    let cells = (0..<16).compactMap { atlas.cropping(to: CGRect(x: $0 % 4 * 256, y: $0 / 4 * 256, width: 256, height: 256)) }
+    for (kind, leaves) in [Array(cells[0..<6]), Array(cells[6..<10]), Array(cells[10..<16])].enumerated() {
+        for seed in 1...20 {
+            var rng = SplitMix(state: UInt64(seed))
+            let context = DappledLight.twig(kind, of: leaves, using: &rng), n = context.width
+            let pixels = UnsafeBufferPointer(start: context.data!.assumingMemoryBound(to: UInt8.self), count: n * n)
+            let edge = (0..<n).flatMap { [pixels[$0], pixels[(n - 1) * n + $0], pixels[$0 * n], pixels[$0 * n + n - 1]] }
+            let cover = Double(pixels.filter { $0 > 127 }.count) / Double(n * n)
+            #expect(edge.max()! == 0 && cover > 0.03, "kind \(kind), seed \(seed): edge \(edge.max()!), cover \(cover)")
+        }
+    }
+}
+
 /// Picking another lighting in Settings hands the view a new tank lit that way, once the changes settle (a dragged
 /// slider makes many), and the one fading out doesn't present another on the next change.
 @MainActor @Test func fishTankFollowsLightingSetting() async throws {
