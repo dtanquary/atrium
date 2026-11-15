@@ -66,7 +66,8 @@ final class Schlieren: SKScene {
                             mtexel: SKUniform(name: "u_mtexel", vectorFloat2: .zero), gain: SKUniform(name: "u_gain", float: 0),
                             mirror: SKUniform(name: "u_mirror", float: 0), aspect: SKUniform(name: "u_aspect", float: 1),
                             tilt: SKUniform(name: "u_tilt", vectorFloat2: .zero), visible: SKUniform(name: "u_visible", vectorFloat2: [0, 1]),
-                            air: SKUniform(name: "u_air", vectorFloat2: .zero), blend: SKUniform(name: "u_blend", float: 1))
+                            air: SKUniform(name: "u_air", vectorFloat2: .zero), blend: SKUniform(name: "u_blend", float: 1),
+                            roll: SKUniform(name: "u_roll", float: 0))
     private let look = gradeKnobs("schlieren").map { SKUniform(name: "u_" + $0.key.split(separator: ".").last!, float: Float($0.value)) }
 
     override init(size: CGSize) {
@@ -88,7 +89,7 @@ final class Schlieren: SKScene {
         uniforms.tilt.vectorFloat2Value = [Float.random(in: -0.15...0.15), Float.random(in: -0.08...0.08)]
         screen.shader = SKShader(source: shaderCommon + Self.shader, uniforms: [
             uniforms.field, uniforms.mask, uniforms.filter, uniforms.texel, uniforms.mtexel, uniforms.gain, uniforms.mirror,
-            uniforms.aspect, uniforms.tilt, uniforms.visible, uniforms.air, uniforms.blend, WallpaperTime.now,
+            uniforms.aspect, uniforms.tilt, uniforms.visible, uniforms.air, uniforms.blend, uniforms.roll, WallpaperTime.now,
         ] + look)
         addChild(screen)
         applySettings()
@@ -106,6 +107,11 @@ final class Schlieren: SKScene {
         // bend in filter half-widths per unit of ∇(T0/T) per fine cell: (n0 − 1)·depth / span / cell size
         uniforms.gain.floatValue = 2.72e-4 * s.depth / (s.span * 1e-6) / air.cell * Float(Self.knobs[2].value) * Self.filterGain[filter]
         uniforms.mirror.floatValue = Float(Self.knobs[5].value)
+        // Warm air's heaters bend light several half-widths, which held a plume's whole lower half on the filter's
+        // outermost colours, so its rig rolls the strongest bends off, asinh(k·b)/k: weak bends keep their brightness,
+        // and a band grades from the inner colours to the outer only at its strongest edge, as in Settles' dark-field
+        // photos. Flames keep the saturation the photos show round them.
+        uniforms.roll.floatValue = source == 3 ? 2.5 : 0
         for (uniform, knob) in zip(look, gradeKnobs("schlieren")) { uniform.floatValue = Float(knob.value) }
     }
 
@@ -341,6 +347,8 @@ final class Schlieren: SKScene {
         float b = air(texture2D(u_field, a - vec2(0.0, e.y)), u_blend), t = air(texture2D(u_field, a + vec2(0.0, e.y)), u_blend);
         float c = air(texture2D(u_field, a), u_blend);
         vec2 bend = vec2(r - l, t - b) * 0.5 * u_gain;
+        float roll = u_roll * length(bend); // the rig's roll-off, for Warm air: asinh(k·b)/k
+        bend *= roll > 1e-4 ? log(roll + sqrt(roll * roll + 1.0)) / roll : 1.0;
         // room air is never quite still: faint, slow mottling everywhere
         float now = mod(u_now, 3600.0);
         vec2 q = p * vec2(u_aspect, 1.0) * 2.5;
