@@ -203,7 +203,7 @@ private let small = CGSize(width: 320, height: 200)
 
 /// The airliner and the space station run at 15 fps on battery while they paint 15 times a second, as at Speed 1×,
 /// and at the battery's rate once a higher Speed has them painting more often. The Spaceport starts between launches,
-/// at 15; Pixel City has no cap.
+/// at 15. Pixel City's Waterfront has no cap, Foothills runs at 15, and the Overlook at 20 until its pigeons roost.
 @MainActor @Test func pixelRates() {
     with(["seat.speed": 1]) {
         let plane = PixelWindowSeat(size: small)
@@ -214,4 +214,12 @@ private let small = CGSize(width: 320, height: 200)
     with(["seat.speed": 1]) { #expect(PixelOrbit(size: small).batteryRate == 15) }
     #expect(PixelCity(size: small, spaceport: true).batteryRate == 15)
     #expect(PixelCity(size: small, spaceport: false).batteryRate == nil)
+    let city = CGSize(width: 800, height: 500) // Foothills' valley floor needs more than 100 rows
+    with(["city.place": 1]) { #expect(PixelCity(size: city, spaceport: false).batteryRate == 15) }
+    with(["city.place": 4, "city.previewTime": 1, "city.previewHour": 12.8]) {
+        let overlook = PixelCity(size: city, spaceport: false)
+        #expect(overlook.batteryRate == 20)
+        UserDefaults.standard.set(22.0, forKey: "city.previewHour") // posts the change it repaints on
+        #expect(overlook.batteryRate == 15)
+    }
 }

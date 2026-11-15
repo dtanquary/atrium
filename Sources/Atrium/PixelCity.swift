@@ -98,9 +98,12 @@ final class PixelCity: SKScene, BatteryPaced {
     // the layer they are painted into, which the lagoon mirrors; and the figures on the countdown clock.
     private var pad = Pad(), boosters: [Booster] = [], crane = Crane(), plume: [Puff] = []
     private var pace = 1.0 // Settings' Launches, as of the last repaint: reading a setting costs too much to do every frame
-    /// The Spaceport's ceiling on battery: 15 fps between launches, where the crawler moves 5 art pixels a second and
-    /// the smoke steps 15 times a second; 20 from the count to the end of the climb, and while a booster or the
-    /// orbiter comes down, at up to 20 art pixels a second. The city has none: its cars move 22.
+    /// The ceiling on battery, set by the fastest thing on show, which should move no more than an art pixel a frame.
+    /// The Spaceport: 15 fps between launches, where the crawler moves 5 art pixels a second and the smoke steps 15
+    /// times a second; 20 from the count to the end of the climb, and while a booster or the orbiter comes down, at
+    /// up to 20 art pixels a second. Foothills, the Long Bridge and Hillside Town: 15, for far-off traffic at 7.7 and
+    /// the plane at 7. The Overlook: 20 while its pigeons wheel at up to 17, 15 once they roost. The Waterfront and
+    /// the Airport have none: near cars at 22, aircraft at up to 36.
     private(set) var batteryRate: Int? { didSet { batteryRateChanged(from: oldValue) } }
     private var following = false, polledAt = Date.distantPast // Settings' Follow real launches, likewise; and when the schedule was last asked
     private var flewLive = false // the last lift-off was a real launch's, for the board's LIVE
@@ -258,6 +261,7 @@ final class PixelCity: SKScene, BatteryPaced {
         (trafficStrip, trafficShown, launchTexture, plume, boosters) = (nil, [], nil, [], [])
         (nextCar, planeDirection, shipDirection, ship) = ([clock, clock], 0, 0, SKSpriteNode())
         city = spaceport ? .spaceport : City.menu.first { $0.rawValue == Int(knob(.view)) } ?? .waterfront
+        if !spaceport { batteryRate = [.foothills, .bridge, .hillside].contains(city) ? 15 : city == .overlook ? 20 : nil }
         waterRows = city == .waterfront ? Int(Float(h) * 0.21) : 0
         switch city {
         case .waterfront: ground = waterRows + quay + 26
@@ -1057,6 +1061,7 @@ final class PixelCity: SKScene, BatteryPaced {
             for node in steam { node.color = NSColor(red: CGFloat(vapour.x), green: CGFloat(vapour.y), blue: CGFloat(vapour.z), alpha: 1) }
             for light in towerLights { light.isHidden = night < 0.4 }
             for bird in flock { bird.node.isHidden = night > 0.35 } // they roost at dusk
+            batteryRate = night > 0.35 ? 15 : 20 // and leave nothing faster than the traffic
         case .airport:
             drawAirfield(into: &px, zenith: top, horizon: horizon)
             for i in flights.indices { dress(i) }
