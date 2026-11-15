@@ -868,7 +868,7 @@ The model
 - meanderpy, Zoltán Sylvester, Apache-2.0 (law and constants read, no code copied): https://github.com/zsylvester/meanderpy
 - Howard & Knutson 1984 (not read; known through meanderpy): https://agupubs.onlinelibrary.wiley.com/doi/abs/10.1029/WR020i011p01659
 - Sylvester, Durkin & Covault 2019, meanderpy's paper (not read): https://doi.org/10.1130/G45608.1
-- The four-tap cubic read and the busyness figures: [turing-patterns.md](turing-patterns.md), [game-of-life.md](game-of-life.md); the read itself is Sigg & Hadwiger, "Fast Third-Order Texture Filtering", GPU Gems 2, ch. 20: https://developer.nvidia.com/gpugems/gpugems2/part-iii-high-quality-rendering/chapter-20-fast-third-order-texture-filtering
+- The four-tap cubic read and the busyness figures: [turing-patterns.md](turing-patterns.md); the read itself is Sigg & Hadwiger, "Fast Third-Order Texture Filtering", GPU Gems 2, ch. 20: https://developer.nvidia.com/gpugems/gpugems2/part-iii-high-quality-rendering/chapter-20-fast-third-order-texture-filtering
 - A tapering segment's banks (the uneven capsule), Inigo Quilez, no licence stated on the page, so written from the geometry: https://iquilezles.org/articles/distfunctions2d/
 - The shader's noise is from the shared `hash42` (Dave Hoskins, "Hash without Sine", MIT: https://www.shadertoy.com/view/4djSRW)
 

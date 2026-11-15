@@ -36,7 +36,6 @@ fireflies|Fireflies|8|
 fish-tank|Fish Tank|4|SNAPSHOT_APPEARANCE=light
 flowing-gradient|Flowing Gradient|4|SNAPSHOT_DEFAULTS=gradient.palette=Midnight,gradient.ribbonsOn=1
 galaxy|Galaxy|4|SNAPSHOT_DEFAULTS=galaxy.kind=Whirlpool,galaxy.rotation=4
-game-of-life|Game of Life|30|
 jellyfish|Jellyfish|5|SNAPSHOT_DEFAULTS=jellyfish.seed=22 SNAPSHOT_APPEARANCE=light
 kelp-forest|Kelp Forest|5|SNAPSHOT_DEFAULTS=kelp.seed=5 SNAPSHOT_APPEARANCE=light
 lava-lamp|Lava Lamp|40|SNAPSHOT_DEFAULTS=lava.palette=Coral LAVA_SEED=11
@@ -66,7 +65,6 @@ fireflies|fireflies
 fish-tank|fish-tank-day
 flowing-gradient|flowing-gradient
 galaxy|galaxy-whirlpool
-game-of-life|game-of-life
 jellyfish|jellyfish
 kelp-forest|kelp-forest
 lava-lamp|lava-lamp

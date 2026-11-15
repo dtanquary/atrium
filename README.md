@@ -12,7 +12,7 @@ Screenshots show the wallpaper alone, with no desktop icons, menu bar or Dock. T
 
 - **Nature and weather:** [Fish Tank](#fish-tank) · [Weather](#weather) · [Dappled Light](#dappled-light) · [Rain on Glass](#rain-on-glass) · [Wind](#wind) · [Murmuration](#murmuration) · [Aurora](#aurora) · [Fireflies](#fireflies) · [Meander](#meander) · [Ant Colony](#ant-colony) · [Jellyfish](#jellyfish) · [Kelp Forest](#kelp-forest)
 - **Space:** [Space Tour](#space-tour) · [Nebula](#nebula) · [Galaxy](#galaxy) · [Black Hole](#black-hole) · [Night Sky](#night-sky) · [Earth from Orbit](#earth-from-orbit) · [Pixel Spaceport](#pixel-spaceport)
-- **Color, light and pattern:** [Flowing Gradient](#flowing-gradient) · [Lava Lamp](#lava-lamp) · [Schlieren](#schlieren) · [Turing Patterns](#turing-patterns) · [Game of Life](#game-of-life) · [Pixel City](#pixel-city) · [Pixel Railway](#pixel-railway) · [Pixel Window Seat](#pixel-window-seat) · [Etching](#etching)
+- **Color, light and pattern:** [Flowing Gradient](#flowing-gradient) · [Lava Lamp](#lava-lamp) · [Schlieren](#schlieren) · [Turing Patterns](#turing-patterns) · [Pixel City](#pixel-city) · [Pixel Railway](#pixel-railway) · [Pixel Window Seat](#pixel-window-seat) · [Etching](#etching)
 
 ### Nature and weather
 
@@ -255,13 +255,6 @@ Reaction–diffusion, the chemistry Alan Turing proposed for how animals get the
 | <img src="docs/images/turing-patterns.webp" alt="Turing Patterns, fingerprint stripes in Dark Mode, moving" width="1600"> | ![Turing Patterns, coral in Light Mode](docs/images/turing-patterns-light.jpg) |
 |---|---|
 | Fingerprint stripes in Dark Mode | Coral, glazed like ceramic, in Light Mode |
-
-#### Game of Life
-Conway's cells, reseeding so they never die out. The Calm look shows a long exposure, so cells melt into soft glowing blobs that drift slowly; the Classic look is crisp, quick and colorful.
-
-| <img src="docs/images/game-of-life.webp" alt="Game of Life, Calm, moving" width="1600"> | ![Game of Life, Classic](docs/images/game-of-life-classic.jpg) |
-|---|---|
-| Calm | Classic |
 
 #### Pixel City
 A pixel-art city that follows your clock and the real Sun, with traffic and windows lighting up through the evening. Pick a city: the Waterfront, a downtown mirrored in the water with its walls lit from wherever the Sun is; Foothills, a small downtown under snow-capped mountains that hold the last of the sunlight; the Long Bridge, strung with lights across a bay; Hillside Town, tiled houses stacked above a harbour; the Overlook, out over a sea of rooftops; or the Airport, across a bay, where airliners land, taxi to the terminal and take off again into the real wind, mirrored in the water. It can move between them by itself every few minutes. You can also choose which way you look, so the Sun sets in view or lights the buildings from behind you.

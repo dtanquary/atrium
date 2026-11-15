@@ -157,16 +157,6 @@ private let small = CGSize(width: 320, height: 200)
     }
 }
 
-/// Game of Life's rate on battery follows its look: Calm slower than Classic.
-@MainActor @Test func gameOfLifeRateFollowsLook() {
-    with(["life.calm": 1]) {
-        let scene = GameOfLife(size: small)
-        #expect(scene.batteryRate == 12)
-        UserDefaults.standard.set(0.0, forKey: "life.calm")
-        #expect(scene.batteryRate == 20)
-    }
-}
-
 /// Weather runs slower on battery under fair skies and fog, at the battery's rate in rain, and follows the weather
 /// as it changes; A Tree for the Year, built on it, takes the calm rate back.
 @MainActor @Test func weatherRateFollowsTheWeather() {

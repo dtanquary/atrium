@@ -45,7 +45,7 @@ Reaction–diffusion: two chemicals spread across the screen at different rates 
    - Tried and dropped: stronger flow (0.03–0.06 cells a step combed everything into diagonal stripes within 30 s); softer local nudges of k (±0.004–0.007: too subtle, and on Holes a negative nudge left grey fog patches); and **Waves**, f varying across the screen in a travelling band (only 4× the still baseline, as change happened in one band).
 8. **Upload.** B × 2, clamped, as 16 bits split across red (high byte) and green (low byte). Linear filtering interpolates both channels, and the sum is still exact, so the smooth reads don't band.
 9. **Shader.**
-   - **Smoothing.** A cubic B-spline between cells in four linear taps (GPU Gems 2, ch. 20), as in Game of Life's Calm look.
+   - **Smoothing.** A cubic B-spline between cells in four linear taps (GPU Gems 2, ch. 20), as Game of Life's Calm look had (cut on 2026-11-14).
    - **Lighting.** Height is the field. The normal comes from Metal's `dfdx`/`dfdy` (see Gotchas) × 28, lit from the upper left, with a soft sheen.
    - **Colour.** The body edge is `smoothstep(0.25, 0.45)`, running from 55% ink at the edges to ink mixed 35% toward the glow on the ridges. Two inks blend by a slow sine over position and `u_now`.
    - **Dark Mode** adds a faint glow in the gaps, a background of ink × 0.1, and a vignette.

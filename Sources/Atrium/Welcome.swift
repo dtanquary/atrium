@@ -14,7 +14,7 @@ struct WelcomeView: View {
                                 "Murmuration", "Aurora", "Fireflies", "Meander", "Ant Colony", "Jellyfish", "Kelp Forest",
                                 "Campfire"]),
         ("Space", ["Space Tour", "Nebula", "Galaxy", "Black Hole", "Night Sky", "Earth from Orbit", "Pixel Spaceport"]),
-        ("Color, light and pattern", ["Flowing Gradient", "Lava Lamp", "Schlieren", "Turing Patterns", "Game of Life", "Pixel City",
+        ("Color, light and pattern", ["Flowing Gradient", "Lava Lamp", "Schlieren", "Turing Patterns", "Pixel City",
                                       "Pixel Window Seat"]),
     ]
     /// Wallpapers that follow the sky, weather, light or seasons where you are, so they ask for your location.
