@@ -98,10 +98,14 @@ def glow(path, wide=2048, high=1024):
     i, j = np.floor(x).astype(int), np.floor(y).astype(int)
     fx, fy = (x - i)[..., None], (y - j)[..., None]
     out = ((a[j, i % w] * (1 - fx) + a[j, (i + 1) % w] * fx) * (1 - fy) + (a[j + 1, i % w] * (1 - fx) + a[j + 1, (i + 1) % w] * fx) * fy)
+    # At the best quality: the shader raises this to the 3.667 and the lens stretches it, so anything less shows the
+    # encoder's block edges, as patches of colour 64 px of the map across and as a straight step across the sky on
+    # the screen's midline, where the map's equator (which the camera looks along) is one. At 80 the step there was
+    # 1.8 times the rows round it; 99 still left the blocks faintly; 100 leaves none, in 1.1 MB.
     target = os.path.join(RESOURCES, 'blackhole-glow.heic')
     with tempfile.NamedTemporaryFile(suffix='.png') as png:
         Image.fromarray((np.clip(out, 0, 1) ** 0.6 * 255 + 0.5).astype(np.uint8)).save(png.name)
-        subprocess.run(['/usr/bin/sips', '-s', 'format', 'heic', '-s', 'formatOptions', '80', png.name, '--out', target],
+        subprocess.run(['/usr/bin/sips', '-s', 'format', 'heic', '-s', 'formatOptions', '100', png.name, '--out', target],
                        check=True, stdout=subprocess.DEVNULL)
     print(f'glow {wide} x {high}, {os.path.getsize(target)} bytes -> {target}')
 
