@@ -366,11 +366,42 @@ def route(tier, start, bridge=20):
 DIRS = [(1, 0), (0, 1), (-1, 0), (0, -1), (1, 1), (-1, 1), (-1, -1), (1, -1)]
 HASTE = 8   # how many times faster the stylus goes back along a line than it draws (LineRoute.haste)
 
-def pack(cells, kind, grid, rect):
+def strays(cells, kind, grid, rect):
+    """The steps along stray marks, as runs (first step, steps, whether a way to the frame), and the cells of each
+    sort. A stray mark is the line the stylus leaves crossing bare screen; a step is along one if it begins or ends
+    on a cell a stray mark drew, so going back along it counts, and its last step onto ink. Marks that touch are one
+    mark, and one with any cell outside the picture's rect is a way to the frame the route begins with: the app
+    draws no frame, so it draws none of that mark either, and keeps every other stray mark pale."""
+    x0, y0, pw, ph = rect
+    stray = np.zeros(grid.w * grid.h, bool); stray[cells[kind == 2]] = True
+    marks, n = ndi.label(stray.reshape(grid.h, grid.w), np.ones((3, 3)))
+    outside = np.ones((grid.h, grid.w), bool); outside[y0:y0 + ph, x0:x0 + pw] = False
+    framed = np.zeros(n + 1, np.uint8); framed[np.unique(marks[outside & (marks > 0)])] = 1
+    cell = np.where(marks > 0, 1 + framed[marks], 0).ravel()            # 0 ink or bare, 1 a stray mark in the picture, 2 a way to the frame
+    step = np.maximum(cell[cells[:-1]], cell[cells[1:]])                # of step i + 1, which goes from cell i to cell i + 1
+    edge = np.flatnonzero(np.r_[1, np.diff(step) != 0, 1])
+    runs = [(int(a) + 1, int(b - a), bool(step[a] == 2)) for a, b in zip(edge[:-1], edge[1:]) if step[a]]
+    return runs, int((cell == 1).sum()), int((cell == 2).sum())
+
+def tail(marks):
+    """The stray marks' runs of steps (`strays`) as bytes: their deflated length, then, deflated, two numbers to a
+    run, the steps since the last run ended and its steps times two, plus one for a way to the frame, each seven bits
+    to a byte, low first, the top bit set on all but the last byte."""
+    out, end = bytearray(), 0
+    for first, count, framed in marks:
+        for n in (first - end, count * 2 + framed):
+            while n >= 128: out.append(n & 127 | 128); n >>= 7
+            out.append(n)
+        end = first + count
+    packed = zlib.compressobj(9, zlib.DEFLATED, -15); body = packed.compress(bytes(out)) + packed.flush()
+    return struct.pack("<I", len(body)) + body
+
+def pack(cells, kind, grid, rect, marks=()):
     """The route as bytes. Each run of steps one way is a byte: bit 7 set while the stylus goes back along its own
     line, bits 6-4 the direction (DIRS), bits 3-0 the run's length less one. The runs are deflated; before them:
     "LRT1", the grid's width and height, the picture's rect, the start cell, the number of steps, the route's clock
-    (cells of drawing, going back counting an eighth), and the deflated length."""
+    (cells of drawing, going back counting an eighth), and the deflated length. After them, the stray marks
+    (`tail`)."""
     x, y = cells % grid.w, cells // grid.w
     dx, dy = np.diff(x), np.diff(y)
     code = np.array([DIRS.index((int(a), int(b))) for a, b in zip(dx, dy)], np.uint8) << 4 | (kind[1:] == 1).astype(np.uint8) << 7
@@ -386,7 +417,7 @@ def pack(cells, kind, grid, rect):
     clock = float(np.where(kind[1:] == 1, seg / HASTE, seg).sum())
     packed = zlib.compressobj(9, zlib.DEFLATED, -15); body = packed.compress(bytes(out)) + packed.flush()
     head = b"LRT1" + struct.pack("<8HIfI", grid.w, grid.h, *rect, int(x[0]), int(y[0]), len(cells) - 1, clock, len(body))
-    return head + body, len(out), clock
+    return head + body + tail(marks), len(out), clock
 
 if __name__ == "__main__":
     args = [a for a in sys.argv[1:] if a != "--fine"]; fine = "--fine" in sys.argv
@@ -402,9 +433,10 @@ if __name__ == "__main__":
         tier, start = wanted(d, rect)
         cells, kind = route(tier, start)
         assert not (kind[1:] == 3).any(), "the line lifted"
-        data, nruns, clock = pack(cells, kind, grid, rect)
+        marks, inside, framed = strays(cells, kind, grid, rect)
+        data, nruns, clock = pack(cells, kind, grid, rect, marks)
         out = os.path.join(dst, f"etching-{name}{'-fine' if fine else ''}.route")
         open(out, "wb").write(data)
-        stray = int((kind == 2).sum())
         print(f"{os.path.basename(out)}: {len(cells) - 1} steps in {nruns} runs, {len(data)} bytes; clock {clock:.1f} cells = "
-              f"{clock / grid.w * 40 / 60:.0f} min at 1/40 of the width a second; {stray} cells of stray marks; picture at {rect}")
+              f"{clock / grid.w * 40 / 60:.0f} min at 1/40 of the width a second; {inside} cells of stray marks in the picture "
+              f"and {framed} of ways to the frame, in {len(marks)} runs of steps; picture at {rect}")
