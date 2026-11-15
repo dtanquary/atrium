@@ -282,19 +282,21 @@ func blackBodyKeepsToTheLocus(kelvin: Double, x: Double, y: Double) {
 }
 
 /// On battery it holds to 15 fps while the disc's edge steps 2 px a frame or less at that rate (Size times Speed at
-/// most 1), and to 20 once either is turned up.
+/// most 1) and the sky is still, and to 20 once either is turned up or Drift is on.
 @MainActor @Test func blackHolePacesItsBattery() {
     let defaults = UserDefaults.standard
-    defer { for key in [BlackHole.size.key, BlackHole.speed.key] { defaults.removeObject(forKey: key) } }
-    func rate(size: Double, speed: Double) -> Int? {
+    defer { for key in [BlackHole.size.key, BlackHole.speed.key, BlackHole.drift.key] { defaults.removeObject(forKey: key) } }
+    func rate(size: Double, speed: Double, drift: Double = 0) -> Int? {
         defaults.set(size, forKey: BlackHole.size.key)
         defaults.set(speed, forKey: BlackHole.speed.key)
+        defaults.set(drift, forKey: BlackHole.drift.key)
         return BlackHole(size: CGSize(width: 64, height: 40)).batteryRate
     }
     #expect(rate(size: 1, speed: 1) == 15)
     #expect(rate(size: 0.65, speed: 1.5) == 15)
     #expect(rate(size: 1.5, speed: 1) == 20)
     #expect(rate(size: 1, speed: 4) == 20)
+    #expect(rate(size: 1, speed: 1, drift: 4) == 20)
 }
 
 /// For looking at the Black Hole moving: `BLACKHOLE_STRIPS=<dir> swift test --filter blackHoleMoves` (with

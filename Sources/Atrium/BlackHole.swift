@@ -406,8 +406,8 @@ final class BlackHole: SKScene, BatteryPaced {
     private var lastUpdate: TimeInterval?
     /// The ceiling on battery. The fastest thing on screen is the disc's inner edge, seen edge on in front: about 30
     /// device pixels a second at the standard Size and Speed, and Size times Speed that. So 15 fps while that is 2 px
-    /// a frame or less at 15 (Size times Speed at most 1), and 20 past it. The sky's drift doesn't count: each star
-    /// is drawn as the streak it left in the frame, so it joins up at any rate.
+    /// a frame or less at 15 (Size times Speed at most 1) with the sky still, and 20 past it or once Drift is on: at
+    /// Drift 4× and 15 the stars are 2.4 px dashes and the Milky Way's glow steps as far each frame.
     private(set) var batteryRate: Int? = 20 { didSet { batteryRateChanged(from: oldValue) } }
 
     /// `checks` draws the prototype's test pattern in place of the picture, for the test that compares the two:
@@ -509,7 +509,7 @@ final class BlackHole: SKScene, BatteryPaced {
     /// Pushes the Settings sliders into the shader. Size is the field of view: the hole is `size` times as wide.
     @objc private func applySettings() {
         for knob in Self.knobs { knobUniforms[knob.key]?.floatValue = Float(knob.value) }
-        batteryRate = Self.size.value * Self.speed.value <= 1 ? 15 : 20
+        batteryRate = Self.size.value * Self.speed.value <= 1 && Self.drift.value == 0 ? 15 : 20
         lens.floatValue = Float(tan((field ?? View().field) * .pi / 360) / (field == nil ? Self.size.value : 1))
         // Until the glow is made again for a new Size, the one there is stretched to fit: it follows the disc at once.
         if let made = haloFor.first { haloFit.floatValue = lens.floatValue / made }
