@@ -63,6 +63,23 @@ import Testing
     }
 }
 
+/// The school of blacksmith stays together in view as it swims (a minute in, most of it is on the screen), and the
+/// Fish switch takes it away.
+@MainActor @Test func kelpSchoolStaysInView() {
+    UserDefaults.standard.set(5, forKey: "kelp.seed")
+    defer { for key in ["kelp.seed", "kelp.fish"] { UserDefaults.standard.removeObject(forKey: key) } }
+    let size = CGSize(width: 756, height: 491), screen = CGRect(origin: .zero, size: size)
+    let scene = KelpForest(size: size, view: 0), cards = Atlas.shared().fish.map { $0.textureRect() }
+    let fish = scene.children.compactMap { $0 as? SKSpriteNode }.filter { node in cards.contains { $0 == node.texture?.textureRect() } }
+    for frame in 1...600 { scene.update(1000 + Double(frame) / 10) }
+    #expect(fish.count == 36)
+    let seen = fish.filter { !$0.isHidden && screen.contains($0.position) }.count
+    #expect(seen > 24, "\(seen) of \(fish.count) fish on the screen after a minute")
+    UserDefaults.standard.set(0, forKey: "kelp.fish")
+    scene.update(1060.1)
+    #expect(fish.filter { !$0.isHidden }.isEmpty)
+}
+
 /// On battery the water draws at half resolution and its marine snow, specks a pixel or two across, moves to a sprite
 /// of its own over it at full resolution, and back as the trim goes off; dusk has no snow to move.
 @MainActor @Test func kelpSnowStaysSharpWhenTrimmed() throws {

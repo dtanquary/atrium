@@ -24,6 +24,7 @@ final class KelpForest: SKScene, Trimmable {
         Knob(key: "kelp.view", label: "View", range: 0...Double(views.count - 1), standard: 0, section: "Look", format: .choice(views)),
         Knob(key: "kelp.swell", label: "Swell", range: 0.25...2, standard: 1, section: "Sea", format: .times),
         Knob(key: "kelp.speed", label: "Speed", range: 0.5...2, standard: 1, section: "Sea", format: .times),
+        Knob(key: "kelp.fish", label: "Fish", range: 0...1, standard: 1, section: "Sea", format: .toggle),
     ]
 
     // MARK: - Looks
@@ -88,6 +89,13 @@ final class KelpForest: SKScene, Trimmable {
     private var cam: SIMD3<Double>
     private var sea: Sea
     private var fronds: [Frond] = []
+    /// A fish of the school: its length, where it is and its velocity through the water (metres, m/s), the heading it
+    /// wanders toward, how many tail strokes it has made, and the fog its colour was last set for.
+    private struct Fish {
+        let node: SKSpriteNode, length: Double
+        var p: SIMD3<Double>, v: SIMD3<Double>, wander: Double, stroke: Double, fogged = -1
+    }
+    private var fish: [Fish] = [], home = SIMD3<Double>.zero, fishOn = true
     private var simTime = 0.0, lastTime: TimeInterval?, lastCycle: TimeInterval?
     private var rng: SplitMix
     private var atlas: Atlas!
@@ -168,9 +176,13 @@ final class KelpForest: SKScene, Trimmable {
             uExt, uDeep, uUp, uSun, uKelp, uGlow, uSunDir, uView, uPx,
         ])
         plant(with: kelp)
+        school(with: kelp)
         settleLook(at: true)
-        // Run the sea a while first, so the forest has settled into it: 30 s in steps of 1/30 s.
-        for k in 0..<900 { step(at: simTime + Double(k - 900) / 30, dt: 1.0 / 30, farDt: 1.0 / 30) }
+        // Run the sea a while first, so the forest has settled into it and the fish have schooled: 30 s in steps of 1/30 s.
+        for k in 0..<900 {
+            step(at: simTime + Double(k - 900) / 30, dt: 1.0 / 30, farDt: 1.0 / 30)
+            swim(at: simTime + Double(k - 900) / 30, dt: 1.0 / 30)
+        }
         (farMoved, posedPitch) = (true, -1)
         pose(at: simTime)
     }
@@ -188,10 +200,12 @@ final class KelpForest: SKScene, Trimmable {
             removeAllChildren()
             fronds = []
             holdfasts = []
+            fish = []
             setUp()
             return
         }
         sea.height = Self.knobs[2].value
+        if fishOn != (Self.knobs[4].value > 0.5) { (fishOn, farMoved) = (!fishOn, true) }
         settleLook(at: false)
     }
 
@@ -379,6 +393,53 @@ final class KelpForest: SKScene, Trimmable {
         }
     }
 
+    /// A loose school of three dozen blacksmith (*Chromis punctipinnis*), 18 to 25 cm long, about 11 m off along the
+    /// view: the fish whose colour sits inside the water's (research-method.md §3, research-look.md item 7), so fogged
+    /// they are dark blue-grey slivers. Cards from the atlas in the kelp's one batch, under its shader.
+    private func school(with shader: SKShader) {
+        let tip = spot.pitch * .pi / 180
+        home = cam + SIMD3(0, sin(tip), cos(tip)) * 11
+        home.y = min(max(home.y, 2), spot.depth - 1.5)
+        fishOn = Self.knobs[4].value > 0.5
+        for _ in 0..<36 {
+            let node = SKSpriteNode(texture: atlas.fish[0])
+            node.shader = shader
+            addChild(node)
+            let a = Double.random(in: 0...(2 * .pi), using: &rng)
+            let at = SIMD3(Double.random(in: -2...2, using: &rng), .random(in: -0.6...0.6, using: &rng), .random(in: -2...2, using: &rng))
+            fish.append(Fish(node: node, length: Atlas.fishLength * .random(in: 0.72...1, using: &rng), p: home + at,
+                             v: SIMD3(cos(a), 0, 0.35 * sin(a)) * 0.3, wander: a, stroke: .random(in: 0...1, using: &rng)))
+        }
+    }
+
+    /// Steers the school as Fish Tank steers its schools: clear of schoolmates, matching their heading, drifting toward
+    /// their middle and wandering, held loosely near home so it stays in view, and carried by the swell with the kelp.
+    /// Speeds in m/s; stepped every 1/30 s, so it swims the same at any frame rate.
+    private func swim(at t: Double, dt: Double) {
+        let cruise = 0.3, gap = 0.4, sight = 1.5, flow = sea.flow(sea.phases(at: home, t), y: home.y, t)
+        for i in fish.indices {
+            let p = fish[i].p, v = fish[i].v
+            var steer = SIMD3<Double>.zero, heading = steer, middle = steer, seen = 0.0
+            // ponytail: O(n²), fine for a few dozen fish
+            for j in fish.indices where j != i {
+                let d = fish[j].p - p, r = max(simd_length(d), 0.001)
+                if r < gap { steer -= d / r * (gap - r) / gap * cruise * 3 }
+                if r < sight { heading += fish[j].v; middle += fish[j].p; seen += 1 }
+            }
+            if seen > 0 { steer += (heading / seen - v) * 0.9 + (middle / seen - p) * 0.25 }
+            fish[i].wander += Double.random(in: -1...1, using: &rng) * dt * 1.5
+            // Wandering mostly across the view, as Fish Tank's mostly level: a school seen end on is a cloud of dots.
+            steer += SIMD3(cos(fish[i].wander), 0, 0.35 * sin(fish[i].wander)) * cruise * 0.45 + (home - p) * 0.04
+            var nv = v + steer * dt
+            nv.y *= 1 - 1.4 * dt // fish mostly swim level
+            nv *= min(max(simd_length(nv), cruise * 0.45), cruise * 1.35) / max(simd_length(nv), 0.001)
+            fish[i].v = nv
+            fish[i].p = p + (nv + flow) * dt
+            fish[i].p.y = min(max(fish[i].p.y, 0.5), spot.depth - 0.5)
+            fish[i].stroke += dt * 2.2
+        }
+    }
+
     /// Sets a sprite's fixed numbers for the kelp shader, carried in its colour (the shader's `v_color_mix`): how far
     /// off it is (to 64 m), how high (to 16 m), and in blue its light (to 1.2, in 16 steps) with a number of its own
     /// (0 to 1) in the middle of each step, clear of its edges however the channel rounds. Not as attributes: SpriteKit
@@ -424,6 +485,7 @@ final class KelpForest: SKScene, Trimmable {
         for k in stride(from: first, through: (simTime / step).rounded(.down), by: 1).prefix(12) {
             let far = Int(k) % 2 == 0
             self.step(at: k * step, dt: step, farDt: far ? 2 * step : nil)
+            if far { swim(at: k * step, dt: 2 * step) }
             farMoved = farMoved || far
         }
         // A change of look eases over a few seconds.
@@ -579,6 +641,26 @@ final class KelpForest: SKScene, Trimmable {
                     node.size = CGSize(width: Atlas.cardSize.width * ppm / 2, height: Atlas.cardSize.height * simd_length(d) / Atlas.cardStipe / 2)
                 }
             }
+        }
+        // The fish move when the far fronds do: each faces the way it swims, belly down, shorter seen end on, its tail
+        // flicked one way and the other as it strokes, and fogged by how far off it is now.
+        guard !farStill else { return }
+        for i in fish.indices {
+            let f = fish[i], at = project(f.p), nose = project(f.p + simd_normalize(f.v) * f.length)
+            let on = fishOn && at.ahead > 0.5 && nose.ahead > 0.5
+            show(f.node, on)
+            guard on else { continue }
+            let d = nose.px - at.px, scale = f.length / Atlas.fishLength * at.ppm / 2
+            f.node.position = CGPoint(x: at.px.x / 2, y: at.px.y / 2)
+            f.node.zRotation = atan2(d.y, d.x)
+            f.node.zPosition = CGFloat(-at.dist)
+            f.node.size = CGSize(width: Atlas.fishCard.width * scale * min(max(simd_length(d) / (f.length * at.ppm), 0.3), 1),
+                                 height: Atlas.fishCard.height * scale)
+            if (f.node.yScale < 0) != (d.x < 0) { f.node.yScale = -f.node.yScale }
+            let pose = atlas.fish[Int(f.stroke * 2) % 2]
+            if f.node.texture !== pose { f.node.texture = pose }
+            let fog = Int(at.dist * 4) * 1000 + Int(f.p.y * 16)
+            if fog != f.fogged { info(f.node, dist: at.dist, height: f.p.y, seed: 0, light: 0.8); fish[i].fogged = fog }
         }
     }
 
@@ -871,7 +953,7 @@ private func kelpNoise(_ x: Float, _ y: Float) -> Float {
 /// as the mock-up's frond shader drew them (`blade`), the stipes and holdfasts in Core Graphics.
 @MainActor struct Atlas {
     let texture: SKTexture
-    let blades: [SKTexture], sparse: [SKTexture], dense: [SKTexture], stipe: SKTexture, holdfast: SKTexture
+    let blades: [SKTexture], sparse: [SKTexture], dense: [SKTexture], stipe: SKTexture, holdfast: SKTexture, fish: [SKTexture]
 
     /// A blade card is 1 m by 33 cm at 400 px a metre, the blade's base 3 cm in from its end and 44 px in from the side
     /// it bows away from; a blade at full size is 92 cm long with its stalk and float, bowed by up to an eighth of its
@@ -883,6 +965,8 @@ private func kelpNoise(_ x: Float, _ y: Float) -> Float {
     /// A far card is 2 m by 3.2 m, its two links of stipe 2.1 m long from 20 cm up.
     static let cardSize = (width: 2.0, height: 3.2), cardStipe = 2.1, cardAnchor = CGPoint(x: 0.5, y: 0.2 / 3.2)
     static let holdfastSize = (width: 0.8, height: 0.5)
+    /// A fish card is 30 by 15 cm, a blacksmith 25 cm long across its middle, facing the way of the card.
+    static let fishCard = (width: 0.3, height: 0.15), fishLength = 0.25
     private static let (w, h) = (2048, 2048)
 
     /// Where a blade card's foot is: even cards bow up, odd ones down.
@@ -897,7 +981,7 @@ private func kelpNoise(_ x: Float, _ y: Float) -> Float {
                      blades: (0..<bladeCards).map { sub(1240 + $0 / 12 * 404, $0 % 12 * 136, 400, 132) },
                      sparse: (0..<3).map { sub($0 * 410, 720, 400, 640) },
                      dense: (0..<3).map { sub($0 * 410, 1370, 400, 640) },
-                     stipe: sub(412, 2, 8, 28), holdfast: sub(430, 0, 240, 150))
+                     stipe: sub(412, 2, 8, 28), holdfast: sub(430, 0, 240, 150), fish: [sub(0, 0, 120, 60), sub(0, 64, 120, 60)])
     }
 
     /// Draws the whole texture, the same every time (its own fixed seed), so copies on two displays match.
@@ -927,6 +1011,24 @@ private func kelpNoise(_ x: Float, _ y: Float) -> Float {
             let y = CGFloat.random(in: 4...max(8, top), using: &rng)
             ctx.setFillColor(CGColor(red: .random(in: 0.35...0.6, using: &rng), green: 0.37, blue: 0.5, alpha: 1))
             ctx.fillEllipse(in: CGRect(x: x - r, y: y - r * 0.6, width: 2 * r, height: 1.2 * r))
+        }
+        // Two blacksmith 25 cm long, at 400 px a metre, the tail flicked one way and then the other: deep in the body
+        // with a forked tail, dark (red), letting no light through (green) and never glowing (blue).
+        for (k, flick) in [CGFloat(-0.15), 0.15].enumerated() {
+            let L: CGFloat = 100, ox: CGFloat = 10, oy = CGFloat(k * 64) + 30, root = CGPoint(x: ox + 0.25 * L, y: oy)
+            func tail(_ x: CGFloat, _ y: CGFloat) -> CGPoint { // turned about the root of the tail
+                let dx = ox + x * L - root.x, dy = y * L
+                return CGPoint(x: root.x + dx * cos(flick) - dy * sin(flick), y: root.y + dx * sin(flick) + dy * cos(flick))
+            }
+            let body = CGMutablePath()
+            body.move(to: CGPoint(x: ox + L, y: oy + 0.01 * L))
+            body.addQuadCurve(to: tail(0.25, 0.055), control: CGPoint(x: ox + 0.58 * L, y: oy + 0.42 * L))
+            for (x, y) in [(0.02, 0.2), (0.12, 0.0), (0.02, -0.2), (0.25, -0.055)] as [(CGFloat, CGFloat)] { body.addLine(to: tail(x, y)) }
+            body.addQuadCurve(to: CGPoint(x: ox + L, y: oy - 0.01 * L), control: CGPoint(x: ox + 0.55 * L, y: oy - 0.36 * L))
+            body.closeSubpath()
+            ctx.addPath(body)
+            ctx.setFillColor(CGColor(red: 0.15, green: 0.05, blue: 1, alpha: 1))
+            ctx.fillPath()
         }
         // Far cards: two links of frond with their blades, sparse (low on a frond) and dense (the ruff), at 200 px a metre.
         for (y0, dense) in [(720, false), (1370, true)] {
