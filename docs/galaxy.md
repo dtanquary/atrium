@@ -25,7 +25,7 @@ Everything is maths per pixel, per frame, in four coordinate frames:
    - disc: `exp(-rt/0.4)`, fading out between 0.85 and 1.4 with no edge, since the photo drops off faster from about three quarters of the way out. `rt` gives the disc a thickness of 0.15, so steep tilts fade to a soft ellipse instead of a sharp one, and it's also what the branch at 1.4 tests: past it the disc, and everything it gates, is zero.
    - arm: `crest·inArms·(0.5 + 0.9·clump)`. `inArms` fades the arms in past `r0`. `clump` is two octaves of noise in unswirled `g`, so the arms read as star clouds rather than brush strokes.
    - texture: photos have fine texture everywhere, about ±25% at 1–10 px, and a smooth disc reads as airbrushed. So `tex = 0.7 + 0.6·(0.45·lumps + 0.35·noise(g·110) + 0.2·noise(g·260))` (octaves turned apart) multiplies the disc and arm light.
-   - light: `tint·disc·(0.84·tex + 2.5·arm·tex)·√los` (the arm weight went from 2.1 to 2.5, since texture lowers the arm contrast). `tint` shades from bulge cream to disc white outward, and toward the young-star blue in the arms and the outskirts (`0.6·smoothstep(0.4, 1.1, r)`, which gives the photo's teal-grey at 0.7–0.8 of the radius). `los = min(1/cos i, 4.5)` is the path through the disc, so tilted discs look brighter.
+   - light: `tint·disc·(level·tex + gain·arm·tex)·√los`, with `level` 0.84 and `gain` 3.5 for most kinds (the arm weight went from 2.1 to 2.5 when texture came in, since it lowers the arm contrast, then to 3.5 with the stronger stretch). `level` is the smooth disc between the arms: it eases from 0.84 at the centre to the kind's own disc level (`u_arms.w`) by r = 0.45, and `gain = 3.5 + (0.84 − disc level)·1.33`, so a darker disc doesn't dim the arms' crests (see Pinwheel under Kinds). `tint` shades from bulge cream to disc white outward, and toward the young-star blue in the arms and the outskirts (`0.6·smoothstep(0.4, 1.1, r)`, which gives the photo's teal-grey at 0.7–0.8 of the radius). `los = min(1/cos i, 4.5)` is the path through the disc, so tilted discs look brighter.
    - bar: `exp(-(x/L)⁴ - (y/0.2L)²)` in `g`, so it's flat-ended and turns with the disc
    - young stars: `young·inArms·clump·disc`
 6. **Dust:** `fbmRidge(qn)` gives fbm `dt` and a ridged multifractal from the same five noise samples. There are four parts:
@@ -94,21 +94,23 @@ Contrast, saturation and hue come from `gradeKnobs("galaxy")`, and `grade()` fro
 
 **Kinds** (`Galaxy.kinds`), each after a real galaxy and its Hubble and ground-based portraits:
 
-| Kind | After | Arms | Pitch | Bar | Bulge | Ragged | Dust | Tilt | Look |
-|---|---|---|---|---|---|---|---|---|---|
-| Whirlpool | M51 | 2 | 19° | none | 0.05 | 0.2 | 1.3 | 15–25° | grand design, strung with H II; companion NGC 5195 |
-| Pinwheel | M101 | 4 | 27° | none | 0.03 | 0.55 | 0.8 | 10–25° | face-on, many open, lopsided arms |
-| Andromeda | M31 | 2 | 8° | none | 0.13 | 0.5 | 1.2 | 72–77° | cream bulge, dusty arms, mauve outskirts; companions M32 and M110 |
-| Milky Way | ours | 4 (2 minor at 0.45) | 13° | 0.28 | 0.09 | 0.3 | 1.2 | 0–35° | short bar, two major arms off its ends, two minor between |
-| Great Barred | NGC 1300 | 2 | 17° | 0.45 | 0.05 | 0.1 | 1.0 | 40–50° | long bar with dust lanes, open arms off its ends |
-| Triangulum | M33 | 2 | 30° | none | 0.015 | 0.9 | 0.6 | 50–56° | a flocculent patchwork, rich in H II |
+| Kind | After | Arms | Pitch | Bar | Bulge | Ragged | Dust | Disc | Tilt | Look |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Whirlpool | M51 | 2 | 19° | none | 0.05 | 0.2 | 1.3 | 0.84 | 15–25° | grand design, strung with H II; companion NGC 5195 |
+| Pinwheel | M101 | 4 | 27° | none | 0.03 | 0.55 | 0.8 | 0.2 | 10–25° | face-on, many open, lopsided arms on a dark disc |
+| Andromeda | M31 | 2 | 8° | none | 0.13 | 0.5 | 1.2 | 0.84 | 72–77° | cream bulge, dusty arms, mauve outskirts; companions M32 and M110 |
+| Milky Way | ours | 4 (2 minor at 0.45) | 13° | 0.28 | 0.09 | 0.3 | 1.2 | 0.84 | 0–35° | short bar, two major arms off its ends, two minor between |
+| Great Barred | NGC 1300 | 2 | 17° | 0.45 | 0.05 | 0.1 | 1.0 | 0.84 | 40–50° | long bar with dust lanes, open arms off its ends |
+| Triangulum | M33 | 2 | 30° | none | 0.015 | 0.9 | 0.6 | 0.84 | 50–56° | a flocculent patchwork, rich in H II |
+
+**Disc** is how bright the smooth disc is between the arms outside the inner disc; 0.84 was fitted to M51's radial profile. The review of 2026-11-14 found the random roll it saw, a Pinwheel, a flat grey plate with no focal point: arms only 1.2 times the gaps, and everything out to two thirds of the radius between 100 and 150 of 255. Measured by annulus against ESA/Hubble's M101 (heic0602a, its radius taken as 500 px of the 1280 px frame), the photo's gaps (20th percentile) fall to a fifth of its centre by 0.6 of the radius and a tenth by 0.8, with arms 2–4 times the gaps; the render's held half the centre at 0.6 and arms 1.3–1.6 times the gaps. A disc level of 0.2 (tried 0.5, 0.3 and 0.2, each with the arm gain from 3.5 to 5.5) gives gaps a quarter of the centre at 0.6 and arms 2–3.7 times the gaps, so the arms read as separate arms on a dark disc round the bright core, as in the photo; lowering it only past r = 0.05–0.45 keeps the inner disc's glow (166 of 255 at the centre, where a flat 0.3 dropped it to 148). Triangulum was tried too and kept at 0.84: ESO's M33 (eso1424a) is flocculent, its arms only 1.2–1.8 times its gaps, about what the render already had, and a low disc level turned it into streaks on black. The other kinds weren't part of the review and stay at 0.84. Free at run time: the level rides in `u_arms.w`, since the shader is near Metal's limit on uniforms.
 
 Colours per kind: bulge (cream), old disc (warm grey), young stars (cyan-grey blue) and H II (salmon pink). They were sampled from the photos (M51 heic0506a, M101 heic0602a, NGC 1300 heic0501a, M33 eso1424a, and M31) as the asinh stretch shows them. The stretch keeps hue, so gold bulge colours came out literally orange. Andromeda's outskirts are mauve; Triangulum and NGC 1300 are the bluest. The Milky Way row wasn't sampled; it's in the same family.
 
 ## Tuning constants
 - Rotation `2π/720` rad/s at speed 1.
 - Arms: warp `2 + 5·ragged`; crest exponent `4 - 2·ragged`; lane at ph + 0.45 (exponent 14); H II at ph + 0.2 (exponent 10); young at ph − 0.35 (exponent 8); arm strengths 0.6–1.
-- Disc scale length 0.4, fading out between 0.85 and 1.4; the arms brighten it `0.6 + 1.5·arm`.
+- Disc scale length 0.4, fading out between 0.85 and 1.4; its level 0.84, or the kind's own from r = 0.05 to 0.45 (Pinwheel 0.2); arm gain `3.5 + (0.84 − level)·1.33`.
 - Dust: lanes ×1.3, feathers ×0.7 (none on flocculent kinds), web `0.25 + 0.9·crest`, bar lanes ×0.9; all ×`los`; reddening (0.5, 0.75, 1.0); 30% of the old disc in front.
 - Stars: 2.8 pt and 3.9 pt grain layers kept up to 80% and 90% (×`min(disc·(1.5 + 3·arm), 0.3)`), and 11 pt giants up to 30% (×0.5). H II: 16 pt cells, up to 90% where grouped, inside r ≈ 1.2, ×2.2.
 - Bulge `3·exp(-3.67√rb) + 1.5·exp(-60rb²)`. Stretch `asinh(6·lum)/asinh(12)`, with highlights paling above 0.55.

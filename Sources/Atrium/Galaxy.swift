@@ -23,23 +23,23 @@ final class Galaxy: SKScene, Trimmable {
     /// Kinds of spiral, each after a real galaxy: how many arms and how strong every other one is (below 1 for minor
     /// arms between the major ones), their pitch angle in degrees, the bar's length and
     /// the bulge's size (in disc radii, 0 for no bar), how ragged the arms are (0 grand design, 1 flocculent), dust,
-    /// the tilt range in degrees from face-on (around the real one), and colours: bulge, old disc stars, young arm
+    /// how bright the smooth disc is between the arms outside the inner disc (0.84 was fitted to M51), the tilt range in degrees from face-on (around the real one), and colours: bulge, old disc stars, young arm
     /// stars, and the hydrogen-alpha pink of H II regions. The colours were sampled from ESA/Hubble, ESO and NASA
     /// portraits (M51 heic0506a, M101 heic0602a, M31, NGC 1300 heic0501a, M33 eso1424a) as the stretch shows them.
     nonisolated static let kinds: [(name: String, arms: Float, minor: Float, pitch: Float, bar: Float, bulge: Float,
-                                    ragged: Float, dust: Float, tilt: ClosedRange<Float>, colours: [SIMD3<Float>])] = [
-        ("Whirlpool", 2, 1, 19, 0, 0.05, 0.2, 1.3, 15...25,        // M51 (i ≈ 20°): the classic grand design, strung with H II
+                                    ragged: Float, dust: Float, disc: Float, tilt: ClosedRange<Float>, colours: [SIMD3<Float>])] = [
+        ("Whirlpool", 2, 1, 19, 0, 0.05, 0.2, 1.3, 0.84, 15...25,       // M51 (i ≈ 20°): the classic grand design, strung with H II
          [[1.0, 0.91, 0.80], [0.94, 0.90, 0.87], [0.72, 0.86, 1.0], [1.0, 0.42, 0.50]]),
-        ("Pinwheel", 4, 1, 27, 0, 0.03, 0.55, 0.8, 10...25,        // M101 (i ≈ 18°): face-on, many open, lopsided arms
+        ("Pinwheel", 4, 1, 27, 0, 0.03, 0.55, 0.8, 0.2, 10...25,       // M101 (i ≈ 18°): face-on, many open, lopsided arms
          [[1.0, 0.93, 0.86], [0.95, 0.93, 0.93], [0.70, 0.82, 1.0], [1.0, 0.50, 0.60]]),
-        ("Andromeda", 2, 1, 8, 0, 0.13, 0.5, 1.2, 72...77,         // M31 (i ≈ 77°): cream bulge, dusty arms, mauve outskirts
+        ("Andromeda", 2, 1, 8, 0, 0.13, 0.5, 1.2, 0.84, 72...77,        // M31 (i ≈ 77°): cream bulge, dusty arms, mauve outskirts
          [[1.0, 0.90, 0.78], [0.86, 0.78, 0.86], [0.74, 0.76, 1.0], [1.0, 0.50, 0.70]]),
-        ("Milky Way", 4, 0.45, 13, 0.28, 0.09, 0.3, 1.2, 0...35, // ours, from outside: a short bar, two major arms off
+        ("Milky Way", 4, 0.45, 13, 0.28, 0.09, 0.3, 1.2, 0.84, 0...35, // ours, from outside: a short bar, two major arms off
                                                                   // its ends (Scutum-Centaurus, Perseus), two minor between
          [[1.0, 0.90, 0.76], [0.92, 0.88, 0.84], [0.72, 0.84, 1.0], [1.0, 0.45, 0.55]]),
-        ("Great Barred", 2, 1, 17, 0.45, 0.05, 0.1, 1.0, 40...50,  // NGC 1300 (i ≈ 50°): a long bar with open arms off its ends
+        ("Great Barred", 2, 1, 17, 0.45, 0.05, 0.1, 1.0, 0.84, 40...50, // NGC 1300 (i ≈ 50°): a long bar with open arms off its ends
          [[1.0, 0.90, 0.84], [0.93, 0.90, 0.97], [0.72, 0.84, 1.0], [1.0, 0.50, 0.60]]),
-        ("Triangulum", 2, 1, 30, 0, 0.015, 0.9, 0.6, 50...56,      // M33 (i ≈ 55°): a flocculent patchwork, rich in H II
+        ("Triangulum", 2, 1, 30, 0, 0.015, 0.9, 0.6, 0.84, 50...56,     // M33 (i ≈ 55°): a flocculent patchwork, rich in H II
          [[1.0, 0.96, 0.90], [0.88, 0.90, 1.0], [0.74, 0.86, 1.0], [1.0, 0.50, 0.56]]),
     ]
 
@@ -83,7 +83,7 @@ final class Galaxy: SKScene, Trimmable {
             SKUniform(name: "u_tilt", float: tilt),
             SKUniform(name: "u_spin", float: Bool.random(using: &rng) ? 1 : -1),
             SKUniform(name: "u_shape", vectorFloat4: [kind.arms, 1 / tan(kind.pitch * .pi / 180), kind.bar, kind.bulge]),
-            SKUniform(name: "u_arms", vectorFloat3: [kind.ragged, kind.dust, kind.minor]),
+            SKUniform(name: "u_arms", vectorFloat4: [kind.ragged, kind.dust, kind.minor, kind.disc]),
             SKUniform(name: "u_core", vectorFloat3: kind.colours[0]), SKUniform(name: "u_disc", vectorFloat3: kind.colours[1]),
             SKUniform(name: "u_young", vectorFloat3: kind.colours[2]), SKUniform(name: "u_knots", vectorFloat3: kind.colours[3]),
             phase, WallpaperTime.now,
@@ -363,8 +363,11 @@ final class Galaxy: SKScene, Trimmable {
             // Photos have fine texture everywhere, about ±25% at 1–10 px, where a smooth disc reads as airbrushed.
             // (A third octave at 3 px was dropped for cost: the grain below covers that scale.)
             float tex = 0.7 + 0.6 * (0.55 * lumps + 0.45 * noise(mat2(0.6, -0.8, 0.8, 0.6) * g * 110.0 + u_seed.yx));
-            light = (tint * (disc * 0.84 * tex + haze * 0.12) + u_core * barLight * 0.9) * boost * screen
-                  + (tint * disc * 3.5 * arm * tex + u_young * young * inArms * clump * disc * 1.2) * boost * absorb;
+            // The smooth disc between the arms is as bright as the kind's own photo has it outside the inner disc (M101's
+            // gaps go nearly black), and the arms gain what it loses, so their crests keep their light.
+            float level = mix(0.84, u_arms.w, smoothstep(0.05, 0.45, r));
+            light = (tint * (disc * level * tex + haze * 0.12) + u_core * barLight * 0.9) * boost * screen
+                  + (tint * disc * (3.5 + (0.84 - u_arms.w) * 1.33) * arm * tex + u_young * young * inArms * clump * disc * 1.2) * boost * absorb;
 
             // Resolved stars twinkling in the disc as it turns, drawn as pinpoints on screen: a fine grain of stars
             // that follows the light, and blue giants just past the crests.
