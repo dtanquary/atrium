@@ -349,14 +349,33 @@ float fogCover(vec2 p, float water, float inside) {
 }
 
 // Dew: condensation grown into beads big enough to see, from about 40 g/m², tiny lenses that grow in place with a
-// mean contact radius of 6 µm per g/m² (0.00003 screen heights). Returns like beadLayer.
+// mean contact radius of 6 µm per g/m² (0.00003 screen heights). A pane of dew is beads of every size, the big ones
+// ringed by small (Beysens 2006): each cell of a lattice holds a bead, which grows with the water until it fills its
+// share of the cell, 0.15 to 0.48 of it, and in the two corners of the cell farthest from it, smaller beads growing
+// a third as fast, until they'd touch it. Every other row of cells sits half a cell across, and the lattice is
+// turned 27 degrees, since the eye finds a level row of beads at once and a slanting one hardly at all. One hash a
+// pixel: a second lattice of small beads between the first cost 0.17 ms. Returns like beadLayer.
 vec4 dewLayer(vec2 p, float water) {
-    float cell = 0.008;
-    vec2 id = floor(p / cell);
+    mat2 turn = mat2(0.891, 0.454, -0.454, 0.891);
+    float cell = 0.008, grown = 0.00003 * water / cell;    // the mean bead's radius, in cells
+    vec2 q = turn * p / cell;
+    q.x += 0.5 * mod(floor(q.y), 2.0);
+    vec2 id = floor(q), f = q - id - 0.5;                  // p in its cell, from the cell's middle, in cells
     vec4 h = hash42(id + 29.0);
-    float r = min(0.00003 * water * (0.3 + 1.4 * h.w * h.w), cell * 0.35);
-    vec2 d = (p - (id + 0.5 + (h.yz - 0.5) * (1.0 - 2.0 * r / cell)) * cell) / r;
-    return vec4(d, smoothstep(1.0, 0.8, length(d)) * step(h.x, 0.85), r);
+    float r = min(grown * (0.3 + 1.4 * h.w * h.w), 0.15 + 0.33 * h.w) * step(h.x, 0.85);
+    vec2 c = (h.yz - 0.5) * (1.0 - 2.0 * r);
+    vec2 d = (f - c) / max(r, 1e-4);
+    float cover = smoothstep(1.0, 0.8, length(d)) * step(1e-4, r);
+    if (cover == 0.0) {
+        // (a bead in a corner, a radius in from both walls, clears the big one while it's under 0.41 of the gap
+        // between the corner and the big one's edge)
+        vec2 far = mix(vec2(0.5), vec2(-0.5), step(0.0, c)), next = vec2(far.x, -far.y);
+        vec2 rs = min(min(vec2(length(far - c), length(next - c)) - r, 0.6) * 0.37, grown * 0.35) * (0.5 + 0.5 * fract(h.xw * 7.3));
+        vec2 da = (f - far * (1.0 - 2.0 * rs.x)) / rs.x, db = (f - next * (1.0 - 2.0 * rs.y)) / rs.y;
+        if (length(da) < length(db)) { d = da; r = rs.x; } else { d = db; r = rs.y; }
+        cover = smoothstep(1.0, 0.8, length(d));
+    }
+    return vec4(d * turn, cover, r * cell);
 }
 
 // A snowflake's lace at q (in units of its radius, from its middle): six arms with side branches at 60 degrees,

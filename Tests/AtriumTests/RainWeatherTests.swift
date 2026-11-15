@@ -63,3 +63,70 @@ import UniformTypeIdentifiers
         }
     }
 }
+
+/// A scene drawn offscreen, a pixel a point: its pixels, top row first.
+@MainActor private func drawn(_ scene: SKScene) throws -> [UInt32] {
+    let device = try #require(MTLCreateSystemDefaultDevice()), queue = try #require(device.makeCommandQueue())
+    let (w, h) = (Int(scene.size.width), Int(scene.size.height))
+    let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: w, height: h, mipmapped: false)
+    descriptor.usage = [.renderTarget, .shaderRead]
+    descriptor.storageMode = .shared
+    let texture = try #require(device.makeTexture(descriptor: descriptor)), pass = MTLRenderPassDescriptor()
+    pass.colorAttachments[0].texture = texture
+    pass.colorAttachments[0].storeAction = .store
+    let renderer = SKRenderer(device: device)
+    renderer.scene = scene
+    for _ in 0..<2 { // the first frame can go by before a shader has compiled
+        renderer.update(atTime: ProcessInfo.processInfo.systemUptime)
+        let buffer = try #require(queue.makeCommandBuffer())
+        renderer.render(withViewport: CGRect(x: 0, y: 0, width: w, height: h), commandBuffer: buffer, renderPassDescriptor: pass)
+        buffer.commit()
+        buffer.waitUntilCompleted()
+    }
+    var pixels = [UInt32](repeating: 0, count: w * h)
+    texture.getBytes(&pixels, bytesPerRow: w * 4, from: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0)
+    return pixels
+}
+
+/// Each kind of weather is its own build of the shader, compiled only as it's first drawn, where a mistake is a
+/// black screen that `swift build` can't see: every one draws a picture, over a photo and over a city (whose traffic
+/// is one more).
+@MainActor @Test func rainDrawsInEveryWeather() throws {
+    let keys = ["rain.palette", "rain.seed", "rain.preview", "rain.previewRain", "rain.previewFog", "rain.previewSnow", "rain.previewFrost"]
+    defer { keys.forEach(UserDefaults.standard.removeObject) }
+    UserDefaults.standard.set(500.0, forKey: "rain.seed")
+    var kept = [SKScene]() // (so the city is baked once)
+    for backdrop in ["Hamburg", "City"] {
+        for weather in [[:], ["Fog": 0.5], ["Fog": 1], ["Snow": 1], ["Frost": 0.6], ["Rain": 0]] as [[String: Double]] {
+            keys.dropFirst(2).forEach(UserDefaults.standard.removeObject)
+            UserDefaults.standard.set(backdrop, forKey: "rain.palette")
+            if !weather.isEmpty { UserDefaults.standard.set(1.0, forKey: "rain.preview") }
+            for (name, value) in weather { UserDefaults.standard.set(value, forKey: "rain.preview" + name) }
+            let scene = rainOnGlass(size: CGSize(width: 300, height: 200))
+            kept.append(scene)
+            let pixels = try drawn(scene)
+            #expect(Set(stride(from: 0, to: pixels.count, by: 97).map { pixels[$0] }).count > 20, "\(backdrop) with \(weather) drew a flat picture")
+        }
+    }
+}
+
+/// Dew isn't on a grid. Row by row down the picture, how much edge there is across the row: beads in level rows make
+/// that rise and fall once a row, so a row of pixels is like the one a row of beads below it and unlike the one half
+/// a row of beads below. With no level rows, neither.
+@MainActor @Test func rainDewIsNotInRows() throws {
+    let keys = ["rain.palette", "rain.seed", "rain.preview", "rain.previewFog"]
+    defer { keys.forEach(UserDefaults.standard.removeObject) }
+    for (key, value) in zip(keys, ["Hamburg", 500.0, 1.0, 1.0] as [Any]) { UserDefaults.standard.set(value, forKey: key) }
+    let (w, h) = (1500, 2000), pixels = try drawn(rainOnGlass(size: CGSize(width: w, height: h)))
+    let edges = (0..<h).map { row in
+        (1..<w).reduce(0.0) { $0 + abs(Double(pixels[row * w + $1] >> 8 & 255) - Double(pixels[row * w + $1 - 1] >> 8 & 255)) }
+    }
+    /// How alike the edges of two rows `lag` apart are, -1 to 1.
+    func alike(_ lag: Int) -> Double {
+        let a = Array(edges.dropLast(lag)), b = Array(edges.dropFirst(lag)), ma = a.reduce(0, +) / Double(a.count), mb = b.reduce(0, +) / Double(b.count)
+        let cross = zip(a, b).reduce(0.0) { $0 + ($1.0 - ma) * ($1.1 - mb) }
+        return cross / (a.reduce(0.0) { $0 + ($1 - ma) * ($1 - ma) } * b.reduce(0.0) { $0 + ($1 - mb) * ($1 - mb) }).squareRoot()
+    }
+    let row = Int((0.008 * Double(h)).rounded()) // a row of beads, in pixels
+    #expect(alike(row) - alike(row / 2) < 0.15, "rows \(row) apart are \(alike(row)) alike, and half that apart \(alike(row / 2))")
+}
