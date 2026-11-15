@@ -976,13 +976,19 @@ class WeatherScene: SKScene, BatteryPaced {
             albedo = mix(albedo, mix(albedo, even, 0.7 * u_grass.a) * u_grass.rgb, clamp(green * (0.45 + 1.1 * patches), 0.0, 1.0));
         }
         // Snow on the ground: the open grass goes white, shaded by the photo's own light and shade so the hills keep
-        // their form; the trees darken, lose colour and catch snow on their brighter parts.
+        // their form. Thin snow lies on the brighter grass first: under 5 cm the darkest fifth (tufts, dry stems, the
+        // scrub) shows through. The oaks go charcoal-olive, with snow along the tops of their crowns (where the tree
+        // mask thins going up) and on their brighter leaves.
         if (u_snow > 0.0) {
             float lum = dot(albedo, vec3(0.3, 0.59, 0.11));
             vec3 snowy = vec3(0.86, 0.89, 0.94) * clamp(pow(lum / 0.42, 0.55), 0.45, 1.08);
-            vec3 trees = mix(vec3(lum), albedo, 0.35) * 0.62 + vec3(0.8, 0.83, 0.88) * smoothstep(0.3, 0.6, lum) * 0.35;
+            float thr = mix(0.6, 0.385, smoothstep(0.0, 0.6, u_snow)) - smoothstep(0.85, 1.0, u_snow);
+            float cover = smoothstep(thr - 0.05, thr + 0.05, lum) * min(u_snow * 3.0, 1.0);
+            float above = texture2D(u_aux, v_tex_coord + vec2(0.0, 0.008)).g;
+            float cap = max(smoothstep(0.1, 0.45, aux.g - above), smoothstep(0.32, 0.55, lum) * 0.6);
+            vec3 trees = mix(mix(vec3(lum) * vec3(1.0, 1.04, 0.86), albedo, 0.25) * 0.68, snowy, cap * 0.8);
             float open = 1.0 - smoothstep(0.3, 0.7, aux.g);
-            albedo = mix(albedo, mix(trees, snowy, open), u_snow * (0.55 + 0.45 * open));
+            albedo = mix(mix(albedo, trees, min(u_snow * 1.5, 1.0) * 0.9), mix(albedo, snowy, cover), open);
         }
         vec3 land = albedo * albedo * (u_light + vec3(0.75, 0.8, 1.0) * u_flash * 0.15);
         // The photo's far ridges are pale with its own haze. Against a low Sun or a twilight glow they should be
