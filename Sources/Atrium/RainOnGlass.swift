@@ -77,8 +77,7 @@ func rainBackdrop(picked: String?) -> String {
 
 /// The scene for one backdrop, with its water clock at `clock`. Left on Random, or before a pick, it fades to another
 /// photo every few minutes if Settings says so; the new scene takes over the clock, so the water carries on through
-/// the fade. It
-/// fades the same way between its day and night looks at dawn and dusk while it follows the weather.
+/// the fade. It fades the same way between its day and night looks at dawn and dusk while it follows the weather.
 /// After about two hours of water it fades to a fresh pane of the same backdrop, which keeps the clock small enough
 /// for the shader's Floats to place drops to the pixel.
 @MainActor private func rainScene(size: CGSize, backdrop: String, clock: Double) -> SKScene {
