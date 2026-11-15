@@ -163,9 +163,9 @@ That table is step 3's. After step 4 (2026-11-15), the render test drew each loo
 |---|---|---|---|---|
 | Lit tank, 84 moon jellies | 2.05 ms | 1.30 ms | 0.77–0.83 ms | 0.73–0.75 ms |
 | Glow | 2.07 ms | 1.10 ms | | |
-| Crystal jellies, 48 | 3.16 ms | 2.36 ms | 0.70 ms | 0.82 ms (one run) |
+| Crystal jellies, 48 | 2.66 ms (2.65–2.70 in five runs) | 2.36 ms | 0.70 ms | 0.59–0.67 ms |
 
-So the moon jellies now draw inside the 2 ms of GPU, the saving of step 4's first change paying for the flap, the gonads and the rest; the crystal jellies are still over, their cost being tentacles seven radii long, which the bell's closed form (the review's tenth, not attempted) wouldn't shorten. The frames before and after aren't of the same moment of the same tank, since the motion changed; the sprites' boxes, a fair measure of what is drawn, cover 0.78 of the screen before step 4 and 0.48 after for the lit tank, 1.91 and 2.33 for the crystal jellies (their tentacles now bend with the eddies and the water).
+So the moon jellies now draw inside the 2 ms of GPU, the saving of step 4's first change paying for the flap, the gonads and the rest; the crystal jellies save only about 0.3 ms and are still over 2 ms, their cost being tentacles seven radii long, which the bell's closed form (the review's tenth, not attempted) wouldn't shorten. The frames before and after aren't of the same moment of the same tank, since the motion changed; the sprites' boxes, a fair measure of what is drawn, cover 0.78 of the screen before step 4 and 0.48 after for the lit tank, 1.91 and 2.33 for the crystal jellies (their tentacles now bend with the eddies and the water).
 
 No `batteryRate`: tried in step 4 and not set (above).
 
