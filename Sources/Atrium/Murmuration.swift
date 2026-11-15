@@ -433,7 +433,8 @@ private final class Flock: SKNode {
     private var touched = 0..<0 // the rows of the reflection that last held ink
 
     // ponytail: 1,500 agents, each a parcel standing for about 40 birds (60,000 in all), which is what the CPU allows.
-    // A parcel draws as ten dark specks rather than forty faint ones, which matches how photos show a flock's grain.
+    // A parcel draws as twenty birds rather than forty fainter ones: the flock's grain and darkness then fall within
+    // what photos show (ten, drawn as dashes, read as grains of rice up close, and made the flock a little dark).
     private static let count = 1500
     private static let buckets = 8192  // a spatial hash of `cell`-metre cubes
     private static let cell: Float = 6
@@ -442,7 +443,7 @@ private final class Flock: SKNode {
     private static let core: Float = 0.68, reach: Float = 9.2
     private let roost = SIMD3<Float>(0, 200, 44), roostSize = SIMD2<Float>(55, 40)
     /// The nearest a flock heading our way comes before it turns away. Nearer than about 130 m (on a 1512-point
-    /// screen) a parcel's sprite is scaled up past the 64 points it's drawn at, and its ten birds show as one blurry
+    /// screen) a parcel's sprite is scaled up past the 64 points it's drawn at, and its twenty birds show as one blurry
     /// group moving together.
     private static let nearest: Float = 160
 
@@ -519,39 +520,44 @@ private final class Flock: SKNode {
         for sprite in sprites { sprite.color = ink }
     }
 
-    /// Eight scatterings of ten birds, some with wings level (a dash) and some raised (a small V), each drawn with its
-    /// wings at `turns` angles across 180°, all in one mipmapped texture so every parcel draws in one batch. A parcel
-    /// keeps its scattering and only changes angle, so its birds turn where they are rather than the whole parcel
-    /// spinning like a wheel, which gave it away as a group. Raised wings always point up the screen. Each bird keeps
-    /// its pose: at a few pixels a wingbeat can't be seen, and flipping between them only flickers. A parcel is
-    /// `parcel` metres across; birds are 0.4 m.
+    /// Eight scatterings of twenty starlings, each drawn with its wings at `turns` angles across 180°, all in one
+    /// mipmapped texture so every parcel draws in one batch. A parcel keeps its scattering and only changes angle, so its
+    /// birds turn where they are rather than the whole parcel spinning like a wheel, which gave it away as a group. Each
+    /// bird is a filled silhouette seen from below, about twice as wide as it is long, so it reads the same turned
+    /// either way: two swept triangular wings across an oval body (four in ten), the wings half folded (a third), or
+    /// the body alone (a quarter), as starlings close their wings between bursts of flapping. Each keeps its pose: at a
+    /// few pixels a wingbeat can't be seen, and flipping between them only flickers. Spread wings span 0.44 m, varying
+    /// with the whole bird up to 0.5 m. A parcel is `parcel` metres across.
     private static let layouts = 8, turns = 16
     private static func makeAtlas() -> [SKTexture] {
         let side: CGFloat = 64, perMetre = side / CGFloat(parcel)
         let sheet = paint(CGSize(width: side * CGFloat(turns), height: side * CGFloat(layouts))) { ctx in
-            ctx.setStrokeColor(rgb(0.03, 0.025, 0.035))
-            ctx.setLineCap(.round)
-            ctx.setLineWidth(0.15 * perMetre)
+            ctx.setFillColor(rgb(0.03, 0.025, 0.035))
             for layout in 0..<layouts {
                 var rng = Xorshift(seed: UInt64(layout + 7))
-                for _ in 0..<10 {
+                for _ in 0..<20 {
                     // Gaussian scatter, σ 1.3 m, so neighbouring parcels overlap into an even texture.
                     let r = CGFloat(min(sqrt(-2 * log(max(rng.unit(), 1e-4))) * 1.3, 3)), a = CGFloat(rng.unit() * 2 * .pi)
-                    // Spans vary by wing pose as much as by distance: in photos the 90th percentile bird is twice the median.
-                    let pose = CGFloat(exp((rng.unit() + rng.unit() + rng.unit() - 1.5) * 0.55))
-                    let span = min(0.36 * pose, 0.8) * perMetre, tilt = CGFloat(rng.unit() - 0.5) * 1.2, raised = rng.unit() < 0.5
+                    let size = min(1.05 * CGFloat(exp((rng.unit() + rng.unit() + rng.unit() - 1.5) * 0.3)), 0.5 / 0.42)
+                    let tilt = CGFloat(rng.unit() - 0.5) * 1.2, pose = rng.unit()
                     for turn in 0..<turns {
                         ctx.saveGState()
                         ctx.translateBy(x: CGFloat(turn) * side + side / 2 + cos(a) * r * perMetre,
                                         y: CGFloat(layout) * side + side / 2 + sin(a) * r * perMetre)
                         ctx.rotate(by: tilt + (CGFloat(turn) / CGFloat(turns) - 0.5) * .pi)
-                        if raised {
-                            ctx.move(to: CGPoint(x: -span * 0.4, y: span * 0.25)); ctx.addLine(to: .zero)
-                            ctx.addLine(to: CGPoint(x: span * 0.4, y: span * 0.25))
-                        } else {
-                            ctx.move(to: CGPoint(x: -span / 2, y: 0)); ctx.addLine(to: CGPoint(x: span / 2, y: 0))
+                        ctx.scaleBy(x: size * perMetre, y: size * perMetre)
+                        // In metres, wings across x: the body, then the wings spread or half folded. With the
+                        // poses and the size, the 90th percentile bird is about 1.7 times the median, as in photos.
+                        ctx.fillEllipse(in: CGRect(x: -0.035, y: -0.11, width: 0.07, height: 0.22))
+                        if pose < 0.75 {
+                            let tip = pose < 0.4 ? CGPoint(x: 0.21, y: -0.02) : CGPoint(x: 0.14, y: -0.09)
+                            for s: CGFloat in [-1, 1] {
+                                ctx.move(to: CGPoint(x: 0.02 * s, y: 0.05))
+                                ctx.addLine(to: CGPoint(x: tip.x * s, y: tip.y))
+                                ctx.addLine(to: CGPoint(x: 0.02 * s, y: -0.06))
+                                ctx.fillPath()
+                            }
                         }
-                        ctx.strokePath()
                         ctx.restoreGState()
                     }
                 }
@@ -596,13 +602,13 @@ private final class Flock: SKNode {
             sprite.size = CGSize(width: side, height: side)
             let alpha = (0.22 + 0.45 * facing) * (b.state == 2 ? min(max((p.z - perch.z) / 6, 0), 1) : 1) // fading into the roost
             sprite.alpha = CGFloat(alpha)
-            // Its reflection: ten birds of about 0.06 m² each, spread over the texels it lands on.
+            // Its reflection: twenty birds of about 0.025 m² each, spread over the texels it lands on.
             let below = 2 * horizon - at.y
             if below > -reach && below < horizon {
                 let x = at.x / across, y = (below + reach) / span * Float(rows)
                 let (tx, ty) = (Int(x.rounded(.down)), Int(y))
                 if x >= 0 && tx < cols - 1 && ty < rows - 1 {
-                    let ink = alpha * 0.6 * at.perMetre * at.perMetre / texel, fx = x - Float(tx), fy = y - Float(ty)
+                    let ink = alpha * 0.5 * at.perMetre * at.perMetre / texel, fx = x - Float(tx), fy = y - Float(ty)
                     splat[ty * cols + tx] += ink * (1 - fx) * (1 - fy); splat[ty * cols + tx + 1] += ink * fx * (1 - fy)
                     splat[(ty + 1) * cols + tx] += ink * (1 - fx) * fy; splat[(ty + 1) * cols + tx + 1] += ink * fx * fy
                     low = min(low, ty); high = max(high, ty + 2)
