@@ -317,7 +317,7 @@ final class EarthFromOrbit: SKScene, BatteryPaced {
 
                 float sun = dot(w, u_sun);
                 // A step toward the Sun along the ground, as far as a cloud top 8 km up throws its shadow (cot of the
-                // Sun's height), up to 1.1°: a pixel or less with the Sun high, 6-8 near the terminator.
+                // Sun's height), up to 1.1°: a pixel or less with the Sun high, 6-8 with the Sun 10° up, 17 at the line.
                 vec3 along = u_sun - w * sun;
                 vec3 w2 = normalize(w + along * min(0.0013 / max(sun, 0.001), 0.02 / max(length(along), 0.001)));
                 vec2 uv2 = vec2(atan(w2.y, w2.x) / 6.2831853 + 0.5, asin(clamp(w2.z, -1.0, 1.0)) / 3.1415927 + 0.5);
