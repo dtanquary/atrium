@@ -298,9 +298,9 @@ final class Galaxy: SKScene, Trimmable {
             float armN = mod(floor(ph / 6.2832 + 0.5), arms);
             float armAmp = (0.6 + 0.4 * hash21(vec2(armN, u_seed.x))) * mix(1.0, u_arms.z, mod(armN, 2.0));
             float soft = mix(1.0, 0.4, steep);
-            float crest = pow(0.5 + 0.5 * cos(ph), (4.0 - 2.0 * ragged) * soft) * armAmp;
-            float young = pow(0.5 + 0.5 * cos(ph - 0.35), 8.0 * soft) * armAmp;
-            float hii = pow(0.5 + 0.5 * cos(ph + 0.2), 10.0 * soft) * armAmp;
+            float crest = pow(max(0.5 + 0.5 * cos(ph), 0.0), (4.0 - 2.0 * ragged) * soft) * armAmp;
+            float young = pow(max(0.5 + 0.5 * cos(ph - 0.35), 0.0), 8.0 * soft) * armAmp;
+            float hii = pow(max(0.5 + 0.5 * cos(ph + 0.2), 0.0), 10.0 * soft) * armAmp;
             // Ragged arms break up. Flocculent kinds (M33) go further, to a patchwork of short arm segments: noise in
             // swirled space is already sheared into spiral streaks, so its peaks make them, and young stars and H II
             // regions follow the patches instead of whole arms.
@@ -328,7 +328,7 @@ final class Galaxy: SKScene, Trimmable {
             vec2 fr = fbmRidge(qn * 6.0 + u_seed * 1.3 + 3.0);
             float dt = fr.x;
             float lp = ph + 0.45 + (dt - 0.5) * 2.5;
-            float lc = 0.5 + 0.5 * cos(lp);
+            float lc = max(0.5 + 0.5 * cos(lp), 0.0);
             float along = lc > 0.6 ? noise(qn * 40.0 + u_seed) : 0.5; // only matters near a lane
             float lane = pow(lc, 14.0 * mix(1.0, 0.7, steep)) * smoothstep(0.25, 0.8, lumps + dt - 0.5)
                        * mix(0.45, 1.0, smoothstep(0.3, 0.7, along)); // thicker and thinner along its length
