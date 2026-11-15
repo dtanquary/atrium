@@ -276,30 +276,34 @@ extension TrainWorld {
                 guard z >= Self.farShore || z <= shore(at), stands(at, in: kind) else { continue }
                 let village = noise(at / 1400, 2, 4242), seed = Int(hash(c, 3, salt + 32) % (1 << 30)), size = unit(hash(c, 4, salt + 33))
                 let stamp: Stamp, spired = kind == .mountains && z == 900 && village > 0.70 && draw < 0.2
-                if kind == .snow { // cabins under snow, a few together or one alone, and snow-laden firs where it is sheltered
+                if kind == .snow { // cabins under snow, a few together or one alone, and snow-laden firs and bare birches where it is sheltered
                     if village > 0.66, z >= 300, draw < [0, 0, 0, 0, 0, 0.6, 0.6, 0.55, 0.4, 0, 0][ring] {
-                        stamp = Stamp.house(max(2, 4.5 * ppm), seed).recast(Self.cabin)
-                    } else if z <= 500, draw < [0, 0, 0, 0, 0, 0, 0, 0.05, 0.06, 0.05, 0][ring] {
-                        stamp = Stamp.house(max(2, 4.5 * ppm), seed).recast(Self.cabin)
+                        stamp = .cabin(max(2, 4.5 * ppm), seed)
+                    } else if z <= 500, draw < [0, 0, 0, 0, 0, 0, 0, 0.05, 0.07, 0.06, 0][ring] {
+                        stamp = .cabin(max(2, 4.5 * ppm), seed)
+                    } else if z <= 300, draw < 0.13 { // birches standing alone in the snow, a few to a stretch
+                        stamp = .birch((8 + 7 * size) * ppm, seed)
                     } else if z <= 900, draw > 1 - min(max(0.03 + (fbm(at / 900, z / 300, 3, salt + 1) - 0.52) * 2.6, 0.02), 0.6) {
-                        stamp = Stamp.fir((10 + 10 * size) * ppm).snowed
+                        stamp = unit(hash(c, 5, salt + 34)) < 0.35 ? .birch((9 + 7 * size) * ppm, seed) : Stamp.fir((10 + 10 * size) * ppm).snowed
                     } else {
                         continue
                     }
-                } else if kind == .desert { // a camp of tents, or a clump of scrub: a plot is short here, and the scrub thick by the line
+                } else if kind == .desert { // a camp of tents and its wind pump, or a clump of scrub, now and then a Joshua tree: a plot is short here, and the scrub thick by the line
                     if village > 0.69, z >= 180, z <= 500, draw < 0.5 {
                         stamp = .ger(3.2 * ppm)
+                    } else if village > 0.66, z >= 180, z <= 300, unit(hash(c, 11, salt + 40)) < 0.03 {
+                        stamp = .windPump(ppm, seed) // (one now and then by a camp, for its water)
                     } else if z <= 900, draw > 1 - [0, 0, 0, 0, 0, 0, 0.35, 0.42, 0.46, 0.5, 0.5][ring] * (0.5 + fbm(at / 900, z / 300, 3, salt + 1)) {
-                        stamp = .bush((1.2 + 2.2 * size * size) * ppm, seed)
+                        stamp = z <= 300 && unit(hash(c, 5, salt + 34)) < 0.1 ? .joshua((6 + 4 * size) * ppm, seed) : .bush((1.2 + 2.2 * size * size) * ppm, seed)
                     } else {
                         continue
                     }
                 } else if spired {
-                    stamp = .church(30 * ppm)
+                    stamp = .chapel(30 * ppm) // with its onion dome
                 } else if village > 0.64, z >= 300, draw < Self.housed[ring] {
-                    stamp = Stamp.house(max(2, 5.0 * ppm), seed).recast(Self.chalet)
+                    stamp = .chalet(max(3, 5.5 * ppm), seed)
                 } else if z <= 500, draw < Self.farmed[ring] {
-                    stamp = Stamp.house(max(2, 5.5 * ppm), seed).recast(Self.chalet) // a farm, or a hay barn, on its own
+                    stamp = unit(hash(c, 10, salt + 39)) < 0.5 ? .chalet(max(3, 5.5 * ppm), seed) : Stamp.barn(ppm * 0.7, seed, silo: false).recast(Self.hayBarn) // a farm, or a hay barn, on its own
                 } else if z <= 900, draw > 1 - min(max(0.16 + (fbm(at / 900, z / 300, 3, salt + 1) - 0.45) * 2.2, 0.07), 0.7) {
                     stamp = unit(hash(c, 5, salt + 34)) < 0.25 ? .tree((8 + 7 * size) * ppm, seed) : .fir((13 + 13 * size) * ppm)
                 } else {
@@ -307,7 +311,7 @@ extension TrainWorld {
                 }
                 let left = Int((at * ppm).rounded(.toNearestOrEven)) - stamp.w / 2, entered = when(left) // (all of it goes by its left edge)
                 let lift = Int(Double(swollen) * (0.35 + 0.65 * unit(hash(c, 6, salt + 35))))
-                guard n >= left, n < left + stamp.w, lift + stamp.h <= rows, entered.pace <= (spired ? Self.thin : Self.broad) else { continue }
+                guard n >= left, n < left + stamp.w, lift + stamp.h <= rows, entered.pace <= (spired || stamp.thin ? Self.thin : Self.broad) else { continue }
                 for (y, material) in stamp.column(n - left, entered.sun).enumerated() where material != 0 {
                     let lamp = material == TrainMat.glass && z >= 180 && entered.pace <= Self.bright && unit(hash(seed + n - left, y, 55)) < 0.8
                     cells[lift + stamp.h - 1 - y] = material | (lamp ? 128 : 0)
@@ -373,20 +377,33 @@ extension TrainWorld {
                 let tall = high * (0.45 + 0.55 * centre)
                 (stamp, built) = (.block((26 + 30 * wide) * ppm, tall * ppm, seed, floor: 2, style: style == 1 ? 0 : style, light: tall > 120), true)
             } else if z >= 500 {
-                guard draw < 0.78 else { continue }
-                let tall = high * (0.55 + 0.45 * centre)
-                (stamp, built) = (.block(plot * (0.40 + 0.75 * wide) * ppm, tall * ppm, seed, floor: 3.2 * ppm, style: style, light: tall > 90), true)
+                if draw >= 0.78 { // among the blocks, works: a chimney, a gasholder, a tower crane over a building going up
+                    if z >= 900, draw < 0.82 {
+                        (stamp, built) = (.chimney((70 + 50 * size) * ppm, max(1, Int((4 * ppm).rounded()))), true)
+                    } else if z <= 900, draw < 0.85 {
+                        (stamp, built) = (.gasholder((40 + 20 * wide) * ppm, seed), true)
+                    } else if draw < 0.87 {
+                        (stamp, built) = (Stamp.crane((45 + 25 * size) * ppm, (22 + 14 * wide) * ppm, seed).thinned, true)
+                    } else {
+                        continue
+                    }
+                } else {
+                    let tall = high * (0.55 + 0.45 * centre)
+                    (stamp, built) = (.block(plot * (0.40 + 0.75 * wide) * ppm, tall * ppm, seed, floor: 3.2 * ppm, style: style, light: tall > 90), true)
+                }
             } else if draw < 0.40 {
                 (stamp, built) = (.house(max(2, (5.0 + 2.5 * size) * low * ppm), seed), false)
             } else if draw < 0.64 {
                 (stamp, built) = (.block(plot * (0.7 + 0.6 * wide) * ppm, max(3, (4.5 + high * 0.8) * low * ppm), seed, floor: 3.2 * ppm, style: style % 2, light: false), true)
             } else if draw < 0.80 {
                 (stamp, built) = (.tree((7 + 7 * size) * low * ppm, seed), false)
+            } else if z >= 180, z <= 300, draw < 0.825 {
+                (stamp, built) = (.billboard((10 + 4 * wide) * ppm, seed), true) // facing the line, lit after dark
             } else {
                 continue
             }
             let left = Int((at * ppm).rounded(.toNearestOrEven)) - stamp.w / 2, entered = when(left)
-            guard n >= left, n < left + stamp.w, stamp.h <= rows, entered.pace <= Self.broad else { continue }
+            guard n >= left, n < left + stamp.w, stamp.h <= rows, entered.pace <= (stamp.thin ? Self.thin : Self.broad) else { continue }
             let lights = z >= 180 && entered.pace <= Self.bright
             for (y, cell) in stamp.column(n - left, entered.sun).enumerated() where cell != 0 {
                 let lamp = lights && (built ? cell > 127 : cell == TrainMat.glass && unit(hash(seed + n - left, y, 55)) < 0.8)
@@ -475,13 +492,9 @@ extension TrainWorld {
         return top
     }
 
-    /// A cabin is farmland's house in red or tarred timber under a snowed roof.
-    private static let cabin = [TrainMat.white: TrainMat.falu, TrainMat.whiteShade: TrainMat.faluShade, TrainMat.stone: TrainMat.falu,
-                                TrainMat.stoneShade: TrainMat.faluShade, TrainMat.brick: TrainMat.chalet, TrainMat.brickShade: TrainMat.chaletShade,
-                                TrainMat.roof: TrainMat.snow, TrainMat.roofShade: TrainMat.snowShade, TrainMat.slate: TrainMat.snow, TrainMat.slateShade: TrainMat.snowShade]
-    /// A chalet is farmland's house in dark timber under grey shingles.
-    private static let chalet = [TrainMat.brick: TrainMat.chalet, TrainMat.brickShade: TrainMat.chaletShade,
-                                 TrainMat.roof: TrainMat.slate, TrainMat.roofShade: TrainMat.slateShade]
+    /// An alpine hay barn is the barn in dark timber under grey shingles.
+    private static let hayBarn = [TrainMat.falu: TrainMat.chalet, TrainMat.faluShade: TrainMat.chaletShade, TrainMat.stone: TrainMat.chalet,
+                                  TrainMat.stoneShade: TrainMat.chaletShade, TrainMat.roof: TrainMat.slate, TrainMat.roofShade: TrainMat.slateShade]
 }
 
 extension Stamp {
@@ -552,29 +565,366 @@ extension Stamp {
     }
 
     /// A herder's round felt tent `tall` pixels high: a low white dome, shaded on the side away from the Sun, with a
-    /// door toward it that glows after dark.
+    /// door toward it that glows after dark; and where it is big enough to show (since 2026-11-15), its walls
+    /// standing straight under the rope round its roof, and the dark ring of its smoke-hole at the top.
     static func ger(_ tall: Double) -> Stamp {
         let h = max(2, Int(tall)), w = max(4, Int((Double(h) * 2.1).rounded(.toNearestOrEven))), cx = Double(w - 1) / 2
+        let walled = h >= 4, eaves = h - max(2, h * 9 / 20) // (the row the walls rise to)
         return Stamp(w: w, h: h) { x, sun in
             var column = (0..<h).map { y -> UInt8 in
-                let down = (Double(y) - Double(h - 1)) / (Double(h) + 0.2), across = (Double(x) - cx) / (Double(w) / 2 + 0.2)
-                guard down * down + across * across < 1 else { return 0 }
+                let across = (Double(x) - cx) / (Double(w) / 2 + 0.2)
+                if walled {
+                    // A shallow cone of roof from the top of the walls to the crown.
+                    guard y >= eaves || abs(across) <= 0.25 + 0.75 * Double(y + 1) / Double(eaves) else { return 0 }
+                    if y == eaves - 1 { return TrainMat.stone } // the rope round it
+                } else {
+                    let down = (Double(y) - Double(h - 1)) / (Double(h) + 0.2)
+                    guard down * down + across * across < 1 else { return 0 }
+                }
                 return (Double(x) - cx) * Double(sun) > -Double(w) / 5 ? TrainMat.white : TrainMat.whiteShade
             }
+            if walled, abs(Double(x) - cx) < 1 { column[0] = TrainMat.chaletShade }
             if x == Int(cx) + (sun > 0 ? 1 : 0) { for y in h - 1 - (h > 2 ? 1 : 0)..<h { column[y] = TrainMat.glass } }
             return column
         }
     }
 
+    /// The same stamp, laid only where thin things are (a crane's mast and jib).
+    var thinned: Stamp { Stamp(w: w, h: h, thin: true, column: column) }
+
     /// A fir with snow lying on its boughs: on its lit side all but every third row, and its tip.
     var snowed: Stamp {
-        Stamp(w: w, h: h) { x, sun in
+        Stamp(w: w, h: h, thin: thin) { x, sun in
             column(x, sun).enumerated().map { y, cell in cell != 0 && (y < 2 || (cell == TrainMat.fir1 && y % 3 != 2)) ? TrainMat.snow : cell }
         }
     }
 
     /// The same stamp with some of its materials changed for others.
-    func recast(_ others: [UInt8: UInt8]) -> Stamp { Stamp(w: w, h: h) { x, sun in column(x, sun).map { others[$0] ?? $0 } } }
+    func recast(_ others: [UInt8: UInt8]) -> Stamp { Stamp(w: w, h: h, thin: thin) { x, sun in column(x, sun).map { others[$0] ?? $0 } } }
+
+    // MARK: The stamps added since the mock-ups (2026-11-15)
+
+    /// A stamp drawn as a small picture, `w` by `h`, for each side the Sun can be on: `draw` is given the picture
+    /// (rows from the top, 0 see-through) and the side, 1 with the Sun to the right.
+    static func drawn(_ w: Int, _ h: Int, thin: Bool = false, _ draw: (inout Sketch, Int) -> Void) -> Stamp {
+        let (w, h) = (max(w, 1), max(h, 1))
+        let sides = [1, -1].map { sun -> [UInt8] in
+            var sketch = Sketch(w: w, h: h)
+            draw(&sketch, sun)
+            return sketch.cells
+        }
+        return Stamp(w: w, h: h, thin: thin) { x, sun in
+            let cells = sides[sun > 0 ? 0 : 1]
+            return (0..<h).map { cells[$0 * w + x] }
+        }
+    }
+
+    /// Several stamps side by side on one foot, `gap` pixels apart: one thing to a plot that is several things.
+    static func together(_ parts: [Stamp], gap: Int) -> Stamp {
+        let w = parts.map(\.w).reduce(0, +) + gap * (parts.count - 1), h = parts.map(\.h).max() ?? 1
+        return Stamp(w: max(w, 1), h: h, thin: parts.contains(where: \.thin)) { x, sun in
+            var left = 0
+            for part in parts {
+                if x < left + part.w { return [UInt8](repeating: 0, count: h - part.h) + part.column(x - left, sun) }
+                left += part.w + gap
+                if x < left { break }
+            }
+            return [UInt8](repeating: 0, count: h)
+        }
+    }
+
+    /// A barn `ppm` pixels a metre away, 13 to 19 m long: red or tarred timber or grey board, its end turned from
+    /// the Sun in shade, under a slated or tiled roof, with its big doors; and with a `silo` beside it, a concrete
+    /// tower 12 to 17 m high under a domed cap, round, so lit on the Sun's side and shaded on the other.
+    static func barn(_ ppm: Double, _ seed: Int, silo: Bool) -> Stamp {
+        func draw(_ k: Int) -> Double { unit(hash(seed, k, 71)) }
+        let pick = draw(6), walls = pick < 0.6 ? (TrainMat.falu, TrainMat.faluShade) : pick < 0.85 ? (TrainMat.chalet, TrainMat.chaletShade) : (TrainMat.stone, TrainMat.stoneShade)
+        let roofs = draw(7) < 0.7 ? (TrainMat.slate, TrainMat.slateShade) : (TrainMat.roof, TrainMat.roofShade)
+        let long = max(4, Int(((13 + 6 * draw(1)) * ppm).rounded())), wall = max(2, Int(((4 + draw(2)) * ppm).rounded()))
+        let roof = max(1, Int(((2.5 + 1.5 * draw(3)) * ppm).rounded()))
+        let round = silo ? max(2, Int((4.5 * ppm).rounded())) : 0, tall = silo ? max(wall + roof + 1, Int(((12 + 5 * draw(4)) * ppm).rounded())) : 0
+        let gap = silo ? max(1, Int((1.5 * ppm).rounded())) : 0, siloLeft = draw(5) < 0.5
+        return .drawn(long + round + gap, max(wall + roof, tall)) { s, sun in
+            let x0 = siloLeft ? round + gap : 0, foot = s.h, end = max(1, long / 5)
+            for x in 0..<long {
+                let shaded = sun > 0 ? x < end : x >= long - end
+                for y in foot - wall..<foot { s.put(x0 + x, y, shaded ? walls.1 : walls.0) }
+                for y in foot - wall - roof..<foot - wall { s.put(x0 + x, y, y == foot - wall - roof ? roofs.1 : roofs.0) }
+            }
+            // Its doors: a dark opening a third of its length, in the middle of its side, under a lintel.
+            let door = max(1, long / 4), high = max(1, wall * 2 / 3), mid = x0 + (long - door) / 2 + (sun > 0 ? end / 2 : -end / 2)
+            s.box(mid, foot - high, mid + door, foot, TrainMat.door)
+            guard silo else { return }
+            let sx = siloLeft ? 0 : long + gap, lit = max(1, round * 2 / 3)
+            for x in 0..<round {
+                let shaded = sun > 0 ? x < round - lit : x >= lit
+                for y in foot - tall..<foot { s.put(sx + x, y, shaded ? TrainMat.concreteShade : TrainMat.concrete) }
+            }
+            if round >= 3 { s.put(sx, foot - tall, 0); s.put(sx + round - 1, foot - tall, 0) } // its domed cap
+        }
+    }
+
+    /// A farm on its own as one thing: the farmhouse, a barn beside it, and a tree.
+    static func farmstead(_ ppm: Double, _ seed: Int) -> Stamp {
+        let house = Stamp.house(max(2, 5.5 * ppm), seed), barn = Stamp.barn(ppm * 0.8, seed + 1, silo: false)
+        let tree = Stamp.tree((9 + 5 * unit(hash(seed, 9, 72))) * ppm, seed + 2), gap = max(1, Int((3 * ppm).rounded()))
+        return unit(hash(seed, 10, 72)) < 0.5 ? .together([tree, house, barn], gap: gap) : .together([barn, house, tree], gap: gap)
+    }
+
+    /// A Lombardy poplar `tall` pixels high: a narrow column of crown, lit on the Sun's side, on a short trunk.
+    static func poplar(_ tall: Double, _ seed: Int) -> Stamp {
+        let h = max(4, Int(tall)), w = max(2, Int((Double(h) * 0.24).rounded())), crown = h - max(1, h / 9)
+        return .drawn(w, h) { s, sun in
+            for y in 0..<crown {
+                let t = Double(y) / Double(max(crown - 1, 1)), half = Double(w) / 2 * sin(min(1, t * 1.4 + 0.15) * .pi * 0.5 + (t > 0.7 ? 0 : 0)) * (t < 0.92 ? 1 : 0.8)
+                for x in 0..<w where abs(Double(x) + 0.5 - Double(w) / 2) <= half + 0.3 * unit(hash(x + seed, y, 73)) {
+                    let toward = (Double(x) + 0.5 - Double(w) / 2) * Double(sun) > 0
+                    s.put(x, y, toward ? TrainMat.leaf1 : unit(hash(x, y + seed, 74)) < 0.25 ? TrainMat.leaf1 : TrainMat.leaf0)
+                }
+            }
+            s.box(w / 2, crown, w / 2 + 1, h, TrainMat.trunk)
+        }
+    }
+
+    /// A row of four to seven poplars along a field's edge, six metres apart, of about one height.
+    static func poplars(_ ppm: Double, _ seed: Int) -> Stamp {
+        let count = 4 + Int(unit(hash(seed, 1, 75)) * 4), tall = (17 + 7 * unit(hash(seed, 2, 75))) * ppm
+        let trees = (0..<count).map { Stamp.poplar(tall * (0.9 + 0.2 * unit(hash(seed, 10 + $0, 75))), seed + $0) }
+        return .together(trees, gap: max(0, Int((6 * ppm).rounded()) - trees[0].w))
+    }
+
+    /// A willow `tall` pixels high: a broad crown wider than it is tall, yellow-green and lit on the Sun's side, its
+    /// edge hanging in a ragged fringe, on a short thick trunk.
+    static func willow(_ tall: Double, _ seed: Int) -> Stamp {
+        let h = max(3, Int(tall)), w = max(4, Int((Double(h) * 1.35).rounded())), crown = h - max(1, h / 5)
+        return .drawn(w, h) { s, sun in
+            let (cx, cy) = (Double(w) / 2, Double(crown) * 0.45)
+            for y in 0..<crown {
+                for x in 0..<w {
+                    let across = (Double(x) + 0.5 - cx) / (cx + 0.2), down = (Double(y) + 0.5 - cy) / (y < Int(cy) ? cy + 0.5 : Double(crown) - cy + 0.5)
+                    let hang = y > Int(cy) ? 0.25 * unit(hash(x + seed * 7, 1, 76)) : 0 // (strands hang to different lengths)
+                    guard across * across + down * down < 0.92 - hang + 0.2 * unit(hash(x, y + seed, 77)) else { continue }
+                    let lit = across * Double(sun) * 0.8 - down * 0.5 + (unit(hash(x + seed, y, 78)) - 0.5) * 0.6
+                    s.put(x, y, lit > 0.35 ? TrainMat.alp : lit > -0.35 ? TrainMat.pasture : TrainMat.leaf1)
+                }
+            }
+            s.box(w / 2 - (h >= 12 ? 1 : 0), crown - 1, w / 2 + 1, h, TrainMat.trunk)
+        }
+    }
+
+    /// Round bales of hay left in a field, three to six of them over 25 m: each about 1.5 m, lit on top and on the
+    /// Sun's side.
+    static func bales(_ ppm: Double, _ seed: Int) -> Stamp {
+        let count = 3 + Int(unit(hash(seed, 1, 79)) * 4), size = max(1, Int((1.5 * ppm).rounded()))
+        let spread = max(count * (size + 1), Int((25 * ppm).rounded()))
+        let at = (0..<count).map { Int(Double(spread - size) * (Double($0) + 0.3 * unit(hash(seed, 10 + $0, 79))) / Double(count)) }
+        return .drawn(spread, size) { s, sun in
+            for x0 in at {
+                for x in 0..<size {
+                    for y in 0..<size where !(size >= 3 && y == 0 && (x == 0 || x == size - 1)) {
+                        let shaded = size >= 2 && (sun > 0 ? x == 0 : x == size - 1) && y > 0
+                        s.put(x0 + x, y, shaded ? TrainMat.stubble : TrainMat.wheat)
+                    }
+                }
+            }
+        }
+    }
+
+    /// A wind pump 8 to 10 m high: a lattice tower narrowing to the top, and on it the wheel of blades and the
+    /// tail vane behind. Thin.
+    static func windPump(_ ppm: Double, _ seed: Int) -> Stamp {
+        let h = max(5, Int(((8 + 2 * unit(hash(seed, 1, 80))) * ppm).rounded())), wheel = max(3, Int((3 * ppm).rounded()) | 1)
+        let base = max(2, Int((2.4 * ppm).rounded())), tail = max(2, wheel * 2 / 3), w = max(base, wheel) + tail + 1
+        return .drawn(w, h + wheel / 2, thin: true) { s, sun in
+            let cx = sun > 0 ? (w - tail - 1) / 2 + tail : (w - tail - 1) / 2 // (the wheel faces the wind; the vane trails behind it)
+            let top = wheel / 2, foot = s.h
+            for y in top..<foot { // the legs, closer together toward the top, braced crosswise
+                let spread = Int((Double(base) / 2 * Double(y - top) / Double(max(foot - top, 1))).rounded())
+                s.put(cx - spread, y, TrainMat.pole)
+                s.put(cx + spread, y, TrainMat.pole)
+                if spread >= 2 {
+                    let across = Int((Double((y - top) % 4) / 3 * Double(2 * spread)).rounded()) - spread
+                    s.put(cx + across, y, TrainMat.pole)
+                    s.put(cx - across, y, TrainMat.pole)
+                }
+            }
+            for dy in -wheel / 2...wheel / 2 { // the wheel's blades, pale, round its dark hub
+                for dx in -wheel / 2...wheel / 2 where dx * dx + dy * dy <= (wheel / 2) * (wheel / 2) + wheel / 2 {
+                    s.put(cx + dx, top + dy, dx == 0 && dy == 0 ? TrainMat.pole : (dx + dy) & 1 == 0 ? TrainMat.whiteShade : TrainMat.stone)
+                }
+            }
+            let back = sun > 0 ? -1 : 1 // the tail vane
+            for k in 1...tail { s.put(cx + back * (wheel / 2 + k), top, TrainMat.pole) }
+            s.box(min(cx + back * (wheel / 2 + tail), cx + back * (wheel / 2 + tail - 1)), top - 1, max(cx + back * (wheel / 2 + tail), cx + back * (wheel / 2 + tail - 1)) + 1, top + 1, TrainMat.stone)
+        }
+    }
+
+    /// A snowbound cabin whose eaves are `eaves` pixels up: red or tarred timber under a roof of snow, with its
+    /// windows, a porch on the end toward the Sun under a lean-to roof of snow on two posts, and a woodpile against
+    /// the other end.
+    static func cabin(_ eaves: Double, _ seed: Int) -> Stamp {
+        let walls = unit(hash(seed, 2, 81)) < 0.7 ? (TrainMat.falu, TrainMat.faluShade) : (TrainMat.chalet, TrainMat.chaletShade)
+        let wall = max(2, Int(eaves)), w = max(4, Int((Double(wall) * (1.5 + 0.6 * unit(hash(seed, 4, 81)))).rounded()))
+        let roof = max(2, Int((Double(wall) * 0.7).rounded())), porch = max(1, w / 3), pile = max(1, w / 4)
+        return .drawn(w + porch + pile, wall + roof) { s, sun in
+            let x0 = sun > 0 ? pile : porch, foot = s.h, end = max(1, w / 4)
+            for x in 0..<w {
+                let shaded = sun > 0 ? x < end : x >= w - end
+                for y in foot - wall..<foot { s.put(x0 + x, y, shaded ? walls.1 : walls.0) }
+                for y in foot - wall - roof..<foot - wall { s.put(x0 + x, y, y == foot - wall - roof ? TrainMat.snowShade : TrainMat.snow) }
+            }
+            if wall >= 3 { for x in stride(from: x0 + end + 1, to: x0 + w - 1, by: max(2, wall / 2 + 1)) { s.box(x, foot - wall + wall / 3, x + 1, foot - wall + wall / 3 + max(1, wall / 4), TrainMat.glass) } }
+            // The porch: its roof of snow sloping down from the eaves, on a post at its outer corner.
+            let px = sun > 0 ? x0 + w : 0
+            for k in 0..<porch {
+                let x = sun > 0 ? px + k : px + porch - 1 - k, y = foot - wall + k * max(1, wall / 3) / max(porch, 1)
+                s.put(x, y, TrainMat.snow)
+                if k == porch - 1 { s.box(x, y + 1, x + 1, foot, TrainMat.chaletShade) }
+            }
+            // The woodpile: logs stacked a little under half the wall's height, their ends lit on top.
+            let wx = sun > 0 ? 0 : x0 + w, high = max(1, wall * 2 / 5)
+            for x in wx..<wx + pile { for y in foot - high..<foot { s.put(x, y, y == foot - high ? TrainMat.snow : (x + y) & 1 == 0 ? TrainMat.chalet : TrainMat.trunk) } }
+        }
+    }
+
+    /// A birch in winter `tall` pixels high: its white trunk marked with black, and a thin, see-through crown of
+    /// bare twigs.
+    static func birch(_ tall: Double, _ seed: Int) -> Stamp {
+        let h = max(4, Int(tall)), w = max(3, Int((Double(h) * 0.42).rounded()) | 1), crown = h * 3 / 4, cx = w / 2
+        return .drawn(w, h) { s, sun in
+            for y in 0..<crown {
+                let t = (Double(y) + 0.5) / Double(crown), half = Double(w) / 2 * sin(t * .pi) * (0.6 + 0.4 * t)
+                for x in 0..<w where abs(Double(x - cx)) <= half && unit(hash(x + seed * 5, y, 82)) < 0.7 {
+                    s.put(x, y, unit(hash(x, y + seed, 88)) < 0.35 ? TrainMat.trunk : TrainMat.birch) // (twigs, some of them dark)
+                }
+            }
+            for y in h / 5..<h { s.put(cx, y, unit(hash(seed, y, 83)) < 0.2 ? TrainMat.trunk : (sun > 0 ? TrainMat.white : TrainMat.whiteShade)) }
+        }
+    }
+
+    /// A Joshua tree `tall` pixels high: a shaggy trunk that forks into a few arms, each crooked upward and ending
+    /// in a spiky tuft of dark leaves.
+    static func joshua(_ tall: Double, _ seed: Int) -> Stamp {
+        let h = max(5, Int(tall)), w = max(5, Int((Double(h) * 0.9).rounded())), cx = w / 2, fork = h * 3 / 5
+        return .drawn(w, h) { s, sun in
+            s.box(cx, h - fork, cx + 1, h, TrainMat.trunk)
+            let arms = 2 + Int(unit(hash(seed, 1, 84)) * 3)
+            for k in 0..<arms {
+                let side = k % 2 == 0 ? -1 : 1, reach = 1 + Int(unit(hash(seed, 10 + k, 84)) * Double(w / 2 - 1)), lift = 1 + Int(unit(hash(seed, 20 + k, 84)) * Double(h / 4))
+                let from = h - fork + Int(unit(hash(seed, 30 + k, 84)) * Double(fork / 3))
+                var (x, y) = (cx, from)
+                for step in 0..<reach + lift { // out, then up
+                    if step < reach { x += side } else { y -= 1 }
+                    if step == reach - 1, reach > 1 { y -= 1 }
+                    s.put(x, y, TrainMat.trunk)
+                }
+                for dy in -2...0 { for dx in -1...1 where !(dy == -2 && dx != 0) { // the tuft
+                    s.put(x + dx, y - 1 + dy, (dx * sun > 0 || dy == -2) ? TrainMat.scrub : TrainMat.scrubShade)
+                } }
+            }
+            for dy in -2...0 { for dx in -1...1 where !(dy == -2 && dx != 0) { s.put(cx + dx, h - fork - 1 + dy, dx * sun > 0 ? TrainMat.scrub : TrainMat.scrubShade) } }
+        }
+    }
+
+    /// An alpine chalet whose eaves are `eaves` pixels up, gable end on: a white ground floor and a timber storey
+    /// above, a shallow roof whose eaves reach well out beyond the walls, and a balcony across the gable with its
+    /// rail and a box of red flowers.
+    static func chalet(_ eaves: Double, _ seed: Int) -> Stamp {
+        let wall = max(3, Int(eaves)), body = max(4, Int((Double(wall) * (1.3 + 0.4 * unit(hash(seed, 1, 85)))).rounded()))
+        let over = max(1, body / 5), roof = max(1, Int((Double(body) * 0.28).rounded())), w = body + 2 * over
+        return .drawn(w, wall + roof) { s, sun in
+            let foot = s.h, ground = max(1, wall * 2 / 5), shade = max(1, body / 4)
+            for x in 0..<body {
+                let shaded = sun > 0 ? x < shade : x >= body - shade
+                for y in foot - wall..<foot { s.put(over + x, y, y >= foot - ground ? (shaded ? TrainMat.whiteShade : TrainMat.white) : (shaded ? TrainMat.chaletShade : TrainMat.chalet)) }
+            }
+            for y in 0..<roof { // the gable: wide and shallow, the eaves standing out over the walls
+                let half = Double(w) / 2 * Double(y + 1) / Double(roof)
+                for x in 0..<w where abs(Double(x) + 0.5 - Double(w) / 2) <= half { s.put(x, foot - wall - roof + y, y == roof - 1 || abs(Double(x) + 0.5 - Double(w) / 2) > half - 1 ? TrainMat.slateShade : TrainMat.slate) }
+            }
+            if wall >= 5 { // the balcony at the floor of the timber storey: a rail, and flowers along it
+                let y = foot - ground - 1
+                s.box(over - (body > 8 ? 1 : 0), y, w - over + (body > 8 ? 1 : 0), y + 1, TrainMat.chaletShade)
+                for x in stride(from: over, to: w - over, by: 2) { s.put(x, y - 1, TrainMat.roof) }
+                for x in stride(from: over + shade + 1, to: w - over - 1, by: max(2, body / 3)) { s.put(x, foot - wall + 1, TrainMat.glass) }
+            } else {
+                s.put(w / 2, foot - wall + 1, TrainMat.glass)
+            }
+        }
+    }
+
+    /// A mountain chapel `tall` pixels high in all: a white nave under a slate roof, and at one end its tower with
+    /// an onion dome and a small spire.
+    static func chapel(_ tall: Double) -> Stamp {
+        let h = max(7, Int(tall)), nave = max(2, h / 3), tower = max(2, h / 6), bulb = tower + 2, w = max(4, Int(Double(h) * 0.7)) + bulb
+        return .drawn(w, h) { s, sun in
+            let foot = h, tx = sun > 0 ? 1 : w - bulb + 1 // the tower at the end away from the Sun
+            for x in 0..<w where x < tx - 1 || x >= tx + tower + 1 { // the nave
+                for y in foot - nave..<foot { s.put(x, y, TrainMat.white) }
+                for y in foot - nave - max(1, nave / 2)..<foot - nave { s.put(x, y, TrainMat.slate) }
+            }
+            let dome = foot - Int(Double(h) * 0.62)
+            s.box(tx, dome, tx + tower, foot, sun > 0 ? TrainMat.whiteShade : TrainMat.white)
+            // The onion: swelling out wider than the tower, then drawn in to a point, and a short spire over it.
+            let r = Double(bulb) / 2, bulbTop = max(1, dome - Int((r * 2.4).rounded())), mid = Double(tx) + Double(tower) / 2
+            for y in bulbTop..<dome {
+                let t = Double(dome - y) / Double(dome - bulbTop), half = t < 0.4 ? r * (0.7 + 0.55 * sin(t / 0.4 * .pi / 2)) : r * 1.25 * pow(1 - (t - 0.4) / 0.6, 1.3)
+                for x in tx - 2...tx + tower + 1 where abs(Double(x) + 0.5 - mid) <= max(half, 0.5) {
+                    s.put(x, y, (Double(x) + 0.5 - mid) * Double(sun) > half * 0.3 ? TrainMat.slate : TrainMat.slateShade)
+                }
+            }
+            for y in max(0, bulbTop - max(1, h / 10))..<bulbTop { s.put(tx + tower / 2, y, TrainMat.slateShade) }
+        }
+    }
+
+    /// A works chimney `tall` pixels high and `wide` across, of brick, with a red light at its top. Thin.
+    static func chimney(_ tall: Double, _ wide: Int) -> Stamp {
+        let h = max(6, Int(tall)), w = max(1, wide)
+        return .drawn(w, h + 1, thin: true) { s, sun in
+            s.box(0, 1, w, h + 1, TrainMat.brick)
+            if w > 1 { s.box(sun > 0 ? 0 : w - 1, 1, sun > 0 ? 1 : w, h + 1, TrainMat.brickShade) }
+            s.box(0, 1, w, 2, TrainMat.brickShade)
+            s.put(w / 2, 0, TrainMat.lampRed | 128)
+        }
+    }
+
+    /// A gasholder `wide` pixels across: a squat drum, round and so lit on the Sun's side, inside the lattice of its
+    /// guide frame, which stands a little above it with a ring at its top.
+    static func gasholder(_ wide: Double, _ seed: Int) -> Stamp {
+        let w = max(5, Int(wide)), drum = max(3, Int((Double(w) * (0.45 + 0.2 * unit(hash(seed, 1, 86)))).rounded())), h = max(drum + 2, Int(Double(w) * 0.75))
+        return .drawn(w, h, thin: true) { s, sun in
+            for x in 0..<w {
+                let lit = (Double(x) + 0.5 - Double(w) / 2) * Double(sun) > -Double(w) / 6
+                for y in h - drum..<h { s.put(x, y, lit ? TrainMat.tower : TrainMat.towerShade) }
+            }
+            for x in stride(from: 0, to: w, by: max(2, w / 5)) { s.box(x, 0, x + 1, h, TrainMat.pole) } // the frame's columns
+            s.box(0, 0, w, 1, TrainMat.pole)
+            s.box(0, h - drum - 1, w, h - drum, TrainMat.pole)
+        }
+    }
+
+    /// A billboard on two posts beside the line, `wide` pixels across: a pale face with a band of colour, lit
+    /// after dark (its face's top bit). Its posts are thin.
+    static func billboard(_ wide: Double, _ seed: Int) -> Stamp {
+        let w = max(4, Int(wide)), face = max(2, w / 3), posts = max(2, w / 2), h = face + posts
+        let band = [TrainMat.roof, TrainMat.brick, TrainMat.tower, TrainMat.rape][Int(unit(hash(seed, 1, 87)) * 4)]
+        return .drawn(w, h, thin: true) { s, _ in
+            for y in 0..<face { for x in 0..<w { s.put(x, y, (y == face / 2 ? band : y == face - 1 ? TrainMat.whiteShade : TrainMat.white) | (y < face - 1 ? 128 : 0)) } }
+            for x in [w / 4, w - 1 - w / 4] { s.box(x, face, x + 1, h, TrainMat.pole) }
+        }
+    }
+}
+
+/// A small picture to draw a stamp in, rows from the top: 0 is see-through.
+struct Sketch {
+    let w: Int, h: Int
+    var cells: [UInt8]
+    init(w: Int, h: Int) { (self.w, self.h, cells) = (w, h, [UInt8](repeating: 0, count: w * h)) }
+    mutating func put(_ x: Int, _ y: Int, _ material: UInt8) { if x >= 0, x < w, y >= 0, y < h { cells[y * w + x] = material } }
+    /// A box from `x0`, `y0` up to `x1`, `y1`, kept to the picture.
+    mutating func box(_ x0: Int, _ y0: Int, _ x1: Int, _ y1: Int, _ material: UInt8) {
+        for y in max(y0, 0)..<max(min(y1, h), max(y0, 0)) { for x in max(x0, 0)..<max(min(x1, w), max(x0, 0)) { cells[y * w + x] = material } }
+    }
 }
 
 // The country's own arithmetic, as in PixelTrain.swift, where each is private: the mock-ups', in doubles.
