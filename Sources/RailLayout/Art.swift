@@ -20,10 +20,11 @@ public enum RailArt {
         static let snowTop = Flags(rawValue: 16)    // snow lies on its top faces
         static let snowAll = Flags(rawValue: 32)    // snow on every face (the hill, the banks)
         static let flat = Flags(rawValue: 64)       // shaded flat: a bank's 1:1 steps would read as a checkerboard
+        static let snowSide = Flags(rawValue: 128)  // in snow, its sides too, in blue shadow (pitched roofs, a laden fir)
     }
 
     /// Every material: name, colour and flags (W window, D dome glass, H headlight, L lamp, S snow on top, A snow
-    /// all over, F flat). Index 0 is empty. The grassy ones have an autumn (`_a`) and a dormant winter (`_w`) form.
+    /// all over, F flat, snow on the sides in shadow). Index 0 is empty. The grassy ones have an autumn (`_a`) and a dormant winter (`_w`) form.
     static let table = materials + containerMaterials + worldMaterials
     private static let materials: [(name: String, hex: UInt32, flags: Flags)] = [
         // running gear and shared
@@ -69,25 +70,25 @@ public enum RailArt {
         ("v50_red", 0xB02A2A, []), ("v_white", 0xE8E8E6, []), ("v_black", 0x1C1C1E, []), ("v_grey", 0x6A6C70, []),
         ("v_silver", 0xA8AAAE, []), ("v_blue", 0x2A4A8A, []), ("v_red", 0xA82424, []),
         // buildings
-        ("sp_wall", 0xD8B860, []), ("sp_trim", 0x6E4E30, []), ("sp_roof", 0x4E6A3A, .snowTop), ("brick", 0x8E4A3A, []),
-        ("brick_dk", 0x74382C, []), ("slate", 0x4A5058, .snowTop), ("canopy", 0x6E6E6A, .snowTop),
-        ("roof_green", 0x4E6A4A, .snowTop), ("roof_red", 0x8A4A3E, .snowTop), ("roof_black", 0x3A3A3C, .snowTop),
-        ("roof_grey", 0x6E6E6A, .snowTop),
+        ("sp_wall", 0xD8B860, []), ("sp_trim", 0x6E4E30, []), ("sp_roof", 0x4E6A3A, [.snowTop, .snowSide]), ("brick", 0x8E4A3A, []),
+        ("brick_dk", 0x74382C, []), ("slate", 0x4A5058, [.snowTop, .snowSide]), ("canopy", 0x6E6E6A, .snowTop),
+        ("roof_green", 0x4E6A4A, [.snowTop, .snowSide]), ("roof_red", 0x8A4A3E, [.snowTop, .snowSide]), ("roof_black", 0x3A3A3C, [.snowTop, .snowSide]),
+        ("roof_grey", 0x6E6E6A, [.snowTop, .snowSide]),
         ("wall_white", 0xE4E0D4, []), ("wall_cream", 0xE0D2A8, []), ("wall_yellow", 0xD8C080, []), ("wall_grey", 0xA8A49A, []),
         ("wall_blue", 0x8EA2B0, []), ("wall_brick", 0x9A5A44, []), ("door", 0x5A4232, []), ("house_win", 0x3C4650, .window),
         ("chimney", 0x7A4A3A, .snowTop), ("platform", 0xB0ACA4, .snowTop), ("platform_edge", 0xD8D4C8, .snowTop),
-        ("wood_tank", 0x8A5A3A, []), ("wood_tank_dk", 0x6A4430, []), ("tank_roof", 0x4A3A2E, .snowTop), ("timber", 0x5A4632, []),
+        ("wood_tank", 0x8A5A3A, []), ("wood_tank_dk", 0x6A4430, []), ("tank_roof", 0x4A3A2E, [.snowTop, .snowSide]), ("timber", 0x5A4632, []),
         ("conc_tower", 0xA8A49C, .snowTop), ("conc_dark", 0x8A8680, []), ("elevator", 0xC8C4B8, .snowTop), ("elevator_dk", 0xA8A498, []),
         ("freight_wall", 0x7A5A44, []), ("freight_door", 0x4A3828, []), ("dock", 0x6E5A44, .snowTop), ("tower_wall", 0x8E4A3A, []),
         ("silo", 0xD8D6D0, .snowTop), ("silo_dk", 0xB8B6B0, []), ("shelter_glass", 0x6A8090, []), ("shelter_roof", 0x5A5E64, .snowTop),
-        ("roof_charcoal", 0x4A4A4C, .snowTop), ("roof_brown", 0x6A5A4C, .snowTop), ("roof_pale", 0xC8C8C4, .snowTop), ("wall_beige", 0xD8CCB4, []),
+        ("roof_charcoal", 0x4A4A4C, [.snowTop, .snowSide]), ("roof_brown", 0x6A5A4C, [.snowTop, .snowSide]), ("roof_pale", 0xC8C8C4, [.snowTop, .snowSide]), ("wall_beige", 0xD8CCB4, []),
         // lineside
         ("post", 0x3A3634, []), ("post_white", 0xE8E4DC, []), ("pole", 0x5A4A3A, []), ("crossarm", 0x4A3C30, []),
         ("lamp", 0xF0E8D0, .lamp), ("sig_head", 0x1A1A1C, []), ("cl_head", 0x1A1A1C, []), ("concrete", 0xA8A49C, .snowTop), ("steel", 0x4E5258, []),
         ("steel_lt", 0x6A6E74, []), ("deck", 0x5A5650, .snowTop),
         // nature
         ("leaf", 0x4A6A24, .snowTop), ("leaf_lt", 0x6E8E3A, .snowTop), ("leaf_dk", 0x3E541A, .snowTop), ("trunk", 0x5A4232, []),
-        ("conifer", 0x2A4628, .snowTop), ("conifer_dk", 0x22382A, .snowTop), ("twig", 0x3E3630, []), ("twig_lt", 0x948A80, []),
+        ("conifer", 0x2A4628, .snowTop), ("conifer_dk", 0x22382A, .snowTop), ("twig", 0x3E3630, []),
         ("hill", 0x557F33, .snowAll), ("hill_lt", 0x6A9440, .snowAll), ("hill_dk", 0x4A7230, .snowAll),
         ("tunnel", 0x121214, []), ("portal", 0x8A8884, .snowTop), ("bank", 0x6E8E3E, [.snowAll, .flat]), ("bank_dk", 0x58762F, [.snowAll, .flat]),
         // the seasons: new leaves, autumn's colours turning and full, dead and held leaves, conifers
@@ -95,10 +96,11 @@ public enum RailArt {
         ("turn_wine", 0x624922, .snowTop), ("turn_orange", 0x896721, .snowTop), ("turn_yellow", 0x91892A, .snowTop),
         ("dead_leaf", 0x987A5A, .snowTop), ("held_leaf", 0xBCA480, .snowTop),
         ("conifer_a", 0x2A4426, .snowTop), ("conifer_w", 0x24382A, .snowTop), ("conifer_dk_w", 0x1E3024, .snowTop),
+        ("conifer_laden", 0x24382A, [.snowTop, .snowSide]),
         ("hill_a", 0x7E8A44, .snowAll), ("hill_lt_a", 0x8E9A50, .snowAll), ("hill_dk_a", 0x6E783A, .snowAll),
-        ("hill_w", 0x9A8C5E, .snowAll), ("hill_lt_w", 0xA89A68, .snowAll), ("hill_dk_w", 0x8A7C50, .snowAll),
+        ("hill_w", 0x86885A, .snowAll), ("hill_lt_w", 0x94966A, .snowAll), ("hill_dk_w", 0x76784C, .snowAll),
         ("bank_a", 0x86924A, [.snowAll, .flat]), ("bank_dk_a", 0x6E783A, [.snowAll, .flat]),
-        ("bank_w", 0xA09264, [.snowAll, .flat]), ("bank_dk_w", 0x857850, [.snowAll, .flat]),
+        ("bank_w", 0x8C8E60, [.snowAll, .flat]), ("bank_dk_w", 0x74764C, [.snowAll, .flat]),
     ]
 
     /// Double-stack boxes in plain colours, and each one's shaded side at 0.8.

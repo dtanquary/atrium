@@ -68,8 +68,8 @@ final class PixelRailway: SKScene {
     private let railway: Railway
     private let texture: SKMutableTexture
     private var pixels: [UInt32]
-    private var night: Float = 0, litAt = Date.distantPast, checkedAt = Date()
-    private var last: TimeInterval?
+    private var night: Float = 0, warm = SIMD3<Float>(1, 1, 1), litAt = Date.distantPast, checkedAt = Date()
+    private var last: TimeInterval?, painted: TimeInterval = -.infinity
     private var building = false, retired = false
 
     override convenience init(size: CGSize) {
@@ -85,8 +85,9 @@ final class PixelRailway: SKScene {
         super.init(size: size)
         let canvas = SKSpriteNode(texture: texture, size: CGSize(width: CGFloat(plan.w) * plan.pixel, height: CGFloat(plan.h) * plan.pixel))
         canvas.position = CGPoint(x: size.width / 2, y: size.height / 2)
+        canvas.yScale = -1 // the railway draws rows from the top, and a mutable texture takes them from the bottom
         addChild(canvas)
-        night = nightNow()
+        (night, warm) = lightNow()
         litAt = Date()
         paint()
         NotificationCenter.default.addObserver(self, selector: #selector(changed), name: UserDefaults.didChangeNotification, object: nil)
@@ -140,18 +141,26 @@ final class PixelRailway: SKScene {
                 eras: plan.eras, mix: plan.eras.count > 1)
     }
 
-    /// How dark it is, 0 by day to 1 at night, by the Sun where you are, or at the preview hour.
-    private func nightNow() -> Float {
+    /// How dark it is, 0 by day to 1 at night, by the Sun where you are, or at the preview hour; and the colour a low
+    /// Sun lights things with, the pixel family's (`PixelCity.sunColour`), as much as it differs from the noon Sun's,
+    /// strongest from 6 degrees up to 1 up and gone by 14 degrees up and 1.5 below, as the family's Sun is; half as
+    /// strong on snow, which a full grade turns to sand.
+    private func lightNow() -> (night: Float, warm: SIMD3<Float>) {
         let date = Self.previewTime.value > 0.5 ? Calendar.current.startOfDay(for: Date()).addingTimeInterval(Self.previewHour.value * 3600) : Date()
         let here = Location.shared.coordinate, jd = Sky.julianDate(date)
         let up = normalize(Sky.horizonMatrix(jd: jd, latitude: here.latitude, longitude: here.longitude) * Sky.sun(jd)).z
-        return smoothstep(4, -8, Float(asin(min(max(up, -1), 1)) * 180 / .pi))
+        let el = Float(asin(min(max(up, -1), 1)) * 180 / .pi)
+        let hue = { (el: Float) in PixelCity.sunColour(el) / PixelCity.sunColour(el).x }
+        let glow = smoothstep(14, 6, el) * smoothstep(-1.5, 1, el)
+        var warm = 1 + (hue(max(el, 1)) / hue(30) - 1) * 0.3 * glow + SIMD3(0.08, 0.04, 0) * glow
+        if plan.season.snow { warm = 1 + (warm - 1) * 0.5 }
+        return (smoothstep(4, -8, el), (warm * 64).rounded(.toNearestOrEven) / 64) // in steps, so the picture under the trains is redrawn only as it moves
     }
 
     /// A setting or the weather changed: a new time of day shows at once; anything that makes another layout
     /// fades to it.
     @objc private func changed() {
-        night = nightNow()
+        (night, warm) = lightNow()
         rebuildIfNeeded()
     }
 
@@ -175,13 +184,15 @@ final class PixelRailway: SKScene {
 
     override func update(_ currentTime: TimeInterval) {
         railway.advance(frameTime(currentTime, &last))
-        if Date().timeIntervalSince(litAt) > 30 { night = nightNow(); litAt = Date() }
+        if Date().timeIntervalSince(litAt) > 30 { (night, warm) = lightNow(); litAt = Date() }
         if Date().timeIntervalSince(checkedAt) > 5 { checkedAt = Date(); rebuildIfNeeded() } // a new period's layout
-        paint()
+        // the trains step whole art pixels at up to 18 a second, so a picture 30 times a second shows every step; at
+        // 60 fps (120 on ProMotion) the view shows each picture twice (four times), not drawn and uploaded again
+        if currentTime - painted >= 1 / 30.0 - 0.002 { paint(); painted = currentTime }
     }
 
     private func paint() {
-        pixels.withUnsafeMutableBufferPointer { railway.draw(night: night, into: $0) }
+        pixels.withUnsafeMutableBufferPointer { railway.draw(night: night, warm: warm, into: $0) }
         pixels.withUnsafeBytes { buffer in
             nonisolated(unsafe) let bytes = buffer
             texture.modifyPixelData { data, length in data?.copyMemory(from: bytes.baseAddress!, byteCount: min(length, bytes.count)) }

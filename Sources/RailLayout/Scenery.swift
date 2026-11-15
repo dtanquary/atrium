@@ -74,6 +74,59 @@ func rectPoints(_ c: SIMD2<Double>, _ along: SIMD2<Double>, _ across: SIMD2<Doub
     return out
 }
 
+/// The farmland under everything else, on the world's axes: fields between cut lines, each with a crop of the era's
+/// country or grass, in long strips where the country farms in strips, ringed by a headland (or a paddy's levee), and
+/// none where anything stands or runs, nor within 12 of the town's streets.
+struct Fields {
+    enum Crop { case grass, meadow, corn, soy, wheat, barley, rape, rice, greens }
+    let xs: [Double], ys: [Double], seed: Int
+    /// What the fields may grow, a crop's share by how often it's listed; strips across a field 8 to 13 wide; paddies.
+    let crops: [Crop], strips: Bool, paddies: Bool
+    /// How far each cell of `room` is from anything placed, past which a field may run.
+    let room: Room, open: [Double]
+
+    /// The country's fields: the US's big sections of corn, soy and wheat; Britain's pasture and a few arable fields in
+    /// its hedges' lines; German and French strips; Japan's paddies.
+    init(era: RailEra, lines: [[Double]]?, room: Room, open: [Double], seed: Int) {
+        (self.room, self.open, self.seed) = (room, open, seed)
+        var rng = Dice(seed &* 31 &+ 977)
+        let size: ClosedRange<Double>
+        switch era {
+        case .britishSteam, .britishDiesel: (crops, strips, paddies, size) = ([.grass, .meadow, .meadow, .grass, .wheat, .barley], false, false, 40...64)
+        case .germanAlps, .highSpeed: (crops, strips, paddies, size) = ([.wheat, .barley, .rape, .corn, .meadow, .grass, .meadow, .barley], true, false, 44...70)
+        case .shinkansen: (crops, strips, paddies, size) = ([.rice, .rice, .rice, .rice, .rice, .greens, .grass], false, true, 16...26)
+        default: (crops, strips, paddies, size) = ([.corn, .corn, .soy, .soy, .wheat, .meadow, .grass], false, false, 48...84)
+        }
+        var cut: [[Double]] = []
+        for axis in 0..<2 {
+            var xs: [Double] = [], x = room.o[axis] + rng.uniform(4, size.lowerBound)
+            while x < room.o[axis] + Double(axis == 0 ? room.nx : room.ny) { xs.append(x); x += rng.uniform(size.lowerBound, size.upperBound) }
+            cut.append(xs)
+        }
+        (xs, ys) = lines.map { ($0[0], $0[1]) } ?? (cut[0], cut[1])
+    }
+
+    /// The crop at `p`, how far across its rows it is (rows run along a field's long side), and how far it is in from
+    /// the field's edge; nil where there's no field.
+    func at(_ p: SIMD2<Double>) -> (crop: Crop, across: Double, edge: Double)? {
+        guard let (ci, cj) = room.cell(p), open[ci * room.nx + cj] >= 3 else { return nil }
+        func cell(_ cuts: [Double], _ v: Double) -> (Int, Double, Double) {
+            let i = cuts.firstIndex { $0 > v } ?? cuts.count
+            return (i, i > 0 ? cuts[i - 1] : -1e9, i < cuts.count ? cuts[i] : 1e9)
+        }
+        let (i, x0, x1) = cell(xs, p.x), (j, y0, y1) = cell(ys, p.y)
+        let edge = min(p.x - x0, x1 - p.x, p.y - y0, y1 - p.y)
+        let long = min(x1, 1e4) - max(x0, -1e4) > min(y1, 1e4) - max(y0, -1e4) // rows along x
+        var across = long ? p.y : p.x, key = hsh(seed, i, j)
+        if strips { // narrow strips along the field's long side, each its own crop
+            let width = 8 + 5 * hsh(seed, i, j, 1), k = Int(floor((across - (long ? y0 : x0)) / width))
+            key = hsh(seed, i, j, k, 2)
+            across -= Double(k) * width
+        }
+        return (crops[Int(key * Double(crops.count))], across, edge)
+    }
+}
+
 /// Everything round the track, from the layout's seed: a station and its town, the road over the line and its
 /// level crossing, a pond, a hill with a tunnel, signals, a pole line, lamps and trees.
 final class Scenery {
@@ -100,6 +153,10 @@ final class Scenery {
     var planLength: [Int: Double] = [:], capacity: [Int: Int] = [:]
     /// Each turnout's switch stand, whose target shows which way it's set.
     var switches: [(turnout: Turnout, pos: SIMD2<Double>)] = []
+    /// The farmland under it all, and each broadleaf tree's foot and seed, for the leaves it drops in autumn.
+    var fields: Fields?, broadleaves: [(p: SIMD2<Double>, seed: Int)] = []
+    /// The top of each house's chimney.
+    var chimneys: [SIMD3<Double>] = []
 
     /// With `transfers`, every loop the branch can't reach gets a tunnel with a hidden yard; `pool` is every train
     /// that may arrive.
@@ -137,7 +194,8 @@ final class Scenery {
         }
 
         // the station, on the longest clear straight of a passenger loop (where a high-speed line's has room for the
-        // road's bridge, if one can)
+        // road's bridge, if one can), on the world's axes if one will do: on a corner cut square to the screen's edge
+        // the town's streets run straight up and across it and every house shows flat, gable-on or eave-on
         var best: (score: Double, li: Int, pc: Piece, side: Double, L: Double)?
         for (li, lp) in lay.loops.enumerated() {
             let freight = lp.keys.allSatisfy { RailArt.consist($0).freight }
@@ -153,7 +211,8 @@ final class Scenery {
                     guard G.freeShare(probe) > 0.93, plat.allSatisfy({ onScreen($0, -1) }) else { continue }
                     let room = Double(town.filter { G.free($0) && onScreen($0, -4) }.count) / Double(town.count)
                     let cx = mid + pc.d * (L / 2 + 9), road = !bridged(lp) || bridgeRoom(cx, n, li, pc.s0 + dot(cx - pc.a, pc.d))
-                    let score = L + 120 * room + rng.uniform(0, 30) - (freight ? 60 : 0) - (road ? 0 : 150)
+                    let square = abs(pc.d.x * pc.d.y) > 0.05
+                    let score = L + 120 * room + rng.uniform(0, 30) - (freight ? 60 : 0) - (road ? 0 : 150) - (square ? 80 : 0)
                     if best == nil || score > best!.score { best = (score, li, pc, side, L) }
                 }
             }
@@ -305,6 +364,9 @@ final class Scenery {
                     let facing = atan2(house.dv.y, house.dv.x) + (dot(house.toward, SIMD2(-house.dv.y, house.dv.x)) > 0 ? 0 : .pi)
                     let g = Models.house(house.w, house.d, wall: rng.pick(walls), roof: rng.pick(roofs), seed: k + lay.seed)
                     things.append(Thing(grid: g, pos: house.c, heading: facing, kind: .house, lit: hsh(k, lay.seed) < 0.75))
+                    // the top of its chimney, as `Models.house` stands it: one cell in from an end, on the ridge
+                    let cu = Double(hsh(k + lay.seed, 99) < 0.5 ? 1 : house.w - 2) + 0.5 - Double(house.w) / 2
+                    chimneys.append(SIMD3(house.c.x + cu * cos(facing), house.c.y + cu * sin(facing), Double(3 + (house.d - 1) / 2 + 2)))
                 }
                 // street lamps along the side streets
                 for rd in roads.dropFirst() {
@@ -532,17 +594,21 @@ final class Scenery {
             for q in poles { things.append(Thing(grid: Models.pole(), pos: q, heading: atan2(nn.y, nn.x), kind: .pole)); G.mark([q], 2) }
         }
 
-        if look.hedges { placeHedges(lay, &G, &rng, onScreen, season: season) }
+        let hedgeLines = look.hedges ? placeHedges(lay, &G, &rng, onScreen, season: season) : nil
 
-        // trees: dart throwing in what's left, thicker in clumps (fewer among hedgerows)
+        // trees: dart throwing in what's left, thicker in clumps (fewer among hedgerows), on grass and not in a crop
         for h in hills { G.mark([h.c], h.r + 1) }
         let gap = G.distance()
+        var town = G
+        town.mark(roads.dropFirst().flatMap { $0 }, 12)
+        fields = Fields(era: era, lines: hedgeLines, room: G, open: town.distance(), seed: lay.seed)
         var trees: [SIMD2<Double>] = []
         for _ in 0..<6000 where trees.count < (look.hedges ? 100 : 230) {
             let p = SIMD2(rng.uniform(G.o.x, G.o.x + Double(G.nx)), rng.uniform(G.o.y, G.o.y + Double(G.ny)))
             guard let (i, j) = G.cell(p), gap[i * G.nx + j] >= 4, onScreen(p, 4) else { continue }
             let clump = 0.5 + 0.5 * sin(p.x / 23 + Double(lay.seed)) * cos(p.y / 19 - Double(lay.seed))
             if rng.unit() > 0.05 + 0.95 * clump * clump * clump { continue }
+            if let f = fields?.at(p), f.crop != .grass, f.crop != .meadow, f.edge > 3.5 { continue } // on its margin, a windbreak
             if trees.contains(where: { length($0 - p) < 6 }) { continue }
             trees.append(p)
         }
@@ -550,6 +616,7 @@ final class Scenery {
             let conifer = hsh(k, lay.seed, 5) < look.conifers
             let g = conifer ? Models.conifer(seed: k * 31 + lay.seed, season: season) : Models.tree(seed: k * 31 + lay.seed, season: season)
             things.append(Thing(grid: g, pos: p, kind: .tree))
+            if !conifer { broadleaves.append((p, k * 31 + lay.seed)) }
         }
         for (j, hill) in hills.enumerated() { // a few conifers on each hill
             var hr = Dice(lay.seed + 5 + 97 * j)
@@ -621,8 +688,8 @@ final class Scenery {
     }
 
     /// Hedgerows round fields of 40 to 64, about a third of the field edges left open, broken wherever anything else
-    /// stands, a tree in some.
-    private func placeHedges(_ lay: Layout, _ G: inout Room, _ rng: inout Dice, _ onScreen: (SIMD2<Double>, Double) -> Bool, season: RailSeason) {
+    /// stands, a tree in some. Returns the fields' lines, x then y.
+    private func placeHedges(_ lay: Layout, _ G: inout Room, _ rng: inout Dice, _ onScreen: (SIMD2<Double>, Double) -> Bool, season: RailSeason) -> [[Double]] {
         for h in hills { G.mark([h.c], h.r + 2) }
         let size = [Double(G.nx), Double(G.ny)]
         var lines: [[Double]] = []
@@ -648,6 +715,7 @@ final class Scenery {
                             things.append(Thing(grid: Models.hedge(b - a, season: season), pos: c, heading: axis == 0 ? .pi / 2 : 0, kind: .tree))
                             for p in stride(from: a + 3, to: b - 3, by: 11).map({ P[$0] }) where rng.chance(0.4) {
                                 things.append(Thing(grid: Models.tree(seed: Int(p.x * 7 + p.y * 13) + lay.seed, season: season), pos: p, kind: .tree))
+                                broadleaves.append((p, Int(p.x * 7 + p.y * 13) + lay.seed))
                             }
                             G.mark(stride(from: a, to: b, by: 2).map { P[$0] }, 1)
                         }
@@ -656,6 +724,7 @@ final class Scenery {
                 }
             }
         }
+        return lines
     }
 
     /// A distant signal 36 before each stop signal drawn, at caution while that one is at danger (Britain's steam era).

@@ -114,6 +114,9 @@ struct RailLight {
     static let window = RailArt.colour(0xFFAE54), headlight = RailArt.colour(0xFFD9A0)
     static let nightMul = SIMD3<Float>(0.25, 0.26, 0.36), nightAdd = SIMD3<Float>(18, 15, 34)
     static let shadow = SIMD3<Float>(0.80, 0.85, 0.92)
+    /// Shadow on snow, deeper and bluer, so the shapes are carried by blue and not by black; and snow on the side of
+    /// a laden fir or a roof's slope, in the shade of its own top.
+    static let snowShadow = SIMD3<Float>(0.74, 0.81, 0.93), snowSide = RailArt.colour(0xC4D0E2)
 
     init(night: Bool, winter: Bool, era: RailEra) {
         (self.night, self.winter) = (night, winter)
@@ -127,12 +130,15 @@ struct RailLight {
         return Float((0.7 + 0.3 * max(0, dot(n, s))) / (0.7 + 0.3 * s.z))
     }
 
-    /// A material's colour seen with this shade; snow lies on top faces of what takes it. `lit` says whether a
-    /// window is lit tonight.
+    /// A material's colour seen with this shade; snow lies on top faces of what takes it, and on the sides of a roof
+    /// or a laden fir in blue shadow. `lit` says whether a window is lit tonight.
     func colour(_ m: UInt16, _ shade: Float, top: Bool, lit: Bool = true) -> SIMD3<Float> {
         let flags = RailArt.flags[Int(m)]
         var c = RailArt.rgb[Int(m)]
         if winter, flags.contains(.snowAll) || flags.contains(.snowTop) && top { c = RailArt.snowTone[Int(m)] }
+        else if winter, flags.contains(.snowSide) { // white where the Sun is on it, blue in the shade, shaded already
+            c = (Self.snowSide + (RailArt.snowTone[Int(m)] - Self.snowSide) * min(max((shade - 0.76) / 0.22, 0), 1)) / shade
+        }
         c *= shade
         if night {
             c = c * Self.nightMul + Self.nightAdd
@@ -294,29 +300,33 @@ enum Models {
         return g
     }
 
-    /// A broadleaf tree on the season's day: a dark trunk forking into 3 or 4 branches up to a light, ragged crown
-    /// of fine twigs (what shows when it's bare), with the leaves that are out laid over it.
+    /// A broadleaf tree on the season's day: a dark trunk forking into 3 or 4 branches out to the edge of a ragged
+    /// crown of fine twigs (what shows when it's bare: darker than the dormant grass, and thicker on the side away
+    /// from the Sun), with the leaves that are out laid over it.
     static func tree(seed: Int, season: RailSeason) -> Voxels {
         var rng = Dice(seed)
         let r = rng.uniform(2.2, 3.4), rz = rng.uniform(2.0, 2.8), c = rng.uniform(3.5, 5.0)
         let n = Int(2 * r) + 3, nz = Int(c + rz) + 2, mid = n / 2
-        var g = Voxels(n, n, nz), crown: [(Int, Int, Int)] = []
+        var g = Voxels(n, n, nz), crown: [(Int, Int, Int)] = [], inCrown = [Bool](repeating: false, count: n * n * nz)
         for x in 0..<n { for y in 0..<n { for z in 0..<nz {
             let dx = Double(x - mid) / r, dy = Double(y - mid) / r, dz = (Double(z) + 0.5 - c) / rz
             let e = dx * dx + dy * dy + dz * dz
             guard e <= 1 + 0.25 * (hsh(seed, x, y, z) - 0.5) else { continue }
-            crown.append((x, y, z))
-            if e > 0.5, hsh(seed, x, y, z, 4) < (Double(z) + 0.5 > c ? 0.65 : 0.4) { g[x, y, z] = m("twig_lt") }
+            crown.append((x, y, z)); inCrown[x + n * (y + n * z)] = true
+            let shaded = max(0, 0.447 * dx - 0.894 * dy) // toward the side away from the Sun, which comes from (-0.3, 0.6)
+            if e > 0.5, hsh(seed, x, y, z, 4) < (Double(z) + 0.5 > c ? 0.65 : 0.4) + 0.3 * shaded { g[x, y, z] = m("twig_mass") }
         } } }
         let fork = max(2, Int(c - rz * 0.6))
         g.fill(mid..<(mid + 1), mid..<(mid + 1), 0..<(fork + 1), m("twig"))
         for k in 0..<(3 + rng.below(2)) {
             let a = rng.uniform(0, 2 * .pi) + Double(k) * 1.7
-            for i in 0..<6 {
-                let t = 0.15 + 0.8 * Double(i) / 5
-                let x = Int((Double(mid) + cos(a) * r * 0.9 * t).rounded()), y = Int((Double(mid) + sin(a) * r * 0.9 * t).rounded())
-                let z = Int((Double(fork) + (c + rz * 0.5 - Double(fork)) * t).rounded())
-                if x >= 0, x < n, y >= 0, y < n, z >= 0, z < nz { g[x, y, z] = m("twig") }
+            for i in 0..<8 {
+                let t = 0.15 + 0.85 * Double(i) / 7
+                let x = Int((Double(mid) + cos(a) * r * 0.95 * t).rounded()), y = Int((Double(mid) + sin(a) * r * 0.95 * t).rounded())
+                let z = Int((Double(fork) + (c + rz * 0.3 - Double(fork)) * t).rounded())
+                // inside the crown, or under it: in leaf, the leaves hide every branch that reaches out
+                guard x >= 0, x < n, y >= 0, y < n, z >= 0, z < nz, inCrown[x + n * (y + n * z)] || Double(z) + 0.5 < c else { continue }
+                g[x, y, z] = m("twig")
             }
         }
         for (x, y, z) in crown {
@@ -340,7 +350,8 @@ enum Models {
         for z in 1..<height {
             let rr = rb * (1 - Double(z - 1) / Double(height - 1)) + 0.35
             for x in 0..<n { for y in 0..<n where hypot(Double(x - mid), Double(y - mid)) <= rr {
-                g[x, y, z] = m(hsh(seed, x, y, z) < 0.3 ? dark : lit)
+                // in snow half its cells are laden, sides and all, so it reads as a white cone and not as bars
+                g[x, y, z] = m(season.snow && hsh(seed, x, y, z, 7) > 0.5 ? "conifer_laden" : hsh(seed, x, y, z) < 0.3 ? dark : lit)
             } }
         }
         return g

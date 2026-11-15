@@ -14,7 +14,7 @@ private func save(_ railway: Railway, night: Float, _ name: String, scale: Int =
     var px = [UInt32](repeating: 0, count: w * h)
     px.withUnsafeMutableBufferPointer { railway.draw(night: night, into: $0) }
     var big = [UInt32](repeating: 0, count: w * h * scale * scale)
-    for y in 0..<(h * scale) { for x in 0..<(w * scale) { big[y * w * scale + x] = px[(h - 1 - y / scale) * w + x / scale] } } // rows from the bottom
+    for y in 0..<(h * scale) { for x in 0..<(w * scale) { big[y * w * scale + x] = px[(y / scale) * w + x / scale] } }
     let dir = FileManager.default.temporaryDirectory.appendingPathComponent("atrium-railway")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     let data = big.withUnsafeBytes { Data($0) }
@@ -196,4 +196,97 @@ private func save(_ railway: Railway, night: Float, _ name: String, scale: Int =
             #expect(railway.sim.swaps >= 3, "\(era) seed \(seed): \(railway.sim.swaps) swaps")
         }
     }
+}
+
+/// Winter reads: in snow a roof's slope or a laden fir's side is snow, white in the Sun and blue in the shade, not its
+/// own dark colour in bars between white treads; and a bare tree's twigs are darker than the dormant grass.
+@Test func railwayWinterReads() {
+    let roof = RailArt.mat("roof_red"), snow = RailLight(night: false, winter: true, era: .steam)
+    let lit = snow.colour(roof, 0.977, top: false), shaded = snow.colour(roof, 0.76, top: false)
+    #expect(lit.min() > 230 && shaded.min() > 150 && shaded.z > shaded.x + 20, "\(lit) \(shaded)")
+    #expect(RailLight(night: false, winter: false, era: .steam).colour(roof, 0.76, top: false).max() < 120)
+    let luma = { (c: SIMD3<Float>) in dot(c, SIMD3(0.3, 0.59, 0.11)) }
+    #expect(luma(RailArt.rgb[Int(RailArt.mat("twig_mass"))]) < luma(snowy.grass[0]) - 25)
+}
+
+/// The ground is farmed: each crop in its season (corn green in July and bare soil in May, wheat gold at harvest, a
+/// paddy flooded at planting), and no one green is most of a summer's picture (one was 40% before the fields).
+@Test func railwayFarmsTheGround() {
+    func on(_ day: Double) -> RailSeason { RailSeason(day: day, breaks: 115, full: 144, onset: 278, peak: 301, bare: 318, green: 1, snow: false) }
+    let green = { (c: SIMD3<Float>) in c.y - max(c.x, c.z) }
+    #expect(green(on(196).crop(.corn)!.0) > 30 && green(on(140).crop(.corn)!.0) < 0)
+    #expect(on(196).crop(.wheat)!.0.x > 180 && on(135).crop(.rice)!.0.z > on(135).crop(.rice)!.0.x)
+    let railway = Railway(seed: 4, width: 504, height: 328, era: .transition, count: 3, season: .summer)
+    var px = [UInt32](repeating: 0, count: railway.w * railway.h)
+    px.withUnsafeMutableBufferPointer { railway.draw(night: 0, into: $0) }
+    let commonest = Dictionary(grouping: px, by: { $0 }).values.map(\.count).max()!
+    #expect(Double(commonest) / Double(px.count) < 0.25, "\(commonest) of \(px.count)")
+}
+
+/// A vehicle casts a shadow beyond its own pixels, away from the Sun (which comes from the left of the screen).
+@Test func railwayTrainsCastShadows() {
+    let view = RailView(w: 64, h: 64), car = RailArt.upCoach
+    for heading in [0.0, 1.2, 2.5] {
+        let body = Painted(Marched(car.grid, view, heading: heading, fine: true), view, era: .streamliners)
+        let own = Set(zip(body.dx, body.dy).map { SIMD2($0, $1) })
+        let beyond = Painted.shadow(car.grid, view, heading: heading, slope: 0).filter { !own.contains($0) }
+        let mean = { (xs: [Int16]) in Double(xs.reduce(0) { $0 + Int($1) }) / Double(max(xs.count, 1)) }
+        #expect(beyond.count > 10 && mean(beyond.map(\.x)) > mean(body.dx), "heading \(heading): \(beyond.count) beyond")
+    }
+}
+
+/// A low Sun warms what it lights and leaves the ground in shadow cool: the same moment drawn at noon and in a
+/// golden hour.
+@Test func railwayGoldenHour() {
+    let railway = Railway(seed: 4, width: 504, height: 328, era: .transition, count: 3, season: .summer)
+    var noon = [UInt32](repeating: 0, count: railway.w * railway.h), gold = noon
+    noon.withUnsafeMutableBufferPointer { railway.draw(night: 0, into: $0) }
+    gold.withUnsafeMutableBufferPointer { railway.draw(night: 0, warm: [1.08, 0.88, 0.78], into: $0) }
+    let shaded = railway.statics.shaded
+    func rgb(_ px: [UInt32], _ i: Int) -> SIMD3<Float> {
+        let p = px[i]
+        return SIMD3(Float(p & 0xFF), Float(p >> 8 & 0xFF), Float(p >> 16 & 0xFF))
+    }
+    let lit = shaded.indices.first { !shaded[$0] }!, cool = shaded.indices.first { shaded[$0] }!
+    #expect(rgb(gold, lit).x / rgb(gold, lit).z > rgb(noon, lit).x / rgb(noon, lit).z * 1.2)
+    #expect(rgb(gold, cool).z >= rgb(noon, cool).z && rgb(gold, cool).x / rgb(gold, cool).z < rgb(noon, cool).x / rgb(noon, cool).z)
+    // each house's roof, the first pixel above the ground down from over its middle, warms with the ground (the
+    // houses took the shadows' grade, as their own shadows lie on the ground behind them)
+    let (view, depth) = (railway.view, railway.statics.depth)
+    let roofs = railway.scenery.things.filter { $0.kind == .house }.compactMap { house -> Int? in
+        let top = view.project([house.pos.x, house.pos.y, (house.base ?? 0) + Double(house.grid.nz)]), x = Int(top.x)
+        guard x >= 0, x < railway.w else { return nil }
+        return (max(0, Int(top.y))..<railway.h).map { $0 * railway.w + x }.first { depth[$0] > Float(view.pixelDepth(x, $0 / railway.w, 0)) + 0.1 }
+    }
+    #expect(roofs.count > 3)
+    for roof in roofs { #expect(rgb(gold, roof).x / rgb(gold, roof).z > rgb(noon, roof).x / rgb(noon, roof).z * 1.2, "the roof at \(roof % railway.w), \(roof / railway.w)") }
+}
+
+/// The station and its town stand on a straight on the world's axes, where the houses show in isometric, not on a
+/// corner cut square to the screen's edge (11 of 20 British steam layouts did, and 50 of 180 in all nine eras; 7 now).
+@Test func railwayTownsStandOnTheWorldsAxes() {
+    var square = 0
+    for seed in 1...10 {
+        let railway = Railway(seed: seed, width: 504, height: 328, era: .britishSteam, count: 3, season: .summer, swaps: 40...90)
+        let station = railway.scenery.station
+        #expect(station != nil, "seed \(seed): no station")
+        if let d = station?.piece.d, abs(d.x * d.y) > 0.05 { square += 1 }
+    }
+    #expect(square <= 2, "\(square) of 10 towns on a straight up or across the screen")
+}
+
+/// Small things: the lamp pools' and headlights' steps are dithered only near their edges (a step's middle stays
+/// solid), and the pond's glints move on from one 0.4 s tick to the next.
+@Test func railwaySmallThingsMove() {
+    let levels: [Float] = [0, 0.14, 0.32, 0.55]
+    let at = { (t: Float) in Set((0..<16).map { dithered(t, $0 % 4, $0 / 4, levels) }) }
+    #expect(at(1.0) == [0.14] && at(1.2) == [0.14] && at(1.5) == [0.14, 0.32] && at(3.4) == [0.55])
+    let railway = Railway(seed: 4, width: 504, height: 328, era: .transition, count: 3, season: .summer)
+    let glints = railway.statics.glints
+    #expect(glints.count > 20)
+    var a = [UInt32](repeating: 0, count: railway.w * railway.h), b = a
+    a.withUnsafeMutableBufferPointer { railway.draw(night: 0, into: $0) }
+    railway.advance(0.25); railway.advance(0.25) // into the next tick (it steps at most 0.25 s at a time)
+    b.withUnsafeMutableBufferPointer { railway.draw(night: 0, into: $0) }
+    #expect(glints.filter { a[$0] != b[$0] }.count > glints.count / 5)
 }
