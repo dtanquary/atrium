@@ -43,18 +43,18 @@ private func edgeWidth(_ pixels: [SIMD3<Int>], _ w: Int) -> Double {
     for row in stride(from: 0, to: pixels.count, by: w) {
         var paper: Bool?
         for red in pixels[row..<row + w].map(\.x) {
-            guard red < 120 || red > 200 else { between += 1; continue }
-            if let paper, paper != (red > 200) { crossings += 1 }
-            paper = red > 200
+            guard red < 110 || red > 150 else { between += 1; continue }
+            if let paper, paper != (red > 150) { crossings += 1 }
+            paper = red > 150
         }
     }
     return Double(between) / Double(max(crossings, 1))
 }
 
-/// The pattern's outline is in focus: the middle of its edge is a pixel or two wide. (Measured 1.2 pixels; while the
-/// edge ran from 0.25 to 0.45 of the field whatever its slope, it measured 5.8.)
+/// The pattern's outline is in focus: the middle of its edge is under a pixel wide. (Measured 0.7 pixels; while the
+/// edge ran from 0.25 to 0.45 of the field whatever its slope, it measured 2.5.)
 @MainActor @Test func turingPatternsEdgeIsInFocus() throws {
-    #expect(edgeWidth(try picture(light: true), 640) < 3)
+    #expect(edgeWidth(try picture(light: true), 640) < 1.5)
 }
 
 /// How bright the ink is just inside the top edges of the pattern and just inside the bottom ones, in a Light Mode
@@ -74,4 +74,24 @@ private func flanks(_ pixels: [SIMD3<Int>], _ w: Int) -> (top: Double, bottom: D
 @MainActor @Test func turingPatternsAreLitFromAbove() throws {
     let lit = flanks(try picture(light: true), 640)
     #expect(lit.top > lit.bottom + 5)
+}
+
+/// How bright the paper is beside the pattern, in a Light Mode picture `w` to a row: the mean red of the paper with
+/// ink eight pixels up and to the left of it (in the pattern's lee, as the light comes from there), and of the paper
+/// with ink eight pixels down and to the right.
+private func paperBeside(_ pixels: [SIMD3<Int>], _ w: Int) -> (lee: Double, lit: Double) {
+    var lee = (sum: 0, count: 0), lit = (sum: 0, count: 0)
+    let reach = 8 * w + 8
+    for i in reach..<pixels.count - reach where pixels[i].x > 150 {
+        if pixels[i - reach].x < 110 { lee = (lee.sum + pixels[i].x, lee.count + 1) }
+        if pixels[i + reach].x < 110 { lit = (lit.sum + pixels[i].x, lit.count + 1) }
+    }
+    return (Double(lee.sum) / Double(max(lee.count, 1)), Double(lit.sum) / Double(max(lit.count, 1)))
+}
+
+/// In Light Mode the relief casts a shadow on the paper, down and to the right: the paper there is darker than the
+/// paper on the side the light comes from (measured 176 against 218 of 255; with no shadow, 221 against 220).
+@MainActor @Test func turingPatternsCastAShadowInLightMode() throws {
+    let paper = paperBeside(try picture(light: true), 640)
+    #expect(paper.lee < paper.lit - 20)
 }

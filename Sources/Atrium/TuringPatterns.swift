@@ -277,7 +277,11 @@ final class TuringPatterns: SKScene {
             vec2 uv = v_tex_coord;
             vec3 ink = mix(u_ink, u_ink2, 0.5 + 0.5 * sin(uv.x * 2.2 - uv.y * 1.5 + u_now * 0.01));
             vec3 surface = mix(ink * 0.55, mix(ink, u_glow, 0.35), ridge) * diffuse;
-            vec3 c = mix(u_paper, surface, body) + u_glow * sheen * body * 0.18 + ink * smoothstep(0.02, 0.35, v) * 0.08 * u_dark;
+            // Light Mode's shadow on the paper, down and to the right: the field 1.3 cells toward the light, taken from
+            // its slope here rather than a second read, which looked the same and cost four more taps
+            float lee = v + 1.3 / abs(dfdx(p.x)) * dot(slope, normalize(l.xy));
+            vec3 paper = u_paper * (1.0 - 0.25 * (1.0 - u_dark) * smoothstep(0.12, 0.5, lee));
+            vec3 c = mix(paper, surface, body) + u_glow * sheen * body * 0.18 + ink * smoothstep(0.02, 0.35, v) * 0.08 * u_dark;
             float vignette = 1.0 - 0.3 * length(uv - 0.5);
             gl_FragColor = vec4(u_dark > 0.5 ? c * vignette : c, 1.0);
         }
