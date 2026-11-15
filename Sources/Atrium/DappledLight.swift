@@ -89,7 +89,14 @@ final class DappledLight: SKScene, BatteryPaced, Trimmable {
     var batteryRate: Int? = 20 { didSet { batteryRateChanged(from: oldValue) } }
     private var conditions = LiveWeather.Conditions(code: 1, cloudCover: 10, wind: 8)
     private var sinceLight = 0.0, clock = 0.0, lastUpdate: TimeInterval?
-    /// The twig's base in the plane of its leaves, fixed when the surface is picked so its shadow starts on screen.
+    /// Where the twig's shadow starts, as a fraction of the wall across and up from its middle, and which way it
+    /// reaches (radians, 0 straight up): hanging in from the top right or top left, or reaching in from either side.
+    private static let twigPlaces: [(at: SIMD2<Double>, angle: Double)] = [([0.42, 0.33], 2.55), ([-0.42, 0.33], -2.55),
+                                                                         ([0.5, -0.12], 0.95), ([-0.5, -0.08], -0.95)]
+    /// This scene's place for the twig, rolled when it's built (pinned by `dappled.seed`), and its base in the plane of
+    /// its leaves, fixed when the surface is picked so its shadow starts there.
+    private let twigPlace = { (seed: Int) in twigPlaces[seed > 0 ? seed % twigPlaces.count : .random(in: 0..<twigPlaces.count)] }(
+        UserDefaults.standard.integer(forKey: "dappled.seed"))
     private var twigBase = SIMD2<Double>.zero
     private var surface = surfaces[0]
     /// The albedo's tint in linear light, over the texture's mean, and whether it's the charcoal wall of Dark Mode.
@@ -104,7 +111,7 @@ final class DappledLight: SKScene, BatteryPaced, Trimmable {
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]),
             SKUniform(name: "u_mpp", float: Float(Self.wallWidth / size.width)),
             albedo, relief, surfaceShape, SKUniform(name: "u_noise", texture: CloudNoise.texture),
-            SKUniform(name: "u_canopy", texture: Self.canopy), SKUniform(name: "u_twig", texture: Self.twig),
+            SKUniform(name: "u_canopy", texture: Self.tree.canopy), SKUniform(name: "u_twig", texture: Self.tree.twig),
             proj, invL, shiftFar, shiftNear, blur, source, terminator, direct, ambient, direction, wind, twigPose, tint, night,
             WallpaperTime.now,
         ])
@@ -144,7 +151,7 @@ final class DappledLight: SKScene, BatteryPaced, Trimmable {
         charcoal = dark && surface.dark != nil
         wallColour = ((charcoal ? surface.dark : nil) ?? surface.colour).map { $0 / textures.mean } ?? [1, 1, 1]
         light()
-        twigBase = SIMD2(0.42, 0.33) * SIMD2(Self.wallWidth, Self.wallWidth * size.height / size.width) - shift(Self.near)
+        twigBase = twigPlace.at * SIMD2(Self.wallWidth, Self.wallWidth * size.height / size.width) - shift(Self.near)
     }
 
     /// The live weather, or what Settings locks it to. Before the first report, a mostly clear day with a breeze.
@@ -326,7 +333,7 @@ final class DappledLight: SKScene, BatteryPaced, Trimmable {
         let amplitude = min(0.01 * pow(breeze / 10, 1.4), 0.05) * sway
         let flutter = min(max((breeze - 5) / 15, 0), 1) * 0.35 * min(sway, 1.5)
         wind.vectorFloat4Value = SIMD4<Float>(Float(amplitude), Float(flutter), Float(1 - sunny), Float(Self.knob(.cover)))
-        let angle = 2.55 + min(0.012 * breeze / 10, 0.05) * sway * (sin(clock * 3.3) + 0.6 * sin(clock * 5.1 + 1))
+        let angle = twigPlace.angle + min(0.012 * breeze / 10, 0.05) * sway * (sin(clock * 3.3) + 0.6 * sin(clock * 5.1 + 1))
         twigPose.vectorFloat4Value = SIMD4<Float>(Float(twigBase.x), Float(twigBase.y), Float(angle), Float(Self.knob(.twig)))
     }
 
@@ -390,18 +397,27 @@ final class DappledLight: SKScene, BatteryPaced, Trimmable {
         return result
     }
 
-    /// The tree's shadow-casters, 3 m square and tiling, laid out afresh each launch from real maple, oak or beech
-    /// leaves (ambientCG's leaf scans, CC0), one kind of tree at a time. Red holds sprays of leaves on their twigs,
-    /// green the far crown: denser clumps of smaller leaves, blurred into the soft masses that the Sun, 5 m on, makes
-    /// of them; blue the crown's much softer shadow from the sky.
-    private static let canopy: SKTexture = {
+    /// The tree's shadow-casters, laid out afresh each launch from real maple, oak or beech leaves (ambientCG's leaf
+    /// scans, CC0), one kind of tree at a time. `dappled.seed` (any whole number but 0, for the tests) rolls the same
+    /// tree every time.
+    ///
+    /// The canopy is 3 m square and tiling. Red holds sprays of leaves on their twigs, green the far crown: denser
+    /// clumps of smaller leaves, blurred into the soft masses that the Sun, 5 m on, makes of them; blue the crown's much
+    /// softer shadow from the sky; alpha where the crown is thinner, for its gaps to gather in.
+    ///
+    /// The twig near the wall, 0.75 m square, is a stem of the same leaves, its base at the middle of the bottom edge.
+    private static let tree: (canopy: SKTexture, twig: SKTexture) = {
         let n = 1024, metres = 3.0
+        let seed = UInt64(max(0, UserDefaults.standard.integer(forKey: "dappled.seed")))
+        var rng = SplitMix(state: seed != 0 ? seed : .random(in: 1...UInt64.max))
         guard let atlas = NSImage(contentsOf: resource("dappled-leaves.png"))?.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-            return SKTexture(cgImage: CGContext(data: nil, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(),
-                                                bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!.makeImage()!)
+            let blank = SKTexture(cgImage: CGContext(data: nil, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(),
+                                                     bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!.makeImage()!)
+            return (blank, blank)
         }
         let cells = (0..<16).compactMap { atlas.cropping(to: CGRect(x: $0 % 4 * 256, y: $0 / 4 * 256, width: 256, height: 256)) }
-        let kinds = [Array(0..<6), Array(6..<10), Array(10..<16)].randomElement()! // maple, oak or beech
+        let trees = [Array(0..<6), Array(6..<10), Array(10..<16)] // maple, oak or beech
+        let kinds = trees.randomElement(using: &rng)!
         func context() -> CGContext {
             let context = CGContext(data: nil, width: n, height: n, bitsPerComponent: 8, bytesPerRow: n, space: CGColorSpaceCreateDeviceGray(),
                                     bitmapInfo: CGImageAlphaInfo.none.rawValue)!
@@ -412,7 +428,7 @@ final class DappledLight: SKScene, BatteryPaced, Trimmable {
         }
         /// Draws a leaf with its stem's end at `at`, pointing along `angle`, white on black, wrapped so the layer tiles.
         func leaf(_ context: CGContext, at: CGPoint, angle: Double, length: Double) {
-            let side = length * 256 / 240, cell = cells[kinds.randomElement()!]
+            let side = length * 256 / 240, cell = cells[kinds.randomElement(using: &rng)!]
             for dx in [-metres, 0, metres] {
                 for dy in [-metres, 0, metres] where at.x + dx > -0.2 && at.x + dx < metres + 0.2 && at.y + dy > -0.2 && at.y + dy < metres + 0.2 {
                     context.saveGState()
@@ -459,23 +475,25 @@ final class DappledLight: SKScene, BatteryPaced, Trimmable {
         // Sprays: twigs off a few branches, leaves set alternately along each twig and one at its tip.
         let sprayContext = context()
         for _ in 0..<5 {
-            var at = CGPoint(x: .random(in: 0..<metres), y: .random(in: 0..<metres))
-            var heading = Double.random(in: 0..<(2 * .pi))
+            var at = CGPoint(x: .random(in: 0..<metres, using: &rng), y: .random(in: 0..<metres, using: &rng))
+            var heading = Double.random(in: 0..<(2 * .pi), using: &rng)
             for _ in 0..<7 {
-                heading += .random(in: -0.5...0.5)
-                let twig = Double.random(in: 0.18...0.4), side: Double = Bool.random() ? 1 : -1
-                let out = heading + side * .random(in: 0.5...1.1)
+                heading += .random(in: -0.5...0.5, using: &rng)
+                let twig = Double.random(in: 0.18...0.4, using: &rng), side: Double = Bool.random(using: &rng) ? 1 : -1
+                let out = heading + side * .random(in: 0.5...1.1, using: &rng)
                 let tip = CGPoint(x: at.x + cos(out) * twig, y: at.y + sin(out) * twig)
                 line(sprayContext, from: at, to: tip, width: 0.004)
                 var k = 0.25
                 while k < 1 {
                     let node = CGPoint(x: at.x + cos(out) * twig * k, y: at.y + sin(out) * twig * k)
                     let flip: Double = Int(k * 10) % 2 == 0 ? 1 : -1
-                    leaf(sprayContext, at: node, angle: out + flip * .random(in: 0.5...1.0), length: .random(in: 0.08...0.13))
-                    k += .random(in: 0.14...0.24)
+                    leaf(sprayContext, at: node, angle: out + flip * .random(in: 0.5...1.0, using: &rng),
+                         length: .random(in: 0.08...0.13, using: &rng))
+                    k += .random(in: 0.14...0.24, using: &rng)
                 }
-                leaf(sprayContext, at: tip, angle: out + .random(in: -0.2...0.2), length: .random(in: 0.09...0.13))
-                let step = Double.random(in: 0.15...0.3)
+                leaf(sprayContext, at: tip, angle: out + .random(in: -0.2...0.2, using: &rng),
+                     length: .random(in: 0.09...0.13, using: &rng))
+                let step = Double.random(in: 0.15...0.3, using: &rng)
                 let next = CGPoint(x: at.x + cos(heading) * step, y: at.y + sin(heading) * step)
                 line(sprayContext, from: at, to: next, width: 0.012)
                 at = next
@@ -487,17 +505,18 @@ final class DappledLight: SKScene, BatteryPaced, Trimmable {
         // The far crown: clumps of leaves along a few limbs, dense at their hearts and thinning out, with sky between.
         let crownContext = context()
         for _ in 0..<5 {
-            var at = CGPoint(x: .random(in: 0..<metres), y: .random(in: 0..<metres))
-            var heading = Double.random(in: 0..<(2 * .pi))
+            var at = CGPoint(x: .random(in: 0..<metres, using: &rng), y: .random(in: 0..<metres, using: &rng))
+            var heading = Double.random(in: 0..<(2 * .pi), using: &rng)
             for _ in 0..<6 {
-                let radius = Double.random(in: 0.1...0.24)
+                let radius = Double.random(in: 0.1...0.24, using: &rng)
                 for _ in 0..<Int(radius * radius * 3000) {
-                    let r = radius * abs(Double.random(in: -1...1) + Double.random(in: -1...1)) * 0.6, a = Double.random(in: 0..<(2 * .pi))
-                    leaf(crownContext, at: CGPoint(x: at.x + cos(a) * r, y: at.y + sin(a) * r), angle: a + .random(in: -1...1),
-                         length: .random(in: 0.06...0.1))
+                    let r = radius * abs(Double.random(in: -1...1, using: &rng) + Double.random(in: -1...1, using: &rng)) * 0.6
+                    let a = Double.random(in: 0..<(2 * .pi), using: &rng)
+                    leaf(crownContext, at: CGPoint(x: at.x + cos(a) * r, y: at.y + sin(a) * r), angle: a + .random(in: -1...1, using: &rng),
+                         length: .random(in: 0.06...0.1, using: &rng))
                 }
-                heading += .random(in: -0.9...0.9)
-                let step = Double.random(in: 0.15...0.3)
+                heading += .random(in: -0.9...0.9, using: &rng)
+                let step = Double.random(in: 0.15...0.3, using: &rng)
                 at = CGPoint(x: at.x + cos(heading) * step, y: at.y + sin(heading) * step)
             }
         }
@@ -507,19 +526,101 @@ final class DappledLight: SKScene, BatteryPaced, Trimmable {
         // really blur a crown 5 m out over metres into an even grey; this keeps the tree readable under cloud.
         let skyShadow = blurred(crown, radius: 40, passes: 3)
 
-        var bytes = [UInt8](repeating: 255, count: n * n * 4)
-        for i in 0..<n * n {
-            bytes[i * 4] = UInt8(min(sprays[i], 255))
-            bytes[i * 4 + 1] = UInt8(min(crown[i], 255))
-            bytes[i * 4 + 2] = UInt8(min(skyShadow[i] * 1.3, 255))
+        // Where the crown is thinner or thicker, so its gaps gather in groups with bare shade between: value noise over
+        // 30 cm and 15 cm, spread so 0…1 is about three standard deviations.
+        var clumps = [Float](repeating: 0, count: n * n)
+        for (cells, weight) in [(10, Float(2)), (20, 1)] {
+            let lattice = (0..<cells * cells).map { _ in Float.random(in: 0...1, using: &rng) }
+            func at(_ i: Int, _ j: Int) -> Float { lattice[j % cells * cells + i % cells] }
+            for y in 0..<n {
+                let fy = Float(y * cells) / Float(n), j = Int(fy), v = (fy - Float(j)) * (fy - Float(j)) * (3 - 2 * (fy - Float(j)))
+                for x in 0..<n {
+                    let fx = Float(x * cells) / Float(n), i = Int(fx), u = (fx - Float(i)) * (fx - Float(i)) * (3 - 2 * (fx - Float(i)))
+                    clumps[y * n + x] += weight * ((at(i, j) * (1 - u) + at(i + 1, j) * u) * (1 - v) + (at(i, j + 1) * (1 - u) + at(i + 1, j + 1) * u) * v)
+                }
+            }
         }
-        let context = CGContext(data: &bytes, width: n, height: n, bitsPerComponent: 8, bytesPerRow: n * 4, space: CGColorSpaceCreateDeviceRGB(),
-                                bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
-        return SKTexture(cgImage: context.makeImage()!)
-    }()
+        let mean = clumps.reduce(0, +) / Float(n * n)
+        let spread = (clumps.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Float(n * n)).squareRoot()
 
-    /// A twig of three serrated leaves (ambientCG LeafSet005, CC0), for the sharp shadow near the wall.
-    private static let twig = SKTexture(imageNamed: resource("dappled-twig.png").path)
+        // Bottom row first, as SKTexture(data:) wants it, so the layers lie as they're drawn.
+        var bytes = [UInt8](repeating: 255, count: n * n * 4)
+        for row in 0..<n {
+            for x in 0..<n {
+                let (i, o) = ((n - 1 - row) * n + x, (row * n + x) * 4)
+                bytes[o] = UInt8(min(sprays[i], 255))
+                bytes[o + 1] = UInt8(min(crown[i], 255))
+                bytes[o + 2] = UInt8(min(skyShadow[i] * 1.3, 255))
+                bytes[o + 3] = UInt8(min(max(0.5 + (clumps[i] - mean) / (3 * spread), 0), 1) * 255)
+            }
+        }
+        let canopy = SKTexture(data: Data(bytes), size: CGSize(width: n, height: n))
+        canopy.filteringMode = .linear
+
+        // The Sun, 25 cm on, blurs the twig by about 2.3 mm: three texels.
+        let twigContext = twig(trees.firstIndex(of: kinds)!, of: kinds.map { cells[$0] }, using: &rng)
+        var twigBytes = blurred(pixels(twigContext), radius: 1, passes: 1).map { UInt8(min($0, 255)) }
+        let twigTexture = SKTexture(cgImage: CGContext(data: &twigBytes, width: n, height: n, bitsPerComponent: 8, bytesPerRow: n,
+                                                       space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue)!.makeImage()!)
+        return (canopy, twigTexture)
+    }()
+    static var canopy: SKTexture { tree.canopy }
+
+    /// The twig near the wall, 0.75 m square in 1024² texels, white on black: a gently bowed stem growing up from the
+    /// middle of the bottom edge, tapering, with `leaves` of its tree (`kind` 0, 1, 2) along it: maple's in opposite
+    /// pairs, oak's crowding toward the tip, beech's alternate and smaller. They're shade leaves, low in the tree and
+    /// bigger than the crown's.
+    static func twig(_ kind: Int, of leaves: [CGImage], using rng: inout SplitMix) -> CGContext {
+        let n = 1024, span = 0.75
+        let context = CGContext(data: nil, width: n, height: n, bitsPerComponent: 8, bytesPerRow: n, space: CGColorSpaceCreateDeviceGray(),
+                                bitmapInfo: CGImageAlphaInfo.none.rawValue)!
+        context.scaleBy(x: Double(n) / span, y: Double(n) / span)
+        context.setStrokeColor(gray: 1, alpha: 1)
+        context.setLineCap(.round)
+        let length = [0.38, 0.33, 0.45][kind] * .random(in: 0.9...1.1, using: &rng), lean = Double.random(in: -0.25...0.25, using: &rng)
+        let base = CGPoint(x: span / 2, y: 0.01), tip = CGPoint(x: span / 2 + sin(lean) * length, y: 0.01 + cos(lean) * length)
+        let bend = CGPoint(x: (base.x + tip.x) / 2 + .random(in: -0.08...0.08, using: &rng), y: (base.y + tip.y) / 2)
+        /// A point `t` of the way along the stem, and the way it's heading there.
+        func stem(_ t: Double) -> (at: CGPoint, heading: Double) {
+            let (a, b, c) = ((1 - t) * (1 - t), 2 * (1 - t) * t, t * t)
+            let dx = (1 - t) * (bend.x - base.x) + t * (tip.x - bend.x), dy = (1 - t) * (bend.y - base.y) + t * (tip.y - bend.y)
+            return (CGPoint(x: a * base.x + b * bend.x + c * tip.x, y: a * base.y + b * bend.y + c * tip.y), atan2(dy, dx))
+        }
+        for i in 0..<16 {
+            context.setLineWidth(0.007 - 0.0045 * Double(i) / 16)
+            context.move(to: stem(Double(i) / 16).at)
+            context.addLine(to: stem(Double(i + 1) / 16).at)
+            context.strokePath()
+        }
+        // Where each leaf is along the stem, its turn toward the tip, and its length.
+        var placed: [(t: Double, turn: Double, length: Double)] = []
+        switch kind {
+        case 0:
+            for (t, turn) in [(0.5, 0.75), (1.0, 0.45)] {
+                for side in [-1.0, 1.0] { placed.append((t, side * (turn + .random(in: -0.15...0.15, using: &rng)), .random(in: 0.2...0.25, using: &rng))) }
+            }
+        case 1:
+            for (t, turn) in [(0.4, 0.8), (0.62, -0.75), (0.8, 0.6), (0.92, -0.5), (1.0, 0.1)] {
+                placed.append((t, turn + .random(in: -0.15...0.15, using: &rng), .random(in: 0.17...0.21, using: &rng)))
+            }
+        default:
+            for (i, t) in [0.3, 0.48, 0.66, 0.84].enumerated() {
+                placed.append((t, (i % 2 == 0 ? 1 : -1) * .random(in: 0.55...0.85, using: &rng), .random(in: 0.13...0.16, using: &rng)))
+            }
+            placed.append((1, .random(in: -0.2...0.2, using: &rng), 0.145))
+        }
+        // Each leaf tilts out of the wall's plane a little, so its shadow is narrower than the leaf.
+        for (t, turn, length) in placed {
+            let node = stem(t), side = length * 256 / 240
+            context.saveGState()
+            context.translateBy(x: node.at.x, y: node.at.y)
+            context.rotate(by: node.heading + turn - .pi / 2)
+            context.scaleBy(x: .random(in: 0.5...1, using: &rng), y: 1)
+            context.draw(leaves.randomElement(using: &rng)!, in: CGRect(x: -side / 2, y: -side * 0.03, width: side, height: side))
+            context.restoreGState()
+        }
+        return context
+    }
 
     // MARK: - Shader
 
@@ -542,24 +643,30 @@ final class DappledLight: SKScene, BatteryPaced, Trimmable {
         return lit;
     }
 
-    // Gaps in the far crown, one to a 2 × 2 cell of sky offset (so every image is round here); the fluttering ones blink.
-    float pinholes(vec2 g, float open, float flutter, float t, vec4 src, vec2 term, float px) {
-        vec2 cell = floor(g * 0.5);
-        float sum = 0.0;
-        for (int j = -1; j <= 1; j++) {
-            for (int i = -1; i <= 1; i++) {
-                vec2 c = cell + vec2(float(i), float(j));
-                vec4 h = hash42(c);
-                float r = h.z < 0.78 - 0.4 * open ? 0.0 : (0.1 + 0.3 * h.z) * (0.5 + 0.5 * open);
-                // A gap's image is as bright as the gap's area over the image's, so pinhole-sized gaps make dim images,
-                // but photos show the dapples at 0.7–1.6 times the median spot: the visible ones are the wider gaps.
-                float bright = fract(h.z * 13.7 + h.w * 5.3);
-                float gain = mix(0.2, 1.0, bright * bright) * (1.0 - flutter * step(0.6, h.w) * (0.5 + 0.5 * sin(mod(t, 3600.0) * (15.0 + 20.0 * h.w) + h.w * 80.0))); // wrapped: a fast flutter coarsens first
-                float size = 0.65 + 0.8 * fract(h.z * 7.31 + h.w * 3.7);   // gaps 3.3 to 7.3 m out: the nearer, the smaller
-                if (r > 0.02) { sum += gain * sunImage((g - (c + 0.2 + 0.6 * h.xy) * 2.0) / size, r / size, src, term, px / size); }
-            }
+    // One gap in the far crown and its image of the light, `dg` from the image's centre in sky offset, `size` its
+    // radius, `stretch` how much longer it is along a slit. `open` is how thin the crown is where the image falls and
+    // `clump` a slow noise over the crown, both read there, so a gap is all there or not at all (read at each pixel,
+    // they cut discs into crescents), and the gaps gather in groups with bare shade between. The fluttering ones
+    // blink, and with any wind (`sway`, 0–1) each gap slowly opens and closes.
+    float gap(vec2 dg, vec4 h, float size, float stretch, float open, float clump, float flutter, float sway, float t, vec4 src, vec2 term, float px) {
+        float there = smoothstep(-0.03, 0.03, h.z - (0.78 - 0.4 * open + 0.6 * (clump - 0.5)));
+        float tw = mod(t, 3600.0); // wrapped: a fast flutter coarsens first
+        float breathe = 1.0 - 0.2 * sway * (0.5 + 0.5 * sin(t * (0.4 + 0.5 * fract(h.w * 7.3)) + h.w * 40.0));
+        float r = (0.1 + 0.3 * h.z) * (0.5 + 0.5 * open) * breathe;
+        // A gap's image is as bright as the gap's area over the image's, (r / size)², so a wide gap near the wall makes
+        // a bright, soft blob and a pinhole far out a faint, crisp disc; squeezed into the 0.2–1 of full sun that the
+        // photos' visible dapples span.
+        float k = r / size;
+        float x = clamp((k - 0.05) / 0.55, 0.0, 1.0);
+        float gain = there * mix(0.2, 1.0, x)
+            * (1.0 - flutter * step(0.6, h.w) * (0.5 + 0.5 * sin(tw * (15.0 + 20.0 * h.w) + h.w * 80.0)));
+        vec2 q = dg / size;
+        if (stretch > 1.0) {
+            float a = 6.2832 * fract(h.y * 5.9 + h.z * 2.3);
+            vec2 along = vec2(cos(a), sin(a));
+            q -= along * dot(q, along) * (1.0 - 1.0 / stretch);
         }
-        return sum;
+        return there > 0.0 ? gain * sunImage(q, k, src, term, px / size) : 0.0;
     }
 
     void main() {
@@ -572,58 +679,87 @@ final class DappledLight: SKScene, BatteryPaced, Trimmable {
         vec4 rel = texture2D(u_relief, st);
         vec2 slope = rel.rg * 2.0 - 1.0;
         vec3 normal = vec3(slope, sqrt(max(1.0 - dot(slope, slope), 0.0)));
-        // Deep relief (siding's laps, brick's mortar) shades itself: march toward the light up through its height.
-        float relit = 1.0;
-        if (u_surface.z > 0.0) {
-            vec2 run = u_dir.xy / max(u_dir.z, 0.08) * u_surface.z * 0.125;
-            for (int k = 1; k <= 8; k++) {
-                float hk = texture2D(u_relief, fract((p + run * float(k)) / u_surface.xy)).b;
-                relit = min(relit, smoothstep(-0.04, 0.04, rel.b + float(k) * 0.125 - hk));
-            }
-        }
-
         // Branches sway, each part of the tree in its own phase.
         float phase = texture2D(u_noise, fract(p * 0.21 + 0.37)).a * 14.0;
         vec2 sway = u_wind.x * vec2(sin(t * 2.7 + phase) + 0.5 * sin(t * 1.3 + phase * 1.7),
                                     0.6 * cos(t * 2.1 + phase * 0.8) + 0.3 * sin(t * 0.9 + phase * 2.3));
 
-        // The far crown: a soft mass of shade, with round images of the source where it has gaps.
-        vec2 cf = p - u_shiftFar + sway * 0.6;
-        float density = texture2D(u_canopy, fract(cf * 0.29 + vec2(0.13, 0.61))).g;
-        float crown = smoothstep(0.1, 0.6, density + u_wind.w - 0.5);
-        float far = 1.0 - crown;
-        if (crown > 0.01) {
-            float px = u_mpp * 0.5 * length(u_proj.xy) * u_invL;
-            vec2 g = vec2(dot(u_proj.xy, cf), dot(u_proj.zw, cf)) * u_invL;
-            far += crown * min(pinholes(g, 1.0 - smoothstep(0.4, 1.0, density), u_wind.y, t, u_src, u_term, px), 1.0);
+        // What the direct light reaches, past the leaves and the relief's own shade: none of it is worked out when
+        // there's no direct light (overcast, the source behind the wall or set), when it would all be multiplied by 0.
+        float sunlit = 0.0;
+        if (u_light.r + u_light.g + u_light.b > 0.0) {
+            // Deep relief (siding's laps, brick's mortar) shades itself: march toward the light up through its height.
+            float relit = 1.0;
+            if (u_surface.z > 0.0) {
+                vec2 run = u_dir.xy / max(u_dir.z, 0.08) * u_surface.z * 0.125;
+                for (int k = 1; k <= 8; k++) {
+                    float hk = texture2D(u_relief, fract((p + run * float(k)) / u_surface.xy)).b;
+                    relit = min(relit, smoothstep(-0.04, 0.04, rel.b + float(k) * 0.125 - hk));
+                }
+            }
+
+            // The far crown: a soft mass of shade, with round images of the source where it has gaps.
+            vec2 cf = p - u_shiftFar + sway * 0.6;
+            float density = texture2D(u_canopy, fract(cf * 0.29 + vec2(0.13, 0.61))).g;
+            float crown = smoothstep(0.1, 0.6, density + u_wind.w - 0.5);
+            float far = 1.0 - crown;
+            if (crown > 0.01) {
+                float px = u_mpp * 0.5 * length(u_proj.xy) * u_invL;
+                vec2 g = vec2(dot(u_proj.xy, cf), dot(u_proj.zw, cf)) * u_invL;
+                // Gaps, at most one to a 2 × 2 cell of sky offset (so every image is round here), more where the crown is
+                // thinner. Each whose image could reach here looks up the crown where its image falls (sky offset back to
+                // the wall: the sprays' blur matrix, scaled from their distance to the crown's).
+                float dapples = 0.0;
+                float breeze = clamp(u_wind.x * 100.0, 0.0, 1.0);
+                vec2 cell = floor(g * 0.5);
+                for (int j = -1; j <= 1; j++) {
+                    for (int i = -1; i <= 1; i++) {
+                        vec2 c = cell + vec2(float(i), float(j));
+                        vec4 h = hash42(c);
+                        vec2 dg = g - (c + 0.2 + 0.6 * h.xy) * 2.0;
+                        float size = 0.45 * pow(4.0, fract(h.z * 7.31 + h.w * 3.7));   // gaps 2.3 to 9 m out: the nearer, the smaller
+                        // A third are slits between leaves, whose image is the disc smeared along them, up to 1.6 times as
+                        // long but never past the cells searched (2.4 away at the nearest).
+                        float slit = fract(h.w * 3.1 + h.x * 1.7);
+                        float stretch = slit < 0.33 ? max(min(1.0 + 1.8 * slit, 2.3 / (size + 0.4)), 1.0) : 1.0;
+                        float reach = (size + 0.4 + px) * stretch;
+                        if (h.z > 0.05 && dot(dg, dg) < reach * reach) {
+                            vec2 at = cf + vec2(dot(u_blur.xy, dg), dot(u_blur.zw, dg)) * 4.1667;   // 5 m / 1.2 m
+                            vec4 there = texture2D(u_canopy, fract(at * 0.29 + vec2(0.13, 0.61)));
+                            dapples += gap(dg, h, size, stretch, 1.0 - smoothstep(0.4, 1.0, there.g), there.a, u_wind.y, breeze, t, u_src, u_term, px);
+                        }
+                    }
+                }
+                far += crown * min(dapples, 1.0);
+            }
+            far = mix(far, 1.0 - 0.7 * crown, u_wind.z);   // behind thin cloud the dapples blur into the shade
+
+            // Sprays of leaves nearer the wall: their shadow blurred over the source's image, tap by tap, each tap dropped
+            // where the Moon covers the Sun.
+            vec2 cm = p - u_shiftNear.xy + sway;
+            float leaf = 0.0;
+            float weight = 0.0;
+            for (int k = 0; k < 7; k++) {
+                float a = float(k) * 1.0472 + 0.3;
+                vec2 d = k == 0 ? vec2(0.0) : 0.7 * vec2(cos(a), sin(a));
+                float w = 1.0;
+                if (u_src.z > 0.0) { w = step(u_src.z, length(d - u_src.xy)); }
+                vec2 tap = cm + vec2(dot(u_blur.xy, d), dot(u_blur.zw, d));
+                leaf += w * texture2D(u_canopy, fract(tap * 0.33 + vec2(0.71, 0.29))).r;
+                weight += w;
+            }
+            leaf = smoothstep(0.0, 1.0, leaf / max(weight, 0.001) * (0.6 + u_wind.w * 0.8));
+
+            // The twig near the wall: a sharp shadow, swaying about its base.
+            vec2 local = p - u_shiftNear.zw - u_twigPose.xy + sway * 0.5;
+            float ca = cos(u_twigPose.z);
+            float sa = sin(u_twigPose.z);
+            vec2 uv = vec2(ca * local.x + sa * local.y, -sa * local.x + ca * local.y) / 0.75 + vec2(0.5, 0.0);
+            float twig = 0.0;
+            if (uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) { twig = texture2D(u_twig, uv).r * u_twigPose.w; }
+
+            sunlit = far * (1.0 - leaf) * (1.0 - twig) * relit;
         }
-        far = mix(far, 1.0 - 0.7 * crown, u_wind.z);   // behind thin cloud the dapples blur into the shade
-
-        // Sprays of leaves nearer the wall: their shadow blurred over the source's image, tap by tap, each tap dropped
-        // where the Moon covers the Sun.
-        vec2 cm = p - u_shiftNear.xy + sway;
-        float leaf = 0.0;
-        float weight = 0.0;
-        for (int k = 0; k < 7; k++) {
-            float a = float(k) * 1.0472 + 0.3;
-            vec2 d = k == 0 ? vec2(0.0) : 0.7 * vec2(cos(a), sin(a));
-            float w = 1.0;
-            if (u_src.z > 0.0) { w = step(u_src.z, length(d - u_src.xy)); }
-            vec2 tap = cm + vec2(dot(u_blur.xy, d), dot(u_blur.zw, d));
-            leaf += w * texture2D(u_canopy, fract(tap * 0.33 + vec2(0.71, 0.29))).r;
-            weight += w;
-        }
-        leaf = smoothstep(0.0, 1.0, leaf / max(weight, 0.001) * (0.6 + u_wind.w * 0.8));
-
-        // The twig near the wall: a sharp shadow, swaying about its base.
-        vec2 local = p - u_shiftNear.zw - u_twigPose.xy + sway * 0.5;
-        float ca = cos(u_twigPose.z);
-        float sa = sin(u_twigPose.z);
-        vec2 uv = vec2(ca * local.x + sa * local.y, -sa * local.x + ca * local.y) / vec2(0.44, 0.55) + vec2(0.66, 0.0);
-        float twig = 0.0;
-        if (uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) { twig = texture2D(u_twig, uv).a * u_twigPose.w; }
-
-        float sunlit = far * (1.0 - leaf) * (1.0 - twig) * relit;
         // The crown also hides part of the sky: a soft shadow straight back from where the tree really is (a little low,
         // since the sky is brightest overhead), which is all there is to see under cloud or with the Sun behind the wall.
         vec2 cs = p + sway * 0.6 + vec2(0.0, 0.2);   // looking 0.2 m up the tree puts its shadow 0.2 m low
