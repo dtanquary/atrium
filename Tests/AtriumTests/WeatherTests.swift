@@ -38,3 +38,25 @@ import simd
     #expect(distance(place(star, later), moved) < 1e-9)
     #expect(moved.y < 0.78 && moved.x > 0.3) // setting, down and to the north
 }
+
+/// Every cumulus in Weather's pool has its photo, and none of them is a tower but the one. A missing photo would draw
+/// nothing: `packedCloud` falls back to an empty texture.
+@MainActor @Test func weatherCloudsHaveTheirPhotos() {
+    for cloud in WeatherScene.photoClouds {
+        #expect(FileManager.default.fileExists(atPath: resource("weather-cloud-\(cloud.name).heic").path), "\(cloud.name)")
+        #expect(cloud.lum.x < cloud.lum.y)
+    }
+    #expect(WeatherScene.photoClouds.filter(\.tower).count == 1)
+}
+
+/// The grass's year on Weather's hills: Fort Ord's own grass (linear R/G 0.75, B/G 0.29), multiplied by `grass`,
+/// comes out as dormant straw (R/G 1.30, B/G 0.58, 1.6 times as bright) and at its peak as green (R/G 0.70, B/G 0.30).
+@MainActor @Test func weatherGrassTurnsWithTheYear() {
+    let fortOrd = SIMD3<Float>(0.75, 1, 0.29)
+    for (g, rg, bg, bright) in [(0.0, 1.30, 0.58, 1.6), (1.0, 0.70, 0.30, 1.0)] {
+        let m = WeatherScene.grass(greenness: g), lit = fortOrd * m * m
+        #expect(abs(Double(lit.x / lit.y) - rg) < 0.01 && abs(Double(lit.z / lit.y) - bg) < 0.01)
+        let luminance = { (c: SIMD3<Float>) in Double(0.2126 * c.x + 0.7152 * c.y + 0.0722 * c.z) }
+        #expect(abs(luminance(lit) / luminance(fortOrd) - bright) < 0.01)
+    }
+}

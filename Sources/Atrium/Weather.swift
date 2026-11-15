@@ -79,8 +79,9 @@ class WeatherScene: SKScene, BatteryPaced {
     let fog = SKUniform(name: "u_fog", float: 0), snowCover = SKUniform(name: "u_snow", float: 0)
     private let nightUniform = SKUniform(name: "u_night", float: 0), backlit = SKUniform(name: "u_backlit", float: 0)
     private let mist = SKUniform(name: "u_mist", float: 0)
-    /// The grass out of its photo's season, for a wallpaper built on this one: the open grass's colour is multiplied
-    /// by this (rgb, as the photo's values, so the square of it in light) while a is 1. Weather leaves a at 0.
+    /// The grass out of its photo's season: the open grass's colour is multiplied by this (rgb, as the photo's values,
+    /// so the square of it in light), and a is how far it is from green, 0 at its peak (when the photo shows as it
+    /// is) to 1 as dormant straw. Set from the grass's year where you are by `show`.
     let grassSeason = SKUniform(name: "u_grass", vectorFloat4: .zero)
     /// Cloud time for the billowing, 0…1 around one period of the noise it scrolls, so it wraps seamlessly.
     private let billow = SKUniform(name: "u_billow", float: 0)
@@ -212,10 +213,18 @@ class WeatherScene: SKScene, BatteryPaced {
         cameraUniforms.forward.vectorFloat3Value = SIMD3<Float>(viewpoint.forward)
         cameraUniforms.right.vectorFloat3Value = SIMD3<Float>(viewpoint.right)
         starsUniform.vectorFloat2Value.y = trails
-        let sky = SKSpriteNode(color: .black, size: size)
+        // Only the sky above the land is drawn: its opaque photo hid the rest, stars and all. The sprite starts where
+        // the bake does, 0.06 under the horizon, or lower where a wide screen crops the photo's foot and so lowers its
+        // skyline, and the shader is told where (a constant in its source; it has no uniform to spare).
+        let photo = ground.photo.size(), landHeight = max(size.width, size.height * ground.top * photo.width / max(photo.height, 1))
+            * photo.height / max(photo.width, 1) / size.height
+        let bottom = ground.top - (ground.top - CGFloat(viewpoint.horizon - 0.06)) * landHeight / ground.top
+        let sky = SKSpriteNode(color: .black, size: CGSize(width: size.width, height: size.height * (1 - bottom)))
         sky.anchorPoint = .zero
+        sky.position.y = size.height * bottom
         // Full: 29 uniforms, against the 30 or so a shader takes (CLAUDE.md). Pack two into one before adding another.
-        sky.shader = SKShader(source: shaderCommon + moonShade + Self.skyShader, uniforms: [
+        let source = Self.skyShader.replacingOccurrences(of: "SKY_BOTTOM", with: String(format: "%.6f", Double(bottom)))
+        sky.shader = SKShader(source: shaderCommon + moonShade + source, uniforms: [
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]), skyBefore, skyAfter, skyBlend,
             cameraUniforms.lens, cameraUniforms.forward, cameraUniforms.right, sunDirection, sunDisc, moonPlace, moonLight,
             moonColour, starsUniform, starTurn, SKUniform(name: "u_moonTex", texture: Self.moonTexture),
@@ -307,6 +316,12 @@ class WeatherScene: SKScene, BatteryPaced {
         // At night the eye sees less colour (the Purkinje shift), and the haze isn't lit from low down any more,
         // since the air near the ground is in the Earth's shadow while the high sky still glows.
         groundColour.floatValue = Float(smoothstep(0.002, 0.03, brightness) * (1 - 0.7 * smoothstep(-0.03, -0.2, light.sun.z)))
+        // The grass's year where you are (Phenology.swift): dormant straw through the winter, green from three weeks
+        // before the oaks' buds break until the hard freezes, cured a little in late summer.
+        let latitude = Location.shared.coordinate.latitude, pinned = UserDefaults.standard.double(forKey: "weather.seasonDay")
+        let day = pinned > 0 ? pinned : Phenology.day(light.date, latitude: latitude) // the day is pinned only by tests
+        let greenness = Phenology.greenness(day: day, .whiteOak.moved(latitude: latitude, warmer: 0))
+        grassSeason.vectorFloat4Value = SIMD4<Float>(Self.grass(greenness: greenness), Float(1 - greenness))
         groundHazeLit.floatValue = Float(0.25 + 0.75 * smoothstep(-0.03, 0.2, light.sun.z))
         // Valley mist forms on still, clear nights and lingers into the morning until the Sun burns it off; it's
         // there in fog, and a little after rain.
@@ -320,6 +335,15 @@ class WeatherScene: SKScene, BatteryPaced {
         let moonNight = smoothstep(0.05, -0.1, light.sun.z)
         nightUniform.floatValue = Float(smoothstep(-0.05, -0.2, light.sun.z) * 0.6)
         moonColour.vectorFloat3Value = SIMD3<Float>(Atmosphere.shared.sunlight(viewpoint.height, light.moon.z) * (0.5 + 1.5 * moonNight))
+    }
+
+    /// What to multiply the ground photo's grass by for `greenness`, 0 dormant straw to 1 at its peak. In linear light
+    /// dormant straw is R/G 1.30, B/G 0.58 and 1.6 times as bright, and peak green R/G 0.70, B/G 0.30 (A Tree for the
+    /// Year's PhenoCam research, in git history); Fort Ord's open grass, shot in May, measures R/G 0.75, B/G 0.29.
+    static func grass(greenness g: Double) -> SIMD3<Float> {
+        let rg = 1.30 + (0.70 - 1.30) * g, bg = 0.58 + (0.30 - 0.58) * g, bright = 1.6 + (1.0 - 1.6) * g
+        let scale = bright * (0.2126 * 0.75 + 0.7152 + 0.0722 * 0.29) / (0.2126 * rg + 0.7152 + 0.0722 * bg)
+        return SIMD3<Float>(SIMD3(rg / 0.75, 1, bg / 0.29) * scale).squareRoot()
     }
 
     /// Moves the Sun and Moon to where they are now; they'd hop visibly if they only moved with each minute's bake.
@@ -440,7 +464,7 @@ class WeatherScene: SKScene, BatteryPaced {
     float hg(float c, float g) { return (1.0 - g * g) / pow(1.0 + g * g - 2.0 * g * c, 1.5) * 0.0796; }
 
     void main() {
-        vec2 uv = v_tex_coord;
+        vec2 uv = vec2(v_tex_coord.x, SKY_BOTTOM + v_tex_coord.y * (1.0 - SKY_BOTTOM)); // the sprite starts there
         vec2 pts = uv * u_size;
         vec3 rd = normalize(u_right * ((uv.x * 2.0 - 1.0) * u_cam.x) + u_fwd + vec3(0.0, 0.0, (uv.y - u_cam.z) * 2.0 * u_cam.y));
         vec2 st = vec2(uv.x, max(uv.y - u_cam.w, 0.0) / (1.0 - u_cam.w));
@@ -568,15 +592,18 @@ class WeatherScene: SKScene, BatteryPaced {
     // MARK: - Photo clouds
 
     /// Real cumulus cut out of photos (Resources/weather-cloud-*.heic, credited in weather-credits.tsv): each one's
-    /// width in km, and the range of its brightness in the photo (2nd and 98th percentiles of its sRGB luminance) so
+    /// width in km, and the range of its brightness in the photo (2nd and 98th percentiles of its luminance, in linear light, where it is over half opaque) so
     /// the shader can relight it, darkest to skylight and brightest to sunlight. Procedural cumulus looked like smears.
-    private static let photoClouds: [(name: String, km: Double, lum: SIMD2<Float>, tower: Bool)] = [
+    static let photoClouds: [(name: String, km: Double, lum: SIMD2<Float>, tower: Bool)] = [
         ("cu-humilis-1", 1.2, [0.63, 0.86], false), ("cu-humilis-2", 1.0, [0.74, 0.88], false),
-        ("cu-humilis-3", 1.4, [0.75, 0.87], false), ("cu-mediocris-1", 2.4, [0.65, 0.87], false),
-        ("cu-mediocris-2", 2.2, [0.64, 0.86], false), ("cu-mediocris-3", 1.8, [0.76, 0.88], false),
-        ("cu-flat-1", 3.5, [0.50, 0.83], false), ("cu-sidelit-1", 2.4, [0.62, 0.87], false),
+        ("cu-humilis-4", 1.3, [0.60, 0.98], false), ("cu-humilis-5", 1.6, [0.68, 0.95], false),
+        ("cu-mediocris-1", 2.6, [0.35, 0.93], false), ("cu-mediocris-2", 2.2, [0.64, 0.86], false),
+        ("cu-mediocris-3", 1.8, [0.40, 0.97], false), ("cu-mediocris-4", 2.2, [0.42, 0.94], false),
+        ("cu-mediocris-5", 1.9, [0.62, 0.96], false), ("cu-mediocris-6", 1.8, [0.48, 0.97], false),
+        ("cu-mediocris-7", 2.4, [0.38, 0.86], false),
+        ("cu-flat-1", 3.5, [0.50, 0.83], false), ("cu-flat-2", 1.4, [0.81, 0.96], false),
         ("cu-congestus-3", 4.5, [0.65, 0.90], true),
-    ] // ponytail: nine clouds and one tower; five more were cut but ran into their photos' frames, which showed
+    ] // ponytail: thirteen clouds and one tower from two skies; another sky's cut-outs would vary them further
     /// Each cloud as packed, kept while this scene lives so one that drifts off isn't packed again when it's next
     /// picked, and shared with any other scene showing it.
     private var cloudTextures: [String: SKTexture] = [:]
@@ -646,6 +673,10 @@ class WeatherScene: SKScene, BatteryPaced {
         var age: Double, life: Double
     }
     private var photoCloudsShown: [DriftingCloud] = []
+    /// The cumulus' draws: seeded from `weather.seed` when it's set (for two renders that differ only by the code;
+    /// nothing but the tests and snapshots sets it), at random otherwise.
+    private var rng = SplitMix(state: UserDefaults.standard.integer(forKey: "weather.seed") > 0
+        ? UInt64(UserDefaults.standard.integer(forKey: "weather.seed")) : .random(in: 1...UInt64.max))
     private lazy var photoCloudShader: SKShader = {
         let shader = SKShader(source: Self.photoCloudShaderSource, uniforms: [
             photoCloudSun, photoCloudShade, skyBefore, skyAfter, skyBlend, cameraUniforms.lens, nightUniform, billow,
@@ -659,13 +690,13 @@ class WeatherScene: SKScene, BatteryPaced {
 
     /// How far off a new cumulus is, in km: from 3.5 (high on the screen and big) to 34 (small, on the horizon), more
     /// of them far than near. Much further and the ridge hides them.
-    private static var cloudDistance: Double { 3.5 + 30 * pow(.random(in: 0...1), 1.8) }
+    private func cloudDistance() -> Double { 3.5 + 30 * pow(.random(in: 0...1, using: &rng), 1.8) }
 
     /// How long a cumulus lives, sped up with the drift but never under three minutes: 10–20 minutes for a small one,
     /// 20–30 for a medium one, 30–45 for a tower.
     private func cloudLifetime(km: Double) -> Double {
         let minutes: ClosedRange<Double> = km < 1.5 ? 10...20 : km < 4 ? 20...30 : 30...45
-        return max(180, .random(in: minutes) * 60 / cloudSpeed)
+        return max(180, .random(in: minutes, using: &rng) * 60 / cloudSpeed)
     }
 
     /// Fair-weather cumulus, a few on a mainly clear day and more when it's partly cloudy, now and then a tower. They
@@ -677,22 +708,23 @@ class WeatherScene: SKScene, BatteryPaced {
         let count = conditions.kind == .partlyCloudy ? 6 + Int(cover * 14) : conditions.kind == .clear && cover > 0.08 ? 1 + Int(cover * 6) : 0
         var towers = 0
         for _ in 0..<count {
-            let tower = towers == 0 && Double.random(in: 0...1) < 0.15
+            let tower = towers == 0 && Double.random(in: 0...1, using: &rng) < 0.15
             if tower { towers += 1 }
-            let pick = Self.photoClouds.filter { $0.tower == tower }.randomElement()!
+            let pick = Self.photoClouds.filter { $0.tower == tower }.randomElement(using: &rng)!
             let node = SKSpriteNode(texture: cloudTexture(pick.name))
             node.anchorPoint = CGPoint(x: 0.5, y: 0.077) // the photo's base, in a node 4% bigger so puffs can swell
             node.shader = photoCloudShader
-            node.userData = ["seed": SIMD2<Float>(.random(in: 0...1), .random(in: 0...1))]
+            node.userData = ["seed": SIMD2<Float>(Float.random(in: 0...1, using: &rng), Float.random(in: 0...1, using: &rng))]
             node.setValue(SKAttributeValue(vectorFloat2: pick.lum), forAttribute: "a_lum")
-            node.xScale = Bool.random() ? 1 : -1
+            node.xScale = Bool.random(using: &rng) ? 1 : -1
             addChild(node)
             // Towers stand far off, where the ridge hides the bottom of their photo.
-            let away = tower ? Double.random(in: 26...40) : Self.cloudDistance
+            let away = tower ? Double.random(in: 26...40, using: &rng) : cloudDistance()
             let life = cloudLifetime(km: pick.km)
-            photoCloudsShown.append(DriftingCloud(node: node, across: .random(in: -1.15...1.15) * viewpoint.tanH * away, away: away,
-                                                  base: tower ? 0.9 : 1.3 + .random(in: 0...0.3), km: pick.km * .random(in: 0.85...1.2),
-                                                  age: .random(in: 0.15...0.75) * life, life: life))
+            let across = Double.random(in: -1.15...1.15, using: &rng) * viewpoint.tanH * away
+            let base = tower ? 0.9 : 1.3 + .random(in: 0...0.3, using: &rng), km = pick.km * .random(in: 0.85...1.2, using: &rng)
+            photoCloudsShown.append(DriftingCloud(node: node, across: across, away: away, base: base, km: km,
+                                                  age: .random(in: 0.15...0.75, using: &rng) * life, life: life))
         }
         driftClouds(0)
     }
@@ -715,15 +747,15 @@ class WeatherScene: SKScene, BatteryPaced {
             let tower = cloud.base < 1
             let gone = abs(cloud.across / cloud.away) > viewpoint.tanH * 1.35 || cloud.away < 3 || cloud.away > 42
             if gone || cloud.age >= cloud.life {
-                cloud.away = tower ? .random(in: 26...40) : Self.cloudDistance
+                cloud.away = tower ? Double.random(in: 26...40, using: &rng) : cloudDistance()
                 cloud.across = gone && abs(across) > abs(away) * 0.3
                     ? (across > 0 ? -1 : 1) * viewpoint.tanH * 1.3 * cloud.away
-                    : .random(in: -1.1...1.1) * viewpoint.tanH * cloud.away
-                let pick = Self.photoClouds.filter { $0.tower == tower }.randomElement()!
+                    : Double.random(in: -1.1...1.1, using: &rng) * viewpoint.tanH * cloud.away
+                let pick = Self.photoClouds.filter { $0.tower == tower }.randomElement(using: &rng)!
                 cloud.node.texture = cloudTexture(pick.name)
                 cloud.node.setValue(SKAttributeValue(vectorFloat2: pick.lum), forAttribute: "a_lum")
-                cloud.node.xScale = Bool.random() ? 1 : -1
-                cloud.km = pick.km * .random(in: 0.85...1.2)
+                cloud.node.xScale = Bool.random(using: &rng) ? 1 : -1
+                cloud.km = pick.km * .random(in: 0.85...1.2, using: &rng)
                 cloud.life = cloudLifetime(km: pick.km)
                 cloud.age = gone ? 0.15 * cloud.life : 0 // drifting in, it's already a cloud; otherwise it forms
             }
@@ -782,9 +814,10 @@ class WeatherScene: SKScene, BatteryPaced {
 
     /// A new overhead cloud's shadow, somewhere on the ground in view, or drifting in from the upwind side.
     private func overheadCloud(upwind: SIMD2<Double>?) -> (across: Double, away: Double, km: Double, age: Double, life: Double) {
-        let away = 0.05 + 2.4 * pow(.random(in: 0...1), 1.5), km = Double.random(in: 1...2.4), life = cloudLifetime(km: km)
+        let away = 0.05 + 2.4 * pow(.random(in: 0...1, using: &rng), 1.5), km = Double.random(in: 1...2.4, using: &rng)
+        let life = cloudLifetime(km: km)
         let edge = viewpoint.tanH * away + km * 0.5
-        guard let upwind else { return (.random(in: -edge...edge), away, km, .random(in: 0.15...0.75) * life, life) }
+        guard let upwind else { return (.random(in: -edge...edge, using: &rng), away, km, .random(in: 0.15...0.75, using: &rng) * life, life) }
         return (upwind.x > 0 ? -edge : edge, away, km, 0.15 * life, life)
     }
 
@@ -849,14 +882,25 @@ class WeatherScene: SKScene, BatteryPaced {
         float lum = packed.r;
         float tone = clamp((lum - a_lum.x) / max(a_lum.y - a_lum.x, 0.02), 0.0, 1.0);
         float v = 1.0 - uv.y;
+        // A low Sun lights the side of a cloud toward it (a_sun.xy, on its picture), and the faces of its puffs that
+        // turn toward it: the slope of the thickness times the alpha (blurred, and sharp at the edge) is a rough
+        // outward normal, measured over 2% of the width (the GPU's own slopes came out as orange peel, and 0.8% on the
+        // unblurred alpha came out mottled). In the picture's own units, so it mirrors with a mirrored cloud.
+        float e = 0.02;
+        vec4 cx = texture2D(u_texture, uv + vec2(e, 0.0)), cy = texture2D(u_texture, uv + vec2(0.0, e / a_cloud.z));
+        vec2 nrm = -vec2(cx.g / max(cx.a, 0.05) - packed.g, cy.g / max(cy.a, 0.05) - packed.g) / e;
+        float lean = length(nrm);
+        float face = dot(nrm / max(lean, 0.0001), a_sun.xy / max(length(a_sun.xy), 0.0001)) * smoothstep(0.3, 3.0, lean) * smoothstep(0.1, 0.4, c.a);
+        float side = clamp(0.5 + dot(vec2(uv.x - 0.5, (uv.y - 0.5) * a_cloud.z), a_sun.xy) * 1.8 + 0.5 * (1.0 - length(a_sun.xy))
+                           + 0.35 * face * length(a_sun.xy), 0.0, 1.0);
         // Lit from above, as in the photo. A high Sun's light fills a cloud's shadows from inside; a low Sun's
-        // (a_sun.w) doesn't, and they take the sky's colour.
-        float t = (mix(0.3, 0.08, a_sun.w) + mix(0.7, 0.92, a_sun.w) * tone) * (1.0 - 0.5 * v * v);
+        // (a_sun.w) doesn't, and they take the sky's colour; and it lights the side toward it, which at sunset is
+        // the base as often as the top.
+        float t = (mix(0.3, 0.08, a_sun.w) + mix(0.7, 0.92, a_sun.w) * tone) * mix(1.0 - 0.5 * v * v, 0.25 + 0.75 * side, a_sun.w);
         t = mix(t, t * t * 0.9, a_back * 0.6);
-        // A low Sun beyond the cloud (a_sun.z) lights the side of it toward the Sun (a_sun.xy, on its picture) and
-        // shines through its thin edges, all round when it's straight behind. The body we see is in shade.
+        // A low Sun beyond the cloud (a_sun.z) lights the side of it toward the Sun and shines through its thin edges,
+        // all round when it's straight behind. The body we see is in shade.
         float thin = 1.0 - smoothstep(0.2, 0.8, packed.g);
-        float side = clamp(0.5 + dot(vec2(uv.x - 0.5, (uv.y - 0.5) * a_cloud.z), a_sun.xy) * 1.8 + 0.5 * (1.0 - length(a_sun.xy)), 0.0, 1.0);
         float back = side * side * (0.12 + 0.88 * thin) * (0.55 + 0.45 * tone);
         vec3 col = mix(u_cloudAmb * (1.0 - 0.2 * a_back), u_cloudSun, t);
         vec3 rim = u_cloudSun * a_back * 2.0 * smoothstep(0.15, 0.35, a) * (1.0 - a) * (1.0 - a_sun.z); // light through the thin edges
@@ -920,22 +964,31 @@ class WeatherScene: SKScene, BatteryPaced {
         vec3 aux = texture2D(u_aux, v_tex_coord).rgb;
         vec2 screen = u_frame.xy + v_tex_coord * u_frame.zw;
         vec3 albedo = photo.rgb / max(photo.a, 0.004);
-        // Grass out of season: the green of the open ground (not the trees, the chalk or the soil) is regraded.
+        // Grass out of season: the green of the open ground (not the trees or the soil) is regraded. Its own colour
+        // gives way to the grass's average at its own lightness first, as far as the season is from green, so the
+        // bluer grass in shade and the grey-green scrub turn to straw with the rest and not lavender.
         if (u_grass.a > 0.0) {
             float green = smoothstep(-0.03, 0.01, albedo.g - albedo.r) * smoothstep(0.04, 0.12, albedo.g - albedo.b)
                 * (1.0 - smoothstep(0.3, 0.7, aux.g));
             // In patches, as grass greens up through last year's straw and dries out on the thin soil first.
             float patches = texture2D(u_noise, nuv(screen * vec2(7.0, 18.0))).r;
-            albedo *= mix(vec3(1.0), u_grass.rgb, clamp(green * u_grass.a * (0.45 + 1.1 * patches), 0.0, 1.0));
+            vec3 even = dot(albedo, vec3(0.3, 0.59, 0.11)) * vec3(0.953, 1.1, 0.593); // linear R/G 0.75, B/G 0.29
+            albedo = mix(albedo, mix(albedo, even, 0.7 * u_grass.a) * u_grass.rgb, clamp(green * (0.45 + 1.1 * patches), 0.0, 1.0));
         }
         // Snow on the ground: the open grass goes white, shaded by the photo's own light and shade so the hills keep
-        // their form; the trees darken, lose colour and catch snow on their brighter parts.
+        // their form. Thin snow lies on the brighter grass first: under 5 cm the darkest fifth (tufts, dry stems, the
+        // scrub) shows through. The oaks go charcoal-olive, with snow along the tops of their crowns (where the tree
+        // mask thins going up) and on their brighter leaves.
         if (u_snow > 0.0) {
             float lum = dot(albedo, vec3(0.3, 0.59, 0.11));
             vec3 snowy = vec3(0.86, 0.89, 0.94) * clamp(pow(lum / 0.42, 0.55), 0.45, 1.08);
-            vec3 trees = mix(vec3(lum), albedo, 0.35) * 0.62 + vec3(0.8, 0.83, 0.88) * smoothstep(0.3, 0.6, lum) * 0.35;
+            float thr = mix(0.6, 0.385, smoothstep(0.0, 0.6, u_snow)) - smoothstep(0.85, 1.0, u_snow);
+            float cover = smoothstep(thr - 0.05, thr + 0.05, lum) * min(u_snow * 3.0, 1.0);
+            float above = texture2D(u_aux, v_tex_coord + vec2(0.0, 0.008)).g;
+            float cap = max(smoothstep(0.1, 0.45, aux.g - above), smoothstep(0.32, 0.55, lum) * 0.6);
+            vec3 trees = mix(mix(vec3(lum) * vec3(1.0, 1.04, 0.86), albedo, 0.25) * 0.68, snowy, cap * 0.8);
             float open = 1.0 - smoothstep(0.3, 0.7, aux.g);
-            albedo = mix(albedo, mix(trees, snowy, open), u_snow * (0.55 + 0.45 * open));
+            albedo = mix(mix(albedo, trees, min(u_snow * 1.5, 1.0) * 0.9), mix(albedo, snowy, cover), open);
         }
         vec3 land = albedo * albedo * (u_light + vec3(0.75, 0.8, 1.0) * u_flash * 0.15);
         // The photo's far ridges are pale with its own haze. Against a low Sun or a twilight glow they should be
