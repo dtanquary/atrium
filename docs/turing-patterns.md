@@ -47,7 +47,8 @@ Reaction–diffusion: two chemicals spread across the screen at different rates 
 9. **Shader.**
    - **Smoothing.** A cubic B-spline between cells in four linear taps (GPU Gems 2, ch. 20), as Game of Life's Calm look had (cut on 2026-11-14).
    - **Lighting.** Height is the field. The normal comes from Metal's `dfdx`/`dfdy` (see Gotchas) × 28, lit from the upper left, with a soft sheen.
-   - **Colour.** The body edge is `smoothstep(0.25, 0.45)`, running from 55% ink at the edges to ink mixed 35% toward the glow on the ridges. Two inks blend by a slow sine over position and `u_now`.
+   - **Edge.** The body is where the field is over 0.35, and its edge is in focus: a ramp 2.5 device pixels wide round that contour whatever the field's slope there (`edge`, from `dfdx`/`dfdy`), and never narrower than 0.008 of the field, so a flat place (a saddle between two arms, a patch dissolving) keeps a ramp. Until 2026-11-14 it was `smoothstep(0.25, 0.45)` of the field itself, which came to about 24 device pixels and read on a Retina screen as out of focus.
+   - **Colour.** The body runs from 55% ink at the edges to ink mixed 35% toward the glow on the ridges. Two inks blend by a slow sine over position and `u_now`.
    - **Dark Mode** adds a faint glow in the gaps, a background of ink × 0.1, and a vignette.
    - **Light Mode** uses warm paper tinted 6% by the ink, ink at 90%, and a glow halfway to white.
 
@@ -69,7 +70,7 @@ Reaction–diffusion: two chemicals spread across the screen at different rates 
 - `cell` 5 pt, `stepsPerSecond` 60, a 12-step cap per frame. Drift holds of 3, 1, 3 and 1 minutes, with a 2-minute `ease`.
 - Regrow: a patch every 300 steps lasting 960, σ 14 cells in a box of radius 42, kill up to +0.02. Flow: peak 0.012 cells a step, refreshed every 60 steps.
 - Seeds: discs of radius 5, 1 per 800 cells, A 0.5, B 0.24–0.26. Reseed below a peak B of 0.05.
-- Shader: body 0.25–0.45, ridge 0.45–0.8, normal scale 28, diffuse 0.55 + 0.6·(n·l), sheen power 16 at 0.18, gap glow 0.08, vignette 0.3, ink sine 0.01 rad/s.
+- Shader: the body's edge 2.5 device pixels round 0.35 (no narrower than 0.008 of the field), ridge 0.45–0.8, normal scale 28, diffuse 0.55 + 0.6·(n·l), sheen power 16 at 0.18, gap glow 0.08, vignette 0.3, ink sine 0.01 rad/s.
 
 ## Performance
 Measured at CPU 0.9–1.05 ms and GPU 0.3–0.75 ms per frame (release build, 2x, 2026-09-26). GPU cost rises with how much of the screen is pattern. The CPU cost is one step (about 60k cells) per frame at 60 fps, or two at 30 fps: roughly 0.45 ms a step. Faster Speed costs CPU in proportion. At 1× that's about 27 ms of CPU a second (under 3% of one core); at 3× it's about 1.4 ms a frame at 60 fps, or 2.7 ms at 30 fps, which is over budget.
@@ -79,6 +80,8 @@ Since 2026-10-14 the step works on four cells at a time (SIMD4), each lane doing
 Debug builds are much slower (about 29 ms of CPU a frame in `swift test`), as the unsafe-buffer loop isn't optimised; build.sh builds release.
 
 With Motion, a frame at 30 fps (2 steps) costs about 1.1 ms of CPU with Regrow and 1.35 ms with Flow. The step loop always reads the kill and current arrays, which are zero when unused.
+
+**2026-11-14, the edge in focus:** nothing measurable. The render test's GPU read 0.83 ms on each of twelve stills (release build, 2x, 30 fps), against 0.81–0.83 for the old edge in the same state. That state is the GPU at its slow clock, with the Mac otherwise quiet, as a wallpaper finds it; while other builds kept the GPU busy both read anywhere from 0.21 to 0.9. CPU was 0.70–0.95 ms a frame, as before.
 
 **Busyness** (rendered frames 1/15 s apart, average grey-level change per pixel, 90 s in, never a jump): Still 0.03, Regrow 0.07 on Coral, 0.11 on Holes and 0.05 on Spots, and Flow 0.21. That's against 0.22 for Game of Life's Calm look and 1.41 for Classic. Regrow's change is local (a few patches at a time), so these averages undersell how visible it is.
 
@@ -93,6 +96,7 @@ With Motion, a frame at 30 fps (2 steps) costs about 1.1 ms of CPU with Regrow a
 - 2026-09-26: suggested as a calmer relative of Game of Life, after he found Life "so crazy on the eyes". He asked for it as its own wallpaper, or as a sub-option of Game of Life if that fitted better. It's its own wallpaper, because it shares no code or settings with Life, and Shuffle and the menu treat each wallpaper as one unit.
 - 2026-09-26, first look: "really cool but it seems like once the animation settles in and completes it done moving." He enjoyed the growing, and it stopped once growth finished, so Regrow brings growth back and is the default. Flow and Still stay as choices, as he likes to have them. His Game of Life verdict the same day was to keep both looks as a choice.
 - "coral and holes are my favorite modes, all are good": Drift now holds Coral and Holes for 3 minutes each, and the others for 1.
+- 2026-11-14, the review of every wallpaper (7 of 10, "improve"): "Its outlines are about 24 device pixels soft, which on a Retina screen reads as out of focus rather than soft." Dave asked for all its suggestions. The first is the outline in focus (How it works, Shader, Edge). Tried on the same pattern (`turing.seed=3`): a fixed `smoothstep(0.32, 0.38)`, about 6 pixels and softer where the field is shallow, as round Holes; and the edge by the field's slope at 2, 2.5, 3 and 4 pixels. All were clean, with no steps along a contour, and 2.5 was kept, as the review asked. A patch dissolving under Regrow now tapers and draws back like a liquid where it used to fade: frames 0.27 s apart show no pop. No Softness slider was added, as nothing has asked for the old look back.
 
 ## Ideas / next steps
 - **Real references:** colour and relief after real Turing patterns (pufferfish skin, brain coral, a zebra's or angelfish's stripes).
@@ -100,4 +104,4 @@ With Motion, a frame at 30 fps (2 steps) costs about 1.1 ms of CPU with Regrow a
 - **Local variety:** vary f and k across the screen so regions show different patterns (the Waves test above, with more amplitude and a still map rather than a travelling one).
 
 ## Checking it
-`SNAPSHOT_SCENE="Turing Patterns" SNAPSHOT_SECONDS=40 SNAPSHOT_DEFAULTS="turing.pattern=1,turing.palette=Amber" swift test`: pattern 1–4 in the order above, or 0 for Drift. Under 20 seconds it will still be filling in. Check both looks with `SNAPSHOT_APPEARANCE=light|dark`. `turing.seed=3` (any whole number above 0; a test-only key, which nothing else sets) fixes every random draw (the palette if none is pinned, where Drift starts, the seeds and Regrow's patches), so two renders at the same settings come out the same to the byte and a change to the shader can be judged on the same pattern. To explore rates quickly, a numpy copy of the same update (`np.roll` for the Laplacian) runs 3,600 steps of the full grid in about 1.5 s.
+`SNAPSHOT_SCENE="Turing Patterns" SNAPSHOT_SECONDS=40 SNAPSHOT_DEFAULTS="turing.pattern=1,turing.palette=Amber" swift test`: pattern 1–4 in the order above, or 0 for Drift. Under 20 seconds it will still be filling in. Check both looks with `SNAPSHOT_APPEARANCE=light|dark`. `turing.seed=3` (any whole number above 0; a test-only key, which nothing else sets) fixes every random draw (the palette if none is pinned, where Drift starts, the seeds and Regrow's patches), so two renders at the same settings come out the same to the byte and a change to the shader can be judged on the same pattern. `swift test --filter turingPatterns` runs its own tests (`Tests/AtriumTests/TuringPatternsTests.swift`): how wide the edge is. To explore rates quickly, a numpy copy of the same update (`np.roll` for the Laplacian) runs 3,600 steps of the full grid in about 1.5 s.

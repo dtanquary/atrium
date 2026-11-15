@@ -263,8 +263,11 @@ final class TuringPatterns: SKScene {
             vec4 t = g0.y * (g0.x * t00 + g1.x * t10) + g1.y * (g0.x * t01 + g1.x * t11);
             float v = (t.r * 65280.0 + t.g * 255.0) / 65535.0;
 
-            // the pattern as a softly lit relief, like brain coral: v is its height, lit from the upper left
-            float body = smoothstep(0.25, 0.45, v);
+            // the pattern as a softly lit relief, like brain coral: v is its height, lit from the upper left. Its edge is
+            // in focus: 2.5 device pixels wide round the contour at 0.35, whatever the field's slope there, and never
+            // narrower than 0.008 of v, so a flat place (a saddle between two arms, a patch dissolving) keeps a ramp
+            float edge = max(1.25 * length(vec2(dfdx(v), dfdy(v))), 0.004);
+            float body = smoothstep(0.35 - edge, 0.35 + edge, v);
             vec3 n = normalize(vec3(-dfdx(v) * 28.0, -dfdy(v) * 28.0, 1.0));
             vec3 l = normalize(vec3(-0.45, 0.55, 0.7));
             float diffuse = clamp(0.55 + 0.6 * dot(n, l), 0.0, 1.3);
