@@ -304,8 +304,9 @@ def runs(row):
 LAYERS = [("H8", 0, 8, 0, 0.20), ("H4", 0, 8, 4, 0.36), ("H2", 0, 4, 2, 0.54),
           ("V4", 1, 4, 0, 0.72), ("V2", 1, 4, 2, 0.84), ("solid", 0, 2, 1, 0.94)]
 
-def hatch_layers(d, rng, jitter=0.03):
-    """One mask per layer of hatching, with the zigzag links that join one row's end to the next."""
+def hatch_layers(d, rng, cut, jitter=0.03):
+    """One mask per layer of hatching, with the zigzag links that join one row's end to the next. `cut` is the
+    lines drawn before them, which part one patch of hatching from the next."""
     ds = ndi.gaussian_filter(d, 1.2)
     out = []
     for name, axis, every, off, thr in LAYERS:
@@ -324,7 +325,18 @@ def hatch_layers(d, rng, jitter=0.03):
                         lo, hi = max(a0, b0), min(a1, b1)
                         if lo <= hi: m[ya:yb + 1, hi if k % 2 == 0 else lo] = True
         out.append(m.T if axis else m)
-    return out
+    # a pale patch, of the two lightest layers together between the lines that part it from the next (side by side,
+    # not corner to corner, so it doesn't slip across a line one cell wide), that spans fewer than three of their rows is
+    # a scrap, a row or two and an upright between outlines, and goes: a shaded side gets a real patch of hatching or
+    # none. Pale is lighter on average than the next layer's threshold: a dark tone cut small by the lines in it stays.
+    light = (out[0] | out[1]) & ~cut
+    lab, n = ndi.label(light)
+    at = np.arange(d.shape[0])[:, None] % 8
+    y, x = np.nonzero(light & (out[0] & (at == 0) | out[1] & (at == 4)))   # each layer's own rows, not an upright's cells
+    rows = np.bincount(np.unique(lab[y, x] * d.shape[0] + y) // d.shape[0], minlength=n + 1)
+    pale = np.r_[False, np.asarray(ndi.mean(ds, lab, np.arange(1, n + 1))) < LAYERS[2][4]]
+    scrap = ((rows < 3) & pale)[lab] & light
+    return [m & ~scrap if i < 2 else m for i, m in enumerate(out)]
 
 def wanted(d, rect, seed=1):
     """The grid of wanted ink as tiers (0 bare; drawn in order 1, 2, ...): a frame and the bold lines, the other
@@ -336,7 +348,7 @@ def wanted(d, rect, seed=1):
     frame[y0 - o, x0 - o:x0 + pw + o] = frame[y0 + ph + o - 1, x0 - o:x0 + pw + o] = True
     frame[y0 - o:y0 + ph + o, x0 - o] = frame[y0 - o:y0 + ph + o, x0 + pw + o - 1] = True
     lines, major = line_mask(d)
-    layers = hatch_layers(d, rng)
+    layers = hatch_layers(d, rng, lines | frame)
     last = 3 + len(layers)
     tier[lines] = 2
     tier[major | frame] = 1
@@ -419,7 +431,18 @@ def pack(cells, kind, grid, rect, marks=()):
     head = b"LRT1" + struct.pack("<8HIfI", grid.w, grid.h, *rect, int(x[0]), int(y[0]), len(cells) - 1, clock, len(body))
     return head + body + tail(marks), len(out), clock
 
+def check():
+    """`bake.py --check`: the scrap rule in hatch_layers, on a made-up picture. Between two lines, a pale band one row
+    of hatching tall goes, a dark band as small keeps its light rows, and a pale band four rows tall stays."""
+    d = np.zeros((100, 160)); cut = np.zeros(d.shape, bool)
+    cut[[12, 20, 40, 80], :] = True
+    d[13:20, :60] = 0.3; d[13:20, 100:] = 0.7; d[41:80, :60] = 0.3
+    light = np.logical_or(*hatch_layers(d, np.random.default_rng(1), cut)[:2])
+    assert not light[13:20, :60].any() and light[13:20, 100:].any() and light[41:80, :60].sum() > 200, "hatch_layers: the scrap rule"
+    print("bake.py: checked")
+
 if __name__ == "__main__":
+    if "--check" in sys.argv: check(); sys.exit()
     args = [a for a in sys.argv[1:] if a != "--fine"]; fine = "--fine" in sys.argv
     src, dst, names = args[0], args[1], args[2:] or list(PICTURES)
     grid = Grid(fine)

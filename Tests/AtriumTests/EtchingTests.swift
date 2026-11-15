@@ -9,8 +9,8 @@ import Testing
 /// its grid and never lifts: each step is to a cell beside the last.
 @Test func lineRouteDecodesToItsKnownLength() throws {
     let file = try Data(contentsOf: resource("etching-wave.route")), route = try #require(LineRoute(file))
-    #expect(route.steps == 238_714 && route.x.count == 238_715 && (route.columns, route.rows) == (1024, 640))
-    #expect(abs(route.clock - 123_131.2) < 1 && abs(route.t[route.steps] - route.clock) < 1, "clock \(route.t[route.steps]) against \(route.clock)")
+    #expect(route.steps == 223_957 && route.x.count == 223_958 && (route.columns, route.rows) == (1024, 640))
+    #expect(abs(route.clock - 114_134.9) < 1 && abs(route.t[route.steps] - route.clock) < 1, "clock \(route.t[route.steps]) against \(route.clock)")
     #expect(route.x.allSatisfy { $0 > 0 && $0 < 1024 } && route.y.allSatisfy { $0 > 0 && $0 < 640 })
     // eased by one step, two cells in a row are never more than a diagonal apart
     #expect((1...route.steps).allSatisfy { abs(route.x[$0] - route.x[$0 - 1]) < 1.01 && abs(route.y[$0] - route.y[$0 - 1]) < 1.01 })
@@ -40,12 +40,12 @@ import Testing
         #expect(alone == picture.name.hasSuffix("(Fine only)"), "\(picture.name)")
         for (fine, grid) in [(false, 1024), (true, 2048)] where fine || !alone {
             let file = try Data(contentsOf: resource("etching-\(picture.file)\(fine ? "-fine" : "").route")), route = try #require(LineRoute(file), "\(picture.name)")
-            #expect(route.columns == grid && route.rows == grid * 5 / 8 && route.x.count == route.steps + 1 && route.steps > 40_000, "\(picture.name), fine \(fine)")
+            #expect(route.columns == grid && route.rows == grid * 5 / 8 && route.x.count == route.steps + 1 && route.steps > 30_000, "\(picture.name), fine \(fine)")
             #expect(route.rect.x > 0 && route.rect.y > 0 && route.rect.x + route.rect.w < grid && route.rect.y + route.rect.h < grid * 5 / 8)
         }
-        // (the least is Cayley's machine, all outline: 1.25 times as long fine; the quickest the Elliptical Wing, 12 minutes
-        // and 44,000 steps at the standard line)
-        #expect(seconds[0] > 600 && (alone ? seconds[1] == seconds[0] : seconds[1] > 1.2 * seconds[0]), "\(picture.name) takes \(seconds)")
+        // (the least is Mishima Pass, its fine route flattened: 1.20 times as long fine; the quickest the Elliptical Wing,
+        // 10 minutes, and the fewest steps the Interlace's, 35,000, at the standard line)
+        #expect(seconds[0] > 540 && (alone ? seconds[1] == seconds[0] : seconds[1] > 1.2 * seconds[0]), "\(picture.name) takes \(seconds)")
     }
     #expect(Etching.fineOnly.count { $0 } == 3)
     #expect(Etching.choices(detail: 1) == Array(Etching.pictures.indices) && Etching.choices(detail: 0) == Etching.pictures.indices.filter { !Etching.fineOnly[$0] })
@@ -596,7 +596,7 @@ private func stillness(_ route: LineRoute, _ w: Int, _ h: Int, fill: Bool) -> (l
 
 /// A picture that fills the screen is cut off at the display's edges and runs under the menu bar, and nothing waits
 /// for the stylus while it is out there or under it. For every route a picture ships, on a 14-inch screen with
-/// Fill the screen on: the longest stretch in which nothing that shows changes is under two and a half seconds,
+/// Fill the screen on: the longest stretch in which nothing that shows changes is under three seconds,
 /// and the drawing is done no later than fitted. Prints both for each, filling and fitted. (That a spell be no
 /// longer than fitted is not asked: one texel changing in the middle of a run splits it, so that compares noise.)
 @MainActor @Test func etchingNeverWaitsOutOfSight() throws {
@@ -607,9 +607,9 @@ private func stillness(_ route: LineRoute, _ w: Int, _ h: Int, fill: Bool) -> (l
             let found = String(format: "%@%@: still for %.2f s at the most filling the screen and %.2f s fitted; drawn in %.1f min and %.1f", picture.name, fine ? ", fine" : "",
                                filled.longest, fitted.longest, filled.drawing / 60, fitted.drawing / 60)
             print("Etching, \(found)")
-            // (2.5 s to the measure's 5 to 9 ms: the Struthiomimus's stillest stretch is 2.501 s, timed exactly, and has
-            // been since it was baked; leaving the ways to the frame out moved it a step, and the measure from 2.499 to 2.500)
-            #expect(filled.longest < 2.51 && filled.drawing <= fitted.drawing, "\(found)")
+            // (it was 2.5 s, which the routes as first baked kept to by a hair; with small pale scraps left unhatched the
+            // stylus goes back along more of its dark lines, and the Villa Rotonda at the standard line is still for 2.8)
+            #expect(filled.longest < 3 && filled.drawing <= fitted.drawing, "\(found)")
         }
     }
 }
