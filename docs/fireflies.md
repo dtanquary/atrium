@@ -83,8 +83,8 @@ Time is accumulated from `frameTime` in `update(_:)`, so it pauses with the view
 - **Their light on the grass:** 0.15 of the albedo at the middle of a pool 0.5 m round, eight at a time, flies within 14 m and under 0.7 m.
 
 ## Performance
-CPU 0.54 ms and GPU 0.52 ms per frame (release build, 2x, 2026-09-26).
-- **CPU:** a loop over 800 flies that only touches the ones glowing, about 150. A few a frame get new attributes as they finish a glow.
+CPU 0.41 ms and GPU 0.37 ms per frame (release build, 2x, seed 2, the fastest of six runs while other builds ran, 2026-11-15; 0.49 and 0.47 before the review's changes, measured the same way back to back; at twice the fireflies 0.46 and 0.41, from 0.53 and 0.48). It was 0.54 and 0.52 on 2026-09-26.
+- **CPU:** a loop over 800 flies that only touches the ones glowing, about 150, and hands their lights on the grass to two uniforms. A few a frame get new attributes as they finish a glow, and their lift from a 64-column table of the depth map, drawn once at build.
 - **GPU:**
   - the ground, once over the photo's rect: five noise calls and two texture reads a pixel
   - the sky, from 0.46 of the height up
