@@ -1,5 +1,8 @@
 import Foundation
+import ImageIO
+import SpriteKit
 import Testing
+import UniformTypeIdentifiers
 @testable import Atrium
 
 /// Rain on Glass's weather physics against the numbers the research worked out (docs/rain-on-glass.md).
@@ -31,4 +34,32 @@ import Testing
     #expect(rainBackdrops.standard == "Hamburg" && rainBackdrop(picked: nil) == "Hamburg")
     #expect(rainBackdrop(picked: "City") == "City")
     #expect(Set((0..<40).map { _ in rainBackdrop(picked: "") }).count > 1)
+}
+
+/// Every palette's city is laid out as a city is, not sprinkled evenly: most of its lights are dim and a few are many
+/// times brighter, and they crowd towards the horizon. One of them bakes, by night and by day, into three pictures
+/// that aren't flat; `SNAPSHOT_DIR` keeps those to look at, and `RAIN_CITY` picks which palette's.
+@MainActor @Test func rainCityIsLaidOutLikeACity() throws {
+    for (index, palette) in rainPalettes.enumerated() {
+        let lights = RainCity.lights(palette: index), powers = lights.map(\.power).sorted()
+        #expect(lights.count > 150)
+        #expect(powers[powers.count / 2] < 0.1 && powers[powers.count * 49 / 50] > 10 * powers[powers.count / 2], "\(palette.name)'s lights are all much the same")
+        let high = lights.filter { $0.at.y > RainCity.horizon - 0.2 && $0.at.y < RainCity.horizon + 0.05 }.count
+        #expect(high * 2 > lights.count, "\(palette.name)'s lights don't crowd towards the horizon")
+    }
+    let env = ProcessInfo.processInfo.environment, index = rainPalettes.firstIndex { $0.name == env["RAIN_CITY"] } ?? 0
+    for night in [true, false] {
+        let baked = RainCity.textures(palette: index, night: night)
+        for (texture, name) in [(baked.far, "far"), (baked.near, "near"), (baked.haze, "haze")] {
+            let image = texture.cgImage()
+            let bytes = try #require(image.dataProvider?.data as Data?)
+            #expect(Set(stride(from: 0, to: bytes.count - 4, by: 4 * 97).map { bytes[$0] }).count > 8, "the \(name) texture is flat")
+            if let dir = env["SNAPSHOT_DIR"] {
+                let url = URL(fileURLWithPath: dir).appendingPathComponent("city-\(rainPalettes[index].name)-\(night ? "night" : "day")-\(name).png")
+                let destination = try #require(CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil))
+                CGImageDestinationAddImage(destination, image, nil)
+                CGImageDestinationFinalize(destination)
+            }
+        }
+    }
 }
