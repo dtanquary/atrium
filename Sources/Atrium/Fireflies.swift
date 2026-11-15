@@ -19,6 +19,7 @@ final class Fireflies: SKScene {
         var x: CGFloat = 0, y: CGFloat = 0, d: CGFloat = 1
         var vx: CGFloat = 0, vd: CGFloat = 0 // its drift between flashes, m/s
         var lamp = -1 // which of the lights on the grass it has while it glows, or -1
+        var lift: CGFloat = 0 // how far the photo's own ground stands above the ground plane under it
         var next: CGFloat // when its next flash starts
         let period: CGFloat
     }
@@ -39,6 +40,9 @@ final class Fireflies: SKScene {
     let lamps = [SKUniform(name: "u_lamps0", matrixFloat4x4: .init()), SKUniform(name: "u_lamps1", matrixFloat4x4: .init())]
     private var light = [SIMD4<Float>](repeating: .zero, count: 8), taken = [Bool](repeating: false, count: 8)
     private var photoFrame = CGRect.zero
+    /// The photo's log distance down 64 columns, bottom row first, to lift flies over ground that rises above the plane.
+    /// Trees (and the sky) read as farther than any fly, so none is lifted over them.
+    private var columns: [[CGFloat]] = []
 
     private var flies: [Fly] = []
     // "fireflies.seed" is for the tests, which want the same field twice; nothing else sets it.
@@ -86,6 +90,11 @@ final class Fireflies: SKScene {
 
         let width = size.height * MeadowPhoto.top * MeadowPhoto.aspect * stretch, height = width / MeadowPhoto.aspect
         photoFrame = CGRect(x: (size.width - width) / 2, y: size.height * MeadowPhoto.top - height, width: width, height: height)
+        let aux = MeadowPhoto.aux.cgImage(), rows = aux.height
+        var rgba = [UInt8](repeating: 0, count: 64 * rows * 4)
+        CGContext(data: &rgba, width: 64, height: rows, bitsPerComponent: 8, bytesPerRow: 64 * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)?.draw(aux, in: CGRect(x: 0, y: 0, width: 64, height: rows))
+        columns = (0..<64).map { c in (0..<rows).reversed().map { let i = ($0 * 64 + c) * 4; return rgba[i + 1] > 127 ? CGFloat(rgba[i]) / 255 : 1 } }
         let shared = lamps + [
             SKUniform(name: "u_aux", texture: MeadowPhoto.aux), fog, wind, WallpaperTime.now,
             SKUniform(name: "u_frame", vectorFloat2: [Float(size.height * MeadowPhoto.top - height), Float(height)]),
@@ -97,7 +106,7 @@ final class Fireflies: SKScene {
             let slice = SKSpriteNode(texture: photo, size: CGSize(width: width, height: height))
             slice.anchorPoint = CGPoint(x: 0.5, y: 1)
             slice.position = CGPoint(x: size.width / 2, y: size.height * MeadowPhoto.top)
-            slice.zPosition = b > 1e3 ? -500 : 100 - (a + b) / 2
+            slice.zPosition = b > 1e3 ? -500 : 100 - b
             slice.shader = SKShader(source: shaderCommon + Self.groundSource, uniforms: shared + [
                 SKUniform(name: "u_slice", vectorFloat2: [Float(MeadowPhoto.depth(a)), Float(MeadowPhoto.depth(b))]),
             ])
@@ -119,12 +128,12 @@ final class Fireflies: SKScene {
             // third of it, and out over nearly half.
             let fly = flies[i], s = u * flash, alpha = smoothstep(0, 0.35, u) * (1 - smoothstep(0.55, 1, u))
             let x = fly.x + fly.vx * s, y = fly.y + 0.03 * (1.6 * u * u - 0.6 * u), d = fly.d + fly.vd * s
-            fly.node.position = project(x, y, d)
+            fly.node.position = project(x, fly.lift + y, d)
             fly.node.alpha = alpha
             fly.node.isHidden = false
             // Light on the grass round it, or on the tops of the grass under it, half a metre round and a third as tall
             // on screen (blades stand up), fading the higher it flies: for the low ones within 14 m whose light shows.
-            let ground = project(x, min(y, 0.3), d)
+            let ground = project(x, fly.lift + min(y, 0.3), d)
             if fly.lamp < 0, u < 0.5, alpha < 0.1, d < 14, y < 0.7, frame.contains(ground), let free = taken.firstIndex(of: false) {
                 (taken[free], flies[i].lamp) = (true, free)
             }
@@ -156,7 +165,7 @@ final class Fireflies: SKScene {
         let heading = CGFloat.random(in: 0...(2 * .pi), using: &rng), speed = CGFloat.random(in: 0.02...0.05, using: &rng)
         fly.vx = cos(heading) * speed
         fly.vd = sin(heading) * speed
-        dress(fly)
+        dress(&fly)
     }
 
     /// After a flash: dark again, flying on and turning a little until the next, or somewhere new once it's out of view.
@@ -170,7 +179,7 @@ final class Fireflies: SKScene {
         if fly.d < nearest || fly.d > treeline || abs(project(fly.x, 0, fly.d).x - size.width / 2) > size.width * 0.55 {
             spawn(&fly)
         } else {
-            dress(fly)
+            dress(&fly)
         }
     }
 
@@ -179,10 +188,21 @@ final class Fireflies: SKScene {
         exp(-CGFloat(fog.floatValue) * (0.1 + 2.2 * pow(max(MeadowPhoto.depth(d), 0), 2)))
     }
 
+    /// How far the photo's own ground stands above the ground plane, in metres, `d` metres away at `x` across: where
+    /// the field rises to the right, a fly on the plane would be inside it, behind a nearer slice of grass that cuts
+    /// it in half. Nothing where the ground is lower, and never over trees.
+    func lift(_ x: CGFloat, _ d: CGFloat) -> CGFloat {
+        let foot = project(x, 0, d), far = MeadowPhoto.depth(d)
+        let column = columns[min(max(Int((foot.x - photoFrame.minX) / photoFrame.width * 64), 0), 63)]
+        let row = column.firstIndex { $0 >= far } ?? 0 // where the photo's ground is that far, up from its bottom
+        return max(0, photoFrame.minY + (CGFloat(row) + 0.5) / CGFloat(column.count) * photoFrame.height - foot.y) * d / (size.height * focal)
+    }
+
     /// Dresses a firefly as a soft orb, its glow about 4.5 cm across in the world, so it shrinks with distance to a
-    /// point by the treeline. Near ones sometimes sit in a pale halo, and now and then there's a halo alone, a
-    /// firefly out of focus.
-    private func dress(_ fly: Fly) {
+    /// point by the treeline, and lifts it over the photo's own ground. Near ones sometimes sit in a pale halo, and now
+    /// and then there's a halo alone, a firefly out of focus.
+    private func dress(_ fly: inout Fly) {
+        fly.lift = lift(fly.x, fly.d)
         let spread = (CGFloat.random(in: -1...1, using: &rng) + .random(in: -1...1, using: &rng) + .random(in: -1...1, using: &rng)) * 0.3
         let f = size.height * focal, near = fly.d < 12, roll = CGFloat.random(in: 0...1, using: &rng)
         var r = min(max(f * 0.045 / fly.d * exp(spread), 1), 9)

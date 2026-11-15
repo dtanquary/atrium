@@ -33,7 +33,7 @@ A research agent measured all three and read up on real fireflies. Its notes are
    - Deep blue overhead, paler toward the treeline, with a faint warm afterglow (a little stronger to the right).
    - A few stars, which fade out with the fog.
    - Fog lightens it low down.
-4. **Ground** (`groundSource`), drawn five times, once per slice of distance (0–5, 5–9, 9–16, 16–28 and 28+ m, the last behind every firefly). Each slice sits at z `100 − its middle distance`, so fireflies pass behind nearer ground. In each slice:
+4. **Ground** (`groundSource`), drawn five times, once per slice of distance (0–5, 5–9, 9–16, 16–28 and 28+ m, the last behind every firefly). Each slice sits at z `100 − its far edge`, so a firefly is drawn over its own slice and every farther one, and behind only the slices wholly nearer than it. In each slice:
    - The albedo is lit by a dim blue skylight, `(0.03, 0.036, 0.042)`, with a 15% Purkinje shift toward blue-grey.
    - **Fog** is clear close by and thickens with the square of the log distance: `1 − exp(−fog·(0.1 + 2.2·far²)·wisps·low)`.
      - `low` thins it up the trees (down 85% by 70% of their height), so mist pools at their foot while the crowns stay a dark silhouette.
@@ -53,6 +53,7 @@ A research agent measured all three and read up on real fireflies. Its notes are
    - **Where they are:**
      - Most are spread evenly over the meadow's area, 3–50 m out, so there are many more far off than near, crowding toward the treeline as in photos of real fields. A third are spread evenly by distance instead, to fill the middle of the field.
      - They fly 0.15–1.75 m up, weighted low; the few above eye height show against the trees.
+     - Up from the photo's own ground, not the plane's: far off to the right the field rises above the plane (by up to 24 pt on screen at 30 m), and there each is lifted by the difference (`lift`). It's read once from the aux map, drawn down to 64 columns at build: up each column from the bottom to the first row as far as the fly. Trees count as farther than any fly, so none is lifted over them; where the ground is lower than the plane (the left), nothing changes. A near fly in the middle rises a little too (up to 32 pt at 8 m), where the map puts the near field a little higher than the plane.
      - They drift at 0.02–0.05 m/s, turning up to 0.8 rad between flashes. Once one drifts out of view or past the treeline, it's put somewhere new.
    - **Flashing:**
      - Each has a period of 6–10 s, with ±15% jitter each time.
@@ -98,8 +99,8 @@ CPU 0.54 ms and GPU 0.52 ms per frame (release build, 2x, 2026-09-26).
 ## Gotchas and shortcuts
 - **Fading:** orbs fade with node alpha, which a SpriteKit custom shader gets as `v_color_mix.a`.
 - **Metal naming:** `half` is a reserved word in Metal, so don't name a shader variable that.
-- **Depth slices:** a firefly is in front of or behind a whole slice, so it can pass in front of grass up to half a slice nearer than it. The slices are narrow near the camera, where it shows.
-- **Flat ground plane:** the plane underestimates the far end of the field, which rises to the right.
+- **Depth slices:** a firefly is in front of or behind a whole slice, so it's drawn over grass up to a slice nearer than it (it's above that grass on screen, so it doesn't show), and only a slice wholly nearer hides it. With each slice at its middle distance, a low fly in the far half of its own slice was cut along that slice's far edge, a ruler-straight line through the orb.
+- **Flat ground plane:** the plane underestimates the far end of the field, which rises to the right. Flies there were placed inside the rising ground, behind the 16–28 m slice, and cut in half along its edge; `lift` puts them back on the photo's ground. Rendering seeds 1–6 with every slice behind every fly and comparing, the grass hid 1,150–6,500 pixels of fireflies a frame before, all of it cuts, and none after.
 - **Wheat, not grass:** the photo's field is young wheat. At blue hour it reads as a meadow.
 
 ## Dave's feedback and decisions
@@ -125,6 +126,7 @@ CPU 0.54 ms and GPU 0.52 ms per frame (release build, 2x, 2026-09-26).
   - **Light on the grass under near flashes,** the doc's own idea: the orbs sat on the picture, the grass under a near one exactly as dark as beside it. Now the low near ones light the blades round them. A pool on the ground under the fly, lit by its true distance through the depth map, was tried first: the map's ripples made thin wavy strips, so it's a soft pool on screen. At the review's +8 to +10 of 255 it couldn't be seen at 100%; at 0.15 (+15 to +25) it reads as light on the blades and still calm.
 
   - **The out-of-focus firefly is a firefly** (it was a grey-teal stain with a ragged edge and blocky grain, left over from the painted look: "a smudge on the lens"). Now a faint cream disc, brighter at its rim. Only the halo alone changed; every orb, and the halo round an orb, is the same to the byte. The review asked whether the grey one was part of the orbs Dave likes: `2-side-by-side.jpg` in the session's shots shows both, for him to choose.
+  - **No more orbs cut in half** by a straight edge: each slice now sits at its far edge, and flies are lifted over the photo's own ground where it rises above the plane. The review offered either softening the slices' edges or the lift; the lift alone left the cut along a fly's own slice, so it took both. With them the grass hides no firefly at all (see Gotchas).
 
 ## Ideas / next steps
 - **Synchronous flashing,** like *Photinus carolinus*: bursts of 4–8 flashes 0.5 s apart, 6–9 s dark, relayed across the field at about 0.5 m/s.
