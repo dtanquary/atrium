@@ -292,8 +292,10 @@ final class EarthFromOrbit: SKScene, BatteryPaced {
                 vec3 ground = day * (1.0 - 0.6 * sunward);
 
                 float daylight = smoothstep(-0.12, 0.1, sun) * (0.25 + 0.95 * max(sun, 0.0));
+                // sunlight through the long path of air goes copper and rose in the last few degrees before night
+                vec3 sunlight = daylight * mix(vec3(1.3, 0.75, 0.5), vec3(1.0), smoothstep(-0.02, 0.12, sun));
                 // a little earthshine keeps the night side's shape, and shows the clouds there faintly
-                vec3 colour = mix(ground, cloudColour, cloud * 0.95) * (daylight + 0.03);
+                vec3 colour = mix(ground, cloudColour, cloud * 0.95) * (sunlight + 0.03);
                 vec3 lights = night * night * vec3(1.0, 0.82, 0.55) * 2.2;
                 colour += lights * (1.0 - smoothstep(-0.2, 0.02, sun)) * (1.0 - 0.8 * cloud); // cloud dims, not hides
 

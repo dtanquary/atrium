@@ -18,6 +18,7 @@ The whole Earth seen from high above the viewer's own location, like a geostatio
   - Each pixel becomes a point on the sphere, turned Earth-fixed through `u_basis`, then latitude/longitude texture coordinates.
   - It samples the day map (`u_texture`), the night-lights map (`u_night`), and the cloud map (see Clouds below). Both maps are `sharedTexture`s, so every display and Settings' live copy share one of each.
   - **Daylight** = `smoothstep(−0.12, 0.1, sun·n) · (0.25 + 0.95·max(sun·n, 0))`, plus 0.03 of earthshine so the night side keeps its shape.
+  - **The warm line** (2026-11-15): daylight is tinted `mix((1.3, 0.75, 0.5), 1, smoothstep(−0.02, 0.12, sun·n))`, so cloud and ground go copper and rose in the last 7° or so before night, sunlight through the long path of air, as in pictures from orbit, where the band was neutral grey. The review proposed (1, 0.62, 0.38) over −0.05…0.25: rendered, it was a band 15° wide of muddy tan, since orange on dim grey reads as brown. A physical Rayleigh tint (`exp(−τ·(airmass − 1))`, τ 0.05/0.1/0.24) was worse, a sepia wash over half the day side. The narrower, redder band reads as light, not dirt; at noon over the Americas in November it lies across the Arctic, where the Sun is that low all day.
   - **City lights:** night², tinted warm ×2.2, faded in past the terminator.
   - **Clouds:** `cloud = smoothstep(0.42, 0.95, map)`, crossfaded from `u_cloudsBefore` to `u_clouds` by `u_cloudFade`. Only during that minute's fade is the old map read at all (`if (u_cloudFade < 1.0)`, a branch on a uniform, so the GPU skips it whole): it used to be read at every pixel all the time, holding the same map as the new one. The ground mixes toward the cloud's colour by `cloud × 0.95` before lighting, so clouds are lit by the same daylight and earthshine: bright by day, faint grey on the night side. They dim city lights by `1 − 0.8·cloud` (lights glow through thin cloud) and block sun glint.
   - **The clouds' body** (2026-11-15, from the review of 14 November: clouds read as "cut paper" and "a featureless grey sheet"). The colour follows the map, from (0.62, 0.66, 0.72) for thin decks to white for the thick, cold tops (`smoothstep(0.55, 1, map)`), in place of one grey (0.8, 0.82, 0.86), so the sheets keep the swirls that are in the data. And the map is read once more a step toward the Sun along the ground (`uv2`): as far as a cloud top 8 km up throws its shadow, `0.0013 / sin(height)` of an Earth radius along the Sun's direction, at most 0.02 (1.1°). With the Sun high that's under a pixel, and nothing shows; near the terminator it's 6–8 pixels. A cloud standing above the cloud there is lit, one below it is in its shade (`× clamp(1 + 0.4·(cloud − sunward), 0.55, 1.12)`), and the ground is darkened by it (`× 1 − 0.6·sunward`), the cloud's shadow. Frontal bands get a lit edge and a shaded back, and cellular fields show their cells, in the band near the terminator that was the flattest part of the picture. During a fade the step is read from both maps too.
@@ -103,7 +104,7 @@ All are read live through `Self.knobs[i].value` every frame (in `knobs` order: I
 - **Globe:** radius 0.43 h, centre (0.58 w, 0.48 h), margin 1.12.
 - **Timing:** sun and view refresh every 30 s; orbit ring redraws at most every 5 s; ISS poll every 60 s.
 - **ISS marker:** 14 pt, pulsing to 2.2× over 1.6 s.
-- **Shader:** city-light gain 2.2, glint power 90, halo falloff 40.
+- **Shader:** city-light gain 2.2, glint power 90, halo falloff 40; warm line (1.3, 0.75, 0.5) up to sun·n 0.12.
 - **Stars:** density one per 2,500 pt².
 
 ## Performance
@@ -132,7 +133,7 @@ All are read live through `Self.knobs[i].value` every frame (in `knobs` order: I
 - **Observed lightning** instead of forecast storms: NOAA GOES GLM is public domain but Americas-only, and ships as NetCDF every 20 s. Blitzortung's terms restrict reuse.
 - **Lightning that lights the cloud** in the shader (see the ponytail note under Lightning).
 - Cloud drift between the 3-hourly maps.
-- The Moon, and the terminator's twilight band.
+- The Moon. The terminator's warm line is in (2026-11-15); a blue twilight glow past it, lit by the sky, isn't.
 - A time-lapse or preview setting.
 - Settings for zoom and framing.
 - Correcting the orbit ring for Earth's spin.
