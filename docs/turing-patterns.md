@@ -54,7 +54,7 @@ Reaction–diffusion: two chemicals spread across the screen at different rates 
 ## Time and appearance
 - The simulation runs on `frameTime`, and the ink drift runs on `u_now`.
 - Dark and Light looks are picked from `systemIsDark` when the scene is built.
-- Each load starts from fresh seeds, with a random palette unless one is pinned and a random point on Drift's loop.
+- Each load starts from fresh seeds, with a random palette unless one is pinned and a random point on Drift's loop, all drawn from one generator (`rng`) that `turing.seed` can fix for the render tests.
 
 ## Settings
 
@@ -100,4 +100,4 @@ With Motion, a frame at 30 fps (2 steps) costs about 1.1 ms of CPU with Regrow a
 - **Local variety:** vary f and k across the screen so regions show different patterns (the Waves test above, with more amplitude and a still map rather than a travelling one).
 
 ## Checking it
-`SNAPSHOT_SCENE="Turing Patterns" SNAPSHOT_SECONDS=40 SNAPSHOT_DEFAULTS="turing.pattern=1,turing.palette=Amber" swift test`: pattern 1–4 in the order above, or 0 for Drift. Under 20 seconds it will still be filling in. Check both looks with `SNAPSHOT_APPEARANCE=light|dark`. To explore rates quickly, a numpy copy of the same update (`np.roll` for the Laplacian) runs 3,600 steps of the full grid in about 1.5 s.
+`SNAPSHOT_SCENE="Turing Patterns" SNAPSHOT_SECONDS=40 SNAPSHOT_DEFAULTS="turing.pattern=1,turing.palette=Amber" swift test`: pattern 1–4 in the order above, or 0 for Drift. Under 20 seconds it will still be filling in. Check both looks with `SNAPSHOT_APPEARANCE=light|dark`. `turing.seed=3` (any whole number above 0; a test-only key, which nothing else sets) fixes every random draw (the palette if none is pinned, where Drift starts, the seeds and Regrow's patches), so two renders at the same settings come out the same to the byte and a change to the shader can be judged on the same pattern. To explore rates quickly, a numpy copy of the same update (`np.roll` for the Laplacian) runs 3,600 steps of the full grid in about 1.5 s.

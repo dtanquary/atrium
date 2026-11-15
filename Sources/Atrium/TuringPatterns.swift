@@ -41,19 +41,24 @@ final class TuringPatterns: SKScene {
     private var texture: SKMutableTexture!
     private var lastTime: TimeInterval?
     private var owed = 0.0
-    private var drift = Double.random(in: 0..<loop) // steps along Drift's loop; a new start each load
+    private var drift = 0.0 // steps along Drift's loop; a new start each load
     private var steps = 0
     private var kill: [Float] = [], flowX: [Float] = [], flowY: [Float] = [] // Motion's extra kill rate and current, per cell
     private var patches: [(x: Int, y: Int, age: Int)] = [] // Regrow's, age in steps
     private var flowing = false
+    /// Each load's draws: its palette, where Drift starts, its seeds and Regrow's patches. ("turing.seed" is for the
+    /// tests, which want the same pattern twice; nothing else sets it.)
+    private var rng = SplitMix(state: UInt64(max(UserDefaults.standard.integer(forKey: "turing.seed"), 0)))
 
     override func sceneDidLoad() {
+        if rng.state == 0 { rng.state = .random(in: 1...UInt64.max) }
         backgroundColor = .black
         cols = Int((size.width / cell).rounded(.up))
         rows = Int((size.height / cell).rounded(.up))
         stride = cols + 2
         a = Array(repeating: 1, count: stride * (rows + 2))
         b = Array(repeating: 0, count: a.count)
+        drift = .random(in: 0..<Self.loop, using: &rng)
         for _ in 0..<cols * rows / 800 { seed() }
         nextA = a
         nextB = b
@@ -66,7 +71,7 @@ final class TuringPatterns: SKScene {
         let board = SKSpriteNode(texture: texture, size: CGSize(width: CGFloat(cols) * cell, height: CGFloat(rows) * cell))
         board.position = CGPoint(x: size.width / 2, y: size.height / 2)
         let chosen = UserDefaults.standard.string(forKey: "turing.palette") ?? ""
-        let palette = Self.palettes.first { $0.name == chosen } ?? Self.palettes.randomElement()!
+        let palette = Self.palettes.first { $0.name == chosen } ?? Self.palettes.randomElement(using: &rng)!
         let (ink, ink2, glow) = systemIsDark ? (palette.ink, palette.ink2, palette.glow) : (palette.ink * 0.9, palette.ink2 * 0.9, simd_mix(palette.ink, .one, SIMD3(repeating: 0.5)))
         let paper = systemIsDark ? palette.ink * 0.1 : simd_mix(SIMD3(0.93, 0.92, 0.89), palette.ink, SIMD3(repeating: 0.06))
         board.shader = SKShader(source: Self.shader, uniforms: [
@@ -81,11 +86,11 @@ final class TuringPatterns: SKScene {
     /// A disc of the second chemical, from which a pattern grows. Smaller than 9 cells across, most die out. A little
     /// noise breaks its symmetry; much more shows as mottling in the lighting while it's young.
     private func seed() {
-        let cx = Int.random(in: 1...cols), cy = Int.random(in: 1...rows)
+        let cx = Int.random(in: 1...cols, using: &rng), cy = Int.random(in: 1...rows, using: &rng)
         for y in cy - 5...cy + 5 where (1...rows).contains(y) {
             for x in cx - 5...cx + 5 where (1...cols).contains(x) && (x - cx) * (x - cx) + (y - cy) * (y - cy) <= 25 {
                 a[y * stride + x] = 0.5
-                b[y * stride + x] = Float.random(in: 0.24...0.26)
+                b[y * stride + x] = Float.random(in: 0.24...0.26, using: &rng)
             }
         }
     }
@@ -127,7 +132,7 @@ final class TuringPatterns: SKScene {
     /// 6 s held and 6 s down. The pattern there dissolves, then grows back in from the edges with a new shape, as
     /// zebrafish regrow their stripes after an injury. About three are active at once, so something is always growing.
     private func regrow() {
-        if steps % 300 == 0 { patches.append((Int.random(in: 1...cols), Int.random(in: 1...rows), 0)) }
+        if steps % 300 == 0 { patches.append((Int.random(in: 1...cols, using: &rng), Int.random(in: 1...rows, using: &rng), 0)) }
         patches = patches.map { ($0.x, $0.y, $0.age + 1) }.filter { $0.age < 960 }
         guard steps % 15 == 0 else { return }
         clear(&kill)
