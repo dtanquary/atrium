@@ -69,7 +69,7 @@ final class PixelRailway: SKScene {
     private let texture: SKMutableTexture
     private var pixels: [UInt32]
     private var night: Float = 0, warm = SIMD3<Float>(1, 1, 1), litAt = Date.distantPast, checkedAt = Date()
-    private var last: TimeInterval?
+    private var last: TimeInterval?, painted: TimeInterval = -.infinity
     private var building = false, retired = false
 
     override convenience init(size: CGSize) {
@@ -85,6 +85,7 @@ final class PixelRailway: SKScene {
         super.init(size: size)
         let canvas = SKSpriteNode(texture: texture, size: CGSize(width: CGFloat(plan.w) * plan.pixel, height: CGFloat(plan.h) * plan.pixel))
         canvas.position = CGPoint(x: size.width / 2, y: size.height / 2)
+        canvas.yScale = -1 // the railway draws rows from the top, and a mutable texture takes them from the bottom
         addChild(canvas)
         (night, warm) = lightNow()
         litAt = Date()
@@ -183,7 +184,9 @@ final class PixelRailway: SKScene {
         railway.advance(frameTime(currentTime, &last))
         if Date().timeIntervalSince(litAt) > 30 { (night, warm) = lightNow(); litAt = Date() }
         if Date().timeIntervalSince(checkedAt) > 5 { checkedAt = Date(); rebuildIfNeeded() } // a new period's layout
-        paint()
+        // the trains step whole art pixels at up to 18 a second, so a picture 30 times a second shows every step; at
+        // 60 fps (120 on ProMotion) the view shows each picture twice (four times), not drawn and uploaded again
+        if currentTime - painted >= 1 / 30.0 - 0.002 { paint(); painted = currentTime }
     }
 
     private func paint() {

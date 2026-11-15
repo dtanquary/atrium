@@ -14,7 +14,7 @@ private func save(_ railway: Railway, night: Float, _ name: String, scale: Int =
     var px = [UInt32](repeating: 0, count: w * h)
     px.withUnsafeMutableBufferPointer { railway.draw(night: night, into: $0) }
     var big = [UInt32](repeating: 0, count: w * h * scale * scale)
-    for y in 0..<(h * scale) { for x in 0..<(w * scale) { big[y * w * scale + x] = px[(h - 1 - y / scale) * w + x / scale] } } // rows from the bottom
+    for y in 0..<(h * scale) { for x in 0..<(w * scale) { big[y * w * scale + x] = px[(y / scale) * w + x / scale] } }
     let dir = FileManager.default.temporaryDirectory.appendingPathComponent("atrium-railway")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     let data = big.withUnsafeBytes { Data($0) }
@@ -242,9 +242,9 @@ private func save(_ railway: Railway, night: Float, _ name: String, scale: Int =
     var noon = [UInt32](repeating: 0, count: railway.w * railway.h), gold = noon
     noon.withUnsafeMutableBufferPointer { railway.draw(night: 0, into: $0) }
     gold.withUnsafeMutableBufferPointer { railway.draw(night: 0, warm: [1.08, 0.88, 0.78], into: $0) }
-    let (w, h, shaded) = (railway.w, railway.h, railway.statics.shaded)
-    func rgb(_ px: [UInt32], _ i: Int) -> SIMD3<Float> { // rows from the bottom
-        let p = px[(h - 1 - i / w) * w + i % w]
+    let shaded = railway.statics.shaded
+    func rgb(_ px: [UInt32], _ i: Int) -> SIMD3<Float> {
+        let p = px[i]
         return SIMD3(Float(p & 0xFF), Float(p >> 8 & 0xFF), Float(p >> 16 & 0xFF))
     }
     let lit = shaded.indices.first { !shaded[$0] }!, cool = shaded.indices.first { shaded[$0] }!
@@ -278,6 +278,5 @@ private func save(_ railway: Railway, night: Float, _ name: String, scale: Int =
     a.withUnsafeMutableBufferPointer { railway.draw(night: 0, into: $0) }
     railway.advance(0.25); railway.advance(0.25) // into the next tick (it steps at most 0.25 s at a time)
     b.withUnsafeMutableBufferPointer { railway.draw(night: 0, into: $0) }
-    let row = { (i: Int) in (railway.h - 1 - i / railway.w) * railway.w + i % railway.w } // rows from the bottom
-    #expect(glints.filter { a[row($0)] != b[row($0)] }.count > glints.count / 5)
+    #expect(glints.filter { a[$0] != b[$0] }.count > glints.count / 5)
 }

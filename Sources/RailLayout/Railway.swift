@@ -13,7 +13,8 @@ public final class Railway {
     private let roadCar: RailVehicle
     /// The picture under the trains at the last night level and low Sun's warmth drawn, packed, and those.
     private var under: [UInt32] = [], underNight: Float = -1, underWarm = SIMD3<Float>(repeating: -1)
-    private var frame: [UInt32], depth: [Float]
+    /// The canvas being drawn: the caller's, while `draw` runs, so nothing is copied into it afterwards.
+    private var frame = UnsafeMutableBufferPointer<UInt32>(start: nil, count: 0), depth: [Float]
     /// The contact wire, where the era has one: each pixel it crosses and its nearest depth there.
     private let wire: [(i: Int, d: Float)]
     /// Each turnout's switch rails as set each way (normal, reverse), pixels and depths, and the rail's colour by day
@@ -78,7 +79,6 @@ public final class Railway {
         sim = make()
         roadCar = RailArt.roadVehicle(era, seed: layout.seed)
         wire = era.look.wire ? Self.wire(layout, scenery, view) : []
-        frame = Array(repeating: 0, count: width * height)
         depth = statics.depth
         shadowTone = season.snow ? RailLight.snowShadow : RailLight.shadow
         shadedIn = Array(repeating: 0, count: width * height)
@@ -215,10 +215,13 @@ public final class Railway {
         return (Double(g.nx) / 4, Double(g.nz))
     }
 
-    /// Draws the layout with its trains where they are now into `out` (premultiplied RGBA, rows from the bottom,
-    /// as a mutable texture takes them), `night` from 0 (day) to 1, and everything the Sun lights multiplied by
-    /// `warm` (a low Sun's colour; 1 by day), the ground in shadow by a cooler, violet share of it.
+    /// Draws the layout with its trains where they are now into `out` (premultiplied RGBA, `w` by `h`, rows from the
+    /// top: the scene shows its texture flipped), `night` from 0 (day) to 1, and everything the Sun lights multiplied
+    /// by `warm` (a low Sun's colour; 1 by day), the ground in shadow by a cooler, violet share of it.
     public func draw(night: Float, warm: SIMD3<Float> = [1, 1, 1], into out: UnsafeMutableBufferPointer<UInt32>) {
+        precondition(out.count >= w * h)
+        frame = out
+        defer { frame = .init(start: nil, count: 0) }
         let night = (night * 32).rounded() / 32
         frameCount &+= 1
         if night != underNight || warm != underWarm {
@@ -226,7 +229,7 @@ public final class Railway {
             under = statics.day.indices.map { i in pack((statics.day[i] + (statics.night[i] - statics.day[i]) * night) * (statics.shaded[i] ? cool : warm)) }
             (underNight, underWarm) = (night, warm)
         }
-        frame.withUnsafeMutableBufferPointer { f in under.withUnsafeBufferPointer { f.baseAddress!.update(from: $0.baseAddress!, count: $0.count) } }
+        under.withUnsafeBufferPointer { frame.baseAddress!.update(from: $0.baseAddress!, count: $0.count) }
         depth.withUnsafeMutableBufferPointer { d in statics.depth.withUnsafeBufferPointer { d.baseAddress!.update(from: $0.baseAddress!, count: $0.count) } }
         if night < 0.6 { // the pond: a few of its glints catch the light at a time, a new few every 0.4 s
             let tick = Int(sim.t / 0.4), glint = pack(SIMD3<Float>(110, 154, 180) * (1 - night * 0.6) * warm)
@@ -262,11 +265,6 @@ public final class Railway {
         crossingParts(night)
         signalParts(night)
         smoke(night, warm)
-        for y in 0..<h { // rows from the bottom
-            frame.withUnsafeBufferPointer { src in
-                (out.baseAddress! + (h - 1 - y) * w).update(from: src.baseAddress! + y * w, count: w)
-            }
-        }
     }
 
     // MARK: drawing the moving things
