@@ -303,14 +303,18 @@ final class EarthFromOrbit: SKScene, BatteryPaced {
                 vec3 towardUs = u_basis * vec3(0.0, 0.0, 1.0);
                 colour += vec3(1.0, 0.95, 0.85) * ocean * pow(max(dot(w, normalize(u_sun + towardUs)), 0.0), 90.0) * 0.6;
 
+                // the air seen edge-on: a pale haze inside the limb, and outside it a bright hairline with a short
+                // glow, a few pixels as in whole-Earth photographs (it was a 20 px glow, five times too thick)
                 float edge = 1.0 - sqrt(max(0.0, 1.0 - r * r));
-                vec3 air = vec3(0.35, 0.6, 1.0);
-                colour = mix(colour, air * daylight, pow(edge, 3.0) * 0.6);
+                vec3 haze = vec3(0.6, 0.78, 1.0);
+                colour = mix(colour, haze * daylight, pow(edge, 3.0) * 0.6);
 
                 float disc = smoothstep(1.0, 0.997, r);
                 float rimSun = smoothstep(-0.35, 0.3, dot(normalize(u_basis * vec3(p, 0.0)), u_sun));
-                float halo = exp(-max(r - 1.0, 0.0) * 40.0) * (1.0 - disc) * rimSun * 0.8;
-                gl_FragColor = vec4(colour * disc + air * halo, max(disc, halo));
+                float outside = max(r - 1.0, 0.0);
+                float halo = exp(-outside * 120.0) * 0.6 * (1.0 - disc) * rimSun;
+                float hairline = exp(-outside * 500.0) * 0.5 * (1.0 - disc) * rimSun;
+                gl_FragColor = vec4(colour * disc + vec3(0.35, 0.6, 1.0) * halo + haze * hairline, max(disc, halo + hairline));
             }
             """, uniforms: [
                 SKUniform(name: "u_night", texture: texture("earth-night.heic")),
