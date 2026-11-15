@@ -1,6 +1,6 @@
 # Earth from Orbit
 
-The whole Earth seen from high above the viewer's own location, like a geostationary satellite parked overhead, set against a still starfield. It shows the real line between day and night, today's real clouds, lightning in the storms around the viewer, city lights on the night side, sun glint on the oceans, a lit edge of atmosphere, and the ISS at its live position with its orbit ring.
+The whole Earth seen from high above the viewer's own location, like a geostationary satellite parked overhead, set against the real stars behind it. It shows the real line between day and night, today's real clouds, lightning in the storms around the viewer, city lights on the night side, sun glint on the oceans, a lit edge of atmosphere, and the ISS at its live position with its orbit ring.
 
 - **Files:**
   - `Sources/Atrium/EarthFromOrbit.swift`: the scene.
@@ -13,7 +13,7 @@ The whole Earth seen from high above the viewer's own location, like a geostatio
 - **Kind:** hybrid. The globe is one sprite with an SKShader sampling two textures; the stars, ISS marker, label and orbit ring are nodes.
 
 ## How it works
-- **View frame.** `basis` has three Earth-fixed axes: east, north, and the up vector at the viewer's latitude and longitude. The globe is always seen from straight above the viewer. `refresh()` rebuilds it every 30 s from `Location.shared`. The globe sits at (0.58 w, 0.48 h) with radius 0.43 h; the sprite is 12% bigger (`margin`) to leave room for the atmosphere halo.
+- **View frame.** `basis` has three Earth-fixed axes: east, north, and the up vector at the viewer's latitude and longitude. The globe is always seen from straight above the viewer. `refresh()` rebuilds it every 5 s from `Location.shared`. The globe sits at (0.58 w, 0.48 h) with radius 0.43 h; the sprite is 12% bigger (`margin`) to leave room for the atmosphere halo.
 - **Globe shader:**
   - Each pixel becomes a point on the sphere, turned Earth-fixed through `u_basis`, then latitude/longitude texture coordinates.
   - It samples the day map (`u_texture`), the night-lights map (`u_night`), and the cloud map (see Clouds below). Both maps are `sharedTexture`s, so every display and Settings' live copy share one of each.
@@ -25,8 +25,8 @@ The whole Earth seen from high above the viewer's own location, like a geostatio
   - **Sun glint:** a Blinn-style highlight (power 90) only where the day map reads as ocean (blue > red) and there's no cloud.
   - **Atmosphere:** an edge tint of pale blue (0.6, 0.78, 1)·daylight inside the limb, and outside it a hairline of the same pale blue (`exp(−500·(r − 1))`, half strength) over a short blue glow (0.35, 0.6, 1) (`exp(−120·(r − 1))`, 0.6), both brighter on the sunward rim.
   - **A thinner atmosphere** (2026-11-15, from the review of 14 November). The glow was `exp(−40·(r − 1))` at 0.8 in deep blue: measured across the sunlit limb, still 116 of 255 in blue 12 px out and 12 at 60 px, which is 450 km of a globe 844 px in radius, about five times the real air's height. Now it's 255 at the limb, 81 at 5 px, 37 at 10 and gone by 20, a line of air as in whole-Earth photographs. It waits on Dave's pick, from the two side by side: the review asked "the thick blue glow or a thin, true-to-life line of air?", since the thick glow is part of the look he called great. To put it back: the glow at `exp(−40·(r − 1))`, 0.8, no hairline, and the edge tint (0.35, 0.6, 1).
-- **Sun.** `u_sun` points at the subsolar point: `Sky.direction(sunRA − GMST, sunDec)`, updated every 30 s. The terminator moves in real time.
-- **Stars:** about w·h/2500 still sprites. They don't twinkle, since there's no atmosphere up here. Brightness is `random³`.
+- **Sun.** `u_sun` points at the subsolar point: `Sky.direction(sunRA − GMST, sunDec)`, updated every 5 s. The terminator moves in real time.
+- **Stars** (real since 2026-11-15; they were w·h/2500 random white dots, the one made-up thing in the picture): Night Sky's catalogue (`NightSky.catalogue`, the Yale Bright Star Catalogue to magnitude 5.5) in their own colours (`NightSky.starColour`), placed by `placeStars()` in `refresh()`. The sky behind the Earth is the sky straight down from you, through the planet: centred on right ascension = local sidereal time + 12 h, declination = −your latitude (`EarthFromOrbit.behind`, a gnomonic projection on the view's own east and north). Seen from inside the sky like any sky, so its east is on the left: `starsBehindTheEarthAreTheSkyBelow` checks Orion the right way round. About 70° of sky top to bottom: at 60°, as the review proposed, only 140 stars showed at noon over the Americas in November against some 370 random ones before, and the faintest at 30% were all but invisible; at 70°, 170–230 show, the faint ones at 45% and 2.2 pt. They drift with the sky, 15° an hour, which is 4 pt a minute, so they're placed every 5 s (steps of 0.3 pt). Rebuilding the sprites each time takes about 1 ms on the main thread (release), once every 5 s. They don't twinkle, since there's no air up here.
 - **ISS:**
   - In `update(_:)`, it takes the interpolated position now and 20 s ahead, converts each to an Earth-fixed vector in Earth radii (`station()`), and projects it with `basis`.
   - `visible()` hides it only when it's behind the globe, meaning facing away but inside the disc.
@@ -89,6 +89,7 @@ The whole Earth seen from high above the viewer's own location, like a geostatio
   Image.open('BlackMarble_2016_3km.jpg').convert('RGB').resize((4096, 2048), Image.LANCZOS).save('earth-night.png')
   ```
 - The credit is in a comment in `addGlobe()`, and in About (Earth imagery, Earth at night).
+- The stars are Night Sky's `stars.txt`, the Yale Bright Star Catalogue, 5th ed. (CDS V/50), public domain, credited in the file's header (see [night-sky.md](night-sky.md)).
 - Both load through `resource(_:)` as mipmapped textures.
 
 ## Settings
@@ -103,10 +104,10 @@ All are read live through `Self.knobs[i].value` every frame (in `knobs` order: I
 
 ## Tuning constants
 - **Globe:** radius 0.43 h, centre (0.58 w, 0.48 h), margin 1.12.
-- **Timing:** sun and view refresh every 30 s; orbit ring redraws at most every 5 s; ISS poll every 60 s.
+- **Timing:** sun, view and stars refresh every 5 s; orbit ring redraws at most every 5 s; ISS poll every 60 s.
 - **ISS marker:** 14 pt, pulsing to 2.2× over 1.6 s.
 - **Shader:** city-light gain 2.2, glint power 90, halo falloff 120 (0.6) and hairline 500 (0.5); warm line (1.3, 0.75, 0.5) up to sun·n 0.12.
-- **Stars:** density one per 2,500 pt².
+- **Stars:** 70° of sky top to bottom; diameter `max(2.2, 5.4 − 0.6·V)` pt, alpha `0.45…0.9` (`1.05 − 0.1·V`).
 
 ## Performance
 - About 0.49 ms CPU and 0.18 ms GPU per frame (release build, 2x, 1512×982) before clouds. With clouds it measured 0.45 ms CPU and 0.3–0.6 ms GPU: two more 4K texture samples per globe pixel. With clouds off it's back to 0.15 ms (blank 1×1 textures). The clouds' body (2026-11-15) reads the map toward the Sun in place of the old map, which is now read only while fading, so the reads a pixel stay at two: measured back to back in release under load from other builds, 0.28–0.44 ms GPU with it against 0.29–0.48 without, no difference to measure.
@@ -121,7 +122,6 @@ All are read live through `Self.knobs[i].value` every frame (in `knobs` order: I
 - **The ISS label** must not be a child of the pulsing marker, or it scales and fades with it.
 - **Clouds are a still snapshot** between 3-hourly maps, with no drift. A slow advection (warping the lookup along the jet streams) or a flow between two maps would make them move.
 - `ponytail:` **cloud shadows and relief come from one read toward the Sun,** with the map's brightness standing for height. It's right in the band near the terminator, where the Sun is low; the next step would be a height from the map (cold tops are high) and two reads, one near for the cloud's own slopes and one far for its shadow.
-- **The stars** are random on each load, not a real star field.
 
 ## Dave's feedback and decisions
 - **Static label.** "Don't blink and scale / fade the ISS text, just have it be a fixed semi faded text next to the ISS … let everything else … be the animated parts." That's why the label is a separate node at 50% alpha. The marker dot still pulses; he didn't ask for that to change.
