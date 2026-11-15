@@ -79,7 +79,7 @@ final class TuringPatterns: SKScene, BatteryPaced {
         let palette = Self.palettes.first { $0.name == chosen } ?? Self.palettes.randomElement(using: &rng)!
         let (ink, ink2, glow) = systemIsDark ? (palette.ink, palette.ink2, palette.glow) : (palette.ink * 0.9, palette.ink2 * 0.9, simd_mix(palette.ink, .one, SIMD3(repeating: 0.5)))
         let paper = systemIsDark ? palette.ink * 0.1 : simd_mix(SIMD3(0.93, 0.92, 0.89), palette.ink, SIMD3(repeating: 0.06))
-        board.shader = SKShader(source: Self.shader, uniforms: [
+        board.shader = SKShader(source: Self.shader(dark: systemIsDark), uniforms: [
             SKUniform(name: "u_grid", vectorFloat2: [Float(cols), Float(rows)]), SKUniform(name: "u_paper", vectorFloat3: paper),
             SKUniform(name: "u_ink", vectorFloat3: ink), SKUniform(name: "u_ink2", vectorFloat3: ink2),
             SKUniform(name: "u_glow", vectorFloat3: glow), SKUniform(name: "u_dark", float: systemIsDark ? 1 : 0), WallpaperTime.now,
@@ -256,7 +256,16 @@ final class TuringPatterns: SKScene, BatteryPaced {
         if peak < 0.05 { for _ in 0..<cols * rows / 800 { seed() } }
     }
 
-    private static let shader = """
+    /// The shader for Dark Mode or Light Mode. Only Light Mode's casts the relief's shadow; Dark Mode's leaves those
+    /// sums out, as they cost 0.06 ms of GPU a frame even behind a branch on `u_dark`.
+    private static func shader(dark: Bool) -> String {
+        // Light Mode's shadow on the paper, down and to the right: the field 1.3 cells toward the light, taken from
+        // its slope here rather than a second read, which looked the same and cost four more taps
+        let shadow = dark ? "" : """
+            float lee = v + 1.3 / abs(dfdx(p.x)) * dot(slope, normalize(l.xy));
+            paper *= 1.0 - 0.25 * smoothstep(0.12, 0.5, lee);
+            """
+        return """
         void main() {
             // cubic B-spline between cells, in four linear taps (GPU Gems 2, ch. 20), so no grid shows
             vec2 p = v_tex_coord * u_grid - 0.5, i = floor(p), s = p - i;
@@ -283,13 +292,12 @@ final class TuringPatterns: SKScene, BatteryPaced {
             vec2 uv = v_tex_coord;
             vec3 ink = mix(u_ink, u_ink2, 0.5 + 0.5 * sin(uv.x * 2.2 - uv.y * 1.5 + u_now * 0.01));
             vec3 surface = mix(ink * 0.55, mix(ink, u_glow, 0.35), ridge) * diffuse;
-            // Light Mode's shadow on the paper, down and to the right: the field 1.3 cells toward the light, taken from
-            // its slope here rather than a second read, which looked the same and cost four more taps
-            float lee = v + 1.3 / abs(dfdx(p.x)) * dot(slope, normalize(l.xy));
-            vec3 paper = u_paper * (1.0 - 0.25 * (1.0 - u_dark) * smoothstep(0.12, 0.5, lee));
+            vec3 paper = u_paper;
+            \(shadow)
             vec3 c = mix(paper, surface, body) + u_glow * sheen * body * 0.18 + ink * smoothstep(0.02, 0.35, v) * 0.08 * u_dark;
             float vignette = 1.0 - 0.3 * length(uv - 0.5);
             gl_FragColor = vec4(u_dark > 0.5 ? c * vignette : c, 1.0);
         }
         """
+    }
 }
