@@ -57,7 +57,7 @@ Layers, back to front, from the `Z` enum:
    | flame angelfish | 1 | 0.97 | low by a rock |
    | yellow tang (near) | 1 | 1.1 | open |
 
-   Each fish is drawn from one of its species' photos, picked at random, so a school isn't a row of clones. Depth sets scale, speed and z-layer (far < 0.7, mid < 1, near). The far school gets a slight blur, `(0.9 - depth)·4` pt, and fades toward the back panel, `(0.9 - depth)·0.5`. Real tank water barely tints anything over half a metre, so both stay light.
+   Each fish is drawn from one of its species' photos, picked at random, so a school isn't a row of clones. Depth sets scale, speed and z-layer (far < 0.85, behind the islands; mid < 1, in front of them; near, in front of everything). By `sandLine` the islands stand at about depth 0.86–0.9, their bases at 0.55–0.6 of the sand's height. Until 2026-11-15 far was < 0.7, so the three yellow tangs at 0.8 swam in front of the islands while their shadows fell behind them, and only the far chromis ever passed behind the reef; now the tangs do too. The far school gets a slight blur, `(0.9 - depth)·4` pt, and fades toward the back panel, `(0.9 - depth)·0.5`. Real tank water barely tints anything over half a metre, so both stay light.
 5. **Marine snow:** slow, faint specks across the whole tank (`softDot`).
 6. **Vignette:** a radial darkening sprite on top.
 
@@ -92,7 +92,7 @@ Layers, back to front, from the `Z` enum:
 Everything is pre-simulated for 150 steps in `sceneDidLoad`, so schools have already formed on the first frame.
 
 **Pose (`pose`):**
-- facing eases through zero at 2.5 per second, so the fish visibly turns instead of flipping
+- facing eases through zero (`turn`), so the fish visibly turns instead of flipping: 2.5 a second, rising to 6 as it passes edge-on (linearly from |facing| 0.5). At a steady 2.5 a turning fish was under a third of its width for a quarter of a second, a squeezed sliver; now about a seventh, at 15 to 120 fps alike (`fishTurnQuicklyThroughEdgeOn`). Turns are meant to happen off screen, but fish that wander or keep a home turn in view.
 - tilt follows pitch, clamped to ±0.3
 - the tail beat steps through 20 precomputed warp frames (`swimWarps`: an 8×1 grid with a wave from head to tail, `0.075·(1-u)²`). The beat rate scales with speed. The warps work on the photos unchanged.
 

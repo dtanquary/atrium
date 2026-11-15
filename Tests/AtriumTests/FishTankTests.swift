@@ -29,3 +29,17 @@ import Testing
     #expect(sorted[light.count / 2] < 0.8)       // the median: most of the floor is in the cells between filaments
     #expect(sorted[light.count * 99 / 100] > 4)  // the filaments' bright cores
 }
+
+/// A fish turning round passes edge-on quickly, at any frame rate: under a third of its width for about a seventh of
+/// a second, where at a steady 2.5 a second it was a squeezed sliver for a quarter of one.
+@MainActor @Test func fishTurnQuicklyThroughEdgeOn() {
+    for fps in [15.0, 30, 60, 120] {
+        var facing = -1.0, sliver = 0.0, time = 0.0
+        while facing < 1, time < 5 {
+            facing = FishTank.turn(facing, toward: 1, dt: 1 / fps)
+            if abs(facing) < 1.0 / 3 { sliver += 1 / fps }
+            time += 1 / fps
+        }
+        #expect(facing == 1 && sliver < 0.2 && time < 0.75, "at \(fps) fps: \(sliver) s a sliver, \(time) s to turn")
+    }
+}

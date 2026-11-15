@@ -176,7 +176,7 @@ final class FishTank: SKScene {
         let v = fish.velocity, cruise = school.cruise
         let target = v.x > cruise * 0.15 ? 1.0 : v.x < -cruise * 0.15 ? -1.0 : (fish.facing >= 0 ? 1 : -1)
         if fish.facing == -target { fish.bank = Bool.random(using: &rng) ? 1 : -1 } // a new turn: bank toward the lamp or away
-        fish.facing += max(-dt * 2.5, min(dt * 2.5, target - fish.facing))
+        fish.facing = Self.turn(fish.facing, toward: target, dt: dt)
         let pitch = max(-0.3, min(0.3, atan2(v.y, max(abs(v.x), cruise * 0.5))))
         fish.tilt += (pitch - fish.tilt) * min(1, dt * 3)
         fish.node.position = CGPoint(x: fish.position.x, y: fish.position.y)
@@ -194,6 +194,13 @@ final class FishTank: SKScene {
             fish.node.warpGeometry = school.beat[frame]
         }
         swimmers[i] = fish
+    }
+
+    /// Eases a fish's facing (1 right, -1 left, its width on screen) toward `target`: 2.5 a second, and up to 6 as it
+    /// passes edge-on, so a fish turning in view isn't a squeezed sliver for long (a quarter of a second at 2.5).
+    static func turn(_ facing: Double, toward target: Double, dt: Double) -> Double {
+        let rate = 2.5 + 3.5 * max(0, 1 - abs(facing) / 0.5)
+        return facing + max(-dt * rate, min(dt * rate, target - facing))
     }
 
     /// Lights a fish from where it swims and how it moves (see `photoShader`): brighter near the surface and under
@@ -263,7 +270,8 @@ final class FishTank: SKScene {
                 let look = looks.randomElement(using: &rng)!
                 let node = SKSpriteNode(texture: look.texture, size: look.size)
                 node.setScale(depth * fishUnit)
-                node.zPosition = depth < 0.7 ? Z.farFish : depth < 1 ? Z.midFish : Z.nearFish
+                // Behind the islands up to 0.85: they stand at about 0.86–0.9 by `sandLine`, so the tangs at 0.8 pass behind.
+                node.zPosition = depth < 0.85 ? Z.farFish : depth < 1 ? Z.midFish : Z.nearFish
                 node.subdivisionLevels = 1
                 graded(node, fog: max(0, 0.9 - depth) * 0.5, glow: 0.08)
                 addChild(node)
