@@ -195,6 +195,7 @@ PICTURES = {   # name: file, source, crop as fractions of the file, tone gamma, 
             dict(lift=0.25, blank=[(0.46, 0.0, 0.55, 0.025), (0.0, 0.025, 1.0, 0.095), (0.503, 0.0, 0.518, 0.121), (0.03, 0.095, 0.047, 0.232), (0.972, 0.095, 0.99, 0.228), (0.475, 0.095, 0.6, 0.121), (0.618, 0.12, 0.73, 0.168), (0.42, 0.461, 0.61, 0.51), (0.508, 0.461, 0.517, 0.735), (0.2, 0.51, 0.8, 0.553), (0.205, 0.548, 0.372, 0.566), (0.205, 0.566, 0.2145, 0.775), (0.366, 0.566, 0.372, 0.652), (0.4, 0.582, 0.575, 0.608), (0.1, 0.645, 0.318, 0.659), (0.1, 0.659, 0.205, 0.738), (0.1, 0.738, 0.271, 0.746), (0.1, 0.746, 0.205, 0.895), (0.1, 0.86, 0.249, 0.874), (0.1, 0.874, 0.249, 0.905), (0.249, 0.895, 0.257, 0.905), (0.1, 0.905, 0.93, 1.0), (0.205, 0.815, 0.2145, 0.905), (0.508, 0.785, 0.517, 0.822), (0.508, 0.836, 0.517, 0.86), (0.508, 0.868, 0.517, 0.905), (0.59, 0.868, 0.6, 0.905), (0.597, 0.858, 0.93, 0.872), (0.765, 0.548, 0.781, 0.584), (0.79, 0.578, 0.93, 0.594), (0.825, 0.594, 0.93, 0.858), (0.755, 0.772, 0.825, 0.812), (0.725, 0.812, 0.83, 0.862), (0.77, 0.762, 0.778, 0.772), (0.985, 0.87, 1.0, 0.9), (0.0, 0.94, 0.05, 1.0), (0.262, 0.896, 0.275, 0.905), (0.414, 0.896, 0.427, 0.905), (0.443, 0.868, 0.452, 0.905), (0.778, 0.762, 0.8, 0.772)])),
 }
 FINE_ONLY = {"pontneuf", "fujiatsea", "sawmill"}   # a muddle at the standard line: no standard route is baked, and the app draws it fine whatever Detail says
+KEPT = {"interlace", "stars", "bands"}   # Bourgoin's patterns keep their small pale scraps (hatch_layers): without them the stylus no longer goes back along the bands, and their dark line fell from about half to a quarter
 
 class Grid:
     """The stylus's grid: cells across and down, and the bare margin round the picture."""
@@ -304,8 +305,9 @@ def runs(row):
 LAYERS = [("H8", 0, 8, 0, 0.20), ("H4", 0, 8, 4, 0.36), ("H2", 0, 4, 2, 0.54),
           ("V4", 1, 4, 0, 0.72), ("V2", 1, 4, 2, 0.84), ("solid", 0, 2, 1, 0.94)]
 
-def hatch_layers(d, rng, jitter=0.03):
-    """One mask per layer of hatching, with the zigzag links that join one row's end to the next."""
+def hatch_layers(d, rng, cut, jitter=0.03, scraps=False):
+    """One mask per layer of hatching, with the zigzag links that join one row's end to the next. `cut` is the
+    lines drawn before them, which part one patch of hatching from the next. `scraps` keeps small pale scraps (KEPT)."""
     ds = ndi.gaussian_filter(d, 1.2)
     out = []
     for name, axis, every, off, thr in LAYERS:
@@ -324,9 +326,21 @@ def hatch_layers(d, rng, jitter=0.03):
                         lo, hi = max(a0, b0), min(a1, b1)
                         if lo <= hi: m[ya:yb + 1, hi if k % 2 == 0 else lo] = True
         out.append(m.T if axis else m)
-    return out
+    if scraps: return out
+    # a pale patch, of the two lightest layers together between the lines that part it from the next (side by side,
+    # not corner to corner, so it doesn't slip across a line one cell wide), that spans fewer than three of their rows is
+    # a scrap, a row or two and an upright between outlines, and goes: a shaded side gets a real patch of hatching or
+    # none. Pale is lighter on average than the next layer's threshold: a dark tone cut small by the lines in it stays.
+    light = (out[0] | out[1]) & ~cut
+    lab, n = ndi.label(light)
+    at = np.arange(d.shape[0])[:, None] % 8
+    y, x = np.nonzero(light & (out[0] & (at == 0) | out[1] & (at == 4)))   # each layer's own rows, not an upright's cells
+    rows = np.bincount(np.unique(lab[y, x] * d.shape[0] + y) // d.shape[0], minlength=n + 1)
+    pale = np.r_[False, np.asarray(ndi.mean(ds, lab, np.arange(1, n + 1))) < LAYERS[2][4]]
+    scrap = ((rows < 3) & pale)[lab] & light
+    return [m & ~scrap if i < 2 else m for i, m in enumerate(out)]
 
-def wanted(d, rect, seed=1):
+def wanted(d, rect, seed=1, scraps=False):
     """The grid of wanted ink as tiers (0 bare; drawn in order 1, 2, ...): a frame and the bold lines, the other
     lines, then each depth of shading over the whole picture. And the cell the stylus starts on."""
     rng = np.random.default_rng(seed)
@@ -336,7 +350,7 @@ def wanted(d, rect, seed=1):
     frame[y0 - o, x0 - o:x0 + pw + o] = frame[y0 + ph + o - 1, x0 - o:x0 + pw + o] = True
     frame[y0 - o:y0 + ph + o, x0 - o] = frame[y0 - o:y0 + ph + o, x0 + pw + o - 1] = True
     lines, major = line_mask(d)
-    layers = hatch_layers(d, rng)
+    layers = hatch_layers(d, rng, lines | frame, scraps=scraps)
     last = 3 + len(layers)
     tier[lines] = 2
     tier[major | frame] = 1
@@ -366,11 +380,42 @@ def route(tier, start, bridge=20):
 DIRS = [(1, 0), (0, 1), (-1, 0), (0, -1), (1, 1), (-1, 1), (-1, -1), (1, -1)]
 HASTE = 8   # how many times faster the stylus goes back along a line than it draws (LineRoute.haste)
 
-def pack(cells, kind, grid, rect):
+def strays(cells, kind, grid, rect):
+    """The steps along stray marks, as runs (first step, steps, whether a way to the frame), and the cells of each
+    sort. A stray mark is the line the stylus leaves crossing bare screen; a step is along one if it begins or ends
+    on a cell a stray mark drew, so going back along it counts, and its last step onto ink. Marks that touch are one
+    mark, and one with any cell outside the picture's rect is a way to the frame the route begins with: the app
+    draws no frame, so it draws none of that mark either, and keeps every other stray mark pale."""
+    x0, y0, pw, ph = rect
+    stray = np.zeros(grid.w * grid.h, bool); stray[cells[kind == 2]] = True
+    marks, n = ndi.label(stray.reshape(grid.h, grid.w), np.ones((3, 3)))
+    outside = np.ones((grid.h, grid.w), bool); outside[y0:y0 + ph, x0:x0 + pw] = False
+    framed = np.zeros(n + 1, np.uint8); framed[np.unique(marks[outside & (marks > 0)])] = 1
+    cell = np.where(marks > 0, 1 + framed[marks], 0).ravel()            # 0 ink or bare, 1 a stray mark in the picture, 2 a way to the frame
+    step = np.maximum(cell[cells[:-1]], cell[cells[1:]])                # of step i + 1, which goes from cell i to cell i + 1
+    edge = np.flatnonzero(np.r_[1, np.diff(step) != 0, 1])
+    runs = [(int(a) + 1, int(b - a), bool(step[a] == 2)) for a, b in zip(edge[:-1], edge[1:]) if step[a]]
+    return runs, int((cell == 1).sum()), int((cell == 2).sum())
+
+def tail(marks):
+    """The stray marks' runs of steps (`strays`) as bytes: their deflated length, then, deflated, two numbers to a
+    run, the steps since the last run ended and its steps times two, plus one for a way to the frame, each seven bits
+    to a byte, low first, the top bit set on all but the last byte."""
+    out, end = bytearray(), 0
+    for first, count, framed in marks:
+        for n in (first - end, count * 2 + framed):
+            while n >= 128: out.append(n & 127 | 128); n >>= 7
+            out.append(n)
+        end = first + count
+    packed = zlib.compressobj(9, zlib.DEFLATED, -15); body = packed.compress(bytes(out)) + packed.flush()
+    return struct.pack("<I", len(body)) + body
+
+def pack(cells, kind, grid, rect, marks=()):
     """The route as bytes. Each run of steps one way is a byte: bit 7 set while the stylus goes back along its own
     line, bits 6-4 the direction (DIRS), bits 3-0 the run's length less one. The runs are deflated; before them:
     "LRT1", the grid's width and height, the picture's rect, the start cell, the number of steps, the route's clock
-    (cells of drawing, going back counting an eighth), and the deflated length."""
+    (cells of drawing, going back counting an eighth), and the deflated length. After them, the stray marks
+    (`tail`)."""
     x, y = cells % grid.w, cells // grid.w
     dx, dy = np.diff(x), np.diff(y)
     code = np.array([DIRS.index((int(a), int(b))) for a, b in zip(dx, dy)], np.uint8) << 4 | (kind[1:] == 1).astype(np.uint8) << 7
@@ -386,9 +431,20 @@ def pack(cells, kind, grid, rect):
     clock = float(np.where(kind[1:] == 1, seg / HASTE, seg).sum())
     packed = zlib.compressobj(9, zlib.DEFLATED, -15); body = packed.compress(bytes(out)) + packed.flush()
     head = b"LRT1" + struct.pack("<8HIfI", grid.w, grid.h, *rect, int(x[0]), int(y[0]), len(cells) - 1, clock, len(body))
-    return head + body, len(out), clock
+    return head + body + tail(marks), len(out), clock
+
+def check():
+    """`bake.py --check`: the scrap rule in hatch_layers, on a made-up picture. Between two lines, a pale band one row
+    of hatching tall goes, a dark band as small keeps its light rows, and a pale band four rows tall stays."""
+    d = np.zeros((100, 160)); cut = np.zeros(d.shape, bool)
+    cut[[12, 20, 40, 80], :] = True
+    d[13:20, :60] = 0.3; d[13:20, 100:] = 0.7; d[41:80, :60] = 0.3
+    light = np.logical_or(*hatch_layers(d, np.random.default_rng(1), cut)[:2])
+    assert not light[13:20, :60].any() and light[13:20, 100:].any() and light[41:80, :60].sum() > 200, "hatch_layers: the scrap rule"
+    print("bake.py: checked")
 
 if __name__ == "__main__":
+    if "--check" in sys.argv: check(); sys.exit()
     args = [a for a in sys.argv[1:] if a != "--fine"]; fine = "--fine" in sys.argv
     src, dst, names = args[0], args[1], args[2:] or list(PICTURES)
     grid = Grid(fine)
@@ -399,12 +455,13 @@ if __name__ == "__main__":
         if fine: more.update(over)
         gamma = more.pop("gamma", gamma)
         d, rect = darkness(os.path.join(src, file), grid, crop, gamma, **more)
-        tier, start = wanted(d, rect)
+        tier, start = wanted(d, rect, scraps=name in KEPT)
         cells, kind = route(tier, start)
         assert not (kind[1:] == 3).any(), "the line lifted"
-        data, nruns, clock = pack(cells, kind, grid, rect)
+        marks, inside, framed = strays(cells, kind, grid, rect)
+        data, nruns, clock = pack(cells, kind, grid, rect, marks)
         out = os.path.join(dst, f"etching-{name}{'-fine' if fine else ''}.route")
         open(out, "wb").write(data)
-        stray = int((kind == 2).sum())
         print(f"{os.path.basename(out)}: {len(cells) - 1} steps in {nruns} runs, {len(data)} bytes; clock {clock:.1f} cells = "
-              f"{clock / grid.w * 40 / 60:.0f} min at 1/40 of the width a second; {stray} cells of stray marks; picture at {rect}")
+              f"{clock / grid.w * 40 / 60:.0f} min at 1/40 of the width a second; {inside} cells of stray marks in the picture "
+              f"and {framed} of ways to the frame, in {len(marks)} runs of steps; picture at {rect}")

@@ -18,6 +18,11 @@ public struct LineRoute: Sendable {
     /// The stylus's position after each step, in cells from the top left, eased by one step so corners round a
     /// little; and the clock when it gets there.
     public private(set) var x: [Float] = [], y: [Float] = [], t: [Double] = []
+    /// Which steps are along a stray mark, the line the stylus leaves crossing bare screen from one piece of a picture
+    /// to another, going back along it too: 0 for none, 1 for a mark inside the picture, 2 for one of the ways to the
+    /// frame every route begins with. A byte to a step, as `x` has a position; empty for a route baked before the
+    /// marks were kept, which is stamped as it always was.
+    public private(set) var stray: [UInt8] = []
 
     /// The line's width in cells: on the real toy, about 1/700 of the screen's width.
     public static let line = 1.44
@@ -67,6 +72,23 @@ public struct LineRoute: Sendable {
         for i in 1..<steps + 1 {
             let length = Double(((x[i] - x[i - 1]) * (x[i] - x[i - 1]) + (y[i] - y[i - 1]) * (y[i] - y[i - 1])).squareRoot())
             t[i] = t[i - 1] + (back[i] ? length / Self.haste : length)
+        }
+        // the stray marks' steps, where the file has them after its runs: two numbers to a run of steps, the steps
+        // since the last run ended and its steps times two, plus one for a way to the frame, seven bits to a byte
+        let after = 32 + packed
+        guard bytes.count >= after + 4, bytes.count >= after + 4 + Int(long(after)),
+              let marks = try? [UInt8]((Data(bytes[after + 4..<after + 4 + Int(long(after))]) as NSData).decompressed(using: .zlib) as Data) else { return }
+        stray = [UInt8](repeating: 0, count: steps + 1)
+        var at = 0, end = 0
+        func number() -> Int {
+            var n = 0, shift = 0
+            while at < marks.count { let byte = marks[at]; at += 1; n |= Int(byte & 127) << shift; shift += 7; if byte < 128 { break } }
+            return n
+        }
+        while at < marks.count {
+            let first = end + number(), count = number()
+            end = first + count / 2
+            for step in stride(from: first, to: min(end, steps + 1), by: 1) { stray[step] = UInt8(1 + count % 2) }
         }
     }
 
@@ -149,6 +171,11 @@ public struct LineRoute: Sendable {
     /// is not stamped at all and takes no time either: that is the frame every route begins with, six cells round
     /// the picture, and the stylus's ways about by it, which are no part of the picture and showed round one fitted
     /// inside the screen. A route that fits inside is otherwise stamped to its own clock.
+    ///
+    /// A stray mark that is a way to the frame (`stray`, 2) is left out the same, all of it and every step back along
+    /// it: with no frame drawn it was a line from the picture's edge to its first ink, or a stub hanging off a piece
+    /// of it. Any other stray mark is stamped but never as gone over, however often the stylus goes back along it, so
+    /// it stays the pale line of one pass where the picture's own outlines turn dark.
     // ponytail: where a later line overlaps an earlier one's edge by less than a quarter of a texel's cover, that
     // sliver shows with the earlier line; store a time per pass if lines ever cross thickly enough to see it.
     public func stamp(width: Int, height: Int, scale: Double, dx: Double, dy: Double, covered: Double = 0, over ghost: Data? = nil) -> Stamped {
@@ -168,7 +195,8 @@ public struct LineRoute: Sendable {
                 // out of sight by its own line, whatever of its width reaches in: a row of hatching just off the
                 // edge would otherwise be waited for and show a sliver
                 let unseen = max(ax, bx) < 0 || min(ax, bx) > Float(width) || max(ay, by) < 0 || min(ay, by) > top
-                let outside = max(x[i - 1], x[i]) < left || min(x[i - 1], x[i]) > right || max(y[i - 1], y[i]) < upper || min(y[i - 1], y[i]) > lower
+                let mark = stray.isEmpty ? 0 : stray[i]
+                let outside = mark == 2 || max(x[i - 1], x[i]) < left || min(x[i - 1], x[i]) > right || max(y[i - 1], y[i]) < upper || min(y[i - 1], y[i]) > lower
                 let from = t[i - 1] - saved, took = unseen || outside ? 0 : t[i] - t[i - 1]
                 saved += t[i] - t[i - 1] - took
                 guard x0 <= x1, y0 <= y1, !outside else { continue }
@@ -183,7 +211,7 @@ public struct LineRoute: Sendable {
                         let p = py * width + px, q = UInt32((from + Double(along) * took) * unit)
                         if first[p] == never || Int(level) > Int(cover[p]) + 64 {
                             first[p] = q; second[p] = never
-                        } else if second[p] == never, level > 76, q > first[p] + gap {
+                        } else if second[p] == never, mark == 0, level > 76, q > first[p] + gap {
                             second[p] = q
                         }
                         if level > cover[p] { cover[p] = level }

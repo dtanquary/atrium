@@ -57,13 +57,26 @@ final class Etching: SKScene, BatteryPaced {
     /// and keel; the Crawler Tractor's tail wheel; the T. rex Skull's crest and jaw, and the whole T. rex's skull),
     /// so it is fitted inside whatever Fill the screen says.
     nonisolated static let whole: Set = ["airship", "elephant", "schooner", "holt", "rexskull", "rex"]
+    /// The pictures that are the better at the standard line, by their files, which Auto draws there; it draws every
+    /// other fine, where an engraving's hatching, a skeleton's ribs and a plan's close lines come out as themselves and
+    /// not as doubled lines and boxes. These nine are bold outline with little or no shading, or a source too soft
+    /// for the fine line to add anything: Bourgoin's three interlaces, whose straight bands the fine line draws in
+    /// small steps; the Aerial Screw and the Bear, the same blotches thinner with more stray marks; Mississippi
+    /// Meanders, which picks up section lines and lettering fine; and Cayley's machine, the Elliptical Wing and the
+    /// Crawler Tractor, no better fine. Judged from every picture at both widths, side by side at 1:1 (docs/etching.md).
+    nonisolated static let bold: Set = ["interlace", "stars", "bands", "screw", "bear", "mississippi", "cayley", "spitfire", "holt"]
     /// Which picture: Random, a different one each time, or one of the set over and over. Picking one clears the
     /// screen for it there and then.
     nonisolated static let picture = Knob(key: "etching.picture", label: "Picture", range: 0...Double(pictures.count), standard: 0, section: "Drawing",
                                           format: .choice(["Random"] + pictures.map(\.name)), order: listed)
     /// The line's width: the toy's own, about 1/700 of the screen's width, or half that, which holds twice the
-    /// detail each way, takes about twice as long, and looks more like a fine pen than the toy (`etching-<file>-fine.route`).
-    nonisolated static let detail = Knob(key: "etching.detail", label: "Detail", range: 0...1, standard: 0, section: "Drawing", format: .choice(["Standard", "Fine"]))
+    /// detail each way, takes about twice as long, and looks more like a fine pen than the toy (`etching-<file>-fine.route`);
+    /// or Auto, the width that suits each picture (`bold`), which is the standard. Stored by place, so Auto is the
+    /// last, and listed first.
+    nonisolated static let detail = Knob(key: "etching.detail", label: "Detail", range: 0...2, standard: 2, section: "Drawing",
+                                         format: .choice(["Standard", "Fine", "Auto"]), order: [2, 0, 1])
+    /// Whether a picture is drawn with the fine line under a pick of the Detail menu.
+    static func fine(_ picture: Int, detail: Int) -> Bool { detail == 1 || detail == 2 && !bold.contains(pictures[picture].file) || fineOnly[picture] }
     /// How many times faster than a careful hand: at 1 the stylus crosses a fortieth of the screen's width a
     /// second as it draws and a picture takes up to an hour and a half (three, fine; four for the one that is
     /// fine only); at the top the longest is done in about four minutes.
@@ -130,11 +143,12 @@ final class Etching: SKScene, BatteryPaced {
         try? Data(contentsOf: resource("etching-\(pictures[picture].file)\(fine || fineOnly[picture] ? "-fine" : "").route"))
     }
     /// Whether a picture ships with no route for the standard line, being a muddle at that width: it is drawn
-    /// fine whatever Detail says, its name in the menu says so, and Random draws it only while Detail is Fine.
+    /// fine whatever Detail says, its name in the menu says so, and Random leaves it out while Detail is Standard.
     static let fineOnly: [Bool] = pictures.map { !FileManager.default.fileExists(atPath: resource("etching-\($0.file).route").path) }
-    /// The pictures Random may draw at one width of line.
-    static func choices(detailed: Bool) -> [Int] {
-        pictures.indices.filter { seconds[detailed ? 1 : 0][$0] > 0 && (detailed || !fineOnly[$0]) }
+    /// The pictures Random may draw under a pick of the Detail menu: all of them, but at Standard those with a route
+    /// for that line.
+    static func choices(detail: Int) -> [Int] {
+        pictures.indices.filter { seconds[detail][$0] > 0 && (detail > 0 || !fineOnly[$0]) }
     }
 
     /// Screen widths the stylus crosses in a second at speed 1: an eighth of a turn of a dial a second on the toy.
@@ -142,11 +156,14 @@ final class Etching: SKScene, BatteryPaced {
     /// The share of the screen's height kept clear at the top: the menu bar's, which on a notched MacBook is 3.8%
     /// and would otherwise lie over the top of the picture's frame.
     nonisolated private static let bar = 0.04
-    /// How long each picture takes at speed 1, in seconds, from its route's own clock, at the standard line's
-    /// width and at the fine one's; none for one that can't be read.
-    static let seconds: [[Double]] = [false, true].map { fine in
-        pictures.indices.map { route($0, fine: fine).flatMap { LineRoute($0, walking: false) }.map { $0.clock / (Double($0.columns) * pace) } ?? 0 }
-    }
+    /// How long each picture takes at speed 1, in seconds, from its route's own clock, under each pick of the Detail
+    /// menu: at the standard line's width, at the fine one's, and at its own; none for one that can't be read.
+    static let seconds: [[Double]] = {
+        let widths = [false, true].map { fine in
+            pictures.indices.map { route($0, fine: fine).flatMap { LineRoute($0, walking: false) }.map { $0.clock / (Double($0.columns) * pace) } ?? 0 }
+        }
+        return widths + [pictures.indices.map { widths[fine($0, detail: 2) ? 1 : 0][$0] }]
+    }()
 
     /// Where a route's grid goes in textures `across` by `down` texels: the texels to a cell, the grid's top left
     /// corner in from the textures' own, and the texels at the top that the menu bar covers with line under them.
@@ -194,6 +211,7 @@ final class Etching: SKScene, BatteryPaced {
         /// The picture now takes `new` seconds at speed 1 where it took `old` (the other width of line): it stays
         /// the same share drawn, or as long rested.
         mutating func stretch(at wall: Double, from old: Double, to new: Double) {
+            guard new != old else { return }
             let since = wall - began, drawing = old / paced
             began = since < drawing && drawing > 0 ? wall - since / drawing * new / paced : wall - new / paced - (since - drawing)
         }
@@ -232,17 +250,17 @@ final class Etching: SKScene, BatteryPaced {
         }
     }
 
-    /// The one cycle every copy of the scene follows, the width of line it was last worked out for, and what of it
-    /// was last saved.
-    private static var cycle: Cycle?, fine: Bool?, saved: (picture: Int, before: Int?, began: Double) = (-1, nil, .nan)
+    /// The one cycle every copy of the scene follows, the Detail menu's pick it was last worked out for, and what of
+    /// it was last saved.
+    private static var cycle: Cycle?, detailed: Int?, saved: (picture: Int, before: Int?, began: Double) = (-1, nil, .nan)
 
     /// The shared cycle's moment at `wall`, read from the defaults the first time and saved back whenever it moves
     /// to another picture or a setting moves it.
     private static func moment(at wall: Double) -> Cycle.Moment {
         let speed = Self.speed.value, pick = Int(Self.picture.value), defaults = UserDefaults.standard
-        let detailed = Self.detail.value > 0.5, seconds = Self.seconds[detailed ? 1 : 0]
+        let detail = Int(Self.detail.value), seconds = Self.seconds[detail]
         func place(_ key: String) -> Int? { defaults.string(forKey: key).flatMap { file in pictures.firstIndex { $0.file == file } } }
-        func another(than picture: Int) -> Int { choices(detailed: detailed).filter { $0 != picture }.randomElement() ?? picture }
+        func another(than picture: Int) -> Int { choices(detail: detail).filter { $0 != picture }.randomElement() ?? picture }
         if cycle == nil {
             if let picture = place("etching.drawing"), let began = defaults.object(forKey: "etching.began") as? Double {
                 cycle = Cycle(picture: picture, before: place("etching.before"), began: began, paced: speed, rested: rest, following: nil, picked: pick)
@@ -250,8 +268,8 @@ final class Etching: SKScene, BatteryPaced {
                 cycle = Cycle(picture: pick > 0 ? pick - 1 : another(than: -1), before: nil, began: wall, paced: speed, rested: rest, following: nil, picked: pick)
             }
         }
-        if let was = fine, was != detailed { cycle!.stretch(at: wall, from: Self.seconds[was ? 1 : 0][cycle!.picture], to: seconds[cycle!.picture]) }
-        fine = detailed
+        if let was = detailed, was != detail { cycle!.stretch(at: wall, from: Self.seconds[was][cycle!.picture], to: seconds[cycle!.picture]) }
+        detailed = detail
         let moment = cycle!.moment(at: wall, speed: speed, rest: rest, pick: pick, seconds: seconds, another: another)
         if cycle!.picture != saved.picture || cycle!.before != saved.before || cycle!.began != saved.began {
             saved = (cycle!.picture, cycle!.before, cycle!.began)
@@ -274,10 +292,10 @@ final class Etching: SKScene, BatteryPaced {
         }
     }
 
-    /// What a pair of textures holds: a picture's line at one width, fitted or filling, and the ghost of the one
-    /// before it.
+    /// What a pair of textures holds: a picture's line and the ghost of the one before it, each at the width the
+    /// Detail menu's pick gives it, fitted or filling.
     private struct Held: Equatable {
-        var picture: Int, ghost: Int?, fine: Bool, fill: Bool
+        var picture: Int, ghost: Int?, detail: Int, fill: Bool
     }
 
     private let sprite = SKSpriteNode()
@@ -377,8 +395,8 @@ final class Etching: SKScene, BatteryPaced {
     /// scene has if that picture is on the screen now; otherwise its route is stamped first, for the cover alone.
     private func stamp(_ wanted: Held) {
         let landing = Landing(), (across, down) = (wide, high)
-        let places = [wanted.picture, wanted.ghost], files = places.map { place in place.flatMap { Self.route($0, fine: wanted.fine) } }
-        let known = wanted.ghost == held?.picture && wanted.fine == held?.fine && wanted.fill == held?.fill ? cover : nil
+        let places = [wanted.picture, wanted.ghost], files = places.map { place in place.flatMap { Self.route($0, fine: Self.fine($0, detail: wanted.detail)) } }
+        let known = wanted.ghost == held?.picture && wanted.detail == held?.detail && wanted.fill == held?.fill ? cover : nil
         stamping = (wanted, landing)
         Task.detached(priority: .userInitiated) {
             func stamped(_ which: Int, over ghost: Data?) -> LineRoute.Stamped? {
@@ -418,7 +436,7 @@ final class Etching: SKScene, BatteryPaced {
             tint()
         }
 
-        let speed = Self.speed.value, rest = Self.rest, pick = Int(Self.picture.value), fine = Self.detail.value > 0.5, seconds = Self.seconds[fine ? 1 : 0]
+        let speed = Self.speed.value, rest = Self.rest, pick = Int(Self.picture.value), detail = Int(Self.detail.value), seconds = Self.seconds[detail]
         if let asked, own == nil {
             let picture = pick > 0 ? pick - 1 : 0, count = Self.pictures.count, drawing = seconds[picture] / speed
             let since = asked.cleared > 0 ? drawing + rest + asked.cleared * Cycle.clearing : asked.drawn * drawing
@@ -430,7 +448,7 @@ final class Etching: SKScene, BatteryPaced {
         // The textures for this moment, and, once the picture is clearing, the ones for the picture to follow, so
         // that it can begin on the frame the clearing ends.
         let fill = Self.fill.value > 0.5
-        let now = Held(picture: moment.picture, ghost: moment.before, fine: fine, fill: fill), next = moment.following.map { Held(picture: $0, ghost: moment.picture, fine: fine, fill: fill) }
+        let now = Held(picture: moment.picture, ghost: moment.before, detail: detail, fill: fill), next = moment.following.map { Held(picture: $0, ghost: moment.picture, detail: detail, fill: fill) }
         if let job = stamping, let stamped = job.landing.take(waiting: view == nil && job.of == now) {
             (made, stamping) = ((job.of, stamped), nil)
         }
