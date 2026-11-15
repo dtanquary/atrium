@@ -243,11 +243,22 @@ let rainPreview = [
         return 243.12 * x / (17.62 - x)
     }
 
+    /// How high the Sun is where you are, as the sine of its altitude: under the horizon it's below 0. `rain.sun`,
+    /// an altitude in degrees, stands in for it, for the tests and for pictures; nothing else sets it.
+    static func sunHeight(at date: Date) -> Double {
+        if let asked = UserDefaults.standard.object(forKey: "rain.sun") as? Double { return sin(asked * .pi / 180) }
+        let here = Location.shared.coordinate, jd = Sky.julianDate(date)
+        return normalize(Sky.horizonMatrix(jd: jd, latitude: here.latitude, longitude: here.longitude) * Sky.sun(jd)).z
+    }
+
+    /// Whether the view behind the glass is its night look. Following the weather, by the real Sun: night once it's
+    /// 1.5° under the horizon, as Dappled Light counts it, so the hour behind the glass is the one the rain on it is
+    /// falling in. Otherwise by the system's appearance, as it always was.
+    static var night: Bool { rainFollow.value > 0.5 ? sunHeight(at: Date()) < sin(-1.5 * .pi / 180) : systemIsDark }
+
     /// W/m² of sunlight the pane absorbs: a few percent of what falls on it, less under cloud.
     static func sunlight(at date: Date) -> Double {
-        let here = Location.shared.coordinate, jd = Sky.julianDate(date)
-        let up = normalize(Sky.horizonMatrix(jd: jd, latitude: here.latitude, longitude: here.longitude) * Sky.sun(jd)).z
-        return 30 * max(up, 0) * (1 - 0.75 * (LiveWeather.shared.latest?.cloudCover ?? 50) / 100)
+        30 * max(sunHeight(at: date), 0) * (1 - 0.75 * (LiveWeather.shared.latest?.cloudCover ?? 50) / 100)
     }
 
     /// Rain arriving on the glass, 1 being the steady rain the scene was made for: about 3.5 mm/h on a pane facing

@@ -74,7 +74,8 @@ func rainBackdrop(picked: String?) -> String {
 }
 
 /// The scene for one backdrop, with its water clock at `clock`. Left on Random, it fades to another one every few
-/// minutes if Settings says so; the new scene takes over the clock, so the water carries on through the fade.
+/// minutes if Settings says so; the new scene takes over the clock, so the water carries on through the fade. It
+/// fades the same way between its day and night looks at dawn and dusk while it follows the weather.
 /// After about two hours of water it fades to a fresh pane of the same backdrop, which keeps the clock small enough
 /// for the shader's Floats to place drops to the pixel.
 @MainActor private func rainScene(size: CGSize, backdrop: String, clock: Double) -> SKScene {
@@ -82,15 +83,16 @@ func rainBackdrop(picked: String?) -> String {
     // while it's off, exactly as it always was; the scene rebuilds, crossfading, when that changes
     let features = GlassUniforms.wanted
     let weather = features.contains("WEATHER") ? GlassUniforms(features) : nil
+    let night = GlassWeather.night   // Dark Mode's, or the real night while following the weather
     let scene: SKScene
     if let photo = rainPhotos.first(where: { $0.name == backdrop }) {
-        let look = systemIsDark ? photo.night : photo.day
+        let look = night ? photo.night : photo.day
         func texture(_ level: String) -> SKTexture { SKTexture(image: NSImage(contentsOf: resource("rain-\(look)-\(level).jpg")) ?? NSImage()) }
         scene = rainGlassScene(size: size, far: texture("far"), near: texture("near"), haze: texture("haze"), night: look.hasSuffix("night"),
                                traffic: nil, weather: weather)
     } else {
         // a palette's city is baked as it's first shown, and shared by every copy of the scene while one shows it
-        let index = rainPalettes.firstIndex { $0.name == backdrop }!, palette = rainPalettes[index], night = systemIsDark
+        let index = rainPalettes.firstIndex { $0.name == backdrop }!, palette = rainPalettes[index]
         var baked: (far: SKTexture, near: SKTexture, haze: SKTexture)?
         func texture(_ level: KeyPath<(far: SKTexture, near: SKTexture, haze: SKTexture), SKTexture>, _ name: String) -> SKTexture {
             sharedTexture("rain-\(palette.name)-\(night ? "night" : "day")-\(name)") {
@@ -120,7 +122,9 @@ func rainBackdrop(picked: String?) -> String {
         let fade = SKTransition.crossFade(withDuration: 4)
         fade.pausesIncomingScene = false   // both keep raining through the fade, in step on the same clock
         fade.pausesOutgoingScene = false
-        if UserDefaults.standard.string(forKey: rainBackdrops.key) == "", rainKnobs[0].value > 0.5,   // on Random
+        if GlassWeather.night != night {   // dusk or dawn, following the weather: the same pane over the other look
+            view.presentScene(rainScene(size: water.size, backdrop: backdrop, clock: water.clockTime), transition: fade)
+        } else if UserDefaults.standard.string(forKey: rainBackdrops.key) == "", rainKnobs[0].value > 0.5,   // on Random
            abs(Date().timeIntervalSince(born)) >= rainKnobs[1].value.rounded() * 60 {
             let others = rainBackdrops.options.map(\.name).filter { $0 != backdrop }
             view.presentScene(rainScene(size: water.size, backdrop: others.randomElement()!, clock: water.clockTime), transition: fade)

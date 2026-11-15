@@ -130,3 +130,23 @@ import UniformTypeIdentifiers
     let row = Int((0.008 * Double(h)).rounded()) // a row of beads, in pixels
     #expect(alike(row) - alike(row / 2) < 0.15, "rows \(row) apart are \(alike(row)) alike, and half that apart \(alike(row / 2))")
 }
+
+/// Following the weather, the view behind the glass is by day or by night by the real Sun where you are, whatever the
+/// system's appearance, so the hour behind the glass is the one its rain is falling in; not following, it's Dark
+/// Mode's night and Light Mode's day, as it always was.
+@MainActor @Test func rainFollowsTheSunWithTheWeather() {
+    let keys = ["rain.palette", "rain.weather", "rain.sun", "rain.status"]
+    defer { keys.forEach(UserDefaults.standard.removeObject) }
+    func night() -> Float? {
+        (rainOnGlass(size: CGSize(width: 300, height: 200)) as? ShaderScene)?.sprite.shader?.uniformNamed("u_night")?.floatValue
+    }
+    UserDefaults.standard.set("Hamburg", forKey: "rain.palette")
+    UserDefaults.standard.set(30.0, forKey: "rain.sun")
+    #expect(night() == (systemIsDark ? 1 : 0)) // the Sun doesn't count until the weather is followed
+    UserDefaults.standard.set(1.0, forKey: "rain.weather")
+    #expect(night() == 0)
+    UserDefaults.standard.set(-1.0, forKey: "rain.sun") // lamps aren't lit at sunset
+    #expect(night() == 0)
+    UserDefaults.standard.set(-10.0, forKey: "rain.sun")
+    #expect(night() == 1)
+}
