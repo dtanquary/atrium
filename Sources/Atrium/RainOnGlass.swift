@@ -53,8 +53,10 @@ let rainPhotos: [(name: String, night: String, day: String)] = [
 /// backdrop, or a city of out-of-focus lights in a palette: night in Dark Mode, an overcast day in Light Mode.
 @MainActor func rainOnGlass(size: CGSize) -> SKScene {
     let names = rainPhotos.map(\.name) + rainPalettes.map(\.name)
+    // ("rain.seed" is for pictures that can be taken again: the pane's clock starts there. Nothing else sets it.)
+    let seed = UserDefaults.standard.double(forKey: "rain.seed")
     return rainScene(size: size, backdrop: UserDefaults.standard.string(forKey: "rain.palette").flatMap { names.contains($0) ? $0 : nil }
-                                           ?? names.randomElement()!, clock: .random(in: 0..<1000))   // a fresh pane each time
+                                           ?? names.randomElement()!, clock: seed > 0 ? seed : .random(in: 0..<1000))   // a fresh pane each time
 }
 
 /// The scene for one backdrop, with its water clock at `clock`. Left on Random, it fades to another one every few
