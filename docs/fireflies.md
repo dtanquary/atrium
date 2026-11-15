@@ -43,6 +43,10 @@ A research agent measured all three and read up on real fireflies. Its notes are
      - Broad gusts (`noise`, drifting across at 0.06 photo widths a second, about 1.3 m/s at 20 m) set how far the grass leans.
      - Each patch also rustles at its own phase (`sin(1.6 t + noise)`).
      - At `fireflies.wind` 0.5, it leans about ±0.75 pt typically and 2.5 pt at most. The leaning stalks brighten by up to 6% where a gust passes.
+   - **Light from the fireflies:** up to eight glowing flies within 14 m light the grass round them (`u_lamps0`, `u_lamps1`, two 4×4 matrices, a fly to a column).
+     - Each lights a pool half a metre round and a third as tall on screen (blades stand up), centred on the fly if it's in the grass and on the grass tops (0.3 m) under it if it's above them. It's the orb's cream times the photo's albedo, 0.15 at its middle at the height of a glow (about a skylight and a half on the grass; +15 to +25 of 255 on the near field), easing out to nothing at its edge (`(1 − r²)³`), and it falls with the fly's height (`1/(1 + 4y²)`).
+     - A fly takes a light only as its glow starts (alpha under 0.1) and keeps it to the end, so none pops in or out (`grassLightNeverPops` checks it at 15 fps). Only flies under 0.7 m whose pool lands on screen take one; the ones nearer than about 6 m fly below the bottom edge. At standard density most of the low near glows get one; at 2× some don't.
+     - Only the four slices nearer than 28 m run it (a branch on `u_slice`), so a pool reaching past 16 m isn't cut off.
    - Each pixel belongs to exactly one slice, so the other four skip all the work (an `if` on the slice); that halved the ground's cost.
 5. **Fireflies** (`Fly`, `spawn`, `rest`, `dress`, `flySource`).
    - There's a pool of 800 sprites. `fireflies.density` × 400 of them are active.
@@ -74,6 +78,7 @@ Time is accumulated from `frameTime` in `update(_:)`, so it pauses with the view
 - **Photo placement and view:** in `MeadowPhoto`.
 - **Light and fog:** skylight `(0.03, 0.036, 0.042)`, fog colour `(0.04, 0.05, 0.07)`, and a fog curve of `0.1 + 2.2·far²` with 85% thinning up the trees.
 - **Fireflies:** drift 0.02–0.05 m/s; a glow 3 s long, a 6–10 s period and a 0.03 m rise; a 4.5 cm glow; a third spread by distance, the rest by area.
+- **Their light on the grass:** 0.15 of the albedo at the middle of a pool 0.5 m round, eight at a time, flies within 14 m and under 0.7 m.
 
 ## Performance
 CPU 0.54 ms and GPU 0.52 ms per frame (release build, 2x, 2026-09-26).
@@ -82,6 +87,7 @@ CPU 0.54 ms and GPU 0.52 ms per frame (release build, 2x, 2026-09-26).
   - the five ground slices, each covering the photo's rect; a pixel outside a slice costs one texture read, and inside, five noise calls and two reads
   - the sky
   - the orbs
+  - the light on the grass: eight pools over the slices nearer than 28 m, about 0.05 ms (debug build, the fastest of eight runs at seed 2 while other builds ran, 2026-11-15: 0.46 → 0.51 ms; CPU no change within the noise)
 
   ponytail: crop each slice's sprite to the rows its distances occupy if the GPU cost matters.
 - **Memory:** the photo is 4096×1461 RGBA, about 24 MB decoded, shared by every copy of the scene and let go with the last one showing it (`sharedTexture`).
@@ -114,10 +120,12 @@ CPU 0.54 ms and GPU 0.52 ms per frame (release build, 2x, 2026-09-26).
 - **Photo choice:** a research agent shortlisted ten licensed meadow photos and baked four: Field at dusk, Herbst (Thomas Heins, CC BY 4.0), Indian Hollow and Pewley Downs. Field at dusk won for its real dusk light, continuous treeline and grass texture up close. Herbst, a flatter and broader meadow with mist already at the trees' foot, is the runner-up. Its bake is in the scratchpad, `meadow/ship/`.
   - Also tried: a real fog photo, "Desenka meadow 2016 G3" by George Chernilevsky (public domain), baked with its mist kept in. In the scene, at blue-hour brightness, the mist all but vanished. Its trees are near and tall at 50 mm, which leaves the meadow a thin dark strip, the opposite of broad. Shader fog over the wider field reads better.
 
+- **The review of 2026-11-14** (team verdict "improve", 7/10: close to done; what was left was tying the lights into the meadow), carried out 2026-11-15:
+  - **Light on the grass under near flashes,** the doc's own idea: the orbs sat on the picture, the grass under a near one exactly as dark as beside it. Now the low near ones light the blades round them. A pool on the ground under the fly, lit by its true distance through the depth map, was tried first: the map's ripples made thin wavy strips, so it's a soft pool on screen. At the review's +8 to +10 of 255 it couldn't be seen at 100%; at 0.15 (+15 to +25) it reads as light on the blades and still calm.
+
 ## Ideas / next steps
 - **Synchronous flashing,** like *Photinus carolinus*: bursts of 4–8 flashes 0.5 s apart, 6–9 s dark, relayed across the field at about 0.5 m/s.
 - **Follow the real evening:** fireflies come out at sunset, peak about 30 minutes later and thin out by 90–120 minutes.
-- **Faint light on the grass** around near flashes.
 - Crop the ground slices to their rows.
 
 ## Checking it
