@@ -175,7 +175,7 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
                 // corner at the edge draws a hairline along it. Nothing shines under a real aurora's lower border
                 // (docs/aurora.md, Sources), so below it only the slab's depth (`sh` km of heights along the line of
                 // sight, a box: variance sh²/12) and haze soften the edge
-                float green = (dh < 0.0 ? exp(-dh * dh / (30.0 + 0.17 * sh * sh + 400.0 * ax))
+                float green = (dh < 0.0 ? exp(-dh * dh / (8.0 + 0.17 * sh * sh + 60.0 * ax))
                                         : exp((4.0 - sqrt(dh * dh + 16.0)) / (10.0 + 25.0 * r.a * r.a)))
                               * (0.85 + 0.3 * r.b);
                 float red = exp(-(h - 240.0) * (h - 240.0) / 3600.0);
