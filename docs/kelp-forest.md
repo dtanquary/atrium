@@ -146,6 +146,18 @@ So its GPU is Nebula's, and its CPU (about 1 to 1.5 ms a frame) 1.4 to 2 times J
 
 Live figures move with whatever else the Mac is doing (the scheduler puts the work on efficiency cores when it's busy, where it takes longer and less energy), so compare a view with Nebula measured in the same run: after the whole of step 3, 2.6 times Nebula's CPU level, 4.2 looking up and 3.6 in the moving view.
 
+After Step 4 (2026-11-15), the render test taking turns with the build before it (release, seed 5, the lower of two runs each, under load from other work on the Mac, so the integrator's figures on a quiet Mac stand over these):
+
+| View, look | CPU before → after | GPU before → after |
+|---|---|---|
+| Level, teal | 1.05 → 1.02 ms | 1.61 → 1.57 ms |
+| Level, dusk | 1.04 → 1.03 ms | 1.61 → 1.31 ms |
+| Looking up, teal | 1.32 → 1.02 ms | 1.69 → 1.19 ms |
+| Moving between them, level, teal | 1.17 → 1.01 ms | 1.57 → 1.51 ms |
+| Moving between them, looking up, teal | 1.13 → 0.91 ms | 1.16 → 1.15 ms |
+
+So every view is inside the 2 ms of CPU and of GPU, with the school of fish and the new blades paid for by the savings; on battery with Lighter drawing on, the half-resolution water takes another 0.2 to 0.6 ms of GPU off.
+
 A debug build reads about 12 ms of CPU. Looking up and moving between the views are over on CPU: their near plants are many (the moving view's forest has plants from 4 m, for looking up), and each blade is a sprite posed every frame. The next saving is to draw the farther of them as cards. No `batteryRate`: a near stipe moves far over 2 device pixels a frame at 20 fps (research-method.md §5).
 
 ## Checking it
