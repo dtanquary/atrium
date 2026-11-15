@@ -302,9 +302,12 @@ final class AntColony: SKScene {
 
     private static let scatter = SKTexture(data: Nest.scatter(), size: CGSize(width: 512, height: 512))
 
-    private let medium = SKSpriteNode(), swarm = SKNode()
-    /// The share dug; how many times that share a cell's rank is from it, for the shader to open a cell over the
-    /// digging of the twenty before it; and the whole picture's fade up when a farm lands.
+    /// The tank changes only when the dig moves a step, the surroundings arrive, the look changes or it fades, so
+    /// it is drawn into a texture and that is shown until then (`shouldRasterize`: SpriteKit draws it afresh when
+    /// any of its shader's uniforms is set, even to the value it had, so each is set only when it changes).
+    private let tank = SKEffectNode(), medium = SKSpriteNode(), swarm = SKNode()
+    /// The share dug, in steps (`update`); how many times that share a cell's rank is from it, for the shader to
+    /// open a cell over the digging of the twenty before it; and the whole picture's fade up when a farm lands.
     private let dug = SKUniform(name: "u_dug", float: 0), fade = SKUniform(name: "u_fade", float: 1), show = SKUniform(name: "u_show", float: 0)
     /// The tank in cells and the row of its ground line, for the shader.
     private let cells = SKUniform(name: "u_cells", vectorFloat3: [1, 1, 0])
@@ -336,7 +339,9 @@ final class AntColony: SKScene {
         medium.anchorPoint = CGPoint(x: 0, y: 1)
         medium.position = CGPoint(x: 0, y: size.height)
         medium.isHidden = true
-        addChild(medium)
+        tank.shouldRasterize = true
+        tank.addChild(medium)
+        addChild(tank)
         swarm.zPosition = 1
         addChild(swarm)
         backgroundColor = .black
@@ -454,8 +459,14 @@ final class AntColony: SKScene {
         let pick = min(max(look, 0), 4)
         if medium.shader !== shader(pick) { medium.shader = shader(pick) }
         medium.isHidden = false
-        dug.floatValue = Float(share)
-        show.floatValue = Float(simd_smoothstep(0, 1, (wall - shown) / 0.4 + (view == nil ? 1 : 0)))
+        // The dig as the shader shows it moves in whole steps, so the tank is drawn again only when it has moved:
+        // a cell at a time, or as many as the farm digs in half a second at its fastest at this Speed (a large tank
+        // at Speed 8), whichever is more. Rounded up, so a cell an ant may stand in is never shown less dug.
+        let whole = Double(max(nest.dug, 1)), step = max((whole * speed / 86400).rounded(.down), 1)
+        let stepped = Float(min((share * whole / step).rounded(.up) * step / whole, 1))
+        if dug.floatValue != stepped { dug.floatValue = stepped }
+        let showing = Float(simd_smoothstep(0, 1, (wall - shown) / 0.4 + (view == nil ? 1 : 0)))
+        if show.floatValue != showing { show.floatValue = showing }
         swarm.alpha = CGFloat(show.floatValue)
 
         // The ants and the grains they have dropped, made afresh when the look or the size changes.
