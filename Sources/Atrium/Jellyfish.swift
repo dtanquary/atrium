@@ -117,6 +117,11 @@ final class Jellyfish: SKScene {
     private let clock = SKUniform(name: "u_t", float: 0)
     private let water = SKSpriteNode(color: .black, size: .zero)
     private var groups: [Group] = []
+    /// How the jellies' light falls on what is behind them: added in the lit tank, as light through glass, and
+    /// screened in the dark, where added it piled overlapping bells into the brightest thing on screen (and screened
+    /// on the lit tank's blue, every jelly went milky). The two are the same on black but where bells overlap, so the
+    /// switch, as the tank's light all but goes, doesn't show.
+    private var blend = SKBlendMode.add
     /// The tank's slow eddies, the same for every jelly so neighbours drift together: each one's middle (it wanders
     /// round it over minutes), radius and speed (anticlockwise if positive), in units of the tank's scale, and the
     /// phase of its wander.
@@ -196,6 +201,7 @@ final class Jellyfish: SKScene {
         if once {
             lit.floatValue = Float(target.lit)
             crystalShown.floatValue = Float(target.crystal)
+            blend = lit.floatValue < 0.02 ? .screen : .add
         }
         for (i, group) in groups.enumerated() where group.jellies.isEmpty {
             if (i == 0 ? 1 - target.crystal : target.crystal) > 0.01 { fill(group) }
@@ -223,7 +229,7 @@ final class Jellyfish: SKScene {
             let start = begin - .random(in: 0...period, using: &rng)
             let axis = norm(randomUnit() + SIMD3(0, 0.5, 0))
             let node = SKSpriteNode(color: .white, size: CGSize(width: 1, height: 1))
-            node.blendMode = .add
+            node.blendMode = blend
             node.shader = group.shader
             addChild(node)
             group.jellies.append(Jelly(node: node, p: SIMD3(u * (0.85 * half - d / 2), w * 0.75 * half / aspect, z), axis: axis, d: d,
@@ -272,6 +278,10 @@ final class Jellyfish: SKScene {
         lit.floatValue += Float((target.lit - Double(lit.floatValue)) * ease)
         crystalShown.floatValue += Float((target.crystal - Double(crystalShown.floatValue)) * ease)
         water.isHidden = lit.floatValue < 0.002 && crystalShown.floatValue < 0.002 // the glow's water is black, as the scene is behind it
+        if blend != (lit.floatValue < 0.02 ? .screen : .add) {
+            blend = blend == .add ? .screen : .add
+            for group in groups { for j in group.jellies { j.node.blendMode = blend } }
+        }
         // ponytail: the sway and the snow jump once an hour where this wraps; carry their phase on the CPU if a jump shows
         clock.floatValue = Float(simTime.truncatingRemainder(dividingBy: 3600))
         if simTime - lastSun > 60 { settle(at: false) }
@@ -540,6 +550,11 @@ final class Jellyfish: SKScene {
         vec2 q = vec2((v_tex_coord.x - 0.5) * a_box.x, v_tex_coord.y * a_box.y - a_box.z);
         float px = a_box.w, t = u_t;
         float tilt = a_pose.x, seed = a_pose.y, bright = a_pose.z, amp = a_pose.w;
+        // Soft focus: the camera focuses 1.3 tank scales in (2.4 m in the moon jellies' tank), and nearer and further
+        // bells blur as a lens's would, by how far off focus they are in 1/distance: about 2.5 points across on the
+        // nearest, 1.5 on the furthest. The distance is read back from the fog. Every edge is at least that soft.
+        px = max(px, 6.5 * abs(1.0 / (0.65 - 3.167 * log(bright)) - 0.77) * a_box.w);
+        float edge = max(0.02, 0.5 * px), thin = max(0.035, 0.7 * px);
         float S = amp * squeezeAt(0.0, a_pulse);
         float A = 1.0 - SHRINK * S, C = HEIGHT + RISE * S;
         // The skirt: its hinge, its angle, and the margin at its foot (tx out, ty up), where the fringe hangs from.
@@ -578,10 +593,10 @@ final class Jellyfish: SKScene {
                 float inner = flap ? outer - mix(thick, 0.06 * A, (yh - Yb) / (yh - ty)) : A * 0.94 * sqrt(max(1.0 - (Yb / inH) * (Yb / inH), 0.0));
                 float square = flap ? ca : 1.0, o = (rho - outer) * square, n = (rho - inner) * square;
                 float below = smoothstep(ty - 0.015, ty + 0.015, Yb);
-                tissue += smoothstep(0.02, -0.02, o) * below * smoothstep(-0.02, 0.02, n) * dz;
+                tissue += smoothstep(edge, -edge, o) * below * smoothstep(-edge, edge, n) * dz;
                 // A step can stride right over the skin, 0.035 thick, where the line of sight crosses it squarely: so
                 // each skin is widened to the step's stride across it and dimmed to match, and keeps its light.
-                float wo = i == 0 ? 0.035 : max(0.035, 0.6 * abs(o - oLast)), wn = i == 0 ? 0.035 : max(0.035, 0.6 * abs(n - nLast));
+                float wo = i == 0 ? thin : max(thin, 0.6 * abs(o - oLast)), wn = i == 0 ? thin : max(thin, 0.6 * abs(n - nLast));
                 oLast = o; nLast = n;
                 float sk = (0.035 / wo * exp(-pow(o / wo, 2.0)) + 0.5 * 0.035 / wn * exp(-pow(n / wn, 2.0)) * step(Yb, inH))
                     * below * smoothstep(C + 0.03, C - 0.01, Yb);
@@ -601,7 +616,7 @@ final class Jellyfish: SKScene {
                 if (abs(g) < 0.15) {
                     float h = Yb - inH * (1.0 - 0.566 * rho * rho / (A * A)) + 0.03;
                     float open = smoothstep(-0.95, -0.7, dot(normalize(d + 1e-4), vec2(0.7071))); // the gap faces the middle
-                    float tube = 0.05 * (1.0 + 0.4 * sin(9.0 * q.x + 7.0 * Zb + seed)), w = max(tube, 0.6 * dz);
+                    float tube = 0.05 * (1.0 + 0.4 * sin(9.0 * q.x + 7.0 * Zb + seed)), w = max(max(tube, 0.6 * dz), 0.7 * px);
                     organ += tube / w * exp(-(g * g + h * h) / (w * w)) * open * dz * 8.0 * ripe;
                 }
                 #endif

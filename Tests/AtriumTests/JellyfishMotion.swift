@@ -128,3 +128,15 @@ import Testing
         #expect(differing < 50)
     }
 }
+
+/// The jellies' light is added to the lit tank's blue, as light through glass, and screened on the dark looks' black,
+/// where added it piled overlapping bells into the brightest thing on screen; screened on the blue, they went milky.
+@MainActor @Test func jellyfishScreensInTheDark() {
+    defer { ["jellyfish.seed", "jellyfish.look"].forEach(UserDefaults.standard.removeObject) }
+    UserDefaults.standard.set(22, forKey: "jellyfish.seed")
+    for (look, blend) in [(4, SKBlendMode.add), (5, .screen), (6, .screen)] { // the lit tank, the glow, the crystal jellies
+        UserDefaults.standard.set(look, forKey: "jellyfish.look")
+        let jellies = Jellyfish(size: CGSize(width: 1512, height: 982)).children.compactMap { $0 as? SKSpriteNode }.filter { $0.zPosition > -10 }
+        #expect(!jellies.isEmpty && jellies.allSatisfy { $0.blendMode == blend })
+    }
+}
