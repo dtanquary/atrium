@@ -79,17 +79,6 @@ func eclipsesLineUp(time: String, latitude: Double, longitude: Double) {
     #expect(strongest(3, 15).hourly == 0)
 }
 
-/// The made-up comet comes and goes: on 16 November 2026, half-way through its first visit, it's at its brightest and
-/// about 45° from the Sun; nine days later it has gone, and it's back for the next visit on 20 December.
-@Test func madeUpCometComesAndGoes() throws {
-    func noon(_ month: Int, _ day: Int) -> Double {
-        Sky.julianDate(DateComponents(calendar: Calendar(identifier: .gregorian), timeZone: .gmt, year: 2026, month: month, day: day, hour: 0).date!)
-    }
-    let peak = try #require(NightSky.comet(noon(11, 16)))
-    #expect(peak.bright > 0.99 && (44...52).contains(acos(dot(peak.direction, Sky.sun(noon(11, 16)))) * 180 / .pi))
-    #expect(NightSky.comet(noon(11, 25)) == nil && NightSky.comet(noon(12, 20)) != nil)
-}
-
 /// Night Sky's fainter stars come from Black Hole's star file, which is baked already turned to that scene's view, and
 /// `NightSky.toStars` is that turn. Bake the file for another view and Night Sky's stars would all land in the wrong
 /// places with nothing to say so; this says so: each of the 20 brightest stars of Night Sky's own catalogue has to be

@@ -14,7 +14,6 @@ final class NightSky: SKScene, BatteryPaced {
         Knob(key: "sky.constellations", label: "Constellation lines", range: 0...1, standard: 1, section: "Show",
              format: .toggle),
         Knob(key: "sky.planetLabels", label: "Labels", range: 0...1, standard: 1, section: "Show", format: .toggle),
-        Knob(key: "sky.comets", label: "Comets (made up)", range: 0...1, standard: 0, section: "Show", format: .toggle),
         Knob(key: "sky.landscape", label: "Show a landscape", range: 0...1, standard: 0, section: "Landscape",
              format: .toggle),
         Knob(key: "sky.ground", label: "Landscape", range: 0...Double(Landscape.allCases.count - 1), standard: 0,
@@ -30,13 +29,9 @@ final class NightSky: SKScene, BatteryPaced {
     private let constellations = SKShapeNode()
     private var planets: [(planet: Sky.Planet, node: SKSpriteNode)] = []
     private let sun = SKSpriteNode()
-    private let sunGlow = SKSpriteNode()
     private let moon = SKSpriteNode(color: .white, size: CGSize(width: 46, height: 46))
-    private let moonGlow = SKSpriteNode()
     private let moonLight = SKUniform(name: "u_light", vectorFloat3: [0, 0, 1])
     private let iss = SKSpriteNode()
-    private let comet = SKSpriteNode(color: .white, size: .zero)
-    private let cometLook = SKUniform(name: "u_look", vectorFloat2: [0, 1]) // how bright, and which way its dust tail curls
     /// What's worth pointing out in the sky's photograph, by right ascension and declination (J2000, degrees).
     private static let sights: [(name: String, ra: Double, dec: Double)] = [
         ("Orion Nebula", 83.82, -5.39), ("Rosette Nebula", 97.98, 4.95), ("Pleiades", 56.75, 24.12),
@@ -55,6 +50,7 @@ final class NightSky: SKScene, BatteryPaced {
     private let starFrame = SKUniform(name: "u_toStars", matrixFloat3x3: matrix_identity_float3x3)
     private let twilightUniform = SKUniform(name: "u_twilight", float: 0)
     private let sunUniform = SKUniform(name: "u_sun", vectorFloat3: [0, 0, 1])
+    private let moonUniform = SKUniform(name: "u_moon", vectorFloat4: [0, 0, 1, 0]) // where it is, and how strongly it glows
 
     /// The horizon's height on screen: `landHorizon` with a landscape, and the bottom edge without one, so the sky
     /// fills the screen and nothing in it is below the horizon.
@@ -86,7 +82,6 @@ final class NightSky: SKScene, BatteryPaced {
         iss.zPosition = 4
         iss.addChild(label("ISS", alpha: 0.6))
         addChild(iss)
-        addComet()
         sightNames.zPosition = 3
         addChild(sightNames)
         for sight in Self.sights {
@@ -130,8 +125,8 @@ final class NightSky: SKScene, BatteryPaced {
         for planet in planets { planet.node.children.forEach { $0.isHidden = Self.knobs[1].value < 0.5 } } // their labels
         radiants.isHidden = Self.knobs[1].value < 0.5
         sightNames.isHidden = radiants.isHidden
-        ground.isHidden = Self.knobs[3].value < 0.5
-        let pick = Landscape.allCases[min(Int(Self.knobs[4].value), Landscape.allCases.count - 1)]
+        ground.isHidden = Self.knobs[2].value < 0.5
+        let pick = Landscape.allCases[min(Int(Self.knobs[3].value), Landscape.allCases.count - 1)]
         if !ground.isHidden, pick != landscape { paintGround(pick) }
         horizonY = ground.isHidden ? 0 : landHorizon
         horizonUniform.floatValue = Float(horizonY)
@@ -141,8 +136,8 @@ final class NightSky: SKScene, BatteryPaced {
 
     /// Now, or today at the preview hour while previewing a time of day.
     private var skyDate: Date {
-        guard Self.knobs[5].value > 0.5 else { return Date() }
-        return Calendar.current.startOfDay(for: Date()).addingTimeInterval(Self.knobs[6].value * 3600)
+        guard Self.knobs[4].value > 0.5 else { return Date() }
+        return Calendar.current.startOfDay(for: Date()).addingTimeInterval(Self.knobs[5].value * 3600)
     }
 
     // MARK: Projection
@@ -205,18 +200,6 @@ final class NightSky: SKScene, BatteryPaced {
         for (planet, node) in planets { place(node, at: toHorizon * Sky.planet(planet, jd)) }
         for (sight, spot) in zip(Self.sights, sightNames.children) { place(spot, at: toHorizon * Sky.direction(sight.ra, sight.dec)) }
 
-        // The made-up comet, while one is passing and Settings has them on: its tails stream away from the Sun, and
-        // it shrinks as it fades. The sprite holds the head a tenth of the way along.
-        if Self.knobs[2].value > 0.5, let visitor = Self.comet(jd, north: here.latitude >= 0) {
-            let at = toHorizon * visitor.direction, long = visitor.tail * visitor.bright * .pi / 180 * scale * 1.15 / 0.9
-            place(comet, at: at)
-            comet.size = CGSize(width: long, height: long / 2)
-            comet.zRotation = screenAngle(from: at, toward: sunH) + .pi
-            cometLook.vectorFloat2Value = [Float(visitor.bright), Float(visitor.curl)]
-        } else {
-            comet.isHidden = true
-        }
-
         // Meteor showers: each one's radiant, named while it gives two an hour or more, and how many of its meteors
         // reach this sky, fewer the lower its radiant stands.
         let sunLongitude = Sky.sunLongitude(jd)
@@ -233,8 +216,6 @@ final class NightSky: SKScene, BatteryPaced {
         sunUniform.vectorFloat3Value = facingSouth ? [Float(-sunH.x), Float(sunH.z), Float(-sunH.y)]
                                                    : [Float(sunH.x), Float(sunH.z), Float(sunH.y)]
         place(sun, at: sunH)
-        sunGlow.position = sun.position
-        sunGlow.isHidden = sun.isHidden
         sun.colorBlendFactor = CGFloat(1 - simd_smoothstep(0, 12, sunAltitude)) // redder near the horizon
 
         // SpriteKit strokes the whole path again every frame, so leave out the lines it can't show: each unbroken
@@ -268,9 +249,8 @@ final class NightSky: SKScene, BatteryPaced {
         let phase = acos(2 * lit - 1) // Sun–Moon–Earth angle
         moonLight.vectorFloat3Value = [Float(sin(phase) * cos(toSun)), Float(sin(phase) * sin(toSun)), Float(cos(phase))]
         place(moon, at: moonH)
-        moonGlow.position = moon.position
-        moonGlow.isHidden = moon.isHidden
-        moonGlow.alpha = 0.5 * lit
+        moonUniform.vectorFloat4Value = facingSouth ? [Float(-moonH.x), Float(moonH.z), Float(-moonH.y), Float(0.5 * lit)]
+                                                    : [Float(moonH.x), Float(moonH.z), Float(moonH.y), Float(0.5 * lit)]
         if !moon.isHidden { moon.zRotation = screenAngle(from: moonH, toward: poleH) - .pi / 2 }
 
         // The background maps screen → sky → the photo, and the fainter stars' grid: plane (right, up, forward) →
@@ -374,60 +354,9 @@ final class NightSky: SKScene, BatteryPaced {
         }
     }
 
-    /// A comet that isn't there, for whoever turns Comets on in Settings: one visits for ten days in every 37,
-    /// counted from 11 November 2026, in the evening sky and the morning sky by turns. It closes from 75° to 45° from
-    /// the Sun, brightening, and draws away again, on the side of the Sun's path that stands higher for a viewer in
-    /// the north or the south, so it's well up in this view at dusk or dawn (a real one keeps nearer the Sun, which
-    /// from here sets beyond the screen's edge). Nil between visits. Real comets were looked at first: one bright
-    /// enough for this sky comes for a few weeks in a year or two (docs/night-sky.md).
-    nonisolated static func comet(_ jd: Double, north: Bool = true) -> (direction: Sky.Vector, bright: Double, tail: Double, curl: Double)? {
-        let days = jd - 2461355.5, visit = (days / 37).rounded(.down), passed = (days - visit * 37) / 10
-        guard passed < 1 else { return nil }
-        func chance(_ n: Double) -> Double { // 0 to 1, this visit's own
-            let x = sin(visit * 12.9898 + n * 78.233) * 43758.5453
-            return x - x.rounded(.down)
-        }
-        let evening = visit.truncatingRemainder(dividingBy: 2) == 0, apart = 45 + 30 * (1 - sin(.pi * passed))
-        let longitude = Sky.sunLongitude(jd) + (evening ? apart : -apart) // east of the Sun sets after it
-        let latitude = (north ? 1 : -1) * (4 + 14 * chance(1)) + (chance(2) - 0.5) * 12 * (2 * passed - 1)
-        return (Sky.equatorial(fromEcliptic: Sky.direction(longitude, latitude)), pow(sin(.pi * passed), 0.6),
-                14 + 12 * chance(3), chance(4) < 0.5 ? -1 : 1)
-    }
-
-    /// The comet's picture: a greenish head, a thin straight blue tail of gas and a broad pale one of dust that curls
-    /// to one side, all added to the sky behind. Along the sprite, 0 is the head and 1 the tails' end.
-    private func addComet() {
-        comet.anchorPoint = CGPoint(x: 0.1, y: 0.5)
-        comet.zPosition = 3
-        comet.isHidden = true
-        comet.shader = SKShader(source: """
-            void main() {
-                vec2 p = vec2(v_tex_coord.x - 0.1, (v_tex_coord.y - 0.5) * 0.5) / 0.9;
-                float along = max(p.x, 0.0);
-                float end = smoothstep(0.0, 0.03, p.x) * (1.0 - smoothstep(0.7, 1.0, p.x));
-                float head = exp(-dot(p, p) / 0.0002) + 0.6 * exp(-dot(p, p) / 0.002);
-                float gasWide = 0.006 + 0.02 * along;
-                float gas = exp(-p.y * p.y / (gasWide * gasWide)) * exp(-1.6 * along) * end;
-                float curled = p.y - u_look.y * 0.16 * along * along;
-                float dustWide = 0.012 + 0.1 * along;
-                float dust = exp(-curled * curled / (dustWide * dustWide)) * exp(-2.2 * along) * end;
-                vec3 colour = vec3(0.75, 1.0, 0.9) * head + vec3(0.5, 0.68, 1.0) * 0.6 * gas + vec3(1.0, 0.94, 0.84) * 0.8 * dust;
-                gl_FragColor = vec4(colour * u_look.x, 0.0);
-            }
-            """, uniforms: [cometLook])
-        addChild(comet)
-    }
-
-    /// The Sun: a bright disc in a wide warm glow, among the stars, drawn only when it's up and in view.
+    /// The Sun: a bright disc among the stars, drawn only when it's up and in view. Its wide warm glow is the sky
+    /// shader's, as the Moon's is.
     private func addSun() {
-        sunGlow.texture = glow
-        sunGlow.size = CGSize(width: 360, height: 360)
-        sunGlow.color = NSColor(red: 1, green: 0.85, blue: 0.6, alpha: 1)
-        sunGlow.colorBlendFactor = 1
-        sunGlow.alpha = 0.6
-        sunGlow.zPosition = 3
-        addChild(sunGlow)
-
         sun.texture = paint(CGSize(width: 48, height: 48)) { ctx in
             let colours = [CGColor(red: 1, green: 1, blue: 0.96, alpha: 1), CGColor(red: 1, green: 0.95, blue: 0.82, alpha: 1),
                            CGColor(red: 1, green: 0.9, blue: 0.7, alpha: 0)] as CFArray
@@ -442,13 +371,6 @@ final class NightSky: SKScene, BatteryPaced {
     }
 
     private func addMoon() {
-        moonGlow.texture = glow
-        moonGlow.size = CGSize(width: 220, height: 220)
-        moonGlow.color = NSColor(red: 0.8, green: 0.85, blue: 1, alpha: 1)
-        moonGlow.colorBlendFactor = 1
-        moonGlow.zPosition = 3
-        addChild(moonGlow)
-
         // NASA's map of the near side (Weather's), north up, on a sphere lit from u_light in the disc's frame.
         moon.shader = SKShader(source: moonShade + """
             void main() {
@@ -570,6 +492,13 @@ final class NightSky: SKScene, BatteryPaced {
                     }
                 }
 
+                // The Sun's glow and the Moon's, while each is up. They are wide and faint, so they belong here with
+                // the dither below: as sprites, their steps of brightness showed as rings on the dark sky.
+                colour += vec3(1.0, 0.85, 0.6) * 0.6 * exp(-acos(clamp(dot(d, u_sun), -1.0, 1.0)) / 0.06)
+                    * smoothstep(-0.02, 0.02, u_sun.y);
+                colour += vec3(0.8, 0.85, 1.0) * u_moon.w * exp(-acos(clamp(dot(d, u_moon.xyz), -1.0, 1.0)) / 0.036)
+                    * smoothstep(-0.02, 0.02, u_moon.y);
+
                 // Sunrise and sunset: a warm band low in the sky, strongest toward the Sun's azimuth.
                 float sunward = exp((dot(normalize(d.xz), normalize(u_sun.xz + vec2(0.0, 0.0001))) - 1.0) * 2.5);
                 float low = exp(-max(d.y, 0.0) * 6.0);
@@ -588,7 +517,7 @@ final class NightSky: SKScene, BatteryPaced {
                     grid.filteringMode = .nearest
                     return grid
                 }),
-                photoFrame, starFrame, twilightUniform, sunUniform,
+                photoFrame, starFrame, twilightUniform, sunUniform, moonUniform,
             ])
         addChild(sky)
     }

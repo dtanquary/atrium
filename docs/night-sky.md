@@ -27,6 +27,7 @@ The real sky above the viewer right now, looking toward the equator: 116,000 sta
   - **The fainter stars** (`u_stars`, since 2026-11-14): the HYG catalogue's 113,000 from magnitude 5.3 to 11, drawn by the shader as points, so they are as sharp as the screen at any size. They come from Black Hole's file (`blackhole-stars.lzfse`, in that scene's frame; `NightSky.toStars` turns to it). The two are tied by a test, `starFileIsInNightSkysFrame`: if the file is ever baked for another view of Black Hole's, the 20 brightest stars are no longer where the turn puts them and it fails, and `docs/black-hole/sky.py` says so where the turn is set. Its own copy of the stars would cut the tie for 0.6 MB more. `starGrid()` lays them in a 2048 × 1024 grid the shader can find a star in: a row every 0.18° of latitude, each holding as many cells as keep them about 0.18° wide (bands of 32 rows share a count, from 2,048 round the middle to 200 by the poles), one star to a cell. A pixel looks in the two cells nearest it in each of the two rows nearest it, and adds each star it finds as a small bell 0.3 to 0.5 points in radius, brighter and larger for a brighter star, tinted by its B−V. The projection keeps shapes, so the stars are round everywhere. Sprites still draw the 2,887 brighter ones, which glow and twinkle.
     - Why not one plate carrée grid as Black Hole has: its cells narrow toward its poles, and a star can only shine as far as half a cell, so stars within 30° of either pole (an eighth of the sky) came out half size.
     - The shader has to count a row's cells exactly as `cells(row:)` does. It works from the band, a whole number, and none of the sixteen counts lies within a tenth of a whole number, so a GPU's cosine can't round the other way; `faintStarsKeepTheirCells` checks that.
+  - **The Sun's glow and the Moon's**, while each is up: e^(−angle ÷ 0.06) of warm light round the Sun and e^(−angle ÷ 0.036) of pale blue round the Moon, the Moon's by how much of it is lit (`u_moon`). They were sprites until 2026-11-14.
   - A twilight band of warm light sits low in the sky, strongest toward the Sun's azimuth (`u_twilight`, `u_sun` in the same right/up/forward frame).
   - ±½/255 dither against banding.
 - **Stars:** the brighter ones are sprites. `stars.txt` holds 2,887 stars to magnitude 5.5, as `RA Dec V B−V` in degrees, J2000.
@@ -34,14 +35,14 @@ The real sky above the viewer right now, looking toward the equator: 116,000 sta
   - Stars brighter than V 2 twinkle with fade actions.
 - **Constellations:** one `SKShapeNode` path, rebuilt each refresh from `constellations.txt` polylines. A segment breaks where it dips below the horizon. SpriteKit strokes a shape node's whole path again every frame, path unchanged or not, so the path holds only the unbroken runs with a segment on screen, each run whole (cutting off just its off-screen segments moved pixels along the rest), and nothing while the lines are switched off.
 - **Planets:** `Sky.planet(_:_:)` gives Mercury to Saturn. Each is a glow sprite with a fixed size and colour and an "ISS"-style label as its child.
-- **Sun:** a 48 pt disc and a 360 pt glow, blended toward orange below 12° altitude. It's hidden below the horizon or out of view, and otherwise sits among the stars: in mid-November, in Libra.
+- **Sun:** a 48 pt disc, blended toward orange below 12° altitude, in a wide warm glow that the sky shader draws. It's hidden below the horizon or out of view, and otherwise sits among the stars: in mid-November, in Libra.
 - **Moon:** a 46 pt disc (exaggerated; the real Moon is about 5 pt at this scale) drawn by a shader.
   - The shader treats the disc as a sphere lit from `u_light`, wearing NASA's map of the near side (`weather-moon.png`, Weather's, from LRO; since 2026-11-14, in place of 11 hand-placed blobs for the seas).
   - Its shading is `moonShade` (Shaders.swift, shared with Weather): McEwen's lunar-Lambert, as in The Moon, so the light fades toward the terminator instead of stopping at an edge. It's shown as its square root (light to display), over an opaque disc with a little blue earthshine on the dark side, faint enough that the seas only just show in it.
   - The disc is rotated so its north points to the celestial pole on screen (`screenAngle` toward `poleH`).
   - The light direction is measured from the Moon's north using `skyAngle`, which works in the local frame of someone facing the Moon with their head upright. That keeps it correct however the disc is turned.
   - The phase angle comes from `Sky.moonPhase(jd).lit` (`acos(2·lit − 1)`).
-  - Glow alpha = 0.5 · lit.
+  - Its glow is the sky shader's, 0.5 · lit strong.
 - **Names in the photo** (`sights`, since 2026-11-14): fourteen things worth pointing out get a faint name beside them, under the Labels switch: the Orion, Rosette, Lagoon, Carina and North America nebulae, the Pleiades, the Beehive and Double clusters, Omega Centauri, the Andromeda Galaxy, the Magellanic Clouds, the Coalsack and the center of the Milky Way. From 40°N on a November night that's four at a time. A name sits to the right of what it names, or to the left where the screen's edge is near (`place`), which planets and radiants get too.
 - **ISS:** in `update(_:)`, using `ISS.shared.position()` → `Sky.lookDirection` → `place()`. It's shown only while sunlit (the real naked-eye condition), with a label as a child.
 - **Meteors:** a painted 140×2 pt streak, fading over 0.7 s, every 15–75 s on a night with no shower (`awaitMeteor`).
@@ -83,7 +84,6 @@ The real sky above the viewer right now, looking toward the equator: 116,000 sta
 |---|---|---|---|---|
 | `sky.constellations` | Constellation lines | toggle | on | `constellations.isHidden` |
 | `sky.planetLabels` | Labels | toggle | on | the planets' names, the names of things in the photo, and the meteor showers' radiants (it was Planet labels until 2026-11-14; the key kept its name) |
-| `sky.comets` | Comets (made up) | toggle | off | the made-up comet, while one is visiting |
 | `sky.landscape` | Show a landscape | toggle | off | `ground.isHidden`, and `horizonY` (12% up, or the bottom edge) through `u_horizon` |
 | `sky.ground` | Landscape (shown while the switch is on) | menu | Pine ridge | which `Landscape` is painted, stored as its place in the list |
 | `sky.previewTime` | Preview a time of day | toggle | off | `skyDate` uses the preview hour |
@@ -98,7 +98,7 @@ The real sky above the viewer right now, looking toward the equator: 116,000 sta
   - size `11 − 1.55·V`, minimum 2.2 pt
   - alpha `1.2 − 0.14·V`, clamped between 0.35 and 1
   - bright stars twinkle to 60% over 0.15–0.5 s
-- **Sprite sizes:** Moon 46 pt, Moon glow 220 pt, Sun 48 pt, Sun glow 360 pt.
+- **Sizes:** Moon 46 pt, Sun 48 pt. Their glows fall off as e^(−angle ÷ 2.1°) for the Moon and e^(−angle ÷ 3.4°) for the Sun, which is what the 220 and 360 pt sprites before them did.
 
 ## Performance
 - About 0.55 ms CPU and 0.55 ms GPU per frame (debug build, 2x, 1512×982, measured 2026-11-14). The photo alone is one lookup, 0.19 ms; the fainter stars' four lookups and their arithmetic are the rest. With the drawn Milky Way it was 0.71 ms the same day.
@@ -126,10 +126,11 @@ The real sky above the viewer right now, looking toward the equator: 116,000 sta
 - **Moon's terminator (2026-10-03).** In Weather he saw the half Moon end in a hard edge by day, where the real one fades into the sky, and asked for this one to be checked too. Both now share `moonShade`.
 - **Switches.** He asked for the constellation and planet-label switches.
 - **Landscape (2026-10-05).** He asked for a switch to turn the landscape off, and for more silhouettes to choose between. Off means no ground at all, not a flat one: the horizon drops to the bottom edge. Once he had the switch he asked for off to be the default ("i think we should default to no landscape", "it looks nice without a landscape there imo"), so the landscapes are an extra for those who want one.
-- **Preview.** Added so he could see the daytime look on demand; now it shows the sky of any hour today.
+- **Preview.** Added so he could see the daytime look on demand; now it shows the sky of any hour today. It stays on until turned off, and that caught him out on 2026-11-14: at 6:42 pm he asked "why do I see both the sun and the moon on this?", with the preview still at 1 pm from earlier in the day, when both were up. Nothing on the desktop says a preview is showing.
+- **The Sun's glow had rings (2026-11-14).** His screenshot showed them: the glow was a 16-pixel sprite stretched to 360 points, and its steps of brightness stood out on the dark sky. The Sun's glow and the Moon's are now worked out in the sky shader, where the dither hides the steps.
 - **Making it look really cool (2026-11-14).** With the move back to Night Sky he asked to "see if there is anything else we can do to enhance that experience, comets, nebula, whatever you can think of that would make it look really cool". The nebulae came as real ones: the photograph of the whole sky was already in the app for Space Tour (though that copy fades to black at its edges, which would cut a dark seam through Taurus, so this one is made from ESO's original). With it came names for what's in it, the Moon's real face, and meteors from the real showers.
 - **Sharpness (2026-11-14).** Seeing the first version he asked "is our milky way image we are using super high res? we need it to be as high quality as possible". It wasn't: 4096 pixels wide, half what his screen shows, with the photo's own soft stars in it. ESO publishes nothing larger than 6000 × 3000, so the answer was to stop drawing stars from a picture: the photo, at its full size and lossless, for the glow and the nebulae, and the catalogue for the stars.
-- **A made-up comet, behind a switch (2026-11-14).** Told that a real comet would be on screen a few weeks a year, he chose: "maybe we just fake comets based on a setting option, but if we fixed to be real then lets cut it (i think an option to fake them and just have them be there every so often would be cool)". Comets (made up) is off unless turned on, since everything else here is real; that default is my call, his to change. On, one visits for ten days in every 37 (`NightSky.comet`), in the evening and the morning sky by turns, closing from 75° to 45° from the Sun and back, with a greenish head, a straight blue gas tail and a curling dust tail 14° to 26° long at its brightest, streaming away from the real Sun. It keeps further from the Sun than a real one would, and on the side of the Sun's path that stands higher for the viewer, so that it's up in this south-facing view at dusk or dawn. The first visit is 11 to 21 November 2026.
+- **A made-up comet, tried and cut (2026-11-14).** Told that a real comet would be on screen a few weeks a year, he chose: "maybe we just fake comets based on a setting option, but if we fixed to be real then lets cut it (i think an option to fake them and just have them be there every so often would be cool)". It was built that way: a Comets (made up) switch, off unless turned on, and with it a comet for ten days in every 37, 45° to 75° from the Sun, with a greenish head, a straight blue gas tail and a curling dust tail streaming away from the real Sun. Seeing it on his desktop the same evening: "the comets do not look good, lets cut them entirely". It's gone, switch and all (commit 54e4333 has it, for the record). Don't bring a comet back without a look he has picked first.
 - **Real comets were looked at first (2026-11-14).** Real ones are there for the asking: NASA JPL's Small-Body Database answers `https://ssd-api.jpl.nasa.gov/sbdb_query.api?fields=full_name,e,q,i,om,w,tp,M1,K1&sb-kind=c&sb-cdata={"AND":["q|LT|4","tp|RG|<a year back>|<a year on>"]}` with about fifty comets' orbits and brightness in 5 KB, and Kepler's equation does the rest. But worked through for tonight, the brightest was C/2024 T5 (ATLAS) at magnitude 13, a thousand times fainter than the faintest star drawn here, and over the year only C/2025 R3 (PANSTARRS) came near the naked eye, about magnitude 8 for a few weeks in April. A real comet would be on screen a few weeks a year, which is why he took the made-up one above.
 
 ## Landscapes: what was looked at (2026-10-05)
@@ -151,7 +152,7 @@ A research agent compared drawn recipes, real skylines and traced photos, each a
 - Real planet magnitudes, from distance and phase.
 - Topocentric Moon parallax.
 - Each shower's own activity curve and its radiant's drift (see the `ponytail:` on `hourly`), and their speeds: Leonids at 71 km/s are quick, Taurids at 27 slow and often bright.
-- Real comets beside the made-up ones, when one is bright enough (see the decisions above for the feed and what it would show).
+- Real comets, when one is bright enough (see the decisions above for the feed and what it would show). The made-up one was cut for how it looked, so a real one needs its picture settled first.
 - The Milky Way's finest structure is the photo's 17 pixels a degree. NASA's Deep Star Maps 2020 (public domain, from Gaia, up to 64K) has finer dust lanes but no nebulae: its detail could be laid into this photo's colours.
 - Names for the brightest stars, and for the constellations beside their lines.
 - Satellite flares and more satellites.
@@ -176,6 +177,5 @@ A research agent compared drawn recipes, real skylines and traced photos, each a
   - the photo's bright stars are where the catalogue's are (`skyPhotoLinesUpWithTheStars`)
   - Black Hole's star file is in the frame `toStars` turns to (`starFileIsInNightSkysFrame`)
   - the star grid's rows hold the cells the shader expects, and over 105,000 stars keep one (`faintStarsKeepTheirCells`)
-  - the made-up comet is at its brightest on 16 November 2026, gone nine days later and back on 20 December (`madeUpCometComesAndGoes`)
   - the Perseids, Geminids and Quadrantids are each the strongest shower on their night, and March has none (`showersPeakOnTheirNights`)
 - To see where meteors go, set `awaitMeteor`'s 45 to 0.2 for a moment, render `SNAPSHOT_MOVIE=8` and lay the frames over each other, keeping the lighter pixel: the streaks should point back at the ringed radiants.
