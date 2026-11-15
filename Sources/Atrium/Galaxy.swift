@@ -253,9 +253,11 @@ final class Galaxy: SKScene, Trimmable {
         vec3 light = vec3(0.0);
         vec3 absorb = vec3(1.0);
         vec3 vivid = vec3(0.0); // H II light added after the stretch
-        // A steeply tilted galaxy also has a rounder glow around it (below), so it gets a rounder region to draw in.
+        // Everything in the disc fades out by rt = 1.4 (the disc, and the stars, knots and dust it gates); beyond it
+        // there's only sky. A steeply tilted galaxy also has a rounder glow around it (below), out to rh = 1.6, so it
+        // gets a rounder region to draw in. (Drawing to rt = 1.6 cost the largest rolls about 0.2 ms for no light.)
         float rh = length(vec2(e.x, e.y / mix(u_tilt, 1.0, 0.3)));
-        if ((u_tilt < 0.5 ? rh : rt) < 1.6) { // everything fades out by here; beyond it there's only sky
+        if (u_tilt < 0.5 ? rh < 1.6 : rt < 1.4) {
             vec2 g = turn(d, -u_phase);
             float arms = u_shape.x;
             float bar = u_shape.z;
