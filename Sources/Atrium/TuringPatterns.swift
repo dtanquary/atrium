@@ -266,9 +266,10 @@ final class TuringPatterns: SKScene {
             // the pattern as a softly lit relief, like brain coral: v is its height, lit from the upper left. Its edge is
             // in focus: 2.5 device pixels wide round the contour at 0.35, whatever the field's slope there, and never
             // narrower than 0.008 of v, so a flat place (a saddle between two arms, a patch dissolving) keeps a ramp
-            float edge = max(1.25 * length(vec2(dfdx(v), dfdy(v))), 0.004);
+            vec2 slope = vec2(dfdx(v), -dfdy(v)); // a device pixel across and up: Metal's dfdy runs down the screen
+            float edge = max(1.25 * length(slope), 0.004);
             float body = smoothstep(0.35 - edge, 0.35 + edge, v);
-            vec3 n = normalize(vec3(-dfdx(v) * 28.0, -dfdy(v) * 28.0, 1.0));
+            vec3 n = normalize(vec3(-slope * 28.0, 1.0));
             vec3 l = normalize(vec3(-0.45, 0.55, 0.7));
             float diffuse = clamp(0.55 + 0.6 * dot(n, l), 0.0, 1.3);
             float sheen = pow(max(dot(reflect(-l, n), vec3(0.0, 0.0, 1.0)), 0.0), 16.0);

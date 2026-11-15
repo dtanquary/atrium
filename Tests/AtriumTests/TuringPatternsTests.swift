@@ -56,3 +56,22 @@ private func edgeWidth(_ pixels: [SIMD3<Int>], _ w: Int) -> Double {
 @MainActor @Test func turingPatternsEdgeIsInFocus() throws {
     #expect(edgeWidth(try picture(light: true), 640) < 3)
 }
+
+/// How bright the ink is just inside the top edges of the pattern and just inside the bottom ones, in a Light Mode
+/// picture `w` to a row: the mean of red, green and blue over the ink with paper six pixels above it, and below it.
+private func flanks(_ pixels: [SIMD3<Int>], _ w: Int) -> (top: Double, bottom: Double) {
+    var top = (sum: 0, count: 0), bottom = (sum: 0, count: 0)
+    for i in 6 * w..<pixels.count - 6 * w where pixels[i].x < 110 {
+        if pixels[i - 6 * w].x > 150 { top = (top.sum + pixels[i].wrappedSum(), top.count + 1) }
+        if pixels[i + 6 * w].x > 150 { bottom = (bottom.sum + pixels[i].wrappedSum(), bottom.count + 1) }
+    }
+    return (Double(top.sum) / Double(max(top.count, 1)) / 3, Double(bottom.sum) / Double(max(bottom.count, 1)) / 3)
+}
+
+/// The relief is lit from above, as its doc always said: the ink inside an arm's top edge is brighter than the ink
+/// inside its bottom edge (measured 64 against 49 of 255). Until 2026-11-14 it was the other way up, 48 against 67,
+/// as Metal's `dfdy` runs down the screen.
+@MainActor @Test func turingPatternsAreLitFromAbove() throws {
+    let lit = flanks(try picture(light: true), 640)
+    #expect(lit.top > lit.bottom + 5)
+}
