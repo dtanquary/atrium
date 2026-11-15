@@ -222,3 +222,15 @@ private func save(_ railway: Railway, night: Float, _ name: String, scale: Int =
     let commonest = Dictionary(grouping: px, by: { $0 }).values.map(\.count).max()!
     #expect(Double(commonest) / Double(px.count) < 0.25, "\(commonest) of \(px.count)")
 }
+
+/// A vehicle casts a shadow beyond its own pixels, away from the Sun (which comes from the left of the screen).
+@Test func railwayTrainsCastShadows() {
+    let view = RailView(w: 64, h: 64), car = RailArt.upCoach
+    for heading in [0.0, 1.2, 2.5] {
+        let body = Painted(Marched(car.grid, view, heading: heading, fine: true), view, era: .streamliners)
+        let own = Set(zip(body.dx, body.dy).map { SIMD2($0, $1) })
+        let beyond = Painted.shadow(car.grid, view, heading: heading, slope: 0).filter { !own.contains($0) }
+        let mean = { (xs: [Int16]) in Double(xs.reduce(0) { $0 + Int($1) }) / Double(max(xs.count, 1)) }
+        #expect(beyond.count > 10 && mean(beyond.map(\.x)) > mean(body.dx), "heading \(heading): \(beyond.count) beyond")
+    }
+}

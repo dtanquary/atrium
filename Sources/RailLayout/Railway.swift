@@ -20,6 +20,10 @@ public final class Railway {
     /// and by night.
     private var switchRails: [Turnout: [[(i: Int, d: Float)]]] = [:]
     private let rail: (day: SIMD3<Float>, night: SIMD3<Float>)
+    /// What a vehicle's shadow multiplies the ground by (bluer on snow), and which frame last shaded each pixel, so
+    /// two shadows that meet don't darken twice.
+    private let shadowTone: SIMD3<Float>
+    private var shadedIn: [UInt32], frameCount: UInt32 = 0
     /// Steam engines' exhaust: each puff where it left the stack and when, and how far each train has run since
     /// its last.
     private var puffs: [(p: SIMD3<Double>, t: Double)] = [], chuffed: [Int: Double] = [:]
@@ -74,6 +78,8 @@ public final class Railway {
         wire = era.look.wire ? Self.wire(layout, scenery, view) : []
         frame = Array(repeating: 0, count: width * height)
         depth = statics.depth
+        shadowTone = season.snow ? RailLight.snowShadow : RailLight.shadow
+        shadedIn = Array(repeating: 0, count: width * height)
         let steel = RailArt.colour(season.snow ? 0x4A4642 : 0xA8A8A8)
         rail = (steel, RailLight(night: true, winter: season.snow, era: era).ground(steel))
         switchRails = Self.switchRails(layout, view)
@@ -208,6 +214,7 @@ public final class Railway {
     /// as a mutable texture takes them), `night` from 0 (day) to 1.
     public func draw(night: Float, into out: UnsafeMutableBufferPointer<UInt32>) {
         let night = (night * 32).rounded() / 32
+        frameCount &+= 1
         if night != underNight {
             under = zip(statics.day, statics.night).map { pack($0 + ($1 - $0) * night) }
             underNight = night
@@ -272,11 +279,24 @@ public final class Railway {
         let q = Int((heading / (2 * .pi / 64)).rounded()) & 63
         let key = "\(v.name) \(q) \(slope)"
         let painted = bakes[key] ?? {
-            let p = Painted(Marched(v.grid, view, heading: Double(q) * 2 * .pi / 64, slope: slope, fine: true), view, era: era)
+            var p = Painted(Marched(v.grid, view, heading: Double(q) * 2 * .pi / 64, slope: slope, fine: true), view, era: era)
+            p.shadow = Painted.shadow(v.grid, view, heading: Double(q) * 2 * .pi / 64, slope: slope)
             bakes[key] = p
             return p
         }()
         let s = view.project(c), ax = Int(floor(s.x)), ay = Int(floor(s.y)), base = Float(view.pixelDepth(ax, ay, c.z))
+        // ponytail: on a ramp the shadow shows only where the bank is near its foot's height; per-pixel heights would fix it
+        if night < 1 { // its shadow, by day, on the ground at its foot's height and on nothing drawn over it yet
+            let shade = 1 - (1 - shadowTone) * (1 - night)
+            for k in painted.shadow.indices {
+                let x = Int(painted.shadow[k].x) + ax, y = Int(painted.shadow[k].y) + ay
+                guard x >= 0, x < w, y >= 0, y < h else { continue }
+                let i = y * w + x, plane = Float(view.pixelDepth(x, y, c.z))
+                guard shadedIn[i] != frameCount, abs(statics.depth[i] - plane) < 0.5, depth[i] <= plane + 0.1 else { continue }
+                shadedIn[i] = frameCount
+                frame[i] = pack(unpack(frame[i]) * shade)
+            }
+        }
         for k in 0..<painted.count {
             let colour = night == 0 ? painted.day[k] : night == 1 ? painted.night[k] : pack(unpack(painted.day[k]) + (unpack(painted.night[k]) - unpack(painted.day[k])) * night)
             put(Int(painted.dx[k]) + ax, Int(painted.dy[k]) + ay, colour, painted.dd[k] + base)
@@ -426,6 +446,31 @@ public final class Railway {
 struct Painted {
     var dx: [Int16] = [], dy: [Int16] = [], dd: [Float] = [], day: [UInt32] = [], night: [UInt32] = []
     var count: Int { dx.count }
+    /// The pixels its shadow falls on, as offsets from its middle's, on the plane of its foot.
+    var shadow: [SIMD2<Int16>] = []
+
+    /// A vehicle's shadow at a heading and slope: every voxel, sampled at four points across its top, dropped along
+    /// the Sun's rays onto the plane of its foot and gathered on a half-unit raster; then each pixel whose ground
+    /// point lands in it.
+    static func shadow(_ g: Voxels, _ view: RailView, heading: Double, slope: Double) -> [SIMD2<Int16>] {
+        let s = view.sun, (c, sn) = (cos(heading), sin(heading))
+        var cells = Set<SIMD2<Int32>>(), lo = SIMD2<Double>(repeating: .infinity), hi = -lo
+        for z in 0..<g.nz { for y in 0..<g.ny { for x in 0..<g.nx where g[x, y, z] > 0 {
+            for (du, dv) in [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)] {
+                let u = Double(x) + du - Double(g.nx) / 2, v = Double(y) + dv - Double(g.ny) / 2, wz = Double(z) + 0.5 + slope * u
+                let p = SIMD2(u * c - v * sn - wz * s.x / s.z, u * sn + v * c - wz * s.y / s.z)
+                cells.insert(SIMD2(Int32(floor(p.x * 2)), Int32(floor(p.y * 2))))
+                let q = view.project([p.x, p.y, 0]) - view.project(.zero)
+                lo = simd_min(lo, q); hi = simd_max(hi, q)
+            }
+        } } }
+        var out: [SIMD2<Int16>] = []
+        for py in (Int(floor(lo.y)) - 1)...(Int(ceil(hi.y)) + 1) { for px in (Int(floor(lo.x)) - 1)...(Int(ceil(hi.x)) + 1) {
+            let p = view.unproject(Double(px), Double(py))
+            if cells.contains(SIMD2(Int32(floor(p.x * 2)), Int32(floor(p.y * 2)))) { out.append(SIMD2(Int16(px), Int16(py))) }
+        } }
+        return out
+    }
 
     init(_ m: Marched, _ view: RailView, era: RailEra) {
         let lights = [RailLight(night: false, winter: false, era: era), RailLight(night: true, winter: false, era: era)]
