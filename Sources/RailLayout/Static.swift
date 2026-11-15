@@ -6,7 +6,8 @@ import simd
 struct Statics {
     var day: [SIMD3<Float>], night: [SIMD3<Float>], depth: [Float]
 
-    static let snowField: [UInt32] = [0xF4F6FA, 0xECF0F7, 0xF7F9FC]
+    /// Lying snow's three tones, a step under the white of snow on tops so roofs and firs stand out of it.
+    static let snowField: [UInt32] = [0xE2E8F0, 0xD6DEEA, 0xEAEFF5]
 
     init(_ lay: Layout, _ sc: Scenery, era: RailEra, season: RailSeason) {
         let view = lay.view, (w, h) = (view.w, view.h), winter = season.snow
@@ -40,7 +41,8 @@ struct Statics {
         var day = base, night = base
         night.rgb = base.rgb.map(nightLight.ground)
         let shade = Self.shadows(things, view, ground)
-        for i in day.rgb.indices where shade[i] && day.depth[i] <= Float(view.pixelDepth(i % w, i / w, 0)) + 0.1 { day.rgb[i] *= RailLight.shadow } // on the ground only
+        let shadow = winter ? RailLight.snowShadow : RailLight.shadow
+        for i in day.rgb.indices where shade[i] && day.depth[i] <= Float(view.pixelDepth(i % w, i / w, 0)) + 0.1 { day.rgb[i] *= shadow } // on the ground only
         var pools = [Float](repeating: 0, count: w * h)
         for q in sc.lamps { Self.pool(&pools, q, view) }
         for i in pools.indices where pools[i] > 0 { night.rgb[i] += pools[i] * nightLight.lamp * 0.55 }
@@ -77,7 +79,7 @@ struct Statics {
                 let rr = pond.r * (1 + 0.12 * sin(3 * a + s) + 0.07 * sin(5 * a - s))
                 if winter {
                     if d < rr { col[i] = RailArt.colour(0xBFD3E0) }
-                    if d < rr - 2, sin(p.x / 4.1 + cos(p.y / 3.3)) * cos(p.y / 3.7 - p.x / 6.1) > 0.35 { col[i] = RailArt.colour(0xF4F6FA) }
+                    if d < rr - 2, sin(p.x / 4.1 + cos(p.y / 3.3)) * cos(p.y / 3.7 - p.x / 6.1) > 0.35 { col[i] = tones[2] }
                 } else {
                     if d < rr + 1.2 { col[i] = tones[0] * 0.82 }
                     if d < rr { col[i] = season.pond }

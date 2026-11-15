@@ -197,3 +197,14 @@ private func save(_ railway: Railway, night: Float, _ name: String, scale: Int =
         }
     }
 }
+
+/// Winter reads: in snow a roof's slope or a laden fir's side is snow, white in the Sun and blue in the shade, not its
+/// own dark colour in bars between white treads; and a bare tree's twigs are darker than the dormant grass.
+@Test func railwayWinterReads() {
+    let roof = RailArt.mat("roof_red"), snow = RailLight(night: false, winter: true, era: .steam)
+    let lit = snow.colour(roof, 0.977, top: false), shaded = snow.colour(roof, 0.76, top: false)
+    #expect(lit.min() > 230 && shaded.min() > 150 && shaded.z > shaded.x + 20, "\(lit) \(shaded)")
+    #expect(RailLight(night: false, winter: false, era: .steam).colour(roof, 0.76, top: false).max() < 120)
+    let luma = { (c: SIMD3<Float>) in dot(c, SIMD3(0.3, 0.59, 0.11)) }
+    #expect(luma(RailArt.rgb[Int(RailArt.mat("twig_mass"))]) < luma(snowy.grass[0]) - 25)
+}

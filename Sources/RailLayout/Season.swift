@@ -9,7 +9,7 @@ public struct RailSeason: Sendable, Equatable {
     public let day: Double
     /// The oak's buds break, its leaves reach full size, colour starts and peaks, and it's bare.
     let breaks: Double, full: Double, onset: Double, peak: Double, bare: Double
-    /// How green the grass is, 0 dormant straw to 1.
+    /// How green the grass is, 0 dormant to 1.
     let green: Double
     public let snow: Bool
 
@@ -27,9 +27,10 @@ public struct RailSeason: Sendable, Equatable {
         return day >= bare + 20 || day < breaks ? .winter : .spring
     }
 
-    /// The grass's three tones: straw greening with the season, olive through autumn's colour.
+    /// The grass's three tones: dormant grey-green greening with the season, olive through autumn's colour. (Full
+    /// straw, #9A8C5E, made five months of the year a pale board the bare trees vanished into.)
     var grass: [SIMD3<Float>] {
-        let straw = RailArt.colour(0x9A8C5E), lush = RailArt.colour(0x5A9636), olive = RailArt.colour(0x7E8A44), g = Float(green)
+        let straw = RailArt.colour(0x86885A), lush = RailArt.colour(0x5A9636), olive = RailArt.colour(0x7E8A44), g = Float(green)
         var base = straw + (lush - straw) * g
         if day > 200 { base += (olive - base) * Float(smoothstep(onset - 10, peak, day)) * g }
         return [base, base * SIMD3(0.93, 0.96, 0.9), base * SIMD3(1.06, 1.05, 1.06)]
@@ -48,7 +49,7 @@ public struct RailSeason: Sendable, Equatable {
         }
     }
 
-    /// The season's form of a grassy material (the hill, a bank): olive in autumn, straw in a dormant winter.
+    /// The season's form of a grassy material (the hill, a bank): olive in autumn, grey-green in a dormant winter.
     func grassy(_ name: String) -> String {
         if kind == .autumn, day >= onset { return name + "_a" }
         if kind == .winter, green < 0.3 { return name + "_w" }
