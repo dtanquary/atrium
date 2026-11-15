@@ -393,9 +393,10 @@ final class DappledLight: SKScene, BatteryPaced, Trimmable {
     /// The tree's shadow-casters, 3 m square and tiling, laid out afresh each launch from real maple, oak or beech
     /// leaves (ambientCG's leaf scans, CC0), one kind of tree at a time. Red holds sprays of leaves on their twigs,
     /// green the far crown: denser clumps of smaller leaves, blurred into the soft masses that the Sun, 5 m on, makes
-    /// of them; blue the crown's much softer shadow from the sky. `dappled.seed` (any whole number but 0, for the tests)
+    /// of them; blue the crown's much softer shadow from the sky; alpha where the crown is thinner, for its gaps to gather
+    /// in. `dappled.seed` (any whole number but 0, for the tests)
     /// rolls the same tree every time.
-    private static let canopy: SKTexture = {
+    static let canopy: SKTexture = {
         let n = 1024, metres = 3.0
         let seed = UInt64(max(0, UserDefaults.standard.integer(forKey: "dappled.seed")))
         var rng = SplitMix(state: seed != 0 ? seed : .random(in: 1...UInt64.max))
@@ -513,15 +514,37 @@ final class DappledLight: SKScene, BatteryPaced, Trimmable {
         // really blur a crown 5 m out over metres into an even grey; this keeps the tree readable under cloud.
         let skyShadow = blurred(crown, radius: 40, passes: 3)
 
-        var bytes = [UInt8](repeating: 255, count: n * n * 4)
-        for i in 0..<n * n {
-            bytes[i * 4] = UInt8(min(sprays[i], 255))
-            bytes[i * 4 + 1] = UInt8(min(crown[i], 255))
-            bytes[i * 4 + 2] = UInt8(min(skyShadow[i] * 1.3, 255))
+        // Where the crown is thinner or thicker, so its gaps gather in groups with bare shade between: value noise over
+        // 30 cm and 15 cm, spread so 0…1 is about three standard deviations.
+        var clumps = [Float](repeating: 0, count: n * n)
+        for (cells, weight) in [(10, Float(2)), (20, 1)] {
+            let lattice = (0..<cells * cells).map { _ in Float.random(in: 0...1, using: &rng) }
+            func at(_ i: Int, _ j: Int) -> Float { lattice[j % cells * cells + i % cells] }
+            for y in 0..<n {
+                let fy = Float(y * cells) / Float(n), j = Int(fy), v = (fy - Float(j)) * (fy - Float(j)) * (3 - 2 * (fy - Float(j)))
+                for x in 0..<n {
+                    let fx = Float(x * cells) / Float(n), i = Int(fx), u = (fx - Float(i)) * (fx - Float(i)) * (3 - 2 * (fx - Float(i)))
+                    clumps[y * n + x] += weight * ((at(i, j) * (1 - u) + at(i + 1, j) * u) * (1 - v) + (at(i, j + 1) * (1 - u) + at(i + 1, j + 1) * u) * v)
+                }
+            }
         }
-        let context = CGContext(data: &bytes, width: n, height: n, bitsPerComponent: 8, bytesPerRow: n * 4, space: CGColorSpaceCreateDeviceRGB(),
-                                bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
-        return SKTexture(cgImage: context.makeImage()!)
+        let mean = clumps.reduce(0, +) / Float(n * n)
+        let spread = (clumps.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Float(n * n)).squareRoot()
+
+        // Bottom row first, as SKTexture(data:) wants it, so the layers lie as they're drawn.
+        var bytes = [UInt8](repeating: 255, count: n * n * 4)
+        for row in 0..<n {
+            for x in 0..<n {
+                let (i, o) = ((n - 1 - row) * n + x, (row * n + x) * 4)
+                bytes[o] = UInt8(min(sprays[i], 255))
+                bytes[o + 1] = UInt8(min(crown[i], 255))
+                bytes[o + 2] = UInt8(min(skyShadow[i] * 1.3, 255))
+                bytes[o + 3] = UInt8(min(max(0.5 + (clumps[i] - mean) / (3 * spread), 0), 1) * 255)
+            }
+        }
+        let texture = SKTexture(data: Data(bytes), size: CGSize(width: n, height: n))
+        texture.filteringMode = .linear
+        return texture
     }()
 
     /// A twig of three serrated leaves (ambientCG LeafSet005, CC0), for the sharp shadow near the wall.
@@ -548,24 +571,30 @@ final class DappledLight: SKScene, BatteryPaced, Trimmable {
         return lit;
     }
 
-    // Gaps in the far crown, one to a 2 × 2 cell of sky offset (so every image is round here); the fluttering ones blink.
-    float pinholes(vec2 g, float open, float flutter, float t, vec4 src, vec2 term, float px) {
-        vec2 cell = floor(g * 0.5);
-        float sum = 0.0;
-        for (int j = -1; j <= 1; j++) {
-            for (int i = -1; i <= 1; i++) {
-                vec2 c = cell + vec2(float(i), float(j));
-                vec4 h = hash42(c);
-                float r = h.z < 0.78 - 0.4 * open ? 0.0 : (0.1 + 0.3 * h.z) * (0.5 + 0.5 * open);
-                // A gap's image is as bright as the gap's area over the image's, so pinhole-sized gaps make dim images,
-                // but photos show the dapples at 0.7–1.6 times the median spot: the visible ones are the wider gaps.
-                float bright = fract(h.z * 13.7 + h.w * 5.3);
-                float gain = mix(0.2, 1.0, bright * bright) * (1.0 - flutter * step(0.6, h.w) * (0.5 + 0.5 * sin(mod(t, 3600.0) * (15.0 + 20.0 * h.w) + h.w * 80.0))); // wrapped: a fast flutter coarsens first
-                float size = 0.65 + 0.8 * fract(h.z * 7.31 + h.w * 3.7);   // gaps 3.3 to 7.3 m out: the nearer, the smaller
-                if (r > 0.02) { sum += gain * sunImage((g - (c + 0.2 + 0.6 * h.xy) * 2.0) / size, r / size, src, term, px / size); }
-            }
+    // One gap in the far crown and its image of the light, `dg` from the image's centre in sky offset, `size` its
+    // radius, `stretch` how much longer it is along a slit. `open` is how thin the crown is where the image falls and
+    // `clump` a slow noise over the crown, both read there, so a gap is all there or not at all (read at each pixel,
+    // they cut discs into crescents), and the gaps gather in groups with bare shade between. The fluttering ones
+    // blink, and with any wind (`sway`, 0–1) each gap slowly opens and closes.
+    float gap(vec2 dg, vec4 h, float size, float stretch, float open, float clump, float flutter, float sway, float t, vec4 src, vec2 term, float px) {
+        float there = smoothstep(-0.03, 0.03, h.z - (0.78 - 0.4 * open + 0.6 * (clump - 0.5)));
+        float tw = mod(t, 3600.0); // wrapped: a fast flutter coarsens first
+        float breathe = 1.0 - 0.2 * sway * (0.5 + 0.5 * sin(tw * (0.4 + 0.5 * fract(h.w * 7.3)) + h.w * 40.0));
+        float r = (0.1 + 0.3 * h.z) * (0.5 + 0.5 * open) * breathe;
+        // A gap's image is as bright as the gap's area over the image's, (r / size)², so a wide gap near the wall makes
+        // a bright, soft blob and a pinhole far out a faint, crisp disc; squeezed into the 0.2–1 of full sun that the
+        // photos' visible dapples span.
+        float k = r / size;
+        float x = clamp((k - 0.05) / 0.55, 0.0, 1.0);
+        float gain = there * mix(0.2, 1.0, x)
+            * (1.0 - flutter * step(0.6, h.w) * (0.5 + 0.5 * sin(tw * (15.0 + 20.0 * h.w) + h.w * 80.0)));
+        vec2 q = dg / size;
+        if (stretch > 1.0) {
+            float a = 6.2832 * fract(h.y * 5.9 + h.z * 2.3);
+            vec2 along = vec2(cos(a), sin(a));
+            q -= along * dot(q, along) * (1.0 - 1.0 / stretch);
         }
-        return sum;
+        return there > 0.0 ? gain * sunImage(q, k, src, term, px / size) : 0.0;
     }
 
     void main() {
@@ -601,7 +630,31 @@ final class DappledLight: SKScene, BatteryPaced, Trimmable {
         if (crown > 0.01) {
             float px = u_mpp * 0.5 * length(u_proj.xy) * u_invL;
             vec2 g = vec2(dot(u_proj.xy, cf), dot(u_proj.zw, cf)) * u_invL;
-            far += crown * min(pinholes(g, 1.0 - smoothstep(0.4, 1.0, density), u_wind.y, t, u_src, u_term, px), 1.0);
+            // Gaps, at most one to a 2 × 2 cell of sky offset (so every image is round here), more where the crown is
+            // thinner. Each whose image could reach here looks up the crown where its image falls (sky offset back to
+            // the wall: the sprays' blur matrix, scaled from their distance to the crown's).
+            float dapples = 0.0;
+            float breeze = clamp(u_wind.x * 100.0, 0.0, 1.0);
+            vec2 cell = floor(g * 0.5);
+            for (int j = -1; j <= 1; j++) {
+                for (int i = -1; i <= 1; i++) {
+                    vec2 c = cell + vec2(float(i), float(j));
+                    vec4 h = hash42(c);
+                    vec2 dg = g - (c + 0.2 + 0.6 * h.xy) * 2.0;
+                    float size = 0.45 * pow(4.0, fract(h.z * 7.31 + h.w * 3.7));   // gaps 2.3 to 9 m out: the nearer, the smaller
+                    // A third are slits between leaves, whose image is the disc smeared along them, up to 1.6 times as
+                    // long but never past the cells searched (2.4 away at the nearest).
+                    float slit = fract(h.w * 3.1 + h.x * 1.7);
+                    float stretch = slit < 0.33 ? max(min(1.0 + 1.8 * slit, 2.3 / (size + 0.4)), 1.0) : 1.0;
+                    float reach = (size + 0.4 + px) * stretch;
+                    if (h.z > 0.05 && dot(dg, dg) < reach * reach) {
+                        vec2 at = cf + vec2(dot(u_blur.xy, dg), dot(u_blur.zw, dg)) * 4.1667;   // 5 m / 1.2 m
+                        vec4 there = texture2D(u_canopy, fract(at * 0.29 + vec2(0.13, 0.61)));
+                        dapples += gap(dg, h, size, stretch, 1.0 - smoothstep(0.4, 1.0, there.g), there.a, u_wind.y, breeze, t, u_src, u_term, px);
+                    }
+                }
+            }
+            far += crown * min(dapples, 1.0);
         }
         far = mix(far, 1.0 - 0.7 * crown, u_wind.z);   // behind thin cloud the dapples blur into the shade
 

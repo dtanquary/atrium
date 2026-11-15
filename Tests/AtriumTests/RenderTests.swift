@@ -392,6 +392,21 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
     }
 }
 
+/// Dappled Light's canopy carries its clumps in alpha, spread over most of 0…1, for the crown's gaps to gather in: lost
+/// (a texture made through a CGImage drops alpha), every gap would be as likely anywhere, a field of polka dots again.
+@MainActor @Test func dappledLightCanopyClumps() throws {
+    let image = DappledLight.canopy.cgImage()
+    let (w, h) = (image.width, image.height)
+    var bytes = [UInt8](repeating: 0, count: w * h * 4)
+    let context = try #require(CGContext(data: &bytes, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                                         space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+    context.setBlendMode(.copy)
+    context.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+    let alpha = stride(from: 3, to: bytes.count, by: 4 * 97).map { bytes[$0] }.sorted()
+    let (low, high) = (alpha[alpha.count / 10], alpha[alpha.count * 9 / 10])
+    #expect(low < 90 && high > 165, "clumps' alpha p10 \(low), p90 \(high)")
+}
+
 /// Picking another lighting in Settings hands the view a new tank lit that way, once the changes settle (a dragged
 /// slider makes many), and the one fading out doesn't present another on the next change.
 @MainActor @Test func fishTankFollowsLightingSetting() async throws {
