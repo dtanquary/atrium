@@ -48,7 +48,7 @@ import Testing
         #expect(seconds[0] > 600 && (alone ? seconds[1] == seconds[0] : seconds[1] > 1.2 * seconds[0]), "\(picture.name) takes \(seconds)")
     }
     #expect(Etching.fineOnly.count { $0 } == 3)
-    #expect(Etching.choices(detailed: true) == Array(Etching.pictures.indices) && Etching.choices(detailed: false) == Etching.pictures.indices.filter { !Etching.fineOnly[$0] })
+    #expect(Etching.choices(detail: 1) == Array(Etching.pictures.indices) && Etching.choices(detail: 0) == Etching.pictures.indices.filter { !Etching.fineOnly[$0] })
     // at the top of the Speed slider the longest, fine, is done in a few minutes
     #expect(Etching.seconds[1].max()! / Etching.speed.range.upperBound < 300)
 }
@@ -330,6 +330,34 @@ private func ink(_ pixels: [UInt32]) -> Int {
     #expect(lines(asStandard) > 1512 * 982 / 20 && asStandard == asFine, "the fine-only picture has \(lines(asStandard)) pixels of line at Standard")
 }
 
+/// Detail's Auto, which Etching comes with and lists first: each picture at the width that suits it, the fine line
+/// but for the few named in `bold`. Random may then draw any picture; each takes its own width's time; the Interlace
+/// is drawn as at Standard and the Triceratops as at Fine; and going from Standard to Auto under a picture that keeps
+/// its width moves nothing.
+@MainActor @Test func etchingPicksEachPicturesWidth() throws {
+    #expect(Etching.detail.format == .choice(["Standard", "Fine", "Auto"]) && Etching.detail.standard == 2 && Etching.detail.order == [2, 0, 1] && Etching.detail.range == 0...2)
+    let files = Etching.pictures.map(\.file)
+    #expect(Etching.bold.count == 9 && Etching.bold.allSatisfy { name in files.firstIndex(of: name).map { !Etching.fineOnly[$0] } == true })
+    #expect(Etching.choices(detail: 2) == Array(Etching.pictures.indices) && Etching.seconds.count == 3)
+    for (place, file) in files.enumerated() {
+        let bold = Etching.bold.contains(file)
+        #expect(Etching.fine(place, detail: 0) == Etching.fineOnly[place] && Etching.fine(place, detail: 1) && Etching.fine(place, detail: 2) == !bold, "\(file)")
+        #expect(Etching.seconds[2][place] == Etching.seconds[bold ? 0 : 1][place], "\(file)")
+    }
+    func finished(_ file: String, detail: Double?) throws -> [UInt32] {
+        var pixels: [UInt32] = []
+        let picture = Double(try #require(files.firstIndex(of: file)) + 1)
+        try with(["etching.drawn": 1, Etching.picture.key: picture].merging(detail.map { [Etching.detail.key: $0] } ?? [:]) { $1 }) { pixels = try Screen(1512, 982).settled() }
+        return pixels
+    }
+    let interlace = try [nil, 0, 1].map { try finished("interlace", detail: $0) }, triceratops = try [nil, 0, 1].map { try finished("triceratops", detail: $0) }
+    #expect(interlace[0] == interlace[1] && interlace[0] != interlace[2], "the Interlace as it comes is not the standard line's")
+    #expect(triceratops[0] == triceratops[2] && triceratops[0] != triceratops[1], "the Triceratops as it comes is not the fine line's")
+    var cycle = Etching.Cycle(picture: 0, before: nil, began: 0.1, paced: 3, rested: 30, following: nil, picked: 0)
+    cycle.stretch(at: 100, from: 600, to: 600)
+    #expect(cycle.began == 0.1)
+}
+
 /// The ground's level: the middle pixel's blue, which is bare ground whichever of the line and the ground is the
 /// lighter. Paper's, which Etching starts on, is 216 in its light tone and 53 in its dark one.
 private func level(_ pixels: [UInt32]) -> Int { pixels.map { Int($0 & 255) }.sorted()[pixels.count / 2] }
@@ -447,7 +475,7 @@ private func contrast(_ pixels: [UInt32]) -> (levels: Float, lighter: Bool) {
 /// line is all still there.
 @MainActor @Test func etchingChangesSurface() throws {
     func lines(_ pixels: [UInt32]) -> Int { pixels.count { $0 & 255 < 110 } }
-    try with(["etching.drawn": 0.7, Etching.picture.key: 1]) {
+    try with(["etching.drawn": 0.7, Etching.picture.key: 1, Etching.detail.key: 0]) { // (the standard line, which the counts below are of)
         let screen = try Screen(1512, 982), paper = try screen.settled()
         UserDefaults.standard.set(3.0, forKey: Etching.surface.key)
         defer { UserDefaults.standard.removeObject(forKey: Etching.surface.key) }
