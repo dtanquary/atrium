@@ -236,7 +236,6 @@ final class PixelWindowSeat: SKScene, BatteryPaced {
         let sparkle = mix(rgb(255, 196, 120), rgb(255, 252, 240), smoothstep(0, 14, el))
         paint.sparkle = (0..<Paint.steps).map { pack(mix(sparkle, haze, Float($0) / Float(Paint.steps - 1) * 0.85)) }
         paint.moonSparkle = (0..<Paint.steps).map { pack(mix(rgb(150, 164, 200), haze, Float($0) / Float(Paint.steps - 1) * 0.85)) }
-        cirrus(in: &sky, colour: paint.cloud[(Paint.steps - 2) * Paint.tones + 4])
         paint.window = pack(rgb(255, 214, 150))
 
         // The glitter path: the Sun's image in the water, straight below it, as scattered sparkles. Under the Moon
@@ -282,31 +281,6 @@ final class PixelWindowSeat: SKScene, BatteryPaced {
         // preview as it opens, the render tests' first frame) has no next frame, and would show an empty pane.
         advance()
         compose()
-    }
-
-    /// Thin cirrus far off at our own height, as a few long streaks in the lowest third of the sky, laid over its
-    /// picture in a cloud's palest tone, dithered thin toward their ends. Each of five streaks comes and goes with
-    /// the country we fly over: it fades in and out over half of every 240 to 480 km of the flight (16 to 32 minutes
-    /// at 1×) and is gone for the other half, and takes a new place only while it is gone, so none ever jumps.
-    private func cirrus(in sky: inout [UInt32], colour: UInt32) {
-        let (gw, gh) = (glass.w, glass.h), room = gh - horizon
-        for k in 0..<5 {
-            let u = Self.flown / (240 + 60 * Double(k)) + Double(Atrium.hash(k, 0, 5050) >> 40) / 16_777_216, life = Int(u.rounded(.down))
-            let shown = Float(max(0, sin((u - Double(life)) * 2 * .pi)))
-            guard shown > 0 else { continue }
-            let draw = Atrium.hash(k, life, 5051), pick = { (bits: UInt64) in Float(draw >> bits & 1023) / 1023 }
-            let y = horizon + 4 + Int(pick(0) * Float(room) * 0.22), long = 80 + Int(pick(10) * 180), x0 = Int(pick(20) * Float(gw)) - long / 2
-            let deep = 3 + Int(pick(30) * 4) // rows
-            for row in 0..<deep where y + row < gh {
-                let across = sin((Float(row) + 0.5) / Float(deep) * .pi)
-                for x in max(x0, 0)..<min(x0 + long, gw) {
-                    // Fibres along it, from noise 10 pixels long, thinning toward its ends and its edges.
-                    let along = pow(sin(Float(x - x0) / Float(long) * .pi), 0.6), fibre = noise(Double(x) / 10, Double(row * 3 + k * 31 + life * 7), 5052)
-                    let thick = shown * across * along * (fibre * 1.4 - 0.2)
-                    if bayer(x, y + row) < thick * 1.6 { sky[(y + row) * gw + x] = blend(sky[(y + row) * gw + x], colour, thick > 0.55 ? 190 : 110) }
-                }
-            }
-        }
     }
 
     // MARK: - The cabin and the wing
