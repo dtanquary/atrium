@@ -28,12 +28,14 @@ import UniformTypeIdentifiers
     #expect(GlassWeather.rainAmount(mmPerHour: 0, wind: 4, code: 51) > 0)   // drizzle Open-Meteo rounds to 0
 }
 
-/// Before a backdrop is picked the scene shows the one Settings shows as picked: Hamburg, the look on the menu's
-/// tile. Random (stored empty) rolls any of them, and a pick is that pick.
-@Test func rainStartsOnItsStandardBackdrop() {
-    #expect(rainBackdrops.standard == "Hamburg" && rainBackdrop(picked: nil) == "Hamburg")
+/// Before a backdrop is picked Settings shows Random and the scene opens on Hamburg, the look on the menu's tile.
+/// Random (stored empty) starts on any photo, and both fade between the photos only; a pick is that pick.
+@Test func rainOpensOnHamburgAndRotatesThePhotos() {
+    #expect(rainBackdrops.standard == "" && rainBackdrop(picked: nil) == "Hamburg")
     #expect(rainBackdrop(picked: "City") == "City")
-    #expect(Set((0..<40).map { _ in rainBackdrop(picked: "") }).count > 1)
+    let photos = Set(rainPhotos.map(\.name)), rolls = Set((0..<60).map { _ in rainBackdrop(picked: "") })
+    #expect(rolls.count > 1 && rolls.isSubset(of: photos))
+    #expect(Set(rainRotation) == photos)
 }
 
 /// Every palette's city is laid out as a city is, not sprinkled evenly: most of its lights are dim and a few are many

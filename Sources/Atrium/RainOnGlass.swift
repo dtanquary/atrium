@@ -49,19 +49,21 @@ let rainPhotos: [(name: String, night: String, day: String)] = [
     ("Shanghai", "shanghai-night", "shanghai-night"),
 ]
 
-/// The backdrops Settings offers, photos first, then the bokeh palettes: stored by name, empty for Random. Before a
-/// pick it's Hamburg, the look on the menu's tile, in its loop and on the site.
+/// The backdrops Settings offers, photos first, then the bokeh palettes: stored by name, empty for Random, which is
+/// what Settings shows as picked before a pick.
 let rainBackdrops = PaletteChoice(key: "rain.palette", options: rainPhotos.map { ($0.name, [], []) }
                                   + rainPalettes.map { ($0.name, [$0.night[1], $0.lights[0], $0.lights[1]], [$0.day[0], $0.lights[0], $0.lights[1]]) },
-                                  standard: "Hamburg",
                                   photos: Dictionary(uniqueKeysWithValues: rainPhotos.map { ($0.name, ("rain-\($0.night)-far.jpg", "rain-\($0.day)-far.jpg")) }),
                                   title: "Backdrop")
 
-/// The backdrop for what Settings has stored: the standard one before any pick, as Settings shows it, and a roll of
-/// them all for Random.
+/// What Random starts on and fades between: the photos. The bokeh palettes are picks, out of the rotation.
+let rainRotation = rainPhotos.map(\.name)
+
+/// The backdrop for what Settings has stored: before any pick, Hamburg, the look on the menu's tile, in its loop and
+/// on the site, fading on from there as Random does; on Random, any photo; otherwise the pick.
 func rainBackdrop(picked: String?) -> String {
-    let names = rainBackdrops.options.map(\.name), pick = picked ?? rainBackdrops.standard
-    return names.contains(pick) ? pick : names.randomElement()!
+    guard let picked else { return "Hamburg" }
+    return rainBackdrops.options.contains { $0.name == picked } ? picked : rainRotation.randomElement()!
 }
 
 /// Beads of water and drops sliding down a rainy window, each drop a little lens. Behind the glass is a photo
@@ -73,8 +75,9 @@ func rainBackdrop(picked: String?) -> String {
                      clock: seed > 0 ? seed : .random(in: 0..<1000))   // a fresh pane each time
 }
 
-/// The scene for one backdrop, with its water clock at `clock`. Left on Random, it fades to another one every few
-/// minutes if Settings says so; the new scene takes over the clock, so the water carries on through the fade. It
+/// The scene for one backdrop, with its water clock at `clock`. Left on Random, or before a pick, it fades to another
+/// photo every few minutes if Settings says so; the new scene takes over the clock, so the water carries on through
+/// the fade. It
 /// fades the same way between its day and night looks at dawn and dusk while it follows the weather.
 /// After about two hours of water it fades to a fresh pane of the same backdrop, which keeps the clock small enough
 /// for the shader's Floats to place drops to the pixel.
@@ -124,9 +127,9 @@ func rainBackdrop(picked: String?) -> String {
         fade.pausesOutgoingScene = false
         if GlassWeather.night != night {   // dusk or dawn, following the weather: the same pane over the other look
             view.presentScene(rainScene(size: water.size, backdrop: backdrop, clock: water.clockTime), transition: fade)
-        } else if UserDefaults.standard.string(forKey: rainBackdrops.key) == "", rainKnobs[0].value > 0.5,   // on Random
+        } else if UserDefaults.standard.string(forKey: rainBackdrops.key) ?? "" == "", rainKnobs[0].value > 0.5,   // Random, or no pick
            abs(Date().timeIntervalSince(born)) >= rainKnobs[1].value.rounded() * 60 {
-            let others = rainBackdrops.options.map(\.name).filter { $0 != backdrop }
+            let others = rainRotation.filter { $0 != backdrop }
             view.presentScene(rainScene(size: water.size, backdrop: others.randomElement()!, clock: water.clockTime), transition: fade)
         } else if water.clockTime > 8000 {
             view.presentScene(rainScene(size: water.size, backdrop: backdrop, clock: .random(in: 0..<1000)), transition: fade)
