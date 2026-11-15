@@ -148,9 +148,10 @@ final class Jellyfish: SKScene {
             group.shader.attributes = ["a_box", "a_pose", "a_pulse", "a_sp1", "a_sp2"].map { SKAttribute(name: $0, type: .vectorFloat4) }
             groups.append(group)
         }
+        var stream = SplitMix(state: rng.state ^ 0x5EED_ED01) // their own draws, so a pinned tank keeps its animals
         eddies = (0..<4).map { k in
-            (SIMD2(.random(in: -0.8...0.8, using: &rng), .random(in: -0.5...0.5, using: &rng)), .random(in: 0.15...0.4, using: &rng),
-             (k % 2 == 0 ? 1 : -1) * 0.025, .random(in: 0...(2 * .pi), using: &rng))
+            (SIMD2(.random(in: -0.8...0.8, using: &stream), .random(in: -0.5...0.5, using: &stream)), .random(in: 0.15...0.4, using: &stream),
+             (k % 2 == 0 ? 1 : -1) * 0.025, .random(in: 0...(2 * .pi), using: &stream))
         }
         settle(at: true)
         NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged), name: UserDefaults.didChangeNotification, object: nil)
