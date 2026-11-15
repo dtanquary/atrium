@@ -191,6 +191,51 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
     #expect(nodes.allSatisfy { $0 > 10 } && nodes.last == nodes.first)
 }
 
+/// Pixel City's clouds drift in three rows at three paces, and each is solid from its foot to its top in every
+/// column: no sky shows through a hole in one, whatever the humps it was heaped from.
+@MainActor @Test func pixelCityCloudsAreSolid() throws {
+    let looks = PixelCity(size: CGSize(width: 1512, height: 982), spaceport: true).cloudLooks
+    #expect(looks.count == 11 && Set(looks.map(\.speed)).count == 3)
+    for look in looks {
+        let picture = try #require(look.picture), (w, h) = (picture.width, picture.height)
+        var rgba = [UInt8](repeating: 0, count: w * h * 4)
+        let context = try #require(CGContext(data: &rgba, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                                             space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.draw(picture, in: CGRect(x: 0, y: 0, width: w, height: h))
+        for x in 0..<w {
+            let solid = (0..<h).map { rgba[($0 * w + x) * 4 + 3] > 0 }
+            if let top = solid.firstIndex(of: true), let foot = solid.lastIndex(of: true) { #expect(!solid[top...foot].contains(false)) }
+        }
+    }
+}
+
+/// Pixel City's Moon is lit on the side the Sun is on: a waxing Moon on the right of an evening looking south, on the
+/// left of an evening looking north from the southern hemisphere, and a waning one on the left of a morning.
+@MainActor @Test func pixelCityMoonFacesTheSun() {
+    #expect(PixelCity.litOnRight(sun: 250, moon: 180))
+    #expect(!PixelCity.litOnRight(sun: 290, moon: 10))
+    #expect(!PixelCity.litOnRight(sun: 110, moon: 200))
+}
+
+/// The Waterfront's walkers follow the hour's traffic: all ten out at the morning rush and one at most in the small
+/// hours, and as some walk off the end of the street others come on, so the pavement never empties at the rush.
+@MainActor @Test func pixelCityWalkersFollowTheHour() {
+    let defaults = UserDefaults.standard
+    defer { ["city.place", "city.previewTime", "city.previewHour"].forEach(defaults.removeObject) }
+    defaults.set(0.0, forKey: "city.place")
+    defaults.set(1.0, forKey: "city.previewTime")
+    for (hour, most, least) in [(8.5, 10, 6), (3.5, 1, 0)] {
+        defaults.set(hour, forKey: "city.previewHour")
+        let scene = PixelCity(size: CGSize(width: 400, height: 250)) // a street 200 pixels long
+        var counts: [Int] = []
+        for frame in 0...1500 { // two and a half minutes at ten frames a second, long enough to cross it
+            scene.update(Double(frame) / 10)
+            if frame > 0 { counts.append(scene.walkersOut) }
+        }
+        #expect(counts.max() == most && counts.min()! >= least)
+    }
+}
+
 /// Pixel City's automatic move goes to a different city every time and saves it, so Settings and every display
 /// follow; in a view, it hands over to a new scene of that city.
 @MainActor @Test func pixelCityMovesOn() {
