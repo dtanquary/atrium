@@ -472,6 +472,7 @@ final class FishTank: SKScene {
     /// - under actinic blue, saturated pigments fluoresce in their own colours (`a_glow` for how much), while plain
     ///   stone just goes blue
     /// - `a_fog` fades things further back toward the back panel
+    /// - soft corals: `a_fish` is (0, how far their tentacles move in points, 0, 0), from `place`
     /// - fish only, set every frame: `a_fish` is (1, light level, flank flash, sand bounce), from `illuminate(_:in:)`,
     ///   lighting the back more than the belly as the lamp is overhead; `a_shadow` is a band cast by a fish above,
     ///   (centre x, half width, softness, strength), from `castShadows`
@@ -481,8 +482,16 @@ final class FishTank: SKScene {
     private lazy var photoShader: SKShader = {
         let shader = SKShader(source: Self.caustics + """
             void main() {
-                vec4 c = texture2D(u_texture, v_tex_coord);
                 vec2 pts = a_frame.xy + v_tex_coord * a_frame.zw;
+                // Soft corals' tentacles move against each other, over the warp that leans the whole coral: the
+                // picture read a few points aside, in waves up the tentacles, not at all at the foot.
+                vec2 uv = v_tex_coord;
+                float sway = a_fish.y * (1.0 - a_fish.x);
+                if (sway > 0.0) {
+                    uv += sway / a_frame.zw * vec2(sin(pts.y * 0.09 + u_now * 0.9 + pts.x * 0.03), 0.4 * sin(pts.x * 0.08 - u_now * 0.7))
+                        * smoothstep(0.1, 0.7, v_tex_coord.y);
+                }
+                vec4 c = texture2D(u_texture, uv);
                 float high = clamp(pts.y / u_height, 0.0, 1.0);
                 float shade = a_shadow.w * (1.0 - smoothstep(a_shadow.y - a_shadow.z, a_shadow.y + a_shadow.z, abs(pts.x - a_shadow.x)));
                 // the same caustics as on the sand, a little smaller this much nearer the surface
@@ -651,6 +660,7 @@ final class FishTank: SKScene {
             let action = TankArt.swayWarps(width: textureSize.width, height: textureSize.height, strength: sway,
                                            period: .random(in: 5...8, using: &rng), phase: .random(in: 0...(2 * .pi), using: &rng))
             sprite.run(.sequence([.wait(forDuration: .random(in: 0...4, using: &rng)), action]))
+            attribute("a_fish", of: sprite, to: [0, Float(sway * 70), 0, 0]) // the anemone's tentacles most, the toadstool's polyps least
         }
         addChild(sprite)
         return sprite
