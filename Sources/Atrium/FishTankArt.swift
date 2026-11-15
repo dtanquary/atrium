@@ -93,7 +93,7 @@ enum TankArt {
         let drawnWidth = exp2((log2(width) * 16).rounded() / 16), key = "\(name) \(drawnWidth) \(blur)" as NSString
         let m = 2 * margin(blur: blur)
         if let texture = drawn.object(forKey: key), let aspect = aspects[name] { return (texture, CGSize(width: width + m, height: width * aspect + m)) }
-        guard var image = NSImage(contentsOf: resource(name + ".heic"))?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        guard var image = NSImage(contentsOf: file(name, pixels: 2 * drawnWidth))?.cgImage(forProposedRect: nil, context: nil, hints: nil)
         else { return nil }
         let aspect = CGFloat(image.height) / CGFloat(image.width), drawnSize = CGSize(width: drawnWidth + m, height: drawnWidth * aspect + m)
         aspects[name] = aspect
@@ -104,6 +104,18 @@ enum TankArt {
         }
         drawn.setObject(texture, forKey: key)
         return (texture, CGSize(width: width + m, height: width * aspect + m))
+    }
+
+    /// The picture to draw a cut-out `pixels` wide from: `<name>-big.heic`, a sharper copy, where there is one and the
+    /// cut-out is drawn over 1.2 times the width of `<name>.heic`, as big displays draw the live rock and the tenuis
+    /// Acropora; else `<name>.heic`. The big ones take about four times as long to decode, which laptops, drawing
+    /// them at about their size, would pay on every tank built for no gain.
+    static func file(_ name: String, pixels: CGFloat) -> URL {
+        let small = resource(name + ".heic"), big = resource(name + "-big.heic")
+        guard FileManager.default.fileExists(atPath: big.path), let source = CGImageSourceCreateWithURL(small as CFURL, nil),
+              let width = (CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any])?[kCGImagePropertyPixelWidth] as? Int
+        else { return small }
+        return pixels > 1.2 * CGFloat(width) ? big : small
     }
 
     /// The clear margin round a cut-out blurred by `blur` points: three sigma, where the blur has faded out.

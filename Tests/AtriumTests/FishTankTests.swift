@@ -43,3 +43,12 @@ import Testing
         #expect(facing == 1 && sliver < 0.2 && time < 0.75, "at \(fps) fps: \(sliver) s a sliver, \(time) s to turn")
     }
 }
+
+/// The sharper copies of the live rock and the tenuis Acropora are decoded only where a big display draws them well
+/// past the size of the ordinary ones, so laptops don't pay for them.
+@Test func bigCutOutsOnlyForBigDisplays() {
+    #expect(TankArt.file("reef-rock-1", pixels: 1040).lastPathComponent == "reef-rock-1.heic")      // a base rock, 14-inch
+    #expect(TankArt.file("reef-rock-1", pixels: 1410).lastPathComponent == "reef-rock-1-big.heic")  // a base rock, 5K
+    #expect(TankArt.file("reef-acropora-2", pixels: 938).lastPathComponent == "reef-acropora-2-big.heic")
+    #expect(TankArt.file("reef-rock-4", pixels: 3000).lastPathComponent == "reef-rock-4.heic")      // no sharper copy
+}
