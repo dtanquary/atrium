@@ -43,6 +43,18 @@ final class EarthFromOrbit: SKScene, BatteryPaced {
     /// Earth-fixed axes of the view: east, north, and toward us.
     private var basis = matrix_identity_double3x3
     private var orbitDrawn: TimeInterval = 0
+    private let stars = SKNode()
+    private static let starDot = paint(CGSize(width: 8, height: 8)) { ctx in
+        let colours = [CGColor(gray: 1, alpha: 1), CGColor(gray: 1, alpha: 0)] as CFArray
+        ctx.drawRadialGradient(CGGradient(colorsSpace: nil, colors: colours, locations: [0, 1])!,
+                               startCenter: CGPoint(x: 4, y: 4), startRadius: 0,
+                               endCenter: CGPoint(x: 4, y: 4), endRadius: 4, options: [])
+    }
+
+    /// Now, or the moment `EARTH_AT` names in Unix seconds, so renders can compare pictures of one moment.
+    private static var now: Date {
+        ProcessInfo.processInfo.environment["EARTH_AT"].flatMap(Double.init).map(Date.init(timeIntervalSince1970:)) ?? Date()
+    }
 
     private var radius: CGFloat { size.height * 0.43 }
     private var centre: CGPoint { CGPoint(x: size.width * 0.58, y: size.height * 0.48) }
@@ -50,7 +62,7 @@ final class EarthFromOrbit: SKScene, BatteryPaced {
 
     override func sceneDidLoad() {
         backgroundColor = .black
-        addStars()
+        addChild(stars)
         addGlobe()
         if Self.knobs[1].value > 0.5 { // clouds from the cache straight away, no fade
             cloudsOn = true
@@ -85,7 +97,8 @@ final class EarthFromOrbit: SKScene, BatteryPaced {
         addChild(iss)
 
         refresh()
-        run(.repeatForever(.sequence([.wait(forDuration: 30), .run { [weak self] in self?.refresh() }])))
+        // every 5 s, so the stars drift with the sky (15° an hour) in steps under a pixel
+        run(.repeatForever(.sequence([.wait(forDuration: 5), .run { [weak self] in self?.refresh() }])))
     }
 
     override func didMove(to view: SKView) {
@@ -224,7 +237,11 @@ final class EarthFromOrbit: SKScene, BatteryPaced {
         return CGPoint(x: centre.x + CGFloat(v.x) * radius, y: centre.y + CGFloat(v.y) * radius)
     }
 
-    /// Points the view at the viewer's location and moves the Sun to where it is now.
+    /// The day map for a month, 1 to 12: the Blue Marble of that month in 2004, so the snow and the green are the
+    /// season's. A new month comes in when the app rebuilds a wallpaper that has run 12 hours.
+    nonisolated static func dayMap(month: Int) -> String { String(format: "earth-day-%02d.heic", month) }
+
+    /// Points the view at the viewer's location, and moves the Sun and the stars to where they are now.
     private func refresh() {
         let here = Location.shared.coordinate
         let (lat, lon) = (here.latitude * .pi / 180, here.longitude * .pi / 180)
@@ -235,23 +252,59 @@ final class EarthFromOrbit: SKScene, BatteryPaced {
                                                                   SIMD3<Float>(basis.columns.1),
                                                                   SIMD3<Float>(basis.columns.2)))
         // The subsolar point: the Sun's declination, and its right ascension less Greenwich sidereal time.
-        let jd = Sky.julianDate(Date())
+        let jd = Sky.julianDate(Self.now)
         let sun = Sky.raDec(Sky.sun(jd))
         sunDirection = Sky.direction(sun.ra - Sky.siderealTime(jd), sun.dec)
         sunUniform.vectorFloat3Value = SIMD3<Float>(sunDirection)
+        placeStars(latitude: here.latitude, sidereal: Sky.siderealTime(jd) + here.longitude)
+    }
+
+    /// The real stars behind the Earth, from the Yale catalogue to magnitude 5.5 in their own colours, about 70° of sky
+    /// top to bottom. They don't twinkle, since there's no air up here.
+    private func placeStars(latitude: Double, sidereal: Double) {
+        stars.removeAllChildren()
+        let scale = Double(size.height) / 2 / tan(35 * Double.pi / 180), view = CGRect(origin: .zero, size: size).insetBy(dx: -4, dy: -4)
+        for star in NightSky.catalogue {
+            guard let at = Self.behind(star.direction, latitude: latitude, sidereal: sidereal) else { continue }
+            let point = CGPoint(x: centre.x + at.x * scale, y: centre.y + at.y * scale)
+            guard view.contains(point), hypot(point.x - centre.x, point.y - centre.y) > radius - 4 else { continue } // not behind the globe
+            let sprite = SKSpriteNode(texture: Self.starDot)
+            let diameter = max(2.2, 5.4 - 0.6 * star.magnitude)
+            sprite.size = CGSize(width: diameter, height: diameter)
+            sprite.position = point
+            sprite.color = NightSky.starColour(star.bv)
+            sprite.colorBlendFactor = 1
+            sprite.alpha = min(0.9, max(0.45, 1.05 - 0.1 * star.magnitude))
+            stars.addChild(sprite)
+        }
+    }
+
+    /// Where a star stands behind the Earth, seen straight down from above a place at `latitude` with local sidereal
+    /// time `sidereal` (both in degrees): its offset from the globe's centre in tangents of its angle from the nadir,
+    /// x east on the Earth and y north. Seen from inside the sky, as always, so the sky's east is on the left. Nil for
+    /// a star more than 84° from the nadir.
+    nonisolated static func behind(_ star: Sky.Vector, latitude: Double, sidereal: Double) -> CGPoint? {
+        let up = Sky.direction(sidereal, latitude), east = Sky.direction(sidereal + 90, 0)
+        let forward = -simd_dot(star, up)
+        guard forward > 0.1 else { return nil }
+        return CGPoint(x: simd_dot(star, east) / forward, y: simd_dot(star, cross(up, east)) / forward)
     }
 
     private func addGlobe() {
+        // 45 MB of GPU memory each with mipmaps, so every display and Settings' copy share one of each
         func texture(_ name: String) -> SKTexture {
-            let texture = SKTexture(image: NSImage(contentsOf: resource(name)) ?? NSImage())
-            texture.usesMipmaps = true
-            return texture
+            sharedTexture(name) {
+                let texture = SKTexture(image: NSImage(contentsOf: resource(name)) ?? NSImage())
+                texture.usesMipmaps = true
+                return texture
+            }
         }
-        globe.texture = texture("earth-day.jpg")
+        globe.texture = texture(Self.dayMap(month: Calendar.current.component(.month, from: Self.now)))
         globe.size = CGSize(width: radius * 2 * margin, height: radius * 2 * margin)
         globe.position = centre
         globe.zPosition = 1
-        // Earth textures: NASA Blue Marble, September 2004 (day) and Black Marble 2016 (night lights), both public domain.
+        // Earth textures: NASA Blue Marble Next Generation, the month's map of 2004, with topography and no bathymetry,
+        // its sea baked to one deep blue (day), and Black Marble 2016 (night lights), both public domain, at 4096 x 2048.
         // Clouds come live from Clouds.shared.
         globe.shader = SKShader(source: """
             void main() {
@@ -262,14 +315,31 @@ final class EarthFromOrbit: SKScene, BatteryPaced {
                 vec3 day = texture2D(u_texture, uv).rgb;
                 vec3 night = texture2D(u_night, uv).rgb;
 
-                // the map reads thin haze and cold ground as faint grey, so only real cloud decks go opaque
-                float cloud = mix(texture2D(u_cloudsBefore, uv).r, texture2D(u_clouds, uv).r, u_cloudFade);
-                cloud = smoothstep(0.42, 0.95, cloud);
-
                 float sun = dot(w, u_sun);
+                // A step toward the Sun along the ground, as far as a cloud top 8 km up throws its shadow (cot of the
+                // Sun's height), up to 1.1°: a pixel or less with the Sun high, 6-8 with the Sun 10° up, 17 at the line.
+                vec3 along = u_sun - w * sun;
+                vec3 w2 = normalize(w + along * min(0.0013 / max(sun, 0.001), 0.02 / max(length(along), 0.001)));
+                vec2 uv2 = vec2(atan(w2.y, w2.x) / 6.2831853 + 0.5, asin(clamp(w2.z, -1.0, 1.0)) / 3.1415927 + 0.5);
+                float raw = texture2D(u_clouds, uv).r, sunward = texture2D(u_clouds, uv2).r;
+                if (u_cloudFade < 1.0) { // the minute's fade to a new map, the only time the old one is read
+                    raw = mix(texture2D(u_cloudsBefore, uv).r, raw, u_cloudFade);
+                    sunward = mix(texture2D(u_cloudsBefore, uv2).r, sunward, u_cloudFade);
+                }
+                // the map reads thin haze and cold ground as faint grey, so only real cloud decks go opaque
+                float cloud = smoothstep(0.42, 0.95, raw);
+                sunward = smoothstep(0.42, 0.95, sunward);
+                // Thick cold tops white, thin decks grey; lit where the cloud stands above the cloud toward the Sun,
+                // in shade where a taller one stands there, which also shadows the ground.
+                vec3 cloudColour = mix(vec3(0.62, 0.66, 0.72), vec3(1.0), smoothstep(0.55, 1.0, raw))
+                    * clamp(1.0 + 0.4 * (cloud - sunward), 0.55, 1.12);
+                vec3 ground = day * (1.0 - 0.6 * sunward);
+
                 float daylight = smoothstep(-0.12, 0.1, sun) * (0.25 + 0.95 * max(sun, 0.0));
+                // sunlight through the long path of air goes copper and rose in the last few degrees before night
+                vec3 sunlight = daylight * mix(vec3(1.3, 0.75, 0.5), vec3(1.0), smoothstep(-0.02, 0.12, sun));
                 // a little earthshine keeps the night side's shape, and shows the clouds there faintly
-                vec3 colour = mix(day, vec3(0.8, 0.82, 0.86), cloud * 0.95) * (daylight + 0.03);
+                vec3 colour = mix(ground, cloudColour, cloud * 0.95) * (sunlight + 0.03);
                 vec3 lights = night * night * vec3(1.0, 0.82, 0.55) * 2.2;
                 colour += lights * (1.0 - smoothstep(-0.2, 0.02, sun)) * (1.0 - 0.8 * cloud); // cloud dims, not hides
 
@@ -277,17 +347,21 @@ final class EarthFromOrbit: SKScene, BatteryPaced {
                 vec3 towardUs = u_basis * vec3(0.0, 0.0, 1.0);
                 colour += vec3(1.0, 0.95, 0.85) * ocean * pow(max(dot(w, normalize(u_sun + towardUs)), 0.0), 90.0) * 0.6;
 
+                // the air seen edge-on: a pale haze inside the limb, and outside it a bright hairline with a short
+                // glow, a few pixels as in whole-Earth photographs (it was a 20 px glow, five times too thick)
                 float edge = 1.0 - sqrt(max(0.0, 1.0 - r * r));
-                vec3 air = vec3(0.35, 0.6, 1.0);
-                colour = mix(colour, air * daylight, pow(edge, 3.0) * 0.6);
+                vec3 haze = vec3(0.6, 0.78, 1.0);
+                colour = mix(colour, haze * daylight, pow(edge, 3.0) * 0.6);
 
                 float disc = smoothstep(1.0, 0.997, r);
                 float rimSun = smoothstep(-0.35, 0.3, dot(normalize(u_basis * vec3(p, 0.0)), u_sun));
-                float halo = exp(-max(r - 1.0, 0.0) * 40.0) * (1.0 - disc) * rimSun * 0.8;
-                gl_FragColor = vec4(colour * disc + air * halo, max(disc, halo));
+                float outside = max(r - 1.0, 0.0);
+                float halo = exp(-outside * 120.0) * 0.6 * (1.0 - disc) * rimSun;
+                float hairline = exp(-outside * 500.0) * 0.5 * (1.0 - disc) * rimSun;
+                gl_FragColor = vec4(colour * disc + vec3(0.35, 0.6, 1.0) * halo + haze * hairline, max(disc, halo + hairline));
             }
             """, uniforms: [
-                SKUniform(name: "u_night", texture: texture("earth-night.jpg")),
+                SKUniform(name: "u_night", texture: texture("earth-night.heic")),
                 SKUniform(name: "u_margin", float: Float(margin)),
                 sunUniform,
                 basisUniform,
@@ -296,26 +370,5 @@ final class EarthFromOrbit: SKScene, BatteryPaced {
                 cloudFadeUniform,
             ])
         addChild(globe)
-    }
-
-    /// A still starfield: no atmosphere up here, so nothing twinkles.
-    private func addStars() {
-        let dot = paint(CGSize(width: 8, height: 8)) { ctx in
-            let colours = [CGColor(gray: 1, alpha: 1), CGColor(gray: 1, alpha: 0)] as CFArray
-            ctx.drawRadialGradient(CGGradient(colorsSpace: nil, colors: colours, locations: [0, 1])!,
-                                   startCenter: CGPoint(x: 4, y: 4), startRadius: 0,
-                                   endCenter: CGPoint(x: 4, y: 4), endRadius: 4, options: [])
-        }
-        for _ in 0..<Int(size.width * size.height / 2500) {
-            let star = SKSpriteNode(texture: dot)
-            let brightness = pow(Double.random(in: 0...1), 3)
-            let diameter = 1.5 + 3 * brightness
-            star.size = CGSize(width: diameter, height: diameter)
-            star.alpha = 0.25 + 0.75 * brightness
-            star.color = NSColor(red: 0.85 + .random(in: 0...0.15), green: 0.9, blue: 0.85 + .random(in: 0...0.15), alpha: 1)
-            star.colorBlendFactor = 1
-            star.position = CGPoint(x: .random(in: 0...size.width), y: .random(in: 0...size.height))
-            addChild(star)
-        }
     }
 }
