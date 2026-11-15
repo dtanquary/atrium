@@ -254,9 +254,14 @@ final class LavaLamp: SKScene {
         float edge = clamp((f.x - 1.0) / (length(f.yz) * 0.75 / u_size.y + 0.0001) + 0.5, 0.0, 1.0);
         col = mix(col, wax, edge * (u_opacity + (1.0 - u_opacity) * smoothstep(0.0, 0.5, thick)));
 
-        // Curved glass: darker toward the sides, with two soft vertical window reflections.
+        // Curved glass: darker toward the sides, with two soft window reflections, bowed and fading out toward the
+        // top and bottom as a sheen on curved glass does. Straight and even from top to bottom they read as seams,
+        // and a thin bright core in them read as one too.
         col *= 0.62 + 0.38 * sin(3.14159 * x);
-        col += vec3(0.035 * exp(-(x - 0.16) * (x - 0.16) / 0.0004) + 0.02 * exp(-(x - 0.87) * (x - 0.87) / 0.001225));
+        float ends = (2.0 * y - 1.0) * (2.0 * y - 1.0);
+        float ra = x - 0.15 - 0.035 * ends, rb = x - 0.87 + 0.025 * ends;
+        col += vec3(0.04 * exp(-ra * ra / 0.0012) * smoothstep(0.05, 0.5, y) * smoothstep(1.0, 0.75, y)
+                  + 0.025 * exp(-rb * rb / 0.002) * smoothstep(0.15, 0.55, y) * smoothstep(0.95, 0.7, y));
         col = grade(col, u_pivot, u_hue, u_saturation, u_contrast, u_brightness);
         col += (hash42(v_tex_coord * u_size * 2.0).x - 0.5) / 128.0; // hash21 tiles every 50 pixels across and 100 up
         gl_FragColor = vec4(col, 1.0);

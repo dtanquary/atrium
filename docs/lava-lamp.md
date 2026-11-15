@@ -40,7 +40,8 @@ It follows how real lamps convect (the research agent's sources: [Wikipedia on l
 
 **Glass:**
 - **Refraction:** a cylinder of liquid seen from outside magnifies the middle and crowds the sides into the walls, as every whole-lamp photo shows. So the field is evaluated at a warped x, `u = 2x - 1`, `p.x = aspect·(0.5 + 0.5·u·(0.8 + 0.2u²))`: 0.8× across the middle, 1.4× at the edges. Wax sliding toward a wall narrows and speeds up. The cone and glass terms use the plain x. It costs nothing measurable.
-- darker toward the sides (`0.62 + 0.38·sin(πx)`), two faint vertical window reflections, then dither of ±½ a level from `hash42(…).x`. It was `hash21`, which repeats every 50 pixels across and 100 up: in a render the liquid's noise matched itself 0.34 at 50 pixels across and 0.43 at 100 up, a faint regular weave in the darkest, smoothest part of the frame; now 0.00 (Flowing Gradient made the same change on 2026-10-08).
+- **Window reflections:** soft sheens near 0.15 and 0.87 of the width (`0.04·exp(-d²/0.0012)` and `0.025·exp(-d²/0.002)`), bowed toward the walls at the top and bottom by 0.035 and 0.025 of the width times `(2y - 1)²`, and fading out over the bottom half and the top quarter of the glass. They were straight stripes of one strength from top to bottom, which read as seams (a pale line through the big blob, and through the pool). A thin bright core inside a wide faint skirt was tried first and still read as a line; removing them altogether left the glass with nothing on it but its darker sides.
+- darker toward the sides (`0.62 + 0.38·sin(πx)`), two faint window reflections, then dither of ±½ a level from `hash42(…).x`. It was `hash21`, which repeats every 50 pixels across and 100 up: in a render the liquid's noise matched itself 0.34 at 50 pixels across and 0.43 at 100 up, a faint regular weave in the darkest, smoothest part of the frame; now 0.00 (Flowing Gradient made the same change on 2026-10-08).
 
 ## Time, live data and appearance
 - **Time:** `time` (Double) is integrated in `update` (`dt × speed`, dt capped at 0.5 s) and copied to `u_phase`, so the speed slider never jumps and `SNAPSHOT_SECONDS` moves it forward.
@@ -119,6 +120,7 @@ CPU about 0.5 ms and GPU 1.0 ms per frame (release, 2x): the stems add about 0.2
   - **The pool back inside the palette** (2026-11-15): see the pool's tone above. In the bottom 8% of the screen (seed 11, Dark Mode at 103 s, Light at 33 s), the share of pixels with two channels clipped went from up to 79% in Dark Mode (Magenta 63%, Teal 79%) and 54% in Light to 0–1%, but for Teal in Dark Mode at 34%, whose hot colour has two channels near 1. The band's mean brightness fell from 176–232 of 255 to 140–197 in Dark Mode.
   - **Light Mode tints the liquid round the wax instead of adding to it** (2026-11-15): see Liquid above. Pixels with a channel at 255 in Light Mode went from 4.9–17.2% of the frame to 0.6–11.6% (seed 11 at 33 s, after the pool change), what is left being the wax's own cores.
   - **The dither no longer tiles** (2026-11-15): see Glass above. Same strength, no pattern.
+  - **The window reflections shaped** (2026-11-15): see Window reflections above. No measurable cost.
 
 ## Ideas / next steps
 - A perceptual (OKLab-style) colour blend for the cycle.
