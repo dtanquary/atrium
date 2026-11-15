@@ -62,7 +62,8 @@ A research agent measured all three and read up on real fireflies. Its notes are
    - **The orb:**
      - A cream disc (#fef09c) with a soft, slightly wobbly edge and a faint glow out to 2.6 radii.
      - Its radius is a glow about 4.5 cm across in the world (`focal·0.045/d`, with a log-normal spread of σ about 0.3, from 1 to 9 pt). So it shrinks with distance: 9 pt at 7 m, about 1.5 pt by the treeline.
-     - Within 12 m, 20% sit in a pale grey-teal halo about 2.6 times their size, a little off centre, with a ragged edge, and 25% are a halo alone, a firefly out of focus.
+     - Within 12 m, 20% sit in a pale grey-teal halo about 2.6 times their size, a little off centre, with a ragged edge.
+     - Another 25% within 12 m are out of focus: a faint round disc of the orb's cream (10%, a touch brighter toward its rim, as a lens draws a point of light), 10–24 cm across in the world (`f·0.05–0.12/d`), with a soft edge 12% of its radius wide.
      - `a_fly` carries the radius, the half-width, the kind plus a seed, and how much light gets through the fog (`clearness(d)`, the same curve as the ground's). The node's alpha fades it through `v_color_mix.a`.
 
 ## Time and appearance
@@ -122,6 +123,8 @@ CPU 0.54 ms and GPU 0.52 ms per frame (release build, 2x, 2026-09-26).
 
 - **The review of 2026-11-14** (team verdict "improve", 7/10: close to done; what was left was tying the lights into the meadow), carried out 2026-11-15:
   - **Light on the grass under near flashes,** the doc's own idea: the orbs sat on the picture, the grass under a near one exactly as dark as beside it. Now the low near ones light the blades round them. A pool on the ground under the fly, lit by its true distance through the depth map, was tried first: the map's ripples made thin wavy strips, so it's a soft pool on screen. At the review's +8 to +10 of 255 it couldn't be seen at 100%; at 0.15 (+15 to +25) it reads as light on the blades and still calm.
+
+  - **The out-of-focus firefly is a firefly** (it was a grey-teal stain with a ragged edge and blocky grain, left over from the painted look: "a smudge on the lens"). Now a faint cream disc, brighter at its rim. Only the halo alone changed; every orb, and the halo round an orb, is the same to the byte. The review asked whether the grey one was part of the orbs Dave likes: `2-side-by-side.jpg` in the session's shots shows both, for him to choose.
 
 ## Ideas / next steps
 - **Synchronous flashing,** like *Photinus carolinus*: bursts of 4–8 flashes 0.5 s apart, 6–9 s dark, relayed across the field at about 0.5 m/s.

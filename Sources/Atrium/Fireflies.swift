@@ -261,27 +261,29 @@ final class Fireflies: SKScene {
 
     /// A firefly as a soft orb, faded by the node's alpha and by the fog in front of it (`a_fly.w`). `a_fly` is its
     /// radius and the sprite's half-width in points, then its kind plus a seed in the fraction: 0 a cream orb with a
-    /// soft, slightly wobbly edge and a faint glow around it, 1 the same in a halo, and 5 a halo
-    /// alone. A halo is a flat, pale grey-teal wash about 2.6 times the orb's size, a little off centre, with a ragged
-    /// edge and a grainy texture.
+    /// soft, slightly wobbly edge and a faint glow around it, 1 the same in a halo, and 5 a firefly out of focus.
+    /// A halo is a flat, pale grey-teal wash about 2.6 times the orb's size, a little off centre, with a ragged edge
+    /// and a grainy texture. Out of focus, it's a faint round disc of the orb's cream, a touch brighter toward its
+    /// rim, as a lens draws a point of light.
     private static let flySource = """
     void main() {
         float r0 = a_fly.x, kind = floor(a_fly.z), seed = fract(a_fly.z) * 64.0;
-        float ghost = step(4.5, kind), stained = max(mod(kind, 2.0), ghost);
+        float ghost = step(4.5, kind), stained = mod(kind, 2.0) * (1.0 - ghost);
         vec2 q = (v_tex_coord - 0.5) * 2.0 * a_fly.y;
         float r = length(q);
         vec2 dir = q / max(r, 0.001);
         float edge = r0 * (0.92 + 0.16 * noise(dir * 1.5 + seed));
         float dab = smoothstep(edge + 0.5 + 0.2 * r0, edge - 0.3 * r0, r) * (1.0 - ghost);
         float glow = 0.16 * smoothstep(r0 * 2.6, r0 * 0.8, r) * (1.0 - ghost);
-        vec2 s = q - (vec2(hash11(seed), hash11(seed + 3.0)) - 0.5) * 0.5 * r0 * (1.0 - ghost);
+        vec2 s = q - (vec2(hash11(seed), hash11(seed + 3.0)) - 0.5) * 0.5 * r0;
         float rs = length(s);
         vec2 ds = s / max(rs, 0.001);
-        float reach = mix(r0 * 2.6, r0, ghost) * (0.85 + 0.3 * noise(ds * 2.0 + seed) + 0.12 * noise(ds * 7.0 + seed));
+        float reach = r0 * 2.6 * (0.85 + 0.3 * noise(ds * 2.0 + seed) + 0.12 * noise(ds * 7.0 + seed));
         float stain = smoothstep(reach, reach * 0.8, rs) * (1.0 + 0.15 * smoothstep(reach * 0.5, 0.0, rs))
                     * (0.8 + 0.4 * hash42(floor(q * 0.7) + seed).x) * stained;
         vec4 under = vec4(0.353, 0.416, 0.416, 1.0) * 0.3 * stain;
         under = vec4(1.0, 0.94, 0.7, 1.0) * glow + under * (1.0 - glow);
+        under += vec4(0.996, 0.941, 0.612, 1.0) * 0.1 * smoothstep(r0, r0 * 0.88, r) * (1.0 + 0.4 * smoothstep(r0 * 0.5, r0 * 0.92, r)) * ghost;
         vec4 paint = vec4(0.996, 0.941, 0.612, 1.0) * dab;
         gl_FragColor = (under * (1.0 - paint.a) + paint) * v_color_mix.a * a_fly.w;
     }
