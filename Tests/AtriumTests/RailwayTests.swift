@@ -251,3 +251,16 @@ private func save(_ railway: Railway, night: Float, _ name: String, scale: Int =
     #expect(rgb(gold, lit).x / rgb(gold, lit).z > rgb(noon, lit).x / rgb(noon, lit).z * 1.2)
     #expect(rgb(gold, cool).z >= rgb(noon, cool).z && rgb(gold, cool).x / rgb(gold, cool).z < rgb(noon, cool).x / rgb(noon, cool).z)
 }
+
+/// The station and its town stand on a straight on the world's axes, where the houses show in isometric, not on a
+/// corner cut square to the screen's edge (11 of 20 British steam layouts did, and 50 of 180 in all nine eras; 7 now).
+@Test func railwayTownsStandOnTheWorldsAxes() {
+    var square = 0
+    for seed in 1...10 {
+        let railway = Railway(seed: seed, width: 504, height: 328, era: .britishSteam, count: 3, season: .summer, swaps: 40...90)
+        let station = railway.scenery.station
+        #expect(station != nil, "seed \(seed): no station")
+        if let d = station?.piece.d, abs(d.x * d.y) > 0.05 { square += 1 }
+    }
+    #expect(square <= 2, "\(square) of 10 towns on a straight up or across the screen")
+}

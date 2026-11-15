@@ -192,7 +192,8 @@ final class Scenery {
         }
 
         // the station, on the longest clear straight of a passenger loop (where a high-speed line's has room for the
-        // road's bridge, if one can)
+        // road's bridge, if one can), on the world's axes if one will do: on a corner cut square to the screen's edge
+        // the town's streets run straight up and across it and every house shows flat, gable-on or eave-on
         var best: (score: Double, li: Int, pc: Piece, side: Double, L: Double)?
         for (li, lp) in lay.loops.enumerated() {
             let freight = lp.keys.allSatisfy { RailArt.consist($0).freight }
@@ -208,7 +209,8 @@ final class Scenery {
                     guard G.freeShare(probe) > 0.93, plat.allSatisfy({ onScreen($0, -1) }) else { continue }
                     let room = Double(town.filter { G.free($0) && onScreen($0, -4) }.count) / Double(town.count)
                     let cx = mid + pc.d * (L / 2 + 9), road = !bridged(lp) || bridgeRoom(cx, n, li, pc.s0 + dot(cx - pc.a, pc.d))
-                    let score = L + 120 * room + rng.uniform(0, 30) - (freight ? 60 : 0) - (road ? 0 : 150)
+                    let square = abs(pc.d.x * pc.d.y) > 0.05
+                    let score = L + 120 * room + rng.uniform(0, 30) - (freight ? 60 : 0) - (road ? 0 : 150) - (square ? 80 : 0)
                     if best == nil || score > best!.score { best = (score, li, pc, side, L) }
                 }
             }
