@@ -31,8 +31,9 @@ It follows how real lamps convect (the research agent's sources: [Wikipedia on l
 **Wax shading:** the only light in a real lamp is the bulb underneath (Mathmos's bulbs are directional, "directing the light into the lava"), so every blob glows brightest on its underside and dims toward its top. Real wax is opaque satin with no dark outline.
 - **Where in its blob (`dl`):** alongside the field, the loop sums `lp += ball·(q - centre)/r` for the heads, so `dl = lp/f` is this pixel's offset from its blob's centre in radii (y from −1 underneath to +1 on top), smooth even where blobs merge. Stems don't add to it. The pool adds only below its surface (`clamp(…, -1, 0)`), so the top of the pool stays pale and hot rather than dimming like the top of a blob. Deriving `dl` from the gradient direction instead was tried by the agent: it leaves pinwheels and dents wherever the gradient vanishes.
 - **Thickness:** `thick = 1 - exp(-(f-1)·0.9)` rises from the edge and levels off. That stops overlapping balls showing hot spots.
-- **Colour:** `under = smoothstep(0.9, -0.9, dl.y)`. Deep to hot by `0.15 + 0.5·under + 0.25·heat + 0.3·thick`, then `×(0.7 + 0.4·under + 0.2·heat)` and a soft limb `×(0.85 + 0.15·z)`. Tops fall to the palette's deep colour rather than darkening; a darker floor (0.55) turned them muddy brown.
-- **Glow:** a hot core `waxHot·(0.12 + 0.25·heat)·thick²` at every height, so the luminous cores survive, plus the bulb through the thin underside, a crescent `0.45·(1 - z)³·under·(0.4 + heat)`.
+- **Colour:** `under = smoothstep(0.9, -0.9, dl.y)`. Deep to hot by `0.15 + 0.5·under + 0.25·heat + 0.3·thick`, then `×(0.7 + (0.4·under + 0.2·heat)·(1 - 0.8·pool))` and a soft limb `×(0.85 + 0.15·z)`. Tops fall to the palette's deep colour rather than darkening; a darker floor (0.55) turned them muddy brown.
+- **Glow:** a hot core `waxHot·(0.12 + 0.25·heat)·thick²·(1 - pool·(1 - cone))` at every height, so the luminous cores survive, plus the bulb through the thin underside, a crescent `0.45·(1 - z)³·under·(0.4 + heat)`.
+- **The pool's tone (`pool = 1 - smoothstep(0.03, 0.14, y)`):** the pool is all underside, heat and thick core, and those gains summed to 1.67 times the hot colour, so along the bottom 8% of the screen, where the Dock sits, two channels clipped and the palette washed out to cream (Coral, Peach) or pale pink (Magenta): the brightest slab on the screen. Low down the underside and heat gains fall to a fifth and the core glow follows the bulb's `cone`, so the pool peaks near 1.2 times the hot colour over the bulb and comes down to the hot colour itself toward the walls. Blobs above 0.14 of the height are untouched, so their cores keep their pale glow. It's by height, not by the pool's share of the field (`pv / f`, the review's suggestion): that share kinks at the pool's buried surface, where its field stops growing, and drew a seam along it, and it left heads sunk in the pool as cream spots. A hue-keeping knee on the brightest channel was tried too, over all the wax (the cores lost their glow and the pool went flat salmon) and over the pool alone (flat and dull, grey in Lavender), and dropped.
 - **Sheen:** faint, `0.06·pow(·, 10)`, from a normal built from `dl`. The old `0.12·pow(·, 18)` gave merged heads a pair of highlights like eyes.
 
 **Edge:** one pixel of antialiasing from the field's gradient. Thin wax is translucent: `u_opacity + (1 - u_opacity)·smoothstep(thick)`.
@@ -82,7 +83,7 @@ Sections: Colors (swatches plus the cycle interval), Motion, Light, Look. The Lo
 - Ceiling: 65% of trips, top at `1 - 0.45r`, pancake `sy` down to 0.62 while parked (`s` 0.34–0.66; 0.3 as much for trips that turn back).
 - Lanes: rise at 0.3–0.7 of the width; slide out over `s` 0.40–0.66 by 0.1–0.22 of the width; sway `0.02·sin(0.03t + 2i)`.
 - Stem: 0.7r at the pool, tapering to 0.3× under the head; softening constant 0.00015. Drip thread: 0.4r. Both grow in as the head clears its anchor, from 0.5r to 2.5r away.
-- Pool: height 0.03, heave `0.006·sin(4x + 0.1t) + 0.004·sin(9x - 0.13t)`, strength `0.0028/d²`.
+- Pool: height 0.03, heave `0.006·sin(4x + 0.1t) + 0.004·sin(9x - 0.13t)`, strength `0.0028/d²`. Its tone: gains cut by 0.8 below 0.03 of the height, fading out by 0.14; core glow times the cone there.
 - Satin sheen: 0.12 × pow(·, 18). Cycle fade: 60 s.
 
 ## Performance
@@ -113,6 +114,9 @@ CPU about 0.5 ms and GPU 1.0 ms per frame (release, 2x): the stems add about 0.2
 - He asked for it to follow the system's Dark/Light setting: darker lava colours in Dark Mode, lighter in Light Mode.
 - He said yes to sliders and a palette picker in Settings.
 - He asked for a research pass on photos and videos of real lamps, with the suggestions implemented. The agent found: per-blob maths was 60% of the GPU frame (moved to Swift); real rising wax is a round head on a stem rooted in the pool, not a stretched egg; wax sticks to the top a while, rises over the bulb and sinks at the sides; paths repeated every trip; and there were no small droplets. Those became the layout above. It advised skipping floating specks in the liquid (they read as a starfield), a whole-lamp framing (it would fill under a third of the screen), and the heating coil (it's never visible from the front).
+
+- The review of every wallpaper (2026-11-14) scored it 6.5 of 10: good motion held back by a clipped, pale pool along the bottom and a Light Mode whose glow bleached the liquid white. Dave asked for all its suggestions to be made. What came of each:
+  - **The pool back inside the palette** (2026-11-15): see the pool's tone above. In the bottom 8% of the screen (seed 11, Dark Mode at 103 s, Light at 33 s), the share of pixels with two channels clipped went from up to 79% in Dark Mode (Magenta 63%, Teal 79%) and 54% in Light to 0–1%, but for Teal in Dark Mode at 34%, whose hot colour has two channels near 1. The band's mean brightness fell from 176–232 of 255 to 140–197 in Dark Mode.
 
 ## Ideas / next steps
 - A perceptual (OKLab-style) colour blend for the cycle.

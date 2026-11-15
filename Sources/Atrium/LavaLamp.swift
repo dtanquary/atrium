@@ -234,10 +234,15 @@ final class LavaLamp: SKScene {
         // The only light is the bulb underneath, so each blob glows brightest on its underside and dims toward its
         // top, with the thick core still glowing from within. Satin wax, so a soft limb rather than a dark outline.
         float under = smoothstep(0.9, -0.9, dl.y);
+        // The pool is all underside, heat and core, which summed to 1.67 times the hot colour and clipped two channels
+        // to cream or pale pink along the bottom. So low down those gains come down and the core glow follows the
+        // bulb's cone: the pool peaks near 1.2 times the hot colour over the bulb and falls to it toward the walls.
+        // By height, not by the pool's share of the field, which kinks at its buried surface and drew a seam there.
+        float pool = 1.0 - smoothstep(0.03, 0.14, y);
         vec3 wax = mix(u_waxDeep, u_waxHot, clamp(0.15 + 0.5 * under + 0.25 * heat + 0.3 * thick, 0.0, 1.0));
-        wax *= 0.7 + 0.4 * under + 0.2 * heat; // tops fall to the deep colour rather than darkening to brown
+        wax *= 0.7 + (0.4 * under + 0.2 * heat) * (1.0 - 0.8 * pool); // tops fall to the deep colour rather than darkening to brown
         wax *= 0.85 + 0.15 * z;
-        wax += u_waxHot * (0.12 + 0.25 * heat) * thick * thick;                        // hot core glow
+        wax += u_waxHot * (0.12 + 0.25 * heat) * thick * thick * (1.0 - pool * (1.0 - cone)); // hot core glow
         wax += u_waxHot * 0.45 * pow(1.0 - z, 3.0) * under * (0.4 + heat);             // bulb through the thin underside
         vec3 n = normalize(vec3(dl * (1.0 - 0.7 * thick), z + 0.3));
         wax += vec3(0.06) * pow(max(dot(n, normalize(vec3(-0.35, 0.45, 0.82))), 0.0), 10.0); // faint satin sheen
