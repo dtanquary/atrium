@@ -58,14 +58,14 @@ final class Jellyfish: SKScene {
         "NT": "120", "TLEN": "0.32", "TW": "0.006", "SWAY": "0.25", "NOA": "4", "ALEN": "1.0", "AW": "0.17",
         "ASPREAD": "0.22", "ASWAY": "0.25", "TWIST": "3.0", "HEIGHT": "0.42", "RISE": "0.32", "SHRINK": "0.14",
         "NC": "32.0", "CANALSHARP": "10.0", "CANALK": "0.5", "GONADS": "1", "CONVERGE": "0.0", "TVARY": "0.0", "RING": "0",
-        "UNDER": "0.02", "SKIRT": "0.22", "FLARE": "0.82", "TUCK": "-0.5",
+        "UNDER": "0.02", "SKIRT": "0.22", "FLARE": "0.82", "TUCK": "-0.5", "STEPS": "16",
     ])
     static let crystal = Species(count: 48, diameter: 0.08...0.2, period: 1.8, perPulse: 0.35, restChance: 0.25, rest: 0.8...3.0,
                                  righting: 0.02, sag: 0.05, tentacles: 7, arms: 0.35, defines: [
         "NT": "36", "TLEN": "7.0", "TW": "0.005", "SWAY": "0.06", "NOA": "1", "ALEN": "0.35", "AW": "0.3",
         "ASPREAD": "0.0", "ASWAY": "0.05", "TWIST": "1.5", "HEIGHT": "0.36", "RISE": "0.26", "SHRINK": "0.12",
         "NC": "60.0", "CANALSHARP": "16.0", "CANALK": "2.2", "GONADS": "0", "CONVERGE": "0.3", "TVARY": "0.7", "RING": "1",
-        "UNDER": "0.08", "SKIRT": "0.22", "FLARE": "0.82", "TUCK": "-0.5", // its ring's points glow a little below the margin
+        "UNDER": "0.08", "SKIRT": "0.22", "FLARE": "0.82", "TUCK": "-0.5", "STEPS": "20", // the ring's points glow a little below the margin, and want 20 steps
     ])
 
     /// One jelly in metres, seen by a camera 50° across from the origin, looking along +z: its place, the way its
@@ -492,8 +492,8 @@ final class Jellyfish: SKScene {
     }
     """
 
-    /// One jelly. The bell is marched through in 20 steps, so its rim is bright where the line of sight grazes the
-    /// tissue rather than painted on; its outer sixth is a skirt that flaps, its angle lagging the squeeze. Tentacles
+    /// One jelly. The bell is marched through in 16 steps (20 for the crystal jellies' ring), so its rim is bright where
+    /// the line of sight grazes the tissue rather than painted on; its outer sixth is a skirt that flaps, its angle lagging the squeeze. Tentacles
     /// and oral arms hang along the spine, and each pixel looks at only the strands nearest it (four either side, front
     /// and back of the ring), so a hundred cost no more than eight. A moon jelly is drawn lit (`u_lit` 1) or glowing
     /// (0), or between as the light changes; a crystal jelly under a blue lamp, with its ring of fluorescent green
@@ -521,16 +521,16 @@ final class Jellyfish: SKScene {
         float zm = (-UNDER - q.y * cb) / (abs(sb) > 1e-4 ? sb : 1e-4);
         if (sb < -1e-4) { z1 = min(z1, zm); } else { z0 = max(z0, zm); }
         if (disc > 0.0 && z1 > z0 && abs(q.x) < wide && q.y > -wide * abs(sb) - 0.06 && q.y < C * cb + wide * abs(sb) + 0.04) {
-            float dz = (z1 - z0) / 20.0, inH = C * 0.55, thick = 0.283 * A;
+            float dz = (z1 - z0) / float(STEPS), inH = C * 0.55, thick = 0.283 * A;
             // Each pixel starts its steps at its own depth, afresh every frame: by where it is on screen, not in the
             // sprite's box, so the picture is the same whatever the box.
             float jitter = hash42(gl_FragCoord.xy + seed + 71.0 * fract(t * 3.7)).x;
-            for (int i = 0; i < 20; i++) {
+            float oLast = 0.0, nLast = 0.0, gLast = 0.0;
+            for (int i = 0; i < STEPS; i++) {
                 float z = z1 - dz * (float(i) + jitter);
                 float Yb = q.y * cb + z * sb;
                 float Zb = -q.y * sb + z * cb;
                 float rho = length(vec2(q.x, Zb));
-                float phi = atan(Zb, q.x);
                 float hn = clamp(Yb / C, 0.0, 1.0);
                 // Above the hinge, half an ellipsoid; below it, the skirt, thinning to the margin. Its distances are
                 // taken square to it, as the ellipsoid's are across it.
@@ -540,21 +540,29 @@ final class Jellyfish: SKScene {
                 float square = flap ? ca : 1.0, o = (rho - outer) * square, n = (rho - inner) * square;
                 float below = smoothstep(ty - 0.015, ty + 0.015, Yb);
                 tissue += smoothstep(0.02, -0.02, o) * below * smoothstep(-0.02, 0.02, n) * dz;
-                float sk = (exp(-pow(o / 0.035, 2.0)) + 0.5 * exp(-pow(n / 0.035, 2.0)) * step(Yb, inH))
+                // A step can stride right over the skin, 0.035 thick, where the line of sight crosses it squarely: so
+                // each skin is widened to the step's stride across it and dimmed to match, and keeps its light.
+                float wo = i == 0 ? 0.035 : max(0.035, 0.6 * abs(o - oLast)), wn = i == 0 ? 0.035 : max(0.035, 0.6 * abs(n - nLast));
+                oLast = o; nLast = n;
+                float sk = (0.035 / wo * exp(-pow(o / wo, 2.0)) + 0.5 * 0.035 / wn * exp(-pow(n / wn, 2.0)) * step(Yb, inH))
                     * below * smoothstep(C + 0.03, C - 0.01, Yb);
+                float phi = atan(Zb, q.x);
                 skin += sk * (1.0 + CANALK * pow(abs(cos(phi * NC * 0.5)), CANALSHARP) * (1.0 - hn)) * dz;
-                #if GONADS
-                if (abs(Yb - inH * 0.95) < 0.25 && rho < 0.62 * A) {
-                    // Four rings round the middle, each a mirror image of the next: folded onto one.
-                    vec2 d = abs(vec2(q.x, Zb)) - 0.2404 * A;
-                    float open = smoothstep(-0.95, -0.7, dot(normalize(d + 1e-4), vec2(0.7071))); // the gap faces the middle
-                    organ += exp(-pow((length(d) - 0.16 * A) / 0.04, 2.0)) * open * exp(-pow((Yb - inH * 0.95) / 0.09, 2.0)) * dz * 5.0;
-                }
-                #endif
                 #if RING
                 float idx = floor(phi / 6.2832 * 100.0 + 0.5);
                 float dphi = (phi - idx * 6.2832 / 100.0) * tx;
                 ringPts += exp(-(pow(rho - tx, 2.0) + pow(Yb - ty, 2.0) + dphi * dphi) / 0.0006) * dz * 45.0;
+                #endif
+                #if GONADS
+                // Four rings round the middle, each a mirror image of the next: folded onto one. Widened to the step's
+                // stride across them, as the skin is.
+                vec2 d = abs(vec2(q.x, Zb)) - 0.2404 * A;
+                float g = length(d) - 0.16 * A, wg = i == 0 ? 0.04 : max(0.04, 0.6 * abs(g - gLast));
+                gLast = g;
+                if (abs(Yb - inH * 0.95) < 0.25 && rho < 0.62 * A) {
+                    float open = smoothstep(-0.95, -0.7, dot(normalize(d + 1e-4), vec2(0.7071))); // the gap faces the middle
+                    organ += 0.04 / wg * exp(-pow(g / wg, 2.0)) * open * exp(-pow((Yb - inH * 0.95) / 0.09, 2.0)) * dz * 5.0;
+                }
                 #endif
             }
         }
