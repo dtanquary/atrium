@@ -247,16 +247,20 @@ final class EarthFromOrbit: SKScene, BatteryPaced {
     }
 
     private func addGlobe() {
+        // 45 MB of GPU memory each with mipmaps, so every display and Settings' copy share one of each
         func texture(_ name: String) -> SKTexture {
-            let texture = SKTexture(image: NSImage(contentsOf: resource(name)) ?? NSImage())
-            texture.usesMipmaps = true
-            return texture
+            sharedTexture(name) {
+                let texture = SKTexture(image: NSImage(contentsOf: resource(name)) ?? NSImage())
+                texture.usesMipmaps = true
+                return texture
+            }
         }
-        globe.texture = texture("earth-day.jpg")
+        globe.texture = texture("earth-day.heic")
         globe.size = CGSize(width: radius * 2 * margin, height: radius * 2 * margin)
         globe.position = centre
         globe.zPosition = 1
-        // Earth textures: NASA Blue Marble, September 2004 (day) and Black Marble 2016 (night lights), both public domain.
+        // Earth textures: NASA Blue Marble Next Generation, September 2004, with topography and no bathymetry, its sea
+        // baked to one deep blue (day), and Black Marble 2016 (night lights), both public domain, at 4096 x 2048.
         // Clouds come live from Clouds.shared.
         globe.shader = SKShader(source: """
             void main() {
@@ -292,7 +296,7 @@ final class EarthFromOrbit: SKScene, BatteryPaced {
                 gl_FragColor = vec4(colour * disc + air * halo, max(disc, halo));
             }
             """, uniforms: [
-                SKUniform(name: "u_night", texture: texture("earth-night.jpg")),
+                SKUniform(name: "u_night", texture: texture("earth-night.heic")),
                 SKUniform(name: "u_margin", float: Float(margin)),
                 sunUniform,
                 basisUniform,
