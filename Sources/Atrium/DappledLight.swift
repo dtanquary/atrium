@@ -679,82 +679,87 @@ final class DappledLight: SKScene, BatteryPaced, Trimmable {
         vec4 rel = texture2D(u_relief, st);
         vec2 slope = rel.rg * 2.0 - 1.0;
         vec3 normal = vec3(slope, sqrt(max(1.0 - dot(slope, slope), 0.0)));
-        // Deep relief (siding's laps, brick's mortar) shades itself: march toward the light up through its height.
-        float relit = 1.0;
-        if (u_surface.z > 0.0) {
-            vec2 run = u_dir.xy / max(u_dir.z, 0.08) * u_surface.z * 0.125;
-            for (int k = 1; k <= 8; k++) {
-                float hk = texture2D(u_relief, fract((p + run * float(k)) / u_surface.xy)).b;
-                relit = min(relit, smoothstep(-0.04, 0.04, rel.b + float(k) * 0.125 - hk));
-            }
-        }
-
         // Branches sway, each part of the tree in its own phase.
         float phase = texture2D(u_noise, fract(p * 0.21 + 0.37)).a * 14.0;
         vec2 sway = u_wind.x * vec2(sin(t * 2.7 + phase) + 0.5 * sin(t * 1.3 + phase * 1.7),
                                     0.6 * cos(t * 2.1 + phase * 0.8) + 0.3 * sin(t * 0.9 + phase * 2.3));
 
-        // The far crown: a soft mass of shade, with round images of the source where it has gaps.
-        vec2 cf = p - u_shiftFar + sway * 0.6;
-        float density = texture2D(u_canopy, fract(cf * 0.29 + vec2(0.13, 0.61))).g;
-        float crown = smoothstep(0.1, 0.6, density + u_wind.w - 0.5);
-        float far = 1.0 - crown;
-        if (crown > 0.01) {
-            float px = u_mpp * 0.5 * length(u_proj.xy) * u_invL;
-            vec2 g = vec2(dot(u_proj.xy, cf), dot(u_proj.zw, cf)) * u_invL;
-            // Gaps, at most one to a 2 × 2 cell of sky offset (so every image is round here), more where the crown is
-            // thinner. Each whose image could reach here looks up the crown where its image falls (sky offset back to
-            // the wall: the sprays' blur matrix, scaled from their distance to the crown's).
-            float dapples = 0.0;
-            float breeze = clamp(u_wind.x * 100.0, 0.0, 1.0);
-            vec2 cell = floor(g * 0.5);
-            for (int j = -1; j <= 1; j++) {
-                for (int i = -1; i <= 1; i++) {
-                    vec2 c = cell + vec2(float(i), float(j));
-                    vec4 h = hash42(c);
-                    vec2 dg = g - (c + 0.2 + 0.6 * h.xy) * 2.0;
-                    float size = 0.45 * pow(4.0, fract(h.z * 7.31 + h.w * 3.7));   // gaps 2.3 to 9 m out: the nearer, the smaller
-                    // A third are slits between leaves, whose image is the disc smeared along them, up to 1.6 times as
-                    // long but never past the cells searched (2.4 away at the nearest).
-                    float slit = fract(h.w * 3.1 + h.x * 1.7);
-                    float stretch = slit < 0.33 ? max(min(1.0 + 1.8 * slit, 2.3 / (size + 0.4)), 1.0) : 1.0;
-                    float reach = (size + 0.4 + px) * stretch;
-                    if (h.z > 0.05 && dot(dg, dg) < reach * reach) {
-                        vec2 at = cf + vec2(dot(u_blur.xy, dg), dot(u_blur.zw, dg)) * 4.1667;   // 5 m / 1.2 m
-                        vec4 there = texture2D(u_canopy, fract(at * 0.29 + vec2(0.13, 0.61)));
-                        dapples += gap(dg, h, size, stretch, 1.0 - smoothstep(0.4, 1.0, there.g), there.a, u_wind.y, breeze, t, u_src, u_term, px);
-                    }
+        // What the direct light reaches, past the leaves and the relief's own shade: none of it is worked out when
+        // there's no direct light (overcast, the source behind the wall or set), when it would all be multiplied by 0.
+        float sunlit = 0.0;
+        if (u_light.r + u_light.g + u_light.b > 0.0) {
+            // Deep relief (siding's laps, brick's mortar) shades itself: march toward the light up through its height.
+            float relit = 1.0;
+            if (u_surface.z > 0.0) {
+                vec2 run = u_dir.xy / max(u_dir.z, 0.08) * u_surface.z * 0.125;
+                for (int k = 1; k <= 8; k++) {
+                    float hk = texture2D(u_relief, fract((p + run * float(k)) / u_surface.xy)).b;
+                    relit = min(relit, smoothstep(-0.04, 0.04, rel.b + float(k) * 0.125 - hk));
                 }
             }
-            far += crown * min(dapples, 1.0);
+
+            // The far crown: a soft mass of shade, with round images of the source where it has gaps.
+            vec2 cf = p - u_shiftFar + sway * 0.6;
+            float density = texture2D(u_canopy, fract(cf * 0.29 + vec2(0.13, 0.61))).g;
+            float crown = smoothstep(0.1, 0.6, density + u_wind.w - 0.5);
+            float far = 1.0 - crown;
+            if (crown > 0.01) {
+                float px = u_mpp * 0.5 * length(u_proj.xy) * u_invL;
+                vec2 g = vec2(dot(u_proj.xy, cf), dot(u_proj.zw, cf)) * u_invL;
+                // Gaps, at most one to a 2 × 2 cell of sky offset (so every image is round here), more where the crown is
+                // thinner. Each whose image could reach here looks up the crown where its image falls (sky offset back to
+                // the wall: the sprays' blur matrix, scaled from their distance to the crown's).
+                float dapples = 0.0;
+                float breeze = clamp(u_wind.x * 100.0, 0.0, 1.0);
+                vec2 cell = floor(g * 0.5);
+                for (int j = -1; j <= 1; j++) {
+                    for (int i = -1; i <= 1; i++) {
+                        vec2 c = cell + vec2(float(i), float(j));
+                        vec4 h = hash42(c);
+                        vec2 dg = g - (c + 0.2 + 0.6 * h.xy) * 2.0;
+                        float size = 0.45 * pow(4.0, fract(h.z * 7.31 + h.w * 3.7));   // gaps 2.3 to 9 m out: the nearer, the smaller
+                        // A third are slits between leaves, whose image is the disc smeared along them, up to 1.6 times as
+                        // long but never past the cells searched (2.4 away at the nearest).
+                        float slit = fract(h.w * 3.1 + h.x * 1.7);
+                        float stretch = slit < 0.33 ? max(min(1.0 + 1.8 * slit, 2.3 / (size + 0.4)), 1.0) : 1.0;
+                        float reach = (size + 0.4 + px) * stretch;
+                        if (h.z > 0.05 && dot(dg, dg) < reach * reach) {
+                            vec2 at = cf + vec2(dot(u_blur.xy, dg), dot(u_blur.zw, dg)) * 4.1667;   // 5 m / 1.2 m
+                            vec4 there = texture2D(u_canopy, fract(at * 0.29 + vec2(0.13, 0.61)));
+                            dapples += gap(dg, h, size, stretch, 1.0 - smoothstep(0.4, 1.0, there.g), there.a, u_wind.y, breeze, t, u_src, u_term, px);
+                        }
+                    }
+                }
+                far += crown * min(dapples, 1.0);
+            }
+            far = mix(far, 1.0 - 0.7 * crown, u_wind.z);   // behind thin cloud the dapples blur into the shade
+
+            // Sprays of leaves nearer the wall: their shadow blurred over the source's image, tap by tap, each tap dropped
+            // where the Moon covers the Sun.
+            vec2 cm = p - u_shiftNear.xy + sway;
+            float leaf = 0.0;
+            float weight = 0.0;
+            for (int k = 0; k < 7; k++) {
+                float a = float(k) * 1.0472 + 0.3;
+                vec2 d = k == 0 ? vec2(0.0) : 0.7 * vec2(cos(a), sin(a));
+                float w = 1.0;
+                if (u_src.z > 0.0) { w = step(u_src.z, length(d - u_src.xy)); }
+                vec2 tap = cm + vec2(dot(u_blur.xy, d), dot(u_blur.zw, d));
+                leaf += w * texture2D(u_canopy, fract(tap * 0.33 + vec2(0.71, 0.29))).r;
+                weight += w;
+            }
+            leaf = smoothstep(0.0, 1.0, leaf / max(weight, 0.001) * (0.6 + u_wind.w * 0.8));
+
+            // The twig near the wall: a sharp shadow, swaying about its base.
+            vec2 local = p - u_shiftNear.zw - u_twigPose.xy + sway * 0.5;
+            float ca = cos(u_twigPose.z);
+            float sa = sin(u_twigPose.z);
+            vec2 uv = vec2(ca * local.x + sa * local.y, -sa * local.x + ca * local.y) / 0.75 + vec2(0.5, 0.0);
+            float twig = 0.0;
+            if (uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) { twig = texture2D(u_twig, uv).r * u_twigPose.w; }
+
+            sunlit = far * (1.0 - leaf) * (1.0 - twig) * relit;
         }
-        far = mix(far, 1.0 - 0.7 * crown, u_wind.z);   // behind thin cloud the dapples blur into the shade
-
-        // Sprays of leaves nearer the wall: their shadow blurred over the source's image, tap by tap, each tap dropped
-        // where the Moon covers the Sun.
-        vec2 cm = p - u_shiftNear.xy + sway;
-        float leaf = 0.0;
-        float weight = 0.0;
-        for (int k = 0; k < 7; k++) {
-            float a = float(k) * 1.0472 + 0.3;
-            vec2 d = k == 0 ? vec2(0.0) : 0.7 * vec2(cos(a), sin(a));
-            float w = 1.0;
-            if (u_src.z > 0.0) { w = step(u_src.z, length(d - u_src.xy)); }
-            vec2 tap = cm + vec2(dot(u_blur.xy, d), dot(u_blur.zw, d));
-            leaf += w * texture2D(u_canopy, fract(tap * 0.33 + vec2(0.71, 0.29))).r;
-            weight += w;
-        }
-        leaf = smoothstep(0.0, 1.0, leaf / max(weight, 0.001) * (0.6 + u_wind.w * 0.8));
-
-        // The twig near the wall: a sharp shadow, swaying about its base.
-        vec2 local = p - u_shiftNear.zw - u_twigPose.xy + sway * 0.5;
-        float ca = cos(u_twigPose.z);
-        float sa = sin(u_twigPose.z);
-        vec2 uv = vec2(ca * local.x + sa * local.y, -sa * local.x + ca * local.y) / 0.75 + vec2(0.5, 0.0);
-        float twig = 0.0;
-        if (uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) { twig = texture2D(u_twig, uv).r * u_twigPose.w; }
-
-        float sunlit = far * (1.0 - leaf) * (1.0 - twig) * relit;
         // The crown also hides part of the sky: a soft shadow straight back from where the tree really is (a little low,
         // since the sky is brightest overhead), which is all there is to see under cloud or with the Sun behind the wall.
         vec2 cs = p + sway * 0.6 + vec2(0.0, 0.2);   // looking 0.2 m up the tree puts its shadow 0.2 m low
