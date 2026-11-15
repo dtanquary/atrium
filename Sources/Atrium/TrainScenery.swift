@@ -903,13 +903,14 @@ extension Stamp {
         }
     }
 
-    /// A billboard on two posts beside the line, `wide` pixels across: a pale face with a band of colour, lit
-    /// after dark (its face's top bit). Its posts are thin.
+    /// A billboard on two posts beside the line, `wide` pixels across: a pale face with a band of colour, and after
+    /// dark a row of lamps along its top edge (a cell's top bit; the whole face lit was a block of lamp light). Its
+    /// posts are thin.
     static func billboard(_ wide: Double, _ seed: Int) -> Stamp {
         let w = max(4, Int(wide)), face = max(2, w / 3), posts = max(2, w / 2), h = face + posts
         let band = [TrainMat.roof, TrainMat.brick, TrainMat.tower, TrainMat.rape][Int(unit(hash(seed, 1, 87)) * 4)]
         return .drawn(w, h, thin: true) { s, _ in
-            for y in 0..<face { for x in 0..<w { s.put(x, y, (y == face / 2 ? band : y == face - 1 ? TrainMat.whiteShade : TrainMat.white) | (y < face - 1 ? 128 : 0)) } }
+            for y in 0..<face { for x in 0..<w { s.put(x, y, (y == face / 2 ? band : y == face - 1 ? TrainMat.whiteShade : TrainMat.white) | (y == 0 && x % 2 == 0 ? 128 : 0)) } }
             for x in [w / 4, w - 1 - w / 4] { s.box(x, face, x + 1, h, TrainMat.pole) }
         }
     }
