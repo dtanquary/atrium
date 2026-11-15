@@ -5,6 +5,8 @@ import simd
 /// thing, with the depth of each pixel for the trains to be drawn against. Rows from the top.
 struct Statics {
     var day: [SIMD3<Float>], night: [SIMD3<Float>], depth: [Float]
+    /// The ground in shadow by day, which a low Sun leaves cool while it warms the rest.
+    var shaded: [Bool] = []
 
     /// Lying snow's three tones, a step under the white of snow on tops so roofs and firs stand out of it.
     static let snowField: [UInt32] = [0xE2E8F0, 0xD6DEEA, 0xEAEFF5]
@@ -42,7 +44,8 @@ struct Statics {
         night.rgb = base.rgb.map(nightLight.ground)
         let shade = Self.shadows(things, view, ground)
         let shadow = winter ? RailLight.snowShadow : RailLight.shadow
-        for i in day.rgb.indices where shade[i] && day.depth[i] <= Float(view.pixelDepth(i % w, i / w, 0)) + 0.1 { day.rgb[i] *= shadow } // on the ground only
+        shaded = day.rgb.indices.map { shade[$0] && day.depth[$0] <= Float(view.pixelDepth($0 % w, $0 / w, 0)) + 0.1 } // on the ground only
+        for i in day.rgb.indices where shaded[i] { day.rgb[i] *= shadow }
         var pools = [Float](repeating: 0, count: w * h)
         for q in sc.lamps { Self.pool(&pools, q, view) }
         for i in pools.indices where pools[i] > 0 { night.rgb[i] += pools[i] * nightLight.lamp * 0.55 }

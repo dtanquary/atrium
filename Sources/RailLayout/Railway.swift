@@ -11,8 +11,8 @@ public final class Railway {
     /// Each vehicle as drawn at each heading (and slope), coloured by day and by night, made as first needed.
     private var bakes: [String: Painted] = [:]
     private let roadCar: RailVehicle
-    /// The picture under the trains at the last night level drawn, packed, and that level.
-    private var under: [UInt32] = [], underNight: Float = -1
+    /// The picture under the trains at the last night level and low Sun's warmth drawn, packed, and those.
+    private var under: [UInt32] = [], underNight: Float = -1, underWarm = SIMD3<Float>(repeating: -1)
     private var frame: [UInt32], depth: [Float]
     /// The contact wire, where the era has one: each pixel it crosses and its nearest depth there.
     private let wire: [(i: Int, d: Float)]
@@ -211,13 +211,15 @@ public final class Railway {
     }
 
     /// Draws the layout with its trains where they are now into `out` (premultiplied RGBA, rows from the bottom,
-    /// as a mutable texture takes them), `night` from 0 (day) to 1.
-    public func draw(night: Float, into out: UnsafeMutableBufferPointer<UInt32>) {
+    /// as a mutable texture takes them), `night` from 0 (day) to 1, and everything the Sun lights multiplied by
+    /// `warm` (a low Sun's colour; 1 by day), the ground in shadow by a cooler, violet share of it.
+    public func draw(night: Float, warm: SIMD3<Float> = [1, 1, 1], into out: UnsafeMutableBufferPointer<UInt32>) {
         let night = (night * 32).rounded() / 32
         frameCount &+= 1
-        if night != underNight {
-            under = zip(statics.day, statics.night).map { pack($0 + ($1 - $0) * night) }
-            underNight = night
+        if night != underNight || warm != underWarm {
+            let cool = 1 + (warm - 1) * SIMD3(0.33, 0.38, -0.5)
+            under = statics.day.indices.map { i in pack((statics.day[i] + (statics.night[i] - statics.day[i]) * night) * (statics.shaded[i] ? cool : warm)) }
+            (underNight, underWarm) = (night, warm)
         }
         frame.withUnsafeMutableBufferPointer { f in under.withUnsafeBufferPointer { f.baseAddress!.update(from: $0.baseAddress!, count: $0.count) } }
         depth.withUnsafeMutableBufferPointer { d in statics.depth.withUnsafeBufferPointer { d.baseAddress!.update(from: $0.baseAddress!, count: $0.count) } }
@@ -232,9 +234,9 @@ public final class Railway {
             for dx in [0, 0.9] { for dy in [0, 0.9] { for z in [2.2, 3.1] { point([sw.pos.x + dx, sw.pos.y + dy, z], c, eps: 0.3) } } }
         }
         if night > 0 { for p in poses where p.lead { headlight(p.c, p.heading, Double(p.vehicle.length), night) } }
-        for p in poses { sprite(p.vehicle, p.c, p.heading, (p.slope * 8).rounded() / 8, night) }
+        for p in poses { sprite(p.vehicle, p.c, p.heading, (p.slope * 8).rounded() / 8, night, warm) }
         if let (at, heading) = sim.carPose() {
-            sprite(roadCar, at, heading, 0, night)
+            sprite(roadCar, at, heading, 0, night, warm)
             if night > 0.5 {
                 let t = SIMD2(cos(heading), sin(heading)), n = SIMD2(-t.y, t.x)
                 for e in [-1.0, 1.0] { let q = SIMD2(at.x, at.y) + t * 3.6 + n * e * 0.8; point([q.x, q.y, 0.8], [255, 240, 200]) }
@@ -246,7 +248,7 @@ public final class Railway {
         }
         crossingParts(night)
         signalParts(night)
-        smoke(night)
+        smoke(night, warm)
         for y in 0..<h { // rows from the bottom
             frame.withUnsafeBufferPointer { src in
                 (out.baseAddress! + (h - 1 - y) * w).update(from: src.baseAddress! + y * w, count: w)
@@ -275,7 +277,7 @@ public final class Railway {
     }
 
     /// A vehicle at the nearest of 64 headings, its middle at `c`.
-    private func sprite(_ v: RailVehicle, _ c: SIMD3<Double>, _ heading: Double, _ slope: Double, _ night: Float) {
+    private func sprite(_ v: RailVehicle, _ c: SIMD3<Double>, _ heading: Double, _ slope: Double, _ night: Float, _ warm: SIMD3<Float>) {
         let q = Int((heading / (2 * .pi / 64)).rounded()) & 63
         let key = "\(v.name) \(q) \(slope)"
         let painted = bakes[key] ?? {
@@ -298,7 +300,8 @@ public final class Railway {
             }
         }
         for k in 0..<painted.count {
-            let colour = night == 0 ? painted.day[k] : night == 1 ? painted.night[k] : pack(unpack(painted.day[k]) + (unpack(painted.night[k]) - unpack(painted.day[k])) * night)
+            let colour = warm == [1, 1, 1] && (night == 0 || night == 1) ? (night == 0 ? painted.day[k] : painted.night[k])
+                : pack((unpack(painted.day[k]) + (unpack(painted.night[k]) - unpack(painted.day[k])) * night) * warm)
             put(Int(painted.dx[k]) + ax, Int(painted.dy[k]) + ay, colour, painted.dd[k] + base)
         }
     }
@@ -321,8 +324,8 @@ public final class Railway {
 
     /// The puffs, each a disc that rises, spreads and fades, left where it was blown out as its train runs on: pale
     /// grey, its lower right in shadow, and dim at night. They thin what's behind them and hide behind what's in front.
-    private func smoke(_ night: Float) {
-        let lit = SIMD3<Float>(228, 228, 224) + (SIMD3<Float>(78, 80, 92) - SIMD3<Float>(228, 228, 224)) * night
+    private func smoke(_ night: Float, _ warm: SIMD3<Float>) {
+        let lit = (SIMD3<Float>(228, 228, 224) + (SIMD3<Float>(78, 80, 92) - SIMD3<Float>(228, 228, 224)) * night) * warm
         for puff in puffs {
             let age = sim.t - puff.t, f = age / Self.puffLife
             let r = 1 + 2.6 * f.squareRoot(), a = Float(0.9 * (1 - f * f)), z = puff.p.z + 8 * (1 - exp(-1.6 * age))

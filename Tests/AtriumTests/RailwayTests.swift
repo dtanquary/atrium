@@ -234,3 +234,20 @@ private func save(_ railway: Railway, night: Float, _ name: String, scale: Int =
         #expect(beyond.count > 10 && mean(beyond.map(\.x)) > mean(body.dx), "heading \(heading): \(beyond.count) beyond")
     }
 }
+
+/// A low Sun warms what it lights and leaves the ground in shadow cool: the same moment drawn at noon and in a
+/// golden hour.
+@Test func railwayGoldenHour() {
+    let railway = Railway(seed: 4, width: 504, height: 328, era: .transition, count: 3, season: .summer)
+    var noon = [UInt32](repeating: 0, count: railway.w * railway.h), gold = noon
+    noon.withUnsafeMutableBufferPointer { railway.draw(night: 0, into: $0) }
+    gold.withUnsafeMutableBufferPointer { railway.draw(night: 0, warm: [1.08, 0.88, 0.78], into: $0) }
+    let (w, h, shaded) = (railway.w, railway.h, railway.statics.shaded)
+    func rgb(_ px: [UInt32], _ i: Int) -> SIMD3<Float> { // rows from the bottom
+        let p = px[(h - 1 - i / w) * w + i % w]
+        return SIMD3(Float(p & 0xFF), Float(p >> 8 & 0xFF), Float(p >> 16 & 0xFF))
+    }
+    let lit = shaded.indices.first { !shaded[$0] }!, cool = shaded.indices.first { shaded[$0] }!
+    #expect(rgb(gold, lit).x / rgb(gold, lit).z > rgb(noon, lit).x / rgb(noon, lit).z * 1.2)
+    #expect(rgb(gold, cool).z >= rgb(noon, cool).z && rgb(gold, cool).x / rgb(gold, cool).z < rgb(noon, cool).x / rgb(noon, cool).z)
+}
