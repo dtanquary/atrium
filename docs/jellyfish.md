@@ -139,6 +139,8 @@ Cost is unchanged: 1.5 to 1.8 ms of GPU.
   - *Screened in the dark.* Added light piled overlapping bells into the brightest thing on screen: in the glow, every pixel over 200 was in one pile. On the glow's and the crystal jellies' black the jellies are now screened, as The Moon's sky is, which is the same as adding for one bell and can't pass white for many: the glow's brightest tenth of a percent comes to 147 of 255 where it was 186 (the look research's cap for broad light is 150), its brightest pixel 206 where it was 255; the crystal jellies' 145 and 198, from 162 and 255. Screened on the lit tank's bright blue, every jelly went milky, so the lit tank keeps adding, and still clips where many overlap, as a Light Mode scene bright on purpose. The switch is made as the tank's light all but goes (under 2%), where the two differ only in piles. Drawing near bells in front of far ones (`.alpha`, with the order set by depth) was the review's better step; screening answered the pile, and wasn't tried. `jellyfishScreensInTheDark` checks each look's blend.
 
   Both cost nothing measurable: the focus is a log and a few multiplies a pixel, and the blend is the GPU's own.
+- **A battery rate, tried and not set.** With the soft focus in, 20 s of the lit tank were measured for a `batteryRate`: at 20 fps the bells' middles move 4.3 device pixels a frame at the 99th percentile and 8.3 at most, and their margins, which now flap, 3.8 and 8.3 (at 30 fps, 3.1 and 7.1, and 2.4 and 5.5). That is twice and more the 2 pixels a frame that look the same as 30 fps, so the battery keeps its 30 fps. BatteryPaced still can't help: with 84 out of step, one is always mid-stroke.
+- **10. The bell solved in closed form, rather than marched,** was not attempted, on Dave's word: where the GPU lands without it is under Cost.
 
 ## Settings
 - **Look** (`jellyfish.look`, a menu): lit tank in Light Mode, glow in Dark Mode (the standard); lit tank in Light Mode, crystal jellies in Dark Mode; lit tank by day, glow at night; lit tank by day, crystal jellies at night; lit tank; glow; crystal jellies. Each pick says what it does, rather than a second menu for the dark look that would show for only four of the seven picks, which a knob can't express. By day means the Sun where you are: the tank's light eases through civil twilight, from 6° below the horizon to 1° above.
@@ -155,9 +157,17 @@ Measured by the render test at 2x Retina on an M3 Max, debug build (release CPU 
 
 At 4 and 8 s in, with Atrium quit: a copy on the desktop shares the GPU and more than doubled the readings. That is about twice the 2 ms of GPU a wallpaper aims for, the price of three times as many as at first: 28 moon jellies drew in 1.56 ms and 56 in 2.9. In a release build 56 moon jellies took 0.7 to 0.95 ms of CPU; 84 weren't measured there until step 4: 0.64 to 0.74 ms, and 0.54 to 0.61 for 48 crystal jellies, so the CPU column above is a debug build's and the wallpaper's CPU is inside its 2 ms.
 
-That table is step 3's. Step 4's savings took about four-tenths off the lit tank's and the glow's GPU time and a tenth off the crystal jellies' (its figures are under step 4: taken on a busy machine, so as before and after, not as a new table).
+That table is step 3's. After step 4 (2026-11-15), the render test drew each look with the code from before it and the code after, turn about, four times each on a machine shared with four other sessions; the quietest of each:
 
-No `batteryRate` yet: a near bell's margin moves about 3 device pixels a frame at 20 fps in the squeeze, a little over the 2 that can't be seen, so 20 fps waits on Dave seeing it side by side, as research-method.md advised.
+| Look | GPU before | GPU after | CPU, release, before | after |
+|---|---|---|---|---|
+| Lit tank, 84 moon jellies | 2.05 ms | 1.30 ms | 0.77–0.83 ms | 0.73–0.75 ms |
+| Glow | 2.07 ms | 1.10 ms | | |
+| Crystal jellies, 48 | 3.16 ms | 2.36 ms | 0.70 ms | 0.82 ms (one run) |
+
+So the moon jellies now draw inside the 2 ms of GPU, the saving of step 4's first change paying for the flap, the gonads and the rest; the crystal jellies are still over, their cost being tentacles seven radii long, which the bell's closed form (the review's tenth, not attempted) wouldn't shorten. The frames before and after aren't of the same moment of the same tank, since the motion changed; the sprites' boxes, a fair measure of what is drawn, cover 0.78 of the screen before step 4 and 0.48 after for the lit tank, 1.91 and 2.33 for the crystal jellies (their tentacles now bend with the eddies and the water).
+
+No `batteryRate`: tried in step 4 and not set (above).
 
 ## Checking it
 ```sh
@@ -166,6 +176,7 @@ SNAPSHOT_SCENE="Jellyfish" SNAPSHOT_APPEARANCE=dark SNAPSHOT_DEFAULTS="jellyfish
 SNAPSHOT_SCENE="Jellyfish" SNAPSHOT_DEFAULTS="jellyfish.seed=21,jellyfish.look=6" swift test --filter everySceneRenders          # crystal jellies
 swift test --filter jellyfishMove                    # speed and spread measured as the footage was; JELLY_SEED and JELLY_LOOK pick another
 swift test --filter jellyfishBox                     # each sprite's box holds everything its shader draws
+swift test --filter jellyfish                        # those two, and the glide between strokes, the arms' trailing and each look's blend
 ```
 `jellyfish.seed` (any whole number but 0) pins the tank's layout and every pulse and turn, for pictures that can be taken again; unset, each load is new. The Settings pictures are `preview-jellyfish.jpg` (the glow, Dark Mode's standard) and `preview-jellyfish-light.jpg` (the lit tank), from the first two commands. The mock and its statistics, which measure poses, turns, spacing and cover as research-motion.md measured footage, stay in `docs/jellyfish/` (`JSTATS=1` on `mock.swift`).
 
