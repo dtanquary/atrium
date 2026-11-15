@@ -393,15 +393,18 @@ final class DappledLight: SKScene, BatteryPaced, Trimmable {
     /// The tree's shadow-casters, 3 m square and tiling, laid out afresh each launch from real maple, oak or beech
     /// leaves (ambientCG's leaf scans, CC0), one kind of tree at a time. Red holds sprays of leaves on their twigs,
     /// green the far crown: denser clumps of smaller leaves, blurred into the soft masses that the Sun, 5 m on, makes
-    /// of them; blue the crown's much softer shadow from the sky.
+    /// of them; blue the crown's much softer shadow from the sky. `dappled.seed` (any whole number but 0, for the tests)
+    /// rolls the same tree every time.
     private static let canopy: SKTexture = {
         let n = 1024, metres = 3.0
+        let seed = UInt64(max(0, UserDefaults.standard.integer(forKey: "dappled.seed")))
+        var rng = SplitMix(state: seed != 0 ? seed : .random(in: 1...UInt64.max))
         guard let atlas = NSImage(contentsOf: resource("dappled-leaves.png"))?.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
             return SKTexture(cgImage: CGContext(data: nil, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(),
                                                 bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!.makeImage()!)
         }
         let cells = (0..<16).compactMap { atlas.cropping(to: CGRect(x: $0 % 4 * 256, y: $0 / 4 * 256, width: 256, height: 256)) }
-        let kinds = [Array(0..<6), Array(6..<10), Array(10..<16)].randomElement()! // maple, oak or beech
+        let kinds = [Array(0..<6), Array(6..<10), Array(10..<16)].randomElement(using: &rng)! // maple, oak or beech
         func context() -> CGContext {
             let context = CGContext(data: nil, width: n, height: n, bitsPerComponent: 8, bytesPerRow: n, space: CGColorSpaceCreateDeviceGray(),
                                     bitmapInfo: CGImageAlphaInfo.none.rawValue)!
@@ -412,7 +415,7 @@ final class DappledLight: SKScene, BatteryPaced, Trimmable {
         }
         /// Draws a leaf with its stem's end at `at`, pointing along `angle`, white on black, wrapped so the layer tiles.
         func leaf(_ context: CGContext, at: CGPoint, angle: Double, length: Double) {
-            let side = length * 256 / 240, cell = cells[kinds.randomElement()!]
+            let side = length * 256 / 240, cell = cells[kinds.randomElement(using: &rng)!]
             for dx in [-metres, 0, metres] {
                 for dy in [-metres, 0, metres] where at.x + dx > -0.2 && at.x + dx < metres + 0.2 && at.y + dy > -0.2 && at.y + dy < metres + 0.2 {
                     context.saveGState()
@@ -459,23 +462,25 @@ final class DappledLight: SKScene, BatteryPaced, Trimmable {
         // Sprays: twigs off a few branches, leaves set alternately along each twig and one at its tip.
         let sprayContext = context()
         for _ in 0..<5 {
-            var at = CGPoint(x: .random(in: 0..<metres), y: .random(in: 0..<metres))
-            var heading = Double.random(in: 0..<(2 * .pi))
+            var at = CGPoint(x: .random(in: 0..<metres, using: &rng), y: .random(in: 0..<metres, using: &rng))
+            var heading = Double.random(in: 0..<(2 * .pi), using: &rng)
             for _ in 0..<7 {
-                heading += .random(in: -0.5...0.5)
-                let twig = Double.random(in: 0.18...0.4), side: Double = Bool.random() ? 1 : -1
-                let out = heading + side * .random(in: 0.5...1.1)
+                heading += .random(in: -0.5...0.5, using: &rng)
+                let twig = Double.random(in: 0.18...0.4, using: &rng), side: Double = Bool.random(using: &rng) ? 1 : -1
+                let out = heading + side * .random(in: 0.5...1.1, using: &rng)
                 let tip = CGPoint(x: at.x + cos(out) * twig, y: at.y + sin(out) * twig)
                 line(sprayContext, from: at, to: tip, width: 0.004)
                 var k = 0.25
                 while k < 1 {
                     let node = CGPoint(x: at.x + cos(out) * twig * k, y: at.y + sin(out) * twig * k)
                     let flip: Double = Int(k * 10) % 2 == 0 ? 1 : -1
-                    leaf(sprayContext, at: node, angle: out + flip * .random(in: 0.5...1.0), length: .random(in: 0.08...0.13))
-                    k += .random(in: 0.14...0.24)
+                    leaf(sprayContext, at: node, angle: out + flip * .random(in: 0.5...1.0, using: &rng),
+                         length: .random(in: 0.08...0.13, using: &rng))
+                    k += .random(in: 0.14...0.24, using: &rng)
                 }
-                leaf(sprayContext, at: tip, angle: out + .random(in: -0.2...0.2), length: .random(in: 0.09...0.13))
-                let step = Double.random(in: 0.15...0.3)
+                leaf(sprayContext, at: tip, angle: out + .random(in: -0.2...0.2, using: &rng),
+                     length: .random(in: 0.09...0.13, using: &rng))
+                let step = Double.random(in: 0.15...0.3, using: &rng)
                 let next = CGPoint(x: at.x + cos(heading) * step, y: at.y + sin(heading) * step)
                 line(sprayContext, from: at, to: next, width: 0.012)
                 at = next
@@ -487,17 +492,18 @@ final class DappledLight: SKScene, BatteryPaced, Trimmable {
         // The far crown: clumps of leaves along a few limbs, dense at their hearts and thinning out, with sky between.
         let crownContext = context()
         for _ in 0..<5 {
-            var at = CGPoint(x: .random(in: 0..<metres), y: .random(in: 0..<metres))
-            var heading = Double.random(in: 0..<(2 * .pi))
+            var at = CGPoint(x: .random(in: 0..<metres, using: &rng), y: .random(in: 0..<metres, using: &rng))
+            var heading = Double.random(in: 0..<(2 * .pi), using: &rng)
             for _ in 0..<6 {
-                let radius = Double.random(in: 0.1...0.24)
+                let radius = Double.random(in: 0.1...0.24, using: &rng)
                 for _ in 0..<Int(radius * radius * 3000) {
-                    let r = radius * abs(Double.random(in: -1...1) + Double.random(in: -1...1)) * 0.6, a = Double.random(in: 0..<(2 * .pi))
-                    leaf(crownContext, at: CGPoint(x: at.x + cos(a) * r, y: at.y + sin(a) * r), angle: a + .random(in: -1...1),
-                         length: .random(in: 0.06...0.1))
+                    let r = radius * abs(Double.random(in: -1...1, using: &rng) + Double.random(in: -1...1, using: &rng)) * 0.6
+                    let a = Double.random(in: 0..<(2 * .pi), using: &rng)
+                    leaf(crownContext, at: CGPoint(x: at.x + cos(a) * r, y: at.y + sin(a) * r), angle: a + .random(in: -1...1, using: &rng),
+                         length: .random(in: 0.06...0.1, using: &rng))
                 }
-                heading += .random(in: -0.9...0.9)
-                let step = Double.random(in: 0.15...0.3)
+                heading += .random(in: -0.9...0.9, using: &rng)
+                let step = Double.random(in: 0.15...0.3, using: &rng)
                 at = CGPoint(x: at.x + cos(heading) * step, y: at.y + sin(heading) * step)
             }
         }
