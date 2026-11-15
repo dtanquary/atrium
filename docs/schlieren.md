@@ -51,7 +51,7 @@ Rising heat as a colour schlieren camera sees it, after the photos of Gary Settl
    - Warm patches (the mug, the radiator) are drawn each step, since they ripple. Their heat comes off in a few wandering spots (two sines across them) rather than evenly, so a mug sheds several columns.
    - `span` per source follows the research: candles saturate a 100–300 µrad filter near the flame, while a mug's plume bends light a tenth as much, so its rig is more sensitive.
 6. **Shader.**
-   - The bend is a central difference of T0/T (16 bits in red and green, linear filtering) at ±1 fine texel. That's a bilinear interpolation of the cell differences, so it's continuous.
+   - The bend is a central difference of T0/T at ±1 fine texel. That's a bilinear interpolation of the cell differences, so it's continuous. The texture holds the air's newest step in red and green and the one before it in blue and alpha, 16 bits each with linear filtering, and `air()` blends the two by `u_blend`, how far the frame sits between them (see Time and appearance).
    - **Eddies.** The sim's cells are about 3 mm, so eddies finer than that are added as a small warp of where the field is read: two octaves of value noise at 28 per frame height, up to 3 fine cells, rising with the plume at 0.4 m/s of sim time (`u_air`). It fades in from 40% to 85% of the height, so the laminar stem stays smooth and the turbulent crown gets the crinkled edges of the photos.
    - Faint, slow mottling (value noise, 0.05 half-widths) stands for room air that's never quite still.
    - A small random tilt of the bend across the frame stands for a cutoff that isn't quite at focus. It shows as the navy-to-black drift in Settles' dark photo.
@@ -62,7 +62,7 @@ Rising heat as a colour schlieren camera sees it, after the photos of Gary Settl
 7. **Flames.** An additive sprite per flame: a white core blown out as in the photos, a yellow and orange rim, and a faint blue base. It leans with the sim's air at its middle and breathes with `flicker` (2.5%; a single candle in still air is steady).
 
 ## Time and appearance
-- Everything runs on `frameTime` × Speed, in steps of at most 1/30 s of sim time, so it looks the same at any frame rate. The mottling runs on `u_now`, wrapped hourly.
+- The air takes a step of Speed/30 s of sim time every 30th of a second on a clock of its own, whatever the frame rate, and is uploaded only when it steps. Between steps the shader blends the last two (`ahead`, `u_blend`), so at 60 and 120 fps the picture moves smoothly, about a step behind the air. At 15 fps it takes two steps a frame. So the air is the same to the bit at 15, 30, 60 and 120 fps (`schlierenAirIsTheSameAtAnyFrameRate`). Until 2026-11-15 it took one step a frame of `frameTime` × Speed: twice the work at 60 fps and four times at 120, for air that moves under one fine cell a step, and not quite the same air at each rate. The eddies' clock (`u_air`) is the sim's time as the frame shows it, so they rise smoothly too. The mottling runs on `u_now`, wrapped hourly.
 - At build, 90 steps (1.5 s of sim time) run so the plumes already reach the top.
 - The palette is random on each load unless one is pinned, and so is the background tilt.
 
@@ -81,7 +81,8 @@ Rising heat as a colour schlieren camera sees it, after the photos of Gary Settl
 
 ## Performance
 - Release, 2x, 2026-09-28: CPU 1.9–2.1 ms, GPU 0.35–1.6 ms per frame. The GPU is highest with the mirror and on bright screens.
-- The CPU is one sim step a frame at about 0.65 ms (99×72 coarse, 297×216 fine), plus the upload. On 2026-10-14 the fine-grid passes (MacCormack advection, mixing, the block means) and the pressure sweeps went four cells at a time with SIMD4, each lane doing the scalar arithmetic in the same order, so the sim's output is the same to the bit (checked against the old code over 4,000 steps, and by identical render-test PNGs at 4, 20 and 60 s); a step went from 1.34 to 0.66 ms, timed interleaved in a release build. The upload writes straight into the texture's bytes instead of copying a buffer in.
+- 2026-11-15, the air on its own 30-a-second clock: in a scratch bench (release, 3024 × 1964, Warm air, the render test's way of drawing at 30, 60 and 120 fps, taken while five other sessions built), the CPU a frame went from 1.6–2.0 to 0.9–1.0 ms at 60 fps (95–120 ms a second to 54–59) and from 1.5–1.7 to 0.66–0.71 ms at 120 fps (184–201 ms a second to 79–86). At 30 fps, on battery and in the render test, it's unchanged (1.4–1.7 ms in both), and the render test's still is the same but for 7 pixels by 1 level. The blend reads the same five texels, so the GPU is unchanged.
+- The CPU is one sim step at about 0.65 ms (99×72 coarse, 297×216 fine), plus the upload, 30 times a second. On 2026-10-14 the fine-grid passes (MacCormack advection, mixing, the block means) and the pressure sweeps went four cells at a time with SIMD4, each lane doing the scalar arithmetic in the same order, so the sim's output is the same to the bit (checked against the old code over 4,000 steps, and by identical render-test PNGs at 4, 20 and 60 s); a step went from 1.34 to 0.66 ms, timed interleaved in a release build. The upload writes straight into the texture's bytes instead of copying a buffer in.
 - Two displays, or Settings' live preview, run a sim each.
 - Debug builds are about 30 times slower on the CPU.
 
@@ -122,6 +123,7 @@ Two research agents, 2026-09-28. The notes are summarised here. The photos (30, 
 - 2026-09-28: picked from the "physics as colour" ideas after Crystals was cut. He asked for the colour schlieren version, with a lot of research images, recreated with high fidelity and colour customisation.
 - 2026-10-14: Warm air became the standard Heat in place of Candles: "set 'warm air' to be the default, its more interesting looking". The README, menu and site pictures were retaken in it.
 - 2026-11-05: "the schlieren wallpaper doesnt seem to go all the way flush to the bottom of the screen": Warm air's radiator was a black bar along the bottom. It now sits just below the frame.
+- 2026-11-15: from the review of every wallpaper (2026-11-14, team verdict improve, 6/10), Dave asked for all its suggestions. His call: it sits at the CPU budget, so the fixed 30-steps-a-second sim with a blend comes first, as the saving that pays for anything else; finer heat is a trial, last.
 
 ## Ideas / next steps
 - **A hand:** the classic Settles shot, a black hand with its warm boundary layer rising off the fingertips. It needs a sensitive rig (span 10–30 µrad) and a good silhouette.

@@ -50,11 +50,15 @@ final class Schlieren: SKScene {
 
     private let colours: [SIMD3<Float>]
     private let screen = SKSpriteNode()
-    private var air: AirSim!
+    private(set) var air: AirSim!
     private var field: SKMutableTexture!
     private var flames: [(node: SKSpriteNode, heater: Int)] = []
     private var shown = (source: -1, filter: -1)
     private var lastUpdate: TimeInterval?
+    /// The air steps 30 times a second whatever the frame rate, and the shader blends its last two steps by `blend`:
+    /// how far ahead of the frame the newest step is, in wall seconds, and the sim seconds that step took.
+    private var ahead = 0.0, stepped: Float = 0
+    private var last = UnsafeMutableBufferPointer<UInt16>.allocate(capacity: 0) // the field as last uploaded
     private var scale = CGPoint(x: 1, y: 1) // points per metre
     private var floor: Float = 0 // how far up the sim the frame's bottom edge is, in metres
     private let uniforms = (field: SKUniform(name: "u_field", texture: nil), mask: SKUniform(name: "u_mask", texture: nil),
@@ -62,7 +66,7 @@ final class Schlieren: SKScene {
                             mtexel: SKUniform(name: "u_mtexel", vectorFloat2: .zero), gain: SKUniform(name: "u_gain", float: 0),
                             mirror: SKUniform(name: "u_mirror", float: 0), aspect: SKUniform(name: "u_aspect", float: 1),
                             tilt: SKUniform(name: "u_tilt", vectorFloat2: .zero), visible: SKUniform(name: "u_visible", vectorFloat2: [0, 1]),
-                            air: SKUniform(name: "u_air", vectorFloat2: .zero))
+                            air: SKUniform(name: "u_air", vectorFloat2: .zero), blend: SKUniform(name: "u_blend", float: 1))
     private let look = gradeKnobs("schlieren").map { SKUniform(name: "u_" + $0.key.split(separator: ".").last!, float: Float($0.value)) }
 
     override init(size: CGSize) {
@@ -73,6 +77,8 @@ final class Schlieren: SKScene {
 
     required init?(coder: NSCoder) { fatalError() }
 
+    isolated deinit { last.deallocate() }
+
     override func sceneDidLoad() {
         backgroundColor = .black
         screen.size = size
@@ -82,7 +88,7 @@ final class Schlieren: SKScene {
         uniforms.tilt.vectorFloat2Value = [Float.random(in: -0.15...0.15), Float.random(in: -0.08...0.08)]
         screen.shader = SKShader(source: shaderCommon + Self.shader, uniforms: [
             uniforms.field, uniforms.mask, uniforms.filter, uniforms.texel, uniforms.mtexel, uniforms.gain, uniforms.mirror,
-            uniforms.aspect, uniforms.tilt, uniforms.visible, uniforms.air, WallpaperTime.now,
+            uniforms.aspect, uniforms.tilt, uniforms.visible, uniforms.air, uniforms.blend, WallpaperTime.now,
         ] + look)
         addChild(screen)
         applySettings()
@@ -166,7 +172,10 @@ final class Schlieren: SKScene {
         field.filteringMode = .linear
         uniforms.field.textureValue = field
         uniforms.texel.vectorFloat2Value = [1 / Float(air.fx), 1 / Float(air.fy)]
-        upload()
+        last.deallocate()
+        last = .allocate(capacity: air.fx * air.fy)
+        upload(); upload() // both steps the shader blends are this one
+        ahead = 0
 
         for flame in flames { flame.node.removeFromParent() }
         flames = air.heaters.indices.filter { air.heaters[$0].flame }.map { i in
@@ -197,16 +206,24 @@ final class Schlieren: SKScene {
     }
 
     override func update(_ currentTime: TimeInterval) {
-        var left = frameTime(currentTime, &lastUpdate) * Self.knobs[3].value
         air.draftStrength = Float(Self.knobs[4].value) * 0.06 // m/s: a still room's air moves at 0.05–0.1
-        while left > 1e-6 {
-            let dt = min(left, 1.0 / 30)
-            air.step(Float(dt))
-            left -= dt
+        // a step of Speed/30 s of air every 30th of a second, so the air is the same at any frame rate and a 60 or 120
+        // fps display doesn't step it 2 or 4 times as often; the shader blends the last two steps between them
+        ahead -= frameTime(currentTime, &lastUpdate)
+        if ahead < -1e-4 {
+            repeat {
+                stepped = Float(Self.knobs[3].value / 30)
+                air.step(stepped)
+                ahead += 1.0 / 30
+            } while ahead < -1e-4
+            upload()
         }
-        upload()
-        // sim seconds (wrapped hourly) and how far a plume rises in one, in frame heights, for the eddies the grid can't hold
-        uniforms.air.vectorFloat2Value = [Float(Double(air.seconds).truncatingRemainder(dividingBy: 3600)), 0.4 / Self.sources[shown.source].metres]
+        let blend = Float(min(max(1 - ahead * 30, 0), 1))
+        uniforms.blend.floatValue = blend
+        // sim seconds as the frame shows them (wrapped hourly) and how far a plume rises in one, in frame heights, for
+        // the eddies the grid can't hold
+        let seconds = Double(air.seconds) - Double(stepped * (1 - blend))
+        uniforms.air.vectorFloat2Value = [Float(seconds.truncatingRemainder(dividingBy: 3600)), 0.4 / Self.sources[shown.source].metres]
         // the flames lean with the air round them and breathe with the sim's flicker
         for (node, i) in flames {
             let h = air.heaters[i], wind = air.velocity(atX: h.x, y: h.y + h.height * 0.5)
@@ -216,19 +233,21 @@ final class Schlieren: SKScene {
         }
     }
 
-    /// Sends T0/T (1 in room air, 0.25 in flame) to the texture as 16 bits, so the shader's gradient doesn't band.
-    /// Written straight into the texture's own bytes, all four of each pixel.
+    /// Sends T0/T (1 in room air, 0.25 in flame) to the texture as 16 bits, so the shader's gradient doesn't band: the
+    /// newest step in red and green, the one before it in blue and alpha. Written straight into the texture's own bytes.
     private func upload() {
-        let fx = air.fx, fy = air.fy, fw = air.fw, t = air.t
+        let fx = air.fx, fy = air.fy, fw = air.fw, t = air.t, last = last
         field.modifyPixelData { data, length in
             guard let px = data?.assumingMemoryBound(to: UInt8.self), length >= fx * fy * 4 else { return }
             for y in 0..<fy {
                 for x in 0..<fx {
-                    let m = 1 / (1 + max(t[(y + 1) * fw + x + 1], 0)), v = Int(m * 65535), o = (y * fx + x) * 4
+                    let m = 1 / (1 + max(t[(y + 1) * fw + x + 1], 0)), v = Int(m * 65535), i = y * fx + x, o = i * 4
+                    let was = Int(last[i])
+                    last[i] = UInt16(v)
                     px[o] = UInt8(v >> 8)
                     px[o + 1] = UInt8(v & 255)
-                    px[o + 2] = 255
-                    px[o + 3] = 255
+                    px[o + 2] = UInt8(was >> 8)
+                    px[o + 3] = UInt8(was & 255)
                 }
             }
         }
@@ -306,7 +325,8 @@ final class Schlieren: SKScene {
     }
 
     private static let shader = """
-    float air(vec4 t) { return (t.r * 65280.0 + t.g * 255.0) / 65535.0; }
+    // T0/T, blended between the air's last two steps by how far the frame is between them
+    float air(vec4 t, float blend) { return mix(t.b * 65280.0 + t.a * 255.0, t.r * 65280.0 + t.g * 255.0, blend) / 65535.0; }
 
     void main() {
         vec2 p = v_tex_coord;
@@ -317,9 +337,9 @@ final class Schlieren: SKScene {
         vec2 nq = vec2(p.x * u_aspect, p.y) * 28.0 - vec2(0.0, u_air.x * u_air.y * 28.0);
         vec2 eddy = vec2(noise(nq) + 0.5 * noise(nq * 2.1 + 3.7), noise(nq + vec2(5.2, 1.3)) + 0.5 * noise(nq * 2.1 + 9.1)) - 0.75;
         a += eddy * e * 3.0 * smoothstep(0.4, 0.85, p.y);
-        float l = air(texture2D(u_field, a - vec2(e.x, 0.0))), r = air(texture2D(u_field, a + vec2(e.x, 0.0)));
-        float b = air(texture2D(u_field, a - vec2(0.0, e.y))), t = air(texture2D(u_field, a + vec2(0.0, e.y)));
-        float c = air(texture2D(u_field, a));
+        float l = air(texture2D(u_field, a - vec2(e.x, 0.0)), u_blend), r = air(texture2D(u_field, a + vec2(e.x, 0.0)), u_blend);
+        float b = air(texture2D(u_field, a - vec2(0.0, e.y)), u_blend), t = air(texture2D(u_field, a + vec2(0.0, e.y)), u_blend);
+        float c = air(texture2D(u_field, a), u_blend);
         vec2 bend = vec2(r - l, t - b) * 0.5 * u_gain;
         // room air is never quite still: faint, slow mottling everywhere
         float now = mod(u_now, 3600.0);
