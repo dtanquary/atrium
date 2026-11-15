@@ -44,7 +44,7 @@ import Testing
             #expect(route.rect.x > 0 && route.rect.y > 0 && route.rect.x + route.rect.w < grid && route.rect.y + route.rect.h < grid * 5 / 8)
         }
         // (the least is Mishima Pass, its fine route flattened: 1.20 times as long fine; the quickest the Elliptical Wing,
-        // 10 minutes, and the fewest steps the Interlace's, 35,000, at the standard line)
+        // 10 minutes, and with the fewest steps, 36,500, at the standard line)
         #expect(seconds[0] > 540 && (alone ? seconds[1] == seconds[0] : seconds[1] > 1.2 * seconds[0]), "\(picture.name) takes \(seconds)")
     }
     #expect(Etching.fineOnly.count { $0 } == 3)

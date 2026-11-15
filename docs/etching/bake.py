@@ -195,6 +195,7 @@ PICTURES = {   # name: file, source, crop as fractions of the file, tone gamma, 
             dict(lift=0.25, blank=[(0.46, 0.0, 0.55, 0.025), (0.0, 0.025, 1.0, 0.095), (0.503, 0.0, 0.518, 0.121), (0.03, 0.095, 0.047, 0.232), (0.972, 0.095, 0.99, 0.228), (0.475, 0.095, 0.6, 0.121), (0.618, 0.12, 0.73, 0.168), (0.42, 0.461, 0.61, 0.51), (0.508, 0.461, 0.517, 0.735), (0.2, 0.51, 0.8, 0.553), (0.205, 0.548, 0.372, 0.566), (0.205, 0.566, 0.2145, 0.775), (0.366, 0.566, 0.372, 0.652), (0.4, 0.582, 0.575, 0.608), (0.1, 0.645, 0.318, 0.659), (0.1, 0.659, 0.205, 0.738), (0.1, 0.738, 0.271, 0.746), (0.1, 0.746, 0.205, 0.895), (0.1, 0.86, 0.249, 0.874), (0.1, 0.874, 0.249, 0.905), (0.249, 0.895, 0.257, 0.905), (0.1, 0.905, 0.93, 1.0), (0.205, 0.815, 0.2145, 0.905), (0.508, 0.785, 0.517, 0.822), (0.508, 0.836, 0.517, 0.86), (0.508, 0.868, 0.517, 0.905), (0.59, 0.868, 0.6, 0.905), (0.597, 0.858, 0.93, 0.872), (0.765, 0.548, 0.781, 0.584), (0.79, 0.578, 0.93, 0.594), (0.825, 0.594, 0.93, 0.858), (0.755, 0.772, 0.825, 0.812), (0.725, 0.812, 0.83, 0.862), (0.77, 0.762, 0.778, 0.772), (0.985, 0.87, 1.0, 0.9), (0.0, 0.94, 0.05, 1.0), (0.262, 0.896, 0.275, 0.905), (0.414, 0.896, 0.427, 0.905), (0.443, 0.868, 0.452, 0.905), (0.778, 0.762, 0.8, 0.772)])),
 }
 FINE_ONLY = {"pontneuf", "fujiatsea", "sawmill"}   # a muddle at the standard line: no standard route is baked, and the app draws it fine whatever Detail says
+KEPT = {"interlace", "stars", "bands"}   # Bourgoin's patterns keep their small pale scraps (hatch_layers): without them the stylus no longer goes back along the bands, and their dark line fell from about half to a quarter
 
 class Grid:
     """The stylus's grid: cells across and down, and the bare margin round the picture."""
@@ -304,9 +305,9 @@ def runs(row):
 LAYERS = [("H8", 0, 8, 0, 0.20), ("H4", 0, 8, 4, 0.36), ("H2", 0, 4, 2, 0.54),
           ("V4", 1, 4, 0, 0.72), ("V2", 1, 4, 2, 0.84), ("solid", 0, 2, 1, 0.94)]
 
-def hatch_layers(d, rng, cut, jitter=0.03):
+def hatch_layers(d, rng, cut, jitter=0.03, scraps=False):
     """One mask per layer of hatching, with the zigzag links that join one row's end to the next. `cut` is the
-    lines drawn before them, which part one patch of hatching from the next."""
+    lines drawn before them, which part one patch of hatching from the next. `scraps` keeps small pale scraps (KEPT)."""
     ds = ndi.gaussian_filter(d, 1.2)
     out = []
     for name, axis, every, off, thr in LAYERS:
@@ -325,6 +326,7 @@ def hatch_layers(d, rng, cut, jitter=0.03):
                         lo, hi = max(a0, b0), min(a1, b1)
                         if lo <= hi: m[ya:yb + 1, hi if k % 2 == 0 else lo] = True
         out.append(m.T if axis else m)
+    if scraps: return out
     # a pale patch, of the two lightest layers together between the lines that part it from the next (side by side,
     # not corner to corner, so it doesn't slip across a line one cell wide), that spans fewer than three of their rows is
     # a scrap, a row or two and an upright between outlines, and goes: a shaded side gets a real patch of hatching or
@@ -338,7 +340,7 @@ def hatch_layers(d, rng, cut, jitter=0.03):
     scrap = ((rows < 3) & pale)[lab] & light
     return [m & ~scrap if i < 2 else m for i, m in enumerate(out)]
 
-def wanted(d, rect, seed=1):
+def wanted(d, rect, seed=1, scraps=False):
     """The grid of wanted ink as tiers (0 bare; drawn in order 1, 2, ...): a frame and the bold lines, the other
     lines, then each depth of shading over the whole picture. And the cell the stylus starts on."""
     rng = np.random.default_rng(seed)
@@ -348,7 +350,7 @@ def wanted(d, rect, seed=1):
     frame[y0 - o, x0 - o:x0 + pw + o] = frame[y0 + ph + o - 1, x0 - o:x0 + pw + o] = True
     frame[y0 - o:y0 + ph + o, x0 - o] = frame[y0 - o:y0 + ph + o, x0 + pw + o - 1] = True
     lines, major = line_mask(d)
-    layers = hatch_layers(d, rng, lines | frame)
+    layers = hatch_layers(d, rng, lines | frame, scraps=scraps)
     last = 3 + len(layers)
     tier[lines] = 2
     tier[major | frame] = 1
@@ -453,7 +455,7 @@ if __name__ == "__main__":
         if fine: more.update(over)
         gamma = more.pop("gamma", gamma)
         d, rect = darkness(os.path.join(src, file), grid, crop, gamma, **more)
-        tier, start = wanted(d, rect)
+        tier, start = wanted(d, rect, scraps=name in KEPT)
         cells, kind = route(tier, start)
         assert not (kind[1:] == 3).any(), "the line lifted"
         marks, inside, framed = strays(cells, kind, grid, rect)
