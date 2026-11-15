@@ -412,6 +412,44 @@ import Testing
     #expect(PixelCarriage.light(0, gloom: 0.4).lamp < 0.1 && PixelCarriage.light(0, gloom: 0.7).lamp > 0.8 && PixelCarriage.light(1, gloom: 1) == PixelCarriage.light(1))
 }
 
+/// A car on the lane creeps forward across the pane, a little faster than the train, and is in the same place at
+/// the same moment whatever the frame rate: the first sets off 27.7 s into a scene.
+@MainActor @Test func trainCarCreepsAlongTheLane() {
+    let keys = [PixelWindowSeat.previewTime.key, PixelWindowSeat.previewHour.key, PixelTrain.scenery.key, PixelWindowSeat.clouds.key]
+    defer { for key in keys { UserDefaults.standard.removeObject(forKey: key) } }
+    for (key, value) in zip(keys, [1.0, 13, 1, 1]) { UserDefaults.standard.set(value, forKey: key) }
+    var seen: [[Int?]] = []
+    for rate in [15.0, 30] {
+        PixelTrain.travelled = 18_000
+        let scene = PixelTrain(size: CGSize(width: 1512, height: 982))
+        var at: [Int?] = []
+        for frame in 0...Int(rate * 42) {
+            scene.update(9000 + Double(frame) / rate)
+            if frame % Int(rate) == 0 { at.append(scene.carAt) }
+        }
+        seen.append(at)
+    }
+    #expect(seen[0] == seen[1], "the car is not where it was at 15 frames a second")
+    let path = seen[1].compactMap { $0 }, pace = PixelTrain.carGains * 1.2 * 221 / TrainWorld.lane // (pixels a second on a laptop's Large pane)
+    #expect(path.count >= 10 && path.first! < 18 && zip(path, path.dropFirst()).allSatisfy { abs(Double($1 - $0) - pace) <= 1 },
+            "the car's left edge, a second apart: \(path)")
+}
+
+/// The Sun shining in lays the window's shape on the table, slanting away from its side, with the lamp's shadow in
+/// it: the plain window has nothing for it to fall on, and the table is lit only below its far edge, never all of it.
+@Test func trainSunLightsTheTable() {
+    let (w, h, glass, _) = PixelWindowSeat.pane(CGSize(width: 1512, height: 982))
+    let beam = PixelCarriage.Beam(rise: 1.7, slant: 1, tint: [1.4, 1.3, 1.2]), far = h - glass.y - 46 // (rows from the top)
+    #expect(!PixelCarriage(w: w, h: h, glass: glass, kind: 0).sunlight(dim: 1, lamp: 0, beam: beam).contains { $0 != 0 })
+    let lit = PixelCarriage(w: w, h: h, glass: glass, kind: 2).sunlight(dim: 1, lamp: 0, beam: beam)
+    let table = (far * w..<w * h).filter { lit[$0 * 4 + 3] != 0 }.count, curtain = glass.x + 5 // a column through the curtain
+    #expect(table > w * (h - far) / 4 && table < w * (h - far) * 9 / 10, "\(table) of the table's \(w * (h - far)) pixels lit")
+    #expect((0..<far).allSatisfy { y in (0..<w).allSatisfy { x in lit[(y * w + x) * 4 + 3] == 0 || x < curtain + 30 } }, "above the table only the curtain")
+    // Straight under the lamp, toward us, its shadow: a gap in the light along the column the stem's ray comes from.
+    let lamp = glass.x + glass.w - 58, column = (far + 20..<h).map { lit[($0 * w + lamp - Int(Double($0 - far - 14) * beam.slant)) * 4 + 3] != 0 }
+    #expect(column.contains(true) && column.contains(false), "the lamp's stem casts no shadow in its patch of light")
+}
+
 /// Films the train for docs/pixel-window-seat/train_strips.py: steps a scene at a frame rate and writes each frame
 /// as the pane's own art pixels. No GPU, and nothing on screen.
 ///

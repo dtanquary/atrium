@@ -78,6 +78,16 @@ final class PixelTrain: SKScene {
     private var rain: TrainGlass, wetLight: UInt32 = 0 // rain on the glass, and the colour of its bright side
     private let texture: SKMutableTexture
     private let canvas = SKNode(), outside = SKSpriteNode(), cabin = SKSpriteNode()
+    // The Sun on the cabin (`PixelCarriage.sunlight`), over it, and how strongly it shines in before cloud takes any.
+    private let sunlit = [SKSpriteNode(), SKSpriteNode()]
+    private var beam: (strength: Float, shape: PixelCarriage.Beam)?
+    // Something going our way a little faster than we are, by the scene's own clock (so it steps the same at any
+    // frame rate, and two displays don't show the same car): when the next one sets off, how many have, and the one
+    // in view, if any, with when it set off and whether it is a car on the lane or, in a city after dark, a train
+    // on the far line. And their colours in the light of the moment: each car's paint, lit and in shade, then
+    // glass, tyres, the train's side and its windows.
+    private var passing = (next: 0.0, count: 0, now: nil as (began: Double, until: Double, train: Bool)?)
+    private var traffic: [UInt32] = []
 
     /// How far the train has got, in metres along its line, and the scene time that was true at. Every copy of the
     /// scene shares it, as the airliner's copies share their flight, so each display's window looks out over the
@@ -119,6 +129,10 @@ final class PixelTrain: SKScene {
         (cabin.size, cabin.anchorPoint, cabin.zPosition, cabin.isHidden) = (CGSize(width: w, height: h), .zero, 2, windowSize == 3)
         canvas.addChild(outside)
         canvas.addChild(cabin)
+        for sprite in sunlit {
+            (sprite.anchorPoint, sprite.zPosition, sprite.isHidden) = (.zero, 3, true)
+            canvas.addChild(sprite)
+        }
 
         for k in TrainWorld.rings.indices {
             let perMetre = world.perMetre(k), tall = world.rows(k)
@@ -230,6 +244,15 @@ final class PixelTrain: SKScene {
         let drawn = above.sunSpot, inPane = drawn.x >= 0 && drawn.x < glass.w && drawn.y >= horizon && drawn.y < glass.h
         sunSpot = above.sun.elevation <= 0 ? nil : inPane ? (drawn.x, drawn.y - horizon) : (glass.w / 2, glass.h - horizon - 1)
         if clock == 0 { shade = shadeWanted(with: Self.travelled) }
+        // The Sun shining in at the window while it is up on our side and no weather has put the day out: a ray
+        // toward it climbs three of the window's rows for each row of the table, as the table is seen foreshortened,
+        // by the tangent of its height, and leans by that of its bearing from straight out. Its light is the Sun's
+        // colour, so warm at a low Sun.
+        let bearing = remainder(above.sun.azimuth - above.facing, 360) * .pi / 180, height = max(above.sun.elevation, 0.5) * .pi / 180
+        let shines = smoothstep(0, 3, above.el) * min(max(Float(cos(bearing)) * 4, 0), 1) * (1 - Float(weather?.gloom ?? 0))
+        let sunTint = PixelCity.sunColour(max(above.el, 0)), brightest = max(sunTint.x, sunTint.y, sunTint.z, 0.01)
+        beam = shines > 0.01 ? (shines, PixelCarriage.Beam(rise: 3 * tan(height), slant: 3 * min(max(tan(bearing), -2), 2),
+                                                               tint: SIMD3<Double>(1, 1, 1) + SIMD3<Double>(sunTint / brightest) * 0.4)) : nil
         hazed = reach
         relight()
         (bolt, storms) = (pack(rgb(214, 224, 255)), PixelWindowSeat.lightning.value > 0.5 ? mix(0.22, 0.8, night) : 0) // by day a flash hardly shows
@@ -300,6 +323,8 @@ final class PixelTrain: SKScene {
             }
         }
         (pole, wire) = (pack(lit(rgb(52, 44, 40))), pack(lit(rgb(44, 40, 40))))
+        traffic = Self.paints.flatMap { [pack(lit($0)), pack(lit($0 * 0.62))] } + [rgb(40, 48, 64), rgb(24, 22, 24), rgb(46, 50, 58)].map { pack(lit($0)) }
+        for sprite in sunlit { sprite.alpha = CGFloat((beam?.strength ?? 0) * (1 - Float(shade) / 32)) } // (cloud over the Sun takes it off the table)
     }
 
     /// How far off things fade to the horizon's colour where the train is, to the nearest 200 m. The country's colours
@@ -322,7 +347,15 @@ final class PixelTrain: SKScene {
     var pane: (w: Int, h: Int) { (glass.w, glass.h) }
 
     /// The carriage round the pane (PixelCarriage.swift), in the light of the moment.
-    private func paintFrame() { cabin.texture = carriage.texture(night: Double(night), gloom: weather?.gloom ?? 0) }
+    private func paintFrame() {
+        cabin.texture = carriage.texture(night: Double(night), gloom: weather?.gloom ?? 0)
+        let lit = beam.map { carriage.kind == 0 ? [] : carriage.sunTextures(night: Double(night), gloom: weather?.gloom ?? 0, beam: $0.shape) } ?? []
+        for (k, sprite) in sunlit.enumerated() {
+            sprite.isHidden = k >= lit.count // (the plain window has nothing for the Sun to fall on)
+            guard k < lit.count else { continue }
+            (sprite.texture, sprite.position, sprite.size) = (lit[k].texture, CGPoint(x: lit[k].x, y: lit[k].y), CGSize(width: lit[k].w, height: lit[k].h))
+        }
+    }
 
     // MARK: - Motion (every frame)
 
@@ -506,6 +539,7 @@ final class PixelTrain: SKScene {
                     if s == gw { s = 0 }
                 }
             }
+            passer(out)
             // Each lamp on a lake's far shore leaves a broken streak of its colour in the water under it, fainter toward us.
             let flicker = Int(clock * 2) * 31
             for (i, colour) in reflected {
@@ -535,6 +569,99 @@ final class PixelTrain: SKScene {
         let shot = picture
         texture.modifyPixelData { data, length in
             shot.withUnsafeBytes { data?.copyMemory(from: $0.baseAddress!, byteCount: min(length, $0.count)) }
+        }
+    }
+
+    // MARK: - Something passing
+
+    /// How much faster than the train a car on the lane goes, in metres a second (11 km/h: it creeps across the
+    /// pane at about 13 pixels a second), and a train on the far line in a city (7 km/h). A car is laid out as the
+    /// rows of `car`, side on and facing the way we go, at the lane's own scale; a train is two coaches.
+    static let carGains = 3.0, trainGains = 2.0
+    private static let car = ["      bbbbbbb     ", "     bgggbgggbb   ", " bbbbbbbbbbbbbbbb ", "rbbbbbbbbbbbbbbbbh", " sstttsssssstttss ", "   ttt      ttt   "]
+    /// A car's paint: red, blue, white, silver, green and black.
+    private static let paints = [rgb(150, 40, 36), rgb(40, 70, 130), rgb(214, 214, 208), rgb(150, 156, 162), rgb(46, 84, 60), rgb(36, 38, 42)]
+
+    /// Where the car on the lane is, its left edge's column of the pane, while one is in view: for the tests.
+    var carAt: Int? { passing.now.flatMap { $0.train ? nil : column(of: $0.began, gains: Self.carGains, at: TrainWorld.lane, long: Self.car[0].count) } }
+
+    /// The column of the pane the left edge of something `long` pixels long that set off at `began` has reached,
+    /// `gains` metres a second faster than the train, `away` metres out: it sets off just beyond the pane's left edge.
+    private func column(of began: Double, gains: Double, at away: Double, long: Int) -> Int {
+        Int(((clock - began) * gains * world.focal / away).rounded(.down)) - long
+    }
+
+    /// Now and then a car on the lane going our way a little faster than the train, so that it creeps forward
+    /// across the pane: by day its paint, glass and tyres, after dark its headlamps with a short pool of their light
+    /// on the lane ahead and a tail light. Only where the lane is a road or a track (farmland, snow, the desert), and
+    /// not above 2×. And in a city after dark, now and then a train on the far line doing the same: a dark side with
+    /// a row of lit windows. One every half a minute to two minutes, a train one in three of those in a city; each
+    /// crosses in half a minute to a minute.
+    private func passer(_ out: UnsafeMutableBufferPointer<UInt32>) {
+        let gw = glass.w, lane = Int((world.eye * world.focal / TrainWorld.lane).rounded(.toNearestOrEven))
+        // (Two coaches of 20 m on the far line's rails, 34 m out, a metre apart.)
+        let ppm = world.focal / 34.4, coach = Int((20 * ppm).rounded()), gap = Int(ppm.rounded()), long = 2 * coach + gap
+        if passing.next == 0 { passing.next = 10 + 30 * chance(0, 0, 900) }
+        if let now = passing.now, clock >= now.until { passing.now = nil }
+        if passing.now == nil, clock >= passing.next {
+            // (Each sets off when it was due, not at the frame that found it so, and leaves when it has crossed: at
+            // any frame rate it is in the same place at the same moment.)
+            let here = world.country(Self.travelled), k = passing.count, began = passing.next
+            passing.count += 1
+            let road = [.farmland, .snow, .desert].contains(here.kind) && here.edge > 600 && world.shore(Self.travelled) > 300
+            if here.kind == .city, here.edge > 600, lights > 220, chance(k, 2, 900) < 0.35 {
+                passing.now = (began, began + Double(gw + long) / (Self.trainGains * ppm), true)
+            } else if road, world.speed <= 2 * Self.pace, horizon > lane {
+                passing.now = (began, began + Double(gw + Self.car[0].count) / (Self.carGains * world.focal / TrainWorld.lane), false)
+            }
+            passing.next = (passing.now?.until ?? began) + 20 + 70 * chance(k, 1, 900)
+        }
+        guard let now = passing.now else { return }
+        let night = Float(lights) / 255
+        if now.train {
+            // A dark side to 3.8 m, windows 1.6 to 2.4 m up.
+            let foot = horizon - Int((world.eye * ppm).rounded(.toNearestOrEven)), left = column(of: now.began, gains: Self.trainGains, at: 34.4, long: long)
+            let pane = Int(1.6 * ppm), pillar = Int(0.6 * ppm), (sill, head, roof) = (Int(1.6 * ppm), Int(2.4 * ppm), Int(3.8 * ppm))
+            for i in max(left, 0)..<min(left + 2 * coach + gap, gw) {
+                let along = (i - left) % (coach + gap)
+                for up in max(0, -foot)..<min(along < coach ? roof : roof - gap, glass.h - foot) { // (between the coaches, the gangway)
+                    let window = up >= sill && up < head && along > pillar && along < coach - pillar && (along - pillar) % (pane + pillar) < pane
+                    out[(foot + up) * gw + i] = window ? blend(traffic[traffic.count - 1], lamp, UInt32(255 * night)) : traffic[traffic.count - 1]
+                }
+            }
+            return
+        }
+        // The car stands on the lane's road; its colours are the scene's own, its lamps the scene's lamps' colour.
+        let road = horizon - lane, left = column(of: now.began, gains: Self.carGains, at: TrainWorld.lane, long: Self.car[0].count)
+        let body = 2 * Int(chance(passing.count, 3, 900) * 6)
+        let row = rows[lane - 1], under = ((row.first + left + 9) % gw + gw) % gw
+        guard [TrainMat.road, TrainMat.track].contains(land[(lane - 1) * gw + under]) else { return } // (a lake has come up to the lane, or a meeting)
+        let shape = Self.car.map(Array.init), tail = pack(mix(rgb(120, 30, 30), rgb(255, 60, 48), night))
+        // (Through the weather's air as the road under it is, and its lamps through half as much: a light carries twice as far.)
+        let (veil, mist) = (fog[lane - 1], mist), aired = { (c: UInt32, v: UInt32) in v > 0 ? blend(c, mist, v) : c }
+        for (k, line) in shape.enumerated() {
+            let y = road + shape.count - 1 - k
+            guard y >= 0, y < glass.h else { continue }
+            for (dx, mark) in line.enumerated() where mark != " " {
+                let x = left + dx
+                guard x >= 0, x < gw else { continue }
+                switch mark {
+                case "b": out[y * gw + x] = aired(traffic[body], veil)
+                case "s": out[y * gw + x] = aired(traffic[body + 1], veil)
+                case "g": out[y * gw + x] = aired(traffic[traffic.count - 3], veil)
+                case "t": out[y * gw + x] = aired(traffic[traffic.count - 2], veil)
+                case "h": out[y * gw + x] = aired(blend(traffic[body], lamp, UInt32(80 + 175 * night)), veil / 2)
+                default: out[y * gw + x] = night > 0.3 ? aired(tail, veil / 2) : aired(traffic[body + 1], veil)
+                }
+            }
+        }
+        // After dark, the headlamps' light on the road ahead, fading over a dozen pixels.
+        guard night > 0.3 else { return }
+        let beam = aired(lamp, veil / 2)
+        for dx in 0..<14 {
+            let x = left + shape[0].count + dx
+            guard x >= 0, x < gw, road >= 0, road < glass.h else { continue }
+            out[road * gw + x] = blend(out[road * gw + x], beam, UInt32(Float(150 - dx * 10) * night))
         }
     }
 }
@@ -620,7 +747,7 @@ struct TrainWorld {
     /// For each ring, how long a plot of track is, which can hold one thing (a tree, a house, a church); of the
     /// plots in a village, the share that hold a house; and of the plots anywhere, the share that hold a farm.
     static let plot: [Double] = [0, 0, 0, 700, 420, 260, 150, 90, 60, 44, 34]
-    static let housed: [Double] = [0, 0, 0, 0, 0, 0.8, 0.75, 0.7, 0.5, 0, 0], farmed: [Double] = [0, 0, 0, 0, 0, 0, 0, 0.07, 0.09, 0.07, 0]
+    static let housed: [Double] = [0, 0, 0, 0, 0, 0.8, 0.75, 0.7, 0.5, 0, 0], farmed: [Double] = [0, 0, 0, 0, 0, 0, 0, 0.09, 0.12, 0.10, 0]
     /// A lane and its hedge run beside the line this far out; nearer than `verge` is the railway's own grass.
     /// Things fade to the horizon's colour over `haze` metres.
     static let lane = 62.0, verge = 15.0, haze = 26_000.0
@@ -763,16 +890,25 @@ struct TrainWorld {
                 } else if village > 0.64, draw < Self.housed[ring] {
                     stamp = .house(max(2, 5.0 * ppm), seed)
                 } else if draw < Self.farmed[ring] {
-                    stamp = .house(max(2, 5.5 * ppm), seed)
+                    // A farm on its own (since 2026-11-15 more of them, and not always the one house): the house, a
+                    // farmstead of house, barn and tree, or a barn with or without its silo.
+                    let kind = unit(hash(c, 10, salt + 39))
+                    stamp = kind < 0.3 ? .house(max(2, 5.5 * ppm), seed) : kind < 0.65 ? .farmstead(ppm, seed) : .barn(ppm, seed, silo: kind < 0.85)
+                } else if z >= 180, z <= 500, draw < Self.farmed[ring] + 0.035 {
+                    stamp = .poplars(ppm, seed) // a row of poplars along a field's edge
+                } else if z <= 300, draw < Self.farmed[ring] + 0.055 {
+                    stamp = .windPump(ppm, seed)
+                } else if z <= 180, draw < Self.farmed[ring] + 0.11 {
+                    stamp = .bales(ppm, seed) // round bales left in a field
                 } else if z <= 900, draw > 1 - min(max(0.18 + (fbm(at / 900, z / 300, 3, salt + 1) - 0.45) * 2.2, 0.08), 0.8) {
-                    let high = 9 + 9 * unit(hash(c, 4, salt + 33))
-                    stamp = unit(hash(c, 5, salt + 34)) < 0.2 ? .fir(high * 1.2 * ppm) : .tree(high * ppm, seed)
+                    let high = 9 + 9 * unit(hash(c, 4, salt + 33)), kind = unit(hash(c, 5, salt + 34))
+                    stamp = kind < 0.2 ? .fir(high * 1.2 * ppm) : kind > 0.85 && z <= 300 ? .willow(high * 0.8 * ppm, seed) : .tree(high * ppm, seed)
                 } else {
                     continue
                 }
                 let left = Int((at * ppm).rounded(.toNearestOrEven)) - stamp.w / 2, entered = when(left) // (all of it goes by its left edge)
                 let lift = Int(Double(swollen) * (0.35 + 0.65 * unit(hash(c, 6, salt + 35))))
-                guard n >= left, n < left + stamp.w, lift + stamp.h <= rows, entered.pace <= (spired ? Self.thin : Self.broad) else { continue }
+                guard n >= left, n < left + stamp.w, lift + stamp.h <= rows, entered.pace <= (spired || stamp.thin ? Self.thin : Self.broad) else { continue }
                 for (y, material) in stamp.column(n - left, entered.sun).enumerated() where material != 0 {
                     let up = lift + stamp.h - 1 - y
                     cells[up] = cells[up] & 128 | material
@@ -786,6 +922,33 @@ struct TrainWorld {
            Int(((wx / 42).rounded(.toNearestOrEven) * 42 * ppm).rounded(.toNearestOrEven)) == n {
             for up in 0..<min(7, rows) where cells[up] == 0 { cells[up] = TrainMat.pole }
             top = max(top, min(7, rows))
+        }
+        // A line of pylons 900 m off, a pylon every 350 m along the swell with a wire sagging between, where noise
+        // 8 km across runs high (since 2026-11-15). (One wire, pale: two in grey on two rings were scaffolding.)
+        if z == 900, pace <= Self.thin {
+            /// How high the swell stands, in pixels, `x` metres along.
+            func base(_ x: Double) -> Double { rise * clip(fbm(x / (z * 1.3) + 3, z / 2000, 3, salt + 60) * 1.7 - 0.42) * relief * ppm }
+            /// Whether pylon `k` stands: in a stretch of the line, on dry land, and not where another country begins.
+            func stands(_ k: Double) -> Bool {
+                let at = k * 350, place = country(at)
+                return place.kind == .farmland && place.edge > 700 && shore(at) > z && fbm(at / 8000, 9, 2, 919) > 0.6
+            }
+            let gap = 350.0, k = (wx / gap).rounded(.down), tall = 38 * ppm, arms = [(0.95, 7.0), (0.78, 9.5)] // (how far up, and how far out, in metres)
+            for (from, to) in [(k, k + 1)] where stands(from) && stands(to) {
+                let (a, b) = (base(from * gap), base(to * gap)), t = (wx - from * gap) / gap
+                let y = Int((a + (b - a) * t + tall * arms[0].0 - 10 * ppm * 4 * t * (1 - t)).rounded()) // sagging 10 m at the middle
+                if y >= 0, y < rows, cells[y] == 0 { (cells[y], top) = (TrainMat.stone, max(top, y + 1)) }
+            }
+            for near in [k, k + 1] where stands(near) { // a pylon: a tapering lattice, its two cross-arms near the top
+                let d = Double(n) - (near * gap * ppm).rounded(), foot = Int(base(near * gap).rounded()), high = Int(tall.rounded())
+                for up in 0..<high where foot + up < rows {
+                    let half = 4.5 * ppm * (1 - 0.75 * Double(up) / Double(high)) + 0.5
+                    let arm = arms.contains { abs(Double(up) - tall * $0.0) < 0.6 && abs(d) <= $0.1 * ppm + 0.3 }
+                    if abs(d) <= half && (abs(abs(d) - half) < 1 || (up + Int(abs(d))) % 3 == 0) || arm {
+                        (cells[foot + up], top) = (TrainMat.rockShade, max(top, foot + up + 1))
+                    }
+                }
+            }
         }
         // Lights that show only after dark, lamps with nothing drawn under them, so that a night with no village in
         // view still has something to rest on: far off, the windows of farms too small to draw, a few together, on
@@ -887,7 +1050,11 @@ struct TrainWorld {
 /// top first, 0 where it is see-through. They are the mock-ups' own (train.py), and lit from the side `sun` says:
 /// 1 from the right.
 struct Stamp {
-    let w: Int, h: Int, column: (_ x: Int, _ sun: Int) -> [UInt8]
+    let w: Int, h: Int
+    /// Whether it is thin (a lattice, a mast, a chimney), and so laid only where a ring slides no faster than
+    /// `TrainWorld.thin`, not `broad`.
+    var thin = false
+    let column: (_ x: Int, _ sun: Int) -> [UInt8]
 
     /// A broadleaf tree `tall` pixels high: a ragged round crown in three tones over a trunk.
     static func tree(_ tall: Double, _ seed: Int) -> Stamp {
@@ -922,15 +1089,36 @@ struct Stamp {
         }
     }
 
-    /// A house whose eaves are `eaves` pixels up: a wall of render, brick or stone with its windows, one end in
-    /// shade, under a tiled or slated roof that is hipped or shows a gable, and often a chimney.
+    /// A house whose eaves are `eaves` pixels up: a wall of render, brick or stone with its windows and its door,
+    /// one end in shade, under a tiled or slated roof that is hipped or shows a gable, and often a chimney; or
+    /// (since 2026-11-15, so that two neighbours differ) turned gable end on, or with a lean-to at one end.
     static func house(_ eaves: Double, _ seed: Int) -> Stamp {
         let walls = [(TrainMat.white, TrainMat.whiteShade), (TrainMat.brick, TrainMat.brickShade), (TrainMat.stone, TrainMat.stoneShade)][Int(unit(hash(seed, 2, 21)) * 3)]
         let roofs = unit(hash(seed, 3, 22)) < 0.55 ? (TrainMat.roof, TrainMat.roofShade) : (TrainMat.slate, TrainMat.slateShade)
-        let wall = max(2, Int(eaves)), w = max(4, Int((Double(wall) * (1.5 + 0.9 * unit(hash(seed, 4, 23)))).rounded(.toNearestOrEven)))
+        let wall = max(2, Int(eaves)), turn = unit(hash(seed, 8, 27))
+        if turn < 0.3, wall >= 3 { // gable end on: a narrower face, the gable over it edged with the roof
+            let w = max(3, Int((Double(wall) * (1.0 + 0.4 * unit(hash(seed, 9, 28)))).rounded()) | 1), gable = max(2, (w + 1) / 2)
+            return .drawn(w, wall + gable) { s, sun in
+                s.box(0, gable, w, gable + wall, walls.0)
+                for y in 0..<gable {
+                    let half = Double(y + 1) * Double(w) / 2 / Double(gable)
+                    for x in 0..<w where abs(Double(x) + 0.5 - Double(w) / 2) <= half {
+                        s.put(x, y, abs(Double(x) + 0.5 - Double(w) / 2) > half - 1.2 ? (((Double(x) + 0.5 - Double(w) / 2) * Double(sun) < 0) ? roofs.1 : roofs.0) : walls.0)
+                    }
+                }
+                if wall >= 4 {
+                    for x in [w / 4, w - 1 - w / 4] where x != w / 2 { s.box(x, gable + wall / 3, x + 1, gable + wall / 3 + max(1, wall / 4), TrainMat.glass) }
+                    s.box(w / 2, gable + wall - max(2, wall / 2), w / 2 + 1, gable + wall, TrainMat.door)
+                    if gable >= 4 { s.put(w / 2, gable / 2 + 1, TrainMat.glass) }
+                } else {
+                    s.put(w / 2, gable + wall / 2, TrainMat.glass)
+                }
+            }
+        }
+        let w = max(4, Int((Double(wall) * (1.5 + 0.9 * unit(hash(seed, 4, 23)))).rounded(.toNearestOrEven)))
         let roof = max(2, Int((Double(wall) * 0.7).rounded(.toNearestOrEven))), hipped = unit(hash(seed, 5, 24)) < 0.5
         let chimney = unit(hash(seed, 6, 25)) < 0.6 && w > 5 ? (unit(hash(seed, 7, 26)) < 0.5 ? w - 2 : 1) : -1
-        return Stamp(w: w, h: wall + roof) { x, sun in
+        let body = Stamp(w: w, h: wall + roof) { x, sun in
             var column = [UInt8](repeating: 0, count: wall + roof)
             let shade = sun > 0 ? 0..<max(1, w / 4) : w - max(1, w / 4)..<w, firstWindow = 1 + (sun > 0 ? w / 4 : 0), between = max(2, wall / 2 + 1)
             for y in roof..<roof + wall { column[y] = shade.contains(x) ? walls.1 : walls.0 }
@@ -942,12 +1130,24 @@ struct Stamp {
                 if x >= firstWindow, x < w - 1, (x - firstWindow) % between == 0 {
                     for y in roof + wall / 3..<roof + wall / 3 + max(1, wall / 4) { column[y] = TrainMat.glass }
                 }
+                // Its door, between two windows near the middle, from the ground to a little over half the wall.
+                if x == firstWindow + between * max(0, (w - 1 - firstWindow) / between / 2) + between / 2, x < w - 1 {
+                    for y in roof + wall - max(2, wall / 2)..<roof + wall { column[y] = TrainMat.door }
+                }
             } else if x == w / 2 + (sun > 0 ? 1 : -1) {
                 column[roof + wall / 2 - (wall > 2 ? 1 : 0)] = TrainMat.glass
             }
             if x == chimney, max(0, roof / 3 - 1) < roof / 2 + 1 { for y in max(0, roof / 3 - 1)..<roof / 2 + 1 { column[y] = TrainMat.brickShade } }
             return column
         }
+        guard turn > 0.7, wall >= 3 else { return body }
+        // A lean-to against one end: a lower wall of the house's own, under a roof that slopes down from its eaves.
+        let lean = max(2, w / 3), low = max(2, wall * 2 / 3), left = unit(hash(seed, 10, 29)) < 0.5
+        let shed = Stamp.drawn(lean, low + 1) { s, sun in
+            s.box(0, 1, lean, low + 1, (sun > 0) == left ? walls.1 : walls.0)
+            s.box(0, 0, lean, 1, roofs.0)
+        }
+        return .together(left ? [shed, body] : [body, shed], gap: 0)
     }
 
     /// A village church `tall` pixels high in all: a nave under a slate roof, with a tower and its spire at one end.

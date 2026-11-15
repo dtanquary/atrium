@@ -65,7 +65,7 @@ final class PixelWindowSeat: SKScene, BatteryPaced {
     // slides in until it slides out, so a row moving on a pixel costs one new pixel.
     private var land: [UInt8], glow: [UInt8], tall: [UInt8], cloud: [UInt8], storm: [UInt8]
     private var sky: [UInt32], glint: [UInt8], picture: [UInt32], ceiling: [Int]
-    private var wing: [(at: Int, part: UInt8, flash: UInt8)] = []
+    private var wing: [(at: Int, part: UInt8, flash: UInt8)] = [] // `part` is its part times three plus its tone (`layWing`)
     private var paint = Paint()
     private let texture: SKMutableTexture
     private let canvas = SKNode(), outside = SKSpriteNode(), cabin = SKSpriteNode()
@@ -231,8 +231,11 @@ final class PixelWindowSeat: SKScene, BatteryPaced {
             for (g, lamp) in Mat.lamps.enumerated() { paint.lamp[step * 8 + g] = pack(mix(lamp, haze, far * 0.55)) }
         }
         paint.lights = UInt8(min(255, night * 300))
-        paint.sparkle = pack(mix(rgb(255, 196, 120), rgb(255, 252, 240), smoothstep(0, 14, el)))
-        paint.moonSparkle = pack(rgb(150, 164, 200))
+        // A sparkle in each step of haze, as the water under it has: on far water it is mostly the haze, and the
+        // glitter path dies away toward the horizon.
+        let sparkle = mix(rgb(255, 196, 120), rgb(255, 252, 240), smoothstep(0, 14, el))
+        paint.sparkle = (0..<Paint.steps).map { pack(mix(sparkle, haze, Float($0) / Float(Paint.steps - 1) * 0.85)) }
+        paint.moonSparkle = (0..<Paint.steps).map { pack(mix(rgb(150, 164, 200), haze, Float($0) / Float(Paint.steps - 1) * 0.85)) }
         paint.window = pack(rgb(255, 214, 150))
 
         // The glitter path: the Sun's image in the water, straight below it, as scattered sparkles. Under the Moon
@@ -251,12 +254,22 @@ final class PixelWindowSeat: SKScene, BatteryPaced {
 
         // The wing, in the same light, and what the strobe at its tip makes of it.
         let metal = [RGB.zero, rgb(158, 166, 178), rgb(134, 143, 158), rgb(204, 210, 220), rgb(176, 184, 196), rgb(122, 131, 150), rgb(58, 86, 142),
-                     rgb(112, 120, 136)]
+                     rgb(112, 120, 136), rgb(214, 220, 228)]
         // The Sun still reaches the aircraft when it's 3.4° below the horizon of the ground under it.
         let cabinGlow = RGB(0.05, 0.05, 0.07) * night
         let onWing = ambient * 0.8 + PixelCity.sunColour(el + 3.4) * (0.3 + 0.7 * sin(max(el, 0) * .pi / 180)) * 0.55
-        paint.wing = metal.map { pack(mix(pointwiseMin($0 * onWing + cabinGlow, .one), haze, 0.08)) }
-        paint.wingFlash = metal.map { pack(pointwiseMin($0 * onWing + cabinGlow + RGB(0.2, 0.2, 0.22) * mix(0.15, 1, night), .one)) }
+        // Each part in three tones (`layWing`): in the fuselage's shade, plain, and toward the tip mirroring the sky
+        // over the horizon. The streak along the leading edge takes the Sun's glare while the Sun is in the window.
+        // (Strongest with the Sun low, when it lies along the edge.)
+        let inView = smoothstep(-3.4, 1, el) * smoothstep(-20, 0, Float(min(sunSpot.x, gw - 1 - sunSpot.x)))
+        let glare = PixelCity.sunColour(el + 3.4) * (0.35 + 0.35 * smoothstep(14, 2, el)) * inView
+        let tones = metal.indices.flatMap { part in
+            [metal[part] * 0.86, metal[part], mix(metal[part] * 1.04, mix(haze, rgb(255, 255, 255), 0.3), 0.2)].enumerated().map { step, c in
+                part == 8 ? c + glare * (0.6 + 0.2 * Float(step)) : c
+            }
+        }
+        paint.wing = tones.map { pack(mix(pointwiseMin($0 * onWing + cabinGlow, .one), haze, 0.08)) }
+        paint.wingFlash = tones.map { pack(pointwiseMin($0 * onWing + cabinGlow + RGB(0.2, 0.2, 0.22) * mix(0.15, 1, night), .one)) }
         paint.tip = pack(rgb(255, 60, 50))
         paint.tipOn = night > 0.25
 
@@ -338,23 +351,31 @@ final class PixelWindowSeat: SKScene, BatteryPaced {
         let lead: (SIMD2<Float>, SIMD2<Float>) = ([0.4, -0.02], [0.135, 0.54]), tip: SIMD2<Float> = [0.075, 0.524]
         let surface: [SIMD2<Float>] = [lead.0, lead.1, tip, [-0.05, 0.43], [-0.05, -0.05]]
         let winglet: [SIMD2<Float>] = [lead.1, tip, [0.036, 0.665], [0.06, 0.672]]
+        // The leading edge in pixels, for the streak of light along it.
+        let edge = (lead.0 * [gw, gh], lead.1 * [gw, gh]), run = simd_normalize(edge.1 - edge.0)
         for y in 0..<glass.h {
             for x in 0..<glass.w {
                 let p = SIMD2((Float(x) + 0.5) / gw, (Float(y) + 0.5) / gh)
                 var part: UInt8 = 0
+                let along = (p.y - lead.0.y) / (lead.1.y - lead.0.y), front = lead.0.x + (lead.1.x - lead.0.x) * along
+                let back = (front - p.x) / max(0.02, front - (-0.05 + (tip.x + 0.05) * along))
                 if inside(p, winglet) {
                     part = inside(p + [0.01, 0], winglet) ? 4 : 5 // its trailing edge is in shade
                     if p.y > 0.635 { part = 6 } // the airline's colour across its top
                 } else if inside(p, surface) {
                     // How far back from the leading edge, as a share of the chord here: the edge itself is bright
                     // metal, and the flaps and spoilers behind show as darker panels.
-                    let along = (p.y - lead.0.y) / (lead.1.y - lead.0.y), front = lead.0.x + (lead.1.x - lead.0.x) * along
-                    let back = (front - p.x) / max(0.02, front - (-0.05 + (tip.x + 0.05) * along))
                     part = back < 0.08 ? 3 : back > 0.7 ? (back > 0.72 ? 2 : 7) : (back > 0.4 && back < 0.43) ? 7 : 1
+                    let inFrom = simd_length(simd_cross(SIMD3(run, 0), SIMD3(p * [gw, gh] - edge.0, 0)))
+                    if inFrom < 1.6 { part = 8 } // the streak along the very front
                 }
                 guard part != 0 else { continue }
+                // Across the span, the upper surface mirrors more of the bright sky toward the tip, and the root is in
+                // the fuselage's shade: a tone step from 0 to 2, banded and dithered as the sky is.
+                let shade = max(0, 0.07 - p.y) / 0.07, tone = part == 6 ? 1.2 : 0.7 + 1.5 * min(max(along, 0), 1) - 1.4 * shade
+                let step = UInt8(min(max(Int((tone + (bayer(x, y) - 0.5) * 0.15).rounded(.down)), 0), 2))
                 let reach = simd_distance(p * [gw, gh], tip * [gw, gh])
-                wing.append((y * glass.w + x, part, UInt8(255 * max(0, 1 - reach / 26))))
+                wing.append((y * glass.w + x, part * 3 + step, UInt8(255 * max(0, 1 - reach / 26))))
             }
         }
     }
@@ -432,7 +453,7 @@ final class PixelWindowSeat: SKScene, BatteryPaced {
                         let plain = paint.ground[(step * 2 + (m >> 7)) * mats + kind], n = row.first + i
                         var c = plain
                         if kind <= Int(Mat.lastWater) || kind == Int(Mat.coldSea), r >= 0, glint[r * gw + i] != 0, scatter(n, r, tick) < glint[r * gw + i] {
-                            c = paint.byMoon ? paint.moonSparkle : paint.sparkle
+                            c = paint.byMoon ? paint.moonSparkle[step] : paint.sparkle[step]
                         }
                         if lightsOn, glow[k] != 0, scatter(n, q, 0) < paint.lights, scatter(n, q, tick >> 1) > 7 {
                             c = paint.lamp[step * 8 + Int(glow[k])]
@@ -496,7 +517,7 @@ final class PixelWindowSeat: SKScene, BatteryPaced {
                     let x = Int(plane.x - plane.way * Float(k)), y = Int(plane.y - plane.slant * Float(k))
                     guard x >= 0, x < gw, y >= horizon, y < gh else { continue }
                     if k < 3 {
-                        if !paint.tipOn { out[y * gw + x] = paint.wing[4] } else if k == 0 { out[y * gw + x] = clock.truncatingRemainder(dividingBy: 1.1) < 0.12 ? 0xFFFF_FFFF : paint.tip }
+                        if !paint.tipOn { out[y * gw + x] = paint.wing[4 * 3 + 1] } else if k == 0 { out[y * gw + x] = clock.truncatingRemainder(dividingBy: 1.1) < 0.12 ? 0xFFFF_FFFF : paint.tip }
                     } else if !paint.tipOn || k < 30 {
                         let thin = UInt32(Float(paint.tipOn ? 40 : 200) * (1 - Float(k) / Float(Self.trail)) * (k < 8 ? Float(k) / 8 : 1))
                         out[y * gw + x] = blend(out[y * gw + x], paint.cloud[Paint.tones - 1], thin & ~31) // in a few flat steps
@@ -641,7 +662,7 @@ private struct Paint {
     var ground: [UInt32] = [], cloud = [UInt32](repeating: 0, count: steps * tones), lamp = [UInt32](repeating: 0, count: steps * 8)
     var wing: [UInt32] = [], wingFlash: [UInt32] = []
     var lights: UInt8 = 0 // how far the evening has got: a lamp comes on once this passes its own draw
-    var sparkle: UInt32 = 0, moonSparkle: UInt32 = 0, window: UInt32 = 0, tip: UInt32 = 0
+    var sparkle: [UInt32] = [], moonSparkle: [UInt32] = [], window: UInt32 = 0, tip: UInt32 = 0 // (sparkles by their step of haze)
     var byMoon = false, tipOn = false
     var sunSide = 0 // 1 with the Sun toward the nose (the right of the picture), -1 toward the tail, 0 ahead, behind or down
     var bolt: UInt32 = 0, storms: Float = 0 // lightning's colour, and how strongly it lights a cloud (0 with it switched off)

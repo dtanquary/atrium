@@ -319,7 +319,8 @@ final class PixelOrbit: SKScene, BatteryPaced {
                 guard t > 0 else { continue }
                 let p = ray * t - root, u = dot(p, axis), v = dot(p, side)
                 guard u >= 0, u <= length, abs(v) <= half else { continue }
-                // Parts: 1 blanket, 2 a fold line across it, 3 the seam along it, 4 its lit rim, 5 the mast's lattice, 6 its gaps.
+                // Parts: 1, 7, 8 and 9 the blanket in four tones, 2 a fold line across it, 3 the seam along it, 4 its
+                // rim, 5 the mast's lattice, 6 its gaps, 10 the Sun's glint.
                 var part: UInt8 = 1
                 if abs(v) < 1.1 {
                     let weave = (u + v + 4).truncatingRemainder(dividingBy: 2.2), back = (u - v + 4).truncatingRemainder(dividingBy: 2.2)
@@ -330,6 +331,14 @@ final class PixelOrbit: SKScene, BatteryPaced {
                     part = 3
                 } else if u.truncatingRemainder(dividingBy: 2.3) < 0.28 {
                     part = 2
+                } else {
+                    // Each panel between two folds lies a little differently, so takes one of three near tones; the
+                    // blanket is a step dimmer toward the tip; and across three panels toward the root it catches the
+                    // Sun. Each change is a band with a seam dithered as the sky's are.
+                    let panel = Int(u / 2.3), strip = (v > 0 ? 2 : 0) + (abs(v) > 3.05 ? 1 : 0), d = bayer(x, y)
+                    var tone = Int(scatter(panel, strip, 4040) % 3) + 1 - (Float(u / length) + (d - 0.5) * 0.12 > 0.62 ? 1 : 0)
+                    if exp(-pow(Float(u - 9.5) / 3.4, 2)) + (d - 0.5) * 0.3 > 0.6 { tone = 4 }
+                    part = [9, 7, 1, 8, 10][tone]
                 }
                 wing.append((y * gw + x, part))
             }
@@ -669,9 +678,16 @@ struct OrbitWorld {
     /// lamp in 5 to 7, cloud in 8 and 9 (thin, broken, thick), a cloud's shadow in 10 and a storm's rhythm in 11 to 14.
     func cell(_ p: Sky.Vector, long: Double, wide: Double, sun: Sky.Vector, day: Date, n: Int) -> UInt16 {
         // A cell much bigger than the map's own takes the commonest of five places across it, so a far coast doesn't flicker.
-        var byte = map.at(p)
+        // One finer than the map's (4.9 km) reads it a little way off, by noise 6 and 2.6 km across, so that coasts and
+        // the edges between grounds wander from pixel to pixel instead of stepping in the map's blocks of three.
         let big = max(long, wide)
-        if big > 9 {
+        var byte = map.at(p)
+        if big < 4.9 {
+            let east = normalize(cross([0, 0, 1], p)), north = cross(p, east), km = 1 / Orbit.radius
+            let push = east * Double((noise(p, 6, 61) - 0.5) * 4.9 + (noise(p, 2.6, 63) - 0.5) * 2.4)
+                + north * Double((noise(p, 6, 62) - 0.5) * 4.9 + (noise(p, 2.6, 64) - 0.5) * 2.4)
+            byte = map.at(normalize(p + push * km))
+        } else if big > 9 {
             let east = normalize(cross([0, 0, 1], p)), north = cross(p, east), reach = big / Orbit.radius * 0.3
             let found = [byte] + [east, -east, north, -north].map { map.at(normalize(p + $0 * reach)) }
             let ground = found.map { $0 & 31 }
@@ -722,20 +738,53 @@ struct OrbitWorld {
     /// thousand km across (made up, drifting east a little each day, or today's real ones), broken into puffs.
     func cloud(_ p: Sky.Vector, finest: Double, day: Date) -> Float {
         guard weather != 1 else { return 0 }
-        var cover: Float
+        var cover: Float, at = p, streets = p // (where the clumps are found, and the bigger clumps, which lie in streets)
         if real, let live = Self.live(latitude: asin(p.z) * 180 / .pi, longitude: atan2(p.y, p.x) * 180 / .pi) {
             cover = smoothstep(0.42, 0.95, Float(live))
         } else {
             let drift = day.timeIntervalSince1970 / 86400 * 0.14, q = Sky.Vector(p.x * cos(drift) - p.y * sin(drift), p.x * sin(drift) + p.y * cos(drift), p.z)
-            let bent = q + (Sky.Vector(Double(noise(q, 1500, 31)), Double(noise(q, 1500, 32)), Double(noise(q, 1500, 33))) - 0.5) * 0.09
+            // Lows: the systems wound about their hearts, so they come out as commas and spirals, and the cloud
+            // that moves with them is wound with them.
+            let (wound, low) = Self.lows(q)
+            let bent = wound + (Sky.Vector(Double(noise(wound, 1500, 31)), Double(noise(wound, 1500, 32)), Double(noise(wound, 1500, 33))) - 0.5) * 0.09
             // Kept near the half at which cloud begins, so most of a system is a broken field and only its heart a deck.
-            cover = 0.5 + (noise(bent, 2600, 41) * 0.34 + noise(bent, 1000, 42) * 0.36 + noise(bent, 380, 43) * 0.30 - 0.54) * 1.3
+            cover = 0.5 + (noise(bent, 2600, 41) * 0.34 + noise(bent, 1000, 42) * 0.36 + noise(bent, 380, 43) * 0.30 - 0.54) * 1.3 + low
+            // The bigger clumps drawn out three to one along the way the air goes, east and west and round the lows,
+            // so that a broken field lies in streets.
+            (at, streets) = (wound, Sky.Vector(wound.x / 3, wound.y / 3, wound.z))
         }
         cover = [cover, 0, min(cover, 0.46), 0.52 + (cover - 0.5) * 0.4, 0.95][weather]
         // Clumps and puffs, down to the finest the cell can show: none smaller than its longer side, which it would
         // sample once along that side and show as speckle. So far cloud is smooth, and the limb clean.
-        let puff = (finest < 56 ? noise(p, 70, 2) : 0.5) * 0.3 + (finest < 21 ? noise(p, 26, 3) : 0.5) * 0.35 + (finest < 9 ? noise(p, 11, 5) : 0.5) * 0.22 + (finest < 4 ? noise(p, 5, 9) : 0.5) * 0.13
+        let puff = (finest < 56 ? noise(streets, 70, 2) : 0.5) * 0.3 + (finest < 21 ? noise(streets, 26, 3) : 0.5) * 0.35
+            + (finest < 9 ? noise(at, 11, 5) : 0.5) * 0.22 + (finest < 4 ? noise(at, 5, 9) : 0.5) * 0.13
         return cover + (puff - 0.5) * 0.9
+    }
+
+    /// A place wound about the hearts of the made-up weather's lows, and what a low does to the cover there. Six in
+    /// ten of the cells of a lattice 2,600 km across hold a low somewhere in their middle half. Within 1,800 km of
+    /// one, a place is turned about it by up to a radian and a half, the most at its heart and falling off over
+    /// 900 km, the way the air goes round a low: anticlockwise in the north and clockwise in the south. And the cover
+    /// is raised along one arm that winds in to the heart and lowered along the other, so a low is a comma of cloud
+    /// with a clear slot curling in beside it.
+    static func lows(_ q: Sky.Vector) -> (Sky.Vector, Float) {
+        let size = 2600 / Orbit.radius, u = q / size, base = SIMD3<Double>((u.x - 0.5).rounded(.down), (u.y - 0.5).rounded(.down), (u.z - 0.5).rounded(.down))
+        var wound = q, cover: Float = 0
+        for corner in 0..<8 {
+            let cell = base + SIMD3<Double>(Double(corner & 1), Double(corner >> 1 & 1), Double(corner >> 2))
+            let draw = hash(Int(cell.x) &* 73_856_093 ^ Int(cell.z) &* 83_492_791, Int(cell.y), 4100)
+            guard draw & 255 < 154 else { continue }
+            let heart = (cell + SIMD3<Double>(Double(draw >> 8 & 255), Double(draw >> 16 & 255), Double(draw >> 24 & 255)) / 510 + 0.25) * size
+            let away = simd.length(q - heart) * Orbit.radius
+            guard away < 1800 else { continue }
+            let fall = exp(-(away / 900) * (away / 900)), axis = normalize(heart), turn = heart.z >= 0 ? 1.0 : -1.0, angle = 1.5 * fall * turn
+            wound = wound * cos(angle) + cross(axis, wound) * sin(angle) + axis * dot(axis, wound) * (1 - cos(angle))
+            // (Round the heart, from a bearing of its own, winding in by a radian every 450 km.)
+            let east = normalize(cross([0, 0, 1], axis)), north = cross(axis, east), off = q - heart
+            let round = atan2(dot(off, north), dot(off, east)) + Double(draw >> 32 & 1023) / 1023 * 2 * .pi
+            cover += Float(0.22 * exp(-(away / 800) * (away / 800)) * cos(round - turn * away / 450))
+        }
+        return (wound, cover)
     }
 }
 
@@ -837,11 +886,17 @@ private struct OrbitPaint {
             day.indices.map { (pack(day[$0]), pack(low[$0]), pack(dark[$0])) }
         }
         // (In shadow both faces are one dark shape, so nobody sees which is up change at midnight.)
-        let dark = [RGB.zero, rgb(24, 19, 22), rgb(30, 24, 27), rgb(40, 35, 41), rgb(68, 62, 74), rgb(56, 53, 61), rgb(9, 8, 10)]
-        gold = tones([.zero, rgb(201, 153, 47), rgb(170, 122, 34), rgb(124, 81, 13), rgb(255, 229, 100), rgb(207, 199, 187), rgb(58, 42, 24)],
-                     [.zero, rgb(224, 140, 44), rgb(186, 106, 30), rgb(122, 67, 16), rgb(255, 208, 112), rgb(217, 184, 144), rgb(58, 36, 18)], dark)
-        cells = tones([.zero, rgb(27, 31, 58), rgb(52, 56, 84), rgb(143, 147, 168), rgb(230, 230, 238), rgb(216, 212, 204), rgb(42, 42, 48)],
-                      [.zero, rgb(42, 28, 38), rgb(72, 50, 54), rgb(168, 128, 106), rgb(255, 217, 160), rgb(217, 184, 144), rgb(42, 32, 24)], dark)
+        // (The blanket's four tones are its parts 9, 7, 1 and 8, darkest first, and its glint 10.)
+        let dark = [RGB.zero, rgb(24, 19, 22), rgb(30, 24, 27), rgb(40, 35, 41), rgb(46, 40, 46), rgb(56, 53, 61), rgb(9, 8, 10),
+                    rgb(23, 18, 21), rgb(25, 20, 23), rgb(21, 17, 20), rgb(28, 22, 26)]
+        gold = tones([.zero, rgb(201, 153, 47), rgb(170, 122, 34), rgb(124, 81, 13), rgb(150, 104, 26), rgb(207, 199, 187), rgb(58, 42, 24),
+                      rgb(190, 141, 42), rgb(211, 165, 58), rgb(176, 128, 38), rgb(246, 214, 106)],
+                     [.zero, rgb(224, 140, 44), rgb(186, 106, 30), rgb(122, 67, 16), rgb(160, 92, 24), rgb(217, 184, 144), rgb(58, 36, 18),
+                      rgb(212, 128, 40), rgb(234, 152, 54), rgb(196, 114, 34), rgb(255, 196, 108)], dark)
+        cells = tones([.zero, rgb(27, 31, 58), rgb(52, 56, 84), rgb(143, 147, 168), rgb(230, 230, 238), rgb(216, 212, 204), rgb(42, 42, 48),
+                       rgb(24, 28, 52), rgb(31, 36, 66), rgb(21, 24, 45), rgb(84, 96, 140)],
+                      [.zero, rgb(42, 28, 38), rgb(72, 50, 54), rgb(168, 128, 106), rgb(255, 217, 160), rgb(217, 184, 144), rgb(42, 32, 24),
+                       rgb(38, 25, 34), rgb(48, 32, 42), rgb(33, 22, 30), rgb(150, 98, 84)], dark)
     }
 }
 
