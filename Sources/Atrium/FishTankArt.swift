@@ -158,11 +158,11 @@ enum TankArt {
         }
     }
 
-    /// A slow sway in the current, bending most at the top and lagging there, as a repeating warp action.
-    static func swayWarps(width: CGFloat, height: CGFloat, strength: CGFloat, period: Double) -> SKAction {
+    /// A slow sway in the current, bending most at the top and lagging there, as a repeating warp action. `phase` sets
+    /// where its second, quicker sway starts.
+    static func swayWarps(width: CGFloat, height: CGFloat, strength: CGFloat, period: Double, phase second: Double) -> SKAction {
         let rows = 8, frames = 16
         let source = (0...rows).flatMap { row in (0...1).map { SIMD2<Float>(Float($0), Float(row) / Float(rows)) } }
-        let second = Double.random(in: 0...(2 * .pi))
         let warps = (0...frames).map { frame in
             let phase = Double(frame) / Double(frames) * 2 * .pi
             let destination = source.map { p -> SIMD2<Float> in

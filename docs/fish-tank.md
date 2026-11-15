@@ -171,7 +171,8 @@ CPU 0.8–0.9 ms and GPU 1.3–1.5 ms per frame (release, 2x), in both looks. Th
 
 ## Checking it
 ```sh
-SNAPSHOT_SCENE="Fish Tank" SNAPSHOT_SECONDS=8 swift test                        # Light Mode
-SNAPSHOT_APPEARANCE=dark SNAPSHOT_SCENE="Fish Tank" SNAPSHOT_SECONDS=8 swift test # actinic
+SNAPSHOT_SCENE="Fish Tank" SNAPSHOT_SECONDS=8 swift test --filter everySceneRenders                        # Light Mode
+SNAPSHOT_APPEARANCE=dark SNAPSHOT_SCENE="Fish Tank" SNAPSHOT_SECONDS=8 swift test --filter everySceneRenders # actinic
+SNAPSHOT_SCENE="Fish Tank" SNAPSHOT_DEFAULTS="tank.seed=4,tank.snow=0,tank.look=1" swift test --filter everySceneRenders # the same tank every time
 ```
-Each load rolls a different reef. Caustics are driven by `u_now`, which follows `SNAPSHOT_SECONDS`.
+Each load rolls a different reef. `tank.seed` (test-only, nothing else sets it) rolls the same reef and the same fish every time, so two renders differ only by the code; marine snow is SpriteKit's own emitter, which no seed reaches, so turn it off to compare. Seed 4 has both islands on the wide pile (`rock-4`) and the anemone on the left; seed 1 has a brain coral in the front corner. Caustics are driven by `u_now`, which follows `SNAPSHOT_SECONDS`.

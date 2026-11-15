@@ -15,11 +15,11 @@ final class FishTank: SKScene {
         var position: SIMD2<Double>
         var velocity: SIMD2<Double>
         var facing: Double
-        var wander = Double.random(in: 0..<(2 * .pi))
+        var wander: Double
         var tilt = 0.0
-        var stroke = Double.random(in: 0..<1) // how far through a tail beat, in beats
+        var stroke: Double // how far through a tail beat, in beats
         var frame = -1
-        var pulse = Double.random(in: 0..<1)  // how far through a burst-and-coast cycle, for species that swim so
+        var pulse: Double  // how far through a burst-and-coast cycle, for species that swim so
         var coasting = false
         var bank = 1.0 // which way it rolls in a turn: 1 tips its flank up toward the lamp, -1 away
     }
@@ -44,6 +44,12 @@ final class FishTank: SKScene {
     private var lastUpdate: TimeInterval?
     private var anemone = CGPoint.zero
     private var rockSpots: [CGPoint] = [] // where the shy species hang about, low by each island
+    /// Rolls the reef, the fish and their wandering. ("tank.seed" is for the tests, which want the same tank twice;
+    /// nothing else sets it.)
+    private var rng: SplitMix = {
+        let seed = UInt64(max(0, UserDefaults.standard.integer(forKey: "tank.seed")))
+        return SplitMix(state: seed != 0 ? seed : .random(in: 1...UInt64.max))
+    }()
 
     /// Scales the art with the display, so a bigger screen gets a bigger tank rather than smaller fish.
     private var unit: CGFloat { min(max(size.height / 982, 0.8), 1.8) }
@@ -139,7 +145,7 @@ final class FishTank: SKScene {
                     steer += (heading / seen - v) * 0.9
                     steer += (middle / seen - p) * 0.25
                 }
-                swimmers[i].wander += Double.random(in: -1...1) * dt * 1.5
+                swimmers[i].wander += Double.random(in: -1...1, using: &rng) * dt * 1.5
                 steer += SIMD2(cos(swimmers[i].wander), 0.4 * sin(swimmers[i].wander)) * school.cruise * 0.45
                 if let home = school.home { steer += (home - p) * 0.08 }
                 steer.x += max(0, wall - width * 0.04 - p.x) / wall * push
@@ -169,7 +175,7 @@ final class FishTank: SKScene {
         var fish = swimmers[i]
         let v = fish.velocity, cruise = school.cruise
         let target = v.x > cruise * 0.15 ? 1.0 : v.x < -cruise * 0.15 ? -1.0 : (fish.facing >= 0 ? 1 : -1)
-        if fish.facing == -target { fish.bank = Bool.random() ? 1 : -1 } // a new turn: bank toward the lamp or away
+        if fish.facing == -target { fish.bank = Bool.random(using: &rng) ? 1 : -1 } // a new turn: bank toward the lamp or away
         fish.facing += max(-dt * 2.5, min(dt * 2.5, target - fish.facing))
         let pitch = max(-0.3, min(0.3, atan2(v.y, max(abs(v.x), cruise * 0.5))))
         fish.tilt += (pitch - fish.tilt) * min(1, dt * 3)
@@ -245,19 +251,19 @@ final class FishTank: SKScene {
             let looks = species.photos.compactMap { TankArt.photo($0, width: species.length, blur: blur) }
             guard let first = looks.first else { continue }
             let (floor, ceiling) = bounds(depth)
-            var school = School(species: species, depth: depth, cruise: .random(in: species.cruise) * Double(depth * unit),
+            var school = School(species: species, depth: depth, cruise: .random(in: species.cruise, using: &rng) * Double(depth * unit),
                                 beat: TankArt.swimWarps(species, textureHeight: first.size.height))
             switch species.haunt {
             case .anemone: school.home = SIMD2(Double(anemone.x), Double(anemone.y + 40 * unit))
             case .rock:
-                let spot = rockSpots.randomElement() ?? CGPoint(x: size.width / 2, y: sandHeight)
+                let spot = rockSpots.randomElement(using: &rng) ?? CGPoint(x: size.width / 2, y: sandHeight)
                 school.home = SIMD2(Double(spot.x), Double(spot.y))
             case .open: break
             }
-            let centre = school.home ?? SIMD2(Double.random(in: 0.15...0.85) * Double(size.width), .random(in: floor...ceiling))
-            let heading = Bool.random() ? 1.0 : -1.0
+            let centre = school.home ?? SIMD2(Double.random(in: 0.15...0.85, using: &rng) * Double(size.width), .random(in: floor...ceiling, using: &rng))
+            let heading = Bool.random(using: &rng) ? 1.0 : -1.0
             for _ in 0..<count {
-                let look = looks.randomElement()!
+                let look = looks.randomElement(using: &rng)!
                 let node = SKSpriteNode(texture: look.texture, size: look.size)
                 node.setScale(depth * fishUnit)
                 node.zPosition = depth < 0.7 ? Z.farFish : depth < 1 ? Z.midFish : Z.nearFish
@@ -270,11 +276,12 @@ final class FishTank: SKScene {
                 addChild(shadow)
                 let spread = Double(species.length * depth * fishUnit) * 2.5
                 school.members.append(swimmers.count)
-                swimmers.append(Swimmer(node: node, shadow: shadow, depth: Double(depth) + .random(in: -0.05...0.05),
+                swimmers.append(Swimmer(node: node, shadow: shadow, depth: Double(depth) + .random(in: -0.05...0.05, using: &rng),
                                         length: Double(species.length * depth * fishUnit),
-                                        position: centre + SIMD2(.random(in: -spread...spread), .random(in: -spread...spread) * 0.5),
-                                        velocity: SIMD2(heading * school.cruise, .random(in: -0.1...0.1) * school.cruise),
-                                        facing: heading))
+                                        position: centre + SIMD2(.random(in: -spread...spread, using: &rng), .random(in: -spread...spread, using: &rng) * 0.5),
+                                        velocity: SIMD2(heading * school.cruise, .random(in: -0.1...0.1, using: &rng) * school.cruise),
+                                        facing: heading, wander: .random(in: 0..<(2 * .pi), using: &rng),
+                                        stroke: .random(in: 0..<1, using: &rng), pulse: .random(in: 0..<1, using: &rng)))
             }
             schools.append(school)
         }
@@ -512,16 +519,16 @@ final class FishTank: SKScene {
     /// Two islands of rock and coral, the way reefkeepers aquascape, with open sand between them for the fish to
     /// cross, and a soft, low cluster further back. Which cut-outs go where changes with each load.
     private func addReef() {
-        cluster(at: CGPoint(x: size.width * .random(in: 0.42...0.58), y: sandHeight * 0.92), scale: 0.55, fog: 0.35,
+        cluster(at: CGPoint(x: size.width * .random(in: 0.42...0.58, using: &rng), y: sandHeight * 0.92), scale: 0.55, fog: 0.35,
                 blur: 1.4, z: Z.backReef, anemone: false)
-        let anemoneLeft = Bool.random()
-        cluster(at: CGPoint(x: size.width * .random(in: 0.14...0.24), y: sandHeight * 0.55), scale: 1, fog: 0, blur: 0,
+        let anemoneLeft = Bool.random(using: &rng)
+        cluster(at: CGPoint(x: size.width * .random(in: 0.14...0.24, using: &rng), y: sandHeight * 0.55), scale: 1, fog: 0, blur: 0,
                 z: Z.reef, anemone: anemoneLeft)
-        cluster(at: CGPoint(x: size.width * .random(in: 0.76...0.86), y: sandHeight * 0.6), scale: 0.9, fog: 0.05, blur: 0,
+        cluster(at: CGPoint(x: size.width * .random(in: 0.76...0.86, using: &rng), y: sandHeight * 0.6), scale: 0.9, fog: 0.05, blur: 0,
                 z: Z.reef, anemone: !anemoneLeft)
         // a colony right up against the glass in a front corner
-        let corner = Bool.random() ? CGFloat.random(in: 0.02...0.08) : .random(in: 0.92...0.98)
-        coral(["reef-brain-1", "reef-brain-2", "reef-brain-3", "reef-zoanthid-2"].randomElement()!, width: 230,
+        let corner = Bool.random(using: &rng) ? CGFloat.random(in: 0.02...0.08, using: &rng) : .random(in: 0.92...0.98, using: &rng)
+        coral(["reef-brain-1", "reef-brain-2", "reef-brain-3", "reef-zoanthid-2"].randomElement(using: &rng)!, width: 230,
               at: CGPoint(x: size.width * corner, y: -12 * unit), z: Z.frontReef, sway: 0)
     }
 
@@ -534,9 +541,9 @@ final class FishTank: SKScene {
         // Rock pieces: the live rock and the wide, low pile make bases, the tall porous piece stacks on top, and
         // the pale Porites boulder only suits the soft cluster at the back. No island repeats a piece.
         let back = z == Z.backReef
-        let bottom = back ? ["reef-rock-4", "reef-rock-6"].randomElement()! : ["reef-rock-1", "reef-rock-4"].randomElement()!
-        let stacked = ["reef-rock-3", "reef-rock-1", "reef-rock-4"].filter { $0 != bottom }.randomElement()!
-        guard let rock = place(bottom, width: .random(in: 440...520) * scale, at: base, z: z, fog: fog, blur: blur, sway: 0)
+        let bottom = back ? ["reef-rock-4", "reef-rock-6"].randomElement(using: &rng)! : ["reef-rock-1", "reef-rock-4"].randomElement(using: &rng)!
+        let stacked = ["reef-rock-3", "reef-rock-1", "reef-rock-4"].filter { $0 != bottom }.randomElement(using: &rng)!
+        guard let rock = place(bottom, width: .random(in: 440...520, using: &rng) * scale, at: base, z: z, fog: fog, blur: blur, sway: 0)
         else { return }
         let w = rock.size.width, h = rock.size.height, sink = 12 * scale * unit
         var rocks = [(rock, TankArt.skyline(bottom))]
@@ -559,8 +566,8 @@ final class FishTank: SKScene {
             }
             return CGPoint(x: base.x, y: base.y + h * 0.5)
         }
-        if let upper = place(stacked, width: w / unit * .random(in: 0.45...0.58),
-                             at: perch(base.x + side * w * .random(in: 0.08...0.2)), z: z + 0.01, fog: fog, blur: blur, sway: 0) {
+        if let upper = place(stacked, width: w / unit * .random(in: 0.45...0.58, using: &rng),
+                             at: perch(base.x + side * w * .random(in: 0.08...0.2, using: &rng)), z: z + 0.01, fog: fog, blur: blur, sway: 0) {
             // Settle it into the rock below rather than balancing it on the peak, so the island tops out around
             // mid-tank and its Acropora never reaches the surface.
             let cap = base.y + size.height * 0.36 * scale
@@ -571,23 +578,23 @@ final class FishTank: SKScene {
             // the Acropora crowns the stacked rock, on its highest point
             let peak = stride(from: -0.3, through: 0.3, by: 0.05).map { upper.position.x + CGFloat($0) * upper.size.width }
                 .max { (surface($0) ?? 0) < (surface($1) ?? 0) } ?? upper.position.x
-            place(["reef-acropora-1", "reef-acropora-2"].randomElement()!, width: 320 * scale, at: perch(peak),
+            place(["reef-acropora-1", "reef-acropora-2"].randomElement(using: &rng)!, width: 320 * scale, at: perch(peak),
                   z: z + 0.02, fog: fog, blur: blur, sway: 0)
         }
-        place(["reef-toadstool-1", "reef-toadstool-2", "reef-toadstool-3"].randomElement()!, width: 220 * scale,
+        place(["reef-toadstool-1", "reef-toadstool-2", "reef-toadstool-3"].randomElement(using: &rng)!, width: 220 * scale,
               at: perch(base.x - side * w * 0.3), z: z + 0.03, fog: fog, blur: blur, sway: 0.03)
         if hasAnemone {
             let spot = perch(base.x + side * w * 0.36)
-            place(["reef-anemone-1", "reef-anemone-2", "reef-anemone-3"].randomElement()!, width: 240 * scale,
+            place(["reef-anemone-1", "reef-anemone-2", "reef-anemone-3"].randomElement(using: &rng)!, width: 240 * scale,
                   at: spot, z: z + 0.04, fog: fog, blur: blur, sway: 0.05)
             self.anemone = spot
         } else {
-            place(["reef-torch-1", "reef-torch-2", "reef-euphyllia-1", "reef-candycane-1"].randomElement()!, width: 210 * scale,
+            place(["reef-torch-1", "reef-torch-2", "reef-euphyllia-1", "reef-candycane-1"].randomElement(using: &rng)!, width: 210 * scale,
                   at: perch(base.x + side * w * 0.38), z: z + 0.04, fog: fog, blur: blur, sway: 0.04)
         }
-        place(["reef-zoanthid-1", "reef-zoanthid-2"].randomElement()!, width: 110 * scale,
+        place(["reef-zoanthid-1", "reef-zoanthid-2"].randomElement(using: &rng)!, width: 110 * scale,
               at: CGPoint(x: base.x - side * w * 0.05, y: base.y + h * 0.22), z: z + 0.05, fog: fog, blur: blur, sway: 0)
-        place(["reef-brain-1", "reef-brain-2", "reef-brain-3", "reef-porites-1"].randomElement()!, width: 170 * scale,
+        place(["reef-brain-1", "reef-brain-2", "reef-brain-3", "reef-porites-1"].randomElement(using: &rng)!, width: 170 * scale,
               at: CGPoint(x: base.x - side * w * 0.22, y: base.y - 20 * scale * unit), z: z + 0.06, fog: fog, blur: blur, sway: 0)
         if z == Z.reef { rockSpots.append(CGPoint(x: base.x + side * w * 0.55, y: base.y + h * 0.3)) }
     }
@@ -606,15 +613,15 @@ final class FishTank: SKScene {
         let sprite = SKSpriteNode(texture: texture, size: textureSize)
         sprite.anchorPoint = CGPoint(x: 0.5, y: 0.04)
         sprite.position = base
-        if Bool.random() { sprite.xScale = -1 }
+        if Bool.random(using: &rng) { sprite.xScale = -1 }
         sprite.zPosition = z
         graded(sprite, fog: fog, glow: name.hasPrefix("reef-rock") ? 0.1 : 1)
         if sway > 0 {
             sprite.subdivisionLevels = 1
             sprite.warpGeometry = SKWarpGeometryGrid(columns: 1, rows: 8)
             let action = TankArt.swayWarps(width: textureSize.width, height: textureSize.height, strength: sway,
-                                           period: .random(in: 5...8))
-            sprite.run(.sequence([.wait(forDuration: .random(in: 0...4)), action]))
+                                           period: .random(in: 5...8, using: &rng), phase: .random(in: 0...(2 * .pi), using: &rng))
+            sprite.run(.sequence([.wait(forDuration: .random(in: 0...4, using: &rng)), action]))
         }
         addChild(sprite)
         return sprite
