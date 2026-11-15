@@ -39,6 +39,10 @@ final class Jellyfish: SKScene {
         /// about a fifth of them did where footage has a tenth.
         var glide = 0.45, flatten = 0.08
         var restChance = 0.03, rest = 6.0...10.0, sink = 0.002, righting = 0.055, sag = 0.15
+        /// How the trailing parts lie in the water going past: how much they keep to the bell's axis, how much the
+        /// water streams them (per bell diameter a second of the bell's way), and how much they stretch at speed and
+        /// bunch when slow (at twice the mean speed, 1 + `stretch` their length).
+        var stiff = 0.3, streams = 1.0, stretch = 0.3
         /// The tentacles', arms' and spine's lengths in bell radii and the tentacles' trailing speed (radii a second),
         /// as the shader has them.
         var tentacles: Double, arms: Double, trail = 3.0
@@ -50,6 +54,8 @@ final class Jellyfish: SKScene {
         var rise: Double { Double(defines["RISE"]!)! }
         var tall: Double { low + 1.1 * rise }
         var sway: Double { Double(defines["SWAY"]!)! }
+        /// How far the strands fan apart where the spine bends, per radius it carries them aside.
+        var fan: Double { Double(defines["FAN"]!)! }
         /// The margin's radius at its widest, the skirt flared at rest, as the shader's `rimLate` has it.
         var rim: Double { 0.913 + Double(defines["SKIRT"]!)! * Double(defines["FLARE"]!)! }
     }
@@ -58,14 +64,14 @@ final class Jellyfish: SKScene {
         "NT": "120", "TLEN": "0.32", "TW": "0.006", "SWAY": "0.25", "NOA": "4", "ALEN": "1.0", "AW": "0.17",
         "ASPREAD": "0.22", "ASWAY": "0.25", "TWIST": "3.0", "HEIGHT": "0.42", "RISE": "0.32", "SHRINK": "0.14",
         "NC": "32.0", "CANALSHARP": "10.0", "CANALK": "0.5", "GONADS": "1", "CONVERGE": "0.0", "TVARY": "0.0", "RING": "0",
-        "UNDER": "0.02", "SKIRT": "0.22", "FLARE": "0.82", "TUCK": "-0.5", "STEPS": "16",
+        "UNDER": "0.02", "SKIRT": "0.22", "FLARE": "0.82", "TUCK": "-0.5", "STEPS": "16", "FAN": "0.0",
     ])
     static let crystal = Species(count: 48, diameter: 0.08...0.2, period: 1.8, perPulse: 0.35, restChance: 0.25, rest: 0.8...3.0,
-                                 righting: 0.02, sag: 0.05, tentacles: 7, arms: 0.35, defines: [
+                                 righting: 0.02, sag: 0.05, stretch: 0.08, tentacles: 7, arms: 0.35, defines: [
         "NT": "36", "TLEN": "7.0", "TW": "0.005", "SWAY": "0.06", "NOA": "1", "ALEN": "0.35", "AW": "0.3",
         "ASPREAD": "0.0", "ASWAY": "0.05", "TWIST": "1.5", "HEIGHT": "0.36", "RISE": "0.26", "SHRINK": "0.12",
         "NC": "60.0", "CANALSHARP": "16.0", "CANALK": "2.2", "GONADS": "0", "CONVERGE": "0.3", "TVARY": "0.7", "RING": "1",
-        "UNDER": "0.08", "SKIRT": "0.22", "FLARE": "0.82", "TUCK": "-0.5", "STEPS": "20", // the ring's points glow a little below the margin, and want 20 steps
+        "UNDER": "0.08", "SKIRT": "0.22", "FLARE": "0.82", "TUCK": "-0.5", "STEPS": "20", "FAN": "0.35", // the ring's points glow a little below the margin, and want 20 steps
     ])
 
     /// One jelly in metres, seen by a camera 50° across from the origin, looking along +z: its place, the way its
@@ -85,10 +91,11 @@ final class Jellyfish: SKScene {
     private final class Group {
         let species: Species, shader: SKShader, fade = SKUniform(name: "u_fade", float: 0)
         var jellies: [Jelly] = []
-        /// Each jelly's axis as the camera sees it (pitched) at each of the last `kept` steps, as far back as the
-        /// spine's end trails: a ring buffer a jelly, one after another and all at `head`. Kept here and written in
-        /// place: as an array inside each `Jelly` it was copied whole every step, by the copy `move` works on.
-        var history: [SIMD3<Double>] = [], head = 0
+        /// The way each jelly's trailing parts lie as the camera sees it (pitched), and how stretched (`w`), at each of
+        /// the last `kept` steps, as far back as the spine's end trails: a ring buffer a jelly, one after another and
+        /// all at `head`. Kept here and written in place: as an array inside each `Jelly` it was copied whole every
+        /// step, by the copy `move` works on.
+        var history: [SIMD4<Double>] = [], head = 0
         let kept: Int
         init(_ species: Species, _ shader: SKShader) {
             (self.species, self.shader) = (species, shader)
@@ -108,6 +115,10 @@ final class Jellyfish: SKScene {
     private let clock = SKUniform(name: "u_t", float: 0)
     private let water = SKSpriteNode(color: .black, size: .zero)
     private var groups: [Group] = []
+    /// The tank's slow eddies, the same for every jelly so neighbours drift together: each one's middle (it wanders
+    /// round it over minutes), radius and speed (anticlockwise if positive), in units of the tank's scale, and the
+    /// phase of its wander.
+    private var eddies: [(at: SIMD2<Double>, r: Double, w: Double, phase: Double)] = []
     private var simTime = 0.0, lastTime: TimeInterval?, sunLit = 1.0, lastSun = -100.0, lastCount = Jellyfish.knobs[1].value
     /// Seeded from `jellyfish.seed` when it's set (for pictures that can be taken again), at random otherwise.
     private var rng = SplitMix(state: UInt64(max(0, UserDefaults.standard.integer(forKey: "jellyfish.seed"))).nonzero ?? .random(in: 1...UInt64.max))
@@ -129,6 +140,10 @@ final class Jellyfish: SKScene {
             group.shader.uniforms = [lit, clock, group.fade]
             group.shader.attributes = ["a_box", "a_pose", "a_pulse", "a_sp1", "a_sp2"].map { SKAttribute(name: $0, type: .vectorFloat4) }
             groups.append(group)
+        }
+        eddies = (0..<4).map { k in
+            (SIMD2(.random(in: -0.8...0.8, using: &rng), .random(in: -0.5...0.5, using: &rng)), .random(in: 0.15...0.4, using: &rng),
+             (k % 2 == 0 ? 1 : -1) * 0.025, .random(in: 0...(2 * .pi), using: &rng))
         }
         settle(at: true)
         NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged), name: UserDefaults.didChangeNotification, object: nil)
@@ -212,7 +227,7 @@ final class Jellyfish: SKScene {
             group.jellies.append(Jelly(node: node, p: SIMD3(u * (0.85 * half - d / 2), w * 0.75 * half / aspect, z), axis: axis, d: d,
                                        seed: .random(in: 0...50, using: &rng), amp: .random(in: 0.85...1.1, using: &rng), basePeriod: period,
                                        lastStart: start, period: period, nextStart: start + period))
-            group.history += repeatElement(turned(axis, SIMD3(1, 0, 0), pitch), count: group.kept)
+            group.history += repeatElement(SIMD4(turned(-axis, SIMD3(1, 0, 0), pitch), 1), count: group.kept)
         }
         for k in 0..<600 { move(group, at: begin + Double(k) * Self.step) } // 10 s, ending now
     }
@@ -226,9 +241,20 @@ final class Jellyfish: SKScene {
     /// How near and far the tank runs, by the animals' size, as a tank's window frames them. Deep, so a crowd is mostly
     /// small bells further back, as in the footage's tanks: going from 28 moon jellies to 56 raised the cost of drawing
     /// them by about half rather than doubling it. (Dave then chose 84.)
-    private func depths(_ sp: Species) -> (Double, Double) {
-        let scale = (sp.diameter.lowerBound + sp.diameter.upperBound) / 2 / 0.1
-        return (0.65 * scale, 3.5 * scale)
+    private func depths(_ sp: Species) -> (Double, Double) { (0.65 * Self.scale(sp), 3.5 * Self.scale(sp)) }
+    private static func scale(_ sp: Species) -> Double { (sp.diameter.lowerBound + sp.diameter.upperBound) / 2 / 0.1 }
+
+    /// The eddies' flow at a place, m/s: each a vortex 0.5 to 1.5 m across in the moon jellies' tank, at up to about
+    /// 2 cm/s. They carry the bells without turning them: turned with the flow, as the tank's current turns them, the
+    /// bells gathered toward the top (42% in the top third, against 31%).
+    private func stir(_ p: SIMD3<Double>, _ now: Double, _ scale: Double) -> SIMD3<Double> {
+        var flow = SIMD3<Double>.zero
+        for e in eddies {
+            let c = (e.at + 0.3 * SIMD2(sin(now / 97 + e.phase), cos(now / 131 + 1.7 * e.phase))) * scale
+            let d = SIMD2(p.x, p.y) - c, r = e.r * scale, f = e.w * scale / r * exp(-(d * d).sum() / (r * r))
+            flow += SIMD3(-d.y * f, d.x * f, 0)
+        }
+        return flow
     }
 
     // MARK: - Motion
@@ -302,7 +328,7 @@ final class Jellyfish: SKScene {
             j.way = Self.carried(j.way, axis: j.axis, tau: tau, period: j.period, reach: sp.perPulse * j.d * j.amp, sp)
             var v = j.way
             v.y -= tau < j.period ? sp.sink * 0.3 : sp.sink
-            v += SIMD3(-j.p.y, j.p.x, 0) * spin // the tank's slow turn, round the view's middle
+            v += SIMD3(-j.p.y, j.p.x, 0) * spin + stir(j.p, now, Self.scale(sp)) // the tank's slow turn, round the view's middle, and its eddies
             // ponytail: every pair, every step (126 jellies at most, 1.5x); a grid of cells if the count ever grows much
             for k in group.jellies.indices where k != i {
                 let gap = j.p - group.jellies[k].p, dist = length(gap), touch = (j.d + group.jellies[k].d) * 0.5
@@ -328,7 +354,8 @@ final class Jellyfish: SKScene {
                 j.axis = norm(turned(j.axis, norm(cross(j.axis, away)), Self.wallTurn * min(1, length(away)) * dt))
             }
             j.p += v * dt
-            group.history[i * group.kept + group.head] = turned(j.axis, SIMD3(1, 0, 0), pitch)
+            let trail = Self.trailing(j.axis, way: j.way, d: j.d, mean: sp.perPulse * j.amp / j.period, sp)
+            group.history[i * group.kept + group.head] = SIMD4(turned(SIMD3(trail.x, trail.y, trail.z), SIMD3(1, 0, 0), pitch), trail.w)
             group.jellies[i] = j
         }
     }
@@ -342,6 +369,14 @@ final class Jellyfish: SKScene {
         let squeeze = sp.share * period, glide = sp.glide * period
         let thrust = tau < squeeze ? 2 * pow(sin(.pi * tau / squeeze), 2) / squeeze : 0 // its area over the squeeze is 1
         return way + (axis * (thrust * reach / glide) - way / glide) * step
+    }
+
+    /// The way a jelly's trailing parts lie in the water going past its bell, and how stretched: back along its axis and
+    /// streamed by its way through the water (`way`, m/s; `d` its diameter, `mean` its mean speed in diameters a
+    /// second), so they stream out long at the stroke and slacken and bunch between, and skid with it through a turn.
+    static func trailing(_ axis: SIMD3<Double>, way: SIMD3<Double>, d: Double, mean: Double, _ sp: Species) -> SIMD4<Double> {
+        let u = way / d
+        return SIMD4(-axis * sp.stiff - u * sp.streams, 1 + sp.stretch * max(-1, min(1, length(u) / mean - 1)))
     }
 
     /// Places a group's sprites: where each bell is on screen and how big, which way its axis points (a turn in the
@@ -360,7 +395,7 @@ final class Jellyfish: SKScene {
             // tallest and widest, the fringe from the ring down to the strands' tips and as far aside as the spine
             // carries them, and the arms from their roots to theirs. `jellyfishBoxHoldsWhatIsDrawn` checks it.
             let lean = abs(sin(tilt)), aside = pts.map { abs($0.x) }, last = min(3, Int((4 * sp.tentacles / sp.spine).rounded(.up)) - 1)
-            let fringe = sp.rim + 0.06 + 1.1 * aside[...last].max()! + sp.sway * sp.tentacles / 2
+            let fringe = sp.rim + 0.06 + (1.1 + sp.fan) * aside[...last].max()! + sp.sway * sp.tentacles / 2
             let width = 2 * max(1.1, fringe, 0.7 + 0.66 * aside.max()!) + Self.slack
             let above = sp.tall * cos(tilt) + (sp.rim + 0.04) * lean + 0.05 + Self.slack
             let below = max((sp.rim + 0.04) * lean + 0.06, lean - Self.height(pts, sp.tentacles / sp.spine) + 0.02,
@@ -393,7 +428,7 @@ final class Jellyfish: SKScene {
         for n in 1...steps {
             let back = min(Int((Double(n) - 0.5) * ds / sp.trail / Self.step), group.kept - 1)
             let past = group.history[i * group.kept + (group.head - back + group.kept) % group.kept]
-            pos += norm(-past + SIMD3(0, -sp.sag, 0)) * ds
+            pos += norm(SIMD3(past.x, past.y, past.z) + SIMD3(0, -sp.sag, 0)) * ds * past.w
             if n % (steps / 4) == 0 {
                 pts.append(SIMD2(pos.x * c + pos.y * s, min(-pos.x * s + pos.y * c, (pts.last?.y ?? 0) - 0.03 * sp.spine)))
             }
@@ -569,7 +604,7 @@ final class Jellyfish: SKScene {
         // The strands nearest this pixel: where a strand's root would sit for this x, front and back of the ring.
         float tent = 0.0, arm = 0.0;
         vec2 mid = spineAt(q.y, a_sp1, a_sp2, SPLEN);
-        float r0 = max((1.0 - CONVERGE * smoothstep(0.0, TLEN * 0.6, mid.y)), 0.2) * tx;
+        float r0 = max((1.0 - CONVERGE * smoothstep(0.0, TLEN * 0.6, mid.y)), 0.2) * tx + FAN * abs(mid.x);
         float reach = tx * abs(sb) + ty * cb + 0.06, rim0 = rimLate(0.0, a_pulse, amp);
         // A strand shows from its root down to its tip, and the four looked at root within three slots of this pixel's
         // own place on the ring: outside that band (most of a tilted bell's face) none of them is here.
@@ -586,7 +621,9 @@ final class Jellyfish: SKScene {
                 float rootY = ty * cb - tx * sin(phi) * sb;
                 vec2 sp = spineAt(q.y - rootY, a_sp1, a_sp2, SPLEN);
                 float s = sp.y, own = hash11(fi * 3.31 + seed * 0.7), tl = TLEN * (1.0 - TVARY * own * 0.6);
-                float r = (tx + rimLate(s / 3.0, a_pulse, amp) - rim0) * (1.0 - CONVERGE * smoothstep(0.0, TLEN * 0.6, s));
+                // Where the spine carries the bundle aside, as a turn does, its strands fan apart rather than bending
+                // together like a tube.
+                float r = (tx + rimLate(s / 3.0, a_pulse, amp) - rim0) * (1.0 - CONVERGE * smoothstep(0.0, TLEN * 0.6, s)) + FAN * abs(sp.x);
                 float x = r * cos(phi) + sp.x + SWAY * s * (noise(vec2(s * 0.7 - t * 0.25, fi * 3.7 + seed)) - 0.5);
                 float fade = smoothstep(-0.02, 0.06, s) * (1.0 - smoothstep(tl * 0.5, tl, s));
                 tent += strand(q.x - x, TW * (1.0 - 0.6 * clamp(s / tl, 0.0, 1.0)), px) * fade * (0.7 + 0.3 * sin(phi))

@@ -61,6 +61,18 @@ import Testing
     #expect(speed > 0.1 && speed < 0.4)
     #expect(upper < 0.45 && lower > 0.15)
     #expect(faceOn < 0.15)
+    #expect(Double(along) / Double(max(1, faster)) < 0.76) // 78% at seed 22 before the tank's eddies carried them off it
+}
+
+/// The trailing parts lie in the water going past the bell: at twice its mean speed they stream out long, at rest they
+/// bunch, and while the bell skids through a turn they trail between its axis and the way it is going. They used to
+/// hang along the axis alone, the same length whatever the bell did.
+@MainActor @Test func jellyfishArmsStreamAndBunch() {
+    let sp = Jellyfish.moon, up = SIMD3<Double>(0, 1, 0), d = 0.15, mean = sp.perPulse / sp.period
+    let fast = Jellyfish.trailing(up, way: up * 2 * mean * d, d: d, mean: mean, sp), resting = Jellyfish.trailing(up, way: .zero, d: d, mean: mean, sp)
+    #expect(fast.w > 1.2 && resting.w < 0.8)
+    let skid = Jellyfish.trailing(up, way: SIMD3(mean * d, 0, 0), d: d, mean: mean, sp) // turned to up, still going right
+    #expect(skid.x < 0 && skid.y < 0)
 }
 
 /// One moon jelly's speed through a run of pulses: each stroke carries it the distance it should, and it glides on
