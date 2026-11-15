@@ -385,32 +385,57 @@ final class Galaxy: SKScene, Trimmable {
 
             // H II regions: in complexes, strung along the arm's inner edge between the dust lane and the crest,
             // dimmer toward the outskirts. Each is a young cluster in its hydrogen glow, one per cell where the arm
-            // allows, round on screen like discStar, 0.8 to 3.2 points across and mostly small.
+            // allows, round on screen like discStar: 0.8 to 3.2 points across and mostly small in 16 pt cells, and
+            // a few giant complexes 4 to 7 points across in 48 pt cells, kept a twelfth as often, so only where the
+            // arm keeps the most knots (as NGC 604 in M33 and NGC 5461 in M101).
             vec2 k = vec2(0.0);
             float near = inArms * smoothstep(1.2, 0.8, r);
             if (hii * near > 0.0002) { // they only sit in a band along each arm, so skip the lookups elsewhere
-                float cell = 16.0 * pt / u_tilt;
-                vec4 h = hash42(floor(g / cell) + 41.0);
-                float size = 0.8 + 2.4 * pow(h.w, 3.0);
-                // Small knots can sit almost anywhere in their cell, big ones nearer its middle so they stay inside it
-                // (16 is the cell's narrowest width on screen); a fixed ±15% made the chains along the arms evenly spaced.
-                vec2 local = (fract(g / cell) - 0.5 - (h.yz - 0.5) * clamp(0.95 - 3.0 * size / 16.0, 0.3, 0.9)) * cell;
-                float l = length(m * local) / size;
-                if (l < 2.0) { // only pixels its glow reaches pay for deciding it
-                    // A knot is kept or not by what's at its centre, so it's the same all across: kept by each pixel's
-                    // own place on the arm, and in ragged kinds by the patchwork, which is sheared along the arms and
-                    // changes fast across them, the threshold crossed knots and sliced them into half-moons and
-                    // slivers. Only the slow warp and fade with radius are taken from the pixel.
-                    vec2 gc = g - local;
-                    vec2 qc = turn(gc, log(max(length(gc), r0 * 0.35) / r0) * u_shape.y);
-                    float hiiC = pow(max(0.5 + 0.5 * cos(arms * atan(qc.y, qc.x) + warp * (2.0 + 5.0 * ragged) + 0.2), 0.0), 10.0 * soft) * armAmp;
-                    if (floc > 0.1) {
-                        hiiC = mix(hiiC, smoothstep(0.45, 0.8, noise(qc * 5.0 + u_seed.yx) * 0.6 + noise(qc * 11.0 - u_seed) * 0.4) * armAmp, floc);
+                for (int layer = 0; layer < 2; layer++) {
+                    float giant = float(layer);
+                    float cellPts = mix(16.0, 48.0, giant);
+                    float cell = cellPts * pt / u_tilt;
+                    vec4 h = hash42(floor(g / cell) + 41.0 + 17.0 * giant);
+                    float rare = mix(1.0, 12.0, giant);
+                    if (h.x * rare < 0.9) { // cells that can never be kept go no further
+                        float size = giant > 0.5 ? 4.0 + 3.0 * h.w : 0.8 + 2.4 * pow(h.w, 3.0);
+                        // Small knots can sit almost anywhere in their cell, big ones nearer its middle so they stay
+                        // inside it (`cellPts` is the cell's narrowest width on screen); a fixed ±15% made the chains
+                        // along the arms evenly spaced.
+                        vec2 local = (fract(g / cell) - 0.5 - (h.yz - 0.5) * clamp(0.95 - 3.0 * size / cellPts, 0.3, 0.9)) * cell;
+                        vec2 kp = m * local / size; // on screen, in sizes of the knot
+                        float l = length(kp);
+                        if (l < 2.0) { // only pixels its glow reaches pay for deciding it
+                            // A knot is kept or not by what's at its centre, so it's the same all across: kept by each
+                            // pixel's own place on the arm, and in ragged kinds by the patchwork, which is sheared along
+                            // the arms and changes fast across them, the threshold crossed knots and sliced them into
+                            // half-moons and slivers. Only the slow warp and fade with radius come from the pixel.
+                            vec2 gc = g - local;
+                            vec2 qc = turn(gc, log(max(length(gc), r0 * 0.35) / r0) * u_shape.y);
+                            float hiiC = pow(max(0.5 + 0.5 * cos(arms * atan(qc.y, qc.x) + warp * (2.0 + 5.0 * ragged) + 0.2), 0.0), 10.0 * soft) * armAmp;
+                            if (floc > 0.1) {
+                                hiiC = mix(hiiC, smoothstep(0.45, 0.8, noise(qc * 5.0 + u_seed.yx) * 0.6 + noise(qc * 11.0 - u_seed) * 0.4) * armAmp, floc);
+                            }
+                            float groups = smoothstep(0.3, 0.7, noise(gc * 9.0 + u_seed.yx));
+                            float keep = clamp(hiiC * near * groups * 12.0, 0.0, 0.9);
+                            // (glow, cluster): the hydrogen glow is a lumpy cloud round its cluster, not a disc, its
+                            // edge pushed out and in by two slow waves round it (value noise there made crosses, on
+                            // its grid), and a giant is a complex of three such clouds, all laid out in the disc so
+                            // they turn with it; as bright as the knot is big, and faded by its margin, for what still
+                            // varies across it.
+                            float th = atan(local.y, local.x);
+                            float lg = l * (1.0 + 0.12 * sin(2.0 * th + h.y * 40.0) + 0.1 * sin(3.0 * th + h.z * 40.0));
+                            float glow = exp(-lg * lg * 2.0);
+                            if (giant > 0.5) {
+                                vec4 o = (hash42(floor(g / cell) + 91.0) - 0.5) * 1.6 * pt; // up to 0.8 sizes away
+                                vec2 o1 = kp - m * o.xy;
+                                vec2 o2 = kp - m * o.zw;
+                                glow += 0.7 * exp(-dot(o1, o1) * 4.0) + 0.5 * exp(-dot(o2, o2) * 5.0);
+                            }
+                            k += vec2(glow, exp(-l * l * 8.0)) * mix(0.3 + 0.7 * h.w, 1.0, giant)
+                               * smoothstep(0.0, 0.15, keep - h.x * rare);
+                        }
                     }
-                    float groups = smoothstep(0.3, 0.7, noise(gc * 9.0 + u_seed.yx));
-                    float keep = clamp(hiiC * near * groups * 12.0, 0.0, 0.9);
-                    // (glow, cluster), as bright as the knot is big, and faded by its margin, for what still varies across it
-                    k = vec2(exp(-l * l * 2.0), exp(-l * l * 8.0)) * (0.3 + 0.7 * h.w) * smoothstep(0.0, 0.15, keep - h.x);
                 }
             }
             // Hubble images keep H-alpha saturated, so part of the pink glow goes on after the stretch.
