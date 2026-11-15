@@ -258,7 +258,7 @@ final class LavaLamp: SKScene {
         col *= 0.62 + 0.38 * sin(3.14159 * x);
         col += vec3(0.035 * exp(-(x - 0.16) * (x - 0.16) / 0.0004) + 0.02 * exp(-(x - 0.87) * (x - 0.87) / 0.001225));
         col = grade(col, u_pivot, u_hue, u_saturation, u_contrast, u_brightness);
-        col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0;
+        col += (hash42(v_tex_coord * u_size * 2.0).x - 0.5) / 128.0; // hash21 tiles every 50 pixels across and 100 up
         gl_FragColor = vec4(col, 1.0);
     }
     """
