@@ -7,7 +7,7 @@ import SpriteKit
 let auroraPalettes: [(name: String, colours: [SIMD3<Float>])] = [
     ("Green", [[0.58, 1.0, 0.5], [0.58, 1.0, 0.5], [0.45, 1.0, 0.6], [0.6, 0.25, 1.0]]),   // the classic
     ("Storm", [[1.0, 0.4, 0.75], [0.58, 1.0, 0.5], [0.8, 0.9, 0.45], [1.0, 0.25, 0.25]]),  // pink edge, green, red crown
-    ("Red", [[0.58, 1.0, 0.5], [1.0, 0.35, 0.3], [1.0, 0.15, 0.2], [0.75, 0.1, 0.3]]),       // as seen from mid-latitudes
+    ("Red", [[1.0, 0.45, 0.4], [1.0, 0.35, 0.3], [1.0, 0.15, 0.2], [0.75, 0.1, 0.3]]),       // as seen from mid-latitudes
     ("Pink", [[1.0, 0.25, 0.6], [1.0, 0.45, 0.75], [0.75, 0.4, 1.0], [0.5, 0.25, 1.0]]),
     ("Purple", [[0.9, 0.3, 0.8], [0.6, 0.35, 1.0], [0.45, 0.3, 1.0], [0.8, 0.2, 0.5]]),
     ("Blue", [[0.25, 0.9, 0.7], [0.3, 0.6, 1.0], [0.35, 0.4, 1.0], [0.55, 0.3, 1.0]]),      // sunlit nitrogen
@@ -17,6 +17,7 @@ let auroraPalettes: [(name: String, colours: [SIMD3<Float>])] = [
 
 let auroraKnobs = [
     Knob(key: "aurora.speed", label: "Speed", range: 0...6, standard: 1, section: "Motion", format: .times),
+    Knob(key: "aurora.activity", label: "Activity", range: 0...2, standard: 1, section: "Motion", format: .choice(["Quiet", "Moderate", "Active"])),
     Knob(key: "aurora.rearrange", label: "Slowly rearrange the curtains", range: 0...1, standard: 1, section: "Motion", format: .toggle),
     Knob(key: "aurora.rearrangeMinutes", label: "Rearrange every", range: 1...30, standard: 4, section: "Motion", format: .minutes,
          shownWhen: "aurora.rearrange"),
@@ -117,19 +118,28 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
     func show(_ light: AuroraColours) {
         for (uniform, colour) in zip(colours, light.colours) { uniform.vectorFloat3Value = colour }
         crown.floatValue = light.crown
-        tint = unit(0.7 * light.colours[1] + 0.3 * light.colours[2])
+        // a red display's light on the snow is held to about 60%: as bright as a green one's, it put 3.7 times its
+        // red there and the snow went maroon from edge to edge. Pink loses a little, the rest nothing
+        let body = 0.7 * light.colours[1] + 0.3 * light.colours[2]
+        tint = unit(body) * (1 - 0.4 * min(max(body.x - max(body.y, body.z), 0), 1))
         onLand.vectorFloat3Value = tint * 0.016
     }
     var shown = pick.name
     show(AuroraColours(shown))
+    let setting = { (key: String) in Float(auroraKnobs.first { $0.key == key }!.value) }
     let (arc, bytes, slope) = auroraArc(&rng)
-    let sky = AuroraCurtains(arc: bytes, slope: slope, rng: rng)
+    let sky = AuroraCurtains(arc: bytes, slope: slope, rng: rng, activity: Int(setting("aurora.activity")))
+    // the photo is opaque below its skyline's lowest point (0.26 of the height on a 14-inch display), so the sky's
+    // sprite stops a couple of points under it, on a whole point, and the shader maps its own rows onto the screen's
+    let ground = AuroraGround.frame(in: size)
+    let base = max(0, (ground.maxY - AuroraGround.skyline * ground.height - 2).rounded(.down)) / size.height
+    if let at = Float(ProcessInfo.processInfo.environment["AURORA_SURGE"] ?? "") { sky.substorms.sinceOnset = at } // for snapshots
     let scene = shaderScene(size: size, source: shaderCommon + """
     vec2 arcAt(float x) { return vec2((fract(x) * 4096.0 + 0.5) / 4097.0, 0.5); }
 
     void main() {
         float aspect = u_size.x / u_size.y;
-        vec2 uv = v_tex_coord;
+        vec2 uv = vec2(v_tex_coord.x, \(base) + \(1 - base) * v_tex_coord.y);   // the sprite starts at `base`
         vec2 p = uv * vec2(aspect, 1.0);
         float t = u_now;
         // a level camera facing north, its eye level where the photo's is
@@ -162,7 +172,7 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
                 float h = s * tanEl + s * s / 12742.0;             // the height we see, over a round Earth
                 float seen = smoothstep(0.02, 0.08, den) * smoothstep(0.0, 5.0, num);
                 // rays: read at each ray's foot, so they lean together up the field lines
-                float rx = (s * sn - 0.2 * (h - 100.0) * sp) / 20000.0 + u_offset[i] * 0.5 + u_phase * 0.000025;
+                float rx = (s * sn - 0.2 * (h - 100.0) * sp) / 20000.0 + u_offset[i] * 0.5 + u_surge.y;
                 vec4 r = texture2D(u_arc, arcAt(rx));
                 r.ba = mix(r.ba, vec2(0.3, 0.5), smoothstep(1.0, 4.0, fwidth(rx) * 4096.0));   // finer than a pixel
                 // seen from below, the line of sight crosses the slab over a range of heights, which blurs it
@@ -175,9 +185,9 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
                 // corner at the edge draws a hairline along it. Nothing shines under a real aurora's lower border
                 // (docs/aurora.md, Sources), so below it only the slab's depth (`sh` km of heights along the line of
                 // sight, a box: variance sh²/12) and haze soften the edge
-                float green = (dh < 0.0 ? exp(-dh * dh / (30.0 + 0.17 * sh * sh + 400.0 * ax))
+                float green = (dh < 0.0 ? exp(-dh * dh / (8.0 + 0.17 * sh * sh + 60.0 * ax))
                                         : exp((4.0 - sqrt(dh * dh + 16.0)) / (10.0 + 25.0 * r.a * r.a)))
-                              * (0.85 + 0.3 * r.b);
+                              * (1.0 - 0.5 * u_surge.x + u_surge.x * r.b);   // rays sharpen in a surge
                 float red = exp(-(h - 240.0) * (h - 240.0) / 3600.0);
                 float glow = (0.015 + 0.1 * ax) * exp(-abs(dh) / (15.0 + 100.0 * ax));   // scattered around the edge
                 // scattered light is smooth, so the glow takes the curtain's brightness without the fold pillars
@@ -190,17 +200,18 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
                 light += (hue * green + u_crown * u_red * red) * path + hue * glow * column;
             }
         }
-        // airglow, grey-teal and brighter toward the horizon, then stars: a faint tail and a few bright ones,
-        // clumped as real star fields are, each from orange to blue-white; all through the tone curve of a photo
+        // airglow, grey-teal and brighter toward the horizon, then a faint tail of stars too dim for the catalogue
+        // (the real ones are sprites, `AuroraStars`), clumped as real star fields are, each from orange to blue-white;
+        // all through the tone curve of a photo
         vec3 sky = mix(vec3(0.016, 0.022, 0.025), vec3(0.0052, 0.007, 0.0116), 1.0 - exp(-el * 5.0));
         vec2 pts = uv * u_size;
         float clump = 0.35 + 1.3 * noise(p * 3.5 + 17.0);
-        float star = starField(pts, 11.0, 0.3 * clump, t) * 0.2 + starField(pts + 5.0, 6.0, 0.35 * clump, t) * 0.05;
+        float star = starField(pts + 5.0, 6.0, 0.5 * clump, t) * 0.09;
         vec3 tint = mix(vec3(1.0, 0.75, 0.5), vec3(0.8, 0.88, 1.0), hash42(floor(pts / 11.0) + 3.0).x); // hash21 repeats every 550 pt
         vec3 col = 1.0 - exp(-(sky + (star * tint + light * 0.7) * ext));
         col = pow(col, vec3(1.0 / 2.2));
         col = grade(col, 0.3, u_hue, u_saturation, u_contrast, u_brightness);
-        col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0;
+        col += (hash21(uv * u_size * 2.0) - 0.5) / 128.0;
         gl_FragColor = vec4(col, 1.0);
     }
     """, uniforms: [
@@ -208,13 +219,18 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
     ] + sky.uniforms + colours + [crown], knobs: gradeKnobs("aurora"))
     let phase = SKUniform(name: "u_phase", float: 0), poolA = SKUniform(name: "u_poolA", vectorFloat4: .zero)
     let poolB = SKUniform(name: "u_poolB", vectorFloat4: .zero), glow = SKUniform(name: "u_glow", vectorFloat3: .zero)
-    (scene as! ShaderScene).sprite.shader?.addUniform(phase)
+    let sprite = (scene as! ShaderScene).sprite!
+    sprite.shader?.addUniform(phase)
+    (sprite.position.y, sprite.size.height) = (base * size.height, (1 - base) * size.height)
     func light() {
         let pool = sky.pool()
         poolA.vectorFloat4Value = SIMD4(pool[0..<4]); poolB.vectorFloat4Value = SIMD4(pool[4..<8])
         glow.vectorFloat3Value = [0.016, 0.022, 0.025] + tint * 0.004 * pool.reduce(0, +) / 8
     }
     light()
+    let stars = AuroraStars(size: size, at: ProcessInfo.processInfo.environment["AURORA_TIME"].flatMap(Double.init).map(Date.init(timeIntervalSince1970:)))
+    stars.alpha = CGFloat(min(setting("aurora.brightness"), 1)) // as the Look's brightness dims the sky
+    scene.addChild(stars)
     scene.addChild(auroraGround(size: size, grade: (scene as! ShaderScene).knobs.map(\.uniform) + [
         poolA, poolB, glow, onLand, SKUniform(name: "u_star", vectorFloat3: unit([0.55, 0.72, 1.0]) * 0.02),
     ]))
@@ -222,8 +238,7 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
     // 1× is a real display's pace: folds drifting 0.35-0.6 km/s along the arc, rays 0.5 km/s
     // With Random picked and fading on, every few minutes the curtains (and their light on the snow) ease to
     // another palette over 90 s. With rearranging on, every few minutes (of phase, so it follows Speed) one curtain
-    // is replaced.
-    let setting = { (key: String) in Float(auroraKnobs.first { $0.key == key }!.value) }
+    // is replaced. Substorms come and go on the same clock (`Substorms`).
     var last: CGFloat = 0, since: Float = 0, waited: Float = 0, speed = setting("aurora.speed")
     var rearranging = setting("aurora.rearrange") > 0.5, untilNext: Float = 0
     var from = AuroraColours(shown), to = from, k: Float = 1
@@ -248,6 +263,8 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
         waited = random && setting("aurora.fade") > 0.5 ? waited + since : 0
         speed = setting("aurora.speed")
         rearranging = setting("aurora.rearrange") > 0.5
+        sky.substorms.activity = Int(setting("aurora.activity"))
+        stars.alpha = CGFloat(min(setting("aurora.brightness"), 1))
         since = 0
         light()
         if k >= 1, waited >= setting("aurora.fadeMinutes").rounded() * 60 {
@@ -269,13 +286,21 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
     /// How bright each is now, and what it's easing to.
     var lum = SIMD4<Float>(), target = SIMD4<Float>()
     var phase: Float = 0
+    /// Quiet stretches and surges: in a surge the curtains brighten, their lower edges drop and their rays sharpen and
+    /// run faster.
+    var substorms: Substorms
+    /// How far the rays have drifted, in lengths of the arc texture (0.5 km a second at rest).
+    private var rays = 0.0
     /// The way the display runs; new curtains lie near it, and it wanders a little with each one.
     private var heading: Float
     private var rng: SplitMix
-    let uniforms = ["u_dist", "u_angle", "u_lum", "u_low", "u_thick", "u_offset"].map { SKUniform(name: $0, vectorFloat4: .zero) }
+    private let surge = SKUniform(name: "u_surge", vectorFloat2: [0.3, 0])
+    let uniforms: [SKUniform]
 
-    init(arc: [UInt8], slope: Float, rng: SplitMix) {
+    init(arc: [UInt8], slope: Float, rng: SplitMix, activity: Int) {
         (self.arc, self.slope, self.rng) = (arc, slope, rng)
+        uniforms = ["u_dist", "u_angle", "u_lum", "u_low", "u_thick", "u_offset"].map { SKUniform(name: $0, vectorFloat4: .zero) } + [surge]
+        substorms = Substorms(activity: activity, rng: SplitMix(state: ~rng.state)) // its own stream: the arrangement stays the seed's
         heading = .random(in: -0.35...0.35, using: &self.rng)
         spawn(0)
         if Float.random(in: 0...1, using: &self.rng) < 0.45 { spawn(1) }
@@ -307,15 +332,25 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
         if on.count - 1 < want, let slot = free.randomElement(using: &rng) { spawn(slot) }
     }
 
-    /// Moves each curtain's brightness toward its target, at most 1/90 per second of phase.
+    /// Moves each curtain's brightness toward its target, at most 1/90 per second of phase, and the substorms and
+    /// rays on by `dt` seconds of phase.
     func ease(_ dt: Float) {
-        guard lum != target else { return }
+        guard dt > 0 else { return }
+        let was = (lum, substorms.level)
+        substorms.advance(dt)
+        rays = (rays + Double(dt * 0.000025 * (1 + 2 * substorms.level))).truncatingRemainder(dividingBy: 1)
+        surge.vectorFloat2Value = [0.3 + 0.4 * substorms.level, Float(rays)]
         lum += simd_clamp(target - lum, SIMD4(repeating: -dt / 90), SIMD4(repeating: dt / 90))
-        sync()
+        if lum != was.0 || substorms.level != was.1 { sync() }
     }
 
+    /// How much brighter than at rest a substorm has made the curtains.
+    private var gain: Float { 1 + 0.6 * substorms.level }
+
     private func sync() {
-        for (uniform, value) in zip(uniforms, [dist, angle, lum, low, thick, offset]) { uniform.vectorFloat4Value = value }
+        for (uniform, value) in zip(uniforms, [dist, angle, lum * gain, low - 4 * substorms.level, thick, offset]) {
+            uniform.vectorFloat4Value = value
+        }
     }
 
     /// The arc texture at `x` (wrapping), as the shader's `texture2D(u_arc, arcAt(x))` reads it, to the nearest texel.
@@ -342,8 +377,108 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
                 let patches = 0.4 + 0.6 * simd_smoothstep(0.2, 0.75, patch)
                 b += lum[i] * pfh * patches * simd_smoothstep(0.02, 0.08, den)
             }
-            return b
+            return b * gain
         }
+    }
+}
+
+/// Substorms, as a real display lives: quiet stretches, then a surge over two minutes, in which the curtains brighten
+/// up to 1.6 times, their rays sharpen and run three times as fast and their lower edges drop 4 km, then a recovery
+/// over 5-10 minutes. `level` is 0 at rest and 1 at a surge's peak at Moderate, a surge every 20-30 minutes; Quiet rests
+/// below that (dimmer, calmer rays) with rarer, weaker surges, and Active above it with surges every 12-20 minutes.
+/// It runs on phase time, so it follows Speed and stops at 0×.
+struct Substorms {
+    /// By activity (Quiet, Moderate, Active): the level at rest, a surge's height above it, and the quiet between
+    /// surges in minutes.
+    static let activities: [(rest: Float, strength: Float, quiet: ClosedRange<Float>)] = [(-0.3, 0.5, 30...50), (0, 1, 12...20), (0.25, 1, 5...9)]
+    var activity: Int
+    /// Seconds of phase since the last surge began; negative while waiting for the next.
+    var sinceOnset: Float
+    private(set) var level: Float = 0
+    private var rest: Float, recovery: Float, rng: SplitMix
+
+    /// Joins the cycle part way through a quiet stretch, so the first surge can come within minutes of loading.
+    init(activity: Int, rng: SplitMix) {
+        self.activity = min(max(activity, 0), 2)
+        self.rng = rng
+        rest = Self.activities[self.activity].rest
+        sinceOnset = -.random(in: 2...Self.activities[self.activity].quiet.upperBound, using: &self.rng) * 60
+        recovery = .random(in: 300...600, using: &self.rng)
+        advance(0)
+    }
+
+    mutating func advance(_ dt: Float) {
+        let a = Self.activities[min(max(activity, 0), 2)]
+        rest += min(max(a.rest - rest, -dt / 60), dt / 60)
+        sinceOnset = max(sinceOnset + dt, -a.quiet.upperBound * 60) // a wait from a quieter setting is cut to this one's
+        if sinceOnset > 120 + recovery {
+            sinceOnset = -.random(in: a.quiet, using: &rng) * 60
+            recovery = .random(in: 300...600, using: &rng)
+        }
+        level = rest + a.strength * (simd_smoothstep(0, 120, sinceOnset) - simd_smoothstep(120, 120 + recovery, sinceOnset))
+    }
+}
+
+/// The real stars to V 5.5 (Night Sky's catalogue) over Teton Point, 43.7° N 110.6° W, where the photo was taken, as
+/// they stand now, seen through the sky's camera facing north: brighter ones larger, tinted by their colour, and
+/// dimmed and reddened through more air low down as the sky shader dims its light. They're sprites over the sky and
+/// under the ground, so they stay sharp while the sky draws at half resolution, and they're moved every 4 s (the sky
+/// turns 0.017° in that time, half a device pixel). Polaris, 43.7° up, sits just above the top of the screen, and the
+/// Big Dipper and Cassiopeia wheel round it through the view.
+@MainActor final class AuroraStars: SKNode {
+    private let size: CGSize, pinned: Date?
+    private(set) var sprites: [SKSpriteNode] = []
+
+    /// The sky now, or held at `pinned` (`AURORA_TIME`, seconds since 1970, for snapshots).
+    init(size: CGSize, at pinned: Date? = nil) {
+        (self.size, self.pinned) = (size, pinned)
+        super.init()
+        zPosition = 0.5
+        place()
+        run(.repeatForever(.sequence([.wait(forDuration: 4), .run { [weak self] in self?.place() }])))
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    private static let dot = paint(CGSize(width: 8, height: 8)) { ctx in
+        let white = { (a: CGFloat) in CGColor(srgbRed: 1, green: 1, blue: 1, alpha: a) }
+        let g = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB), colors: [white(1), white(1), white(0.3), white(0)] as CFArray,
+                           locations: [0, 0.15, 0.35, 1])!
+        ctx.drawRadialGradient(g, startCenter: CGPoint(x: 4, y: 4), startRadius: 0, endCenter: CGPoint(x: 4, y: 4), endRadius: 4, options: [])
+    }
+
+    private func place() {
+        let toHorizon = Sky.horizonMatrix(jd: Sky.julianDate(pinned ?? Date()), latitude: 43.7, longitude: -110.6)
+        let focal = Double(size.width) / (2 * Double(auroraLens)), eye = Double(size.height) * Double(auroraHorizon)
+        var n = 0
+        for star in NightSky.catalogue {
+            let h = toHorizon * star.direction // east, north, up
+            guard h.y > 0.1, h.z > 0 else { continue }
+            let p = CGPoint(x: Double(size.width) / 2 + focal * h.x / h.y, y: eye + focal * h.z / h.y)
+            guard p.x > -4, p.x < size.width + 4, p.y < size.height + 4 else { continue }
+            if n == sprites.count {
+                let s = SKSpriteNode(texture: Self.dot)
+                s.colorBlendFactor = 1
+                s.blendMode = .add
+                addChild(s)
+                sprites.append(s)
+            }
+            // the air as the sky shader has it (Kasten and Young), relative to the zenith's; then flux against a 2nd
+            // magnitude star, square-rooted for the eye: a solid core, larger for brighter stars
+            let el = asin(h.z), air = 1 / (sin(el) + 0.50572 * pow(el * 180 / .pi + 6.07995, -1.6364))
+            let ext = exp(-0.921 * (air - 1) * SIMD3<Double>(0.10, 0.15, 0.25))
+            let flux = pow(10, -0.4 * (star.magnitude - 2)) * ext.y, d = min(7, 2.2 + 3 * log10(1 + flux * 4))
+            let c = NightSky.starColour(star.bv).usingColorSpace(.sRGB)!
+            let tint = SIMD3(0.5 + 0.5 * c.redComponent, 0.5 + 0.5 * c.greenComponent, 0.5 + 0.5 * c.blueComponent) * ext / ext.y
+            let s = sprites[n]
+            n += 1
+            s.size = CGSize(width: d, height: d)
+            s.position = p
+            s.color = NSColor(red: min(tint.x, 1), green: min(tint.y, 1), blue: min(tint.z, 1), alpha: 1)
+            s.alpha = min(1, 0.35 + 0.6 * flux.squareRoot())
+            s.isHidden = false
+        }
+        for s in sprites[n...] { s.isHidden = true }
     }
 }
 
@@ -351,24 +486,31 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
 /// commons.wikimedia.org/wiki/File:Teton_Point_Turnout_in_Winter_(52098766554).jpg) with the sky cut out, stored as its
 /// albedo at half scale: its own daylight, haze and colour cast were taken out offline. `aurora-ground-aux` holds each
 /// point's distance in red (log, estimated with Depth Anything V2) and open snow in green.
-@MainActor private enum AuroraGround {
+@MainActor enum AuroraGround {
     static var photo: SKTexture { sharedTexture("aurora-ground.heic") }
     static var aux: SKTexture { sharedTexture("aurora-ground-aux.png") }
     /// Where the highest summit sits: down from the top of the photo as a fraction of its height, and up the screen.
     static let summit = 60.0 / 1390, peak = 0.38
+    /// The photo's width over its height (4096 × 1390), and how far down from its top the sky reaches at the
+    /// skyline's lowest point: below that row the photo is opaque all the way across.
+    static let aspect = 4096.0 / 1390, skyline = 380.0 / 1390
+
+    /// Where the photo goes on a screen of `size`: full width (or wider, on a tall screen, so the range still fits), its
+    /// highest summit at `peak` of the height, cropped at the bottom.
+    static func frame(in size: CGSize) -> CGRect {
+        let peak = size.height * Self.peak, width = max(size.width, peak / (1 - summit) * aspect), height = width / aspect
+        return CGRect(x: (size.width - width) / 2, y: peak + summit * height - height, width: width, height: height)
+    }
 }
 
 /// The snowy range and the flats in front of it, as seen on a real long exposure: lit by starlight and by the aurora
 /// above each part of it (`u_poolA`/`u_poolB`, from `AuroraCurtains`), bluer and greyer as the eye sees in the dark,
 /// hazing into the glow above the skyline with distance, and glinting where near snow catches the light.
 @MainActor private func auroraGround(size: CGSize, grade: [SKUniform]) -> SKNode {
-    let texture = AuroraGround.photo, photo = texture.size(), aspect = photo.width / max(photo.height, 1)
-    let peak = size.height * AuroraGround.peak, summit = AuroraGround.summit
-    let width = max(size.width, peak / (1 - summit) * aspect), height = width / aspect
-    let top = peak + summit * height
-    let ground = SKSpriteNode(texture: texture, size: CGSize(width: width, height: height))
+    let frame = AuroraGround.frame(in: size)
+    let ground = SKSpriteNode(texture: AuroraGround.photo, size: frame.size)
     ground.anchorPoint = CGPoint(x: 0.5, y: 1)
-    ground.position = CGPoint(x: size.width / 2, y: top)
+    ground.position = CGPoint(x: frame.midX, y: frame.maxY)
     ground.zPosition = 1
     ground.shader = SKShader(source: shaderCommon + """
     void main() {
@@ -395,7 +537,7 @@ private let auroraHorizon: Float = 0.26, auroraLens: Float = 0.8
     }
     """, uniforms: [
         SKUniform(name: "u_aux", texture: AuroraGround.aux), SKUniform(name: "u_width", float: Float(size.width)),
-        SKUniform(name: "u_frame", vectorFloat4: [Float((size.width - width) / 2), Float(top - height), Float(width), Float(height)]),
+        SKUniform(name: "u_frame", vectorFloat4: [Float(frame.minX), Float(frame.minY), Float(frame.width), Float(frame.height)]),
         WallpaperTime.now,
     ] + grade)
     return ground
