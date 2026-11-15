@@ -25,6 +25,21 @@ import Testing
     }
     #expect(Nest.faces(at: 0.02) == 1 && Nest.faces(at: 0.1) == 2 && Nest.faces(at: 1) == 8)
     #expect(nest.branches.count { $0.parent < 0 && $0.opened[0] <= 0.05 } == 1, "more than one shaft begun in the first twentieth")
+    // Tunnels a little over an ant wide once dug, measured straight across them every few cells away from their
+    // ends (half again as wide before 2026-11-15), and a dozen or so rooms, not twenty.
+    func open(_ p: SIMD2<Double>, _ way: SIMD2<Double>) -> Double {
+        var d = 0.0
+        while d < 66, !nest.solid(p.x + way.x * d, p.y + way.y * d, at: 1) { d += 0.25 }
+        return d
+    }
+    let widths = nest.branches.filter { !$0.room && $0.points.count > 55 }.flatMap { b in
+        stride(from: 22, to: b.points.count - 22, by: 4).map { k in
+            let along = simd_normalize(b.points[k + 2] - b.points[k - 2]), across = SIMD2(-along.y, along.x)
+            return (open(b.points[k], across) + open(b.points[k], -across)) / nest.bodyLength
+        }
+    }.sorted()
+    print("Ant Colony, the nest of 2026-10-12 done: a quarter of its tunnels' widths under \(widths[widths.count / 4]) ant lengths, half under \(widths[widths.count / 2])")
+    #expect(widths[widths.count / 4] < 1.45 && (6...16).contains(nest.branches.count { $0.room }))
 
     let shares = [0, 1, 3, 6, 12, 18, 24, 30].map { (AntColony.share(after: $0) * 100).rounded() }
     #expect(shares == [0, 8, 23, 44, 75, 94, 100, 100])

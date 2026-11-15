@@ -31,8 +31,9 @@ public struct Dice: Sendable {
 /// It is grown by rules, not fitted to data (docs/ant-colony.md has the measured work they are after): faces go on
 /// in wandering lines, branch off sideways and stop; three times in four a face that meets another tunnel runs on
 /// into it, so galleries join and the sand is left in blocks; new faces open toward the largest stretch of undug
-/// sand; rooms two to four body lengths across open off a tunnel's side or end; a tunnel's width wanders, and the
-/// finished map is read through a smooth push a quarter of a body length deep, so no wall is a brush stroke. A
+/// sand; rooms four to six body lengths across, flat-floored, open off a tunnel's side or end; a tunnel is a little
+/// over a body length wide and its width wanders, and the finished map is read through a smooth push a quarter of
+/// a body length deep, so no wall is a brush stroke. A
 /// young colony works one or two faces at a time and a grown one eight (`faces`), and its entrances open one after
 /// another. This is the numeric half, built optimised even in debug (Package.swift).
 public struct Nest: Sendable {
@@ -70,7 +71,7 @@ public struct Nest: Sendable {
 
     /// A nest for a tank `cols` by `rows` cells with ants `bodyLength` cells long: the top `air` of it air, `dig`
     /// of the sand dug by the end, the spoil never more than `cap` body lengths high.
-    public init(seed: UInt64, cols: Int, rows: Int, bodyLength: Double, air: Double = 0.17, dig: Double = 0.27, cap: Double = 1.8) {
+    public init(seed: UInt64, cols: Int, rows: Int, bodyLength: Double, air: Double = 0.17, dig: Double = 0.21, cap: Double = 1.8) {
         (self.cols, self.rows, self.bodyLength) = (cols, rows, bodyLength)
         ground = max(Int(Double(rows) * air), Int(3 * bodyLength))
         var builder = Builder(seed: seed, cols: cols, rows: rows, bl: bodyLength, y0: ground, dig: dig)
@@ -380,7 +381,7 @@ private struct Builder {
         let index = branches.count - 1
         links.append((parent, at, index, 0, clock))
         var tip = Tip(branch: index, x: x, y: y, heading: heading)
-        tip.radius = max(bl * (0.60 + 0.05 * dice.normal()), 0.56 * bl)
+        tip.radius = max(bl * (0.55 + 0.04 * dice.normal()), 0.50 * bl)
         tip.sign = cos(heading) >= 0 ? 1 : -1
         tip.pitch = pitch ?? atan2(sin(heading), abs(cos(heading)))
         tip.vigour = vigour ?? dice.uniform(0.4, 1.0)
@@ -390,17 +391,20 @@ private struct Builder {
         return tips.count - 1
     }
 
-    /// A room opening off a tunnel's side or end: it starts as a niche in the wall and swells outward to 2 to 4
-    /// body lengths across and 1.2 to 1.7 high, with a flatter floor than roof.
+    /// A room opening off a tunnel's side or end: it starts as a niche in the wall and swells outward to 4 to 6
+    /// body lengths across and about 2 high, a dome over a floor not much below the tunnel's, flat enough that the
+    /// ants resting in it stand in a row (the line they stand on is a tenth of its height below its middle, so that
+    /// it stays inside the room to its ends). Chambers in real nests are flat-floored and wide (Tschinkel 2004);
+    /// these are higher than his, about one ant, so that they show beside tunnels an ant wide.
     mutating func room(_ x: Double, _ y: Double, parent: Int, at: Double, side given: Double) {
-        let (across, up) = (bl * dice.uniform(1.0, 2.0), bl * dice.uniform(0.72, 1.05))
+        let (across, up) = (bl * dice.uniform(2.0, 3.0), bl * dice.uniform(1.4, 1.7))
         var side = given
         func fits(_ side: Double) -> Bool { 1.2 * bl < x + side * 2 * across && x + side * 2 * across < Double(cols) - 1.2 * bl }
         if !fits(side) { side = -side }
         guard fits(side), y - up >= Double(y0) + 1.3 * bl, y + up <= Double(rows) - bl else { return }
         let count = Int(1.8 * across)
         var made = Made(parent: parent, at: at, room: true)
-        made.points = (0..<count).map { SIMD2(x + side * Double($0), y + 0.25 * up) }
+        made.points = (0..<count).map { SIMD2(x + side * Double($0), y + 0.1 * up) }
         made.clock = [Double](repeating: 9e9, count: count)
         made.clock[0] = clock
         made.radius = [Double](repeating: up, count: count)
@@ -411,10 +415,12 @@ private struct Builder {
         tips.append(tip)
     }
 
-    /// Digs a disc at the face now, and books the slow widening of the walls behind it for later.
+    /// Digs a disc at the face now, and books the slow widening of the walls behind it for later: a tenth of a body
+    /// length or so each side, so that a tunnel settles a little over an ant's length wide (measured in fire ants:
+    /// 1.06 ± 0.23, Gravish 2013). It was four tenths, and tunnels settled half again as wide.
     mutating func stamp(_ tip: Tip) -> Double {
         let r = tip.radius * exp(tip.swell), depth = (tip.y - Double(y0)) / Double(rows - y0)
-        let wide = r + bl * 0.42 * (1.3 - 0.6 * depth) * tip.widen, reach = Int(wide + 2)
+        let wide = r + bl * 0.12 * (1.3 - 0.6 * depth) * tip.widen, reach = Int(wide + 2)
         let (xa, xb, ya, yb) = (max(Int(tip.x) - reach, 0), min(Int(tip.x) + reach, cols - 1), max(Int(tip.y) - reach, y0), min(Int(tip.y) + reach, rows - 1))
         guard xa <= xb, ya <= yb else { return r }
         var fresh = 0
@@ -445,7 +451,7 @@ private struct Builder {
         let now = Float(clock)
         for y in ya...yb { for x in xa...xb {
             let (dx, dy) = (Double(x) + 0.5 - cx, Double(y) + 0.5 - cy)
-            let e = pow(dx / a, 2) + pow(dy / (dy > 0 ? 0.62 * b : b), 2), i = y * cols + x
+            let e = pow(dx / a, 2) + pow(dy / (dy > 0 ? 0.3 * b : b), 2), i = y * cols + x
             if e <= 1.6, owner[i] < 0 { owner[i] = Int32(tip.branch) }
             if e <= 1, !(time[i] <= now) { fresh += 1; time[i] = .nan } // marked, then dated once the clock has moved on
         } }
@@ -520,11 +526,11 @@ private struct Builder {
         branches[tip.branch].radius.append(r)
         let at = Double(branches[tip.branch].points.count - 1)
         if tip.gone >= tip.length {
-            if dice.chance(0.45) { room(tip.x, tip.y, parent: tip.branch, at: at, side: tip.sign) }
+            if dice.chance(0.25) { room(tip.x, tip.y, parent: tip.branch, at: at, side: tip.sign) }
             return false
         }
         if tip.merging > 0 || tip.gone < 2.5 * bl || tip.gone - tip.last < 2.5 * bl { return true }
-        if dice.chance(1 / (bl * 11)) {
+        if dice.chance(1 / (bl * 40)) {
             room(tip.x, tip.y, parent: tip.branch, at: at, side: dice.sign())
             tip.last = tip.gone
         } else if dice.chance(1 / (bl * 5.5)), tips.count(where: { !$0.room }) < 9 {
