@@ -738,20 +738,53 @@ struct OrbitWorld {
     /// thousand km across (made up, drifting east a little each day, or today's real ones), broken into puffs.
     func cloud(_ p: Sky.Vector, finest: Double, day: Date) -> Float {
         guard weather != 1 else { return 0 }
-        var cover: Float
+        var cover: Float, at = p, streets = p // (where the clumps are found, and the bigger clumps, which lie in streets)
         if real, let live = Self.live(latitude: asin(p.z) * 180 / .pi, longitude: atan2(p.y, p.x) * 180 / .pi) {
             cover = smoothstep(0.42, 0.95, Float(live))
         } else {
             let drift = day.timeIntervalSince1970 / 86400 * 0.14, q = Sky.Vector(p.x * cos(drift) - p.y * sin(drift), p.x * sin(drift) + p.y * cos(drift), p.z)
-            let bent = q + (Sky.Vector(Double(noise(q, 1500, 31)), Double(noise(q, 1500, 32)), Double(noise(q, 1500, 33))) - 0.5) * 0.09
+            // Lows: the systems wound about their hearts, so they come out as commas and spirals, and the cloud
+            // that moves with them is wound with them.
+            let (wound, low) = Self.lows(q)
+            let bent = wound + (Sky.Vector(Double(noise(wound, 1500, 31)), Double(noise(wound, 1500, 32)), Double(noise(wound, 1500, 33))) - 0.5) * 0.09
             // Kept near the half at which cloud begins, so most of a system is a broken field and only its heart a deck.
-            cover = 0.5 + (noise(bent, 2600, 41) * 0.34 + noise(bent, 1000, 42) * 0.36 + noise(bent, 380, 43) * 0.30 - 0.54) * 1.3
+            cover = 0.5 + (noise(bent, 2600, 41) * 0.34 + noise(bent, 1000, 42) * 0.36 + noise(bent, 380, 43) * 0.30 - 0.54) * 1.3 + low
+            // The bigger clumps drawn out three to one along the way the air goes, east and west and round the lows,
+            // so that a broken field lies in streets.
+            (at, streets) = (wound, Sky.Vector(wound.x / 3, wound.y / 3, wound.z))
         }
         cover = [cover, 0, min(cover, 0.46), 0.52 + (cover - 0.5) * 0.4, 0.95][weather]
         // Clumps and puffs, down to the finest the cell can show: none smaller than its longer side, which it would
         // sample once along that side and show as speckle. So far cloud is smooth, and the limb clean.
-        let puff = (finest < 56 ? noise(p, 70, 2) : 0.5) * 0.3 + (finest < 21 ? noise(p, 26, 3) : 0.5) * 0.35 + (finest < 9 ? noise(p, 11, 5) : 0.5) * 0.22 + (finest < 4 ? noise(p, 5, 9) : 0.5) * 0.13
+        let puff = (finest < 56 ? noise(streets, 70, 2) : 0.5) * 0.3 + (finest < 21 ? noise(streets, 26, 3) : 0.5) * 0.35
+            + (finest < 9 ? noise(at, 11, 5) : 0.5) * 0.22 + (finest < 4 ? noise(at, 5, 9) : 0.5) * 0.13
         return cover + (puff - 0.5) * 0.9
+    }
+
+    /// A place wound about the hearts of the made-up weather's lows, and what a low does to the cover there. Six in
+    /// ten of the cells of a lattice 2,600 km across hold a low somewhere in their middle half. Within 1,800 km of
+    /// one, a place is turned about it by up to a radian and a half, the most at its heart and falling off over
+    /// 900 km, the way the air goes round a low: anticlockwise in the north and clockwise in the south. And the cover
+    /// is raised along one arm that winds in to the heart and lowered along the other, so a low is a comma of cloud
+    /// with a clear slot curling in beside it.
+    static func lows(_ q: Sky.Vector) -> (Sky.Vector, Float) {
+        let size = 2600 / Orbit.radius, u = q / size, base = SIMD3<Double>((u.x - 0.5).rounded(.down), (u.y - 0.5).rounded(.down), (u.z - 0.5).rounded(.down))
+        var wound = q, cover: Float = 0
+        for corner in 0..<8 {
+            let cell = base + SIMD3<Double>(Double(corner & 1), Double(corner >> 1 & 1), Double(corner >> 2))
+            let draw = hash(Int(cell.x) &* 73_856_093 ^ Int(cell.z) &* 83_492_791, Int(cell.y), 4100)
+            guard draw & 255 < 154 else { continue }
+            let heart = (cell + SIMD3<Double>(Double(draw >> 8 & 255), Double(draw >> 16 & 255), Double(draw >> 24 & 255)) / 510 + 0.25) * size
+            let away = simd.length(q - heart) * Orbit.radius
+            guard away < 1800 else { continue }
+            let fall = exp(-(away / 900) * (away / 900)), axis = normalize(heart), turn = heart.z >= 0 ? 1.0 : -1.0, angle = 1.5 * fall * turn
+            wound = wound * cos(angle) + cross(axis, wound) * sin(angle) + axis * dot(axis, wound) * (1 - cos(angle))
+            // (Round the heart, from a bearing of its own, winding in by a radian every 450 km.)
+            let east = normalize(cross([0, 0, 1], axis)), north = cross(axis, east), off = q - heart
+            let round = atan2(dot(off, north), dot(off, east)) + Double(draw >> 32 & 1023) / 1023 * 2 * .pi
+            cover += Float(0.22 * exp(-(away / 800) * (away / 800)) * cos(round - turn * away / 450))
+        }
+        return (wound, cover)
     }
 }
 
