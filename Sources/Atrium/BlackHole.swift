@@ -656,6 +656,13 @@ final class BlackHole: SKScene, BatteryPaced {
         float e = uc * sqrt(1.0 - uc) * sqrt(1.0 + off2) / max(sqrt(off2), 1e-5);
         float e2 = e * e;
         bool escapes = e2 < 0.14814815;
+        // How many pixels out from the shadow's edge this one is, and how much of it lies outside: what lies beyond
+        // the edge (the hairline, the finer images of the disc and the sky) is drawn by that share, so the edge is
+        // smooth and not a staircase of whole pixels.
+        // (fwidth is the sum of the slopes across and up: 4/π too much on average, taken off here.)
+        // (Only near the edge: at the shadow's middle e2 grows without end and its slope can't place the edge.)
+        float edge = (0.14814815 - e2) / max(fwidth(e2) * 0.785, 1e-12);
+        float outside = e2 < 0.3 ? clamp(0.5 + edge, 0.0, 1.0) : 0.0;
         // The turn it has already made on its way in from infinity to the camera (first order in the hole's size,
         // good to 1e-5 with the camera 30 radii or more out), then to its nearest point.
         float w = sqrt(max(e2 - uc * uc, 1e-12));
@@ -668,9 +675,14 @@ final class BlackHole: SKScene, BatteryPaced {
         float after = turnToNearest(texture2D(u_turns, vec2((entry + 1.5) / 1024.0, 0.5)));
         float toNearest = mix(before, after, column - entry);
         // How much further round a ray one pixel over goes, in radians. Toward the shadow's edge it grows without
-        // end, and with every half-turn more comes another, thinner image of the disc.
+        // end, and with every half-turn more comes another, thinner image of the disc. It is table B's slope times
+        // how far `column` moves for a step in e2, worked out here, times e2's slope across the pixel: the slope of
+        // `column` itself grows too fast there for the GPU's, which it takes once for each 2 × 2 block of pixels, so
+        // the hairline round the shadow (below) came out a pixel wide in one block and two in the next.
         // (fwidth is the sum of the slopes across and up: 4/π too much on average, taken off here.)
-        float crowding = 2.0 * abs(after - before) * fwidth(column) * 0.785;
+        float rest = max(1.0 - e2 * 6.75, 1e-9);
+        float perE2 = 1023.0 * 6.75 / (50.0 * sqrt(max(-log(rest), 1e-9) / 50.0) * rest);
+        float crowding = 2.0 * abs(after - before) * perE2 * fwidth(e2) * 0.785;
         float furthest = (1.0 + e2) / (1.0 / 3.0 + 2.0 * e2 * sqrt(e2));
         // The disc's plane cuts the ray's plane along a line this far round from the camera.
         float cut = mod(atan(-u_view.z, u_view.y * y.y), 3.1415927);
@@ -760,11 +772,15 @@ final class BlackHole: SKScene, BatteryPaced {
             // as stray dots, so there they give way to what they average to: a quarter of every half-turn is lit,
             // and it comes to 0.14 of the disc's light at 5 radii. That is the hairline round the shadow.
             // ponytail: 0.14 was worked out for a disc from 3 to 11 radii; a view with another outer edge needs its own.
-            float piled = smoothstep(0.6, 1.4, crowding);
-            if (escapes && piled > 0.0) {
+            // `piled` is how much of the pixel lies where they do, its outer edge drawn as smooth as the shadow's:
+            // `crowding` falls as one over the distance from the edge, so it passes 1 at `edge` times `crowding`
+            // pixels out (about one, at every size). Inside the shadow's edge it is all hairline, by `outside`.
+            float piled = escapes ? clamp(0.5 + edge * (crowding - 1.0), 0.0, 1.0) : 1.0;
+            if (outside > 0.0 && piled > 0.0) {
                 float seen = pow(0.83666 / (1.0 - 0.063246 * lean / e), u_beaming) * 0.998 * streakHeat(0.5);
                 light = mix(light, vec4(0.14 * discLight(texture2D(u_heat, heatAt(seen * u_peak.x)).rgb, seen, 0.5, 0.2, u_view.w).rgb, 0.2), piled);
             }
+            light.rgb *= outside;
             if (hit0) {
                 float spin = sqrt(0.5 * u0 * u0 * u0) / 6.2831853;
                 float round = atan(on0.y, on0.x) / 6.2831853;
@@ -830,6 +846,7 @@ final class BlackHole: SKScene, BatteryPaced {
                         behind += hue * starLight(\(reach), star.b + 0.03475 * u_twinkle * swell, room, u_stars * magnified\(thinned));
                     }
                 }
+                behind *= outside;
             }
             // Galaxy's stretch, asinh on brightness with the colour kept: it lifts the disc's faint outer part, holds
             // the bright side without bleaching it and leaves black black. Brightness here is the strongest channel,

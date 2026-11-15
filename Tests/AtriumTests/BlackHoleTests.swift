@@ -257,6 +257,30 @@ func blackBodyKeepsToTheLocus(kelvin: Double, x: Double, y: Double) {
     #expect(step <= 1, "with the sky dark, turning it changes a pixel by \(step) of 255")
 }
 
+/// The hairline round the shadow's edge, close up (Size 3) with nothing else in the sky: over the top of the arc each
+/// column holds about the same light in it, with no gaps, as a smooth line does. Drawn a pixel wide in one 2 × 2
+/// block of pixels and two in the next, as it was, its light jumped by over a quarter from column to column.
+@MainActor @Test func blackHoleHairlineIsSmooth() throws {
+    let defaults = UserDefaults.standard
+    let held = [BlackHole.size.key: 3.0, BlackHole.glow.key: 0, BlackHole.speed.key: 0, "blackhole.stars": 0, "blackhole.milkyway": 0]
+    for (key, value) in held { defaults.set(value, forKey: key) }
+    defer { for key in held.keys { defaults.removeObject(forKey: key) } }
+    let (w, h) = (1512, 982)
+    let picture = try drawn(BlackHole(size: CGSize(width: w / 2, height: h / 2), start: (time: 20, generation: 7)), w, h)
+    // the shadow's radius in pixels, where e² is 4/27 (see the shader's `escapes`)
+    let (uc, lens) = (1 / BlackHole.View().distance, tan(BlackHole.View().field * .pi / 360) / 3)
+    let k = uc * uc * (1 - uc), radius = (k / (4.0 / 27 - k)).squareRoot() / (2 * lens) * Double(w)
+    let light = (Int(Double(w) / 2 - radius / 2)..<Int(Double(w) / 2 + radius / 2)).map { x in
+        let edge = Int(Double(h) / 2 - (radius * radius - pow(Double(x) + 0.5 - Double(w) / 2, 2)).squareRoot())
+        return (edge - 3...edge + 3).reduce(0.0) { $0 + Double(picture[$1 * w + x].x) }
+    }
+    let mean = light.reduce(0, +) / Double(light.count)
+    let jumps = zip(light, light.dropFirst()).map { abs($0 - $1) }.reduce(0, +) / Double(light.count - 1) / mean
+    print(String(format: "Black Hole: the hairline's light from column to column changes by %.0f%% of it on average, least %.0f%% of its mean", jumps * 100, light.min()! / mean * 100))
+    #expect(jumps < 0.15, "the hairline steps: its light jumps by \(Int(jumps * 100))% from column to column")
+    #expect(light.min()! > mean / 2, "the hairline has gaps")
+}
+
 /// On battery it holds to 15 fps while the disc's edge steps 2 px a frame or less at that rate (Size times Speed at
 /// most 1), and to 20 once either is turned up.
 @MainActor @Test func blackHolePacesItsBattery() {
