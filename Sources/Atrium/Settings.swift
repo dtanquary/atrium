@@ -862,10 +862,11 @@ struct PalettePicker: View {
 
     var body: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 76), spacing: 14)], spacing: 14) {
-            let plain = choice.options.filter { choice.photos[$0.name] == nil }
-            // Random blends the plain palettes' colours; where every option is a photo, it's a mosaic of the first four.
-            swatch("Random", colours: (plain.isEmpty ? choice.options : plain).compactMap { (scheme == .dark ? $0.dark : $0.light).last },
-                   symbol: "shuffle", mosaic: plain.isEmpty ? choice.options.prefix(4).compactMap { photo(choice.photos[$0.name]) } : [])
+            let photos = choice.options.compactMap { photo(choice.photos[$0.name]) }
+            // Random blends the palettes' colours; where there are photos, it's a mosaic of the first four, since Random
+            // goes round only the photos (Rain on Glass's bokeh palettes are picks).
+            swatch("Random", colours: photos.isEmpty ? choice.options.compactMap { (scheme == .dark ? $0.dark : $0.light).last } : [],
+                   symbol: "shuffle", mosaic: Array(photos.prefix(4)))
             ForEach(choice.options, id: \.name) { option in
                 swatch(option.name, colours: scheme == .dark ? option.dark : option.light, photo: photo(choice.photos[option.name]))
             }

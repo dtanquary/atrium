@@ -49,16 +49,35 @@ let rainPhotos: [(name: String, night: String, day: String)] = [
     ("Shanghai", "shanghai-night", "shanghai-night"),
 ]
 
+/// The backdrops Settings offers, photos first, then the bokeh palettes: stored by name, empty for Random, which is
+/// what Settings shows as picked before a pick.
+let rainBackdrops = PaletteChoice(key: "rain.palette", options: rainPhotos.map { ($0.name, [], []) }
+                                  + rainPalettes.map { ($0.name, [$0.night[1], $0.lights[0], $0.lights[1]], [$0.day[0], $0.lights[0], $0.lights[1]]) },
+                                  photos: Dictionary(uniqueKeysWithValues: rainPhotos.map { ($0.name, ("rain-\($0.night)-far.jpg", "rain-\($0.day)-far.jpg")) }),
+                                  title: "Backdrop")
+
+/// What Random starts on and fades between: the photos. The bokeh palettes are picks, out of the rotation.
+let rainRotation = rainPhotos.map(\.name)
+
+/// The backdrop for what Settings has stored: before any pick, Hamburg, the look on the menu's tile, in its loop and
+/// on the site, fading on from there as Random does; on Random, any photo; otherwise the pick.
+func rainBackdrop(picked: String?) -> String {
+    guard let picked else { return "Hamburg" }
+    return rainBackdrops.options.contains { $0.name == picked } ? picked : rainRotation.randomElement()!
+}
+
 /// Beads of water and drops sliding down a rainy window, each drop a little lens. Behind the glass is a photo
 /// backdrop, or a city of out-of-focus lights in a palette: night in Dark Mode, an overcast day in Light Mode.
 @MainActor func rainOnGlass(size: CGSize) -> SKScene {
-    let names = rainPhotos.map(\.name) + rainPalettes.map(\.name)
-    return rainScene(size: size, backdrop: UserDefaults.standard.string(forKey: "rain.palette").flatMap { names.contains($0) ? $0 : nil }
-                                           ?? names.randomElement()!, clock: .random(in: 0..<1000))   // a fresh pane each time
+    // ("rain.seed" is for pictures that can be taken again: the pane's clock starts there. Nothing else sets it.)
+    let seed = UserDefaults.standard.double(forKey: "rain.seed")
+    return rainScene(size: size, backdrop: rainBackdrop(picked: UserDefaults.standard.string(forKey: rainBackdrops.key)),
+                     clock: seed > 0 ? seed : .random(in: 0..<1000))   // a fresh pane each time
 }
 
-/// The scene for one backdrop, with its water clock at `clock`. Left on Random, it fades to another one every few
-/// minutes if Settings says so; the new scene takes over the clock, so the water carries on through the fade.
+/// The scene for one backdrop, with its water clock at `clock`. Left on Random, or before a pick, it fades to another
+/// photo every few minutes if Settings says so; the new scene takes over the clock, so the water carries on through
+/// the fade. It fades the same way between its day and night looks at dawn and dusk while it follows the weather.
 /// After about two hours of water it fades to a fresh pane of the same backdrop, which keeps the clock small enough
 /// for the shader's Floats to place drops to the pixel.
 @MainActor private func rainScene(size: CGSize, backdrop: String, clock: Double) -> SKScene {
@@ -66,8 +85,26 @@ let rainPhotos: [(name: String, night: String, day: String)] = [
     // while it's off, exactly as it always was; the scene rebuilds, crossfading, when that changes
     let features = GlassUniforms.wanted
     let weather = features.contains("WEATHER") ? GlassUniforms(features) : nil
-    let scene = rainPhotos.first { $0.name == backdrop }.map { rainPhotoScene(size: size, name: systemIsDark ? $0.night : $0.day, weather: weather) }
-        ?? rainBokehScene(size: size, palette: rainPalettes.first { $0.name == backdrop }!, weather: weather)
+    let night = GlassWeather.night   // Dark Mode's, or the real night while following the weather
+    let scene: SKScene
+    if let photo = rainPhotos.first(where: { $0.name == backdrop }) {
+        let look = night ? photo.night : photo.day
+        func texture(_ level: String) -> SKTexture { SKTexture(image: NSImage(contentsOf: resource("rain-\(look)-\(level).jpg")) ?? NSImage()) }
+        scene = rainGlassScene(size: size, far: texture("far"), near: texture("near"), haze: texture("haze"), night: look.hasSuffix("night"),
+                               traffic: nil, weather: weather)
+    } else {
+        // a palette's city is baked as it's first shown, and shared by every copy of the scene while one shows it
+        let index = rainPalettes.firstIndex { $0.name == backdrop }!, palette = rainPalettes[index]
+        var baked: (far: SKTexture, near: SKTexture, haze: SKTexture)?
+        func texture(_ level: KeyPath<(far: SKTexture, near: SKTexture, haze: SKTexture), SKTexture>, _ name: String) -> SKTexture {
+            sharedTexture("rain-\(palette.name)-\(night ? "night" : "day")-\(name)") {
+                baked = baked ?? RainCity.textures(palette: index, night: night)
+                return baked![keyPath: level]
+            }
+        }
+        scene = rainGlassScene(size: size, far: texture(\.far, "far"), near: texture(\.near, "near"), haze: texture(\.haze, "haze"), night: night,
+                               traffic: palette.lights, weather: weather)
+    }
     let water = scene as! ShaderScene
     water.clockTime = clock
     weather?.apply(to: water)
@@ -87,141 +124,17 @@ let rainPhotos: [(name: String, night: String, day: String)] = [
         let fade = SKTransition.crossFade(withDuration: 4)
         fade.pausesIncomingScene = false   // both keep raining through the fade, in step on the same clock
         fade.pausesOutgoingScene = false
-        if UserDefaults.standard.string(forKey: "rain.palette") ?? "" == "", rainKnobs[0].value > 0.5,
+        if GlassWeather.night != night {   // dusk or dawn, following the weather: the same pane over the other look
+            view.presentScene(rainScene(size: water.size, backdrop: backdrop, clock: water.clockTime), transition: fade)
+        } else if UserDefaults.standard.string(forKey: rainBackdrops.key) ?? "" == "", rainKnobs[0].value > 0.5,   // Random, or no pick
            abs(Date().timeIntervalSince(born)) >= rainKnobs[1].value.rounded() * 60 {
-            let others = (rainPhotos.map(\.name) + rainPalettes.map(\.name)).filter { $0 != backdrop }
+            let others = rainRotation.filter { $0 != backdrop }
             view.presentScene(rainScene(size: water.size, backdrop: others.randomElement()!, clock: water.clockTime), transition: fade)
         } else if water.clockTime > 8000 {
             view.presentScene(rainScene(size: water.size, backdrop: backdrop, clock: .random(in: 0..<1000)), transition: fade)
         }
     }])))
     return scene
-}
-
-/// A city of out-of-focus lights behind the glass, in one of `rainPalettes`.
-@MainActor private func rainBokehScene(size: CGSize, palette: (name: String, night: [SIMD3<Float>], day: [SIMD3<Float>], lights: [SIMD3<Float>]),
-                                       weather: GlassUniforms?) -> SKScene {
-    let sky = systemIsDark ? palette.night : palette.day
-    let l = palette.lights
-    return shaderScene(size: size, source: GlassUniforms.defines(weather) + shaderCommon + """
-    // One layer of bokeh lights, one per grid cell. blur 1 = out of focus (big soft discs), 0 = sharp points.
-    // Returns (tint * strength, strength); the tints come in as matrix columns since only main() sees uniforms.
-    vec4 bokeh(vec2 p, float cell, float blur, float seed, mat3 a, mat3 b) {
-        vec2 id = floor(p / cell);
-        float h = hash21(id + seed);
-        if (h < 0.45) { return vec4(0.0); }
-        vec2 off = (vec2(hash21(id + seed + 1.3), hash21(id + seed + 2.7)) - 0.5) * 0.5;
-        float r = (0.13 + 0.12 * hash21(id + seed + 4.1)) * mix(0.25, 1.0, blur);
-        float d = length(fract(p / cell) - 0.5 - off);
-        float disc = smoothstep(r, r - mix(0.015, 0.1, blur), d) * (0.75 + 0.25 * smoothstep(r * 0.4, r, d));
-        float k = hash21(id + seed + 6.6);
-        vec3 tint = k < 0.45 ? a[0] : k < 0.65 ? a[1] : k < 0.8 ? a[2] : k < 0.93 ? b[0] : b[1];
-        return vec4(tint, 1.0) * disc * (0.25 + 0.5 * h) * mix(1.6, 1.0, blur);
-    }
-
-    // The street behind the glass: light-polluted haze low down, lights mostly in the lower half, and a band of
-    // traffic crawling along. `sky` holds the top and low colours; `day` is 1 in Light Mode; `haze` is how much
-    // the mist on the glass scatters (`blur` in steady rain).
-    vec3 city(vec2 p, float blur, float t, mat3 sky, mat3 a, mat3 b, float day, float haze) {
-        vec3 col = mix(sky[1], sky[0], smoothstep(0.0, 0.9, p.y));
-        float low = smoothstep(0.95, 0.25, p.y);
-        float lane1 = (p.y - 0.27) / 0.06;
-        float lane2 = (p.y - 0.2) / 0.05;
-        vec4 lights = bokeh(p, 0.19, blur, 1.0, a, b) * low
-                    + bokeh(p + vec2(0.37, 0.11), 0.13, blur, 7.0, a, b) * low * 0.8
-                    + bokeh(p * mat2(0.8, 0.6, -0.6, 0.8) + vec2(3.1, 0.7), 0.09, blur, 23.0, a, b) * low * 0.6
-                    + bokeh(p + vec2(t * 0.012, 0.0), 0.08, blur, 13.0, a, b) * exp(-lane1 * lane1)
-                    + bokeh(p - vec2(t * 0.009, 0.0), 0.07, blur, 19.0, a, b) * exp(-lane2 * lane2) * 0.8;
-        // night: lights add on, and condensation scatters them into a haze.
-        // day: the same lights read as coloured blurs, and fog whitens the glass.
-        vec3 night = col + sky[1] * 0.55 * low * haze + lights.rgb;
-        vec3 lit = col * exp(-1.3 * (lights.a - 0.8 * lights.rgb));
-        return mix(night, mix(lit, vec3(1.0), 0.15 * haze), day);
-    }
-
-    \(rainWater)
-
-    void main() {
-        \(rainDrops)
-
-        // the fogged glass, cleared a little along fresh trails
-        // (branches skip the extra city lookups on the dry glass, which is most of the screen)
-        mat3 sky = mat3(u_top, u_low, vec3(0.0));
-        mat3 a = mat3(u_l0, u_l1, u_l2);
-        mat3 b = mat3(u_l3, u_l4, vec3(0.0));
-        #if WEATHER
-        float mist = u_glass.x / 0.3;
-        #else
-        float mist = 1.0;
-        #endif
-        vec3 col = city(p, 1.0, t, sky, a, b, u_day, mist);
-        if (wiped > 0.0) { col = mix(col, city(p, 0.45, t, sky, a, b, u_day, 0.45 * mist), wiped * 0.8); }
-        // the lights scattered by anything on the glass: a glow at night, milky by day
-        vec3 glow = (a * vec3(0.45, 0.2, 0.15) + b * vec3(0.13, 0.07, 0.0)) * 0.5 + u_low * 1.5;
-        vec3 veil = mix(mix(u_low, u_top, smoothstep(0.0, 0.9, p.y)) + glow * smoothstep(1.0, 0.1, p.y), mix(u_top, vec3(1.0), 0.3), u_day);
-        #if SNOW
-        col = mix(col, mix(veil * 1.2 + 0.05, vec3(0.95), u_day), falling);
-        #endif
-        #if FOG
-        // condensation (see fogCover): on the outside of the pane the trails wipe it and the drops sit on top, on the
-        // inside it covers them
-        float fog = fogCover(p, u_glass.y, u_pane.x);
-        col = mix(col, veil, fog * (1.0 - u_pane.x) * (1.0 - wiped));
-        #endif
-        // each drop is a lens (see rainPhotoScene): a sharp, upside-down view of a wide patch of the lights, with a
-        // dark rim where light from outside is totally reflected
-        #if FOG || SNOW || FROST
-        dewy = dewy || drop.w < 0.004;   // behind fog, snow or frost a small drop's view is lost in the haze anyway
-        #endif
-        if (drop.z > 0.0) {
-            float sd = length(drop.xy);
-        #if DRY
-            float sin60 = mix(0.866, 0.174, flattened(drop.w, rain.w)), k = 0.866 / sin60;  // flatter as it dries
-        #else
-            float sin60 = 0.866, k = 1.0;
-        #endif
-            float sa = min(sd, 1.0) * sin60;
-            float bend = asin(min(1.333 * sa, 1.0)) - asin(sa);
-            // (a little softer and brighter than sharp: the procedural city is mostly dark sky between its lights,
-            // which would leave the drops as dark holes; a dew bead, a few pixels across, just holds the glow)
-            vec3 through = mix(u_low, u_top, 0.5 + 0.5 * drop.y) + glow * 0.5 * (1.0 - u_day);
-            if (!dewy) { through = city(p - drop.xy * drop.w - drop.xy / max(sd, 0.001) * bend / 0.9, 0.4, t, sky, a, b, u_day, 0.4 * mist); }
-            through *= mix(1.25, 1.05, u_day) * mix(0.98, 0.89, smoothstep(0.7 * k, 0.87 * k, sd));
-            float aa = 1.0 / max(drop.w * u_size.y * 2.0, 1.0), dark = mix(0.05, 0.15, u_day);
-        #if FROST
-            // frozen: cloudy ice that loses the sharp view, with a frosted rim that catches the light
-            float frozen = step(fract(drop.w * 7919.0), u_glass.w);
-            through = mix(through, veil * 1.3 + mix(0.04, 0.35, u_day), frozen * 0.65);
-            dark = mix(dark, 1.4, frozen);
-        #endif
-            through *= mix(1.0, dark, smoothstep(0.87 * k - aa, 0.87 * k + aa, sd));
-            col = mix(col, through, drop.z);
-        }
-        #if FOG
-        col = mix(col, veil, fog * u_pane.x);
-        #endif
-        #if SNOW
-        col = mix(col, mix(veil * 1.6 + 0.06, vec3(0.92), u_day), white);
-        #endif
-        #if FROST
-        vec2 frost = frostAt(texture2D(u_frostMap, v_tex_coord), p, u_glass.z);
-        vec3 lit = mix(veil, vec3(dot(veil, vec3(0.3, 0.59, 0.11))), 0.3);   // (ice scatters every colour alike)
-        vec3 ice = mix(1.0 - exp(-lit * (0.5 + 2.6 * frost.x)) + 0.02, vec3(0.86, 0.9, 0.95) * 0.85, u_day);
-        col = mix(col, mix(ice, veil, u_pane.w * 0.6), frost.y * (0.9 - 0.5 * u_pane.w));
-        vec4 glint = hash42(floor(v_tex_coord * u_size * 2.0) + 5.0);
-        col += step(glint.x, 0.004) * frost.x * glint.y * mix(glow * 3.0, vec3(0.5), u_day);
-        #endif
-
-        col = grade(col, mix(0.3, 0.7, u_day), u_hue, u_saturation, u_contrast, u_brightness);
-        col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0;
-        gl_FragColor = vec4(col, 1.0);
-    }
-    """, uniforms: [
-        SKUniform(name: "u_top", vectorFloat3: sky[0]), SKUniform(name: "u_low", vectorFloat3: sky[1]),
-        SKUniform(name: "u_l0", vectorFloat3: l[0]), SKUniform(name: "u_l1", vectorFloat3: l[1]),
-        SKUniform(name: "u_l2", vectorFloat3: l[2]), SKUniform(name: "u_l3", vectorFloat3: l[3]),
-        SKUniform(name: "u_l4", vectorFloat3: l[4]), SKUniform(name: "u_day", float: systemIsDark ? 0 : 1),
-    ] + (weather?.all ?? []), knobs: gradeKnobs("rain"), speed: rainSpeed)
 }
 
 /// The water on the glass, the same over every backdrop. Drop functions return (position inside the drop on a unit
@@ -442,14 +355,33 @@ float fogCover(vec2 p, float water, float inside) {
 }
 
 // Dew: condensation grown into beads big enough to see, from about 40 g/m², tiny lenses that grow in place with a
-// mean contact radius of 6 µm per g/m² (0.00003 screen heights). Returns like beadLayer.
+// mean contact radius of 6 µm per g/m² (0.00003 screen heights). A pane of dew is beads of every size, the big ones
+// ringed by small (Beysens 2006): each cell of a lattice holds a bead, which grows with the water until it fills its
+// share of the cell, 0.15 to 0.48 of it, and in the two corners of the cell farthest from it, smaller beads growing
+// a third as fast, until they'd touch it. Every other row of cells sits half a cell across, and the lattice is
+// turned 27 degrees, since the eye finds a level row of beads at once and a slanting one hardly at all. One hash a
+// pixel: a second lattice of small beads between the first cost 0.17 ms. Returns like beadLayer.
 vec4 dewLayer(vec2 p, float water) {
-    float cell = 0.008;
-    vec2 id = floor(p / cell);
+    mat2 turn = mat2(0.891, 0.454, -0.454, 0.891);
+    float cell = 0.008, grown = 0.00003 * water / cell;    // the mean bead's radius, in cells
+    vec2 q = turn * p / cell;
+    q.x += 0.5 * mod(floor(q.y), 2.0);
+    vec2 id = floor(q), f = q - id - 0.5;                  // p in its cell, from the cell's middle, in cells
     vec4 h = hash42(id + 29.0);
-    float r = min(0.00003 * water * (0.3 + 1.4 * h.w * h.w), cell * 0.35);
-    vec2 d = (p - (id + 0.5 + (h.yz - 0.5) * (1.0 - 2.0 * r / cell)) * cell) / r;
-    return vec4(d, smoothstep(1.0, 0.8, length(d)) * step(h.x, 0.85), r);
+    float r = min(grown * (0.3 + 1.4 * h.w * h.w), 0.15 + 0.33 * h.w) * step(h.x, 0.85);
+    vec2 c = (h.yz - 0.5) * (1.0 - 2.0 * r);
+    vec2 d = (f - c) / max(r, 1e-4);
+    float cover = smoothstep(1.0, 0.8, length(d)) * step(1e-4, r);
+    if (cover == 0.0) {
+        // (a bead in a corner, a radius in from both walls, clears the big one while it's under 0.41 of the gap
+        // between the corner and the big one's edge)
+        vec2 far = mix(vec2(0.5), vec2(-0.5), step(0.0, c)), next = vec2(far.x, -far.y);
+        vec2 rs = min(min(vec2(length(far - c), length(next - c)) - r, 0.6) * 0.37, grown * 0.35) * (0.5 + 0.5 * fract(h.xw * 7.3));
+        vec2 da = (f - far * (1.0 - 2.0 * rs.x)) / rs.x, db = (f - next * (1.0 - 2.0 * rs.y)) / rs.y;
+        if (length(da) < length(db)) { d = da; r = rs.x; } else { d = db; r = rs.y; }
+        cover = smoothstep(1.0, 0.8, length(d));
+    }
+    return vec4(d * turn, cover, r * cell);
 }
 
 // A snowflake's lace at q (in units of its radius, from its middle): six arms with side branches at 60 degrees,
@@ -573,9 +505,8 @@ if (abs(fract(p.x / lane) - 0.5) * lane > 0.5 * lane - 0.005) {
     if (next.z > drop.z) { drop = next; }
 }
 #endif
-bool dewy = false;   // a dew bead: too small for the bokeh city to work out its view (rainBokehScene)
 #if DEW
-if (u_glass.y > 40.0) { vec4 dew = dewLayer(p, u_glass.y); if (dew.z > drop.z) { drop = dew; dewy = true; } }
+if (u_glass.y > 40.0) { vec4 dew = dewLayer(p, u_glass.y); if (dew.z > drop.z) { drop = dew; } }
 #endif
 // snow landing on the glass: white lace, and the beads it melts into; and snow falling beyond it
 float white = 0.0, falling = 0.0;
@@ -587,16 +518,34 @@ falling = snowfall(p, t, u_snow.x);
 #endif
 """
 
-/// Rain on a window with a photo behind it, focused on the glass. Behind it, the camera's defocus (`far`); drizzle
-/// mist on the glass scatters part of that into a wide glow (`haze`), except where a slider has just swept it.
-/// Each drop is a strong lens showing the sharp view (`near`) upside down, with a dark rim where light from outside
-/// can't get through. Numbers are from measured footage and the optics of a water cap on glass; see the doc.
-@MainActor private func rainPhotoScene(size: CGSize, name: String, weather: GlassUniforms?) -> SKScene {
-    func texture(_ level: String) -> SKTexture { SKTexture(image: NSImage(contentsOf: resource("rain-\(name)-\(level).jpg")) ?? NSImage()) }
-    let far = texture("far")
-    let night: Float = name.hasSuffix("night") ? 1 : 0
-    return shaderScene(size: size, source: GlassUniforms.defines(weather) + shaderCommon + """
+/// Rain on a window with a view behind it, focused on the glass: a photo's three textures or a baked city's
+/// (`RainCity`). Behind the glass, the camera's defocus (`far`); drizzle mist on the glass scatters part of that into
+/// a wide glow (`haze`), except where a slider has just swept it. Each drop is a strong lens showing the sharp view
+/// (`near`) upside down, with a dark rim where light from outside can't get through. Numbers are from measured
+/// footage and the optics of a water cap on glass; see the doc. Over a city, `traffic` is its palette's five tints:
+/// two lanes of lights crawl along its near cross street, the only ones that move, compiled in for a city alone, so
+/// a photo's shader is the one it always was.
+@MainActor private func rainGlassScene(size: CGSize, far: SKTexture, near: SKTexture, haze: SKTexture, night: Bool, traffic: [SIMD3<Float>]?,
+                                       weather: GlassUniforms?) -> SKScene {
+    func glsl(_ c: SIMD3<Float>) -> String { "vec3(\(c.x), \(c.y), \(c.z))" }
+    // (by night the traffic's light adds up in linear light, as the bake's does; a palette's tints are display colours)
+    let l = (traffic ?? [.zero, .zero, .zero, .zero, .zero]).map { glsl(night ? RainCity.decoded($0) : $0) }
+    return shaderScene(size: size, source: GlassUniforms.defines(weather) + "#define TRAFFIC \(traffic == nil ? 0 : 1)\n" + shaderCommon + """
     \(rainWater)
+
+    #if TRAFFIC
+    // One lane of traffic at q (the baked view's own heights): a light every `cell`, some cells empty, each a disc
+    // out of focus like the baked ones, sitting inside its cell. Returns (tint * strength, strength).
+    vec4 headlights(vec2 q, float y, float seed) {
+        float cell = 0.2, r = \(RainCity.disc);
+        vec4 h = hash42(vec2(floor(q.x / cell), seed));
+        if (h.x < 0.45) { return vec4(0.0); }
+        float d = length(vec2((fract(q.x / cell) - 0.5 - (h.y - 0.5) * 0.5) * cell, q.y - y - (h.z - 0.5) * 0.02));
+        float disc = clamp((r - d) / 0.006, 0.0, 1.0) * (0.85 + 0.15 * clamp((d / r - 0.4) / 0.6, 0.0, 1.0));
+        vec3 tint = h.w < 0.45 ? \(l[0]) : h.w < 0.65 ? \(l[1]) : h.w < 0.8 ? \(l[2]) : h.w < 0.93 ? \(l[3]) : \(l[4]);
+        return vec4(tint, 1.0) * disc * (0.15 + 0.5 * h.x);
+    }
+    #endif
 
     void main() {
         \(rainDrops)
@@ -606,6 +555,16 @@ falling = snowfall(p, t, u_snow.x);
         vec2 uv = (v_tex_coord - 0.5) * fit + 0.5;
         vec3 camera = texture2D(u_far, uv).rgb;
         vec3 haze = texture2D(u_haze, uv).rgb;
+        #if TRAFFIC
+        // the city's traffic, crawling both ways along its near cross street: added in linear light by night, as the
+        // bake adds its lights, and by day tinting the sky as its do
+        vec2 q = uv * vec2(u_photoAspect, 1.0);
+        if (abs(q.y - \(RainCity.traffic)) < 0.08) {
+            vec4 cars = headlights(q + vec2(t * 0.012, 0.0), \(RainCity.traffic + 0.018), 13.0) + headlights(q - vec2(t * 0.009, 0.0), \(RainCity.traffic - 0.018), 19.0);
+            camera = mix(camera * exp(-1.3 * (cars.a - 0.8 * cars.rgb)),
+                         pow(1.0 - (1.0 - pow(camera, vec3(2.2))) * exp(-cars.rgb), vec3(1.0 / 2.2)), u_night);
+        }
+        #endif
         #if SNOW
         camera = mix(camera, haze * 1.3 + mix(0.05, 0.5, 1.0 - u_night), falling);   // snow falling beyond the glass
         #endif
@@ -620,7 +579,11 @@ falling = snowfall(p, t, u_snow.x);
         #if FOG
         // condensation (see fogCover): on the outside of the pane the trails wipe it and the drops sit on top, on the
         // inside it covers them
+        #if DEW
+        float fog = 0.7;   // fogCover without its noise: water that has beaded is many times what whitens the whole pane
+        #else
         float fog = fogCover(p, u_glass.y, u_pane.x);
+        #endif
         col = mix(col, veil, fog * (1.0 - u_pane.x) * (1.0 - wiped));
         mist += 0.5 * fog;
         #endif
@@ -671,13 +634,13 @@ falling = snowfall(p, t, u_snow.x);
         col += step(g.x, 0.004) * frost.x * g.y * mix(max(camera - 0.3, 0.0) * 4.0, vec3(0.5), 1.0 - u_night);
         #endif
 
-        col = grade(col, 0.5, u_hue, u_saturation, u_contrast, u_brightness);
+        col = grade(col, \(traffic == nil ? 0.5 : night ? 0.3 : 0.7), u_hue, u_saturation, u_contrast, u_brightness);
         col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0;
         gl_FragColor = vec4(col, 1.0);
     }
     """, uniforms: [
-        SKUniform(name: "u_far", texture: far), SKUniform(name: "u_near", texture: texture("near")),
-        SKUniform(name: "u_haze", texture: texture("haze")), SKUniform(name: "u_night", float: night),
+        SKUniform(name: "u_far", texture: far), SKUniform(name: "u_near", texture: near),
+        SKUniform(name: "u_haze", texture: haze), SKUniform(name: "u_night", float: night ? 1 : 0),
         SKUniform(name: "u_photoAspect", float: Float(far.size().width / max(far.size().height, 1))),
         SKUniform(name: "u_fov", float: 0.9),   // the photos' height in radians (about 52 degrees)
     ] + (weather?.all ?? []), knobs: gradeKnobs("rain"), speed: rainSpeed)
