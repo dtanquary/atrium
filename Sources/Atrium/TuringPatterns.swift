@@ -41,19 +41,24 @@ final class TuringPatterns: SKScene {
     private var texture: SKMutableTexture!
     private var lastTime: TimeInterval?
     private var owed = 0.0
-    private var drift = Double.random(in: 0..<loop) // steps along Drift's loop; a new start each load
+    private var drift = 0.0 // steps along Drift's loop; a new start each load
     private var steps = 0
     private var kill: [Float] = [], flowX: [Float] = [], flowY: [Float] = [] // Motion's extra kill rate and current, per cell
     private var patches: [(x: Int, y: Int, age: Int)] = [] // Regrow's, age in steps
     private var flowing = false
+    /// Each load's draws: its palette, where Drift starts, its seeds and Regrow's patches. ("turing.seed" is for the
+    /// tests, which want the same pattern twice; nothing else sets it.)
+    private var rng = SplitMix(state: UInt64(max(UserDefaults.standard.integer(forKey: "turing.seed"), 0)))
 
     override func sceneDidLoad() {
+        if rng.state == 0 { rng.state = .random(in: 1...UInt64.max) }
         backgroundColor = .black
         cols = Int((size.width / cell).rounded(.up))
         rows = Int((size.height / cell).rounded(.up))
         stride = cols + 2
         a = Array(repeating: 1, count: stride * (rows + 2))
         b = Array(repeating: 0, count: a.count)
+        drift = .random(in: 0..<Self.loop, using: &rng)
         for _ in 0..<cols * rows / 800 { seed() }
         nextA = a
         nextB = b
@@ -66,10 +71,10 @@ final class TuringPatterns: SKScene {
         let board = SKSpriteNode(texture: texture, size: CGSize(width: CGFloat(cols) * cell, height: CGFloat(rows) * cell))
         board.position = CGPoint(x: size.width / 2, y: size.height / 2)
         let chosen = UserDefaults.standard.string(forKey: "turing.palette") ?? ""
-        let palette = Self.palettes.first { $0.name == chosen } ?? Self.palettes.randomElement()!
+        let palette = Self.palettes.first { $0.name == chosen } ?? Self.palettes.randomElement(using: &rng)!
         let (ink, ink2, glow) = systemIsDark ? (palette.ink, palette.ink2, palette.glow) : (palette.ink * 0.9, palette.ink2 * 0.9, simd_mix(palette.ink, .one, SIMD3(repeating: 0.5)))
         let paper = systemIsDark ? palette.ink * 0.1 : simd_mix(SIMD3(0.93, 0.92, 0.89), palette.ink, SIMD3(repeating: 0.06))
-        board.shader = SKShader(source: Self.shader, uniforms: [
+        board.shader = SKShader(source: Self.shader(dark: systemIsDark), uniforms: [
             SKUniform(name: "u_grid", vectorFloat2: [Float(cols), Float(rows)]), SKUniform(name: "u_paper", vectorFloat3: paper),
             SKUniform(name: "u_ink", vectorFloat3: ink), SKUniform(name: "u_ink2", vectorFloat3: ink2),
             SKUniform(name: "u_glow", vectorFloat3: glow), SKUniform(name: "u_dark", float: systemIsDark ? 1 : 0), WallpaperTime.now,
@@ -81,11 +86,11 @@ final class TuringPatterns: SKScene {
     /// A disc of the second chemical, from which a pattern grows. Smaller than 9 cells across, most die out. A little
     /// noise breaks its symmetry; much more shows as mottling in the lighting while it's young.
     private func seed() {
-        let cx = Int.random(in: 1...cols), cy = Int.random(in: 1...rows)
+        let cx = Int.random(in: 1...cols, using: &rng), cy = Int.random(in: 1...rows, using: &rng)
         for y in cy - 5...cy + 5 where (1...rows).contains(y) {
             for x in cx - 5...cx + 5 where (1...cols).contains(x) && (x - cx) * (x - cx) + (y - cy) * (y - cy) <= 25 {
                 a[y * stride + x] = 0.5
-                b[y * stride + x] = Float.random(in: 0.24...0.26)
+                b[y * stride + x] = Float.random(in: 0.24...0.26, using: &rng)
             }
         }
     }
@@ -127,7 +132,7 @@ final class TuringPatterns: SKScene {
     /// 6 s held and 6 s down. The pattern there dissolves, then grows back in from the edges with a new shape, as
     /// zebrafish regrow their stripes after an injury. About three are active at once, so something is always growing.
     private func regrow() {
-        if steps % 300 == 0 { patches.append((Int.random(in: 1...cols), Int.random(in: 1...rows), 0)) }
+        if steps % 300 == 0 { patches.append((Int.random(in: 1...cols, using: &rng), Int.random(in: 1...rows, using: &rng), 0)) }
         patches = patches.map { ($0.x, $0.y, $0.age + 1) }.filter { $0.age < 960 }
         guard steps % 15 == 0 else { return }
         clear(&kill)
@@ -245,7 +250,16 @@ final class TuringPatterns: SKScene {
         if peak < 0.05 { for _ in 0..<cols * rows / 800 { seed() } }
     }
 
-    private static let shader = """
+    /// The shader for Dark Mode or Light Mode. Only Light Mode's casts the relief's shadow; Dark Mode's leaves those
+    /// sums out, as they cost 0.06 ms of GPU a frame even behind a branch on `u_dark`.
+    private static func shader(dark: Bool) -> String {
+        // Light Mode's shadow on the paper, down and to the right: the field 1.3 cells toward the light, taken from
+        // its slope here rather than a second read, which looked the same and cost four more taps
+        let shadow = dark ? "" : """
+            float lee = v + 1.3 / abs(dfdx(p.x)) * dot(slope, normalize(l.xy));
+            paper *= 1.0 - 0.25 * smoothstep(0.12, 0.5, lee);
+            """
+        return """
         void main() {
             // cubic B-spline between cells, in four linear taps (GPU Gems 2, ch. 20), so no grid shows
             vec2 p = v_tex_coord * u_grid - 0.5, i = floor(p), s = p - i;
@@ -258,9 +272,13 @@ final class TuringPatterns: SKScene {
             vec4 t = g0.y * (g0.x * t00 + g1.x * t10) + g1.y * (g0.x * t01 + g1.x * t11);
             float v = (t.r * 65280.0 + t.g * 255.0) / 65535.0;
 
-            // the pattern as a softly lit relief, like brain coral: v is its height, lit from the upper left
-            float body = smoothstep(0.25, 0.45, v);
-            vec3 n = normalize(vec3(-dfdx(v) * 28.0, -dfdy(v) * 28.0, 1.0));
+            // the pattern as a softly lit relief, like brain coral: v is its height, lit from the upper left. Its edge is
+            // in focus: 2.5 device pixels wide round the contour at 0.35, whatever the field's slope there, and never
+            // narrower than 0.008 of v, so a flat place (a saddle between two arms, a patch dissolving) keeps a ramp
+            vec2 slope = vec2(dfdx(v), -dfdy(v)); // a device pixel across and up: Metal's dfdy runs down the screen
+            float edge = max(1.25 * length(slope), 0.004);
+            float body = smoothstep(0.35 - edge, 0.35 + edge, v);
+            vec3 n = normalize(vec3(-slope * 28.0, 1.0));
             vec3 l = normalize(vec3(-0.45, 0.55, 0.7));
             float diffuse = clamp(0.55 + 0.6 * dot(n, l), 0.0, 1.3);
             float sheen = pow(max(dot(reflect(-l, n), vec3(0.0, 0.0, 1.0)), 0.0), 16.0);
@@ -268,9 +286,12 @@ final class TuringPatterns: SKScene {
             vec2 uv = v_tex_coord;
             vec3 ink = mix(u_ink, u_ink2, 0.5 + 0.5 * sin(uv.x * 2.2 - uv.y * 1.5 + u_now * 0.01));
             vec3 surface = mix(ink * 0.55, mix(ink, u_glow, 0.35), ridge) * diffuse;
-            vec3 c = mix(u_paper, surface, body) + u_glow * sheen * body * 0.18 + ink * smoothstep(0.02, 0.35, v) * 0.08 * u_dark;
+            vec3 paper = u_paper;
+            \(shadow)
+            vec3 c = mix(paper, surface, body) + u_glow * sheen * body * 0.18 + ink * smoothstep(0.02, 0.35, v) * 0.08 * u_dark;
             float vignette = 1.0 - 0.3 * length(uv - 0.5);
             gl_FragColor = vec4(u_dark > 0.5 ? c * vignette : c, 1.0);
         }
         """
+    }
 }
