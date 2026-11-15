@@ -208,7 +208,8 @@ final class Fireflies: SKScene {
         var r = min(max(f * 0.045 / fly.d * exp(spread), 1), 9)
         let kind: CGFloat = near && roll < 0.25 ? 5 : near && roll < 0.45 ? 1 : 0
         if kind == 5 { r = f * .random(in: 0.05...0.12, using: &rng) / fly.d }
-        let extent = r * [2.7, 4.4, 0, 0, 0, 1.3][Int(kind)] + 1
+        let bloom = smoothstep(0.08, 0.45, 1 - clearness(fly.d)) // the glow's reach in the mist, as the shader spreads it
+        let extent = r * (kind == 5 ? 1.3 : max(kind == 1 ? 4.4 : 2.7, 2.7 + 3.4 * bloom)) + 1
         fly.node.size = CGSize(width: extent * 2, height: extent * 2)
         fly.node.zPosition = 100 - fly.d
         fly.node.setValue(SKAttributeValue(vectorFloat4: [Float(r), Float(extent), Float(kind + .random(in: 0..<0.99, using: &rng)), Float(clearness(fly.d))]),
@@ -294,7 +295,8 @@ final class Fireflies: SKScene {
         vec2 dir = q / max(r, 0.001);
         float edge = r0 * (0.92 + 0.16 * noise(dir * 1.5 + seed));
         float dab = smoothstep(edge + 0.5 + 0.2 * r0, edge - 0.3 * r0, r) * (1.0 - ghost);
-        float glow = 0.16 * smoothstep(r0 * 2.6, r0 * 0.8, r) * (1.0 - ghost);
+        float bloom = smoothstep(0.08, 0.45, 1.0 - a_fly.w); // deep in the mist the glow spreads, out to 6 radii at twice the weight
+        float glow = 0.16 * (1.0 + bloom) * smoothstep(r0 * (2.6 + 3.4 * bloom), r0 * 0.8, r) * (1.0 - ghost);
         vec2 s = q - (vec2(hash11(seed), hash11(seed + 3.0)) - 0.5) * 0.5 * r0;
         float rs = length(s);
         vec2 ds = s / max(rs, 0.001);

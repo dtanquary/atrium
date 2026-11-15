@@ -62,6 +62,7 @@ A research agent measured all three and read up on real fireflies. Its notes are
      - `fireflies.speed` scales the scene's own clock, so drift, glows and gaps all speed up or slow down together.
    - **The orb:**
      - A cream disc (#fef09c) with a soft, slightly wobbly edge and a faint glow out to 2.6 radii.
+     - Deep in the mist the glow blooms, as light does in fog: by how much of the fly's light the fog takes (`1 − a_fly.w`), from none at 8% to all of it at 45%, its reach grows to 6 radii and its weight doubles (`dress` grows the sprite to match). At the standard fog that's the far field and the treeline's foot; under 20 m it reaches 3 radii at most, and at Fog 0 nothing changes.
      - Its radius is a glow about 4.5 cm across in the world (`focal·0.045/d`, with a log-normal spread of σ about 0.3, from 1 to 9 pt). So it shrinks with distance: 9 pt at 7 m, about 1.5 pt by the treeline.
      - Within 12 m, 20% sit in a pale grey-teal halo about 2.6 times their size, a little off centre, with a ragged edge.
      - Another 25% within 12 m are out of focus: a faint round disc of the orb's cream (10%, a touch brighter toward its rim, as a lens draws a point of light), 10–24 cm across in the world (`f·0.05–0.12/d`), with a soft edge 12% of its radius wide.
@@ -127,6 +128,7 @@ CPU 0.54 ms and GPU 0.52 ms per frame (release build, 2x, 2026-09-26).
 
   - **The out-of-focus firefly is a firefly** (it was a grey-teal stain with a ragged edge and blocky grain, left over from the painted look: "a smudge on the lens"). Now a faint cream disc, brighter at its rim. Only the halo alone changed; every orb, and the halo round an orb, is the same to the byte. The review asked whether the grey one was part of the orbs Dave likes: `2-side-by-side.jpg` in the session's shots shows both, for him to choose.
   - **No more orbs cut in half** by a straight edge: each slice now sits at its far edge, and flies are lifted over the photo's own ground where it rises above the plane. The review offered either softening the slices' edges or the lift; the lift alone left the cut along a fly's own slice, so it took both. With them the grass hides no firefly at all (see Gotchas).
+  - **Lights in the mist bloom:** inside the fog band the far ones were crisp 2–4 px discs while the trees behind them were blurred by the same fog. Now their glow spreads in it. The review asked to check with Dave since it's the orb shader: the orbs themselves, and every glow outside the mist, are as they were (Fog 0 renders the same to the byte).
 
 ## Ideas / next steps
 - **Synchronous flashing,** like *Photinus carolinus*: bursts of 4–8 flashes 0.5 s apart, 6–9 s dark, relayed across the field at about 0.5 m/s.
