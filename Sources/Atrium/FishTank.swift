@@ -492,9 +492,14 @@ final class FishTank: SKScene {
                 float up = v_tex_coord.y;
                 lit *= mix(1.0, a_fish.y * (0.8 + 0.4 * up) + a_fish.w * (1.0 - up), a_fish.x) * (1.0 - shade);
                 lit += u_grade * c.a * a_fish.z * (0.3 + 0.7 * up) * (1.0 - shade);
+                // Vivid pigment fluoresces most: tan tissue, like rock, mostly goes blue and dim under actinic light.
                 float saturation = max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b));
-                lit += c.rgb * saturation * a_glow * u_fluoro;
+                lit += c.rgb * saturation * mix(0.3, 1.0, smoothstep(0.3, 0.7, saturation / max(c.a, 0.001))) * a_glow * u_fluoro;
                 lit *= mix(0.6 + 0.4 * smoothstep(0.0, 0.15, up), 1.0, a_fish.x); // rock and coral darken where they stand
+                // The brightest channel rolls off above 0.8 toward 0.97, the others with it so the hue holds: pale
+                // corals, graded bright and then lit by the caustics and their own glow, clipped flat.
+                float peak = max(lit.r, max(lit.g, lit.b)) / max(c.a, 0.001);
+                lit *= (peak > 0.8 ? 0.8 + 0.17 * (1.0 - exp((0.8 - peak) / 0.17)) : peak) / max(peak, 0.001);
                 gl_FragColor = vec4(mix(lit, u_haze * c.a, a_fog), c.a);
             }
             """, uniforms: [
