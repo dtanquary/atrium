@@ -492,7 +492,6 @@ struct AboutPage: View {
                 credit("Fireflies' meadow", "\"Field at dusk\" by Tristan Ferne", "https://www.flickr.com/photos/89056504@N00/7357684410",
                        license: "CC BY 2.0")
                 group("Dappled Light", "Plaster, brick, siding, oak and leaves from Poly Haven and ambientCG (CC0)", "dappled-credits.tsv")
-                group("A Tree for the Year", "Hilltop, leaves and bark from Wikimedia Commons and ambientCG (CC0)", "tree-credits.tsv")
                 group("Weather", "Hills, clouds and Moon from the BLM, NASA, Poly Haven and Wikimedia Commons", "weather-credits.tsv")
                 group("Rain on Glass", "Backdrops from Poly Haven, Wikimedia Commons and the NPS", "rain-credits.tsv")
                 group("Fish Tank", "Reef photos from iNaturalist, Wikimedia Commons and NOAA", "reef-credits.tsv")

@@ -1,8 +1,8 @@
 import Foundation
 import simd
 
-/// The time of year a layout is drawn in: its leaves, grass and water, after A Tree for the Year's calendar (a white
-/// oak's, moved for latitude, and its grass greenness), which the scene works out and passes in; and whether snow
+/// The time of year a layout is drawn in: its leaves, grass and water, after a white oak's calendar (moved for
+/// latitude, and its grass greenness), which the scene works out and passes in; and whether snow
 /// lies.
 public struct RailSeason: Sendable, Equatable {
     /// The day of the year as a northern tree sees it (half a year on south of the equator).

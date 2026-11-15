@@ -10,14 +10,14 @@ struct WelcomeView: View {
     static let key = "welcome.show"
     /// The wallpapers by mood, as the README groups them. Any wallpaper not listed joins the last group.
     static let groups: [(name: String, members: [String])] = [
-        ("Nature and weather", ["Fish Tank", "Weather", "A Tree for the Year", "Dappled Light", "Rain on Glass", "Wind",
+        ("Nature and weather", ["Fish Tank", "Weather", "Dappled Light", "Rain on Glass", "Wind",
                                 "Murmuration", "Aurora", "Fireflies", "Meander", "Ant Colony", "Jellyfish", "Kelp Forest"]),
         ("Space", ["Space Tour", "Nebula", "Galaxy", "Black Hole", "Night Sky", "Earth from Orbit", "Pixel Spaceport"]),
         ("Color, light and pattern", ["Flowing Gradient", "Lava Lamp", "Schlieren", "Turing Patterns", "Pixel City",
                                       "Pixel Window Seat"]),
     ]
     /// Wallpapers that follow the sky, weather, light or seasons where you are, so they ask for your location.
-    static let local: Set<String> = ["Night Sky", "Earth from Orbit", "Weather", "A Tree for the Year", "Dappled Light", "Wind",
+    static let local: Set<String> = ["Night Sky", "Earth from Orbit", "Weather", "Dappled Light", "Wind",
                                      "Pixel City", "Pixel Spaceport", "Pixel Window Seat", "Space Tour", "Flowing Gradient"]
 
     @Environment(\.dismiss) private var dismiss

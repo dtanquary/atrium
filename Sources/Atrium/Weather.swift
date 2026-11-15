@@ -54,8 +54,8 @@ class WeatherScene: SKScene, BatteryPaced {
     /// `calmRate` under fair skies and fog, whose clouds drift under 1 px a frame at 15 fps (2 at Cloud speed 15×);
     /// none in drizzle, rain, snow and storms, whose streaks, flakes and flashes are fast. Set as each weather is built.
     private(set) var batteryRate: Int? { didSet { batteryRateChanged(from: oldValue) } }
-    /// The ceiling on battery in calm weather, for a wallpaper built on this one whose own motion is faster (A Tree
-    /// for the Year's sway) to take back.
+    /// The ceiling on battery in calm weather, for a wallpaper built on this one whose own motion is faster to take
+    /// back (as A Tree for the Year did for its sway, until it was cut; nothing does now).
     class var calmRate: Int? { 15 }
     /// How far the cloud deck (km) and the cirrus (in their noise's own units) have drifted, wrapped where the noise
     /// repeats so the floats keep their precision.

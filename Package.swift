@@ -5,11 +5,9 @@ let package = Package(
     name: "Atrium",
     platforms: [.macOS("26.0")],
     targets: [
-        // A Tree for the Year's growth and bake: numeric code a hundred times slower unoptimised, which would add minutes
-        // to every debug `swift test`, so it's always built with -O.
-        .target(name: "TreeGrowth", swiftSettings: [.unsafeFlags(["-O"])]),
-        // Meander's river and the ground it writes on: the same, for the same reason. A new river is given two hours
-        // of past as its scene is built, 90 ms optimised and seconds if not.
+        // Meander's river and the ground it writes on: numeric code many times slower unoptimised, which would add
+        // seconds to every scene built in a debug `swift test`, so it's always built with -O. A new river is given two
+        // hours of past as its scene is built, 90 ms optimised and seconds if not.
         .target(name: "MeanderRiver", swiftSettings: [.unsafeFlags(["-O"])]),
         // Etching's routes and the stamping of one into a display's worth of texels: the same again. A quarter
         // of a million steps are stamped as its scene is built, 120 ms optimised for a 14-inch screen.
@@ -21,7 +19,7 @@ let package = Package(
         // and its scenery marched through as its scene is built, and the trains are drawn into it every frame.
         .target(name: "RailLayout", swiftSettings: [.unsafeFlags(["-O"])]),
         // Resources are copied into the .app by build.sh and found with resource(_:), not Bundle.module.
-        .executableTarget(name: "Atrium", dependencies: ["TreeGrowth", "MeanderRiver", "LineRoute", "AntNest", "RailLayout"], exclude: ["Resources"]),
+        .executableTarget(name: "Atrium", dependencies: ["MeanderRiver", "LineRoute", "AntNest", "RailLayout"], exclude: ["Resources"]),
         .testTarget(name: "AtriumTests", dependencies: ["Atrium"]),
     ]
 )

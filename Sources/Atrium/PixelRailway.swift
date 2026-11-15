@@ -119,7 +119,7 @@ final class PixelRailway: SKScene {
                     eras: mix.value > 0.5 ? eras : [era])
     }
 
-    /// The time of year where you are, or on the previewed day: A Tree for the Year's oak, moved for your latitude,
+    /// The time of year where you are, or on the previewed day: a white oak's calendar (`Phenology`), moved for your latitude,
     /// and its grass; snow where the weather says a centimetre or more lies, or while previewing it. Whole days,
     /// so the leaves turn and fall a day at a time.
     static func season(_ date: Date) -> RailSeason {
@@ -132,7 +132,7 @@ final class PixelRailway: SKScene {
         let oak = Phenology.whiteOak.moved(latitude: latitude, warmer: 0), d = Phenology.day(when, latitude: latitude).rounded(.down)
         let snowing = snow.value > 0.5 && (LiveWeather.shared.latest?.snowDepth ?? 0) > 0.01
         return RailSeason(day: d, breaks: oak.breaks, full: oak.full, onset: oak.onset, peak: oak.peak, bare: oak.bare,
-                          green: TreeScene.greenness(day: d, oak), snow: previewSnow.value > 0.5 || snowing)
+                          green: Phenology.greenness(day: d, oak), snow: previewSnow.value > 0.5 || snowing)
     }
 
     nonisolated static func build(_ plan: Plan) -> Railway {

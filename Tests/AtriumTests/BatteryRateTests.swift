@@ -158,16 +158,15 @@ private let small = CGSize(width: 320, height: 200)
 }
 
 /// Weather runs slower on battery under fair skies and fog, at the battery's rate in rain, and follows the weather
-/// as it changes; A Tree for the Year, built on it, takes the calm rate back.
+/// as it changes.
 @MainActor @Test func weatherRateFollowsTheWeather() {
-    with(["weather.lock": 1, "tree.lock": 1]) { // Clear
+    with(["weather.lock": 1]) { // Clear
         let scene = WeatherScene(size: small)
         #expect(scene.batteryRate == 15)
         UserDefaults.standard.set(6.0, forKey: "weather.lock") // Rain
         #expect(scene.batteryRate == nil)
         UserDefaults.standard.set(4.0, forKey: "weather.lock") // Fog
         #expect(scene.batteryRate == 15)
-        #expect(TreeScene(size: small).batteryRate == nil)
     }
 }
 

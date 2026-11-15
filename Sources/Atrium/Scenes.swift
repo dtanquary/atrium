@@ -43,7 +43,7 @@ struct Wallpaper {
     /// Not good enough to show yet: left out of the menu, Settings, Shuffle and the welcome unless `unfinished` is set
     /// (`defaults write com.dtanquary.atrium unfinished -bool true`, then relaunch), but still built and render-tested.
     /// One that is parked, not being worked on, can be left hidden even then by name
-    /// (`defaults write com.dtanquary.atrium unfinished.hide -array "A Tree for the Year"`).
+    /// (`defaults write com.dtanquary.atrium unfinished.hide -array "Its Name"`).
     var unfinished = false
 
     /// The title a section of its settings goes by, given what the menu that can retitle it holds.
@@ -60,7 +60,7 @@ struct Refresh {
     let available: @MainActor () -> Date
     let updated: @MainActor () -> Date?
 
-    /// Open-Meteo's weather where you are, shared by Weather, Dappled Light, Rain on Glass and A Tree for the Year.
+    /// Open-Meteo's weather where you are, shared by Weather, Dappled Light and Rain on Glass.
     @MainActor static let weather = Refresh(run: { LiveWeather.shared.poll(force: true) },
                                             available: { LiveWeather.shared.available }, updated: { LiveWeather.shared.updated })
     /// Wind's forecast for the zoom picked.
@@ -157,9 +157,6 @@ struct Refresh {
     Wallpaper(name: "Dappled Light", icon: "leaf.fill", tint: .mint, blurb: "Sunlight through leaves on a plaster wall, from the real Sun.",
               make: dappledLight, knobs: DappledLight.knobs, status: (key: "weather.status", below: "dappled.weather"),
               refresh: .weather, batteryScale: 0.75),
-    Wallpaper(name: "A Tree for the Year", icon: "tree.fill", tint: .green, blurb: "One tree on a hill, through your real seasons and weather.",
-              make: treeForTheYear, knobs: TreeScene.treeKnobs, status: (key: "weather.status", below: "tree.lock"),
-              refresh: .weather, unfinished: true),
     Wallpaper(name: "Space Tour", icon: "smallcircle.filled.circle", tint: .orange,
               blurb: "Slow pans across the best real photos of the Solar System and deep space, with the live Sun and Moon.",
               make: spaceTour,
