@@ -121,8 +121,9 @@ final class Schlieren: SKScene {
     private func build(_ source: Int) {
         let metres = Self.sources[source].metres
         // the air runs on above the frame, so the plume leaves the picture without meeting the sim's edge, and for
-        // Warm air below it, where the radiator sits out of sight so its plumes rise from the screen's bottom edge
-        let rows = 64, above = 8, below = source == 3 ? 3 : 0, cols = max(16, Int((Float(rows) * Float(size.width / size.height)).rounded()))
+        // Warm air below it, where the radiator sits out of sight, its top 3 rows down and its hot patches with it, so
+        // its plumes rise in from the screen's bottom edge
+        let rows = 64, above = 8, below = source == 3 ? 6 : 0, cols = max(16, Int((Float(rows) * Float(size.width / size.height)).rounded()))
         let width = Float(cols) * metres / Float(rows) // the grid's width, which the screen stretches over (< 1% off)
         scale = CGPoint(x: size.width / CGFloat(width), y: size.height / CGFloat(metres))
         floor = metres * Float(below) / Float(rows)
@@ -151,10 +152,11 @@ final class Schlieren: SKScene {
                 ctx.setLineWidth(0.009)
                 ctx.strokeEllipse(in: CGRect(x: cx + r - 0.012, y: base + h * 0.25, width: 0.042, height: h * 0.55))
             }
-        default: // warm air rising off a radiator's top just below the frame, hotter in wandering patches
-            air.addSolid(x0: 0, x1: width, y0: 0, y1: floor)
+        default: // warm air rising off a radiator's top below the frame, hotter in wandering patches
+            let top = floor / 2
+            air.addSolid(x0: 0, x1: width, y0: 0, y1: top)
             for i in 0..<5 {
-                air.heaters.append(.init(x: (0.1 + 0.2 * Float(i)) * width, y: floor, width: 0.06, height: 0.006, heat: 0.2, flame: false, ripple: 0.6))
+                air.heaters.append(.init(x: (0.1 + 0.2 * Float(i)) * width, y: top, width: 0.06, height: 0.006, heat: 0.2, flame: false, ripple: 0.6))
             }
             air.cool = 0.35
         }
