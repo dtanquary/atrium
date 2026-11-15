@@ -44,6 +44,11 @@ final class EarthFromOrbit: SKScene, BatteryPaced {
     private var basis = matrix_identity_double3x3
     private var orbitDrawn: TimeInterval = 0
 
+    /// Now, or the moment `EARTH_AT` names in Unix seconds, so renders can compare pictures of one moment.
+    private static var now: Date {
+        ProcessInfo.processInfo.environment["EARTH_AT"].flatMap(Double.init).map(Date.init(timeIntervalSince1970:)) ?? Date()
+    }
+
     private var radius: CGFloat { size.height * 0.43 }
     private var centre: CGPoint { CGPoint(x: size.width * 0.58, y: size.height * 0.48) }
     private let margin: CGFloat = 1.12 // globe sprite extends past the disc for the atmosphere
@@ -235,7 +240,7 @@ final class EarthFromOrbit: SKScene, BatteryPaced {
                                                                   SIMD3<Float>(basis.columns.1),
                                                                   SIMD3<Float>(basis.columns.2)))
         // The subsolar point: the Sun's declination, and its right ascension less Greenwich sidereal time.
-        let jd = Sky.julianDate(Date())
+        let jd = Sky.julianDate(Self.now)
         let sun = Sky.raDec(Sky.sun(jd))
         sunDirection = Sky.direction(sun.ra - Sky.siderealTime(jd), sun.dec)
         sunUniform.vectorFloat3Value = SIMD3<Float>(sunDirection)

@@ -67,7 +67,7 @@ The whole Earth seen from high above the viewer's own location, like a geostatio
 - `ponytail:` **a flash is a sprite, not light in the cloud.** It doesn't reveal cloud texture. The upgrade is flash positions as shader uniforms that brighten `cloud` locally.
 
 ## Time, live data and appearance
-- **Time:** always real time (`Date()`). There's no preview seam.
+- **Time:** always real time (`Date()`), unless a render sets `EARTH_AT` (see Checking it). There's no preview setting.
 - **Location:** `Location.start()` is called in `didMove`. The view centres on the saved fix, or on the time-zone fallback; see [night-sky.md](night-sky.md).
 - **Appearance:** one look. It ignores Light/Dark Mode.
 
@@ -130,5 +130,5 @@ All are read live through `Self.knobs[i].value` every frame (in `knobs` order: I
 - `SNAPSHOT_DEFAULTS="earth.iss=0" …` or `"earth.clouds=0"` checks a switch.
 - **Lightning:** `SNAPSHOT_SECONDS=0.034 SNAPSHOT_DEFAULTS="earth.previewStorm=1"` catches the first preview flash (it fires on the first update and is fully up one frame later). Later frames usually fall between flashes.
 - Clouds render from the cache file. To seed it: `curl -o ~/Library/Caches/com.dtanquary.atrium/clouds.jpg https://clouds.matteason.co.uk/images/4096x2048/clouds.jpg`.
-- To see daylight over the Americas at night, temporarily change `Sky.julianDate(Date())` in `refresh()` to `Date(timeIntervalSinceNow: 12 * 3600)`, and revert it before committing.
+- **Another moment:** `EARTH_AT=<Unix seconds>` sets the scene's clock (the Sun, and so the terminator), so two renders can be compared at one moment: `EARTH_AT=1794760200` is 16:30 UTC on 15 November 2026, noon over the Caribbean. The cloud map is still the cached one.
 - To see the ISS offline, you'd need a temporary test that fills `ISS.shared` and renders. That was done once while building it, then deleted.
