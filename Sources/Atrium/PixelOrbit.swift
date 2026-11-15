@@ -678,9 +678,16 @@ struct OrbitWorld {
     /// lamp in 5 to 7, cloud in 8 and 9 (thin, broken, thick), a cloud's shadow in 10 and a storm's rhythm in 11 to 14.
     func cell(_ p: Sky.Vector, long: Double, wide: Double, sun: Sky.Vector, day: Date, n: Int) -> UInt16 {
         // A cell much bigger than the map's own takes the commonest of five places across it, so a far coast doesn't flicker.
-        var byte = map.at(p)
+        // One finer than the map's (4.9 km) reads it a little way off, by noise 6 and 2.6 km across, so that coasts and
+        // the edges between grounds wander from pixel to pixel instead of stepping in the map's blocks of three.
         let big = max(long, wide)
-        if big > 9 {
+        var byte = map.at(p)
+        if big < 4.9 {
+            let east = normalize(cross([0, 0, 1], p)), north = cross(p, east), km = 1 / Orbit.radius
+            let push = east * Double((noise(p, 6, 61) - 0.5) * 4.9 + (noise(p, 2.6, 63) - 0.5) * 2.4)
+                + north * Double((noise(p, 6, 62) - 0.5) * 4.9 + (noise(p, 2.6, 64) - 0.5) * 2.4)
+            byte = map.at(normalize(p + push * km))
+        } else if big > 9 {
             let east = normalize(cross([0, 0, 1], p)), north = cross(p, east), reach = big / Orbit.radius * 0.3
             let found = [byte] + [east, -east, north, -north].map { map.at(normalize(p + $0 * reach)) }
             let ground = found.map { $0 & 31 }
