@@ -219,10 +219,12 @@ final class LavaLamp: SKScene {
         lp += pv * vec2(0.0, clamp((q.y - surface) / 0.05, -1.0, 0.0));
 
         // Liquid: dark, lit by the bulb in a soft cone rising from the bottom, with the wax's own glow scattering
-        // into it around every blob.
+        // into it around every blob. Light Mode's liquid is already pale, so there the glow tints it toward the wax
+        // instead: added, it clipped to a white halo round every blob and a white beam up every stem.
         float cone = exp(-(x - 0.5) * (x - 0.5) / 0.36) * pow(1.0 - y, 1.3);
         vec3 col = mix(u_liquidDeep, u_liquidLit, 0.15 + 0.95 * cone * u_bulb);
-        col += u_waxHot * u_glow * smoothstep(0.2, 1.0, f.x) * (1.2 - y);
+        float glow = u_glow * smoothstep(0.2, 1.0, f.x) * (1.2 - y);
+        col = mix(col + u_waxHot * glow, mix(col, u_waxHot, 0.55 * glow), step(0.5, u_pivot)); // u_pivot is 0.7 in Light Mode
 
         // Wax. 1/f is about (d/r)² near a blob, so sqrt(1 - 1/f) is its thickness: 0 at the edge, 1 in the core.
         float z = sqrt(max(1.0 - 1.0 / f.x, 0.0));

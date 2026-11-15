@@ -26,7 +26,7 @@ It follows how real lamps convect (the research agent's sources: [Wikipedia on l
 
 **Liquid:**
 - `mix(liquidDeep, liquidLit, 0.15 + 0.95·cone·u_bulb)`: a soft cone of light rising from the bulb
-- plus the wax's own glow scattering into the liquid (`u_glow`)
+- plus the wax's own glow scattering into the liquid (`u_glow`), `glow = u_glow·smoothstep(0.2, 1, f)·(1.2 - y)`: added in Dark Mode, `+ waxHot·glow`; in Light Mode a tint toward the wax instead, `mix(col, waxHot, 0.55·glow)`. Light Mode's liquid is already pale, so adding to it clipped to a white halo round every blob and a white beam up every stem; tinted, the wax sits in pale liquid with a faint coloured halo and its thread shows in the wax's colour. The two are one blend switched by `step(0.5, u_pivot)` (the grade's pivot is 0.7 in Light Mode, 0.3 in Dark) rather than a branch or a new uniform; Dark Mode renders to the byte as before.
 
 **Wax shading:** the only light in a real lamp is the bulb underneath (Mathmos's bulbs are directional, "directing the light into the lava"), so every blob glows brightest on its underside and dims toward its top. Real wax is opaque satin with no dark outline.
 - **Where in its blob (`dl`):** alongside the field, the loop sums `lp += ball·(q - centre)/r` for the heads, so `dl = lp/f` is this pixel's offset from its blob's centre in radii (y from −1 underneath to +1 on top), smooth even where blobs merge. Stems don't add to it. The pool adds only below its surface (`clamp(…, -1, 0)`), so the top of the pool stays pale and hot rather than dimming like the top of a blob. Deriving `dl` from the gradient direction instead was tried by the agent: it leaves pinwheels and dents wherever the gradient vanishes.
@@ -117,6 +117,7 @@ CPU about 0.5 ms and GPU 1.0 ms per frame (release, 2x): the stems add about 0.2
 
 - The review of every wallpaper (2026-11-14) scored it 6.5 of 10: good motion held back by a clipped, pale pool along the bottom and a Light Mode whose glow bleached the liquid white. Dave asked for all its suggestions to be made. What came of each:
   - **The pool back inside the palette** (2026-11-15): see the pool's tone above. In the bottom 8% of the screen (seed 11, Dark Mode at 103 s, Light at 33 s), the share of pixels with two channels clipped went from up to 79% in Dark Mode (Magenta 63%, Teal 79%) and 54% in Light to 0–1%, but for Teal in Dark Mode at 34%, whose hot colour has two channels near 1. The band's mean brightness fell from 176–232 of 255 to 140–197 in Dark Mode.
+  - **Light Mode tints the liquid round the wax instead of adding to it** (2026-11-15): see Liquid above. Pixels with a channel at 255 in Light Mode went from 4.9–17.2% of the frame to 0.6–11.6% (seed 11 at 33 s, after the pool change), what is left being the wax's own cores.
 
 ## Ideas / next steps
 - A perceptual (OKLab-style) colour blend for the cycle.
