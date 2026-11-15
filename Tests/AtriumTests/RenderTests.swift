@@ -217,6 +217,25 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
     #expect(!PixelCity.litOnRight(sun: 110, moon: 200))
 }
 
+/// The Waterfront's walkers follow the hour's traffic: all ten out at the morning rush and one at most in the small
+/// hours, and as some walk off the end of the street others come on, so the pavement never empties at the rush.
+@MainActor @Test func pixelCityWalkersFollowTheHour() {
+    let defaults = UserDefaults.standard
+    defer { ["city.place", "city.previewTime", "city.previewHour"].forEach(defaults.removeObject) }
+    defaults.set(0.0, forKey: "city.place")
+    defaults.set(1.0, forKey: "city.previewTime")
+    for (hour, most, least) in [(8.5, 10, 6), (3.5, 1, 0)] {
+        defaults.set(hour, forKey: "city.previewHour")
+        let scene = PixelCity(size: CGSize(width: 400, height: 250)) // a street 200 pixels long
+        var counts: [Int] = []
+        for frame in 0...1500 { // two and a half minutes at ten frames a second, long enough to cross it
+            scene.update(Double(frame) / 10)
+            if frame > 0 { counts.append(scene.walkersOut) }
+        }
+        #expect(counts.max() == most && counts.min()! >= least)
+    }
+}
+
 /// Pixel City's automatic move goes to a different city every time and saves it, so Settings and every display
 /// follow; in a view, it hands over to a new scene of that city.
 @MainActor @Test func pixelCityMovesOn() {

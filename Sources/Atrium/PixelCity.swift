@@ -132,6 +132,9 @@ final class PixelCity: SKScene, BatteryPaced {
     private var carLooks: [(day: SKTexture, night: SKTexture, length: Int, height: Int)] = []
     private var carPictures: [(day: Pixels, night: Pixels)] = [] // the same, as pixels, for the water to mirror
     private var carPace: Float = 1, carGap: Float = 36 // far-off traffic crawls, and runs closer together
+    private var walkers: [Walker] = [] // the Waterfront's people on the far pavement
+    private var walkerLooks: [[SKTexture]] = [] // each walker's two steps, painted in the light at every repaint
+    var walkersOut: Int { walkers.filter { !$0.node.isHidden }.count } // for the tests
     private var plane = SKSpriteNode()
     private var planeLights = SKNode()
     private var beacon = SKNode()
@@ -250,7 +253,7 @@ final class PixelCity: SKScene, BatteryPaced {
     /// Run again when Settings picks another city.
     private func layOut() {
         canvas.removeAllChildren()
-        (skyline, parks, clouds, cars) = ([], [], [], [])
+        (skyline, parks, clouds, cars, walkers, walkerLooks) = ([], [], [], [], [], [])
         (plane, planeLights, beacon, mirrored, waterTints, mirrors) = (SKSpriteNode(), SKNode(), SKNode(), [], [], [])
         (trafficStrip, trafficShown, launchTexture, plume, boosters) = (nil, [], nil, [], [])
         (nextCar, planeDirection, shipDirection, ship) = ([clock, clock], 0, 0, SKSpriteNode())
@@ -334,7 +337,7 @@ final class PixelCity: SKScene, BatteryPaced {
                       rgb(66, 138, 88), rgb(40, 40, 48), rgb(160, 166, 172)]
         let far = city != .waterfront && city != .hillside // traffic seen from miles off: a dash of paint, and at night just its lights
         carPictures = far ? paints.map { speck(2, body: $0) } + [speck(4, body: rgb(226, 226, 218))]
-                          : paints.map { vehicle(sedan, body: $0) } + [vehicle(bus, body: rgb(228, 150, 40))]
+                          : paints.flatMap { paint in [sedan, hatchback, van, pickup].map { vehicle($0, body: paint) } } + [vehicle(bus, body: rgb(228, 150, 40))]
         carLooks = carPictures.map { ($0.day.texture(), $0.night.texture(), $0.day.w, $0.day.h) }
         (carPace, carGap) = far ? (0.35, 7) : (1, 36)
         let lanes = city == .bridge ? [deck + 1, deck + 2] : city == .overlook ? [ground + 6, ground + 7]
@@ -361,6 +364,19 @@ final class PixelCity: SKScene, BatteryPaced {
             }
             // Start with a little traffic already on the road.
             for x in [Float(w) * 0.2, Float(w) * 0.65] where !cars.isEmpty { spawnCar(lane: lane, at: x + Float.random(in: -20...20)) }
+        }
+
+        if city == .waterfront { // people on the far pavement, between the kerb and the shop fronts
+            for i in 0..<10 {
+                let node = SKSpriteNode()
+                node.anchorPoint = CGPoint(x: 0.5, y: 0)
+                node.size = CGSize(width: 2, height: 7) // a head taller than the cars' roofs
+                node.position.y = CGFloat(streetBase + (i % 2 == 0 ? 22 : 24))
+                node.zPosition = i % 2 == 0 ? 2.8 : 2.7 // the row nearer the kerb in front
+                node.isHidden = true
+                canvas.addChild(node)
+                walkers.append(Walker(node: node))
+            }
         }
 
         plane.texture = art(["#...........",
@@ -1062,6 +1078,13 @@ final class PixelCity: SKScene, BatteryPaced {
         for car in cars { car.node.texture = night > 0.5 ? carLooks[car.look].night : carLooks[car.look].day }
         trafficShown = [] // so the strip the water mirrors is painted again in this light
         for car in cars { car.beam.alpha = CGFloat(smoothstep(0.3, 0.8, night)) }
+        // The walkers in the front's light, and a little of the street lamps' after dark.
+        walkerLooks = walkers.indices.map { i in
+            let (skin, shirt, legs) = (skins[i % skins.count], shirts[i * 3 % shirts.count], trousers[i * 5 % trousers.count])
+            func paint(_ c: RGB) -> RGB { pointwiseMin(lit(c, keyFront) + c * rgb(255, 214, 150) * 0.3 * night, .one) }
+            return steps.map { art($0, ["s": paint(skin), "c": paint(shirt), "p": paint(legs)]) }
+        }
+        for i in walkers.indices { walkers[i].at = .min } // so each takes its new look as it next moves
         plane.color = NSColor(red: 0.05, green: 0.06, blue: 0.1, alpha: 1) // a dark silhouette after sunset
         plane.colorBlendFactor = CGFloat(night * 0.85)
         planeLights.alpha = CGFloat(mix(0.4, 1, night))
@@ -1920,6 +1943,7 @@ final class PixelCity: SKScene, BatteryPaced {
         }
 
         mirrorTraffic()
+        walk(dt)
         for (i, boat) in boats.enumerated() { // each from its own waterline, as it bobs
             let node = boat.node, turned = node.xScale < 0
             reflect(i, from: Float(node.position.x) + (turned ? 0.5 : -0.5) * Float(node.size.width), foot: Float(node.position.y),
@@ -1979,6 +2003,38 @@ final class PixelCity: SKScene, BatteryPaced {
                 planeDirection = 0
                 plane.isHidden = true
                 nextPlane = clock + .random(in: 40...120)
+            }
+        }
+    }
+
+    /// Moves the Waterfront's people along the far pavement at 2 to 3 pixels a second, a step a pixel, and brings
+    /// them on from either end as the hour's traffic wants: ten at the rush hours, one or none in the small hours.
+    // ponytail: walkers aren't mirrored in the water: the squash leaves them three rows. Paint them into the traffic's strip if that ever shows.
+    private func walk(_ dt: Float) {
+        guard !walkers.isEmpty else { return }
+        var out = walkers.filter { !$0.node.isHidden }.count
+        let wanted = Int((Float(traffic) * Float(walkers.count)).rounded())
+        for i in walkers.indices {
+            if walkers[i].node.isHidden {
+                guard out < wanted, clock >= walkers[i].due else { continue }
+                let way: Float = Bool.random() ? 1 : -1, anywhere = walkers[i].due < 0 // the first ones are already out
+                (walkers[i].way, walkers[i].speed) = (way, .random(in: 2...3))
+                walkers[i].x = anywhere ? .random(in: 0..<Float(w)) : way > 0 ? -2 : Float(w + 2)
+                walkers[i].node.xScale = CGFloat(way)
+                walkers[i].node.isHidden = false
+                out += 1
+            }
+            walkers[i].x += walkers[i].way * walkers[i].speed * dt
+            let x = Int(walkers[i].x.rounded(.down))
+            if x != walkers[i].at, i < walkerLooks.count {
+                walkers[i].at = x
+                walkers[i].node.position.x = CGFloat(x)
+                walkers[i].node.texture = walkerLooks[i][x & 1]
+            }
+            if walkers[i].x < -3 || walkers[i].x > Float(w + 3) {
+                walkers[i].node.isHidden = true
+                walkers[i].due = clock + .random(in: 2...12)
+                out -= 1
             }
         }
     }
@@ -3276,6 +3332,13 @@ private struct Car {
     var x: Float = 0, cruise: Float = 0, speed: Float = 0, length: Float = 16
 }
 
+/// One of the Waterfront's people: which way and how fast they walk, the pixel they were last shown at, and when
+/// they may come back on once they've walked off (below 0 for the first ones, which start anywhere along).
+private struct Walker {
+    let node: SKSpriteNode
+    var x: Float = 0, way: Float = 1, speed: Float = 2.5, at = Int.min, due: TimeInterval = -1
+}
+
 /// The Spaceport's launch pad, and where its round has got to.
 private struct Pad {
     /// In the hangar; rolling out to the pad on its transporter; being stood up; fuelling, through the count (or,
@@ -3627,6 +3690,46 @@ private let sedan = [
     "ddooodddddooodd.",
     "..ooo.....ooo...",
 ]
+
+// More cars than the sedan, nose to the right like it, and an even number of pixels long so they sit on whole
+// pixels about their middle.
+private let hatchback = [
+    "..######......",
+    ".#www#www#....",
+    "#wwww#wwww#...",
+    "BBBBBBBBBBBBBh",
+    "tBBBBBBBBBBBBB",
+    "dooodddddoood.",
+    ".ooo.....ooo..",
+]
+
+private let van = [
+    "BBBBBBBBBBBBBB....",
+    "BBBBBBBBBBBBBB#w..",
+    "BBBBBBBBBBBBBB#ww.",
+    "BBBBBBBBBBBBBB#www",
+    "BBBBBBBBBBBBBBBBBh",
+    "tBBBBBBBBBBBBBBBBB",
+    "ddoooddddddddooodd",
+    "..ooo........ooo..",
+]
+
+private let pickup = [
+    ".........#####....",
+    ".........#ww#ww#..",
+    "B.......B#ww#www#.",
+    "BBBBBBBBBBBBBBBBBh",
+    "tBBBBBBBBBBBBBBBBB",
+    "ddoooddddddddooodd",
+    "..ooo........ooo..",
+]
+
+// The Waterfront's walkers, facing right: a head (s) a step ahead of a shirt (c) over trousers (p), one foot
+// forward then the other; and the colours they come in.
+private let steps = [[".s", "cc", "cc", "cc", "pp", "pp", "p."], [".s", "cc", "cc", "cc", "pp", "pp", ".p"]]
+private let skins = [rgb(236, 196, 164), rgb(198, 146, 108), rgb(142, 98, 70), rgb(96, 64, 48)]
+private let shirts = [rgb(196, 64, 56), rgb(58, 104, 178), rgb(230, 226, 214), rgb(232, 176, 52), rgb(64, 132, 90), rgb(40, 40, 48), rgb(214, 118, 150)]
+private let trousers = [rgb(44, 52, 78), rgb(30, 30, 36), rgb(108, 108, 112), rgb(150, 128, 92)]
 
 private let freighter = [
     "....l.........................",
