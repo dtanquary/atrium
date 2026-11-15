@@ -79,8 +79,9 @@ class WeatherScene: SKScene, BatteryPaced {
     let fog = SKUniform(name: "u_fog", float: 0), snowCover = SKUniform(name: "u_snow", float: 0)
     private let nightUniform = SKUniform(name: "u_night", float: 0), backlit = SKUniform(name: "u_backlit", float: 0)
     private let mist = SKUniform(name: "u_mist", float: 0)
-    /// The grass out of its photo's season, for a wallpaper built on this one: the open grass's colour is multiplied
-    /// by this (rgb, as the photo's values, so the square of it in light) while a is 1. Weather leaves a at 0.
+    /// The grass out of its photo's season: the open grass's colour is multiplied by this (rgb, as the photo's values,
+    /// so the square of it in light), and a is how far it is from green, 0 at its peak (when the photo shows as it
+    /// is) to 1 as dormant straw. Set from the grass's year where you are by `show`.
     let grassSeason = SKUniform(name: "u_grass", vectorFloat4: .zero)
     /// Cloud time for the billowing, 0…1 around one period of the noise it scrolls, so it wraps seamlessly.
     private let billow = SKUniform(name: "u_billow", float: 0)
@@ -315,6 +316,12 @@ class WeatherScene: SKScene, BatteryPaced {
         // At night the eye sees less colour (the Purkinje shift), and the haze isn't lit from low down any more,
         // since the air near the ground is in the Earth's shadow while the high sky still glows.
         groundColour.floatValue = Float(smoothstep(0.002, 0.03, brightness) * (1 - 0.7 * smoothstep(-0.03, -0.2, light.sun.z)))
+        // The grass's year where you are (Phenology.swift): dormant straw through the winter, green from three weeks
+        // before the oaks' buds break until the hard freezes, cured a little in late summer.
+        let latitude = Location.shared.coordinate.latitude, pinned = UserDefaults.standard.double(forKey: "weather.seasonDay")
+        let day = pinned > 0 ? pinned : Phenology.day(light.date, latitude: latitude) // the day is pinned only by tests
+        let greenness = Phenology.greenness(day: day, .whiteOak.moved(latitude: latitude, warmer: 0))
+        grassSeason.vectorFloat4Value = SIMD4<Float>(Self.grass(greenness: greenness), Float(1 - greenness))
         groundHazeLit.floatValue = Float(0.25 + 0.75 * smoothstep(-0.03, 0.2, light.sun.z))
         // Valley mist forms on still, clear nights and lingers into the morning until the Sun burns it off; it's
         // there in fog, and a little after rain.
@@ -328,6 +335,15 @@ class WeatherScene: SKScene, BatteryPaced {
         let moonNight = smoothstep(0.05, -0.1, light.sun.z)
         nightUniform.floatValue = Float(smoothstep(-0.05, -0.2, light.sun.z) * 0.6)
         moonColour.vectorFloat3Value = SIMD3<Float>(Atmosphere.shared.sunlight(viewpoint.height, light.moon.z) * (0.5 + 1.5 * moonNight))
+    }
+
+    /// What to multiply the ground photo's grass by for `greenness`, 0 dormant straw to 1 at its peak. In linear light
+    /// dormant straw is R/G 1.30, B/G 0.58 and 1.6 times as bright, and peak green R/G 0.70, B/G 0.30 (A Tree for the
+    /// Year's PhenoCam research, in git history); Fort Ord's open grass, shot in May, measures R/G 0.75, B/G 0.29.
+    static func grass(greenness g: Double) -> SIMD3<Float> {
+        let rg = 1.30 + (0.70 - 1.30) * g, bg = 0.58 + (0.30 - 0.58) * g, bright = 1.6 + (1.0 - 1.6) * g
+        let scale = bright * (0.2126 * 0.75 + 0.7152 + 0.0722 * 0.29) / (0.2126 * rg + 0.7152 + 0.0722 * bg)
+        return SIMD3<Float>(SIMD3(rg / 0.75, 1, bg / 0.29) * scale).squareRoot()
     }
 
     /// Moves the Sun and Moon to where they are now; they'd hop visibly if they only moved with each minute's bake.
@@ -948,13 +964,16 @@ class WeatherScene: SKScene, BatteryPaced {
         vec3 aux = texture2D(u_aux, v_tex_coord).rgb;
         vec2 screen = u_frame.xy + v_tex_coord * u_frame.zw;
         vec3 albedo = photo.rgb / max(photo.a, 0.004);
-        // Grass out of season: the green of the open ground (not the trees, the chalk or the soil) is regraded.
+        // Grass out of season: the green of the open ground (not the trees or the soil) is regraded. Its own colour
+        // gives way to the grass's average at its own lightness first, as far as the season is from green, so the
+        // bluer grass in shade and the grey-green scrub turn to straw with the rest and not lavender.
         if (u_grass.a > 0.0) {
             float green = smoothstep(-0.03, 0.01, albedo.g - albedo.r) * smoothstep(0.04, 0.12, albedo.g - albedo.b)
                 * (1.0 - smoothstep(0.3, 0.7, aux.g));
             // In patches, as grass greens up through last year's straw and dries out on the thin soil first.
             float patches = texture2D(u_noise, nuv(screen * vec2(7.0, 18.0))).r;
-            albedo *= mix(vec3(1.0), u_grass.rgb, clamp(green * u_grass.a * (0.45 + 1.1 * patches), 0.0, 1.0));
+            vec3 even = dot(albedo, vec3(0.3, 0.59, 0.11)) * vec3(0.953, 1.1, 0.593); // linear R/G 0.75, B/G 0.29
+            albedo = mix(albedo, mix(albedo, even, 0.7 * u_grass.a) * u_grass.rgb, clamp(green * (0.45 + 1.1 * patches), 0.0, 1.0));
         }
         // Snow on the ground: the open grass goes white, shaded by the photo's own light and shade so the hills keep
         // their form; the trees darken, lose colour and catch snow on their brighter parts.

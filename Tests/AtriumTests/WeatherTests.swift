@@ -48,3 +48,15 @@ import simd
     }
     #expect(WeatherScene.photoClouds.filter(\.tower).count == 1)
 }
+
+/// The grass's year on Weather's hills: Fort Ord's own grass (linear R/G 0.75, B/G 0.29), multiplied by `grass`,
+/// comes out as dormant straw (R/G 1.30, B/G 0.58, 1.6 times as bright) and at its peak as green (R/G 0.70, B/G 0.30).
+@MainActor @Test func weatherGrassTurnsWithTheYear() {
+    let fortOrd = SIMD3<Float>(0.75, 1, 0.29)
+    for (g, rg, bg, bright) in [(0.0, 1.30, 0.58, 1.6), (1.0, 0.70, 0.30, 1.0)] {
+        let m = WeatherScene.grass(greenness: g), lit = fortOrd * m * m
+        #expect(abs(Double(lit.x / lit.y) - rg) < 0.01 && abs(Double(lit.z / lit.y) - bg) < 0.01)
+        let luminance = { (c: SIMD3<Float>) in Double(0.2126 * c.x + 0.7152 * c.y + 0.0722 * c.z) }
+        #expect(abs(luminance(lit) / luminance(fortOrd) - bright) < 0.01)
+    }
+}
