@@ -61,11 +61,12 @@ final class Schlieren: SKScene {
     private var last = UnsafeMutableBufferPointer<UInt16>.allocate(capacity: 0) // the field as last uploaded
     private var scale = CGPoint(x: 1, y: 1) // points per metre
     private var floor: Float = 0 // how far up the sim the frame's bottom edge is, in metres
+    private var left: Float = 0 // how far into the sim the frame's left edge is, in metres
     private let uniforms = (field: SKUniform(name: "u_field", texture: nil), mask: SKUniform(name: "u_mask", texture: nil),
                             filter: SKUniform(name: "u_filter", texture: nil), texel: SKUniform(name: "u_texel", vectorFloat2: .zero),
                             mtexel: SKUniform(name: "u_mtexel", vectorFloat2: .zero), gain: SKUniform(name: "u_gain", float: 0),
                             mirror: SKUniform(name: "u_mirror", float: 0), aspect: SKUniform(name: "u_aspect", float: 1),
-                            tilt: SKUniform(name: "u_tilt", vectorFloat2: .zero), visible: SKUniform(name: "u_visible", vectorFloat2: [0, 1]),
+                            tilt: SKUniform(name: "u_tilt", vectorFloat2: .zero), visible: SKUniform(name: "u_visible", vectorFloat4: [0, 1, 0, 1]),
                             air: SKUniform(name: "u_air", vectorFloat2: .zero), blend: SKUniform(name: "u_blend", float: 1),
                             roll: SKUniform(name: "u_roll", float: 0))
     private let look = gradeKnobs("schlieren").map { SKUniform(name: "u_" + $0.key.split(separator: ".").last!, float: Float($0.value)) }
@@ -122,24 +123,28 @@ final class Schlieren: SKScene {
         let metres = Self.sources[source].metres
         // the air runs on above the frame, so the plume leaves the picture without meeting the sim's edge, and for
         // Warm air below it, where the radiator sits out of sight, its top 3 rows down and its hot patches with it, so
-        // its plumes rise in from the screen's bottom edge
-        let rows = 64, above = 8, below = source == 3 ? 6 : 0, cols = max(16, Int((Float(rows) * Float(size.width / size.height)).rounded()))
-        let width = Float(cols) * metres / Float(rows) // the grid's width, which the screen stretches over (< 1% off)
+        // its plumes rise in from the screen's bottom edge, and past each side, where its plumes drift out of the
+        // picture and back without meeting the room air that comes in at the sim's edge
+        let rows = 64, above = 8, below = source == 3 ? 6 : 0, side = source == 3 ? 6 : 0
+        let cols = max(16, Int((Float(rows) * Float(size.width / size.height)).rounded()))
+        let width = Float(cols) * metres / Float(rows) // the frame's width, which the screen stretches over (< 1% off)
         scale = CGPoint(x: size.width / CGFloat(width), y: size.height / CGFloat(metres))
         floor = metres * Float(below) / Float(rows)
-        air = AirSim(nx: cols, ny: below + rows + above, height: metres * Float(below + rows + above) / Float(rows), fine: 3)
-        uniforms.visible.vectorFloat2Value = [Float(below), Float(rows)] / Float(below + rows + above)
+        left = metres * Float(side) / Float(rows)
+        air = AirSim(nx: cols + 2 * side, ny: below + rows + above, height: metres * Float(below + rows + above) / Float(rows), fine: 3)
+        let across = Float(cols + 2 * side), up = Float(below + rows + above)
+        uniforms.visible.vectorFloat4Value = [Float(side) / across, Float(cols) / across, Float(below) / up, Float(rows) / up]
         var shapes: [(CGContext) -> Void] = []
 
         switch source {
         case 0: // four birthday candles in a huddle, as in Davidhazy's photo
             for (x, top) in [(0.40, 0.13), (0.47, 0.17), (0.54, 0.115), (0.61, 0.15)] as [(Float, Float)] {
-                addCandle(x: x * width, top: top * metres, radius: 0.0032, flame: (0.006, 0.016), into: &shapes)
+                addCandle(x: left + x * width, top: top * metres, radius: 0.0032, flame: (0.006, 0.016), into: &shapes)
             }
         case 1: // one taper, as in Settles' and Kinsman's photos (NIST's: 21 mm across, a 42 mm flame)
-            addCandle(x: 0.5 * width, top: 0.13 * metres, radius: 0.0105, flame: (0.011, 0.034), into: &shapes)
+            addCandle(x: left + 0.5 * width, top: 0.13 * metres, radius: 0.0105, flame: (0.011, 0.034), into: &shapes)
         case 2: // a mug of coffee at 70 °C: its surface and walls warm the air (θ = ΔT/T0)
-            let x = 0.5 * width, r: Float = 0.042, h: Float = 0.095, base: Float = 0.01
+            let x = left + 0.5 * width, r: Float = 0.042, h: Float = 0.095, base: Float = 0.01
             air.addSolid(x0: x - r, x1: x + r, y0: 0, y1: base + h)
             air.heaters.append(.init(x: x, y: base + h - 0.003, width: 2 * r * 0.9, height: 0.005, heat: 0.15, flame: false, ripple: 0.4))
             for side: Float in [-1, 1] {
@@ -154,9 +159,9 @@ final class Schlieren: SKScene {
             }
         default: // warm air rising off a radiator's top below the frame, hotter in wandering patches
             let top = floor / 2
-            air.addSolid(x0: 0, x1: width, y0: 0, y1: top)
+            air.addSolid(x0: 0, x1: width + 2 * left, y0: 0, y1: top)
             for i in 0..<5 {
-                air.heaters.append(.init(x: (0.1 + 0.2 * Float(i)) * width, y: top, width: 0.06, height: 0.006, heat: 0.2, flame: false, ripple: 0.6))
+                air.heaters.append(.init(x: left + (0.1 + 0.2 * Float(i)) * width, y: top, width: 0.06, height: 0.006, heat: 0.2, flame: false, ripple: 0.6))
             }
             air.cool = 0.35
         }
@@ -166,7 +171,7 @@ final class Schlieren: SKScene {
             ctx.setFillColor(rgb(0, 0, 0))
             ctx.fill(CGRect(origin: .zero, size: self.size))
             ctx.scaleBy(x: self.scale.x / 2, y: self.scale.y / 2)
-            ctx.translateBy(x: 0, y: CGFloat(-self.floor))
+            ctx.translateBy(x: CGFloat(-self.left), y: CGFloat(-self.floor))
             ctx.setFillColor(rgb(1, 1, 1))
             ctx.setStrokeColor(rgb(1, 1, 1))
             for shape in shapes { shape(ctx) }
@@ -237,7 +242,7 @@ final class Schlieren: SKScene {
             let h = air.heaters[i], wind = air.velocity(atX: h.x, y: h.y + h.height * 0.5)
             node.zRotation = CGFloat(-atan2(wind.x, max(wind.y, 0.3) + 0.3)) * 0.8
             node.yScale = CGFloat(air.flicker(i))
-            node.position = CGPoint(x: CGFloat(h.x) * scale.x, y: CGFloat(h.y - floor) * scale.y)
+            node.position = CGPoint(x: CGFloat(h.x - left) * scale.x, y: CGFloat(h.y - floor) * scale.y)
         }
     }
 
@@ -339,7 +344,7 @@ final class Schlieren: SKScene {
     void main() {
         vec2 p = v_tex_coord;
         // the bend: rays turn toward cooler, denser air, by the gradient of T0/T (the air runs on past the frame)
-        vec2 e = u_texel, a = vec2(p.x, u_visible.x + p.y * u_visible.y);
+        vec2 e = u_texel, a = u_visible.xz + p * u_visible.yw;
         // eddies finer than the sim's 3 mm cells: a small warp that rises with the plume, fading in above the stem,
         // so the turbulent crown gets the fine filaments of the photos
         vec2 nq = vec2(p.x * u_aspect, p.y) * 28.0 - vec2(0.0, u_air.x * u_air.y * 28.0);
