@@ -200,6 +200,17 @@ private func crossings(_ river: River) -> Int {
     #expect(born > 3 && worst < 0.5)
 }
 
+/// A scrap of a lake, under three widths of water between its silting fronts, ages four times as fast from when it
+/// became one, so it goes in a quarter of the life it had left. A longer lake isn't hurried until its fronts have
+/// come that far in, and a piece that is a scrap already is hurried from when it was made.
+@Test func riverLetsAScrapOfALakeGoSoon() {
+    let straight = (0...20).map { SIMD3<Float>(Float($0) * 0.5, 0, 0.5) } // 10 widths long
+    let lake = River.Lake(nodes: straight, born: 100, first: 100, last: 100).hurried(from: 100)
+    #expect(abs(10 - 2 * River.Lake.front(Float(lake.hurry - 100)) - River.Lake.scrap) < 0.01)
+    #expect(lake.age(at: lake.hurry) == lake.hurry - 100 && abs(lake.age(at: lake.hurry + 1) - (lake.hurry - 100 + 4)) < 1e-9)
+    #expect(River.Lake(nodes: Array(straight[..<5]), born: 100, first: 100, last: 100).hurried(from: 103).hurry == 103)
+}
+
 /// A cutoff opens as a breach and widens. On the step the river cuts through a neck the way through is a sixth of a
 /// width across, where it used to open at its full width at once and take the neck's last land with it for half a
 /// width either side: two tips of land gone in one frame. Half a T later (1.5 s at this speed) it is nearly as wide
@@ -559,7 +570,7 @@ private func wetness(_ lake: River.Lake, at now: Double, life: Double) -> [Float
     var arcs: [Float] = [0]
     for (a, b) in zip(lake.nodes, lake.nodes.dropFirst()) { arcs.append(arcs.last! + hypot(b.x - a.x, b.y - a.y)) }
     func smooth(_ x: Float) -> Float { let t = min(max(x, 0), 1); return t * t * (3 - 2 * t) }
-    let body = 1 - smooth(Float(now - lake.born - 0.5 * life) / Float(0.5 * life))
+    let body = 1 - smooth(Float(lake.age(at: now) - 0.5 * life) / Float(0.5 * life))
     return arcs.map { body * smooth(($0 - River.Lake.front(Float(now - lake.first))) / 2 + 1) * smooth((arcs.last! - $0 - River.Lake.front(Float(now - lake.last))) / 2 + 1) }
 }
 

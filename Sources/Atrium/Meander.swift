@@ -655,14 +655,16 @@ final class Meander: SKScene, Trimmable {
             vec3 under = texture2D(u_heights, vec2((clamp(old.x + 0.02 * bars.x, 0.0, 1.0) * 255.0 + 0.5) / 256.0, 0.5)).rgb;
             col = mix(col, under * clamp(1.0 + \(strength) * light(-5.0 * lean), 0.72, \(lit)), wild);
         }
-        // Water the river has left dulls a little over its first few T: a lake. Over the second half of its life
-        // a lake narrows to nothing (`River.trace`), and as it does it dulls to the colour of a new bar, all of
-        // it at once, so that by the time it is a sliver it doesn't shine like a highlight. (Its shallows used to
+        // Water the river has left dulls over its first few T, three fifths of the way to `u_wet`, so that a lake is
+        // plainly a second tone and the river the one bright line (it was a third, and a lake read as more river,
+        // the review of 2026-11-14). Over the second half of its life a lake narrows to nothing (`River.trace`),
+        // and as it does it dulls to the colour of a new bar, all of it at once, so that by the time it is a
+        // sliver it doesn't shine like a highlight. (Its shallows used to
         // dull first, within two texels of its banks: a light middle in a dull rim, which made a bead of a small
         // lake and left every lake's edge soft beside the river's.) Where the water is deep its age is the
         // smooth read's, so a lake shades into the river it lies against.
         float still = mix(wetAge, past, smoothstep(0.8, 1.8, -bank)), lake = smoothstep(0.3, 4.0, still);
-        float dull = lake * mix(0.35, 1.0, smoothstep(0.5 * u_knobs.w, 0.9 * u_knobs.w, still));
+        float dull = lake * mix(0.6, 1.0, smoothstep(0.5 * u_knobs.w, 0.9 * u_knobs.w, still));
         col = mix(col, mix(u_river, u_wet, dull), water);
         col = mix(col, u_ground, u_edge * outer);
         \(last)
