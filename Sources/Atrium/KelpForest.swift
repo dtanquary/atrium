@@ -94,6 +94,12 @@ final class KelpForest: SKScene {
     private let water = SKSpriteNode(color: .black, size: .zero)
     private var appearance: NSKeyValueObservation?
     private var sunLit = 1.0, lastSun = -100.0, shownLit: Float = -1
+    /// Whether the far fronds' chains have stepped since their cards were posed, and the tilt everything was last
+    /// posed at: far cards and holdfasts are left alone on a frame when neither has changed.
+    private var farMoved = true, posedPitch = -1.0
+    /// Leaves alone what can't be seen to change: blades off the screen, far cards whose chain hasn't stepped. Off
+    /// only for the test that the picture is the same without it.
+    var skipsUnseen = true
 
     // The look's uniforms, shared by the water and the kelp; set from the Look menu, eased as it changes.
     private let uExt = SKUniform(name: "u_ext", vectorFloat3: .zero), uDeep = SKUniform(name: "u_deep", vectorFloat3: .zero)
@@ -150,6 +156,7 @@ final class KelpForest: SKScene {
         settleLook(at: true)
         // Run the sea a while first, so the forest has settled into it: 30 s in steps of 1/30 s.
         for k in 0..<900 { step(at: simTime + Double(k - 900) / 30, dt: 1.0 / 30, farDt: 1.0 / 30) }
+        (farMoved, posedPitch) = (true, -1)
         pose(at: simTime)
     }
 
@@ -368,7 +375,9 @@ final class KelpForest: SKScene {
         simTime += dt
         // Far fronds every other step, as steps of 1/30 s: far off, a 30th of a second's sway is under a pixel or two.
         for k in stride(from: first, through: (simTime / step).rounded(.down), by: 1).prefix(12) {
-            self.step(at: k * step, dt: step, farDt: Int(k) % 2 == 0 ? 2 * step : nil)
+            let far = Int(k) % 2 == 0
+            self.step(at: k * step, dt: step, farDt: far ? 2 * step : nil)
+            farMoved = farMoved || far
         }
         // A change of look eases over a few seconds.
         let target = Float(wanted.dusk)
@@ -440,16 +449,23 @@ final class KelpForest: SKScene {
         uSurge.vectorFloat2Value = [Float(sh.x), Float(sh.y)]
         // ponytail: the snow, caustics and ripples jump once an hour where this wraps; carry their phase on the CPU if a jump shows
         uTime.floatValue = Float(t.truncatingRemainder(dividingBy: 3600))
-        for (node, at) in holdfasts {
-            let p = project(at)
-            show(node, p.ahead > 0.3)
-            node.position = CGPoint(x: p.px.x / 2, y: p.px.y / 2)
-            node.size = CGSize(width: Atlas.holdfastSize.width * p.ppm / 2, height: Atlas.holdfastSize.height * p.ppm / 2)
+        // A holdfast moves on the screen only as the camera tips, and a far frond's cards only then or when its chain
+        // has stepped, which at 60 fps is every other frame and at 120 one in four.
+        let tipped = pitch != posedPitch || !skipsUnseen, farStill = !tipped && !farMoved
+        (posedPitch, farMoved) = (pitch, false)
+        if tipped {
+            for (node, at) in holdfasts {
+                let p = project(at)
+                show(node, p.ahead > 0.3)
+                node.position = CGPoint(x: p.px.x / 2, y: p.px.y / 2)
+                node.size = CGSize(width: Atlas.holdfastSize.width * p.ppm / 2, height: Atlas.holdfastSize.height * p.ppm / 2)
+            }
         }
         let w = Double(size.width) * 2, h = Double(size.height) * 2, nearest = 0.3
         var pts = [(px: SIMD2<Double>, ppm: Double, dist: Double, ahead: Double)](repeating: (.zero, 0, 0, 0), count: Self.links + 1)
         for f in fronds.indices {
             let fr = fronds[f]
+            if farStill && !fr.near { continue }
             var lo = SIMD2(Double.infinity, .infinity), hi = -lo, reach = 0.0
             for k in 0...Self.links {
                 pts[k] = project(fr.p[k])
@@ -462,10 +478,11 @@ final class KelpForest: SKScene {
             if fr.near {
                 // A stipe sprite for every two links, and the blades placed along the same straight runs.
                 for (j, s) in fr.stipe.enumerated() {
-                    let k = j * 2, on = clear(k) && pts[k + 2].ahead > nearest
+                    let k = j * 2, a = pts[k].px, b = pts[k + 2].px, d = b - a
+                    let lo = simd_min(a, b), hi = simd_max(a, b), span = skipsUnseen ? 0.012 * max(pts[k].ppm, pts[k + 2].ppm) + 4 : .infinity
+                    let on = clear(k) && pts[k + 2].ahead > nearest && hi.x > -span && lo.x < w + span && hi.y > -span && lo.y < h + span
                     show(s, on)
                     guard on else { continue }
-                    let a = pts[k].px, b = pts[k + 2].px, d = b - a
                     s.position = CGPoint(x: a.x / 2, y: a.y / 2)
                     s.zRotation = atan2(-d.x, d.y)
                     s.size = CGSize(width: max(0.012 * pts[k].ppm, 1.2) / 2, height: simd_length(d) / 2 + 0.5)
@@ -480,11 +497,14 @@ final class KelpForest: SKScene {
                 }
                 for b in fr.blades {
                     let x = b.at / fr.len * Double(Self.links), k = min(Int(x / 2) * 2, Self.links - 2), frac = (x - Double(k)) / 2
-                    let on = clear(k) && pts[k + 2].ahead > nearest
-                    show(b.node, on)
-                    guard on else { continue }
                     let at = pts[k].px + (pts[k + 2].px - pts[k].px) * frac
                     let ppm = pts[k].ppm + (pts[k + 2].ppm - pts[k].ppm) * frac
+                    // Most of a near frond is above or beside the screen (its ruff most of all): a blade whose foot is
+                    // farther off the screen than its card can reach isn't worth posing.
+                    let span = skipsUnseen ? b.length * ppm * Atlas.bladeReach + 2 : .infinity
+                    let on = clear(k) && pts[k + 2].ahead > nearest && at.x > -span && at.x < w + span && at.y > -span && at.y < h + span
+                    show(b.node, on)
+                    guard on else { continue }
                     let tangent = simd_normalize(pts[k + 2].px - pts[k].px + SIMD2(0, 1e-6))
                     let normal = SIMD2(-tangent.y, tangent.x)
                     let fx = x / 2, fk = min(Int(fx), flows.count - 2), flow = flows[fk] + (flows[fk + 1] - flows[fk]) * (fx - Double(fk))
@@ -777,6 +797,8 @@ final class KelpForest: SKScene {
 
     /// A blade card is 1 m by 22 cm, the blade's base 3 cm in; a blade at full size is 92 cm long with its stalk.
     static let bladeCard = (width: 1.0, height: 0.22), bladeAnchor = 0.03, bladeLength = 0.92
+    /// How far a blade card's farthest corner is from the blade's foot, in blade lengths.
+    static let bladeReach = hypot(bladeCard.width * (1 - bladeAnchor), bladeCard.height / 2) / bladeLength
     /// A far card is 2 m by 3.2 m, its two links of stipe 2.1 m long from 20 cm up.
     static let cardSize = (width: 2.0, height: 3.2), cardStipe = 2.1, cardAnchor = CGPoint(x: 0.5, y: 0.2 / 3.2)
     static let holdfastSize = (width: 0.8, height: 0.5)
