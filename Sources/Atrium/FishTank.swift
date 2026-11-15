@@ -15,11 +15,11 @@ final class FishTank: SKScene {
         var position: SIMD2<Double>
         var velocity: SIMD2<Double>
         var facing: Double
-        var wander = Double.random(in: 0..<(2 * .pi))
+        var wander: Double
         var tilt = 0.0
-        var stroke = Double.random(in: 0..<1) // how far through a tail beat, in beats
+        var stroke: Double // how far through a tail beat, in beats
         var frame = -1
-        var pulse = Double.random(in: 0..<1)  // how far through a burst-and-coast cycle, for species that swim so
+        var pulse: Double  // how far through a burst-and-coast cycle, for species that swim so
         var coasting = false
         var bank = 1.0 // which way it rolls in a turn: 1 tips its flank up toward the lamp, -1 away
     }
@@ -44,6 +44,12 @@ final class FishTank: SKScene {
     private var lastUpdate: TimeInterval?
     private var anemone = CGPoint.zero
     private var rockSpots: [CGPoint] = [] // where the shy species hang about, low by each island
+    /// Rolls the reef, the fish and their wandering. ("tank.seed" is for the tests, which want the same tank twice;
+    /// nothing else sets it.)
+    private var rng: SplitMix = {
+        let seed = UInt64(max(0, UserDefaults.standard.integer(forKey: "tank.seed")))
+        return SplitMix(state: seed != 0 ? seed : .random(in: 1...UInt64.max))
+    }()
 
     /// Scales the art with the display, so a bigger screen gets a bigger tank rather than smaller fish.
     private var unit: CGFloat { min(max(size.height / 982, 0.8), 1.8) }
@@ -139,7 +145,7 @@ final class FishTank: SKScene {
                     steer += (heading / seen - v) * 0.9
                     steer += (middle / seen - p) * 0.25
                 }
-                swimmers[i].wander += Double.random(in: -1...1) * dt * 1.5
+                swimmers[i].wander += Double.random(in: -1...1, using: &rng) * dt * 1.5
                 steer += SIMD2(cos(swimmers[i].wander), 0.4 * sin(swimmers[i].wander)) * school.cruise * 0.45
                 if let home = school.home { steer += (home - p) * 0.08 }
                 steer.x += max(0, wall - width * 0.04 - p.x) / wall * push
@@ -169,8 +175,8 @@ final class FishTank: SKScene {
         var fish = swimmers[i]
         let v = fish.velocity, cruise = school.cruise
         let target = v.x > cruise * 0.15 ? 1.0 : v.x < -cruise * 0.15 ? -1.0 : (fish.facing >= 0 ? 1 : -1)
-        if fish.facing == -target { fish.bank = Bool.random() ? 1 : -1 } // a new turn: bank toward the lamp or away
-        fish.facing += max(-dt * 2.5, min(dt * 2.5, target - fish.facing))
+        if fish.facing == -target { fish.bank = Bool.random(using: &rng) ? 1 : -1 } // a new turn: bank toward the lamp or away
+        fish.facing = Self.turn(fish.facing, toward: target, dt: dt)
         let pitch = max(-0.3, min(0.3, atan2(v.y, max(abs(v.x), cruise * 0.5))))
         fish.tilt += (pitch - fish.tilt) * min(1, dt * 3)
         fish.node.position = CGPoint(x: fish.position.x, y: fish.position.y)
@@ -188,6 +194,13 @@ final class FishTank: SKScene {
             fish.node.warpGeometry = school.beat[frame]
         }
         swimmers[i] = fish
+    }
+
+    /// Eases a fish's facing (1 right, -1 left, its width on screen) toward `target`: 2.5 a second, and up to 6 as it
+    /// passes edge-on, so a fish turning in view isn't a squeezed sliver for long (a quarter of a second at 2.5).
+    static func turn(_ facing: Double, toward target: Double, dt: Double) -> Double {
+        let rate = 2.5 + 3.5 * max(0, 1 - abs(facing) / 0.5)
+        return facing + max(-dt * rate, min(dt * rate, target - facing))
     }
 
     /// Lights a fish from where it swims and how it moves (see `photoShader`): brighter near the surface and under
@@ -236,48 +249,68 @@ final class FishTank: SKScene {
             (.chromis, 14, 0.62), (.yellowTang, 3, 0.8), (.chromis, 12, 0.9), (.blueTang, 2, 0.95), (.clownfish, 2, 0.95),
             (.royalGramma, 1, 0.92), (.firefish, 2, 0.9), (.flameAngel, 1, 0.97), (.yellowTang, 1, 1.1),
         ]
-        let shadowTexture = radialGlow(diameter: 32, stops: [(0, rgb(0, 0, 0)), (0.4, rgb(0, 0, 0, 0.7)), (1, rgb(0, 0, 0, 0))])
-        let shade = light.low * 0.5 // shadows on the sand are lit only by the blue of the water around them
-        let shadowColor = NSColor(red: CGFloat(shade.x), green: CGFloat(shade.y), blue: CGFloat(shade.z), alpha: 1)
         for (species, planned, depth) in plan {
             let count = max(1, Int((Double(planned) * Self.fishKnob.value).rounded())) // Settings → Fish thins every school alike
             let blur = max(0, 0.9 - depth) * 4 // the back school is a little out of focus
             let looks = species.photos.compactMap { TankArt.photo($0, width: species.length, blur: blur) }
             guard let first = looks.first else { continue }
             let (floor, ceiling) = bounds(depth)
-            var school = School(species: species, depth: depth, cruise: .random(in: species.cruise) * Double(depth * unit),
+            var school = School(species: species, depth: depth, cruise: .random(in: species.cruise, using: &rng) * Double(depth * unit),
                                 beat: TankArt.swimWarps(species, textureHeight: first.size.height))
             switch species.haunt {
             case .anemone: school.home = SIMD2(Double(anemone.x), Double(anemone.y + 40 * unit))
             case .rock:
-                let spot = rockSpots.randomElement() ?? CGPoint(x: size.width / 2, y: sandHeight)
+                let spot = rockSpots.randomElement(using: &rng) ?? CGPoint(x: size.width / 2, y: sandHeight)
                 school.home = SIMD2(Double(spot.x), Double(spot.y))
             case .open: break
             }
-            let centre = school.home ?? SIMD2(Double.random(in: 0.15...0.85) * Double(size.width), .random(in: floor...ceiling))
-            let heading = Bool.random() ? 1.0 : -1.0
+            let centre = school.home ?? SIMD2(Double.random(in: 0.15...0.85, using: &rng) * Double(size.width), .random(in: floor...ceiling, using: &rng))
+            let heading = Bool.random(using: &rng) ? 1.0 : -1.0
             for _ in 0..<count {
-                let look = looks.randomElement()!
+                let look = looks.randomElement(using: &rng)!
                 let node = SKSpriteNode(texture: look.texture, size: look.size)
                 node.setScale(depth * fishUnit)
-                node.zPosition = depth < 0.7 ? Z.farFish : depth < 1 ? Z.midFish : Z.nearFish
+                // Behind the islands up to 0.85: they stand at about 0.86–0.9 by `sandLine`, so the tangs at 0.8 pass behind.
+                node.zPosition = depth < 0.85 ? Z.farFish : depth < 1 ? Z.midFish : Z.nearFish
                 node.subdivisionLevels = 1
                 graded(node, fog: max(0, 0.9 - depth) * 0.5, glow: 0.08)
                 addChild(node)
-                let shadow = SKSpriteNode(texture: shadowTexture, color: shadowColor, size: CGSize(width: 1, height: 1))
-                shadow.colorBlendFactor = 1
-                shadow.zPosition = Z.shadows
-                addChild(shadow)
+                let shadow = shadowOnSand()
                 let spread = Double(species.length * depth * fishUnit) * 2.5
                 school.members.append(swimmers.count)
-                swimmers.append(Swimmer(node: node, shadow: shadow, depth: Double(depth) + .random(in: -0.05...0.05),
+                swimmers.append(Swimmer(node: node, shadow: shadow, depth: Double(depth) + .random(in: -0.05...0.05, using: &rng),
                                         length: Double(species.length * depth * fishUnit),
-                                        position: centre + SIMD2(.random(in: -spread...spread), .random(in: -spread...spread) * 0.5),
-                                        velocity: SIMD2(heading * school.cruise, .random(in: -0.1...0.1) * school.cruise),
-                                        facing: heading))
+                                        position: centre + SIMD2(.random(in: -spread...spread, using: &rng), .random(in: -spread...spread, using: &rng) * 0.5),
+                                        velocity: SIMD2(heading * school.cruise, .random(in: -0.1...0.1, using: &rng) * school.cruise),
+                                        facing: heading, wander: .random(in: 0..<(2 * .pi), using: &rng),
+                                        stroke: .random(in: 0..<1, using: &rng), pulse: .random(in: 0..<1, using: &rng)))
             }
             schools.append(school)
         }
+    }
+
+    private lazy var shadowTexture = radialGlow(diameter: 32, stops: [(0, rgb(0, 0, 0)), (0.4, rgb(0, 0, 0, 0.7)), (1, rgb(0, 0, 0, 0))])
+
+    /// A soft, dark-blue shadow on the sand, lit only by the blue of the water around it: one under each fish, moved
+    /// in `illuminate`, and one under each thing standing on the sand.
+    private func shadowOnSand() -> SKSpriteNode {
+        let shade = light.low * 0.5
+        let shadow = SKSpriteNode(texture: shadowTexture, color: NSColor(red: CGFloat(shade.x), green: CGFloat(shade.y),
+                                  blue: CGFloat(shade.z), alpha: 1), size: CGSize(width: 1, height: 1))
+        shadow.colorBlendFactor = 1
+        shadow.zPosition = Z.shadows
+        addChild(shadow)
+        return shadow
+    }
+
+    /// The shadow at the foot of a rock or coral standing on the sand: its width by a sixth of it, centred on its base,
+    /// fading out toward the back of the sand as the fish's do.
+    private func ground(_ piece: SKSpriteNode?) {
+        guard let piece else { return }
+        let shadow = shadowOnSand()
+        shadow.position = CGPoint(x: piece.position.x, y: piece.position.y - piece.size.width / 30)
+        shadow.size = CGSize(width: piece.size.width * 1.1, height: piece.size.width / 5)
+        shadow.alpha = 0.65 * (1 - min(max((piece.position.y / sandHeight - 0.6) / 0.4, 0), 1))
     }
 
     // MARK: - Water, light and sand
@@ -357,7 +390,7 @@ final class FishTank: SKScene {
 
                 // LED shimmer on the back wall, and faint rays from the lamp array, fading downward
                 float high = smoothstep(0.2, 1.0, uv.y);
-                c += u_shimmer * caustic(pts / 160.0, t * 0.6) * 0.025 * high;
+                c += u_shimmer * texture2D(u_caustics, causticAt(pts / 160.0, t * 0.6)).r * 0.025 * high;
                 float rays = noise1(pts.x / 45.0 + sin(t * 0.1) * 1.5) * noise1(pts.x / 14.0 - t * 0.05 + 3.0);
                 c += u_shimmer * smoothstep(0.3, 0.8, rays) * 0.05 * high * lamp;
 
@@ -366,9 +399,9 @@ final class FishTank: SKScene {
                 // meets the water, with the bright waterline above. A grey, blurry band here read as muddy.
                 float band = smoothstep(0.94, 0.946, uv.y);
                 if (band > 0.0) {
-                    float lines = caustic(vec2(pts.x / 90.0, pts.y / 9.0), t * 0.8);
+                    float lines = texture2D(u_caustics, causticAt(vec2(pts.x / 90.0, pts.y / 9.0), t * 0.8)).r;
                     vec3 mirror = u_high * (1.2 + 0.15 * noise(vec2(pts.x * 0.01 + t * 0.05, pts.y * 0.05)));
-                    mirror += u_shimmer * lines * 0.35;
+                    mirror += u_shimmer * lines * 0.5;
                     c = mix(c, mirror, band);
                 }
                 c += u_shimmer * 0.25 * exp(-pow((uv.y - 0.943) * u_size.y / 2.0, 2.0)); // where mirror meets water
@@ -381,34 +414,24 @@ final class FishTank: SKScene {
             """, uniforms: [
                 SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]),
                 SKUniform(name: "u_high", vectorFloat3: light.high), SKUniform(name: "u_low", vectorFloat3: light.low),
-                SKUniform(name: "u_shimmer", vectorFloat3: light.shimmer), WallpaperTime.now,
+                SKUniform(name: "u_shimmer", vectorFloat3: light.shimmer), SKUniform(name: "u_caustics", texture: causticTexture),
+                WallpaperTime.now,
             ])
         addChild(water)
     }
 
-    /// Bright lines where the cells of a moving Voronoi pattern meet, like sunlight focused by surface waves.
+    /// Where to read the baked caustics (`TankArt.caustics`, as `u_caustics`) for a point `q`, measured in cells of
+    /// light, at time `t`: the light writhes as the surface moves, bending the filaments at two scales, and drifts
+    /// slowly across. The tile is 16 cells across, plus a wrapped texel so it's smoothed across its seam.
     private static let caustics = """
-        float caustic(vec2 p, float t) {
-            // Bend the cell walls into wandering curves, at two scales.
-            p += 0.3 * vec2(sin(p.y * 1.7 + t * 0.7) + 0.6 * sin(p.y * 3.3 - t * 0.9 + p.x),
-                            sin(p.x * 1.5 - t * 0.6) + 0.6 * sin(p.x * 3.1 + t * 0.8 - p.y));
-            vec2 i = floor(p);
-            vec2 f = fract(p);
-            float d1 = 8.0;
-            float d2 = 8.0;
-            for (int y = -1; y <= 1; y++) {
-                for (int x = -1; x <= 1; x++) {
-                    vec2 g = vec2(float(x), float(y));
-                    vec2 h = fract(sin(vec2(dot(i + g, vec2(127.1, 311.7)), dot(i + g, vec2(269.5, 183.3)))) * 43758.5453);
-                    float d = length(g + 0.5 + 0.42 * sin(t + 6.2831 * h) - f);
-                    if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) { d2 = d; }
-                }
-            }
-            float edge = 1.0 - smoothstep(0.0, 0.1, d2 - d1);
-            return edge * edge * 0.8 + (1.0 - smoothstep(0.0, 0.35, d2 - d1)) * 0.2;
+        vec2 causticAt(vec2 q, float t) {
+            q += 0.22 * vec2(sin(q.y * 1.3 + t * 0.7) + 0.5 * sin(q.y * 2.7 - t * 0.9 + q.x),
+                             sin(q.x * 1.1 - t * 0.6) + 0.5 * sin(q.x * 2.9 + t * 0.8 - q.y));
+            return (fract(q / 8.0 + t * vec2(0.004, 0.0026)) * 512.0 + 0.5) / 513.0;
         }
 
         """
+    private lazy var causticTexture = TankArt.caustics()
 
     /// White aragonite sand: warm white up front under the lamp, going blue with distance, with fine grain and the
     /// lamp's shimmer rippling across it. The caustics multiply the sand they land on rather than adding white, so
@@ -426,15 +449,25 @@ final class FishTank: SKScene {
                 vec4 h = hash42(floor(pts * 2.0));
                 s *= 0.88 + 0.14 * noise(pts * vec2(0.18, 0.5)) + 0.1 * (h.x - 0.5); // grain and ripples in the sand
                 vec2 p = vec2(pts.x, pts.y * 2.6) / mix(140.0, 60.0, back);
-                float light = caustic(p, u_now * 0.7) * 0.75 + caustic(p * 1.7 + 3.7, u_now * 0.95) * 0.3;
-                s *= 1.0 + light * 1.1 * (1.0 - 0.6 * back);
+                float light = texture2D(u_caustics, causticAt(p, u_now * 0.7)).r * 0.75
+                            + texture2D(u_caustics, causticAt(mat2(0.8, 0.6, -0.6, 0.8) * p * 1.7 + 3.7, u_now * 0.95)).r * 0.3;
+                s *= 0.88 + light * 1.6 * (1.0 - 0.6 * back);
+                float peak = max(s.r, max(s.g, s.b)); // bright cores roll off short of white, keeping their colour
+                s *= (peak > 0.8 ? 0.8 + 0.16 * (1.0 - exp((0.8 - peak) / 0.16)) : peak) / max(peak, 0.001);
                 s = mix(s, u_low, smoothstep(0.75, 1.0, back) * 0.5); // melting into the back panel
-                gl_FragColor = vec4(s, 1.0);
+                // A soft, uneven back edge, not a ruled line, fading into the water behind it: the water's own colour
+                // there (addWater's back panel and lamp; its shimmer and rays don't reach this low). Opaque, not
+                // faded by alpha, which shaded the water under all the sand as well: 0.1 ms.
+                float edge = u_size.y - 2.0 - 4.0 * noise(vec2(pts.x * 0.015, 0.5));
+                vec3 water = mix(u_low, u_high, smoothstep(0.05, 0.9, back * u_share)) * (0.75 + 0.35 * exp(-pow((v_tex_coord.x - 0.5) / 0.6, 2.0)));
+                gl_FragColor = vec4(mix(s, water, smoothstep(edge - 4.0, edge + 2.0, pts.y)), 1.0);
             }
             """, uniforms: [
                 SKUniform(name: "u_size", vectorFloat2: [Float(floorSize.width), Float(floorSize.height)]),
                 SKUniform(name: "u_sandNear", vectorFloat3: light.sandNear), SKUniform(name: "u_sandFar", vectorFloat3: light.sandFar),
-                SKUniform(name: "u_low", vectorFloat3: light.low), WallpaperTime.now,
+                SKUniform(name: "u_low", vectorFloat3: light.low), SKUniform(name: "u_high", vectorFloat3: light.high),
+                SKUniform(name: "u_share", float: Float(sandHeight / size.height)),
+                SKUniform(name: "u_caustics", texture: causticTexture), WallpaperTime.now,
             ])
         addChild(sand)
     }
@@ -447,6 +480,7 @@ final class FishTank: SKScene {
     /// - under actinic blue, saturated pigments fluoresce in their own colours (`a_glow` for how much), while plain
     ///   stone just goes blue
     /// - `a_fog` fades things further back toward the back panel
+    /// - soft corals: `a_fish` is (0, how far their tentacles move in points, 0, 0), from `place`
     /// - fish only, set every frame: `a_fish` is (1, light level, flank flash, sand bounce), from `illuminate(_:in:)`,
     ///   lighting the back more than the belly as the lamp is overhead; `a_shadow` is a band cast by a fish above,
     ///   (centre x, half width, softness, strength), from `castShadows`
@@ -454,29 +488,41 @@ final class FishTank: SKScene {
     /// `a_frame` says where the sprite is in the tank: the scene position of texture corner (0, 0), then the sprite's
     /// width (negative when flipped) and height, in points. Fish update it every frame.
     private lazy var photoShader: SKShader = {
-        let shader = SKShader(source: """
+        let shader = SKShader(source: Self.caustics + """
             void main() {
-                vec4 c = texture2D(u_texture, v_tex_coord);
                 vec2 pts = a_frame.xy + v_tex_coord * a_frame.zw;
+                // Soft corals' tentacles move against each other, over the warp that leans the whole coral: the
+                // picture read a few points aside, in waves up the tentacles, not at all at the foot.
+                vec2 uv = v_tex_coord;
+                float sway = a_fish.y * (1.0 - a_fish.x);
+                if (sway > 0.0) {
+                    uv += sway / a_frame.zw * vec2(sin(pts.y * 0.09 + u_now * 0.9 + pts.x * 0.03), 0.4 * sin(pts.x * 0.08 - u_now * 0.7))
+                        * smoothstep(0.1, 0.7, v_tex_coord.y);
+                }
+                vec4 c = texture2D(u_texture, uv);
                 float high = clamp(pts.y / u_height, 0.0, 1.0);
                 float shade = a_shadow.w * (1.0 - smoothstep(a_shadow.y - a_shadow.z, a_shadow.y + a_shadow.z, abs(pts.x - a_shadow.x)));
-                // two crossing, wandering waves: a cheap stand-in for caustics, plenty on small moving shapes
-                float t = u_now;
-                float ripple = pow(abs(sin(pts.x * 0.045 + 1.7 * sin(pts.y * 0.03 + t * 0.5) + t * 0.6)
-                                     * sin(pts.y * 0.05 - 1.3 * sin(pts.x * 0.035 - t * 0.4) + t * 0.45)), 3.0)
+                // the same caustics as on the sand, a little smaller this much nearer the surface
+                float ripple = texture2D(u_caustics, causticAt(pts / 100.0, u_now * 0.6)).r * 1.4
                              * (0.3 + 0.7 * smoothstep(0.35, 1.0, v_tex_coord.y)) * (1.0 - shade);
                 vec3 lit = c.rgb * u_grade * (0.82 + 0.28 * high) * (1.0 + ripple * 0.45 * (0.4 + 0.6 * high));
                 float up = v_tex_coord.y;
                 lit *= mix(1.0, a_fish.y * (0.8 + 0.4 * up) + a_fish.w * (1.0 - up), a_fish.x) * (1.0 - shade);
                 lit += u_grade * c.a * a_fish.z * (0.3 + 0.7 * up) * (1.0 - shade);
+                // Vivid pigment fluoresces most: tan tissue, like rock, mostly goes blue and dim under actinic light.
                 float saturation = max(c.r, max(c.g, c.b)) - min(c.r, min(c.g, c.b));
-                lit += c.rgb * saturation * a_glow * u_fluoro;
+                lit += c.rgb * saturation * mix(0.3, 1.0, smoothstep(0.3, 0.7, saturation / max(c.a, 0.001))) * a_glow * u_fluoro;
+                lit *= mix(0.6 + 0.4 * smoothstep(0.0, 0.15, up), 1.0, a_fish.x); // rock and coral darken where they stand
+                // The brightest channel rolls off above 0.8 toward 0.97, the others with it so the hue holds: pale
+                // corals, graded bright and then lit by the caustics and their own glow, clipped flat.
+                float peak = max(lit.r, max(lit.g, lit.b)) / max(c.a, 0.001);
+                lit *= (peak > 0.8 ? 0.8 + 0.17 * (1.0 - exp((0.8 - peak) / 0.17)) : peak) / max(peak, 0.001);
                 gl_FragColor = vec4(mix(lit, u_haze * c.a, a_fog), c.a);
             }
             """, uniforms: [
                 SKUniform(name: "u_grade", vectorFloat3: light.grade), SKUniform(name: "u_haze", vectorFloat3: light.haze),
                 SKUniform(name: "u_fluoro", float: light.fluoro), SKUniform(name: "u_height", float: Float(size.height)),
-                WallpaperTime.now,
+                SKUniform(name: "u_caustics", texture: causticTexture), WallpaperTime.now,
             ])
         shader.attributes = [SKAttribute(name: "a_fog", type: .float), SKAttribute(name: "a_glow", type: .float),
                              SKAttribute(name: "a_frame", type: .vectorFloat4), SKAttribute(name: "a_fish", type: .vectorFloat4),
@@ -512,16 +558,16 @@ final class FishTank: SKScene {
     /// Two islands of rock and coral, the way reefkeepers aquascape, with open sand between them for the fish to
     /// cross, and a soft, low cluster further back. Which cut-outs go where changes with each load.
     private func addReef() {
-        cluster(at: CGPoint(x: size.width * .random(in: 0.42...0.58), y: sandHeight * 0.92), scale: 0.55, fog: 0.35,
+        cluster(at: CGPoint(x: size.width * .random(in: 0.42...0.58, using: &rng), y: sandHeight * 0.92), scale: 0.55, fog: 0.35,
                 blur: 1.4, z: Z.backReef, anemone: false)
-        let anemoneLeft = Bool.random()
-        cluster(at: CGPoint(x: size.width * .random(in: 0.14...0.24), y: sandHeight * 0.55), scale: 1, fog: 0, blur: 0,
+        let anemoneLeft = Bool.random(using: &rng)
+        cluster(at: CGPoint(x: size.width * .random(in: 0.14...0.24, using: &rng), y: sandHeight * 0.55), scale: 1, fog: 0, blur: 0,
                 z: Z.reef, anemone: anemoneLeft)
-        cluster(at: CGPoint(x: size.width * .random(in: 0.76...0.86), y: sandHeight * 0.6), scale: 0.9, fog: 0.05, blur: 0,
+        cluster(at: CGPoint(x: size.width * .random(in: 0.76...0.86, using: &rng), y: sandHeight * 0.6), scale: 0.9, fog: 0.05, blur: 0,
                 z: Z.reef, anemone: !anemoneLeft)
         // a colony right up against the glass in a front corner
-        let corner = Bool.random() ? CGFloat.random(in: 0.02...0.08) : .random(in: 0.92...0.98)
-        coral(["reef-brain-1", "reef-brain-2", "reef-brain-3", "reef-zoanthid-2"].randomElement()!, width: 230,
+        let corner = Bool.random(using: &rng) ? CGFloat.random(in: 0.02...0.08, using: &rng) : .random(in: 0.92...0.98, using: &rng)
+        coral(["reef-brain-1", "reef-brain-2", "reef-brain-3", "reef-zoanthid-2"].randomElement(using: &rng)!, width: 230,
               at: CGPoint(x: size.width * corner, y: -12 * unit), z: Z.frontReef, sway: 0)
     }
 
@@ -534,21 +580,27 @@ final class FishTank: SKScene {
         // Rock pieces: the live rock and the wide, low pile make bases, the tall porous piece stacks on top, and
         // the pale Porites boulder only suits the soft cluster at the back. No island repeats a piece.
         let back = z == Z.backReef
-        let bottom = back ? ["reef-rock-4", "reef-rock-6"].randomElement()! : ["reef-rock-1", "reef-rock-4"].randomElement()!
-        let stacked = ["reef-rock-3", "reef-rock-1", "reef-rock-4"].filter { $0 != bottom }.randomElement()!
-        guard let rock = place(bottom, width: .random(in: 440...520) * scale, at: base, z: z, fog: fog, blur: blur, sway: 0)
+        let bottom = back ? ["reef-rock-4", "reef-rock-6"].randomElement(using: &rng)! : ["reef-rock-1", "reef-rock-4"].randomElement(using: &rng)!
+        let stacked = ["reef-rock-3", "reef-rock-1", "reef-rock-4"].filter { $0 != bottom }.randomElement(using: &rng)!
+        guard let rock = place(bottom, width: .random(in: 440...520, using: &rng) * scale, at: base, z: z, fog: fog, blur: blur, sway: 0)
         else { return }
-        let w = rock.size.width, h = rock.size.height, sink = 12 * scale * unit
+        ground(rock)
+        /// A piece's size without the clear margin round a blurred cut-out (`TankArt.photo`).
+        func drawn(_ sprite: SKSpriteNode) -> CGSize {
+            let margin = 2 * TankArt.margin(blur: blur)
+            return CGSize(width: sprite.size.width - margin, height: sprite.size.height - margin)
+        }
+        let w = drawn(rock).width, h = drawn(rock).height, sink = 12 * scale * unit
         var rocks = [(rock, TankArt.skyline(bottom))]
         /// The highest rock surface at x, or nil where there's no rock; `inset` keeps clear of thin, ragged edges.
         func surface(_ x: CGFloat) -> CGFloat? {
             rocks.compactMap { sprite, line -> CGFloat? in
-                let width = sprite.size.width
+                let width = drawn(sprite).width, height = drawn(sprite).height
                 var u = (x - sprite.position.x) / width + 0.5
                 if sprite.xScale < 0 { u = 1 - u }
                 guard (0.06...0.94).contains(u), !line.isEmpty else { return nil }
                 let top = line[min(Int(u * CGFloat(line.count)), line.count - 1)]
-                return top > 0.12 ? sprite.position.y - 0.04 * sprite.size.height + top * sprite.size.height : nil
+                return top > 0.12 ? sprite.position.y - 0.04 * height + top * height : nil
             }.max()
         }
         /// A spot on the rock near x: the nearest column toward the island's middle that has rock under it.
@@ -559,42 +611,42 @@ final class FishTank: SKScene {
             }
             return CGPoint(x: base.x, y: base.y + h * 0.5)
         }
-        if let upper = place(stacked, width: w / unit * .random(in: 0.45...0.58),
-                             at: perch(base.x + side * w * .random(in: 0.08...0.2)), z: z + 0.01, fog: fog, blur: blur, sway: 0) {
+        if let upper = place(stacked, width: w / unit * .random(in: 0.45...0.58, using: &rng),
+                             at: perch(base.x + side * w * .random(in: 0.08...0.2, using: &rng)), z: z + 0.01, fog: fog, blur: blur, sway: 0) {
             // Settle it into the rock below rather than balancing it on the peak, so the island tops out around
             // mid-tank and its Acropora never reaches the surface.
             let cap = base.y + size.height * 0.36 * scale
-            let excess = upper.position.y + upper.size.height * 0.96 - cap
+            let excess = upper.position.y + drawn(upper).height * 0.96 - cap
             if excess > 0 { upper.position.y = max(upper.position.y - excess, base.y + h * 0.3) }
             framed(upper)
             rocks.append((upper, TankArt.skyline(stacked)))
             // the Acropora crowns the stacked rock, on its highest point
-            let peak = stride(from: -0.3, through: 0.3, by: 0.05).map { upper.position.x + CGFloat($0) * upper.size.width }
+            let peak = stride(from: -0.3, through: 0.3, by: 0.05).map { upper.position.x + CGFloat($0) * drawn(upper).width }
                 .max { (surface($0) ?? 0) < (surface($1) ?? 0) } ?? upper.position.x
-            place(["reef-acropora-1", "reef-acropora-2"].randomElement()!, width: 320 * scale, at: perch(peak),
+            place(["reef-acropora-1", "reef-acropora-2"].randomElement(using: &rng)!, width: 320 * scale, at: perch(peak),
                   z: z + 0.02, fog: fog, blur: blur, sway: 0)
         }
-        place(["reef-toadstool-1", "reef-toadstool-2", "reef-toadstool-3"].randomElement()!, width: 220 * scale,
+        place(["reef-toadstool-1", "reef-toadstool-2", "reef-toadstool-3"].randomElement(using: &rng)!, width: 220 * scale,
               at: perch(base.x - side * w * 0.3), z: z + 0.03, fog: fog, blur: blur, sway: 0.03)
         if hasAnemone {
             let spot = perch(base.x + side * w * 0.36)
-            place(["reef-anemone-1", "reef-anemone-2", "reef-anemone-3"].randomElement()!, width: 240 * scale,
+            place(["reef-anemone-1", "reef-anemone-2", "reef-anemone-3"].randomElement(using: &rng)!, width: 240 * scale,
                   at: spot, z: z + 0.04, fog: fog, blur: blur, sway: 0.05)
             self.anemone = spot
         } else {
-            place(["reef-torch-1", "reef-torch-2", "reef-euphyllia-1", "reef-candycane-1"].randomElement()!, width: 210 * scale,
+            place(["reef-torch-1", "reef-torch-2", "reef-euphyllia-1", "reef-candycane-1"].randomElement(using: &rng)!, width: 210 * scale,
                   at: perch(base.x + side * w * 0.38), z: z + 0.04, fog: fog, blur: blur, sway: 0.04)
         }
-        place(["reef-zoanthid-1", "reef-zoanthid-2"].randomElement()!, width: 110 * scale,
+        place(["reef-zoanthid-1", "reef-zoanthid-2"].randomElement(using: &rng)!, width: 110 * scale,
               at: CGPoint(x: base.x - side * w * 0.05, y: base.y + h * 0.22), z: z + 0.05, fog: fog, blur: blur, sway: 0)
-        place(["reef-brain-1", "reef-brain-2", "reef-brain-3", "reef-porites-1"].randomElement()!, width: 170 * scale,
-              at: CGPoint(x: base.x - side * w * 0.22, y: base.y - 20 * scale * unit), z: z + 0.06, fog: fog, blur: blur, sway: 0)
+        ground(place(["reef-brain-1", "reef-brain-2", "reef-brain-3", "reef-porites-1"].randomElement(using: &rng)!, width: 170 * scale,
+                     at: CGPoint(x: base.x - side * w * 0.22, y: base.y - 20 * scale * unit), z: z + 0.06, fog: fog, blur: blur, sway: 0))
         if z == Z.reef { rockSpots.append(CGPoint(x: base.x + side * w * 0.55, y: base.y + h * 0.3)) }
     }
 
     /// A coral right up against the glass: sharp, and big.
     private func coral(_ name: String, width: CGFloat, at base: CGPoint, z: CGFloat, sway: CGFloat) {
-        place(name, width: width, at: base, z: z, fog: 0, blur: 0, sway: sway)
+        ground(place(name, width: width, at: base, z: z, fog: 0, blur: 0, sway: sway))
     }
 
     /// Places one cut-out standing on `base`, graded to the tank's light, swaying from its foot by `sway` if it's
@@ -604,17 +656,19 @@ final class FishTank: SKScene {
                        sway: CGFloat) -> SKSpriteNode? {
         guard let (texture, textureSize) = TankArt.photo(name, width: width * unit, blur: blur) else { return nil }
         let sprite = SKSpriteNode(texture: texture, size: textureSize)
-        sprite.anchorPoint = CGPoint(x: 0.5, y: 0.04)
+        let margin = TankArt.margin(blur: blur) // a blurred cut-out's clear edge: its foot stays where an unblurred one's would
+        sprite.anchorPoint = CGPoint(x: 0.5, y: (margin + 0.04 * (textureSize.height - 2 * margin)) / textureSize.height)
         sprite.position = base
-        if Bool.random() { sprite.xScale = -1 }
+        if Bool.random(using: &rng) { sprite.xScale = -1 }
         sprite.zPosition = z
         graded(sprite, fog: fog, glow: name.hasPrefix("reef-rock") ? 0.1 : 1)
         if sway > 0 {
             sprite.subdivisionLevels = 1
             sprite.warpGeometry = SKWarpGeometryGrid(columns: 1, rows: 8)
             let action = TankArt.swayWarps(width: textureSize.width, height: textureSize.height, strength: sway,
-                                           period: .random(in: 5...8))
-            sprite.run(.sequence([.wait(forDuration: .random(in: 0...4)), action]))
+                                           period: .random(in: 5...8, using: &rng), phase: .random(in: 0...(2 * .pi), using: &rng))
+            sprite.run(.sequence([.wait(forDuration: .random(in: 0...4, using: &rng)), action]))
+            attribute("a_fish", of: sprite, to: [0, Float(sway * 70), 0, 0]) // the anemone's tentacles most, the toadstool's polyps least
         }
         addChild(sprite)
         return sprite
