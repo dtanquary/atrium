@@ -271,14 +271,29 @@ final class EarthFromOrbit: SKScene, BatteryPaced {
                 vec3 day = texture2D(u_texture, uv).rgb;
                 vec3 night = texture2D(u_night, uv).rgb;
 
-                // the map reads thin haze and cold ground as faint grey, so only real cloud decks go opaque
-                float cloud = mix(texture2D(u_cloudsBefore, uv).r, texture2D(u_clouds, uv).r, u_cloudFade);
-                cloud = smoothstep(0.42, 0.95, cloud);
-
                 float sun = dot(w, u_sun);
+                // A step toward the Sun along the ground, as far as a cloud top 8 km up throws its shadow (cot of the
+                // Sun's height), up to 1.1°: a pixel or less with the Sun high, 6-8 near the terminator.
+                vec3 along = u_sun - w * sun;
+                vec3 w2 = normalize(w + along * min(0.0013 / max(sun, 0.001), 0.02 / max(length(along), 0.001)));
+                vec2 uv2 = vec2(atan(w2.y, w2.x) / 6.2831853 + 0.5, asin(clamp(w2.z, -1.0, 1.0)) / 3.1415927 + 0.5);
+                float raw = texture2D(u_clouds, uv).r, sunward = texture2D(u_clouds, uv2).r;
+                if (u_cloudFade < 1.0) { // the minute's fade to a new map, the only time the old one is read
+                    raw = mix(texture2D(u_cloudsBefore, uv).r, raw, u_cloudFade);
+                    sunward = mix(texture2D(u_cloudsBefore, uv2).r, sunward, u_cloudFade);
+                }
+                // the map reads thin haze and cold ground as faint grey, so only real cloud decks go opaque
+                float cloud = smoothstep(0.42, 0.95, raw);
+                sunward = smoothstep(0.42, 0.95, sunward);
+                // Thick cold tops white, thin decks grey; lit where the cloud stands above the cloud toward the Sun,
+                // in shade where a taller one stands there, which also shadows the ground.
+                vec3 cloudColour = mix(vec3(0.62, 0.66, 0.72), vec3(1.0), smoothstep(0.55, 1.0, raw))
+                    * clamp(1.0 + 0.4 * (cloud - sunward), 0.55, 1.12);
+                vec3 ground = day * (1.0 - 0.6 * sunward);
+
                 float daylight = smoothstep(-0.12, 0.1, sun) * (0.25 + 0.95 * max(sun, 0.0));
                 // a little earthshine keeps the night side's shape, and shows the clouds there faintly
-                vec3 colour = mix(day, vec3(0.8, 0.82, 0.86), cloud * 0.95) * (daylight + 0.03);
+                vec3 colour = mix(ground, cloudColour, cloud * 0.95) * (daylight + 0.03);
                 vec3 lights = night * night * vec3(1.0, 0.82, 0.55) * 2.2;
                 colour += lights * (1.0 - smoothstep(-0.2, 0.02, sun)) * (1.0 - 0.8 * cloud); // cloud dims, not hides
 
