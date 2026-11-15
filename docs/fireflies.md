@@ -62,7 +62,7 @@ A research agent measured all three and read up on real fireflies. Its notes are
      - `a_fly` carries the radius, the half-width, the kind plus a seed, and how much light gets through the fog (`clearness(d)`, the same curve as the ground's). The node's alpha fades it through `v_color_mix.a`.
 
 ## Time and appearance
-Time is accumulated from `frameTime` in `update(_:)`, so it pauses with the view. It's always blue hour, by Dave's choice, with no Light Mode look and no link to the real time. The layout of the fireflies is random on each load.
+Time is accumulated from `frameTime` in `update(_:)`, so it pauses with the view. It's always blue hour, by Dave's choice, with no Light Mode look and no link to the real time. The layout of the fireflies is random on each load, unless `fireflies.seed` (a test-only key, any whole number but 0) pins it, with every flash and turn after.
 
 ## Settings
 - `fireflies.density` (Fireflies, 0.25–2×, standard 1): how many are active. It's live.
@@ -121,4 +121,4 @@ CPU 0.54 ms and GPU 0.52 ms per frame (release build, 2x, 2026-09-26).
 - Crop the ground slices to their rows.
 
 ## Checking it
-`SNAPSHOT_SCENE="Fireflies" SNAPSHOT_SECONDS=8 SNAPSHOT_DIR=/tmp/ff swift test`. Motion runs through `update(_:)`, so `SNAPSHOT_SECONDS` advances flights and flashes. The fog wisps and the grass's sway run on `u_now`, which moves with it too. The rustle's time wraps hourly: each patch keeps its own rhythm, so the jump can't be seen. `SNAPSHOT_DEFAULTS="fireflies.fog=1"` shows thick fog.
+`SNAPSHOT_SCENE="Fireflies" SNAPSHOT_SECONDS=8 SNAPSHOT_DIR=/tmp/ff swift test`. Motion runs through `update(_:)`, so `SNAPSHOT_SECONDS` advances flights and flashes. The fog wisps and the grass's sway run on `u_now`, which moves with it too. The rustle's time wraps hourly: each patch keeps its own rhythm, so the jump can't be seen. `SNAPSHOT_DEFAULTS="fireflies.fog=1"` shows thick fog, and `fireflies.seed=2` the same field every time, for before and after pictures.

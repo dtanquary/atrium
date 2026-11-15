@@ -34,6 +34,9 @@ final class Fireflies: SKScene {
     private let wind = SKUniform(name: "u_wind", float: Float(Fireflies.knobs[3].value))
 
     private var flies: [Fly] = []
+    // "fireflies.seed" is for the tests, which want the same field twice; nothing else sets it.
+    private var rng = SplitMix(state: UInt64(exactly: UserDefaults.standard.integer(forKey: "fireflies.seed")).flatMap { $0 == 0 ? nil : $0 }
+                               ?? .random(in: 1...UInt64.max))
     private var time: TimeInterval = 0
     private var lastTime: TimeInterval?
 
@@ -46,7 +49,7 @@ final class Fireflies: SKScene {
             node.shader = shader
             node.isHidden = true
             addChild(node)
-            var fly = Fly(node: node, next: .random(in: 0...10), period: .random(in: 6...10))
+            var fly = Fly(node: node, next: .random(in: 0...10, using: &rng), period: .random(in: 6...10, using: &rng))
             spawn(&fly)
             flies.append(fly)
         }
@@ -123,12 +126,12 @@ final class Fireflies: SKScene {
     /// distance, to fill the middle of the field. Most fly low over the grass; the few above eye height show against
     /// the trees.
     private func spawn(_ fly: inout Fly) {
-        fly.d = CGFloat.random(in: 0...1) < 0.35 ? .random(in: nearest...treeline)
-            : sqrt(nearest * nearest + .random(in: 0...1) * (treeline * treeline - nearest * nearest))
+        fly.d = CGFloat.random(in: 0...1, using: &rng) < 0.35 ? .random(in: nearest...treeline, using: &rng)
+            : sqrt(nearest * nearest + .random(in: 0...1, using: &rng) * (treeline * treeline - nearest * nearest))
         let reach = size.width / 2 / (size.height * focal) * fly.d * 1.1
-        fly.x = .random(in: -reach...reach)
-        fly.y = 0.15 + 1.6 * pow(.random(in: 0...1), 2)
-        let heading = CGFloat.random(in: 0...(2 * .pi)), speed = CGFloat.random(in: 0.02...0.05)
+        fly.x = .random(in: -reach...reach, using: &rng)
+        fly.y = 0.15 + 1.6 * pow(.random(in: 0...1, using: &rng), 2)
+        let heading = CGFloat.random(in: 0...(2 * .pi), using: &rng), speed = CGFloat.random(in: 0.02...0.05, using: &rng)
         fly.vx = cos(heading) * speed
         fly.vd = sin(heading) * speed
         dress(fly)
@@ -137,7 +140,7 @@ final class Fireflies: SKScene {
     /// After a flash: dark again, flying on and turning a little until the next, or somewhere new once it's out of view.
     private func rest(_ fly: inout Fly) {
         fly.node.isHidden = true
-        let gap = fly.period * .random(in: 0.85...1.15), turn = CGFloat.random(in: -0.8...0.8)
+        let gap = fly.period * .random(in: 0.85...1.15, using: &rng), turn = CGFloat.random(in: -0.8...0.8, using: &rng)
         fly.x += fly.vx * gap
         fly.d += fly.vd * gap
         fly.next += gap
@@ -158,15 +161,15 @@ final class Fireflies: SKScene {
     /// point by the treeline. Near ones sometimes sit in a pale halo, and now and then there's a halo alone, a
     /// firefly out of focus.
     private func dress(_ fly: Fly) {
-        let spread = (CGFloat.random(in: -1...1) + .random(in: -1...1) + .random(in: -1...1)) * 0.3
-        let f = size.height * focal, near = fly.d < 12, roll = CGFloat.random(in: 0...1)
+        let spread = (CGFloat.random(in: -1...1, using: &rng) + .random(in: -1...1, using: &rng) + .random(in: -1...1, using: &rng)) * 0.3
+        let f = size.height * focal, near = fly.d < 12, roll = CGFloat.random(in: 0...1, using: &rng)
         var r = min(max(f * 0.045 / fly.d * exp(spread), 1), 9)
         let kind: CGFloat = near && roll < 0.25 ? 5 : near && roll < 0.45 ? 1 : 0
-        if kind == 5 { r = f * .random(in: 0.05...0.12) / fly.d }
+        if kind == 5 { r = f * .random(in: 0.05...0.12, using: &rng) / fly.d }
         let extent = r * [2.7, 4.4, 0, 0, 0, 1.3][Int(kind)] + 1
         fly.node.size = CGSize(width: extent * 2, height: extent * 2)
         fly.node.zPosition = 100 - fly.d
-        fly.node.setValue(SKAttributeValue(vectorFloat4: [Float(r), Float(extent), Float(kind + .random(in: 0..<0.99)), Float(clearness(fly.d))]),
+        fly.node.setValue(SKAttributeValue(vectorFloat4: [Float(r), Float(extent), Float(kind + .random(in: 0..<0.99, using: &rng)), Float(clearness(fly.d))]),
                           forAttribute: "a_fly")
     }
 
