@@ -319,7 +319,8 @@ final class PixelOrbit: SKScene, BatteryPaced {
                 guard t > 0 else { continue }
                 let p = ray * t - root, u = dot(p, axis), v = dot(p, side)
                 guard u >= 0, u <= length, abs(v) <= half else { continue }
-                // Parts: 1 blanket, 2 a fold line across it, 3 the seam along it, 4 its lit rim, 5 the mast's lattice, 6 its gaps.
+                // Parts: 1, 7, 8 and 9 the blanket in four tones, 2 a fold line across it, 3 the seam along it, 4 its
+                // rim, 5 the mast's lattice, 6 its gaps, 10 the Sun's glint.
                 var part: UInt8 = 1
                 if abs(v) < 1.1 {
                     let weave = (u + v + 4).truncatingRemainder(dividingBy: 2.2), back = (u - v + 4).truncatingRemainder(dividingBy: 2.2)
@@ -330,6 +331,14 @@ final class PixelOrbit: SKScene, BatteryPaced {
                     part = 3
                 } else if u.truncatingRemainder(dividingBy: 2.3) < 0.28 {
                     part = 2
+                } else {
+                    // Each panel between two folds lies a little differently, so takes one of three near tones; the
+                    // blanket is a step dimmer toward the tip; and across three panels toward the root it catches the
+                    // Sun. Each change is a band with a seam dithered as the sky's are.
+                    let panel = Int(u / 2.3), strip = (v > 0 ? 2 : 0) + (abs(v) > 3.05 ? 1 : 0), d = bayer(x, y)
+                    var tone = Int(scatter(panel, strip, 4040) % 3) + 1 - (Float(u / length) + (d - 0.5) * 0.12 > 0.62 ? 1 : 0)
+                    if exp(-pow(Float(u - 9.5) / 3.4, 2)) + (d - 0.5) * 0.3 > 0.6 { tone = 4 }
+                    part = [9, 7, 1, 8, 10][tone]
                 }
                 wing.append((y * gw + x, part))
             }
@@ -837,11 +846,17 @@ private struct OrbitPaint {
             day.indices.map { (pack(day[$0]), pack(low[$0]), pack(dark[$0])) }
         }
         // (In shadow both faces are one dark shape, so nobody sees which is up change at midnight.)
-        let dark = [RGB.zero, rgb(24, 19, 22), rgb(30, 24, 27), rgb(40, 35, 41), rgb(68, 62, 74), rgb(56, 53, 61), rgb(9, 8, 10)]
-        gold = tones([.zero, rgb(201, 153, 47), rgb(170, 122, 34), rgb(124, 81, 13), rgb(255, 229, 100), rgb(207, 199, 187), rgb(58, 42, 24)],
-                     [.zero, rgb(224, 140, 44), rgb(186, 106, 30), rgb(122, 67, 16), rgb(255, 208, 112), rgb(217, 184, 144), rgb(58, 36, 18)], dark)
-        cells = tones([.zero, rgb(27, 31, 58), rgb(52, 56, 84), rgb(143, 147, 168), rgb(230, 230, 238), rgb(216, 212, 204), rgb(42, 42, 48)],
-                      [.zero, rgb(42, 28, 38), rgb(72, 50, 54), rgb(168, 128, 106), rgb(255, 217, 160), rgb(217, 184, 144), rgb(42, 32, 24)], dark)
+        // (The blanket's four tones are its parts 9, 7, 1 and 8, darkest first, and its glint 10.)
+        let dark = [RGB.zero, rgb(24, 19, 22), rgb(30, 24, 27), rgb(40, 35, 41), rgb(46, 40, 46), rgb(56, 53, 61), rgb(9, 8, 10),
+                    rgb(23, 18, 21), rgb(25, 20, 23), rgb(21, 17, 20), rgb(28, 22, 26)]
+        gold = tones([.zero, rgb(201, 153, 47), rgb(170, 122, 34), rgb(124, 81, 13), rgb(150, 104, 26), rgb(207, 199, 187), rgb(58, 42, 24),
+                      rgb(190, 141, 42), rgb(211, 165, 58), rgb(176, 128, 38), rgb(246, 214, 106)],
+                     [.zero, rgb(224, 140, 44), rgb(186, 106, 30), rgb(122, 67, 16), rgb(160, 92, 24), rgb(217, 184, 144), rgb(58, 36, 18),
+                      rgb(212, 128, 40), rgb(234, 152, 54), rgb(196, 114, 34), rgb(255, 196, 108)], dark)
+        cells = tones([.zero, rgb(27, 31, 58), rgb(52, 56, 84), rgb(143, 147, 168), rgb(230, 230, 238), rgb(216, 212, 204), rgb(42, 42, 48),
+                       rgb(24, 28, 52), rgb(31, 36, 66), rgb(21, 24, 45), rgb(84, 96, 140)],
+                      [.zero, rgb(42, 28, 38), rgb(72, 50, 54), rgb(168, 128, 106), rgb(255, 217, 160), rgb(217, 184, 144), rgb(42, 32, 24),
+                       rgb(38, 25, 34), rgb(48, 32, 42), rgb(33, 22, 30), rgb(150, 98, 84)], dark)
     }
 }
 
