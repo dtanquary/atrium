@@ -356,7 +356,7 @@ final class AntColony: SKScene {
         let made = SKShader(source: shaderCommon + Self.source(look), uniforms: [
             cells, SKUniform(name: "u_bl", float: Float(Self.antCells)), SKUniform(name: "u_px", float: Float(size.width / pixel)),
             SKUniform(name: "u_grain", texture: Self.grain), map, heap, near, dug, fade, show]
-            + (look == 2 || look == 3 ? [SKUniform(name: "u_scatter", texture: Self.scatter)] : []))
+            + (look < 4 ? [SKUniform(name: "u_scatter", texture: Self.scatter)] : []))
         shaders[look] = made
         return made
     }
@@ -554,7 +554,10 @@ final class AntColony: SKScene {
     /// Each look is its own source, the two gels and the two sands as well: a variant behind a uniform can move
     /// pixels where it never runs (Sources/CLAUDE.md).
     private static func source(_ look: Int) -> String {
-        let place = [2: grains, 3: grains, 4: "    vec2 at = cell + 0.035 * u_bl * n.rg * step(ground + 0.5, cell.y);"][look] ?? "    vec2 at = cell;"
+        let place = [grains(Self.crumb, at: "mix(cell, middle * \(Self.crumb) * u_bl, step(cell.y, ground) * step(middle.y * \(Self.crumb) * u_bl, ground))"),
+                     grains(Self.crumb, at: "mix(cell, middle * \(Self.crumb) * u_bl, step(cell.y, ground) * step(middle.y * \(Self.crumb) * u_bl, ground))"),
+                     grains("0.10", at: "middle * 0.10 * u_bl"), grains("0.10", at: "middle * 0.10 * u_bl"),
+                     "    vec2 at = cell + 0.035 * u_bl * n.rg * step(ground + 0.5, cell.y);"][look]
         let picture = [gelLook, brightGelLook,
                        sandLook(sand: "vec3(0.860, 0.790, 0.680)", pane: "vec3(0.557, 0.502, 0.431)", tone: "0.66"),
                        sandLook(sand: "vec3(0.905, 0.868, 0.800)", pane: "vec3(0.560, 0.562, 0.560)", tone: "1.12"), earthLook][look]
@@ -640,13 +643,26 @@ final class AntColony: SKScene {
             float beads = clamp(n.b - 0.7, 0.0, 1.6) * pow(by, 1.5);
             tube += vec3(0.690, 0.945, 0.984) * (0.50 * rim + 0.30 * sheen + 0.32 * sparks + 0.42 * beads) * (0.45 + 0.75 * glow);
 
-            // Above the ground: the crumbs, and the dark air with the glow that hugs the heap.
-            vec3 crumbs = vec3(0.463, 0.675, 0.941) * (0.36 + 0.07 * n.b + 0.05 * n.a + 0.22 * step(0.9965, h.y) + 0.30 * clamp((1.0 - close) * 2.0, 0.0, 1.0)) * (0.8 + 0.5 * lamps);
+            // Above the ground: the dark air with the glow that hugs the heap, and where no spoil lies the gel's top
+            // catching the light as a tunnel's wall does; and the crumbs (`gelCrumbs`).
             float height = clamp((ground - cell.y) / (3.0 * u_bl), 0.0, 4.0);
             vec3 air = vec3(0.063, 0.133, 0.337) * exp(-height * 1.6) * (0.55 + 0.6 * lamps) + vec3(0.220, 0.463, 0.910) * 0.75 * pow(hug, 1.15) * (0.7 + 0.5 * lamps) + vec3(0.008, 0.012, 0.031);
-
+            body += vec3(0.690, 0.945, 0.984) * 0.50 * exp(-sq((cell.y - ground) * ppc / 2.0)) * (0.45 + 0.75 * glow);
+    \(gelCrumbs)
             vec3 colour = mix(mix(tube, air, above), mix(body, crumbs, above), solid) * 0.85;
             colour += 0.010 * exp(-sq((x - 0.30 - 0.38 * down) / 0.06)) * vec3(0.784, 0.882, 1.0); // a reflection in the glass
+    """
+
+    /// What is dug in the gels, lying on top as crumbs: each a pale bead of gel lit from the lamps below, a few with
+    /// a glint, brighter toward the heap's surface where the glow reaches, with a dark gap round it; at the heap's
+    /// edge the gap is the air, so the crumbs on top stand out one by one.
+    private static let gelCrumbs = """
+            vec4 more = hash42(floor(middle) + 53.0);
+            float size = 0.24 + 0.32 * mine.b, bead = clamp((size - away) * \(crumb) * u_bl * ppc / 1.3 + 0.5, 0.0, 1.0);
+            float under = dot((gp - middle) / size, vec2(-0.30, 0.95));
+            vec3 gem = vec3(0.400, 0.650, 0.980) * (0.48 + 0.08 * more.w + 0.14 * under + 0.05 * n.b + 0.25 * clamp((1.0 - close) * 2.0, 0.0, 1.0)) * (0.8 + 0.5 * lamps)
+                + vec3(0.745, 0.922, 1.0) * 0.40 * step(0.94, more.y) * clamp(1.0 - 3.0 * length((gp - middle) / size - vec2(-0.25, 0.4)), 0.0, 1.0);
+            vec3 crumbs = mix(mix(air, vec3(0.300, 0.500, 0.950) * 0.26 * (0.8 + 0.5 * lamps), smoothstep(0.35, 0.75, close)), gem, bead);
     """
 
     /// The gel nearer its photograph (docs/ant-colony.md, photograph 6), and brighter than the mock-ups were: a
@@ -696,29 +712,35 @@ final class AntColony: SKScene {
             float rim = pow(clamp(1.0 - abs(close - 0.42) / 0.30, 0.0, 1.0), 1.5);
             tube += vec3(0.72, 0.95, 1.0) * (0.30 * rim + 0.30 * sheen + 0.30 * sparks + 1.25 * froth + inside) * wet;
             body += vec3(0.72, 0.95, 1.0) * 0.8 * froth * wet;
-            float bubble = fine;
 
-            // Above the ground: the crumbs, and the dark air with the glow that hugs the heap.
-            vec3 crumbs = vec3(0.463, 0.675, 0.941) * (0.36 + 0.07 * n.b + 0.05 * n.a + 0.22 * step(0.9965, h.y) + 0.30 * clamp((1.0 - close) * 2.0, 0.0, 1.0) + 0.5 * bubble * step(s4.w, 0.5)) * (0.8 + 0.5 * lamps);
+            // Above the ground: the dark air with the glow that hugs the heap, the gel's top lit where no spoil lies,
+            // and the crumbs.
             float height = clamp((ground - cell.y) / (3.0 * u_bl), 0.0, 4.0);
             vec3 air = vec3(0.063, 0.133, 0.337) * exp(-height * 1.6) * (0.55 + 0.6 * lamps) + vec3(0.220, 0.463, 0.910) * 0.75 * pow(hug, 1.15) * (0.7 + 0.5 * lamps) + vec3(0.008, 0.012, 0.031);
+            body += vec3(0.72, 0.95, 1.0) * 0.50 * exp(-sq((cell.y - ground) * ppc / 2.0)) * wet;
+    \(gelCrumbs)
 
             vec3 colour = mix(mix(tube, air, above), mix(body, crumbs, above), solid) * 0.85;
             colour += 0.010 * exp(-sq((x - 0.30 - 0.38 * down) / 0.06)) * vec3(0.784, 0.882, 1.0); // a reflection in the glass
     """
 
-    /// The sand's grains: a tenth of an ant across, scattered one to a square with no lattice to them (a lattice
-    /// shows as a weave when the picture is drawn at half size). The scatter is baked once into a tile that
-    /// repeats every 64 squares (`Nest.scatter`), read at a texel's middle: one read gives the grain a pixel is in,
-    /// where its middle is, which is where the map is then read, and how big it is. (Looking through the nine
-    /// squares round the pixel for it cost 3.7 ms of GPU on a 6K display.)
-    private static let grains = """
-            vec2 gp = cell / (0.10 * u_bl), within = fract(gp / 64.0) * 64.0, texel = (floor(within * 8.0) + 0.5) / 8.0;
+    /// The sand's grains, and the gels' crumbs on the spoil: `across` of an ant across, scattered one to a square
+    /// with no lattice to them (a lattice shows as a weave when the picture is drawn at half size). The scatter is
+    /// baked once into a tile that repeats every 64 squares (`Nest.scatter`), read at a texel's middle: one read
+    /// gives the grain a pixel is in, where its middle is, which is where the map is then read (`at`: in sand
+    /// everywhere, in the gels only above the ground, so a tunnel there does not crumble), and how big it is.
+    /// (Looking through the nine squares round the pixel for it cost 3.7 ms of GPU on a 6K display.)
+    private static func grains(_ across: String, at: String) -> String {
+        """
+            vec2 gp = cell / (\(across) * u_bl), within = fract(gp / 64.0) * 64.0, texel = (floor(within * 8.0) + 0.5) / 8.0;
             vec4 mine = texture2D(u_scatter, texel / 64.0);
             vec2 middle = gp - within + texel + (mine.rg - 0.5) * 3.0;
             float away = length(gp - middle);
-            vec2 at = middle * 0.10 * u_bl;
+            vec2 at = \(at);
     """
+    }
+    /// A crumb of gel on the spoil, as a share of an ant's length.
+    private static let crumb = "0.14"
 
     /// Sand between two panes an ant's length apart, lit by one lamp up and to the left: grains lit from the
     /// lamp's side, a few of them dark and a few glinting; a tunnel is a trough, its wall curving back from the
