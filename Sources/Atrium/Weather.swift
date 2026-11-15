@@ -576,15 +576,18 @@ class WeatherScene: SKScene, BatteryPaced {
     // MARK: - Photo clouds
 
     /// Real cumulus cut out of photos (Resources/weather-cloud-*.heic, credited in weather-credits.tsv): each one's
-    /// width in km, and the range of its brightness in the photo (2nd and 98th percentiles of its sRGB luminance) so
+    /// width in km, and the range of its brightness in the photo (2nd and 98th percentiles of its luminance, in linear light, where it is over half opaque) so
     /// the shader can relight it, darkest to skylight and brightest to sunlight. Procedural cumulus looked like smears.
-    private static let photoClouds: [(name: String, km: Double, lum: SIMD2<Float>, tower: Bool)] = [
+    static let photoClouds: [(name: String, km: Double, lum: SIMD2<Float>, tower: Bool)] = [
         ("cu-humilis-1", 1.2, [0.63, 0.86], false), ("cu-humilis-2", 1.0, [0.74, 0.88], false),
-        ("cu-humilis-3", 1.4, [0.75, 0.87], false), ("cu-mediocris-1", 2.4, [0.65, 0.87], false),
-        ("cu-mediocris-2", 2.2, [0.64, 0.86], false), ("cu-mediocris-3", 1.8, [0.76, 0.88], false),
-        ("cu-flat-1", 3.5, [0.50, 0.83], false), ("cu-sidelit-1", 2.4, [0.62, 0.87], false),
+        ("cu-humilis-4", 1.3, [0.60, 0.98], false), ("cu-humilis-5", 1.6, [0.68, 0.95], false),
+        ("cu-mediocris-1", 2.6, [0.35, 0.93], false), ("cu-mediocris-2", 2.2, [0.64, 0.86], false),
+        ("cu-mediocris-3", 1.8, [0.40, 0.97], false), ("cu-mediocris-4", 2.2, [0.42, 0.94], false),
+        ("cu-mediocris-5", 1.9, [0.62, 0.96], false), ("cu-mediocris-6", 1.8, [0.48, 0.97], false),
+        ("cu-mediocris-7", 2.4, [0.38, 0.86], false),
+        ("cu-flat-1", 3.5, [0.50, 0.83], false), ("cu-flat-2", 1.4, [0.81, 0.96], false),
         ("cu-congestus-3", 4.5, [0.65, 0.90], true),
-    ] // ponytail: nine clouds and one tower; five more were cut but ran into their photos' frames, which showed
+    ] // ponytail: thirteen clouds and one tower from two skies; another sky's cut-outs would vary them further
     /// Each cloud as packed, kept while this scene lives so one that drifts off isn't packed again when it's next
     /// picked, and shared with any other scene showing it.
     private var cloudTextures: [String: SKTexture] = [:]

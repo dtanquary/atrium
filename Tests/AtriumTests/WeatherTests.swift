@@ -38,3 +38,13 @@ import simd
     #expect(distance(place(star, later), moved) < 1e-9)
     #expect(moved.y < 0.78 && moved.x > 0.3) // setting, down and to the north
 }
+
+/// Every cumulus in Weather's pool has its photo, and none of them is a tower but the one. A missing photo would draw
+/// nothing: `packedCloud` falls back to an empty texture.
+@MainActor @Test func weatherCloudsHaveTheirPhotos() {
+    for cloud in WeatherScene.photoClouds {
+        #expect(FileManager.default.fileExists(atPath: resource("weather-cloud-\(cloud.name).heic").path), "\(cloud.name)")
+        #expect(cloud.lum.x < cloud.lum.y)
+    }
+    #expect(WeatherScene.photoClouds.filter(\.tower).count == 1)
+}
