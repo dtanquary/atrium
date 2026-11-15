@@ -109,6 +109,75 @@ enum TankArt {
     /// The clear margin round a cut-out blurred by `blur` points: three sigma, where the blur has faded out.
     static func margin(blur: CGFloat) -> CGFloat { 3 * blur }
 
+    /// The lamp's light on the tank's floor, focused by the rippled surface: filaments that fork, bunch into bright
+    /// knots and fade out, as real caustics do. One tile that repeats, 512 texels plus a wrapped row and column, about
+    /// 16 cells of light across, with the light over 8 times the mean in red, green and blue. Baked once while any
+    /// tank shows it.
+    @MainActor static func caustics() -> SKTexture {
+        sharedTexture("fish tank caustics") {
+            let n = 512, light = causticLight(n)
+            var bytes = [UInt8](repeating: 255, count: (n + 1) * (n + 1) * 4)
+            for y in 0...n {
+                for x in 0...n {
+                    let v = UInt8((min(light[y % n * n + x % n] / 8, 1) * 255).rounded()), i = (y * (n + 1) + x) * 4
+                    (bytes[i], bytes[i + 1], bytes[i + 2]) = (v, v, v)
+                }
+            }
+            let texture = SKTexture(data: Data(bytes), size: CGSize(width: n + 1, height: n + 1))
+            texture.filteringMode = .linear
+            return texture
+        }
+    }
+
+    /// The light under a rippled surface on a tile `n` texels across, relative to its mean: rays sent straight down
+    /// through a surface of summed sines are bent by its slope, and counting where they land gives the light.
+    static func causticLight(_ n: Int) -> [Float] {
+        var rng = SplitMix(state: 3)
+        var waves: [(m: Float, k: Float, phase: Float, height: Float)] = [] // whole waves across the tile, so it repeats
+        while waves.count < 24 {
+            let m = Int.random(in: -20...20, using: &rng), k = Int.random(in: -20...20, using: &rng)
+            let length = Float(m * m + k * k).squareRoot()
+            if (5...20).contains(length) {
+                waves.append((Float(m), Float(k), .random(in: 0..<(2 * .pi), using: &rng), 1 / (length * length)))
+            }
+        }
+        // The surface's slope at each texel corner, sin(a + b) taken apart so each wave costs no sines per texel.
+        var gx = [Float](repeating: 0, count: n * n), gy = gx
+        for w in waves {
+            let a = (0..<n).map { 2 * Float.pi * w.m * Float($0) / Float(n) }
+            let b = (0..<n).map { 2 * Float.pi * w.k * Float($0) / Float(n) + w.phase }
+            let (sa, ca, sb, cb) = (a.map(sin), a.map(cos), b.map(sin), b.map(cos))
+            for y in 0..<n {
+                for x in 0..<n {
+                    let s = w.height * (sa[x] * cb[y] + ca[x] * sb[y])
+                    gx[y * n + x] -= s * w.m
+                    gy[y * n + x] -= s * w.k
+                }
+            }
+        }
+        let rms = (zip(gx, gy).reduce(0) { $0 + $1.0 * $1.0 + $1.1 * $1.1 } / Float(n * n)).squareRoot()
+        let reach = 0.011 * Float(n) / rms // texels a ray is bent per unit of slope: just past the first focus
+        // Four rays to a texel, each landing where the slope there sends it, shared between the four texels round it.
+        var light = [Float](repeating: 0, count: n * n)
+        func wrap(_ i: Int) -> Int { (i % n + n) % n }
+        for j in 0..<(2 * n) {
+            for i in 0..<(2 * n) {
+                let px = (Float(i) + 0.5) / 2, py = (Float(j) + 0.5) / 2
+                let x0 = Int(px), y0 = Int(py), fx = px - Float(x0), fy = py - Float(y0)
+                let (c0, c1, c2, c3) = (y0 * n + x0, y0 * n + wrap(x0 + 1), wrap(y0 + 1) * n + x0, wrap(y0 + 1) * n + wrap(x0 + 1))
+                let (w0, w1, w2, w3) = ((1 - fx) * (1 - fy), fx * (1 - fy), (1 - fx) * fy, fx * fy)
+                let lx = px - 0.5 + reach * (gx[c0] * w0 + gx[c1] * w1 + gx[c2] * w2 + gx[c3] * w3)
+                let ly = py - 0.5 + reach * (gy[c0] * w0 + gy[c1] * w1 + gy[c2] * w2 + gy[c3] * w3)
+                let lx0 = Int(lx.rounded(.down)), ly0 = Int(ly.rounded(.down)), ux = lx - Float(lx0), uy = ly - Float(ly0)
+                light[wrap(ly0) * n + wrap(lx0)] += (1 - ux) * (1 - uy)
+                light[wrap(ly0) * n + wrap(lx0 + 1)] += ux * (1 - uy)
+                light[wrap(ly0 + 1) * n + wrap(lx0)] += (1 - ux) * uy
+                light[wrap(ly0 + 1) * n + wrap(lx0 + 1)] += ux * uy
+            }
+        }
+        return light.map { $0 / 4 }
+    }
+
     /// The cut-outs as drawn, while any tank still shows them: a tank built for a new setting takes most of the
     /// one it replaces' rather than drawing all 40-odd again, about 10 ms each on the main thread. Held weakly, so
     /// they go with the last tank.

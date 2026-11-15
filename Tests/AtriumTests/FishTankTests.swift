@@ -17,3 +17,15 @@ import Testing
     let edge = (0..<w).flatMap { [alpha[$0], alpha[(h - 1) * w + $0]] } + (0..<h).flatMap { [alpha[$0 * w], alpha[$0 * w + w - 1]] }
     #expect(edge.max()! < 8) // the rock stands on its photo's bottom edge, solid there unless the blur has room
 }
+
+/// The caustics are light gathered into filaments: most of the floor is dimmer than the mean and a few texels many
+/// times brighter. Rays bent too little would light it evenly, and too much would scatter it into noise.
+@Test func causticLightGathersIntoFilaments() {
+    let clock = ContinuousClock(), began = clock.now
+    let light = TankArt.causticLight(512), took = clock.now - began
+    let sorted = light.sorted(), mean = light.reduce(0, +) / Float(light.count)
+    print("caustics baked in \(took)")
+    #expect(abs(mean - 1) < 0.001)
+    #expect(sorted[light.count / 2] < 0.8)       // the median: most of the floor is in the cells between filaments
+    #expect(sorted[light.count * 99 / 100] > 4)  // the filaments' bright cores
+}

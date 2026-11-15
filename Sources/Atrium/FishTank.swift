@@ -382,7 +382,7 @@ final class FishTank: SKScene {
 
                 // LED shimmer on the back wall, and faint rays from the lamp array, fading downward
                 float high = smoothstep(0.2, 1.0, uv.y);
-                c += u_shimmer * caustic(pts / 160.0, t * 0.6) * 0.025 * high;
+                c += u_shimmer * texture2D(u_caustics, causticAt(pts / 160.0, t * 0.6)).r * 0.025 * high;
                 float rays = noise1(pts.x / 45.0 + sin(t * 0.1) * 1.5) * noise1(pts.x / 14.0 - t * 0.05 + 3.0);
                 c += u_shimmer * smoothstep(0.3, 0.8, rays) * 0.05 * high * lamp;
 
@@ -391,9 +391,9 @@ final class FishTank: SKScene {
                 // meets the water, with the bright waterline above. A grey, blurry band here read as muddy.
                 float band = smoothstep(0.94, 0.946, uv.y);
                 if (band > 0.0) {
-                    float lines = caustic(vec2(pts.x / 90.0, pts.y / 9.0), t * 0.8);
+                    float lines = texture2D(u_caustics, causticAt(vec2(pts.x / 90.0, pts.y / 9.0), t * 0.8)).r;
                     vec3 mirror = u_high * (1.2 + 0.15 * noise(vec2(pts.x * 0.01 + t * 0.05, pts.y * 0.05)));
-                    mirror += u_shimmer * lines * 0.35;
+                    mirror += u_shimmer * lines * 0.5;
                     c = mix(c, mirror, band);
                 }
                 c += u_shimmer * 0.25 * exp(-pow((uv.y - 0.943) * u_size.y / 2.0, 2.0)); // where mirror meets water
@@ -406,34 +406,24 @@ final class FishTank: SKScene {
             """, uniforms: [
                 SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]),
                 SKUniform(name: "u_high", vectorFloat3: light.high), SKUniform(name: "u_low", vectorFloat3: light.low),
-                SKUniform(name: "u_shimmer", vectorFloat3: light.shimmer), WallpaperTime.now,
+                SKUniform(name: "u_shimmer", vectorFloat3: light.shimmer), SKUniform(name: "u_caustics", texture: causticTexture),
+                WallpaperTime.now,
             ])
         addChild(water)
     }
 
-    /// Bright lines where the cells of a moving Voronoi pattern meet, like sunlight focused by surface waves.
+    /// Where to read the baked caustics (`TankArt.caustics`, as `u_caustics`) for a point `q`, measured in cells of
+    /// light, at time `t`: the light writhes as the surface moves, bending the filaments at two scales, and drifts
+    /// slowly across. The tile is 16 cells across, plus a wrapped texel so it's smoothed across its seam.
     private static let caustics = """
-        float caustic(vec2 p, float t) {
-            // Bend the cell walls into wandering curves, at two scales.
-            p += 0.3 * vec2(sin(p.y * 1.7 + t * 0.7) + 0.6 * sin(p.y * 3.3 - t * 0.9 + p.x),
-                            sin(p.x * 1.5 - t * 0.6) + 0.6 * sin(p.x * 3.1 + t * 0.8 - p.y));
-            vec2 i = floor(p);
-            vec2 f = fract(p);
-            float d1 = 8.0;
-            float d2 = 8.0;
-            for (int y = -1; y <= 1; y++) {
-                for (int x = -1; x <= 1; x++) {
-                    vec2 g = vec2(float(x), float(y));
-                    vec2 h = fract(sin(vec2(dot(i + g, vec2(127.1, 311.7)), dot(i + g, vec2(269.5, 183.3)))) * 43758.5453);
-                    float d = length(g + 0.5 + 0.42 * sin(t + 6.2831 * h) - f);
-                    if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) { d2 = d; }
-                }
-            }
-            float edge = 1.0 - smoothstep(0.0, 0.1, d2 - d1);
-            return edge * edge * 0.8 + (1.0 - smoothstep(0.0, 0.35, d2 - d1)) * 0.2;
+        vec2 causticAt(vec2 q, float t) {
+            q += 0.22 * vec2(sin(q.y * 1.3 + t * 0.7) + 0.5 * sin(q.y * 2.7 - t * 0.9 + q.x),
+                             sin(q.x * 1.1 - t * 0.6) + 0.5 * sin(q.x * 2.9 + t * 0.8 - q.y));
+            return (fract(q / 8.0 + t * vec2(0.004, 0.0026)) * 512.0 + 0.5) / 513.0;
         }
 
         """
+    private lazy var causticTexture = TankArt.caustics()
 
     /// White aragonite sand: warm white up front under the lamp, going blue with distance, with fine grain and the
     /// lamp's shimmer rippling across it. The caustics multiply the sand they land on rather than adding white, so
@@ -451,8 +441,11 @@ final class FishTank: SKScene {
                 vec4 h = hash42(floor(pts * 2.0));
                 s *= 0.88 + 0.14 * noise(pts * vec2(0.18, 0.5)) + 0.1 * (h.x - 0.5); // grain and ripples in the sand
                 vec2 p = vec2(pts.x, pts.y * 2.6) / mix(140.0, 60.0, back);
-                float light = caustic(p, u_now * 0.7) * 0.75 + caustic(p * 1.7 + 3.7, u_now * 0.95) * 0.3;
-                s *= 1.0 + light * 1.1 * (1.0 - 0.6 * back);
+                float light = texture2D(u_caustics, causticAt(p, u_now * 0.7)).r * 0.75
+                            + texture2D(u_caustics, causticAt(mat2(0.8, 0.6, -0.6, 0.8) * p * 1.7 + 3.7, u_now * 0.95)).r * 0.3;
+                s *= 0.88 + light * 1.6 * (1.0 - 0.6 * back);
+                float peak = max(s.r, max(s.g, s.b)); // bright cores roll off short of white, keeping their colour
+                s *= (peak > 0.8 ? 0.8 + 0.16 * (1.0 - exp((0.8 - peak) / 0.16)) : peak) / max(peak, 0.001);
                 s = mix(s, u_low, smoothstep(0.75, 1.0, back) * 0.5); // melting into the back panel
                 // A soft, uneven back edge, not a ruled line, fading into the water behind it: the water's own colour
                 // there (addWater's back panel and lamp; its shimmer and rays don't reach this low). Opaque, not
@@ -465,7 +458,8 @@ final class FishTank: SKScene {
                 SKUniform(name: "u_size", vectorFloat2: [Float(floorSize.width), Float(floorSize.height)]),
                 SKUniform(name: "u_sandNear", vectorFloat3: light.sandNear), SKUniform(name: "u_sandFar", vectorFloat3: light.sandFar),
                 SKUniform(name: "u_low", vectorFloat3: light.low), SKUniform(name: "u_high", vectorFloat3: light.high),
-                SKUniform(name: "u_share", float: Float(sandHeight / size.height)), WallpaperTime.now,
+                SKUniform(name: "u_share", float: Float(sandHeight / size.height)),
+                SKUniform(name: "u_caustics", texture: causticTexture), WallpaperTime.now,
             ])
         addChild(sand)
     }
@@ -485,16 +479,14 @@ final class FishTank: SKScene {
     /// `a_frame` says where the sprite is in the tank: the scene position of texture corner (0, 0), then the sprite's
     /// width (negative when flipped) and height, in points. Fish update it every frame.
     private lazy var photoShader: SKShader = {
-        let shader = SKShader(source: """
+        let shader = SKShader(source: Self.caustics + """
             void main() {
                 vec4 c = texture2D(u_texture, v_tex_coord);
                 vec2 pts = a_frame.xy + v_tex_coord * a_frame.zw;
                 float high = clamp(pts.y / u_height, 0.0, 1.0);
                 float shade = a_shadow.w * (1.0 - smoothstep(a_shadow.y - a_shadow.z, a_shadow.y + a_shadow.z, abs(pts.x - a_shadow.x)));
-                // two crossing, wandering waves: a cheap stand-in for caustics, plenty on small moving shapes
-                float t = u_now;
-                float ripple = pow(abs(sin(pts.x * 0.045 + 1.7 * sin(pts.y * 0.03 + t * 0.5) + t * 0.6)
-                                     * sin(pts.y * 0.05 - 1.3 * sin(pts.x * 0.035 - t * 0.4) + t * 0.45)), 3.0)
+                // the same caustics as on the sand, a little smaller this much nearer the surface
+                float ripple = texture2D(u_caustics, causticAt(pts / 100.0, u_now * 0.6)).r * 1.4
                              * (0.3 + 0.7 * smoothstep(0.35, 1.0, v_tex_coord.y)) * (1.0 - shade);
                 vec3 lit = c.rgb * u_grade * (0.82 + 0.28 * high) * (1.0 + ripple * 0.45 * (0.4 + 0.6 * high));
                 float up = v_tex_coord.y;
@@ -508,7 +500,7 @@ final class FishTank: SKScene {
             """, uniforms: [
                 SKUniform(name: "u_grade", vectorFloat3: light.grade), SKUniform(name: "u_haze", vectorFloat3: light.haze),
                 SKUniform(name: "u_fluoro", float: light.fluoro), SKUniform(name: "u_height", float: Float(size.height)),
-                WallpaperTime.now,
+                SKUniform(name: "u_caustics", texture: causticTexture), WallpaperTime.now,
             ])
         shader.attributes = [SKAttribute(name: "a_fog", type: .float), SKAttribute(name: "a_glow", type: .float),
                              SKAttribute(name: "a_frame", type: .vectorFloat4), SKAttribute(name: "a_fish", type: .vectorFloat4),
