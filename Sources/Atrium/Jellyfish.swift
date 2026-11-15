@@ -54,8 +54,6 @@ final class Jellyfish: SKScene {
         var rise: Double { Double(defines["RISE"]!)! }
         var tall: Double { low + 1.1 * rise }
         var sway: Double { Double(defines["SWAY"]!)! }
-        /// How far the strands fan apart where the spine bends, per radius it carries them aside.
-        var fan: Double { Double(defines["FAN"]!)! }
         /// How far out the fringe's tips splay at rest, following the skirt, in bell radii.
         var splay: Double { Double(defines["SPLAY"]!)! * Double(defines["FLARE"]!)! * tentacles }
         /// The margin's radius at its widest, the skirt flared at rest, as the shader's `rimLate` has it.
@@ -66,14 +64,14 @@ final class Jellyfish: SKScene {
         "NT": "320", "TLEN": "0.32", "TW": "0.003", "SWAY": "0.12", "NOA": "4", "ALEN": "1.0", "AW": "0.17",
         "ASPREAD": "0.22", "ASWAY": "0.25", "TWIST": "3.0", "HEIGHT": "0.42", "RISE": "0.32", "SHRINK": "0.14",
         "NC": "32.0", "CANALSHARP": "10.0", "CANALK": "0.5", "GONADS": "1", "CONVERGE": "0.0", "TVARY": "0.5", "RING": "0",
-        "UNDER": "0.02", "SKIRT": "0.22", "FLARE": "0.82", "TUCK": "-0.5", "STEPS": "16", "FAN": "0.0", "SPLAY": "0.35",
+        "UNDER": "0.02", "SKIRT": "0.22", "FLARE": "0.82", "TUCK": "-0.5", "STEPS": "16", "SPLAY": "0.35",
     ])
     static let crystal = Species(count: 48, diameter: 0.08...0.2, period: 1.8, perPulse: 0.35, restChance: 0.25, rest: 0.8...3.0,
                                  righting: 0.02, sag: 0.05, stretch: 0.08, tentacles: 7, arms: 0.35, defines: [
         "NT": "36", "TLEN": "7.0", "TW": "0.005", "SWAY": "0.06", "NOA": "1", "ALEN": "0.35", "AW": "0.3",
         "ASPREAD": "0.0", "ASWAY": "0.05", "TWIST": "1.5", "HEIGHT": "0.36", "RISE": "0.26", "SHRINK": "0.12",
         "NC": "60.0", "CANALSHARP": "16.0", "CANALK": "2.2", "GONADS": "0", "CONVERGE": "0.3", "TVARY": "0.7", "RING": "1",
-        "UNDER": "0.08", "SKIRT": "0.22", "FLARE": "0.82", "TUCK": "-0.5", "STEPS": "20", "FAN": "0.35", "SPLAY": "0.0", // the ring's points glow a little below the margin, and want 20 steps
+        "UNDER": "0.08", "SKIRT": "0.22", "FLARE": "0.82", "TUCK": "-0.5", "STEPS": "20", "SPLAY": "0.0", // the ring's points glow a little below the margin, and want 20 steps
     ])
 
     /// One jelly in metres, seen by a camera 50° across from the origin, looking along +z: its place, the way its
@@ -408,7 +406,7 @@ final class Jellyfish: SKScene {
             // tallest and widest, the fringe from the ring down to the strands' tips and as far aside as the spine
             // carries them, and the arms from their roots to theirs. `jellyfishBoxHoldsWhatIsDrawn` checks it.
             let lean = abs(sin(tilt)), aside = pts.map { abs($0.x) }, last = min(3, Int((4 * sp.tentacles / sp.spine).rounded(.up)) - 1)
-            let fringe = sp.rim + 0.06 + sp.splay + (1.1 + sp.fan) * aside[...last].max()! + sp.sway * sp.tentacles / 2
+            let fringe = sp.rim + 0.06 + sp.splay + 1.1 * aside[...last].max()! + sp.sway * sp.tentacles / 2
             let width = 2 * max(1.1, fringe, 0.7 + 0.66 * aside.max()!) + Self.slack
             let above = sp.tall * cos(tilt) + (sp.rim + 0.04) * lean + 0.05 + Self.slack
             let below = max((sp.rim + 0.04) * lean + 0.06, lean - Self.height(pts, sp.tentacles / sp.spine) + 0.02,
@@ -626,7 +624,7 @@ final class Jellyfish: SKScene {
         // The strands nearest this pixel: where a strand's root would sit for this x, front and back of the ring.
         float tent = 0.0, arm = 0.0;
         vec2 mid = spineAt(q.y, a_sp1, a_sp2, SPLEN);
-        float r0 = max((1.0 - CONVERGE * smoothstep(0.0, TLEN * 0.6, mid.y)), 0.2) * tx + FAN * abs(mid.x) + SPLAY * sa * clamp(mid.y, 0.0, TLEN);
+        float r0 = max((1.0 - CONVERGE * smoothstep(0.0, TLEN * 0.6, mid.y)), 0.2) * tx + SPLAY * sa * clamp(mid.y, 0.0, TLEN);
         float reach = tx * abs(sb) + ty * cb + 0.06, rim0 = rimLate(0.0, a_pulse, amp).x;
         // A strand shows from its root down to its tip, and the four looked at root within three slots of this pixel's
         // own place on the ring: outside that band (most of a tilted bell's face) none of them is here.
@@ -643,12 +641,10 @@ final class Jellyfish: SKScene {
                 float rootY = ty * cb - tx * sin(phi) * sb;
                 vec2 sp = spineAt(q.y - rootY, a_sp1, a_sp2, SPLEN);
                 float s = sp.y, own = hash11(fi * 3.31 + seed * 0.7), tl = TLEN * (1.0 - TVARY * own * 0.6);
-                // Where the spine carries the bundle aside, as a turn does, its strands fan apart rather than bending
-                // together like a tube.
                 // A moon jelly's fringe leaves the margin along its skirt, so it splays out at rest and swings in on
                 // the stroke.
                 vec2 rim = rimLate(s / 3.0, a_pulse, amp);
-                float r = (tx + rim.x - rim0) * (1.0 - CONVERGE * smoothstep(0.0, TLEN * 0.6, s)) + FAN * abs(sp.x) + SPLAY * rim.y * s;
+                float r = (tx + rim.x - rim0) * (1.0 - CONVERGE * smoothstep(0.0, TLEN * 0.6, s)) + SPLAY * rim.y * s;
                 float x = r * cos(phi) + sp.x + SWAY * s * (noise(vec2(s * 0.7 - t * 0.25, fi * 3.7 + seed)) - 0.5);
                 float fade = smoothstep(-0.02, 0.06, s) * (1.0 - smoothstep(tl * 0.5, tl, s));
                 tent += strand(q.x - x, TW * (1.0 - 0.6 * clamp(s / tl, 0.0, 1.0)), px) * fade * (0.7 + 0.3 * sin(phi))
