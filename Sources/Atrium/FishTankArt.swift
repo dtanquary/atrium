@@ -84,15 +84,18 @@ enum Species: CaseIterable {
 /// Loads the tank's photo cut-outs and builds the warps that swim and sway them.
 enum TankArt {
     /// A photo cut-out from Resources, drawn `width` points wide with its height from its shape, and softened by
-    /// `blur` points, like a camera's depth of field for things further back. Nil if the file's missing.
+    /// `blur` points, like a camera's depth of field for things further back. A blurred one comes with a clear
+    /// `margin(blur:)` all round, included in its size, so its blur isn't cut off straight at the photo's edge.
+    /// Nil if the file's missing.
     @MainActor static func photo(_ name: String, width: CGFloat, blur: CGFloat = 0) -> (texture: SKTexture, size: CGSize)? {
         // Drawn at the nearest sixteenth of an octave, SpriteKit scaling the last 2% at most, so a reef laid out
         // again at slightly different sizes finds most of its cut-outs already drawn.
         let drawnWidth = exp2((log2(width) * 16).rounded() / 16), key = "\(name) \(drawnWidth) \(blur)" as NSString
-        if let texture = drawn.object(forKey: key), let aspect = aspects[name] { return (texture, CGSize(width: width, height: width * aspect)) }
+        let m = 2 * margin(blur: blur)
+        if let texture = drawn.object(forKey: key), let aspect = aspects[name] { return (texture, CGSize(width: width + m, height: width * aspect + m)) }
         guard var image = NSImage(contentsOf: resource(name + ".heic"))?.cgImage(forProposedRect: nil, context: nil, hints: nil)
         else { return nil }
-        let aspect = CGFloat(image.height) / CGFloat(image.width), drawnSize = CGSize(width: drawnWidth, height: drawnWidth * aspect)
+        let aspect = CGFloat(image.height) / CGFloat(image.width), drawnSize = CGSize(width: drawnWidth + m, height: drawnWidth * aspect + m)
         aspects[name] = aspect
         if blur > 0 { image = blurred(image, sigma: blur * CGFloat(image.width) / drawnWidth) ?? image }
         let texture = paint(drawnSize) { ctx in
@@ -100,8 +103,11 @@ enum TankArt {
             ctx.draw(image, in: CGRect(origin: .zero, size: drawnSize))
         }
         drawn.setObject(texture, forKey: key)
-        return (texture, CGSize(width: width, height: width * aspect))
+        return (texture, CGSize(width: width + m, height: width * aspect + m))
     }
+
+    /// The clear margin round a cut-out blurred by `blur` points: three sigma, where the blur has faded out.
+    static func margin(blur: CGFloat) -> CGFloat { 3 * blur }
 
     /// The cut-outs as drawn, while any tank still shows them: a tank built for a new setting takes most of the
     /// one it replaces' rather than drawing all 40-odd again, about 10 ms each on the main thread. Held weakly, so
@@ -139,8 +145,10 @@ enum TankArt {
 
     private static func blurred(_ image: CGImage, sigma: CGFloat) -> CGImage? {
         let source = CIImage(cgImage: image)
-        let soft = source.applyingGaussianBlur(sigma: sigma).cropped(to: source.extent) // not clamped: that smeared a cut-out's edges into a faint box beside it
-        return imaging.createCGImage(soft, from: source.extent)
+        // Not clamped: that smeared a cut-out's edges into a faint box beside it. Cropped to its own box, the blur
+        // was cut off there, leaving the back cluster's base and sides razor-straight.
+        let padded = source.extent.insetBy(dx: -margin(blur: sigma), dy: -margin(blur: sigma))
+        return imaging.createCGImage(source.applyingGaussianBlur(sigma: sigma).cropped(to: padded), from: padded)
     }
 
     /// One tail beat as warp frames: a wave travelling from head to tail, swinging the tail most.
