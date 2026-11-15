@@ -44,6 +44,25 @@ import Testing
     #expect(worst.light <= 0.0401 && worst.seed < 0.06, "\(worst)")
 }
 
+/// Every blade card holds its whole blade, bowed, crimped and at its widest: nothing reaches the card's edges, where
+/// it would be cut off, and each card has a blade in it.
+@MainActor @Test func kelpBladesStayInTheirCards() throws {
+    let image = try #require(Atlas.shared().texture.cgImage())
+    let (w, h) = (image.width, image.height)
+    var rgba = [UInt8](repeating: 0, count: w * h * 4)
+    let ctx = try #require(CGContext(data: &rgba, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                                     space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+    ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+    for card in Atlas.shared().blades {
+        let r = card.textureRect(), x0 = Int((r.minX * Double(w)).rounded()), x1 = Int((r.maxX * Double(w)).rounded()) - 1
+        let y0 = Int((r.minY * Double(h)).rounded()), y1 = Int((r.maxY * Double(h)).rounded()) - 1
+        func alpha(_ x: Int, _ y: Int) -> UInt8 { rgba[((h - 1 - y) * w + x) * 4 + 3] } // drawn rows run from the top
+        let edge = (x0...x1).map { max(alpha($0, y0), alpha($0, y1)) }.max()! | (y0...y1).map { alpha(x1, $0) }.max()!
+        let inside = (x0...x1).reduce(0) { n, x in n + (y0...y1).filter { alpha(x, $0) > 128 }.count }
+        #expect(edge == 0 && inside > 2000, "card at \(x0), \(y0): \(edge) at its edges, \(inside) pixels of blade")
+    }
+}
+
 /// On battery the water draws at half resolution and its marine snow, specks a pixel or two across, moves to a sprite
 /// of its own over it at full resolution, and back as the trim goes off; dusk has no snow to move.
 @MainActor @Test func kelpSnowStaysSharpWhenTrimmed() throws {

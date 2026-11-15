@@ -335,7 +335,7 @@ final class KelpForest: SKScene, Trimmable {
                             let card = Int.random(in: 0..<atlas.blades.count, using: &rng)
                             let length = Atlas.bladeLength * .random(in: 0.45...1, using: &rng) * (0.55 + 0.45 * high)
                             let node = SKSpriteNode(texture: atlas.blades[card])
-                            node.anchorPoint = CGPoint(x: Atlas.bladeAnchor, y: 0.5)
+                            node.anchorPoint = Atlas.bladeFoot(card)
                             let w = length / Atlas.bladeLength
                             node.size = CGSize(width: Atlas.bladeCard.width * w * mid.ppm / 2, height: Atlas.bladeCard.height * w * mid.ppm / 2)
                             node.zPosition = depthZ
@@ -638,27 +638,12 @@ final class KelpForest: SKScene, Trimmable {
     /// How thick the canopy is over a point of the surface (x and z in metres from the camera), 0 open water to 1 thick:
     /// patches drawn out along the swell, as the mock-up worked out per pixel. The same every time, so displays match.
     nonisolated static func canopy(_ x: Float, _ y: Float) -> Float {
-        func hash(_ x: Float, _ y: Float) -> Float {
-            var p = SIMD2(x, y) * SIMD2(123.34, 456.21)
-            p -= p.rounded(.down)
-            let d = simd_dot(p, p + 45.32)
-            p += d
-            let v = p.x * p.y
-            return v - v.rounded(.down)
-        }
-        func noise(_ x: Float, _ y: Float) -> Float {
-            let ix = x.rounded(.down), iy = y.rounded(.down), fx = x - ix, fy = y - iy
-            let ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy)
-            let a = hash(ix, iy) + (hash(ix + 1, iy) - hash(ix, iy)) * ux
-            let b = hash(ix, iy + 1) + (hash(ix + 1, iy + 1) - hash(ix, iy + 1)) * ux
-            return a + (b - a) * uy
-        }
         func fbm(_ x: Float, _ y: Float) -> Float {
             var (s, a, px, py): (Float, Float, Float, Float) = (0, 0.5, x, y)
-            for _ in 0..<4 { s += a * noise(px, py); px = px * 2.03 + 17.1; py = py * 2.03 + 9.3; a *= 0.5 }
+            for _ in 0..<4 { s += a * kelpNoise(px, py); px = px * 2.03 + 17.1; py = py * 2.03 + 9.3; a *= 0.5 }
             return s
         }
-        let wx = noise(x * 0.17, y * 0.17), wy = noise(x * 0.17 + 5.2, y * 0.17 + 5.2)
+        let wx = kelpNoise(x * 0.17, y * 0.17), wy = kelpNoise(x * 0.17 + 5.2, y * 0.17 + 5.2)
         return simd_smoothstep(Float(0.47), 0.65, fbm(x * 0.22 + wx * 2, y * 0.34 + wy * 2))
     }
 
@@ -830,7 +815,7 @@ final class KelpForest: SKScene, Trimmable {
     """
 
     /// Every kelp sprite: a card from the texture, whose red is how lit its tissue is from our side, green how much
-    /// light comes through it (its thin margins most), and blue its floats and stalks; coloured by the look, glowing
+    /// light comes through it (its thin margins most, as the mock-up's `through`), and blue its floats and stalks; coloured by the look, glowing
     /// gold when we look toward the light, fogged by distance along its own line of sight.
     static let kelpSource = """
     void main() {
@@ -848,7 +833,7 @@ final class KelpForest: SKScene, Trimmable {
         vec3 lit = lightAt(info.y, u_sun, u_ext) * floor(info.z) / 12.5;
         vec3 tint = mix(vec3(1.0), vec3(0.9, 1.0, 0.75), fract(own * 7.3) * 0.5);
         vec3 front = u_kelp * tint * lit * m.r;
-        vec3 through = u_glow * tint * lit * (0.45 + 0.55 * m.g) * (0.5 + 0.5 * m.r);
+        vec3 through = u_glow * tint * lit * m.g;
         vec3 col = mix(front, through, back * 0.85 * (1.0 - m.b * 0.5));
         vec3 tr = exp(-u_ext * info.x);
         col = col * tr + waterCol(d, info.y, u_deep, u_up, u_ext, u_sundir) * (1.0 - tr);
@@ -860,26 +845,48 @@ final class KelpForest: SKScene, Trimmable {
     """
 }
 
+/// The shaders' `kHash` and `kNoise` on the CPU, for the canopy and the blades drawn at load.
+private func kelpHash(_ x: Float, _ y: Float) -> Float {
+    var p = SIMD2(x, y) * SIMD2(123.34, 456.21)
+    p -= p.rounded(.down)
+    let d = simd_dot(p, p + 45.32)
+    p += d
+    let v = p.x * p.y
+    return v - v.rounded(.down)
+}
+private func kelpNoise(_ x: Float, _ y: Float) -> Float {
+    let ix = x.rounded(.down), iy = y.rounded(.down), fx = x - ix, fy = y - iy
+    let ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy)
+    let a = kelpHash(ix, iy) + (kelpHash(ix + 1, iy) - kelpHash(ix, iy)) * ux
+    let b = kelpHash(ix, iy + 1) + (kelpHash(ix + 1, iy + 1) - kelpHash(ix, iy + 1)) * ux
+    return a + (b - a) * uy
+}
+
 // MARK: - The cards
 
 /// One texture of everything the kelp is drawn from, made once and shared (`sharedTexture`): blade cards, far cards
 /// of two links of frond with their blades, a stipe and a holdfast. Its red is how lit the tissue is from our side
-/// (its ridges and wrinkles), green how much light comes through it (most at its thin margins), blue a float, stalk or
-/// stipe, which glow less; the kelp shader colours them by the look. Drawn in Core Graphics, a blade as the mock-up's:
-/// a short stalk on its float, a long blade tapering to its tip, its margin crimped and toothed every 2 cm, ridges
-/// across it every 3 cm (the close-up of a real blade, docs/kelp-forest.md Still open).
+/// (its blisters, ridges and twist), green how much light comes through it (most at its thin margins), blue a float,
+/// stalk or stipe, which glow less; the kelp shader colours them by the look. The blades are drawn a pixel at a time
+/// as the mock-up's frond shader drew them (`blade`), the stipes and holdfasts in Core Graphics.
 @MainActor struct Atlas {
     let texture: SKTexture
     let blades: [SKTexture], sparse: [SKTexture], dense: [SKTexture], stipe: SKTexture, holdfast: SKTexture
 
-    /// A blade card is 1 m by 22 cm, the blade's base 3 cm in; a blade at full size is 92 cm long with its stalk.
-    static let bladeCard = (width: 1.0, height: 0.22), bladeAnchor = 0.03, bladeLength = 0.92
+    /// A blade card is 1 m by 33 cm at 400 px a metre, the blade's base 3 cm in from its end and 44 px in from the side
+    /// it bows away from; a blade at full size is 92 cm long with its stalk and float, bowed by up to an eighth of its
+    /// length at its middle, half the cards one way and half the other, so its chord lies along the card.
+    static let bladeCard = (width: 1.0, height: 0.33), bladeAnchor = 0.03, bladeLength = 0.92
+    static let bladeCards = 24, bladeSide = 44.0 / 132
     /// How far a blade card's farthest corner is from the blade's foot, in blade lengths.
-    static let bladeReach = hypot(bladeCard.width * (1 - bladeAnchor), bladeCard.height / 2) / bladeLength
+    static let bladeReach = hypot(bladeCard.width * (1 - bladeAnchor), bladeCard.height * (1 - bladeSide)) / bladeLength
     /// A far card is 2 m by 3.2 m, its two links of stipe 2.1 m long from 20 cm up.
     static let cardSize = (width: 2.0, height: 3.2), cardStipe = 2.1, cardAnchor = CGPoint(x: 0.5, y: 0.2 / 3.2)
     static let holdfastSize = (width: 0.8, height: 0.5)
-    private static let (w, h) = (1280, 2048)
+    private static let (w, h) = (2048, 2048)
+
+    /// Where a blade card's foot is: even cards bow up, odd ones down.
+    static func bladeFoot(_ card: Int) -> CGPoint { CGPoint(x: bladeAnchor, y: card % 2 == 0 ? bladeSide : 1 - bladeSide) }
 
     static func shared() -> Atlas {
         let texture = sharedTexture("kelp-cards") { draw() }
@@ -887,7 +894,7 @@ final class KelpForest: SKScene, Trimmable {
             SKTexture(rect: CGRect(x: Double(x) / Double(w), y: Double(y) / Double(h), width: Double(cw) / Double(w), height: Double(ch) / Double(h)), in: texture)
         }
         return Atlas(texture: texture,
-                     blades: (0..<8).map { sub(0, $0 * 88, 400, 88) },
+                     blades: (0..<bladeCards).map { sub(1240 + $0 / 12 * 404, $0 % 12 * 136, 400, 132) },
                      sparse: (0..<3).map { sub($0 * 410, 720, 400, 640) },
                      dense: (0..<3).map { sub($0 * 410, 1370, 400, 640) },
                      stipe: sub(412, 2, 8, 28), holdfast: sub(430, 0, 240, 150))
@@ -901,46 +908,50 @@ final class KelpForest: SKScene, Trimmable {
         ctx.translateBy(x: 0, y: CGFloat(h))
         ctx.scaleBy(x: 1, y: -1)
         var rng = SplitMix(state: 0x6B65_6C70)
-        // Blade cards: eight blades, each along its card from its base 3 cm in, at 400 px a metre.
-        for i in 0..<8 {
-            let y = CGFloat(i * 88) + 44
-            blade(ctx, base: CGPoint(x: 12, y: y), angle: 0, length: 0.92, curl: .random(in: -0.15...0.15, using: &rng),
-                  halfWidth: .random(in: 0.045...0.075, using: &rng), ppm: 400, shade: .random(in: 0.4...0.75, using: &rng), seed: Double(i) * 7.1)
+        let pixels = ctx.data!.assumingMemoryBound(to: UInt8.self)
+        // Blade cards, in two columns at the right: each blade's chord along its card from its base 3 cm in, at 400 px a
+        // metre, bowed up (even cards) or down. A bowed blade's chord is a little shorter than the blade.
+        for i in 0..<bladeCards {
+            let curl = Float(i % 2 == 0 ? 1 : -1) * .random(in: 0.12...0.55, using: &rng)
+            let foot = bladeFoot(i), x0 = 1240 + i / 12 * 404, y0 = i % 12 * 136
+            blade(pixels, base: [Float(x0) + 12, Float(y0) + Float(foot.y) * 132], angle: 0,
+                  length: Float(bladeLength) / (1 + curl * curl / 6), curl: curl, width: .random(in: 0.05...0.085, using: &rng),
+                  ppm: 400, shade: .random(in: 0.8...1, using: &rng), seed: rng.next())
         }
         // A stipe and a holdfast.
-        ctx.setFillColor(CGColor(red: 0.55, green: 0.15, blue: 0.6, alpha: 1))
+        ctx.setFillColor(CGColor(red: 0.55, green: 0.41, blue: 0.6, alpha: 1))
         ctx.fill(CGRect(x: 413, y: 0, width: 6, height: 32))
         for _ in 0..<40 {
             let r = CGFloat.random(in: 6...22, using: &rng), x = CGFloat.random(in: 470...630, using: &rng)
             let top = 140 - abs(x - 550) * 1.4
             let y = CGFloat.random(in: 4...max(8, top), using: &rng)
-            ctx.setFillColor(CGColor(red: .random(in: 0.35...0.6, using: &rng), green: 0.1, blue: 0.5, alpha: 1))
+            ctx.setFillColor(CGColor(red: .random(in: 0.35...0.6, using: &rng), green: 0.37, blue: 0.5, alpha: 1))
             ctx.fillEllipse(in: CGRect(x: x - r, y: y - r * 0.6, width: 2 * r, height: 1.2 * r))
         }
         // Far cards: two links of frond with their blades, sparse (low on a frond) and dense (the ruff), at 200 px a metre.
-        for (row, (y0, dense)) in [(720, false), (1370, true)].enumerated() {
+        for (y0, dense) in [(720, false), (1370, true)] {
             for col in 0..<3 {
                 let ox = CGFloat(col * 410), oy = CGFloat(y0), ppm: CGFloat = 200
                 let stalkX = ox + 200, from = oy + 0.2 * ppm, to = from + 2.1 * ppm
-                var blades: [(at: CGFloat, az: Double, el: Double, len: Double, hw: CGFloat, shade: CGFloat)] = []
+                var blades: [(at: CGFloat, az: Double, el: Double, len: Double, hw: Double, shade: Double, seed: UInt64)] = []
                 var u: CGFloat = 0.05
                 while u < 2.1 {
                     if dense || Double.random(in: 0...1, using: &rng) < 0.35 {
                         blades.append((u, .random(in: 0...(2 * .pi), using: &rng), 0.3 + pow(.random(in: 0...1, using: &rng), 2),
-                                       (dense ? 0.92 : 0.55) * .random(in: 0.5...1, using: &rng), .random(in: 0.045...0.075, using: &rng),
-                                       .random(in: 0.4...0.75, using: &rng)))
+                                       (dense ? 0.92 : 0.55) * .random(in: 0.5...1, using: &rng), .random(in: 0.05...0.085, using: &rng),
+                                       .random(in: 0.8...1, using: &rng), rng.next()))
                     }
                     u += dense ? .random(in: 0.06...0.14, using: &rng) : .random(in: 0.1...0.2, using: &rng)
                 }
                 // Those leaning away from us first, in the stipe's shadow; then the stipe; then those toward us.
-                func draw(_ b: (at: CGFloat, az: Double, el: Double, len: Double, hw: CGFloat, shade: CGFloat), dim: CGFloat) {
+                func draw(_ b: (at: CGFloat, az: Double, el: Double, len: Double, hw: Double, shade: Double, seed: UInt64), dim: Double) {
                     let dx = sin(b.el) * cos(b.az), dy = cos(b.el), fore = (dx * dx + dy * dy).squareRoot()
-                    blade(ctx, base: CGPoint(x: stalkX, y: from + b.at * ppm), angle: atan2(dy, dx), length: b.len * fore,
-                          curl: CGFloat(sin(b.az * 3)) * 0.12, halfWidth: b.hw * CGFloat(0.4 + 0.6 * abs(cos(b.az * 1.7))),
-                          ppm: ppm, shade: b.shade * dim, seed: Double(b.at) * 31 + Double(row))
+                    blade(pixels, base: [Float(stalkX), Float(from + b.at * ppm)], angle: Float(atan2(dy, dx)), length: Float(b.len * fore),
+                          curl: Float(sin(b.az * 3) * 0.5), width: Float(b.hw * (0.4 + 0.6 * abs(cos(b.az * 1.7)))),
+                          ppm: Float(ppm), shade: Float(b.shade * dim), seed: b.seed)
                 }
                 for b in blades where sin(b.az) > 0 { draw(b, dim: 0.55) }
-                ctx.setFillColor(CGColor(red: 0.5, green: 0.12, blue: 0.6, alpha: 1))
+                ctx.setFillColor(CGColor(red: 0.5, green: 0.39, blue: 0.6, alpha: 1))
                 ctx.fill(CGRect(x: stalkX - 1.2, y: from, width: 2.4, height: to - from))
                 for b in blades where sin(b.az) <= 0 { draw(b, dim: 1) }
             }
@@ -952,57 +963,72 @@ final class KelpForest: SKScene, Trimmable {
         return texture
     }
 
-    /// One blade, from its base along `angle`, in pixels at `ppm` a metre.
-    private static func blade(_ ctx: CGContext, base: CGPoint, angle: CGFloat, length: Double, curl: CGFloat, halfWidth: CGFloat,
-                              ppm: CGFloat, shade: CGFloat, seed: Double) {
-        let L = CGFloat(length) * ppm, dir = CGPoint(x: cos(angle), y: sin(angle)), nrm = CGPoint(x: -dir.y, y: dir.x)
-        func point(_ a: CGFloat, _ off: CGFloat) -> CGPoint {
-            let c = curl * a * a * L
-            return CGPoint(x: base.x + dir.x * a * L + nrm.x * (c + off), y: base.y + dir.y * a * L + nrm.y * (c + off))
+    /// One blade laid over the texture's pixels (premultiplied, rows from the bottom), as the mock-up's frond shader drew
+    /// one (docs/kelp-forest/mock.swift): from its base along `angle`, its chord `length` metres at `ppm` pixels a metre,
+    /// bowed to one side by `curl` of its chord (a quarter of that at its middle), so it is a sickle and not a spear. A
+    /// short stalk, a pear-shaped float 7 by 2.5 cm, then the blade, twisting so it narrows to its edge here and there and
+    /// shows first one face and then the other; its margin crimped and toothed every 2 cm; its tissue blistered, with
+    /// ridges across it about 3 cm apart lit on one side and shaded on the other, and streaks along it; some tips worn
+    /// away. Red is how lit it is from our side, green how much light comes through it (most at its thin margins), blue
+    /// its float and stalk, which glow less.
+    private static func blade(_ pixels: UnsafeMutablePointer<UInt8>, base: SIMD2<Float>, angle: Float, length: Float, curl: Float,
+                              width: Float, ppm: Float, shade: Float, seed: UInt64) {
+        var rng = SplitMix(state: seed)
+        let h3 = Float.random(in: 0...1, using: &rng), h4 = Float.random(in: 0...1, using: &rng), hs = Float.random(in: 0...1, using: &rng)
+        let chord = length * ppm, dir = SIMD2(cos(angle), sin(angle)), nrm = SIMD2(-dir.y, dir.x)
+        let tip: Float = h3 > 0.6 ? 1 - 0.3 * h4 : 1, foot = min(0.08 / length, 0.3) // the blade proper starts past its float
+        let reach = width * 1.25 * ppm + 2, bow = curl * chord / 4
+        // Ridges and teeth fade out where they would be under a pixel or two.
+        let ridges = simd_clamp(0.03 * ppm / 6 - 0.3, 0, 1), teeth = simd_clamp(0.022 * ppm / 4 - 0.5, 0, 1)
+        var lo = SIMD2<Float>(repeating: .infinity), hi = -lo
+        for (s, t) in [(Float(0), min(0, bow) - reach), (chord, min(0, bow) - reach), (0, max(0, bow) + reach), (chord, max(0, bow) + reach)] {
+            let p = base + dir * s + nrm * t
+            lo = simd_min(lo, p); hi = simd_max(hi, p)
         }
-        func profile(_ a: CGFloat, _ side: CGFloat) -> CGFloat {
-            let m = Double(a) * length
-            if a < 0.05 { return 0.004 * ppm }
-            let ab = (a - 0.05) / 0.95
-            var p = simd_smoothstep(0, 0.25, ab) * (1 - simd_smoothstep(0.55, 1, ab) * 0.92)
-            p *= 1 + 0.07 * CGFloat(sin(m * 55 + seed)) + 0.05 * CGFloat(sin(m * 23 + seed * 0.3 + Double(side)))
-            p *= 1 - 0.07 * CGFloat((m / 0.022 + (side > 0 ? 0 : 0.5)).truncatingRemainder(dividingBy: 1))
-            return max(p * halfWidth * ppm, 0.004 * ppm)
+        guard hi.x >= 0, hi.y >= 0, lo.x < Float(w), lo.y < Float(h) else { return }
+        for y in max(0, Int(lo.y))...min(h - 1, Int(hi.y)) {
+            for x in max(0, Int(lo.x))...min(w - 1, Int(hi.x)) {
+                let p = SIMD2(Float(x) + 0.5, Float(y) + 0.5) - base
+                let a = simd_dot(p, dir) / chord
+                guard a > -0.01, a < 1 else { continue }
+                let slope = curl * (1 - 2 * a)
+                let off = (simd_dot(p, nrm) - curl * chord * a * (1 - a)) / (1 + slope * slope).squareRoot() // pixels across
+                guard abs(off) < reach else { continue }
+                let m = a * length, side: Float = off > 0 ? 1 : -1
+                var c = SIMD3<Float>.zero, alpha: Float = 0
+                func over(_ colour: SIMD3<Float>, _ cover: Float) { c = colour * cover + c * (1 - cover); alpha = cover + alpha * (1 - cover) }
+                let ab = (a - foot) / (tip - foot)
+                if ab > 0 && ab < 1 {
+                    let tw = h3 * 6.283 + a * (0.8 + 2.2 * h4), facing = 0.25 + 0.75 * abs(cos(tw)).squareRoot()
+                    var prof = simd_smoothstep(0, 0.25, ab) * (1 - simd_smoothstep(0.55, 1, ab) * 0.92) * (1 - simd_smoothstep(0.97, 1, ab))
+                    prof *= 1 + 0.07 * sin(m * 55 + hs * 20) + 0.05 * sin(m * 23 + hs * 7) + 0.08 * (kelpNoise(m * 30, hs * 9 + side * 3) - 0.5)
+                    let tooth = m / 0.022 + side * 0.5
+                    prof *= 1 - 0.07 * (tooth - tooth.rounded(.down)) * teeth
+                    let hw = width * facing * prof * ppm
+                    let cover = simd_clamp(hw + 0.5 - abs(off), 0, 1) * min(1, hw / 0.8)
+                    if cover > 0 {
+                        let across = off / max(hw, 1e-3)
+                        var rug = kelpNoise(m * 26, across * 3 + hs * 50) * 0.6 + kelpNoise(m * 70, across * 6 + hs * 20) * 0.4
+                        rug *= 1 - ridges * 0.28 * (1 - sin((m + 0.012 * sin(across * 2.5 + hs * 9)) * 210 + hs * 30))
+                        let streak = 0.85 + 0.15 * kelpNoise(m * 3, across * 9 + hs * 11), thin = max(1 - abs(across), 0)
+                        let front: Float = shade * (0.5 + 0.5 * rug) * streak * (0.4 + 0.6 * facing) * (0.9 + 0.1 * sin(tw))
+                        let through: Float = (0.55 + 0.45 * (1 - 0.6 * thin)) * (0.6 + 0.4 * rug) * streak * (1 - 0.35 * a) * (0.55 + 0.45 * facing)
+                        over(SIMD3(front, through, 0), cover)
+                    }
+                }
+                // Its float, narrow at the stalk and widest toward the blade, a little paler than the blade.
+                let u = (m - 0.008) / 0.07
+                if u > 0 && u < 1 {
+                    let r = 0.0145 * pow(sin(.pi * u), 0.6) * (0.55 + 0.45 * u) * ppm
+                    over(SIMD3(min(1, shade * 1.05), 0.55, 1), simd_clamp(r + 0.5 - abs(off), 0, 1))
+                }
+                if m < 0.012 { over(SIMD3(shade * 0.7, 0.3, 1), simd_clamp(max(0.004 * ppm, 0.6) + 0.5 - abs(off), 0, 1)) }
+                guard alpha > 0 else { continue }
+                let k = (y * w + x) * 4
+                for (i, v) in [c.x, c.y, c.z, 1].enumerated() {
+                    pixels[k + i] = UInt8(min(255, (v * (i == 3 ? alpha : 1) * 255 + Float(pixels[k + i]) * (1 - alpha)).rounded()))
+                }
+            }
         }
-        let n = 80
-        let path = CGMutablePath()
-        path.move(to: point(0, 0))
-        for i in 0...n { let a = CGFloat(i) / CGFloat(n); path.addLine(to: point(a, profile(a, 1))) }
-        for i in stride(from: n, through: 0, by: -1) { let a = CGFloat(i) / CGFloat(n); path.addLine(to: point(a, -profile(a, -1))) }
-        path.closeSubpath()
-        ctx.addPath(path)
-        ctx.setFillColor(CGColor(red: shade, green: 0.25, blue: 0, alpha: 1))
-        ctx.fillPath()
-        ctx.saveGState()
-        ctx.addPath(path)
-        ctx.clip()
-        // Its thin margins let the most light through.
-        ctx.addPath(path)
-        ctx.setLineWidth(halfWidth * ppm * 0.5)
-        ctx.setStrokeColor(CGColor(red: shade, green: 0.95, blue: 0, alpha: 0.6))
-        ctx.strokePath()
-        // Ridges across it about 3 cm apart, wandering.
-        ctx.setLineWidth(max(1, 0.006 * ppm))
-        ctx.setStrokeColor(CGColor(red: shade * 0.55, green: 0.15, blue: 0, alpha: 0.45))
-        var m = 0.06
-        while m < length {
-            let a = CGFloat(m / length), wob = CGFloat(sin(m * 40 + seed)) * 0.01 * ppm
-            ctx.move(to: point(a, -halfWidth * ppm * 1.2))
-            ctx.addLine(to: point(a + wob / L, halfWidth * ppm * 1.2))
-            m += 0.03 * Double.random(in: 0.8...1.2, using: &ridges)
-        }
-        ctx.strokePath()
-        ctx.restoreGState()
-        // The float at its foot.
-        let f = point(0.035 / CGFloat(length), 0)
-        ctx.setFillColor(CGColor(red: 0.85, green: 0.3, blue: 1, alpha: 1))
-        ctx.fillEllipse(in: CGRect(x: f.x - 0.02 * ppm, y: f.y - 0.011 * ppm, width: 0.04 * ppm, height: 0.022 * ppm))
     }
-
-    nonisolated(unsafe) private static var ridges = SplitMix(state: 7)
 }
