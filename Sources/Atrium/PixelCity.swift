@@ -1157,6 +1157,10 @@ final class PixelCity: SKScene, BatteryPaced {
         let homes = b.kind == .brick || (b.kind == .slab && rng.next() % 2 == 0)
         let warm = homes || b.kind == .deco || rng.next() % 3 == 0
         let share = officeShare
+        // By day an unlit window is dark glass, a pane mirroring the sky or a blind drawn, run by run (60, 25 and
+        // 15%), by a draw the run makes whatever the hour; they fade into the night's dark glass.
+        let mirror = mix(tone(mix(mix(behind, zenith, 0.5), rgb(236, 240, 246), 0.2)), glass, 0.25), blind = tone(lit(mix(b.colour, rgb(240, 232, 214), 0.5), keyFront))
+        func pane(_ unlit: RGB, _ r: Float) -> RGB { r < 0.6 ? unlit : mix(r < 0.85 ? mirror : blind, unlit, night) }
 
         /// A box: front wall, side wall and lit roof edge. Returns where its front wall starts and how wide that is.
         func block(_ x: Int, _ y: Int, _ width: Int, _ height: Int) -> (x: Int, width: Int) {
@@ -1175,7 +1179,7 @@ final class PixelCity: SKScene, BatteryPaced {
                 let (r1, r2, r3) = (Float.random(in: 0..<1, using: &rng), Float.random(in: 0..<1, using: &rng), Float.random(in: 0..<1, using: &rng))
                 let on = dark && (homes ? isLit(r1, r2, r3, home: 0.45) : r3 < share)
                 let lamp = (warm ? mix(rgb(255, 190, 100), rgb(255, 226, 150), r1) : mix(rgb(176, 200, 232), rgb(226, 234, 240), r1)) * (0.6 + 0.4 * r2)
-                if let colour = on ? mix(glass, tone(lamp), glow) : unlit {
+                if let colour = on ? mix(glass, tone(lamp), glow) : unlit.map({ pane($0, r2) }) {
                     for j in i..<min(i + run, count) { px.fill(x + j * pitch, y, width, rows, colour) }
                 }
                 i += run
@@ -1227,8 +1231,13 @@ final class PixelCity: SKScene, BatteryPaced {
                 let pane = tone(mix(mix(behind, zenith, 0.25 + 0.75 * Float(row) / Float(b.height)) * 0.82, tint, 0.38))
                 px.fill(f.x, base + row, f.width, 1, row % b.floor == b.floor - 1 ? pane * 0.74 : pane)
             }
-            for cy in stride(from: base + (b.far ? 0 : 8), through: top - 1 - b.floor, by: b.floor) {
-                storey(f.x + 1, cy, count: (f.width - 1) / bay, pitch: bay, width: bay - 1, rows: b.floor - 1, runs: 2...6, unlit: nil)
+            // By day it catches the bright sky in a band of panes two bays wide, stepping a bay every two floors.
+            let glint = tone(mix(behind, rgb(250, 250, 252), 0.45)), bays = (f.width - 1) / bay, period = bays + 4
+            for (k, cy) in stride(from: base + (b.far ? 0 : 8), through: top - 1 - b.floor, by: b.floor).enumerated() {
+                for j in 0..<bays where night < 1 && (((onRight ? j : bays - 1 - j) - k / 2 + Int(b.seed % 97)) % period + period) % period < 2 {
+                    px.fill(f.x + 1 + j * bay, cy, bay - 1, b.floor - 1, glint, 0.55 * (1 - night))
+                }
+                storey(f.x + 1, cy, count: bays, pitch: bay, width: bay - 1, rows: b.floor - 1, runs: 2...6, unlit: nil)
             }
             for mx in stride(from: f.x + bay, to: f.x + f.width - 1, by: bay) { px.fill(mx, base, 1, b.height - 1, .zero, 0.14) } // mullions
             if !b.far { px.fill(f.x + 1, base, f.width - 2, 6, dark ? mix(glass, rgb(255, 214, 160), glow * 0.45) : glass * 0.8) } // the lobby
