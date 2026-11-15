@@ -231,8 +231,12 @@ final class PixelWindowSeat: SKScene, BatteryPaced {
             for (g, lamp) in Mat.lamps.enumerated() { paint.lamp[step * 8 + g] = pack(mix(lamp, haze, far * 0.55)) }
         }
         paint.lights = UInt8(min(255, night * 300))
-        paint.sparkle = pack(mix(rgb(255, 196, 120), rgb(255, 252, 240), smoothstep(0, 14, el)))
-        paint.moonSparkle = pack(rgb(150, 164, 200))
+        // A sparkle in each step of haze, as the water under it has: on far water it is mostly the haze, and the
+        // glitter path dies away toward the horizon.
+        let sparkle = mix(rgb(255, 196, 120), rgb(255, 252, 240), smoothstep(0, 14, el))
+        paint.sparkle = (0..<Paint.steps).map { pack(mix(sparkle, haze, Float($0) / Float(Paint.steps - 1) * 0.85)) }
+        paint.moonSparkle = (0..<Paint.steps).map { pack(mix(rgb(150, 164, 200), haze, Float($0) / Float(Paint.steps - 1) * 0.85)) }
+        cirrus(in: &sky, colour: paint.cloud[(Paint.steps - 2) * Paint.tones + 4])
         paint.window = pack(rgb(255, 214, 150))
 
         // The glitter path: the Sun's image in the water, straight below it, as scattered sparkles. Under the Moon
@@ -278,6 +282,31 @@ final class PixelWindowSeat: SKScene, BatteryPaced {
         // preview as it opens, the render tests' first frame) has no next frame, and would show an empty pane.
         advance()
         compose()
+    }
+
+    /// Thin cirrus far off at our own height, as a few long streaks in the lowest third of the sky, laid over its
+    /// picture in a cloud's palest tone, dithered thin toward their ends. Each of five streaks comes and goes with
+    /// the country we fly over: it fades in and out over half of every 240 to 480 km of the flight (16 to 32 minutes
+    /// at 1×) and is gone for the other half, and takes a new place only while it is gone, so none ever jumps.
+    private func cirrus(in sky: inout [UInt32], colour: UInt32) {
+        let (gw, gh) = (glass.w, glass.h), room = gh - horizon
+        for k in 0..<5 {
+            let u = Self.flown / (240 + 60 * Double(k)) + Double(Atrium.hash(k, 0, 5050) >> 40) / 16_777_216, life = Int(u.rounded(.down))
+            let shown = Float(max(0, sin((u - Double(life)) * 2 * .pi)))
+            guard shown > 0 else { continue }
+            let draw = Atrium.hash(k, life, 5051), pick = { (bits: UInt64) in Float(draw >> bits & 1023) / 1023 }
+            let y = horizon + 4 + Int(pick(0) * Float(room) * 0.22), long = 80 + Int(pick(10) * 180), x0 = Int(pick(20) * Float(gw)) - long / 2
+            let deep = 3 + Int(pick(30) * 4) // rows
+            for row in 0..<deep where y + row < gh {
+                let across = sin((Float(row) + 0.5) / Float(deep) * .pi)
+                for x in max(x0, 0)..<min(x0 + long, gw) {
+                    // Fibres along it, from noise 10 pixels long, thinning toward its ends and its edges.
+                    let along = pow(sin(Float(x - x0) / Float(long) * .pi), 0.6), fibre = noise(Double(x) / 10, Double(row * 3 + k * 31 + life * 7), 5052)
+                    let thick = shown * across * along * (fibre * 1.4 - 0.2)
+                    if bayer(x, y + row) < thick * 1.6 { sky[(y + row) * gw + x] = blend(sky[(y + row) * gw + x], colour, thick > 0.55 ? 190 : 110) }
+                }
+            }
+        }
     }
 
     // MARK: - The cabin and the wing
@@ -450,7 +479,7 @@ final class PixelWindowSeat: SKScene, BatteryPaced {
                         let plain = paint.ground[(step * 2 + (m >> 7)) * mats + kind], n = row.first + i
                         var c = plain
                         if kind <= Int(Mat.lastWater) || kind == Int(Mat.coldSea), r >= 0, glint[r * gw + i] != 0, scatter(n, r, tick) < glint[r * gw + i] {
-                            c = paint.byMoon ? paint.moonSparkle : paint.sparkle
+                            c = paint.byMoon ? paint.moonSparkle[step] : paint.sparkle[step]
                         }
                         if lightsOn, glow[k] != 0, scatter(n, q, 0) < paint.lights, scatter(n, q, tick >> 1) > 7 {
                             c = paint.lamp[step * 8 + Int(glow[k])]
@@ -659,7 +688,7 @@ private struct Paint {
     var ground: [UInt32] = [], cloud = [UInt32](repeating: 0, count: steps * tones), lamp = [UInt32](repeating: 0, count: steps * 8)
     var wing: [UInt32] = [], wingFlash: [UInt32] = []
     var lights: UInt8 = 0 // how far the evening has got: a lamp comes on once this passes its own draw
-    var sparkle: UInt32 = 0, moonSparkle: UInt32 = 0, window: UInt32 = 0, tip: UInt32 = 0
+    var sparkle: [UInt32] = [], moonSparkle: [UInt32] = [], window: UInt32 = 0, tip: UInt32 = 0 // (sparkles by their step of haze)
     var byMoon = false, tipOn = false
     var sunSide = 0 // 1 with the Sun toward the nose (the right of the picture), -1 toward the tail, 0 ahead, behind or down
     var bolt: UInt32 = 0, storms: Float = 0 // lightning's colour, and how strongly it lights a cloud (0 with it switched off)
