@@ -554,7 +554,11 @@ falling = snowfall(p, t, u_snow.x);
         #if FOG
         // condensation (see fogCover): on the outside of the pane the trails wipe it and the drops sit on top, on the
         // inside it covers them
+        #if DEW
+        float fog = 0.7;   // fogCover without its noise: water that has beaded is many times what whitens the whole pane
+        #else
         float fog = fogCover(p, u_glass.y, u_pane.x);
+        #endif
         col = mix(col, veil, fog * (1.0 - u_pane.x) * (1.0 - wiped));
         mist += 0.5 * fog;
         #endif
