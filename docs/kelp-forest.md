@@ -152,13 +152,13 @@ After Step 4 (2026-11-15), the render test taking turns with the build before it
 |---|---|---|
 | Level, teal | 1.05 → 1.02 ms | 1.61 → 1.57 ms |
 | Level, dusk | 1.04 → 1.03 ms | 1.61 → 1.31 ms |
-| Looking up, teal | 1.32 → 1.02 ms | 1.69 → 1.19 ms |
+| Looking up, teal | 1.32 → 1.02 ms | about 1.2 → 1.3 ms (the same within noise) |
 | Moving between them, level, teal | 1.17 → 1.01 ms | 1.57 → 1.51 ms |
 | Moving between them, looking up, teal | 1.13 → 0.91 ms | 1.16 → 1.15 ms |
 
 So every view is inside the 2 ms of CPU and of GPU, with the school of fish and the new blades paid for by the savings; on battery with Lighter drawing on, the half-resolution water takes another 0.2 to 0.6 ms of GPU off.
 
-A debug build reads about 12 ms of CPU. Looking up and moving between the views are over on CPU: their near plants are many (the moving view's forest has plants from 4 m, for looking up), and each blade is a sprite posed every frame. The next saving is to draw the farther of them as cards. No `batteryRate`: a near stipe moves far over 2 device pixels a frame at 20 fps (research-method.md §5).
+A debug build reads about 8 to 10.5 ms of CPU. Before step 4, looking up and moving between the views were over on CPU: their near plants are many, and each blade is a sprite posed every frame. Drawing the farther of them as cards is the next saving, if one is needed. No `batteryRate`: a near stipe moves far over 2 device pixels a frame at 20 fps (research-method.md §5).
 
 ## Checking it
 ```sh
