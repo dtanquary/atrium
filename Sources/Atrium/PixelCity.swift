@@ -123,7 +123,8 @@ final class PixelCity: SKScene, BatteryPaced {
     private var trafficStrip: SKMutableTexture?, trafficShown: [Int] = []
     private var skyline: [Building] = []
     private var parks: [(x: Int, width: Int)] = []
-    private var stars: [(x: Int, y: Int, brightness: Float)] = []
+    /// The stars over the skyline: Night Sky's catalogue (the Yale Bright Star Catalogue) to magnitude 4.
+    nonisolated private static let brightStars = NightSky.catalogue.filter { $0.magnitude < 4.5 }
     private var clouds: [Cloud] = []
     /// Each cloud's picture as last painted, and how fast it drifts, for the tests.
     var cloudLooks: [(picture: CGImage?, speed: Float)] { clouds.map { ($0.node.texture?.cgImage(), $0.speed) } }
@@ -249,7 +250,7 @@ final class PixelCity: SKScene, BatteryPaced {
     /// Run again when Settings picks another city.
     private func layOut() {
         canvas.removeAllChildren()
-        (skyline, parks, stars, clouds, cars) = ([], [], [], [], [])
+        (skyline, parks, clouds, cars) = ([], [], [], [])
         (plane, planeLights, beacon, mirrored, waterTints, mirrors) = (SKSpriteNode(), SKNode(), SKNode(), [], [], [])
         (trafficStrip, trafficShown, launchTexture, plume, boosters) = (nil, [], nil, [], [])
         (nextCar, planeDirection, shipDirection, ship) = ([clock, clock], 0, 0, SKSpriteNode())
@@ -306,10 +307,6 @@ final class PixelCity: SKScene, BatteryPaced {
              .fadeAlpha(to: 0.15, duration: 0), .wait(forDuration: flashes.count > 1 ? 1.95 : 1.25)]
         })))
         canvas.addChild(beacon)
-
-        stars = (0..<170).map { _ in
-            (Int.random(in: 0..<w, using: &rng), Int.random(in: skyBase + 30..<h, using: &rng), Float.random(in: 0.35...1, using: &rng))
-        }
 
         // Three rows of cloud, far to near: small flat ones low over the horizon, middling ones, and two big heaps
         // high up, each row drifting faster than the one behind it, so they slide past each other. A row keeps its
@@ -910,9 +907,13 @@ final class PixelCity: SKScene, BatteryPaced {
         let now = now
         let spot = Location.shared.coordinate
         let sun = skyPosition(now, latitude: spot.latitude, longitude: spot.longitude)
-        let moonAge = ((now.timeIntervalSince1970 - 947_182_440) / 86_400).truncatingRemainder(dividingBy: 29.530588853)
-        let moonPhase = moonAge / 29.530588853 // 0 new, 0.5 full
-        let moon = skyPosition(now, latitude: spot.latitude, longitude: spot.longitude, eclipticOffset: moonPhase * 360)
+        // The Moon and the stars where they really are (`Sky`), and how much of the Moon is lit.
+        let jd = Sky.julianDate(now), turn = Sky.horizonMatrix(jd: jd, latitude: spot.latitude, longitude: spot.longitude)
+        func seen(_ v: Sky.Vector) -> (elevation: Double, azimuth: Double) {
+            let up = turn * v // east, north, up
+            return (asin(min(max(up.z, -1), 1)) * 180 / .pi, (atan2(up.x, up.y) * 180 / .pi + 360).truncatingRemainder(dividingBy: 360))
+        }
+        let moon = seen(Sky.moon(jd, latitude: spot.latitude, longitude: spot.longitude).direction), moonLit = Sky.moonPhase(jd).lit
         let parts = Calendar.current.dateComponents([.hour, .minute], from: now)
         hour = Double(parts.hour ?? 12) + Double(parts.minute ?? 0) / 60
         let el = Float(sun.elevation)
@@ -921,6 +922,7 @@ final class PixelCity: SKScene, BatteryPaced {
         // Around a low Sun the horizon changes with the compass: orange under the Sun, and opposite it the pink band
         // over the Earth's shadow.
         let facing = heading(spot.latitude), low = smoothstep(-10, -2, el) * smoothstep(12, 3, el)
+        self.facing = facing // for `place`, which a repaint asks hundreds of times
         let lilac = mix(top, rgb(226, 156, 176), 0.5)
         func horizonToward(_ azimuth: Double) -> RGB {
             mix(sunward, lilac, Float(1 - cos((azimuth - sun.azimuth) * .pi / 180)) / 2 * low * 0.85)
@@ -932,7 +934,7 @@ final class PixelCity: SKScene, BatteryPaced {
 
         // Sky: banded and dithered like old pixel art, glowing around a low sun.
         let band: Float = 0.4 // how much of each band is dithered into the next
-        let sunSpot = place(sun, latitude: spot.latitude)
+        let sunSpot = place(sun)
         let glow = smoothstep(-10, 0, el) * (1 - smoothstep(6, 20, el)) * 0.7 + 0.15 * smoothstep(0, 10, el)
         let glowColour = mix(rgb(255, 128, 64), rgb(255, 214, 150), smoothstep(-2, 10, el))
         let reach = mix(1, 0.35, smoothstep(4, 20, el)) // a low sun lights a wide band of sky, a high one a small halo
@@ -956,18 +958,22 @@ final class PixelCity: SKScene, BatteryPaced {
         }
 
         let starlight = smoothstep(-5, -12, el)
-        for star in stars where starlight > 0 {
+        for star in Self.brightStars where starlight > 0 {
+            let at = seen(star.direction)
+            guard at.elevation > 0 else { continue }
+            let p = place(at, over: skyBase), brightness = Float(min(1, max(0.35, 1.1 - 0.2 * star.magnitude)))
             // The city's glow drowns the stars near the horizon.
-            let clear = smoothstep(0.1, 0.6, Float(star.y - skyBase) / Float(h - skyBase)) * 0.8
-            let a = starlight * star.brightness * clear
-            px.plot(star.x, star.y, rgb(255, 248, 232), a)
-            if star.brightness > 0.93 {
-                for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] { px.plot(star.x + dx, star.y + dy, rgb(200, 210, 255), a * 0.35) }
+            let clear = smoothstep(0.1, 0.6, Float(p.y - skyBase) / Float(h - skyBase)) * 0.8
+            let a = starlight * brightness * clear
+            px.plot(p.x, p.y, rgb(255, 248, 232), a)
+            if star.magnitude < 0.9 { // a small cross on the brightest: Sirius, Vega, Capella, Rigel, Betelgeuse…
+                for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] { px.plot(p.x + dx, p.y + dy, rgb(200, 210, 255), a * 0.35) }
             }
         }
 
         if moon.elevation > -3 {
-            drawMoon(into: &px, at: place(moon, latitude: spot.latitude), phase: moonPhase, alpha: mix(0.5, 1, night))
+            drawMoon(into: &px, at: place(moon), lit: moonLit, right: Self.litOnRight(sun: sun.azimuth, moon: moon.azimuth),
+                     alpha: mix(0.5, 1, night))
         }
         if sun.elevation > -4 {
             let colour = mix(rgb(255, 150, 80), rgb(255, 246, 214), smoothstep(0, 12, el))
@@ -979,8 +985,8 @@ final class PixelCity: SKScene, BatteryPaced {
         px = Pixels(w, h) // the city, clear wherever the sky shows through
         // The sky lights every wall evenly; the Sun, or the Moon after dark, lights the walls that face it.
         ambient = mix(mix(RGB(0.84, 0.86, 0.92), RGB(0.52, 0.48, 0.62), smoothstep(16, 0, el)), RGB(0.19, 0.2, 0.31), night)
-        (self.facing, sunAt) = (facing, sun)
-        moonKey = key(moon, rgb(120, 140, 200) * Float(1 - cos(2 * .pi * moonPhase)) * smoothstep(0, 10, Float(moon.elevation)) * night * 0.15)
+        sunAt = sun
+        moonKey = key(moon, rgb(120, 140, 200) * Float(2 * moonLit) * smoothstep(0, 10, Float(moon.elevation)) * night * 0.15)
         let sunKey = key(sun, Self.sunColour(el))
         (keyRight, keyLeft) = (sunKey.right + moonKey.right, sunKey.left + moonKey.left)
         (keyFront, keyTop) = (sunKey.front + moonKey.front, sunKey.top + moonKey.top)
@@ -1094,27 +1100,32 @@ final class PixelCity: SKScene, BatteryPaced {
         return (mix(a.1, b.1, t), horizon)
     }
 
-    /// Where a sky position lands on the canvas, looking along `heading` (toward the equator, east is on the left up north).
-    private func place(_ p: (elevation: Double, azimuth: Double), latitude: Double) -> (x: Int, y: Int) {
-        let dx = (p.azimuth - heading(latitude) + 540).truncatingRemainder(dividingBy: 360) - 180
+    /// Where a sky position lands on the canvas, looking along `facing` (toward the equator, east is on the left up north).
+    /// Stars go up from the sky's lowest row (`over`), and whatever stands in front of them hides them.
+    private func place(_ p: (elevation: Double, azimuth: Double), over floor: Int? = nil) -> (x: Int, y: Int) {
+        let dx = (p.azimuth - facing + 540).truncatingRemainder(dividingBy: 360) - 180
         let x = Int(Double(w) * (0.5 + dx / span))
         // A low Sun or Moon gets more room than a high one, and they drop out of sight as soon as they set: behind the
         // skyline at that spot (`crest`), which they clear by the time they are 15 degrees up.
-        let horizon = mix(Float(crest[min(max(x, 0), w - 1)]), Float(crest.max() ?? ground), smoothstep(0, 15, Float(p.elevation)))
+        let horizon = floor.map(Float.init) ?? mix(Float(crest[min(max(x, 0), w - 1)]), Float(crest.max() ?? ground), smoothstep(0, 15, Float(p.elevation)))
         let rise = p.elevation < 0 ? p.elevation * 12 : pow(p.elevation / 70, 0.75) * Double(Float(h - 14) - horizon)
         return (x, Int(Double(horizon) + rise))
     }
 
-    /// The moon's disc with its current phase lit on the right while waxing, the left while waning.
-    private func drawMoon(into px: inout Pixels, at spot: (x: Int, y: Int), phase: Double, alpha: Float) {
+    /// Whether the Moon is lit on its right on the canvas: the side the Sun is on, by their azimuths in degrees, which
+    /// also turns it the right way round for the southern hemisphere and for any way Settings has us look.
+    static func litOnRight(sun: Double, moon: Double) -> Bool { (sun - moon + 540).truncatingRemainder(dividingBy: 360) > 180 }
+
+    /// The moon's disc with `lit` of it lit (0 new, 1 full), on the right or the left.
+    private func drawMoon(into px: inout Pixels, at spot: (x: Int, y: Int), lit: Double, right: Bool, alpha: Float) {
         // ponytail: a thin crescent is drawn at least 1.6 pixels wide, or it breaks into specks at this size
-        let r = 8, k = min(Float(cos(2 * .pi * phase)), 1 - 1.6 / 8)
+        let r = 8, k = min(Float(1 - 2 * lit), 1 - 1.6 / 8)
         for dy in -r...r {
             for dx in -r...r {
                 let nx = Float(dx) / Float(r), ny = Float(dy) / Float(r)
                 guard nx * nx + ny * ny <= 1.05 else { continue }
                 let edge = k * (max(0, 1 - ny * ny)).squareRoot()
-                let lit = phase < 0.5 ? nx > edge : nx < -edge
+                let lit = right ? nx > edge : nx < -edge
                 let crater = [(-4, 2), (-3, 2), (-4, 3), (-3, 3), (1, 4), (2, 4), (-1, -4), (0, -4), (-1, -3),
                               (4, -2), (4, -1), (-6, -1), (1, 0)].contains { $0 == (dx, dy) } // the maria, roughly
                 if lit {
@@ -3858,13 +3869,12 @@ struct SeededRandom: RandomNumberGenerator {
     }
 }
 
-/// Elevation and azimuth (degrees, azimuth clockwise from north) of the sun, or of a point `eclipticOffset` degrees
-/// further east along the ecliptic, which is close enough to place the moon. Low precision (~1°), fine for pixels.
-private func skyPosition(_ date: Date, latitude: Double, longitude: Double, eclipticOffset: Double = 0) -> (elevation: Double, azimuth: Double) {
+/// Elevation and azimuth (degrees, azimuth clockwise from north) of the sun. Low precision (~1°), fine for pixels.
+private func skyPosition(_ date: Date, latitude: Double, longitude: Double) -> (elevation: Double, azimuth: Double) {
     let rad = Double.pi / 180
     let d = (date.timeIntervalSince1970 - 946_728_000) / 86_400 // days since J2000
     let g = (357.529 + 0.98560028 * d) * rad
-    let l = (280.459 + 0.98564736 * d + 1.915 * sin(g) + 0.020 * sin(2 * g) + eclipticOffset) * rad
+    let l = (280.459 + 0.98564736 * d + 1.915 * sin(g) + 0.020 * sin(2 * g)) * rad
     let e = 23.439 * rad
     let ra = atan2(cos(e) * sin(l), cos(l)), dec = asin(sin(e) * sin(l))
     let hourAngle = (280.46061837 + 360.98564736629 * d + longitude) * rad - ra

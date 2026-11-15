@@ -209,6 +209,14 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
     }
 }
 
+/// Pixel City's Moon is lit on the side the Sun is on: a waxing Moon on the right of an evening looking south, on the
+/// left of an evening looking north from the southern hemisphere, and a waning one on the left of a morning.
+@MainActor @Test func pixelCityMoonFacesTheSun() {
+    #expect(PixelCity.litOnRight(sun: 250, moon: 180))
+    #expect(!PixelCity.litOnRight(sun: 290, moon: 10))
+    #expect(!PixelCity.litOnRight(sun: 110, moon: 200))
+}
+
 /// Pixel City's automatic move goes to a different city every time and saves it, so Settings and every display
 /// follow; in a view, it hands over to a new scene of that city.
 @MainActor @Test func pixelCityMovesOn() {
