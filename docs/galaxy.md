@@ -171,5 +171,6 @@ Thinning the star grain made no measurable difference. Pixels beyond 1.6 galaxy 
 SNAPSHOT_SCENE=Galaxy swift test                                            # a random roll
 SNAPSHOT_DEFAULTS="galaxy.kind=Andromeda" SNAPSHOT_SCENE=Galaxy swift test
 SNAPSHOT_DEFAULTS="galaxy.kind=Whirlpool,galaxy.rotation=4" SNAPSHOT_SECONDS=30 SNAPSHOT_SCENE=Galaxy swift test   # further round
+SNAPSHOT_DEFAULTS="galaxy.seed=2,galaxy.kind=Pinwheel" SNAPSHOT_SCENE=Galaxy swift test --filter everySceneRenders   # the same roll every time
 ```
-Each render rolls a new tilt, angle and seed. To compare two moments of the same galaxy, temporarily fix `u_seed`, `angle` and `u_spin` in `init`, render at two `SNAPSHOT_SECONDS`, and put them back. To test cycling fast, temporarily shorten the cycle and the 90 s dissolve, then run the app binary directly and check that it survives several handovers.
+Each render rolls a new tilt, angle and seed, unless `galaxy.seed` (for the tests; nothing else sets it) pins the roll: a whole number above 0 gives the same kind (unless `galaxy.kind` names one), tilt, angle, centre, size, spin and star field every time. With a kind named, seed 2 rolls the largest centred galaxy (radius 0.437, 50% across, 51% up), the one to measure cost on. To compare two moments of the same galaxy, pin the seed and render at two `SNAPSHOT_SECONDS`. To test cycling fast, temporarily shorten the cycle and the 90 s dissolve, then run the app binary directly and check that it survives several handovers.

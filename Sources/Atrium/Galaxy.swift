@@ -63,22 +63,25 @@ final class Galaxy: SKScene, Trimmable {
             ($0.key, SKUniform(name: "u_" + $0.key.split(separator: ".").last!, float: Float($0.standard)))
         })
         super.init(size: size)
-        let kind = Self.kinds.first { $0.name == UserDefaults.standard.string(forKey: "galaxy.kind") } ?? Self.kinds.randomElement()!
-        let tilt = cos(Float.random(in: kind.tilt) * .pi / 180)
+        // ("galaxy.seed" is for the tests, which want the same roll twice; nothing else sets it.)
+        let seed = UInt64(max(UserDefaults.standard.integer(forKey: "galaxy.seed"), 0))
+        var rng = SplitMix(state: seed > 0 ? seed : .random(in: 1...UInt64.max))
+        let kind = Self.kinds.first { $0.name == UserDefaults.standard.string(forKey: "galaxy.kind") } ?? Self.kinds.randomElement(using: &rng)!
+        let tilt = cos(Float.random(in: kind.tilt, using: &rng) * .pi / 180)
         // Tilted galaxies lie near level so they fit the screen; face-on ones can point any way.
-        let angle = Float.random(in: -1...1) * (0.4 + (.pi - 0.4) * tilt * tilt * tilt) + (Bool.random() ? .pi : 0)
+        let angle = Float.random(in: -1...1, using: &rng) * (0.4 + (.pi - 0.4) * tilt * tilt * tilt) + (Bool.random(using: &rng) ? .pi : 0)
         let aspect = Float(size.width / size.height)
 
         let sprite = SKSpriteNode(color: .black, size: size)
         sprite.anchorPoint = .zero
         sprite.shader = SKShader(source: shaderCommon + Self.source, uniforms: [
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]),
-            SKUniform(name: "u_seed", vectorFloat2: [.random(in: 0...100), .random(in: 0...100)]),
-            SKUniform(name: "u_centre", vectorFloat2: [aspect * .random(in: 0.44...0.56), .random(in: 0.46...0.54)]),
-            SKUniform(name: "u_radius", float: .random(in: 0.36...0.44)),
+            SKUniform(name: "u_seed", vectorFloat2: [.random(in: 0...100, using: &rng), .random(in: 0...100, using: &rng)]),
+            SKUniform(name: "u_centre", vectorFloat2: [aspect * .random(in: 0.44...0.56, using: &rng), .random(in: 0.46...0.54, using: &rng)]),
+            SKUniform(name: "u_radius", float: .random(in: 0.36...0.44, using: &rng)),
             SKUniform(name: "u_pa", vectorFloat2: [cos(angle), sin(angle)]),
             SKUniform(name: "u_tilt", float: tilt),
-            SKUniform(name: "u_spin", float: Bool.random() ? 1 : -1),
+            SKUniform(name: "u_spin", float: Bool.random(using: &rng) ? 1 : -1),
             SKUniform(name: "u_shape", vectorFloat4: [kind.arms, 1 / tan(kind.pitch * .pi / 180), kind.bar, kind.bulge]),
             SKUniform(name: "u_arms", vectorFloat3: [kind.ragged, kind.dust, kind.minor]),
             SKUniform(name: "u_core", vectorFloat3: kind.colours[0]), SKUniform(name: "u_disc", vectorFloat3: kind.colours[1]),
