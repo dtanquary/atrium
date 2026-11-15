@@ -208,3 +208,17 @@ private func save(_ railway: Railway, night: Float, _ name: String, scale: Int =
     let luma = { (c: SIMD3<Float>) in dot(c, SIMD3(0.3, 0.59, 0.11)) }
     #expect(luma(RailArt.rgb[Int(RailArt.mat("twig_mass"))]) < luma(snowy.grass[0]) - 25)
 }
+
+/// The ground is farmed: each crop in its season (corn green in July and bare soil in May, wheat gold at harvest, a
+/// paddy flooded at planting), and no one green is most of a summer's picture (one was 40% before the fields).
+@Test func railwayFarmsTheGround() {
+    func on(_ day: Double) -> RailSeason { RailSeason(day: day, breaks: 115, full: 144, onset: 278, peak: 301, bare: 318, green: 1, snow: false) }
+    let green = { (c: SIMD3<Float>) in c.y - max(c.x, c.z) }
+    #expect(green(on(196).crop(.corn)!.0) > 30 && green(on(140).crop(.corn)!.0) < 0)
+    #expect(on(196).crop(.wheat)!.0.x > 180 && on(135).crop(.rice)!.0.z > on(135).crop(.rice)!.0.x)
+    let railway = Railway(seed: 4, width: 504, height: 328, era: .transition, count: 3, season: .summer)
+    var px = [UInt32](repeating: 0, count: railway.w * railway.h)
+    px.withUnsafeMutableBufferPointer { railway.draw(night: 0, into: $0) }
+    let commonest = Dictionary(grouping: px, by: { $0 }).values.map(\.count).max()!
+    #expect(Double(commonest) / Double(px.count) < 0.25, "\(commonest) of \(px.count)")
+}

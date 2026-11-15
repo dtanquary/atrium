@@ -63,29 +63,78 @@ struct Statics {
         (self.day, self.night, depth) = (day.rgb, night.rgb, day.depth)
     }
 
-    /// Grass in the season's colours or snow, a pond (ice in winter), and roads, by day.
+    /// Grass in the season's colours or snow; the fields in theirs (with a fence line and a farm track among the US's);
+    /// a verge of rougher grass along the track and the roads; leaves under the trees in autumn; a pond (ice in
+    /// winter) with a dark rim and reeds; and roads, by day.
     static func groundColours(_ lay: Layout, _ sc: Scenery, _ ground: [SIMD2<Double>], season: RailSeason) -> [SIMD3<Float>] {
         let view = lay.view, w = view.w, winter = season.snow
         let tones = winter ? snowField.map(RailArt.colour) : season.grass
+        /// 0..<1 from a ground pixel's cell, for speckle.
+        func speck(_ p: SIMD2<Double>, _ k: Double = 0) -> Double { let g = sin(floor(p.x) * 12.9898 + floor(p.y) * 78.233 + k) * 43758.5453; return g - floor(g) }
         var col = ground.map { p -> SIMD3<Float> in
             let n = sin(p.x / 9.1 + sin(p.y / 13.7)) * cos(p.y / 8.3 - p.x / 17.0) + 0.5 * sin((p.x + p.y) / 5.3)
             return n > 0.55 ? tones[1] : n < -0.75 ? tones[2] : tones[0]
         }
+        if !winter, let f = sc.fields {
+            // the US's farm track: along one field edge each way
+            let us = f.crops.contains(.corn) && !f.strips, laneX = f.xs.isEmpty ? nil : f.xs[Int(hsh(f.seed, 9) * Double(f.xs.count))]
+            let laneY = f.ys.isEmpty ? nil : f.ys[Int(hsh(f.seed, 10) * Double(f.ys.count))]
+            for (i, p) in ground.enumerated() {
+                guard let (crop, across, edge) = f.at(p) else { continue }
+                if f.paddies && edge < 1 { col[i] = tones[0] * SIMD3(1.12, 1.08, 1.0); continue } // the levee between paddies
+                let lane = min(laneX.map { abs(p.x - $0) } ?? 9, laneY.map { abs(p.y - $0) } ?? 9)
+                if us, lane < 1.2 { col[i] = RailArt.colour(lane < 0.35 ? 0x8E8A5C : 0xA08C6A); continue } // dirt, grass down its middle
+                if us, edge < 0.45, Int(floor(p.x + p.y)) % 3 == 0, hsh(f.seed, Int(floor(p.x / 7)), Int(floor(p.y / 7)), 4) < 0.7 {
+                    col[i] = RailArt.colour(0x5A4A38) // a fence's posts along the field's edge
+                    continue
+                }
+                guard edge > 1.2 else { continue } // the headland, in grass
+                if crop == .meadow { // a meadow: lighter, mown in stripes while the grass grows
+                    col[i] *= SIMD3(1.05, 1.04, 0.98) * (season.green > 0.5 && Int(floor(across / 4)) % 2 == 0 ? 1.03 : 1)
+                } else if let (a, b) = season.crop(crop) {
+                    col[i] = Int(floor(across / 1.5)) % 2 == 0 ? a : b
+                }
+            }
+        }
+        if !winter { // a verge of rougher, darker grass along the track
+            var verge = [Bool](repeating: false, count: ground.count), inner = verge
+            let tracks = lay.loops.flatMap { lp in stride(from: 0, to: lp.P.count, by: 4).compactMap { lp.Z[$0] == 0 ? lp.P[$0] : nil } }
+                + Scenery.paths(lay).flatMap { pa in stride(from: 0, to: pa.count, by: 4).map { pa[$0] } }
+            for q in tracks {
+                let c = view.project([q.x, q.y, 0])
+                for y in clamped(Int(c.y) - 7, Int(c.y) + 8, view.h) { for x in clamped(Int(c.x) - 12, Int(c.x) + 13, w) {
+                    let d = length(view.ground(x, y) - q)
+                    if d < 3.6 { inner[y * w + x] = true } else if d < 5.6 { verge[y * w + x] = true }
+                } }
+            }
+            for i in col.indices where verge[i] && !inner[i] { col[i] = tones[0] * Float(0.82 + 0.1 * speck(ground[i])) }
+            for t in sc.broadleaves { // autumn's leaves round each broadleaf's foot
+                guard let (leaf, thick) = season.litter(seed: t.seed) else { continue }
+                let c = view.project([t.p.x, t.p.y, 0])
+                for y in clamped(Int(c.y) - 5, Int(c.y) + 6, view.h) { for x in clamped(Int(c.x) - 9, Int(c.x) + 10, w) {
+                    let i = y * w + x, d = length(ground[i] - t.p)
+                    if d < 4, speck(ground[i], Double(t.seed)) < Double(thick) * 0.8 * (1 - d / 4.5) { col[i] = leaf }
+                } }
+            }
+        }
         if let pond = sc.pond {
             for (i, p) in ground.enumerated() {
                 let d = length(p - pond.c)
-                guard d < pond.r * 1.2 + 2 else { continue }
+                guard d < pond.r * 1.2 + 3 else { continue }
                 let a = atan2(p.y - pond.c.y, p.x - pond.c.x), s = Double(pond.seed)
                 let rr = pond.r * (1 + 0.12 * sin(3 * a + s) + 0.07 * sin(5 * a - s))
                 if winter {
                     if d < rr { col[i] = RailArt.colour(0xBFD3E0) }
                     if d < rr - 2, sin(p.x / 4.1 + cos(p.y / 3.3)) * cos(p.y / 3.7 - p.x / 6.1) > 0.35 { col[i] = tones[2] }
                 } else {
-                    if d < rr + 1.2 { col[i] = tones[0] * 0.82 }
+                    if d < rr + 2.2 { col[i] = tones[0] * (d < rr + 1 ? 0.66 : 0.8) } // a dark, wet rim
                     if d < rr { col[i] = season.pond }
                     if d < rr - 3.5 { col[i] = season.pond * 0.9 }
-                    let g = sin(floor(p.x) * 12.9898 + floor(p.y) * 78.233) * 43758.5453
-                    if d < rr - 2, g - floor(g) > 0.965 { col[i] = RailArt.colour(0x6E9AB4) }
+                    if d < rr - 2, speck(p) > 0.965 { col[i] = RailArt.colour(0x6E9AB4) }
+                    // reeds in clumps at the edge, green while the grass grows and buff while it sleeps
+                    if sin(5 * a + 2 * s) + 0.5 * sin(11 * a - s) > 0.35, d > rr - 1.5, d < rr + 1.4, speck(p, 3) > 0.4 {
+                        col[i] = RailArt.colour(season.green > 0.4 ? (speck(p, 5) > 0.5 ? 0x4E6A2A : 0x7A9440) : (speck(p, 5) > 0.5 ? 0x8E7A50 : 0xB09A66))
+                    }
                 }
             }
         }
@@ -106,6 +155,7 @@ struct Statics {
                 for y in clamped(y0, y1 + 1, view.h) { for x in clamped(x0, x1 + 1, w) {
                     let i = y * w + x, p = ground[i], t = min(max(dot(p - a, ab) / l2, 0), 1), d = length(p - a - t * ab)
                     if d < half { asphalt[i] = true } else if d < half + rim, edge[i] == nil { edge[i] = rimColour }
+                    else if !winter, d < half + rim + 2, edge[i] == nil { col[i] = tones[0] * Float(0.82 + 0.1 * speck(p)) } // the verge
                 } }
             }
         }

@@ -30,10 +30,50 @@ public struct RailSeason: Sendable, Equatable {
     /// The grass's three tones: dormant grey-green greening with the season, olive through autumn's colour. (Full
     /// straw, #9A8C5E, made five months of the year a pale board the bare trees vanished into.)
     var grass: [SIMD3<Float>] {
-        let straw = RailArt.colour(0x86885A), lush = RailArt.colour(0x5A9636), olive = RailArt.colour(0x7E8A44), g = Float(green)
+        let straw = RailArt.colour(0x86885A), lush = RailArt.colour(0x62913F), olive = RailArt.colour(0x7E8A44), g = Float(green)
         var base = straw + (lush - straw) * g
         if day > 200 { base += (olive - base) * Float(smoothstep(onset - 10, peak, day)) * g }
         return [base, base * SIMD3(0.93, 0.96, 0.9), base * SIMD3(1.06, 1.05, 1.06)]
+    }
+
+    /// A field's colour on this day, and the other rows' colour where it grows in rows or lies in furrows; nil for
+    /// grass. Each crop's year at 42°N, moved with the oak's spring before July and its autumn after.
+    func crop(_ c: Fields.Crop) -> (SIMD3<Float>, SIMD3<Float>)? {
+        // (day, colour, the other rows' colour)
+        let soil: UInt32 = 0x6E5A42, furrow: UInt32 = 0x5E4C38, stubble: UInt32 = 0x9C8C64, weathered: UInt32 = 0x847A5E
+        let year: [(Double, UInt32, UInt32)]
+        switch c {
+        case .grass, .meadow: return nil
+        case .corn: year = [(0, weathered, weathered), (100, weathered, weathered), (110, soil, furrow), (155, soil, furrow), (170, 0x587A34, soil),
+                            (190, 0x3F6A2A, 0x3A6226), (245, 0x3F6A2A, 0x3A6226), (270, 0xB09A5C, 0xA28E52), (290, stubble, stubble), (340, weathered, weathered)]
+        case .soy: year = [(0, weathered, weathered), (110, weathered, weathered), (120, soil, furrow), (160, soil, furrow), (178, 0x6A9440, soil),
+                           (200, 0x5A8A36, 0x548232), (250, 0x5A8A36, 0x548232), (265, 0xB4A044, 0xAA9640), (282, 0x8E7A58, 0x86724F), (305, stubble, stubble),
+                           (345, weathered, weathered)]
+        case .wheat: year = [(0, 0x6E7A4A, 0x66724A), (95, 0x6A8A40, 0x64823C), (125, 0x689A3C, 0x62923A), (160, 0x86983E, 0x7E903A), (175, 0xC2A852, 0xBAA04E),
+                             (196, 0xC8AC56, 0xC0A452), (202, 0xBCAE7E, 0xB4A676), (262, 0xB4A676, 0xACA070), (275, soil, furrow), (300, 0x6E7A4A, 0x66724A)]
+        case .barley: year = [(0, 0x6E7A4A, 0x66724A), (95, 0x6E8E44, 0x688640), (125, 0x74A044, 0x6E9840), (155, 0x9AA048, 0x929844), (170, 0xCCB868, 0xC4B064),
+                              (192, 0xC8B470, 0xC0AC6A), (198, 0xC0B286, 0xB8AA7E), (262, 0xB4A880, 0xACA078), (275, soil, furrow), (300, 0x6E7A4A, 0x66724A)]
+        case .rape: year = [(0, 0x5E7444, 0x586C40), (95, 0x5E8A3A, 0x588236), (112, 0xD4C43A, 0xCCBC36), (138, 0xD4C43A, 0xCCBC36), (150, 0x6A8A3A, 0x648236),
+                            (185, 0x8A8250, 0x827A4A), (200, stubble, stubble), (235, soil, furrow), (255, 0x5E8A3A, 0x588236), (300, 0x5E7444, 0x586C40)]
+        case .rice: year = [(0, 0x8C7E5A, 0x84765A), (110, soil, furrow), (122, 0x7E9CA8, 0x7696A2), (150, 0x7E9CA8, 0x7696A2), (165, 0x6E9A56, 0x7E9CA8),
+                            (185, 0x5C9A3A, 0x569236), (240, 0x64983A, 0x5E9036), (255, 0xC8A848, 0xC0A044), (276, 0xC8A848, 0xC0A044), (286, 0xA89A70, 0xA09268),
+                            (330, 0x8C7E5A, 0x84765A)]
+        case .greens: year = [(0, soil, furrow), (120, soil, furrow), (140, 0x5E8E44, soil), (270, 0x5E8E44, soil), (290, soil, furrow)]
+        }
+        let d = ((day < 200 ? day - (breaks - 115) : day - (bare - 318)) + 365).truncatingRemainder(dividingBy: 365)
+        let k = year.lastIndex { $0.0 <= d } ?? year.count - 1, a = year[k], b = year[(k + 1) % year.count]
+        let span = (b.0 - a.0 + 365).truncatingRemainder(dividingBy: 365), t = Float(span > 0 ? min(max((d - a.0 + 365).truncatingRemainder(dividingBy: 365) / span, 0), 1) : 0)
+        let mix = { (x: UInt32, y: UInt32) in RailArt.colour(x) + (RailArt.colour(y) - RailArt.colour(x)) * t }
+        return (mix(a.1, b.1), mix(a.2, b.2))
+    }
+
+    /// The leaves a broadleaf has dropped round its foot: their colour, and how thickly they lie (0 to 1), from the
+    /// time they start falling until a few weeks after the tree is bare, browning as they lie.
+    func litter(seed: Int) -> (SIMD3<Float>, Float)? {
+        let fallen = smoothstep(peak - 6, bare, day) * (1 - smoothstep(bare + 8, bare + 40, day))
+        guard fallen > 0.05 else { return nil }
+        let h = hsh(seed, 2), hue = RailArt.colour(h < 0.4 ? 0x7A2820 : h < 0.75 ? 0xC8641E : 0xD8A830)
+        return ((hue + (RailArt.colour(0x987A5A) - hue) * Float(smoothstep(peak, bare + 12, day))) * 0.9, Float(fallen))
     }
 
     var pond: SIMD3<Float> {
