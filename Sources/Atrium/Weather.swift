@@ -646,6 +646,10 @@ class WeatherScene: SKScene, BatteryPaced {
         var age: Double, life: Double
     }
     private var photoCloudsShown: [DriftingCloud] = []
+    /// The cumulus' draws: seeded from `weather.seed` when it's set (for two renders that differ only by the code;
+    /// nothing but the tests and snapshots sets it), at random otherwise.
+    private var rng = SplitMix(state: UserDefaults.standard.integer(forKey: "weather.seed") > 0
+        ? UInt64(UserDefaults.standard.integer(forKey: "weather.seed")) : .random(in: 1...UInt64.max))
     private lazy var photoCloudShader: SKShader = {
         let shader = SKShader(source: Self.photoCloudShaderSource, uniforms: [
             photoCloudSun, photoCloudShade, skyBefore, skyAfter, skyBlend, cameraUniforms.lens, nightUniform, billow,
@@ -659,13 +663,13 @@ class WeatherScene: SKScene, BatteryPaced {
 
     /// How far off a new cumulus is, in km: from 3.5 (high on the screen and big) to 34 (small, on the horizon), more
     /// of them far than near. Much further and the ridge hides them.
-    private static var cloudDistance: Double { 3.5 + 30 * pow(.random(in: 0...1), 1.8) }
+    private func cloudDistance() -> Double { 3.5 + 30 * pow(.random(in: 0...1, using: &rng), 1.8) }
 
     /// How long a cumulus lives, sped up with the drift but never under three minutes: 10–20 minutes for a small one,
     /// 20–30 for a medium one, 30–45 for a tower.
     private func cloudLifetime(km: Double) -> Double {
         let minutes: ClosedRange<Double> = km < 1.5 ? 10...20 : km < 4 ? 20...30 : 30...45
-        return max(180, .random(in: minutes) * 60 / cloudSpeed)
+        return max(180, .random(in: minutes, using: &rng) * 60 / cloudSpeed)
     }
 
     /// Fair-weather cumulus, a few on a mainly clear day and more when it's partly cloudy, now and then a tower. They
@@ -677,22 +681,23 @@ class WeatherScene: SKScene, BatteryPaced {
         let count = conditions.kind == .partlyCloudy ? 6 + Int(cover * 14) : conditions.kind == .clear && cover > 0.08 ? 1 + Int(cover * 6) : 0
         var towers = 0
         for _ in 0..<count {
-            let tower = towers == 0 && Double.random(in: 0...1) < 0.15
+            let tower = towers == 0 && Double.random(in: 0...1, using: &rng) < 0.15
             if tower { towers += 1 }
-            let pick = Self.photoClouds.filter { $0.tower == tower }.randomElement()!
+            let pick = Self.photoClouds.filter { $0.tower == tower }.randomElement(using: &rng)!
             let node = SKSpriteNode(texture: cloudTexture(pick.name))
             node.anchorPoint = CGPoint(x: 0.5, y: 0.077) // the photo's base, in a node 4% bigger so puffs can swell
             node.shader = photoCloudShader
-            node.userData = ["seed": SIMD2<Float>(.random(in: 0...1), .random(in: 0...1))]
+            node.userData = ["seed": SIMD2<Float>(Float.random(in: 0...1, using: &rng), Float.random(in: 0...1, using: &rng))]
             node.setValue(SKAttributeValue(vectorFloat2: pick.lum), forAttribute: "a_lum")
-            node.xScale = Bool.random() ? 1 : -1
+            node.xScale = Bool.random(using: &rng) ? 1 : -1
             addChild(node)
             // Towers stand far off, where the ridge hides the bottom of their photo.
-            let away = tower ? Double.random(in: 26...40) : Self.cloudDistance
+            let away = tower ? Double.random(in: 26...40, using: &rng) : cloudDistance()
             let life = cloudLifetime(km: pick.km)
-            photoCloudsShown.append(DriftingCloud(node: node, across: .random(in: -1.15...1.15) * viewpoint.tanH * away, away: away,
-                                                  base: tower ? 0.9 : 1.3 + .random(in: 0...0.3), km: pick.km * .random(in: 0.85...1.2),
-                                                  age: .random(in: 0.15...0.75) * life, life: life))
+            let across = Double.random(in: -1.15...1.15, using: &rng) * viewpoint.tanH * away
+            let base = tower ? 0.9 : 1.3 + .random(in: 0...0.3, using: &rng), km = pick.km * .random(in: 0.85...1.2, using: &rng)
+            photoCloudsShown.append(DriftingCloud(node: node, across: across, away: away, base: base, km: km,
+                                                  age: .random(in: 0.15...0.75, using: &rng) * life, life: life))
         }
         driftClouds(0)
     }
@@ -715,15 +720,15 @@ class WeatherScene: SKScene, BatteryPaced {
             let tower = cloud.base < 1
             let gone = abs(cloud.across / cloud.away) > viewpoint.tanH * 1.35 || cloud.away < 3 || cloud.away > 42
             if gone || cloud.age >= cloud.life {
-                cloud.away = tower ? .random(in: 26...40) : Self.cloudDistance
+                cloud.away = tower ? Double.random(in: 26...40, using: &rng) : cloudDistance()
                 cloud.across = gone && abs(across) > abs(away) * 0.3
                     ? (across > 0 ? -1 : 1) * viewpoint.tanH * 1.3 * cloud.away
-                    : .random(in: -1.1...1.1) * viewpoint.tanH * cloud.away
-                let pick = Self.photoClouds.filter { $0.tower == tower }.randomElement()!
+                    : Double.random(in: -1.1...1.1, using: &rng) * viewpoint.tanH * cloud.away
+                let pick = Self.photoClouds.filter { $0.tower == tower }.randomElement(using: &rng)!
                 cloud.node.texture = cloudTexture(pick.name)
                 cloud.node.setValue(SKAttributeValue(vectorFloat2: pick.lum), forAttribute: "a_lum")
-                cloud.node.xScale = Bool.random() ? 1 : -1
-                cloud.km = pick.km * .random(in: 0.85...1.2)
+                cloud.node.xScale = Bool.random(using: &rng) ? 1 : -1
+                cloud.km = pick.km * .random(in: 0.85...1.2, using: &rng)
                 cloud.life = cloudLifetime(km: pick.km)
                 cloud.age = gone ? 0.15 * cloud.life : 0 // drifting in, it's already a cloud; otherwise it forms
             }
@@ -782,9 +787,10 @@ class WeatherScene: SKScene, BatteryPaced {
 
     /// A new overhead cloud's shadow, somewhere on the ground in view, or drifting in from the upwind side.
     private func overheadCloud(upwind: SIMD2<Double>?) -> (across: Double, away: Double, km: Double, age: Double, life: Double) {
-        let away = 0.05 + 2.4 * pow(.random(in: 0...1), 1.5), km = Double.random(in: 1...2.4), life = cloudLifetime(km: km)
+        let away = 0.05 + 2.4 * pow(.random(in: 0...1, using: &rng), 1.5), km = Double.random(in: 1...2.4, using: &rng)
+        let life = cloudLifetime(km: km)
         let edge = viewpoint.tanH * away + km * 0.5
-        guard let upwind else { return (.random(in: -edge...edge), away, km, .random(in: 0.15...0.75) * life, life) }
+        guard let upwind else { return (.random(in: -edge...edge, using: &rng), away, km, .random(in: 0.15...0.75, using: &rng) * life, life) }
         return (upwind.x > 0 ? -edge : edge, away, km, 0.15 * life, life)
     }
 
