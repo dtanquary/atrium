@@ -1235,7 +1235,11 @@ public final class River {
     /// Then the recent past as the live river runs, in coarse steps. Necks are looked for and nodes respaced every
     /// other step, and the ground is kept by `sweep`, which stamps it as the river leaves it. (Bringing the ground
     /// up to date the live river's way every 12th step of the recent past was tried in its place: it took 160 ms
-    /// where this takes 100, and left the bars in terraces, one to a visit, where they should be smooth.)
+    /// where this takes 100, and left the bars in terraces, one to a visit, where they should be smooth.) The recent
+    /// past is swept every 4th step: every 12th, as it was while a past was made on the main thread, left a comb of
+    /// torn teeth along scarps against the valley's walls, for about 20 ms less. (Drawing every strip of the
+    /// distant past, and not only a bank's that moved in, took 40 ms more and only turned torn patches into
+    /// straight-edged ones.)
     public func age(distant: Double = 240, recent: Double = 60) {
         let end = now + distant + recent
         pastEnds = end
@@ -1273,7 +1277,7 @@ public final class River {
                 markNeck()
             }
             if k % 2 == 0 { respace() }
-            if k % 12 == 0 { sweep() }
+            if k % 4 == 0 { sweep() }
         }
         sweep()
         closeCracks()

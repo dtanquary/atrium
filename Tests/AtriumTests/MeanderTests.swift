@@ -511,6 +511,16 @@ private func seeded(_ seed: Double, _ others: [String: Double] = [:]) -> [String
     #expect(next !== scene && next.river.valley == .full)
 }
 
+/// A river's past is made on another thread: the scene is made at once, with nothing on its ground, and dresses
+/// itself when the river lands, with no frame drawn to fetch it. (Landing needs the main actor, which other tests
+/// hold for a minute at a time when they run beside this one: hence the long wait.)
+@MainActor @Test func meanderMakesItsPastOffTheMainThread() async throws {
+    let scene = Meander(size: CGSize(width: 756, height: 491)), clock = ContinuousClock(), start = clock.now
+    #expect(scene.trim.content.children.isEmpty)
+    while scene.trim.content.children.isEmpty, clock.now - start < .seconds(600) { try await Task.sleep(for: .milliseconds(10)) }
+    #expect(!scene.trim.content.children.isEmpty, "the river never landed")
+}
+
 /// What Meander costs a frame on a 14" MacBook Pro's screen, for docs/meander.md: a frame the river steps on and
 /// one it doesn't, each as its update, the CPU's share of drawing it (on a step frame SpriteKit sends the ground's
 /// bytes to the GPU there) and the GPU's; and the copy of the bytes alone. Each look at speed 1 and 60 frames a

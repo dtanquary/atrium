@@ -1,5 +1,6 @@
 import MeanderRiver
 import SpriteKit
+import Synchronization
 
 @MainActor func meander(size: CGSize) -> SKScene { Meander(size: size) }
 
@@ -123,12 +124,35 @@ final class Meander: SKScene, Trimmable {
     ]
 
     /// Texels to a channel's width: at the smallest river a texel is 2 points.
-    private static let texels: Float = 14
+    nonisolated private static let texels: Float = 14
     /// How long a stage of the old map lasts, in T: short when a stage's ink stays with its land for good (thin
     /// stripes), long when the whole sheet moves on to Fisk's next colours at each stage.
     private static let stages = [5.0, 11.0]
 
-    private(set) var river: River!
+    /// The river and its past, once they have landed (`make`).
+    private var landed: River?
+    /// The river. Its past is made on another thread, at every build (130 to 160 ms on the main thread, where it
+    /// was made until 2026-11-15, at each launch, Shuffle and Settings page), and the scene draws only its bare
+    /// ground until it lands; anything else that asks for it before then, the tests, waits for it.
+    var river: River! {
+        if landed == nil { arrive(waiting: true) }
+        return landed
+    }
+    /// A river made on another thread, handed to the scene (as Ant Colony's farms are). Its own thread lets go of
+    /// it as it hands it over, so it is the scene's alone.
+    private final class Landing: Sendable {
+        struct Made: @unchecked Sendable { let river: River }
+        private let made = Mutex<Made?>(nil), ready = DispatchSemaphore(value: 0)
+        func arrive(_ river: River) { made.withLock { $0 = Made(river: river) }; ready.signal() }
+        /// What has arrived, once. `waiting` holds the caller until it has.
+        func take(waiting: Bool) -> River? {
+            if waiting { ready.wait(); ready.signal() }
+            return made.withLock { made in defer { made = nil }; return made?.river }
+        }
+    }
+    private var landing: Landing?
+    /// The ground's own colour, over the picture as it fades up when the river lands.
+    private let cover = SKSpriteNode()
     /// The ground as it was at the river's last two steps, and when each was: the picture is mixed from the two by
     /// how far the river is toward its next step, so a bank moves on every frame and not only when the river
     /// steps. Each step's bytes go to whichever holds the older.
@@ -192,13 +216,39 @@ final class Meander: SKScene, Trimmable {
     private var changes = 0, retired = false
 
     override func sceneDidLoad() {
-        backgroundColor = .black
+        // the bare ground of the look it will wear, in the system's mode, until the river lands
+        let dark = systemIsDark, bare = Self.look.value > 0.5 ? (dark ? Self.maps[0].dark.paper : Self.maps[0].light.paper)
+            : (dark ? Self.reliefs[family.relief].dark.ground : Self.reliefs[family.relief].light.ground)
+        backgroundColor = NSColor(srgbRed: CGFloat(bare.x), green: CGFloat(bare.y), blue: CGFloat(bare.z), alpha: 1)
+        addChild(trim)
+        make()
+        NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged), name: UserDefaults.didChangeNotification, object: nil)
+        appearance = NSApplication.shared.observe(\.effectiveAppearance) { [weak self] _, _ in MainActor.assumeIsolated { self?.settingsChanged() } }
+    }
+
+    /// Makes the river and its past on another thread: about 150 to 250 ms of a core, which on the main thread
+    /// held up the launch, every Shuffle and every Settings page. It lands on the next frame after (`arrive`), or
+    /// sooner on its own if the scene isn't being drawn (a scene waiting to take over, `handOver`).
+    private func make() {
         // ("meander.seed" is for the tests, which want the same river twice; nothing else sets it.)
-        let seed = UInt64(max(UserDefaults.standard.integer(forKey: "meander.seed"), 0))
-        river = River(seed: seed > 0 ? seed : .random(in: 1...UInt64.max), across: Float(size.width / built), up: Float(size.height / built), texels: Self.texels,
-                      valley: full ? .full : .within)
-        river.lakeLife = Self.lakes.value * Self.perMinute
-        river.age()
+        let seed = UInt64(max(UserDefaults.standard.integer(forKey: "meander.seed"), 0)), life = Self.lakes.value * Self.perMinute
+        let (across, up, valley, landing) = (Float(size.width / built), Float(size.height / built), full ? River.Valley.full : .within, Landing())
+        self.landing = landing
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let river = River(seed: seed > 0 ? seed : .random(in: 1...UInt64.max), across: across, up: up, texels: Self.texels, valley: valley)
+            river.lakeLife = life
+            river.age()
+            landing.arrive(river)
+            await self?.arrive(waiting: false)
+        }
+    }
+
+    /// Takes the river once it has landed, if it hasn't been taken, and dresses the ground in it. In a view that
+    /// is running the picture fades up from the bare ground; in one that is held (frozen, paused, or covered) it
+    /// is there at once, and a frozen view is woken to draw it.
+    private func arrive(waiting: Bool) {
+        guard landed == nil, let river = landing?.take(waiting: waiting) else { return }
+        (landed, landing) = (river, nil)
         textures = (0..<3).map { _ in
             let texture = SKMutableTexture(size: CGSize(width: river.columns, height: river.rows))
             texture.filteringMode = .linear
@@ -206,10 +256,14 @@ final class Meander: SKScene, Trimmable {
         }
         beneath = textures.removeLast()
         send(river.beneath, to: beneath)
-        addChild(trim)
         dress()
-        NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged), name: UserDefaults.didChangeNotification, object: nil)
-        appearance = NSApplication.shared.observe(\.effectiveAppearance) { [weak self] _, _ in MainActor.assumeIsolated { self?.settingsChanged() } }
+        if let view = view as? WallpaperView, view.isPaused { view.wake(for: 0.5) }
+        else if view != nil {
+            cover.color = backgroundColor
+            (cover.size, cover.position, cover.zPosition) = (size, CGPoint(x: size.width / 2, y: size.height / 2), 1)
+            addChild(cover)
+            cover.run(.sequence([.fadeOut(withDuration: 0.4), .removeFromParent()]))
+        }
     }
 
     /// What Settings wants the ground to wear: the look, the old map's rule, each look's colours by name (none is
@@ -363,9 +417,14 @@ final class Meander: SKScene, Trimmable {
     /// running. By the clock, not an action, which a frozen view would hold.
     @objc private func settingsChanged() {
         guard !retired else { return }
-        tune()
-        if Self.wanted != dressed { dress() }
-        guard Self.width.value.rounded() != built || (Self.valley.value > 0.5) != full else { return }
+        if landed != nil { // (until then there is nothing to change: it is dressed as Settings has it when it lands)
+            tune()
+            if Self.wanted != dressed { dress() }
+        }
+        guard Self.width.value.rounded() != built || (Self.valley.value > 0.5) != full else {
+            next = nil // (asked for back before the one it was to give way to had landed)
+            return
+        }
         changes += 1
         let change = changes
         Task { [weak self] in
@@ -374,19 +433,33 @@ final class Meander: SKScene, Trimmable {
         }
     }
 
-    /// Hands over to a new scene with a river of the size Settings now asks for, if that isn't this one's.
+    /// The scene to hand over to, while its river is made.
+    private var next: Meander?
+
+    /// Hands over to a new scene with a river of the size Settings now asks for, if that isn't this one's: once
+    /// that river has landed (`update`), so the dissolve is from one river to the other. A view that is held
+    /// takes it at once, its river waited for.
     func handOver() {
         guard !retired, Self.width.value.rounded() != built || (Self.valley.value > 0.5) != full, let view else { return } // no view: the render tests
-        retired = true
+        next = Meander(size: size)
+        next?.scaleMode = scaleMode
+        if view.isPaused { give(waiting: true) }
+    }
+
+    /// Gives way to `next` if its river has landed, or once it has with `waiting`.
+    private func give(waiting: Bool) {
+        guard let next, let view, (waiting ? next.river : next.landed) != nil else { return }
+        (retired, self.next) = (true, nil)
         let fade = SKTransition.crossFade(withDuration: 0.8)
         (fade.pausesIncomingScene, fade.pausesOutgoingScene) = (false, false)
-        let next = Meander(size: size)
-        next.scaleMode = scaleMode
         view.presentScene(next, transition: fade)
     }
 
     override func update(_ currentTime: TimeInterval) {
         let seconds = frameTime(currentTime, &lastTime)
+        if landed == nil { arrive(waiting: view == nil) } // (the tests draw their frames faster than a past is made)
+        guard landed != nil else { return }
+        give(waiting: false)
         river.advance(seconds, speed: Self.speed.value) { upload() }
         show()
         // Random moves on to another family every so often, over a minute as the other wallpapers' colours do
