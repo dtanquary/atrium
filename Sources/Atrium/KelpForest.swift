@@ -289,6 +289,17 @@ final class KelpForest: SKScene, Trimmable {
     private func plant(with shader: SKShader) {
         let maxLen = 1.4 * spot.depth - 0.79
         let nearCut = spot.near + 2.5 // closer than this, a sprite a blade; beyond, cards
+        // Each sprite's light, fixed at load: the canopy's shade along the line to the Sun above it (the day looks'
+        // Sun, bent as `apply` bends it), times a spread of its own, so the kelp sits darker than its water with
+        // sunlit plants among shaded ones, as the mock-ups Dave chose had it (mock.swift's frond shader).
+        let zen = Double(90 - Self.teal.sunElevation) * .pi / 180, az = 10 * Double.pi / 180
+        let toSun = SIMD2(sin(az), cos(az)) * tan(asin(sin(zen) / 1.333))
+        func shade(_ p: [SIMD3<Double>], _ f: Double) -> Double {
+            let x = f * Double(Self.links), k = min(Int(x), Self.links - 1), q = p[k] + (p[k + 1] - p[k]) * (x - Double(k))
+            let at = SIMD2(q.x, q.z) + toSun * (spot.depth - q.y)
+            return 0.3 + 0.7 * (1 - Double(Self.canopy(Float(at.x), Float(at.y))))
+        }
+        func spread(_ seed: Double) -> Double { 0.45 + 0.65 * (seed * 61.3).truncatingRemainder(dividingBy: 1) }
         for _ in 0..<spot.plants {
             let z = spot.near + (spot.far - spot.near) * pow(Double.random(in: 0...1, using: &rng), 1.5)
             let x = Double.random(in: -1...1, using: &rng) * (fovTan * z + 2)
@@ -311,7 +322,7 @@ final class KelpForest: SKScene, Trimmable {
                         let s = SKSpriteNode(texture: atlas.stipe)
                         s.anchorPoint = CGPoint(x: 0.5, y: 0)
                         s.zPosition = depthZ
-                        info(s, dist: mid.dist, height: len / 2, seed: 0)
+                        info(s, dist: mid.dist, height: len / 2, seed: 0, light: 0.7 * shade(frond.p, 0.5))
                         s.shader = shader
                         addChild(s)
                         frond.stipe.append(s)
@@ -328,12 +339,14 @@ final class KelpForest: SKScene, Trimmable {
                             let w = length / Atlas.bladeLength
                             node.size = CGSize(width: Atlas.bladeCard.width * w * mid.ppm / 2, height: Atlas.bladeCard.height * w * mid.ppm / 2)
                             node.zPosition = depthZ
-                            info(node, dist: mid.dist, height: u, seed: .random(in: 0...1, using: &rng))
+                            let seed = Double.random(in: 0...1, using: &rng), az = Double.random(in: 0...(2 * .pi), using: &rng)
+                            let el = 0.3 + pow(Double.random(in: 0...1, using: &rng), 2), own = Double.random(in: 0...100, using: &rng)
+                            // One on our side of its stipe is in the stipe's shadow when we look toward the light.
+                            let behind = 0.35 + 0.65 * simd_smoothstep(-0.7, 0.5, -sin(az))
+                            info(node, dist: mid.dist, height: u, seed: seed, light: spread(seed) * shade(frond.p, u / len) * behind)
                             node.shader = shader
                             addChild(node)
-                            frond.blades.append(Blade(node: node, at: u, az: .random(in: 0...(2 * .pi), using: &rng),
-                                                      el: 0.3 + pow(.random(in: 0...1, using: &rng), 2), length: length,
-                                                      seed: .random(in: 0...100, using: &rng)))
+                            frond.blades.append(Blade(node: node, at: u, az: az, el: el, length: length, seed: own))
                         }
                         u += .random(in: 0.07...0.17, using: &rng)
                     }
@@ -345,7 +358,9 @@ final class KelpForest: SKScene, Trimmable {
                         let node = SKSpriteNode(texture: card)
                         node.anchorPoint = Atlas.cardAnchor
                         node.zPosition = depthZ
-                        info(node, dist: mid.dist, height: (f + 1 / Double(Self.links)) * len, seed: .random(in: 0...1, using: &rng))
+                        let seed = Double.random(in: 0...1, using: &rng)
+                        info(node, dist: mid.dist, height: (f + 1 / Double(Self.links)) * len, seed: seed,
+                             light: spread(seed) * shade(frond.p, f + 1 / Double(Self.links)))
                         node.shader = shader
                         addChild(node)
                         frond.cards.append(node)
@@ -359,19 +374,28 @@ final class KelpForest: SKScene, Trimmable {
             holdfast.anchorPoint = CGPoint(x: 0.5, y: 0.1)
             holdfast.size = CGSize(width: Atlas.holdfastSize.width * at.ppm / 2, height: Atlas.holdfastSize.height * at.ppm / 2)
             holdfast.zPosition = CGFloat(-at.dist) + 0.01
-            info(holdfast, dist: at.dist, height: 0.2, seed: 0.5)
+            info(holdfast, dist: at.dist, height: 0.2, seed: 0.5, light: 0.8 * shade([SIMD3(x, 0, z), SIMD3(x, 1, z)], 0))
             holdfasts.append((holdfast, SIMD3(x, 0, z)))
         }
     }
 
     /// Sets a sprite's fixed numbers for the kelp shader, carried in its colour (the shader's `v_color_mix`): how far
-    /// off it is (to 64 m), how high (to 16 m), and a number of its own. Not as attributes: SpriteKit crashed copying
-    /// thousands of sprites' attribute values while taking the lock screen's still (docs/kelp-forest.md, Dave's feedback).
+    /// off it is (to 64 m), how high (to 16 m), and in blue its light (to 1.2, in 16 steps) with a number of its own
+    /// (0 to 1) in the middle of each step, clear of its edges however the channel rounds. Not as attributes: SpriteKit
+    /// crashed copying thousands of sprites' attribute values while taking the lock screen's still (docs/kelp-forest.md,
+    /// Dave's feedback).
     // ponytail: fog and light are fixed at each sprite's place at rest; a near frond swaying ±1 m at 6 m changes its fog
-    // by a few percent. Set them each frame (its colour) if a near one is seen to glow or darken wrongly.
-    private func info(_ node: SKSpriteNode, dist: Double, height: Double, seed: Double) {
-        node.color = NSColor(red: min(dist / 64, 1), green: min(max(height, 0) / 16, 1), blue: seed, alpha: 1)
+    // by a few percent, and its canopy's shade with it. Set them each frame (its colour) if a near one is seen to glow or
+    // darken wrongly.
+    private func info(_ node: SKSpriteNode, dist: Double, height: Double, seed: Double, light: Double) {
+        node.color = NSColor(red: min(dist / 64, 1), green: min(max(height, 0) / 16, 1), blue: Self.blue(light: light, seed: seed), alpha: 1)
         node.colorBlendFactor = 1
+    }
+
+    /// The blue of a sprite's colour: its light in steps of 0.08 to 1.2, read back by the shader's `floor(info.z)`, and
+    /// its own number between 0.2 and 0.8 of a step, by `fract(info.z)`.
+    nonisolated static func blue(light: Double, seed: Double) -> Double {
+        ((min(max(light, 0), 1.2) * 12.5).rounded() + 0.2 + 0.6 * seed) / 16
     }
 
     /// A frond at rest: up from its holdfast, leaning its own way, and whatever is longer than the water is deep lying
@@ -611,9 +635,9 @@ final class KelpForest: SKScene, Trimmable {
         }
     }
 
-    /// Where the canopy lies on the surface, 0 open water to 1 thick, over 128 m round the camera at 50 cm a texel:
+    /// How thick the canopy is over a point of the surface (x and z in metres from the camera), 0 open water to 1 thick:
     /// patches drawn out along the swell, as the mock-up worked out per pixel. The same every time, so displays match.
-    static func canopy() -> SKTexture {
+    nonisolated static func canopy(_ x: Float, _ y: Float) -> Float {
         func hash(_ x: Float, _ y: Float) -> Float {
             var p = SIMD2(x, y) * SIMD2(123.34, 456.21)
             p -= p.rounded(.down)
@@ -634,13 +658,18 @@ final class KelpForest: SKScene, Trimmable {
             for _ in 0..<4 { s += a * noise(px, py); px = px * 2.03 + 17.1; py = py * 2.03 + 9.3; a *= 0.5 }
             return s
         }
+        let wx = noise(x * 0.17, y * 0.17), wy = noise(x * 0.17 + 5.2, y * 0.17 + 5.2)
+        return simd_smoothstep(Float(0.47), 0.65, fbm(x * 0.22 + wx * 2, y * 0.34 + wy * 2))
+    }
+
+    /// The canopy over 128 m round the camera at 50 cm a texel, for the shaders.
+    static func canopy() -> SKTexture {
         let n = 256
         var bytes = [UInt8](repeating: 255, count: n * n * 4)
         for j in 0..<n {
             for i in 0..<n {
                 let x = (Float(i) + 0.5) / Float(n) * 128 - 64, y = (Float(j) + 0.5) / Float(n) * 128 - 64
-                let wx = noise(x * 0.17, y * 0.17), wy = noise(x * 0.17 + 5.2, y * 0.17 + 5.2)
-                let v = simd_smoothstep(Float(0.47), 0.65, fbm(x * 0.22 + wx * 2, y * 0.34 + wy * 2))
+                let v = canopy(x, y)
                 let k = (j * n + i) * 4
                 bytes[k] = UInt8(v * 255); bytes[k + 1] = bytes[k]; bytes[k + 2] = bytes[k]
             }
@@ -806,7 +835,8 @@ final class KelpForest: SKScene, Trimmable {
     static let kelpSource = """
     void main() {
         vec4 c = texture2D(u_texture, v_tex_coord);
-        vec3 info = v_color_mix.rgb * vec3(64.0, 16.0, 1.0); // how far off, how high, a number of its own
+        vec3 info = v_color_mix.rgb * vec3(64.0, 16.0, 16.0); // how far off, how high; its light and a number of its own
+        float own = clamp((fract(info.z) - 0.2) / 0.6, 0.0, 1.0);
         float alpha = c.a;
         vec4 out = vec4(0.0);
         // Most of a card is empty water: only its kelp is worth the light and the fog.
@@ -815,8 +845,8 @@ final class KelpForest: SKScene, Trimmable {
         vec2 suv = vec2(gl_FragCoord.x / u_px.x, 1.0 - gl_FragCoord.y / u_px.y);
         vec3 d = rayDir(suv, u_view.zw);
         float back = smoothstep(-0.2, 0.9, dot(d, u_sundir));
-        vec3 lit = lightAt(info.y, u_sun, u_ext);
-        vec3 tint = mix(vec3(1.0), vec3(0.9, 1.0, 0.75), fract(info.z * 7.3) * 0.5);
+        vec3 lit = lightAt(info.y, u_sun, u_ext) * floor(info.z) / 12.5;
+        vec3 tint = mix(vec3(1.0), vec3(0.9, 1.0, 0.75), fract(own * 7.3) * 0.5);
         vec3 front = u_kelp * tint * lit * m.r;
         vec3 through = u_glow * tint * lit * (0.45 + 0.55 * m.g) * (0.5 + 0.5 * m.r);
         vec3 col = mix(front, through, back * 0.85 * (1.0 - m.b * 0.5));

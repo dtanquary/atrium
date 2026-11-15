@@ -30,6 +30,20 @@ import Testing
     #expect(seen > 300 && hidden > 100, "view \(view): \(seen) on the screen, \(hidden) left alone") // or nothing was tested
 }
 
+/// A kelp sprite's light and its own number share its colour's blue channel: both come back as the shader reads
+/// them, the light to within half a step and the number to within 6%, even with the channel rounded to 8 bits.
+@Test func kelpLightSharesItsChannel() {
+    var worst = (light: 0.0, seed: 0.0)
+    for light in stride(from: 0.0, through: 1.2, by: 0.005) {
+        for seed in stride(from: 0.0, through: 1.0, by: 0.02) {
+            let b = (KelpForest.blue(light: light, seed: seed) * 255).rounded() / 255 * 16
+            worst.light = max(worst.light, abs(b.rounded(.down) / 12.5 - light))
+            worst.seed = max(worst.seed, abs((b - b.rounded(.down) - 0.2) / 0.6 - seed))
+        }
+    }
+    #expect(worst.light <= 0.0401 && worst.seed < 0.06, "\(worst)")
+}
+
 /// On battery the water draws at half resolution and its marine snow, specks a pixel or two across, moves to a sprite
 /// of its own over it at full resolution, and back as the trim goes off; dusk has no snow to move.
 @MainActor @Test func kelpSnowStaysSharpWhenTrimmed() throws {
