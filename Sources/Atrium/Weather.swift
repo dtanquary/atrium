@@ -212,10 +212,18 @@ class WeatherScene: SKScene, BatteryPaced {
         cameraUniforms.forward.vectorFloat3Value = SIMD3<Float>(viewpoint.forward)
         cameraUniforms.right.vectorFloat3Value = SIMD3<Float>(viewpoint.right)
         starsUniform.vectorFloat2Value.y = trails
-        let sky = SKSpriteNode(color: .black, size: size)
+        // Only the sky above the land is drawn: its opaque photo hid the rest, stars and all. The sprite starts where
+        // the bake does, 0.06 under the horizon, or lower where a wide screen crops the photo's foot and so lowers its
+        // skyline, and the shader is told where (a constant in its source; it has no uniform to spare).
+        let photo = ground.photo.size(), landHeight = max(size.width, size.height * ground.top * photo.width / max(photo.height, 1))
+            * photo.height / max(photo.width, 1) / size.height
+        let bottom = ground.top - (ground.top - CGFloat(viewpoint.horizon - 0.06)) * landHeight / ground.top
+        let sky = SKSpriteNode(color: .black, size: CGSize(width: size.width, height: size.height * (1 - bottom)))
         sky.anchorPoint = .zero
+        sky.position.y = size.height * bottom
         // Full: 29 uniforms, against the 30 or so a shader takes (CLAUDE.md). Pack two into one before adding another.
-        sky.shader = SKShader(source: shaderCommon + moonShade + Self.skyShader, uniforms: [
+        let source = Self.skyShader.replacingOccurrences(of: "SKY_BOTTOM", with: String(format: "%.6f", Double(bottom)))
+        sky.shader = SKShader(source: shaderCommon + moonShade + source, uniforms: [
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]), skyBefore, skyAfter, skyBlend,
             cameraUniforms.lens, cameraUniforms.forward, cameraUniforms.right, sunDirection, sunDisc, moonPlace, moonLight,
             moonColour, starsUniform, starTurn, SKUniform(name: "u_moonTex", texture: Self.moonTexture),
@@ -440,7 +448,7 @@ class WeatherScene: SKScene, BatteryPaced {
     float hg(float c, float g) { return (1.0 - g * g) / pow(1.0 + g * g - 2.0 * g * c, 1.5) * 0.0796; }
 
     void main() {
-        vec2 uv = v_tex_coord;
+        vec2 uv = vec2(v_tex_coord.x, SKY_BOTTOM + v_tex_coord.y * (1.0 - SKY_BOTTOM)); // the sprite starts there
         vec2 pts = uv * u_size;
         vec3 rd = normalize(u_right * ((uv.x * 2.0 - 1.0) * u_cam.x) + u_fwd + vec3(0.0, 0.0, (uv.y - u_cam.z) * 2.0 * u_cam.y));
         vec2 st = vec2(uv.x, max(uv.y - u_cam.w, 0.0) / (1.0 - u_cam.w));
