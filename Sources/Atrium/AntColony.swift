@@ -542,10 +542,11 @@ final class AntColony: SKScene {
     /// The shader for a look. All begin the same way, with what is dug and what is buried.
     ///
     /// A texture a shader reads is smoothed whatever its filtering is set to, and a rank smoothed between a dug
-    /// cell and one never dug is a rank nothing has. So the map is read at the centres of the four cells round the
+    /// cell and one never dug is a rank nothing has. So the map is read at the centres of the cells round the
     /// pixel, each is compared with the share dug on its own (open by the time an ant may stand in it, and opening
     /// over the digging of the twenty cells before that, so a face creeps and never jumps a cell), and only then
-    /// are they mixed; the edge is a pixel and a half soft by the mix's own slope. The spoil's top is its height
+    /// are they mixed: the sixteen round it with cubic weights in the gels and in earth (`sixteenCells`), the four
+    /// in sand (`fourCells`); the edge is a pixel and a half soft by the mix's own slope. The spoil's top is its height
     /// read from `u_heap`. What cannot be had from a read or two (how near a wall is, and which way it faces) is
     /// in `u_near`. In sand the place the map is read at is the middle of the grain the pixel is in, so that a
     /// grain is there whole or not at all, and an edge is a crumbling one; in earth it is pushed about by the
@@ -558,6 +559,7 @@ final class AntColony: SKScene {
                      grains(Self.crumb, at: "mix(cell, middle * \(Self.crumb) * u_bl, step(cell.y, ground) * step(middle.y * \(Self.crumb) * u_bl, ground))"),
                      grains("0.10", at: "middle * 0.10 * u_bl"), grains("0.10", at: "middle * 0.10 * u_bl"),
                      "    vec2 at = cell + 0.035 * u_bl * n.rg * step(ground + 0.5, cell.y);"][look]
+        let dug = look == 2 || look == 3 ? fourCells : sixteenCells
         let picture = [gelLook, brightGelLook,
                        sandLook(sand: "vec3(0.860, 0.790, 0.680)", pane: "vec3(0.557, 0.502, 0.431)", tone: "0.66"),
                        sandLook(sand: "vec3(0.905, 0.868, 0.800)", pane: "vec3(0.560, 0.562, 0.560)", tone: "1.12"), earthLook][look]
@@ -577,19 +579,7 @@ final class AntColony: SKScene {
             vec4 h = hash42(floor(g));
 
         \(place)
-            // Dug: the four cells round that place (none of them above the ground line), each open or not.
-            vec2 p = vec2(at.x, max(at.y, ground + 0.5)) - 0.5, base = floor(p), f = p - base;
-            vec4 open;
-            for (int k = 0; k < 4; k++) {
-                vec2 corner = base + vec2(mod(float(k), 2.0), floor(float(k) / 2.0)) + 0.5;
-                vec4 t = texture2D(u_map, vec2(corner.x, u_cells.y - corner.y) / u_cells.xy);
-                float rank = (floor(t.r * 255.0 + 0.5) * 256.0 + floor(t.g * 255.0 + 0.5)) / 32767.5;
-                open[k] = clamp((rank - u_dug) * u_fade - 1.0, -1.0, 1.0);
-            }
-            float above = step(at.y, ground);
-            float s = mix(mix(open[0], open[1], f.x), mix(open[2], open[3], f.x), f.y);
-            vec2 slope = vec2(mix(open[1] - open[0], open[3] - open[2], f.y), mix(open[2] - open[0], open[3] - open[1], f.x)) / ppc;
-            float solid = clamp(0.5 + s / max(length(slope), 0.000001) / 1.5, 0.0, 1.0);
+        \(dug)
             // Buried: under the spoil's top at this column, at this share of the digging; and what of that was
             // carried up, not poured.
             vec2 level = vec2(at.x / u_cells.x, (u_dug * 256.0 + 0.5) / 257.0);
@@ -609,6 +599,51 @@ final class AntColony: SKScene {
         }
         """
     }
+
+    /// What is dug, in sand: the four cells round the place the map is read at, a grain's middle (none of them above
+    /// the ground line), each open or not, mixed; a grain is there whole or not at all, so its steps never show.
+    private static let fourCells = """
+            // Dug: the four cells round that place (none of them above the ground line), each open or not.
+            vec2 p = vec2(at.x, max(at.y, ground + 0.5)) - 0.5, base = floor(p), f = p - base;
+            vec4 open;
+            for (int k = 0; k < 4; k++) {
+                vec2 corner = base + vec2(mod(float(k), 2.0), floor(float(k) / 2.0)) + 0.5;
+                vec4 t = texture2D(u_map, vec2(corner.x, u_cells.y - corner.y) / u_cells.xy);
+                float rank = (floor(t.r * 255.0 + 0.5) * 256.0 + floor(t.g * 255.0 + 0.5)) / 32767.5;
+                open[k] = clamp((rank - u_dug) * u_fade - 1.0, -1.0, 1.0);
+            }
+            float above = step(at.y, ground);
+            float s = mix(mix(open[0], open[1], f.x), mix(open[2], open[3], f.x), f.y);
+            vec2 slope = vec2(mix(open[1] - open[0], open[3] - open[2], f.y), mix(open[2] - open[0], open[3] - open[1], f.x)) / ppc;
+            float solid = clamp(0.5 + s / max(length(slope), 0.000001) / 1.5, 0.0, 1.0);
+    """
+
+    /// What is dug, in the gels and in earth: the sixteen cells round the pixel (none of them above the ground
+    /// line), each open or not, mixed with cubic B-spline weights, and its slope from the same weights, so that a
+    /// wall is a smooth curve. With four cells mixed in straight lines a wall stepped and bumped at the size of a
+    /// cell under its bright rim (6.5 pixels at Large).
+    private static let sixteenCells = """
+            vec2 p = at - 0.5, base = floor(p), f = p - base, e = 1.0 - f;
+            vec4 wx = vec4(e.x * e.x * e.x, (3.0 * f.x - 6.0) * f.x * f.x + 4.0, ((-3.0 * f.x + 3.0) * f.x + 3.0) * f.x + 1.0, f.x * f.x * f.x) / 6.0;
+            vec4 wy = vec4(e.y * e.y * e.y, (3.0 * f.y - 6.0) * f.y * f.y + 4.0, ((-3.0 * f.y + 3.0) * f.y + 3.0) * f.y + 1.0, f.y * f.y * f.y) / 6.0;
+            vec4 dx = vec4(-e.x * e.x, (3.0 * f.x - 4.0) * f.x, (-3.0 * f.x + 2.0) * f.x + 1.0, f.x * f.x) / 2.0;
+            vec4 dy = vec4(-e.y * e.y, (3.0 * f.y - 4.0) * f.y, (-3.0 * f.y + 2.0) * f.y + 1.0, f.y * f.y) / 2.0;
+            float s = 0.0;
+            vec2 slope = vec2(0.0);
+            for (int j = 0; j < 4; j++) {
+                float row = max(base.y + float(j) - 0.5, ground + 0.5);
+                for (int i = 0; i < 4; i++) {
+                    vec4 t = texture2D(u_map, vec2(base.x + float(i) - 0.5, u_cells.y - row) / u_cells.xy);
+                    float rank = (floor(t.r * 255.0 + 0.5) * 256.0 + floor(t.g * 255.0 + 0.5)) / 32767.5;
+                    float open = clamp((rank - u_dug) * u_fade - 1.0, -1.0, 1.0);
+                    s += wx[i] * wy[j] * open;
+                    slope += vec2(dx[i] * wy[j], wx[i] * dy[j]) * open;
+                }
+            }
+            float above = step(at.y, ground);
+            slope /= ppc;
+            float solid = clamp(0.5 + s / max(length(slope), 0.000001) / 1.5, 0.0, 1.0);
+    """
 
     /// The gel as Dave chose it from the mock-ups, after the toy's gel tanks: a deep blue slab lit by lamps in its
     /// base, glowing brighter toward them; a tunnel is a frosted, paler tube with light gathered into a bright
