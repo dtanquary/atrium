@@ -81,6 +81,13 @@ final class PixelTrain: SKScene {
     // The Sun on the cabin (`PixelCarriage.sunlight`), over it, and how strongly it shines in before cloud takes any.
     private let sunlit = [SKSpriteNode(), SKSpriteNode()]
     private var beam: (strength: Float, shape: PixelCarriage.Beam)?
+    // Something going our way a little faster than we are, by the scene's own clock (so it steps the same at any
+    // frame rate, and two displays don't show the same car): when the next one sets off, how many have, and the one
+    // in view, if any, with when it set off and whether it is a car on the lane or, in a city after dark, a train
+    // on the far line. And their colours in the light of the moment: each car's paint, lit and in shade, then
+    // glass, tyres, the train's side and its windows.
+    private var passing = (next: 0.0, count: 0, now: nil as (began: Double, until: Double, train: Bool)?)
+    private var traffic: [UInt32] = []
 
     /// How far the train has got, in metres along its line, and the scene time that was true at. Every copy of the
     /// scene shares it, as the airliner's copies share their flight, so each display's window looks out over the
@@ -316,6 +323,7 @@ final class PixelTrain: SKScene {
             }
         }
         (pole, wire) = (pack(lit(rgb(52, 44, 40))), pack(lit(rgb(44, 40, 40))))
+        traffic = Self.paints.flatMap { [pack(lit($0)), pack(lit($0 * 0.62))] } + [rgb(40, 48, 64), rgb(24, 22, 24), rgb(46, 50, 58)].map { pack(lit($0)) }
         for sprite in sunlit { sprite.alpha = CGFloat((beam?.strength ?? 0) * (1 - Float(shade) / 32)) } // (cloud over the Sun takes it off the table)
     }
 
@@ -531,6 +539,7 @@ final class PixelTrain: SKScene {
                     if s == gw { s = 0 }
                 }
             }
+            passer(out)
             // Each lamp on a lake's far shore leaves a broken streak of its colour in the water under it, fainter toward us.
             let flicker = Int(clock * 2) * 31
             for (i, colour) in reflected {
@@ -560,6 +569,97 @@ final class PixelTrain: SKScene {
         let shot = picture
         texture.modifyPixelData { data, length in
             shot.withUnsafeBytes { data?.copyMemory(from: $0.baseAddress!, byteCount: min(length, $0.count)) }
+        }
+    }
+
+    // MARK: - Something passing
+
+    /// How much faster than the train a car on the lane goes, in metres a second (11 km/h: it creeps across the
+    /// pane at about 13 pixels a second), and a train on the far line in a city (7 km/h). A car is laid out as the
+    /// rows of `car`, side on and facing the way we go, at the lane's own scale; a train is two coaches.
+    static let carGains = 3.0, trainGains = 2.0
+    private static let car = ["      bbbbbbb     ", "     bgggbgggbb   ", " bbbbbbbbbbbbbbbb ", "rbbbbbbbbbbbbbbbbh", " sstttsssssstttss ", "   ttt      ttt   "]
+    /// A car's paint: red, blue, white, silver, green and black.
+    private static let paints = [rgb(150, 40, 36), rgb(40, 70, 130), rgb(214, 214, 208), rgb(150, 156, 162), rgb(46, 84, 60), rgb(36, 38, 42)]
+
+    /// Where the car on the lane is, its left edge's column of the pane, while one is in view: for the tests.
+    var carAt: Int? { passing.now.flatMap { $0.train ? nil : column(of: $0.began, gains: Self.carGains, at: TrainWorld.lane, long: Self.car[0].count) } }
+
+    /// The column of the pane the left edge of something `long` pixels long that set off at `began` has reached,
+    /// `gains` metres a second faster than the train, `away` metres out: it sets off just beyond the pane's left edge.
+    private func column(of began: Double, gains: Double, at away: Double, long: Int) -> Int {
+        Int(((clock - began) * gains * world.focal / away).rounded(.down)) - long
+    }
+
+    /// Now and then a car on the lane going our way a little faster than the train, so that it creeps forward
+    /// across the pane: by day its paint, glass and tyres, after dark its headlamps with a short pool of their light
+    /// on the lane ahead and a tail light. Only where the lane is a road or a track (farmland, snow, the desert), and
+    /// not above 2×. And in a city after dark, now and then a train on the far line doing the same: a dark side with
+    /// a row of lit windows. One every half a minute to two minutes, a train one in three of those in a city; each
+    /// crosses in half a minute to a minute.
+    private func passer(_ out: UnsafeMutableBufferPointer<UInt32>) {
+        let gw = glass.w, lane = Int((world.eye * world.focal / TrainWorld.lane).rounded(.toNearestOrEven))
+        // (Two coaches of 20 m on the far line's rails, 34 m out, a metre apart.)
+        let ppm = world.focal / 34.4, coach = Int((20 * ppm).rounded()), gap = Int(ppm.rounded()), long = 2 * coach + gap
+        if passing.next == 0 { passing.next = 10 + 30 * chance(0, 0, 900) }
+        if let now = passing.now, clock >= now.until { passing.now = nil }
+        if passing.now == nil, clock >= passing.next {
+            // (Each sets off when it was due, not at the frame that found it so, and leaves when it has crossed: at
+            // any frame rate it is in the same place at the same moment.)
+            let here = world.country(Self.travelled), k = passing.count, began = passing.next
+            passing.count += 1
+            let road = [.farmland, .snow, .desert].contains(here.kind) && here.edge > 600 && world.shore(Self.travelled) > 300
+            if here.kind == .city, here.edge > 600, lights > 220, chance(k, 2, 900) < 0.35 {
+                passing.now = (began, began + Double(gw + long) / (Self.trainGains * ppm), true)
+            } else if road, world.speed <= 2 * Self.pace, horizon > lane {
+                passing.now = (began, began + Double(gw + Self.car[0].count) / (Self.carGains * world.focal / TrainWorld.lane), false)
+            }
+            passing.next = (passing.now?.until ?? began) + 20 + 70 * chance(k, 1, 900)
+        }
+        guard let now = passing.now else { return }
+        let night = Float(lights) / 255
+        if now.train {
+            // A dark side to 3.8 m, windows 1.6 to 2.4 m up.
+            let foot = horizon - Int((world.eye * ppm).rounded(.toNearestOrEven)), left = column(of: now.began, gains: Self.trainGains, at: 34.4, long: long)
+            let pane = Int(1.6 * ppm), pillar = Int(0.6 * ppm), (sill, head, roof) = (Int(1.6 * ppm), Int(2.4 * ppm), Int(3.8 * ppm))
+            for i in max(left, 0)..<min(left + 2 * coach + gap, gw) {
+                let along = (i - left) % (coach + gap)
+                guard along < coach else { continue }
+                for up in max(0, -foot)..<min(roof, glass.h - foot) {
+                    let window = up >= sill && up < head && along > pillar && along < coach - pillar && (along - pillar) % (pane + pillar) < pane
+                    out[(foot + up) * gw + i] = window ? blend(traffic[traffic.count - 1], lamp, UInt32(255 * night)) : traffic[traffic.count - 1]
+                }
+            }
+            return
+        }
+        // The car stands on the lane's road; its colours are the scene's own, its lamps the scene's lamps' colour.
+        let road = horizon - lane, left = column(of: now.began, gains: Self.carGains, at: TrainWorld.lane, long: Self.car[0].count)
+        let body = 2 * Int(chance(passing.count, 3, 900) * 6)
+        let row = rows[lane - 1], under = ((row.first + left + 9) % gw + gw) % gw
+        guard [TrainMat.road, TrainMat.track].contains(land[(lane - 1) * gw + under]) else { return } // (a lake has come up to the lane, or a meeting)
+        let shape = Self.car.map(Array.init), tail = pack(mix(rgb(120, 30, 30), rgb(255, 60, 48), night))
+        for (k, line) in shape.enumerated() {
+            let y = road + shape.count - 1 - k
+            guard y >= 0, y < glass.h else { continue }
+            for (dx, mark) in line.enumerated() where mark != " " {
+                let x = left + dx
+                guard x >= 0, x < gw else { continue }
+                switch mark {
+                case "b": out[y * gw + x] = traffic[body]
+                case "s": out[y * gw + x] = traffic[body + 1]
+                case "g": out[y * gw + x] = traffic[traffic.count - 3]
+                case "t": out[y * gw + x] = traffic[traffic.count - 2]
+                case "h": out[y * gw + x] = blend(traffic[body], lamp, UInt32(80 + 175 * night))
+                default: out[y * gw + x] = night > 0.3 ? tail : traffic[body + 1]
+                }
+            }
+        }
+        // After dark, the headlamps' light on the road ahead, fading over a dozen pixels.
+        guard night > 0.3 else { return }
+        for dx in 0..<14 {
+            let x = left + shape[0].count + dx
+            guard x >= 0, x < gw, road >= 0, road < glass.h else { continue }
+            out[road * gw + x] = blend(out[road * gw + x], lamp, UInt32(Float(150 - dx * 10) * night))
         }
     }
 }

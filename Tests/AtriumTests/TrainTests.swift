@@ -412,6 +412,29 @@ import Testing
     #expect(PixelCarriage.light(0, gloom: 0.4).lamp < 0.1 && PixelCarriage.light(0, gloom: 0.7).lamp > 0.8 && PixelCarriage.light(1, gloom: 1) == PixelCarriage.light(1))
 }
 
+/// A car on the lane creeps forward across the pane, a little faster than the train, and is in the same place at
+/// the same moment whatever the frame rate: the first sets off 27.7 s into a scene.
+@MainActor @Test func trainCarCreepsAlongTheLane() {
+    let keys = [PixelWindowSeat.previewTime.key, PixelWindowSeat.previewHour.key, PixelTrain.scenery.key, PixelWindowSeat.clouds.key]
+    defer { for key in keys { UserDefaults.standard.removeObject(forKey: key) } }
+    for (key, value) in zip(keys, [1.0, 13, 1, 1]) { UserDefaults.standard.set(value, forKey: key) }
+    var seen: [[Int?]] = []
+    for rate in [15.0, 30] {
+        PixelTrain.travelled = 18_000
+        let scene = PixelTrain(size: CGSize(width: 1512, height: 982))
+        var at: [Int?] = []
+        for frame in 0...Int(rate * 42) {
+            scene.update(9000 + Double(frame) / rate)
+            if frame % Int(rate) == 0 { at.append(scene.carAt) }
+        }
+        seen.append(at)
+    }
+    #expect(seen[0] == seen[1], "the car is not where it was at 15 frames a second")
+    let path = seen[1].compactMap { $0 }, pace = PixelTrain.carGains * 1.2 * 221 / TrainWorld.lane // (pixels a second on a laptop's Large pane)
+    #expect(path.count >= 10 && path.first! < 18 && zip(path, path.dropFirst()).allSatisfy { abs(Double($1 - $0) - pace) <= 1 },
+            "the car's left edge, a second apart: \(path)")
+}
+
 /// The Sun shining in lays the window's shape on the table, slanting away from its side, with the lamp's shadow in
 /// it: the plain window has nothing for it to fall on, and the table is lit only below its far edge, never all of it.
 @Test func trainSunLightsTheTable() {
