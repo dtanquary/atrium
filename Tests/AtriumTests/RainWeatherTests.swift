@@ -24,3 +24,11 @@ import Testing
     #expect(GlassWeather.rainAmount(mmPerHour: 0, wind: 4, code: 3) == 0)
     #expect(GlassWeather.rainAmount(mmPerHour: 0, wind: 4, code: 51) > 0)   // drizzle Open-Meteo rounds to 0
 }
+
+/// Before a backdrop is picked the scene shows the one Settings shows as picked: Hamburg, the look on the menu's
+/// tile. Random (stored empty) rolls any of them, and a pick is that pick.
+@Test func rainStartsOnItsStandardBackdrop() {
+    #expect(rainBackdrops.standard == "Hamburg" && rainBackdrop(picked: nil) == "Hamburg")
+    #expect(rainBackdrop(picked: "City") == "City")
+    #expect(Set((0..<40).map { _ in rainBackdrop(picked: "") }).count > 1)
+}

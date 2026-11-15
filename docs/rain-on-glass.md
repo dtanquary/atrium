@@ -3,7 +3,7 @@
 Looking through a rainy window, with the camera focused on the glass. With Follow the weather on, the glass shows what the weather where you are is doing to a real window: rain when it rains, drops drying when it stops, fog on humid mornings, snow, and fern frost growing across the pane below freezing. Behind the glass is a real place, heavily defocused, or a procedural city of bokeh lights. Beads of water sit on the pane, and drops creep down in lurches, now and then run, and leave trails of pearls behind them. Each drop is a strong lens showing a sharp, upside-down view of the scene. Night in Dark Mode, an overcast day in Light Mode.
 
 - **Files:** `Sources/Atrium/RainOnGlass.swift` (the scene and its shaders) `RainWeather.swift` (following the weather: its settings, `GlassWeather` and `GlassUniforms`) and `RainFrost.swift` (the frost's bake), using the `shaderCommon` helpers from Shaders.swift (`hash42`, `noise`, `grade`…). Photos are `Resources/rain-<look>-near.jpg`, `-far.jpg` and `-haze.jpg`, credited in `Resources/rain-credits.tsv` and Settings → About.
-- **Entry:** `@MainActor func rainOnGlass(size:)` picks the backdrop, and `rainScene(size:backdrop:clock:)` builds one of two `shaderScene`s, `rainPhotoScene` for a photo or `rainBokehScene` for the city, and runs the timer that fades to the next backdrop. Registry entry: icon `cloud.rain.fill`, tint `.gray`, `knobs: rainKnobs`, and a `PaletteChoice` titled "Backdrop" that lists the photos (with `photos:` thumbnails) and then the bokeh palettes.
+- **Entry:** `@MainActor func rainOnGlass(size:)` picks the backdrop (`rainBackdrop(picked:)`: Hamburg until one is picked, a roll of all seventeen on Random), and `rainScene(size:backdrop:clock:)` builds one of two `shaderScene`s, `rainPhotoScene` for a photo or `rainBokehScene` for the city, and runs the timer that fades to the next backdrop. Registry entry: icon `cloud.rain.fill`, tint `.gray`, `knobs: rainKnobs`, and `rainBackdrops`, a `PaletteChoice` titled "Backdrop" that lists the photos (with `photos:` thumbnails) and then the bokeh palettes.
 - **Kind:** a single full-screen SKShader. The water is the same GLSL (`rainWater` and `rainDrops`) over every backdrop, animated by `u_clock`, which runs at the Drip speed.
 
 ## Backdrops
@@ -31,7 +31,7 @@ The seven bokeh palettes are the original look, drawn procedurally:
 
 | Palette | Lights |
 |---|---|
-| City | sodium orange, warm white, red tail lights, cool LED blue, rare green (the original look, and still the default) |
+| City | sodium orange, warm white, red tail lights, cool LED blue, rare green (the original look) |
 | Neon | magenta, cyan, violet, electric blue, rare amber |
 | Blue Hour | LED white, steel blue, warm windows, teal, rare red |
 | Sunset | gold, rose, amber, lilac, rare cream |
@@ -39,7 +39,7 @@ The seven bokeh palettes are the original look, drawn procedurally:
 | Holiday | warm fairy lights, red, green, gold, rare blue |
 | Graphite | whites and silvers only |
 
-Random rolls any of the seventeen when the scene is built and, unless switched off, fades to another one every 10 minutes (see Settings).
+Random rolls any of the seventeen when the scene is built and, unless switched off, fades to another one every 10 minutes (see Settings). It's a pick like any other: before one is made, the backdrop is Hamburg.
 
 ## The bake
 Each look is baked offline into three textures at a MacBook's 1512:982 aspect; the shader covers other screens by cropping. The script (`rain/bake.py` in the session scratchpad, about 80 lines of numpy) does:
@@ -124,7 +124,7 @@ The day or night look still follows the system appearance, not the real Sun.
 **Only what's needed is compiled in.** Every part of the weather costs GPU time even while it's idle (a uniform-dependent slider radius alone cost 0.22 ms, because every use of it saw the dependence), so the shader is built with `#define`s (SKShader honours `#define` and `#if`): `WEATHER` for following or previewing at all, `WATER` while there are drops (a pane that has dried draws none), `CHANGE` for 5 minutes after the rain changes (by then every bead has landed and every slider slid in since) and while drying, `DRY`, `FOG`, `DEW` (40 g/m²), `SNOW` and `FROST`. `GlassWeather.Glass.features` says which the glass needs; the scene's 1 s timer compares, and rebuilds with a 1 s crossfade when they differ, onto the same water clock, so the drops don't move. Off, the shader is exactly the old one: `WEATHER` 0, `WATER` 1.
 
 ## Settings
-- **Backdrop** (`rain.palette`, standard "City"): the photos as thumbnails of their defocused view, then the bokeh palettes as swatches. `PaletteChoice.photos` maps a name to its dark and light thumbnail; `title` names the section. A pick rebuilds the scene.
+- **Backdrop** (`rain.palette`, standard "Hamburg", the look on the menu's tile, in its loop and on the site; stored empty for Random): the photos as thumbnails of their defocused view, then the bokeh palettes as swatches. `PaletteChoice.photos` maps a name to its dark and light thumbnail; `title` names the section. A pick rebuilds the scene.
 - **Fade to a new backdrop automatically** (`rain.fade`, on) and **Every** (`rain.fadeMinutes`, 1-60, 10): shown under the backdrops while Random is picked (their section is "Colors", which `RandomOnly` shows), like Aurora's. A 10 s `SKAction` timer checks them, so changes apply within 10 s; it counts from when the scene was built. Each display fades on its own, to its own pick.
 - **Weather → Follow the weather** (`rain.weather`, off): see above, with its status line under it. **Window** (`rain.window`, a menu, shown while following): Double glazed (0, standard) or Single pane.
 - **Drops → Drip speed** (`rain.speed`, 0.25-3×, 1×): everything in the water (lurches, runs, landings, misting) runs this much faster or slower. Dave likes the default.
@@ -181,6 +181,8 @@ From the research agents (session notes `notes/rain-science.md` and `notes/rain-
 - 2026-09-26, Dave: "add more background options to rain on glass. I want to keep what we have as like a bokeh option but lets add other potentially popular options like a rainy city backdrop (but blurry) or country side or cottage", researched across biomes, plus "any other ideas you might have on how to level up this wallpaper". Hence the ten photo backdrops, and the water and lens rebuilt from research, with a Classic switch to compare.
 - 2026-09-26, Dave: "new drops are so much better ditch the classic drops". The switch and the old water are gone (they're in git history at 0.24.0). He also asked for a timed fade to a new backdrop on Random, with the interval configurable, and "a drip speed setting that can apply some overall modifier to make drips go faster or slower, i like the current default though".
 - 2026-09-26, Dave asked for a "Follow the weather" switch "so the glass matches the real weather outside: rain when it's raining, fogged glass on humid mornings, and frost ferns growing across the pane below freezing", with snow if it fits, all "based on real physics", a preview for each state, every backdrop kept, and the switch off behaving exactly as before. Hence `RainWeather.swift`, built from four research passes. Real physics splits windows: fog on modern glazing forms outside, on clear calm humid mornings, while fern frost is classically inside old single panes, so there's a Window menu. Frost is baked on the CPU and revealed by the shader, as he suggested, and compared with photos.
+
+- 2026-11-14, the review of every wallpaper: the first look wasn't the one on the tile, or the one Settings showed. Nothing registers defaults, so an unset `rain.palette` reached the scene as nil and was rolled like Random over all seventeen (and faded on every 10 minutes), while Settings showed City as picked; 7 of the 17 are bokeh palettes, the weakest look. Dave's call: an unset backdrop means the standard, and the standard is the Hamburg photo; Random stays a pick. City had become the default two days before the photos existed. Hamburg also costs half the GPU of a bokeh palette (0.94 ms against 1.74-2.10, debug build, measured back to back under load).
 
 ## Ideas / next steps
 - **Gushes:** rivulets that bead up, above about 10 mm/h, and in a shower's gust front.

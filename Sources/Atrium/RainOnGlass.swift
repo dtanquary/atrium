@@ -49,14 +49,28 @@ let rainPhotos: [(name: String, night: String, day: String)] = [
     ("Shanghai", "shanghai-night", "shanghai-night"),
 ]
 
+/// The backdrops Settings offers, photos first, then the bokeh palettes: stored by name, empty for Random. Before a
+/// pick it's Hamburg, the look on the menu's tile, in its loop and on the site.
+let rainBackdrops = PaletteChoice(key: "rain.palette", options: rainPhotos.map { ($0.name, [], []) }
+                                  + rainPalettes.map { ($0.name, [$0.night[1], $0.lights[0], $0.lights[1]], [$0.day[0], $0.lights[0], $0.lights[1]]) },
+                                  standard: "Hamburg",
+                                  photos: Dictionary(uniqueKeysWithValues: rainPhotos.map { ($0.name, ("rain-\($0.night)-far.jpg", "rain-\($0.day)-far.jpg")) }),
+                                  title: "Backdrop")
+
+/// The backdrop for what Settings has stored: the standard one before any pick, as Settings shows it, and a roll of
+/// them all for Random.
+func rainBackdrop(picked: String?) -> String {
+    let names = rainBackdrops.options.map(\.name), pick = picked ?? rainBackdrops.standard
+    return names.contains(pick) ? pick : names.randomElement()!
+}
+
 /// Beads of water and drops sliding down a rainy window, each drop a little lens. Behind the glass is a photo
 /// backdrop, or a city of out-of-focus lights in a palette: night in Dark Mode, an overcast day in Light Mode.
 @MainActor func rainOnGlass(size: CGSize) -> SKScene {
-    let names = rainPhotos.map(\.name) + rainPalettes.map(\.name)
     // ("rain.seed" is for pictures that can be taken again: the pane's clock starts there. Nothing else sets it.)
     let seed = UserDefaults.standard.double(forKey: "rain.seed")
-    return rainScene(size: size, backdrop: UserDefaults.standard.string(forKey: "rain.palette").flatMap { names.contains($0) ? $0 : nil }
-                                           ?? names.randomElement()!, clock: seed > 0 ? seed : .random(in: 0..<1000))   // a fresh pane each time
+    return rainScene(size: size, backdrop: rainBackdrop(picked: UserDefaults.standard.string(forKey: rainBackdrops.key)),
+                     clock: seed > 0 ? seed : .random(in: 0..<1000))   // a fresh pane each time
 }
 
 /// The scene for one backdrop, with its water clock at `clock`. Left on Random, it fades to another one every few
@@ -89,9 +103,9 @@ let rainPhotos: [(name: String, night: String, day: String)] = [
         let fade = SKTransition.crossFade(withDuration: 4)
         fade.pausesIncomingScene = false   // both keep raining through the fade, in step on the same clock
         fade.pausesOutgoingScene = false
-        if UserDefaults.standard.string(forKey: "rain.palette") ?? "" == "", rainKnobs[0].value > 0.5,
+        if UserDefaults.standard.string(forKey: rainBackdrops.key) == "", rainKnobs[0].value > 0.5,   // on Random
            abs(Date().timeIntervalSince(born)) >= rainKnobs[1].value.rounded() * 60 {
-            let others = (rainPhotos.map(\.name) + rainPalettes.map(\.name)).filter { $0 != backdrop }
+            let others = rainBackdrops.options.map(\.name).filter { $0 != backdrop }
             view.presentScene(rainScene(size: water.size, backdrop: others.randomElement()!, clock: water.clockTime), transition: fade)
         } else if water.clockTime > 8000 {
             view.presentScene(rainScene(size: water.size, backdrop: backdrop, clock: .random(in: 0..<1000)), transition: fade)

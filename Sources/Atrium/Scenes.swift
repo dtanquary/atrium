@@ -96,12 +96,7 @@ struct Refresh {
               make: lavaLamp, knobs: LavaLamp.knobs,
               palettes: PaletteChoice(key: "lava.palette", options: LavaLamp.palettes.map { ($0.name, [$0.dark[3], $0.dark[1]], [$0.light[3], $0.light[1]]) })),
     Wallpaper(name: "Rain on Glass", icon: "cloud.rain.fill", tint: .gray, blurb: "Drops sliding down a rainy window.",
-              make: rainOnGlass, knobs: rainKnobs,
-              palettes: PaletteChoice(key: "rain.palette", options: rainPhotos.map { ($0.name, [], []) }
-                                      + rainPalettes.map { ($0.name, [$0.night[1], $0.lights[0], $0.lights[1]], [$0.day[0], $0.lights[0], $0.lights[1]]) },
-                                      standard: "City",
-                                      photos: Dictionary(uniqueKeysWithValues: rainPhotos.map { ($0.name, ("rain-\($0.night)-far.jpg", "rain-\($0.day)-far.jpg")) }),
-                                      title: "Backdrop"),
+              make: rainOnGlass, knobs: rainKnobs, palettes: rainBackdrops,
               status: (key: "rain.status", below: "rain.weather"), refresh: .weather),
     Wallpaper(name: "Aurora", icon: "mountain.2.fill", tint: .teal, blurb: "Northern lights over snowy peaks.", make: aurora, knobs: auroraKnobs,
               palettes: PaletteChoice(key: "aurora.palette", options: auroraPalettes.map { ($0.name, $0.colours.reversed(), $0.colours.reversed()) }), batteryRate: 15,
