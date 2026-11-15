@@ -562,7 +562,9 @@ final class Jellyfish: SKScene {
             // Each pixel starts its steps at its own depth, afresh every frame: by where it is on screen, not in the
             // sprite's box, so the picture is the same whatever the box.
             float jitter = hash42(gl_FragCoord.xy + seed + 71.0 * fract(t * 3.7)).x;
-            float oLast = 0.0, nLast = 0.0, gLast = 0.0;
+            float oLast = 0.0, nLast = 0.0;
+            // How big and how ripe this animal's gonads are: young ones small and faint, ripe ones large and full.
+            float gsize = A * (0.8 + 0.4 * hash11(seed * 3.7)), ripe = 0.5 + 0.8 * hash11(seed * 5.3);
             for (int i = 0; i < STEPS; i++) {
                 float z = z1 - dz * (float(i) + jitter);
                 float Yb = q.y * cb + z * sb;
@@ -591,14 +593,16 @@ final class Jellyfish: SKScene {
                 ringPts += exp(-(pow(rho - tx, 2.0) + pow(Yb - ty, 2.0) + dphi * dphi) / 0.0006) * dz * 45.0;
                 #endif
                 #if GONADS
-                // Four rings round the middle, each a mirror image of the next: folded onto one. Widened to the step's
-                // stride across them, as the skin is.
-                vec2 d = abs(vec2(q.x, Zb)) - 0.2404 * A;
-                float g = length(d) - 0.16 * A, wg = i == 0 ? 0.04 : max(0.04, 0.6 * abs(g - gLast));
-                gLast = g;
-                if (abs(Yb - inH * 0.95) < 0.25 && rho < 0.62 * A) {
+                // Four horseshoes round the middle, each a mirror image of the next: folded onto one. Each is a round
+                // tube along the dome's underside, thicker and thinner along its length (by where it is, so no two of
+                // the four alike), widened to the step's length so a step can't stride over it, as the skin is.
+                vec2 d = abs(vec2(q.x, Zb)) - 0.2404 * gsize;
+                float g = abs(Yb - inH * 0.88) < 0.16 && rho < 0.72 * A ? length(d) - 0.16 * gsize : 1.0;
+                if (abs(g) < 0.15) {
+                    float h = Yb - inH * (1.0 - 0.566 * rho * rho / (A * A)) + 0.03;
                     float open = smoothstep(-0.95, -0.7, dot(normalize(d + 1e-4), vec2(0.7071))); // the gap faces the middle
-                    organ += 0.04 / wg * exp(-pow(g / wg, 2.0)) * open * exp(-pow((Yb - inH * 0.95) / 0.09, 2.0)) * dz * 5.0;
+                    float tube = 0.05 * (1.0 + 0.4 * sin(9.0 * q.x + 7.0 * Zb + seed)), w = max(tube, 0.6 * dz);
+                    organ += tube / w * exp(-(g * g + h * h) / (w * w)) * open * dz * 8.0 * ripe;
                 }
                 #endif
             }
