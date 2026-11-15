@@ -71,20 +71,26 @@ final class Jellyfish: SKScene {
         var turnAxis = SIMD3<Double>(1, 0, 0), turnAngle = 0.0, turnStart = -100.0, turnTime = 0.5
         var spin = SIMD3<Double>.zero // the axis's slow drift, rad/s
         var touchedAt = -100.0
-        var history: [SIMD3<Double>] // the axis at every step as the camera sees it (pitched), a ring buffer
-        var head = 0
     }
 
     /// A group of one species, in its own layer so the crystal jellies can fade in as the moon jellies fade out.
     private final class Group {
         let species: Species, shader: SKShader, fade = SKUniform(name: "u_fade", float: 0)
         var jellies: [Jelly] = []
-        init(_ species: Species, _ shader: SKShader) { (self.species, self.shader) = (species, shader) }
+        /// Each jelly's axis as the camera sees it (pitched) at each of the last `kept` steps, as far back as the
+        /// spine's end trails: a ring buffer a jelly, one after another and all at `head`. Kept here and written in
+        /// place: as an array inside each `Jelly` it was copied whole every step, by the copy `move` works on.
+        var history: [SIMD3<Double>] = [], head = 0
+        let kept: Int
+        init(_ species: Species, _ shader: SKShader) {
+            (self.species, self.shader) = (species, shader)
+            kept = Int(species.spine / species.trail / Jellyfish.step) + 1
+        }
     }
 
     /// Room added round every sprite's box, in bell radii: for the test that the box cuts nothing off.
     static var slack = 0.0
-    private static let step = 1.0 / 60, kept = 600 // 10 s of the axis's history, for the longest tentacles
+    private static let step = 1.0 / 60
     private static let fov = 2 * tan(25 * Double.pi / 180) // view width per metre of depth
     private static let wallTurn = 0.6 // how fast a side's current turns a bell away, rad/s at the side
     private let current = 0.02 // the tank's current at its rim, m/s (display tanks run 1-3 cm/s: research-motion.md)
@@ -197,8 +203,8 @@ final class Jellyfish: SKScene {
             addChild(node)
             group.jellies.append(Jelly(node: node, p: SIMD3(u * (0.85 * half - d / 2), w * 0.75 * half / aspect, z), axis: axis, d: d,
                                        seed: .random(in: 0...50, using: &rng), amp: .random(in: 0.85...1.1, using: &rng), basePeriod: period,
-                                       lastStart: start, period: period, nextStart: start + period,
-                                       history: Array(repeating: turned(axis, SIMD3(1, 0, 0), pitch), count: Self.kept)))
+                                       lastStart: start, period: period, nextStart: start + period))
+            group.history += repeatElement(turned(axis, SIMD3(1, 0, 0), pitch), count: group.kept)
         }
         for k in 0..<600 { move(group, at: begin + Double(k) * Self.step) } // 10 s, ending now
     }
@@ -206,6 +212,7 @@ final class Jellyfish: SKScene {
     private func empty(_ group: Group) {
         for jelly in group.jellies { jelly.node.removeFromParent() }
         group.jellies.removeAll()
+        group.history.removeAll()
     }
 
     /// How near and far the tank runs, by the animals' size, as a tank's window frames them. Deep, so a crowd is mostly
@@ -251,6 +258,7 @@ final class Jellyfish: SKScene {
     private func move(_ group: Group, at now: Double) {
         let sp = group.species, (near, far) = depths(sp), dt = Self.step
         let aspect = Double(size.width / size.height), spin = current / (Self.fov * (near + far) / 4)
+        group.head = (group.head + 1) % group.kept
         for i in group.jellies.indices {
             var j = group.jellies[i]
             if now >= j.nextStart {
@@ -309,8 +317,7 @@ final class Jellyfish: SKScene {
                 j.axis = norm(turned(j.axis, norm(cross(j.axis, away)), Self.wallTurn * min(1, length(away)) * dt))
             }
             j.p += v * dt
-            j.head = (j.head + 1) % Self.kept
-            j.history[j.head] = turned(j.axis, SIMD3(1, 0, 0), pitch)
+            group.history[i * group.kept + group.head] = turned(j.axis, SIMD3(1, 0, 0), pitch)
             group.jellies[i] = j
         }
     }
@@ -330,13 +337,13 @@ final class Jellyfish: SKScene {
     /// and the spine its tentacles hang along.
     private func place(_ group: Group) {
         let sp = group.species, w = Double(size.width), h = Double(size.height)
-        for j in group.jellies {
+        for (i, j) in group.jellies.enumerated() {
             let k = w / (Self.fov * j.p.z), r = j.d / 2 * k // points per metre, and the bell's radius in points
             let phase = max(0, min(1, (simTime - j.lastStart) / j.period))
             let across = norm(cross(j.axis, SIMD3(sin(j.seed), 0.3, cos(j.seed))))
             let shown = turned(turned(j.axis, across, sp.rock * sin(2 * .pi * phase)), SIMD3(1, 0, 0), pitch)
             let heading = atan2(-shown.x, shown.y), tilt = asin(max(-0.97, min(0.97, -shown.z)))
-            let pts = spine(j, sp, heading: heading)
+            let pts = spine(group, i, heading: heading)
             // The box holds what the shader draws and little else, since every pixel of it costs: the bell at its
             // tallest and widest, the fringe from the ring down to the strands' tips and as far aside as the spine
             // carries them, and the arms from their roots to theirs. `jellyfishBoxHoldsWhatIsDrawn` checks it.
@@ -365,12 +372,12 @@ final class Jellyfish: SKScene {
     /// The spine the tentacles and arms hang along, in the sprite's own frame and bell radii: each bit of the trailing
     /// body hangs back along the way the bell's axis pointed when the margin passed it (a delay of its distance along
     /// over the trailing speed), sagging a little. Four points along its length, each kept lower than the last.
-    private func spine(_ j: Jelly, _ sp: Species, heading: Double) -> [SIMD2<Double>] {
+    private func spine(_ group: Group, _ i: Int, heading: Double) -> [SIMD2<Double>] {
         var pos = SIMD3<Double>.zero, pts: [SIMD2<Double>] = []
-        let steps = 16, ds = sp.spine / Double(steps), (c, s) = (cos(heading), sin(heading))
+        let sp = group.species, steps = 16, ds = sp.spine / Double(steps), (c, s) = (cos(heading), sin(heading))
         for n in 1...steps {
-            let back = min(Int((Double(n) - 0.5) * ds / sp.trail / Self.step), Self.kept - 1)
-            let past = j.history[(j.head - back + Self.kept) % Self.kept]
+            let back = min(Int((Double(n) - 0.5) * ds / sp.trail / Self.step), group.kept - 1)
+            let past = group.history[i * group.kept + (group.head - back + group.kept) % group.kept]
             pos += norm(-past + SIMD3(0, -sp.sag, 0)) * ds
             if n % (steps / 4) == 0 {
                 pts.append(SIMD2(pos.x * c + pos.y * s, min(-pos.x * s + pos.y * c, (pts.last?.y ?? 0) - 0.03 * sp.spine)))
