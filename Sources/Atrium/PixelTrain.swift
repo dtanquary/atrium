@@ -637,6 +637,8 @@ final class PixelTrain: SKScene {
         let row = rows[lane - 1], under = ((row.first + left + 9) % gw + gw) % gw
         guard [TrainMat.road, TrainMat.track].contains(land[(lane - 1) * gw + under]) else { return } // (a lake has come up to the lane, or a meeting)
         let shape = Self.car.map(Array.init), tail = pack(mix(rgb(120, 30, 30), rgb(255, 60, 48), night))
+        // (Through the weather's air as the road under it is, and its lamps through half as much: a light carries twice as far.)
+        let (veil, mist) = (fog[lane - 1], mist), aired = { (c: UInt32, v: UInt32) in v > 0 ? blend(c, mist, v) : c }
         for (k, line) in shape.enumerated() {
             let y = road + shape.count - 1 - k
             guard y >= 0, y < glass.h else { continue }
@@ -644,21 +646,22 @@ final class PixelTrain: SKScene {
                 let x = left + dx
                 guard x >= 0, x < gw else { continue }
                 switch mark {
-                case "b": out[y * gw + x] = traffic[body]
-                case "s": out[y * gw + x] = traffic[body + 1]
-                case "g": out[y * gw + x] = traffic[traffic.count - 3]
-                case "t": out[y * gw + x] = traffic[traffic.count - 2]
-                case "h": out[y * gw + x] = blend(traffic[body], lamp, UInt32(80 + 175 * night))
-                default: out[y * gw + x] = night > 0.3 ? tail : traffic[body + 1]
+                case "b": out[y * gw + x] = aired(traffic[body], veil)
+                case "s": out[y * gw + x] = aired(traffic[body + 1], veil)
+                case "g": out[y * gw + x] = aired(traffic[traffic.count - 3], veil)
+                case "t": out[y * gw + x] = aired(traffic[traffic.count - 2], veil)
+                case "h": out[y * gw + x] = aired(blend(traffic[body], lamp, UInt32(80 + 175 * night)), veil / 2)
+                default: out[y * gw + x] = night > 0.3 ? aired(tail, veil / 2) : aired(traffic[body + 1], veil)
                 }
             }
         }
         // After dark, the headlamps' light on the road ahead, fading over a dozen pixels.
         guard night > 0.3 else { return }
+        let beam = aired(lamp, veil / 2)
         for dx in 0..<14 {
             let x = left + shape[0].count + dx
             guard x >= 0, x < gw, road >= 0, road < glass.h else { continue }
-            out[road * gw + x] = blend(out[road * gw + x], lamp, UInt32(Float(150 - dx * 10) * night))
+            out[road * gw + x] = blend(out[road * gw + x], beam, UInt32(Float(150 - dx * 10) * night))
         }
     }
 }
