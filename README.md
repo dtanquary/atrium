@@ -186,11 +186,11 @@ The real sky above you with the daylight switched off: dark at noon too, with th
 | Three in the afternoon: the Sun among the stars it hides | Three in the morning: Orion and its nebula, the Pleiades, and the radiants of the Taurid meteors |
 
 #### Earth from Orbit
-The globe above your location with the live day/night line, today's real clouds, lightning in storms near you, city lights and the ISS.
+The globe above your location with the live day/night line, today's real clouds, lightning in storms near you, city lights and the ISS, against the real stars on the far side of the Earth from you. The ground is NASA's Blue Marble for the month, snow and autumn colors and all, and the lights are its Black Marble. The last light before night falls copper on the clouds, and the air is a thin bright line around the edge.
 
 | <img src="docs/images/earth-from-orbit.webp" alt="Earth from Orbit at night, over India" width="1600"> | ![Earth from Orbit by day, over North America](docs/images/earth-from-orbit-day.jpg) |
 |---|---|
-| City lights across India in the evening, the day going off to the west | Late afternoon over North America, under today's real clouds |
+| City lights across India in the evening, the day going off to the west | Late afternoon over North America, under that day's real clouds |
 
 #### Pixel Spaceport
 A pixel-art launch site that never stops, drawn like [Pixel City](#pixel-city) and lit by the same real Sun, seen from the bank across a lagoon. A rocket rolls out of the hangar lying on its transporter, climbs the ramp to the pad and is stood up, then fuels through a count you can follow on the countdown board on the near bank. It lifts off on a cloud of steam and arcs away, shrinking to a spark at the top of its trail. A little over a minute later its booster comes back, lights its landing burn, drops its legs and lands beside the pad, and a crane carries it off while the next rocket rolls out.

@@ -30,7 +30,7 @@ PREVIEWS='ant-colony|Ant Colony|4|SNAPSHOT_DEFAULTS=antcolony.day=20261013,antco
 aurora|Aurora|8|SNAPSHOT_DEFAULTS=aurora.palette=Purple,aurora.speed=2
 black-hole|Black Hole|2.5|SNAPSHOT_DEFAULTS=blackhole.speed=2
 dappled-light|Dappled Light|4|SNAPSHOT_DEFAULTS=dappled.previewTime=1,dappled.previewHour=17.5,dappled.weather=1
-earth-from-orbit|Earth from Orbit|4|SNAPSHOT_DEFAULTS=latitude=25,longitude=78,earth.previewStorm=1
+earth-from-orbit|Earth from Orbit|4|EARTH_AT=1794837600 SNAPSHOT_DEFAULTS=latitude=25,longitude=78,earth.previewStorm=1
 etching|Etching|4|SNAPSHOT_DEFAULTS=etching.drawn=0.6908,etching.picture=1,etching.speed=8
 fireflies|Fireflies|8|
 fish-tank|Fish Tank|4|SNAPSHOT_APPEARANCE=light
