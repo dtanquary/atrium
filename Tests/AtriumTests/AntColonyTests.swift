@@ -25,6 +25,21 @@ import Testing
     }
     #expect(Nest.faces(at: 0.02) == 1 && Nest.faces(at: 0.1) == 2 && Nest.faces(at: 1) == 8)
     #expect(nest.branches.count { $0.parent < 0 && $0.opened[0] <= 0.05 } == 1, "more than one shaft begun in the first twentieth")
+    // Tunnels a little over an ant wide once dug, measured straight across them every few cells away from their
+    // ends (half again as wide before 2026-11-15), and a dozen or so rooms, not twenty.
+    func open(_ p: SIMD2<Double>, _ way: SIMD2<Double>) -> Double {
+        var d = 0.0
+        while d < 66, !nest.solid(p.x + way.x * d, p.y + way.y * d, at: 1) { d += 0.25 }
+        return d
+    }
+    let widths = nest.branches.filter { !$0.room && $0.points.count > 55 }.flatMap { b in
+        stride(from: 22, to: b.points.count - 22, by: 4).map { k in
+            let along = simd_normalize(b.points[k + 2] - b.points[k - 2]), across = SIMD2(-along.y, along.x)
+            return (open(b.points[k], across) + open(b.points[k], -across)) / nest.bodyLength
+        }
+    }.sorted()
+    print("Ant Colony, the nest of 2026-10-12 done: a quarter of its tunnels' widths under \(widths[widths.count / 4]) ant lengths, half under \(widths[widths.count / 2])")
+    #expect(widths[widths.count / 4] < 1.45 && (6...16).contains(nest.branches.count { $0.room }))
 
     let shares = [0, 1, 3, 6, 12, 18, 24, 30].map { (AntColony.share(after: $0) * 100).rounded() }
     #expect(shares == [0, 8, 23, 44, 75, 94, 100, 100])
@@ -245,6 +260,10 @@ import Testing
     #expect(looks[0].z > 2 * looks[0].x && looks[1].z > 1.1 * looks[0].z, "the gels are not blue, or the bright one no brighter")
     #expect(looks[2].x > 1.15 * looks[2].z && looks[2].x > 70 && looks[3].x > 1.3 * looks[2].x, "the sand is not warm, or the white sand no whiter")
     #expect(looks[4].x > 1.4 * looks[4].z && looks[4].x / looks[4].z > looks[2].x / looks[2].z, "the earth is not brown, or no browner than sand")
+    // The tank is drawn once and kept until something in it changes: the frame after the look goes from earth to
+    // gel is the gel (and a minute at Speed 8, above, digs more).
+    let switched = mean(try picture(hour: 3, rate: 30, then: { UserDefaults.standard.set(0.0, forKey: "antcolony.look") }, for: 1.0 / 30))
+    #expect(abs(switched.z - looks[0].z) < 2 && abs(switched.x - looks[0].x) < 2, "the tank kept the earth it was drawn in after the look changed")
     for (key, value) in [("antcolony.look", 3.0), ("antcolony.size", 0), ("antcolony.ants", 2), ("antcolony.speed", 8)] { UserDefaults.standard.set(value, forKey: key) }
     let white = try [15.0, 60.0].map { try picture(hour: 3, rate: $0) }
     #expect(white[1] == white[0], "white sand with small ants at speed 8: the picture at 60 frames a second is not the one at 15")
