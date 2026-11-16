@@ -19,7 +19,7 @@ LOOP=12 FADE=2 # seconds: the loop, and the crossfade from its tail into its hea
 # master that the phone and laptop loops are cut from instead, when the desktop look doesn't fit a phone
 WORKS='black-hole|Black Hole|50|2.5|SNAPSHOT_DEFAULTS=blackhole.size=2.5,blackhole.speed=2.5|SNAPSHOT_DEFAULTS=blackhole.speed=2.5
 schlieren|Schlieren|50|10|SNAPSHOT_DEFAULTS=schlieren.palette=Candlelight,schlieren.filter=0,schlieren.source=3
-nebula|Nebula|54|4|SNAPSHOT_DEFAULTS=nebula.palette=Hubble
+nebula|Nebula|54|4|SNAPSHOT_DEFAULTS=nebula.seed=8,nebula.palette=Hubble
 kelp-forest|Kelp Forest|58|5|SNAPSHOT_DEFAULTS=kelp.seed=5,kelp.look=6
 murmuration|Murmuration|44|20|SNAPSHOT_DEFAULTS=murmuration.light=5,murmuration.ground=0 MURMURATION_SEED=3
 fish-tank|Fish Tank|42|4|SNAPSHOT_APPEARANCE=light'
