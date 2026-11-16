@@ -1,3 +1,4 @@
+import CoreImage
 import CoreLocation
 import SpriteKit
 
@@ -7,7 +8,9 @@ import SpriteKit
 /// The wind comes from `WindField` as a small texture. There are no particles on the CPU: every pixel traces the
 /// wind upstream and asks whether a streak has just passed it (see `source`).
 final class WindScene: SKScene {
-    nonisolated static let zoom = Knob(key: "wind.zoom", label: "Zoom", range: 0...2, standard: 1, section: "Map",
+    // half the continent nearly always has a low or a front in it, where a region on an ordinary day blows one way;
+    // it's also what the menu's tile and the site show
+    nonisolated static let zoom = Knob(key: "wind.zoom", label: "Zoom", range: 0...2, standard: 2, section: "Map",
                                        format: .choice(["My town", "My region", "Half the continent"]))
     // a new key: the old one (None, Coastline, Shaded relief) would land on the wrong choices
     nonisolated static let background = Knob(key: "wind.map", label: "Background", range: 0...5, standard: 2, section: "Map",
@@ -17,14 +20,16 @@ final class WindScene: SKScene {
                                           shownWhen: background.key)
     nonisolated static let brightness = Knob(key: "wind.mapBrightness", label: "Brightness", range: 0.3...2, standard: 1, section: "Map",
                                              shownWhen: background.key)
-    nonisolated static let saturation = Knob(key: "wind.mapSaturation", label: "Saturation", range: 0...1.5, standard: 0.8, section: "Map",
+    nonisolated static let saturation = Knob(key: "wind.mapSaturation", label: "Saturation", range: 0...1.5, standard: 0.4, section: "Map",
                                              shownWhen: background.key)
     nonisolated static let look = Knob(key: "wind.look", label: "Look", range: 0...1, standard: 1, section: "Streaks",
                                        format: .choice(["Comets", "Brush strokes"]))
     nonisolated static let speed = Knob(key: "wind.speed", label: "Speed", range: 0.25...4, standard: 1, section: "Streaks", format: .times)
     nonisolated static let length = Knob(key: "wind.length", label: "Streak length", range: 0.25...2, standard: 1, section: "Streaks", format: .times)
     nonisolated static let density = Knob(key: "wind.density", label: "Density", range: 0.1...1, standard: 0.6, section: "Streaks")
-    nonisolated static let knobs = [zoom, background, opacity, brightness, saturation, look, speed, length, density]
+    /// A faint pool of the palette's colour where it blows, under the streaks, after nullschool's overlay of speed.
+    nonisolated static let wash = Knob(key: "wind.wash", label: "Speed wash", range: 0...0.25, standard: 0.1, section: "Streaks")
+    nonisolated static let knobs = [zoom, background, opacity, brightness, saturation, look, speed, length, density, wash]
 
     /// Calm to strong, for Dark Mode; Light Mode draws the same hues as ink.
     nonisolated static let palettes: [(name: String, stops: [SIMD3<Float>])] = [
@@ -41,10 +46,10 @@ final class WindScene: SKScene {
     private let uniforms = (clock: SKUniform(name: "u_clock", float: 0), vmax: SKUniform(name: "u_vmax", float: 10),
                             rect: SKUniform(name: "u_rect", vectorFloat4: .zero), trail: SKUniform(name: "u_trail", float: 2),
                             density: SKUniform(name: "u_density", float: 0.6), brush: SKUniform(name: "u_brush", float: 1),
-                            pace: SKUniform(name: "u_pace", float: 5))
+                            pace: SKUniform(name: "u_pace", float: 5), wash: SKUniform(name: "u_wash", float: 0.1))
     /// The background's kind (1 relief, 2 day, 3 night) and its sliders.
     private let ground = (kind: SKUniform(name: "u_kind", float: 0), opacity: SKUniform(name: "u_opacity", float: 0.35),
-                          brightness: SKUniform(name: "u_brightness", float: 1), saturation: SKUniform(name: "u_saturation", float: 0.8))
+                          brightness: SKUniform(name: "u_brightness", float: 1), saturation: SKUniform(name: "u_saturation", float: 0.4))
     private var clockTime: Double = 0, lastUpdate: TimeInterval?, sinceField: TimeInterval = 0
     private var zoomShown = -1, backgroundShown = -1, mapCentre = CLLocationCoordinate2D()
     private let dark = systemIsDark, base: SIMD3<Float>
@@ -74,7 +79,7 @@ final class WindScene: SKScene {
         streaks.anchorPoint = .zero
         streaks.shader = SKShader(source: Self.source, uniforms: [
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]),
-            SKUniform(name: "u_field", texture: field), uniforms.clock, uniforms.vmax, uniforms.rect, uniforms.trail, uniforms.density, uniforms.brush, uniforms.pace,
+            SKUniform(name: "u_field", texture: field), uniforms.clock, uniforms.vmax, uniforms.rect, uniforms.trail, uniforms.density, uniforms.brush, uniforms.pace, uniforms.wash,
             SKUniform(name: "u_dark", float: dark ? 1 : 0), SKUniform(name: "u_noise", texture: Self.noise),
         ] + stops.indices.map { SKUniform(name: "u_c\($0)", vectorFloat3: stops[$0]) })
         half.addChild(streaks)
@@ -101,6 +106,7 @@ final class WindScene: SKScene {
         uniforms.brush.floatValue = Float(Self.look.value)
         uniforms.trail.floatValue = Float(2 * Self.length.value)
         uniforms.density.floatValue = Float(Self.density.value)
+        uniforms.wash.floatValue = Float(Self.wash.value) * (dark ? 1 : 0.5) // ink on paper reads stronger
         ground.opacity.floatValue = Float(Self.opacity.value)
         ground.brightness.floatValue = Float(Self.brightness.value)
         ground.saturation.floatValue = Float(Self.saturation.value)
@@ -123,10 +129,13 @@ final class WindScene: SKScene {
     private var place: WindMap { WindMap(centre: mapCentre, kmAcross: WindField.spans[zoomShown], size: size) }
 
     /// The relief or Earth image for the zoom and where you are, from what's on disk. A plain sprite of the
-    /// background colour without one (SKRenderer, in the tests, ignores backgroundColor).
+    /// background colour without one (SKRenderer, in the tests, ignores backgroundColor). Blue Marble's land, by day
+    /// or as terrain, is sharpened in Dark Mode at the region and continent zooms, where it's drawn at about its own
+    /// resolution: laid at a third over a ground about as dark, it read as flat charcoal with only the lakes showing.
     private func drawMap() {
         mapCentre = WindField.shared.forecast(zoom: zoomShown).centre
-        map.texture = backgroundShown == 1 ? place.shadedRelief() : place.earth(Imagery.layers(backgroundShown))
+        let detail = dark && zoomShown > 0 && [2, 4].contains(backgroundShown)
+        map.texture = backgroundShown == 1 ? place.shadedRelief() : place.earth(Imagery.layers(backgroundShown), detail: detail)
         map.shader = map.texture == nil ? nil : mapShader
         map.color = backgroundColor
         ground.kind.floatValue = backgroundShown == 1 ? 0 : backgroundShown == 3 ? 2 : 1 // shade, an image, or lights
@@ -261,7 +270,8 @@ final class WindScene: SKScene {
         float crowd = clamp(-div * 2.0 * u_vmax / max(windHere, 1.0), -1.0, 1.0);
         // brightness saturates at half the day's strongest wind, as hint.fm's does, so every day has highlights
         float fast = clamp(windHere / (0.5 * max(u_vmax, 8.0)), 0.0, 1.0);
-        float glow = (1.0 - exp(-2.2 * sum * (1.0 + 0.8 * crowd))) * (0.4 + 0.6 * fast) + 0.06 * min(film, 1.0);
+        // a soft wash of the speed's colour, so windy regions sit in a faint pool of it and calm ones stay dark
+        float glow = (1.0 - exp(-2.2 * sum * (1.0 + 0.8 * crowd))) * (0.4 + 0.6 * fast) + 0.06 * min(film, 1.0) + u_wash * fast * fast;
         glow = min(glow, 1.0);
         vec3 c = s < 1.0 ? mix(u_c0, u_c1, s) : (s < 2.0 ? mix(u_c1, u_c2, s - 1.0) : mix(u_c2, u_c3, s - 2.0));
         if (u_dark < 0.5) { c = c / max(max(c.r, c.g), c.b) * (0.6 - 0.08 * s); } // ink, deeper where it's windier
@@ -469,7 +479,7 @@ struct WindMap {
     }
 
     /// A context at one pixel a point, with tiles drawn into it at their places.
-    private func draw(grey: Bool, fill: CGFloat, tiles: [(degrees: Double, column: Int, row: Int, image: CGImage)]) -> SKTexture? {
+    private func draw(grey: Bool, fill: CGFloat, tiles: [(degrees: Double, column: Int, row: Int, image: CGImage)]) -> CGImage? {
         let (w, h) = (Int(size.width), Int(size.height))
         guard let context = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
                                       space: grey ? CGColorSpaceCreateDeviceGray() : CGColorSpace(name: CGColorSpace.sRGB)!,
@@ -477,11 +487,12 @@ struct WindMap {
         context.setFillColor(CGColor(gray: fill, alpha: 1))
         context.fill(CGRect(x: 0, y: 0, width: w, height: h))
         context.interpolationQuality = .high
+        context.setShouldAntialias(false) // tiles meet on whole pixels: anti-aliased edges left a faint dark seam, which sharpening drew out
         for tile in tiles {
             let corner = point(Double(tile.column) * tile.degrees - 180, 90 - Double(tile.row + 1) * tile.degrees)
             context.draw(tile.image, in: CGRect(x: corner.x, y: corner.y, width: tile.degrees * scale.x, height: tile.degrees * scale.y))
         }
-        return context.makeImage().map { SKTexture(cgImage: $0) }
+        return context.makeImage()
     }
 
     /// The shaded relief as a greyscale texture.
@@ -498,7 +509,7 @@ struct WindMap {
                       let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
                 return (degrees, i, j, image)
             } }
-            return draw(grey: true, fill: 206.0 / 255, tiles: images)
+            return draw(grey: true, fill: 206.0 / 255, tiles: images).map { SKTexture(cgImage: $0) }
         }
     }
 
@@ -518,8 +529,10 @@ struct WindMap {
         return found
     }
 
-    /// NASA's Earth imagery from the tiles on disk; nil before any have downloaded.
-    func earth(_ layers: [Imagery]) -> SKTexture? {
+    /// NASA's Earth imagery from the tiles on disk; nil before any have downloaded. With `detail`, sharpened, which
+    /// brings out rivers, towns, lake shores and ridges and leaves the mean brightness where it was, so the streaks
+    /// still lead.
+    func earth(_ layers: [Imagery], detail: Bool = false) -> SKTexture? {
         let images: [(Double, Int, Int, CGImage)] = earthTiles(layers).compactMap { tile in
             guard let source = CGImageSourceCreateWithURL(tile.file as CFURL, nil),
                   let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
@@ -527,8 +540,18 @@ struct WindMap {
             return (288 / pow(2, Double(tile.level)), tile.column, tile.row,
                     tile.base ? image : image.copy(maskingColorComponents: [0, 6, 0, 6, 0, 6]) ?? image)
         }
-        return images.isEmpty ? nil : draw(grey: false, fill: 0, tiles: images)
+        guard !images.isEmpty, let image = draw(grey: false, fill: 0, tiles: images) else { return nil }
+        return SKTexture(cgImage: detail ? Self.sharpened(image) ?? image : image)
     }
+
+    /// An image sharpened by an unsharp mask 8 pixels wide: edges and small features stand out, and the brightness
+    /// of any area larger than that stays where it was.
+    static func sharpened(_ image: CGImage) -> CGImage? {
+        let sharp = CIImage(cgImage: image).applyingFilter("CIUnsharpMask", parameters: [kCIInputRadiusKey: 8, kCIInputIntensityKey: 1.5])
+        return imaging.createCGImage(sharp, from: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+    }
+
+    private static let imaging = CIContext(options: [.cacheIntermediates: false])
 }
 
 /// NASA imagery from GIBS, the Global Imagery Browse Services (public domain; no key), in geographic tiles of 512 px:
