@@ -106,6 +106,7 @@ After the review of 14 November (2026-11-16; the render test's GPU figure on a p
 - 2026-09-25, after Weather's clouds learned to form and dissolve: "would the nebula wallpaper benefit from this new billowing forming dissolving tech we have?" Billowing no (the gas already churns), but the forming and dissolving yes, for the change between nebulas. He had it prototyped with a Settings switch against the crossfade, compared them, and chose it: "Dissolve and condense looks good to me, i like it."
 
 - 2026-09-26, after every Settings page got a screenshot behind its top: "I am not sure I want this so maybe just try it on one item first" about live previews. Nebula's page was the trial: its own copy of the scene runs there (`LivePreview` in Settings.swift), so the Look sliders show on the page as they move. He liked it, "yeah the live preview is awesome, add it to all of them", so every page has one now.
+- 2026-11-16, after trying the review's changes on his desktop (dust lanes hiding the stars behind them, the brighter body, the Crisp dust lanes slider, coloured field stars): "it looks great, keep the changes". The coloured stars stay, at about 0.2 ms of GPU (about 1.75 ms in all).
 
 ## Ideas / next steps
 - More Settings: drift speed (it would need an integrated phase like Flowing Gradient, instead of `u_now`) and shimmer strength.
