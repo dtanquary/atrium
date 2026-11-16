@@ -184,8 +184,8 @@ let nebulaKnobs = [
         float keep = smoothstep(clip - 0.15, clip + 0.15, thick); // all of it while clip is -0.2 or less
         float density = smoothstep(0.25, 0.8, g) * keep;
         // The light follows the gas on past where density stops rising (g 0.8), or the brightest body flattens into one
-        // tone: from g 0.7 up it dims a little below g 0.84 and brightens above it, about as much as the whole cloud.
-        float glow = density * density * 2.2 * max(1.0 + 4.0 * (g - 0.84) * smoothstep(0.7, 0.8, g), 0.5);
+        // tone: from g 0.8 up it dips a little below g 0.87 and brightens above it. Gas that never passes g 0.8 is as it was.
+        float glow = density * density * 2.2 * (1.0 + 8.0 * (g - 0.87) * smoothstep(0.8, 0.9, g));
         vec3 neb = 1.0 - exp(-c * glow);                                     // soft clip keeps bright cores from blowing out
         // Dark dust lanes. With `detail` (Crisp dust lanes, 0 to 1) a lane's edge takes the gas's own folds and narrows
         // from a blur tens of points wide to a crisp silhouette, and a thin rim just outside it is lit in the hot colour
