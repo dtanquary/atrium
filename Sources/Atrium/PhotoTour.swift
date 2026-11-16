@@ -43,6 +43,8 @@ struct Tour: Sendable {
     static let surface = Knob(key: "solar.surface", label: "Views from the surface", range: 0...1, standard: 1, section: "Tour",
                               format: .toggle, hiddenWhen: which.key, hiddenAt: 2)
     static let brightness = Knob(key: "solar.brightness", label: "Brightness", range: 0.4...1.2, standard: 1, section: "Tour", format: .times)
+    /// Dims the brightest photos (sunlit ground, Jupiter's cloud tops) toward the rest, each by its own glare.
+    static let soften = Knob(key: "solar.soften", label: "Soften bright photos", range: 0...1, standard: 1, section: "Tour", format: .toggle)
     /// The caption: which lines, how many facts and how they're laid out, where, how big, and how far from the edges.
     static let captionLines = Knob(key: "solar.captionLines", label: "Show", range: 0...3, standard: 3, section: "Caption",
                                    format: .choice(["Nothing", "The name", "The name and a line on the photo", "The name, the photo and facts"]))
@@ -57,7 +59,7 @@ struct Tour: Sendable {
                                   shownWhen: captionLines.key)
     static let captionMargin = Knob(key: "solar.captionMargin", label: "Margin", range: 16...240, standard: 52, section: "Caption",
                                     format: .points, shownWhen: captionLines.key)
-    static let knobs = [which, seconds, zoom, framing, surface, brightness, captionLines, factCount, factLayout, captionPlace, captionSize, captionMargin]
+    static let knobs = [which, seconds, zoom, framing, surface, brightness, soften, captionLines, factCount, factLayout, captionPlace, captionSize, captionMargin]
 
     /// The grid under Show's menu at `pick`: every group, each with its thumbnail (`<prefix>-thumb-<name>.jpg`).
     func showChoice(at pick: Double) -> PaletteChoice {
@@ -142,7 +144,7 @@ struct Tour: Sendable {
 /// photo to photo, so Saturn comes round no more often than Io, and each visit shows the next of its photos. The Sun
 /// and the Moon are live: today's Sun from SDO (`TheSun`) and the Moon as it is right now (`TheMoon`), run inside this
 /// scene. Settings can keep the tour to one set, and hold it on one group of that set.
-final class PhotoTour: SKScene {
+final class PhotoTour: SKScene, BatteryPaced {
     typealias View = Tour.View
 
     override init(size: CGSize) {
@@ -170,6 +172,8 @@ final class PhotoTour: SKScene {
         var from = SIMD3<Double>(), to = SIMD3<Double>()
         /// How far in from the texture's edges it fades to black, in texels: 0 but for a photo shown whole on black.
         var feather = 0.0
+        /// What Soften bright photos dims it by (`glare`).
+        var gain = 1.0
         var scene: SKScene?
         /// When it began to show, in scene seconds; nil while it waits its turn.
         var start: Double?
@@ -179,13 +183,13 @@ final class PhotoTour: SKScene {
             view = cut.view
             texture = SKTexture(cgImage: cut.image)
             region = cut.region
-            (from, to, feather) = (cut.from, cut.to, cut.feather)
+            (from, to, feather, gain) = (cut.from, cut.to, cut.feather, cut.gain)
         }
     }
 
     /// A photo planned and cut in the background, ready for `Shown`.
     private struct Cut: @unchecked Sendable { // ponytail: CGImage is immutable, so safe to hand across
-        let view: View, image: CGImage, region: CGRect, from: SIMD3<Double>, to: SIMD3<Double>, feather: Double
+        let view: View, image: CGImage, region: CGRect, from: SIMD3<Double>, to: SIMD3<Double>, feather: Double, gain: Double
     }
 
     // SpriteKit leaves a texture uniform undeclared while it's nil, so both start black.
@@ -197,9 +201,8 @@ final class PhotoTour: SKScene {
     /// How far the dissolve to `next` has got, and whether each is a photo (1) or a live view showing through (0).
     private let fadeUniform = SKUniform(name: "u_fade", float: 0)
     private let opaqueUniform = SKUniform(name: "u_opaque", vectorFloat2: [1, 1])
-    private let captionUniform = SKUniform(name: "u_caption", float: 0)
-    /// The shadow behind the caption: its centre and reach, in points.
-    private let shadeUniform = SKUniform(name: "u_shade", vectorFloat4: [170, 80, 320, 100])
+    /// What each is dimmed by, with Soften bright photos on.
+    private let gainUniform = SKUniform(name: "u_gain", vectorFloat2: [1, 1])
     private let brightnessUniform = SKUniform(name: "u_brightness", float: 1)
 
     private var current: Shown?
@@ -214,6 +217,12 @@ final class PhotoTour: SKScene {
     private var time = 0.0
     private var lastUpdate: TimeInterval?
     private let caption = SKNode()
+    /// The photos, in one full-screen shader over the live views.
+    private let photos = SKSpriteNode(color: .black, size: .zero)
+    /// Its ceiling on battery: 20 fps for the photos' pans, the dissolves and the caption's fades; with a live view
+    /// alone on screen, 15 for the Sun (its plasma moves about 7 px a second, its eruptions up to 17) and 10 for the
+    /// Moon, lit again once a minute and turning with the sky by a few degrees an hour.
+    var batteryRate: Int? = 20 { didSet { batteryRateChanged(from: oldValue) } }
     /// The view the caption is for, its facts (kept so a change of layout doesn't move them on), and the Settings it was
     /// laid out with.
     private var captionView: View?
@@ -229,7 +238,8 @@ final class PhotoTour: SKScene {
 
     override func sceneDidLoad() {
         backgroundColor = .black
-        let sprite = SKSpriteNode(color: .black, size: size)
+        let sprite = photos
+        sprite.size = size
         sprite.anchorPoint = .zero
         // A child's zPosition adds to its parent's, so a live scene's own layers (The Moon's sky is at 2) would draw
         // over a photo at 1 and pop instead of fading. 100 is above anything they use.
@@ -237,7 +247,7 @@ final class PhotoTour: SKScene {
         sprite.blendMode = .alpha // live views show through where the shader leaves it clear
         sprite.shader = SKShader(source: shaderCommon + Self.shader, uniforms: [
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]),
-            aUniform, bUniform, aPlace, bPlace, aSize, bSize, fadeUniform, opaqueUniform, captionUniform, shadeUniform, brightnessUniform,
+            aUniform, bUniform, aPlace, bPlace, aSize, bSize, fadeUniform, opaqueUniform, gainUniform, brightnessUniform,
         ])
         addChild(sprite)
         caption.zPosition = 101
@@ -267,6 +277,7 @@ final class PhotoTour: SKScene {
 
     @objc private func applyKnobs() {
         brightnessUniform.floatValue = Float(Tour.brightness.value)
+        gainUniform.vectorFloat2Value = [gain(current), gain(next)]
         if holds != shownHolds { shownHolds = holds; moveOn() }
         let layout = [Tour.captionLines, Tour.factCount, Tour.factLayout, Tour.captionPlace, Tour.captionSize, Tour.captionMargin].map(\.value)
         guard layout != captionLayout, let view = captionView else { return } // any defaults change lands here; most aren't ours
@@ -280,6 +291,7 @@ final class PhotoTour: SKScene {
 
     override func update(_ currentTime: TimeInterval) {
         let dt = frameTime(currentTime, &lastUpdate)
+        defer { rest() }
         if still == nil { time += dt }
         for live in [current?.scene, next?.scene].compactMap({ $0 }) { live.update(currentTime) }
         guard let current, let began = current.start else { return }
@@ -306,6 +318,15 @@ final class PhotoTour: SKScene {
         self.next = nil
         showCaption(next.view)
         NotificationCenter.default.post(name: .pictureChanged, object: self)
+    }
+
+    /// Lets a live view alone on screen draw less: the photo layer, clear over it but for a dissolve, is hidden, and
+    /// the rate on battery comes down once the caption has faded in.
+    private func rest() {
+        let live = current?.view.kind == .live && next?.start == nil
+        photos.isHidden = live
+        let alone = live && !caption.hasActions() ? current?.scene : nil
+        batteryRate = alone is TheMoon ? 10 : alone is TheSun ? 15 : 20
     }
 
     /// Show changed: drops the view that was next and dissolves to one from the new pick as soon as it's ready, unless
@@ -359,8 +380,11 @@ final class PhotoTour: SKScene {
         let size = shown.texture?.size() ?? CGSize(width: 1, height: 1)
         (slot == 0 ? aSize : bSize).vectorFloat2Value = [Float(size.width), Float(size.height)]
         opaqueUniform.vectorFloat2Value[slot] = shown.view.kind == .live ? 0 : 1
+        gainUniform.vectorFloat2Value[slot] = gain(shown)
         place(shown, in: slot)
     }
+
+    private func gain(_ shown: Shown?) -> Float { Tour.soften.value > 0.5 ? Float(shown?.gain ?? 1) : 1 }
 
     /// Moves a photo along its path: the centre in a straight line, the scale evenly in ratio, over the view's time
     /// and its dissolve out.
@@ -393,7 +417,8 @@ final class PhotoTour: SKScene {
 
     /// Lays out the caption as Settings ask: the name (26 pt), a line on the photo (13 pt) and facts (12 pt, on one line
     /// or one per line), all scaled by Size, in a corner or the middle of the top or bottom edge, Margin from the edges.
-    /// The shader's shadow behind it follows.
+    /// It's painted once a view, each line over a soft shadow of itself thickened, which keeps the dimmer lines readable
+    /// on a sunlit photo (Apollo's ground, the Moon's pale sky) and darkens nothing much beyond the words.
     private func layoutCaption() {
         caption.removeAllChildren()
         guard let view = captionView, Tour.captionLines.value > 0.5 else { caption.removeAllActions(); setCaption(0); return }
@@ -403,22 +428,55 @@ final class PhotoTour: SKScene {
             rows += (Tour.factLayout.value > 0.5 ? shownFacts : [shownFacts.joined(separator: "  ·  ")]).map { ($0, 12, .regular, 0.45) }
         }
         let scale = CGFloat(Tour.captionSize.value), place = Int(Tour.captionPlace.value), column = place % 3
-        var baseline: CGFloat = 0
-        for (i, row) in rows.enumerated() {
-            if i > 0 { baseline -= (rows[i - 1].size * 0.3 + row.size * 1.3) * scale } // the last line's descent, then this one's height
-            let label = SKLabelNode(attributedText: NSAttributedString(string: row.text, attributes: [
-                .font: NSFont.systemFont(ofSize: row.size * scale, weight: row.weight), .foregroundColor: NSColor(white: 1, alpha: row.alpha)]))
-            label.horizontalAlignmentMode = [.left, .center, .right][column]
-            label.verticalAlignmentMode = .baseline
-            label.position.y = baseline
-            caption.addChild(label)
+        let fonts = rows.map { NSFont.systemFont(ofSize: $0.size * scale, weight: $0.weight) }
+        func line(_ i: Int, alpha: CGFloat) -> CTLine {
+            CTLineCreateWithAttributedString(NSAttributedString(string: rows[i].text, attributes: [
+                .font: fonts[i], NSAttributedString.Key(kCTForegroundColorAttributeName as String): CGColor(gray: 1, alpha: alpha)]))
         }
-        caption.position = .zero
-        let block = caption.calculateAccumulatedFrame(), margin = CGFloat(Tour.captionMargin.value)
+        let lines = rows.indices.map { line($0, alpha: rows[$0].alpha) }, widths = lines.map { CGFloat(CTLineGetTypographicBounds($0, nil, nil, nil)) }
+        var baselines: [CGFloat] = [0]
+        for i in rows.indices.dropFirst() { baselines.append(baselines[i - 1] - (rows[i - 1].size * 0.3 + rows[i].size * 1.3) * scale) } // the last line's descent, then this one's height
+        let wide = widths.max() ?? 0, bottom = baselines.last! + fonts.last!.descender
+        let block = CGRect(x: [0, -wide / 2, -wide][column], y: bottom, width: wide, height: fonts[0].ascender - bottom)
+        let pad = 40 * scale // the shadow's reach: three times its blur, and the thickening
+        let canvas = CGSize(width: (block.width + 2 * pad).rounded(.up), height: (block.height + 2 * pad).rounded(.up))
+        func origin(_ i: Int) -> CGPoint { CGPoint(x: pad + [0, (wide - widths[i]) / 2, wide - widths[i]][column], y: pad + baselines[i] - bottom) }
+        // The shadow: each line thickened (drawn nine times, a little apart), off the canvas so that only its shadow lands,
+        // under the line. Being soft, it's painted at a pixel to two points, a sixteenth of the text's pixels.
+        // A shadow's offset and blur are in pixels.
+        let shade: CGFloat = 0.5, backing = CGContext(data: nil, width: Int(canvas.width * shade), height: Int(canvas.height * shade), bitsPerComponent: 8,
+                                             bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        backing.scaleBy(x: shade, y: shade)
+        backing.setShadow(offset: CGSize(width: -canvas.width * shade, height: 0), blur: 9 * scale * shade, color: CGColor(gray: 0, alpha: 0.55))
+        backing.beginTransparencyLayer(auxiliaryInfo: nil) // one shadow for all the copies
+        for i in rows.indices {
+            let opaque = line(i, alpha: 1), r = rows[i].size * scale * 0.15
+            for k in 0..<9 { // thickened: the line, and copies round it
+                let a = Double(k) * .pi / 4, out = k < 8 ? r : 0
+                backing.textPosition = CGPoint(x: origin(i).x + canvas.width + out * cos(a), y: origin(i).y + out * sin(a))
+                CTLineDraw(opaque, backing)
+            }
+        }
+        backing.endTransparencyLayer()
+        let text = paint(canvas) { ctx in
+            for i in rows.indices {
+                ctx.textPosition = origin(i)
+                CTLineDraw(lines[i], ctx)
+            }
+        }
+        let sprite = SKSpriteNode(texture: text, size: canvas), under = SKSpriteNode(texture: SKTexture(cgImage: backing.makeImage()!), size: canvas)
+        for node in [under, sprite] {
+            node.anchorPoint = .zero
+            node.position = CGPoint(x: block.minX - pad, y: block.minY - pad)
+            caption.addChild(node)
+        }
+        let margin = CGFloat(Tour.captionMargin.value), pixel = CGFloat(pixelScale)
         caption.position = CGPoint(x: [margin, size.width / 2, size.width - margin][column],
                                    y: place < 3 ? size.height - margin - block.maxY : margin - block.minY)
-        let shade = block.offsetBy(dx: caption.position.x, dy: caption.position.y)
-        shadeUniform.vectorFloat4Value = [Float(shade.midX), Float(shade.midY), Float(shade.width / 2 + 100 * scale), Float(shade.height / 2 + 65 * scale)]
+        // On whole screen pixels, so the painted text lands a texel to a pixel and stays sharp.
+        let corner = CGPoint(x: caption.position.x + sprite.position.x, y: caption.position.y + sprite.position.y)
+        caption.position.x += ((corner.x * pixel).rounded() - corner.x * pixel) / pixel
+        caption.position.y += ((corner.y * pixel).rounded() - corner.y * pixel) / pixel
     }
 
     private func hideCaption() {
@@ -426,15 +484,13 @@ final class PhotoTour: SKScene {
         caption.run(.customAction(withDuration: 1.5) { [weak self] _, t in self?.setCaption(from * (1 - Double(t) / 1.5)) })
     }
 
-    /// The caption, and the shadow the shader lays behind it so it reads over a bright photo.
-    private func setCaption(_ alpha: Double) {
-        caption.alpha = CGFloat(alpha)
-        captionUniform.floatValue = Float(alpha)
-    }
+    private func setCaption(_ alpha: Double) { caption.alpha = CGFloat(alpha) }
 
-    /// What the live views show today: the Moon's phase is real unless one is picked.
+    /// What the live views show today: a real flare on the Sun, and the Moon's phase unless it's real time.
     private func liveCaption(_ view: View) -> String? {
-        guard view.body == "The Moon", view.kind == .live, TheMoon.knobs[0].value > 0.5,
+        guard view.kind == .live else { return nil }
+        if view.body == "The Sun" { return SunImages.shared.flare.flatMap { $0.isNow() ? "\(view.caption) · \($0.caption)" : nil } }
+        guard view.body == "The Moon", TheMoon.knobs[0].value > 0.5,
               case .choice(let names) = TheMoon.knobs[0].format else { return nil }
         return "\(names[Int(TheMoon.knobs[0].value)]), from the Moon's real maps"
     }
@@ -503,13 +559,26 @@ final class PhotoTour: SKScene {
         context.draw(part, in: CGRect(x: 0, y: 0, width: tw, height: th))
         guard let cutImage = context.makeImage() else { return nil }
         return Cut(view: view, image: cutImage, region: CGRect(x: region.minX, y: region.minY, width: Double(tw) / s, height: Double(th) / s),
-                   from: from, to: to, feather: faded ? wholeEdge * Double(min(tw, th)) : 0)
+                   from: from, to: to, feather: faded ? wholeEdge * Double(min(tw, th)) : 0, gain: glare(cutImage))
+    }
+
+    /// What to dim a photo by so the brightest don't glare: 1 up to a mean level of 110 of 255 (as most are), then
+    /// (110 / mean)^0.7, so Apollo 15's sunlit Mount Hadley, the brightest at 176, comes down by 28% to about 127,
+    /// and a crescent on black is left as it is. The mean is of the part the motion shows, drawn 32 pixels square.
+    nonisolated static func glare(_ image: CGImage) -> Double {
+        guard let small = CGContext(data: nil, width: 32, height: 32, bitsPerComponent: 8, bytesPerRow: 128, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                    bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return 1 }
+        small.interpolationQuality = .medium
+        small.draw(image, in: CGRect(x: 0, y: 0, width: 32, height: 32))
+        let v = UnsafeBufferPointer(start: small.data!.assumingMemoryBound(to: UInt8.self), count: 32 * 32 * 4)
+        let mean = stride(from: 0, to: v.count, by: 4).reduce(0.0) { $0 + 0.2126 * Double(v[$1]) + 0.7152 * Double(v[$1 + 1]) + 0.0722 * Double(v[$1 + 2]) } / 1024
+        return mean > 110 ? pow(110 / mean, 0.7) : 1
     }
 
     /// Both views, each sampled with Catmull-Rom in nine bilinear taps (Sigg and Hadwiger's trick), which stays sharp
     /// as the photo slowly magnifies where plain bilinear would blur and pulse; black outside each photo, and a photo
     /// shown whole fading to it over its last `u_pa.w` texels (a smoothstep each way, as prep.py's `feather`). Live views
-    /// leave their part clear. A soft shadow sits behind the caption.
+    /// leave their part clear.
     private static let shader = """
     vec3 crTaps(float t) { // the three tap positions along one axis, in texels
         float c = floor(t - 0.5) + 0.5, f = t - c;
@@ -545,13 +614,9 @@ final class PhotoTour: SKScene {
             b *= insideOf(tb, u_sb) * edgeFade(tb, u_sb, u_pb.w);
         }
         float oa = u_opaque.x * (1.0 - u_fade), ob = u_opaque.y * u_fade;
-        vec3 col = max(a, 0.0) * oa + max(b, 0.0) * ob; // premultiplied: a live view shows through the rest
+        vec3 col = max(a, 0.0) * (oa * u_gain.x) + max(b, 0.0) * (ob * u_gain.y); // premultiplied: a live view shows through the rest
         float alpha = oa + ob;
         col *= u_brightness;
-        vec2 fromCaption = (pts - u_shade.xy) / u_shade.zw;
-        float shade = u_caption * 0.45 * exp(-dot(fromCaption, fromCaption));
-        col *= 1.0 - shade;
-        alpha = max(alpha, shade);
         col += (hash21(pts * 2.0) - 0.5) / 255.0 * alpha;
         gl_FragColor = vec4(max(col, 0.0), alpha);
     }

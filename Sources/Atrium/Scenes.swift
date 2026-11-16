@@ -156,7 +156,7 @@ struct Refresh {
               blurb: "Slow pans across the best real photos of the Solar System and deep space, with the live Sun and Moon.",
               make: spaceTour,
               knobs: Tour.knobs + ([TheSun.wavelengthKnob] + TheSun.knobs).map { $0.in("The Sun") } + TheMoon.knobs.map { $0.in("The Moon") },
-              looks: [Tour.solarSystem.showChoice(at: 1), Tour.deepSpace.showChoice(at: 2)], batteryRate: 20),
+              looks: [Tour.solarSystem.showChoice(at: 1), Tour.deepSpace.showChoice(at: 2)]), // its own rate on battery: PhotoTour.batteryRate
 ].sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
 
 /// The wallpapers people see: all but the unfinished ones, unless `unfinished` is set for working on them, and

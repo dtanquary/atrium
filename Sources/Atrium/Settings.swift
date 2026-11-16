@@ -467,6 +467,8 @@ struct AboutPage: View {
                 credit("Clouds", "Live Cloud Maps by Matt Eason (CC0); contains modified EUMETSAT data", "https://clouds.matteason.co.uk")
                 credit("The Sun", "Courtesy of NASA/SDO and the AIA, EVE, and HMI science teams, via the ESA/NASA Helioviewer Project",
                        "https://helioviewer.org")
+                credit("Solar flares", "NOAA's GOES X-ray flux, via the Space Weather Prediction Center (public domain)",
+                       "https://www.swpc.noaa.gov/products/goes-x-ray-flux")
                 credit("Wind's maps", "NASA's Blue Marble, Black Marble, Landsat and VIIRS via GIBS, and Natural Earth's relief (public domain)",
                        "https://nasa-gibs.github.io/gibs-api-docs/")
             }
