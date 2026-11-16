@@ -111,6 +111,7 @@ CPU 0.47 ms and GPU 0.55 ms per frame (release, 2x), one of the cheapest scenes.
 - He asked for Random to slowly drift between the palettes after a set time he can change in Settings: `gradient.cycleMinutes`, default 8 minutes, with a 60 s fade.
 - 2026-09-26 he made his own settings the defaults: Random, colours change every 5 minutes, flow speed 2, ribbons off, film grain 0 (the grain setting stays).
 - 2026-11-16 he asked for the review of 2026-11-14's suggestions to be done for this one too, though it had marked it keep-as-is (the lineup judge's pick to live with all day), keeping it calm: nothing busier, brighter or faster than before. So: a new start and new paths on every load (his direction is "a new look on each load"), the ribbons skipped while they're off and the pools laid out in Swift, and Sunset's and Blush's gold and champagne pulled toward rose (his "colours in one family").
+- 2026-11-16, after trying it: Sunset and Blush pulled toward rose, "new sunset color is good, keep it".
 
 ## Ideas / next steps
 - Breathing: a slow brightness swell over about 60 s.
