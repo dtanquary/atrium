@@ -75,11 +75,13 @@ final class FlowingGradient: SKScene, BatteryPaced {
     private let colours = (["u_base"] + (0..<7).map { "u_c\($0)" }).map { SKUniform(name: $0, vectorFloat3: .zero) }
     /// The seven pools' centres, two to a column, laid out by `layPools` so the shader doesn't work them out per pixel.
     private let centres = SKUniform(name: "u_pools", matrixFloat4x4: matrix_identity_float4x4)
-    /// Each pool's Lissajous path, `aspect·(0.5 + 0.6·sin(t·a + phase))` across and `0.5 + 0.6·cos(t·b + 1.7·phase)` up.
-    private static let paths: [(a: Double, b: Double, phase: Double)] = [
-        (0.45, 0.55, 1.2), (0.70, 0.50, 0.0), (0.50, 0.80, 2.1), (0.60, 0.40, 4.0),
-        (0.35, 0.65, 5.3), (0.55, 0.30, 3.1), (0.28, 0.47, 0.7),
+    /// Each pool's Lissajous path, `aspect·(0.5 + 0.6·sin(t·a + turn.x))` across and `0.5 + 0.6·cos(t·b + turn.y)` up,
+    /// its turns rolled at each load.
+    private static let paths: [(a: Double, b: Double)] = [
+        (0.45, 0.55), (0.70, 0.50), (0.50, 0.80), (0.60, 0.40), (0.35, 0.65), (0.55, 0.30), (0.28, 0.47),
     ]
+    /// This load's turn of each pool's path across and up, so the figures they trace differ from load to load.
+    private let turns: [SIMD2<Double>]
     private var time = 0.0 // the phase, kept in Double: see update(_:)
     private var flowSpeed = 1.0
     /// 20 fps on battery while the pools alone move: they are edgeless, so a step of up to 8 px a frame shows as
@@ -93,7 +95,13 @@ final class FlowingGradient: SKScene, BatteryPaced {
         knobUniforms = Dictionary(uniqueKeysWithValues: Self.knobs.map {
             ($0.key, SKUniform(name: "u_" + $0.key.split(separator: ".").last!, float: Float($0.standard)))
         })
+        // Each load starts somewhere new along new paths, so no two open on the same picture or walk the same way.
+        // GRADIENT_SEED pins the roll, for before-and-after renders.
+        var roll = SplitMix(state: UInt64(ProcessInfo.processInfo.environment["GRADIENT_SEED"] ?? "") ?? .random(in: 0...UInt64.max))
+        turns = Self.paths.map { _ in SIMD2(.random(in: 0..<2 * .pi, using: &roll), .random(in: 0..<2 * .pi, using: &roll)) }
+        time = .random(in: 0..<600, using: &roll) // the warp's start too
         super.init(size: size)
+        phase.floatValue = Float(time)
         // The pinned palette, or a random one on Random (the default).
         let chosen = UserDefaults.standard.string(forKey: "gradient.palette") ?? ""
         let palette = Self.palettes.first { $0.name == chosen } ?? Self.palettes.randomElement()!
@@ -138,9 +146,9 @@ final class FlowingGradient: SKScene, BatteryPaced {
     /// Puts each pool's centre on its path at the current phase, into `u_pools`.
     private func layPools() {
         let aspect = Double(size.width / size.height)
-        let c: [SIMD2<Float>] = Self.paths.map { path in
-            let x = aspect * (0.5 + 0.6 * sin(time * path.a + path.phase))
-            let y = 0.5 + 0.6 * cos(time * path.b + path.phase * 1.7)
+        let c: [SIMD2<Float>] = zip(Self.paths, turns).map { path, turn in
+            let x = aspect * (0.5 + 0.6 * sin(time * path.a + turn.x))
+            let y = 0.5 + 0.6 * cos(time * path.b + turn.y)
             return SIMD2(Float(x), Float(y))
         } + [.zero]
         let column = { (k: Int) in SIMD4(lowHalf: c[2 * k], highHalf: c[2 * k + 1]) }

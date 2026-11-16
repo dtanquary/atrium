@@ -9,7 +9,7 @@ Seven big, soft pools of colour drift and melt into each other with no visible e
 ## How it works
 In the shader (`FlowingGradient.source`):
 1. **Warp:** the plane is bent by slow, broad noise (`q = p + 0.5·noise(p·0.9 ± t)`), so the pools smear and flow rather than sliding as circles.
-2. **Seven pools:** gaussian weights `pool(q, centre, r)`. Each drifts on its own Lissajous path (`paths`) that roams a little past the screen edges. The centres are laid out in Swift by `layPools` each frame and passed as one mat4, `u_pools`, two centres to a column (until 2026-11-16 the shader worked out all seven, 14 sines and cosines, at every pixel). Radii run 0.85 to 0.42, scaled by `u_poolSize`. Slots 4 and 6 are the warm ones: at golden hour they swell ×(1 + 0.8·golden) and ×(1 + 2·golden).
+2. **Seven pools:** gaussian weights `pool(q, centre, r)`. Each drifts on its own Lissajous path (`paths`, turned by the load's roll) that roams a little past the screen edges. The centres are laid out in Swift by `layPools` each frame and passed as one mat4, `u_pools`, two centres to a column (until 2026-11-16 the shader worked out all seven, 14 sines and cosines, at every pixel). Radii run 0.85 to 0.42, scaled by `u_poolSize`. Slots 4 and 6 are the warm ones: at golden hour they swell ×(1 + 0.8·golden) and ×(1 + 2·golden).
 3. **Dark Mode (`u_lightMode` < 0.5), blending as light:**
    - `light = u_base + Σ c_i·w_i`: the pools add like coloured light, so overlaps glow into new hues with no edge
    - tinted by mood: cooler at night, warmer at golden hour
@@ -24,13 +24,15 @@ In the shader (`FlowingGradient.source`):
 5. **Silk ribbons (`ribbon`):** worked out only while Show ribbons is on (behind `if (u_ribbonsOn > 0.5)`; until 2026-11-16 they were worked out at every pixel and multiplied by zero). Two slow waves, each made of 5 fine strands. They spread apart and pinch together with `twist`, so bright folds travel along the ribbon, wrapped in a soft glow.
 6. **Film grain:** `hash42(...).x` over `floor(pixel / u_grainSize)` (`hash21` until 2026-10-08, which repeated every 50 by 100 grains, a visible tile once Film Grain was turned up; found in the 1.0 review). It's fixed rather than animated (a deliberate choice for a calm, printed feel) and stronger in the lights. It also dithers away 8-bit banding.
 
+**Each load's roll (init):** every load starts somewhere new along new paths, so no two launches open on the same picture or walk the same way (until 2026-11-16 every launch opened on the same arrangement and walked the same path; only the palette was rolled). A `SplitMix` seeded at random rolls the phase's start (0 to 600, which moves the warp too) and each pool's turn across and up (`turns`, 0 to 2π each), which changes the figure its Lissajous path traces. The rates (`paths`) stay fixed, so nothing moves faster or slower than before. `GRADIENT_SEED` (an environment variable, read only by this scene) pins the roll for before-and-after renders. Each display, and the Settings page's live copy, gets its own roll.
+
 **How the palette is picked (init):** `gradient.palette` is read. Empty or missing means Random, the default (so does any name that isn't a palette). `look(palette)` turns it into the eight colours the shader takes, `u_base` then `u_c0`…`u_c6`: the raw colours in Dark Mode, or in Light Mode `pastel(c)` for each pool over paper tinted 6% toward pool 1. `pastel` normalises the colour to its brightest channel, then mixes it 55% toward white. So each palette defines only its dark colours, and the light washes are derived from them.
 
 **Colour cycle:** only when the palette is Random and `gradient.cycleMinutes` > 0. An SKAction repeats every N minutes and `cycle()` eases all eight colour uniforms to a different palette (tracked by name in `paletteName`) in the current look over 60 s, smoothstepped, while the pools keep drifting. It's rescheduled in `applySettings` only when the interval actually changes, since that also runs every minute for the Sun.
 
 ## Time, live data and appearance
 - **Flow:** the phase is integrated in `update` as `dt × 0.04 × flowSpeed`, capped at 0.5 s per step, and copied to `u_phase`. It isn't `u_time × speed`, so dragging the speed slider never makes the pools jump. This also means `SNAPSHOT_SECONDS` does move it forward in tests.
-- **The phase is summed in Double (`time`).** It used to be summed straight into the Float uniform. Once the phase passed 16384 (about 4.7 days on screen at speed 1 with no rebuild), a 60 fps step was under half a Float's precision and rounded away, so the pools froze; they moved unevenly well before that. `ClockTests` runs six days of updates and checks ten 60 fps frames still move it. Since 2026-11-16 the pools are laid out on the CPU from the Double, as Lava Lamp's are, so they never step. The warp and the ribbons still take the phase as a Float, so after about a week on screen without a rebuild the warp would move in steps (`ponytail:` in `update`); `refreshIfStale` rebuilds the scene within 3 days. A palette pick, a Light/Dark switch or a relaunch rebuilds the scene and resets the phase.
+- **The phase is summed in Double (`time`).** It used to be summed straight into the Float uniform. Once the phase passed 16384 (about 4.7 days on screen at speed 1 with no rebuild), a 60 fps step was under half a Float's precision and rounded away, so the pools froze; they moved unevenly well before that. `ClockTests` runs six days of updates and checks ten 60 fps frames still move it. Since 2026-11-16 the pools are laid out on the CPU from the Double, as Lava Lamp's are, so they never step. The warp and the ribbons still take the phase as a Float, so after about a week on screen without a rebuild the warp would move in steps (`ponytail:` in `update`); `refreshIfStale` rebuilds the scene within 3 days. A palette pick, a Light/Dark switch or a relaunch rebuilds the scene with a new roll.
 - **Mood:** `applySettings()` computes the Sun's altitude with `Sky` (SkyMath.swift) at `Location.shared.coordinate`, on every settings change and every 60 s:
   - `golden = exp(-((alt-2)/8)²)`
   - `night = 1 - smoothstep(-18, -4, alt)`
@@ -106,11 +108,11 @@ CPU 0.47 ms and GPU 0.55 ms per frame (release, 2x), one of the cheapest scenes.
 - He asked for palettes plus a Dark/Light Mode look. Light Mode first came out too saturated; he got the softened washes.
 - He asked for Random to slowly drift between the palettes after a set time he can change in Settings: `gradient.cycleMinutes`, default 8 minutes, with a 60 s fade.
 - 2026-09-26 he made his own settings the defaults: Random, colours change every 5 minutes, flow speed 2, ribbons off, film grain 0 (the grain setting stays).
+- 2026-11-16 he asked for the review of 2026-11-14's suggestions to be done for this one too, though it had marked it keep-as-is (the lineup judge's pick to live with all day): "keep it calm: nothing busier, brighter or faster than today". So: a new start and new paths on every load (his direction is "a new look on each load"), the ribbons skipped while they're off and the pools laid out in Swift.
 
 ## Ideas / next steps
 - Breathing: a slow brightness swell over about 60 s.
 - Cursor parallax: layers shift slightly with the mouse (clicks still pass through). Optional, since Dave chose ambient-only early on.
-- A Nebula-style unique roll: randomised drift paths per load. (The slow palette cycle is done.)
 - Once Dave settles on slider values, read them with `defaults read com.dtanquary.atrium` and bake them in as the new defaults.
 
 ## Checking it
@@ -121,5 +123,6 @@ SNAPSHOT_DEFAULTS="gradient.previewTime=1,gradient.previewHour=18.7" SNAPSHOT_SC
 SNAPSHOT_DEFAULTS="gradient.ribbons=1,gradient.grain=1" SNAPSHOT_SCENE="Flowing Gradient" swift test                 # exaggerate to inspect
 SNAPSHOT_DEFAULTS="gradient.palette=Random,gradient.cycleMinutes=1" SNAPSHOT_SECONDS=90 SNAPSHOT_SCENE="Flowing Gradient" swift test   # halfway through the first colour fade
 ```
+Every load rolls its own start and paths: prefix `GRADIENT_SEED=7` to render the same arrangement twice, as for a before and after.
 `SNAPSHOT_DEFAULTS` can't store an empty string, but any name that isn't a palette counts as Random, hence `gradient.palette=Random`.
 The flow uses the integrated `u_phase`, so `SNAPSHOT_SECONDS` works. The test location is the time-zone fallback, so sunset in previews is around 18:45 local time.
