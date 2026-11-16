@@ -458,6 +458,10 @@ private final class Flock: SKNode {
     /// screen) a parcel's sprite is scaled up past the 64 points it's drawn at, and its twenty-five birds show as one
     /// blurry group moving together.
     private static let nearest: Float = 160
+    /// The lowest a flying parcel's middle goes, in metres above the eye, whose height is the horizon's on screen. Its
+    /// birds spread up to 3 m round it, so the lowest stay 1 m above the horizon, 3 m above the water, and none dips
+    /// behind the far shore or the sea (the ground is drawn over the flock).
+    private static let floor: Float = 4
 
     init(view: GroundView, ink: SKColor, perch: SIMD3<Float>) {
         self.view = view
@@ -850,7 +854,9 @@ private final class Flock: SKNode {
                                 b.alone = simd_dot(out, out) > straying
                                 force += simd_normalize(middle - b.p + SIMD3(0, 0, 1e-4)) * (12.5 * (b.alone ? 1 : max(0, 1 - Float(crowd) / 12)))
                                 force.z -= (b.p.z - height) * 0.1
-                                if b.p.z < 3 { force.z += (3 - b.p.z) * 2 }                      // not into the water
+                                // Never under the horizon: pushed up within 4 m of `floor`, the harder the faster they sink.
+                                let over = b.p.z - Self.floor - 4
+                                if over < 0 { force.z -= over * 3 + min(b.v.z, 0) * 1.5 }
                                 if b.p.y < Self.nearest - 40 { force.y += (Self.nearest - 40 - b.p.y) * 0.5 } // nor at us
                             }
                             force += SIMD3(random.unit() - 0.5, random.unit() - 0.5, random.unit() - 0.5) * 0.25
@@ -898,6 +904,10 @@ private final class Flock: SKNode {
                     downBudget = budget
                     for i in 0..<birds.count where birds[i].state != 0 {
                         birds[i].p += birds[i].v * dt
+                        if birds[i].state == 1 && birds[i].p.z < Self.floor { // the push wasn't enough: level off here
+                            birds[i].p.z = Self.floor
+                            birds[i].v.z = max(birds[i].v.z, 0)
+                        }
                         if birds[i].state == 2 && birds[i].p.z < perch.z { birds[i].state = 0 } // roosting
                     }
                 }
