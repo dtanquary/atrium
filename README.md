@@ -258,7 +258,7 @@ Reaction–diffusion, the chemistry Alan Turing proposed for how animals get the
 | Fingerprint stripes in Dark Mode | Coral, glazed like ceramic, in Light Mode |
 
 #### Pixel City
-A pixel-art city that follows your clock and the real Sun, with traffic and windows lighting up through the evening. Pick a city: the Waterfront, a downtown mirrored in the water with its walls lit from wherever the Sun is; Foothills, a small downtown under snow-capped mountains that hold the last of the sunlight; the Long Bridge, strung with lights across a bay; Hillside Town, tiled houses stacked above a harbour; the Overlook, out over a sea of rooftops; or the Airport, across a bay, where airliners land, taxi to the terminal and take off again into the real wind, mirrored in the water. It can move between them by itself every few minutes. You can also choose which way you look, so the Sun sets in view or lights the buildings from behind you.
+A pixel-art city that follows your clock and the real Sun, with people on its sidewalks, cars, vans and buses on its roads, windows lighting up through the evening, and the real stars and Moon after dark. Pick a city: the Waterfront, a downtown mirrored in the water with its walls lit from wherever the Sun is; Foothills, a small downtown under snow-capped mountains that hold the last of the sunlight; the Long Bridge, strung with lights across a bay; Hillside Town, tiled houses stacked above a harbor; the Overlook, out over a sea of rooftops; or the Airport, across a bay, where airliners land, taxi to the terminal and take off again into the real wind, mirrored in the water. It can move between them by itself every few minutes. You can also choose which way you look, so the Sun sets in view or lights the buildings from behind you.
 
 | <img src="docs/images/pixel-city.webp" alt="Pixel City's Waterfront at dusk, moving" width="1600"> | ![Pixel City's Foothills on a clear morning](docs/images/pixel-city-foothills.jpg) |
 |---|---|
@@ -266,7 +266,7 @@ A pixel-art city that follows your clock and the real Sun, with traffic and wind
 | ![Pixel City's Long Bridge at night](docs/images/pixel-city-bridge.jpg) | ![Pixel City's Hillside Town in the afternoon](docs/images/pixel-city-hillside.jpg) |
 | The Long Bridge at night, strung with lights | Hillside Town in the afternoon |
 | ![Pixel City's Overlook at sunset](docs/images/pixel-city-overlook.jpg) | ![Pixel City's Hillside Town at night](docs/images/pixel-city-hillside-night.jpg) |
-| The Overlook at sunset | Hillside Town at night, its lamps in the harbour |
+| The Overlook at sunset | Hillside Town at night, its lamps in the harbor |
 | ![Pixel City's Airport at sunset](docs/images/pixel-city-airport.jpg) | ![Pixel City's Airport at night](docs/images/pixel-city-airport-night.jpg) |
 | The Airport at sunset, an airliner just down | The Airport at night |
 
