@@ -26,13 +26,13 @@ A bright reef tank of real fish and corals, cut out of photos: a chromis school,
 Settings → Fish Tank holds the lighting at daylight or actinic blue whatever the appearance, or puts the lights out on a timer at night, and sets how many fish there are and whether marine snow drifts.
 
 #### Weather
-Real hills under your live local weather, beneath a physical sky with the real Sun and Moon: sunrise and twilight, real clouds on the real wind, rain, snow lying on the ground, valley mist and lightning.
+Real hills under your live local weather, beneath a physical sky with the real Sun and Moon: sunrise and twilight, real clouds on the real wind, rain, snow lying on the ground and the trees, valley mist and lightning. The grass greens and goes to straw with the year where you are.
 
-| <img src="docs/images/weather.webp" alt="Weather at sunset, moving" width="1600"> | ![Weather, fair](docs/images/weather-fair.jpg) |
+| <img src="docs/images/weather.webp" alt="Weather at sunset, moving" width="1600"> | ![Weather, a fair winter morning](docs/images/weather-fair.jpg) |
 |---|---|
-| Sunset from a physical sky, the hills gone to silhouettes | A fair morning, with real clouds drifting on the wind |
+| Sunset from a physical sky, the hills gone to silhouettes | A fair winter morning, the grass gone to straw, with real clouds drifting on the wind |
 | ![Weather, fog](docs/images/weather-fog.jpg) | ![Weather, snow](docs/images/weather-snow.jpg) |
-| Fog, with mist lying in the valley | Snow falling, and lying on the hills |
+| Fog, with mist lying in the valley | Snow falling, and lying on the hills and the trees |
 
 #### Dappled Light
 Sunlight through a tree onto a warm white plaster wall, from the real Sun where you are: it only falls when the Sun is on the wall's side, and turns golden near sunset. Every gap between the leaves is a pinhole camera, so the dapples are images of the Sun, round or stretched by the angle of the light, and crescents during a real solar eclipse. Near leaves cast sharp shadows, far ones melt into soft shade. Cloud softens it and wind sways the leaves, from the live weather; at night, faint moonlight at the real phase, or a warm streetlight. The wall can be white plaster, terracotta limewash, clay plaster, whitewashed brick, or lap siding in sage or dusty blue, whose laps shade a line under each board. Or the light can fall on an oak floor, in the open or through a window, where the patch of panes stretches as the Sun drops. In Dark Mode the same light falls on charcoal plaster.
