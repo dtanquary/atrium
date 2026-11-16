@@ -274,6 +274,26 @@ final class TheSun: SKScene {
         vec2 uvNext = 0.5 + (r < 1.0 ? turnBack(d, u_ageNext, u_tilt) : dNow) * 0.3895;
         vec2 tc = (uv - u_crop.xy) / u_crop.zw;
         vec3 col = mix(texture2D(u_frame, tc).rgb, texture2D(u_next, (uvNext - u_cropNext.xy) / u_cropNext.zw).rgb, u_fade);
+        // Each ray past 1.2 reads the one texel where it crosses 1.2, which drew the ring's texels and JPEG blocks out
+        // into a comb of hard dashes; so there the ring is smoothed along its length, over two degrees either way. Past
+        // 1.6 the corona has faded below a level of 1 in 255.
+        if (r > 1.2 && r < 1.6) {
+            float spread = 0.01745 * smoothstep(1.2, 1.22, r); // a degree between reads
+            vec2 turn = vec2(cos(spread), sin(spread)), turn2 = vec2(turn.x * turn.x - turn.y * turn.y, 2.0 * turn.x * turn.y);
+            vec2 ring[4];
+            ring[0] = vec2(dNow.x * turn.x - dNow.y * turn.y, dNow.x * turn.y + dNow.y * turn.x);
+            ring[1] = vec2(dNow.x * turn.x + dNow.y * turn.y, dNow.y * turn.x - dNow.x * turn.y);
+            ring[2] = vec2(dNow.x * turn2.x - dNow.y * turn2.y, dNow.x * turn2.y + dNow.y * turn2.x);
+            ring[3] = vec2(dNow.x * turn2.x + dNow.y * turn2.y, dNow.y * turn2.x - dNow.x * turn2.y);
+            vec3 sum = col;
+            for (int k = 0; k < 4; k++) {
+                vec2 q = 0.5 + ring[k] * 0.3895;
+                vec3 c = texture2D(u_frame, (q - u_crop.xy) / u_crop.zw).rgb;
+                if (u_fade > 0.0) { c = mix(c, texture2D(u_next, (q - u_cropNext.xy) / u_cropNext.zw).rgb, u_fade); }
+                sum += c;
+            }
+            col = sum / 5.0;
+        }
         col *= 1.0 + s * 0.35 * streaks;
 
         // Alive: plasma pulses out along the bright loops, away from the active regions' cores, and the regions
