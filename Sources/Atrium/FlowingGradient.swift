@@ -39,12 +39,12 @@ final class FlowingGradient: SKScene, BatteryPaced {
                                           [0.62, 0.12, 0.55], [0.36, 0.18, 0.78], [0.70, 0.30, 0.30]]),
         ("Aurora", [0.01, 0.03, 0.05], [[0.02, 0.20, 0.22], [0.05, 0.45, 0.30], [0.02, 0.50, 0.60], [0.40, 1.10, 0.80],
                                        [0.45, 0.15, 0.70], [0.10, 0.30, 0.70], [0.60, 0.20, 0.60]]),
-        ("Sunset", [0.05, 0.02, 0.05], [[0.25, 0.06, 0.28], [0.40, 0.10, 0.45], [0.75, 0.20, 0.35], [1.10, 0.70, 0.35],
-                                       [0.85, 0.15, 0.40], [0.30, 0.10, 0.55], [1.00, 0.40, 0.20]]),
+        ("Sunset", [0.05, 0.02, 0.05], [[0.25, 0.06, 0.28], [0.40, 0.10, 0.45], [0.75, 0.20, 0.35], [1.10, 0.48, 0.30],
+                                       [0.85, 0.15, 0.40], [0.30, 0.10, 0.55], [1.00, 0.30, 0.24]]),
         ("Ocean", [0.01, 0.03, 0.07], [[0.02, 0.10, 0.35], [0.05, 0.20, 0.60], [0.02, 0.45, 0.55], [0.40, 0.90, 1.10],
                                       [0.15, 0.35, 0.85], [0.10, 0.55, 0.45], [0.30, 0.45, 0.90]]),
-        ("Blush", [0.05, 0.03, 0.04], [[0.30, 0.10, 0.20], [0.50, 0.18, 0.35], [0.75, 0.35, 0.40], [1.10, 0.80, 0.65],
-                                      [0.85, 0.30, 0.45], [0.40, 0.20, 0.45], [1.00, 0.55, 0.35]]),
+        ("Blush", [0.05, 0.03, 0.04], [[0.30, 0.10, 0.20], [0.50, 0.18, 0.35], [0.75, 0.35, 0.40], [1.10, 0.69, 0.65],
+                                      [0.85, 0.30, 0.45], [0.40, 0.20, 0.45], [1.00, 0.44, 0.35]]),
         ("Graphite", [0.02, 0.02, 0.025], [[0.12, 0.13, 0.16], [0.22, 0.23, 0.28], [0.18, 0.22, 0.26], [0.55, 0.60, 0.70],
                                           [0.30, 0.28, 0.30], [0.20, 0.20, 0.30], [0.40, 0.36, 0.34]]),
     ]
@@ -73,6 +73,15 @@ final class FlowingGradient: SKScene, BatteryPaced {
     private let night = SKUniform(name: "u_night", float: 0)
     private let noon = SKUniform(name: "u_noon", float: 0)
     private let colours = (["u_base"] + (0..<7).map { "u_c\($0)" }).map { SKUniform(name: $0, vectorFloat3: .zero) }
+    /// The seven pools' centres, two to a column, laid out by `layPools` so the shader doesn't work them out per pixel.
+    private let centres = SKUniform(name: "u_pools", matrixFloat4x4: matrix_identity_float4x4)
+    /// Each pool's Lissajous path, `aspect·(0.5 + 0.6·sin(t·a + turn.x))` across and `0.5 + 0.6·cos(t·b + turn.y)` up,
+    /// its turns rolled at each load.
+    private static let paths: [(a: Double, b: Double)] = [
+        (0.45, 0.55), (0.70, 0.50), (0.50, 0.80), (0.60, 0.40), (0.35, 0.65), (0.55, 0.30), (0.28, 0.47),
+    ]
+    /// This load's turn of each pool's path across and up, so the figures they trace differ from load to load.
+    private let turns: [SIMD2<Double>]
     private var time = 0.0 // the phase, kept in Double: see update(_:)
     private var flowSpeed = 1.0
     /// 20 fps on battery while the pools alone move: they are edgeless, so a step of up to 8 px a frame shows as
@@ -86,7 +95,13 @@ final class FlowingGradient: SKScene, BatteryPaced {
         knobUniforms = Dictionary(uniqueKeysWithValues: Self.knobs.map {
             ($0.key, SKUniform(name: "u_" + $0.key.split(separator: ".").last!, float: Float($0.standard)))
         })
+        // Each load starts somewhere new along new paths, so no two open on the same picture or walk the same way.
+        // GRADIENT_SEED pins the roll, for before-and-after renders.
+        var roll = SplitMix(state: UInt64(ProcessInfo.processInfo.environment["GRADIENT_SEED"] ?? "") ?? .random(in: 0...UInt64.max))
+        turns = Self.paths.map { _ in SIMD2(.random(in: 0..<2 * .pi, using: &roll), .random(in: 0..<2 * .pi, using: &roll)) }
+        time = .random(in: 0..<600, using: &roll) // the warp's start too
         super.init(size: size)
+        phase.floatValue = Float(time)
         // The pinned palette, or a random one on Random (the default).
         let chosen = UserDefaults.standard.string(forKey: "gradient.palette") ?? ""
         let palette = Self.palettes.first { $0.name == chosen } ?? Self.palettes.randomElement()!
@@ -98,9 +113,10 @@ final class FlowingGradient: SKScene, BatteryPaced {
         sprite.shader = SKShader(source: shaderCommon + Self.source, uniforms: [
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]),
             SKUniform(name: "u_lightMode", float: systemIsDark ? 0 : 1),
-            phase, golden, night, noon,
+            phase, golden, night, noon, centres,
         ] + colours + knobUniforms.values.filter { Self.source.contains($0.name) }) // only those it reads: a shader takes about 30 uniforms
         addChild(sprite)
+        layPools()
 
         applySettings()
         NotificationCenter.default.addObserver(self, selector: #selector(applySettings),
@@ -119,10 +135,24 @@ final class FlowingGradient: SKScene, BatteryPaced {
         guard let last = lastUpdate else { return }
         // Integrated rather than u_time * speed, so moving the speed slider never makes the pools jump. Summed in
         // Double: a Float stops moving once a frame's step is under half its precision (after ~5 days at 60 fps).
-        // ponytail: the shader still gets a Float, so after about a week on screen without a rebuild the pools
-        // drift in steps of a few points at under 10 Hz; lay them out on the CPU, as Lava Lamp does, if that shows
+        // The pools are laid out from the Double, so they never step; the warp and the ribbons take it as a Float.
+        // ponytail: so after about a week on screen without a rebuild (refreshIfStale rebuilds within 3 days) the
+        // warp moves in steps; give it a wrapped clock of its own if a scene ever runs that long
         time += min(max(currentTime - last, 0), 0.5) * 0.04 * flowSpeed
         phase.floatValue = Float(time)
+        layPools()
+    }
+
+    /// Puts each pool's centre on its path at the current phase, into `u_pools`.
+    private func layPools() {
+        let aspect = Double(size.width / size.height)
+        let c: [SIMD2<Float>] = zip(Self.paths, turns).map { path, turn in
+            let x = aspect * (0.5 + 0.6 * sin(time * path.a + turn.x))
+            let y = 0.5 + 0.6 * cos(time * path.b + turn.y)
+            return SIMD2(Float(x), Float(y))
+        } + [.zero]
+        let column = { (k: Int) in SIMD4(lowHalf: c[2 * k], highHalf: c[2 * k + 1]) }
+        centres.matrixFloat4x4Value = simd_float4x4(column(0), column(1), column(2), column(3))
     }
 
     /// Pushes the Settings sliders and the Sun's mood into the shader, and (re)schedules the colour cycle when its
@@ -171,11 +201,6 @@ final class FlowingGradient: SKScene, BatteryPaced {
     // A soft gaussian glow centred on c.
     float pool(vec2 p, vec2 c, float r) { float d = length(p - c) / r; return exp(-d * d); }
 
-    // Each pool drifts on its own slow Lissajous path, roaming a little past the screen edges.
-    vec2 drift(float t, float a, float b, float phase, float aspect) {
-        return vec2(aspect * (0.5 + 0.6 * sin(t * a + phase)), 0.5 + 0.6 * cos(t * b + phase * 1.7));
-    }
-
     // A silk ribbon along a slow wave: fine strands that spread apart and pinch together as the ribbon twists, so
     // bright folds travel along it, wrapped in a soft glow.
     float ribbon(vec2 p, float t, float y0, float amp, float freq, float phase, float width) {
@@ -205,16 +230,20 @@ final class FlowingGradient: SKScene, BatteryPaced {
         float night = u_night * u_followDay;
         float noon = u_noon * u_followDay;
 
-        // Seven pools, each drifting on its own path; slots 4 and 6 are the warm ones that swell at golden hour.
-        float w0 = pool(q, drift(t, 0.45, 0.55, 1.2, aspect), 0.85 * r);
-        float w1 = pool(q, drift(t, 0.70, 0.50, 0.0, aspect), 0.70 * r);
-        float w2 = pool(q, drift(t, 0.50, 0.80, 2.1, aspect), 0.62 * r);
-        float w3 = pool(q, drift(t, 0.60, 0.40, 4.0, aspect), 0.50 * r);
-        float w4 = pool(q, drift(t, 0.35, 0.65, 5.3, aspect), 0.50 * r) * (1.0 + 0.8 * golden);
-        float w5 = pool(q, drift(t, 0.55, 0.30, 3.1, aspect), 0.60 * r);
-        float w6 = pool(q, drift(t, 0.28, 0.47, 0.7, aspect), 0.42 * r) * (1.0 + 2.0 * golden);
-        float silk = u_ribbonsOn * u_ribbons * (ribbon(q, t * 1.3, 0.62, 0.16, 1.6, 0.0, u_ribbonWidth)
-                                               + 0.8 * ribbon(q, t * 1.1, 0.36, 0.13, 2.1, 2.4, u_ribbonWidth));
+        // Seven pools, each drifting on its own path (laid out in Swift, two centres to a column of u_pools);
+        // slots 4 and 6 are the warm ones that swell at golden hour.
+        float w0 = pool(q, u_pools[0].xy, 0.85 * r);
+        float w1 = pool(q, u_pools[0].zw, 0.70 * r);
+        float w2 = pool(q, u_pools[1].xy, 0.62 * r);
+        float w3 = pool(q, u_pools[1].zw, 0.50 * r);
+        float w4 = pool(q, u_pools[2].xy, 0.50 * r) * (1.0 + 0.8 * golden);
+        float w5 = pool(q, u_pools[2].zw, 0.60 * r);
+        float w6 = pool(q, u_pools[3].xy, 0.42 * r) * (1.0 + 2.0 * golden);
+        float silk = 0.0;
+        if (u_ribbonsOn > 0.5) { // off by default, and then not worked out at all
+            silk = u_ribbons * (ribbon(q, t * 1.3, 0.62, 0.16, 1.6, 0.0, u_ribbonWidth)
+                                + 0.8 * ribbon(q, t * 1.1, 0.36, 0.13, 2.1, 2.4, u_ribbonWidth));
+        }
         vec3 col;
         if (u_lightMode < 0.5) {
             // Dark Mode: the pools add up like coloured light, so overlaps glow into new hues with no edge, and a
