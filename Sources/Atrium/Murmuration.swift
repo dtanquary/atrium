@@ -12,21 +12,23 @@ private let evenings: [(name: String, sun: Double, balance: SIMD3<Float>)] = [
 /// Where the flock is watched from: a sunset photo each, its sky cut away. `horizon` is the rows from the top of the
 /// photo down to the horizon (of its height); `sky` is the photo's own sky luminance (linear) just above the horizon,
 /// which scales its land to our sky; `rough` is how far above the mirror image the water reflects the sky: a long
-/// exposure of a wavy sea averages the sky well above the horizon, where calm water is a mirror. `waves` is how slow
-/// ripples move the water: how far they bend its reflection, how fast they drift, and how much they brighten and darken
-/// it, which is all the smooth long-exposure sea can show. `perch` is where the flock goes down to roost at the end of
-/// an evening (metres, from the eye): among the pier's legs, or on the pond's far shore, 5 m below the eye so it lands
-/// about 20 points below the horizon, in the photo's band of shore (rows 15 to about 130 of its 706). `lift` brightens the
-/// land's darkest tones, those under about 0.6% of its photo's sky, by that much again: the pond's far shore was nearly
-/// black in its photo, and went to one flat black bar; lifted, its tundra and grass show. Brighter tones aren't lifted,
-/// so the photo's bright water at the land's edge doesn't rim it with light.
+/// exposure of a wavy sea averages the sky well above the horizon, where calm water is a mirror. `glint` is the spread
+/// of the water's slopes (radians), which spreads the Sun's reflection into a path of light down the sea; the pond is
+/// calm enough to mirror its disc. `waves` is how slow ripples move the water: how far they bend its reflection, how
+/// fast they drift, and how much they brighten and darken it, which is all the smooth long-exposure sea can show.
+/// `perch` is where the flock goes down to roost at the end of an evening (metres, from the eye): among the pier's
+/// legs, or on the pond's far shore, 5 m below the eye so it lands about 20 points below the horizon, in the photo's
+/// band of shore (rows 15 to about 130 of its 706). `lift` brightens the land's darkest tones, those under about 0.6%
+/// of its photo's sky, by that much again: the pond's far shore was nearly black in its photo, and went to one flat
+/// black bar; lifted, its tundra and grass show. Brighter tones aren't lifted, so the photo's bright water at the
+/// land's edge doesn't rim it with light.
 /// - Brighton's West Pier: "Tide bears the last glow - Brighton, UK" by sagesolar, CC BY 4.0,
 ///   https://commons.wikimedia.org/wiki/File:Tide_bears_the_last_glow_-_Brighton,_UK.jpg
 /// - A marsh pond: "Sunset over a tundra pond" by USFWS Alaska, public domain,
 ///   https://commons.wikimedia.org/wiki/File:Sunset_over_a_tundra_pond_(53708107535).jpg
-private let grounds: [(name: String, file: String, horizon: Float, sky: Float, rough: Float, waves: SIMD3<Float>, perch: SIMD3<Float>, lift: Float)] = [
-    ("Brighton West Pier", "murmuration-pier", 780.0 / 1533, 0.1252, 0.12, [0.03, 2.5, 0.22], [-26, 265, 8], 0),
-    ("Marsh pond", "murmuration-marsh", 15.0 / 706, 0.2635, 0.005, [0.05, 3.5, 0.12], [30, 320, -5], 4.7),
+private let grounds: [(name: String, file: String, horizon: Float, sky: Float, rough: Float, glint: Float, waves: SIMD3<Float>, perch: SIMD3<Float>, lift: Float)] = [
+    ("Brighton West Pier", "murmuration-pier", 780.0 / 1533, 0.1252, 0.12, 0.1, [0.03, 2.5, 0.22], [-26, 265, 8], 0),
+    ("Marsh pond", "murmuration-marsh", 15.0 / 706, 0.2635, 0.005, 0, [0.05, 3.5, 0.12], [30, 320, -5], 4.7),
 ]
 
 private let lightKnob = Knob(key: "murmuration.light", label: "Light", range: 0...5, standard: 0, section: "Scene",
@@ -134,6 +136,9 @@ final class Murmuration: SKScene, BatteryPaced {
             SKUniform(name: "u_birds", texture: birds.reflection),
             SKUniform(name: "u_rough", float: ground.rough), SKUniform(name: "u_lift", float: ground.lift),
             SKUniform(name: "u_noise", texture: CloudNoise.texture), SKUniform(name: "u_waves", vectorFloat3: ground.waves),
+            sun, disc, SKUniform(name: "u_glint", float: ground.glint),
+            SKUniform(name: "u_fwd", vectorFloat3: SIMD3<Float>(eye.forward)),
+            SKUniform(name: "u_right", vectorFloat3: SIMD3<Float>(eye.right)),
             WallpaperTime.now,
         ])
         addChild(land)
@@ -313,11 +318,11 @@ final class Murmuration: SKScene, BatteryPaced {
     }
 
     /// The land as photographed, scaled from the photo's sky to ours so it stays a near-black silhouette; the water as
-    /// our sky mirrored in it, times the water's reflectance measured in the photo (which keeps its ripples), with the
-    /// flock's reflection darkening it, all gently bent by slow ripples. Light is linear until the end, then tone-mapped
-    /// like the sky. The water's work (three noise reads, six of the sky and six more of the aux map and the flock's
-    /// reflection) runs only where there is water: none above the horizon, where half the pier's photo is (most of it
-    /// clear sky), nor on the pond's far shore.
+    /// our sky and the Sun mirrored in it, times the water's reflectance measured in the photo (which keeps its
+    /// ripples), with the flock's reflection darkening it, all gently bent by slow ripples. Light is linear until the
+    /// end, then tone-mapped like the sky. The water's work (three noise reads, six of the sky and six more of the aux
+    /// map and the flock's reflection) runs only where there is water: none above the horizon, where half the pier's
+    /// photo is (most of it clear sky), nor on the pond's far shore.
     private static let groundShader = """
     vec2 nuv(vec2 p) { return (fract(p) * 256.0 + 0.5) / 257.0; }
 
@@ -367,7 +372,19 @@ final class Murmuration: SKScene, BatteryPaced {
                 birds += texture2D(u_birds, vec2(uv.x + shift.x, (y + 1.4 * u_cam.z) / (2.4 * u_cam.z))).r * exp(-k * 0.7);
             }
             birds /= 2.04;
-            vec3 water = reflected * u_balance * ripples * 2.0 * (1.0 - birds * 0.9) * (1.0 + (slope.y + wavelets) * u_waves.z);
+            // The Sun, outside the white balance as in the sky. Calm water mirrors its disc and glow; the sea's slopes
+            // (`u_glint`) spread the same light into a path, up and down by twice the tilt and sideways only as much
+            // as we look down on the water, so it narrows toward the horizon. Spread, the disc's hard edge softens to a
+            // Gaussian (about as much light in all). It goes as the Sun sets behind the sea.
+            vec2 sun = vec2(dot(u_sun, u_right), u_sun.z) / max(dot(u_sun, u_fwd), 0.01);
+            vec2 ray = vec2(((uv.x + shift.x) * 2.0 - 1.0) * u_cam.x, dip + shift.y * 2.0 * u_cam.y);
+            vec2 tilt = vec2(u_glint * (dip + max(sun.y, 0.0)), 2.0 * u_glint) / 0.0033;
+            vec2 spread = sqrt(1.0 + tilt * tilt);
+            float ang = length((ray - sun) / spread), area = spread.x * spread.y;
+            float sunDisc = exp(-pow(ang / 0.0047, 2.0 + 14.0 / area));
+            vec3 glint = u_disc * (sunDisc * 60.0 + 0.25 * exp(-ang * 40.0) + 0.02 * exp(-ang * 8.0)) / area
+                * clamp(sun.y / 0.0094 + 0.5, 0.0, 1.0);
+            vec3 water = (reflected * u_balance + glint) * ripples * 2.0 * (1.0 - birds * 0.9) * (1.0 + (slope.y + wavelets) * u_waves.z);
             light = mix(land, water, aux.r);
         }
         vec3 col = sqrt(1.0 - exp(-light));
