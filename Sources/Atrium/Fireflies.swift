@@ -18,6 +18,8 @@ final class Fireflies: SKScene {
         let node: SKSpriteNode
         var x: CGFloat = 0, y: CGFloat = 0, d: CGFloat = 1
         var vx: CGFloat = 0, vd: CGFloat = 0 // its drift between flashes, m/s
+        var lamp = -1 // which of the lights on the grass it has while it glows, or -1
+        var lift: CGFloat = 0 // how far the photo's own ground stands above the ground plane under it
         var next: CGFloat // when its next flash starts
         let period: CGFloat
     }
@@ -32,8 +34,20 @@ final class Fireflies: SKScene {
     private let flash: CGFloat = 3, pool = 800 // twice the standard count, for the density knob
     private let fog = SKUniform(name: "u_fog", float: Float(Fireflies.knobs[1].value))
     private let wind = SKUniform(name: "u_wind", float: Float(Fireflies.knobs[3].value))
+    // Eight lights on the grass from flies within 14 m, each a column: where it's centred (in the photo's texture
+    // coordinates), the photo's width over its radius, and how bright it is. A fly takes one only as its glow starts
+    // and keeps it to the end (`taken`), so no light pops in or out.
+    let lamps = [SKUniform(name: "u_lamps0", matrixFloat4x4: .init()), SKUniform(name: "u_lamps1", matrixFloat4x4: .init())]
+    private var light = [SIMD4<Float>](repeating: .zero, count: 8), taken = [Bool](repeating: false, count: 8)
+    private var photoFrame = CGRect.zero
+    /// The photo's log distance down 64 columns, bottom row first, to lift flies over ground that rises above the plane.
+    /// Trees (and the sky) read as farther than any fly, so none is lifted over them.
+    private var columns: [[CGFloat]] = []
 
     private var flies: [Fly] = []
+    // "fireflies.seed" is for the tests, which want the same field twice; nothing else sets it.
+    private var rng = SplitMix(state: UInt64(exactly: UserDefaults.standard.integer(forKey: "fireflies.seed")).flatMap { $0 == 0 ? nil : $0 }
+                               ?? .random(in: 1...UInt64.max))
     private var time: TimeInterval = 0
     private var lastTime: TimeInterval?
 
@@ -46,7 +60,7 @@ final class Fireflies: SKScene {
             node.shader = shader
             node.isHidden = true
             addChild(node)
-            var fly = Fly(node: node, next: .random(in: 0...10), period: .random(in: 6...10))
+            var fly = Fly(node: node, next: .random(in: 0...10, using: &rng), period: .random(in: 6...10, using: &rng))
             spawn(&fly)
             flies.append(fly)
         }
@@ -61,55 +75,70 @@ final class Fireflies: SKScene {
         wind.floatValue = Float(Self.knobs[3].value)
     }
 
-    /// The sky, then the meadow photo in slices by distance, near to far, so fireflies fly behind nearer grass. The
-    /// last slice runs to the trees and beyond, behind every firefly.
+    /// The sky, from the lowest point it shows between the trees, then the meadow photo behind every firefly. Flies
+    /// fly over the photo's own ground (`lift`), so no grass need be drawn in front of them.
     private func meadow() {
-        let photo = MeadowPhoto.photo
-        let sky = SKSpriteNode(color: .black, size: size)
+        let photo = MeadowPhoto.photo, base = onScreen(MeadowPhoto.sky)
+        let sky = SKSpriteNode(color: .black, size: CGSize(width: size.width, height: size.height * (1 - base)))
         sky.anchorPoint = .zero
+        sky.position = CGPoint(x: 0, y: size.height * base)
         sky.zPosition = -1000
         sky.shader = SKShader(source: shaderCommon + Self.skySource, uniforms: [
-            SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]),
+            SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]), SKUniform(name: "u_base", float: Float(base)),
             SKUniform(name: "u_horizon", float: Float(onScreen(MeadowPhoto.skyline))), fog, WallpaperTime.now,
         ])
         addChild(sky)
 
         let width = size.height * MeadowPhoto.top * MeadowPhoto.aspect * stretch, height = width / MeadowPhoto.aspect
-        let shared = [
+        photoFrame = CGRect(x: (size.width - width) / 2, y: size.height * MeadowPhoto.top - height, width: width, height: height)
+        let aux = MeadowPhoto.aux.cgImage(), rows = aux.height
+        var rgba = [UInt8](repeating: 0, count: 64 * rows * 4)
+        CGContext(data: &rgba, width: 64, height: rows, bitsPerComponent: 8, bytesPerRow: 64 * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)?.draw(aux, in: CGRect(x: 0, y: 0, width: 64, height: rows))
+        columns = (0..<64).map { c in (0..<rows).reversed().map { let i = ($0 * 64 + c) * 4; return rgba[i + 1] > 127 ? CGFloat(rgba[i]) / 255 : 1 } }
+        let ground = SKSpriteNode(texture: photo, size: CGSize(width: width, height: height))
+        ground.anchorPoint = CGPoint(x: 0.5, y: 1)
+        ground.position = CGPoint(x: size.width / 2, y: size.height * MeadowPhoto.top)
+        ground.zPosition = -500
+        ground.shader = SKShader(source: shaderCommon + Self.groundSource, uniforms: lamps + [
             SKUniform(name: "u_aux", texture: MeadowPhoto.aux), fog, wind, WallpaperTime.now,
             SKUniform(name: "u_frame", vectorFloat2: [Float(size.height * MeadowPhoto.top - height), Float(height)]),
             SKUniform(name: "u_ground", vectorFloat2: [Float(size.height * onScreen(MeadowPhoto.foot)),
                                                        Float(size.height * (onScreen(MeadowPhoto.skyline) - onScreen(MeadowPhoto.foot)))]),
-        ]
-        let cuts: [CGFloat] = [0, 5, 9, 16, 28, 1e4]
-        for (a, b) in zip(cuts, cuts.dropFirst()) {
-            let slice = SKSpriteNode(texture: photo, size: CGSize(width: width, height: height))
-            slice.anchorPoint = CGPoint(x: 0.5, y: 1)
-            slice.position = CGPoint(x: size.width / 2, y: size.height * MeadowPhoto.top)
-            slice.zPosition = b > 1e3 ? -500 : 100 - (a + b) / 2
-            slice.shader = SKShader(source: shaderCommon + Self.groundSource, uniforms: shared + [
-                SKUniform(name: "u_slice", vectorFloat2: [Float(MeadowPhoto.depth(a)), Float(MeadowPhoto.depth(b))]),
-            ])
-            addChild(slice)
-        }
+        ])
+        addChild(ground)
     }
 
     override func update(_ currentTime: TimeInterval) {
         time += frameTime(currentTime, &lastTime) * Self.knobs[2].value // Speed runs the scene's clock faster or slower
-        let t = CGFloat(time), active = Int(CGFloat(pool) / 2 * Self.knobs[0].value)
+        let t = CGFloat(time), active = Int(CGFloat(pool) / 2 * Self.knobs[0].value), frame = CGRect(origin: .zero, size: size)
         for i in flies.indices where t >= flies[i].next {
             let u = (t - flies[i].next) / flash
             if u >= 1 || i >= active {
+                if flies[i].lamp >= 0 { (light[flies[i].lamp], taken[flies[i].lamp], flies[i].lamp) = (.zero, false, -1) }
                 rest(&flies[i])
                 continue
             }
             // A slow glow while it drifts, rising a little as Photinus does at the end of its swoop: easing in over a
             // third of it, and out over nearly half.
-            let fly = flies[i], s = u * flash
-            fly.node.position = project(fly.x + fly.vx * s, fly.y + 0.03 * (1.6 * u * u - 0.6 * u), fly.d + fly.vd * s)
-            fly.node.alpha = smoothstep(0, 0.35, u) * (1 - smoothstep(0.55, 1, u))
+            let fly = flies[i], s = u * flash, alpha = smoothstep(0, 0.35, u) * (1 - smoothstep(0.55, 1, u))
+            let x = fly.x + fly.vx * s, y = fly.y + 0.03 * (1.6 * u * u - 0.6 * u), d = fly.d + fly.vd * s
+            fly.node.position = project(x, fly.lift + y, d)
+            fly.node.alpha = alpha
             fly.node.isHidden = false
+            // Light on the grass round it, or on the tops of the grass under it, half a metre round and a third as tall
+            // on screen (blades stand up), fading the higher it flies: for the low ones within 14 m whose light shows.
+            let ground = project(x, fly.lift + min(y, 0.3), d)
+            if fly.lamp < 0, u < 0.5, alpha < 0.1, d < 14, y < 0.7, frame.contains(ground), let free = taken.firstIndex(of: false) {
+                (taken[free], flies[i].lamp) = (true, free)
+            }
+            if case let lamp = flies[i].lamp, lamp >= 0 {
+                light[lamp] = [Float((ground.x - photoFrame.minX) / photoFrame.width), Float((ground.y - photoFrame.minY) / photoFrame.height),
+                               Float(photoFrame.width * d / (size.height * focal * 0.5)), Float(alpha / (1 + 4 * y * y))]
+            }
         }
+        lamps[0].matrixFloat4x4Value = simd_float4x4(light[0], light[1], light[2], light[3])
+        lamps[1].matrixFloat4x4Value = simd_float4x4(light[4], light[5], light[6], light[7])
     }
 
     /// Where a point in the meadow lands on screen.
@@ -123,21 +152,21 @@ final class Fireflies: SKScene {
     /// distance, to fill the middle of the field. Most fly low over the grass; the few above eye height show against
     /// the trees.
     private func spawn(_ fly: inout Fly) {
-        fly.d = CGFloat.random(in: 0...1) < 0.35 ? .random(in: nearest...treeline)
-            : sqrt(nearest * nearest + .random(in: 0...1) * (treeline * treeline - nearest * nearest))
+        fly.d = CGFloat.random(in: 0...1, using: &rng) < 0.35 ? .random(in: nearest...treeline, using: &rng)
+            : sqrt(nearest * nearest + .random(in: 0...1, using: &rng) * (treeline * treeline - nearest * nearest))
         let reach = size.width / 2 / (size.height * focal) * fly.d * 1.1
-        fly.x = .random(in: -reach...reach)
-        fly.y = 0.15 + 1.6 * pow(.random(in: 0...1), 2)
-        let heading = CGFloat.random(in: 0...(2 * .pi)), speed = CGFloat.random(in: 0.02...0.05)
+        fly.x = .random(in: -reach...reach, using: &rng)
+        fly.y = 0.15 + 1.6 * pow(.random(in: 0...1, using: &rng), 2)
+        let heading = CGFloat.random(in: 0...(2 * .pi), using: &rng), speed = CGFloat.random(in: 0.02...0.05, using: &rng)
         fly.vx = cos(heading) * speed
         fly.vd = sin(heading) * speed
-        dress(fly)
+        dress(&fly)
     }
 
     /// After a flash: dark again, flying on and turning a little until the next, or somewhere new once it's out of view.
     private func rest(_ fly: inout Fly) {
         fly.node.isHidden = true
-        let gap = fly.period * .random(in: 0.85...1.15), turn = CGFloat.random(in: -0.8...0.8)
+        let gap = fly.period * .random(in: 0.85...1.15, using: &rng), turn = CGFloat.random(in: -0.8...0.8, using: &rng)
         fly.x += fly.vx * gap
         fly.d += fly.vd * gap
         fly.next += gap
@@ -145,7 +174,7 @@ final class Fireflies: SKScene {
         if fly.d < nearest || fly.d > treeline || abs(project(fly.x, 0, fly.d).x - size.width / 2) > size.width * 0.55 {
             spawn(&fly)
         } else {
-            dress(fly)
+            dress(&fly)
         }
     }
 
@@ -154,19 +183,32 @@ final class Fireflies: SKScene {
         exp(-CGFloat(fog.floatValue) * (0.1 + 2.2 * pow(max(MeadowPhoto.depth(d), 0), 2)))
     }
 
+    /// How far the photo's own ground stands above the ground plane, in metres, `d` metres away at `x` across: where
+    /// the field rises to the right, a fly on the plane would be inside it, over grass nearer than itself. Nothing
+    /// where the ground is lower, and never over trees.
+    func lift(_ x: CGFloat, _ d: CGFloat) -> CGFloat {
+        let foot = project(x, 0, d), far = MeadowPhoto.depth(d)
+        guard foot.y >= photoFrame.minY else { return 0 } // nearer than the photo's bottom edge: no ground of its own on screen to stand on
+        let column = columns[min(max(Int((foot.x - photoFrame.minX) / photoFrame.width * 64), 0), 63)]
+        let row = column.firstIndex { $0 >= far } ?? 0 // where the photo's ground is that far, up from its bottom
+        return max(0, photoFrame.minY + (CGFloat(row) + 0.5) / CGFloat(column.count) * photoFrame.height - foot.y) * d / (size.height * focal)
+    }
+
     /// Dresses a firefly as a soft orb, its glow about 4.5 cm across in the world, so it shrinks with distance to a
-    /// point by the treeline. Near ones sometimes sit in a pale halo, and now and then there's a halo alone, a
-    /// firefly out of focus.
-    private func dress(_ fly: Fly) {
-        let spread = (CGFloat.random(in: -1...1) + .random(in: -1...1) + .random(in: -1...1)) * 0.3
-        let f = size.height * focal, near = fly.d < 12, roll = CGFloat.random(in: 0...1)
+    /// point by the treeline, and lifts it over the photo's own ground. Near ones sometimes sit in a pale halo, and now
+    /// and then there's a halo alone, a firefly out of focus.
+    private func dress(_ fly: inout Fly) {
+        fly.lift = lift(fly.x, fly.d)
+        let spread = (CGFloat.random(in: -1...1, using: &rng) + .random(in: -1...1, using: &rng) + .random(in: -1...1, using: &rng)) * 0.3
+        let f = size.height * focal, near = fly.d < 12, roll = CGFloat.random(in: 0...1, using: &rng)
         var r = min(max(f * 0.045 / fly.d * exp(spread), 1), 9)
         let kind: CGFloat = near && roll < 0.25 ? 5 : near && roll < 0.45 ? 1 : 0
-        if kind == 5 { r = f * .random(in: 0.05...0.12) / fly.d }
-        let extent = r * [2.7, 4.4, 0, 0, 0, 1.3][Int(kind)] + 1
+        if kind == 5 { r = f * .random(in: 0.05...0.12, using: &rng) / fly.d }
+        let bloom = smoothstep(0.08, 0.45, 1 - clearness(fly.d)) // the glow's reach in the mist, as the shader spreads it
+        let extent = r * (kind == 5 ? 1.3 : max(kind == 1 ? 4.4 : 2.7, 2.7 + 3.4 * bloom)) + 1
         fly.node.size = CGSize(width: extent * 2, height: extent * 2)
         fly.node.zPosition = 100 - fly.d
-        fly.node.setValue(SKAttributeValue(vectorFloat4: [Float(r), Float(extent), Float(kind + .random(in: 0..<0.99)), Float(clearness(fly.d))]),
+        fly.node.setValue(SKAttributeValue(vectorFloat4: [Float(r), Float(extent), Float(kind + .random(in: 0..<0.99, using: &rng)), Float(clearness(fly.d))]),
                           forAttribute: "a_fly")
     }
 
@@ -174,10 +216,11 @@ final class Fireflies: SKScene {
     /// fog lightening it low down.
     private static let skySource = """
     void main() {
-        vec2 pts = v_tex_coord * u_size;
-        float h = clamp((v_tex_coord.y - u_horizon) / (1.0 - u_horizon), 0.0, 1.0);
+        vec2 uv = vec2(v_tex_coord.x, u_base + v_tex_coord.y * (1.0 - u_base)); // on the screen: the sprite starts at u_base
+        vec2 pts = uv * u_size;
+        float h = clamp((uv.y - u_horizon) / (1.0 - u_horizon), 0.0, 1.0);
         vec3 c = mix(vec3(0.055, 0.07, 0.10), vec3(0.010, 0.017, 0.048), pow(h, 0.55));
-        c += exp(-h * 7.0) * vec3(0.05, 0.028, 0.016) * (0.7 + 0.3 * v_tex_coord.x);
+        c += exp(-h * 7.0) * vec3(0.05, 0.028, 0.016) * (0.7 + 0.3 * uv.x);
         c += starField(pts, 16.0, 0.05, u_now) * smoothstep(0.1, 0.6, h) * 0.02 * (1.0 - u_fog);
         c = mix(c, vec3(0.05, 0.062, 0.085), u_fog * 0.6 * exp(-h * 6.0));
         c = pow(c, vec3(1.0 / 2.2)) + (hash21(pts * 2.0) - 0.5) / 128.0;
@@ -185,64 +228,76 @@ final class Fireflies: SKScene {
     }
     """
 
-    /// One slice of the meadow photo, the part between two distances (`u_slice`, as log distance). The photo is albedo
-    /// at half scale with its daylight taken out offline; here it's lit by a dim blue skylight, a little bluer and
-    /// greyer as the eye sees in the dark. Fog is clear close by and thickens with the square of the log distance.
-    /// It hugs the ground, thinning up the trees
+    /// The meadow photo, albedo at half scale with its daylight taken out offline; here it's lit by a dim blue
+    /// skylight, a little bluer and greyer as the eye sees in the dark. Fog is clear close by and thickens with the
+    /// square of the log distance (the aux map's red). It hugs the ground, thinning up the trees
     /// (`u_ground` is where they stand and how tall they are, in points), in wisps that drift slowly.
     ///
     /// A slight wind sways the field (the aux map's green; never the trees): broad gusts roll slowly across it and the
     /// grass leans with them, each patch rustling at its own rhythm, by up to a couple of points up close and fading
     /// to nothing in the distance. Where a gust passes, the leaning stalks catch a touch more light.
+    ///
+    /// Up to eight low fireflies within 14 m light the grass round them in their own cream (`u_lamps0`, `u_lamps1`):
+    /// a soft pool on the blades, as much as a skylight and a half on the grass at its middle at the height of a glow.
     private static let groundSource = """
     void main() {
         vec2 aux = texture2D(u_aux, v_tex_coord).rg;
         float far = aux.r;
-        vec4 out = vec4(0.0);
-        if (u_slice.x <= far && far < u_slice.y) { // each pixel is drawn by one slice only, so the others skip the work
-            float gust = noise(vec2(v_tex_coord.x * 5.0 - u_now * 0.06, v_tex_coord.y * 2.0 + 3.0));
-            float rustle = sin(mod(u_now, 3600.0) * 1.6 + 30.0 * noise(v_tex_coord * vec2(60.0, 25.0))); // hourly: each patch's rhythm is its own
-            float sway = u_wind * aux.g * (1.0 - far) * (1.0 - far);
-            vec4 photo = texture2D(u_texture, v_tex_coord + vec2(sway * (0.3 + gust) * (0.6 * gust + 0.4 * rustle) * 0.0025, 0.0));
-            vec3 col = 2.0 * pow(photo.rgb / max(photo.a, 0.004), vec3(2.2)) * vec3(0.03, 0.036, 0.042);
-            col = mix(col, dot(col, vec3(0.2126, 0.7152, 0.0722)) * vec3(0.78, 0.92, 1.2), 0.15);
-            col *= 1.0 + 0.12 * sway * (gust - 0.4);
-            float y = u_frame.x + v_tex_coord.y * u_frame.y;
-            float low = 1.0 - 0.85 * smoothstep(u_ground.x, u_ground.x + 0.7 * u_ground.y, y);
-            vec2 w = vec2(v_tex_coord.x * 7.0 + u_now * 0.004, v_tex_coord.y * 20.0);
-            float wisps = 0.6 + 0.8 * noise(w + vec2(2.0 * noise(w * 0.5 + u_now * 0.01), 0.0));
-            float mist = 1.0 - exp(-u_fog * (0.1 + 2.2 * far * far) * wisps * low);
-            col = mix(col, vec3(0.04, 0.05, 0.07), mist);
-            col = pow(col, vec3(1.0 / 2.2)) + (hash21(v_tex_coord * 4096.0) - 0.5) / 128.0;
-            out = vec4(col, 1.0) * photo.a;
+        float gust = noise(vec2(v_tex_coord.x * 5.0 - u_now * 0.06, v_tex_coord.y * 2.0 + 3.0));
+        float rustle = sin(mod(u_now, 3600.0) * 1.6 + 30.0 * noise(v_tex_coord * vec2(60.0, 25.0))); // hourly: each patch's rhythm is its own
+        float sway = u_wind * aux.g * (1.0 - far) * (1.0 - far);
+        vec4 photo = texture2D(u_texture, v_tex_coord + vec2(sway * (0.3 + gust) * (0.6 * gust + 0.4 * rustle) * 0.0025, 0.0));
+        vec3 albedo = 2.0 * pow(photo.rgb / max(photo.a, 0.004), vec3(2.2));
+        vec3 col = albedo * vec3(0.03, 0.036, 0.042);
+        col = mix(col, dot(col, vec3(0.2126, 0.7152, 0.0722)) * vec3(0.78, 0.92, 1.2), 0.15);
+        col *= 1.0 + 0.12 * sway * (gust - 0.4);
+        if (far < 0.43) { // nearer than 28 m: glowing flies within 14 m light the grass round them
+            float lamp = 0.0;
+            for (int i = 0; i < 4; i++) { // a pool a third as tall as it's wide on screen: 1.07 is 3 over the photo's aspect
+                vec2 a = (v_tex_coord - u_lamps0[i].xy) * u_lamps0[i].z * vec2(1.0, 1.07);
+                vec2 b = (v_tex_coord - u_lamps1[i].xy) * u_lamps1[i].z * vec2(1.0, 1.07);
+                float qa = max(1.0 - dot(a, a), 0.0), qb = max(1.0 - dot(b, b), 0.0);
+                lamp += u_lamps0[i].w * qa * qa * qa + u_lamps1[i].w * qb * qb * qb;
+            }
+            col += albedo * vec3(1.0, 0.94, 0.61) * 0.15 * lamp;
         }
-        gl_FragColor = out;
+        float y = u_frame.x + v_tex_coord.y * u_frame.y;
+        float low = 1.0 - 0.85 * smoothstep(u_ground.x, u_ground.x + 0.7 * u_ground.y, y);
+        vec2 w = vec2(v_tex_coord.x * 7.0 + u_now * 0.004, v_tex_coord.y * 20.0);
+        float wisps = 0.6 + 0.8 * noise(w + vec2(2.0 * noise(w * 0.5 + u_now * 0.01), 0.0));
+        float mist = 1.0 - exp(-u_fog * (0.1 + 2.2 * far * far) * wisps * low);
+        col = mix(col, vec3(0.04, 0.05, 0.07), mist);
+        col = pow(col, vec3(1.0 / 2.2)) + (hash21(v_tex_coord * 4096.0) - 0.5) / 128.0;
+        gl_FragColor = vec4(col, 1.0) * photo.a;
     }
     """
 
     /// A firefly as a soft orb, faded by the node's alpha and by the fog in front of it (`a_fly.w`). `a_fly` is its
     /// radius and the sprite's half-width in points, then its kind plus a seed in the fraction: 0 a cream orb with a
-    /// soft, slightly wobbly edge and a faint glow around it, 1 the same in a halo, and 5 a halo
-    /// alone. A halo is a flat, pale grey-teal wash about 2.6 times the orb's size, a little off centre, with a ragged
-    /// edge and a grainy texture.
+    /// soft, slightly wobbly edge and a faint glow around it, 1 the same in a halo, and 5 a firefly out of focus.
+    /// A halo is a flat, pale grey-teal wash about 2.6 times the orb's size, a little off centre, with a ragged edge
+    /// and a grainy texture. Out of focus, it's a faint round disc of the orb's cream, a touch brighter toward its
+    /// rim, as a lens draws a point of light.
     private static let flySource = """
     void main() {
         float r0 = a_fly.x, kind = floor(a_fly.z), seed = fract(a_fly.z) * 64.0;
-        float ghost = step(4.5, kind), stained = max(mod(kind, 2.0), ghost);
+        float ghost = step(4.5, kind), stained = mod(kind, 2.0) * (1.0 - ghost);
         vec2 q = (v_tex_coord - 0.5) * 2.0 * a_fly.y;
         float r = length(q);
         vec2 dir = q / max(r, 0.001);
         float edge = r0 * (0.92 + 0.16 * noise(dir * 1.5 + seed));
         float dab = smoothstep(edge + 0.5 + 0.2 * r0, edge - 0.3 * r0, r) * (1.0 - ghost);
-        float glow = 0.16 * smoothstep(r0 * 2.6, r0 * 0.8, r) * (1.0 - ghost);
-        vec2 s = q - (vec2(hash11(seed), hash11(seed + 3.0)) - 0.5) * 0.5 * r0 * (1.0 - ghost);
+        float bloom = smoothstep(0.08, 0.45, 1.0 - a_fly.w); // deep in the mist the glow spreads, out to 6 radii at twice the weight
+        float glow = 0.16 * (1.0 + bloom) * smoothstep(r0 * (2.6 + 3.4 * bloom), r0 * 0.8, r) * (1.0 - ghost);
+        vec2 s = q - (vec2(hash11(seed), hash11(seed + 3.0)) - 0.5) * 0.5 * r0;
         float rs = length(s);
         vec2 ds = s / max(rs, 0.001);
-        float reach = mix(r0 * 2.6, r0, ghost) * (0.85 + 0.3 * noise(ds * 2.0 + seed) + 0.12 * noise(ds * 7.0 + seed));
+        float reach = r0 * 2.6 * (0.85 + 0.3 * noise(ds * 2.0 + seed) + 0.12 * noise(ds * 7.0 + seed));
         float stain = smoothstep(reach, reach * 0.8, rs) * (1.0 + 0.15 * smoothstep(reach * 0.5, 0.0, rs))
                     * (0.8 + 0.4 * hash42(floor(q * 0.7) + seed).x) * stained;
         vec4 under = vec4(0.353, 0.416, 0.416, 1.0) * 0.3 * stain;
         under = vec4(1.0, 0.94, 0.7, 1.0) * glow + under * (1.0 - glow);
+        under += vec4(0.996, 0.941, 0.612, 1.0) * 0.1 * smoothstep(r0, r0 * 0.88, r) * (1.0 + 0.4 * smoothstep(r0 * 0.5, r0 * 0.92, r)) * ghost;
         vec4 paint = vec4(0.996, 0.941, 0.612, 1.0) * dab;
         gl_FragColor = (under * (1.0 - paint.a) + paint) * v_color_mix.a * a_fly.w;
     }
@@ -257,8 +312,9 @@ final class Fireflies: SKScene {
     static var photo: SKTexture { sharedTexture("fireflies-meadow.heic") }
     static var aux: SKTexture { sharedTexture("fireflies-meadow-aux.png") }
     static let aspect = { let size = photo.size(); return size.width / max(size.height, 1) }()
-    /// The photo's top edge, the treeline's top (median) and its foot, and the ground plane's horizon.
-    static let top: CGFloat = 0.549, skyline: CGFloat = 0.487, foot: CGFloat = 0.317, horizon: CGFloat = 0.3585
+    /// The photo's top edge, the treeline's top (median) and its foot, and the ground plane's horizon; and the lowest the
+    /// sky shows between the trees (the photo is opaque from 0.463 down).
+    static let top: CGFloat = 0.549, skyline: CGFloat = 0.487, foot: CGFloat = 0.317, horizon: CGFloat = 0.3585, sky: CGFloat = 0.46
     /// Fitted from the lens (16 mm on a GF1) and the ground plane `v = horizon − 0.3387/D` over the open field, for
     /// an eye 1.5 m up: the focal length in screen heights, and metres per unit of the depth map's distance `D`.
     static let focal: CGFloat = 1.424, eye: CGFloat = 1.5, scale: CGFloat = 6.3
