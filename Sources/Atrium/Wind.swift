@@ -8,7 +8,9 @@ import SpriteKit
 /// The wind comes from `WindField` as a small texture. There are no particles on the CPU: every pixel traces the
 /// wind upstream and asks whether a streak has just passed it (see `source`).
 final class WindScene: SKScene {
-    nonisolated static let zoom = Knob(key: "wind.zoom", label: "Zoom", range: 0...2, standard: 1, section: "Map",
+    // half the continent nearly always has a low or a front in it, where a region on an ordinary day blows one way;
+    // it's also what the menu's tile and the site show
+    nonisolated static let zoom = Knob(key: "wind.zoom", label: "Zoom", range: 0...2, standard: 2, section: "Map",
                                        format: .choice(["My town", "My region", "Half the continent"]))
     // a new key: the old one (None, Coastline, Shaded relief) would land on the wrong choices
     nonisolated static let background = Knob(key: "wind.map", label: "Background", range: 0...5, standard: 2, section: "Map",
