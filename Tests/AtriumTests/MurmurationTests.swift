@@ -3,11 +3,11 @@ import SpriteKit
 import Testing
 @testable import Atrium
 
-/// The marsh pond at Sunset, drawn at 1512 × 982 pixels at each of `times` (seconds), as levels of 255 (the mean of
-/// red, green and blue), top row first; and the rows of the photo from `from` to `to` (of its 706), as a range of them.
-/// The flock is drawn behind the ground, so it can't change the shore.
-@MainActor private func marshAtSunset(_ times: [Double]) throws -> (pictures: [[Double]], rows: (Double, Double) -> Range<Int>) {
-    let settings = ["murmuration.light": 3.0, "murmuration.ground": 1, "murmuration.falcon": 0]
+/// The marsh pond at a light (Sunset unless given), drawn at 1512 × 982 pixels at each of `times` (seconds), as levels
+/// of 255 (the mean of red, green and blue), top row first; and the rows of the photo from `from` to `to` (of its
+/// 706), as a range of them. The flock is drawn behind the ground, so it can't change the shore.
+@MainActor private func marsh(_ times: [Double], light: Double = 3) throws -> (pictures: [[Double]], rows: (Double, Double) -> Range<Int>) {
+    let settings = ["murmuration.light": light, "murmuration.ground": 1, "murmuration.falcon": 0]
     defer { settings.keys.forEach(UserDefaults.standard.removeObject) }
     for (key, value) in settings { UserDefaults.standard.set(value, forKey: key) }
 
@@ -44,7 +44,7 @@ import Testing
 
 /// The pond's far shore is lifted out of flat black but stays a silhouette: 2.7 of 255 without the lift, 6.0 with it.
 @MainActor @Test func murmurationShoreIsLifted() throws {
-    let (pictures, rows) = try marshAtSunset([0]), shore = rows(40, 120)
+    let (pictures, rows) = try marsh([0]), shore = rows(40, 120)
     let mean = pictures[0][shore].reduce(0, +) / Double(shore.count)
     #expect(mean > 4 && mean < 20, "the far shore is \(mean) of 255")
 }
@@ -52,7 +52,15 @@ import Testing
 /// The water's shading, which runs only where the water map has water, still runs: its ripples move over 2 s (by
 /// about 3.6 of 255), where water shaded as land would hold still.
 @MainActor @Test func murmurationWaterRipples() throws {
-    let (pictures, rows) = try marshAtSunset([0, 2]), water = rows(320, 650)
+    let (pictures, rows) = try marsh([0, 2]), water = rows(320, 650)
     let change = zip(pictures[0][water], pictures[1][water]).map { abs($0 - $1) }.reduce(0, +) / Double(water.count)
     #expect(change > 0.5, "the water changed by \(change) of 255 in 2 s")
+}
+
+/// The Sun shows in the water: at Golden hour, 5° up, its mirror image lands on the pond below the far shore, as white
+/// as the disc in the sky. Without it the water's brightest was about 227 of 255, the sky's glow near the shore.
+@MainActor @Test func murmurationSunInTheWater() throws {
+    let (pictures, rows) = try marsh([0], light: 2), water = rows(140, 700)
+    let brightest = pictures[0][water].max() ?? 0
+    #expect(brightest > 250, "the water's brightest is \(brightest) of 255")
 }
