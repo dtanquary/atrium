@@ -251,7 +251,7 @@ Rising heat as a color schlieren camera sees it, after the photos of Gary Settle
 | One candle through the rainbow filter, after Davidhazy | A mug of coffee through the knife edge in Light Mode, after Kinsman |
 
 #### Turing Patterns
-Reaction–diffusion, the chemistry Alan Turing proposed for how animals get their spots and stripes. Patterns grow from a few glowing seeds, then slowly drift from coral to dividing spots to a honeycomb to fingerprint stripes and round again, in six jewel-tone palettes. Patches keep dissolving and growing back in, so it never stops moving, or it can swirl on a slow current instead.
+Reaction–diffusion, the chemistry Alan Turing proposed for how animals get their spots and stripes. Patterns grow from a few glowing seeds, then slowly drift from coral to dividing spots to a honeycomb to fingerprint stripes and round again, in six jewel-tone palettes. Patches keep dissolving and growing back in, so it never stops moving, or it can swirl on a slow current instead. The pattern stands up like glaze, lit from the upper left, and in Light Mode casts a soft shadow on the paper.
 
 | <img src="docs/images/turing-patterns.webp" alt="Turing Patterns, fingerprint stripes in Dark Mode, moving" width="1600"> | ![Turing Patterns, coral in Light Mode](docs/images/turing-patterns-light.jpg) |
 |---|---|
