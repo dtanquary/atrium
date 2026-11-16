@@ -109,7 +109,7 @@ For repeatable snapshots, `MURMURATION_SEED=3` seeds the flock, and `MURMURATION
 - **A visible falcon:** a lone silhouette about 2.5× a starling's size, lighter than the flock, a few flock-lengths off its edge (as in the reference photos).
 - **Splits and merges:** a sub-flock of a sixth to a tenth of the flock breaking off and rejoining within 10–20 s, as in about a quarter of the photos; copied 180° escape turns from the falcon would give these.
 - **Blackening and dilution:** the flock compacting and darkening around an attack and spreading out about 15 s later.
-- **Clouds:** most murmuration photos have some; Weather's cloud layer could be borrowed.
+- **Clouds:** most murmuration photos have some; Weather's cloud layer could be borrowed. Tried 2026-11-15 (the review's low-confidence suggestion) and not kept: a flat stratus layer 1.5 km up in the sky shader, two reads of Weather's `CloudNoise` stretched into streets, seen in perspective between about 0.5° and 5° up. Fine noise drew thin dark streaks that read as scratches; soft noise, faint horizontal bands that read as the 8-bit sky bake's banding; denser bars with a lit-underside test (two more reads) gave one soft dark bar over the setting Sun that was plausible at Sunset but airbrushed, still for the whole evening, and not yet in the pond's mirror, which would show it missing at once. Not plainly better than the clear sky Dave called near perfect, so it waits for him to judge a mock-up; it would want drift, its reflection in the water, and a look per light.
 - **Flock size** as a setting: more birds per parcel and wider spacing.
 
 ## Checking it
