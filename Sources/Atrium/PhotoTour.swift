@@ -144,7 +144,7 @@ struct Tour: Sendable {
 /// photo to photo, so Saturn comes round no more often than Io, and each visit shows the next of its photos. The Sun
 /// and the Moon are live: today's Sun from SDO (`TheSun`) and the Moon as it is right now (`TheMoon`), run inside this
 /// scene. Settings can keep the tour to one set, and hold it on one group of that set.
-final class PhotoTour: SKScene {
+final class PhotoTour: SKScene, BatteryPaced {
     typealias View = Tour.View
 
     override init(size: CGSize) {
@@ -217,6 +217,12 @@ final class PhotoTour: SKScene {
     private var time = 0.0
     private var lastUpdate: TimeInterval?
     private let caption = SKNode()
+    /// The photos, in one full-screen shader over the live views.
+    private let photos = SKSpriteNode(color: .black, size: .zero)
+    /// Its ceiling on battery: 20 fps for the photos' pans, the dissolves and the caption's fades; with a live view
+    /// alone on screen, 15 for the Sun (its plasma moves about 7 px a second, its eruptions up to 17) and 10 for the
+    /// Moon, lit again once a minute and turning with the sky by a few degrees an hour.
+    var batteryRate: Int? = 20 { didSet { batteryRateChanged(from: oldValue) } }
     /// The view the caption is for, its facts (kept so a change of layout doesn't move them on), and the Settings it was
     /// laid out with.
     private var captionView: View?
@@ -232,7 +238,8 @@ final class PhotoTour: SKScene {
 
     override func sceneDidLoad() {
         backgroundColor = .black
-        let sprite = SKSpriteNode(color: .black, size: size)
+        let sprite = photos
+        sprite.size = size
         sprite.anchorPoint = .zero
         // A child's zPosition adds to its parent's, so a live scene's own layers (The Moon's sky is at 2) would draw
         // over a photo at 1 and pop instead of fading. 100 is above anything they use.
@@ -284,6 +291,7 @@ final class PhotoTour: SKScene {
 
     override func update(_ currentTime: TimeInterval) {
         let dt = frameTime(currentTime, &lastUpdate)
+        defer { rest() }
         if still == nil { time += dt }
         for live in [current?.scene, next?.scene].compactMap({ $0 }) { live.update(currentTime) }
         guard let current, let began = current.start else { return }
@@ -310,6 +318,15 @@ final class PhotoTour: SKScene {
         self.next = nil
         showCaption(next.view)
         NotificationCenter.default.post(name: .pictureChanged, object: self)
+    }
+
+    /// Lets a live view alone on screen draw less: the photo layer, clear over it but for a dissolve, is hidden, and
+    /// the rate on battery comes down once the caption has faded in.
+    private func rest() {
+        let live = current?.view.kind == .live && next?.start == nil
+        photos.isHidden = live
+        let alone = live && !caption.hasActions() ? current?.scene : nil
+        batteryRate = alone is TheMoon ? 10 : alone is TheSun ? 15 : 20
     }
 
     /// Show changed: drops the view that was next and dissolves to one from the new pick as soon as it's ready, unless
