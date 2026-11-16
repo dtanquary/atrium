@@ -26,12 +26,12 @@ fish-tank|Fish Tank|42|4|SNAPSHOT_APPEARANCE=light'
 
 # Every wallpaper in the app, as the loop its card opens, in about the card's look:
 # slug|scene|seconds in before recording|extra environment
-PREVIEWS='ant-colony|Ant Colony|4|SNAPSHOT_DEFAULTS=antcolony.day=20261013,antcolony.hour=11
+PREVIEWS='ant-colony|Ant Colony|4|SNAPSHOT_DEFAULTS=antcolony.day=20261017,antcolony.hour=11
 aurora|Aurora|8|SNAPSHOT_DEFAULTS=aurora.palette=Purple,aurora.speed=2
 black-hole|Black Hole|2.5|SNAPSHOT_DEFAULTS=blackhole.speed=2
-dappled-light|Dappled Light|4|SNAPSHOT_DEFAULTS=dappled.previewTime=1,dappled.previewHour=17.5,dappled.weather=1
+dappled-light|Dappled Light|4|SNAPSHOT_DEFAULTS=dappled.previewTime=1,dappled.previewHour=16.1,dappled.weather=1,dappled.seed=6 SNAPSHOT_APPEARANCE=light
 earth-from-orbit|Earth from Orbit|4|SNAPSHOT_DEFAULTS=latitude=25,longitude=78,earth.previewStorm=1
-etching|Etching|4|SNAPSHOT_DEFAULTS=etching.drawn=0.6908,etching.picture=1,etching.speed=8
+etching|Etching|4|SNAPSHOT_DEFAULTS=etching.drawn=0.6892,etching.picture=1,etching.speed=16
 fireflies|Fireflies|8|
 fish-tank|Fish Tank|4|SNAPSHOT_APPEARANCE=light
 flowing-gradient|Flowing Gradient|4|SNAPSHOT_DEFAULTS=gradient.palette=Midnight,gradient.ribbonsOn=1
@@ -47,11 +47,11 @@ pixel-city|Pixel City|30|SNAPSHOT_DEFAULTS=city.place=0,city.previewTime=1,city.
 pixel-railway|Pixel Railway|40|RAILWAY_SEED=4 RAILWAY_ERA=transition SNAPSHOT_DEFAULTS=railway.previewTime=1,railway.previewHour=12,railway.previewDay=1,railway.day=196
 pixel-spaceport|Pixel Spaceport|23|SNAPSHOT_DEFAULTS=spaceport.rocket.falcon9=0,spaceport.rocket.heavy=0,spaceport.rocket.newglenn=0,spaceport.rocket.vulcan=0,spaceport.rocket.electron=0,spaceport.rocket.sls=0,spaceport.rocket.shuttle=0,spaceport.rocket.saturn=0,spaceport.rocket.ariane6=0,spaceport.rocket.ariane=0,spaceport.rocket.titan=0,spaceport.rocket.atlas=0,spaceport.rocket.redstone=0,spaceport.rocket.soyuz=0,spaceport.rocket.longmarch=0,spaceport.rocket.h3=0,spaceport.rocket.lvm3=0,spaceport.previewTime=1,spaceport.previewHour=16.35
 pixel-window-seat|Pixel Window Seat|5|SEAT_AT=30500 SNAPSHOT_DEFAULTS=seat.previewTime=1,seat.previewHour=9
-rain-on-glass|Rain on Glass|4|SNAPSHOT_DEFAULTS=rain.palette=Hamburg SNAPSHOT_APPEARANCE=dark
+rain-on-glass|Rain on Glass|4|SNAPSHOT_DEFAULTS=rain.palette=Hamburg,rain.seed=412 SNAPSHOT_APPEARANCE=dark
 schlieren|Schlieren|40|SNAPSHOT_DEFAULTS=schlieren.palette=Candlelight,schlieren.filter=0,schlieren.source=3
 space-tour|Space Tour|4|SNAPSHOT_DEFAULTS=deep.photo=deep-pillars-webb.heic
 turing-patterns|Turing Patterns|40|SNAPSHOT_DEFAULTS=turing.pattern=4,turing.palette=Lagoon,turing.seed=3
-weather|Weather|4|SNAPSHOT_DEFAULTS=weather.lock=2,weather.previewTime=1,weather.previewHour=17.1
+weather|Weather|4|SNAPSHOT_DEFAULTS=weather.lock=2,weather.previewTime=1,weather.previewHour=16.45,weather.seed=2
 wind|Wind|4|SNAPSHOT_DEFAULTS=wind.zoom=2,wind.map=2'
 
 # Every wallpaper in the app, as 16:10 stills for the cards on the glass pane: slug|screenshot in docs/images.
