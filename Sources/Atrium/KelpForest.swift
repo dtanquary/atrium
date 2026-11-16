@@ -89,13 +89,17 @@ final class KelpForest: SKScene, Trimmable {
     private var cam: SIMD3<Double>
     private var sea: Sea
     private var fronds: [Frond] = []
-    /// A fish of the school: its length, where it is and its velocity through the water (metres, m/s), the heading it
-    /// wanders toward, how many tail strokes it has made, and the fog its colour was last set for.
+    /// A fish of the school: its length, and how strong the slow water from behind must be before it turns round; where
+    /// it is and where in the school it keeps to (metres); its heading (radians about the vertical, 0 along x), the way
+    /// it faces into the slow water (0 or π) and its own veer from that; what's left of a dart; its tail's beats and
+    /// bend (-1 to 1); the last step's place, heading and bend, which it is drawn between; and the fog its colour was
+    /// last set for.
     private struct Fish {
-        let node: SKSpriteNode, length: Double
-        var p: SIMD3<Double>, v: SIMD3<Double>, wander: Double, stroke: Double, fogged = -1
+        let node: SKSpriteNode, length: Double, turns: Double
+        var p: SIMD3<Double>, spot: SIMD3<Double>, yaw: Double, into: Double, veer = 0.0, dart = 0.0, beat: Double, bend = 0.0
+        var was: (p: SIMD3<Double>, yaw: Double, bend: Double), fogged = -1
     }
-    private var fish: [Fish] = [], home = SIMD3<Double>.zero, fishOn = true
+    private var fish: [Fish] = [], home = SIMD3<Double>.zero, fishOn = true, swamAt = 0.0
     private var simTime = 0.0, lastTime: TimeInterval?, lastCycle: TimeInterval?
     private var rng: SplitMix
     private var atlas: Atlas!
@@ -401,42 +405,63 @@ final class KelpForest: SKScene, Trimmable {
         home = cam + SIMD3(0, sin(tip), cos(tip)) * 11
         home.y = min(max(home.y, 2), spot.depth - 1.5)
         fishOn = Self.knobs[4].value > 0.5
+        let into = sea.drift(y: home.y, simTime - 30).x > 0 ? Double.pi : 0
         for _ in 0..<36 {
             let node = SKSpriteNode(texture: atlas.fish[0])
             node.shader = shader
             addChild(node)
-            let a = Double.random(in: 0...(2 * .pi), using: &rng)
-            let at = SIMD3(Double.random(in: -2...2, using: &rng), .random(in: -0.6...0.6, using: &rng), .random(in: -2...2, using: &rng))
-            fish.append(Fish(node: node, length: Atlas.fishLength * .random(in: 0.72...1, using: &rng), p: home + at,
-                             v: SIMD3(cos(a), 0, 0.35 * sin(a)) * 0.3, wander: a, stroke: .random(in: 0...1, using: &rng)))
+            let at = home + SIMD3(Double.random(in: -1...1, using: &rng), .random(in: -0.35...0.35, using: &rng), .random(in: -1...1, using: &rng))
+            fish.append(Fish(node: node, length: Atlas.fishLength * .random(in: 0.72...1, using: &rng), turns: .random(in: 0.003...0.025, using: &rng),
+                             p: at, spot: at, yaw: into, into: into, beat: .random(in: 0...1, using: &rng), was: (at, into, 0)))
         }
     }
 
-    /// Steers the school as Fish Tank steers its schools: clear of schoolmates, matching their heading, drifting toward
-    /// their middle and wandering, held loosely near home so it stays in view, and carried by the swell with the kelp.
-    /// Speeds in m/s; stepped every 1/30 s, so it swims the same at any frame rate.
+    /// Blacksmith hang in the water column picking plankton, facing into the current, rather than cruising. Each faces
+    /// into the slow water (the slow surge and the current, not each swell) along the surge, across the view, and turns
+    /// round only once that plainly comes from behind, each at its own moment, so a turn ripples through the school;
+    /// holds its place in the school against the slow water and three fifths of the swell, ahead with its tail and a
+    /// little back or aside with its fins, so the school sways with the surge less than the kelp, each fish along its
+    /// own length; veers a little on its own; and every few seconds darts ahead at a plankter and coasts. Its tail beats
+    /// as fast as it swims ahead through the water, wider the harder. Speeds in m/s; stepped every 1/30 s at fixed
+    /// times and drawn between the last two steps (`was`), so it swims the same at any frame rate.
     private func swim(at t: Double, dt: Double) {
-        let cruise = 0.3, gap = 0.4, sight = 1.5, flow = sea.flow(sea.phases(at: home, t), y: home.y, t)
+        let u = sea.flow(sea.phases(at: home, t), y: home.y, t), slow = sea.drift(y: home.y, t).x
+        let gap = 0.35, root = dt.squareRoot()
+        swamAt = t
         for i in fish.indices {
-            let p = fish[i].p, v = fish[i].v
-            var steer = SIMD3<Double>.zero, heading = steer, middle = steer, seen = 0.0
+            var f = fish[i]
+            f.was = (f.p, f.yaw, f.bend)
+            // ponytail: the school faces along x only, into the slow water's share along it; the current's own bearing
+            // (up to 34° off x) is left out so the fish stay side on. Face its bearing if a view ever looks along it.
+            if slow * cos(f.into) > f.turns { f.into = slow > 0 ? .pi : 0 }
+            f.veer += -f.veer * dt / 5 + Double.random(in: -1...1, using: &rng) * 0.33 * root // about ±0.3, over seconds
+            if Double.random(in: 0...1, using: &rng) < dt / 6 {
+                f.dart = .random(in: 0.25...0.45, using: &rng)
+                f.veer += .random(in: -0.4...0.4, using: &rng)
+            }
+            f.dart *= exp(-dt / 0.35)
+            // A fish yaws round, at up to 3 radians a second; it never rolls or tips over.
+            f.yaw += min(max(remainder(f.into + f.veer - f.yaw, 2 * .pi) * 4 * dt, -3 * dt), 3 * dt)
+            // Its place in the school wanders over a minute or so, and it keeps clear of its neighbours.
+            let spread = SIMD3(0.58, 0.2, 0.58) * 0.32 * root
+            f.spot += (home - f.spot) * dt / 60 + SIMD3(Double.random(in: -1...1, using: &rng), .random(in: -1...1, using: &rng),
+                                                        .random(in: -1...1, using: &rng)) * spread
+            var want = (f.spot - f.p) * 0.3 - u * 0.6
             // ponytail: O(n²), fine for a few dozen fish
             for j in fish.indices where j != i {
-                let d = fish[j].p - p, r = max(simd_length(d), 0.001)
-                if r < gap { steer -= d / r * (gap - r) / gap * cruise * 3 }
-                if r < sight { heading += fish[j].v; middle += fish[j].p; seen += 1 }
+                let d = fish[j].p - f.p, r = max(simd_length(d), 0.001)
+                if r < gap { want -= d / r * (gap - r) * 2 }
             }
-            if seen > 0 { steer += (heading / seen - v) * 0.9 + (middle / seen - p) * 0.25 }
-            fish[i].wander += Double.random(in: -1...1, using: &rng) * dt * 1.5
-            // Wandering mostly across the view, as Fish Tank's mostly level: a school seen end on is a cloud of dots.
-            steer += SIMD3(cos(fish[i].wander), 0, 0.35 * sin(fish[i].wander)) * cruise * 0.45 + (home - p) * 0.04
-            var nv = v + steer * dt
-            nv.y *= 1 - 1.4 * dt // fish mostly swim level
-            nv *= min(max(simd_length(nv), cruise * 0.45), cruise * 1.35) / max(simd_length(nv), 0.001)
-            fish[i].v = nv
-            fish[i].p = p + (nv + flow) * dt
-            fish[i].p.y = min(max(fish[i].p.y, 0.5), spot.depth - 0.5)
-            fish[i].stroke += dt * 2.2
+            let h = SIMD3(cos(f.yaw), 0, sin(f.yaw)), ahead = min(max(simd_dot(want, h), -0.1), 0.35) + f.dart
+            var aside = want - h * simd_dot(want, h)
+            aside *= min(1, 0.06 / max(simd_length(SIMD2(aside.x, aside.z)), 1e-6))
+            aside.y = min(max(want.y, -0.04), 0.04)
+            f.p += (h * ahead + aside + u) * dt
+            f.p.y = min(max(f.p.y, 0.5), spot.depth - 0.5)
+            let thrust = max(ahead, 0) // backing is the fins' work
+            f.beat += dt * min(max(thrust / (0.6 * f.length), 0.8), 5)
+            f.bend = min(0.25 + thrust / 0.3, 1) * sin(2 * .pi * f.beat)
+            fish[i] = f
         }
     }
 
@@ -642,25 +667,28 @@ final class KelpForest: SKScene, Trimmable {
                 }
             }
         }
-        // The fish move when the far fronds do: each faces the way it swims, belly down, shorter seen end on, its tail
-        // flicked one way and the other as it strokes, and fogged by how far off it is now.
-        guard !farStill else { return }
+        // The fish every frame, between their last two steps: each shows its side, mirrored as it faces left, as long
+        // as its heading is across the view and down to a fifth of that end on (its narrow front); belly down, tipped
+        // by its heading's slope on the screen up to 20° side on and not at all end on, so a turn is a yaw and never a
+        // fish standing on its nose; its tail bent as it beats; and fogged by how far off it is now.
+        let a = min(max((t - swamAt) * 30, 0), 1)
         for i in fish.indices {
-            let f = fish[i], at = project(f.p), nose = project(f.p + simd_normalize(f.v) * f.length)
+            let f = fish[i], p = f.was.p + (f.p - f.was.p) * a, yaw = f.was.yaw + remainder(f.yaw - f.was.yaw, 2 * .pi) * a
+            let at = project(p), nose = project(p + SIMD3(cos(yaw), 0, sin(yaw)) * f.length)
             let on = fishOn && at.ahead > 0.5 && nose.ahead > 0.5
             show(f.node, on)
             guard on else { continue }
-            let d = nose.px - at.px, scale = f.length / Atlas.fishLength * at.ppm / 2
+            let d = nose.px - at.px, full = f.length * at.ppm, scale = f.length / Atlas.fishLength * at.ppm / 2, side = d.x < 0 ? -1.0 : 1.0
             f.node.position = CGPoint(x: at.px.x / 2, y: at.px.y / 2)
-            f.node.zRotation = atan2(d.y, d.x)
+            f.node.zRotation = side * min(max(atan2(d.y, abs(d.x)), -0.35), 0.35) * min(abs(d.x) / full, 1)
             f.node.zPosition = CGFloat(-at.dist)
-            f.node.size = CGSize(width: Atlas.fishCard.width * scale * min(max(simd_length(d) / (f.length * at.ppm), 0.3), 1),
-                                 height: Atlas.fishCard.height * scale)
-            if (f.node.yScale < 0) != (d.x < 0) { f.node.yScale = -f.node.yScale }
-            let pose = atlas.fish[Int(f.stroke * 2) % 2]
+            f.node.size = CGSize(width: Atlas.fishCard.width * scale * min(max(abs(d.x) / full, 0.2), 1), height: Atlas.fishCard.height * scale)
+            if (f.node.xScale < 0) != (side < 0) { f.node.xScale = -f.node.xScale }
+            let bend = f.was.bend + (f.bend - f.was.bend) * a
+            let pose = atlas.fish[Int(((bend + 1) / 2 * Double(atlas.fish.count - 1)).rounded())]
             if f.node.texture !== pose { f.node.texture = pose }
-            let fog = Int(at.dist * 4) * 1000 + Int(f.p.y * 16)
-            if fog != f.fogged { info(f.node, dist: at.dist, height: f.p.y, seed: 0, light: 0.8); fish[i].fogged = fog }
+            let fog = Int(at.dist * 4) * 1000 + Int(p.y * 16)
+            if fog != f.fogged { info(f.node, dist: at.dist, height: p.y, seed: 0, light: 0.8); fish[i].fogged = fog }
         }
     }
 
@@ -703,10 +731,13 @@ final class KelpForest: SKScene, Trimmable {
                 let horiz = s.a * s.omega * ch / s.sinhKH * ph.c
                 u += SIMD3(s.dir.x * horiz, s.a * s.omega * sh / s.sinhKH * ph.s, s.dir.y * horiz)
             }
-            u *= height
-            u.x += height * beat.x * beat.omega * cos(beat.omega * t + beat.phase)
+            return u * height + drift(y: y, t)
+        }
+
+        /// The water's slow part at height y: the slow surge and the current, without the swell.
+        func drift(y: Double, _ t: Double) -> SIMD3<Double> {
             let c = current.speed * (1 + 0.5 * sin(t / 420 + current.phase)), cb = 0.6 * sin(t / 900 + current.phase)
-            return u + SIMD3(c * cos(cb), 0, c * sin(cb)) * (0.6 + 0.8 * y / depth)
+            return SIMD3(height * beat.x * beat.omega * cos(beat.omega * t + beat.phase), 0, 0) + SIMD3(c * cos(cb), 0, c * sin(cb)) * (0.6 + 0.8 * y / depth)
         }
 
         /// How far the surface water is carried from rest, for the canopy and ripples drawn on it.
@@ -965,8 +996,9 @@ private func kelpNoise(_ x: Float, _ y: Float) -> Float {
     /// A far card is 2 m by 3.2 m, its two links of stipe 2.1 m long from 20 cm up.
     static let cardSize = (width: 2.0, height: 3.2), cardStipe = 2.1, cardAnchor = CGPoint(x: 0.5, y: 0.2 / 3.2)
     static let holdfastSize = (width: 0.8, height: 0.5)
-    /// A fish card is 30 by 15 cm, a blacksmith 25 cm long across its middle, facing the way of the card.
-    static let fishCard = (width: 0.3, height: 0.15), fishLength = 0.25
+    /// A fish card is 30 by 16 cm, a blacksmith 25 cm long across its middle, facing the way of the card; one for each
+    /// of seven bends of its tail, from one side to the other.
+    static let fishCard = (width: 0.3, height: 0.16), fishLength = 0.25, fishBends = 7
     private static let (w, h) = (2048, 2048)
 
     /// Where a blade card's foot is: even cards bow up, odd ones down.
@@ -981,7 +1013,7 @@ private func kelpNoise(_ x: Float, _ y: Float) -> Float {
                      blades: (0..<bladeCards).map { sub(1240 + $0 / 12 * 404, $0 % 12 * 136, 400, 132) },
                      sparse: (0..<3).map { sub($0 * 410, 720, 400, 640) },
                      dense: (0..<3).map { sub($0 * 410, 1370, 400, 640) },
-                     stipe: sub(412, 2, 8, 28), holdfast: sub(430, 0, 240, 150), fish: [sub(0, 0, 120, 60), sub(0, 64, 120, 60)])
+                     stipe: sub(412, 2, 8, 28), holdfast: sub(430, 0, 240, 150), fish: (0..<fishBends).map { sub(0, $0 * 68, 120, 64) })
     }
 
     /// Draws the whole texture, the same every time (its own fixed seed), so copies on two displays match.
@@ -1012,11 +1044,13 @@ private func kelpNoise(_ x: Float, _ y: Float) -> Float {
             ctx.setFillColor(CGColor(red: .random(in: 0.35...0.6, using: &rng), green: 0.37, blue: 0.5, alpha: 1))
             ctx.fillEllipse(in: CGRect(x: x - r, y: y - r * 0.6, width: 2 * r, height: 1.2 * r))
         }
-        // Two blacksmith 25 cm long, at 400 px a metre, the tail flicked one way and then the other: deep in the body
-        // with a forked tail, dark (red), letting no light through (green) and never glowing (blue).
-        for (k, flick) in [CGFloat(-0.15), 0.15].enumerated() {
-            let L: CGFloat = 100, ox: CGFloat = 10, oy = CGFloat(k * 64) + 30, root = CGPoint(x: ox + 0.25 * L, y: oy)
-            func tail(_ x: CGFloat, _ y: CGFloat) -> CGPoint { // turned about the root of the tail
+        // A blacksmith 25 cm long, at 400 px a metre, in seven bends of its tail from one side to the other: deep in the
+        // body with a forked tail, dark (red), letting no light through (green) and never glowing (blue). The tail and
+        // the narrow of the body before it swing about a point 42% along, so the body bends into the stroke.
+        for k in 0..<fishBends {
+            let flick = 0.2 * (2 * CGFloat(k) / CGFloat(fishBends - 1) - 1)
+            let L: CGFloat = 100, ox: CGFloat = 10, oy = CGFloat(k * 68) + 32, root = CGPoint(x: ox + 0.42 * L, y: oy)
+            func tail(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
                 let dx = ox + x * L - root.x, dy = y * L
                 return CGPoint(x: root.x + dx * cos(flick) - dy * sin(flick), y: root.y + dx * sin(flick) + dy * cos(flick))
             }
