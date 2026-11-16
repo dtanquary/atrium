@@ -22,11 +22,12 @@ import Testing
 
 /// Fireflies fly over the photo's own ground: where the field rises above the ground plane (far off, to the right)
 /// they're lifted, not left inside it over nearer grass, and where trees stand in the way (the left, past 40 m)
-/// they aren't lifted over them.
+/// they aren't lifted over them, nor nearer than the photo's bottom edge, where there's no ground of its own on screen.
 @MainActor @Test func firefliesFlyOverTheField() {
     let scene = Fireflies(size: CGSize(width: 1512, height: 982))
     let across = { (fraction: CGFloat, d: CGFloat) in (fraction - 0.5) * 1512 / (982 * 1.424) * d } // metres, by the lens
     #expect(scene.lift(across(0.95, 30), 30) > 0.3)
     #expect(scene.lift(across(0.05, 45), 45) == 0)
     #expect(scene.lift(across(0.3, 20), 20) == 0)
+    #expect(scene.lift(0, 4) == 0)
 }

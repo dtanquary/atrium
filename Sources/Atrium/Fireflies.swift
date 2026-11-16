@@ -188,6 +188,7 @@ final class Fireflies: SKScene {
     /// where the ground is lower, and never over trees.
     func lift(_ x: CGFloat, _ d: CGFloat) -> CGFloat {
         let foot = project(x, 0, d), far = MeadowPhoto.depth(d)
+        guard foot.y >= photoFrame.minY else { return 0 } // nearer than the photo's bottom edge: no ground of its own on screen to stand on
         let column = columns[min(max(Int((foot.x - photoFrame.minX) / photoFrame.width * 64), 0), 63)]
         let row = column.firstIndex { $0 >= far } ?? 0 // where the photo's ground is that far, up from its bottom
         return max(0, photoFrame.minY + (CGFloat(row) + 0.5) / CGFloat(column.count) * photoFrame.height - foot.y) * d / (size.height * focal)
