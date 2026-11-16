@@ -3551,7 +3551,7 @@ private enum Fuel {
     var glow: (smoke: RGB, glare: RGB, shine: Float) {
         switch self {
         case .kerosene: (rgb(255, 168, 84), rgb(255, 150, 70), 1)
-        case .solid: (rgb(255, 212, 146), rgb(255, 196, 116), 0.6)
+        case .solid: (rgb(255, 212, 146), rgb(255, 196, 116), 1)
         case .methane: (rgb(204, 176, 255), rgb(176, 150, 255), 0.6)
         case .hydrogen: (rgb(196, 214, 255), rgb(170, 190, 255), 0.2)
         case .hypergolic: (rgb(255, 160, 100), rgb(255, 140, 84), 0.5)
