@@ -334,21 +334,23 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
     #expect(!scene.shedding && scene.movements == 1, "\(scene.movements) movements a minute after \(rocket)'s lift-off")
 }
 
-/// Starship has a pad of its own at the Spaceport: with only it switched on, it lifts off and its booster comes back
-/// to the tower again and again, and nothing else is ever on the pad.
+/// Starship has a pad of its own at the Spaceport: with only it switched on, it lifts off, its booster and then its
+/// ship come back to the tower's arms again and again, and nothing else is ever on the pad.
 @MainActor @Test func pixelSpaceportCatchesStarship() throws {
     var settings: [String: Double] = ["spaceport.launches": 3]
     for knob in PixelCity.spaceportKnobs where knob.key.hasPrefix("spaceport.rocket.") { settings[knob.key] = knob.key == "spaceport.rocket.starship" ? 1 : 0 }
     defer { settings.keys.forEach(UserDefaults.standard.removeObject) }
     for (key, value) in settings { UserDefaults.standard.set(value, forKey: key) }
     let scene = PixelCity(size: CGSize(width: 800, height: 500), spaceport: true)
-    var flown = Set<String>()
+    var flown = Set<String>(), ships = 0, held = false
     for step in 0..<7_200 {
         scene.update(Double(step) / 10)
         if step % 20 == 0 { scene.didFinishUpdate() }
         flown.insert(scene.rocketName)
+        if scene.shipCaught, !held { ships += 1 }
+        held = scene.shipCaught
     }
-    #expect(flown == ["STARSHIP"] && scene.movements >= 4, "\(scene.movements) lift-offs and catches, of \(flown.sorted())")
+    #expect(flown == ["STARSHIP"] && scene.movements >= 4 && ships >= 2, "\(scene.movements) lift-offs and catches, \(ships) of them ships, of \(flown.sorted())")
 }
 
 /// New Glenn's booster comes back to a landing zone like a Falcon's: with only it switched on, it lifts off and
