@@ -32,7 +32,7 @@ black-hole|Black Hole|2.5|SNAPSHOT_DEFAULTS=blackhole.speed=2
 dappled-light|Dappled Light|4|SNAPSHOT_DEFAULTS=dappled.previewTime=1,dappled.previewHour=17.5,dappled.weather=1
 earth-from-orbit|Earth from Orbit|4|SNAPSHOT_DEFAULTS=latitude=25,longitude=78,earth.previewStorm=1
 etching|Etching|4|SNAPSHOT_DEFAULTS=etching.drawn=0.6908,etching.picture=1,etching.speed=8
-fireflies|Fireflies|8|
+fireflies|Fireflies|8|SNAPSHOT_DEFAULTS=fireflies.seed=2
 fish-tank|Fish Tank|4|SNAPSHOT_APPEARANCE=light SNAPSHOT_DEFAULTS=tank.seed=7
 flowing-gradient|Flowing Gradient|4|GRADIENT_SEED=2 SNAPSHOT_APPEARANCE=dark SNAPSHOT_DEFAULTS=gradient.palette=Midnight,gradient.ribbonsOn=1,gradient.previewTime=1,gradient.previewHour=15
 galaxy|Galaxy|4|SNAPSHOT_DEFAULTS=galaxy.kind=Whirlpool,galaxy.rotation=4
