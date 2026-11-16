@@ -24,7 +24,9 @@ final class WindScene: SKScene {
     nonisolated static let speed = Knob(key: "wind.speed", label: "Speed", range: 0.25...4, standard: 1, section: "Streaks", format: .times)
     nonisolated static let length = Knob(key: "wind.length", label: "Streak length", range: 0.25...2, standard: 1, section: "Streaks", format: .times)
     nonisolated static let density = Knob(key: "wind.density", label: "Density", range: 0.1...1, standard: 0.6, section: "Streaks")
-    nonisolated static let knobs = [zoom, background, opacity, brightness, saturation, look, speed, length, density]
+    /// A faint pool of the palette's colour where it blows, under the streaks, after nullschool's overlay of speed.
+    nonisolated static let wash = Knob(key: "wind.wash", label: "Speed wash", range: 0...0.25, standard: 0.1, section: "Streaks")
+    nonisolated static let knobs = [zoom, background, opacity, brightness, saturation, look, speed, length, density, wash]
 
     /// Calm to strong, for Dark Mode; Light Mode draws the same hues as ink.
     nonisolated static let palettes: [(name: String, stops: [SIMD3<Float>])] = [
@@ -41,7 +43,7 @@ final class WindScene: SKScene {
     private let uniforms = (clock: SKUniform(name: "u_clock", float: 0), vmax: SKUniform(name: "u_vmax", float: 10),
                             rect: SKUniform(name: "u_rect", vectorFloat4: .zero), trail: SKUniform(name: "u_trail", float: 2),
                             density: SKUniform(name: "u_density", float: 0.6), brush: SKUniform(name: "u_brush", float: 1),
-                            pace: SKUniform(name: "u_pace", float: 5))
+                            pace: SKUniform(name: "u_pace", float: 5), wash: SKUniform(name: "u_wash", float: 0.1))
     /// The background's kind (1 relief, 2 day, 3 night) and its sliders.
     private let ground = (kind: SKUniform(name: "u_kind", float: 0), opacity: SKUniform(name: "u_opacity", float: 0.35),
                           brightness: SKUniform(name: "u_brightness", float: 1), saturation: SKUniform(name: "u_saturation", float: 0.8))
@@ -74,7 +76,7 @@ final class WindScene: SKScene {
         streaks.anchorPoint = .zero
         streaks.shader = SKShader(source: Self.source, uniforms: [
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]),
-            SKUniform(name: "u_field", texture: field), uniforms.clock, uniforms.vmax, uniforms.rect, uniforms.trail, uniforms.density, uniforms.brush, uniforms.pace,
+            SKUniform(name: "u_field", texture: field), uniforms.clock, uniforms.vmax, uniforms.rect, uniforms.trail, uniforms.density, uniforms.brush, uniforms.pace, uniforms.wash,
             SKUniform(name: "u_dark", float: dark ? 1 : 0), SKUniform(name: "u_noise", texture: Self.noise),
         ] + stops.indices.map { SKUniform(name: "u_c\($0)", vectorFloat3: stops[$0]) })
         half.addChild(streaks)
@@ -101,6 +103,7 @@ final class WindScene: SKScene {
         uniforms.brush.floatValue = Float(Self.look.value)
         uniforms.trail.floatValue = Float(2 * Self.length.value)
         uniforms.density.floatValue = Float(Self.density.value)
+        uniforms.wash.floatValue = Float(Self.wash.value) * (dark ? 1 : 0.5) // ink on paper reads stronger
         ground.opacity.floatValue = Float(Self.opacity.value)
         ground.brightness.floatValue = Float(Self.brightness.value)
         ground.saturation.floatValue = Float(Self.saturation.value)
@@ -261,7 +264,8 @@ final class WindScene: SKScene {
         float crowd = clamp(-div * 2.0 * u_vmax / max(windHere, 1.0), -1.0, 1.0);
         // brightness saturates at half the day's strongest wind, as hint.fm's does, so every day has highlights
         float fast = clamp(windHere / (0.5 * max(u_vmax, 8.0)), 0.0, 1.0);
-        float glow = (1.0 - exp(-2.2 * sum * (1.0 + 0.8 * crowd))) * (0.4 + 0.6 * fast) + 0.06 * min(film, 1.0);
+        // a soft wash of the speed's colour, so windy regions sit in a faint pool of it and calm ones stay dark
+        float glow = (1.0 - exp(-2.2 * sum * (1.0 + 0.8 * crowd))) * (0.4 + 0.6 * fast) + 0.06 * min(film, 1.0) + u_wash * fast * fast;
         glow = min(glow, 1.0);
         vec3 c = s < 1.0 ? mix(u_c0, u_c1, s) : (s < 2.0 ? mix(u_c1, u_c2, s - 1.0) : mix(u_c2, u_c3, s - 2.0));
         if (u_dark < 0.5) { c = c / max(max(c.r, c.g), c.b) * (0.6 - 0.08 * s); } // ink, deeper where it's windier

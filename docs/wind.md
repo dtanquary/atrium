@@ -26,6 +26,7 @@ The live wind around you, drawn as thin streaks streaming across the map, in the
 - **Colour** comes from the palette's four stops, calm to strong, at √(speed / max(vmax, 8 m/s)), so a calm day still spans the palette, as hint.fm scales to the day's maximum. The strongest stop is pale, so fast air goes toward white, as in both references.
 - **Brightness** runs from 40% in calm air to 100% at half the day's strongest wind (max(vmax, 8 m/s)), as hint.fm's saturates, so every day has highlights. An earlier version peaked at 44% luma and had none, the biggest gap the reference agent measured.
 - **Speed on screen** depends on the zoom (`u_pace`): 1 m/s is 14 pt/s at the town zoom, 8 at the region and 5 at the continent, times the Speed setting. nullschool's ratio is 1 : 2.4 : 6.4 for the same three; at 5 pt/s everywhere a town looked frozen (330× real time).
+- **Speed wash:** under the streaks, a faint pool of the speed's colour, `0.1 × fast²` of it (half that in Light Mode, where ink on paper reads stronger), so a low or a windy band sits in a soft glow of its own colour while calm air stays dark: nullschool's overlay of speed, kept faint. Before it the frame was only fine lines on a flat ground, nothing soft or large, where Dave's favourites (Nebula, Flowing Gradient) are soft masses of colour. It's drawn in the same pass from `c` and `fast`, already worked out for each pixel, so it costs nothing measurable (two multiplies, no reads). Added 2026-11-16 from the review of 2026-11-14; Speed wash at 0 is the look before.
 - **Crowding:** real particles pile up where the wind converges and thin out where it spreads, which draws hint.fm's bright convergence lines. Stateless streaks can't pile up, so the shader brightens where the field's divergence (over ±20 pt) is negative and dims where it's positive.
 - **Half resolution:** the streaks render into an `SKEffectNode` scaled up 2×, with its child at half size. An effect node renders its children at their own scale, so the shader runs once per point, not per Retina pixel. That cut the GPU cost 4.5× (5.0 → 1.1 ms in the first version), and 1 pt lines barely soften.
 - **The map** (`WindMap`) is drawn once per zoom, background or location, then graded live by a shader (`mapSource`): Opacity, Brightness and Saturation.
@@ -75,6 +76,7 @@ All live, except Palette, which rebuilds. Zoom and Background redraw the map; a 
 | `wind.speed` | Speed | 0.25–4× | 1× | only changes how fast `u_clock` runs, so the picture stays the same and nothing jumps |
 | `wind.length` | Streak length | 0.25–2× | 1× | the tail's time constant, 2 s × this; a streak lives 2.25 × that |
 | `wind.density` | Density | 0.1–1 | 0.6 | the share of lattice cells with a spot, × 0.3; 0.4 was calmer but half as dense as the references |
+| `wind.wash` | Speed wash | 0–0.25 | 0.1 | a soft pool of the speed's colour under the streaks; 0 is none, as before 2026-11-16 |
 | `wind.palette` | Colors | Midnight, Sapphire, Lagoon, Amethyst, Garnet, Silver, Random | Midnight | four stops, calm to strong |
 
 **Speed on screen:** at 1× a 5 m/s breeze moves 70 pt/s at the town zoom (about 920× real time), 40 pt/s at the region (4,200×) and 25 pt/s at the continent (11,600×). hint.fm moves a 5 m/s wind about 80 pt/s at every zoom (scaled to this screen), nullschool 33–210 px/s; this is slower, for calm.
@@ -84,7 +86,7 @@ All live, except Palette, which rebuilds. Zoom and Background redraw the map; a 
 - Walk: 64 steps of `clamp(speed × 0.06, 0.8, 1.5)` pt, the field read every other step; `reach` 96 pt. Pace 14, 8, 5 pt/s per m/s by zoom.
 - Comets: tail `2 s × Streak length`, life 2.25 × tail, period life + 0.5. Strokes: travel 0.3–1 of 1.5 × tail, period life + 3 tails. Periods are rounded so they divide an hour, where `u_clock` wraps.
 - Line 0.25–0.85 pt from the walk; brightness 0.55–1 by spot; film `exp(−a / 6 tail)` at 6%.
-- Glow `(1 − exp(−2.2 × sum × (1 + 0.8 × crowd))) × (0.4 + 0.6 × fast) + 0.06 × film`, fast = speed / (0.5 × max(vmax, 8)), capped at 1.
+- Glow `(1 − exp(−2.2 × sum × (1 + 0.8 × crowd))) × (0.4 + 0.6 × fast) + 0.06 × film + wash × fast²`, fast = speed / (0.5 × max(vmax, 8)), capped at 1; wash is Speed wash, halved in Light Mode.
 - Background: `stops[0] × 0.2 + 0.055` in Dark Mode; paper (0.955, 0.953, 0.94) tinted 4% toward stop 1.
 
 ## Performance
@@ -120,7 +122,6 @@ Two research agents, 2026-09-26: one on the look of the reference maps (reading 
 ## Ideas / next steps
 - **Town-zoom relief:** Natural Earth's relief is magnified 28× there and turns to mush (Earth by day uses Landsat there instead). AWS Open Data's Terrain Tiles (Mapzen terrarium PNGs, `s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png`) give about 15 z10 tiles (1–1.5 MB per place, cached forever) that shade sharply, e.g. Denver's Dakota Hogback and creek valleys. They need an attribution line for their mixed sources (USGS 3DEP, SRTM, GMTED2010, ETOPO1, EU-DEM, and others) and a vertical exaggeration of about 2 to match Natural Earth.
 - **A live status line** in Settings, like Weather's ("Live: 12 km/h from SW · updated 3:05 PM"), once `StatusRow` can show under an ungated row.
-- **A nullschool-style overlay:** a faint jewel wash of wind speed over the background.
 - **Crossfade** on a zoom change, as Weather does on a new forecast.
 
 ## Checking it
