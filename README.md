@@ -43,7 +43,7 @@ Sunlight through a tree onto a warm white plaster wall, from the real Sun where 
 | ![Dappled Light in Dark Mode, on charcoal plaster](docs/images/dappled-light-dark.jpg) | ![Dappled Light during a partial solar eclipse](docs/images/dappled-light-eclipse.jpg) |
 | Dark Mode: the same light on charcoal plaster | A partial solar eclipse: every dapple a crescent |
 | ![Dappled Light on sage lap siding](docs/images/dappled-light-siding.jpg) | ![Dappled Light on an oak floor, through a window](docs/images/dappled-light-window.jpg) |
-| Sage lap siding | An oak floor by a window, mid-afternoon |
+| Sage lap siding | An oak floor by a window, just after noon |
 
 #### Rain on Glass
 Drops creeping and running down a rainy window, each a tiny lens showing the street upside down. Behind the glass: ten real places, blurred as a camera focused on the glass sees them (from a wet Hamburg square to a cabin in the snow), or city lights in seven palettes. Turn on Follow the weather and the glass does what the weather where you are would do to a real window: rain when it rains, drops drying when it stops, fog on humid mornings, snow melting into beads, and fern frost growing across the pane over hours below freezing.
