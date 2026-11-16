@@ -15,14 +15,17 @@ private let evenings: [(name: String, sun: Double, balance: SIMD3<Float>)] = [
 /// exposure of a wavy sea averages the sky well above the horizon, where calm water is a mirror. `waves` is how slow
 /// ripples move the water: how far they bend its reflection, how fast they drift, and how much they brighten and darken
 /// it, which is all the smooth long-exposure sea can show. `perch` is where the flock goes down to roost at the end of
-/// an evening (metres, from the eye): among the pier's legs, or into the reeds on the far shore.
+/// an evening (metres, from the eye): among the pier's legs, or into the reeds on the far shore. `lift` brightens the
+/// land's darkest tones, those under about 0.6% of its photo's sky, by that much again: the pond's far shore was nearly
+/// black in its photo, and went to one flat black bar; lifted, its tundra and grass show. Brighter tones aren't lifted,
+/// so the photo's bright water at the land's edge doesn't rim it with light.
 /// - Brighton's West Pier: "Tide bears the last glow - Brighton, UK" by sagesolar, CC BY 4.0,
 ///   https://commons.wikimedia.org/wiki/File:Tide_bears_the_last_glow_-_Brighton,_UK.jpg
 /// - A marsh pond: "Sunset over a tundra pond" by USFWS Alaska, public domain,
 ///   https://commons.wikimedia.org/wiki/File:Sunset_over_a_tundra_pond_(53708107535).jpg
-private let grounds: [(name: String, file: String, horizon: Float, sky: Float, rough: Float, waves: SIMD3<Float>, perch: SIMD3<Float>)] = [
-    ("Brighton West Pier", "murmuration-pier", 780.0 / 1533, 0.1252, 0.12, [0.03, 2.5, 0.22], [-26, 265, 8]),
-    ("Marsh pond", "murmuration-marsh", 15.0 / 706, 0.2635, 0.005, [0.05, 3.5, 0.12], [30, 420, -1]),
+private let grounds: [(name: String, file: String, horizon: Float, sky: Float, rough: Float, waves: SIMD3<Float>, perch: SIMD3<Float>, lift: Float)] = [
+    ("Brighton West Pier", "murmuration-pier", 780.0 / 1533, 0.1252, 0.12, [0.03, 2.5, 0.22], [-26, 265, 8], 0),
+    ("Marsh pond", "murmuration-marsh", 15.0 / 706, 0.2635, 0.005, [0.05, 3.5, 0.12], [30, 420, -1], 4.7),
 ]
 
 private let lightKnob = Knob(key: "murmuration.light", label: "Light", range: 0...5, standard: 0, section: "Scene",
@@ -128,7 +131,7 @@ final class Murmuration: SKScene, BatteryPaced {
             SKUniform(name: "u_aux", texture: photo.aux), before, after, blend,
             SKUniform(name: "u_cam", vectorFloat4: lens), balance, self.land,
             SKUniform(name: "u_birds", texture: birds.reflection),
-            SKUniform(name: "u_rough", float: ground.rough),
+            SKUniform(name: "u_rough", float: ground.rough), SKUniform(name: "u_lift", float: ground.lift),
             SKUniform(name: "u_noise", texture: CloudNoise.texture), SKUniform(name: "u_waves", vectorFloat3: ground.waves),
             WallpaperTime.now,
         ])
@@ -311,54 +314,62 @@ final class Murmuration: SKScene, BatteryPaced {
     /// The land as photographed, scaled from the photo's sky to ours so it stays a near-black silhouette; the water as
     /// our sky mirrored in it, times the water's reflectance measured in the photo (which keeps its ripples), with the
     /// flock's reflection darkening it, all gently bent by slow ripples. Light is linear until the end, then tone-mapped
-    /// like the sky.
+    /// like the sky. The water's work (three noise reads, six of the sky and six more of the aux map and the flock's
+    /// reflection) runs only where there is water: none above the horizon, where half the pier's photo is (most of it
+    /// clear sky), nor on the pond's far shore.
     private static let groundShader = """
     vec2 nuv(vec2 p) { return (fract(p) * 256.0 + 0.5) / 257.0; }
 
     void main() {
         vec2 uv = vec2(v_tex_coord.x, v_tex_coord.y * u_frame);
-        // Slow ripples on the water plane (the eye 2 m above it), from two layers of the baked noise drifting different
-        // ways. On screen they shrink toward the horizon, and they fade out far away, where they'd only shimmer.
-        float dip = max(u_cam.z - uv.y, 0.0) * 2.0 * u_cam.y;
-        float dist = 2.0 / max(dip, 0.004);
-        vec2 w = vec2((uv.x * 2.0 - 1.0) * u_cam.x * dist, dist);
-        float t = u_now * u_waves.y;
-        vec4 n1 = texture2D(u_noise, nuv(w * vec2(0.07, 0.11) + vec2(t * 0.004, t * 0.013)));
-        vec4 n2 = texture2D(u_noise, nuv(w * vec2(0.13, 0.19) + vec2(-t * 0.009, t * 0.007)));
-        vec2 slope = vec2(n1.r - n2.b, n1.b + n2.r - 1.0) * smoothstep(400.0, 60.0, dist);
-        vec2 shift = slope * dip * u_waves.x;
-        // Fine wavelets, stretched across the view as wind ripples are, drifting toward us; only on the nearer water,
-        // where a pixel still spans less than one of them.
-        vec4 n3 = texture2D(u_noise, nuv(w * vec2(0.3, 0.9) + vec2(t * 0.02, t * 0.12)));
-        float wavelets = (n3.g - 0.5) * smoothstep(45.0, 12.0, dist);
         vec4 photo = texture2D(u_texture, v_tex_coord);
         vec3 aux = texture2D(u_aux, v_tex_coord).rgb;
-        float ripples = texture2D(u_aux, v_tex_coord + vec2(shift.x, shift.y / u_frame)).g;
         // Land and pier: the photo's shading in our horizon's colour, keeping a little of its own, and darker than the
         // photo's long exposure made it, as a silhouette against a sunset is (under 4% of the sky in photos).
         vec3 shot = pow(photo.rgb / max(photo.a, 0.004), vec3(2.2));
+        shot += min(shot, vec3(0.0015)) * u_lift; // the darkest tones lifted (`lift`)
         float lw = dot(u_land, vec3(0.2126, 0.7152, 0.0722));
         vec3 land = mix(dot(shot, vec3(0.2126, 0.7152, 0.0722)) * u_land, shot * lw, 0.3) * 0.35;
-        // Waves tilt toward us, so rough water reflects sky higher than the mirror image, and a spread of it.
-        float mirror = 2.0 * u_cam.z - uv.y;
-        vec3 reflected = vec3(0.0);
-        for (int i = 0; i < 3; i++) {
-            float v = mirror + shift.y + u_rough * (0.3 + 0.5 * float(i));
-            vec2 st = vec2(uv.x + shift.x, clamp((v - u_cam.w) / (1.0 - u_cam.w), 0.0, 1.0));
-            vec3 c4 = mix(texture2D(u_before, st).rgb, texture2D(u_after, st).rgb, u_blend);
-            reflected += c4 * c4 * (4.0 / 3.0);
+        vec3 light = land;
+        if (aux.r > 0.0) {
+            // Slow ripples on the water plane (the eye 2 m above it), from two layers of the baked noise drifting
+            // different ways. On screen they shrink toward the horizon, and they fade out far away, where they'd only
+            // shimmer.
+            float dip = max(u_cam.z - uv.y, 0.0) * 2.0 * u_cam.y;
+            float dist = 2.0 / max(dip, 0.004);
+            vec2 w = vec2((uv.x * 2.0 - 1.0) * u_cam.x * dist, dist);
+            float t = u_now * u_waves.y;
+            vec4 n1 = texture2D(u_noise, nuv(w * vec2(0.07, 0.11) + vec2(t * 0.004, t * 0.013)));
+            vec4 n2 = texture2D(u_noise, nuv(w * vec2(0.13, 0.19) + vec2(-t * 0.009, t * 0.007)));
+            vec2 slope = vec2(n1.r - n2.b, n1.b + n2.r - 1.0) * smoothstep(400.0, 60.0, dist);
+            vec2 shift = slope * dip * u_waves.x;
+            // Fine wavelets, stretched across the view as wind ripples are, drifting toward us; only on the nearer
+            // water, where a pixel still spans less than one of them.
+            vec4 n3 = texture2D(u_noise, nuv(w * vec2(0.3, 0.9) + vec2(t * 0.02, t * 0.12)));
+            float wavelets = (n3.g - 0.5) * smoothstep(45.0, 12.0, dist);
+            float ripples = texture2D(u_aux, v_tex_coord + vec2(shift.x, shift.y / u_frame)).g;
+            // Waves tilt toward us, so rough water reflects sky higher than the mirror image, and a spread of it.
+            float mirror = 2.0 * u_cam.z - uv.y;
+            vec3 reflected = vec3(0.0);
+            for (int i = 0; i < 3; i++) {
+                float v = mirror + shift.y + u_rough * (0.3 + 0.5 * float(i));
+                vec2 st = vec2(uv.x + shift.x, clamp((v - u_cam.w) / (1.0 - u_cam.w), 0.0, 1.0));
+                vec3 c4 = mix(texture2D(u_before, st).rgb, texture2D(u_after, st).rgb, u_blend);
+                reflected += c4 * c4 * (4.0 / 3.0);
+            }
+            // The flock's reflection, the same way: on calm water its mirror image; on a wavy sea smeared up toward the
+            // horizon, most of it near the mirror image, so a flock close and high still darkens the sea under it.
+            float birds = 0.0;
+            for (int i = 0; i < 5; i++) {
+                float k = 0.1 + 0.8 * float(i);
+                float y = uv.y - shift.y - u_rough * k;
+                birds += texture2D(u_birds, vec2(uv.x + shift.x, (y + 1.4 * u_cam.z) / (2.4 * u_cam.z))).r * exp(-k * 0.7);
+            }
+            birds /= 2.04;
+            vec3 water = reflected * u_balance * ripples * 2.0 * (1.0 - birds * 0.9) * (1.0 + (slope.y + wavelets) * u_waves.z);
+            light = mix(land, water, aux.r);
         }
-        // The flock's reflection, the same way: on calm water its mirror image; on a wavy sea smeared up toward the horizon,
-        // most of it near the mirror image, so a flock close and high still darkens the sea under it.
-        float birds = 0.0;
-        for (int i = 0; i < 5; i++) {
-            float k = 0.1 + 0.8 * float(i);
-            float y = uv.y - shift.y - u_rough * k;
-            birds += texture2D(u_birds, vec2(uv.x + shift.x, (y + 1.4 * u_cam.z) / (2.4 * u_cam.z))).r * exp(-k * 0.7);
-        }
-        birds /= 2.04;
-        vec3 water = reflected * u_balance * ripples * 2.0 * (1.0 - birds * 0.9) * (1.0 + (slope.y + wavelets) * u_waves.z);
-        vec3 col = sqrt(1.0 - exp(-mix(land, water, aux.r)));
+        vec3 col = sqrt(1.0 - exp(-light));
         gl_FragColor = vec4(col + (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0, 1.0) * photo.a;
     }
     """
@@ -433,7 +444,9 @@ private final class Flock: SKNode {
     private var touched = 0..<0 // the rows of the reflection that last held ink
 
     // ponytail: 1,500 agents, each a parcel standing for about 40 birds (60,000 in all), which is what the CPU allows.
-    // A parcel draws as ten dark specks rather than forty faint ones, which matches how photos show a flock's grain.
+    // A parcel draws as twenty-five birds rather than forty fainter ones: up close the flock's grain and darkness then
+    // fall within what photos show (ten, drawn as dashes, read as grains of rice and made the flock a little dark; twenty
+    // silhouettes left a far flock a pale haze).
     private static let count = 1500
     private static let buckets = 8192  // a spatial hash of `cell`-metre cubes
     private static let cell: Float = 6
@@ -442,8 +455,8 @@ private final class Flock: SKNode {
     private static let core: Float = 0.68, reach: Float = 9.2
     private let roost = SIMD3<Float>(0, 200, 44), roostSize = SIMD2<Float>(55, 40)
     /// The nearest a flock heading our way comes before it turns away. Nearer than about 130 m (on a 1512-point
-    /// screen) a parcel's sprite is scaled up past the 64 points it's drawn at, and its ten birds show as one blurry
-    /// group moving together.
+    /// screen) a parcel's sprite is scaled up past the 64 points it's drawn at, and its twenty-five birds show as one
+    /// blurry group moving together.
     private static let nearest: Float = 160
 
     init(view: GroundView, ink: SKColor, perch: SIMD3<Float>) {
@@ -519,39 +532,44 @@ private final class Flock: SKNode {
         for sprite in sprites { sprite.color = ink }
     }
 
-    /// Eight scatterings of ten birds, some with wings level (a dash) and some raised (a small V), each drawn with its
-    /// wings at `turns` angles across 180°, all in one mipmapped texture so every parcel draws in one batch. A parcel
-    /// keeps its scattering and only changes angle, so its birds turn where they are rather than the whole parcel
-    /// spinning like a wheel, which gave it away as a group. Raised wings always point up the screen. Each bird keeps
-    /// its pose: at a few pixels a wingbeat can't be seen, and flipping between them only flickers. A parcel is
-    /// `parcel` metres across; birds are 0.4 m.
+    /// Eight scatterings of twenty-five starlings, each drawn with its wings at `turns` angles across 180°, all in one
+    /// mipmapped texture so every parcel draws in one batch. A parcel keeps its scattering and only changes angle, so its
+    /// birds turn where they are rather than the whole parcel spinning like a wheel, which gave it away as a group. Each
+    /// bird is a filled silhouette seen from below, about twice as wide as it is long, so it reads the same turned
+    /// either way: two swept triangular wings across an oval body (four in ten), the wings half folded (a third), or
+    /// the body alone (a quarter), as starlings close their wings between bursts of flapping. Each keeps its pose: at a
+    /// few pixels a wingbeat can't be seen, and flipping between them only flickers. Spread wings span 0.44 m, varying
+    /// with the whole bird up to 0.5 m. A parcel is `parcel` metres across.
     private static let layouts = 8, turns = 16
     private static func makeAtlas() -> [SKTexture] {
         let side: CGFloat = 64, perMetre = side / CGFloat(parcel)
         let sheet = paint(CGSize(width: side * CGFloat(turns), height: side * CGFloat(layouts))) { ctx in
-            ctx.setStrokeColor(rgb(0.03, 0.025, 0.035))
-            ctx.setLineCap(.round)
-            ctx.setLineWidth(0.15 * perMetre)
+            ctx.setFillColor(rgb(0.03, 0.025, 0.035))
             for layout in 0..<layouts {
                 var rng = Xorshift(seed: UInt64(layout + 7))
-                for _ in 0..<10 {
+                for _ in 0..<25 {
                     // Gaussian scatter, σ 1.3 m, so neighbouring parcels overlap into an even texture.
                     let r = CGFloat(min(sqrt(-2 * log(max(rng.unit(), 1e-4))) * 1.3, 3)), a = CGFloat(rng.unit() * 2 * .pi)
-                    // Spans vary by wing pose as much as by distance: in photos the 90th percentile bird is twice the median.
-                    let pose = CGFloat(exp((rng.unit() + rng.unit() + rng.unit() - 1.5) * 0.55))
-                    let span = min(0.36 * pose, 0.8) * perMetre, tilt = CGFloat(rng.unit() - 0.5) * 1.2, raised = rng.unit() < 0.5
+                    let size = min(1.05 * CGFloat(exp((rng.unit() + rng.unit() + rng.unit() - 1.5) * 0.3)), 0.5 / 0.42)
+                    let tilt = CGFloat(rng.unit() - 0.5) * 1.2, pose = rng.unit()
                     for turn in 0..<turns {
                         ctx.saveGState()
                         ctx.translateBy(x: CGFloat(turn) * side + side / 2 + cos(a) * r * perMetre,
                                         y: CGFloat(layout) * side + side / 2 + sin(a) * r * perMetre)
                         ctx.rotate(by: tilt + (CGFloat(turn) / CGFloat(turns) - 0.5) * .pi)
-                        if raised {
-                            ctx.move(to: CGPoint(x: -span * 0.4, y: span * 0.25)); ctx.addLine(to: .zero)
-                            ctx.addLine(to: CGPoint(x: span * 0.4, y: span * 0.25))
-                        } else {
-                            ctx.move(to: CGPoint(x: -span / 2, y: 0)); ctx.addLine(to: CGPoint(x: span / 2, y: 0))
+                        ctx.scaleBy(x: size * perMetre, y: size * perMetre)
+                        // In metres, wings across x: the body, then the wings spread or half folded. With the
+                        // poses and the size, the 90th percentile bird is about 1.7 times the median, as in photos.
+                        ctx.fillEllipse(in: CGRect(x: -0.035, y: -0.11, width: 0.07, height: 0.22))
+                        if pose < 0.75 {
+                            let tip = pose < 0.4 ? CGPoint(x: 0.21, y: -0.02) : CGPoint(x: 0.14, y: -0.09)
+                            for s: CGFloat in [-1, 1] {
+                                ctx.move(to: CGPoint(x: 0.02 * s, y: 0.05))
+                                ctx.addLine(to: CGPoint(x: tip.x * s, y: tip.y))
+                                ctx.addLine(to: CGPoint(x: 0.02 * s, y: -0.06))
+                                ctx.fillPath()
+                            }
                         }
-                        ctx.strokePath()
                         ctx.restoreGState()
                     }
                 }
@@ -596,13 +614,13 @@ private final class Flock: SKNode {
             sprite.size = CGSize(width: side, height: side)
             let alpha = (0.22 + 0.45 * facing) * (b.state == 2 ? min(max((p.z - perch.z) / 6, 0), 1) : 1) // fading into the roost
             sprite.alpha = CGFloat(alpha)
-            // Its reflection: ten birds of about 0.06 m² each, spread over the texels it lands on.
+            // Its reflection: twenty-five birds of about 0.025 m² each, spread over the texels it lands on.
             let below = 2 * horizon - at.y
             if below > -reach && below < horizon {
                 let x = at.x / across, y = (below + reach) / span * Float(rows)
                 let (tx, ty) = (Int(x.rounded(.down)), Int(y))
                 if x >= 0 && tx < cols - 1 && ty < rows - 1 {
-                    let ink = alpha * 0.6 * at.perMetre * at.perMetre / texel, fx = x - Float(tx), fy = y - Float(ty)
+                    let ink = alpha * 0.62 * at.perMetre * at.perMetre / texel, fx = x - Float(tx), fy = y - Float(ty)
                     splat[ty * cols + tx] += ink * (1 - fx) * (1 - fy); splat[ty * cols + tx + 1] += ink * fx * (1 - fy)
                     splat[(ty + 1) * cols + tx] += ink * (1 - fx) * fy; splat[(ty + 1) * cols + tx + 1] += ink * fx * fy
                     low = min(low, ty); high = max(high, ty + 2)
