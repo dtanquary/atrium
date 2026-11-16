@@ -512,12 +512,13 @@ private func seeded(_ seed: Double, _ others: [String: Double] = [:]) -> [String
 }
 
 /// A river's past is made on another thread: the scene is made at once, with nothing on its ground, and dresses
-/// itself when the river lands, with no frame drawn to fetch it. (Landing needs the main actor, which other tests
-/// hold for a minute at a time when they run beside this one: hence the long wait.)
+/// itself when the river lands, with no frame drawn to fetch it. (Landing needs the main actor, which the whole
+/// suite queues for: a wait timed by the clock ran out in the queue, just ahead of the landing, so the wait is
+/// counted in the test's own turns on the main actor, and a landing already queued always comes within one.)
 @MainActor @Test func meanderMakesItsPastOffTheMainThread() async throws {
-    let scene = Meander(size: CGSize(width: 756, height: 491)), clock = ContinuousClock(), start = clock.now
+    let scene = Meander(size: CGSize(width: 756, height: 491))
     #expect(scene.trim.content.children.isEmpty)
-    while scene.trim.content.children.isEmpty, clock.now - start < .seconds(600) { try await Task.sleep(for: .milliseconds(10)) }
+    for _ in 0..<60_000 where scene.trim.content.children.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
     #expect(!scene.trim.content.children.isEmpty, "the river never landed")
 }
 
