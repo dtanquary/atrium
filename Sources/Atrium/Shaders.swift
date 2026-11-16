@@ -208,7 +208,12 @@ let nebulaKnobs = [
     let mix = SKUniform(name: "u_mix", float: 0)
     private var waited = 0.0, changing = false
 
-    init() { Self.roll(now) }
+    init() {
+        // ("nebula.seed" is for the tests, which want the same roll twice; nothing else sets it.)
+        let seed = UInt64(max(UserDefaults.standard.integer(forKey: "nebula.seed"), 0))
+        var rng = SplitMix(state: seed > 0 ? seed : .random(in: 1...UInt64.max))
+        Self.roll(now, using: &rng)
+    }
 
     /// seed, zoom, band, then the palette's background, main gas, secondary gas and hot core
     private static func uniforms(_ suffix: String) -> [SKUniform] {
@@ -219,12 +224,12 @@ let nebulaKnobs = [
 
     /// A new nebula: a new region of the endless noise field, its scale, the band it lies along (height, slope,
     /// width), and a palette, unless one is pinned.
-    private static func roll(_ set: [SKUniform]) {
+    private static func roll(_ set: [SKUniform], using rng: inout some RandomNumberGenerator) {
         let palette = (nebulaPalettes.first { $0.name == UserDefaults.standard.string(forKey: "nebula.palette") }
-            ?? nebulaPalettes.randomElement()!).colours
-        set[0].vectorFloat2Value = [.random(in: 0...100), .random(in: 0...100)]
-        set[1].floatValue = .random(in: 1.2...1.9)
-        set[2].vectorFloat3Value = [.random(in: 0.38...0.62), .random(in: -0.6...0.6), .random(in: 0.26...0.4)]
+            ?? nebulaPalettes.randomElement(using: &rng)!).colours
+        set[0].vectorFloat2Value = [.random(in: 0...100, using: &rng), .random(in: 0...100, using: &rng)]
+        set[1].floatValue = .random(in: 1.2...1.9, using: &rng)
+        set[2].vectorFloat3Value = [.random(in: 0.38...0.62, using: &rng), .random(in: -0.6...0.6, using: &rng), .random(in: 0.26...0.4, using: &rng)]
         for i in 0..<4 { set[3 + i].vectorFloat3Value = palette[i] }
     }
 
@@ -235,7 +240,8 @@ let nebulaKnobs = [
         waited += seconds
         guard waited >= every else { return nil }
         changing = true
-        Self.roll(next)
+        var rng = SystemRandomNumberGenerator()
+        Self.roll(next, using: &rng)
         let mix = mix
         return .sequence([.customAction(withDuration: 90) { _, elapsed in mix.floatValue = Float(elapsed / 90) },
                           .run { [weak self] in self?.finish() }])

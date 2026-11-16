@@ -84,7 +84,7 @@ CPU 0.45 ms and GPU about 1.6 ms per frame (release, 2x; the dissolve's thicknes
 **On battery it draws at three quarters of the screen's resolution each way** (`batteryScale` in Scenes.swift, under the same condition as its battery rate, with Settings → Power's Lighter drawing on battery, on unless changed; 2026-10-14). That cuts the GPU's work a frame by 40% (1.49 to 0.90 ms, frames drawn back to back at 3024 × 1964), about 24 ms of GPU time a second at 15 fps. Side by side at 100% (`trimShots` in TrimShots.swift) the gas can't be told apart and the stars barely; at half resolution the faintest stars thinned and softened, so it stays at three quarters.
 
 ## Gotchas and shortcuts
-- Every roll is random. To compare palettes, pin one with `SNAPSHOT_DEFAULTS="nebula.palette=Hubble"`. To see another moment, raise `SNAPSHOT_SECONDS`: the drift runs on `u_now`, which moves with it.
+- Every roll is random. To compare palettes, pin one with `SNAPSHOT_DEFAULTS="nebula.palette=Hubble"`. To render the same roll twice, pin its seed too, `nebula.seed=5` (a test-only key, any whole number above 0; nothing else sets it): with the palette pinned, one seed gives the same cloud in every palette. To see another moment, raise `SNAPSHOT_SECONDS`: the drift runs on `u_now`, which moves with it.
 - Helper functions can't read uniforms, so `brightStar` takes `t` as a parameter.
 - The Planetary palette's dense and accent slots are swapped on purpose. The accent covers most of the area (`w.x` is often high), so putting red in dense and teal in accent makes it read teal with a red rim, like the Helix. The first attempt came out salmon.
 - Colours are mixed in RGB and then soft-clipped. Emission's red and blue together can drift slightly pink; that's real (hydrogen-alpha plus hydrogen-beta) but has been kept restrained.
@@ -110,6 +110,7 @@ CPU 0.45 ms and GPU about 1.6 ms per frame (release, 2x; the dissolve's thicknes
 ```sh
 SNAPSHOT_SCENE=Nebula swift test                                        # a random roll
 SNAPSHOT_DEFAULTS="nebula.palette=Planetary" SNAPSHOT_SCENE=Nebula swift test
+SNAPSHOT_DEFAULTS="nebula.seed=5,nebula.palette=Dusty" SNAPSHOT_SCENE=Nebula swift test --filter everySceneRenders  # the same roll every time
 SNAPSHOT_DEFAULTS="nebula.palette=Hubble,nebula.contrast=1.5,nebula.hue=120" SNAPSHOT_SCENE=Nebula swift test
 ```
 `SNAPSHOT_SECONDS` moves the gas (the shader runs on `u_now`), so a larger value previews the drift. To test cycling fast, temporarily shorten the `8 * 60` wait and the 90 s dissolve, then run the app binary directly and check that it survives several handovers.
