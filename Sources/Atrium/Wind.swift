@@ -1,3 +1,4 @@
+import CoreImage
 import CoreLocation
 import SpriteKit
 
@@ -17,7 +18,7 @@ final class WindScene: SKScene {
                                           shownWhen: background.key)
     nonisolated static let brightness = Knob(key: "wind.mapBrightness", label: "Brightness", range: 0.3...2, standard: 1, section: "Map",
                                              shownWhen: background.key)
-    nonisolated static let saturation = Knob(key: "wind.mapSaturation", label: "Saturation", range: 0...1.5, standard: 0.8, section: "Map",
+    nonisolated static let saturation = Knob(key: "wind.mapSaturation", label: "Saturation", range: 0...1.5, standard: 0.4, section: "Map",
                                              shownWhen: background.key)
     nonisolated static let look = Knob(key: "wind.look", label: "Look", range: 0...1, standard: 1, section: "Streaks",
                                        format: .choice(["Comets", "Brush strokes"]))
@@ -46,7 +47,7 @@ final class WindScene: SKScene {
                             pace: SKUniform(name: "u_pace", float: 5), wash: SKUniform(name: "u_wash", float: 0.1))
     /// The background's kind (1 relief, 2 day, 3 night) and its sliders.
     private let ground = (kind: SKUniform(name: "u_kind", float: 0), opacity: SKUniform(name: "u_opacity", float: 0.35),
-                          brightness: SKUniform(name: "u_brightness", float: 1), saturation: SKUniform(name: "u_saturation", float: 0.8))
+                          brightness: SKUniform(name: "u_brightness", float: 1), saturation: SKUniform(name: "u_saturation", float: 0.4))
     private var clockTime: Double = 0, lastUpdate: TimeInterval?, sinceField: TimeInterval = 0
     private var zoomShown = -1, backgroundShown = -1, mapCentre = CLLocationCoordinate2D()
     private let dark = systemIsDark, base: SIMD3<Float>
@@ -126,10 +127,13 @@ final class WindScene: SKScene {
     private var place: WindMap { WindMap(centre: mapCentre, kmAcross: WindField.spans[zoomShown], size: size) }
 
     /// The relief or Earth image for the zoom and where you are, from what's on disk. A plain sprite of the
-    /// background colour without one (SKRenderer, in the tests, ignores backgroundColor).
+    /// background colour without one (SKRenderer, in the tests, ignores backgroundColor). Blue Marble's land, by day
+    /// or as terrain, is sharpened in Dark Mode at the region and continent zooms, where it's drawn at about its own
+    /// resolution: laid at a third over a ground about as dark, it read as flat charcoal with only the lakes showing.
     private func drawMap() {
         mapCentre = WindField.shared.forecast(zoom: zoomShown).centre
-        map.texture = backgroundShown == 1 ? place.shadedRelief() : place.earth(Imagery.layers(backgroundShown))
+        let detail = dark && zoomShown > 0 && [2, 4].contains(backgroundShown)
+        map.texture = backgroundShown == 1 ? place.shadedRelief() : place.earth(Imagery.layers(backgroundShown), detail: detail)
         map.shader = map.texture == nil ? nil : mapShader
         map.color = backgroundColor
         ground.kind.floatValue = backgroundShown == 1 ? 0 : backgroundShown == 3 ? 2 : 1 // shade, an image, or lights
@@ -473,7 +477,7 @@ struct WindMap {
     }
 
     /// A context at one pixel a point, with tiles drawn into it at their places.
-    private func draw(grey: Bool, fill: CGFloat, tiles: [(degrees: Double, column: Int, row: Int, image: CGImage)]) -> SKTexture? {
+    private func draw(grey: Bool, fill: CGFloat, tiles: [(degrees: Double, column: Int, row: Int, image: CGImage)]) -> CGImage? {
         let (w, h) = (Int(size.width), Int(size.height))
         guard let context = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
                                       space: grey ? CGColorSpaceCreateDeviceGray() : CGColorSpace(name: CGColorSpace.sRGB)!,
@@ -481,11 +485,12 @@ struct WindMap {
         context.setFillColor(CGColor(gray: fill, alpha: 1))
         context.fill(CGRect(x: 0, y: 0, width: w, height: h))
         context.interpolationQuality = .high
+        context.setShouldAntialias(false) // tiles meet on whole pixels: anti-aliased edges left a faint dark seam, which sharpening drew out
         for tile in tiles {
             let corner = point(Double(tile.column) * tile.degrees - 180, 90 - Double(tile.row + 1) * tile.degrees)
             context.draw(tile.image, in: CGRect(x: corner.x, y: corner.y, width: tile.degrees * scale.x, height: tile.degrees * scale.y))
         }
-        return context.makeImage().map { SKTexture(cgImage: $0) }
+        return context.makeImage()
     }
 
     /// The shaded relief as a greyscale texture.
@@ -502,7 +507,7 @@ struct WindMap {
                       let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
                 return (degrees, i, j, image)
             } }
-            return draw(grey: true, fill: 206.0 / 255, tiles: images)
+            return draw(grey: true, fill: 206.0 / 255, tiles: images).map { SKTexture(cgImage: $0) }
         }
     }
 
@@ -522,8 +527,10 @@ struct WindMap {
         return found
     }
 
-    /// NASA's Earth imagery from the tiles on disk; nil before any have downloaded.
-    func earth(_ layers: [Imagery]) -> SKTexture? {
+    /// NASA's Earth imagery from the tiles on disk; nil before any have downloaded. With `detail`, sharpened, which
+    /// brings out rivers, towns, lake shores and ridges and leaves the mean brightness where it was, so the streaks
+    /// still lead.
+    func earth(_ layers: [Imagery], detail: Bool = false) -> SKTexture? {
         let images: [(Double, Int, Int, CGImage)] = earthTiles(layers).compactMap { tile in
             guard let source = CGImageSourceCreateWithURL(tile.file as CFURL, nil),
                   let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return nil }
@@ -531,8 +538,18 @@ struct WindMap {
             return (288 / pow(2, Double(tile.level)), tile.column, tile.row,
                     tile.base ? image : image.copy(maskingColorComponents: [0, 6, 0, 6, 0, 6]) ?? image)
         }
-        return images.isEmpty ? nil : draw(grey: false, fill: 0, tiles: images)
+        guard !images.isEmpty, let image = draw(grey: false, fill: 0, tiles: images) else { return nil }
+        return SKTexture(cgImage: detail ? Self.sharpened(image) ?? image : image)
     }
+
+    /// An image sharpened by an unsharp mask 8 pixels wide: edges and small features stand out, and the brightness
+    /// of any area larger than that stays where it was.
+    static func sharpened(_ image: CGImage) -> CGImage? {
+        let sharp = CIImage(cgImage: image).applyingFilter("CIUnsharpMask", parameters: [kCIInputRadiusKey: 8, kCIInputIntensityKey: 1.5])
+        return imaging.createCGImage(sharp, from: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+    }
+
+    private static let imaging = CIContext(options: [.cacheIntermediates: false])
 }
 
 /// NASA imagery from GIBS, the Global Imagery Browse Services (public domain; no key), in geographic tiles of 512 px:

@@ -1,3 +1,4 @@
+import CoreGraphics
 import CoreLocation
 import Foundation
 import Testing
@@ -39,4 +40,23 @@ import Testing
     #expect(town.filter(\.base).count == 2 && town.count == 20) // 42° N falls on a Blue Marble tile edge: 2 of them, 18 of Landsat's
     // the tile over the centre: 288/2^7 = 2.25° tiles from 180° W and 90° N
     #expect(town.contains { $0.remote.path.hasSuffix("BlueMarble_NextGeneration/default/500m/7/21/40.jpeg") })
+}
+
+/// The day map's sharpening brings out an edge and leaves broad areas, and the image's size, as they were.
+@Test func windMapSharpensEdgesNotLevels() throws {
+    let (w, h) = (64, 32)
+    var grey = [UInt8](repeating: 51, count: w * h) // 0.2 on the left, 0.3 on the right
+    for y in 0..<h { for x in w / 2..<w { grey[y * w + x] = 77 } }
+    let context = try #require(CGContext(data: &grey, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w,
+                                         space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue))
+    let image = try #require(context.makeImage())
+    let sharp = try #require(WindMap.sharpened(image))
+    #expect(sharp.width == w && sharp.height == h)
+    var out = [UInt8](repeating: 0, count: w * h)
+    let reader = try #require(CGContext(data: &out, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w,
+                                        space: CGColorSpaceCreateDeviceGray(), bitmapInfo: CGImageAlphaInfo.none.rawValue))
+    reader.draw(sharp, in: CGRect(x: 0, y: 0, width: w, height: h))
+    let row = Array(out[(h / 2) * w..<(h / 2 + 1) * w])
+    #expect(row[w / 2 - 1] < 46 && row[w / 2] > 82) // darker and lighter either side of the edge
+    #expect(abs(Int(row[1]) - 51) <= 2 && abs(Int(row[w - 2]) - 77) <= 2) // far from it, the levels are kept
 }
