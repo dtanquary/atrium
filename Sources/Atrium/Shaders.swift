@@ -153,7 +153,10 @@ let nebulaKnobs = [
         float thick = clamp((g * 0.55 + (w.x + w.y) * 0.3 + band * 0.1 - 0.5) / 0.35, 0.0, 1.0);
         float keep = smoothstep(clip - 0.15, clip + 0.15, thick); // all of it while clip is -0.2 or less
         float density = smoothstep(0.25, 0.8, g) * keep;
-        vec3 neb = 1.0 - exp(-c * density * density * 2.2);                // soft clip keeps bright cores from blowing out
+        // The light follows the gas on past where density stops rising (g 0.8), or the brightest body flattens into one
+        // tone: from g 0.7 up it dims a little below g 0.84 and brightens above it, about as much as the whole cloud.
+        float glow = density * density * 2.2 * max(1.0 + 4.0 * (g - 0.84) * smoothstep(0.7, 0.8, g), 0.5);
+        vec3 neb = 1.0 - exp(-c * glow);                                     // soft clip keeps bright cores from blowing out
         float lane = smoothstep(0.5, 0.72, dust);
         neb *= 1.0 - 0.85 * lane;                                            // dark dust lanes
         // The gas dims the stars behind it a little; a lane across the gas is dust in front of them and hides nearly

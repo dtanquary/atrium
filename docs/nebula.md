@@ -16,7 +16,8 @@ Everything is maths per pixel, per frame:
    - `u_base` blends to `u_dense` with gas density
    - `u_accent` comes in where the warp `w.x` is high
    - `u_hot` lights up where density and warp overlap
-   - a soft clip, `1 - exp(-c·density²·2.2)`, keeps bright cores from blowing out
+   - a soft clip, `1 - exp(-c·density²·2.2·m)`, keeps bright cores from blowing out
+   - `m` lets the light follow the gas on past where density stops rising (`g` 0.8): `1 + 4(g − 0.84)`, phased in from `g` 0.7 to 0.8 and never under 0.5. Without it the brightest body, where the band lifts `g` past 0.8 across a wide area, was one flat tone: in a Dusty or Oxygen roll whose band sits on bright gas, 19–20% of the lit pixels were in the top 10 brightness levels, a slab. Now 6–8%, and the slab shows its folds. Centred at 0.84, it dims the shoulder a little and lifts the peaks a little, so the cloud as a whole comes out 1–2% dimmer, never brighter (pinned rolls in Dusty, Oxygen, Hubble, Emission and Dark Cloud; the brightest 1% rise by up to 15 levels in a slab roll and fall in the others). The review's own idea, `(0.55 + 0.9·gas)` everywhere, made the whole cloud 6% brighter and left 16% of it piled at the top; centred at 0.82 it was as bright as before with brighter peaks; at 0.85 from `g` 0.65 the gold went muddy in rolls that were already good. (2026-11-16, from the review of 14 November.)
    - plus a faint wash around the band
 6. **Stars:**
    - `starField` puts one candidate star per 7 pt cell and keeps 30% of them, each twinkling ±20% at its own rate, dimmed behind dense gas and hidden behind dust lanes (above). Its random numbers come from `hash42`: `hash21` repeated every 50 cells, tiling the stars every 350 pt (Dave spotted it in Galaxy's emptier sky).
