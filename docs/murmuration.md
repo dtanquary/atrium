@@ -66,6 +66,7 @@ For repeatable snapshots, `MURMURATION_SEED=3` seeds the flock, and `MURMURATION
 
 ## Performance
 - Release build at 2x: CPU 1.25–1.8 ms (simulation 0.4–0.7, sprites 0.25, SpriteKit's own 1,500 nodes about 0.6), GPU 0.45–0.8 ms. It no longer scales with screen area.
+- 2026-11-15, after the review's changes, side by side with the code before them (release, 600 frames each, min and median, the quietest of three rounds while other sessions built): pier GPU 0.47 and 0.57 ms before, 0.40 and 0.48 after; pond 0.37 and 0.47, 0.35 and 0.43. CPU 1.0–1.2 ms either way: the birds' new shapes, the retouched pier and the shore's lift cost nothing, and the water's gate saves the GPU's difference.
 - The neighbour search reads positions copied in bucket order (`bucketPositions`), along memory, rather than each neighbour's whole `Bird`: about 0.04 ms a frame less (2026-10-14; the same flight to the bit).
 - The flock fixes of 2026-09-26 cost nothing measurable. Side by side on a busy machine: CPU 2.05–2.23 ms against 2.41–3.01 before, GPU 0.65–0.76 against 0.95–1.24. A parcel changes texture only when its angle crosses to the next of 16.
 - The ground shader does the water's work (three noise reads, six of the sky, six more of the aux map and the flock's reflection) only where the aux map has water (`if (aux.r > 0.0)`), not above the horizon, where half the pier's photo is and most of it clear sky, nor on the pond's far shore (2026-11-15, from the review). Drawn 21 times over to stand out of other sessions' load (min of 300 frames each, two rounds): one ground went from about 0.20 to 0.12 ms on the pier and 0.10 to 0.07 on the pond. The review had guessed 0.15–0.3 on the pier. Not quite to the byte: 5–10 pixels in 6 million moved by one level, the arithmetic laid out differently round the branch (see Sources/CLAUDE.md).
@@ -114,6 +115,8 @@ For repeatable snapshots, `MURMURATION_SEED=3` seeds the flock, and `MURMURATION
 - **Flock size** as a setting: more birds per parcel and wider spacing.
 
 ## Checking it
+`swift test --filter murmuration` runs its own tests: the pond's far shore is lifted out of flat black, and the water is still shaded (its ripples move) where the water map has water.
+
 To measure the flock, temporarily log each 5 s of `Flock.step`: the nearest bird's distance (y), the largest parcel on screen (`parcel × perMetre`), lone parcels (no other bird within 8 m) and how far they are from the middle, groups linked within 9 m, and the share of parcels whose angle jumps by more than one step in a frame. Run 400 s at a fixed light with a few `MURMURATION_SEED`s, and `MURMURATION_EVENING=0.83` for the descent.
 
 `SNAPSHOT_DEFAULTS="murmuration.light=2,murmuration.ground=0" MURMURATION_SEED=3 SNAPSHOT_SCENE="Murmuration" SNAPSHOT_SECONDS=30 swift test -c release -Xswiftc -enable-testing`. The simulation runs in `update(_:)`, so `SNAPSHOT_SECONDS` advances it; with seed 3, 106 s is a low pass that shows the reflection, and the first falcon comes at about 40 s. The scratchpad's `mur/opacity.py` measures flock coverage against a render with no birds.
