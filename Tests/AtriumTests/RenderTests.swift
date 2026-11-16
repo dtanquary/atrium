@@ -334,6 +334,28 @@ private func save(_ pixels: [UInt32], _ w: Int, _ h: Int, to url: URL) {
     #expect(!scene.shedding && scene.movements == 1, "\(scene.movements) movements a minute after \(rocket)'s lift-off")
 }
 
+/// Each rocket's flames burn what its engines do: five seconds after lift-off a kerosene rocket burns one flame,
+/// Starship methane, SLS its hydrogen core between two solid boosters, Long March 5 between two kerosene ones, and
+/// LVM3 only its two solids, its core lighting before they fall away.
+@MainActor @Test(arguments: [("falcon9", 5, "kerosene"), ("starship", 5, "methane"), ("sls", 5, "hydrogen solid solid"),
+                             ("longmarch", 5, "hydrogen kerosene kerosene"), ("lvm3", 5, "solid solid"), ("lvm3", 12.5, "hypergolic solid solid")])
+func pixelSpaceportBurnsEachRocketsFuel(of rocket: String, at seconds: Double, burning: String) throws {
+    var settings: [String: Double] = [:]
+    for knob in PixelCity.spaceportKnobs where knob.key.hasPrefix("spaceport.rocket.") { settings[knob.key] = knob.key == "spaceport.rocket.\(rocket)" ? 1 : 0 }
+    defer { settings.keys.forEach(UserDefaults.standard.removeObject) }
+    for (key, value) in settings { UserDefaults.standard.set(value, forKey: key) }
+    let scene = PixelCity(size: CGSize(width: 800, height: 500), spaceport: true)
+    var step = 0, liftoff: Int?
+    while liftoff == nil, step < 3_000 {
+        scene.update(Double(step) / 10)
+        if scene.movements == 1 { liftoff = step }
+        step += 1
+    }
+    let since = try #require(liftoff)
+    for step in since...(since + Int(seconds * 10)) { scene.update(Double(step) / 10) }
+    #expect(scene.burning.joined(separator: " ") == burning)
+}
+
 /// Starship has a pad of its own at the Spaceport: with only it switched on, it lifts off, its booster and then its
 /// ship come back to the tower's arms again and again, and nothing else is ever on the pad.
 @MainActor @Test func pixelSpaceportCatchesStarship() throws {

@@ -2583,6 +2583,8 @@ final class PixelCity: SKScene, BatteryPaced {
 
     /// For the tests: whether two boosters have been given the same landing zone (Starship's tower takes two in turn).
     var zoneShared: Bool { let zones = boosters.map(\.zone).filter { $0 < 2 }; return Set(zones).count < zones.count }
+    /// For the tests: what each flame burning now burns, the core's first.
+    var burning: [String] { flames().map { "\($0.fuel)" } }
     /// For the tests: whether Starship's ship is hanging in its tower's arms.
     var shipCaught: Bool { boosters.contains { $0.ship && $0.zone == 2 && $0.phase == .landed } }
 
@@ -3009,7 +3011,7 @@ final class PixelCity: SKScene, BatteryPaced {
                         for fire in fires {
                             let dx = Float(x) - fire.x, dy = (Float(y + base) - fire.y) * 1.2
                             let heat = (1 - (dx * dx + dy * dy).squareRoot() / 46) * fire.power
-                            if heat > 0 { c = mix(c, rgb(255, 168, 84) * (0.75 + 0.25 * c.sum() / 3), heat) }
+                            if heat > 0 { c = mix(c, fire.fuel.glow.smoke * (0.75 + 0.25 * c.sum() / 3), heat) }
                         }
                         if flood > 0 {
                             for lamp in lamps {
@@ -3052,38 +3054,52 @@ final class PixelCity: SKScene, BatteryPaced {
     /// wide it is, how strongly it lights the smoke round it, the row it's hidden below (the pad's deck, whose
     /// trench takes the exhaust, so at ignition only the flame between the engines and the deck shows and the
     /// rest comes into view as the rocket climbs; the ground for Starship's mount and the landing zones), and
-    /// whether it's the pale, near-invisible flame of hydrogen engines rather than a bright one.
-    private func flames() -> [(x: Float, y: Float, angle: Float, scale: Float, length: Float, wide: Float, power: Float, deck: Int, pale: Bool)] {
+    /// what it burns, which colours it. The core comes first, for the rocket to be drawn at its angle.
+    private func flames() -> [(x: Float, y: Float, angle: Float, scale: Float, length: Float, wide: Float, power: Float, deck: Int, fuel: Fuel)] {
         let k = 0.35 + 0.65 * night
-        var fires: [(x: Float, y: Float, angle: Float, scale: Float, length: Float, wide: Float, power: Float, deck: Int, pale: Bool)] = []
+        var fires: [(x: Float, y: Float, angle: Float, scale: Float, length: Float, wide: Float, power: Float, deck: Int, fuel: Fuel)] = []
         if let t = flightTime, t > (pad.rocket == .shuttle ? -6.6 : -2.6) {
             let at = climb(t), next = climb(t + 0.2), z = at.y - site.y, kit = pad.rocket.kit, deck = kit.caught ? ground : padDeck
             let angle = atan2(next.x - at.x, next.y - at.y), power = min(1, k * (z < 110 ? 1.2 : 0.8)) * max(0.2, 1 - z / 160)
+            let (qx, qy) = (cos(angle), -sin(angle))
             if at.y >= Float(h) + 40 {
             } else if pad.rocket == .shuttle {
                 // The Shuttle's three main engines light 6.6 seconds early, a short pale flame under the orbiter's
                 // tail, three rows above the boosters' nozzles; the boosters light at zero, at once, and both swing
                 // out from behind one another with the roll. The main engines alone burn on once they've gone.
-                let (ax, ay) = (sin(angle), cos(angle)), (qx, qy) = (cos(angle), -sin(angle)), roll = roll, main = -5 * cos(roll) * at.scale
-                fires.append((at.x + qx * main + ax * 3 * at.scale, at.y + qy * main + ay * 3 * at.scale, angle, at.scale, 16 * smoothstep(-6.6, -4.4, t), 2, 0.3 * power, deck, true))
+                let (ax, ay) = (sin(angle), cos(angle)), roll = roll, main = -5 * cos(roll) * at.scale
+                fires.append((at.x + qx * main + ax * 3 * at.scale, at.y + qy * main + ay * 3 * at.scale, angle, at.scale, 16 * smoothstep(-6.6, -4.4, t), 2, 0.3 * power, deck, .hydrogen))
                 if t >= 0, !shedding {
                     for side in [-1, 1] as [Float] {
                         let off = side * 3.5 * sin(roll) * at.scale
-                        fires.append((at.x + qx * off, at.y + qy * off, angle, at.scale, kit.flame.length, 3, 0.6 * power, deck, false))
+                        fires.append((at.x + qx * off, at.y + qy * off, angle, at.scale, kit.flame.length, 3, 0.6 * power, deck, .solid))
+                    }
+                }
+            } else if let strapped = kit.boosters, let parts = kit.sheds {
+                // Strap-ons that burn something other than the core each burn their own plume, and the core's own
+                // flame, shorter, burns between them: as the Shuttle's do, but never rolling. LVM3's core lights late.
+                let lit = smoothstep(-2.6, -0.4, t), wide = Float(parts.booster[0].count), off = (Float(kit.art[0].count) - wide) / 2 * at.scale
+                if !kit.late || t * kit.pace > 11 {
+                    fires.append((at.x, at.y, angle, at.scale, kit.flame.length * 0.5 * lit * (kit.late ? smoothstep(11, 12, t * kit.pace) : 1),
+                                  Float(kit.art[0].count) - 2 * wide - 1, (kit.fuel == .hydrogen ? 0.3 : 0.6) * power, deck, kit.fuel))
+                }
+                if !shedding {
+                    for side in [-1, 1] as [Float] {
+                        fires.append((at.x + qx * side * off, at.y + qy * side * off, angle, at.scale, kit.flame.length * lit, wide + 1, 0.6 * power, deck, strapped))
                     }
                 }
             } else {
-                fires.append((at.x, at.y, angle, at.scale, kit.flame.length * smoothstep(-2.6, -0.4, t), kit.flame.wide * (shedding ? 0.55 : 1), power, deck, false))
+                fires.append((at.x, at.y, angle, at.scale, kit.flame.length * smoothstep(-2.6, -0.4, t), kit.flame.wide * (shedding ? 0.55 : 1), power, deck, kit.fuel))
             }
         }
         for b in boosters where b.phase == .burn {
             if b.zone == 2 { // Starship's booster, or its ship
                 let at = pose(caught: b)
-                fires.append((at.x, at.y + (b.ship ? 0 : at.scale), at.angle, at.scale, b.ship ? 20 : 26, b.ship ? 3 : 4, 0.9 * k, ground, false))
+                fires.append((at.x, at.y + (b.ship ? 0 : at.scale), at.angle, at.scale, b.ship ? 20 : 26, b.ship ? 3 : 4, 0.9 * k, ground, .methane))
                 continue
             }
             let (rows, scale) = lens(b.z)
-            fires.append((Float(zones[b.zone]) + 0.5, Float(ground + 1) + rows + scale, 0, scale, 18, 2, 0.9 * k, ground, false))
+            fires.append((Float(zones[b.zone]) + 0.5, Float(ground + 1) + rows + scale, 0, scale, 18, 2, 0.9 * k, ground, b.of.kit.fuel))
         }
         return fires
     }
@@ -3138,9 +3154,10 @@ final class PixelCity: SKScene, BatteryPaced {
         var px = smoke
         for fire in fires where fire.length > 4 { // the glare round a flame
             let k = 0.35 + 0.65 * night, wide = 0.5 + fire.scale / 2
+            let (glare, shine) = (fire.fuel.glow.glare, fire.fuel.glow.shine)
             for (r, a) in [(30, 0.045), (20, 0.07), (11, 0.11), (5, 0.16)] as [(Float, Float)] {
                 let reach = Int(r * wide), cx = Int(fire.x), cy = Int(fire.y - 12 * fire.scale)
-                for dy in -reach...reach { for dx in -reach...reach where dx * dx + dy * dy <= reach * reach { px.plot(cx + dx, cy + dy, rgb(255, 150, 70), a * k) } }
+                for dy in -reach...reach { for dx in -reach...reach where dx * dx + dy * dy <= reach * reach { px.plot(cx + dx, cy + dy, glare, a * k * shine) } }
             }
         }
         let steel = mix(mix(lit(rgb(110, 114, 124), .zero), hazeColour, 0.12), rgb(22, 22, 32), night * 0.8)
@@ -3172,12 +3189,12 @@ final class PixelCity: SKScene, BatteryPaced {
         }
         for (i, fire) in fires.enumerated() { // flames flicker, a dozen times a second
             let jitter = 0.9 + 0.2 * Float((flicker &+ i &* 7) &* 2_654_435_761 % 7) / 6
-            flame(into: &px, x: fire.x, y: fire.y, angle: fire.angle, scale: fire.scale, length: fire.length * jitter, wide: fire.wide, deck: fire.deck, pale: fire.pale)
+            flame(into: &px, x: fire.x, y: fire.y, angle: fire.angle, scale: fire.scale, length: fire.length * jitter, wide: fire.wide, deck: fire.deck, fuel: fire.fuel)
         }
         let shed = shed
         if let flying, let fire = fires.first, flying.y < Float(h) + 40 {
             let art = pad.rocket == .shuttle ? shuttleStack(roll: roll, boosters: shed.isEmpty) : (shed.isEmpty ? nil : kit.sheds?.core) ?? art
-            stamp(art, into: &px, x: flying.x, y: flying.y, angle: fire.angle, scale: flying.scale, paint: rocketPaint(flood: floodlit(SIMD2(flying.x, flying.y), by: site)), soot: soot, heat: 0.3 + 0.5 * night)
+            stamp(art, into: &px, x: flying.x, y: flying.y, angle: fire.angle, scale: flying.scale, paint: rocketPaint(flood: floodlit(SIMD2(flying.x, flying.y), by: site)), soot: soot, heat: 0.3 + 0.5 * night, by: shed.isEmpty ? kit.boosters ?? kit.fuel : kit.fuel)
         }
         if let parts = kit.sheds {
             for b in shed where b.y < Float(h) + 40 { stamp(parts.booster, into: &px, x: b.x, y: b.y, angle: b.angle, scale: b.scale, paint: rocketPaint(flood: 0), soot: soot) }
@@ -3187,7 +3204,7 @@ final class PixelCity: SKScene, BatteryPaced {
         for (i, b) in boosters.enumerated() where b.phase != .away && b.zone == 2 { // Starship's: no legs, and they come down to the tower
             let at = pose(caught: b), p = b.phase == .landed && i == held ? caught : SIMD2(at.x, at.y)
             stamp(b.ship ? shipArt : superHeavyArt, into: &px, x: p.x, y: p.y, angle: at.angle, scale: at.scale,
-                  paint: rocketPaint(flood: floodlit(p, by: [Float(starX) + 0.5, Float(starMount)])), heat: b.phase == .burn ? (b.ship ? 0.6 : 0.85) : 0)
+                  paint: rocketPaint(flood: floodlit(p, by: [Float(starX) + 0.5, Float(starMount)])), heat: b.phase == .burn ? (b.ship ? 0.6 : 0.85) : 0, by: .methane)
         }
         // The tower's arms: a carriage on the tower and a beam out across the rocket, under its grid fins or the ship's flaps.
         let iron = mix(mix(lit(rgb(62, 64, 74), .zero), hazeColour, 0.12), rgb(14, 14, 22), night * 0.85)
@@ -3200,7 +3217,7 @@ final class PixelCity: SKScene, BatteryPaced {
             let zone = SIMD2(Float(zones[b.zone]) + 0.5, Float(ground + 1)) // its lights, weaker than the pad's floodlights
             let legs = flying ? b.z < 26 : !(held && crane.phase == .carry)
             let (landed, falling) = b.of == .newGlenn ? (glennLandedArt, glennFallingArt) : (landedArt, fallingArt)
-            stamp(legs ? landed : falling, into: &px, x: x, y: y, scale: scale, paint: rocketPaint(flood: 0.6 * floodlit([x, y], by: zone)), soot: 18, heat: b.phase == .burn ? 0.85 : 0)
+            stamp(legs ? landed : falling, into: &px, x: x, y: y, scale: scale, paint: rocketPaint(flood: 0.6 * floodlit([x, y], by: zone)), soot: 18, heat: b.phase == .burn ? 0.85 : 0, by: b.of.kit.fuel)
         }
         if orbiter.phase != .away {
             // The orbiter: the Shuttle's own drawing of it, laid on its belly, nose to the left; nose down in the
@@ -3272,11 +3289,11 @@ final class PixelCity: SKScene, BatteryPaced {
 
     /// Paints a rocket with the middle of its foot at (`x`, `y`), leaning `angle` radians right of upright, at
     /// `scale`. Each pixel under it looks up the art it falls on, so it turns and shrinks without gaps. A booster
-    /// that has flown is sooty toward its foot (`soot`: for how many rows up), and takes a flame's light there (`heat`).
+    /// that has flown is sooty toward its foot (`soot`: for how many rows up), and takes the light of the flame `by` it there (`heat`).
     private func stamp(_ art: [[UInt8]], into px: inout Bytes, x: Float, y: Float, angle: Float = 0, scale: Float = 1,
-                       paint: [RGB], soot: Int = 0, heat: Float = 0) {
+                       paint: [RGB], soot: Int = 0, heat: Float = 0, by fuel: Fuel = .kerosene) {
         let rows = art.count, wide = art[0].count, reach = Int(Float(rows + wide) * scale) + 2
-        let (ax, ay) = (sin(angle), cos(angle)), (qx, qy) = (cos(angle), -sin(angle)), glare = rgb(255, 170, 90)
+        let (ax, ay) = (sin(angle), cos(angle)), (qx, qy) = (cos(angle), -sin(angle)), glare = fuel.foot
         let long = Float(rows) * scale, half = Float(wide) * scale / 2, columns = span(x, ax * long, qx * half, reach: reach)
         for py in span(y, ay * long, qy * half, reach: reach) {
             for column in columns {
@@ -3293,12 +3310,10 @@ final class PixelCity: SKScene, BatteryPaced {
         }
     }
 
-    /// A flame from (`x`, `y`) back along a rocket's axis: white-hot down its middle, orange outside and toward its
-    /// tip, or `pale`: a hydrogen flame, white to blue and half see-through. Nothing of it shows below the `deck`
-    /// row, where the trench takes it.
-    private func flame(into px: inout Bytes, x: Float, y: Float, angle: Float, scale: Float, length: Float, wide: Float, deck: Int, pale: Bool = false) {
-        let (core, warm, cool, alpha): (RGB, RGB, RGB, Float) = pale ? (rgb(240, 246, 255), rgb(176, 204, 255), rgb(104, 144, 240), 0.6)
-            : (rgb(255, 252, 232), rgb(255, 220, 120), rgb(255, 120, 44), 1)
+    /// A flame from (`x`, `y`) back along a rocket's axis: white-hot down its middle, its body outside and toward
+    /// its tip in the colours of what it burns (`Fuel`). Nothing of it shows below the `deck` row, where the trench takes it.
+    private func flame(into px: inout Bytes, x: Float, y: Float, angle: Float, scale: Float, length: Float, wide: Float, deck: Int, fuel: Fuel) {
+        let (core, warm, cool, alpha) = fuel.colours
         let (ax, ay) = (-sin(angle), -cos(angle)), (qx, qy) = (cos(angle), -sin(angle))
         let n = max(2, length * scale), w0 = max(1, wide * scale), reach = Int(n + w0) + 3
         guard length > 1 else { return }
@@ -3310,8 +3325,11 @@ final class PixelCity: SKScene, BatteryPaced {
                 guard along >= 0, along < n else { continue }
                 let u = along / n, half = (w0 / 2 + scale * sin(min(u * 4, 1) * .pi / 2)) * (1 - pow(u, 1.5)) + (u < 0.92 ? 0.35 : 0)
                 guard across <= half else { continue }
-                let hot = across < half * (0.62 - 0.5 * u) || (u < 0.25 && across < half - 0.9)
-                px.plot(column, py, hot ? core : mix(warm, cool, u * 1.15 + (across > half - 0.8 ? 0.25 : 0)), alpha)
+                // A clean flame shows its shock diamonds: bright knots down its middle, one every 6 pixels at full size.
+                let knot = 1 - abs(2 * (along / max(4, 6 * scale)).truncatingRemainder(dividingBy: 1) - 1)
+                let hot = fuel.diamonds ? u < 0.7 && across < 0.3 + half * 0.6 * knot
+                    : across < half * (0.62 - 0.5 * u) || (u < 0.25 && across < half - 0.9)
+                px.plot(column, py, hot ? core : mix(warm, cool, u * 1.15 + (across > half - 0.8 ? 0.25 : 0)), hot && fuel.diamonds ? max(alpha, 0.9) : alpha)
             }
         }
         }
@@ -3393,10 +3411,13 @@ private enum Rocket: Int {
     /// boosters shed them near the top of the picture (`shed`): `sheds` is the picture of the rocket without them,
     /// one booster by itself, and how many fall away (two to the sides, or four in a cross). None comes back but a
     /// Falcon Heavy's, which are the `Booster`s that land a minute later, as a New Glenn's does with its own picture.
+    /// What its engines burn is its `fuel` (kerosene unless said); strap-ons that burn something else (`boosters`)
+    /// each burn their own plume, with the core's flame between them, which for LVM3 lights only late in the climb.
     struct Kit {
         let art: [[UInt8]], name: String, lands: Int, standing: Bool
         let flame: (length: Float, wide: Float), smoke: Float, steam: Float, pace: Float, cold: Bool, flag: Flag?
         var caught = false, lean: Float? = nil, sheds: (core: [[UInt8]], booster: [[UInt8]], count: Int)? = nil
+        var fuel = Fuel.kerosene, boosters: Fuel? = nil, late = false
         /// How far it leans over as it climbs: `lean` if set, else half a Falcon's arc for anything over 60 rows tall.
         var arc: Float { lean ?? (art.count > 60 ? 0.5 : 1) }
     }
@@ -3406,23 +3427,55 @@ private enum Rocket: Int {
         Kit(art: dragonArt, name: "FALCON 9", lands: 1, standing: false, flame: (36, 3), smoke: 1, steam: 1, pace: 1, cold: true, flag: nil),
         Kit(art: heavyArt, name: "F HEAVY", lands: 2, standing: false, flame: (36, 7), smoke: 1.25, steam: 1.15, pace: 1, cold: true, flag: nil,
             sheds: (bytes(falconRows.map { ".." + $0 + ".." }), bytes(heavySide), 2)), // its sides fall away in the climb, then come back as `Booster`s
-        Kit(art: bytes(arianeRows), name: "ARIANE 5", lands: 0, standing: true, flame: (34, 6), smoke: 1.5, steam: 1, pace: 1.1, cold: true, flag: .france, sheds: strapOns(arianeRows, wide: 2)),
-        Kit(art: shuttleStack(roll: 0), name: "SHUTTLE", lands: 0, standing: true, flame: (40, 7), smoke: 1.7, steam: 1.3, pace: 1.15, cold: true, flag: nil, sheds: (shuttleStack(roll: .pi, boosters: false), shuttleBoosterArt, 2)),
-        Kit(art: bytes(slsRows), name: "SLS", lands: 0, standing: true, flame: (44, 9), smoke: 1.7, steam: 1.3, pace: 1.1, cold: true, flag: nil, sheds: strapOns(slsRows, wide: 3)),
+        Kit(art: bytes(arianeRows), name: "ARIANE 5", lands: 0, standing: true, flame: (34, 6), smoke: 1.5, steam: 1, pace: 1.1, cold: true, flag: .france, sheds: strapOns(arianeRows, wide: 2), fuel: .hydrogen, boosters: .solid),
+        Kit(art: shuttleStack(roll: 0), name: "SHUTTLE", lands: 0, standing: true, flame: (40, 7), smoke: 1.7, steam: 1.3, pace: 1.15, cold: true, flag: nil, sheds: (shuttleStack(roll: .pi, boosters: false), shuttleBoosterArt, 2), fuel: .hydrogen, boosters: .solid),
+        Kit(art: bytes(slsRows), name: "SLS", lands: 0, standing: true, flame: (44, 9), smoke: 1.7, steam: 1.3, pace: 1.1, cold: true, flag: nil, sheds: strapOns(slsRows, wide: 3), fuel: .hydrogen, boosters: .solid),
         Kit(art: saturnArt, name: "SATURN V", lands: 0, standing: true, flame: (52, 7), smoke: 1.3, steam: 1.3, pace: 0.82, cold: true, flag: nil),
-        Kit(art: titanArt, name: "TITAN II", lands: 0, standing: false, flame: (16, 3), smoke: 0.75, steam: 0.3, pace: 1.05, cold: false, flag: nil),
+        Kit(art: titanArt, name: "TITAN II", lands: 0, standing: false, flame: (16, 3), smoke: 0.75, steam: 0.3, pace: 1.05, cold: false, flag: nil, fuel: .hypergolic),
         Kit(art: atlasArt, name: "ATLAS", lands: 0, standing: false, flame: (20, 3), smoke: 0.85, steam: 0.35, pace: 1, cold: true, flag: nil),
         Kit(art: redstoneArt, name: "REDSTONE", lands: 0, standing: false, flame: (14, 2), smoke: 0.8, steam: 0.3, pace: 0.95, cold: true, flag: nil, lean: 0.33),
         Kit(art: bytes(soyuzRows), name: "SOYUZ", lands: 0, standing: false, flame: (26, 5), smoke: 1, steam: 0.7, pace: 1.05, cold: true, flag: .russia, sheds: strapOns(soyuzRows, wide: 2, count: 4)),
-        Kit(art: bytes(longMarchRows), name: "CZ-5", lands: 0, standing: true, flame: (34, 6), smoke: 1.2, steam: 1.1, pace: 1, cold: true, flag: .china, sheds: strapOns(longMarchRows, wide: 2, count: 4)),
-        Kit(art: bytes(h3Rows), name: "H3", lands: 0, standing: true, flame: (34, 6), smoke: 1.4, steam: 1, pace: 1.1, cold: true, flag: .japan, sheds: strapOns(h3Rows, wide: 2)),
-        Kit(art: bytes(lvm3Rows), name: "LVM3", lands: 0, standing: true, flame: (30, 6), smoke: 1.6, steam: 1, pace: 1.05, cold: false, flag: .india, sheds: strapOns(lvm3Rows, wide: 2)),
-        Kit(art: starshipArt, name: "STARSHIP", lands: 1, standing: true, flame: (56, 6), smoke: 0.9, steam: 1.5, pace: 0.9, cold: true, flag: nil, caught: true),
-        Kit(art: bytes(vulcanRows), name: "VULCAN", lands: 0, standing: true, flame: (36, 6), smoke: 1.5, steam: 1.1, pace: 1.05, cold: true, flag: nil, sheds: strapOns(vulcanRows, wide: 2, count: 4)),
-        Kit(art: bytes(newGlennRows), name: "N GLENN", lands: 1, standing: false, flame: (52, 7), smoke: 0.7, steam: 1.4, pace: 0.9, cold: true, flag: nil),
+        Kit(art: bytes(longMarchRows), name: "CZ-5", lands: 0, standing: true, flame: (34, 6), smoke: 1.2, steam: 1.1, pace: 1, cold: true, flag: .china, sheds: strapOns(longMarchRows, wide: 2, count: 4), fuel: .hydrogen, boosters: .kerosene),
+        Kit(art: bytes(h3Rows), name: "H3", lands: 0, standing: true, flame: (34, 6), smoke: 1.4, steam: 1, pace: 1.1, cold: true, flag: .japan, sheds: strapOns(h3Rows, wide: 2), fuel: .hydrogen, boosters: .solid),
+        Kit(art: bytes(lvm3Rows), name: "LVM3", lands: 0, standing: true, flame: (30, 6), smoke: 1.6, steam: 1, pace: 1.05, cold: false, flag: .india, sheds: strapOns(lvm3Rows, wide: 2), fuel: .hypergolic, boosters: .solid, late: true),
+        Kit(art: starshipArt, name: "STARSHIP", lands: 1, standing: true, flame: (56, 6), smoke: 0.9, steam: 1.5, pace: 0.9, cold: true, flag: nil, caught: true, fuel: .methane),
+        Kit(art: bytes(vulcanRows), name: "VULCAN", lands: 0, standing: true, flame: (36, 6), smoke: 1.5, steam: 1.1, pace: 1.05, cold: true, flag: nil, sheds: strapOns(vulcanRows, wide: 2, count: 4), fuel: .methane, boosters: .solid),
+        Kit(art: bytes(newGlennRows), name: "N GLENN", lands: 1, standing: false, flame: (52, 7), smoke: 0.7, steam: 1.4, pace: 0.9, cold: true, flag: nil, fuel: .methane),
         Kit(art: electronArt, name: "ELECTRON", lands: 0, standing: false, flame: (12, 2), smoke: 0.7, steam: 0.3, pace: 1.1, cold: true, flag: nil),
-        Kit(art: bytes(ariane6Rows), name: "ARIANE 6", lands: 0, standing: true, flame: (34, 6), smoke: 1.5, steam: 1, pace: 1.1, cold: true, flag: .france, sheds: strapOns(ariane6Rows, wide: 2, count: 4)),
+        Kit(art: bytes(ariane6Rows), name: "ARIANE 6", lands: 0, standing: true, flame: (34, 6), smoke: 1.5, steam: 1, pace: 1.1, cold: true, flag: .france, sheds: strapOns(ariane6Rows, wide: 2, count: 4), fuel: .hydrogen, boosters: .solid),
     ]
+}
+
+/// What an engine burns, which colours its flame and the light it throws. Kerosene burns bright yellow and orange
+/// on the soot in it; a solid motor brighter and whiter still; methane burns cleaner, a white-blue core in a violet
+/// sheath you can partly see through; hydrogen almost invisibly, white to blue; and the hypergolics of the Titan
+/// and LVM3's core a thin, half-clear orange. (See Sources in pixel-spaceport.md.)
+private enum Fuel {
+    case kerosene, solid, methane, hydrogen, hypergolic
+    /// The flame's white-hot middle, its body, its edge and tip, and how solid it is.
+    var colours: (core: RGB, warm: RGB, cool: RGB, alpha: Float) {
+        switch self {
+        case .kerosene: (rgb(255, 252, 232), rgb(255, 220, 120), rgb(255, 120, 44), 1)
+        case .solid: (rgb(255, 255, 244), rgb(255, 236, 168), rgb(255, 168, 84), 1)
+        case .methane: (rgb(236, 242, 255), rgb(170, 166, 255), rgb(196, 132, 228), 0.85)
+        case .hydrogen: (rgb(240, 246, 255), rgb(176, 204, 255), rgb(104, 144, 240), 0.6)
+        case .hypergolic: (rgb(255, 222, 184), rgb(255, 170, 112), rgb(236, 112, 76), 0.5)
+        }
+    }
+    /// The light it throws on the foot of the rocket burning it.
+    var foot: RGB { self == .kerosene ? rgb(255, 170, 90) : glow.smoke }
+    /// Whether it burns clean enough to show its shock diamonds.
+    var diamonds: Bool { self == .methane || self == .hydrogen }
+    /// The light it throws on the smoke round it, the colour of its glare, and how strong that glare is.
+    var glow: (smoke: RGB, glare: RGB, shine: Float) {
+        switch self {
+        case .kerosene: (rgb(255, 168, 84), rgb(255, 150, 70), 1)
+        case .solid: (rgb(255, 212, 146), rgb(255, 196, 116), 0.6)
+        case .methane: (rgb(204, 176, 255), rgb(176, 150, 255), 0.6)
+        case .hydrogen: (rgb(196, 214, 255), rgb(170, 190, 255), 0.2)
+        case .hypergolic: (rgb(255, 160, 100), rgb(255, 140, 84), 0.5)
+        }
+    }
 }
 
 /// The flag a rocket from abroad flies under, nine pixels by six, as rows of letters and the colours they stand for.
