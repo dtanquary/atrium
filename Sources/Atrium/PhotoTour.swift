@@ -486,9 +486,11 @@ final class PhotoTour: SKScene, BatteryPaced {
 
     private func setCaption(_ alpha: Double) { caption.alpha = CGFloat(alpha) }
 
-    /// What the live views show today: the Moon's phase is real unless one is picked.
+    /// What the live views show today: a real flare on the Sun, and the Moon's phase unless it's real time.
     private func liveCaption(_ view: View) -> String? {
-        guard view.body == "The Moon", view.kind == .live, TheMoon.knobs[0].value > 0.5,
+        guard view.kind == .live else { return nil }
+        if view.body == "The Sun" { return SunImages.shared.flare.flatMap { $0.isNow() ? "\(view.caption) · \($0.caption)" : nil } }
+        guard view.body == "The Moon", TheMoon.knobs[0].value > 0.5,
               case .choice(let names) = TheMoon.knobs[0].format else { return nil }
         return "\(names[Int(TheMoon.knobs[0].value)]), from the Moon's real maps"
     }

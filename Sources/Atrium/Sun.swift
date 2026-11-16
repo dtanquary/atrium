@@ -70,6 +70,8 @@ final class TheSun: SKScene {
     /// set, for trying them out), then every few minutes.
     private var untilEvent = UserDefaults.standard.string(forKey: "sun.nextEvent") == nil ? Double.random(in: 10...25) : 1
     private var alive: Bool { Self.knobs[0].value > 0.5 }
+    /// The real flare last shown, by when it began, so each shows once.
+    private var shownFlare: Date?
 
     override func sceneDidLoad() {
         backgroundColor = .black
@@ -102,6 +104,7 @@ final class TheSun: SKScene {
         run(.repeatForever(.sequence([.run { [weak self] in
             guard let self else { return }
             SunImages.shared.poll(wavelength.source, width: width)
+            SunImages.shared.pollFlares()
         }, .wait(forDuration: 60)])))
     }
 
@@ -131,21 +134,24 @@ final class TheSun: SKScene {
     }
 
     /// Counts down to the next flare or eruption while the Sun is alive, and ages the ones under way. A shorter
-    /// interval in Settings applies at once.
+    /// interval in Settings applies at once. A real flare (`SunImages.flare`) shows as soon as the Sun is on screen.
     private func updateEvents(_ dt: Double) {
         flareUniform.vectorFloat4Value.z += Float(dt)
         eruptionUniform.vectorFloat4Value.y += Float(dt)
         let every = Self.knobs[2].value * 60
         guard alive, every > 29, wavelength.source != 18 else { return } // visible light shows neither
         untilEvent = min(untilEvent - dt, every * 1.5)
-        guard untilEvent <= 0 else { return }
+        let real = SunImages.shared.flare.flatMap { $0.isNow() && $0.begin != shownFlare && !isHidden ? $0 : nil }
+        guard untilEvent <= 0 || real != nil else { return }
         untilEvent = every * .random(in: 0.5...1.5)
-        startEvent()
+        shownFlare = real?.begin ?? shownFlare
+        startEvent(real: real != nil)
     }
 
     /// A flare at one of the brightest knots on the disc, today's active regions, or an eruption off the limb, above
-    /// one of them if it's near the edge. Both only where the framing shows them.
-    private func startEvent() {
+    /// one of them if it's near the edge. Both only where the framing shows them. A real flare is at the brightest,
+    /// at full strength: GOES's feed says how strong a flare is, not where.
+    private func startEvent(real: Bool = false) {
         let d = disc(framing)
         func onScreen(_ p: SIMD2<Float>) -> Bool {
             let pts = SIMD2(d.x, d.y) + p * d.z
@@ -153,6 +159,10 @@ final class TheSun: SKScene {
         }
         let forced = UserDefaults.standard.string(forKey: "sun.nextEvent") // "flare" or "eruption", for trying them out
         let knots = spots.filter(onScreen)
+        if real {
+            if let knot = knots.first { flareUniform.vectorFloat4Value = [knot.x, knot.y, 0, 1] }
+            return
+        }
         if forced != "eruption", let knot = knots.prefix(4).randomElement(), forced == "flare" || Double.random(in: 0...1) < 0.6 {
             flareUniform.vectorFloat4Value = [knot.x, knot.y, 0, .random(in: 0.6...1)]
             return
@@ -408,6 +418,44 @@ nonisolated func sunTilt(at date: Date) -> Float {
     private let folder = URL.cachesDirectory.appending(path: "com.dtanquary.atrium/sun")
     private let api = "https://api.helioviewer.org/v2/"
     private var lastCheck: [String: Date] = [:]
+    /// The latest X-ray flare NOAA's GOES satellites saw, kept in memory only.
+    var flare: Flare?
+
+    /// An X-ray flare as GOES saw it: when it began and peaked, when it ended (nil while it's under way), and its
+    /// class at its peak so far ("M1.7").
+    struct Flare: Equatable {
+        let begin: Date, peak: Date, end: Date?, name: String
+
+        /// One to show: of class M or above, and under way or ended within the hour. One reported under way for more
+        /// than four hours is a feed gone stale.
+        func isNow(_ now: Date = Date()) -> Bool {
+            (name.hasPrefix("M") || name.hasPrefix("X")) && now.timeIntervalSince(end ?? begin) < (end == nil ? 4 : 1) * 3600
+        }
+
+        /// For the caption: "an M1.7 flare at 9:21 PM", or "an M1.7 flare under way".
+        var caption: String { "an \(name) flare " + (end == nil ? "under way" : "at \(peak.formatted(date: .omitted, time: .shortened))") }
+    }
+
+    /// Asks NOAA's Space Weather Prediction Center for the latest flare, at most every 15 minutes however many displays
+    /// ask: about 500 bytes. Failures leave the last one known.
+    func pollFlares() {
+        guard abs(Date().timeIntervalSince(lastCheck["flares"] ?? .distantPast)) > 900 else { return }
+        lastCheck["flares"] = Date()
+        Task {
+            guard let url = URL(string: "https://services.swpc.noaa.gov/json/goes/primary/xray-flares-latest.json"),
+                  let (data, _) = try? await URLSession.shared.data(from: url), let flare = Self.flare(data) else { return }
+            self.flare = flare
+        }
+    }
+
+    /// Reads SWPC's `xray-flares-latest.json`: a list of one flare, with times in ISO 8601 and an end time once it's
+    /// over; one missing or that won't read is taken as under way.
+    nonisolated static func flare(_ reply: Data) -> Flare? {
+        guard let json = (try? JSONSerialization.jsonObject(with: reply) as? [[String: Any]])?.last else { return nil }
+        func date(_ key: String) -> Date? { (json[key] as? String).flatMap { try? Date($0, strategy: .iso8601) } }
+        guard let begin = date("begin_time"), let name = json["max_class"] as? String ?? json["current_class"] as? String else { return nil }
+        return Flare(begin: begin, peak: date("max_time") ?? begin, end: date("end_time"), name: name)
+    }
 
     /// A channel's cached frames at a width, oldest first.
     func frames(_ source: Int, width: Int) -> [URL] {
