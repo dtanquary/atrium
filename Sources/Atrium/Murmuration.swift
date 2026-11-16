@@ -15,7 +15,8 @@ private let evenings: [(name: String, sun: Double, balance: SIMD3<Float>)] = [
 /// exposure of a wavy sea averages the sky well above the horizon, where calm water is a mirror. `waves` is how slow
 /// ripples move the water: how far they bend its reflection, how fast they drift, and how much they brighten and darken
 /// it, which is all the smooth long-exposure sea can show. `perch` is where the flock goes down to roost at the end of
-/// an evening (metres, from the eye): among the pier's legs, or into the reeds on the far shore. `lift` brightens the
+/// an evening (metres, from the eye): among the pier's legs, or on the pond's far shore, 5 m below the eye so it lands
+/// about 20 points below the horizon, in the photo's band of shore (rows 15 to about 130 of its 706). `lift` brightens the
 /// land's darkest tones, those under about 0.6% of its photo's sky, by that much again: the pond's far shore was nearly
 /// black in its photo, and went to one flat black bar; lifted, its tundra and grass show. Brighter tones aren't lifted,
 /// so the photo's bright water at the land's edge doesn't rim it with light.
@@ -25,7 +26,7 @@ private let evenings: [(name: String, sun: Double, balance: SIMD3<Float>)] = [
 ///   https://commons.wikimedia.org/wiki/File:Sunset_over_a_tundra_pond_(53708107535).jpg
 private let grounds: [(name: String, file: String, horizon: Float, sky: Float, rough: Float, waves: SIMD3<Float>, perch: SIMD3<Float>, lift: Float)] = [
     ("Brighton West Pier", "murmuration-pier", 780.0 / 1533, 0.1252, 0.12, [0.03, 2.5, 0.22], [-26, 265, 8], 0),
-    ("Marsh pond", "murmuration-marsh", 15.0 / 706, 0.2635, 0.005, [0.05, 3.5, 0.12], [30, 420, -1], 4.7),
+    ("Marsh pond", "murmuration-marsh", 15.0 / 706, 0.2635, 0.005, [0.05, 3.5, 0.12], [30, 320, -5], 4.7),
 ]
 
 private let lightKnob = Knob(key: "murmuration.light", label: "Light", range: 0...5, standard: 0, section: "Scene",
@@ -426,11 +427,16 @@ private final class Flock: SKNode {
     private var falcon: (p: SIMD3<Float>, v: SIMD3<Float>, left: Float)?
     private var random: Xorshift
     /// Late in the evening: metres the flock's height is lowered (the swoops get lower as the light fails), then whether
-    /// it's going down to roost, pouring from its underside to `perch`, under the pier or into the far reeds.
+    /// it's going down to roost, pouring from its underside to the perch, under the pier or onto the far shore.
     var dip: Float = 0, roosting = false
     /// Birds (parcels) a second that may leave for the roost: the descent takes the same share of any evening.
     var roostRate: Float = 10
-    private let perch: SIMD3<Float>
+    /// Where each bird lands: its own spot within ±40 m across and ±20 m deep of the perch, so the stream fans out over
+    /// the roost as it comes down instead of diving into one point.
+    private let spots: [SIMD3<Float>]
+    /// Whether the roost is on ground seen from above (a perch below the eye): nothing in the photo stands in front of
+    /// it, so birds going down are drawn over the photo and land on the shore rather than vanishing behind the horizon.
+    private let landsInView: Bool
     private var nextDown: Float = 0, downBudget: Float = 0
     /// Birds in the air, and whether any are on their way down.
     private(set) var flying = Flock.count, falling = 0
@@ -458,10 +464,16 @@ private final class Flock: SKNode {
     /// screen) a parcel's sprite is scaled up past the 64 points it's drawn at, and its twenty-five birds show as one
     /// blurry group moving together.
     private static let nearest: Float = 160
+    /// The lowest a flying parcel's middle goes, in metres above the eye, whose height is the horizon's on screen. Its
+    /// birds spread up to 3 m round it, so the lowest stay 1 m above the horizon, 3 m above the water, and none dips
+    /// behind the far shore or the sea (the ground is drawn over the flock).
+    private static let floor: Float = 4
 
     init(view: GroundView, ink: SKColor, perch: SIMD3<Float>) {
         self.view = view
-        self.perch = perch
+        var scatter = Xorshift(seed: 11) // its own, so the flight's random numbers don't change with it
+        spots = (0..<Self.count).map { _ in perch + SIMD3((scatter.unit() - 0.5) * 80, (scatter.unit() - 0.5) * 40, 0) }
+        landsInView = perch.z < 0
         atlas = Self.makeAtlas()
         frameSize = atlas[0].size().width
         let seed = ProcessInfo.processInfo.environment["MURMURATION_SEED"].flatMap(UInt64.init) ?? .random(in: 1...UInt64.max)
@@ -597,6 +609,8 @@ private final class Flock: SKNode {
             let b = birds[i], sprite = sprites[i]
             if sprite.isHidden != (b.state == 0) { sprite.isHidden = b.state == 0 }
             if b.state == 0 { continue }
+            let layer: CGFloat = b.state == 2 && landsInView ? 4 : 2 // drawn over the photo as it lands
+            if sprite.zPosition != layer { sprite.zPosition = layer }
             let p = b.p + b.v * pending, ex = simd_normalize(b.v), ey = simd_normalize(simd_cross(up, ex) + SIMD3(0, 1e-6, 0))
             let ez = simd_cross(ex, ey) * cos(b.bank) + ey * sin(b.bank)
             let at = view.project(p), wing = view.project(p + simd_cross(ez, ex)), nose = view.project(p + ex * 0.5)
@@ -612,7 +626,7 @@ private final class Flock: SKNode {
             if frames[i] != frame { sprite.texture = atlas[frame]; frames[i] = frame }
             let side = CGFloat(Self.parcel * at.perMetre / 64) * frameSize
             sprite.size = CGSize(width: side, height: side)
-            let alpha = (0.22 + 0.45 * facing) * (b.state == 2 ? min(max((p.z - perch.z) / 6, 0), 1) : 1) // fading into the roost
+            let alpha = (0.22 + 0.45 * facing) * (b.state == 2 ? min(max((p.z - spots[i].z) / 3, 0), 1) : 1) // settling in
             sprite.alpha = CGFloat(alpha)
             // Its reflection: twenty-five birds of about 0.025 m² each, spread over the texels it lands on.
             let below = 2 * horizon - at.y
@@ -672,7 +686,7 @@ private final class Flock: SKNode {
         // Going down to roost: the lowest birds lead, and their neighbours follow them (below), so a funnel pours from
         // the flock's underside, at `roostRate` birds a second: two or three minutes, as real ones take. The last few
         // go together.
-        let roosting = roosting, perch = perch
+        let roosting = roosting, spots = spots
         var budget = roosting ? min(downBudget + roostRate * dt, 30) : 0
         nextDown -= dt
         if roosting && flying > 0 && nextDown < 0 && budget >= 1 {
@@ -841,16 +855,15 @@ private final class Flock: SKNode {
                             // Few close neighbours means the thin edge: steer for the middle (Hoetzlein's Flock2), which
                             // keeps one flock with a crisp outline; a bird that has strayed well outside it flies straight
                             // back, and faster. A weak spring holds the roost's height, above the water and not too
-                            // near us. Birds going down to roost dive for the perch, still flocking with each other, so
-                            // they pour down in streams rather than one parcel at a time.
-                            if b.state == 2 {
-                                force += simd_normalize(perch - b.p) * 15
-                            } else {
+                            // near us. (Birds going down to roost fly for their spots, below.)
+                            if b.state == 1 {
                                 let out = SIMD2(b.p.x - middle.x, b.p.y - middle.y)
                                 b.alone = simd_dot(out, out) > straying
                                 force += simd_normalize(middle - b.p + SIMD3(0, 0, 1e-4)) * (12.5 * (b.alone ? 1 : max(0, 1 - Float(crowd) / 12)))
                                 force.z -= (b.p.z - height) * 0.1
-                                if b.p.z < 3 { force.z += (3 - b.p.z) * 2 }                      // not into the water
+                                // Never under the horizon: pushed up within 4 m of `floor`, the harder the faster they sink.
+                                let over = b.p.z - Self.floor - 4
+                                if over < 0 { force.z -= over * 3 + min(b.v.z, 0) * 1.5 }
                                 if b.p.y < Self.nearest - 40 { force.y += (Self.nearest - 40 - b.p.y) * 0.5 } // nor at us
                             }
                             force += SIMD3(random.unit() - 0.5, random.unit() - 0.5, random.unit() - 0.5) * 0.25
@@ -869,8 +882,8 @@ private final class Flock: SKNode {
                             b.force = force
                         }
 
-                        // Cruise at 10 m/s; faster diving to roost, or catching up with the flock after straying.
-                        let force = b.force + ex * ((b.state == 2 || b.alone ? 14 : 10) - speed)
+                        // Cruise at 10 m/s; faster catching up with the flock after straying.
+                        let force = b.force + ex * ((b.alone ? 14 : 10) - speed)
                         if b.turning >= 0 { b.turning += dt }
                         b.turnRest -= dt
                         if b.turnCue >= 0 { b.turnCue -= dt; if b.turnCue < 0 { b.turning = 0; b.turn = b.cueTurn } }
@@ -890,15 +903,27 @@ private final class Flock: SKNode {
                         b.zigRest -= dt
                         b.bank += (want - b.bank) * (1 - exp(-dt / roll))
                         let ez = simd_cross(ex, ey) * cos(b.bank) + ey * sin(b.bank)
-                        let lift = g * speed * speed / 100
-                        b.v += (force - ey * pull + ez * lift + ex * (g - lift) / 3.3 - up * g) * dt
+                        if b.state == 2 {
+                            // Going down to roost: straight for its spot at 14 m/s, braking over the last 44 m to drop in
+                            // at 3 m/s, and still steered by its neighbours, so the birds pour down in streams. (In the
+                            // flight model a bird speeding up to dive climbed first: its lift grows with speed².)
+                            let to = spots[i] - b.p, d = simd_length(to)
+                            b.v += (to / max(d, 0.01) * min(3 + d / 4, 14) - b.v) * (1 - exp(-dt / 0.5)) + b.force * dt
+                        } else {
+                            let lift = g * speed * speed / 100
+                            b.v += (force - ey * pull + ez * lift + ex * (g - lift) / 3.3 - up * g) * dt
+                        }
                         birds[i] = b
                     }
                     } }
                     downBudget = budget
                     for i in 0..<birds.count where birds[i].state != 0 {
                         birds[i].p += birds[i].v * dt
-                        if birds[i].state == 2 && birds[i].p.z < perch.z { birds[i].state = 0 } // roosting
+                        if birds[i].state == 1 && birds[i].p.z < Self.floor { // the push wasn't enough: level off here
+                            birds[i].p.z = Self.floor
+                            birds[i].v.z = max(birds[i].v.z, 0)
+                        }
+                        if birds[i].state == 2 && birds[i].p.z < spots[i].z { birds[i].state = 0 } // roosting
                     }
                 }
             }
