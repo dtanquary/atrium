@@ -66,12 +66,14 @@ Sections: Colors (swatches plus the cycle interval), Look, Silk Ribbons, Film Gr
 |---|---|
 | Midnight | the original: navy, indigo, teal, soft blue (#6eb1ff-ish, >1 for glow), magenta, violet, dusky coral |
 | Aurora | deep teal, emerald, teal, mint, violet, blue, magenta |
-| Sunset | plum, purple, rose, gold, magenta-red, indigo, orange |
+| Sunset | plum, purple, rose, salmon, magenta-red, indigo, coral red (gold and orange until 2026-11-16) |
 | Ocean | navy, blue, teal, aqua, cornflower, seafoam, periwinkle |
-| Blush | wine, mauve, rose, champagne, pink, plum, peach |
+| Blush | wine, mauve, rose, pale rose, pink, plum, salmon (champagne and peach until 2026-11-16) |
 | Graphite | blue-greys with a warm grey |
 
 The swatches in Settings (`paletteOptions`) use pools 1, 3, 4 and 6, and their pastels.
+
+**Sunset and Blush pulled toward rose (2026-11-16).** Their slot 3 and slot 6, gold and orange in Sunset, champagne and peach in Blush, turned tan and terracotta where they faded over the dark or crossed the purples (dim orange reads as brown): the review measured the left third of a Sunset render at hue 13° and saturation 0.41, against 0.6 to 0.7 elsewhere. Each was turned about 10 to 15° toward red at the same strength and saturation: Sunset's slot 3 (1.10, 0.70, 0.35) → (1.10, 0.48, 0.30) and slot 6 (1.00, 0.40, 0.20) → (1.00, 0.30, 0.24), as the review's mock-up had them; Blush's slot 3 (1.10, 0.80, 0.65) → (1.10, 0.69, 0.65) and slot 6 (1.00, 0.55, 0.35) → (1.00, 0.44, 0.35) by the same move. Over six seeds each in Dark Mode, the share of lit pixels that are tan (hue 10 to 50°, saturation under 0.5) went from up to 5.6% (Sunset) and 6.2% (Blush) to 0, and the median saturation rose by 0.02 to 0.07; the same frames now stay in rose, coral and plum. At golden hour, when slot 6 swells, Sunset's glow is rose-red rather than orange. Light Mode's washes, derived from these, barely change (a little pinker where the old gold lay).
 
 ## Tuning constants
 - Drift speeds and phases are each pool's `(a, b, phase)` in `paths`. The flow rate is `0.04` in `update`.
@@ -108,7 +110,7 @@ CPU 0.47 ms and GPU 0.55 ms per frame (release, 2x), one of the cheapest scenes.
 - He asked for palettes plus a Dark/Light Mode look. Light Mode first came out too saturated; he got the softened washes.
 - He asked for Random to slowly drift between the palettes after a set time he can change in Settings: `gradient.cycleMinutes`, default 8 minutes, with a 60 s fade.
 - 2026-09-26 he made his own settings the defaults: Random, colours change every 5 minutes, flow speed 2, ribbons off, film grain 0 (the grain setting stays).
-- 2026-11-16 he asked for the review of 2026-11-14's suggestions to be done for this one too, though it had marked it keep-as-is (the lineup judge's pick to live with all day): "keep it calm: nothing busier, brighter or faster than today". So: a new start and new paths on every load (his direction is "a new look on each load"), the ribbons skipped while they're off and the pools laid out in Swift.
+- 2026-11-16 he asked for the review of 2026-11-14's suggestions to be done for this one too, though it had marked it keep-as-is (the lineup judge's pick to live with all day), keeping it calm: nothing busier, brighter or faster than before. So: a new start and new paths on every load (his direction is "a new look on each load"), the ribbons skipped while they're off and the pools laid out in Swift, and Sunset's and Blush's gold and champagne pulled toward rose (his "colours in one family").
 
 ## Ideas / next steps
 - Breathing: a slow brightness swell over about 60 s.
