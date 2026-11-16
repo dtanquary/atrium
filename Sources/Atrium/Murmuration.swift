@@ -444,8 +444,9 @@ private final class Flock: SKNode {
     private var touched = 0..<0 // the rows of the reflection that last held ink
 
     // ponytail: 1,500 agents, each a parcel standing for about 40 birds (60,000 in all), which is what the CPU allows.
-    // A parcel draws as twenty birds rather than forty fainter ones: the flock's grain and darkness then fall within
-    // what photos show (ten, drawn as dashes, read as grains of rice up close, and made the flock a little dark).
+    // A parcel draws as twenty-five birds rather than forty fainter ones: up close the flock's grain and darkness then
+    // fall within what photos show (ten, drawn as dashes, read as grains of rice and made the flock a little dark; twenty
+    // silhouettes left a far flock a pale haze).
     private static let count = 1500
     private static let buckets = 8192  // a spatial hash of `cell`-metre cubes
     private static let cell: Float = 6
@@ -454,8 +455,8 @@ private final class Flock: SKNode {
     private static let core: Float = 0.68, reach: Float = 9.2
     private let roost = SIMD3<Float>(0, 200, 44), roostSize = SIMD2<Float>(55, 40)
     /// The nearest a flock heading our way comes before it turns away. Nearer than about 130 m (on a 1512-point
-    /// screen) a parcel's sprite is scaled up past the 64 points it's drawn at, and its twenty birds show as one blurry
-    /// group moving together.
+    /// screen) a parcel's sprite is scaled up past the 64 points it's drawn at, and its twenty-five birds show as one
+    /// blurry group moving together.
     private static let nearest: Float = 160
 
     init(view: GroundView, ink: SKColor, perch: SIMD3<Float>) {
@@ -531,7 +532,7 @@ private final class Flock: SKNode {
         for sprite in sprites { sprite.color = ink }
     }
 
-    /// Eight scatterings of twenty starlings, each drawn with its wings at `turns` angles across 180°, all in one
+    /// Eight scatterings of twenty-five starlings, each drawn with its wings at `turns` angles across 180°, all in one
     /// mipmapped texture so every parcel draws in one batch. A parcel keeps its scattering and only changes angle, so its
     /// birds turn where they are rather than the whole parcel spinning like a wheel, which gave it away as a group. Each
     /// bird is a filled silhouette seen from below, about twice as wide as it is long, so it reads the same turned
@@ -546,7 +547,7 @@ private final class Flock: SKNode {
             ctx.setFillColor(rgb(0.03, 0.025, 0.035))
             for layout in 0..<layouts {
                 var rng = Xorshift(seed: UInt64(layout + 7))
-                for _ in 0..<20 {
+                for _ in 0..<25 {
                     // Gaussian scatter, σ 1.3 m, so neighbouring parcels overlap into an even texture.
                     let r = CGFloat(min(sqrt(-2 * log(max(rng.unit(), 1e-4))) * 1.3, 3)), a = CGFloat(rng.unit() * 2 * .pi)
                     let size = min(1.05 * CGFloat(exp((rng.unit() + rng.unit() + rng.unit() - 1.5) * 0.3)), 0.5 / 0.42)
@@ -613,13 +614,13 @@ private final class Flock: SKNode {
             sprite.size = CGSize(width: side, height: side)
             let alpha = (0.22 + 0.45 * facing) * (b.state == 2 ? min(max((p.z - perch.z) / 6, 0), 1) : 1) // fading into the roost
             sprite.alpha = CGFloat(alpha)
-            // Its reflection: twenty birds of about 0.025 m² each, spread over the texels it lands on.
+            // Its reflection: twenty-five birds of about 0.025 m² each, spread over the texels it lands on.
             let below = 2 * horizon - at.y
             if below > -reach && below < horizon {
                 let x = at.x / across, y = (below + reach) / span * Float(rows)
                 let (tx, ty) = (Int(x.rounded(.down)), Int(y))
                 if x >= 0 && tx < cols - 1 && ty < rows - 1 {
-                    let ink = alpha * 0.5 * at.perMetre * at.perMetre / texel, fx = x - Float(tx), fy = y - Float(ty)
+                    let ink = alpha * 0.62 * at.perMetre * at.perMetre / texel, fx = x - Float(tx), fy = y - Float(ty)
                     splat[ty * cols + tx] += ink * (1 - fx) * (1 - fy); splat[ty * cols + tx + 1] += ink * fx * (1 - fy)
                     splat[(ty + 1) * cols + tx] += ink * (1 - fx) * fy; splat[(ty + 1) * cols + tx + 1] += ink * fx * fy
                     low = min(low, ty); high = max(high, ty + 2)
