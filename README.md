@@ -55,11 +55,11 @@ Drops creeping and running down a rainy window, each a tiny lens showing the str
 | Following the weather: fern frost on a freezing night, over the Cabin | Fogged glass on a gray morning, over the Countryside |
 
 #### Wind
-The live wind around you as thin streaks streaming across the map, in the spirit of the hint.fm wind map and earth.nullschool: a grid of Open-Meteo's hourly forecast, blended from hour to hour, with streaks that speed up, brighten and curl with the real wind, as brush strokes like hint.fm's or comets like nullschool's. Zoom from your town to half the continent, over a map at the opacity you choose: the Earth by day or at night, terrain and the sea floor, or yesterday's satellite view with its real clouds (all from NASA), Natural Earth's shaded relief, or nothing, in six jewel-toned palettes. Light Mode draws the same streaks as ink on paper.
+The live wind around you as thin streaks streaming across the map, in the spirit of the hint.fm wind map and earth.nullschool: a grid of Open-Meteo's hourly forecast, blended from hour to hour, with streaks that speed up, brighten and curl with the real wind, as brush strokes like hint.fm's or comets like nullschool's, over a faint wash of the speed's color. It shows half the continent, or zooms in to your region or your town, over a map at the opacity you choose: the Earth by day or at night, terrain and the sea floor, or yesterday's satellite view with its real clouds (all from NASA), Natural Earth's shaded relief, or nothing, in six jewel-toned palettes. Light Mode draws the same streaks as ink on paper.
 
 | <img src="docs/images/wind.webp" alt="Wind at the continent zoom over the Earth by day, moving, a low spinning off the East Coast" width="1600"> | ![Wind in Light Mode at the region zoom, over the Earth printed on paper](docs/images/wind-light.jpg) |
 |---|---|
-| Half the continent, over the Earth by day | A region in Light Mode, ink on a pale print of the map |
+| Half the continent, over the Earth by day | A region in Light Mode, ink on a pale gray print of the map |
 
 #### Murmuration
 Tens of thousands of starlings wheeling over Brighton's West Pier or a marsh pond, flying like the real thing (a published flight model), mirrored in the water and scattering from a falcon. By default a whole evening plays out, from golden hour to the roost.
@@ -195,32 +195,33 @@ The globe above your location with the live day/night line, today's real clouds,
 #### Pixel Spaceport
 A pixel-art launch site that never stops, drawn like [Pixel City](#pixel-city) and lit by the same real Sun, seen from the bank across a lagoon. A rocket rolls out of the hangar lying on its transporter, climbs the ramp to the pad and is stood up, then fuels through a count you can follow on the countdown board on the near bank. It lifts off on a cloud of steam and arcs away, shrinking to a spark at the top of its trail. A little over a minute later its booster comes back, lights its landing burn, drops its legs and lands beside the pad, and a crane carries it off while the next rocket rolls out.
 
-- **Fourteen rockets,** each with its own switch in Settings: Falcon 9 and Falcon Heavy, Starship, SLS, the Space Shuttle, the Saturn V, Gemini-Titan, Mercury-Atlas and Mercury-Redstone from the 1960s, and from abroad Ariane 5, Soyuz, Long March 5, Japan's H3 and India's LVM3. They are drawn to one scale, so a Saturn V stands as tall as the pad's tower and a Redstone not much taller than its floodlights. The countdown board names the one on the pad.
-- **Four of them come back.** A Falcon 9's booster lands beside the pad, and a Falcon Heavy's two land side by side. Starship has a pad of its own: its tower's arms lift it onto the mount, and catch its booster when that flies back. A little later its ship comes home too: it falls on its belly, flips upright on its engines and is caught by the same arms. And two and a half minutes after a Shuttle launch its orbiter glides in to the runway along the shore, rolls out behind a drag chute and is towed away. Rockets whose boosters come back and rockets that fly once take turns, so a booster returns after every other lift-off.
-- **Each flies as itself.** The big NASA rockets and Ariane roll out standing on a crawler; the Shuttle and SLS leave the thick white trail of their solid boosters; the Saturn V climbs slowly.
-- **A tip of the hat:** when a rocket from abroad is on the pad, its country's flag goes up a second pole beside the Stars and Stripes: the French tricolour for Ariane 5, and Russia's, China's, Japan's and India's for the others.
+- **Eighteen rockets,** each with its own switch in Settings: Falcon 9 and Falcon Heavy, Starship, New Glenn, Vulcan, Electron, SLS, the Space Shuttle, the Saturn V, Gemini-Titan, Mercury-Atlas and Mercury-Redstone from the 1960s, and from abroad Ariane 5 and Ariane 6, Soyuz, Long March 5, Japan's H3 and India's LVM3. They are drawn to one scale, so a Saturn V stands as tall as the pad's tower and a Redstone not much taller than its floodlights. The countdown board names the one on the pad.
+- **Five of them come back.** A Falcon 9's or a New Glenn's booster lands beside the pad, and a Falcon Heavy's two land side by side. Starship has a pad of its own: its tower's arms lift it onto the mount, and catch its booster when that flies back. A little later its ship comes home too: it falls on its belly, flips upright on its engines and is caught by the same arms. And two and a half minutes after a Shuttle launch its orbiter glides in to the runway along the shore, rolls out behind a drag chute and is towed away. Rockets whose boosters come back and rockets that fly once take turns, so a booster returns after every other lift-off.
+- **Each flies as itself.** The big NASA rockets and Ariane roll out standing on a crawler; the Shuttle and SLS leave the thick white trail of their solid boosters; the Saturn V climbs slowly. Each burns what its engines burn: kerosene white-hot and orange, methane a violet flame with white shock diamonds under Starship and New Glenn, solid boosters a brighter white-yellow, and hydrogen a pale blue you can barely see.
+- **A tip of the hat:** when a rocket from abroad is on the pad, its country's flag goes up a second pole beside the Stars and Stripes: the French tricolor for the two Arianes, and Russia's, China's, Japan's and India's for the others.
+- **Life on the bank:** the flags ripple in the wind, the crowd cheers each lift-off, and every few minutes by day a line of pelicans glides low across the lagoon.
 - **How often:** a lift-off every four minutes or so, or anywhere from every two minutes to every twelve with the Launches slider.
-- **The light is the real Sun's,** as in Pixel City, and you can choose which way you look or preview a time of day. A night launch lights its own steam, and for half an hour after sunset the trail still catches the Sun above a pad already in shadow.
+- **The light is the real Sun's,** as in Pixel City, and you can choose which way you look or preview a time of day. A night launch lights its own steam, and for half an hour after sunset the trail and the high clouds still catch the Sun, glowing pink above a pad already in shadow.
 - **All of it is mirrored in the lagoon,** the flames included.
 - **It runs to its own clock,** unless you switch on Follow real launches in its Settings: then, in the ten minutes before a real lift-off of a rocket it draws, the pad is cleared for that rocket, the board counts the real time down and says LIVE, and it lifts off at the real T−0 (holds hold it; a scrub sends it back to the hangar). The schedule comes from [Launch Library 2](https://thespacedevs.com/llapi) by The Space Devs, a few KB about once an hour (see Privacy below); off, it makes no network requests. The rockets are drawn after the real ones, without names or logos on them; Atrium isn't affiliated with SpaceX, NASA or any other space agency or launch company.
 
-![Pixel Spaceport's fourteen rockets on the pad, from Mercury-Redstone to Starship](docs/images/pixel-spaceport-fleet.jpg)
+![Pixel Spaceport's eighteen rockets on the pad, from Electron to Starship](docs/images/pixel-spaceport-fleet.jpg)
 
-| <img src="docs/images/pixel-spaceport.webp" alt="Pixel Spaceport at sunset, Starship lifting off on a cloud of steam" width="1600"> | ![Pixel Spaceport at sunset, a Falcon Heavy's two boosters landing](docs/images/pixel-spaceport-double.jpg) |
+| <img src="docs/images/pixel-spaceport.webp" alt="Pixel Spaceport at sunset, Starship lifting off on a violet flame and a cloud of steam" width="1600"> | ![Pixel Spaceport at sunset, a Falcon Heavy's two boosters landing](docs/images/pixel-spaceport-double.jpg) |
 |---|---|
 | Starship lifting off at sunset | A Falcon Heavy's two boosters coming home |
-| ![Pixel Spaceport by day, a rocket being stood up as a booster lands](docs/images/pixel-spaceport-day.jpg) | ![Pixel Spaceport after sunset, the trail lit pink above a pad in shadow](docs/images/pixel-spaceport-twilight.jpg) |
-| The next rocket is stood up as the last one's booster lands | After sunset, the trail still in sunlight |
+| ![Pixel Spaceport by day, a Falcon Heavy rolling out of the hangar as a booster lands](docs/images/pixel-spaceport-day.jpg) | ![Pixel Spaceport after sunset, the trail lit pink above a pad in shadow](docs/images/pixel-spaceport-twilight.jpg) |
+| The next rocket rolls out as the last one's booster lands | After sunset, the trail and the clouds still in sunlight |
 | ![Pixel Spaceport at night, a Falcon Heavy floodlit on the pad](docs/images/pixel-spaceport-heavy.jpg) | ![Pixel Spaceport at night, a booster on its landing burn](docs/images/pixel-spaceport-night.jpg) |
 | A Falcon Heavy on the pad, nine seconds from lift-off | A booster on its landing burn at night |
 | ![Pixel Spaceport at sunset, a Saturn V eight seconds after lift-off](docs/images/pixel-spaceport-saturn.jpg) | ![Pixel Spaceport by day, the Space Shuttle seven seconds after lift-off](docs/images/pixel-spaceport-shuttle.jpg) |
 | A Saturn V at sunset | The Space Shuttle by day |
-| ![Pixel Spaceport by day, an Ariane 5 on the pad with the French flag beside the Stars and Stripes](docs/images/pixel-spaceport-ariane.jpg) | ![Pixel Spaceport at night, SLS floodlit on the pad](docs/images/pixel-spaceport-sls.jpg) |
-| An Ariane 5 on the pad, the tricolour up beside the Stars and Stripes | SLS floodlit at night |
-| ![Pixel Spaceport by day, Starship on its own pad beside its tower](docs/images/pixel-spaceport-starship.jpg) | ![Pixel Spaceport at sunset, Starship's booster coming down to the tower's arms](docs/images/pixel-spaceport-catch.jpg) |
+| ![Pixel Spaceport by day, an Ariane 5 on the pad with the French flag beside the Stars and Stripes](docs/images/pixel-spaceport-ariane.jpg) | ![Pixel Spaceport at night, SLS lifting off on its two solid boosters](docs/images/pixel-spaceport-sls.jpg) |
+| An Ariane 5 on the pad, the tricolor up beside the Stars and Stripes | SLS lifting off at night, its solid boosters either side of its pale hydrogen flame |
+| ![Pixel Spaceport by day, Starship on its own pad beside its tower](docs/images/pixel-spaceport-starship.jpg) | ![Pixel Spaceport at sunset, Starship's booster coming down to the tower's arms on a violet flame](docs/images/pixel-spaceport-catch.jpg) |
 | Starship on its own pad | Its booster coming back to the tower's arms |
-| ![Pixel Spaceport at sunset, Starship's ship swinging upright on its engines](docs/images/pixel-spaceport-flip.jpg) | ![Pixel Spaceport at sunset, Starship's ship coming down on a landing zone](docs/images/pixel-spaceport-ship.jpg) |
-| Then its ship comes home: the flip | Down on its engines |
+| ![Pixel Spaceport at sunset, Starship's ship swinging upright on its engines](docs/images/pixel-spaceport-flip.jpg) | ![Pixel Spaceport at sunset, Starship's ship caught in the tower's arms](docs/images/pixel-spaceport-ship.jpg) |
+| Then its ship comes home: the flip | Caught in the same arms |
 | ![Pixel Spaceport by day, the Shuttle's orbiter rolling out along the runway behind its drag chute](docs/images/pixel-spaceport-orbiter.jpg) | ![Pixel Spaceport at sunset, a Soyuz lifting off with Russia's flag beside the Stars and Stripes](docs/images/pixel-spaceport-soyuz.jpg) |
 | The Shuttle's orbiter home, rolling out behind its drag chute | A Soyuz at sunset, its flag up beside the Stars and Stripes |
 
@@ -250,14 +251,14 @@ Rising heat as a color schlieren camera sees it, after the photos of Gary Settle
 | One candle through the rainbow filter, after Davidhazy | A mug of coffee through the knife edge in Light Mode, after Kinsman |
 
 #### Turing Patterns
-Reaction–diffusion, the chemistry Alan Turing proposed for how animals get their spots and stripes. Patterns grow from a few glowing seeds, then slowly drift from coral to dividing spots to a honeycomb to fingerprint stripes and round again, in six jewel-tone palettes. Patches keep dissolving and growing back in, so it never stops moving, or it can swirl on a slow current instead.
+Reaction–diffusion, the chemistry Alan Turing proposed for how animals get their spots and stripes. Patterns grow from a few glowing seeds, then slowly drift from coral to dividing spots to a honeycomb to fingerprint stripes and round again, in six jewel-tone palettes. Patches keep dissolving and growing back in, so it never stops moving, or it can swirl on a slow current instead. The pattern stands up like glaze, lit from the upper left, and in Light Mode casts a soft shadow on the paper.
 
 | <img src="docs/images/turing-patterns.webp" alt="Turing Patterns, fingerprint stripes in Dark Mode, moving" width="1600"> | ![Turing Patterns, coral in Light Mode](docs/images/turing-patterns-light.jpg) |
 |---|---|
 | Fingerprint stripes in Dark Mode | Coral, glazed like ceramic, in Light Mode |
 
 #### Pixel City
-A pixel-art city that follows your clock and the real Sun, with traffic and windows lighting up through the evening. Pick a city: the Waterfront, a downtown mirrored in the water with its walls lit from wherever the Sun is; Foothills, a small downtown under snow-capped mountains that hold the last of the sunlight; the Long Bridge, strung with lights across a bay; Hillside Town, tiled houses stacked above a harbour; the Overlook, out over a sea of rooftops; or the Airport, across a bay, where airliners land, taxi to the terminal and take off again into the real wind, mirrored in the water. It can move between them by itself every few minutes. You can also choose which way you look, so the Sun sets in view or lights the buildings from behind you.
+A pixel-art city that follows your clock and the real Sun, with people on its sidewalks, cars, vans and buses on its roads, windows lighting up through the evening, and the real stars and Moon after dark. Pick a city: the Waterfront, a downtown mirrored in the water with its walls lit from wherever the Sun is; Foothills, a small downtown under snow-capped mountains that hold the last of the sunlight; the Long Bridge, strung with lights across a bay; Hillside Town, tiled houses stacked above a harbor; the Overlook, out over a sea of rooftops; or the Airport, across a bay, where airliners land, taxi to the terminal and take off again into the real wind, mirrored in the water. It can move between them by itself every few minutes. You can also choose which way you look, so the Sun sets in view or lights the buildings from behind you.
 
 | <img src="docs/images/pixel-city.webp" alt="Pixel City's Waterfront at dusk, moving" width="1600"> | ![Pixel City's Foothills on a clear morning](docs/images/pixel-city-foothills.jpg) |
 |---|---|
@@ -265,7 +266,7 @@ A pixel-art city that follows your clock and the real Sun, with traffic and wind
 | ![Pixel City's Long Bridge at night](docs/images/pixel-city-bridge.jpg) | ![Pixel City's Hillside Town in the afternoon](docs/images/pixel-city-hillside.jpg) |
 | The Long Bridge at night, strung with lights | Hillside Town in the afternoon |
 | ![Pixel City's Overlook at sunset](docs/images/pixel-city-overlook.jpg) | ![Pixel City's Hillside Town at night](docs/images/pixel-city-hillside-night.jpg) |
-| The Overlook at sunset | Hillside Town at night, its lamps in the harbour |
+| The Overlook at sunset | Hillside Town at night, its lamps in the harbor |
 | ![Pixel City's Airport at sunset](docs/images/pixel-city-airport.jpg) | ![Pixel City's Airport at night](docs/images/pixel-city-airport-night.jpg) |
 | The Airport at sunset, an airliner just down | The Airport at night |
 

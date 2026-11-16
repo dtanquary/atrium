@@ -38,19 +38,19 @@ flowing-gradient|Flowing Gradient|4|SNAPSHOT_DEFAULTS=gradient.palette=Midnight,
 galaxy|Galaxy|4|SNAPSHOT_DEFAULTS=galaxy.kind=Whirlpool,galaxy.rotation=4
 jellyfish|Jellyfish|5|SNAPSHOT_DEFAULTS=jellyfish.seed=22 SNAPSHOT_APPEARANCE=light
 kelp-forest|Kelp Forest|5|SNAPSHOT_DEFAULTS=kelp.seed=5 SNAPSHOT_APPEARANCE=light
-lava-lamp|Lava Lamp|40|SNAPSHOT_DEFAULTS=lava.palette=Coral LAVA_SEED=11
+lava-lamp|Lava Lamp|101|SNAPSHOT_DEFAULTS=lava.palette=Coral LAVA_SEED=11
 night-sky|Night Sky|4|SNAPSHOT_DEFAULTS=sky.previewTime=1,sky.previewHour=17.45
 meander|Meander|2.5|SNAPSHOT_DEFAULTS=meander.seed=13,meander.colors=Rainforest,meander.speed=2 SNAPSHOT_APPEARANCE=dark
 murmuration|Murmuration|20|SNAPSHOT_DEFAULTS=murmuration.light=5,murmuration.ground=0 MURMURATION_SEED=3
 nebula|Nebula|4|SNAPSHOT_DEFAULTS=nebula.palette=Hubble
-pixel-city|Pixel City|30|SNAPSHOT_DEFAULTS=city.place=0,city.previewTime=1,city.previewHour=19
+pixel-city|Pixel City|30|SNAPSHOT_DEFAULTS=city.place=0,city.previewTime=1,city.previewHour=17.15
 pixel-railway|Pixel Railway|40|RAILWAY_SEED=4 RAILWAY_ERA=transition SNAPSHOT_DEFAULTS=railway.previewTime=1,railway.previewHour=12,railway.previewDay=1,railway.day=196
-pixel-spaceport|Pixel Spaceport|19|SNAPSHOT_DEFAULTS=spaceport.previewTime=1,spaceport.previewHour=18.3
+pixel-spaceport|Pixel Spaceport|23|SNAPSHOT_DEFAULTS=spaceport.rocket.falcon9=0,spaceport.rocket.heavy=0,spaceport.rocket.newglenn=0,spaceport.rocket.vulcan=0,spaceport.rocket.electron=0,spaceport.rocket.sls=0,spaceport.rocket.shuttle=0,spaceport.rocket.saturn=0,spaceport.rocket.ariane6=0,spaceport.rocket.ariane=0,spaceport.rocket.titan=0,spaceport.rocket.atlas=0,spaceport.rocket.redstone=0,spaceport.rocket.soyuz=0,spaceport.rocket.longmarch=0,spaceport.rocket.h3=0,spaceport.rocket.lvm3=0,spaceport.previewTime=1,spaceport.previewHour=16.35
 pixel-window-seat|Pixel Window Seat|5|SEAT_AT=30500 SNAPSHOT_DEFAULTS=seat.previewTime=1,seat.previewHour=9
 rain-on-glass|Rain on Glass|4|SNAPSHOT_DEFAULTS=rain.palette=Hamburg SNAPSHOT_APPEARANCE=dark
 schlieren|Schlieren|40|SNAPSHOT_DEFAULTS=schlieren.palette=Candlelight,schlieren.filter=0,schlieren.source=3
 space-tour|Space Tour|4|SNAPSHOT_DEFAULTS=deep.photo=deep-pillars-webb.heic
-turing-patterns|Turing Patterns|40|SNAPSHOT_DEFAULTS=turing.pattern=4,turing.palette=Lagoon
+turing-patterns|Turing Patterns|40|SNAPSHOT_DEFAULTS=turing.pattern=4,turing.palette=Lagoon,turing.seed=3
 weather|Weather|4|SNAPSHOT_DEFAULTS=weather.lock=2,weather.previewTime=1,weather.previewHour=17.1
 wind|Wind|4|SNAPSHOT_DEFAULTS=wind.zoom=2,wind.map=2'
 

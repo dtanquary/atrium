@@ -136,7 +136,7 @@ SNAPSHOT_SCENE="Lava Lamp" SNAPSHOT_SECONDS=40 swift test          # integrated 
 SNAPSHOT_DEFAULTS="lava.palette=Teal" SNAPSHOT_APPEARANCE=light SNAPSHOT_SCENE="Lava Lamp" swift test
 LAVA_SEED=17 SNAPSHOT_SECONDS=36 SNAPSHOT_SCENE="Lava Lamp" swift test   # the same blobs every run, for before/after
 ```
-The README and Settings screenshots (2026-09-26) are `LAVA_SEED=11`, Coral at `SNAPSHOT_SECONDS=103` for Dark Mode and Teal at 33 for Light Mode, rendered with `swift test -c release -Xswiftc -enable-testing`.
+The README and Settings screenshots (2026-09-26, retaken on 2026-11-16 for the review's changes) are `LAVA_SEED=11`, Coral at `SNAPSHOT_SECONDS=103` for Dark Mode (`lava-lamp.jpg`, the card and Settings picture) and Teal at 33 for Light Mode (`lava-lamp-light.jpg`), rendered with `swift test -c release -Xswiftc -enable-testing`. `preview-lava-lamp-light.jpg` is Coral at 103 in Light Mode. The site's loop opens on the same moment as the Dark Mode still: its `PREVIEWS` line in `site/media.sh` says 101 (it was 40 until then, a different moment from the card's), since the script crossfades a render's first 2 s into its end.
 To check the colour cycle, run it at its shortest interval for six changes (about 15 s of wall time):
 ```sh
 SNAPSHOT_DEFAULTS="lava.cycleMinutes=1" SNAPSHOT_SECONDS=365 SNAPSHOT_SCENE="Lava Lamp" swift test
