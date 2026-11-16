@@ -119,10 +119,13 @@ let nebulaPalettes: [(name: String, colours: [SIMD3<Float>])] = [
     ("Oxygen", [[0.0, 0.03, 0.03], [0.10, 0.70, 0.50], [0.15, 0.45, 0.75], [0.85, 1.0, 0.92]]),       // like NGC 3242: OIII green, Hβ blue
 ]
 
-/// Nebula's settings: how often it changes to a new one, then the Look sliders.
+/// Nebula's settings: how often it changes to a new one, then the Look sliders, and how crisp its dust lanes are
+/// (0, the standard, is their soft look before it had the slider).
 let nebulaKnobs = [
     Knob(key: "nebula.every", label: "New nebula every", range: 0...30, standard: 8, section: "Change", format: .minutes),
-] + gradeKnobs("nebula")
+] + gradeKnobs("nebula") + [
+    Knob(key: "nebula.detail", label: "Crisp dust lanes", range: 0...1, standard: 0, section: "Look"),
+]
 
 /// Deep-space gas clouds cut by dark dust lanes, drifting very slowly. Every load rolls a new one: its own cloud
 /// structure, scale, palette (unless one is pinned in Settings), star field, and the band the cloud lies along.
@@ -135,7 +138,7 @@ let nebulaKnobs = [
     // nebula condenses from its knots outward. It clips a smoother measure than the gas itself, mostly the broad warp
     // field, or it breaks into specks.
     vec4 nebulaAt(vec2 uv, float aspect, float t, vec2 seed, float zoom, vec3 shape, vec3 base, vec3 dense, vec3 accent,
-                  vec3 hot, float clip) {
+                  vec3 hot, float clip, float detail) {
         // domain-warped fbm: the warp vector w folds the clouds into filaments
         vec2 q = uv * vec2(aspect, 1.0) * zoom + seed + vec2(t, t * 0.4);
         vec2 w = vec2(fbm(q + vec2(0.0, 1.3)), fbm(q + vec2(5.2, 8.1)));
@@ -157,8 +160,17 @@ let nebulaKnobs = [
         // tone: from g 0.7 up it dims a little below g 0.84 and brightens above it, about as much as the whole cloud.
         float glow = density * density * 2.2 * max(1.0 + 4.0 * (g - 0.84) * smoothstep(0.7, 0.8, g), 0.5);
         vec3 neb = 1.0 - exp(-c * glow);                                     // soft clip keeps bright cores from blowing out
-        float lane = smoothstep(0.5, 0.72, dust);
-        neb *= 1.0 - 0.85 * lane;                                            // dark dust lanes
+        // Dark dust lanes. With `detail` (Crisp dust lanes, 0 to 1) a lane's edge takes the gas's own folds and narrows
+        // from a blur tens of points wide to a crisp silhouette, and a thin rim just outside it is lit in the hot colour
+        // where dense, hot gas lies beside it, as the Pillars' edges are lit by the stars they face. At 0 it's the soft
+        // lanes from before the slider.
+        float edge = dust + (gas - 0.5) * 0.4 * detail;
+        float lo = 0.5 + 0.07 * detail;
+        float lane = smoothstep(lo, 0.72 - 0.07 * detail, edge);
+        neb *= 1.0 - 0.85 * lane;
+        float rim = smoothstep(lo - 0.03, lo, edge) * (1.0 - lane) * smoothstep(0.3, 0.6, g * w.y * 1.1)
+                  * smoothstep(0.5, 0.75, gas) * density * detail * 0.8;
+        neb += (1.0 - neb) * (1.0 - exp(-hot * rim));                        // soft-clipped like the gas
         // The gas dims the stars behind it a little; a lane across the gas is dust in front of them and hides nearly
         // all of them. Only where there's gas to see it against, or open sky would be punched with starless holes.
         float hide = mix(0.6 * density, 0.9, lane * smoothstep(0.1, 0.5, density));
@@ -175,7 +187,7 @@ let nebulaKnobs = [
         // inward over the first three quarters while the new one condenses out of its densest knots over the last
         // three quarters, evenly, so halfway the densest quarter or so of each is showing.
         float clipNow = mix(-0.2, 1.2, clamp(u_mix / 0.75, 0.0, 1.0));
-        vec4 now = nebulaAt(uv, aspect, t, u_seed, u_zoom, u_band, u_base, u_dense, u_accent, u_hot, clipNow);
+        vec4 now = nebulaAt(uv, aspect, t, u_seed, u_zoom, u_band, u_base, u_dense, u_accent, u_hot, clipNow, u_detail);
         // each nebula has its own star field, moved by its seed; they swap over as it changes
         vec2 ptsNow = pts + u_seed * 97.0;
         float field = starField(ptsNow, 7.0, 0.3, u_now);
@@ -183,7 +195,7 @@ let nebulaKnobs = [
         vec4 next = vec4(0.0);
         if (u_mix > 0.0) { // only while changing, so the rest of the time it costs no more than one nebula
             float clipNext = mix(1.2, -0.2, clamp((u_mix - 0.25) / 0.75, 0.0, 1.0));
-            next = nebulaAt(uv, aspect, t, u_seed2, u_zoom2, u_band2, u_base2, u_dense2, u_accent2, u_hot2, clipNext);
+            next = nebulaAt(uv, aspect, t, u_seed2, u_zoom2, u_band2, u_base2, u_dense2, u_accent2, u_hot2, clipNext, u_detail);
             vec2 ptsNext = pts + u_seed2 * 97.0;
             field = mix(field, starField(ptsNext, 7.0, 0.3, u_now), u_mix);
             bright = mix(bright, brightStar(ptsNext + vec2(u_now * 0.2, 0.0), 180.0, u_now), u_mix);

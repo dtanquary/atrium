@@ -11,6 +11,7 @@ Everything is maths per pixel, per frame:
 1. **Gas:** `fbm` is value noise stacked 5 octaves deep. The coordinates are `q = p·u_zoom + u_seed + (t, 0.4t)`.
 2. **Domain warp:** two more fbm fields, `w`, bend `q` before the gas is sampled (`gas = fbm(q + 1.8w + ...)`). This is what turns blobs into filaments, folds and curls.
 3. **Dust lanes:** two warped noise octaves. Where `dust` > 0.5–0.72 they darken the gas by up to 85%. They're dust in front of the gas, so they hide the field stars behind them too: 90% where a lane crosses dense gas, fading with the gas (`smoothstep(0.1, 0.5, density)`), so open sky is never punched with starless holes. The gas alone dims them by up to 60%, as it always did. `nebulaAt` returns that hiding in its alpha. (2026-11-16, from the review of 14 November: a lane held 13.8 stars per 100 × 100 px, as many as the gas beside it, and read as a shadow on the gas rather than dust in front of it; now 4.5, only the brightest showing faintly. In Dark Cloud a lane over the dim gas now reads as a true dark nebula, a starless patch.)
+   - **Crisp dust lanes** (`nebula.detail`, 0–1, standard 0): the lanes' edges are soft blurs 30–60 pt wide with no lit rim, which is the calm look and stays the standard. Raised, a lane's edge takes the gas's own five octaves (`dust + (gas − 0.5)·0.4·detail`) and its smoothstep narrows from 0.5–0.72 to 0.57–0.65, so it becomes a crisp silhouette with folded edges; and a thin rim just outside it (0.03 below the lane's threshold) is lit in the palette's hot colour, soft-clipped like the gas, only where the gas is dense (`smoothstep(0.5, 0.75, gas)`) and hot (`smoothstep(0.3, 0.6, g·w.y·1.1)`, a looser gate than the hot-core colour's own), so the rims glow on the side facing the hot gas and break up along the rest, like the lit edges of the Pillars. Because the gas lifts the threshold, at 1 a lane also reaches a little further into the brightest gas, which can grow a new pillar there. At 0 every term it adds is multiplied by 0, so it is the picture from before the slider: 44 of 5.9 million pixels moved by 1 of 255 (Metal lays the arithmetic out differently round it, as Sources/CLAUDE.md warns). (2026-11-16, from the review of 14 November: Dave's call was to put the crisp, rim-lit lanes behind a slider whose standard is today's look.)
 4. **Band:** a gaussian band across the screen, `(y - u_band.x + u_band.y·(x - 0.5))/u_band.z`. It keeps the cloud crossing the screen instead of landing wherever the noise puts it. `ponytail:` it's a fixed band, so the composition only shifts through the drifting gas.
 5. **Colour:**
    - `u_base` blends to `u_dense` with gas density
@@ -56,6 +57,7 @@ Everything is maths per pixel, per frame:
 | `nebula.contrast` | Contrast | 0.5–1.5 | 1 |
 | `nebula.saturation` | Saturation | 0–2 | 1 |
 | `nebula.hue` | Hue shift | −180–180° | 0 |
+| `nebula.detail` | Crisp dust lanes | 0–1 | 0 (the soft lanes; see How it works, 3) |
 
 At 1.8, brightness and contrast blew the cores out to white, so both stop at 1.5.
 
@@ -112,6 +114,8 @@ CPU 0.45 ms and GPU about 1.6 ms per frame (release, 2x; the dissolve's thicknes
 SNAPSHOT_SCENE=Nebula swift test                                        # a random roll
 SNAPSHOT_DEFAULTS="nebula.palette=Planetary" SNAPSHOT_SCENE=Nebula swift test
 SNAPSHOT_DEFAULTS="nebula.seed=5,nebula.palette=Dusty" SNAPSHOT_SCENE=Nebula swift test --filter everySceneRenders  # the same roll every time
+SNAPSHOT_DEFAULTS="nebula.seed=1,nebula.palette=Hubble,nebula.detail=1" SNAPSHOT_SCENE=Nebula swift test --filter everySceneRenders  # crisp, rim-lit lanes
+swift test --filter nebulaFollowsItsSeedAndDustDetail   # the seed pins the roll, and Crisp dust lanes reaches the shader
 SNAPSHOT_DEFAULTS="nebula.palette=Hubble,nebula.contrast=1.5,nebula.hue=120" SNAPSHOT_SCENE=Nebula swift test
 ```
 `SNAPSHOT_SECONDS` moves the gas (the shader runs on `u_now`), so a larger value previews the drift. To test cycling fast, temporarily shorten the `8 * 60` wait and the 90 s dissolve, then run the app binary directly and check that it survives several handovers.
