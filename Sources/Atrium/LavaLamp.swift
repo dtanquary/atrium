@@ -207,8 +207,11 @@ final class LavaLamp: SKScene {
             vec4 h = i < 4 ? u_blobs0[min(i, 3)] : u_blobs1[max(i - 4, 0)];
             vec4 k = i < 4 ? u_blobs2[min(i, 3)] : u_blobs3[max(i - 4, 0)];
             vec3 b = ball(q, h.xy, h.z, h.w);
-            f += b + stem(q, k.xy, h.xy, k.z);
+            f += b;
             lp += b.x * (q - h.xy) * k.w;
+            // A stem lives only while its head rises or drips, about a third of a trip; on a uniform, so every pixel
+            // takes the same path.
+            if (k.z > 0.0) f += stem(q, k.xy, h.xy, k.z);
         }
         // the molten pool: a nearly flat surface, the heads resting in it make the bumps. Its lp only counts
         // below the surface, so the top of the pool stays pale and hot rather than dimming like the top of a blob.
@@ -219,10 +222,12 @@ final class LavaLamp: SKScene {
         lp += pv * vec2(0.0, clamp((q.y - surface) / 0.05, -1.0, 0.0));
 
         // Liquid: dark, lit by the bulb in a soft cone rising from the bottom, with the wax's own glow scattering
-        // into it around every blob.
+        // into it around every blob. Light Mode's liquid is already pale, so there the glow tints it toward the wax
+        // instead: added, it clipped to a white halo round every blob and a white beam up every stem.
         float cone = exp(-(x - 0.5) * (x - 0.5) / 0.36) * pow(1.0 - y, 1.3);
         vec3 col = mix(u_liquidDeep, u_liquidLit, 0.15 + 0.95 * cone * u_bulb);
-        col += u_waxHot * u_glow * smoothstep(0.2, 1.0, f.x) * (1.2 - y);
+        float glow = u_glow * smoothstep(0.2, 1.0, f.x) * (1.2 - y);
+        col = mix(col + u_waxHot * glow, mix(col, u_waxHot, 0.55 * glow), step(0.5, u_pivot)); // u_pivot is 0.7 in Light Mode
 
         // Wax. 1/f is about (d/r)² near a blob, so sqrt(1 - 1/f) is its thickness: 0 at the edge, 1 in the core.
         float z = sqrt(max(1.0 - 1.0 / f.x, 0.0));
@@ -234,10 +239,15 @@ final class LavaLamp: SKScene {
         // The only light is the bulb underneath, so each blob glows brightest on its underside and dims toward its
         // top, with the thick core still glowing from within. Satin wax, so a soft limb rather than a dark outline.
         float under = smoothstep(0.9, -0.9, dl.y);
+        // The pool is all underside, heat and core, which summed to 1.67 times the hot colour and clipped two channels
+        // to cream or pale pink along the bottom. So low down those gains come down and the core glow follows the
+        // bulb's cone: the pool peaks near 1.2 times the hot colour over the bulb and falls to it toward the walls.
+        // By height, not by the pool's share of the field, which kinks at its buried surface and drew a seam there.
+        float pool = 1.0 - smoothstep(0.03, 0.14, y);
         vec3 wax = mix(u_waxDeep, u_waxHot, clamp(0.15 + 0.5 * under + 0.25 * heat + 0.3 * thick, 0.0, 1.0));
-        wax *= 0.7 + 0.4 * under + 0.2 * heat; // tops fall to the deep colour rather than darkening to brown
+        wax *= 0.7 + (0.4 * under + 0.2 * heat) * (1.0 - 0.8 * pool); // tops fall to the deep colour rather than darkening to brown
         wax *= 0.85 + 0.15 * z;
-        wax += u_waxHot * (0.12 + 0.25 * heat) * thick * thick;                        // hot core glow
+        wax += u_waxHot * (0.12 + 0.25 * heat) * thick * thick * (1.0 - pool * (1.0 - cone)); // hot core glow
         wax += u_waxHot * 0.45 * pow(1.0 - z, 3.0) * under * (0.4 + heat);             // bulb through the thin underside
         vec3 n = normalize(vec3(dl * (1.0 - 0.7 * thick), z + 0.3));
         wax += vec3(0.06) * pow(max(dot(n, normalize(vec3(-0.35, 0.45, 0.82))), 0.0), 10.0); // faint satin sheen
@@ -247,11 +257,16 @@ final class LavaLamp: SKScene {
         float edge = clamp((f.x - 1.0) / (length(f.yz) * 0.75 / u_size.y + 0.0001) + 0.5, 0.0, 1.0);
         col = mix(col, wax, edge * (u_opacity + (1.0 - u_opacity) * smoothstep(0.0, 0.5, thick)));
 
-        // Curved glass: darker toward the sides, with two soft vertical window reflections.
+        // Curved glass: darker toward the sides, with two soft window reflections, bowed and fading out toward the
+        // top and bottom as a sheen on curved glass does. Straight and even from top to bottom they read as seams,
+        // and a thin bright core in them read as one too.
         col *= 0.62 + 0.38 * sin(3.14159 * x);
-        col += vec3(0.035 * exp(-(x - 0.16) * (x - 0.16) / 0.0004) + 0.02 * exp(-(x - 0.87) * (x - 0.87) / 0.001225));
+        float ends = (2.0 * y - 1.0) * (2.0 * y - 1.0);
+        float ra = x - 0.15 - 0.035 * ends, rb = x - 0.87 + 0.025 * ends;
+        col += vec3(0.04 * exp(-ra * ra / 0.0012) * smoothstep(0.05, 0.5, y) * smoothstep(1.0, 0.75, y)
+                  + 0.025 * exp(-rb * rb / 0.002) * smoothstep(0.15, 0.55, y) * smoothstep(0.95, 0.7, y));
         col = grade(col, u_pivot, u_hue, u_saturation, u_contrast, u_brightness);
-        col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0;
+        col += (hash42(v_tex_coord * u_size * 2.0).x - 0.5) / 128.0; // hash21 tiles every 50 pixels across and 100 up
         gl_FragColor = vec4(col, 1.0);
     }
     """
