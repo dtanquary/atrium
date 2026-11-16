@@ -33,7 +33,7 @@ dappled-light|Dappled Light|4|SNAPSHOT_DEFAULTS=dappled.previewTime=1,dappled.pr
 earth-from-orbit|Earth from Orbit|4|SNAPSHOT_DEFAULTS=latitude=25,longitude=78,earth.previewStorm=1
 etching|Etching|4|SNAPSHOT_DEFAULTS=etching.drawn=0.6908,etching.picture=1,etching.speed=8
 fireflies|Fireflies|8|
-fish-tank|Fish Tank|4|SNAPSHOT_APPEARANCE=light
+fish-tank|Fish Tank|4|SNAPSHOT_APPEARANCE=light SNAPSHOT_DEFAULTS=tank.seed=7
 flowing-gradient|Flowing Gradient|4|SNAPSHOT_DEFAULTS=gradient.palette=Midnight,gradient.ribbonsOn=1
 galaxy|Galaxy|4|SNAPSHOT_DEFAULTS=galaxy.kind=Whirlpool,galaxy.rotation=4
 jellyfish|Jellyfish|5|SNAPSHOT_DEFAULTS=jellyfish.seed=22 SNAPSHOT_APPEARANCE=light
