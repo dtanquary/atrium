@@ -48,3 +48,11 @@ import Testing
     let mean = pictures[0][shore].reduce(0, +) / Double(shore.count)
     #expect(mean > 4 && mean < 20, "the far shore is \(mean) of 255")
 }
+
+/// The water's shading, which runs only where the water map has water, still runs: its ripples move over 2 s (by
+/// about 3.6 of 255), where water shaded as land would hold still.
+@MainActor @Test func murmurationWaterRipples() throws {
+    let (pictures, rows) = try marshAtSunset([0, 2]), water = rows(320, 650)
+    let change = zip(pictures[0][water], pictures[1][water]).map { abs($0 - $1) }.reduce(0, +) / Double(water.count)
+    #expect(change > 0.5, "the water changed by \(change) of 255 in 2 s")
+}
