@@ -234,18 +234,20 @@ final class Meander: SKScene, Trimmable {
         let seed = UInt64(max(UserDefaults.standard.integer(forKey: "meander.seed"), 0)), life = Self.lakes.value * Self.perMinute
         let (across, up, valley, landing) = (Float(size.width / built), Float(size.height / built), full ? River.Valley.full : .within, Landing())
         self.landing = landing
-        Task.detached(priority: .userInitiated) { [weak self] in
+        // (held weakly across the hop to the main actor too, or a scene given up meanwhile lives on until it's free)
+        let land: @MainActor () -> Void = { [weak self] in self?.arrive(waiting: false) }
+        Task.detached(priority: .userInitiated) {
             let river = River(seed: seed > 0 ? seed : .random(in: 1...UInt64.max), across: across, up: up, texels: Self.texels, valley: valley)
             river.lakeLife = life
             river.age()
             landing.arrive(river)
-            await self?.arrive(waiting: false)
+            await land()
         }
     }
 
     /// Takes the river once it has landed, if it hasn't been taken, and dresses the ground in it. In a view that
     /// is running the picture fades up from the bare ground; in one that is held (frozen, paused, or covered) it
-    /// is there at once, and a frozen view is woken to draw it.
+    /// is there at once, and a frozen view is woken to draw it; a frozen view still awake is kept so through the fade.
     private func arrive(waiting: Bool) {
         guard landed == nil, let river = landing?.take(waiting: waiting) else { return }
         (landed, landing) = (river, nil)
@@ -263,6 +265,9 @@ final class Meander: SKScene, Trimmable {
             (cover.size, cover.position, cover.zPosition) = (size, CGPoint(x: size.width / 2, y: size.height / 2), 1)
             addChild(cover)
             cover.run(.sequence([.fadeOut(withDuration: 0.4), .removeFromParent()]))
+            // a frozen view still awake from being shown stays so until the fade is done; not mid-crossfade, whose
+            // longer wake this would cut short (the fade runs after it, within it)
+            if let view = view as? WallpaperView, view.frozen, view.scene === self { view.wake(for: 0.5) }
         }
     }
 
