@@ -314,55 +314,62 @@ final class Murmuration: SKScene, BatteryPaced {
     /// The land as photographed, scaled from the photo's sky to ours so it stays a near-black silhouette; the water as
     /// our sky mirrored in it, times the water's reflectance measured in the photo (which keeps its ripples), with the
     /// flock's reflection darkening it, all gently bent by slow ripples. Light is linear until the end, then tone-mapped
-    /// like the sky.
+    /// like the sky. The water's work (three noise reads, six of the sky and six more of the aux map and the flock's
+    /// reflection) runs only where there is water: none above the horizon, where half the pier's photo is (most of it
+    /// clear sky), nor on the pond's far shore.
     private static let groundShader = """
     vec2 nuv(vec2 p) { return (fract(p) * 256.0 + 0.5) / 257.0; }
 
     void main() {
         vec2 uv = vec2(v_tex_coord.x, v_tex_coord.y * u_frame);
-        // Slow ripples on the water plane (the eye 2 m above it), from two layers of the baked noise drifting different
-        // ways. On screen they shrink toward the horizon, and they fade out far away, where they'd only shimmer.
-        float dip = max(u_cam.z - uv.y, 0.0) * 2.0 * u_cam.y;
-        float dist = 2.0 / max(dip, 0.004);
-        vec2 w = vec2((uv.x * 2.0 - 1.0) * u_cam.x * dist, dist);
-        float t = u_now * u_waves.y;
-        vec4 n1 = texture2D(u_noise, nuv(w * vec2(0.07, 0.11) + vec2(t * 0.004, t * 0.013)));
-        vec4 n2 = texture2D(u_noise, nuv(w * vec2(0.13, 0.19) + vec2(-t * 0.009, t * 0.007)));
-        vec2 slope = vec2(n1.r - n2.b, n1.b + n2.r - 1.0) * smoothstep(400.0, 60.0, dist);
-        vec2 shift = slope * dip * u_waves.x;
-        // Fine wavelets, stretched across the view as wind ripples are, drifting toward us; only on the nearer water,
-        // where a pixel still spans less than one of them.
-        vec4 n3 = texture2D(u_noise, nuv(w * vec2(0.3, 0.9) + vec2(t * 0.02, t * 0.12)));
-        float wavelets = (n3.g - 0.5) * smoothstep(45.0, 12.0, dist);
         vec4 photo = texture2D(u_texture, v_tex_coord);
         vec3 aux = texture2D(u_aux, v_tex_coord).rgb;
-        float ripples = texture2D(u_aux, v_tex_coord + vec2(shift.x, shift.y / u_frame)).g;
         // Land and pier: the photo's shading in our horizon's colour, keeping a little of its own, and darker than the
         // photo's long exposure made it, as a silhouette against a sunset is (under 4% of the sky in photos).
         vec3 shot = pow(photo.rgb / max(photo.a, 0.004), vec3(2.2));
         shot += min(shot, vec3(0.0015)) * u_lift; // the darkest tones lifted (`lift`)
         float lw = dot(u_land, vec3(0.2126, 0.7152, 0.0722));
         vec3 land = mix(dot(shot, vec3(0.2126, 0.7152, 0.0722)) * u_land, shot * lw, 0.3) * 0.35;
-        // Waves tilt toward us, so rough water reflects sky higher than the mirror image, and a spread of it.
-        float mirror = 2.0 * u_cam.z - uv.y;
-        vec3 reflected = vec3(0.0);
-        for (int i = 0; i < 3; i++) {
-            float v = mirror + shift.y + u_rough * (0.3 + 0.5 * float(i));
-            vec2 st = vec2(uv.x + shift.x, clamp((v - u_cam.w) / (1.0 - u_cam.w), 0.0, 1.0));
-            vec3 c4 = mix(texture2D(u_before, st).rgb, texture2D(u_after, st).rgb, u_blend);
-            reflected += c4 * c4 * (4.0 / 3.0);
+        vec3 light = land;
+        if (aux.r > 0.0) {
+            // Slow ripples on the water plane (the eye 2 m above it), from two layers of the baked noise drifting
+            // different ways. On screen they shrink toward the horizon, and they fade out far away, where they'd only
+            // shimmer.
+            float dip = max(u_cam.z - uv.y, 0.0) * 2.0 * u_cam.y;
+            float dist = 2.0 / max(dip, 0.004);
+            vec2 w = vec2((uv.x * 2.0 - 1.0) * u_cam.x * dist, dist);
+            float t = u_now * u_waves.y;
+            vec4 n1 = texture2D(u_noise, nuv(w * vec2(0.07, 0.11) + vec2(t * 0.004, t * 0.013)));
+            vec4 n2 = texture2D(u_noise, nuv(w * vec2(0.13, 0.19) + vec2(-t * 0.009, t * 0.007)));
+            vec2 slope = vec2(n1.r - n2.b, n1.b + n2.r - 1.0) * smoothstep(400.0, 60.0, dist);
+            vec2 shift = slope * dip * u_waves.x;
+            // Fine wavelets, stretched across the view as wind ripples are, drifting toward us; only on the nearer
+            // water, where a pixel still spans less than one of them.
+            vec4 n3 = texture2D(u_noise, nuv(w * vec2(0.3, 0.9) + vec2(t * 0.02, t * 0.12)));
+            float wavelets = (n3.g - 0.5) * smoothstep(45.0, 12.0, dist);
+            float ripples = texture2D(u_aux, v_tex_coord + vec2(shift.x, shift.y / u_frame)).g;
+            // Waves tilt toward us, so rough water reflects sky higher than the mirror image, and a spread of it.
+            float mirror = 2.0 * u_cam.z - uv.y;
+            vec3 reflected = vec3(0.0);
+            for (int i = 0; i < 3; i++) {
+                float v = mirror + shift.y + u_rough * (0.3 + 0.5 * float(i));
+                vec2 st = vec2(uv.x + shift.x, clamp((v - u_cam.w) / (1.0 - u_cam.w), 0.0, 1.0));
+                vec3 c4 = mix(texture2D(u_before, st).rgb, texture2D(u_after, st).rgb, u_blend);
+                reflected += c4 * c4 * (4.0 / 3.0);
+            }
+            // The flock's reflection, the same way: on calm water its mirror image; on a wavy sea smeared up toward the
+            // horizon, most of it near the mirror image, so a flock close and high still darkens the sea under it.
+            float birds = 0.0;
+            for (int i = 0; i < 5; i++) {
+                float k = 0.1 + 0.8 * float(i);
+                float y = uv.y - shift.y - u_rough * k;
+                birds += texture2D(u_birds, vec2(uv.x + shift.x, (y + 1.4 * u_cam.z) / (2.4 * u_cam.z))).r * exp(-k * 0.7);
+            }
+            birds /= 2.04;
+            vec3 water = reflected * u_balance * ripples * 2.0 * (1.0 - birds * 0.9) * (1.0 + (slope.y + wavelets) * u_waves.z);
+            light = mix(land, water, aux.r);
         }
-        // The flock's reflection, the same way: on calm water its mirror image; on a wavy sea smeared up toward the horizon,
-        // most of it near the mirror image, so a flock close and high still darkens the sea under it.
-        float birds = 0.0;
-        for (int i = 0; i < 5; i++) {
-            float k = 0.1 + 0.8 * float(i);
-            float y = uv.y - shift.y - u_rough * k;
-            birds += texture2D(u_birds, vec2(uv.x + shift.x, (y + 1.4 * u_cam.z) / (2.4 * u_cam.z))).r * exp(-k * 0.7);
-        }
-        birds /= 2.04;
-        vec3 water = reflected * u_balance * ripples * 2.0 * (1.0 - birds * 0.9) * (1.0 + (slope.y + wavelets) * u_waves.z);
-        vec3 col = sqrt(1.0 - exp(-mix(land, water, aux.r)));
+        vec3 col = sqrt(1.0 - exp(-light));
         gl_FragColor = vec4(col + (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 128.0, 1.0) * photo.a;
     }
     """
