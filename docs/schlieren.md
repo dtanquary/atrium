@@ -137,8 +137,9 @@ Two research agents, 2026-09-28. The notes are summarised here. The photos (30, 
 ## Checking it
 `SNAPSHOT_SCENE="Schlieren" SNAPSHOT_SECONDS=40 SNAPSHOT_DEFAULTS="schlieren.palette=Candlelight,schlieren.filter=0,schlieren.source=3" swift test -c release -Xswiftc -enable-testing --filter everySceneRenders`. Filters and sources are indexed in the order above (source 3 is Warm air, the standard; 0 is Candles). Check both looks with `SNAPSHOT_APPEARANCE=light|dark`.
 - **Settling.** Candles settle in about 6 s. Warm air takes longer: its plumes are low mushrooms at 6 s, reach mid-frame by 14 s and only fill the frame, turbulent to the top, from about 40 s on, which is how it looks for most of the time it runs.
-- **The pictures** (retaken 2026-10-14, when Warm air became the standard), all with the palette pinned to Candlelight and the dark field:
-  - `images/schlieren.jpg` (the hero, cut to `Resources/preview-schlieren.jpg` and the site's card): `schlieren.source=3`, 40 s.
+- **The pictures** (retaken 2026-10-14, when Warm air became the standard, and again 2026-11-16 after the 30-steps-a-second air and Warm air's roll-off and radiator), with `swift test -c release -Xswiftc -enable-testing`:
+  - `images/schlieren.jpg` (the hero, cut to `Resources/preview-schlieren.jpg` and the site's card): `schlieren.palette=Candlelight,schlieren.filter=0,schlieren.source=3`, 40 s.
   - The site's loop and the README's `schlieren.webp`: the same, 40 s in, as `site/media.sh`'s `PREVIEWS` line says. The WebP is 10 fps at q50 with a keyframe every frame (`fps=10`, `-kmin 0 -kmax 1 -q 50 -d 100`): at 15 fps q70 it came to 4.2 MB, and without keyframes the dim turbulence broke into blocks.
-  - `images/schlieren-candles.jpg`: `schlieren.source=0`, 14 s.
-  - `images/schlieren-rainbow.jpg` and `images/schlieren-light.jpg` are from 2026-09-29 (one Candle, Rainbow, Spectrum; a Mug, Knife edge, Pastel in Light Mode).
+  - `images/schlieren-candles.jpg`: `schlieren.palette=Candlelight,schlieren.filter=0,schlieren.source=0`, 14 s.
+  - `images/schlieren-rainbow.jpg`: `schlieren.palette=Spectrum,schlieren.filter=1,schlieren.source=1`, 14 s.
+  - `images/schlieren-light.jpg`: `schlieren.palette=Pastel,schlieren.filter=3,schlieren.source=2` with `SNAPSHOT_APPEARANCE=light`, 14 s. (The 2026-09-29 rainbow and knife-edge stills had come out in other palettes than these, a navy rainbow and a pink field; Spectrum's is Davidhazy's ultramarine, and Pastel's a lavender field.)
