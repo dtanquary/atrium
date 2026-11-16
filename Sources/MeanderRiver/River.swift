@@ -75,6 +75,30 @@ public final class River {
         /// The texels it was last drawn on and its bank distance at each, the box round them (the least column and
         /// row, then the greatest), and when that was.
         var texels: [Int32] = [], distances: [Float] = [], box = SIMD4<Int32>(.max, .max, -1, -1), drawn = -Double.infinity
+        /// From when it ages four times as fast: once its water is a scrap (`scrap`), so it goes in a quarter of
+        /// the life it had left.
+        var hurry = Double.infinity
+
+        /// Water shorter than this between its silting fronts, in widths, is a scrap: about three widths of it
+        /// show, with the taper ahead of each front. (Scraps lasted as long as whole lakes, at the river's own
+        /// tone, and read as loose brush strokes beside it: the review of 2026-11-14.)
+        static let scrap: Float = 3
+
+        /// How old it is, for its life: its age, and three times more since it was hurried.
+        func age(at now: Double) -> Double { now - born + 3 * max(0, now - hurry) }
+
+        /// It, hurried from when its water is a scrap, or from `from` if it is one already: its fronts only come
+        /// in, so that is one moment, found by halving.
+        func hurried(from: Double) -> Lake {
+            var arc: Float = 0, lake = self
+            for i in nodes.indices.dropFirst() { arc += hypot(nodes[i].x - nodes[i - 1].x, nodes[i].y - nodes[i - 1].y) }
+            func wet(_ t: Double) -> Float { arc - Self.front(Float(t - first)) - Self.front(Float(t - last)) }
+            var (lo, hi) = (from, from + 2 * Double(arc) + 1) // a front comes in a quarter of a width a T at least
+            if wet(lo) < Self.scrap { hi = lo }
+            for _ in 0..<30 where hi > lo { if wet(0.5 * (lo + hi)) < Self.scrap { hi = 0.5 * (lo + hi) } else { lo = 0.5 * (lo + hi) } }
+            lake.hurry = hi
+            return lake
+        }
 
         /// How far a silting front has come in from an end that has been one for `age`: about 3 widths in the first
         /// T, then a quarter of a width a T.
@@ -760,7 +784,8 @@ public final class River {
 
     /// Puts a lake's nodes in `path` at their widths now. Each end silts up behind a front that moves in from it
     /// (`Lake.front`), the water tapering to nothing over the 2 widths ahead of the front; and over the second half
-    /// of its life the whole lake narrows to nothing. A dry stretch gets a negative width, so nothing is drawn.
+    /// of its life the whole lake narrows to nothing (a scrap's life going four times as fast, `Lake.age(at:)`).
+    /// A dry stretch gets a negative width, so nothing is drawn.
     /// Returns how many nodes, or 0 if the lake is all dry.
     private func trace(_ lake: Lake) -> Int {
         arcs.removeAll(keepingCapacity: true)
@@ -771,7 +796,7 @@ public final class River {
             arcs.append(arc)
         }
         func silted(_ from: Float, _ since: Double) -> Float { smoothstep(0, 1, (from - Lake.front(Float(now - since))) / 2 + 1) }
-        let body = 1 - smoothstep(Float(0.5 * lakeLife), Float(lakeLife), Float(now - lake.born))
+        let body = 1 - smoothstep(Float(0.5 * lakeLife), Float(lakeLife), Float(lake.age(at: now)))
         for (i, node) in lake.nodes.enumerated() {
             let share = body * silted(arcs[i], lake.first) * silted(arc - arcs[i], lake.last)
             path.append([node.x, node.y, node.z * share - 0.15 * (1 - share)])
@@ -798,7 +823,7 @@ public final class River {
         var at = 0
         while at < lakes.count {
             let lake = lakes[at], n = lake.nodes.count
-            if now - lake.born > lakeLife {
+            if lake.age(at: now) > lakeLife {
                 drop(at)
                 continue
             }
@@ -844,8 +869,13 @@ public final class River {
                 // this piece runs to the middle of the covered stretch after it, or to the lake's end if that stretch is the last
                 let lo = gone ? max(i - 1, 0) : from, hi = gone ? min(j + 1, n - 1) : next == n ? n - 1 : (j + next) / 2
                 if hi > lo {
-                    lakes.insert(Lake(nodes: Array(lake.nodes[lo...hi]), born: lake.born, first: lo == 0 ? lake.first : began(under[lo], silted.0 - arcs[lo]),
-                                      last: hi == n - 1 ? lake.last : began(under[hi], silted.1 - (arc - arcs[hi]))), at: at)
+                    // A scrap is hurried from now, or, in a past, from when it became one; and a piece of a hurried lake
+                    // stays as hurried, or it would widen again
+                    var piece = Lake(nodes: Array(lake.nodes[lo...hi]), born: lake.born, first: lo == 0 ? lake.first : began(under[lo], silted.0 - arcs[lo]),
+                                     last: hi == n - 1 ? lake.last : began(under[hi], silted.1 - (arc - arcs[hi])))
+                    piece = piece.hurried(from: gone ? lake.born : now)
+                    piece.hurry = min(piece.hurry, lake.hurry)
+                    lakes.insert(piece, at: at)
                     at += 1
                 }
                 (i, from) = (next, hi)
@@ -1102,7 +1132,7 @@ public final class River {
                 write(i, ground, pixels)
             }
         } } }
-        if lake { lakes.append(Lake(nodes: loop, born: now, first: now, last: now)) }
+        if lake { lakes.append(Lake(nodes: loop, born: now, first: now, last: now).hurried(from: now)) }
     }
 
     // MARK: Running it
@@ -1205,7 +1235,11 @@ public final class River {
     /// Then the recent past as the live river runs, in coarse steps. Necks are looked for and nodes respaced every
     /// other step, and the ground is kept by `sweep`, which stamps it as the river leaves it. (Bringing the ground
     /// up to date the live river's way every 12th step of the recent past was tried in its place: it took 160 ms
-    /// where this takes 100, and left the bars in terraces, one to a visit, where they should be smooth.)
+    /// where this takes 100, and left the bars in terraces, one to a visit, where they should be smooth.) The recent
+    /// past is swept every 4th step: every 12th, as it was while a past was made on the main thread, left a comb of
+    /// torn teeth along scarps against the valley's walls, for about 20 ms less. (Drawing every strip of the
+    /// distant past, and not only a bank's that moved in, took 40 ms more and only turned torn patches into
+    /// straight-edged ones.)
     public func age(distant: Double = 240, recent: Double = 60) {
         let end = now + distant + recent
         pastEnds = end
@@ -1243,7 +1277,7 @@ public final class River {
                 markNeck()
             }
             if k % 2 == 0 { respace() }
-            if k % 12 == 0 { sweep() }
+            if k % 4 == 0 { sweep() }
         }
         sweep()
         closeCracks()

@@ -1,5 +1,6 @@
 import MeanderRiver
 import SpriteKit
+import Synchronization
 
 @MainActor func meander(size: CGSize) -> SKScene { Meander(size: size) }
 
@@ -123,12 +124,35 @@ final class Meander: SKScene, Trimmable {
     ]
 
     /// Texels to a channel's width: at the smallest river a texel is 2 points.
-    private static let texels: Float = 14
+    nonisolated private static let texels: Float = 14
     /// How long a stage of the old map lasts, in T: short when a stage's ink stays with its land for good (thin
     /// stripes), long when the whole sheet moves on to Fisk's next colours at each stage.
     private static let stages = [5.0, 11.0]
 
-    private(set) var river: River!
+    /// The river and its past, once they have landed (`make`).
+    private var landed: River?
+    /// The river. Its past is made on another thread, at every build (130 to 160 ms on the main thread, where it
+    /// was made until 2026-11-15, at each launch, Shuffle and Settings page), and the scene draws only its bare
+    /// ground until it lands; anything else that asks for it before then, the tests, waits for it.
+    var river: River! {
+        if landed == nil { arrive(waiting: true) }
+        return landed
+    }
+    /// A river made on another thread, handed to the scene (as Ant Colony's farms are). Its own thread lets go of
+    /// it as it hands it over, so it is the scene's alone.
+    private final class Landing: Sendable {
+        struct Made: @unchecked Sendable { let river: River }
+        private let made = Mutex<Made?>(nil), ready = DispatchSemaphore(value: 0)
+        func arrive(_ river: River) { made.withLock { $0 = Made(river: river) }; ready.signal() }
+        /// What has arrived, once. `waiting` holds the caller until it has.
+        func take(waiting: Bool) -> River? {
+            if waiting { ready.wait(); ready.signal() }
+            return made.withLock { made in defer { made = nil }; return made?.river }
+        }
+    }
+    private var landing: Landing?
+    /// The ground's own colour, over the picture as it fades up when the river lands.
+    private let cover = SKSpriteNode()
     /// The ground as it was at the river's last two steps, and when each was: the picture is mixed from the two by
     /// how far the river is toward its next step, so a bank moves on every frame and not only when the river
     /// steps. Each step's bytes go to whichever holds the older.
@@ -192,13 +216,41 @@ final class Meander: SKScene, Trimmable {
     private var changes = 0, retired = false
 
     override func sceneDidLoad() {
-        backgroundColor = .black
+        // the bare ground of the look it will wear, in the system's mode, until the river lands
+        let dark = systemIsDark, bare = Self.look.value > 0.5 ? (dark ? Self.maps[0].dark.paper : Self.maps[0].light.paper)
+            : (dark ? Self.reliefs[family.relief].dark.ground : Self.reliefs[family.relief].light.ground)
+        backgroundColor = NSColor(srgbRed: CGFloat(bare.x), green: CGFloat(bare.y), blue: CGFloat(bare.z), alpha: 1)
+        addChild(trim)
+        make()
+        NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged), name: UserDefaults.didChangeNotification, object: nil)
+        appearance = NSApplication.shared.observe(\.effectiveAppearance) { [weak self] _, _ in MainActor.assumeIsolated { self?.settingsChanged() } }
+    }
+
+    /// Makes the river and its past on another thread: about 150 to 250 ms of a core, which on the main thread
+    /// held up the launch, every Shuffle and every Settings page. It lands on the next frame after (`arrive`), or
+    /// sooner on its own if the scene isn't being drawn (a scene waiting to take over, `handOver`).
+    private func make() {
         // ("meander.seed" is for the tests, which want the same river twice; nothing else sets it.)
-        let seed = UInt64(max(UserDefaults.standard.integer(forKey: "meander.seed"), 0))
-        river = River(seed: seed > 0 ? seed : .random(in: 1...UInt64.max), across: Float(size.width / built), up: Float(size.height / built), texels: Self.texels,
-                      valley: full ? .full : .within)
-        river.lakeLife = Self.lakes.value * Self.perMinute
-        river.age()
+        let seed = UInt64(max(UserDefaults.standard.integer(forKey: "meander.seed"), 0)), life = Self.lakes.value * Self.perMinute
+        let (across, up, valley, landing) = (Float(size.width / built), Float(size.height / built), full ? River.Valley.full : .within, Landing())
+        self.landing = landing
+        // (held weakly across the hop to the main actor too, or a scene given up meanwhile lives on until it's free)
+        let land: @MainActor () -> Void = { [weak self] in self?.arrive(waiting: false) }
+        Task.detached(priority: .userInitiated) {
+            let river = River(seed: seed > 0 ? seed : .random(in: 1...UInt64.max), across: across, up: up, texels: Self.texels, valley: valley)
+            river.lakeLife = life
+            river.age()
+            landing.arrive(river)
+            await land()
+        }
+    }
+
+    /// Takes the river once it has landed, if it hasn't been taken, and dresses the ground in it. In a view that
+    /// is running the picture fades up from the bare ground; in one that is held (frozen, paused, or covered) it
+    /// is there at once, and a frozen view is woken to draw it; a frozen view still awake is kept so through the fade.
+    private func arrive(waiting: Bool) {
+        guard landed == nil, let river = landing?.take(waiting: waiting) else { return }
+        (landed, landing) = (river, nil)
         textures = (0..<3).map { _ in
             let texture = SKMutableTexture(size: CGSize(width: river.columns, height: river.rows))
             texture.filteringMode = .linear
@@ -206,10 +258,17 @@ final class Meander: SKScene, Trimmable {
         }
         beneath = textures.removeLast()
         send(river.beneath, to: beneath)
-        addChild(trim)
         dress()
-        NotificationCenter.default.addObserver(self, selector: #selector(settingsChanged), name: UserDefaults.didChangeNotification, object: nil)
-        appearance = NSApplication.shared.observe(\.effectiveAppearance) { [weak self] _, _ in MainActor.assumeIsolated { self?.settingsChanged() } }
+        if let view = view as? WallpaperView, view.isPaused { view.wake(for: 0.5) }
+        else if view != nil {
+            cover.color = backgroundColor
+            (cover.size, cover.position, cover.zPosition) = (size, CGPoint(x: size.width / 2, y: size.height / 2), 1)
+            addChild(cover)
+            cover.run(.sequence([.fadeOut(withDuration: 0.4), .removeFromParent()]))
+            // a frozen view still awake from being shown stays so until the fade is done; not mid-crossfade, whose
+            // longer wake this would cut short (the fade runs after it, within it)
+            if let view = view as? WallpaperView, view.frozen, view.scene === self { view.wake(for: 0.5) }
+        }
     }
 
     /// What Settings wants the ground to wear: the look, the old map's rule, each look's colours by name (none is
@@ -363,9 +422,14 @@ final class Meander: SKScene, Trimmable {
     /// running. By the clock, not an action, which a frozen view would hold.
     @objc private func settingsChanged() {
         guard !retired else { return }
-        tune()
-        if Self.wanted != dressed { dress() }
-        guard Self.width.value.rounded() != built || (Self.valley.value > 0.5) != full else { return }
+        if landed != nil { // (until then there is nothing to change: it is dressed as Settings has it when it lands)
+            tune()
+            if Self.wanted != dressed { dress() }
+        }
+        guard Self.width.value.rounded() != built || (Self.valley.value > 0.5) != full else {
+            next = nil // (asked for back before the one it was to give way to had landed)
+            return
+        }
         changes += 1
         let change = changes
         Task { [weak self] in
@@ -374,19 +438,33 @@ final class Meander: SKScene, Trimmable {
         }
     }
 
-    /// Hands over to a new scene with a river of the size Settings now asks for, if that isn't this one's.
+    /// The scene to hand over to, while its river is made.
+    private var next: Meander?
+
+    /// Hands over to a new scene with a river of the size Settings now asks for, if that isn't this one's: once
+    /// that river has landed (`update`), so the dissolve is from one river to the other. A view that is held
+    /// takes it at once, its river waited for.
     func handOver() {
         guard !retired, Self.width.value.rounded() != built || (Self.valley.value > 0.5) != full, let view else { return } // no view: the render tests
-        retired = true
+        next = Meander(size: size)
+        next?.scaleMode = scaleMode
+        if view.isPaused { give(waiting: true) }
+    }
+
+    /// Gives way to `next` if its river has landed, or once it has with `waiting`.
+    private func give(waiting: Bool) {
+        guard let next, let view, (waiting ? next.river : next.landed) != nil else { return }
+        (retired, self.next) = (true, nil)
         let fade = SKTransition.crossFade(withDuration: 0.8)
         (fade.pausesIncomingScene, fade.pausesOutgoingScene) = (false, false)
-        let next = Meander(size: size)
-        next.scaleMode = scaleMode
         view.presentScene(next, transition: fade)
     }
 
     override func update(_ currentTime: TimeInterval) {
         let seconds = frameTime(currentTime, &lastTime)
+        if landed == nil { arrive(waiting: view == nil) } // (the tests draw their frames faster than a past is made)
+        guard landed != nil else { return }
+        give(waiting: false)
         river.advance(seconds, speed: Self.speed.value) { upload() }
         show()
         // Random moves on to another family every so often, over a minute as the other wallpapers' colours do
@@ -435,7 +513,7 @@ final class Meander: SKScene, Trimmable {
 
     /// Tells the shader, on every frame, how to mix the two grounds: by how far the river is toward its next step,
     /// so the picture is of the river a step ago moving on to where it is now. And how far through each of its
-    /// cycles that moment is: relief's two scroll-bar spacings and the sets of them, or the map's swales and its
+    /// cycles that moment is: relief's two scroll-bar spacings, the sets of them and the fine set, or the map's swales and its
     /// stages, counted in fours for its four inks (and from 160, so a stage's number is never below nothing). The
     /// cycles are in the time itself, not the time since the base, so nothing moves when the base does.
     private func show() {
@@ -444,7 +522,7 @@ final class Meander: SKScene, Trimmable {
         blend.floatValue = Float(newest == 1 ? toward : 1 - toward)
         func turn(_ period: Double) -> Float { Float(now / period - (now / period).rounded(.down)) }
         for dress in leaving + [worn!] {
-            dress.turns.vectorFloat4Value = dress.map ? [turn(1.4), 0, 0, turn(Self.stages[dress.rule] * 4) * 4 + 160] : [turn(0.7), turn(1.1326), turn(2.9), 0]
+            dress.turns.vectorFloat4Value = dress.map ? [turn(1.4), 0, 0, turn(Self.stages[dress.rule] * 4) * 4 + 160] : [turn(0.7), turn(1.1326), turn(2.9), turn(0.25)]
         }
     }
 
@@ -487,17 +565,21 @@ final class Meander: SKScene, Trimmable {
     }
 
     // Relief's scroll bars: old bank lines, so contours of the stamp. Two spacings beating, uneven in strength,
-    // and low; and sets of them, arcs that show at a glance. Where the lines would be too fine to draw, or
-    // across a scarp, the ground is flat. For land of an `age` that the river left `past` ago, where the stamp's
-    // slope a texel is `slope` and the present falls at `cycles` in the three spacings' turns: how far they
-    // raise the ground, and what they take from its tilt.
-    vec3 scrolls(float age, float past, vec2 slope, vec3 cycles, vec2 pts, float strength) {
+    // and low; sets of them, arcs that show at a glance; and a fine set a quarter of a T apart, which shows only
+    // where a bank swept fast and the other two are broad soft bands, unevenly spaced (its phase wanders with the
+    // same lumps that make the bars uneven), so that a point bar has its hair-fine ridges as on the real thing.
+    // Where the lines would be too fine to draw, or across a scarp, the ground is flat. For land of an `age` that
+    // the river left `past` ago, where the stamp's slope a texel is `slope` and the present falls at `cycles` in
+    // the four spacings' turns: how far they raise the ground, and what they take from its tilt.
+    vec3 scrolls(float age, float past, vec2 slope, vec4 cycles, vec2 pts, float strength) {
         float steep = 6.2832 * length(slope) * 0.5; // how far half a texel takes the stamp, as an angle for a period of 1 T
-        float bars = strength * (1.0 - smoothstep(0.7, 1.5, steep / 0.7)) * (0.55 + 0.34 * lumps(pts / 70.0 + 5.0)) * (0.35 + 0.65 * exp(-age / 150.0));
+        float uneven = lumps(pts / 70.0 + 5.0);
+        float bars = strength * (1.0 - smoothstep(0.7, 1.5, steep / 0.7)) * (0.55 + 0.34 * uneven) * (0.35 + 0.65 * exp(-age / 150.0));
         float sets = strength * 0.9 * (1.0 - smoothstep(0.7, 1.5, steep / 2.9)) * (0.5 + 0.5 * exp(-age / 200.0));
-        vec3 turn = 6.2832 * fract(cycles - past / vec3(0.7, 1.1326, 2.9)) + vec3(0.0, 1.3, 0.7);
-        return vec3(bars * (0.6 * cos(turn.x) + 0.4 * cos(turn.y)) + sets * cos(turn.z),
-                    0.03 * (bars * (0.6 * sin(turn.x) / 0.7 + 0.4 * sin(turn.y) / 1.1326) + sets * sin(turn.z) / 2.9) * 6.2832 * slope);
+        float fine = strength * 0.25 * (1.0 - smoothstep(1.0, 2.0, steep / 0.25)) * (0.35 + 0.65 * exp(-age / 150.0));
+        vec4 turn = 6.2832 * fract(cycles - past / vec4(0.7, 1.1326, 2.9, 0.25)) + vec4(0.0, 1.3, 0.7, 3.0 * uneven);
+        return vec3(bars * (0.6 * cos(turn.x) + 0.4 * cos(turn.y)) + sets * cos(turn.z) + fine * cos(turn.w),
+                    0.03 * (bars * (0.6 * sin(turn.x) / 0.7 + 0.4 * sin(turn.y) / 1.1326) + sets * sin(turn.z) / 2.9 + fine * sin(turn.w) / 0.25) * 6.2832 * slope);
     }
 
     // Relief's light, from the upper left, on ground tilted so: how much lighter or darker than level ground.
@@ -641,7 +723,7 @@ final class Meander: SKScene, Trimmable {
         vec2 tilt = 0.35 * (1.0 - wild) * (rise + sunk * 6.0 * dip * (1.0 - dip) / 0.12 * 0.75 * vec2(across.a, up.a));
         height -= sunk * dip * dip * (3.0 - 2.0 * dip);
         // scroll bars (`scrolls`), as strong as Settings has them
-        vec3 scroll = scrolls(age, past, slope, u_turns.xyz, pts, u_knobs.z * (1.0 - wild));
+        vec3 scroll = scrolls(age, past, slope, u_turns, pts, u_knobs.z * (1.0 - wild));
         tilt -= scroll.yz;
         vec3 col = texture2D(u_heights, vec2((clamp(height + 0.02 * scroll.x, 0.0, 1.0) * 255.0 + 0.5) / 256.0, 0.5)).rgb;
         // light from the upper left on the fine relief only, and none within a few pixels of water: no rims
@@ -650,19 +732,21 @@ final class Meander: SKScene, Trimmable {
         // (its bars' turns are counted from nothing, so they keep still too), with no water, bank or hollow.
         if (wild > 0.0) {
             vec2 old = stands(pastBeneath, 1e9);
-            vec3 bars = scrolls(pastBeneath, pastBeneath, slopeBeneath, vec3(0.0), pts, u_knobs.z);
+            vec3 bars = scrolls(pastBeneath, pastBeneath, slopeBeneath, vec4(0.0), pts, u_knobs.z);
             vec2 lean = -0.35 * (0.1 * exp(-pastBeneath / 2.5) + 0.75 / 90.0 * exp(-pastBeneath / 90.0)) * slopeBeneath - bars.yz;
             vec3 under = texture2D(u_heights, vec2((clamp(old.x + 0.02 * bars.x, 0.0, 1.0) * 255.0 + 0.5) / 256.0, 0.5)).rgb;
             col = mix(col, under * clamp(1.0 + \(strength) * light(-5.0 * lean), 0.72, \(lit)), wild);
         }
-        // Water the river has left dulls a little over its first few T: a lake. Over the second half of its life
-        // a lake narrows to nothing (`River.trace`), and as it does it dulls to the colour of a new bar, all of
-        // it at once, so that by the time it is a sliver it doesn't shine like a highlight. (Its shallows used to
+        // Water the river has left dulls over its first few T, three fifths of the way to `u_wet`, so that a lake is
+        // plainly a second tone and the river the one bright line (it was a third, and a lake read as more river,
+        // the review of 2026-11-14). Over the second half of its life a lake narrows to nothing (`River.trace`),
+        // and as it does it dulls to the colour of a new bar, all of it at once, so that by the time it is a
+        // sliver it doesn't shine like a highlight. (Its shallows used to
         // dull first, within two texels of its banks: a light middle in a dull rim, which made a bead of a small
         // lake and left every lake's edge soft beside the river's.) Where the water is deep its age is the
         // smooth read's, so a lake shades into the river it lies against.
         float still = mix(wetAge, past, smoothstep(0.8, 1.8, -bank)), lake = smoothstep(0.3, 4.0, still);
-        float dull = lake * mix(0.35, 1.0, smoothstep(0.5 * u_knobs.w, 0.9 * u_knobs.w, still));
+        float dull = lake * mix(0.6, 1.0, smoothstep(0.5 * u_knobs.w, 0.9 * u_knobs.w, still));
         col = mix(col, mix(u_river, u_wet, dull), water);
         col = mix(col, u_ground, u_edge * outer);
         \(last)
