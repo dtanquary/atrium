@@ -10,7 +10,7 @@ A deep-space gas cloud, cut by dark dust lanes, over a twinkling star field, dri
 Everything is maths per pixel, per frame:
 1. **Gas:** `fbm` is value noise stacked 5 octaves deep. The coordinates are `q = p·u_zoom + u_seed + (t, 0.4t)`.
 2. **Domain warp:** two more fbm fields, `w`, bend `q` before the gas is sampled (`gas = fbm(q + 1.8w + ...)`). This is what turns blobs into filaments, folds and curls.
-3. **Dust lanes:** two warped noise octaves. Where `dust` > 0.5–0.72 they darken the gas by up to 85%.
+3. **Dust lanes:** two warped noise octaves. Where `dust` > 0.5–0.72 they darken the gas by up to 85%. They're dust in front of the gas, so they hide the field stars behind them too: 90% where a lane crosses dense gas, fading with the gas (`smoothstep(0.1, 0.5, density)`), so open sky is never punched with starless holes. The gas alone dims them by up to 60%, as it always did. `nebulaAt` returns that hiding in its alpha. (2026-11-16, from the review of 14 November: a lane held 13.8 stars per 100 × 100 px, as many as the gas beside it, and read as a shadow on the gas rather than dust in front of it; now 4.5, only the brightest showing faintly. In Dark Cloud a lane over the dim gas now reads as a true dark nebula, a starless patch.)
 4. **Band:** a gaussian band across the screen, `(y - u_band.x + u_band.y·(x - 0.5))/u_band.z`. It keeps the cloud crossing the screen instead of landing wherever the noise puts it. `ponytail:` it's a fixed band, so the composition only shifts through the drifting gas.
 5. **Colour:**
    - `u_base` blends to `u_dense` with gas density
@@ -19,7 +19,7 @@ Everything is maths per pixel, per frame:
    - a soft clip, `1 - exp(-c·density²·2.2)`, keeps bright cores from blowing out
    - plus a faint wash around the band
 6. **Stars:**
-   - `starField` puts one candidate star per 7 pt cell and keeps 30% of them, each twinkling ±20% at its own rate, dimmed behind dense gas. Its random numbers come from `hash42`: `hash21` repeated every 50 cells, tiling the stars every 350 pt (Dave spotted it in Galaxy's emptier sky).
+   - `starField` puts one candidate star per 7 pt cell and keeps 30% of them, each twinkling ±20% at its own rate, dimmed behind dense gas and hidden behind dust lanes (above). Its random numbers come from `hash42`: `hash21` repeated every 50 cells, tiling the stars every 350 pt (Dave spotted it in Galaxy's emptier sky).
    - `brightStar` adds a few foreground stars with four-point diffraction spikes (18% of 180 pt cells). About half of them (h < 0.09) shimmer very gently: ±7% over 6–10 s. They drift sideways at 0.2 pt/s.
    - both star layers are offset by `u_seed·97`, so each nebula has its own star field
 7. **Grade** (the Settings sliders): `grade()` in `shaderCommon`, shared with Aurora and Rain on Glass, over the whole picture in this order:

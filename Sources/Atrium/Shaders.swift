@@ -130,9 +130,10 @@ let nebulaKnobs = [
 @MainActor func nebula(size: CGSize) -> SKScene {
     let cycle = NebulaCycle()
     let scene = shaderScene(size: size, source: shaderCommon + """
-    // One nebula: its glow (rgb) and density (a). As `clip` rises from -0.2 to 1.2 it dissolves, the thin outer gas and
-    // fine filaments first and the densest knots last; lowered again, the same nebula condenses from its knots outward.
-    // It clips a smoother measure than the gas itself, mostly the broad warp field, or it breaks into specks.
+    // One nebula: its glow (rgb) and how much of the field stars behind it it hides (a). As `clip` rises from -0.2 to
+    // 1.2 it dissolves, the thin outer gas and fine filaments first and the densest knots last; lowered again, the same
+    // nebula condenses from its knots outward. It clips a smoother measure than the gas itself, mostly the broad warp
+    // field, or it breaks into specks.
     vec4 nebulaAt(vec2 uv, float aspect, float t, vec2 seed, float zoom, vec3 shape, vec3 base, vec3 dense, vec3 accent,
                   vec3 hot, float clip) {
         // domain-warped fbm: the warp vector w folds the clouds into filaments
@@ -153,8 +154,12 @@ let nebulaKnobs = [
         float keep = smoothstep(clip - 0.15, clip + 0.15, thick); // all of it while clip is -0.2 or less
         float density = smoothstep(0.25, 0.8, g) * keep;
         vec3 neb = 1.0 - exp(-c * density * density * 2.2);                // soft clip keeps bright cores from blowing out
-        neb *= 1.0 - 0.85 * smoothstep(0.5, 0.72, dust);                     // dark dust lanes
-        return vec4(neb + c * 0.07 * band * keep, density);                  // plus a faint wash around the cloud
+        float lane = smoothstep(0.5, 0.72, dust);
+        neb *= 1.0 - 0.85 * lane;                                            // dark dust lanes
+        // The gas dims the stars behind it a little; a lane across the gas is dust in front of them and hides nearly
+        // all of them. Only where there's gas to see it against, or open sky would be punched with starless holes.
+        float hide = mix(0.6 * density, 0.9, lane * smoothstep(0.1, 0.5, density));
+        return vec4(neb + c * 0.07 * band * keep, hide);                     // plus a faint wash around the cloud
     }
 
     void main() {
@@ -184,7 +189,7 @@ let nebulaKnobs = [
         vec4 neb = vec4(1.0 - (1.0 - now.rgb) * (1.0 - next.rgb), max(now.a, next.a));
 
         vec3 col = vec3(0.004, 0.004, 0.012) + neb.rgb;
-        col += vec3(0.8, 0.85, 1.0) * field * (1.0 - 0.6 * neb.a);
+        col += vec3(0.8, 0.85, 1.0) * field * (1.0 - neb.a);
         col += vec3(1.0, 0.92, 0.85) * bright;
 
         col = grade(col, 0.3, u_hue, u_saturation, u_contrast, u_brightness);
