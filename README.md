@@ -55,11 +55,11 @@ Drops creeping and running down a rainy window, each a tiny lens showing the str
 | Following the weather: fern frost on a freezing night, over the Cabin | Fogged glass on a gray morning, over the Countryside |
 
 #### Wind
-The live wind around you as thin streaks streaming across the map, in the spirit of the hint.fm wind map and earth.nullschool: a grid of Open-Meteo's hourly forecast, blended from hour to hour, with streaks that speed up, brighten and curl with the real wind, as brush strokes like hint.fm's or comets like nullschool's. Zoom from your town to half the continent, over a map at the opacity you choose: the Earth by day or at night, terrain and the sea floor, or yesterday's satellite view with its real clouds (all from NASA), Natural Earth's shaded relief, or nothing, in six jewel-toned palettes. Light Mode draws the same streaks as ink on paper.
+The live wind around you as thin streaks streaming across the map, in the spirit of the hint.fm wind map and earth.nullschool: a grid of Open-Meteo's hourly forecast, blended from hour to hour, with streaks that speed up, brighten and curl with the real wind, as brush strokes like hint.fm's or comets like nullschool's, over a faint wash of the speed's color. It shows half the continent, or zooms in to your region or your town, over a map at the opacity you choose: the Earth by day or at night, terrain and the sea floor, or yesterday's satellite view with its real clouds (all from NASA), Natural Earth's shaded relief, or nothing, in six jewel-toned palettes. Light Mode draws the same streaks as ink on paper.
 
 | <img src="docs/images/wind.webp" alt="Wind at the continent zoom over the Earth by day, moving, a low spinning off the East Coast" width="1600"> | ![Wind in Light Mode at the region zoom, over the Earth printed on paper](docs/images/wind-light.jpg) |
 |---|---|
-| Half the continent, over the Earth by day | A region in Light Mode, ink on a pale print of the map |
+| Half the continent, over the Earth by day | A region in Light Mode, ink on a pale gray print of the map |
 
 #### Murmuration
 Tens of thousands of starlings wheeling over Brighton's West Pier or a marsh pond, flying like the real thing (a published flight model), mirrored in the water and scattering from a falcon. By default a whole evening plays out, from golden hour to the roost.
