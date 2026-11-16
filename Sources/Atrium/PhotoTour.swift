@@ -43,6 +43,8 @@ struct Tour: Sendable {
     static let surface = Knob(key: "solar.surface", label: "Views from the surface", range: 0...1, standard: 1, section: "Tour",
                               format: .toggle, hiddenWhen: which.key, hiddenAt: 2)
     static let brightness = Knob(key: "solar.brightness", label: "Brightness", range: 0.4...1.2, standard: 1, section: "Tour", format: .times)
+    /// Dims the brightest photos (sunlit ground, Jupiter's cloud tops) toward the rest, each by its own glare.
+    static let soften = Knob(key: "solar.soften", label: "Soften bright photos", range: 0...1, standard: 1, section: "Tour", format: .toggle)
     /// The caption: which lines, how many facts and how they're laid out, where, how big, and how far from the edges.
     static let captionLines = Knob(key: "solar.captionLines", label: "Show", range: 0...3, standard: 3, section: "Caption",
                                    format: .choice(["Nothing", "The name", "The name and a line on the photo", "The name, the photo and facts"]))
@@ -57,7 +59,7 @@ struct Tour: Sendable {
                                   shownWhen: captionLines.key)
     static let captionMargin = Knob(key: "solar.captionMargin", label: "Margin", range: 16...240, standard: 52, section: "Caption",
                                     format: .points, shownWhen: captionLines.key)
-    static let knobs = [which, seconds, zoom, framing, surface, brightness, captionLines, factCount, factLayout, captionPlace, captionSize, captionMargin]
+    static let knobs = [which, seconds, zoom, framing, surface, brightness, soften, captionLines, factCount, factLayout, captionPlace, captionSize, captionMargin]
 
     /// The grid under Show's menu at `pick`: every group, each with its thumbnail (`<prefix>-thumb-<name>.jpg`).
     func showChoice(at pick: Double) -> PaletteChoice {
@@ -170,6 +172,8 @@ final class PhotoTour: SKScene {
         var from = SIMD3<Double>(), to = SIMD3<Double>()
         /// How far in from the texture's edges it fades to black, in texels: 0 but for a photo shown whole on black.
         var feather = 0.0
+        /// What Soften bright photos dims it by (`glare`).
+        var gain = 1.0
         var scene: SKScene?
         /// When it began to show, in scene seconds; nil while it waits its turn.
         var start: Double?
@@ -179,13 +183,13 @@ final class PhotoTour: SKScene {
             view = cut.view
             texture = SKTexture(cgImage: cut.image)
             region = cut.region
-            (from, to, feather) = (cut.from, cut.to, cut.feather)
+            (from, to, feather, gain) = (cut.from, cut.to, cut.feather, cut.gain)
         }
     }
 
     /// A photo planned and cut in the background, ready for `Shown`.
     private struct Cut: @unchecked Sendable { // ponytail: CGImage is immutable, so safe to hand across
-        let view: View, image: CGImage, region: CGRect, from: SIMD3<Double>, to: SIMD3<Double>, feather: Double
+        let view: View, image: CGImage, region: CGRect, from: SIMD3<Double>, to: SIMD3<Double>, feather: Double, gain: Double
     }
 
     // SpriteKit leaves a texture uniform undeclared while it's nil, so both start black.
@@ -197,6 +201,8 @@ final class PhotoTour: SKScene {
     /// How far the dissolve to `next` has got, and whether each is a photo (1) or a live view showing through (0).
     private let fadeUniform = SKUniform(name: "u_fade", float: 0)
     private let opaqueUniform = SKUniform(name: "u_opaque", vectorFloat2: [1, 1])
+    /// What each is dimmed by, with Soften bright photos on.
+    private let gainUniform = SKUniform(name: "u_gain", vectorFloat2: [1, 1])
     private let brightnessUniform = SKUniform(name: "u_brightness", float: 1)
 
     private var current: Shown?
@@ -234,7 +240,7 @@ final class PhotoTour: SKScene {
         sprite.blendMode = .alpha // live views show through where the shader leaves it clear
         sprite.shader = SKShader(source: shaderCommon + Self.shader, uniforms: [
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]),
-            aUniform, bUniform, aPlace, bPlace, aSize, bSize, fadeUniform, opaqueUniform, brightnessUniform,
+            aUniform, bUniform, aPlace, bPlace, aSize, bSize, fadeUniform, opaqueUniform, gainUniform, brightnessUniform,
         ])
         addChild(sprite)
         caption.zPosition = 101
@@ -264,6 +270,7 @@ final class PhotoTour: SKScene {
 
     @objc private func applyKnobs() {
         brightnessUniform.floatValue = Float(Tour.brightness.value)
+        gainUniform.vectorFloat2Value = [gain(current), gain(next)]
         if holds != shownHolds { shownHolds = holds; moveOn() }
         let layout = [Tour.captionLines, Tour.factCount, Tour.factLayout, Tour.captionPlace, Tour.captionSize, Tour.captionMargin].map(\.value)
         guard layout != captionLayout, let view = captionView else { return } // any defaults change lands here; most aren't ours
@@ -356,8 +363,11 @@ final class PhotoTour: SKScene {
         let size = shown.texture?.size() ?? CGSize(width: 1, height: 1)
         (slot == 0 ? aSize : bSize).vectorFloat2Value = [Float(size.width), Float(size.height)]
         opaqueUniform.vectorFloat2Value[slot] = shown.view.kind == .live ? 0 : 1
+        gainUniform.vectorFloat2Value[slot] = gain(shown)
         place(shown, in: slot)
     }
+
+    private func gain(_ shown: Shown?) -> Float { Tour.soften.value > 0.5 ? Float(shown?.gain ?? 1) : 1 }
 
     /// Moves a photo along its path: the centre in a straight line, the scale evenly in ratio, over the view's time
     /// and its dissolve out.
@@ -530,7 +540,20 @@ final class PhotoTour: SKScene {
         context.draw(part, in: CGRect(x: 0, y: 0, width: tw, height: th))
         guard let cutImage = context.makeImage() else { return nil }
         return Cut(view: view, image: cutImage, region: CGRect(x: region.minX, y: region.minY, width: Double(tw) / s, height: Double(th) / s),
-                   from: from, to: to, feather: faded ? wholeEdge * Double(min(tw, th)) : 0)
+                   from: from, to: to, feather: faded ? wholeEdge * Double(min(tw, th)) : 0, gain: glare(cutImage))
+    }
+
+    /// What to dim a photo by so the brightest don't glare: 1 up to a mean level of 110 of 255 (as most are), then
+    /// (110 / mean)^0.7, so Apollo 15's sunlit Mount Hadley, the brightest at 176, comes down by 28% to about 127,
+    /// and a crescent on black is left as it is. The mean is of the part the motion shows, drawn 32 pixels square.
+    nonisolated static func glare(_ image: CGImage) -> Double {
+        guard let small = CGContext(data: nil, width: 32, height: 32, bitsPerComponent: 8, bytesPerRow: 128, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                                    bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue) else { return 1 }
+        small.interpolationQuality = .medium
+        small.draw(image, in: CGRect(x: 0, y: 0, width: 32, height: 32))
+        let v = UnsafeBufferPointer(start: small.data!.assumingMemoryBound(to: UInt8.self), count: 32 * 32 * 4)
+        let mean = stride(from: 0, to: v.count, by: 4).reduce(0.0) { $0 + 0.2126 * Double(v[$1]) + 0.7152 * Double(v[$1 + 1]) + 0.0722 * Double(v[$1 + 2]) } / 1024
+        return mean > 110 ? pow(110 / mean, 0.7) : 1
     }
 
     /// Both views, each sampled with Catmull-Rom in nine bilinear taps (Sigg and Hadwiger's trick), which stays sharp
@@ -572,7 +595,7 @@ final class PhotoTour: SKScene {
             b *= insideOf(tb, u_sb) * edgeFade(tb, u_sb, u_pb.w);
         }
         float oa = u_opaque.x * (1.0 - u_fade), ob = u_opaque.y * u_fade;
-        vec3 col = max(a, 0.0) * oa + max(b, 0.0) * ob; // premultiplied: a live view shows through the rest
+        vec3 col = max(a, 0.0) * (oa * u_gain.x) + max(b, 0.0) * (ob * u_gain.y); // premultiplied: a live view shows through the rest
         float alpha = oa + ob;
         col *= u_brightness;
         col += (hash21(pts * 2.0) - 0.5) / 255.0 * alpha;
