@@ -27,7 +27,7 @@ fish-tank|Fish Tank|42|4|SNAPSHOT_APPEARANCE=light'
 # Every wallpaper in the app, as the loop its card opens, in about the card's look:
 # slug|scene|seconds in before recording|extra environment
 PREVIEWS='ant-colony|Ant Colony|4|SNAPSHOT_DEFAULTS=antcolony.day=20261013,antcolony.hour=11
-aurora|Aurora|8|SNAPSHOT_DEFAULTS=aurora.palette=Purple,aurora.speed=2
+aurora|Aurora|8|AURORA_SEED=1 AURORA_TIME=1794884400 AURORA_SURGE=100 SNAPSHOT_DEFAULTS=aurora.palette=Purple,aurora.speed=2
 black-hole|Black Hole|2.5|SNAPSHOT_DEFAULTS=blackhole.speed=2
 dappled-light|Dappled Light|4|SNAPSHOT_DEFAULTS=dappled.previewTime=1,dappled.previewHour=17.5,dappled.weather=1
 earth-from-orbit|Earth from Orbit|4|EARTH_AT=1794837600 SNAPSHOT_DEFAULTS=latitude=25,longitude=78,earth.previewStorm=1

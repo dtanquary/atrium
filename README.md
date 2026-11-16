@@ -69,11 +69,11 @@ Tens of thousands of starlings wheeling over Brighton's West Pier or a marsh pon
 | The West Pier at blue hour | The marsh pond in the afterglow |
 
 #### Aurora
-Northern lights over the snowy Tetons, shading through real aurora colors.
+Northern lights over the snowy Tetons, shading through real aurora colors, under the real stars as they stand over the range right now. Like a real display it rests and surges: every 20 to 30 minutes the curtains brighten, their rays sharpen and quicken, then they settle again. Settings → Activity makes the surges rarer or more frequent.
 
 | <img src="docs/images/aurora.webp" alt="Aurora in purple, moving" width="1600"> | ![Aurora in green](docs/images/aurora-green.jpg) |
 |---|---|
-| The Purple palette, at 2× speed | The classic green |
+| The Purple palette at 2× speed, near a surge's peak | The classic green, at a surge's peak |
 
 #### Fireflies
 Fireflies drifting over a misty meadow at blue hour.
