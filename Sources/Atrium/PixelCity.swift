@@ -99,7 +99,7 @@ final class PixelCity: SKScene, BatteryPaced {
     private var pad = Pad(), boosters: [Booster] = [], crane = Crane(), plume: [Puff] = []
     private var pace = 1.0 // Settings' Launches, as of the last repaint: reading a setting costs too much to do every frame
     /// The ceiling on battery, set by the fastest thing on show, which should move no more than an art pixel a frame.
-    /// The Spaceport: 15 fps between launches, where the crawler moves 5 art pixels a second and the smoke steps 15
+    /// The Spaceport: 15 fps between launches, where the crawler moves 5 art pixels a second, pelicans 7, and the smoke steps 15
     /// times a second; 20 from the count to the end of the climb, and while a booster or the orbiter comes down, at
     /// up to 20 art pixels a second. Foothills, the Long Bridge and Hillside Town: 15, for far-off traffic at 7.7 and
     /// the plane at 7. The Overlook: 20 while its pigeons wheel at up to 17, 15 once they roost. The Waterfront and
@@ -113,6 +113,9 @@ final class PixelCity: SKScene, BatteryPaced {
     private var smoked = 0..<0 // the rows of it the last painting reached, which are all the next has to clear
     private var countdown = SKSpriteNode(), counted = ("", ""), board = (false, false, false, -1, "") // its text, and what it was made from
     private var visitor = SKSpriteNode(), visiting: Flag?, hoist: Float = 0 // a visiting rocket's flag, and how far up its pole it is
+    private var stars = SKSpriteNode(), flagLooks: [[SKTexture]] = [], flagFrame = -1 // the Stars and Stripes; both flags' ripples
+    private var crowd = SKSpriteNode(), crowdLooks: [SKTexture] = [], cheered: TimeInterval = -100 // the people on the bank, and when they last cheered
+    private var pelicans: [SKSpriteNode] = [], pelicanX: Float = 0, pelicanWay: Float = 0, nextPelicans: TimeInterval = 0 // a line of them over the lagoon
     private var orbiter = Orbiter() // the Shuttle's, when it glides home
     private var hazeColour = RGB.zero // the horizon's colour, which far-off things fade toward
     private let canvas = SKNode()
@@ -258,7 +261,7 @@ final class PixelCity: SKScene, BatteryPaced {
         canvas.removeAllChildren()
         (skyline, parks, clouds, cars, walkers, walkerLooks) = ([], [], [], [], [], [])
         (plane, planeLights, beacon, mirrored, waterTints, mirrors) = (SKSpriteNode(), SKNode(), SKNode(), [], [], [])
-        (trafficStrip, trafficShown, launchTexture, plume, boosters) = (nil, [], nil, [], [])
+        (trafficStrip, trafficShown, launchTexture, plume, boosters, pelicans) = (nil, [], nil, [], [], [])
         (nextCar, planeDirection, shipDirection, ship) = ([clock, clock], 0, 0, SKSpriteNode())
         city = spaceport ? .spaceport : City.menu.first { $0.rawValue == Int(knob(.view)) } ?? .waterfront
         if !spaceport { batteryRate = [.foothills, .bridge, .hillside].contains(city) ? 15 : city == .overlook ? 20 : nil }
@@ -403,7 +406,7 @@ final class PixelCity: SKScene, BatteryPaced {
         canvas.addChild(plane)
         if waterRows > 0 { addWater() }
         if city == .airport { for flight in flights { canvas.addChild(flight.node) } } // in front of the water
-        if city == .spaceport { for node in [launchLayer, countdown, visitor] { canvas.addChild(node) } }
+        if city == .spaceport { for node in [launchLayer, countdown, visitor, stars, crowd] + pelicans { canvas.addChild(node) } }
         if city == .bridge { // a freighter that crosses the bay in front of the bridge now and then
             ship.anchorPoint = CGPoint(x: 0.5, y: 0)
             ship.size = CGSize(width: freighter[0].count, height: freighter.count)
@@ -1077,7 +1080,9 @@ final class PixelCity: SKScene, BatteryPaced {
         case .spaceport:
             drawSpaceport(into: &px, zenith: top, horizon: horizon)
             (hazeColour, launchShown) = (horizon, []) // its moving things are painted again in this light
-            dressVisitor()
+            dressFlags()
+            let bird = mix(rgb(54, 48, 46), rgb(20, 20, 28), night) // dark against the water
+            for node in pelicans { node.color = NSColor(red: CGFloat(bird.x), green: CGFloat(bird.y), blue: CGFloat(bird.z), alpha: 1) }
             paintSmoke()
         }
         backdrop.texture = px.texture()
@@ -2007,6 +2012,7 @@ final class PixelCity: SKScene, BatteryPaced {
         if city == .airport { fly(dt) }
         if city == .spaceport {
             launch(dt)
+            liven(dt)
             let flying = [.count, .climb].contains(pad.phase) || boosters.contains { $0.phase == .fall || $0.phase == .burn }
             batteryRate = flying || orbiter.phase == .glide || orbiter.phase == .roll ? 20 : 15
         }
@@ -2350,12 +2356,32 @@ final class PixelCity: SKScene, BatteryPaced {
         countdown.position = CGPoint(x: w * 9 / 100, y: 14)
         countdown.zPosition = 3
         (counted, board) = (("", ""), (false, false, false, -1, ""))
-        visitor = SKSpriteNode()
-        visitor.anchorPoint = .zero
-        visitor.size = CGSize(width: 9, height: 6)
-        visitor.position.x = CGFloat(w * 9 / 100 + 59)
-        visitor.zPosition = 3
-        (visiting, hoist) = (pad.rocket.kit.flag, pad.rocket.kit.flag == nil ? 0 : 1)
+        // The two flags, the people and the pelicans are sprites of their own, so that they can move.
+        (visitor, stars, crowd) = (SKSpriteNode(), SKSpriteNode(), SKSpriteNode())
+        for (flag, x) in [(visitor, 59), (stars, 45)] {
+            flag.anchorPoint = .zero
+            flag.size = CGSize(width: 9, height: 6)
+            flag.position.x = CGFloat(w * 9 / 100 + x)
+            flag.zPosition = 3
+        }
+        stars.position.y = 34
+        crowd.anchorPoint = .zero
+        crowd.size = CGSize(width: w, height: 18)
+        crowd.zPosition = 3
+        (visiting, hoist, flagFrame, cheered) = (pad.rocket.kit.flag, pad.rocket.kit.flag == nil ? 0 : 1, -1, -100)
+        pelicans = (0..<4).map { i in
+            let bird = SKSpriteNode(texture: pelicanLooks[0])
+            bird.anchorPoint = CGPoint(x: 0.5, y: 0)
+            bird.size = CGSize(width: 8, height: 8)
+            bird.zPosition = 2.9 // over the water, behind the bank
+            bird.colorBlendFactor = 1
+            bird.isHidden = true
+            // Each beats its wings a few times and glides, a beat behind the bird in front, as a line of pelicans does.
+            let beats = SKAction.repeat(.animate(with: [pelicanLooks[1], pelicanLooks[0], pelicanLooks[2], pelicanLooks[0]], timePerFrame: 0.16), count: 3)
+            bird.run(.sequence([.wait(forDuration: Double(i) * 0.35), .repeatForever(.sequence([beats, .wait(forDuration: 2.4)]))]))
+            return bird
+        }
+        (pelicanWay, nextPelicans) = (0, clock + .random(in: 20...90))
         return (padX + 11, padDeck + 74)
     }
 
@@ -2503,14 +2529,20 @@ final class PixelCity: SKScene, BatteryPaced {
             px.plot(pole + 1, top(pole + 1) - 1, lamp, night)
             px.plot(pole + 2, top(pole + 1) - 1, lamp, 0.3 * night)
         }
-        for row in 0..<6 { px.fill(cx + 45, 34 + row, 9, 1, cloth(row % 2 == 1 ? rgb(196, 64, 60) : rgb(236, 236, 232))) }
-        px.fill(cx + 45, 37, 4, 3, cloth(rgb(52, 70, 140)))
-        // People watching, in ones and twos, and a camera on its tripod.
-        for (at, who) in [(96, person), (102, pointing), (112, person), (117, child), (121, person), (250, person), (256, person),
-                          (268, pointing), (277, child), (281, person), (296, person), (301, person), (316, pointing)] {
-            let x = at * w / 378
-            px.draw(picture(who, ["#": shadow]), x: x, y: top(x) - 1)
+        // People watching, in ones and twos, and a camera on its tripod. The people are a strip of their own (`crowd`),
+        // in two looks: watching, and cheering, when some throw their arms up and the children jump.
+        var (calm, cheer) = (Pixels(w, 18), Pixels(w, 18))
+        for (at, who, joy) in [(96, person, true), (102, pointing, false), (112, person, false), (117, child, true), (121, person, true),
+                               (250, person, false), (256, person, true), (268, pointing, false), (277, child, true), (281, person, true),
+                               (296, person, false), (301, person, true), (316, pointing, false)] {
+            let x = at * w / 378, figure = picture(who, ["#": shadow])
+            calm.draw(figure, x: x, y: top(x) - 1)
+            if !joy { cheer.draw(figure, x: x, y: top(x) - 1) }
+            else if who == child { cheer.draw(figure, x: x, y: top(x)) }
+            else { cheer.draw(picture(cheering, ["#": shadow]), x: x - 1, y: top(x) - 1) }
         }
+        crowdLooks = [calm.texture(), cheer.texture()]
+        crowd.texture = crowdLooks[0]
         let tripod = 131 * w / 378
         for i in 0...7 { for foot in [-3, 3] { px.plot(tripod + foot - foot * i / 7, 5 + i, shadow) } }
         px.fill(tripod - 1, 12, 4, 2, shadow)
@@ -2583,6 +2615,8 @@ final class PixelCity: SKScene, BatteryPaced {
 
     /// For the tests: whether two boosters have been given the same landing zone (Starship's tower takes two in turn).
     var zoneShared: Bool { let zones = boosters.map(\.zone).filter { $0 < 2 }; return Set(zones).count < zones.count }
+    /// For the tests: whether the crowd on the bank is cheering, and whether a line of pelicans is crossing the lagoon.
+    var bankLife: (cheering: Bool, pelicans: Bool) { (crowd.texture != nil && crowd.texture === crowdLooks.last, pelicanWay != 0) }
     /// For the tests: what each flame burning now burns, the core's first.
     var burning: [String] { flames().map { "\($0.fuel)" } }
     /// For the tests: whether Starship's ship is hanging in its tower's arms.
@@ -2694,7 +2728,7 @@ final class PixelCity: SKScene, BatteryPaced {
             let free = zones.indices.filter { zone in !boosters.contains { $0.zone == zone } }, need = kit.caught ? 0 : kit.lands
             if free.count < need, pad.until - clock < 10 * pace { pad.until = clock + 10 * pace }
             if clock >= pad.until {
-                (pad.phase, pad.t, liftoffAt, trailFrom, flew, flewLive, pad.live) = (.climb, 0, clock, nil, pad.rocket, pad.live, false)
+                (pad.phase, pad.t, liftoffAt, trailFrom, flew, flewLive, pad.live, cheered) = (.climb, 0, clock, nil, pad.rocket, pad.live, false, clock)
                 movements += 1
                 for (i, zone) in free.shuffled().prefix(need).sorted().enumerated() {
                     boosters.append(Booster(zone: zone, until: clock + 62 + Double(i) * 1.3, of: pad.rocket))
@@ -2730,7 +2764,7 @@ final class PixelCity: SKScene, BatteryPaced {
         let flag = pad.phase == .hangar ? nil : pad.rocket.kit.flag
         if let flag, hoist == 0 || flag != visiting {
             visiting = flag
-            dressVisitor()
+            dressFlags()
         }
         hoist = min(max(hoist + (flag == nil ? -dt : dt) / 4, 0), 1)
         visitor.isHidden = hoist == 0
@@ -2864,10 +2898,57 @@ final class PixelCity: SKScene, BatteryPaced {
     /// A flag's cloth in the light on the bank: the Sun's by day, and after dark the ground light's at its pole's foot.
     private func cloth(_ c: RGB) -> RGB { mix(lit(c, keyFront), c * rgb(255, 226, 170) * 0.45, night * 0.8) }
 
-    /// Paints the visiting rocket's flag in the light on the bank.
-    private func dressVisitor() {
-        guard let flag = visiting else { return }
-        visitor.texture = art(flag.rows, flag.colours.mapValues(cloth))
+    /// Paints the Stars and Stripes and the visiting rocket's flag in the light on the bank, each in its four ripples.
+    private func dressFlags() {
+        flagLooks = [Flag.usa, visiting].map { flag in
+            guard let flag else { return [] }
+            let colours = flag.colours.mapValues(cloth)
+            return (0..<4).map { frame in
+                var px = Pixels(9, 6)
+                for (y, row) in flag.rows.enumerated() {
+                    for (x, c) in row.enumerated() { px.plot(x, 5 - y, (colours[c] ?? .zero) * Flag.fold(x, frame)) }
+                }
+                return px.texture()
+            }
+        }
+        flagFrame = -1
+    }
+
+    /// Moves the life on the bank on: the flags ripple four times a second, streaming the way the wind blows the
+    /// clouds; the crowd cheers for 20 seconds from a lift-off, some throwing their arms up and the children jumping,
+    /// three times a second; and every few minutes by day a line of pelicans glides low across the lagoon at 7
+    /// pixels a second, each with its reflection under it, and a line that has gone waits two to five minutes.
+    private func liven(_ dt: Float) {
+        let frame = Int(clock * 4) % 4
+        if frame != flagFrame {
+            flagFrame = frame
+            stars.texture = flagLooks.first?[frame]
+            if flagLooks.count > 1, !flagLooks[1].isEmpty { visitor.texture = flagLooks[1][frame] }
+        }
+        let joy = clock - cheered < 20 && Int(clock * 3) % 2 == 0 ? crowdLooks.last : crowdLooks.first
+        if crowd.texture !== joy { crowd.texture = joy }
+
+        if pelicanWay == 0, clock >= nextPelicans {
+            guard night < 0.5 else { return nextPelicans = clock + .random(in: 60...180) } // they roost at night
+            pelicanWay = Bool.random() ? 1 : -1
+            pelicanX = pelicanWay > 0 ? -8 : Float(w + 8)
+            let y = CGFloat(Int.random(in: 20...26))
+            for (i, bird) in pelicans.enumerated() {
+                (bird.position.y, bird.xScale, bird.isHidden) = (y + CGFloat(i % 2), CGFloat(pelicanWay), false)
+            }
+        }
+        guard pelicanWay != 0 else { return }
+        pelicanX += pelicanWay * 7 * dt
+        for (i, bird) in pelicans.enumerated() {
+            let x = CGFloat((pelicanX - pelicanWay * Float(i) * 13).rounded(.down))
+            if bird.position.x != x { bird.position.x = x }
+        }
+        let last = pelicanX - pelicanWay * Float(pelicans.count - 1) * 13
+        if last < -10 && pelicanWay < 0 || last > Float(w + 10) && pelicanWay > 0 {
+            pelicanWay = 0
+            for bird in pelicans { bird.isHidden = true }
+            nextPelicans = clock + .random(in: 120...300)
+        }
     }
 
     /// Paints the Spaceport's layer once a frame's moving is done: the smoke if it has moved, then everything over
@@ -3478,11 +3559,13 @@ private enum Fuel {
     }
 }
 
-/// The flag a rocket from abroad flies under, nine pixels by six, as rows of letters and the colours they stand for.
+/// The flag a rocket from abroad flies under, nine pixels by six, as rows of letters and the colours they stand for;
+/// and the Stars and Stripes, which always flies.
 private enum Flag {
-    case france, russia, china, japan, india
+    case france, russia, china, japan, india, usa
     var rows: [String] {
         switch self {
+        case .usa: ["uuuusssss", "uuuuwwwww", "uuuusssss", "wwwwwwwww", "sssssssss", "wwwwwwwww"]
         case .france: Array(repeating: "bbbwwwrrr", count: 6)
         case .russia: ["wwwwwwwww", "wwwwwwwww", "bbbbbbbbb", "bbbbbbbbb", "rrrrrrrrr", "rrrrrrrrr"]
         case .china: ["ryyrrrrrr", "ryyryrrrr", "rrrrrrrrr", "rrrrrrrrr", "rrrrrrrrr", "rrrrrrrrr"]
@@ -3491,7 +3574,15 @@ private enum Flag {
         }
     }
     var colours: [Character: RGB] {
-        ["b": rgb(44, 70, 150), "w": rgb(236, 236, 232), "r": rgb(206, 56, 60), "y": rgb(250, 214, 60), "o": rgb(240, 150, 50), "g": rgb(40, 130, 70)]
+        ["b": rgb(44, 70, 150), "w": rgb(236, 236, 232), "r": rgb(206, 56, 60), "y": rgb(250, 214, 60), "o": rgb(240, 150, 50), "g": rgb(40, 130, 70),
+         "s": rgb(196, 64, 60), "u": rgb(52, 70, 140)]
+    }
+    /// How much light column `x` of a flag catches in the `frame`th of four ripples: a fold in shadow travels out
+    /// from the pole every four columns, with a half-shaded column behind it. (Sliding columns up and down instead
+    /// turned the Stars and Stripes' one-pixel stripes into a checkerboard.)
+    static func fold(_ x: Int, _ frame: Int) -> Float {
+        guard x > 0 else { return 1 }
+        return [0.74, 0.88, 1, 1][(x - frame + 8) % 4]
     }
 }
 
@@ -3742,6 +3833,21 @@ private let figures: [Character: [UInt8]] = [
 private let person = [".##.", ".##.", "####", "####", ".##.", ".##.", ".#.#", ".#.#"]
 private let pointing = [".##..#", ".##.#.", "####..", "###...", ".##...", ".##...", ".#.#..", ".#.#.."]
 private let child = ["##", "##", "##", "##", "##"]
+/// Someone cheering, both arms up.
+private let cheering = ["#....#", "#.##.#", "#.##.#", "######", "..##..", "..##..", "..##..", "..#.#.", "..#.#."]
+/// A pelican, its head a little ahead of its middle, in white for its colour to be set: gliding with its wingtips
+/// low, wings up and wings down, each with its reflection in the lagoon two rows under it, a third as strong.
+@MainActor private let pelicanLooks: [SKTexture] = [["....##..", "########", "#......#"], ["#......#", ".#.##.#.", "..####.."],
+                                                    ["..####..", ".#....#.", "#......#"]].map { rows in
+    var px = Pixels(8, 8)
+    for (y, row) in rows.enumerated() {
+        for (x, c) in row.enumerated() where c == "#" {
+            px.plot(x, 7 - y, .one)
+            px.plot(x, y, .one, 0.3)
+        }
+    }
+    return px.texture()
+}
 private let palm = [
     "......#...#.......",
     "...##..#.#..###...",

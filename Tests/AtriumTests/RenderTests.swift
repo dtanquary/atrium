@@ -356,6 +356,23 @@ func pixelSpaceportBurnsEachRocketsFuel(of rocket: String, at seconds: Double, b
     #expect(scene.burning.joined(separator: " ") == burning)
 }
 
+/// The Spaceport's bank comes alive: its crowd cheers in the 20 seconds after a lift-off and at no other time, and
+/// by day a line of pelicans crosses the lagoon within ten minutes.
+@MainActor @Test func pixelSpaceportBankComesAlive() throws {
+    let settings: [String: Double] = ["spaceport.previewTime": 1, "spaceport.previewHour": 12, "spaceport.launches": 3]
+    defer { settings.keys.forEach(UserDefaults.standard.removeObject) }
+    for (key, value) in settings { UserDefaults.standard.set(value, forKey: key) }
+    let scene = PixelCity(size: CGSize(width: 800, height: 500), spaceport: true)
+    var cheered = false, outOfTurn: [String] = [], pelicans = false
+    for step in 0..<6_000 {
+        scene.update(Double(step) / 10)
+        let (cheering, flying) = scene.bankLife, board = scene.boardSays.0
+        if cheering, !board.hasPrefix("T+00:") || Int(board.suffix(2)) ?? 99 > 20 { outOfTurn.append(board) }
+        (cheered, pelicans) = (cheered || cheering, pelicans || flying)
+    }
+    #expect(cheered && outOfTurn.isEmpty && pelicans, "cheered \(cheered), out of turn at \(outOfTurn.prefix(3)), pelicans \(pelicans)")
+}
+
 /// Starship has a pad of its own at the Spaceport: with only it switched on, it lifts off, its booster and then its
 /// ship come back to the tower's arms again and again, and nothing else is ever on the pad.
 @MainActor @Test func pixelSpaceportCatchesStarship() throws {
