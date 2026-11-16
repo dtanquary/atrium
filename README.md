@@ -69,11 +69,11 @@ Tens of thousands of starlings wheeling over Brighton's West Pier or a marsh pon
 | The West Pier at blue hour | The marsh pond in the afterglow |
 
 #### Aurora
-Northern lights over the snowy Tetons, shading through real aurora colors.
+Northern lights over the snowy Tetons, shading through real aurora colors, under the real stars as they stand over the range right now. Like a real display it rests and surges: every 20 to 30 minutes the curtains brighten, their rays sharpen and quicken, then they settle again. Settings → Activity makes the surges rarer or more frequent.
 
 | <img src="docs/images/aurora.webp" alt="Aurora in purple, moving" width="1600"> | ![Aurora in green](docs/images/aurora-green.jpg) |
 |---|---|
-| The Purple palette, at 2× speed | The classic green |
+| The Purple palette at 2× speed, near a surge's peak | The classic green, at a surge's peak |
 
 #### Fireflies
 Fireflies drifting over a misty meadow at blue hour.
@@ -123,7 +123,7 @@ A forest of giant kelp seen from inside it: rope-thin stalks rising in clumps fr
 ### Space
 
 #### Space Tour
-A slow tour through the best real photos spacecraft and telescopes have taken, of the Sun's family and of deep space. From the Solar System, 193 photos of 46 worlds: Cassini's Saturn, Juno's Jupiter, Mars Express's Mars, New Horizons' Pluto, Webb's Uranus, Magellan's Venus, the Nile from the space station, down to Saturn's moon Pan and comet 67P, and from the ground too: rover panoramas on Mars, the Apollo astronauts on the Moon, Huygens on Titan, and the last seconds before landing on comets and asteroids, which Settings can leave out. From beyond it, 95 photos of nebulae, star clusters, dying stars, galaxies, deep fields, and the only two black holes ever imaged, from Webb, Hubble, ESO, Euclid, the Rubin Observatory, Chandra and the Event Horizon Telescope. Real photos only: no artist's impressions or simulations. Each fills the screen, drifting and zooming for a minute, then dissolves into another world or object, and one you come back to shows you a different photo. Under each name, a line on the photo and two quick facts, never the same pair twice in a row. The Sun is today's real Sun and the Moon is tonight's real Moon, both live. Settings → Show tours everything, half from each, or only the Solar System or only deep space, and can hold the tour on one world or one kind of object; Framing can show each photo whole instead of filling the screen.
+A slow tour through the best real photos spacecraft and telescopes have taken, of the Sun's family and of deep space. From the Solar System, 193 photos of 46 worlds: Cassini's Saturn, Juno's Jupiter, Mars Express's Mars, New Horizons' Pluto, Webb's Uranus, Magellan's Venus, the Nile from the space station, down to Saturn's moon Pan and comet 67P, and from the ground too: rover panoramas on Mars, the Apollo astronauts on the Moon, Huygens on Titan, and the last seconds before landing on comets and asteroids, which Settings can leave out. From beyond it, 95 photos of nebulae, star clusters, dying stars, galaxies, deep fields, and the only two black holes ever imaged, from Webb, Hubble, ESO, Euclid, the Rubin Observatory, Chandra and the Event Horizon Telescope. Real photos only: no artist's impressions or simulations. Each fills the screen, drifting and zooming for a minute, then dissolves into another world or object, and one you come back to shows you a different photo. Under each name, a line on the photo and two quick facts, never the same pair twice in a row. The Sun is today's real Sun and the Moon is tonight's real Moon, both live. Settings → Show tours everything, half from each, or only the Solar System or only deep space, and can hold the tour on one world or one kind of object; Framing can show each photo whole instead of filling the screen, and Soften bright photos, on unless you turn it off, dims the few brightest (sunlit ground on the Moon and Mars, Jupiter's cloud tops) toward the rest.
 
 | <img src="docs/images/space-tour.webp" alt="Space Tour: the Pillars of Creation from Webb, moving" width="1600"> | ![Space Tour: Jupiter from Juno, in enhanced color](docs/images/space-tour-jupiter.jpg) |
 |---|---|
@@ -134,11 +134,11 @@ A slow tour through the best real photos spacecraft and telescopes have taken, o
 | Jezero crater on Mars, from Perseverance | Apollo 16 at Descartes |
 
 ##### The Sun, live
-One of the Sun's views is the real Sun as NASA's Solar Dynamics Observatory saw it about an hour ago (two or three in visible light): today's flares, sunspots and prominences, in eight wavelengths, each in its real SDO color, from the gold coronal loops of 171 Å to visible light. Plasma pulses out along its loops, its corona streams away, and every few minutes one of today's active regions flares or a prominence erupts off the edge.
+One of the Sun's views is the real Sun as NASA's Solar Dynamics Observatory saw it about an hour ago (two or three in visible light): today's flares, sunspots and prominences, in eight wavelengths, each in its real SDO color, from the gold coronal loops of 171 Å to visible light. Plasma pulses out along its loops, its corona streams away, and every few minutes one of today's active regions flares or a prominence erupts off the edge. When NOAA's GOES satellites have seen a real M- or X-class flare within the hour, the Sun flares at its brightest active region as it comes on screen, and the caption names the flare.
 
 | ![The Sun Today, 193 Bronze](docs/images/sun-193.jpg) | ![The Sun Today, 304 Red, with a prominence erupting](docs/images/sun-304-eruption.jpg) |
 |---|---|
-| 193 Å, the million-degree corona, with a dark coronal hole, on September 29, 2026 | 304 Å, the chromosphere, as a prominence erupts |
+| 193 Å, the million-degree corona, with a long dark coronal hole, on November 7, 2026 | 304 Å, the chromosphere, as a prominence erupts |
 
 ##### The Moon, live
 When the tour reaches the Moon, one of its views is the Moon filling the screen as it is right now from where you are: its real phase, wobble and tilt, from NASA's LRO maps, with shadows along the terminator, earthshine on the dark side, and copper during a lunar eclipse. Choose black, faint real stars or the real sky behind it.
@@ -150,13 +150,13 @@ When the tour reaches the Moon, one of its views is the Moon filling the screen 
 | The total lunar eclipse of December 31, 2028, previewed | Checked against NASA's Dial-a-Moon (left of each pair) for phase, libration, tilt and tone |
 
 #### Nebula
-A unique deep-space cloud on every load, in real nebula colors, dissolving into a new one every few minutes.
+A unique deep-space cloud on every load, in real nebula colors, dissolving into a new one every few minutes. Its dark dust lanes hide the stars behind them, and Crisp dust lanes in Settings sharpens their soft edges into silhouettes with a lit rim.
 
 | <img src="docs/images/nebula.webp" alt="Nebula, Hubble palette, moving" width="1600"> | ![Nebula, Reflection palette](docs/images/nebula-reflection.jpg) |
 |---|---|
 | The Hubble palette | The Reflection palette |
 | ![Nebula, Planetary palette](docs/images/nebula-planetary.jpg) | ![Nebula, Oxygen palette](docs/images/nebula-oxygen.jpg) |
-| The Planetary palette | The Oxygen palette |
+| The Planetary palette | The Oxygen palette, with Crisp dust lanes |
 
 #### Galaxy
 A spiral galaxy turning slowly, after a real one, with dust lanes, star clusters and pink star-forming knots.
@@ -186,11 +186,11 @@ The real sky above you with the daylight switched off: dark at noon too, with th
 | Three in the afternoon: the Sun among the stars it hides | Three in the morning: Orion and its nebula, the Pleiades, and the radiants of the Taurid meteors |
 
 #### Earth from Orbit
-The globe above your location with the live day/night line, today's real clouds, lightning in storms near you, city lights and the ISS.
+The globe above your location with the live day/night line, today's real clouds, lightning in storms near you, city lights and the ISS, against the real stars on the far side of the Earth from you. The ground is NASA's Blue Marble for the month, snow and autumn colors and all, and the lights are its Black Marble. The last light before night falls copper on the clouds, and the air is a thin bright line around the edge.
 
 | <img src="docs/images/earth-from-orbit.webp" alt="Earth from Orbit at night, over India" width="1600"> | ![Earth from Orbit by day, over North America](docs/images/earth-from-orbit-day.jpg) |
 |---|---|
-| City lights across India in the evening, the day going off to the west | Late afternoon over North America, under today's real clouds |
+| City lights across India in the evening, the day going off to the west | Late afternoon over North America, under that day's real clouds |
 
 #### Pixel Spaceport
 A pixel-art launch site that never stops, drawn like [Pixel City](#pixel-city) and lit by the same real Sun, seen from the bank across a lagoon. A rocket rolls out of the hangar lying on its transporter, climbs the ramp to the pad and is stood up, then fuels through a count you can follow on the countdown board on the near bank. It lifts off on a cloud of steam and arcs away, shrinking to a spark at the top of its trail. A little over a minute later its booster comes back, lights its landing burn, drops its legs and lands beside the pad, and a crane carries it off while the next rocket rolls out.

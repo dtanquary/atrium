@@ -27,22 +27,22 @@ fish-tank|Fish Tank|42|4|SNAPSHOT_APPEARANCE=light'
 # Every wallpaper in the app, as the loop its card opens, in about the card's look:
 # slug|scene|seconds in before recording|extra environment
 PREVIEWS='ant-colony|Ant Colony|4|SNAPSHOT_DEFAULTS=antcolony.day=20261017,antcolony.hour=11
-aurora|Aurora|8|SNAPSHOT_DEFAULTS=aurora.palette=Purple,aurora.speed=2
+aurora|Aurora|8|AURORA_SEED=1 AURORA_TIME=1794884400 AURORA_SURGE=100 SNAPSHOT_DEFAULTS=aurora.palette=Purple,aurora.speed=2
 black-hole|Black Hole|2.5|SNAPSHOT_DEFAULTS=blackhole.speed=2
 dappled-light|Dappled Light|4|SNAPSHOT_DEFAULTS=dappled.previewTime=1,dappled.previewHour=16.1,dappled.weather=1,dappled.seed=6 SNAPSHOT_APPEARANCE=light
-earth-from-orbit|Earth from Orbit|4|SNAPSHOT_DEFAULTS=latitude=25,longitude=78,earth.previewStorm=1
+earth-from-orbit|Earth from Orbit|4|EARTH_AT=1794837600 SNAPSHOT_DEFAULTS=latitude=25,longitude=78,earth.previewStorm=1
 etching|Etching|4|SNAPSHOT_DEFAULTS=etching.drawn=0.6892,etching.picture=1,etching.speed=16
 fireflies|Fireflies|8|
 fish-tank|Fish Tank|4|SNAPSHOT_APPEARANCE=light
 flowing-gradient|Flowing Gradient|4|SNAPSHOT_DEFAULTS=gradient.palette=Midnight,gradient.ribbonsOn=1
-galaxy|Galaxy|4|SNAPSHOT_DEFAULTS=galaxy.kind=Whirlpool,galaxy.rotation=4
+galaxy|Galaxy|4|SNAPSHOT_DEFAULTS=galaxy.seed=1,galaxy.kind=Whirlpool,galaxy.rotation=4
 jellyfish|Jellyfish|5|SNAPSHOT_DEFAULTS=jellyfish.seed=22 SNAPSHOT_APPEARANCE=light
 kelp-forest|Kelp Forest|5|SNAPSHOT_DEFAULTS=kelp.seed=5 SNAPSHOT_APPEARANCE=light
 lava-lamp|Lava Lamp|101|SNAPSHOT_DEFAULTS=lava.palette=Coral LAVA_SEED=11
 night-sky|Night Sky|4|SNAPSHOT_DEFAULTS=sky.previewTime=1,sky.previewHour=17.45
 meander|Meander|2.5|SNAPSHOT_DEFAULTS=meander.seed=13,meander.colors=Rainforest,meander.speed=2 SNAPSHOT_APPEARANCE=dark
 murmuration|Murmuration|20|SNAPSHOT_DEFAULTS=murmuration.light=5,murmuration.ground=0 MURMURATION_SEED=3
-nebula|Nebula|4|SNAPSHOT_DEFAULTS=nebula.palette=Hubble
+nebula|Nebula|4|SNAPSHOT_DEFAULTS=nebula.seed=1,nebula.palette=Hubble
 pixel-city|Pixel City|30|SNAPSHOT_DEFAULTS=city.place=0,city.previewTime=1,city.previewHour=17.15
 pixel-railway|Pixel Railway|40|RAILWAY_SEED=4 RAILWAY_ERA=transition SNAPSHOT_DEFAULTS=railway.previewTime=1,railway.previewHour=12,railway.previewDay=1,railway.day=196
 pixel-spaceport|Pixel Spaceport|23|SNAPSHOT_DEFAULTS=spaceport.rocket.falcon9=0,spaceport.rocket.heavy=0,spaceport.rocket.newglenn=0,spaceport.rocket.vulcan=0,spaceport.rocket.electron=0,spaceport.rocket.sls=0,spaceport.rocket.shuttle=0,spaceport.rocket.saturn=0,spaceport.rocket.ariane6=0,spaceport.rocket.ariane=0,spaceport.rocket.titan=0,spaceport.rocket.atlas=0,spaceport.rocket.redstone=0,spaceport.rocket.soyuz=0,spaceport.rocket.longmarch=0,spaceport.rocket.h3=0,spaceport.rocket.lvm3=0,spaceport.previewTime=1,spaceport.previewHour=16.35
