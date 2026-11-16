@@ -133,6 +133,33 @@ let nebulaKnobs = [
 @MainActor func nebula(size: CGSize) -> SKScene {
     let cycle = NebulaCycle()
     let scene = shaderScene(size: size, source: shaderCommon + """
+    // Galaxy's star layer: one layer of background stars on a grid turned by `a`, so layers of different sizes never
+    // line up into a lattice, kept where `keep` allows. Mostly faint: only the big, sparse layers hold bright stars,
+    // with a soft halo. Colours run from orange dwarfs through white to blue giants.
+    // ponytail: a copy of Galaxy's (Galaxy.swift); move both into shaderCommon when a third scene wants it
+    vec3 starLayer(vec2 pts, float cell, mat2 a, float keep, float t) {
+        vec2 q = a * pts / cell;
+        vec4 h = hash42(floor(q));
+        if (h.x > keep) { return vec3(0.0); }
+        vec4 k = hash42(floor(q) + 57.0);
+        vec2 d = (fract(q) - 0.5 - (h.yz - 0.5) * 0.7) * cell;
+        float mag = pow(h.w, 6.0) * min(cell / 17.0, 1.0);
+        float r = 0.4 + 1.1 * mag;
+        float glow = exp(-dot(d, d) / (r * r)) + 0.3 * mag * exp(-length(d) / (0.06 * cell));
+        float twinkle = 0.88 + 0.12 * sin(mod(t, 3600.0) * (0.6 + 2.0 * k.x) + k.y * 40.0); // hourly, as in starField
+        vec3 tint = mix(mix(vec3(0.72, 0.82, 1.0), vec3(1.0, 0.97, 0.94), smoothstep(0.0, 0.3, k.z)),
+                        vec3(1.0, 0.72, 0.5), smoothstep(0.55, 1.0, k.z));
+        return tint * glow * (0.12 + 2.0 * mag) * twinkle;
+    }
+
+    // The field stars behind the gas, as in Galaxy's sky: two layers of different sizes and angles, bunched into loose
+    // clusters and thinner patches by one broad noise.
+    vec3 fieldStars(vec2 pts, float t) {
+        float crowd = 0.25 + 1.5 * smoothstep(0.2, 0.8, noise(pts / 160.0));
+        return starLayer(pts, 5.0, mat2(1.0, 0.0, 0.0, 1.0), 0.16 * crowd, t)
+             + starLayer(pts, 17.0, mat2(0.76, 0.64, -0.64, 0.76), 0.3 * crowd, t);
+    }
+
     // One nebula: its glow (rgb) and how much of the field stars behind it it hides (a). As `clip` rises from -0.2 to
     // 1.2 it dissolves, the thin outer gas and fine filaments first and the densest knots last; lowered again, the same
     // nebula condenses from its knots outward. It clips a smoother measure than the gas itself, mostly the broad warp
@@ -190,21 +217,21 @@ let nebulaKnobs = [
         vec4 now = nebulaAt(uv, aspect, t, u_seed, u_zoom, u_band, u_base, u_dense, u_accent, u_hot, clipNow, u_detail);
         // each nebula has its own star field, moved by its seed; they swap over as it changes
         vec2 ptsNow = pts + u_seed * 97.0;
-        float field = starField(ptsNow, 7.0, 0.3, u_now);
+        vec3 field = fieldStars(ptsNow, u_now);
         float bright = brightStar(ptsNow + vec2(u_now * 0.2, 0.0), 180.0, u_now);
         vec4 next = vec4(0.0);
         if (u_mix > 0.0) { // only while changing, so the rest of the time it costs no more than one nebula
             float clipNext = mix(1.2, -0.2, clamp((u_mix - 0.25) / 0.75, 0.0, 1.0));
             next = nebulaAt(uv, aspect, t, u_seed2, u_zoom2, u_band2, u_base2, u_dense2, u_accent2, u_hot2, clipNext, u_detail);
             vec2 ptsNext = pts + u_seed2 * 97.0;
-            field = mix(field, starField(ptsNext, 7.0, 0.3, u_now), u_mix);
+            field = mix(field, fieldStars(ptsNext, u_now), u_mix);
             bright = mix(bright, brightStar(ptsNext + vec2(u_now * 0.2, 0.0), 180.0, u_now), u_mix);
         }
         // screened, not added, or where the two overlap their light flares white
         vec4 neb = vec4(1.0 - (1.0 - now.rgb) * (1.0 - next.rgb), max(now.a, next.a));
 
         vec3 col = vec3(0.004, 0.004, 0.012) + neb.rgb;
-        col += vec3(0.8, 0.85, 1.0) * field * (1.0 - neb.a);
+        col += field * (1.0 - neb.a);
         col += vec3(1.0, 0.92, 0.85) * bright;
 
         col = grade(col, 0.3, u_hue, u_saturation, u_contrast, u_brightness);
