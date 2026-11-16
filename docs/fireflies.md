@@ -136,3 +136,5 @@ CPU 0.41 ms and GPU 0.37 ms per frame (release build, 2x, seed 2, the fastest of
 
 ## Checking it
 `SNAPSHOT_SCENE="Fireflies" SNAPSHOT_SECONDS=8 SNAPSHOT_DIR=/tmp/ff swift test`. Motion runs through `update(_:)`, so `SNAPSHOT_SECONDS` advances flights and flashes. The fog wisps and the grass's sway run on `u_now`, which moves with it too. The rustle's time wraps hourly: each patch keeps its own rhythm, so the jump can't be seen. `SNAPSHOT_DEFAULTS="fireflies.fog=1"` shows thick fog, and `fireflies.seed=2` the same field every time, for before and after pictures.
+
+The README's picture and the site's (retaken 2026-11-16, after the review's changes): `fireflies.jpg` (the card and `preview-fireflies.jpg`) is `SNAPSHOT_SECONDS=8 SNAPSHOT_DEFAULTS="fireflies.seed=2"` with `swift test -c release -Xswiftc -enable-testing`, and the 12 s loop, the README's `fireflies.webp` and the menu tile are `site/media.sh preview-fireflies card-fireflies`, from 8 s into the same field.

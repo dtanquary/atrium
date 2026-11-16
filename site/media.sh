@@ -32,9 +32,9 @@ black-hole|Black Hole|2.5|SNAPSHOT_DEFAULTS=blackhole.speed=2
 dappled-light|Dappled Light|4|SNAPSHOT_DEFAULTS=dappled.previewTime=1,dappled.previewHour=16.1,dappled.weather=1,dappled.seed=6 SNAPSHOT_APPEARANCE=light
 earth-from-orbit|Earth from Orbit|4|EARTH_AT=1794837600 SNAPSHOT_DEFAULTS=latitude=25,longitude=78,earth.previewStorm=1
 etching|Etching|4|SNAPSHOT_DEFAULTS=etching.drawn=0.6892,etching.picture=1,etching.speed=16
-fireflies|Fireflies|8|
-fish-tank|Fish Tank|4|SNAPSHOT_APPEARANCE=light
-flowing-gradient|Flowing Gradient|4|SNAPSHOT_DEFAULTS=gradient.palette=Midnight,gradient.ribbonsOn=1
+fireflies|Fireflies|8|SNAPSHOT_DEFAULTS=fireflies.seed=2
+fish-tank|Fish Tank|4|SNAPSHOT_APPEARANCE=light SNAPSHOT_DEFAULTS=tank.seed=7
+flowing-gradient|Flowing Gradient|4|GRADIENT_SEED=2 SNAPSHOT_APPEARANCE=dark SNAPSHOT_DEFAULTS=gradient.palette=Midnight,gradient.ribbonsOn=1,gradient.previewTime=1,gradient.previewHour=15
 galaxy|Galaxy|4|SNAPSHOT_DEFAULTS=galaxy.seed=1,galaxy.kind=Whirlpool,galaxy.rotation=4
 jellyfish|Jellyfish|5|SNAPSHOT_DEFAULTS=jellyfish.seed=22 SNAPSHOT_APPEARANCE=light
 kelp-forest|Kelp Forest|5|SNAPSHOT_DEFAULTS=kelp.seed=5 SNAPSHOT_APPEARANCE=light

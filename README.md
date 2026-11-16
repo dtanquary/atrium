@@ -103,7 +103,7 @@ A colony of ants digging its nest in a thin tank seen from the side, with your d
 | Earth, at four in the afternoon | Large ants in Gel at nine in the morning: the first shaft and its first branches |
 
 #### Jellyfish
-Moon jellies and crystal jellies drifting and pulsing in a tank, drawn by shaders rather than cut out of photos, at their real sizes and a little under their real pace. Every bell squeezes quickly, opens again slowly and coasts, its rim lagging behind, and its tentacles trail from where the rim was a moment ago, so a squeeze or a turn runs down them. They move as real groups in aquarium tanks do, measured from footage: each pulse a little longer or shorter than the last, the group turning slowly round the tank with its current, and one that bumps into another stops pulsing for a moment and turns away. Look picks moon jellies in a lit blue tank, the same moon jellies glowing a steady blue in the dark (real moon jellies don't glow: this one is made up), or crystal jellies under blue light with their green rings, or follows Light and Dark Mode or day and night where you are, with the lit tank by day and the glow or the crystal jellies by night. In Settings you can also set how many there are, from half to one and a half times the standard 84 moon jellies or 48 crystal jellies, and how fast they swim.
+Moon jellies and crystal jellies drifting and pulsing in a tank, drawn by shaders rather than cut out of photos, at their real sizes and a little under their real pace. Every bell squeezes quickly, opens again slowly and coasts on, its rim flapping a moment behind, and its tentacles trail from where the rim was a moment ago, so a squeeze or a turn runs down them. Bells nearer or farther than the focus are a little soft, as through a lens. They move as real groups in aquarium tanks do, measured from footage: each pulse a little longer or shorter than the last, the group turning slowly round the tank with its current, and one that bumps into another stops pulsing for a moment and turns away. Look picks moon jellies in a lit blue tank, the same moon jellies glowing a steady blue in the dark (real moon jellies don't glow: this one is made up), or crystal jellies under blue light with their green rings, or follows Light and Dark Mode or day and night where you are, with the lit tank by day and the glow or the crystal jellies by night. In Settings you can also set how many there are, from half to one and a half times the standard 84 moon jellies or 48 crystal jellies, and how fast they swim.
 
 | <img src="docs/images/jellyfish.webp" alt="Jellyfish in the lit tank, moving: moon jellies pulsing in blue water" width="1600"> | ![Jellyfish glowing a steady blue on black](docs/images/jellyfish-glow.jpg) |
 |---|---|
@@ -112,7 +112,7 @@ Moon jellies and crystal jellies drifting and pulsing in a tank, drawn by shader
 | Crystal jellies | The lit tank at 1.5×: 126 moon jellies |
 
 #### Kelp Forest
-A forest of giant kelp seen from inside it: rope-thin stalks rising in clumps from the sea floor into blue-green haze, a blade on a gas float every few inches up each one, shafts of sunlight coming down through the canopy, and the whole forest swaying together in the swell, dragged by the water rather than springing back. It's drawn by shaders, with the kelp at its real size and the water in colors sampled from real photos, and every load grows a new forest. View looks level through the forest, up into the canopy toward the light, or moves between the two: level for four minutes, then tipping slowly up over 40 seconds, holding there, and tipping back. Look picks teal water, golden water or dusk, or follows Light and Dark Mode or day and night where you are, with teal or golden by day and dusk by night. In Settings you can also set how big the swell is and how fast it all moves.
+A forest of giant kelp seen from inside it: rope-thin stalks rising in clumps from the sea floor into blue-green haze, a blade on a gas float every few inches up each one, shafts of sunlight coming down through the canopy, and the whole forest swaying together in the swell, dragged by the water rather than springing back. A loose school of blacksmith, small dark fish, holds station among the kelp facing into the current, and turns, fish by fish, when the surge comes round. It's drawn by shaders, with the kelp at its real size and the water in colors sampled from real photos, and every load grows a new forest. View looks level through the forest, up into the canopy toward the light, or moves between the two: level for four minutes, then tipping slowly up over 40 seconds, holding there, and tipping back. Look picks teal water, golden water or dusk, or follows Light and Dark Mode or day and night where you are, with teal or golden by day and dusk by night. In Settings you can also set how big the swell is and how fast it all moves, and turn the fish off.
 
 | <img src="docs/images/kelp-forest.webp" alt="Kelp Forest level through the forest in teal water, moving: kelp swaying in the swell under shafts of sunlight" width="1600"> | ![Kelp Forest at dusk, dark stalks in deep blue water](docs/images/kelp-forest-dusk.jpg) |
 |---|---|
@@ -228,11 +228,11 @@ A pixel-art launch site that never stops, drawn like [Pixel City](#pixel-city) a
 ### Color, light and pattern
 
 #### Flowing Gradient
-Soft pools of color in six palettes, drifting from one palette to the next every few minutes on Random, with silk ribbons that follow the Sun if you turn them on.
+Soft pools of color in six palettes, each launch opening on its own arrangement along its own paths, drifting from one palette to the next every few minutes on Random and warming and cooling with the Sun, with silk ribbons if you turn them on.
 
 | <img src="docs/images/flowing-gradient.webp" alt="Flowing Gradient in Dark Mode, moving" width="1600"> | ![Flowing Gradient in Light Mode](docs/images/flowing-gradient-light.jpg) |
 |---|---|
-| The Midnight palette in Dark Mode, with its silk ribbons | The watercolor Light Mode |
+| The Midnight palette in Dark Mode, with its silk ribbons | The Sunset palette in the watercolor Light Mode |
 
 #### Lava Lamp
 Wax that rises up the middle as round heads on stems that pinch off, sticks to the top a while, then sinks at the sides, lit by the bulb below. Seven jewel-tone palettes, with Light and Dark looks.

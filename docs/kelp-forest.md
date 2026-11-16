@@ -190,7 +190,7 @@ SNAPSHOT_SCENE="Kelp Forest" SNAPSHOT_APPEARANCE=light SNAPSHOT_DEFAULTS="kelp.s
 
 `kelp.seed` (any whole number but 0) pins the forest and the sea, for pictures that can be taken again; unset, each load is new. The Settings pictures are `preview-kelp-forest.jpg` (dusk, Dark Mode's standard) and `preview-kelp-forest-light.jpg` (teal), from the first two commands.
 
-The README's pictures and the site's (2026-11-09) are the four commands above at `SNAPSHOT_SECONDS=5` with `swift test -c release -Xswiftc -enable-testing`: `kelp-forest.jpg` level in teal (the hero, cut to the card and `preview-kelp-forest-light.jpg`), `kelp-forest-dusk.jpg` (cut to `preview-kelp-forest.jpg`), `kelp-forest-looking-up.jpg` and `kelp-forest-tipping-up.jpg`. The 12 s loop, the card and the menu tile are `site/media.sh preview-kelp-forest card-kelp-forest`, from 5 s into the level view in teal.
+The README's pictures and the site's (2026-11-09, retaken 2026-11-16 by the same recipes after steps 4 and 5) are the four commands above at `SNAPSHOT_SECONDS=5` with `swift test -c release -Xswiftc -enable-testing`: `kelp-forest.jpg` level in teal (the hero, cut to the card and `preview-kelp-forest-light.jpg`), `kelp-forest-dusk.jpg` (cut to `preview-kelp-forest.jpg`), `kelp-forest-looking-up.jpg` and `kelp-forest-tipping-up.jpg`. The 12 s loop, the card and the menu tile are `site/media.sh preview-kelp-forest card-kelp-forest`, from 5 s into the level view in teal.
 
 ## Shortcuts
 - `ponytail:` each kelp sprite's fog and light are fixed at its place at rest; a near frond swaying ±1 m at 6 m changes its fog by a few percent.
