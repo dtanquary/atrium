@@ -150,13 +150,13 @@ When the tour reaches the Moon, one of its views is the Moon filling the screen 
 | The total lunar eclipse of December 31, 2028, previewed | Checked against NASA's Dial-a-Moon (left of each pair) for phase, libration, tilt and tone |
 
 #### Nebula
-A unique deep-space cloud on every load, in real nebula colors, dissolving into a new one every few minutes.
+A unique deep-space cloud on every load, in real nebula colors, dissolving into a new one every few minutes. Its dark dust lanes hide the stars behind them, and Crisp dust lanes in Settings sharpens their soft edges into silhouettes with a lit rim.
 
 | <img src="docs/images/nebula.webp" alt="Nebula, Hubble palette, moving" width="1600"> | ![Nebula, Reflection palette](docs/images/nebula-reflection.jpg) |
 |---|---|
 | The Hubble palette | The Reflection palette |
 | ![Nebula, Planetary palette](docs/images/nebula-planetary.jpg) | ![Nebula, Oxygen palette](docs/images/nebula-oxygen.jpg) |
-| The Planetary palette | The Oxygen palette |
+| The Planetary palette | The Oxygen palette, with Crisp dust lanes |
 
 #### Galaxy
 A spiral galaxy turning slowly, after a real one, with dust lanes, star clusters and pink star-forming knots.

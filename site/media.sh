@@ -42,7 +42,7 @@ lava-lamp|Lava Lamp|40|SNAPSHOT_DEFAULTS=lava.palette=Coral LAVA_SEED=11
 night-sky|Night Sky|4|SNAPSHOT_DEFAULTS=sky.previewTime=1,sky.previewHour=17.45
 meander|Meander|2.5|SNAPSHOT_DEFAULTS=meander.seed=13,meander.colors=Rainforest,meander.speed=2 SNAPSHOT_APPEARANCE=dark
 murmuration|Murmuration|20|SNAPSHOT_DEFAULTS=murmuration.light=5,murmuration.ground=0 MURMURATION_SEED=3
-nebula|Nebula|4|SNAPSHOT_DEFAULTS=nebula.palette=Hubble
+nebula|Nebula|4|SNAPSHOT_DEFAULTS=nebula.seed=1,nebula.palette=Hubble
 pixel-city|Pixel City|30|SNAPSHOT_DEFAULTS=city.place=0,city.previewTime=1,city.previewHour=19
 pixel-railway|Pixel Railway|40|RAILWAY_SEED=4 RAILWAY_ERA=transition SNAPSHOT_DEFAULTS=railway.previewTime=1,railway.previewHour=12,railway.previewDay=1,railway.day=196
 pixel-spaceport|Pixel Spaceport|19|SNAPSHOT_DEFAULTS=spaceport.previewTime=1,spaceport.previewHour=18.3

@@ -122,4 +122,6 @@ SNAPSHOT_DEFAULTS="nebula.seed=1,nebula.palette=Hubble,nebula.detail=1" SNAPSHOT
 swift test --filter nebulaFollowsItsSeedAndDustDetail   # the seed pins the roll, and Crisp dust lanes reaches the shader
 SNAPSHOT_DEFAULTS="nebula.palette=Hubble,nebula.contrast=1.5,nebula.hue=120" SNAPSHOT_SCENE=Nebula swift test
 ```
+**The README's pictures** (retaken on 2026-11-16 for the review's changes, picked from seeds 1 to 9 in Hubble, which give the same clouds in every palette), each 4 s in: `nebula-hubble.jpg`, which the card and Settings' picture are cut from, is `nebula.seed=1,nebula.palette=Hubble`, the environment of its `PREVIEWS` line in `site/media.sh`, so the loop opens on the same roll; `nebula-reflection.jpg` is `nebula.seed=3,nebula.palette=Reflection`, `nebula-planetary.jpg` `nebula.seed=2,nebula.palette=Planetary`, and `nebula-oxygen.jpg` `nebula.seed=7,nebula.palette=Oxygen,nebula.detail=1`, to show Crisp dust lanes. The canvas work on the site's main page (`WORKS` in `site/media.sh`) pins only the palette, so it is another roll.
+
 `SNAPSHOT_SECONDS` moves the gas (the shader runs on `u_now`), so a larger value previews the drift. To test cycling fast, temporarily shorten the `8 * 60` wait and the 90 s dissolve, then run the app binary directly and check that it survives several handovers.
