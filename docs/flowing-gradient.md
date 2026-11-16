@@ -76,7 +76,7 @@ The swatches in Settings (`paletteOptions`) use pools 1, 3, 4 and 6, and their p
 **Sunset and Blush pulled toward rose (2026-11-16).** Their slot 3 and slot 6, gold and orange in Sunset, champagne and peach in Blush, turned tan and terracotta where they faded over the dark or crossed the purples (dim orange reads as brown): the review measured the left third of a Sunset render at hue 13° and saturation 0.41, against 0.6 to 0.7 elsewhere. Each was turned about 10 to 15° toward red at the same strength and saturation: Sunset's slot 3 (1.10, 0.70, 0.35) → (1.10, 0.48, 0.30) and slot 6 (1.00, 0.40, 0.20) → (1.00, 0.30, 0.24), as the review's mock-up had them; Blush's slot 3 (1.10, 0.80, 0.65) → (1.10, 0.69, 0.65) and slot 6 (1.00, 0.55, 0.35) → (1.00, 0.44, 0.35) by the same move. Over six seeds each in Dark Mode, the share of lit pixels that are tan (hue 10 to 50°, saturation under 0.5) went from up to 5.6% (Sunset) and 6.2% (Blush) to 0, and the median saturation rose by 0.02 to 0.07; the same frames now stay in rose, coral and plum. At golden hour, when slot 6 swells, Sunset's glow is rose-red rather than orange. Light Mode's washes, derived from these, barely change (a little pinker where the old gold lay).
 
 ## Tuning constants
-- Drift speeds and phases are each pool's `(a, b, phase)` in `paths`. The flow rate is `0.04` in `update`.
+- Drift speeds are each pool's `(a, b)` in `paths`; their phases are rolled at each load into `turns`. The flow rate is `0.04` in `update`.
 - Ribbons:
   - first: y0 0.62, amplitude 0.16, frequency 1.6
   - second: y0 0.36, amplitude 0.13, frequency 2.1, at ×0.8 strength
