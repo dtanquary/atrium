@@ -133,6 +133,9 @@ A second round looked at the trains outside the US. A registered design on a tra
 - `pixel-railway-night.jpg`: the same at `railway.previewHour=22`.
 - `pixel-railway-britain.jpg`: `RAILWAY_SEED=2 RAILWAY_ERA=britishSteam`, `railway.day=298` (autumn's peak), noon.
 - `pixel-railway-snow.jpg`: `RAILWAY_SEED=1 RAILWAY_ERA=germanAlps`, `railway.day=20,railway.previewSnow=1`, noon.
+- `pixel-railway-golden.jpg` (2026-11-16): the first's settings at `railway.previewHour=16.2`. The preview day sets the season only: the light is the Sun's at the preview hour on the day of the render, so the golden hour moves with it. 16:12 was 4° up on 16 November at the fallback location (40°N, 90°W); on another day pick the hour the Sun is 1 to 6° up.
+- `pixel-railway-winter.jpg` (2026-11-16): the first's settings at `railway.day=20`, the same layout in January without snow.
+- **Retaken on 2026-11-16** for the review's changes (farmland, the trains' shadows, the winter looks, the golden hour, the small things), each looked at beside the one it replaced, with the same settings; the loop, card and menu tile were made again from them (`site/media.sh preview-pixel-railway card-pixel-railway`). The last two were added then, one look each from the review that the README didn't show.
 
 ## Still open
 
