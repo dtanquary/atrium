@@ -80,6 +80,33 @@ import Testing
     #expect(fish.filter { !$0.isHidden }.isEmpty)
 }
 
+/// The fish swim alike at any frame rate, and smoothly: at 30 and 120 fps every fish is in the same place and faces the
+/// same way at the same moment, and at 120 fps they move on every frame, not only when their 1/30 s step comes round.
+@MainActor @Test func kelpFishSwimSmoothlyAtAnyRate() {
+    UserDefaults.standard.set(5, forKey: "kelp.seed")
+    defer { UserDefaults.standard.removeObject(forKey: "kelp.seed") }
+    let size = CGSize(width: 756, height: 491), cards = Atlas.shared().fish.map { $0.textureRect() }
+    func school(_ scene: KelpForest) -> [SKSpriteNode] {
+        scene.children.compactMap { $0 as? SKSpriteNode }.filter { node in cards.contains { $0 == node.texture?.textureRect() } }
+    }
+    let slow = KelpForest(size: size, view: 0), fast = KelpForest(size: size, view: 0), a = school(slow), b = school(fast)
+    slow.update(1000)
+    fast.update(1000)
+    var worst = 0.0, still = 0, last = b.map(\.position)
+    for frame in 1...360 { // 3 s at 120 fps
+        fast.update(1000 + Double(frame) / 120)
+        if b.map(\.position) == last { still += 1 }
+        last = b.map(\.position)
+        guard frame % 4 == 0 else { continue }
+        slow.update(1000 + Double(frame) / 120)
+        for (p, q) in zip(a, b) {
+            worst = max(worst, hypot(p.position.x - q.position.x, p.position.y - q.position.y))
+            #expect(p.xScale == q.xScale, "a fish faces the other way at 30 fps")
+        }
+    }
+    #expect(a.count == 36 && worst < 0.1 && still == 0, "\(worst) pt apart at 30 and 120 fps; \(still) frames of 360 at 120 fps without a move")
+}
+
 /// On battery the water draws at half resolution and its marine snow, specks a pixel or two across, moves to a sprite
 /// of its own over it at full resolution, and back as the trim goes off; dusk has no snow to move.
 @MainActor @Test func kelpSnowStaysSharpWhenTrimmed() throws {
