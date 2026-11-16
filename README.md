@@ -46,7 +46,7 @@ Sunlight through a tree onto a warm white plaster wall, from the real Sun where 
 | Sage lap siding | An oak floor by a window, just after noon |
 
 #### Rain on Glass
-Drops creeping and running down a rainy window, each a tiny lens showing the street upside down. Behind the glass: ten real places, blurred as a camera focused on the glass sees them (from a wet Hamburg square to a cabin in the snow), or city lights in seven palettes. Turn on Follow the weather and the glass does what the weather where you are would do to a real window: rain when it rains, drops drying when it stops, fog on humid mornings, snow melting into beads, and fern frost growing across the pane over hours below freezing.
+Drops creeping and running down a rainy window, each a tiny lens showing the street upside down. Behind the glass: ten real places, blurred as a camera focused on the glass sees them (from a wet Hamburg square to a cabin in the snow), or a city's lights far out of focus, in seven palettes. It opens on Hamburg and fades to another of the ten places every ten minutes, or stays on one you pick. Turn on Follow the weather and the glass does what the weather where you are would do to a real window: rain when it rains, drops drying when it stops, fog on humid mornings, snow melting into beads, and fern frost growing across the pane over hours below freezing.
 
 | <img src="docs/images/rain-on-glass.webp" alt="Rain on Glass at night, moving" width="1600"> | ![Rain on Glass by day](docs/images/rain-on-glass-day.jpg) |
 |---|---|
