@@ -227,11 +227,11 @@ A pixel-art launch site that never stops, drawn like [Pixel City](#pixel-city) a
 ### Color, light and pattern
 
 #### Flowing Gradient
-Soft pools of color in six palettes, drifting from one palette to the next every few minutes on Random, with silk ribbons that follow the Sun if you turn them on.
+Soft pools of color in six palettes, each launch opening on its own arrangement along its own paths, drifting from one palette to the next every few minutes on Random and warming and cooling with the Sun, with silk ribbons if you turn them on.
 
 | <img src="docs/images/flowing-gradient.webp" alt="Flowing Gradient in Dark Mode, moving" width="1600"> | ![Flowing Gradient in Light Mode](docs/images/flowing-gradient-light.jpg) |
 |---|---|
-| The Midnight palette in Dark Mode, with its silk ribbons | The watercolor Light Mode |
+| The Midnight palette in Dark Mode, with its silk ribbons | The Sunset palette in the watercolor Light Mode |
 
 #### Lava Lamp
 Wax that rises up the middle as round heads on stems that pinch off, sticks to the top a while, then sinks at the sides, lit by the bulb below. Seven jewel-tone palettes, with Light and Dark looks.

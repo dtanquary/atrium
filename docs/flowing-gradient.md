@@ -128,5 +128,7 @@ SNAPSHOT_DEFAULTS="gradient.ribbons=1,gradient.grain=1" SNAPSHOT_SCENE="Flowing 
 SNAPSHOT_DEFAULTS="gradient.palette=Random,gradient.cycleMinutes=1" SNAPSHOT_SECONDS=90 SNAPSHOT_SCENE="Flowing Gradient" swift test   # halfway through the first colour fade
 ```
 Every load rolls its own start and paths: prefix `GRADIENT_SEED=7` to render the same arrangement twice, as for a before and after.
+The README's pictures and the site's (retaken 2026-11-16, after each load's roll) pin the roll and the hour, with `swift test -c release -Xswiftc -enable-testing` at `SNAPSHOT_SECONDS=4`: `flowing-gradient.jpg` (the card and `preview-flowing-gradient.jpg`) is `GRADIENT_SEED=2 SNAPSHOT_APPEARANCE=dark SNAPSHOT_DEFAULTS="gradient.palette=Midnight,gradient.ribbonsOn=1,gradient.previewTime=1,gradient.previewHour=15"`, as the `PREVIEWS` line for the site's loop, the README's `flowing-gradient.webp` and the menu tile; `flowing-gradient-light.jpg` (cut to `preview-flowing-gradient-light.jpg`) is the same seed and hour with `SNAPSHOT_APPEARANCE=light SNAPSHOT_DEFAULTS="gradient.palette=Sunset,gradient.previewTime=1,gradient.previewHour=15"`, the ribbons off. The ribbons are on in the dark pictures because the README's loop has always shown them, though they're off as standard.
+
 `SNAPSHOT_DEFAULTS` can't store an empty string, but any name that isn't a palette counts as Random, hence `gradient.palette=Random`.
 The flow uses the integrated `u_phase`, so `SNAPSHOT_SECONDS` works. The test location is the time-zone fallback, so sunset in previews is around 18:45 local time.
