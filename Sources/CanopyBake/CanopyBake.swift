@@ -34,9 +34,10 @@ public struct CanopyBake: Sendable {
     }
 
     /// The canopy lit and composited, premultiplied, as sqrt(linear / 2), rows bottom first; how much canopy is near
-    /// each point, an eighth the size; and how much of the Sun shows through where it stands.
+    /// each point, an eighth the size; how much of the Sun shows through where it stands; and how each point sways
+    /// (`sway`), the size of the cover map.
     public struct Made: Sendable {
-        public let canopy: Data, width: Int, height: Int, cover: Data, coverWidth: Int, coverHeight: Int, sunShows: Double
+        public let canopy: Data, width: Int, height: Int, cover: Data, coverWidth: Int, coverHeight: Int, sunShows: Double, sway: Data
     }
 
     /// ponytail: the canopy is at the stand's own 1512 px to a unit of tan, a 14" MacBook Pro's 2x, and is drawn
@@ -151,7 +152,75 @@ public struct CanopyBake: Sendable {
         let sx = (-sun.x / max(sun.z, 1e-3) / extent.x * 0.5 + 0.5) * Double(sw)
         let sy = (0.5 - sun.y / max(sun.z, 1e-3) / extent.y * 0.5) * Double(sh)
         let shows = sunUp && sx > 0 && sy > 0 && sx < Double(sw) && sy < Double(sh) ? Double(1 - min(crown.at(sx, sy) * 1.4, 1)) : 0
-        return Made(canopy: Data(out), width: sw, height: sh, cover: Data(near), coverWidth: ew, coverHeight: eh, sunShows: shows)
+        return Made(canopy: Data(out), width: sw, height: sh, cover: Data(near), coverWidth: ew, coverHeight: eh, sunShows: shows,
+                    sway: Self.trees(wood, sw, sh))
+    }
+
+    /// Which tree each point of the stand belongs to, for the sway, an eighth the size, rows bottom first: in each of
+    /// R, G, B and A, how much it sways with one of four groups of trees. Each trunk or limb where it enters at the
+    /// picture's edge (a run of solid wood along the border) is a tree; its label is flooded along the wood, so every
+    /// twig goes with the trunk it is joined to by the shortest path, then out into the sky and leaves round it from
+    /// the nearest wood; trees round the edge in turn go to groups 0, 1, 2, 3, 0, ... so neighbours sway apart. How
+    /// much a point sways grows with how far along its tree it is from the edge, none at the trunk's foot and all of
+    /// it from 700 px on, so the crowns move as bodies and the trunks bend.
+    static func trees(_ wood: [UInt8], _ sw: Int, _ sh: Int) -> Data {
+        let (w, h) = (sw / 4, sh / 4) // a quarter the size: the most of each 4 px block, and its mean
+        var most = [Float](repeating: 0, count: w * h), mean = most
+        for j in 0..<h { for i in 0..<w {
+            var (m, s) = (0, 0)
+            for dj in 0..<4 { for di in 0..<4 { let a = Int(wood[((j * 4 + dj) * sw + i * 4 + di) * 4 + 3]); m = max(m, a); s += a } }
+            (most[j * w + i], mean[j * w + i]) = (Float(m) / 255, Float(s) / 16 / 255)
+        } }
+        var label = [Int32](repeating: -1, count: w * h), along = [Float](repeating: 0, count: w * h), queue: [Int] = []
+        // the border, clockwise from the top left
+        let border = Array(0..<w) + (1..<h).map { $0 * w + w - 1 } + stride(from: w - 2, through: 0, by: -1).map { (h - 1) * w + $0 }
+            + stride(from: h - 2, through: 1, by: -1).map { $0 * w }
+        var run: Int32 = -1, inside = false
+        for k in border {
+            if mean[k] > 0.6 {
+                if !inside { run += 1 }
+                inside = true
+                label[k] = run
+                queue.append(k)
+            } else { inside = false }
+        }
+        if run > 0, label[border[0]] >= 0, label[border[border.count - 1]] >= 0 { // a run across the start is one tree
+            for k in border where label[k] == run { label[k] = 0 }
+        }
+        var head = 0
+        func flood(wood: Bool) { // breadth first, 8-connected: along the wood, counting its steps, or out from it
+            while head < queue.count {
+                let k = queue[head], (i, j) = (k % w, k / w)
+                head += 1
+                for y in max(j - 1, 0)...min(j + 1, h - 1) { for x in max(i - 1, 0)...min(i + 1, w - 1) {
+                    let p = y * w + x
+                    guard label[p] < 0, !wood || most[p] > 0.1 else { continue }
+                    (label[p], along[p]) = (label[k], along[k] + (wood ? (x != i && y != j ? 1.41 : 1) : 0))
+                    queue.append(p)
+                } }
+            }
+        }
+        if queue.isEmpty { return Data(count: (sw / 8) * (sh / 8) * 4) } // no trees: nothing sways
+        flood(wood: true)
+        queue = (0..<(w * h)).filter { label[$0] >= 0 }
+        head = 0
+        flood(wood: false)
+        // an eighth the size: each group's share, blurred so neighbouring trees part smoothly
+        let (ew, eh) = (sw / 8, sh / 8)
+        var groups = [[Float]](repeating: [Float](repeating: 0, count: ew * eh), count: 4)
+        for j in 0..<eh { for i in 0..<ew {
+            for dj in 0..<2 { for di in 0..<2 {
+                let k = min(j * 2 + dj, h - 1) * w + min(i * 2 + di, w - 1)
+                groups[Int(label[k]) % 4][j * ew + i] += min(along[k] * 4 / 700, 1) / 4
+            } }
+        } }
+        for g in 0..<4 { boxBlur(&groups[g], ew, eh, 3) }
+        var out = [UInt8](repeating: 0, count: ew * eh * 4)
+        for j in 0..<eh { for i in 0..<ew {
+            let q = ((eh - 1 - j) * ew + i) * 4
+            for g in 0..<4 { out[q + g] = UInt8(min(groups[g][j * ew + i], 1) * 255 + 0.5) }
+        } }
+        return Data(out)
     }
 
     /// The stand's picture, mirrored by `flip` and turned a quarter for a portrait screen, as premultiplied RGBA,

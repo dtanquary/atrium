@@ -74,6 +74,68 @@ import CanopyBake
     #expect(frames.stars().filter(clear).count < 5, "stars left at noon")
 }
 
+/// The trees sway as bodies, not as a picture wobbling like water: two points 30-80 px apart inside one group of
+/// crowns move together, and a point in another group moves apart from them as the two groups' breezes say. Measured in the drawn
+/// frames, by matching a patch round each point from one frame to one 1.5 s later.
+@MainActor @Test func canopyTreesSwayAsBodies() throws {
+    let defaults = UserDefaults.standard, pins = Canopy.pins
+    defer { for key in [pins.seed, pins.date, pins.hour] { defaults.removeObject(forKey: key) } }
+    for (key, value) in [(pins.seed, 3 as Any), (pins.date, "2026-07-15"), (pins.hour, 15.5)] { defaults.set(value, forKey: key) }
+    let size = CGSize(width: 1512, height: 982), camera = Canopy.Camera(size: size), place = CLLocationCoordinate2D(latitude: 42, longitude: -88)
+    var frames = try Frames(Canopy(size: size, place: place), size: size)
+    frames.draw()
+    let made = Canopy.bake(moment: Canopy.moment(day: "2026-07-15", hour: 15.5), latitude: 42, longitude: -88, camera: camera, seed: 3,
+                           light: nil, night: false).made
+    let (ew, eh) = (made.coverWidth, made.coverHeight)
+    // the cells of the sway map wholly in one group, as points on the screen (rows top first), on the leaves
+    var cells: [[(x: Int, y: Int)]] = [[], [], [], []]
+    for j in stride(from: 2, to: eh - 2, by: 3) { for i in stride(from: 2, to: ew - 2, by: 3) {
+        let share = (0..<4).map { Double(made.sway[(j * ew + i) * 4 + $0]) / 255 }
+        guard let g = share.firstIndex(where: { $0 > 0.97 }), share.reduce(0, +) - share[g] < 0.02 else { continue }
+        let t = (SIMD2(Double(i) + 0.5, Double(j) + 0.5) / SIMD2(Double(ew), Double(eh)) - 0.5) * 2 * camera.extent
+        let uv = t / camera.tan * 0.5 + 0.5
+        guard abs(uv.x - 0.5) < 0.42, abs(uv.y - 0.5) < 0.4 else { continue }
+        let (x, y) = (Int(uv.x * Double(frames.w)), Int((1 - uv.y) * Double(frames.h)))
+        let (ci, cj) = (Int(Double(i) / Double(ew) * Double(made.width)), Int(Double(j) / Double(eh) * Double(made.height)))
+        guard made.canopy[(cj * made.width + ci) * 4 + 3] > 200 else { continue }
+        cells[g].append((x, y))
+    }}
+    let groups = (0..<4).filter { cells[$0].count >= 2 }
+    try #require(groups.count >= 2, "no two groups wholly inside the screen")
+    let (g, h) = (groups[0], groups[1])
+    let a = cells[g][0], b = try #require(cells[g].dropFirst().first { (30...80).contains(hypot(Double($0.x - a.x), Double($0.y - a.y))) }), c = cells[h][0]
+    // a moment when the two groups' breezes differ by 8 px or more
+    let breeze = Canopy.Breeze(seed: 3)
+    func gap(_ t0: Double, _ t1: Double) -> Double {
+        let (o0, o1) = (breeze.offsets(t0), breeze.offsets(t1))
+        return length((o1[g] - o0[g]) - (o1[h] - o0[h]))
+    }
+    var tries = 0
+    while gap(frames.time, frames.time + 1.5) < 8, tries < 60 { frames.draw(seconds: 0.5); tries += 1 }
+    let before = frames.grey(), t0 = frames.time
+    frames.draw(seconds: 1.5)
+    let after = frames.grey()
+    func shift(_ p: (x: Int, y: Int)) -> SIMD2<Double> { // the patch's move from before to after, in pixels (x right, y down)
+        var best = (cost: Float.infinity, d: SIMD2<Double>.zero)
+        for dy in -20...20 { for dx in -20...20 {
+            var cost: Float = 0
+            for y in stride(from: p.y - 20, through: p.y + 20, by: 2) { for x in stride(from: p.x - 20, through: p.x + 20, by: 2) {
+                let e = before[y * frames.w + x] - after[(y + dy) * frames.w + x + dx]
+                cost += e * e
+            }}
+            if cost < best.cost { best = (cost, [Double(dx), Double(dy)]) }
+        }}
+        return best.d
+    }
+    let (sa, sb, sc) = (shift(a), shift(b), shift(c))
+    let (o0, o1) = (breeze.offsets(t0), breeze.offsets(t0 + 1.5))
+    let expected = (o1[g] - o0[g]) - (o1[h] - o0[h]) // the two groups' moves apart, in px at 2x on a 14" (x right, y up)
+    print("Canopy's sway over 1.5 s: group \(g) at \(a) moved \(sa), at \(b) \(sb); group \(h) at \(c) \(sc); apart by \(expected) expected")
+    // (within the limbs' own sway, 2.5 px either way, which differs a little from point to point)
+    #expect(length(sa - sb) <= 4, "one group's crowns moved apart")
+    #expect(length((sa - sc) - SIMD2(expected.x, -expected.y)) <= 4 + 0.15 * length(expected), "the groups didn't move as their breezes say")
+}
+
 /// What building Canopy holds the main thread for, and its bake off it, at a 14" MacBook Pro's size: meaningful in a
 /// release build: `CANOPY_LOAD=1 swift test -c release -Xswiftc -enable-testing --filter canopyLoad`. Then a bake for
 /// later in the day (the light, the canopy and the night's stars, off the main thread), and what landing one costs the
@@ -155,6 +217,13 @@ import CanopyBake
         }
         buffer.waitUntilCompleted()
         return held
+    }
+
+    /// The last frame's brightness, 0 to 255 a pixel, rows top first.
+    func grey() -> [Float] {
+        var pixels = [UInt32](repeating: 0, count: w * h)
+        texture.getBytes(&pixels, bytesPerRow: w * 4, from: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0)
+        return pixels.map { Float($0 & 255) * 0.0722 + Float($0 >> 8 & 255) * 0.7152 + Float($0 >> 16 & 255) * 0.2126 }
     }
 
     /// The stars in the last frame: each pixel as bright as the 8 round it and brighter by 15 of 255 or more than an

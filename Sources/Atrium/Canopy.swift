@@ -33,6 +33,9 @@ final class Canopy: SKScene {
     /// The picture in front, and the one behind that the next bake lands in and fades in from.
     private var front: Picture, back: Picture
     private let night: Night
+    /// The sway, shared by both pictures: each group of trees' offset, two to a uniform, and the limbs' and the
+    /// leaves' flutter (`Breeze`), set every frame.
+    private let breeze: Breeze, motion: Motion
     private var job: Job?, fading: (start: TimeInterval, length: TimeInterval)?, ticked: TimeInterval = -.infinity
     /// The moment the latest bake shows, and the Sun's height then; whether the canopy has landed yet.
     private var shown: (moment: Date, sun: Double), landed = false
@@ -43,10 +46,11 @@ final class Canopy: SKScene {
         var seed = UInt64(max(defaults.integer(forKey: Self.pins.seed), 0))
         if seed == 0 { seed = .random(in: 1...UInt64(UInt32.max)) }
         let moment = Self.moment(day: defaults.string(forKey: Self.pins.date), hour: defaults.object(forKey: Self.pins.hour) as? Double)
-        let camera = Camera(size: size), night = Night()
+        let camera = Camera(size: size), night = Night(), motion = Motion()
         let light = Light(camera: camera, date: moment, latitude: here.latitude, longitude: here.longitude)
         (lens, self.seed, self.place, self.night, shown) = (camera, seed, place, night, (moment, light.sun.z))
-        (front, back) = (Picture(camera: camera, night: night), Picture(camera: camera, night: night))
+        (breeze, self.motion) = (Breeze(seed: seed), motion)
+        (front, back) = (Picture(camera: camera, night: night, motion: motion), Picture(camera: camera, night: night, motion: motion))
         super.init(size: size)
 
         backgroundColor = .black
@@ -80,6 +84,7 @@ final class Canopy: SKScene {
             ticked = currentTime
             tick()
         }
+        motion.set(breeze, at: currentTime, camera: lens)
     }
 
     private var here: CLLocationCoordinate2D { place ?? Location.shared.coordinate }
@@ -151,7 +156,7 @@ final class Canopy: SKScene {
     /// A bake's textures: the sky, the canopy and its cover, and the night's if they were asked for and it is night,
     /// the stars' grid and Night Sky's photograph of the Milky Way (a 6000 × 3000 HEIC, 160 ms to decode).
     struct Textures: @unchecked Sendable { // made off the main thread, then only handed over
-        let sky: SKTexture, canopy: SKTexture, cover: SKTexture, stars: SKTexture?, photo: SKTexture?
+        let sky: SKTexture, canopy: SKTexture, cover: SKTexture, sway: SKTexture, stars: SKTexture?, photo: SKTexture?
     }
 
     /// Everything about one moment that takes time, off the main thread: the light (unless given), the canopy grown
@@ -172,7 +177,7 @@ final class Canopy: SKScene {
         }
         let dark = night && light.starlight > 0
         let textures = Textures(sky: texture(Data(light.sky), Light.width, Light.height), canopy: texture(made.canopy, made.width, made.height),
-                                cover: texture(made.cover, made.coverWidth, made.coverHeight),
+                                cover: texture(made.cover, made.coverWidth, made.coverHeight), sway: texture(made.sway, made.coverWidth, made.coverHeight),
                                 stars: dark ? texture(Data(starGrid()), grid.width, grid.height, .nearest) : nil,
                                 photo: dark ? SKTexture(image: NSImage(contentsOf: resource("sky-milky-way.heic")) ?? NSImage()) : nil)
         return Baked(moment: moment, light: light, made: made, textures: textures)
@@ -193,16 +198,16 @@ final class Canopy: SKScene {
     @MainActor private final class Picture {
         let sprite = SKSpriteNode(color: .white, size: .zero) // its alpha reaches the shader as v_color_mix.a
         private let sky = SKUniform(name: "u_sky", texture: Canopy.clear), canopy = SKUniform(name: "u_canopy", texture: Canopy.clear),
-                    cover = SKUniform(name: "u_cover", texture: Canopy.clear)
+                    cover = SKUniform(name: "u_cover", texture: Canopy.clear), sway = SKUniform(name: "u_sway", texture: Canopy.clear)
         private let sun = SKUniform(name: "u_sun", vectorFloat3: .zero), disc = SKUniform(name: "u_disc", vectorFloat3: .zero),
                     glow = SKUniform(name: "u_glow", vectorFloat3: .zero), stars = SKUniform(name: "u_night", float: 0)
 
         /// Its shader by day, and by night (with the stars), each sharing its uniforms.
         private let shaders: (day: SKShader, night: SKShader)
 
-        init(camera: Camera, night: Night) {
-            let own = [sky, canopy, cover, sun, disc, glow]
-            shaders = (SKShader(source: camera.defines + Canopy.source(night: false), uniforms: own),
+        init(camera: Camera, night: Night, motion: Motion) {
+            let own = [sky, canopy, cover, sway, sun, disc, glow] + motion.uniforms
+            shaders = (SKShader(source: camera.defines + Canopy.source(night: false), uniforms: own + [WallpaperTime.now]),
                        SKShader(source: camera.defines + Canopy.source(night: true), uniforms: own + [stars] + night.uniforms))
             sprite.shader = shaders.day
         }
@@ -213,7 +218,7 @@ final class Canopy: SKScene {
         /// A bake's light and textures; with no textures, the sky alone, made here, as the scene starts.
         func show(_ light: Light, _ textures: Textures?, sunShows: Double) {
             if let textures {
-                (sky.textureValue, canopy.textureValue, cover.textureValue) = (textures.sky, textures.canopy, textures.cover)
+                (sky.textureValue, canopy.textureValue, cover.textureValue, sway.textureValue) = (textures.sky, textures.canopy, textures.cover, textures.sway)
             } else {
                 sky.textureValue = SKTexture(data: Data(light.sky), size: CGSize(width: Light.width, height: Light.height))
                 sky.textureValue?.filteringMode = .linear
@@ -228,7 +233,66 @@ final class Canopy: SKScene {
             if sprite.shader !== shader { sprite.shader = shader }
         }
 
-        func clear() { for map in [sky, canopy, cover] { map.textureValue = Canopy.clear } }
+        func clear() { for map in [sky, canopy, cover, sway] { map.textureValue = Canopy.clear } }
+    }
+
+    /// The sway's uniforms, shared by both pictures, set every frame from the breeze: each group of trees' offset in the
+    /// stand's picture (two groups to a uniform), and the limbs' phases, their reach and the leaves' flutter.
+    @MainActor final class Motion {
+        let a = SKUniform(name: "u_swayA", vectorFloat4: .zero), b = SKUniform(name: "u_swayB", vectorFloat4: .zero)
+        let limb = SKUniform(name: "u_limb", vectorFloat4: .zero)
+        var uniforms: [SKUniform] { [a, b, limb] }
+
+        func set(_ breeze: Breeze, at time: TimeInterval, camera: Camera) {
+            let o = breeze.offsets(time), strength = Float(breeze.strength(time))
+            let per = SIMD2<Double>(1, 1) / (stand.perTan * 2 * camera.extent) // a pixel (at 2x on a 14" screen) in the picture
+            func pair(_ k: Int) -> (Float, Float, Float, Float) {
+                (Float(o[k].x * per.x), Float(o[k].y * per.y), Float(o[k + 1].x * per.x), Float(o[k + 1].y * per.y))
+            }
+            let (p, q) = (pair(0), pair(2))
+            a.vectorFloat4Value = SIMD4(p.0, p.1, p.2, p.3)
+            b.vectorFloat4Value = SIMD4(q.0, q.1, q.2, q.3)
+            limb.vectorFloat4Value = SIMD4(Float((2 * .pi * 0.47 * time).truncatingRemainder(dividingBy: 2 * .pi)),
+                                           Float((2 * .pi * 0.53 * time).truncatingRemainder(dividingBy: 2 * .pi)),
+                                           Float(Breeze.limbs * per.x) * strength, Breeze.flutter * strength)
+        }
+    }
+
+    /// The breeze, until the live wind comes (step (d)): a heading from the seed, and a strength that swells and
+    /// eases, 0.35 to 1, under which each of the four groups of trees sways at its own pace in 0.17-0.33 Hz (the
+    /// in-leaf range, research-method.md §2), mostly along the wind and a little across it.
+    struct Breeze {
+        /// How far the crowns sway at full strength, and their limbs on their own, in pixels at 2x on a 14" screen;
+        /// and how much the leaves' light flutters.
+        static let reach = 18.0, limbs = 2.0, flutter: Float = 0.12
+        static let along = [0.17, 0.21, 0.25, 0.29], across = [0.19, 0.24, 0.28, 0.33]
+        let heading: Double, phases: [Double]
+
+        init(seed: UInt64) {
+            var state = seed
+            func next() -> Double { // SplitMix64's step, as the bake's
+                state &+= 0x9E37_79B9_7F4A_7C15
+                var z = (state ^ (state >> 30)) &* 0xBF58_476D_1CE4_E5B9
+                z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+                return Double((z ^ (z >> 31)) >> 11) / Double(1 << 53)
+            }
+            heading = next() * 2 * .pi
+            phases = (0..<10).map { _ in next() * 2 * .pi }
+        }
+
+        /// How hard it blows at `time` (seconds), 0.35 to 1: a swell over about a minute and gusts over a quarter of one.
+        func strength(_ time: TimeInterval) -> Double {
+            min(max(0.62 + 0.22 * sin(2 * .pi * time / 61 + phases[8]) + 0.16 * sin(2 * .pi * time / 17 + phases[9]), 0.35), 1)
+        }
+
+        /// Each group's offset at `time`, in pixels at 2x on a 14" screen (x right, y up).
+        func offsets(_ time: TimeInterval) -> [SIMD2<Double>] {
+            let reach = Self.reach * strength(time), (c, s) = (cos(heading), sin(heading))
+            return (0..<4).map { k in
+                let along = sin(2 * .pi * Self.along[k] * time + phases[k]), across = 0.35 * sin(2 * .pi * Self.across[k] * time + phases[k + 4])
+                return SIMD2(along * c - across * s, along * s + across * c) * reach
+            }
+        }
     }
 
     /// The night's textures, shared by both pictures and held only while one shows stars: Night Sky's photograph of
@@ -306,12 +370,25 @@ final class Canopy: SKScene {
         void main() {
             vec2 uv = v_tex_coord;
             vec2 t = (uv * 2.0 - 1.0) * TAN;                 // tan units: x right (west), y up (north)
-            vec2 q = t / (2.0 * EXTENT) + 0.5;               // the stand's picture
+            vec2 q0 = t / (2.0 * EXTENT) + 0.5;              // the stand's picture
+            // the sway: each point moves with its group of trees by its share of each (u_sway), so the crowns move as
+            // bodies and the trunks bend, and with its limbs a little on their own
+            vec4 tree = texture2D(u_sway, q0);
+            vec2 q = q0 - tree.x * u_swayA.xy - tree.y * u_swayA.zw - tree.z * u_swayB.xy - tree.w * u_swayB.zw
+                - (tree.x + tree.y + tree.z + tree.w) * u_limb.z * vec2(sin(u_limb.x + dot(q0, vec2(23.0, 9.0))), sin(u_limb.y + dot(q0, vec2(-8.0, 19.0))));
             vec3 sky = texture2D(u_sky, uv).rgb;
             sky = sky * sky * 4.0;
             vec4 c = texture2D(u_canopy, q);
             vec3 canopy = c.rgb * c.rgb * 2.0;
             float a = c.a;
+            // the flutter: leaves turning in the breeze catch the light and lose it, patch by patch, each about a spray
+            // across (a change of light, not of place)
+            vec2 fc = q * STAND / 24.0, fi = floor(fc), ff = fract(fc);
+            ff = ff * ff * (3.0 - 2.0 * ff);
+            vec4 hh = fract(sin(vec4(dot(fi, vec2(127.1, 311.7)), dot(fi + vec2(1.0, 0.0), vec2(127.1, 311.7)),
+                                     dot(fi + vec2(0.0, 1.0), vec2(127.1, 311.7)), dot(fi + vec2(1.0, 1.0), vec2(127.1, 311.7)))) * 43758.5453);
+            vec4 fl = sin(mod(u_now, 3600.0) * (4.0 + 5.0 * hh) + 37.0 * hh); // hourly: a jump in a flutter can't be seen
+            canopy *= 1.0 + u_limb.w * mix(mix(fl.x, fl.y, ff.x), mix(fl.z, fl.w, ff.x), ff.y);
             // the veil: by day, the sky in a gap paled toward silver near the leaves, as a bright gap in a crown looks
             float near = texture2D(u_cover, q).r;
             vec3 gap = mix(sky, vec3(0.86, 0.89, 0.97) * lumi(sky), 0.55 * smoothstep(0.08, 0.7, near)\(night ? " * (1.0 - u_night)" : ""));
@@ -398,6 +475,7 @@ extension Canopy {
             #define TAN vec2(\(tan.x), \(tan.y))
             #define EXTENT vec2(\(extent.x), \(extent.y))
             #define SCALE \(scale)
+            #define STAND vec2(\(stand.perTan * 2 * extent.x), \(stand.perTan * 2 * extent.y))
             #define MILKY 0.5
 
             """
