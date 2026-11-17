@@ -247,6 +247,8 @@ public struct CanopyBake: Sendable {
     /// their limbs and the specks go. And the key
     /// left the evergreens' masses part-covered where sky glinted through their needles, which showed as soft, lighter
     /// patches against the dusk: inside a mass, part cover is made solid, the holes kept.
+    // ponytail: done in every bake (110-135 ms off the main thread), not once in the shipped HEIC; clean the HEIC
+    // itself in docs/canopy/stand.swift if a second stand comes or the bake's time matters
     static func clean(_ wood: inout [UInt8], _ w: Int, _ h: Int) {
         let n = w * h
         var seen = [Bool](repeating: false, count: n), queue = [Int32]()

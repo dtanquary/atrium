@@ -6,7 +6,7 @@ It was pick #3 of the "Atrium Wallpaper Ideas" page of 2026-11-14 (a review of t
 
 - **Research:** [canopy/research-method.md](canopy/research-method.md) (camera, numbers, three ways to draw the crowns, measured cost) and [canopy/research-look.md](canopy/research-look.md) (references, palettes, brightness, CC0 assets, the name).
 - **Scripts:** `docs/canopy/mock.swift` (SKRenderer, the app's `Atmosphere` through a zenith camera), `variants.py`, `sheet.py`; [canopy/mockups-round1.md](canopy/mockups-round1.md) has every tile's measurements, assets and licences, and how to redraw a round.
-- **Where it stands (2026-11-16):** step (a), the still picture, and the first part of step (d), the night and the light kept current (d1), built and hidden behind `unfinished` (`Sources/Atrium/Canopy.swift`); steps (b), (c), the rest of (d) and (e) to come.
+- **Where it stands (2026-11-17):** step (a), the still picture, the first part of step (d), the night and the light kept current (d1), and step (b), motion (the sway in a breeze, the flutter, falling leaves, the battery rate), built and hidden behind `unfinished` (`Sources/Atrium/Canopy.swift`), with the twilight's colour and the stand's matte put right; steps (c), the rest of (d) (the live wind among it) and (e) to come.
 
 ## What the idea's author meant (atrium-37, 2026-11-16)
 Asked on Dave's word, the session that wrote the ideas page said:
@@ -45,7 +45,7 @@ One scene, `Canopy.swift`, three layers, the build in steps each a commit, hidde
 - **The wood:** a real bare stand photographed straight up, keyed from its sky and shipped as an image with alpha in `Resources/canopy-*` (Poly Haven, CC0): Schachen Forest first (conifers at the rim, bare broadleaves inside), Autumn Forest 04 as a second. Turned and mirrored at random each load, so one photo gives many groves. Its bark relit to the canopy's shade; its conifers dark all year.
 - **The leaves:** sprays of scanned leaves (ambientCG, CC0; Dappled Light's atlas to start) grown on the stand's thin twigs at load, two or three depth layers, each spray with an id. Baked off the main thread (the mock-up took 0.6–0.9 s on the CPU), the sky showing first and the canopy fading in. Lit leaf by leaf by the light through them from above (the layers over each read toward the Sun), aimed at sheet 1's A: denser, darker, real variation, no haze.
 - **The season:** each spray's id against its species' calendar (`Phenology`, with each species' offsets from Harvard Forest's HF003, CC0), so leaf-out, colour, fall, bare lace and snow on the branches are one continuous change. A Season setting holds one.
-- **Motion:** each tree sways as a body about its own base (a tree-id map flooded from each trunk along the wood), 0.15–0.3 Hz, its amplitude from the live wind and gusts; falling leaves as a few sprites. `BatteryPaced`, 12–15 fps calm.
+- **Motion:** each tree sways as a body about its own base (a tree-id map flooded from each trunk along the wood), 0.15–0.3 Hz, its amplitude from the live wind and gusts; falling leaves as a few sprites. `BatteryPaced`, 12–15 fps calm. *As built (b): a breeze from the seed until the live wind, and 10–20 fps by its strength, none while a leaf falls.*
 
 **Steps:**
 - **(a) The still:** the entry (hidden), the sky, the wood, the leaves at the real date, the preview still. Judged against sheet 1's A and the real photos at the caps.
@@ -177,19 +177,53 @@ The key left a pepper of faint specks in the open sky (its clouds' edges, up to 
 
 **As built:** the leaves are drawn over the canopy, not among its layers, so a leaf never passes behind a limb; they are let go below the crowns, so it is what you would see.
 
+**The battery rate.** `Canopy` is `BatteryPaced` now, and its entry's fixed `batteryRate: 10` is gone. By Adding a scene's rule (about 2 device pixels a frame or less looks the same as 30 fps), the fastest thing is a crown's sway, at most 39 px a second at full strength (its 18 px at 0.29 Hz and the limbs' 2 px at 0.53 Hz, at 2x on a 14" screen): 10 fps in a lull (the breeze's strength up to 0.5), 12 to 0.6, 15 to 0.76 and 20 above, so 12–15 most of the time; 10 at night (the stars more than half in), when black crowns move on a dark sky; and no ceiling while a leaf is in the air (100–300 px a second), so in the weeks leaves fall the battery runs it at its full 30 fps by day. `canopyBatteryRate` checks the rates. **As built:** the plan's 12–15 calm; a still night is 10.
+
+**Measured** (M3 Max, 1512 × 982 at 2x, seed 3 at 42°N 88°W, the render test's print):
+- **Cost:** by day 0.38–0.61 ms of GPU and 0.42–0.51 of CPU (step (d1): 0.17–0.33 and 0.37–0.51; the GPU reads noisily here, 0.38 to 0.61 for the same picture in two runs); at night 0.81–0.83 ms of GPU and 0.39–0.44 of CPU (was 0.65–0.66 and 0.45–0.54). What the sway adds is one read of a small map a pixel, the flutter's four hashes and sines, and three uniforms set on the CPU a frame; the leaves, at most 12 plain sprites and four properties each a frame. Within the budget of 2 and 2.
+- **Load:** the main thread builds the scene in 6 ms the first time and 4 after (was 6 and 3; the leaves' shapes are made with the first bake, off the main thread, after decoding the atlas on it took 7 ms). A bake takes 0.87–0.99 s off the main thread (was 0.77–0.9): cleaning the stand 110–135 ms of that, the map of the trees a few. **Landing** a bake held the main thread 31–43 ms by day (38 for the first, 72 into the night, 1 through it), against step (d1)'s 8 for a regular one: not yet tracked down (the new sway map is 470 KB; the canopy's 30 MB upload is as before).
+- **Brightness** (desktop size, the brightest of R, G and B): midsummer 3:30 pm median 101, 99th 199, 99.9th 202 (as before); 5 November 2 pm 121, 196, 199, max 230 (a falling leaf); dusk 8:45 pm 55, 211, 215; night 16 November 38, 49, 57.
+
+**What still looks wrong:**
+- **Falling leaves over the crowns** are hard to pick out, being the crowns' own colour; against the sky they read at once. And at 14–25 points they are noticed when you look, not from across the room.
+- **The breeze isn't the weather's:** the same swell and gusts every day until the live wind (step (d)), and its heading is the seed's.
+- **The flutter** is a smooth patchwork of light, 24 px patches, not leaf by leaf; at desktop size it reads as a shimmer on the sunlit crowns, and none on the shaded.
+- **Landing a bake** costs the main thread about 30 ms more than in (d1), every five minutes, cause unknown.
+
 ## Checking it
 ```sh
 SNAPSHOT_SCENE="Canopy" SNAPSHOT_DEFAULTS="canopy.seed=3,canopy.date=2026-07-15,canopy.hour=15.5,latitude=42,longitude=-88" swift test -c release -Xswiftc -enable-testing --filter everySceneRenders
 ```
 That is the picture above and the preview still (`$TMPDIR/atrium-snapshots/Canopy.png`; `sips -Z 1200 -s format jpeg -s formatOptions 70` makes the still). Leave out `canopy.date` and `canopy.hour` for now. `--filter canopy` runs its season check, the stars' rows and the night check (`canopyNightHasStars`, a scene moved from a September afternoon to 11 pm by its own re-bake); with `CANOPY_LOAD=1` it times the load, the re-bakes and their landings too.
 
+`--filter canopy` also runs the sway check (`canopyTreesSwayAsBodies`: frames 1.5 s apart, patches matched round points in two groups), the falling leaves' (`canopyLeavesFallInAutumn`, 30 s each of July, a November afternoon and that night) and the battery rates (`canopyBatteryRate`). Motion, as a film (15 fps frames to `SNAPSHOT_DIR`, then H.264 at half size):
+```sh
+SNAPSHOT_DIR=/some/dir SNAPSHOT_SECONDS=6 SNAPSHOT_MOVIE=12 SNAPSHOT_SCENE="Canopy" SNAPSHOT_DEFAULTS="canopy.seed=3,canopy.date=2026-11-05,canopy.hour=14,latitude=42,longitude=-88" swift test -c release -Xswiftc -enable-testing --filter everySceneRenders
+ffmpeg -framerate 15 -start_number 1 -i /some/dir/Canopy-%03d.png -vf "scale=1512:-2,format=yuv420p" -c:v libx264 -crf 32 -preset slow -movflags +faststart build-b-motion.mp4
+```
+The sway's phase follows the render's clock, so two runs differ in where the trees are; the leaves are let go at random.
+
 The night (the picture above is `canopy.date=2026-11-16`, and 15 July for leaves on):
 ```sh
 SNAPSHOT_SCENE="Canopy" SNAPSHOT_DEFAULTS="canopy.seed=3,canopy.date=2026-11-16,canopy.hour=22.5,latitude=42,longitude=-88" swift test -c release -Xswiftc -enable-testing --filter everySceneRenders
 ```
 
+## Settings
+None yet beyond the pins for pictures (`canopy.seed`, `canopy.date`, `canopy.hour`); step (c) brings Season, Sway and Speed. The breeze's reach (18 px), the limbs' (2 px), the flutter (12%) and the leaves' size and rate are constants in `Canopy.Breeze` and `Canopy.Leaves` until then.
+
 ## Shortcuts
+- `ponytail:` the stand's specks and the evergreens' part cover are cleaned in every bake (110–135 ms off the main thread), not once in the shipped HEIC; clean the HEIC itself (`docs/canopy/stand.swift`, from Poly Haven's 16K source) if a second stand comes or the bake's time matters.
 - `ponytail:` the canopy is at the stand's 1512 px to a unit of tan, softer on screens wider than about 1700 pt; and the bake holds about 175 MB while it runs (`CanopyBake.make`).
 - `ponytail:` each bake every five minutes grows the whole canopy again when only its light has changed, about 2 s of CPU across the cores (`Canopy.bake`); keep the grown layers between bakes (about 120 MB) if that shows on the battery.
 - `ponytail:` a star that shares a half-degree cell of the grid with a brighter one is dropped, a few in a hundred and nearly all faint (`Canopy.starGrid`).
 - The Milky Way is Night Sky's full 6000 × 3000 photograph, 72 MB on the GPU while the stars show; a copy cut to the band of sky ever overhead would be a fraction of that.
+
+## Dave's feedback
+- 2026-11-17, at dawn on 0.130.4 (screenshot at 6:36 am, 42°N): "why are there these smudge looking things in the middle, they dont seem to be connected to any tree". They were the stand photo's own sky kept by its key: faint wisps of cloud and dust, scattered over the open sky. Already fixed on the branch overnight but not yet on his desktop, since the lid was closed (the matte cleaned in the bake: wood kept only where some of it is at least a third covered and it adds up to 150 pixels' worth), with the violet dawn in the same screenshot (the white balance that follows the Sun). Rendered at his moment, 17 November 6:36 am at 42.17°N, the middle of the sky is clean and the zenith (108, 118, 173) blue rather than lavender; one faint wisp remains beside the low twigs (Still open).
+
+## Still open
+- A faint wisp of the photo's sky still sits beside the low twigs at dawn (seed 3, 17 November 6:36 am): the matte's clean-up keeps anything touching real wood.
+- Step (c): Settings (Season, Sway, Speed, a time and date preview) and Light and Dark Mode (blue hour).
+- Step (d): the live wind and gusts in place of the breeze (and more leaves let go in a real gust), the weather's cloud deck and overcast, snow on the branches.
+- Step (e): the birch or aspen grove.
+- From (b): landing a bake's 30 ms on the main thread; falling leaves lost over the crowns; the per-species calendar (every leaf is white oak's).

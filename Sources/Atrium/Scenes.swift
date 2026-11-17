@@ -152,7 +152,7 @@ struct Refresh {
               batteryRate: 20),
     Wallpaper(name: "Canopy", icon: "tree.fill", tint: .green,
               blurb: "Lying on the forest floor, looking up through the leaves at the real sky, in the real season.",
-              make: canopy, batteryRate: 10, unfinished: true),
+              make: canopy, unfinished: true),
     Wallpaper(name: "Dappled Light", icon: "leaf.fill", tint: .mint, blurb: "Sunlight through leaves on a plaster wall, from the real Sun.",
               make: dappledLight, knobs: DappledLight.knobs, status: (key: "weather.status", below: "dappled.weather"),
               refresh: .weather, batteryScale: 0.75),

@@ -18,7 +18,7 @@ import simd
 /// appears, then one every five minutes for the real time, the same seed so the same stand and leaves, so afternoon
 /// turns to dusk, the stars come out and morning comes without a rebuild. The render tests, with no view, wait for
 /// the first.
-final class Canopy: SKScene {
+final class Canopy: SKScene, BatteryPaced {
     /// For pictures: a seed for the stand's mirroring and its leaves (unset or 0 for a new one each load), a day
     /// (`yyyy-MM-dd`) and an hour of the local clock (13.5 for half past one), each unset for now.
     static let pins = (seed: "canopy.seed", date: "canopy.date", hour: "canopy.hour")
@@ -38,6 +38,8 @@ final class Canopy: SKScene {
     private let breeze: Breeze, motion: Motion
     /// The leaves falling in autumn, over both pictures.
     let leaves: Leaves
+    /// The ceiling on battery, by the fastest thing moving (`rate`): 10-20 by the breeze, none while a leaf falls.
+    var batteryRate: Int? = 12 { didSet { batteryRateChanged(from: oldValue) } }
     private var job: Job?, fading: (start: TimeInterval, length: TimeInterval)?, ticked: TimeInterval = -.infinity
     /// The moment the latest bake shows, and the Sun's height then; whether the canopy has landed yet.
     private var shown: (moment: Date, sun: Double), landed = false
@@ -89,6 +91,18 @@ final class Canopy: SKScene {
         }
         motion.set(breeze, at: currentTime, camera: lens)
         leaves.step(currentTime, breeze: breeze, camera: lens, size: size)
+        batteryRate = Self.rate(strength: breeze.strength(currentTime), night: front.starlight > 0.5, falling: leaves.falling > 0)
+    }
+
+    /// The lowest rate at which the fastest thing moves about 2 px a frame or less (at 2x on a 14" screen), which
+    /// looks the same as 30 fps: a crown's sway, at most 39 px a second at full strength (its 18 px at 0.29 Hz, the
+    /// limbs' 2 px at 0.53 Hz), so 10 fps in a lull, 12-15 most of the time and 20 at the top of a gust; 10 at night,
+    /// when black crowns move on a dark sky; and no ceiling while a leaf falls, at 100-300 px a second.
+    static func rate(strength: Double, night: Bool, falling: Bool) -> Int? {
+        if falling { return nil }
+        if night { return 10 }
+        let fastest = strength * 2 * .pi * (Breeze.reach * Breeze.along[3] + Breeze.limbs * 0.53)
+        return [10, 12, 15, 20].first { fastest / Double($0) <= 2 }
     }
 
     private var here: CLLocationCoordinate2D { place ?? Location.shared.coordinate }
@@ -109,11 +123,11 @@ final class Canopy: SKScene {
 
     /// Bakes the light, the canopy and (if night comes and they aren't held) the stars for `moment`, off the main thread.
     private func bake(_ moment: Date, light: Light? = nil, priority: TaskPriority = .utility) {
-        let job = Job(), (camera, seed, here, dark) = (lens, seed, here, !night.held)
+        let job = Job(), (camera, seed, here, dark, shapes) = (lens, seed, here, !night.held, leaves.nodes.first?.texture == nil)
         self.job = job
         Task.detached(priority: priority) {
             job.arrive(Self.bake(moment: moment, latitude: here.latitude, longitude: here.longitude, camera: camera, seed: seed,
-                                 light: light, night: dark))
+                                 light: light, night: dark, shapes: shapes))
         }
     }
 
@@ -124,6 +138,7 @@ final class Canopy: SKScene {
             night.turn(Sky.horizonMatrix(jd: Sky.julianDate(baked.moment), latitude: here.latitude, longitude: here.longitude))
         }
         back.show(baked.light, baked.textures, sunShows: baked.made.sunShows)
+        leaves.take(baked.textures.leaves)
         leaves.season(baked.moment, latitude: here.latitude, light: baked.light)
         back.sprite.alpha = 0
         back.sprite.isHidden = false
@@ -158,10 +173,11 @@ final class Canopy: SKScene {
         let moment: Date, light: Light, made: CanopyBake.Made, textures: Textures
     }
 
-    /// A bake's textures: the sky, the canopy and its cover, and the night's if they were asked for and it is night,
-    /// the stars' grid and Night Sky's photograph of the Milky Way (a 6000 × 3000 HEIC, 160 ms to decode).
+    /// A bake's textures: the sky, the canopy, its cover and its sway map, the falling leaves' shapes if asked for,
+    /// and the night's if asked for and it is night, the stars' grid and Night Sky's photograph of the Milky Way (a
+    /// 6000 × 3000 HEIC, 160 ms to decode).
     struct Textures: @unchecked Sendable { // made off the main thread, then only handed over
-        let sky: SKTexture, canopy: SKTexture, cover: SKTexture, sway: SKTexture, stars: SKTexture?, photo: SKTexture?
+        let sky: SKTexture, canopy: SKTexture, cover: SKTexture, sway: SKTexture, stars: SKTexture?, photo: SKTexture?, leaves: [SKTexture]
     }
 
     /// Everything about one moment that takes time, off the main thread: the light (unless given), the canopy grown
@@ -170,7 +186,7 @@ final class Canopy: SKScene {
     // while the light changes) when only its light has; keep the grown layers between bakes (about 120 MB) if that
     // shows on the battery
     nonisolated static func bake(moment: Date, latitude: Double, longitude: Double, camera: Camera, seed: UInt64, light: Light?,
-                                 night: Bool) -> Baked {
+                                 night: Bool, shapes: Bool = false) -> Baked {
         let light = light ?? Light(camera: camera, date: moment, latitude: latitude, longitude: longitude)
         let made = CanopyBake(stand: resource(stand.name), leaves: resource("dappled-leaves.png"), perTan: stand.perTan,
                               extent: camera.extent, portrait: camera.portrait, sun: light.sun, sunlight: light.sunlight, zenith: light.zenith,
@@ -184,7 +200,8 @@ final class Canopy: SKScene {
         let textures = Textures(sky: texture(Data(light.sky), Light.width, Light.height), canopy: texture(made.canopy, made.width, made.height),
                                 cover: texture(made.cover, made.coverWidth, made.coverHeight), sway: texture(made.sway, made.coverWidth, made.coverHeight),
                                 stars: dark ? texture(Data(starGrid()), grid.width, grid.height, .nearest) : nil,
-                                photo: dark ? SKTexture(image: NSImage(contentsOf: resource("sky-milky-way.heic")) ?? NSImage()) : nil)
+                                photo: dark ? SKTexture(image: NSImage(contentsOf: resource("sky-milky-way.heic")) ?? NSImage()) : nil,
+                                leaves: shapes ? Leaves.shapes() : [])
         return Baked(moment: moment, light: light, made: made, textures: textures)
     }
 
@@ -280,14 +297,24 @@ final class Canopy: SKScene {
         private var tints: [SKColor] = [], last: TimeInterval?
 
         init() {
-            let atlas = NSImage(contentsOf: resource("dappled-leaves.png"))?.cgImage(forProposedRect: nil, context: nil, hints: nil)
-            let cells = (6..<16).compactMap { atlas?.cropping(to: CGRect(x: $0 % 4 * 256, y: $0 / 4 * 256, width: 256, height: 256)) } // oak and beech
-            nodes = (0..<Self.pool).map { k in
-                let node = cells.isEmpty ? SKSpriteNode(color: .white, size: CGSize(width: 1, height: 1)) : SKSpriteNode(texture: SKTexture(cgImage: cells[k % cells.count]))
-                (node.colorBlendFactor, node.zPosition, node.isHidden, node.size) = (1, 2, true, CGSize(width: 1, height: 1)) // sized by its scale
+            nodes = (0..<Self.pool).map { _ in
+                let node = SKSpriteNode(color: .white, size: CGSize(width: 1, height: 1)) // sized by its scale
+                (node.colorBlendFactor, node.zPosition, node.isHidden) = (1, 2, true)
                 return node
             }
             air = Array(repeating: nil, count: Self.pool)
+        }
+
+        /// The scans' oak and beech leaves, made off the main thread with a bake (the atlas's decode took 7 ms).
+        nonisolated static func shapes() -> [SKTexture] {
+            let atlas = NSImage(contentsOf: resource("dappled-leaves.png"))?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+            return (6..<16).compactMap { atlas?.cropping(to: CGRect(x: $0 % 4 * 256, y: $0 / 4 * 256, width: 256, height: 256)) }.map { SKTexture(cgImage: $0) }
+        }
+
+        /// Gives the leaves their shapes, the first time a bake brings them.
+        func take(_ shapes: [SKTexture]) {
+            guard nodes.first?.texture == nil, !shapes.isEmpty else { return }
+            for (k, node) in nodes.enumerated() { node.texture = shapes[k % shapes.count] }
         }
 
         /// How many fall, from how fast the leaves are coming down this week (`CanopySeason`'s share down, a day either
@@ -317,7 +344,7 @@ final class Canopy: SKScene {
             let strength = breeze.strength(time), wind = SIMD2(cos(breeze.heading), sin(breeze.heading)) * (0.3 + 0.9 * strength)
             // on average `rate` at once, each about 5.5 s in the air; three times as many at the top of a gust
             let gust = 0.4 + 2.6 * simd_smoothstep(0.6, 1, strength)
-            if rate > 0, !tints.isEmpty, Double.random(in: 0..<1) < rate * gust / 5.5 * dt, let free = air.firstIndex(where: { $0 == nil }) {
+            if rate > 0, !tints.isEmpty, nodes.first?.texture != nil, Double.random(in: 0..<1) < rate * gust / 5.5 * dt, let free = air.firstIndex(where: { $0 == nil }) {
                 let high = Double.random(in: 7...9.5)
                 // somewhere over the screen, upwind of where it will drift to
                 let spot = SIMD2(Double.random(in: -1...1) * camera.tan.x, Double.random(in: -1...1) * camera.tan.y) * high - wind * 3

@@ -155,6 +155,16 @@ import CanopyBake
     }
 }
 
+/// Canopy's ceiling on battery keeps the sway to about 2 px a frame: low in a lull and at night, higher in a gust,
+/// none while a leaf falls.
+@Test @MainActor func canopyBatteryRate() {
+    #expect(Canopy.rate(strength: 0.35, night: false, falling: false) == 10)
+    #expect(Canopy.rate(strength: 0.55, night: false, falling: false) == 12)
+    #expect(Canopy.rate(strength: 1, night: false, falling: false) == 20)
+    #expect(Canopy.rate(strength: 1, night: true, falling: false) == 10)
+    #expect(Canopy.rate(strength: 0.35, night: false, falling: true) == nil)
+}
+
 /// What building Canopy holds the main thread for, and its bake off it, at a 14" MacBook Pro's size: meaningful in a
 /// release build: `CANOPY_LOAD=1 swift test -c release -Xswiftc -enable-testing --filter canopyLoad`. Then a bake for
 /// later in the day (the light, the canopy and the night's stars, off the main thread), and what landing one costs the
