@@ -493,6 +493,7 @@ struct AboutPage: View {
                        "https://commons.wikimedia.org/wiki/File:Sunset_over_a_tundra_pond_(53708107535).jpg")
                 credit("Fireflies' meadow", "\"Field at dusk\" by Tristan Ferne", "https://www.flickr.com/photos/89056504@N00/7357684410",
                        license: "CC BY 2.0")
+                group("Canopy", "A forest straight up from Poly Haven, and leaves from ambientCG (CC0)", "canopy-credits.tsv")
                 group("Dappled Light", "Plaster, brick, siding, oak and leaves from Poly Haven and ambientCG (CC0)", "dappled-credits.tsv")
                 group("Weather", "Hills, clouds and Moon from the BLM, NASA, Poly Haven and Wikimedia Commons", "weather-credits.tsv")
                 group("Rain on Glass", "Backdrops from Poly Haven, Wikimedia Commons and the NPS", "rain-credits.tsv")

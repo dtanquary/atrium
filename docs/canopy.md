@@ -6,7 +6,7 @@ It was pick #3 of the "Atrium Wallpaper Ideas" page of 2026-11-14 (a review of t
 
 - **Research:** [canopy/research-method.md](canopy/research-method.md) (camera, numbers, three ways to draw the crowns, measured cost) and [canopy/research-look.md](canopy/research-look.md) (references, palettes, brightness, CC0 assets, the name).
 - **Scripts:** `docs/canopy/mock.swift` (SKRenderer, the app's `Atmosphere` through a zenith camera), `variants.py`, `sheet.py`; [canopy/mockups-round1.md](canopy/mockups-round1.md) has every tile's measurements, assets and licences, and how to redraw a round.
-- **Where it stands (2026-11-16):** researched; round 1 of mock-ups with Dave. Nothing in `Sources/` yet.
+- **Where it stands (2026-11-16):** step (a), the still picture, built and hidden behind `unfinished` (`Sources/Atrium/Canopy.swift`); steps (b) to (e) to come.
 
 ## What the idea's author meant (atrium-37, 2026-11-16)
 Asked on Dave's word, the session that wrote the ideas page said:
@@ -53,3 +53,58 @@ One scene, `Canopy.swift`, three layers, the build in steps each a commit, hidde
 - **(c) Settings:** Season (follow the date, or hold one), Sway, Speed, a time and date preview to pin a picture; Light and Dark Mode (blue hour).
 - **(d) Live data:** the live wind and gusts, the weather (cloud deck, overcast), snow on the branches, night and its stars.
 - **(e) The birch or aspen grove,** once honest wood for it is found.
+
+## The build so far
+
+### (a) The still (2026-11-16)
+![Midsummer, 15 July at 3:30 pm, 42°N](canopy/build-a-summer.jpg)
+
+**What was built.** `Canopy.swift` (the scene, its sky and the season) and `Sources/CanopyBake/` (the bake), its entry (hidden, `unfinished: true`), the stand `Resources/canopy-schachen.heic` with `canopy-credits.tsv` and a line in About, and `Resources/preview-canopy.jpg`.
+- **The sky:** the app's `Atmosphere` marched through the zenith camera (90° across the long side, head to the north, screen right west) for the real Sun at `Location`'s place and the hour, 128 × 96, as Weather bakes its own. The exposure holds the zenith's brightest channel at 0.62 before Weather's tone curve, about 175 of 255; by night Weather's partial auto-exposure takes over and lets it go dark (no stars yet). The Sun, when it is in frame, is a soft disc where the canopy is open and a glow, no starburst.
+- **The wood:** Schachen Forest's 16K HDRI (417 MB, deleted after) straight up through the same lens by `docs/canopy/stand.swift`, at 1512 px to a unit of tan (a 14" MacBook Pro's 2x), spanning tan ±1.1 by ±0.75 so a 16:10 screen has 5% each side to sway into: 3326 × 2268. Its sky is keyed out against the sky right behind each pixel (the luminance closed over 13 px, or where that is dark the brightest of each 48 px block), so sub-pixel twigs come out as part cover; the blue between its clouds, as dark as a quarter of the clouds round it, is kept as sky by its colour. Only the wood's brightness is kept, grey over alpha. It is mirrored either way or both by the seed each load, and turned a quarter for a portrait screen.
+- **The leaves:** 10,000 sprays a layer in three layers (62, 50 and 40 px sprays, nearest first), each of 9-13 leaves from `dappled-leaves.png`, grown in clumps where the stand is a haze of fine twigs (none on trunks, limbs or the conifers' masses), thinned by a patchy noise so sky shows through the crowns. **Each leaf** carries its own value and tilt, and each spray marks where two of its leaves overlap.
+- **The light, leaf by leaf:** each leaf passes 8.5% of the light reaching it: the Sun's beam through the leaves of the layers above it (read along the Sun's direction, the layers about 3 m apart some 18 m up), then through the crown over them all (the canopy's cover, blurred at an eighth the size), the brightest where the leaf is square to the Sun; light already through other leaves, in the shade palette's deep olive (#3C521A); and the sky's, through the crown overhead. Overlaps pass half. Sun flecks come and go by a patchy noise at about 60 px. The wood is relit as dark bark (#2A2219) by the sky through the crown, and sits in front of all but the lowest layer of leaves, so limbs cross the crowns.
+- **The season:** white oak's calendar (`Phenology`) moved to the latitude, from the real date: the share of leaves out and their size in spring, how pale they still are, and the shares turned and down in autumn. One order, each leaf's own value and its patch's, runs through all of it, so the leaves that come out first and turn first fall first. Turned leaves take Beech bronze's hues with a little sugar maple. Winter is the bare stand.
+- **Pins** for pictures: `canopy.seed` (a whole number; unset or 0 for a new one each load), `canopy.date` (`yyyy-MM-dd`) and `canopy.hour` (the local clock, 15.5 for half past three).
+- **Load:** the scene shows its sky at once and bakes the canopy off the main thread (`CanopyBake`, a target of its own built with -O, so a debug build isn't 40 times slower at it), which fades in over 1.2 s when it lands. The render tests have no view, so the scene waits for the bake on its first frame there, as Ant Colony and Meander do (`Landing.take(waiting: view == nil)`).
+- **`batteryRate` 10:** nothing moves until step (b).
+
+**As built**, differences from the plan:
+- **As built:** the leaves are lit in the bake, not per frame in the shader as the mock-ups were: every leaf's light and the wood's are composited into one texture, which the shader lays over the sky. The frame is cheaper, and the light is fixed until the next bake.
+- **As built:** the sky is baked once, with the scene, on the main thread, and neither it nor the canopy's light is refreshed while it runs: the app rebuilds it after 12 hours or as the displays sleep. A rebake every few minutes, with the same seed, is the plan's once a minute and comes with step (b) (`ponytail:` in `Canopy.init`).
+- **As built:** the stand is decoded straight into the bake (`CGImageSource`, off the main thread), not through `sharedTexture`: the shader never reads the photo, only the canopy lit from it, which is the scene's own (its seed and light), so there is nothing to share between copies.
+- **As built:** the stand is only mirrored (four ways), not turned at any angle, since the picture is a rectangle just larger than the screen.
+- **As built:** no contrast power (the round's 0.6 on luminance, which laid the blue haze over everything) and no soft focus. The leaves' own light carries the picture to the caps.
+
+**Measured** (M3 Max, 1512 × 982 at 2x):
+- **Cost:** 0.38–0.46 ms of CPU and 0.12–0.30 ms of GPU a frame at 2x, by the render test's print over six pictures (midsummer, noon, spring, late autumn, night, today), against the budget of 2 and 2. The CPU is SpriteKit's own floor for one sprite; the frame is one full-screen shader reading three textures.
+- **Load:** the main thread holds for 6 ms the first time and 3 ms after (the camera, the sky's 128 × 96 rays and the shader; `Atmosphere`'s tables, about 50 ms, are made once for any scene that uses them first). The bake off it takes 0.79 s in release (`CANOPY_LOAD=1 swift test -c release -Xswiftc -enable-testing --filter canopy`), the mock-ups' 0.6–0.9 s; the textures made as it lands, a 30 MB copy, weren't timed apart. The `CanopyBake` target is built with -O, as Meander's and Ant Colony's are, so a debug `swift test` bakes it in about a second too.
+- **Brightness** at desktop size, the brightest of R, G and B (caps: median 90–140, 99th ≤ 210, 99.9th ≤ 230, the Sun's core ≤ 240), seed 3 at 42°N 88°W:
+
+| Picture | Median | 99th | 99.9th | Max |
+|---|---|---|---|---|
+| Midsummer, 15 July 3:30 pm (the picture above, the preview still) | 101 | 199 | 202 | 204 |
+| Midsummer noon, 1 pm (the Sun 69° up, its glow in at the foot of the frame) | 90 | 180 | 182 | 195 |
+| Spring, 14 May 11 am (leaves half out, small and pale) | 131 | 196 | 198 | 200 |
+| Late autumn, 16 November 2 pm (bare: white oak's calendar has every leaf down by then at 42°N) | **173** | 197 | 200 | 206 |
+| Night, 15 July 10:30 pm | 11 | 41 | 42 | 42 |
+- **Texture memory:** 30.7 MB: the canopy, 3326 × 2268 RGBA (30.2 MB), its cover an eighth the size (0.47 MB) and the sky (49 KB). The bake holds about 175 MB while it runs (the stand, three layers of leaves and the canopy at full size), let go when it lands.
+- **Shipped:** `canopy-schachen.heic`, 4.5 MB (Adrian Kubasa, Poly Haven, CC0), and `preview-canopy.jpg`, 206 KB; the leaves are the app's own `dappled-leaves.png` (ambientCG, CC0). The stand's 16K source gives 45 px a degree against the 26 a 14" screen needs at its middle and 53 radially at its edges, so it is a little soft only at the far edges.
+
+**What still looks wrong:**
+- **Better than the round's tiles, short of sheet 1's A.** Close to, each leaf is a leaf, lit by its own light, darker where two overlap and greener in the crown's shade, with flecks of sun on whole clumps, and no haze. At desktop size the crowns are still fairly even masses: too little sky shows inside them, and the brightest leaves are one yellow-green.
+- **The stand's own shape.** Schachen's middle is open sky, about 45% of the screen against the brief's quarter to a third, so the ring is crowns top and bottom, not round; and where the photo's twigs end in a line, the crowns end in one too (the bottom edge at midsummer reads a little like a hedge). Leaves also grow on the conifers' part-covered edges.
+- **Bare is mostly sky,** so late autumn's median (173) misses the cap of 140. Holding the sky lower when the leaves are down would meet it, at the cost of the gaps' 150–190: Dave's call.
+- **The conifers** are the bark's dark grey-brown with sky specks through them, not black-green.
+- **Faint specks** of the photo's clouds are left in the open sky by the key, a few pixels each.
+- **Not yet:** the light refreshing as the day goes on, Light and Dark Mode (the night is a plain deep blue, no stars), the per-species calendar, snow.
+
+## Checking it
+```sh
+SNAPSHOT_SCENE="Canopy" SNAPSHOT_DEFAULTS="canopy.seed=3,canopy.date=2026-07-15,canopy.hour=15.5,latitude=42,longitude=-88" swift test -c release -Xswiftc -enable-testing --filter everySceneRenders
+```
+That is the picture above and the preview still (`$TMPDIR/atrium-snapshots/Canopy.png`; `sips -Z 1200 -s format jpeg -s formatOptions 70` makes the still). Leave out `canopy.date` and `canopy.hour` for now. `--filter canopy` runs its season check; with `CANOPY_LOAD=1` it times the load too.
+
+## Shortcuts
+- `ponytail:` the light and the season are baked once, as the scene is made (`Canopy.init`); bake again every few minutes off the main thread and swap it in, from step (b).
+- `ponytail:` the canopy is at the stand's 1512 px to a unit of tan, softer on screens wider than about 1700 pt; and the bake holds about 175 MB while it runs (`Canopy.Bake.make`).
