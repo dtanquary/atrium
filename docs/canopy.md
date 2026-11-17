@@ -96,7 +96,7 @@ One scene, `Canopy.swift`, three layers, the build in steps each a commit, hidde
 - **The stand's own shape.** Schachen's middle is open sky, about 45% of the screen against the brief's quarter to a third, so the ring is crowns top and bottom, not round; and where the photo's twigs end in a line, the crowns end in one too (the bottom edge at midsummer reads a little like a hedge). Leaves also grow on the conifers' part-covered edges.
 - **Bare is mostly sky,** so late autumn's median (173) misses the cap of 140. Holding the sky lower when the leaves are down would meet it, at the cost of the gaps' 150–190: Dave's call.
 - **The conifers** are the bark's dark grey-brown with sky specks through them, not black-green.
-- **Faint specks** of the photo's clouds are left in the open sky by the key, a few pixels each.
+- **Faint specks** of the photo's clouds are left in the open sky by the key, a few pixels each. *Dropped since (step (b)).*
 - **Not yet:** the light refreshing as the day goes on, Light and Dark Mode (the night is a plain deep blue, no stars), the per-species calendar, snow. *(d1) brought the first two halves: the light kept current and the night's stars.*
 
 ### (d1) The night, and the light kept current (2026-11-16)
@@ -140,7 +140,7 @@ Night was a black stand on a grey-blue sky with nothing in it (step (a): median 
 **What still looks wrong:**
 - **Twilight is violet,** (153, 135, 188) at dusk, from the app's `Atmosphere` through the zenith lens (a-dusk in step (a) too): the real zenith in the blue hour is a deeper blue. Weather's sky has the same model; check whether it lacks the ozone that turns the twilight zenith blue before tuning it here. *Balanced to a deep blue since, below.*
 - **The summer night is mostly a navy sky,** its Milky Way along the east edge until later in the night, and the faint stars are small: real at 2x, sparse at desktop size seen from across a room.
-- **The conifers' part-covered masses** show the sky through them as soft, lighter patches at dusk and night (the stand's own key, as in step (a)).
+- **The conifers' part-covered masses** show the sky through them as soft, lighter patches at dusk and night (the stand's own key, as in step (a)). *Made solid since (step (b)).*
 - **No Moon:** a moonlit night looks the same as a moonless one (Dave didn't choose the Moon through the gaps).
 
 ### (b) Motion, and the twilight and the matte put right (2026-11-17)
@@ -148,6 +148,10 @@ Night was a black stand on a grey-blue sky with nothing in it (step (a): median 
 **The twilight's blue.** ![15 July 8:45 pm, the Sun 4° down](canopy/build-b-twilight.jpg)
 
 `Atmosphere` has ozone (it is Hillaire's model), but with three wavelengths its ozone takes most from the green, so the twilight zenith went lavender at sunset and violet after: (139, 138, 173) with the Sun on the horizon, (107, 93, 151) at 6° down and (46, 40, 82) at 10°, against the look report's blue hour (#011A3E–#02396C, hues 208–228°, research-look.md §2) and the blue of every twilight photo it lists. As Murmuration does (`evenings`), a camera's white balance now follows the Sun's height (`Canopy.Light.balance`): none while the Sun is up, so the day's pictures are the same to the byte, and from the horizon to 4° down red is cut to 0.16 and green to 0.7. It is applied after the exposure is set, so only the hue changes, and to the sunlit sky and the light it gives the leaves, not to the night's floor of airglow (already #081026). The zenith now goes (139, 138, 173) at sunset, (55, 98, 173) at 4° down, (44, 78, 151) at 6° (hue 220°), (20, 36, 82) at 10° and the night's (8, 16, 38) from about 14°, as before. Medians: dusk at 8:45 pm 55 (was 61), twilight at 9:15 pm 44 (was 54); 16 November at 5:15 pm 127, as before.
+
+**The matte put right.** ![The stand's cover in the open middle, stretched eight times so faint cover shows: as keyed (left) and as the bake now cleans it (right)](canopy/build-b-matte.jpg)
+
+The key left a pepper of faint specks in the open sky (its clouds' edges, up to a third covered but mostly a few percent), which showed by day as dark specks over the clear sky and grew the odd stray leaf; and the evergreens' masses part-covered (85–95%), so the dusk showed through them as soft, lighter patches. Cleaned in the bake, as the stand is decoded (`CanopyBake.clean`), not in the shipped HEIC, so no new download or re-encode was needed: the wood is taken piece by piece (pixels 2% covered or more, 8-connected), and a piece is kept only if some of it is surely wood (a third covered) and it adds up to 150 pixels' worth; then inside an evergreen mass (where nearly every 4 px block round a point, over about 20 px, is 80% covered) part cover over 30% is made solid and the holes between needles are kept. 1.24 million faint pixels go (20,500 pixels' worth of cover), every twig at the crowns' edges stays (compared at full size), and about 22,000 pixels' worth is added inside the evergreens. 110–135 ms more a bake, off the main thread. The midsummer picture keeps its median (100) and caps; the stars counted in the open sky at 11 pm on 15 September went from 326 to 972, since the test counts only sky with no cover at all.
 
 ## Checking it
 ```sh

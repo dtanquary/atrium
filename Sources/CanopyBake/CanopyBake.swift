@@ -46,7 +46,8 @@ public struct CanopyBake: Sendable {
     public func make() -> Made {
         let (sw, sh) = (Int(perTan * 2 * extent.x), Int(perTan * 2 * extent.y))
         var rng = SplitMix(state: seed)
-        let wood = Self.decode(stand, sw, sh, portrait: portrait, flip: (Bool.random(using: &rng), Bool.random(using: &rng)))
+        var wood = Self.decode(stand, sw, sh, portrait: portrait, flip: (Bool.random(using: &rng), Bool.random(using: &rng)))
+        Self.clean(&wood, sw, sh)
         let layers = Self.grow(on: wood, sw, sh, leaves: leaves, size: season.size, rng: &rng)
         let noise = Noise(rng: &rng, cell: 110), flecks = Noise(rng: &rng, cell: 60)
 
@@ -169,6 +170,59 @@ public struct CanopyBake: Sendable {
             context.draw(image, in: CGRect(x: -iw / 2, y: -ih / 2, width: iw, height: ih))
         }
         return bytes
+    }
+
+    /// The stand's matte put right. The key left faint specks of its clouds' edges in the open sky, a few pixels and
+    /// a few percent of cover each: only a piece of wood joined through pixels at least 2% covered, with some of it
+    /// surely wood (a third covered or more) and 150 pixels' worth in all, is kept, so the finest twigs stay with
+    /// their limbs and the specks go. And the key
+    /// left the evergreens' masses part-covered where sky glinted through their needles, which showed as soft, lighter
+    /// patches against the dusk: inside a mass, part cover is made solid, the holes kept.
+    static func clean(_ wood: inout [UInt8], _ w: Int, _ h: Int) {
+        let n = w * h
+        var seen = [Bool](repeating: false, count: n), queue = [Int32]()
+        queue.reserveCapacity(n / 2)
+        wood.withUnsafeMutableBufferPointer { W in
+            for start in 0..<n where !seen[start] && W[start * 4 + 3] >= 5 {
+                // one piece of wood, breadth first through pixels 2% covered, 8-connected
+                queue.removeAll(keepingCapacity: true)
+                queue.append(Int32(start))
+                seen[start] = true
+                var head = 0, sure = false, cover = 0
+                while head < queue.count {
+                    let k = Int(queue[head]), (i, j) = (k % w, k / w), a = W[k * 4 + 3]
+                    head += 1
+                    sure = sure || a >= 85
+                    cover += Int(a)
+                    for y in max(j - 1, 0)...min(j + 1, h - 1) { for x in max(i - 1, 0)...min(i + 1, w - 1) {
+                        let p = y * w + x
+                        if !seen[p] && W[p * 4 + 3] >= 5 { seen[p] = true; queue.append(Int32(p)) }
+                    } }
+                }
+                // a speck: nothing in it surely wood, or all of it less than 150 pixels' worth
+                if !sure || cover < 150 * 255 { for k in queue { for c in 0..<4 { W[Int(k) * 4 + c] = 0 } } }
+            }
+            for k in 0..<n where !seen[k] { for c in 0..<4 { W[k * 4 + c] = 0 } } // under 2%
+            // the evergreens' masses: where nearly every 4 px block round a point, over about 20 px, is all but
+            // covered (a haze of twigs, however dense, has gaps between)
+            let (qw, qh) = (w / 4, h / 4)
+            var dense = [Float](repeating: 0, count: qw * qh)
+            for j in 0..<qh { for i in 0..<qw {
+                var s = 0
+                for dj in 0..<4 { for di in 0..<4 { s += Int(W[((j * 4 + dj) * w + i * 4 + di) * 4 + 3]) } }
+                dense[j * qw + i] = s > 16 * 255 * 8 / 10 ? 1 : 0
+            } }
+            boxBlur(&dense, qw, qh, 2)
+            let mass = Grid(values: dense, width: qw, height: qh, scale: 4)
+            for j in 0..<h { for i in 0..<w {
+                let k = (j * w + i) * 4, a = Float(W[k + 3]) / 255
+                guard a > 0.3, a < 1 else { continue }
+                // part-covered needles made solid; the holes between them, where no wood shows, kept
+                let to = a + (1 - a) * simd_smoothstep(0.7, 0.95, mass.at(Double(i), Double(j))) * simd_smoothstep(0.3, 0.8, a)
+                let v = UInt8(min(Float(W[k]) / 255 / a * to, 1) * 255 + 0.5) // the wood's own shade
+                (W[k], W[k + 1], W[k + 2], W[k + 3]) = (v, v, v, UInt8(to * 255 + 0.5))
+            } }
+        }
     }
 
     /// Three layers of sprays (farthest last), each RGBA at the stand's size, row 0 at the top: a leaf's own value
