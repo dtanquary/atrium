@@ -138,10 +138,16 @@ Night was a black stand on a grey-blue sky with nothing in it (step (a): median 
 | Night, 16 November 10:30 pm (bare, the picture above) | 37 | 49 | 57 | 190 |
 
 **What still looks wrong:**
-- **Twilight is violet,** (153, 135, 188) at dusk, from the app's `Atmosphere` through the zenith lens (a-dusk in step (a) too): the real zenith in the blue hour is a deeper blue. Weather's sky has the same model; check whether it lacks the ozone that turns the twilight zenith blue before tuning it here.
+- **Twilight is violet,** (153, 135, 188) at dusk, from the app's `Atmosphere` through the zenith lens (a-dusk in step (a) too): the real zenith in the blue hour is a deeper blue. Weather's sky has the same model; check whether it lacks the ozone that turns the twilight zenith blue before tuning it here. *Balanced to a deep blue since, below.*
 - **The summer night is mostly a navy sky,** its Milky Way along the east edge until later in the night, and the faint stars are small: real at 2x, sparse at desktop size seen from across a room.
 - **The conifers' part-covered masses** show the sky through them as soft, lighter patches at dusk and night (the stand's own key, as in step (a)).
 - **No Moon:** a moonlit night looks the same as a moonless one (Dave didn't choose the Moon through the gaps).
+
+### (b) Motion, and the twilight and the matte put right (2026-11-17)
+
+**The twilight's blue.** ![15 July 8:45 pm, the Sun 4° down](canopy/build-b-twilight.jpg)
+
+`Atmosphere` has ozone (it is Hillaire's model), but with three wavelengths its ozone takes most from the green, so the twilight zenith went lavender at sunset and violet after: (139, 138, 173) with the Sun on the horizon, (107, 93, 151) at 6° down and (46, 40, 82) at 10°, against the look report's blue hour (#011A3E–#02396C, hues 208–228°, research-look.md §2) and the blue of every twilight photo it lists. As Murmuration does (`evenings`), a camera's white balance now follows the Sun's height (`Canopy.Light.balance`): none while the Sun is up, so the day's pictures are the same to the byte, and from the horizon to 4° down red is cut to 0.16 and green to 0.7. It is applied after the exposure is set, so only the hue changes, and to the sunlit sky and the light it gives the leaves, not to the night's floor of airglow (already #081026). The zenith now goes (139, 138, 173) at sunset, (55, 98, 173) at 4° down, (44, 78, 151) at 6° (hue 220°), (20, 36, 82) at 10° and the night's (8, 16, 38) from about 14°, as before. Medians: dusk at 8:45 pm 55 (was 61), twilight at 9:15 pm 44 (was 54); 16 November at 5:15 pm 127, as before.
 
 ## Checking it
 ```sh

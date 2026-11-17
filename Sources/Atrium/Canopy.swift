@@ -418,8 +418,8 @@ extension Canopy {
             let air = Atmosphere.shared, jd = Sky.julianDate(date)
             let sun = normalize(Sky.horizonMatrix(jd: jd, latitude: latitude, longitude: longitude) * Sky.sun(jd))
             // a floor of airglow and starlight, so a moonless night is the deep blue of Night Sky's, not black
-            let glow = V3(0.06, 0.25, 1.3) * 5e-8
-            let up = air.march(h0: 0.3, dir: V3(0, 0, 1), lights: [(sun, 1)]).light + glow
+            let glow = V3(0.06, 0.25, 1.3) * 5e-8, balance = Self.balance(sun.z)
+            let zenith = air.march(h0: 0.3, dir: V3(0, 0, 1), lights: [(sun, 1)]).light, up = zenith + glow
             let luminance = dot(up, V3(0.2126, 0.7152, 0.0722)) + 2e-7
             let night = min(max((-0.03 - sun.z) / 0.17, 0), 1)
             let exposure = min(0.62 / (up.max() + 2e-7), 0.7 * pow(luminance, -0.88) * pow(0.05, -0.12) * (1 - 0.5 * night))
@@ -429,13 +429,21 @@ extension Canopy {
                 DispatchQueue.concurrentPerform(iterations: Self.height) { j in
                     for i in 0..<Self.width {
                         let d = camera.ray((Double(i) + 0.5) / Double(Self.width), (Double(j) + 0.5) / Double(Self.height))
-                        let l = (air.march(h0: 0.3, dir: d, lights: [(sun, 1)]).light + glow) * exposure
+                        let l = (air.march(h0: 0.3, dir: d, lights: [(sun, 1)]).light * balance + glow) * exposure
                         for c in 0..<3 { buffer[(j * Self.width + i) * 4 + c] = UInt8(min(sqrt(max(l[c], 0) / 4), 1) * 255) }
                     }
                 }
             }
-            (sky, self.sun, sunlight, zenith) = (pixels, sun, air.sunlight(0.3, sun.z) * exposure, up * exposure)
+            (sky, self.sun, sunlight, self.zenith) = (pixels, sun, air.sunlight(0.3, sun.z) * balance * exposure, (zenith * balance + glow) * exposure)
         }
+
+        /// A camera's white balance for the Sun's height `z` (its sine): none by day, and from the Sun on the horizon
+        /// to 4° down, red cut to 0.16 and green to 0.7. With only three wavelengths the physical sky's zenith turns
+        /// violet in the blue hour, (107, 93, 151) with the Sun 6° down, where photos show a deep blue (research-look.md
+        /// §2's Blue hour, hues 208-228°). Murmuration's `evenings` met the same. Applied to the sunlit sky and the
+        /// light it gives the leaves, after the exposure is set, so only the hue changes; not to the night's floor of
+        /// airglow, already tuned blue.
+        static func balance(_ z: Double) -> V3 { V3(1, 1, 1) + (V3(0.16, 0.7, 1) - V3(1, 1, 1)) * simd_smoothstep(0, -0.07, z) }
     }
 }
 
