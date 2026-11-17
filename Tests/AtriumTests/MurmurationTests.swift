@@ -64,3 +64,23 @@ import Testing
     let brightest = pictures[0][water].max() ?? 0
     #expect(brightest > 250, "the water's brightest is \(brightest) of 255")
 }
+
+/// The sky is never empty: a 10-minute evening, set 90% through, goes down to roost and rolls into the next evening
+/// while birds are still up, its first feeders flying in at once: at least 176 up at every moment (seed-free run,
+/// 2026-11-16). Before, the sky stood empty for 2–3 minutes in 30.
+@MainActor @Test func murmurationSkyIsNeverEmpty() throws {
+    let settings = ["murmuration.light": 0, "murmuration.length": 10, "murmuration.falcon": 0]
+    defer { settings.keys.forEach(UserDefaults.standard.removeObject) }
+    for (key, value) in settings { UserDefaults.standard.set(value, forKey: key) }
+
+    let scene = try #require(murmuration(size: CGSize(width: 756, height: 491)) as? Murmuration)
+    scene.evening = (0.9 * 600, 600)
+    var fewest = Int.max, rolledOver = false
+    for step in 0..<900 { // 90 s at 10 steps a second
+        scene.update(Double(step) / 10)
+        fewest = min(fewest, scene.inTheAir)
+        if let e = scene.evening, e.at < 30 { rolledOver = true }
+    }
+    #expect(rolledOver, "the next evening began")
+    #expect(fewest >= 100, "at least \(fewest) birds were up at every moment")
+}

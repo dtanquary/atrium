@@ -71,8 +71,10 @@ final class Murmuration: SKScene, BatteryPaced {
     private var shown: Light?, fade: (from: Light, to: Light, start: Double, seconds: Double)?
     private var groundSky: Float = 1, clock = 0.0, baking = false, lastBake = 0.0, lastInk = 0.0
 
-    /// Where the evening is (seconds into it, of how long), while it plays out; nil for a fixed light.
-    private var evening: (at: Double, length: Double)?
+    /// Where the evening is (seconds into it, of how long), while it plays out; nil for a fixed light. Tests move it.
+    var evening: (at: Double, length: Double)?
+    /// Birds in the sky: flying, or on their way down to roost.
+    var inTheAir: Int { (flock?.flying ?? 0) + (flock?.falling ?? 0) }
     private var arrivals: [(at: Double, count: Int)] = []
 
     override func sceneDidLoad() {
@@ -150,10 +152,11 @@ final class Murmuration: SKScene, BatteryPaced {
         if var e = evening, let flock {
             e.at += dt
             let phase = e.at / e.length
-            if phase >= 1 {
-                // A new evening: the light dissolves back to golden hour over 40 s, then the feeders start arriving.
+            if phase >= 1 || (flock.roosting && flock.flying + flock.falling < 300) {
+                // A new evening as the last of the old one goes down, so the sky is never empty: those landing finish,
+                // those still flying stay up, the light dissolves back to golden hour over 40 s, and feeders fly in at once.
                 e.at = 0
-                flock.clearSky()
+                flock.roosting = false
                 arrivals = Self.schedule()
                 bake(at: Self.sunHeight(0), fade: 40)
             } else {
@@ -268,10 +271,10 @@ final class Murmuration: SKScene, BatteryPaced {
         SIMD4(Float(eye.tanH), Float(eye.tanV), Float(eye.horizon), Float(shown?.sky.bottom ?? eye.horizon - 0.06))
     }
 
-    /// When the feeder flocks of a new evening arrive (seconds in) and how many birds each brings: a big first group,
-    /// then smaller ones every 20–30 s for about four minutes, 1,500 in all.
+    /// When the feeder flocks of a new evening arrive (seconds in) and how many birds each brings: a big first group at
+    /// once, joining the last of the old evening's flock, then smaller ones every 20–30 s for about four minutes.
     private static func schedule() -> [(at: Double, count: Int)] {
-        var left = 1500, at = 25.0, out: [(at: Double, count: Int)] = [(at, 320)]
+        var left = 1500, at = 5.0, out: [(at: Double, count: Int)] = [(at, 320)]
         left -= 320
         while left > 0 {
             at += .random(in: 18...32)
@@ -531,13 +534,6 @@ private final class Flock: SKNode {
             pending -= 1.0 / 30
         }
         place(dt)
-    }
-
-    /// An empty sky, for the start of a new evening.
-    func clearSky() {
-        for i in birds.indices { birds[i].state = 0 }
-        roosting = false
-        dip = 0
     }
 
     /// A feeder flock of `count` birds flies in from beyond one side of the view, toward the roost.
