@@ -22,6 +22,10 @@ Asked on Dave's word, the session that wrote the ideas page said:
 - **Winter:** the real season from the date and latitude, with a few evergreens in the ring of crowns so it is never all bare: the broadleaf crowns go to lacy bare branches, with snow on them when it snows where you are, and a Season setting holds one season. Not strictly bare all winter, and not spring-to-autumn only. (A Tree for the Year was cut partly for being bare or brown five months of the year.)
 - **What moves besides the sway:** falling leaves in autumn, more in a gust of the real wind. Not chosen: rain and snow falling toward the viewer, the Moon through the gaps, birds now and then.
 
+## Dave's decisions (2026-11-16, round 1)
+- **"A/C/F look the best, build from there."** Read as sheet 1's tiles, the deciding sheet: C and F, a real bare stand with scanned leaves grown on its twigs (the method recommended), and A, the real photo's crowns in summer, as the look its summer aims at: denser and darker, each leaf lit by its own light, no haze. Not B/E (trees laid out by code) and not D ((a) dissolved into autumn). Building started on his word, with no second round of mock-ups.
+- **Still his to decide**, defaulted to the recommendations until he says otherwise: the view, sheet 2's C (an evergreen rim with broadleaves inside, Poly Haven's Schachen Forest); the day's light, sheet 3's C (leaves glowing, gaps veiled pale at the leaves) with D's Sun behind a crown at summer middays; and whether real photo crowns (A) should also be a pick for summer, once he has seen the grown leaves in the build.
+
 ## Mock-ups, round 1 (2026-11-16)
 Drawn by `mock.swift` with SKRenderer at 3024 × 1964, 42°N, the sky from the app's `Atmosphere`, each tile's cost and brightness printed on it. Every tile is 0.42–0.57 ms of GPU and 0.33–0.43 of CPU; every tile meets the 99th and 99.9th percentile caps, where the real photos clip at 255.
 
@@ -33,3 +37,19 @@ Drawn by `mock.swift` with SKRenderer at 3024 × 1964, 42°N, the sky from the a
 **What the mock-ups showed.** The real stand carries the picture; the leaves don't yet. Flat, evenly lit sprays from Dappled Light's 16-leaf atlas read as cut-outs pasted on the wood, and the contrast squeezed toward the sky (a power of 0.6) lays a blue haze over everything, so at desktop size summer reads as a faded photo; autumn, mostly wood, reads better. The real photos look better than any tile. Falling leaves at the real rate and size (4–12 px, the canopy's own bronze) are all but invisible in the film, and the sway, 6 px, is barely seen. Hard edges come to 17–59% of pixels on every tile and on the photos (the cap was 3%), so that cap is wrong for a canopy, not the tiles. The sky share is lower than the brief's quarter to a third (13% for the ring) because the photo's haze of fine twigs counts as cover. The bake took 0.6–0.9 s on the CPU; the probe's 0.2 s was on the GPU.
 
 **For round 2, whatever is picked:** leaves lit one by one, with the scans' translucency, in bigger clumps that glow; less haze; honest wood for the birch or aspen grove (a CC BY or BY-SA photo, or a CC0 one still to be found); the year in one stand and the night; a film where the falling leaves can be judged.
+
+## How it works (the plan, 2026-11-16)
+One scene, `Canopy.swift`, three layers, the build in steps each a commit, hidden behind `unfinished: true` until Dave says otherwise.
+- **The camera:** a pinhole at the zenith, 90° across the screen's long side, head to the north (research-method.md §1), so straight things stay straight and every trunk runs to the middle.
+- **The sky:** the app's `Atmosphere` (WeatherSky.swift) through a new zenith camera, baked off the main thread about once a minute (about 20 ms) for the real Sun at the user's place, held to the look report's caps (gaps 150–190, never white). Clouds from Weather's procedural deck later; stars (the Yale catalogue in `stars.txt`, as sprites under the canopy) at night.
+- **The wood:** a real bare stand photographed straight up, keyed from its sky and shipped as an image with alpha in `Resources/canopy-*` (Poly Haven, CC0): Schachen Forest first (conifers at the rim, bare broadleaves inside), Autumn Forest 04 as a second. Turned and mirrored at random each load, so one photo gives many groves. Its bark relit to the canopy's shade; its conifers dark all year.
+- **The leaves:** sprays of scanned leaves (ambientCG, CC0; Dappled Light's atlas to start) grown on the stand's thin twigs at load, two or three depth layers, each spray with an id. Baked off the main thread (the mock-up took 0.6–0.9 s on the CPU), the sky showing first and the canopy fading in. Lit leaf by leaf by the light through them from above (the layers over each read toward the Sun), aimed at sheet 1's A: denser, darker, real variation, no haze.
+- **The season:** each spray's id against its species' calendar (`Phenology`, with each species' offsets from Harvard Forest's HF003, CC0), so leaf-out, colour, fall, bare lace and snow on the branches are one continuous change. A Season setting holds one.
+- **Motion:** each tree sways as a body about its own base (a tree-id map flooded from each trunk along the wood), 0.15–0.3 Hz, its amplitude from the live wind and gusts; falling leaves as a few sprites. `BatteryPaced`, 12–15 fps calm.
+
+**Steps:**
+- **(a) The still:** the entry (hidden), the sky, the wood, the leaves at the real date, the preview still. Judged against sheet 1's A and the real photos at the caps.
+- **(b) Motion:** sway by tree, flutter, falling leaves, the battery rate.
+- **(c) Settings:** Season (follow the date, or hold one), Sway, Speed, a time and date preview to pin a picture; Light and Dark Mode (blue hour).
+- **(d) Live data:** the live wind and gusts, the weather (cloud deck, overcast), snow on the branches, night and its stars.
+- **(e) The birch or aspen grove,** once honest wood for it is found.
