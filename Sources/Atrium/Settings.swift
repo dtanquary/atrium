@@ -475,7 +475,7 @@ struct AboutPage: View {
             Section("Sky, Earth and Moon") {
                 credit("Stars", "Yale Bright Star Catalogue, 5th edition (public domain)")
                 credit("Constellations", "d3-celestial by Olaf Frohn (BSD 3-Clause)", "https://github.com/ofrohn/d3-celestial")
-                credit("Night Sky's Milky Way", "ESO/S. Brunier's panorama of the whole sky (CC BY 4.0), its stars and two planets removed; the fainter stars are the HYG database's (David Nash, CC BY-SA 4.0)",
+                credit("The Milky Way in Night Sky and Canopy", "ESO/S. Brunier's panorama of the whole sky (CC BY 4.0), its stars and two planets removed; the fainter stars are the HYG database's (David Nash, CC BY-SA 4.0)",
                        "https://www.eso.org/public/images/eso0932a/")
                 credit("Night Sky's skylines", "Elevation from the USGS 3D Elevation Program and NASA's SRTM (public domain)",
                        "https://www.usgs.gov/3d-elevation-program")

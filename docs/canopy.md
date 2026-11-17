@@ -6,7 +6,7 @@ It was pick #3 of the "Atrium Wallpaper Ideas" page of 2026-11-14 (a review of t
 
 - **Research:** [canopy/research-method.md](canopy/research-method.md) (camera, numbers, three ways to draw the crowns, measured cost) and [canopy/research-look.md](canopy/research-look.md) (references, palettes, brightness, CC0 assets, the name).
 - **Scripts:** `docs/canopy/mock.swift` (SKRenderer, the app's `Atmosphere` through a zenith camera), `variants.py`, `sheet.py`; [canopy/mockups-round1.md](canopy/mockups-round1.md) has every tile's measurements, assets and licences, and how to redraw a round.
-- **Where it stands (2026-11-16):** step (a), the still picture, built and hidden behind `unfinished` (`Sources/Atrium/Canopy.swift`); steps (b) to (e) to come.
+- **Where it stands (2026-11-16):** step (a), the still picture, and the first part of step (d), the night and the light kept current (d1), built and hidden behind `unfinished` (`Sources/Atrium/Canopy.swift`); steps (b), (c), the rest of (d) and (e) to come.
 
 ## What the idea's author meant (atrium-37, 2026-11-16)
 Asked on Dave's word, the session that wrote the ideas page said:
@@ -51,7 +51,7 @@ One scene, `Canopy.swift`, three layers, the build in steps each a commit, hidde
 - **(a) The still:** the entry (hidden), the sky, the wood, the leaves at the real date, the preview still. Judged against sheet 1's A and the real photos at the caps.
 - **(b) Motion:** sway by tree, flutter, falling leaves, the battery rate.
 - **(c) Settings:** Season (follow the date, or hold one), Sway, Speed, a time and date preview to pin a picture; Light and Dark Mode (blue hour).
-- **(d) Live data:** the live wind and gusts, the weather (cloud deck, overcast), snow on the branches, night and its stars.
+- **(d) Live data:** the live wind and gusts, the weather (cloud deck, overcast), snow on the branches, night and its stars. **(d1), built first:** the night and its stars, and the light kept current while it runs.
 - **(e) The birch or aspen grove,** once honest wood for it is found.
 
 ## The build so far
@@ -71,7 +71,7 @@ One scene, `Canopy.swift`, three layers, the build in steps each a commit, hidde
 
 **As built**, differences from the plan:
 - **As built:** the leaves are lit in the bake, not per frame in the shader as the mock-ups were: every leaf's light and the wood's are composited into one texture, which the shader lays over the sky. The frame is cheaper, and the light is fixed until the next bake.
-- **As built:** the sky is baked once, with the scene, on the main thread, and neither it nor the canopy's light is refreshed while it runs: the app rebuilds it after 12 hours or as the displays sleep. A rebake every few minutes, with the same seed, is the plan's once a minute and comes with step (b) (`ponytail:` in `Canopy.init`).
+- **As built:** the sky is baked once, with the scene, on the main thread, and neither it nor the canopy's light is refreshed while it runs: the app rebuilds it after 12 hours or as the displays sleep. A rebake every few minutes, with the same seed, is the plan's once a minute and comes with step (b) (`ponytail:` in `Canopy.init`). *Since (d1), every five minutes, below.*
 - **As built:** the stand is decoded straight into the bake (`CGImageSource`, off the main thread), not through `sharedTexture`: the shader never reads the photo, only the canopy lit from it, which is the scene's own (its seed and light), so there is nothing to share between copies.
 - **As built:** the stand is only mirrored (four ways), not turned at any angle, since the picture is a rectangle just larger than the screen.
 - **As built:** no contrast power (the round's 0.6 on luminance, which laid the blue haze over everything) and no soft focus. The leaves' own light carries the picture to the caps.
@@ -97,14 +97,65 @@ One scene, `Canopy.swift`, three layers, the build in steps each a commit, hidde
 - **Bare is mostly sky,** so late autumn's median (173) misses the cap of 140. Holding the sky lower when the leaves are down would meet it, at the cost of the gaps' 150–190: Dave's call.
 - **The conifers** are the bark's dark grey-brown with sky specks through them, not black-green.
 - **Faint specks** of the photo's clouds are left in the open sky by the key, a few pixels each.
-- **Not yet:** the light refreshing as the day goes on, Light and Dark Mode (the night is a plain deep blue, no stars), the per-species calendar, snow.
+- **Not yet:** the light refreshing as the day goes on, Light and Dark Mode (the night is a plain deep blue, no stars), the per-species calendar, snow. *(d1) brought the first two halves: the light kept current and the night's stars.*
+
+### (d1) The night, and the light kept current (2026-11-16)
+![16 November at 10:30 pm, 42°N 88°W: the Milky Way from Cygnus to Perseus, the Andromeda Galaxy right of the middle and the Pleiades low left, through the bare stand](canopy/build-d1-night.jpg)
+
+Night was a black stand on a grey-blue sky with nothing in it (step (a): median 12, the gaps (24, 28, 40)), which breaks Dave's "Always something to see"; and the light was baked once, so a scene made in the afternoon kept its daylight into the night.
+
+**What was built** (`Canopy.swift`; `CanopyBake` is unchanged):
+- **The stars through the gaps,** at the real place and time: the Yale catalogue (`stars.txt`) to V 5.3 and Night Sky's HYG file (`blackhole-stars.lzfse`) from there to V 7, as Night Sky splits them, 14,500 stars, about 1,800 of them in the view at once. They are drawn by the shader, not as sprites (**As built**, below), from a grid (`Canopy.starGrid`, 720 × 360, 1 MB, shared by every copy as `canopy-stars`): a row every half degree in the frame of Night Sky's fainter stars, each with as many cells as keep them at least half a degree wide, one star to a cell. A pixel looks in the two cells nearest it in each of the two rows nearest it, so a star has a quarter of a degree (3.3 points at the middle of a 14" screen) to shine in, and each is drawn round on the screen where its own direction lands through the lens: a bell 0.45–1 point in radius by its magnitude, a faint halo on those brighter than V 3.5, tinted by its B−V as Night Sky's are, at most 190 of 255 (the look report's cap for stars). They twinkle as Weather's do, ±20% at 0.16–0.64 Hz on `u_now` wrapped hourly, which stays calm. The sky turns under them once a second (`u_toStars`, a twelfth of a pixel a second at the zenith at 42°N).
+- **The Milky Way:** Night Sky's photograph (`sky-milky-way.heic`, ESO/S. Brunier, CC BY 4.0; its line in About now names Canopy too), turned by Night Sky's fitted `toPhoto`, through its film shoulder at half Night Sky's strength. It is the least of four reads 2.5 texels round each pixel, which takes out the few bright stars the photograph keeps: drawn a tenth of a degree from ours they read as tails. From 42°N it crosses the zenith on autumn evenings (above) and lies along the east on July evenings.
+- **The night sky's colour:** the floor of airglow under the sky is now deep blue, (0.06, 0.25, 1.3) × 5e-8 where it was (0.6, 0.8, 1.6), so a moonless night's gaps are #081026, inside the look report's #050B1A–#0A1530, where they were a grey (24, 28, 40). It only shows with the Sun more than about 12° down.
+- **Fading in:** the stars and the Milky Way come in with the Sun from 4° to 14.5° down, as Weather's stars do (`Light.starlight`), and the day's veil (the gaps paled toward silver at the leaves) goes out as they come.
+- **The light kept current:** every five minutes by the moment shown (the wall clock, or the pinned date at the clock's hour), the scene bakes the sky, the canopy and its light again off the main thread (`Canopy.bake`, the same seed, so the same stand and leaves; the season too, from the date), into a second picture behind the first, and fades it in over 8 seconds (1.2 for the first, or for one more than 15 minutes behind after the view was covered). Two sprites, each with its own shader and textures, the one in front at alpha 1; the night's textures and the stars' turn are shared by both. In the dark of night (the Sun 18° down at the last bake and now) nothing but the stars changes, so it doesn't bake. With `canopy.hour` pinned the moment never moves, so a picture stays put.
+- **Off the main thread:** the bake makes its textures too, and at dusk the night's: the stars' grid and the Milky Way (160 ms to decode its 6000 × 3000), handed over to Night Sky's shared copy if one is up. By day they are let go.
+- **Two shaders:** by day the step (a) shader alone, so the day doesn't pay for the night; from the Sun 4° down, the same with the Milky Way and the stars. The Sun's place and light are uniforms now, not written into the source, so one shader serves every bake.
+- **`batteryRate` stays 10:** the stars move a twelfth of a pixel a second, the twinkle is under 0.7 Hz and the fades last seconds.
+
+**As built**, differences from the plan:
+- **As built:** the stars are drawn in the canopy's own shader from a grid, as Night Sky draws its fainter ones, not as ~350 sprites between the sky and the canopy (research-method.md §1). The sky, the leaves and the tone curve are one shader, and a layer of sprites between would have meant splitting it, which changes the day's picture (the tone curve applies to the composite); and sprites wouldn't move with the sway of step (b), where stars in the shader are covered by whatever covers them.
+- **As built:** no rim of sky glow on the crowns' edges. Tried two ways: lit by the blurred cover map, it laid a soft haze over the crowns' edges that put them out of focus; by four reads of the canopy round each pixel, it drew a crosshatch. Crisp black crowns against the #081026 sky read best, so the shapes read by the sky alone.
+- **As built:** the sky is baked with the canopy every five minutes, not alone once a minute: in five minutes the Sun moves just over a degree, and a crossfade of 8 seconds hides the step.
+- **As built:** every bake grows the whole canopy again, not only its light (`ponytail:` in `Canopy.bake`).
+
+**Measured** (M3 Max, 1512 × 982 at 2x, seed 3 at 42°N 88°W):
+- **Cost:** by day as step (a), 0.17–0.33 ms of GPU and 0.37–0.51 of CPU a frame (several runs; the GPU reads noisily here, once 0.65 throughout a run of day and night pictures alike). From the Sun 4° down, 0.65–0.66 ms of GPU and 0.45–0.54 of CPU, against Night Sky's 0.58 measured the same evening; while a new bake fades in, both pictures draw, for 8 seconds every five minutes.
+- **Stars:** `canopyNightHasStars` counts 326 in the open sky at 11 pm on 15 September (leaves on), none under the leaves, none at 3:30 pm or noon.
+- **Re-bakes** (`CANOPY_LOAD=1`): 0.77 s off the main thread, about 2.1 s of CPU across the cores; 0.9 s and 2.7 s at dusk with the night's textures (the grid is 2 ms of it, the Milky Way's decode about 160). At `.utility` priority in the app. **The main thread** on the frame a bake lands on: 8 ms for a regular one (the 30 MB canopy going up to the GPU, which SpriteKit does on first use whoever made the texture), 39 ms for the first (the second picture's first draw), 63 ms at dusk (the Milky Way's 72 MB going up) and 30 ms at dawn (letting the night's textures go); the building of the scene is 6 ms the first time and 3 after, as in step (a).
+- **Memory:** at night the Milky Way (72 MB, shared with Night Sky) and the grid (1 MB) besides step (a)'s 31 MB; during a fade, two canopies.
+- **Brightness** at desktop size, the brightest of R, G and B (night caps: median about 10–45, gaps #050B1A–#0A1530, stars ≤ 190):
+
+| Picture | Median | 99th | 99.9th | Max |
+|---|---|---|---|---|
+| Midsummer, 15 July 3:30 pm (the same as step (a): 0.016% of pixels differ, by 1 or 2) | 102 | 199 | 202 | 217 |
+| Dusk, 15 July 8:45 pm (the Sun 6° down) | 61 | 210 | 214 | 216 |
+| Twilight, 15 July 9:15 pm (10° down: the stars coming in) | 54 | 167 | 171 | 173 |
+| Twilight, 15 July 9:36 pm (13° down) | 30 | 76 | 78 | 148 |
+| Night, 15 July 10:30 pm (leaves on, the Milky Way along the east) | 13 | 48 | 57 | 180 |
+| Dusk, 16 November 5:15 pm (bare, the Sun 8° down) | 127 | 156 | 157 | 167 |
+| Night, 16 November 10:30 pm (bare, the picture above) | 37 | 49 | 57 | 190 |
+
+**What still looks wrong:**
+- **Twilight is violet,** (153, 135, 188) at dusk, from the app's `Atmosphere` through the zenith lens (a-dusk in step (a) too): the real zenith in the blue hour is a deeper blue. Weather's sky has the same model; check whether it lacks the ozone that turns the twilight zenith blue before tuning it here.
+- **The summer night is mostly a navy sky,** its Milky Way along the east edge until later in the night, and the faint stars are small: real at 2x, sparse at desktop size seen from across a room.
+- **The conifers' part-covered masses** show the sky through them as soft, lighter patches at dusk and night (the stand's own key, as in step (a)).
+- **No Moon:** a moonlit night looks the same as a moonless one (Dave didn't choose the Moon through the gaps).
 
 ## Checking it
 ```sh
 SNAPSHOT_SCENE="Canopy" SNAPSHOT_DEFAULTS="canopy.seed=3,canopy.date=2026-07-15,canopy.hour=15.5,latitude=42,longitude=-88" swift test -c release -Xswiftc -enable-testing --filter everySceneRenders
 ```
-That is the picture above and the preview still (`$TMPDIR/atrium-snapshots/Canopy.png`; `sips -Z 1200 -s format jpeg -s formatOptions 70` makes the still). Leave out `canopy.date` and `canopy.hour` for now. `--filter canopy` runs its season check; with `CANOPY_LOAD=1` it times the load too.
+That is the picture above and the preview still (`$TMPDIR/atrium-snapshots/Canopy.png`; `sips -Z 1200 -s format jpeg -s formatOptions 70` makes the still). Leave out `canopy.date` and `canopy.hour` for now. `--filter canopy` runs its season check, the stars' rows and the night check (`canopyNightHasStars`, a scene moved from a September afternoon to 11 pm by its own re-bake); with `CANOPY_LOAD=1` it times the load, the re-bakes and their landings too.
+
+The night (the picture above is `canopy.date=2026-11-16`, and 15 July for leaves on):
+```sh
+SNAPSHOT_SCENE="Canopy" SNAPSHOT_DEFAULTS="canopy.seed=3,canopy.date=2026-11-16,canopy.hour=22.5,latitude=42,longitude=-88" swift test -c release -Xswiftc -enable-testing --filter everySceneRenders
+```
 
 ## Shortcuts
-- `ponytail:` the light and the season are baked once, as the scene is made (`Canopy.init`); bake again every few minutes off the main thread and swap it in, from step (b).
-- `ponytail:` the canopy is at the stand's 1512 px to a unit of tan, softer on screens wider than about 1700 pt; and the bake holds about 175 MB while it runs (`Canopy.Bake.make`).
+- `ponytail:` the canopy is at the stand's 1512 px to a unit of tan, softer on screens wider than about 1700 pt; and the bake holds about 175 MB while it runs (`CanopyBake.make`).
+- `ponytail:` each bake every five minutes grows the whole canopy again when only its light has changed, about 2 s of CPU across the cores (`Canopy.bake`); keep the grown layers between bakes (about 120 MB) if that shows on the battery.
+- `ponytail:` a star that shares a half-degree cell of the grid with a brighter one is dropped, a few in a hundred and nearly all faint (`Canopy.starGrid`).
+- The Milky Way is Night Sky's full 6000 × 3000 photograph, 72 MB on the GPU while the stars show; a copy cut to the band of sky ever overhead would be a fraction of that.

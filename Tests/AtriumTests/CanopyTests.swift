@@ -1,4 +1,6 @@
+import CoreLocation
 import Foundation
+import Metal
 import SpriteKit
 import Testing
 import CanopyBake
@@ -17,9 +19,66 @@ import CanopyBake
     #expect(january.out == 0)
 }
 
+/// The shader works out how many cells each row of the stars' grid holds in single precision: it must agree with
+/// `Canopy.cells(row:)` on every row, or stars land in the wrong cells.
+@Test func canopyStarRowsAgree() {
+    for row in 0..<Canopy.grid.height {
+        let a = Float(min(abs(Double(row) - 179.5) + 0.5, 180)) * 0.0087266463
+        #expect(Double(max((Float(719.5) * cos(a)).rounded(.down), 1)) == Canopy.cells(row: Double(row)), "row \(row)")
+    }
+}
+
+/// Never an empty night: a scene that starts on a September afternoon and is moved on to 11 pm (as its bakes every
+/// five minutes would carry it) lands a second bake that shows stars through the gaps, a hundred or more, and none
+/// through the leaves; and back at noon the stars are gone. Rendered as the desktop sees it, at 2x.
+@MainActor @Test func canopyNightHasStars() throws {
+    let defaults = UserDefaults.standard, pins = Canopy.pins
+    defer { for key in [pins.seed, pins.date, pins.hour] { defaults.removeObject(forKey: key) } }
+    defaults.set(3, forKey: pins.seed)
+    defaults.set("2026-09-15", forKey: pins.date)
+    defaults.set(15.5, forKey: pins.hour)
+    // 42°N, at the longitude the clock keeps, so 11 pm on it is 11 pm by the Sun
+    let zone = TimeZone.current
+    let place = CLLocationCoordinate2D(latitude: 42, longitude: Double(zone.secondsFromGMT() - Int(zone.daylightSavingTimeOffset())) / 240)
+    let size = CGSize(width: 1512, height: 982)
+    var frames = try Frames(Canopy(size: size, place: place), size: size)
+    frames.draw()
+    let day = frames.stars()
+
+    defaults.set(23.0, forKey: pins.hour)
+    frames.draw(seconds: 2) // the next second's tick starts a bake for 11 pm,
+    frames.draw()           // and this frame waits for it, lands it and shows it
+    let night = frames.stars()
+    // where the leaves and the wood are, from the same bake the scene made
+    let camera = Canopy.Camera(size: size)
+    let made = Canopy.bake(moment: Canopy.moment(day: "2026-09-15", hour: 23), latitude: place.latitude, longitude: place.longitude,
+                           camera: camera, seed: 3, light: nil, night: false).made
+    func cover(_ x: Int, _ y: Int) -> UInt8 { // the canopy's alpha over a pixel of the picture (rows top first)
+        let t = (SIMD2(Double(x) + 0.5, Double(frames.h - y) - 0.5) / SIMD2(Double(frames.w), Double(frames.h)) * 2 - 1) * camera.tan
+        let q = t / (2 * camera.extent) + 0.5
+        let (i, j) = (min(max(Int(q.x * Double(made.width)), 0), made.width - 1), min(max(Int(q.y * Double(made.height)), 0), made.height - 1))
+        return made.canopy[(j * made.width + i) * 4 + 3]
+    }
+    // the canopy's cover is the season's, the same all day, so it holds for the afternoon's picture too
+    func clear(_ s: (x: Int, y: Int)) -> Bool { [(0, 0), (-6, 0), (6, 0), (0, -6), (0, 6)].allSatisfy { cover(s.x + $0.0, s.y + $0.1) == 0 } }
+    func covered(_ s: (x: Int, y: Int)) -> Bool { [(0, 0), (-6, 0), (6, 0), (0, -6), (0, 6)].allSatisfy { cover(s.x + $0.0, s.y + $0.1) == 255 } }
+    let (open, hidden) = (night.filter(clear), night.filter(covered))
+    print("Canopy at 11 pm: \(open.count) stars in the open sky, \(hidden.count) under the leaves; at 3:30 pm \(day.filter(clear).count)")
+    #expect(open.count >= 100, "an empty night")
+    #expect(hidden.count <= open.count / 100, "stars showing through the leaves")
+    #expect(day.filter(clear).count < 5, "stars by day")
+
+    defaults.set(12.0, forKey: pins.hour)
+    frames.draw(seconds: 2)
+    frames.draw()
+    #expect(frames.stars().filter(clear).count < 5, "stars left at noon")
+}
+
 /// What building Canopy holds the main thread for, and its bake off it, at a 14" MacBook Pro's size: meaningful in a
-/// release build: `CANOPY_LOAD=1 swift test -c release -Xswiftc -enable-testing --filter canopyLoad`.
-@MainActor @Test(.enabled(if: ProcessInfo.processInfo.environment["CANOPY_LOAD"] != nil)) func canopyLoad() {
+/// release build: `CANOPY_LOAD=1 swift test -c release -Xswiftc -enable-testing --filter canopyLoad`. Then a bake for
+/// later in the day (the light, the canopy and the night's stars, off the main thread), and what landing one costs the
+/// main thread: the frame it lands on, against the frame after.
+@MainActor @Test(.enabled(if: ProcessInfo.processInfo.environment["CANOPY_LOAD"] != nil)) func canopyLoad() throws {
     let clock = ContinuousClock(), size = CGSize(width: 1512, height: 982)
     let camera = Canopy.Camera(size: size), date = Canopy.moment(day: "2026-07-15", hour: 15.5)
     let light = Canopy.Light(camera: camera, date: date, latitude: 42, longitude: -88)
@@ -30,5 +89,91 @@ import CanopyBake
     let baked = (0..<2).map { _ in clock.measure { made = bake.make() } }.min()!
     let built = (0..<3).map { _ in clock.measure { _ = Canopy(size: size) } }
     #expect(made.map { $0.canopy.count == $0.width * $0.height * 4 } == true)
-    print("Canopy at 1512 x 982: built on the main thread in \(built.map { $0.formatted(.units(allowed: [.milliseconds])) }), baked off it in \(baked.formatted(.units(allowed: [.milliseconds])))")
+    func ms(_ d: Duration) -> String { d.formatted(.units(allowed: [.milliseconds])) }
+    print("Canopy at 1512 x 982: built on the main thread in \(built.map(ms)), baked off it in \(ms(baked))")
+
+    let night = Canopy.moment(day: "2026-07-15", hour: 22.5)
+    func cpu() -> Double { // seconds of CPU this process has used, on every core
+        var use = rusage()
+        getrusage(RUSAGE_SELF, &use)
+        return Double(use.ru_utime.tv_sec + use.ru_stime.tv_sec) + Double(use.ru_utime.tv_usec + use.ru_stime.tv_usec) / 1e6
+    }
+    var spent: [Double] = []
+    let rebakes = [false, true, false].map { dark in
+        let before = cpu()
+        defer { spent.append(cpu() - before) }
+        return clock.measure { _ = Canopy.bake(moment: night, latitude: 42, longitude: -88, camera: camera, seed: 3, light: nil, night: dark) }
+    }
+    let stars = clock.measure { _ = Canopy.starGrid() }
+    let defaults = UserDefaults.standard, pins = Canopy.pins
+    defer { for key in [pins.seed, pins.date, pins.hour] { defaults.removeObject(forKey: key) } }
+    for (key, value) in [(pins.seed, 3 as Any), (pins.date, "2026-07-15"), (pins.hour, 15.5)] { defaults.set(value, forKey: key) }
+    var frames = try Frames(Canopy(size: size, place: CLLocationCoordinate2D(latitude: 42, longitude: -88)), size: size)
+    var landing: [Duration] = []
+    // the first bake (by day), then one five minutes on, one into the night (with the stars and the Milky Way), one on
+    // through the night, and one back to day (letting the night's textures go)
+    for hour in [15.5, 15.6, 22.5, 22.6, 12.0] {
+        defaults.set(hour, forKey: pins.hour)
+        if hour != 15.5 { frames.draw(seconds: 2) } // its tick starts the bake
+        Thread.sleep(forTimeInterval: 6) // and it arrives (at .utility) while we wait, so the next frame doesn't wait for it
+        landing.append(frames.draw())
+    }
+    let steady = (0..<5).map { _ in frames.draw() }.min()!
+    print("Canopy's bakes for later: \(rebakes.map(ms)) off the main thread (by day, with the night's textures (the stars' grid \(ms(stars))), by day), "
+          + "\(spent.map { String(format: "%.2f", $0) }) s of CPU; "
+          + "landing, the frame it lands on: \(landing.map(ms)) (first, day, into the night, night, back to day), against \(ms(steady)) for a frame")
+}
+
+/// Draws a scene with SKRenderer at 2x, as the render test does, timing each frame's update and render on the main
+/// thread, and finds the stars in the last.
+@MainActor private struct Frames {
+    let renderer: SKRenderer, queue: MTLCommandQueue, texture: MTLTexture, w: Int, h: Int
+    var time = ProcessInfo.processInfo.systemUptime + 1
+
+    init(_ scene: SKScene, size: CGSize) throws {
+        let device = try #require(MTLCreateSystemDefaultDevice())
+        (w, h) = (Int(size.width) * 2, Int(size.height) * 2)
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: w, height: h, mipmapped: false)
+        descriptor.usage = [.renderTarget, .shaderRead]
+        descriptor.storageMode = .shared
+        (renderer, queue, texture) = (SKRenderer(device: device), try #require(device.makeCommandQueue()), try #require(device.makeTexture(descriptor: descriptor)))
+        renderer.scene = scene
+    }
+
+    /// One frame, `seconds` after the last; what it held the main thread for, up to the GPU's taking it.
+    @discardableResult mutating func draw(seconds: Double = 1.0 / 30) -> Duration {
+        time += seconds
+        let pass = MTLRenderPassDescriptor()
+        pass.colorAttachments[0].texture = texture
+        pass.colorAttachments[0].loadAction = .clear
+        pass.colorAttachments[0].storeAction = .store
+        let buffer = queue.makeCommandBuffer()!
+        let held = ContinuousClock().measure {
+            renderer.update(atTime: time)
+            renderer.render(withViewport: CGRect(x: 0, y: 0, width: w, height: h), commandBuffer: buffer, renderPassDescriptor: pass)
+            buffer.commit()
+        }
+        buffer.waitUntilCompleted()
+        return held
+    }
+
+    /// The stars in the last frame: each pixel as bright as the 8 round it and brighter by 15 of 255 or more than an
+    /// even ring of sky 3 px away (the brightest of R, G and B; a gap among leaves has no even ring), as (x, y) with
+    /// rows top first.
+    func stars() -> [(x: Int, y: Int)] {
+        var pixels = [UInt32](repeating: 0, count: w * h)
+        texture.getBytes(&pixels, bytesPerRow: w * 4, from: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0)
+        let v = pixels.map { Int(max($0 & 255, $0 >> 8 & 255, $0 >> 16 & 255)) }
+        let near = [-w - 1, -w, -w + 1, -1, 1, w - 1, w, w + 1], ring = [-3, 3, -3 * w, 3 * w, -2 * w - 2, -2 * w + 2, 2 * w - 2, 2 * w + 2]
+        var found: [(x: Int, y: Int)] = []
+        for y in 4..<h - 4 { for x in 4..<w - 4 {
+            let p = y * w + x, c = v[p]
+            guard c >= 40 else { continue }
+            var (sum, low, high) = (0, 255, 0)
+            for o in ring { let r = v[p + o]; sum += r; low = min(low, r); high = max(high, r) }
+            guard c - sum / 8 >= 15, high - low <= 8, near.allSatisfy({ c >= v[p + $0] }) else { continue }
+            found.append((x, y))
+        } }
+        return found
+    }
 }
