@@ -136,6 +136,25 @@ import CanopyBake
     #expect(length((sa - sc) - SIMD2(expected.x, -expected.y)) <= 4 + 0.15 * length(expected), "the groups didn't move as their breezes say")
 }
 
+/// Leaves fall only in the weeks they really fall, and only by day: none in July, some on a November afternoon at
+/// 42°N (white oak's leaves coming down fast) over 30 s, and none that night.
+@MainActor @Test func canopyLeavesFallInAutumn() throws {
+    let defaults = UserDefaults.standard, pins = Canopy.pins
+    defer { for key in [pins.seed, pins.date, pins.hour] { defaults.removeObject(forKey: key) } }
+    let size = CGSize(width: 1512, height: 982), place = CLLocationCoordinate2D(latitude: 42, longitude: -88)
+    for (day, hour, falls) in [("2026-07-15", 15.5, false), ("2026-11-05", 14.0, true), ("2026-11-05", 22.0, false)] {
+        for (key, value) in [(pins.seed, 3 as Any), (pins.date, day), (pins.hour, hour)] { defaults.set(value, forKey: key) }
+        let scene = Canopy(size: size, place: place)
+        var frames = try Frames(scene, size: size), most = 0
+        for _ in 0..<120 {
+            frames.draw(seconds: 0.25)
+            most = max(most, scene.leaves.falling)
+        }
+        print("Canopy on \(day) at \(hour): \(String(format: "%.1f", scene.leaves.rate)) leaves at once on average, at most \(most) seen in 30 s")
+        #expect((most > 0) == falls, "\(day) at \(hour)")
+    }
+}
+
 /// What building Canopy holds the main thread for, and its bake off it, at a 14" MacBook Pro's size: meaningful in a
 /// release build: `CANOPY_LOAD=1 swift test -c release -Xswiftc -enable-testing --filter canopyLoad`. Then a bake for
 /// later in the day (the light, the canopy and the night's stars, off the main thread), and what landing one costs the

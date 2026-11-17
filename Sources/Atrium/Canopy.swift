@@ -36,6 +36,8 @@ final class Canopy: SKScene {
     /// The sway, shared by both pictures: each group of trees' offset, two to a uniform, and the limbs' and the
     /// leaves' flutter (`Breeze`), set every frame.
     private let breeze: Breeze, motion: Motion
+    /// The leaves falling in autumn, over both pictures.
+    let leaves: Leaves
     private var job: Job?, fading: (start: TimeInterval, length: TimeInterval)?, ticked: TimeInterval = -.infinity
     /// The moment the latest bake shows, and the Sun's height then; whether the canopy has landed yet.
     private var shown: (moment: Date, sun: Double), landed = false
@@ -49,7 +51,7 @@ final class Canopy: SKScene {
         let camera = Camera(size: size), night = Night(), motion = Motion()
         let light = Light(camera: camera, date: moment, latitude: here.latitude, longitude: here.longitude)
         (lens, self.seed, self.place, self.night, shown) = (camera, seed, place, night, (moment, light.sun.z))
-        (breeze, self.motion) = (Breeze(seed: seed), motion)
+        (breeze, self.motion, leaves) = (Breeze(seed: seed), motion, Leaves())
         (front, back) = (Picture(camera: camera, night: night, motion: motion), Picture(camera: camera, night: night, motion: motion))
         super.init(size: size)
 
@@ -60,6 +62,7 @@ final class Canopy: SKScene {
             addChild(picture.sprite)
         }
         back.sprite.isHidden = true
+        for node in leaves.nodes { addChild(node) }
         front.show(light, nil, sunShows: 0) // the sky at once, the canopy as it lands
         bake(moment, light: light, priority: .userInitiated)
     }
@@ -85,6 +88,7 @@ final class Canopy: SKScene {
             tick()
         }
         motion.set(breeze, at: currentTime, camera: lens)
+        leaves.step(currentTime, breeze: breeze, camera: lens, size: size)
     }
 
     private var here: CLLocationCoordinate2D { place ?? Location.shared.coordinate }
@@ -120,6 +124,7 @@ final class Canopy: SKScene {
             night.turn(Sky.horizonMatrix(jd: Sky.julianDate(baked.moment), latitude: here.latitude, longitude: here.longitude))
         }
         back.show(baked.light, baked.textures, sunShows: baked.made.sunShows)
+        leaves.season(baked.moment, latitude: here.latitude, light: baked.light)
         back.sprite.alpha = 0
         back.sprite.isHidden = false
         (back.sprite.zPosition, front.sprite.zPosition) = (1, 0)
@@ -255,6 +260,91 @@ final class Canopy: SKScene {
             limb.vectorFloat4Value = SIMD4(Float((2 * .pi * 0.47 * time).truncatingRemainder(dividingBy: 2 * .pi)),
                                            Float((2 * .pi * 0.53 * time).truncatingRemainder(dividingBy: 2 * .pi)),
                                            Float(Breeze.limbs * per.x) * strength, Breeze.flutter * strength)
+        }
+    }
+
+    /// Leaves falling, in the weeks they really fall: a few at once, more in a gust, each let go 7-9.5 m up and falling
+    /// about 0.5 m/s with a falling leaf's swing, carried along by the breeze more than falling at the viewer,
+    /// tumbling and turning over, and faded out before it comes nearer than 5.5 m. An 18 cm cell of the leaf scans
+    /// (the leaf a little less), 14-25 points on a 14" screen, a little large for an oak's or a beech's: near, below the crowns, since 4-12 px leaves in the
+    /// canopy's own bronze couldn't be seen (the round-1 film). Lit as a turned leaf with the light behind it. Plain sprites, their colour set as
+    /// each is let go; only those in the air are posed, and none off the screen.
+    @MainActor final class Leaves {
+        static let pool = 12, across = 0.18, sink = 0.5
+        let nodes: [SKSpriteNode]
+        /// Each leaf in the air: when it was let go, where (metres across and up from straight overhead, and high),
+        /// its own phase and spin.
+        private var air: [(born: TimeInterval, at: SIMD2<Double>, high: Double, phase: Double, spin: Double)?]
+        /// How many leaves fall at once on average, from the season (0 outside the weeks they fall), and their colours.
+        private(set) var rate = 0.0
+        private var tints: [SKColor] = [], last: TimeInterval?
+
+        init() {
+            let atlas = NSImage(contentsOf: resource("dappled-leaves.png"))?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+            let cells = (6..<16).compactMap { atlas?.cropping(to: CGRect(x: $0 % 4 * 256, y: $0 / 4 * 256, width: 256, height: 256)) } // oak and beech
+            nodes = (0..<Self.pool).map { k in
+                let node = cells.isEmpty ? SKSpriteNode(color: .white, size: CGSize(width: 1, height: 1)) : SKSpriteNode(texture: SKTexture(cgImage: cells[k % cells.count]))
+                (node.colorBlendFactor, node.zPosition, node.isHidden, node.size) = (1, 2, true, CGSize(width: 1, height: 1)) // sized by its scale
+                return node
+            }
+            air = Array(repeating: nil, count: Self.pool)
+        }
+
+        /// How many fall, from how fast the leaves are coming down this week (`CanopySeason`'s share down, a day either
+        /// side): about one on the screen at a time as the colour starts, four as half come down, six in the last days;
+        /// and their colour, from the light: a turned leaf, the Sun through it and the sky round it, as the canopy's are
+        /// lit. None by night, when they couldn't be seen.
+        func season(_ moment: Date, latitude: Double, light: Light) {
+            let (a, b) = (CanopySeason(date: moment - 86_400, latitude: latitude), CanopySeason(date: moment + 86_400, latitude: latitude))
+            let perDay = (b.fallen - a.fallen) / 2
+            rate = light.sun.z > -0.03 && perDay > 0.001 ? min(4 * perDay / 0.03, 6) : 0
+            let sun = SIMD3<Float>(light.sunlight) / .pi, sky = SIMD3<Float>(light.zenith)
+            tints = [0x88743E, 0x9F894D, 0x9D9F40, 0xD29143, 0xB0743A].map { hex in
+                let c = SIMD3<Float>(pow(Float(hex >> 16 & 255) / 255, 2.2), pow(Float(hex >> 8 & 255) / 255, 2.2), pow(Float(hex & 255) / 255, 2.2))
+                let l = c / dot(c, SIMD3(0.2126, 0.7152, 0.0722)) * (sun * 0.7 + sky * 0.9) * 0.12
+                let v = (SIMD3<Float>(repeating: 1) - exp(-l)).squareRoot() // the shader's tone curve
+                return SKColor(red: CGFloat(v.x), green: CGFloat(v.y), blue: CGFloat(v.z), alpha: 1)
+            }
+        }
+
+        /// How many are in the air.
+        var falling: Int { air.reduce(0) { $0 + ($1 == nil ? 0 : 1) } }
+
+        /// Lets go a leaf now and then, by the season's rate and the breeze's gusts, and poses those in the air.
+        func step(_ time: TimeInterval, breeze: Breeze, camera: Camera, size: CGSize) {
+            let dt = min(max(time - (last ?? time), 0), 0.5)
+            last = time
+            let strength = breeze.strength(time), wind = SIMD2(cos(breeze.heading), sin(breeze.heading)) * (0.3 + 0.9 * strength)
+            // on average `rate` at once, each about 5.5 s in the air; three times as many at the top of a gust
+            let gust = 0.4 + 2.6 * simd_smoothstep(0.6, 1, strength)
+            if rate > 0, !tints.isEmpty, Double.random(in: 0..<1) < rate * gust / 5.5 * dt, let free = air.firstIndex(where: { $0 == nil }) {
+                let high = Double.random(in: 7...9.5)
+                // somewhere over the screen, upwind of where it will drift to
+                let spot = SIMD2(Double.random(in: -1...1) * camera.tan.x, Double.random(in: -1...1) * camera.tan.y) * high - wind * 3
+                air[free] = (time, spot, high, .random(in: 0..<2 * .pi), .random(in: 0.5...1.2) * (Bool.random() ? 1 : -1))
+                nodes[free].color = tints.randomElement()!
+            }
+            for k in air.indices {
+                guard let leaf = air[k] else { continue }
+                let age = time - leaf.born, node = nodes[k]
+                // falling about 0.5 m/s, swinging as a falling leaf does, drifting with the breeze
+                let high = leaf.high - Self.sink * age - 0.15 * sin(2.4 * age + leaf.phase)
+                let at = leaf.at + wind * age + 0.3 * SIMD2(sin(1.3 * age + leaf.phase), cos(1.1 * age + leaf.phase))
+                let fade = min(age / 1.5, 1) * simd_smoothstep(5.5, 6.5, high)
+                let point = CGPoint(x: size.width / 2 + at.x / high * camera.scale, y: size.height / 2 + at.y / high * camera.scale)
+                let side = Self.across / high * camera.scale
+                guard fade > 0 || age < 1.5, point.x > -side, point.y > -side, point.x < size.width + side, point.y < size.height + side else {
+                    air[k] = nil
+                    node.isHidden = true
+                    continue
+                }
+                node.isHidden = false
+                node.position = point
+                let turn = cos(1.6 * age + leaf.phase) // turning over, never quite edge on
+                (node.xScale, node.yScale) = (side * (turn < 0 ? min(turn, -0.2) : max(turn, 0.2)), side)
+                node.zRotation = leaf.spin * age + leaf.phase
+                node.alpha = fade * 0.95
+            }
         }
     }
 
