@@ -18,8 +18,11 @@ let package = Package(
         // Pixel Railway's layouts, scenery and trains, and the drawing of them: the same again. A layout is grown
         // and its scenery marched through as its scene is built, and the trains are drawn into it every frame.
         .target(name: "RailLayout", swiftSettings: [.unsafeFlags(["-O"])]),
+        // Canopy's bake: its stand decoded, a hundred thousand leaves grown on it and each lit, 0.3 s optimised for a
+        // 14-inch screen and 40 s if not.
+        .target(name: "CanopyBake", swiftSettings: [.unsafeFlags(["-O"])]),
         // Resources are copied into the .app by build.sh and found with resource(_:), not Bundle.module.
-        .executableTarget(name: "Atrium", dependencies: ["MeanderRiver", "LineRoute", "AntNest", "RailLayout"], exclude: ["Resources"]),
+        .executableTarget(name: "Atrium", dependencies: ["MeanderRiver", "LineRoute", "AntNest", "RailLayout", "CanopyBake"], exclude: ["Resources"]),
         .testTarget(name: "AtriumTests", dependencies: ["Atrium"]),
     ]
 )
