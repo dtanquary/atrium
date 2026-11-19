@@ -26,6 +26,9 @@ Asked on Dave's word, the session that wrote the ideas page said:
 - **"A/C/F look the best, build from there."** Read as sheet 1's tiles, the deciding sheet: C and F, a real bare stand with scanned leaves grown on its twigs (the method recommended), and A, the real photo's crowns in summer, as the look its summer aims at: denser and darker, each leaf lit by its own light, no haze. Not B/E (trees laid out by code) and not D ((a) dissolved into autumn). Building started on his word, with no second round of mock-ups.
 - **Still his to decide**, defaulted to the recommendations until he says otherwise: the view, sheet 2's C (an evergreen rim with broadleaves inside, Poly Haven's Schachen Forest); the day's light, sheet 3's C (leaves glowing, gaps veiled pale at the leaves) with D's Sun behind a crown at summer middays; and whether real photo crowns (A) should also be a pick for summer, once he has seen the grown leaves in the build.
 
+## Dave's decisions (2026-11-18)
+- **Always at least a subtle wind:** "just have there always be at least some subtle wind", asked whether the live wind should leave the trees nearly still on calm days, as real ones are (research-motion.md measured about 0.5 px/s for leaves in still air). Whatever the wind, real or the stand-in breeze, the motion never drops below about Beaufort 2, "leaves rustle" (about 2 m/s): leaves and the finest twigs visibly moving, by night as well. His rule "Always something to see" ([README.md](README.md#daves-direction-so-far)) applied to the wind.
+
 ## Mock-ups, round 1 (2026-11-16)
 Drawn by `mock.swift` with SKRenderer at 3024 × 1964, 42°N, the sky from the app's `Atmosphere`, each tile's cost and brightness printed on it. Every tile is 0.42–0.57 ms of GPU and 0.33–0.43 of CPU; every tile meets the 99th and 99.9th percentile caps, where the real photos clip at 255.
 
