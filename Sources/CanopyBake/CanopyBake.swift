@@ -26,18 +26,24 @@ public struct CanopyBake: Sendable {
     /// The Sun's direction (east, north, up), sunlight at the ground and the zenith's light, times the exposure.
     public var sun: SIMD3<Double>, sunlight: SIMD3<Double>, zenith: SIMD3<Double>
     public var season: CanopySeason, seed: UInt64
+    /// How the canopy moves (docs/canopy.md, (b2)): 0 the trees swaying as four groups (`trees`); 1 the wood still and
+    /// the twigs and leaves rustling by how free they are (`freedom`); 2 as 1, with the nearest leaves kept apart
+    /// (`Made.near`) to move over the rest.
+    public var motion: Int
 
     public init(stand: URL, leaves: URL, perTan: Double, extent: SIMD2<Double>, portrait: Bool, sun: SIMD3<Double>, sunlight: SIMD3<Double>,
-                zenith: SIMD3<Double>, season: CanopySeason, seed: UInt64) {
+                zenith: SIMD3<Double>, season: CanopySeason, seed: UInt64, motion: Int = 0) {
         (self.stand, self.leaves, self.perTan, self.extent, self.portrait) = (stand, leaves, perTan, extent, portrait)
-        (self.sun, self.sunlight, self.zenith, self.season, self.seed) = (sun, sunlight, zenith, season, seed)
+        (self.sun, self.sunlight, self.zenith, self.season, self.seed, self.motion) = (sun, sunlight, zenith, season, seed, motion)
     }
 
     /// The canopy lit and composited, premultiplied, as sqrt(linear / 2), rows bottom first; how much canopy is near
-    /// each point, an eighth the size; how much of the Sun shows through where it stands; and how each point sways
-    /// (`sway`), the size of the cover map.
+    /// each point, an eighth the size; how much of the Sun shows through where it stands; how each point moves
+    /// (`sway`, the size of the cover map: `trees` for motion 0, `freedom` after); and for motion 2 the nearest layer
+    /// of leaves alone, as the canopy is stored, which the canopy then leaves out.
     public struct Made: Sendable {
         public let canopy: Data, width: Int, height: Int, cover: Data, coverWidth: Int, coverHeight: Int, sunShows: Double, sway: Data
+        public let near: Data?
     }
 
     /// ponytail: the canopy is at the stand's own 1512 px to a unit of tan, a 14" MacBook Pro's 2x, and is drawn
@@ -93,9 +99,12 @@ public struct CanopyBake: Sendable {
         let bark = Self.lin(0x2A2219) / Self.lum(Self.lin(0x2A2219)), zenithLum = Self.lum(SIMD3<Float>(zenith))
         let trans: Float = 0.085 // a leaf passes about 5-15% of the light on its top side (research-method.md §2)
         let hues = Hues(season)
-        var out = [UInt8](repeating: 0, count: n * 4)
-        out.withUnsafeMutableBufferPointer { O in
-            nonisolated(unsafe) let O = O
+        // ponytail: the nearest leaves are one picture (30 MB more on the GPU), not split in two by spray as
+        // research-motion.md offered (30 more again); split them if neighbouring sprays should slide apart more
+        let apart = motion == 2
+        var out = [UInt8](repeating: 0, count: n * 4), nearOut = [UInt8](repeating: 0, count: apart ? n * 4 : 0)
+        out.withUnsafeMutableBufferPointer { O in nearOut.withUnsafeMutableBufferPointer { N in
+            nonisolated(unsafe) let O = O, N = N
             DispatchQueue.concurrentPerform(iterations: sh) { j in
                 for i in 0..<sw {
                     let p = j * sw + i
@@ -135,13 +144,23 @@ public struct CanopyBake: Sendable {
                         let g = min(pow(Float(wood[p * 4]) / 255 / w, 2.2), 0.5)
                         over(bark * g * zenithLum * 1.6 * (0.3 + 0.7 * skyThrough), w)
                     }
-                    leaf(0)
                     let q = ((sh - 1 - j) * sw + i) * 4 // rows bottom first, as SKTexture(data:) reads them
-                    for ch in 0..<3 { O[q + ch] = UInt8(min(sqrt(max(rgb[ch], 0) / 2), 1) * 255 + 0.5) }
-                    O[q + 3] = UInt8(min(alpha, 1) * 255 + 0.5)
+                    func put(_ to: UnsafeMutableBufferPointer<UInt8>) {
+                        for ch in 0..<3 { to[q + ch] = UInt8(min(sqrt(max(rgb[ch], 0) / 2), 1) * 255 + 0.5) }
+                        to[q + 3] = UInt8(min(alpha, 1) * 255 + 0.5)
+                    }
+                    if apart { // the nearest leaves alone, lit as they would be over the rest
+                        put(O)
+                        (rgb, alpha) = (.zero, 0)
+                        leaf(0)
+                        put(N)
+                    } else {
+                        leaf(0)
+                        put(O)
+                    }
                 }
             }
-        }
+        } }
 
         var near = [UInt8](repeating: 255, count: ew * eh * 4)
         for j in 0..<eh { for i in 0..<ew {
@@ -152,8 +171,60 @@ public struct CanopyBake: Sendable {
         let sx = (-sun.x / max(sun.z, 1e-3) / extent.x * 0.5 + 0.5) * Double(sw)
         let sy = (0.5 - sun.y / max(sun.z, 1e-3) / extent.y * 0.5) * Double(sh)
         let shows = sunUp && sx > 0 && sy > 0 && sx < Double(sw) && sy < Double(sh) ? Double(1 - min(crown.at(sx, sy) * 1.4, 1)) : 0
+        let trees = Self.trees(wood, sw, sh)
         return Made(canopy: Data(out), width: sw, height: sh, cover: Data(near), coverWidth: ew, coverHeight: eh, sunShows: shows,
-                    sway: Self.trees(wood, sw, sh))
+                    sway: motion == 0 ? trees : Self.freedom(wood, sw, sh, trees: trees), near: apart ? Data(nearOut) : nil)
+    }
+
+    /// How free each point of the stand is to move, an eighth the size, rows bottom first, as `trees` is: in red, 0 on
+    /// solid wood (trunks, limbs from about 8 px across, the evergreens' masses: 4 px blocks over 85% covered, blurred
+    /// as `grow` blurs them, so a dense knot of twigs on its own doesn't count) rising to 1 at 40 px from it, so thin
+    /// twigs are held where they leave their limb and swing further out; in green the same from trunks alone (solid
+    /// wood 40 px across or more, 80 px to free), for a wind that moves the limbs; in blue how far along its tree a
+    /// point is (the sum of `trees`' four shares), for the crowns swaying as bodies in a strong wind.
+    static func freedom(_ wood: [UInt8], _ sw: Int, _ sh: Int, trees: Data) -> Data {
+        let (w, h) = (sw / 4, sh / 4)
+        var thick = [Float](repeating: 0, count: w * h)
+        for j in 0..<h { for i in 0..<w {
+            var s = 0
+            for dj in 0..<4 { for di in 0..<4 { s += Int(wood[((j * 4 + dj) * sw + i * 4 + di) * 4 + 3]) } }
+            thick[j * w + i] = s > 16 * 255 * 85 / 100 ? 1 : 0
+        } }
+        boxBlur(&thick, w, h, 3) // a line of solid blocks 3 wide comes to 0.39, 2 wide 0.27, 1 wide 0.14, one alone 0.02
+        let solid = thick.map { $0 > 0.22 } // from 8 px across: a limb that bent along its length read as rubber
+        // trunks: solid wood whose middle is 5 blocks (20 px) or more from its edge, grown back out to its edge
+        let core = distance(to: solid.map { !$0 }, w, h).map { $0 >= 5 }, trunks = distance(to: core, w, h).map { $0 <= 5 }
+        let (twigs, limbs) = (distance(to: solid, w, h), distance(to: trunks, w, h))
+        let (ew, eh) = (sw / 8, sh / 8)
+        var out = [UInt8](repeating: 0, count: ew * eh * 4)
+        for j in 0..<eh { for i in 0..<ew {
+            var (a, b): (Float, Float) = (0, 0)
+            for dj in 0..<2 { for di in 0..<2 {
+                let k = min(j * 2 + dj, h - 1) * w + min(i * 2 + di, w - 1)
+                a += simd_smoothstep(0, 10, twigs[k]) / 4 // 40 px: at 80 the bare stand's twigs, nearly all within it of a limb, barely moved
+                b += simd_smoothstep(0, 20, limbs[k]) / 4
+            } }
+            let q = ((eh - 1 - j) * ew + i) * 4
+            let along = (0..<4).reduce(0) { $0 + Int(trees[q + $1]) }
+            (out[q], out[q + 1], out[q + 2], out[q + 3]) = (UInt8(a * 255 + 0.5), UInt8(b * 255 + 0.5), UInt8(min(along, 255)), 255)
+        } }
+        return Data(out)
+    }
+
+    /// How far each cell is from the nearest cell that is `true`, in cells (a chamfer of 1 and 1.4, two passes); far off where none is.
+    static func distance(to set: [Bool], _ w: Int, _ h: Int) -> [Float] {
+        var d = set.map { $0 ? Float(0) : 1e6 }
+        for j in 0..<h { for i in 0..<w {
+            let k = j * w + i
+            if i > 0 { d[k] = min(d[k], d[k - 1] + 1) }
+            if j > 0 { d[k] = min(d[k], d[k - w] + 1); if i > 0 { d[k] = min(d[k], d[k - w - 1] + 1.4) }; if i < w - 1 { d[k] = min(d[k], d[k - w + 1] + 1.4) } }
+        } }
+        for j in stride(from: h - 1, through: 0, by: -1) { for i in stride(from: w - 1, through: 0, by: -1) {
+            let k = j * w + i
+            if i < w - 1 { d[k] = min(d[k], d[k + 1] + 1) }
+            if j < h - 1 { d[k] = min(d[k], d[k + w] + 1); if i < w - 1 { d[k] = min(d[k], d[k + w + 1] + 1.4) }; if i > 0 { d[k] = min(d[k], d[k + w - 1] + 1.4) } }
+        } }
+        return d
     }
 
     /// Which tree each point of the stand belongs to, for the sway, an eighth the size, rows bottom first: in each of
