@@ -73,7 +73,7 @@ import SwiftUI
     /// A wallpaper's loop for its tile (`menu-<name>.mp4`, made by `site/media.sh tiles` from the site's preview loop), or
     /// nil for one without, an unfinished wallpaper.
     static func loop(_ wallpaper: Wallpaper) -> URL? {
-        let url = resource("menu-" + wallpaper.name.lowercased().replacingOccurrences(of: " ", with: "-") + ".mp4")
+        let url = resource("menu-" + wallpaper.slug + ".mp4")
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 

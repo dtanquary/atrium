@@ -661,7 +661,7 @@ struct WallpaperPage: View {
 extension Wallpaper {
     /// Its screenshot, `Resources/preview-<name>.jpg`, or `preview-<name>-light.jpg` in Light Mode if it has one.
     func preview(light: Bool) -> URL {
-        let file = "preview-" + name.lowercased().replacingOccurrences(of: " ", with: "-")
+        let file = "preview-" + slug
         let lit = resource(file + "-light.jpg")
         return light && FileManager.default.fileExists(atPath: lit.path) ? lit : resource(file + ".jpg")
     }

@@ -42,7 +42,7 @@ func trimShots() throws {
 
     for name in names {
         let wallpaper = try #require(allScenes.first { $0.name == name }, "no wallpaper named \(name)")
-        let dir = root.appendingPathComponent(name.lowercased().replacingOccurrences(of: " ", with: "-") + (env["TRIM_DIR"].map { "-" + $0 } ?? ""))
+        let dir = root.appendingPathComponent(wallpaper.slug + (env["TRIM_DIR"].map { "-" + $0 } ?? ""))
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let scene = wallpaper.make(size)
         let trim = try #require((scene as? Trimmable)?.trim, "\(name) has no trim")

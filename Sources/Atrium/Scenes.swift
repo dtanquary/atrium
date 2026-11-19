@@ -46,6 +46,10 @@ struct Wallpaper {
     /// (`defaults write com.dtanquary.atrium unfinished.hide -array "Its Name"`).
     var unfinished = false
 
+    /// Its name as its files spell it (`preview-<slug>.jpg`, `menu-<slug>.mp4`, `docs/<slug>.md`): lowercased, with
+    /// hyphens for spaces and no apostrophes.
+    var slug: String { name.lowercased().replacingOccurrences(of: " ", with: "-").replacingOccurrences(of: "'", with: "") }
+
     /// The title a section of its settings goes by, given what the menu that can retitle it holds.
     func title(of section: String, holding pick: Double) -> String {
         retitled.map { $0.section == section && pick == $0.at ? $0.title : section } ?? section
