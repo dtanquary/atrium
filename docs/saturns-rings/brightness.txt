@@ -1,0 +1,18 @@
+# sheet	tile	median	99th	99.9th	max	exposure   (caps: median 30-45, 99th 170, 99.9th 195, max 215)
+sheet1-view	A	90	162	190	197	2.701
+sheet1-view	B	77	170	183	198	2.441
+sheet1-view	C	87	170	172	173	1.337
+sheet1-view	D	43	170	182	194	0.989
+sheet1-view	E	101	169	190	203	2.326
+sheet2-light	A	87	170	172	173	1.337
+sheet2-light	B	14	170	177	179	1.478
+sheet2-light	C	104	170	173	174	1.305
+sheet2-light	D	14	170	189	199	7.753
+sheet2-light	E	33	170	173	174	1.371
+sheet3-ripple	A	129	170	187	196	4.988
+sheet3-ripple	B	107	170	177	180	2.99
+sheet3-ripple	C	104	170	185	206	2.249
+sheet3-ripple	D	106	170	185	193	2.023
+sheet3-ripple	E	90	162	190	197	2.701
+sheet3-ripple	F	129	170	187	196	4.988
+sheet4-desk	Along	14	170	177	179	1.478
