@@ -26,24 +26,20 @@ public struct CanopyBake: Sendable {
     /// The Sun's direction (east, north, up), sunlight at the ground and the zenith's light, times the exposure.
     public var sun: SIMD3<Double>, sunlight: SIMD3<Double>, zenith: SIMD3<Double>
     public var season: CanopySeason, seed: UInt64
-    /// How the canopy moves (docs/canopy.md, (b2)): 0 the trees swaying as four groups (`trees`); 1 the wood still and
-    /// the twigs and leaves rustling by how free they are (`freedom`); 2 as 1, with the nearest leaves kept apart
-    /// (`Made.near`) to move over the rest.
-    public var motion: Int
 
     public init(stand: URL, leaves: URL, perTan: Double, extent: SIMD2<Double>, portrait: Bool, sun: SIMD3<Double>, sunlight: SIMD3<Double>,
-                zenith: SIMD3<Double>, season: CanopySeason, seed: UInt64, motion: Int = 0) {
+                zenith: SIMD3<Double>, season: CanopySeason, seed: UInt64) {
         (self.stand, self.leaves, self.perTan, self.extent, self.portrait) = (stand, leaves, perTan, extent, portrait)
-        (self.sun, self.sunlight, self.zenith, self.season, self.seed, self.motion) = (sun, sunlight, zenith, season, seed, motion)
+        (self.sun, self.sunlight, self.zenith, self.season, self.seed) = (sun, sunlight, zenith, season, seed)
     }
 
     /// The canopy lit and composited, premultiplied, as sqrt(linear / 2), rows bottom first; how much canopy is near
     /// each point, an eighth the size; how much of the Sun shows through where it stands; how each point moves
-    /// (`sway`, the size of the cover map: `trees` for motion 0, `freedom` after); and for motion 2 the nearest layer
-    /// of leaves alone, as the canopy is stored, which the canopy then leaves out.
+    /// (`sway`, `freedom`, the size of the cover map); and the nearest layer of leaves alone, as the canopy is stored,
+    /// which the canopy then leaves out.
     public struct Made: Sendable {
         public let canopy: Data, width: Int, height: Int, cover: Data, coverWidth: Int, coverHeight: Int, sunShows: Double, sway: Data
-        public let near: Data?
+        public let near: Data
     }
 
     /// ponytail: the canopy is at the stand's own 1512 px to a unit of tan, a 14" MacBook Pro's 2x, and is drawn
@@ -101,8 +97,7 @@ public struct CanopyBake: Sendable {
         let hues = Hues(season)
         // ponytail: the nearest leaves are one picture (30 MB more on the GPU), not split in two by spray as
         // research-motion.md offered (30 more again); split them if neighbouring sprays should slide apart more
-        let apart = motion == 2
-        var out = [UInt8](repeating: 0, count: n * 4), nearOut = [UInt8](repeating: 0, count: apart ? n * 4 : 0)
+        var out = [UInt8](repeating: 0, count: n * 4), nearOut = [UInt8](repeating: 0, count: n * 4)
         out.withUnsafeMutableBufferPointer { O in nearOut.withUnsafeMutableBufferPointer { N in
             nonisolated(unsafe) let O = O, N = N
             DispatchQueue.concurrentPerform(iterations: sh) { j in
@@ -149,15 +144,10 @@ public struct CanopyBake: Sendable {
                         for ch in 0..<3 { to[q + ch] = UInt8(min(sqrt(max(rgb[ch], 0) / 2), 1) * 255 + 0.5) }
                         to[q + 3] = UInt8(min(alpha, 1) * 255 + 0.5)
                     }
-                    if apart { // the nearest leaves alone, lit as they would be over the rest
-                        put(O)
-                        (rgb, alpha) = (.zero, 0)
-                        leaf(0)
-                        put(N)
-                    } else {
-                        leaf(0)
-                        put(O)
-                    }
+                    put(O)
+                    (rgb, alpha) = (.zero, 0) // the nearest leaves alone, lit as they would be over the rest
+                    leaf(0)
+                    put(N)
                 }
             }
         } }
@@ -171,9 +161,8 @@ public struct CanopyBake: Sendable {
         let sx = (-sun.x / max(sun.z, 1e-3) / extent.x * 0.5 + 0.5) * Double(sw)
         let sy = (0.5 - sun.y / max(sun.z, 1e-3) / extent.y * 0.5) * Double(sh)
         let shows = sunUp && sx > 0 && sy > 0 && sx < Double(sw) && sy < Double(sh) ? Double(1 - min(crown.at(sx, sy) * 1.4, 1)) : 0
-        let trees = Self.trees(wood, sw, sh)
         return Made(canopy: Data(out), width: sw, height: sh, cover: Data(near), coverWidth: ew, coverHeight: eh, sunShows: shows,
-                    sway: motion == 0 ? trees : Self.freedom(wood, sw, sh, trees: trees), near: apart ? Data(nearOut) : nil)
+                    sway: Self.freedom(wood, sw, sh, trees: Self.trees(wood, sw, sh)), near: Data(nearOut))
     }
 
     /// How free each point of the stand is to move, an eighth the size, rows bottom first, as `trees` is: in red, 0 on
@@ -227,13 +216,15 @@ public struct CanopyBake: Sendable {
         return d
     }
 
-    /// Which tree each point of the stand belongs to, for the sway, an eighth the size, rows bottom first: in each of
-    /// R, G, B and A, how much it sways with one of four groups of trees. Each trunk or limb where it enters at the
-    /// picture's edge (a run of solid wood along the border) is a tree; its label is flooded along the wood, so every
-    /// twig goes with the trunk it is joined to by the shortest path, then out into the sky and leaves round it from
-    /// the nearest wood; trees round the edge in turn go to groups 0, 1, 2, 3, 0, ... so neighbours sway apart. How
-    /// much a point sways grows with how far along its tree it is from the edge, none at the trunk's foot and all of
-    /// it from 700 px on, so the crowns move as bodies and the trunks bend.
+    /// How far along its tree each point of the stand is, for the crowns' sway in a strong wind (`freedom` sums the
+    /// four channels), an eighth the size, rows bottom first: in each of R, G, B and A, the share of one of four groups
+    /// of trees. Each trunk or limb where it enters at the picture's edge (a run of solid wood along the border) is a
+    /// tree; its label is flooded along the wood, so every twig goes with the trunk it is joined to by the shortest
+    /// path, then out into the sky and leaves round it from the nearest wood; trees round the edge in turn go to groups
+    /// 0, 1, 2, 3, 0, .... A point's share grows with how far along its tree it is from the edge, none at the trunk's
+    /// foot and all of it from 700 px on.
+    // ponytail: still step (b)'s map of four groups, each blurred and rounded apart and summed by `freedom`, so the
+    // ramp stays as it was to the byte; one channel would do once the crowns' sway is retuned
     static func trees(_ wood: [UInt8], _ sw: Int, _ sh: Int) -> Data {
         let (w, h) = (sw / 4, sh / 4) // a quarter the size: the most of each 4 px block, and its mean
         var most = [Float](repeating: 0, count: w * h), mean = most
