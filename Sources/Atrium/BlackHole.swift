@@ -339,8 +339,9 @@ final class BlackHole: SKScene, BatteryPaced {
     // ponytail: 4,589 of the 115,562 stars (4%) share a cell with a brighter one and are dropped, mostly faint ones
     // in the Milky Way's crowds. A grid twice as fine would keep nearly all, for four times the 8 MB.
     /// A cell's bytes are where in it the star sits (across, up), how bright it is (0 for no star, then 255 for
-    /// magnitude −1.5 down to 1 for 11) and where the black-body table keeps its colour.
-    static let starCells: [UInt8] = {
+    /// magnitude −1.5 down to 1 for 11) and where the black-body table keeps its colour. A function, not a constant,
+    /// so the 8 MB isn't held for good: Saturn's Rings makes its own texture of it, through `sharedTexture`.
+    nonisolated static func starCells() -> [UInt8] {
         let (w, h) = skyCells
         var cells = [UInt8](repeating: 0, count: w * h * 4)
         let packed = try? Data(contentsOf: resource("blackhole-stars.lzfse")) as NSData
@@ -358,9 +359,9 @@ final class BlackHole: SKScene, BatteryPaced {
             cells[at..<at + 4] = [UInt8((x - x.rounded(.down)) * 256), UInt8((y - y.rounded(.down)) * 256), bright, UInt8(min(max(hue, 0), 255))]
         }
         return cells
-    }()
+    }
 
-    private static let catalogue = table(starCells, skyCells.across, skyCells.up)
+    private static let catalogue = table(starCells(), skyCells.across, skyCells.up)
 
     /// The Milky Way with its own stars taken out (ESO/S. Brunier's panorama, Resources/blackhole-glow.heic), stored
     /// lighter than it is. It has smaller copies of itself for where the hole squeezes the whole sky into a few pixels.

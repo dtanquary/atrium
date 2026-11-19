@@ -189,7 +189,7 @@ func blackBodyKeepsToTheLocus(kelvin: Double, x: Double, y: Double) {
     let seen = toGalactic.transpose * (Sky.galactic * Sky.direction(6.7525 * 15, -16.7161))
     let (w, h) = BlackHole.skyCells
     let x = Int((atan2(seen.x, seen.z) / (2 * .pi) + 0.5) * Double(w)), y = Int((asin(seen.y) / .pi + 0.5) * Double(h))
-    let cells = BlackHole.starCells
+    let cells = BlackHole.starCells()
     #expect(cells[(y * w + x) * 4 + 2] == 254, "no Sirius at cell \(x), \(y)")
     let kept = stride(from: 2, to: cells.count, by: 4).count { cells[$0] > 0 }
     print("Black Hole: \(kept) of 115,562 stars have a cell of their own")

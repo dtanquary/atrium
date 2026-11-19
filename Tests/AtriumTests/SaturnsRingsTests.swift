@@ -29,6 +29,35 @@ import UniformTypeIdentifiers
     }
 }
 
+/// How long the main thread takes to build the scene and draw its first frame at 3024 × 1964: the first copy, which
+/// makes the shared textures (the pyramid, the star grid, the Milky Way's glow read from its HEIC), and a second,
+/// which shares them. Prints them; docs/saturns-rings.md, Cost, has a release build's.
+@MainActor @Test func saturnsRingsBuildTime() throws {
+    let device = try #require(MTLCreateSystemDefaultDevice()), queue = try #require(device.makeCommandQueue())
+    let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: 3024, height: 1964, mipmapped: false)
+    descriptor.usage = [.renderTarget]
+    let pass = MTLRenderPassDescriptor()
+    pass.colorAttachments[0].texture = try #require(device.makeTexture(descriptor: descriptor))
+    var held: [SaturnsRings] = [] // so the second copy shares the first's textures
+    var times: [String] = []
+    for copy in ["first", "second"] {
+        var start = CFAbsoluteTimeGetCurrent()
+        let scene = SaturnsRings(size: CGSize(width: 1512, height: 982), from: 2, moment: 0)
+        let built = CFAbsoluteTimeGetCurrent() - start
+        held.append(scene)
+        let renderer = SKRenderer(device: device)
+        renderer.scene = scene
+        start = CFAbsoluteTimeGetCurrent()
+        renderer.update(atTime: 1)
+        let buffer = try #require(queue.makeCommandBuffer())
+        renderer.render(withViewport: CGRect(x: 0, y: 0, width: 3024, height: 1964), commandBuffer: buffer, renderPassDescriptor: pass)
+        buffer.commit()
+        buffer.waitUntilCompleted()
+        times.append(String(format: "%@ built in %.0f ms, its first frame drawn in %.0f ms", copy, built * 1000, (CFAbsoluteTimeGetCurrent() - start) * 1000))
+    }
+    print("Saturn's Rings: " + times.joined(separator: "; "))
+}
+
 /// Every glide, from any view anywhere in its drift (a hold can end at any point of it) or from halfway through
 /// another glide (as when a view is picked in Settings then), to any other view, from either face, starts where the
 /// camera was, ends on the view, and stays above the ring plane and outside the planet all the way, with the Sun
@@ -267,4 +296,136 @@ private func saveQuarter(_ pixels: [UInt8], _ w: Int, _ h: Int, to url: URL) thr
     let destination = try #require(CGImageDestinationCreateWithURL(url as CFURL, UTType.jpeg.identifier as CFString, 1, nil))
     CGImageDestinationAddImage(destination, try #require(small.makeImage()), nil)
     #expect(CGImageDestinationFinalize(destination))
+}
+
+/// Horizons' Sun over Saturn's ring plane: its sub-solar latitude on Saturn (quantity 15, seen from the Earth's
+/// centre), which is planetodetic, made planetocentric by tan φc = (1 − f)² tan φd with Saturn's flattening, 0.098.
+/// Fetched from ssd.jpl.nasa.gov/api/horizons.api on 2026-11-19. The two equinoxes are the published ones (Cassini's
+/// of 2009 and the one of 6 May 2025), and 2032-05-15 is near the solstice.
+private let horizons: [(day: String, up: Double)] = [
+    ("2009-08-11", -0.002), ("2025-05-06", 0.010), ("2026-11-18", -8.360), ("2028-06-01", -16.227), ("2032-05-15", -26.725),
+    ("2036-01-01", -16.644), ("2038-10-15", -1.541), ("2039-01-15", -0.121), ("2039-06-01", 1.976),
+]
+
+private func day(_ text: String) -> Date {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withFullDate]
+    return formatter.date(from: text)!
+}
+
+/// The Sun's height over the ring plane from the date, by `SkyMath`'s orbit for Saturn and the IAU's pole, agrees
+/// with JPL Horizons' to a tenth of a degree from Cassini's equinox to the next one, and the date pin is read.
+@Test func saturnsRingsSunMatchesHorizons() {
+    for (text, want) in horizons {
+        let jd = Sky.julianDate(day(text)), got = asin(simd_dot(Sky.sun(from: .saturn, jd), SaturnsRings.pole(jd))) * 180 / .pi
+        #expect(abs(got - want) < 0.1, "\(text): \(got)° against Horizons' \(want)°")
+    }
+    #expect(abs(SaturnsRings.light(on: day("2032-05-15")).up + 26.725) < 0.1)
+    UserDefaults.standard.set("2032-05-15", forKey: "saturn.date")
+    defer { UserDefaults.standard.removeObject(forKey: "saturn.date") }
+    #expect(SaturnsRings.date == day("2032-05-15"))
+}
+
+/// The dates the Sun is `up` degrees over the ring plane near the 2039 equinox, found by halving between Horizons'
+/// 2038-10-15 and 2039-06-01.
+private func equinox(_ up: Double) -> Date {
+    var (early, late) = (day("2038-10-15"), day("2039-06-01"))
+    for _ in 0..<40 {
+        let mid = early.addingTimeInterval(late.timeIntervalSince(early) / 2)
+        if SaturnsRings.light(on: mid).up < up { early = mid } else { late = mid }
+    }
+    return early
+}
+
+/// Every view from both faces at six dates (today, mid-2028, the 2032 solstice, a Sun 1.5° south in 2038, and 0.1°
+/// either side of the plane at the 2039 equinox), at 3024 × 1964: prints each one's luma (Rec. 709) at the median,
+/// 99th, 99.9th and max, and saves it a quarter across to `SNAPSHOT_DIR` as `dates-<date>-<face>-<view>.jpg`, for
+/// docs/saturns-rings/build-dates.jpg. Opt-in:
+///
+///     RINGS_DATES=1 SNAPSHOT_DIR=/some/dir swift test --filter saturnsRingsDates
+@MainActor @Test(.enabled(if: ProcessInfo.processInfo.environment["RINGS_DATES"] != nil))
+func saturnsRingsDates() throws {
+    let dir = URL(fileURLWithPath: ProcessInfo.processInfo.environment["SNAPSHOT_DIR"] ?? NSTemporaryDirectory() + "atrium-snapshots")
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    let device = try #require(MTLCreateSystemDefaultDevice()), queue = try #require(device.makeCommandQueue())
+    let (w, h) = (3024, 1964)
+    let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: w, height: h, mipmapped: false)
+    descriptor.usage = [.renderTarget, .shaderRead]
+    descriptor.storageMode = .shared
+    let texture = try #require(device.makeTexture(descriptor: descriptor))
+    let pass = MTLRenderPassDescriptor()
+    pass.colorAttachments[0].texture = texture
+    pass.colorAttachments[0].loadAction = .clear
+    pass.colorAttachments[0].storeAction = .store
+    defer { UserDefaults.standard.removeObject(forKey: SaturnsRings.face.key) }
+    let dates = [("2026-11-19", day("2026-11-19")), ("2028-06-01", day("2028-06-01")), ("2032-05-15", day("2032-05-15")),
+                 ("2038-10-15", day("2038-10-15")), ("south-0.1", equinox(-0.1)), ("north-0.1", equinox(0.1))]
+    for (name, date) in dates {
+        for lit in [false, true] {
+            UserDefaults.standard.set(lit ? 1.0 : 0.0, forKey: SaturnsRings.face.key)
+            for view in SaturnsRings.views.indices {
+                let renderer = SKRenderer(device: device)
+                // Daphnis Close as its tile has it, the moon 0.6 Mm ahead
+                renderer.scene = SaturnsRings(size: CGSize(width: w / 2, height: h / 2), from: view, moment: SaturnsRings.views[view].moon == nil ? 0 : 300.3, date: date)
+                renderer.update(atTime: 1)
+                let buffer = try #require(queue.makeCommandBuffer())
+                renderer.render(withViewport: CGRect(x: 0, y: 0, width: w, height: h), commandBuffer: buffer, renderPassDescriptor: pass)
+                buffer.commit()
+                buffer.waitUntilCompleted()
+                var pixels = [UInt8](repeating: 0, count: w * h * 4)
+                texture.getBytes(&pixels, bytesPerRow: w * 4, from: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0)
+                var histogram = [Int](repeating: 0, count: 256)
+                for i in stride(from: 0, to: pixels.count, by: 4) {
+                    histogram[min(255, Int((0.0722 * Double(pixels[i]) + 0.7152 * Double(pixels[i + 1]) + 0.2126 * Double(pixels[i + 2])).rounded()))] += 1
+                }
+                func percentile(_ p: Double) -> Int {
+                    var sum = 0
+                    for (value, n) in histogram.enumerated() { sum += n; if Double(sum) >= p * Double(w * h) { return value } }
+                    return 255
+                }
+                print(String(format: "Saturn's Rings dates %@ %@ %d (Sun %.2f°): %d %d %d %d", name, lit ? "lit" : "unlit", view + 1,
+                             SaturnsRings.light(on: date).up, percentile(0.5), percentile(0.99), percentile(0.999), histogram.lastIndex { $0 > 0 } ?? 0))
+                try saveQuarter(pixels, w, h, to: dir.appendingPathComponent("dates-\(name)-\(lit ? "lit" : "unlit")-\(view + 1).jpg"))
+            }
+        }
+    }
+}
+
+/// A tenth of a degree either side of the plane, as at the 2039 equinox: the camera is on the side the Sun isn't (or
+/// is, lit), the light is kept off the plane itself, and every view draws with no pixel black (where a division by
+/// nothing would leave a NaN) and none flat.
+@MainActor @Test func saturnsRingsDrawAtTheEquinox() throws {
+    let device = try #require(MTLCreateSystemDefaultDevice()), queue = try #require(device.makeCommandQueue())
+    let (w, h) = (756, 491)
+    let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: w, height: h, mipmapped: false)
+    descriptor.usage = [.renderTarget, .shaderRead]
+    descriptor.storageMode = .shared
+    let texture = try #require(device.makeTexture(descriptor: descriptor))
+    let pass = MTLRenderPassDescriptor()
+    pass.colorAttachments[0].texture = texture
+    pass.colorAttachments[0].loadAction = .clear
+    pass.colorAttachments[0].storeAction = .store
+    defer { UserDefaults.standard.removeObject(forKey: SaturnsRings.face.key) }
+    for up in [-0.1, 0.1] {
+        let date = equinox(up)
+        #expect(abs(SaturnsRings.light(on: date).up - up) < 0.01)
+        for lit in [false, true] {
+            UserDefaults.standard.set(lit ? 1.0 : 0.0, forKey: SaturnsRings.face.key)
+            let axes = SaturnsRings.Camera(r: 126, h: 4, yaw: 38, pitch: 7, field: 70, sun: 320).axes(lit: lit, sunUp: up)
+            #expect((axes.at.z > 0) == ((axes.sun.z < 0) != lit), "the camera's side at \(up)°, lit \(lit)")
+            for view in SaturnsRings.views.indices {
+                let renderer = SKRenderer(device: device)
+                renderer.scene = SaturnsRings(size: CGSize(width: w / 2, height: h / 2), from: view, moment: 0, date: date)
+                renderer.update(atTime: 1)
+                let buffer = try #require(queue.makeCommandBuffer())
+                renderer.render(withViewport: CGRect(x: 0, y: 0, width: w, height: h), commandBuffer: buffer, renderPassDescriptor: pass)
+                buffer.commit()
+                buffer.waitUntilCompleted()
+                var pixels = [UInt32](repeating: 0, count: w * h)
+                texture.getBytes(&pixels, bytesPerRow: w * 4, from: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0)
+                let black = pixels.count { $0 & 0xFFFFFF == 0 }, colours = Set(stride(from: 0, to: pixels.count, by: 97).map { pixels[$0] })
+                #expect(black == 0 && colours.count > 20, "\(SaturnsRings.views[view].name) at \(up)°, lit \(lit): \(black) black pixels")
+            }
+        }
+    }
 }

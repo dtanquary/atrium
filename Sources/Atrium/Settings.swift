@@ -504,7 +504,7 @@ struct AboutPage: View {
                 group("Fish Tank", "Reef photos from iNaturalist, Wikimedia Commons and NOAA", "reef-credits.tsv")
                 group("Space Tour: the Solar System", "Photos from NASA, ESA, JAXA and the people who processed them", "solar-photos.tsv")
                 group("Space Tour: deep space", "Photos from ESA/Hubble, ESA/Webb, ESO, NOIRLab, Euclid, Chandra and the EHT", "deep-photos.tsv")
-                group("Black Hole", "The Milky Way from ESO, and the HYG catalogue's stars", "blackhole-credits.tsv")
+                group("Black Hole and Saturn's Rings", "The Milky Way from ESO, and the HYG catalogue's stars", "blackhole-credits.tsv")
                 group("Etching", "Prints, plates, drawings and maps from The Met, Wellcome Collection, the Rijksmuseum, the Biblioteca Nacional de España, the Library of Congress, the US Patent Office and more libraries, museums and map collections", "etching-credits.tsv")
             } header: {
                 Text("Photos")

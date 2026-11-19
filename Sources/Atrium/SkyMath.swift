@@ -110,6 +110,11 @@ enum Sky {
         normalize(equatorial(fromEcliptic: -heliocentric("Earth", centuries(jd))))
     }
 
+    /// The Sun as seen from a planet's centre (Saturn's Rings lights its rings by it).
+    static func sun(from planet: Planet, _ jd: Double) -> Vector {
+        normalize(equatorial(fromEcliptic: -heliocentric(planet.rawValue, centuries(jd))))
+    }
+
     /// The Sun's ecliptic longitude (J2000) in degrees, 0..<360: what meteor showers are dated by.
     static func sunLongitude(_ jd: Double) -> Double {
         let earth = heliocentric("Earth", centuries(jd))

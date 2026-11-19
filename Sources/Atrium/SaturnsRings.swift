@@ -1,3 +1,4 @@
+import ImageIO
 import SpriteKit
 
 @MainActor func saturnsRingsScene(size: CGSize) -> SKScene { SaturnsRings(size: size) }
@@ -67,10 +68,47 @@ final class SaturnsRings: SKScene, BatteryPaced {
     /// The most a glide moves the camera along the rings, in heights a second: 0.02, so the ground under it crosses at
     /// most about 2% of the way to it a second.
     nonisolated static let calm = 0.02
-    /// The Sun's height over the ring plane, in degrees (negative: south).
-    // ponytail: fixed at 8.4° south, right for 2026-11-18, which drifts from the real one by about 0.3° a month (it
-    // climbs to 27° by the 2032 solstice); from the date in step (d) of the build order.
-    nonisolated static let sunUp = -8.4
+    /// Saturn's north pole on the sky (J2000 equatorial), the IAU's: right ascension 40.589° − 0.036°T, declination
+    /// 83.537° − 0.004°T, T in Julian centuries from J2000 (Archinal et al. 2018, the IAU WGCCRE report of 2015). The
+    /// rings lie in Saturn's equator.
+    nonisolated static func pole(_ jd: Double) -> Sky.Vector {
+        let t = (jd - 2451545) / 36525
+        return Sky.direction(40.589 - 0.036 * t, 83.537 - 0.004 * t)
+    }
+
+    /// The light on `date`: the Sun's height over the ring plane as seen from Saturn, in degrees (negative is south;
+    /// kept at least 0.05° off the plane, more than the Sun's own radius there, 0.03°, as the shader divides by it),
+    /// and the turn from a direction with the Sun at azimuth 0 round the pole, as the shader has it, to the frame
+    /// Black Hole's star and glow files are in (`NightSky.toStars`), so each view's sky is the real one round its Sun.
+    /// It moves about 0.3° a month, so it's read as the scene is built.
+    nonisolated static func light(on date: Date) -> (up: Double, sky: simd_double3x3) {
+        let jd = Sky.julianDate(date), pole = pole(jd), sun = Sky.sun(from: .saturn, jd)
+        let height = asin(simd_dot(sun, pole)) * 180 / .pi
+        let across = simd_normalize(sun - simd_dot(sun, pole) * pole)
+        return (height < 0 ? min(height, -0.05) : max(height, 0.05),
+                NightSky.toStars * simd_double3x3(columns: (across, simd_cross(pole, across), pole)))
+    }
+
+    /// How much more exposure the rings take when the Sun is lower over them than the 8.4° the exposures were set
+    /// for, by how much less light reaches them (the sine of its height): to the 0.5 from the lit face, up to 10 times,
+    /// and to the 0.75 from the unlit, up to 30, as light through the rings fades faster as the Sun nears their plane.
+    /// Near the 2039 equinox the rings go dark, edge on to the Sun, and the views of rings alone would be all but
+    /// empty: at 0.1° their 99th percentile fell to 17–21 of 255. Never less than 1: a higher Sun brightens them, as it
+    /// really does, and keeps within the caps (docs/saturns-rings.md, The build so far, (d)). The planet's exposure is
+    /// its own.
+    // ponytail: a law fitted by eye to the dates measured (2038's 1.6° and the equinox's 0.1°), keeping the views of
+    // rings alone within about a fifth of today's 99th percentile, not the rings' real photometry; work it out from
+    // the slab's light if a date between looks too bright or too dark.
+    nonisolated static func lift(_ sunUp: Double, lit: Bool) -> Double {
+        min(max(pow(sin(8.4 * .pi / 180) / sin(abs(sunUp) * .pi / 180), lit ? 0.5 : 0.75), 1), lit ? 10 : 30)
+    }
+
+    /// The day the light is worked out for: `saturn.date` (YYYY-MM-DD, for pictures, not in Settings), else now.
+    nonisolated static var date: Date {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withFullDate]
+        return UserDefaults.standard.string(forKey: "saturn.date").flatMap(formatter.date(from:)) ?? Date()
+    }
     /// Daphnis's orbit, Mm from Saturn's centre.
     nonisolated static let daphnis = 136.504
 
@@ -84,13 +122,14 @@ final class SaturnsRings: SKScene, BatteryPaced {
 
         /// Where the camera is, its axes, and the way to the Sun, in Mm with Saturn at the origin, the ring plane at
         /// z = 0 and the camera on +x: on the face the Sun isn't on, or with `lit`, the face it is on, which is the
-        /// same view mirrored.
-        func axes(lit: Bool = false) -> (at: SIMD3<Double>, right: SIMD3<Double>, up: SIMD3<Double>, ahead: SIMD3<Double>, sun: SIMD3<Double>) {
-            let side: Double = (SaturnsRings.sunUp < 0) != lit ? 1 : -1, (yaw, pitch) = (yaw * .pi / 180, pitch * .pi / 180)
+        /// same view mirrored. `sunUp` is the Sun's height over the ring plane in degrees (as on 2026-11-18 unless
+        /// given): the faces change sides when it crosses the plane.
+        func axes(lit: Bool = false, sunUp: Double = -8.4) -> (at: SIMD3<Double>, right: SIMD3<Double>, up: SIMD3<Double>, ahead: SIMD3<Double>, sun: SIMD3<Double>) {
+            let side: Double = (sunUp < 0) != lit ? 1 : -1, (yaw, pitch) = (yaw * .pi / 180, pitch * .pi / 180)
             var ahead = cos(yaw) * SIMD3<Double>(-1, 0, 0) + sin(yaw) * SIMD3<Double>(0, 1, 0)
             ahead = simd_normalize(cos(pitch) * ahead + sin(pitch) * SIMD3(0, 0, -side))
             let right = simd_normalize(simd_cross(ahead, SIMD3(0, 0, side)))
-            let (up, round) = (SaturnsRings.sunUp * .pi / 180, sun * .pi / 180)
+            let (up, round) = (sunUp * .pi / 180, sun * .pi / 180)
             return (SIMD3(r, 0, side * h), right, simd_cross(right, ahead), ahead, SIMD3(cos(up) * cos(round), cos(up) * sin(round), sin(up)))
         }
     }
@@ -163,6 +202,8 @@ final class SaturnsRings: SKScene, BatteryPaced {
     private let cam = SKUniform(name: "u_cam", vectorFloat3: .zero), rot = SKUniform(name: "u_rot", matrixFloat3x3: matrix_identity_float3x3)
     private let sunUniform = SKUniform(name: "u_sun", vectorFloat3: .zero), lens = SKUniform(name: "u_lens", vectorFloat2: .zero)
     private let moonUniform = SKUniform(name: "u_moon", vectorFloat2: .zero), starsUniform = SKUniform(name: "u_stars", float: 1)
+    /// The Sun's height over the ring plane in degrees, for the day the scene was built (`light(on:)`).
+    let sunUp: Double
     private let exposure = SKUniform(name: "u_exposure", float: 1), planetExposure = SKUniform(name: "u_planetExposure", float: 1)
     private let colours = (0..<5).map { SKUniform(name: "u_c\($0)", vectorFloat3: .zero) }
     /// The face whose colours are in `colours`.
@@ -170,24 +211,49 @@ final class SaturnsRings: SKScene, BatteryPaced {
 
     /// Starts holding `first` (the view picked in Settings, else one at random), `moment` seconds in (the
     /// `saturn.moment` default if nil, for pictures), or with `next`, gliding from it to `next`, `moment` seconds in
-    /// (for tests).
-    init(size: CGSize, from first: Int? = nil, to next: Int? = nil, moment: Double? = nil) {
+    /// (for tests), in the light of `date` (`SaturnsRings.date` if nil).
+    init(size: CGSize, from first: Int? = nil, to next: Int? = nil, moment: Double? = nil, date: Date? = nil) {
         let picked = Int(Self.view.value) - 1, moment = moment ?? UserDefaults.standard.double(forKey: "saturn.moment")
         current = first ?? (picked >= 0 ? picked : Self.views.indices.randomElement()!)
         (since, drift) = (-moment, moment * Self.speed.value)
+        let light = Self.light(on: date ?? Self.date)
+        sunUp = light.up
         super.init(size: size)
         batteryRate = Self.rate(Self.views[current], speed: Self.speed.value)
 
-        // ponytail: the profile is read on every build (10 ms in release, the pyramid's bake 8.5 ms more for the
-        // first copy) though the shader takes only its first radius, step and length; keep those beside the shared
-        // pyramid if building gets slow.
+        // ponytail: the first copy builds on the main thread in about 50 ms in release (the profile read 10, the
+        // pyramid's bake 8.5, the star grid 6, the glow 8), about 150 while the HEIC decoder first starts; a second,
+        // sharing the textures, in 8. Bake them off the main thread behind a still if a switch to it is seen to stall.
+        // The profile is read on every build though the shader takes only its first radius, step and length: keep
+        // those beside the shared pyramid first.
         let rings = RingProfile.load()
         let table = sharedTexture("saturn-rings-pyramid") { rings.pyramid() }
+        // The real stars and the Milky Way's glow, Black Hole's (each 2,048 × 1,024, the stars 8 MB): the stars a
+        // grid of cells, read at their centres.
+        let catalogue = sharedTexture("blackhole-star-cells") {
+            let cells = SKTexture(data: Data(BlackHole.starCells()), size: CGSize(width: BlackHole.skyCells.across, height: BlackHole.skyCells.up))
+            cells.filteringMode = .nearest
+            return cells
+        }
+        let glow = sharedTexture("saturn-rings-glow") {
+            // At half its size, 1,024 across: a soft glow, magnified some 15 times on the screen even so, that reads
+            // in 15 ms rather than 22 to 35 (with the HEIC decoder already running) and takes 2 MB rather than 8.
+            let options = [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceThumbnailMaxPixelSize: 1024,
+                           kCGImageSourceShouldCacheImmediately: true] as CFDictionary
+            guard let source = CGImageSourceCreateWithURL(resource("blackhole-glow.heic") as CFURL, nil),
+                  let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options) else {
+                return SKTexture(data: Data([0, 0, 0, 255]), size: CGSize(width: 1, height: 1))
+            }
+            return SKTexture(cgImage: image)
+        }
+        let turn = simd_float3x3(columns: (SIMD3<Float>(light.sky.columns.0), SIMD3<Float>(light.sky.columns.1), SIMD3<Float>(light.sky.columns.2)))
         let sprite = SKSpriteNode(color: .black, size: size)
         sprite.anchorPoint = .zero
         sprite.shader = SKShader(source: shaderCommon + saturnsRingsSource(rings), uniforms: [
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]), SKUniform(name: "u_table", texture: table),
             cam, rot, sunUniform, lens, moonUniform, starsUniform, exposure, planetExposure,
+            SKUniform(name: "u_catalogue", texture: catalogue), SKUniform(name: "u_galaxy", texture: glow),
+            SKUniform(name: "u_sky", matrixFloat3x3: turn),
         ] + colours)
         addChild(sprite)
 
@@ -246,14 +312,14 @@ final class SaturnsRings: SKScene, BatteryPaced {
 
     /// Hands the camera, and the settings that change how it's drawn, to the shader.
     private func show() {
-        let lit = Self.face.value > 0.5, camera = camera(lit: lit), axes = camera.axes(lit: lit)
+        let lit = Self.face.value > 0.5, camera = camera(lit: lit), axes = camera.axes(lit: lit, sunUp: sunUp)
         let tangent = Float(tan(camera.field / 2 * .pi / 180)), brightness = Self.brightness.value
         cam.vectorFloat3Value = SIMD3<Float>(axes.at)
         rot.matrixFloat3x3Value = matrix_float3x3(columns: (SIMD3<Float>(axes.right), SIMD3<Float>(axes.up), SIMD3<Float>(axes.ahead)))
         sunUniform.vectorFloat3Value = SIMD3<Float>(axes.sun)
         lens.vectorFloat2Value = [tangent, tangent * Float(size.height / size.width)]
         moonUniform.vectorFloat2Value = [Float(camera.ahead / Self.daphnis), Float(camera.moon)]
-        exposure.floatValue = Float(camera.exposure * brightness)
+        exposure.floatValue = Float(camera.exposure * brightness * Self.lift(sunUp, lit: lit))
         planetExposure.floatValue = Float((lit ? camera.exposure : min(camera.exposure, Self.planetMost)) * brightness)
         starsUniform.floatValue = Float(Self.stars.value)
         if coloured != lit {
@@ -350,21 +416,6 @@ private func saturnsRingsSource(_ rings: RingProfile) -> String {
         "vec4 \(v)At = pyrAt(\(u), \(w), \(k)); vec4 \(v)0 = texture2D(u_table, \(v)At.xy); vec4 \(v)1 = texture2D(u_table, \(v)At.xz); float \(v) = mix(pyrOf(\(v)0), pyrOf(\(v)1), \(v)At.w); float \(v)Alb = \(v)0.b * 0.5;"
     }
     return """
-    // Faint sparse stars, display values: luma 30 at most (the look report's cap), fixed to the sky so they turn
-    // with the camera in a glide. q is the way to look with the Sun at azimuth 0, perPt the points to a radian. The
-    // sky is a cube, each face in cells 0.0065 across (7 points at 70 degrees across, the mock-ups' grid).
-    // ponytail: random stars; the real catalogue and Milky Way from Black Hole's in step (d) of the build order.
-    float stars(vec3 q, float perPt) {
-        vec3 a = abs(q);
-        vec2 f = a.x >= max(a.y, a.z) ? q.yz / a.x : a.y >= a.z ? q.xz / a.y : q.xy / a.z;
-        float face = a.x >= max(a.y, a.z) ? 1.0 + sign(q.x) : a.y >= a.z ? 3.0 + sign(q.y) : 5.0 + sign(q.z);
-        vec2 g = f / 0.0065;
-        vec4 r = hash42(floor(g) + vec2(face * 400.0, 0.0));
-        if (r.x > 0.05) { return 0.0; }
-        vec2 off = (r.yz - 0.5) * 0.6;
-        float d = length(fract(g) - 0.5 - off) * 0.0065 * perPt;
-        return smoothstep(0.9, 0.0, d) * (0.25 + 0.75 * pow(r.w, 4.0)) * 30.0 / 255.0;
-    }
     // Where the pyramid keeps the mean of exp(-tau k) over a box 2w texels wide, in the two rows of k round k.
     vec4 pyrAt(float u, float w, float k) {
         float m = clamp(log2(2.0 * w), 0.0, 11.999), j = clamp(log2(max(k, 1.0)), 0.0, 10.999), j0 = floor(j);
@@ -496,10 +547,49 @@ private func saturnsRingsSource(_ rings: RingProfile) -> String {
         // exposure and a knee that stays nearly straight to luma 185 (Cassini's contrast kept) and never passes 214
         lin = max(lin, 0.0);
         vec3 col = pow(lin / sqrt(sqrt(1.0 + pow(lin / 0.68, vec3(4.0)))), vec3(0.4545));
-        // the sky: near-black (luma 4-8) and faint stars, both behind whatever the rings let through
-        vec2 toSun = normalize(s.xy);
-        vec3 q = vec3(toSun.x * d.x + toSun.y * d.y, toSun.x * d.y - toSun.y * d.x, d.z);
-        col += (6.0 / 255.0 + stars(q, u_size.x / (2.0 * u_lens.x)) * u_stars) * sky;
+        // The sky: near-black (luma 6), the Milky Way's glow (stored as its value to the 0.6: up to about 17 more at
+        // the galactic centre, 7 at the 99th percentile) and the real stars, all behind whatever the rings let through.
+        // `q` is the way to look with the Sun at azimuth 0 round the pole, `u_sky` turns it to the files' frame,
+        // where longitude is atan(x, z) and latitude asin(y) across and up each (the star grid's cells 2,048 by 1,024).
+        // Only where the sky shows: through the rings it shows a little almost everywhere, but where it shows less
+        // than 1/60 the most the stars and glow add (30 of 255) is under half a level. (The glow file has no smaller
+        // copies of itself, so it can be read in a branch.)
+        vec3 glow = vec3(0.0), starLight = vec3(0.0);
+        if (sky > 0.017 && u_stars > 0.0) {
+            vec2 toSun = normalize(s.xy);
+            vec3 q = vec3(toSun.x * d.x + toSun.y * d.y, toSun.x * d.y - toSun.y * d.x, d.z);
+            vec3 there = u_sky * q;
+            float lon = atan(there.x, there.z), lat = asin(clamp(there.y, -1.0, 1.0));
+            vec2 place = vec2(lon / 6.2831853 + 0.5, lat / 3.1415927 + 0.5);
+            glow = pow(texture2D(u_galaxy, place).rgb, vec3(1.667)) * 18.0 / 255.0;
+            // The stars: any near enough to light this pixel is in a cell that comes within `reach` of it, a star's
+            // radius in cells: one or two each way, but more across toward the files' poles, where a cell is narrower
+            // than a star (to 6 either side, past which, within 3° of the poles, a star is cut). A cell is 0.003068
+            // rad tall, and that times the cosine of the latitude wide; a star is a dot 0.9 points in radius,
+            // at luma 30 for the brightest (its code 1, magnitude -1.5), falling as the square of the code, so 5 at
+            // magnitude 6 and gone by 9. Its colour, from its temperature (Black Hole's place in its black-body
+            // table, about 0.4 at 3,000 K to 0.7 at 10,000 K), only a hint at these levels.
+            // ponytail: two colours by temperature, not Black Hole's black-body table (a fourth texture), as no star
+            // passes luma 30; the table if they're ever drawn bright enough for colour to show. And a star within 3°
+            // of the files' poles is cut, where its cells are too narrow to search: search further if one is seen.
+            float perPt = u_size.x / (2.0 * u_lens.x), wide = 0.003068 * max(cos(lat), 0.001) * perPt, tall = 0.003068 * perPt;
+            vec2 at = place * vec2(2048.0, 1024.0), reach = vec2(min(0.9 / wide, 6.0), 0.9 / tall);
+            vec2 low = floor(at - reach), high = floor(at + reach);
+            for (int j = 0; j < 2; j++) {
+                if (low.y + float(j) > high.y) { break; }
+                for (int i = 0; i < 13; i++) {
+                    if (low.x + float(i) > high.x) { break; }
+                    vec2 cell = low + vec2(float(i), float(j));
+                    vec4 star = texture2D(u_catalogue, (vec2(mod(cell.x, 2048.0), clamp(cell.y, 0.0, 1023.0)) + 0.5) / vec2(2048.0, 1024.0));
+                    if (star.b > 0.0) {
+                        vec2 off = (cell + (star.rg * 255.0 + 0.5) / 256.0 - at) * vec2(wide, tall);
+                        vec3 hue = mix(vec3(1.0, 0.85, 0.68), vec3(0.8, 0.88, 1.0), smoothstep(0.4, 0.7, star.a));
+                        starLight += hue * smoothstep(0.9, 0.0, length(off)) * star.b * star.b * 30.0 / 255.0;
+                    }
+                }
+            }
+        }
+        col += (6.0 / 255.0 + min(glow + starLight, vec3(30.0 / 255.0)) * u_stars) * sky; // the look report's cap
         col += 3.0 / 255.0 * (1.0 - sky);
         col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 255.0;
         gl_FragColor = vec4(col, 1.0);
