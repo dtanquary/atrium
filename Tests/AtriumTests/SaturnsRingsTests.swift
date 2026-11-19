@@ -29,19 +29,19 @@ import UniformTypeIdentifiers
     }
 }
 
-/// Every glide, from the end of any view's hold or from halfway through it (as when another view is picked in
-/// Settings) to any other view, starts where the camera was, ends on the view, and stays above the ring plane and
-/// outside the planet all the way, with the Sun never within 30° of behind the planet, where its shadow would cross
-/// the camera.
+/// Every glide, from any view anywhere in its drift (a hold can end at any point of it) or from halfway through
+/// another glide (as when a view is picked in Settings then), to any other view, from either face, starts where the
+/// camera was, ends on the view, and stays above the ring plane and outside the planet all the way, with the Sun
+/// never within 30° of behind the planet, where its shadow would cross the camera.
 @Test func saturnsRingsGlidesStayClear() {
-    let views = SaturnsRings.views
+    let views = SaturnsRings.views, swing = SaturnsRings.swing
     for (i, a) in views.enumerated() {
         for (j, b) in views.enumerated() where i != j {
-            for moment in [SaturnsRings.hold, SaturnsRings.hold / 2, -1] {
+            for (moment, lit) in [0, swing / 4, swing / 2, swing, 1.5 * swing, -1].flatMap({ m in [(m, false), (m, true)] }) {
                 // -1: from halfway through a glide out of `b`, as when `b` is picked again in Settings mid-glide
-                let from = moment >= 0 ? SaturnsRings.held(a, for: moment)
-                    : SaturnsRings.between(SaturnsRings.held(b, for: SaturnsRings.hold), SaturnsRings.held(a, for: 0), 0.5)
-                let to = SaturnsRings.held(b, for: 0)
+                let from = moment >= 0 ? SaturnsRings.held(a, for: moment, lit: lit)
+                    : SaturnsRings.between(SaturnsRings.held(b, for: swing, lit: lit), SaturnsRings.held(a, for: 0, lit: lit), 0.5)
+                let to = SaturnsRings.held(b, for: 0, lit: lit)
                 for step in 0...200 {
                     let camera = SaturnsRings.between(from, to, Double(step) / 200)
                     let outside = pow(camera.r / 60.268, 2) + pow(camera.h / 54.364, 2)
@@ -52,7 +52,7 @@ import UniformTypeIdentifiers
                 for (got, want) in [(start, from), (end, to)] {
                     #expect(abs(got.r - want.r) + abs(got.h - want.h) + abs(remainder(got.yaw - want.yaw, 360)) + abs(got.pitch - want.pitch)
                             + abs(got.field - want.field) + abs(remainder(got.sun - want.sun, 360)) + abs(got.moon - want.moon)
-                            + (want.moon > 0 ? abs(got.ahead - want.ahead) : 0) < 1e-9,
+                            + (want.moon > 0 ? abs(got.ahead - want.ahead) : 0) + abs(log(got.exposure / want.exposure)) < 1e-9,
                             "\(a.name) to \(b.name)")
                 }
             }
@@ -76,7 +76,7 @@ import UniformTypeIdentifiers
 /// within 1 Mm; the planet, whose night side and ring shadows do; the stars, which keep to the Sun's frame), and as
 /// moving with Daphnis where its waves are a tenth of a km or more, as the shader draws them; the larger counts.
 private func fastest(_ a: SaturnsRings.Camera, _ b: SaturnsRings.Camera, across: Int = 48, up: Int = 32) -> Double {
-    let (w, h) = (3024.0, 1964.0), (from, to) = (a.axes, b.axes)
+    let (w, h) = (3024.0, 1964.0), (from, to) = (a.axes(), b.axes())
     let (lensA, lensB) = (tan(a.field / 2 * .pi / 180), tan(b.field / 2 * .pi / 180))
     func turned(_ p: SIMD3<Double>, by degrees: Double) -> SIMD3<Double> {
         let (c, s) = (cos(degrees * .pi / 180), sin(degrees * .pi / 180))
@@ -126,24 +126,33 @@ private func fastest(_ a: SaturnsRings.Camera, _ b: SaturnsRings.Camera, across:
     return most
 }
 
-/// Each view's battery rate holds the fastest thing on screen to about 2 device pixels a frame (Sources/CLAUDE.md,
-/// Adding a scene), measured at 30 fps through two holds (a held view drifts out and back once a hold, Daphnis's along
-/// the gap and back over two). Glides run at the battery's own 30. Prints what it found, and each glide's fastest
-/// with `RINGS_PAIRS` set.
+/// Each view's `pace` is the fastest thing on screen as it holds, measured at 30 fps through two swings of its drift
+/// (out and back; Daphnis's along the gap and back), and at every Speed its battery rate is the lowest that holds
+/// that to about 2 device pixels a frame (Sources/CLAUDE.md, Adding a scene): 10 fps at 1× would be wrong at 4×.
+/// The mirrored lit face moves the same. Glides run at the battery's own 30. Prints what it found, and each glide's
+/// fastest with `RINGS_PAIRS` set.
 @Test func saturnsRingsMotionFitsTheBatteryRates() {
     let views = SaturnsRings.views, frame = 1.0 / 30
     var holds: [String] = []
     for view in views {
-        let most = stride(from: 0, to: 2 * SaturnsRings.hold, by: 5).map {
-            fastest(SaturnsRings.held(view, for: $0), SaturnsRings.held(view, for: $0 + frame))
-        }.max()! / frame
-        holds.append(String(format: "%@ %.1f", view.name, most))
-        #expect(most / Double(view.rate ?? 30) <= 2, "\(view.name)")
+        for speed in [1.0, 0.5, 2, 4, 10] {
+            let most = stride(from: 0, to: 2 * SaturnsRings.swing, by: 5).map {
+                fastest(SaturnsRings.held(view, for: $0), SaturnsRings.held(view, for: $0 + frame * speed))
+            }.max()! / frame
+            if speed == 1 {
+                holds.append(String(format: "%@ %.2f", view.name, most))
+                #expect(most <= view.pace && most > 0.95 * view.pace, "\(view.name)'s pace is \(most) px/s")
+            }
+            let rate = SaturnsRings.rate(view, speed: speed), lower = [10, 12, 15, 20].last { $0 < rate ?? 30 }
+            if let rate { #expect(most / Double(rate) <= 2, "\(view.name) at \(speed)×") }
+            if let lower { #expect(most / Double(lower) > 2, "\(view.name) at \(speed)× could run at \(lower) fps") }
+        }
     }
+    #expect(SaturnsRings.rate(views[1], speed: 0) == 10)
     var glideMost = (0.0, "")
     for (i, a) in views.enumerated() {
         for (j, b) in views.enumerated() where i != j {
-            let from = SaturnsRings.held(a, for: SaturnsRings.hold), to = SaturnsRings.held(b, for: 0)
+            let from = SaturnsRings.held(a, for: SaturnsRings.swing), to = SaturnsRings.held(b, for: 0)
             func at(_ t: Double) -> SaturnsRings.Camera {
                 let u = min(max(t / SaturnsRings.glide, 0), 1)
                 return SaturnsRings.between(from, to, u * u * (3 - 2 * u))
@@ -163,7 +172,8 @@ private func fastest(_ a: SaturnsRings.Camera, _ b: SaturnsRings.Camera, across:
 
 /// A strip of frames at 3024 × 1964, drawn as the desktop draws them at 15 and then 30 fps, through a glide
 /// (`RINGS_STRIP=0>4`, Looking In to Over the Encke Gap, the views counted from 0) or a hold (`RINGS_STRIP=5@200`,
-/// Daphnis Close from 200 s in, for `RINGS_SECONDS`, 12 by default). Prints the frame-to-frame second difference
+/// Daphnis Close from 200 s in, for `RINGS_SECONDS`, 12 by default), with any settings in `SNAPSHOT_DEFAULTS` as the
+/// render test takes them (`saturn.face=1` for the lit face). Prints the frame-to-frame second difference
 /// |f(t+1) − 2f(t) + f(t−1)| of the green channel, 1 pixel in 16, at its 99th and 99.9th percentiles (smooth motion
 /// keeps it small; crawling bands and flashes make it large), the largest change in the frame's mean from one frame
 /// to the next (an exposure jump); saves six frames, a quarter across, to `SNAPSHOT_DIR` to look at; and times 60
@@ -176,6 +186,9 @@ func saturnsRingsStrip() throws {
     let env = ProcessInfo.processInfo.environment, spec = env["RINGS_STRIP"] ?? ""
     let glide = spec.split(separator: ">").compactMap { Int($0) }, hold = spec.split(separator: "@").compactMap { Double($0) }
     let seconds = glide.count == 2 ? SaturnsRings.glide : Double(env["RINGS_SECONDS"] ?? "") ?? 12
+    let settings = (env["SNAPSHOT_DEFAULTS"] ?? "").split(separator: ",").map { $0.split(separator: "=") }.filter { $0.count == 2 }
+    for pair in settings { UserDefaults.standard.set(Double(pair[1]) ?? 0, forKey: String(pair[0])) }
+    defer { for pair in settings { UserDefaults.standard.removeObject(forKey: String(pair[0])) } }
     let dir = URL(fileURLWithPath: env["SNAPSHOT_DIR"] ?? NSTemporaryDirectory() + "atrium-snapshots")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     let device = try #require(MTLCreateSystemDefaultDevice()), queue = try #require(device.makeCommandQueue())

@@ -2,50 +2,68 @@ import SpriteKit
 
 @MainActor func saturnsRingsScene(size: CGSize) -> SKScene { SaturnsRings(size: size) }
 
-/// Saturn's rings from just above their unlit face, in today's sunlight: one shader that meets each pixel's ray with
-/// the ring plane and the planet (docs/saturns-rings.md, How it works). The camera holds one of six views for a while,
-/// drifting slowly, then glides to another at random, or holds the one picked in Settings.
+/// Saturn's rings from just above them, in today's sunlight: one shader that meets each pixel's ray with the ring
+/// plane and the planet (docs/saturns-rings.md, How it works). The camera holds one of six views for a while, drifting
+/// slowly, then glides to another at random, or holds the one picked in Settings; from the unlit face, or the lit.
 final class SaturnsRings: SKScene, BatteryPaced {
     /// A view, from the mock-ups' sheet5-unlit (docs/saturns-rings/variants.py): how far the camera is from Saturn's
-    /// centre and above the ring plane (Mm, on the face the Sun isn't on), which way it looks (degrees round from
-    /// looking in at Saturn toward the rings' orbit, and down), how wide (degrees across), and where the Sun is round
-    /// the planet from the camera (degrees). The camera keeps station against the Sun, so the light and the planet's
-    /// shadow stay put while it holds a view.
+    /// centre and from the ring plane (Mm), which way it looks (degrees round from looking in at Saturn toward the
+    /// rings' orbit, and down), how wide (degrees across), and where the Sun is round the planet from the camera
+    /// (degrees). The camera keeps station against the Sun, so the light and the planet's shadow stay put while it
+    /// holds a view.
     struct View {
         let name: String
         let r, h, yaw, pitch, field, sun: Double
-        /// How far the camera drifts out from Saturn in a hold and back (Mm; negative is in), so the bands slide by.
-        /// In Daphnis's view, how much nearer the moon comes along the Keeler gap through a hold.
+        /// How far the camera drifts out from Saturn and back (Mm; negative is in), so the bands slide by. In Daphnis's
+        /// view, how much nearer the moon comes along the Keeler gap.
         let drift: Double
+        /// The exposure from the lit face, which puts the brightest real thing in view at a 99.9th of 172 to 190 of 255
+        /// (the mock's own for each view; sheet 1's for B to E). From the unlit face every view takes `unlit`.
+        let lit: Double
+        /// How far the fastest thing on screen moves while it holds, in device px a second at Speed 1×, as
+        /// `saturnsRingsMotionFitsTheBatteryRates` measures it: the battery's ceiling follows from it and Speed.
+        let pace: Double
         /// Daphnis's distance ahead along the gap as a hold begins (Mm), in the view that shows it.
         var moon: Double?
-        /// The ceiling on battery while it holds: 10 fps where the bands creep under 9 device px a second, none (30)
-        /// in Daphnis's view, where its waves flow past the bottom of the screen at up to 45
-        /// (`saturnsRingsMotionFitsTheBatteryRates` measures them).
-        var rate: Int? = 10
     }
 
     /// The six views, in the order the View menu lists and stores them. The drift is 20 km/s at its fastest in the
-    /// views 4 Mm up, the pace the mock-ups' films found calm, and in proportion to the height in the view just
-    /// above the Encke gap, so the bands under the camera cross the screen at about the same pace. Looking in and from
-    /// above are held to 3 and 4 Mm, a few percent of the planet's distance, as their pictures are of the planet: at
-    /// the same pace they would have swung it out of frame.
+    /// views 4 Mm up at Speed 1×, the pace the mock-ups' films found calm, and in proportion to the height in the view
+    /// just above the Encke gap, so the bands under the camera cross the screen at about the same pace. Looking in and
+    /// from above are held to 3 and 4 Mm, a few percent of the planet's distance, as their pictures are of the planet:
+    /// at the same pace they would have swung it out of frame.
     nonisolated static let views = [
-        View(name: "Looking In", r: 150, h: 12, yaw: 0, pitch: 24, field: 74, sun: 60, drift: 3),
-        View(name: "Along to the Horizon", r: 126, h: 4, yaw: 70, pitch: 9, field: 70, sun: 234, drift: -3.06),
-        View(name: "Along the Planet's Edge", r: 126, h: 4, yaw: 38, pitch: 7, field: 70, sun: 320, drift: -3.06),
-        View(name: "From Above", r: 112, h: 40, yaw: 10, pitch: 38, field: 66, sun: 70, drift: -4),
-        View(name: "Over the Encke Gap", r: 134.4, h: 1.6, yaw: 86, pitch: 17, field: 60, sun: 250, drift: 1.22),
-        View(name: "Daphnis Close", r: 136.56, h: 0.12, yaw: 90, pitch: 20, field: 60, sun: 250, drift: 1.3, moon: 1.5, rate: nil),
+        View(name: "Looking In", r: 150, h: 12, yaw: 0, pitch: 24, field: 74, sun: 60, drift: 3, lit: 0.983, pace: 3.0),
+        View(name: "Along to the Horizon", r: 126, h: 4, yaw: 70, pitch: 9, field: 70, sun: 234, drift: -3.06, lit: 2.441, pace: 7.7),
+        View(name: "Along the Planet's Edge", r: 126, h: 4, yaw: 38, pitch: 7, field: 70, sun: 320, drift: -3.06, lit: 1.337, pace: 7.5),
+        View(name: "From Above", r: 112, h: 40, yaw: 10, pitch: 38, field: 66, sun: 70, drift: -4, lit: 0.989, pace: 1.7),
+        View(name: "Over the Encke Gap", r: 134.4, h: 1.6, yaw: 86, pitch: 17, field: 60, sun: 250, drift: 1.22, lit: 2.326, pace: 8.7),
+        View(name: "Daphnis Close", r: 136.56, h: 0.12, yaw: 90, pitch: 20, field: 60, sun: 250, drift: 1.3, lit: 2.023, pace: 45.1, moon: 1.5),
     ]
+    /// The exposure from the unlit face, the same in every view (the mock-ups' sheet 5), and the most the planet's own
+    /// takes there, which keeps its lit side buttercream against the dim rings.
+    nonisolated static let unlit = 1.478, planetMost = 1.52
+
     /// Cycle, or one of the views held for good. Stored as 0 for Cycle and 1 to 6 for the views in `views`' order.
     nonisolated static let view = Knob(key: "saturn.view", label: "View", range: 0...Double(views.count), standard: 0, section: "View",
                                        format: .choice(["Cycle"] + views.map(\.name)))
-    nonisolated static let knobs = [view]
-    /// How long a view holds and how long a glide to the next takes, in seconds.
-    // ponytail: constants until Settings has them (step (c) of the build order). A drift takes a hold to go out
-    // and back, so a longer hold will drift more slowly by the same distance.
-    nonisolated static let hold = 480.0, glide = 120.0
+    /// How long each view holds in Cycle, in minutes.
+    nonisolated static let hold = Knob(key: "saturn.hold", label: "Hold each view", range: 2...30, standard: 8, section: "View",
+                                       format: .minutes, shownWhen: view.key, shownAt: 0)
+    /// Which face of the rings the camera is on: 0 the unlit (the B ring dark, the A and C rings glowing), 1 the lit.
+    nonisolated static let face = Knob(key: "saturn.face", label: "Face", range: 0...1, standard: 0, section: "Look",
+                                       format: .choice(["Unlit", "Lit"]))
+    /// The exposure, times the view's own.
+    nonisolated static let brightness = Knob(key: "saturn.brightness", label: "Brightness", range: 0.5...2, standard: 1, section: "Look")
+    nonisolated static let stars = Knob(key: "saturn.stars", label: "Stars", range: 0...1, standard: 1, section: "Look", format: .toggle)
+    /// How fast the camera drifts while it holds a view (and Daphnis comes near): the drift's own clock. A hold and a
+    /// glide keep their lengths.
+    nonisolated static let speed = Knob(key: "saturn.speed", label: "Speed", range: 0...10, standard: 1, section: "Motion", format: .times)
+    nonisolated static let knobs = [view, hold, face, brightness, stars, speed]
+
+    /// How long a glide to the next view takes, and how long the drift takes to go out and back at Speed 1×, in
+    /// seconds; Daphnis comes near over half that and goes back over the other half.
+    nonisolated static let glide = 120.0, swing = 480.0
     /// The most a glide moves the camera along the rings, in heights a second: 0.02, so the ground under it crosses at
     /// most about 2% of the way to it a second.
     nonisolated static let calm = 0.02
@@ -59,13 +77,16 @@ final class SaturnsRings: SKScene, BatteryPaced {
     /// The numbers a frame is drawn from: a view's with its drift, or partway from one to another in a glide.
     struct Camera {
         var r, h, yaw, pitch, field, sun: Double
+        /// The exposure: the view's for the face it's on, before Brightness.
+        var exposure = SaturnsRings.unlit
         /// Daphnis's distance ahead along the gap (Mm), and how much of it and its waves show (1 in its view, 0 elsewhere).
         var ahead = 0.0, moon = 0.0
 
         /// Where the camera is, its axes, and the way to the Sun, in Mm with Saturn at the origin, the ring plane at
-        /// z = 0 and the camera on +x, on the face the Sun isn't on.
-        var axes: (at: SIMD3<Double>, right: SIMD3<Double>, up: SIMD3<Double>, ahead: SIMD3<Double>, sun: SIMD3<Double>) {
-            let side: Double = SaturnsRings.sunUp < 0 ? 1 : -1, (yaw, pitch) = (yaw * .pi / 180, pitch * .pi / 180)
+        /// z = 0 and the camera on +x: on the face the Sun isn't on, or with `lit`, the face it is on, which is the
+        /// same view mirrored.
+        func axes(lit: Bool = false) -> (at: SIMD3<Double>, right: SIMD3<Double>, up: SIMD3<Double>, ahead: SIMD3<Double>, sun: SIMD3<Double>) {
+            let side: Double = (SaturnsRings.sunUp < 0) != lit ? 1 : -1, (yaw, pitch) = (yaw * .pi / 180, pitch * .pi / 180)
             var ahead = cos(yaw) * SIMD3<Double>(-1, 0, 0) + sin(yaw) * SIMD3<Double>(0, 1, 0)
             ahead = simd_normalize(cos(pitch) * ahead + sin(pitch) * SIMD3(0, 0, -side))
             let right = simd_normalize(simd_cross(ahead, SIMD3(0, 0, side)))
@@ -74,15 +95,15 @@ final class SaturnsRings: SKScene, BatteryPaced {
         }
     }
 
-    /// The camera holding `view`, `time` seconds into the hold. It drifts out and back once a hold, easing at both
-    /// ends, so a glide starts and a held view repeats without a jolt; in Daphnis's view it drifts along the gap
-    /// toward the moon through one hold and back through the next.
-    nonisolated static func held(_ view: View, for time: Double) -> Camera {
-        var camera = Camera(r: view.r, h: view.h, yaw: view.yaw, pitch: view.pitch, field: view.field, sun: view.sun)
+    /// The camera holding `view`, `drift` seconds into its drift (at Speed 1×). It drifts out and back over `swing`,
+    /// easing at both ends; in Daphnis's view it drifts along the gap toward the moon over one `swing` and back over
+    /// the next.
+    nonisolated static func held(_ view: View, for drift: Double, lit: Bool = false) -> Camera {
+        var camera = Camera(r: view.r, h: view.h, yaw: view.yaw, pitch: view.pitch, field: view.field, sun: view.sun, exposure: lit ? view.lit : unlit)
         if let moon = view.moon {
-            (camera.ahead, camera.moon) = (moon - view.drift * (1 - cos(.pi * time / hold)) / 2, 1)
+            (camera.ahead, camera.moon) = (moon - view.drift * (1 - cos(.pi * drift / swing)) / 2, 1)
         } else {
-            camera.r += view.drift * (1 - cos(2 * .pi * time / hold)) / 2
+            camera.r += view.drift * (1 - cos(2 * .pi * drift / swing)) / 2
         }
         return camera
     }
@@ -93,7 +114,7 @@ final class SaturnsRings: SKScene, BatteryPaced {
     /// fastest, the camera climbs in the middle until it isn't: from Daphnis's view, 120 km up, to the Planet's Edge,
     /// 10.5 Mm along, it would otherwise skim the rings at 100 km/s. The yaw goes the short way round; the Sun goes
     /// round the side away from 180°, where the planet's shadow would lie on the camera and sweep across the rings
-    /// under it in a second or two.
+    /// under it in a second or two. The exposure goes by its logarithm too, in light, not in what the screen shows.
     nonisolated static func between(_ a: Camera, _ b: Camera, _ e: Double) -> Camera {
         let (low, rise) = (log(a.h), log(b.h / a.h))
         /// The mean height from the start to `x` of the way, with the middle raised by `lift` (a factor of e^lift).
@@ -113,7 +134,7 @@ final class SaturnsRings: SKScene, BatteryPaced {
         func mix(_ x: Double, _ y: Double) -> Double { x + (y - x) * e }
         func clear(_ sun: Double) -> Double { sun - 180 - 360 * ((sun - 180) / 360).rounded(.down) } // 0 to 360, 0 at 180°
         return Camera(r: a.r + (b.r - a.r) * along, h: h, yaw: a.yaw + remainder(b.yaw - a.yaw, 360) * e, pitch: mix(a.pitch, b.pitch),
-                      field: mix(a.field, b.field), sun: 180 + mix(clear(a.sun), clear(b.sun)),
+                      field: mix(a.field, b.field), sun: 180 + mix(clear(a.sun), clear(b.sun)), exposure: a.exposure * pow(b.exposure / a.exposure, e),
                       ahead: a.moon > 0 && b.moon > 0 ? mix(a.ahead, b.ahead) : a.moon > 0 ? a.ahead : b.ahead, moon: mix(a.moon, b.moon))
     }
 
@@ -122,102 +143,128 @@ final class SaturnsRings: SKScene, BatteryPaced {
         views.indices.filter { $0 != view && $0 != previous }.randomElement()!
     }
 
-    /// Holding view `current`, or gliding to it from `from`, since `since` on the scene's clock, `time`; `previous` is
-    /// the view before.
-    private enum Phase { case hold, glide(from: Camera) }
+    /// The ceiling on battery while `view` holds at `speed`: the lowest of 10, 12, 15 and 20 fps at which its fastest
+    /// thing moves 2 device px a frame or less (Sources/CLAUDE.md, Adding a scene), else none, for the battery's 30.
+    nonisolated static func rate(_ view: View, speed: Double) -> Int? {
+        [10, 12, 15, 20].first { view.pace * speed / Double($0) <= 2 }
+    }
+
+    /// Holding view `current`, or gliding to it, since `since` on the scene's clock, `time`; `previous` is the view before.
+    private enum Phase { case hold, glide(from: Origin) }
+    /// Where a glide sets out from: a view still drifting on, as a hold ends, so the camera doesn't stop dead before
+    /// it moves off; or a camera standing where it was, when another view is picked partway through a glide.
+    private enum Origin { case drifting(Int), still(Camera) }
     private var phase = Phase.hold, current: Int, previous: Int?, since: Double, time = 0.0, lastUpdate: TimeInterval?
-    /// The ceiling on battery: the view's while it holds, none while it glides, when the fastest thing on screen
-    /// crosses 51 to 176 device px a second (`saturnsRingsMotionFitsTheBatteryRates`; docs/saturns-rings.md, Cost).
+    /// How far the drift has gone in the hold that's showing, or the one a glide sets out from: seconds at 1×.
+    private var drift: Double
+    /// The ceiling on battery: the view's at the Speed set while it holds, none while it glides, when the fastest
+    /// thing on screen crosses 51 to 176 device px a second (`saturnsRingsMotionFitsTheBatteryRates`; docs/saturns-rings.md, Cost).
     private(set) var batteryRate: Int? { didSet { batteryRateChanged(from: oldValue) } }
     private let cam = SKUniform(name: "u_cam", vectorFloat3: .zero), rot = SKUniform(name: "u_rot", matrixFloat3x3: matrix_identity_float3x3)
     private let sunUniform = SKUniform(name: "u_sun", vectorFloat3: .zero), lens = SKUniform(name: "u_lens", vectorFloat2: .zero)
-    private let moonUniform = SKUniform(name: "u_moon", vectorFloat2: .zero)
+    private let moonUniform = SKUniform(name: "u_moon", vectorFloat2: .zero), starsUniform = SKUniform(name: "u_stars", float: 1)
+    private let exposure = SKUniform(name: "u_exposure", float: 1), planetExposure = SKUniform(name: "u_planetExposure", float: 1)
+    private let colours = (0..<5).map { SKUniform(name: "u_c\($0)", vectorFloat3: .zero) }
+    /// The face whose colours are in `colours`.
+    private var coloured: Bool?
 
     /// Starts holding `first` (the view picked in Settings, else one at random), `moment` seconds in (the
     /// `saturn.moment` default if nil, for pictures), or with `next`, gliding from it to `next`, `moment` seconds in
     /// (for tests).
     init(size: CGSize, from first: Int? = nil, to next: Int? = nil, moment: Double? = nil) {
-        let picked = Int(Self.view.value) - 1
+        let picked = Int(Self.view.value) - 1, moment = moment ?? UserDefaults.standard.double(forKey: "saturn.moment")
         current = first ?? (picked >= 0 ? picked : Self.views.indices.randomElement()!)
-        since = -(moment ?? UserDefaults.standard.double(forKey: "saturn.moment"))
-        batteryRate = Self.views[current].rate
+        (since, drift) = (-moment, moment * Self.speed.value)
         super.init(size: size)
+        batteryRate = Self.rate(Self.views[current], speed: Self.speed.value)
 
         // ponytail: the profile is read on every build (10 ms in release, the pyramid's bake 8.5 ms more for the
         // first copy) though the shader takes only its first radius, step and length; keep those beside the shared
         // pyramid if building gets slow.
         let rings = RingProfile.load()
         let table = sharedTexture("saturn-rings-pyramid") { rings.pyramid() }
-        // The unlit face's colours, dark to light, from the ring pixels of Cassini's PIA09860 (research-look.md).
-        let ramp = [0x140c0a, 0x503f31, 0x695442, 0x9a7d67, 0xf2cfa2].map {
-            SIMD3<Float>(Float($0 >> 16 & 255), Float($0 >> 8 & 255), Float($0 & 255)) / 255
-        }
-        // The exposure that puts the brightest real thing in view at a 99.9th of 177 to 201 of 255 in every view (the
-        // mock-ups' sheet 5), and the planet's own, held at the most that keeps its lit face buttercream (1.52).
-        let exposure: Float = 1.478
         let sprite = SKSpriteNode(color: .black, size: size)
         sprite.anchorPoint = .zero
         sprite.shader = SKShader(source: shaderCommon + saturnsRingsSource(rings), uniforms: [
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]), SKUniform(name: "u_table", texture: table),
-            cam, rot, sunUniform, lens, moonUniform,
-            SKUniform(name: "u_exposure", float: exposure), SKUniform(name: "u_planetExposure", float: min(exposure, 1.52)),
-        ] + ramp.enumerated().map { SKUniform(name: "u_c\($0.offset)", vectorFloat3: $0.element) })
+            cam, rot, sunUniform, lens, moonUniform, starsUniform, exposure, planetExposure,
+        ] + colours)
         addChild(sprite)
 
-        if let next { glide(to: next, at: since) }
+        if let next { glide(to: next, at: since, from: .drifting(current)) }
         advance()
-        show(camera(at: time))
+        show()
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
     override func update(_ currentTime: TimeInterval) {
-        time += frameTime(currentTime, &lastUpdate)
+        let seconds = frameTime(currentTime, &lastUpdate)
+        time += seconds
+        drift += seconds * Self.speed.value
         advance()
-        show(camera(at: time))
+        show()
     }
 
-    /// The camera at `time` on the scene's clock, in the phase it's in now.
-    func camera(at time: Double) -> Camera {
-        let held = Self.held(Self.views[current], for: time - since)
-        guard case .glide(let from) = phase else { return held }
+    /// The camera now, from the unlit face or with `lit` the lit.
+    func camera(lit: Bool) -> Camera {
+        let held = Self.held(Self.views[current], for: drift, lit: lit)
+        guard case .glide(let origin) = phase else { return held }
+        let from: Camera
+        switch origin {
+        case .drifting(let view): from = Self.held(Self.views[view], for: drift, lit: lit)
+        case .still(let camera): from = camera
+        }
         let u = min(max((time - since) / Self.glide, 0), 1)
-        return Self.between(from, Self.held(Self.views[current], for: 0), u * u * (3 - 2 * u))
+        return Self.between(from, Self.held(Self.views[current], for: 0, lit: lit), u * u * (3 - 2 * u))
     }
 
     /// Moves the phase on: to a glide toward the view picked in Settings, or in Cycle toward one at random once a
     /// hold is over, and to a hold once a glide is over, each at the moment it's due, so the path is the same at any
     /// frame rate.
     private func advance() {
-        let picked = Int(Self.view.value) - 1
+        let picked = Int(Self.view.value) - 1, speed = Self.speed.value
         while true {
             if case .glide = phase, time - since >= Self.glide {
                 (phase, since) = (.hold, since + Self.glide)
-                batteryRate = Self.views[current].rate
+                drift = (time - since) * speed
             } else if picked >= 0, picked != current {
-                glide(to: picked, at: time)
-            } else if picked < 0, case .hold = phase, time - since >= Self.hold {
-                glide(to: Self.next(after: current, previous: previous), at: since + Self.hold)
+                if case .hold = phase { glide(to: picked, at: time, from: .drifting(current)) } else { glide(to: picked, at: time, from: .still(camera(lit: Self.face.value > 0.5))) }
+            } else if picked < 0, case .hold = phase, time - since >= Self.hold.value.rounded() * 60 {
+                glide(to: Self.next(after: current, previous: previous), at: since + Self.hold.value.rounded() * 60, from: .drifting(current))
             } else {
-                return
+                break
             }
         }
+        if case .hold = phase { batteryRate = Self.rate(Self.views[current], speed: speed) } else { batteryRate = nil }
     }
 
-    private func glide(to next: Int, at moment: Double) {
-        phase = .glide(from: camera(at: moment))
+    private func glide(to next: Int, at moment: Double, from origin: Origin) {
+        phase = .glide(from: origin)
         (previous, current, since) = (current, next, moment)
-        batteryRate = nil
     }
 
-    /// Hands `camera` to the shader.
-    private func show(_ camera: Camera) {
-        let axes = camera.axes, tangent = Float(tan(camera.field / 2 * .pi / 180))
+    /// Hands the camera, and the settings that change how it's drawn, to the shader.
+    private func show() {
+        let lit = Self.face.value > 0.5, camera = camera(lit: lit), axes = camera.axes(lit: lit)
+        let tangent = Float(tan(camera.field / 2 * .pi / 180)), brightness = Self.brightness.value
         cam.vectorFloat3Value = SIMD3<Float>(axes.at)
         rot.matrixFloat3x3Value = matrix_float3x3(columns: (SIMD3<Float>(axes.right), SIMD3<Float>(axes.up), SIMD3<Float>(axes.ahead)))
         sunUniform.vectorFloat3Value = SIMD3<Float>(axes.sun)
         lens.vectorFloat2Value = [tangent, tangent * Float(size.height / size.width)]
         moonUniform.vectorFloat2Value = [Float(camera.ahead / Self.daphnis), Float(camera.moon)]
+        exposure.floatValue = Float(camera.exposure * brightness)
+        planetExposure.floatValue = Float((lit ? camera.exposure : min(camera.exposure, Self.planetMost)) * brightness)
+        starsUniform.floatValue = Float(Self.stars.value)
+        if coloured != lit {
+            coloured = lit
+            // Each face's colours, dark to light, from the ring pixels of one Cassini photograph (research-look.md):
+            // the lit face's PIA06485, the unlit face's PIA09860 from 5° below.
+            let ramp = lit ? [0x1f1d24, 0x8a827f, 0x968e8d, 0xcebdb0, 0xe3d3c8] : [0x140c0a, 0x503f31, 0x695442, 0x9a7d67, 0xf2cfa2]
+            for (uniform, hex) in zip(colours, ramp) {
+                uniform.vectorFloat3Value = SIMD3<Float>(Float(hex >> 16 & 255), Float(hex >> 8 & 255), Float(hex & 255)) / 255
+            }
+        }
     }
 }
 
@@ -452,7 +499,7 @@ private func saturnsRingsSource(_ rings: RingProfile) -> String {
         // the sky: near-black (luma 4-8) and faint stars, both behind whatever the rings let through
         vec2 toSun = normalize(s.xy);
         vec3 q = vec3(toSun.x * d.x + toSun.y * d.y, toSun.x * d.y - toSun.y * d.x, d.z);
-        col += (6.0 / 255.0 + stars(q, u_size.x / (2.0 * u_lens.x))) * sky;
+        col += (6.0 / 255.0 + stars(q, u_size.x / (2.0 * u_lens.x)) * u_stars) * sky;
         col += 3.0 / 255.0 * (1.0 - sky);
         col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 255.0;
         gl_FragColor = vec4(col, 1.0);
