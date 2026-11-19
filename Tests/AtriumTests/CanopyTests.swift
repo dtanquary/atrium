@@ -53,11 +53,12 @@ import CanopyBake
     let camera = Canopy.Camera(size: size)
     let made = Canopy.bake(moment: Canopy.moment(day: "2026-09-15", hour: 23), latitude: place.latitude, longitude: place.longitude,
                            camera: camera, seed: 3, light: nil, night: false).made
-    func cover(_ x: Int, _ y: Int) -> UInt8 { // the canopy's alpha over a pixel of the picture (rows top first)
+    func cover(_ x: Int, _ y: Int) -> Int { // the canopy's alpha over a pixel of the picture (rows top first), the nearest leaves' over it
         let t = (SIMD2(Double(x) + 0.5, Double(frames.h - y) - 0.5) / SIMD2(Double(frames.w), Double(frames.h)) * 2 - 1) * camera.tan
         let q = t / (2 * camera.extent) + 0.5
         let (i, j) = (min(max(Int(q.x * Double(made.width)), 0), made.width - 1), min(max(Int(q.y * Double(made.height)), 0), made.height - 1))
-        return made.canopy[(j * made.width + i) * 4 + 3]
+        let (a, n) = (Int(made.canopy[(j * made.width + i) * 4 + 3]), Int(made.near[(j * made.width + i) * 4 + 3]))
+        return 255 - (255 - a) * (255 - n) / 255
     }
     // the canopy's cover is the season's, the same all day, so it holds for the afternoon's picture too
     func clear(_ s: (x: Int, y: Int)) -> Bool { [(0, 0), (-6, 0), (6, 0), (0, -6), (0, 6)].allSatisfy { cover(s.x + $0.0, s.y + $0.1) == 0 } }
@@ -74,70 +75,7 @@ import CanopyBake
     #expect(frames.stars().filter(clear).count < 5, "stars left at noon")
 }
 
-/// Motion 0, step (b)'s sway, kept to compare: the trees sway as bodies, not as a picture wobbling like water: two
-/// points 30-80 px apart inside one group of crowns move together, and a point in another group moves apart from them
-/// as the two groups' breezes say. Measured in the drawn frames, by matching a patch round each point from one frame
-/// to one 1.5 s later.
-@MainActor @Test func canopyTreesSwayAsBodies() throws {
-    let defaults = UserDefaults.standard, pins = Canopy.pins
-    defer { for key in [pins.seed, pins.date, pins.hour, pins.motion] { defaults.removeObject(forKey: key) } }
-    for (key, value) in [(pins.seed, 3 as Any), (pins.date, "2026-07-15"), (pins.hour, 15.5), (pins.motion, 0)] { defaults.set(value, forKey: key) }
-    let size = CGSize(width: 1512, height: 982), camera = Canopy.Camera(size: size), place = CLLocationCoordinate2D(latitude: 42, longitude: -88)
-    var frames = try Frames(Canopy(size: size, place: place), size: size)
-    frames.draw()
-    let made = Canopy.bake(moment: Canopy.moment(day: "2026-07-15", hour: 15.5), latitude: 42, longitude: -88, camera: camera, seed: 3,
-                           light: nil, night: false).made
-    let (ew, eh) = (made.coverWidth, made.coverHeight)
-    // the cells of the sway map wholly in one group, as points on the screen (rows top first), on the leaves
-    var cells: [[(x: Int, y: Int)]] = [[], [], [], []]
-    for j in stride(from: 2, to: eh - 2, by: 3) { for i in stride(from: 2, to: ew - 2, by: 3) {
-        let share = (0..<4).map { Double(made.sway[(j * ew + i) * 4 + $0]) / 255 }
-        guard let g = share.firstIndex(where: { $0 > 0.97 }), share.reduce(0, +) - share[g] < 0.02 else { continue }
-        let t = (SIMD2(Double(i) + 0.5, Double(j) + 0.5) / SIMD2(Double(ew), Double(eh)) - 0.5) * 2 * camera.extent
-        let uv = t / camera.tan * 0.5 + 0.5
-        guard abs(uv.x - 0.5) < 0.42, abs(uv.y - 0.5) < 0.4 else { continue }
-        let (x, y) = (Int(uv.x * Double(frames.w)), Int((1 - uv.y) * Double(frames.h)))
-        let (ci, cj) = (Int(Double(i) / Double(ew) * Double(made.width)), Int(Double(j) / Double(eh) * Double(made.height)))
-        guard made.canopy[(cj * made.width + ci) * 4 + 3] > 200 else { continue }
-        cells[g].append((x, y))
-    }}
-    let groups = (0..<4).filter { cells[$0].count >= 2 }
-    try #require(groups.count >= 2, "no two groups wholly inside the screen")
-    let (g, h) = (groups[0], groups[1])
-    let a = cells[g][0], b = try #require(cells[g].dropFirst().first { (30...80).contains(hypot(Double($0.x - a.x), Double($0.y - a.y))) }), c = cells[h][0]
-    // a moment when the two groups' breezes differ by 8 px or more
-    let breeze = Canopy.Breeze(seed: 3)
-    func gap(_ t0: Double, _ t1: Double) -> Double {
-        let (o0, o1) = (breeze.offsets(t0), breeze.offsets(t1))
-        return length((o1[g] - o0[g]) - (o1[h] - o0[h]))
-    }
-    var tries = 0
-    while gap(frames.time, frames.time + 1.5) < 8, tries < 60 { frames.draw(seconds: 0.5); tries += 1 }
-    let before = frames.grey(), t0 = frames.time
-    frames.draw(seconds: 1.5)
-    let after = frames.grey()
-    func shift(_ p: (x: Int, y: Int)) -> SIMD2<Double> { // the patch's move from before to after, in pixels (x right, y down)
-        var best = (cost: Float.infinity, d: SIMD2<Double>.zero)
-        for dy in -20...20 { for dx in -20...20 {
-            var cost: Float = 0
-            for y in stride(from: p.y - 20, through: p.y + 20, by: 2) { for x in stride(from: p.x - 20, through: p.x + 20, by: 2) {
-                let e = before[y * frames.w + x] - after[(y + dy) * frames.w + x + dx]
-                cost += e * e
-            }}
-            if cost < best.cost { best = (cost, [Double(dx), Double(dy)]) }
-        }}
-        return best.d
-    }
-    let (sa, sb, sc) = (shift(a), shift(b), shift(c))
-    let (o0, o1) = (breeze.offsets(t0), breeze.offsets(t0 + 1.5))
-    let expected = (o1[g] - o0[g]) - (o1[h] - o0[h]) // the two groups' moves apart, in px at 2x on a 14" (x right, y up)
-    print("Canopy's sway over 1.5 s: group \(g) at \(a) moved \(sa), at \(b) \(sb); group \(h) at \(c) \(sc); apart by \(expected) expected")
-    // (within the limbs' own sway, 2.5 px either way, which differs a little from point to point)
-    #expect(length(sa - sb) <= 4, "one group's crowns moved apart")
-    #expect(length((sa - sc) - SIMD2(expected.x, -expected.y)) <= 4 + 0.15 * length(expected), "the groups didn't move as their breezes say")
-}
-
-/// The wood stays still and the leaves rustle (motion 2, the default; research-motion.md's Model 2): over a second
+/// The wood stays still and the leaves rustle (research-motion.md's Model 2): over a second
 /// of midsummer, the screen's pixels well inside solid wood (none of it free in the bake's map round it, no near leaf
 /// within 16 px to slide over it) change by next to nothing, and those on the nearest leaves where they are wholly free
 /// change.
@@ -149,8 +87,8 @@ import CanopyBake
     var frames = try Frames(Canopy(size: size, place: CLLocationCoordinate2D(latitude: 42, longitude: -88)), size: size)
     frames.draw()
     let made = Canopy.bake(moment: Canopy.moment(day: "2026-07-15", hour: 15.5), latitude: 42, longitude: -88, camera: camera, seed: 3,
-                           light: nil, night: false, motion: 2).made
-    let near = try #require(made.near)
+                           light: nil, night: false).made
+    let near = made.near
     let before = frames.grey()
     frames.draw(seconds: 1)
     let after = frames.grey()
@@ -198,17 +136,15 @@ import CanopyBake
 }
 
 /// Canopy's ceiling on battery keeps the fastest motion to about 2 px a frame: 12-30 fps in the breeze (15 at its mean),
-/// no more than 15 in light air, none in a strong wind's gusts, 10 at night, none while a leaf falls; and motion 0 as
-/// step (b) set it.
+/// no more than 15 in light air, none in a strong wind's gusts, 10 at night, none while a leaf falls.
 @Test @MainActor func canopyBatteryRate() {
-    func rates(_ mean: Double, _ model: Int) -> [Int?] {
+    func rates(_ mean: Double) -> [Int?] {
         let breeze = Canopy.Breeze(seed: 3, mean: mean)
-        return stride(from: 0.0, to: 120, by: 0.5).map { Canopy.rate(fastest: breeze.fastest($0, model: model), night: false, falling: false) }
+        return stride(from: 0.0, to: 120, by: 0.5).map { Canopy.rate(fastest: breeze.fastest($0), night: false, falling: false) }
     }
-    #expect(rates(4.3, 2).allSatisfy { $0 != nil } && rates(4.3, 2).contains(12) && rates(4.3, 2).contains(15) && rates(4.3, 2).contains(30))
-    #expect(rates(2, 2).allSatisfy { ($0 ?? 99) <= 15 })
-    #expect(rates(12, 2).contains(nil))
-    #expect(Set(rates(4.3, 0)) == [10, 12, 15, 20])
+    #expect(rates(4.3).allSatisfy { $0 != nil } && rates(4.3).contains(12) && rates(4.3).contains(15) && rates(4.3).contains(30))
+    #expect(rates(2).allSatisfy { ($0 ?? 99) <= 15 })
+    #expect(rates(12).contains(nil))
     #expect(Canopy.rate(fastest: 100, night: true, falling: false) == 10)
     #expect(Canopy.rate(fastest: 1, night: false, falling: true) == nil)
 }
@@ -216,14 +152,14 @@ import CanopyBake
 /// What building Canopy holds the main thread for, and its bake off it, at a 14" MacBook Pro's size: meaningful in a
 /// release build: `CANOPY_LOAD=1 swift test -c release -Xswiftc -enable-testing --filter canopyLoad`. Then a bake for
 /// later in the day (the light, the canopy and the night's stars, off the main thread), and what landing one costs the
-/// main thread: the frame it lands on, against the frame after. `CANOPY_LOAD=0`, `1` or `2` times that motion (2 unset).
+/// main thread: the frame it lands on, against the frame after.
 @MainActor @Test(.enabled(if: ProcessInfo.processInfo.environment["CANOPY_LOAD"] != nil)) func canopyLoad() throws {
-    let clock = ContinuousClock(), size = CGSize(width: 1512, height: 982), motion = Int(ProcessInfo.processInfo.environment["CANOPY_LOAD"] ?? "") ?? 2
+    let clock = ContinuousClock(), size = CGSize(width: 1512, height: 982)
     let camera = Canopy.Camera(size: size), date = Canopy.moment(day: "2026-07-15", hour: 15.5)
     let light = Canopy.Light(camera: camera, date: date, latitude: 42, longitude: -88)
     let bake = CanopyBake(stand: resource(Canopy.stand.name), leaves: resource("dappled-leaves.png"), perTan: Canopy.stand.perTan,
                           extent: camera.extent, portrait: false, sun: light.sun, sunlight: light.sunlight, zenith: light.zenith,
-                          season: CanopySeason(date: date, latitude: 42), seed: 3, motion: motion)
+                          season: CanopySeason(date: date, latitude: 42), seed: 3)
     var made: CanopyBake.Made?
     let baked = (0..<2).map { _ in clock.measure { made = bake.make() } }.min()!
     let built = (0..<3).map { _ in clock.measure { _ = Canopy(size: size) } }
@@ -231,7 +167,7 @@ import CanopyBake
     func ms(_ d: Duration) -> String { d.formatted(.units(allowed: [.milliseconds])) }
     var peak = rusage()
     getrusage(RUSAGE_SELF, &peak) // the most this process has held so far, the bakes' peak among it (bytes on macOS)
-    print("Canopy (motion \(motion)) at 1512 x 982: built on the main thread in \(built.map(ms)), baked off it in \(ms(baked)), "
+    print("Canopy at 1512 x 982: built on the main thread in \(built.map(ms)), baked off it in \(ms(baked)), "
           + "the process's peak \(peak.ru_maxrss / 1_000_000) MB")
 
     let night = Canopy.moment(day: "2026-07-15", hour: 22.5)
@@ -244,12 +180,12 @@ import CanopyBake
     let rebakes = [false, true, false].map { dark in
         let before = cpu()
         defer { spent.append(cpu() - before) }
-        return clock.measure { _ = Canopy.bake(moment: night, latitude: 42, longitude: -88, camera: camera, seed: 3, light: nil, night: dark, motion: motion) }
+        return clock.measure { _ = Canopy.bake(moment: night, latitude: 42, longitude: -88, camera: camera, seed: 3, light: nil, night: dark) }
     }
     let stars = clock.measure { _ = Canopy.starGrid() }
     let defaults = UserDefaults.standard, pins = Canopy.pins
-    defer { for key in [pins.seed, pins.date, pins.hour, pins.motion] { defaults.removeObject(forKey: key) } }
-    for (key, value) in [(pins.seed, 3 as Any), (pins.date, "2026-07-15"), (pins.hour, 15.5), (pins.motion, motion)] { defaults.set(value, forKey: key) }
+    defer { for key in [pins.seed, pins.date, pins.hour] { defaults.removeObject(forKey: key) } }
+    for (key, value) in [(pins.seed, 3 as Any), (pins.date, "2026-07-15"), (pins.hour, 15.5)] { defaults.set(value, forKey: key) }
     var frames = try Frames(Canopy(size: size, place: CLLocationCoordinate2D(latitude: 42, longitude: -88)), size: size)
     var landing: [Duration] = []
     // the first bake (by day), then one five minutes on, one into the night (with the stars and the Milky Way), one on

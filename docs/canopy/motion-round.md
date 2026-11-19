@@ -2,6 +2,8 @@
 
 Step (b2)'s films, for Dave to choose from after his word on (b)'s sway ("its obvious just the wavy effect being applied to an image"), each measured as research-motion.md measured the footage. **Built:** motion 0 (step (b)'s sway, kept to compare), Model 1 (the wood still, the twigs and leaves rustling by how free they are) and Model 2 (as 1, with the nearest leaves a picture of their own moving over the rest), behind `canopy.motion`; **Model 2 is the default.** How each is made is in `docs/canopy.md`, step (b2).
 
+**Chosen:** Model 2 (Dave, 2026-11-18: "go with model 2", then "lets lock in model 2"). The switch, motion 0 and Model 1 are cut since; 532f0e8 is the last commit that redoes their films.
+
 ## The films
 12 s each, seed 3 at 42°N 88°W, 15 July 3:30 pm (in leaf) and 17 November 1 pm (bare), at a breeze (`canopy.wind` 4.3 m/s, Beaufort 3) unless named; H.264 at half size (1512 × 982).
 
