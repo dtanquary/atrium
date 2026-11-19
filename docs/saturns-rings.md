@@ -8,7 +8,7 @@ The idea is from the ideas page of 2026-11-14 ("Saturn's Rings · New wallpaper 
 - **Data:** Cassini UVIS stellar-occultation profiles of the rings' optical depth, and Voyager's lit-face brightness profile, from NASA's PDS Ring-Moon Systems Node. NASA's science data policy (SPD-41a) puts mission data in the public domain: **checked** ([the policy](https://science.nasa.gov/spd-41/)). The node's own pages state no licence, so the datasets are named and credited.
 - **Scripts:** `docs/saturns-rings/`: `profile.py` bakes the profile, `mock.swift` draws the mock-ups with SpriteKit's SKRenderer as the render test draws a wallpaper (meant to carry into the build), `variants.py` and `sheet.py` make the sheets.
 - **Pictures of it:** the mock-up sheets in `docs/saturns-rings/`, below.
-- **Where it stands (2026-11-19):** Dave has chosen from round 1 (below). Step (a) of the build is next, hidden behind the `unfinished` switch.
+- **Where it stands (2026-11-19):** step (a) is built, hidden behind the `unfinished` switch: the still of view C from the unlit face in today's light, on Dave's desktop from 0.130.8. Step (b), the six views and the glide, is next.
 
 ## Dave's decisions (2026-11-19)
 - **Every view, toggled or cycled.** Of round 1: "you dont need films, the images look great: all of the views you gave me are amazing, can we not toggle or cycle btween them?" So no single view: a View setting offers each of them, and a cycle moves between them. Round 1's films (the drift at 1× and 10×, Daphnis passing) were cancelled before any was made.
@@ -96,6 +96,10 @@ The `ponytail:` comments in `SaturnsRings.swift`, each with where it stops being
 - **The profile is 8 km a sample.** View C's bottom edge covers about 6 km of radius a device pixel, near enough. The close views E and F draw 1–2 km a pixel near the bottom: a 4 km profile (16,384 texels, Metal's widest) if their near field looks soft.
 - **The stars are random and fixed to the screen,** which holds only while the camera stands still: the real catalogue, fixed to the sky, once the camera turns (steps (b) and (d)).
 - **The planet's bands are drawn by latitude,** not mapped: a Cassini map of the globe if a view close to it shows them as too regular.
+
+## Still open
+- **Motion, measured before step (b)** (2026-11-19, from films the mock drew and then deleted, since Dave didn't need them): from frame to frame at 30 fps the bands change by 1 level of 255 at the 99th percentile and 2 at the 99.9th at 1× (the camera drifting 20 km/s), and by 7 and 19 at 10×, with no crawling or popping in contact sheets of either. At 1× the bands creep 400 km in 20 s: calm, close to a still.
+- **Daphnis hardly moves at its real speed:** 3.1 m/s against the Keeler gap's inner edge, so in its view at 1× the moon and its waves stand still; the film needed 8,000× to show it passing (with the Sun held still, since at that pace it would go round in 6 s). So in step (b) the passing has to come from the camera, not the moon: a camera a little off the moon's orbit sees it go by at the shear between them.
 
 ## Sources
 The research reports list every page read and say which figures and licences were checked.
