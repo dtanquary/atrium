@@ -159,7 +159,7 @@ struct Refresh {
               make: canopy, unfinished: true),
     Wallpaper(name: "Saturn's Rings", icon: "circle.and.line.horizontal", tint: .brown,
               blurb: "Just above Saturn's rings: their real bands from Cassini, in today's real sunlight.",
-              make: saturnsRingsScene, unfinished: true),
+              make: saturnsRingsScene, knobs: SaturnsRings.knobs, unfinished: true),
     Wallpaper(name: "Dappled Light", icon: "leaf.fill", tint: .mint, blurb: "Sunlight through leaves on a plaster wall, from the real Sun.",
               make: dappledLight, knobs: DappledLight.knobs, status: (key: "weather.status", below: "dappled.weather"),
               refresh: .weather, batteryScale: 0.75),

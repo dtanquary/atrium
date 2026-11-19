@@ -8,7 +8,7 @@ The idea is from the ideas page of 2026-11-14 ("Saturn's Rings · New wallpaper 
 - **Data:** Cassini UVIS stellar-occultation profiles of the rings' optical depth, and Voyager's lit-face brightness profile, from NASA's PDS Ring-Moon Systems Node. NASA's science data policy (SPD-41a) puts mission data in the public domain: **checked** ([the policy](https://science.nasa.gov/spd-41/)). The node's own pages state no licence, so the datasets are named and credited.
 - **Scripts:** `docs/saturns-rings/`: `profile.py` bakes the profile, `mock.swift` draws the mock-ups with SpriteKit's SKRenderer as the render test draws a wallpaper (meant to carry into the build), `variants.py` and `sheet.py` make the sheets.
 - **Pictures of it:** the mock-up sheets in `docs/saturns-rings/`, below.
-- **Where it stands (2026-11-19):** step (a) is built, hidden behind the `unfinished` switch: the still of view C from the unlit face in today's light, on Dave's desktop from 0.130.8. Step (b), the six views and the glide, is next.
+- **Where it stands (2026-11-19):** steps (a) and (b) are built, hidden behind the `unfinished` switch: the six views from the unlit face in today's light, each drifting slowly while it holds, the camera gliding from one to another at random or holding the one picked in Settings (0.130.9). Step (c), the settings, is next.
 
 ## Dave's decisions (2026-11-19)
 - **Every view, toggled or cycled.** Of round 1: "you dont need films, the images look great: all of the views you gave me are amazing, can we not toggle or cycle btween them?" So no single view: a View setting offers each of them, and a cycle moves between them. Round 1's films (the drift at 1× and 10×, Daphnis passing) were cancelled before any was made.
@@ -53,6 +53,10 @@ The plan, from the method research and Dave's choices. Where the build goes anot
 - **No shimmer:** the bands are a function of radius alone, so each pixel takes the exact average of the profile over the stretch of radius it covers, from a table of averages at every width (a mip chain by radius). A table of running sums failed in SpriteKit for lack of precision; this one works and costs two reads a value.
 - **Cost:** 0.27–0.32 ms of GPU a frame at 3024 × 1964 in the probe, against 1.74 for Nebula run the same way; expect 0.35–0.5 in the app with stars and the light on the planet's night side.
 - **The views are cameras, not scenes.** Each view is a camera (distance from Saturn, height above the rings, which way it looks, field of view), a direction of the Sun round the planet that puts the shadow in frame, and an exposure, all from `variants.py`'s tiles. A glide moves every one of those numbers smoothly from one view to the next, so the shader draws the in-between frames as it draws the views. The exposure is eased in light, not in display values, so a glide doesn't flash.
+  - **As built:** one exposure serves every view (1.478, as sheet 5 found), so a glide has none to ease. A glide takes 120 s, eased at both ends (smoothstep), and moves the height by its logarithm. The distance from Saturn moves in step with the height rather than the time, so the camera crosses most of the ground while it's high, where the ground moves least across the screen, and where the ground to cross is far for the height (out of Daphnis's 120 km to any view but the Encke gap's), the camera climbs in the middle until the ground under it moves no more than 2% of its height a second at the glide's fastest. The yaw goes the short way round. The Sun goes round the side away from 180°: going through it, the planet's shadow swept over the camera's own patch of ring in a second or two, a flash.
+- **The camera keeps station against the Sun.** **As built:** the Sun holds still relative to each view, where the plan had it turn at the camera's orbital rate. Over hours that would have put view A back on the planet's night side, the black disc the round-2 mock-ups moved its Sun to avoid. The Sun turns only in a glide, from one view's place for it to the next one's.
+- **The drift while a view holds.** **As built:** the camera drifts out from Saturn and back once a hold, easing at both ends, so the bands slide slowly under it, the pace the films found calm (20 km/s at its fastest at 4 Mm up, 1–2 levels of 255 a frame), in proportion to the height so the near bands cross the screen at about the same pace in every view: 3.06 Mm in along the rings (views B and C), 1.22 Mm out over the Encke gap (E). Looking in (A) and from above (D) are held to 3 and 4 Mm, a few percent of the planet's distance: their pictures are of the planet, which at the same pace (60 and 200 km/s) would have swung out of frame. In Daphnis's view the camera drifts along the Keeler gap instead, so the moon comes nearer from 1.5 Mm ahead (a speck near the top) to 0.2 Mm (large, lower left) through one hold, and goes back through the next if the view is held. It stays in frame throughout: it never leaves the view empty, and the glide carries the camera away from it.
+- **Daphnis** is in the shader only in its own view: it and its waves fade in and out over the glides to and from it, while they are a few pixels across.
 - **The light is today's:** the Sun's height over the ring plane from the date (Saturn's orbit is in `SkyMath`, its pole from the IAU), checked against JPL Horizons' 8.4° south for 2026-11-18. The unlit face is the one the Sun isn't on.
 - **The name's files:** the app makes a wallpaper's file names from its name, lowercased with hyphens for spaces, which would put an apostrophe in `preview-saturn's-rings.jpg`. One shared helper drops apostrophes for every caller (Settings' preview, the menu's loop, the trim shots), so the files are `preview-saturns-rings.jpg` and `menu-saturns-rings.mp4`, and the doc's slug matches.
 
@@ -70,31 +74,58 @@ Each step a commit once it builds and the tests pass, with its snapshot looked a
   - **The name's files:** `Wallpaper.slug` (Scenes.swift) drops the apostrophe, for Settings' preview, the menu's loop and the trim shots, so the still is `preview-saturns-rings.jpg`. No other wallpaper's name has one, so theirs are unchanged.
   - **About** credits the Cassini UVIS and Voyager 2 profiles, each linked to its file on the PDS Ring-Moon Systems Node.
   - **The snapshot looked at:** the render test's PNG (3024 × 1964) against the mock-up drawn with the same settings: the same picture to the pixel, bar one pixel 3 levels off, with the same luma (median 14, 99th 171, 99.9th 177, max 179, as `brightness.txt` has sheet 4) and no black pixels. The B ring dark, the A and C rings cocoa-brown with their fine bands, the planet buttercream with the rings' shadows across it, its limb over the far rings, no black disc, no stray lines. It is `docs/images/saturns-rings.jpg`.
+- **(b) The six views and the glide (2026-11-19).** `SaturnsRings` (in `SaturnsRings.swift`) holds a view for 8 minutes, drifting (How it works), then glides for 2 minutes to another at random, never the one it's at or the one before; or holds the view picked in Settings, gliding to it when it's picked. Each frame's camera is worked out on the CPU from the time since the hold or glide began, stepped by elapsed time, so the path is the same at any frame rate, and handed to the shader as uniforms. The views are plain data (`SaturnsRings.views`); Daphnis's ripple and the moonlet are back from `mock.swift` with Daphnis's numbers written in; and the stars are fixed to the sky (a cube of cells round the camera, turned with the Sun), so they turn with the camera in a glide rather than staying put on the screen.
+  - **The six views** (`docs/saturns-rings/build-views.jpg`), each snapshot pinned, matched to its sheet 5 tile drawn by `mock.swift` with the same settings: the same picture bar the stars, which moved to the sky (up to 29 levels of 255 in a few hundred pixels), with the same luma at the median, 99th, 99.9th and max, within a level, and no black pixels. Daphnis's is at the moment the moon is 0.6 Mm ahead, as in its tile.
+  - **The drift** (`build-drift.jpg`): each view at its furthest from where it starts, and Daphnis's at the start and end of a hold. Every view keeps its picture; the planet's size changes by 2–5% in A, C and D.
+  - **The glides** (`build-glides.jpg`): Looking In to Over the Encke Gap, and Daphnis Close to From Above, the worst glide for motion, each at six moments. Every frame between is a picture of the rings; no flash, no black.
+  - **Motion, measured** (`saturnsRingsMotionFitsTheBatteryRates`: the ring plane, the planet and the sky seen through a grid over the screen, found again a frame later, with the shadow's edge and Daphnis's waves taken as moving where they do). The fastest thing on screen in a hold moves 1.6 device px a second (From Above), 3.0 (Looking In), 7.5–8.7 (B, C, E) and 45 (Daphnis Close, its waves passing the bottom of the screen). In a glide it peaks at 51–176 px/s, the most climbing out of Daphnis's 120 km to From Above's 40 Mm.
+  - **Frame strips** (`saturnsRingsStrip`, the second difference of the green channel, |f(t+1) − 2f(t) + f(t−1)|, 1 pixel in 16, at its 99th and 99.9th percentiles, and the largest change in the frame's mean from one frame to the next):
+
+    | Strip | 30 fps | 15 fps | Mean's largest step |
+    |---|---|---|---|
+    | Glide, Looking In to Over the Encke Gap | 12, 40 | 24, 64 | 0.04–0.08 levels |
+    | Glide, Daphnis Close to From Above | 30, 75 | 40, 111 | 0.07–0.12 levels |
+    | Hold, Along the Planet's Edge, at its fastest | 1, 2 | 1, 6 | 0 |
+    | Hold, Daphnis Close, at its fastest | 0, 1 | 0, 1 | 0 |
+
+    No exposure jump or flash in any (a flash would move the mean by levels in a frame); the holds are as calm as the films found 1× (1 and 2); a glide moves the picture as a camera flight does, most of it at the bottom of the screen.
 
 ## Settings
-None yet. Face, Speed, Brightness, how long a view holds and Stars come in step (c).
+- **View** (`saturn.view`, the first knob, a menu, in its own section): which view, or Cycle. Stored as a number, for good once shipped: **0** Cycle (the standard), **1** Looking In, **2** Along to the Horizon, **3** Along the Planet's Edge, **4** From Above, **5** Over the Encke Gap, **6** Daphnis Close.
+- **For pictures** (not in Settings): `saturn.moment`, seconds into the first hold, read as the scene is built. With a view picked it pins the moment of the drift; in Cycle the first view is random.
+- Face, Speed, Brightness, how long a view holds and Stars come in step (c).
 
 ## Cost
-Measured in a release build by the render test at 3024 × 1964 (2x Retina), two runs:
-- **Drawing:** 0.49–0.50 ms of CPU and 0.38–0.39 ms of GPU a frame, against a budget of about 2 of each, and the research's forecast of 0.35–0.5 ms of GPU.
+Measured in a release build at 3024 × 1964 (2x Retina), by the render test with each view pinned, two runs each, and by `saturnsRingsStrip` timing 60 frames from a glide's middle the same way:
+- **Drawing:** 0.36–0.37 ms of GPU a frame in Along to the Horizon, 0.41–0.46 in Looking In, the Planet's Edge, From Above and the Encke gap, and 0.50–0.51 in Daphnis Close, the worst, where the ripple's branch runs near the gap; 0.43–0.44 mid-glide. CPU 0.40–0.52 ms a frame in every view and mid-glide. The budget is about 2 of each; step (a)'s still was 0.38–0.39 of GPU.
 - **Building, on the main thread:** reading the profile 10–11 ms, baking the pyramid 8.5 ms (only for the first copy: one built while another is showing shares it). About 19 ms in all, under the 30 ms at which a bake would have to move off the main thread.
 - **Memory:** the pyramid's 5.5 MB of texels, and its copy on the GPU.
-- **The shader:** 13 uniforms of the about 30 a shader can take (`u_size`, `u_table`, `u_cam`, `u_rot`, `u_sun`, `u_lens`, the two exposures and five colours), and one texture.
-- No `batteryRate` yet: nothing moves, so step (b) picks it from the fastest motion.
+- **The shader:** 14 uniforms of the about 30 a shader can take (`u_size`, `u_table`, `u_cam`, `u_rot`, `u_sun`, `u_lens`, `u_moon`, the two exposures and five colours), and one texture. The camera's five change every frame.
+- **On battery** (`BatteryPaced`, by the rule of about 2 device px a frame, from the motion measured above): **10 fps while a view holds** (under 1 px a frame), but **none in Daphnis Close's hold** (its waves' 45 px/s would be 2.3 px a frame even at 20) **and none in a glide** (51–176 px/s), so those run at the battery's 30.
 
 ## Checking it
 ```sh
-SNAPSHOT_SCENE="Saturn's Rings" SNAPSHOT_DIR=/some/dir swift test --filter everySceneRenders   # → /some/dir/Saturn's Rings.png
-swift test -c release -Xswiftc -enable-testing --filter saturnsRingsPyramidHoldsMeans            # the pyramid's means, and how long the read and the bake take
+# a view (1 to 6, as Settings stores them), a moment into its hold; -4.03 puts the snapshot at the hold's very start
+# (the render test runs 4 s), which is each view's sheet 5 tile; Daphnis Close's tile is at 296.3 (the moon 0.6 Mm ahead)
+SNAPSHOT_SCENE="Saturn's Rings" SNAPSHOT_DIR=/some/dir SNAPSHOT_DEFAULTS="saturn.view=3,saturn.moment=-4.03" swift test --filter everySceneRenders
+swift test --filter saturnsRings      # the pyramid, every glide's path, the next view, and the motion against the battery rates
+RINGS_PAIRS=1 swift test --filter saturnsRingsMotion   # and each glide's fastest
+# frame strips, the views counted from 0: a glide, or a hold from a moment for RINGS_SECONDS (12 by default)
+RINGS_STRIP="0>4" SNAPSHOT_DIR=/some/dir swift test -c release -Xswiftc -enable-testing --filter saturnsRingsStrip
+RINGS_STRIP="5@234" SNAPSHOT_DIR=/some/dir swift test -c release -Xswiftc -enable-testing --filter saturnsRingsStrip
+swift test -c release -Xswiftc -enable-testing --filter saturnsRingsPyramidHoldsMeans   # how long the read and the bake take
 ```
-The mock-up to compare it with, drawn the same way (in `docs/saturns-rings/`): `swiftc -O "$PWD/mock.swift" -o $TMPDIR/saturn-mock && $TMPDIR/saturn-mock '{"view":"C","sunAz":320,"sunEl":-8.4,"face":"unlit","exposure":1.478,"out":"/some/dir/mock-C.png"}'`. In the app, it shows once `defaults write com.dtanquary.atrium unfinished -bool true` is set and Atrium relaunched.
+A sheet 5 tile to compare with, drawn the same way (in `docs/saturns-rings/`, settings from `variants.py`): `swiftc -O "$PWD/mock.swift" -o $TMPDIR/saturn-mock && $TMPDIR/saturn-mock '{"view":"C","sunAz":320,"sunEl":-8.4,"face":"unlit","exposure":1.478,"out":"/some/dir/mock-C.png"}'`. In the app, it shows once `defaults write com.dtanquary.atrium unfinished -bool true` is set and Atrium relaunched; `defaults write com.dtanquary.atrium saturn.view -int 6` pins a view without Settings.
 
 ## Shortcuts
 The `ponytail:` comments in `SaturnsRings.swift`, each with where it stops being good enough:
+- **The hold and the glide are constants,** 8 and 2 minutes, until Settings has them in step (c). A drift takes a hold to go out and back, so a longer hold will drift more slowly by the same distance.
 - **The Sun is fixed at 8.4° south,** right for 2026-11-18. It drifts from the real one by about 0.3° a month, climbing to 27° at the 2032 solstice: from the date in step (d).
+- **A glide's climb is worked out again every frame,** about 1,600 exponentials, microseconds: keep it for the glide if the CPU a frame ever shows it.
 - **The profile is read on every build** (10 ms), though the shader needs only its first radius, step and length: keep those beside the shared pyramid if building gets slow.
-- **The profile is 8 km a sample.** View C's bottom edge covers about 6 km of radius a device pixel, near enough. The close views E and F draw 1–2 km a pixel near the bottom: a 4 km profile (16,384 texels, Metal's widest) if their near field looks soft.
-- **The stars are random and fixed to the screen,** which holds only while the camera stands still: the real catalogue, fixed to the sky, once the camera turns (steps (b) and (d)).
+- **The profile is 8 km a sample.** View C's bottom edge covers about 6 km of radius a device pixel, near enough. The close views draw finer near the bottom, E about 1.6 km a pixel and F about 0.1 km, so their near fields are the profile smoothed, as in the tiles Dave picked: a 4 km profile (16,384 texels, Metal's widest) if they look soft.
+- **The stars are random,** fixed to the sky since step (b): the real catalogue and Milky Way from Black Hole's in step (d).
+- **Daphnis fades** with its waves over a glide into or out of its view, while the camera is a few hundred km to a few Mm off and they are a few pixels across: place it on its real orbit in every view if the fade ever shows.
 - **The planet's bands are drawn by latitude,** not mapped: a Cassini map of the globe if a view close to it shows them as too regular.
 
 ## Still open

@@ -1,52 +1,233 @@
 import SpriteKit
 
-/// Saturn's rings from just above their unlit face, running off to a horizon with the planet's edge rising at one
-/// side, in today's sunlight: one shader that meets each pixel's ray with the ring plane and the planet
-/// (docs/saturns-rings.md, How it works). For now one view, standing still: view C of the mock-ups, with the Sun
-/// 8.4° south of the ring plane, as JPL Horizons gives it for 2026-11-18.
-@MainActor func saturnsRingsScene(size: CGSize) -> SKScene {
-    // ponytail: the profile is read on every build (10 ms in release, the pyramid's bake 8.5 ms more for the first
-    // copy) though the shader takes only its first radius, step and length; keep those beside the shared pyramid if
-    // building gets slow.
-    let rings = RingProfile.load()
-    let table = sharedTexture("saturn-rings-pyramid") { rings.pyramid() }
+@MainActor func saturnsRingsScene(size: CGSize) -> SKScene { SaturnsRings(size: size) }
 
-    // Mm, Saturn at the origin, the ring plane z = 0, the camera at +x. The camera is on the face the Sun isn't on,
-    // 126 Mm out and 4 Mm up, looking 38° round from Saturn toward the orbit and 7° down, 70° across.
-    // ponytail: the Sun fixed at 8.4° south, which drifts from the real one by about 0.3° a month (it climbs to 27° by
-    // the 2032 solstice); from the date in step (d) of the build order.
-    let (distance, height, yaw, pitch, field) = (126.0, 4.0, 38.0 * .pi / 180, 7.0 * .pi / 180, 70.0 * .pi / 180)
-    let (sunUp, sunRound) = (-8.4 * .pi / 180, 320.0 * .pi / 180) // above the ring plane; round from the camera
-    let side: Double = sunUp < 0 ? 1 : -1
-    let camera = SIMD3<Double>(distance, 0, side * height)
-    var ahead = cos(yaw) * SIMD3<Double>(-1, 0, 0) + sin(yaw) * SIMD3<Double>(0, 1, 0)
-    ahead = simd_normalize(cos(pitch) * ahead + sin(pitch) * SIMD3(0, 0, -side))
-    let right = simd_normalize(simd_cross(ahead, SIMD3(0, 0, side))), up = simd_cross(right, ahead)
-    let sun = SIMD3<Float>(Float(cos(sunUp) * cos(sunRound)), Float(cos(sunUp) * sin(sunRound)), Float(sin(sunUp)))
-    let lens = tan(field / 2)
-
-    // The unlit face's colours, dark to light, from the ring pixels of Cassini's PIA09860 (research-look.md).
-    let ramp = [0x140c0a, 0x503f31, 0x695442, 0x9a7d67, 0xf2cfa2].map {
-        SIMD3<Float>(Float($0 >> 16 & 255), Float($0 >> 8 & 255), Float($0 & 255)) / 255
+/// Saturn's rings from just above their unlit face, in today's sunlight: one shader that meets each pixel's ray with
+/// the ring plane and the planet (docs/saturns-rings.md, How it works). The camera holds one of six views for a while,
+/// drifting slowly, then glides to another at random, or holds the one picked in Settings.
+final class SaturnsRings: SKScene, BatteryPaced {
+    /// A view, from the mock-ups' sheet5-unlit (docs/saturns-rings/variants.py): how far the camera is from Saturn's
+    /// centre and above the ring plane (Mm, on the face the Sun isn't on), which way it looks (degrees round from
+    /// looking in at Saturn toward the rings' orbit, and down), how wide (degrees across), and where the Sun is round
+    /// the planet from the camera (degrees). The camera keeps station against the Sun, so the light and the planet's
+    /// shadow stay put while it holds a view.
+    struct View {
+        let name: String
+        let r, h, yaw, pitch, field, sun: Double
+        /// How far the camera drifts out from Saturn in a hold and back (Mm; negative is in), so the bands slide by.
+        /// In Daphnis's view, how much nearer the moon comes along the Keeler gap through a hold.
+        let drift: Double
+        /// Daphnis's distance ahead along the gap as a hold begins (Mm), in the view that shows it.
+        var moon: Double?
+        /// The ceiling on battery while it holds: 10 fps where the bands creep under 9 device px a second, none (30)
+        /// in Daphnis's view, where its waves flow past the bottom of the screen at up to 45
+        /// (`saturnsRingsMotionFitsTheBatteryRates` measures them).
+        var rate: Int? = 10
     }
-    // The exposure that puts this view's brightest real thing at a 99.9th of about 177 of 255 (the mock-ups' sheet 4),
-    // and the planet's own, which is held at the most that keeps its lit face buttercream (1.52).
-    let exposure: Float = 1.478
-    return shaderScene(size: size, source: shaderCommon + saturnsRingsSource(rings), uniforms: [
-        SKUniform(name: "u_table", texture: table), SKUniform(name: "u_cam", vectorFloat3: SIMD3<Float>(camera)),
-        SKUniform(name: "u_rot", matrixFloat3x3: matrix_float3x3(columns: (SIMD3<Float>(right), SIMD3<Float>(up), SIMD3<Float>(ahead)))),
-        SKUniform(name: "u_sun", vectorFloat3: sun),
-        SKUniform(name: "u_lens", vectorFloat2: [Float(lens), Float(lens * size.height / size.width)]),
-        SKUniform(name: "u_exposure", float: exposure), SKUniform(name: "u_planetExposure", float: min(exposure, 1.52)),
-    ] + ramp.enumerated().map { SKUniform(name: "u_c\($0.offset)", vectorFloat3: $0.element) })
+
+    /// The six views, in the order the View menu lists and stores them. The drift is 20 km/s at its fastest in the
+    /// views 4 Mm up, the pace the mock-ups' films found calm, and in proportion to the height in the view just
+    /// above the Encke gap, so the bands under the camera cross the screen at about the same pace. Looking in and from
+    /// above are held to 3 and 4 Mm, a few percent of the planet's distance, as their pictures are of the planet: at
+    /// the same pace they would have swung it out of frame.
+    nonisolated static let views = [
+        View(name: "Looking In", r: 150, h: 12, yaw: 0, pitch: 24, field: 74, sun: 60, drift: 3),
+        View(name: "Along to the Horizon", r: 126, h: 4, yaw: 70, pitch: 9, field: 70, sun: 234, drift: -3.06),
+        View(name: "Along the Planet's Edge", r: 126, h: 4, yaw: 38, pitch: 7, field: 70, sun: 320, drift: -3.06),
+        View(name: "From Above", r: 112, h: 40, yaw: 10, pitch: 38, field: 66, sun: 70, drift: -4),
+        View(name: "Over the Encke Gap", r: 134.4, h: 1.6, yaw: 86, pitch: 17, field: 60, sun: 250, drift: 1.22),
+        View(name: "Daphnis Close", r: 136.56, h: 0.12, yaw: 90, pitch: 20, field: 60, sun: 250, drift: 1.3, moon: 1.5, rate: nil),
+    ]
+    /// Cycle, or one of the views held for good. Stored as 0 for Cycle and 1 to 6 for the views in `views`' order.
+    nonisolated static let view = Knob(key: "saturn.view", label: "View", range: 0...Double(views.count), standard: 0, section: "View",
+                                       format: .choice(["Cycle"] + views.map(\.name)))
+    nonisolated static let knobs = [view]
+    /// How long a view holds and how long a glide to the next takes, in seconds.
+    // ponytail: constants until Settings has them (step (c) of the build order). A drift takes a hold to go out
+    // and back, so a longer hold will drift more slowly by the same distance.
+    nonisolated static let hold = 480.0, glide = 120.0
+    /// The most a glide moves the camera along the rings, in heights a second: 0.02, so the ground under it crosses at
+    /// most about 2% of the way to it a second.
+    nonisolated static let calm = 0.02
+    /// The Sun's height over the ring plane, in degrees (negative: south).
+    // ponytail: fixed at 8.4° south, right for 2026-11-18, which drifts from the real one by about 0.3° a month (it
+    // climbs to 27° by the 2032 solstice); from the date in step (d) of the build order.
+    nonisolated static let sunUp = -8.4
+    /// Daphnis's orbit, Mm from Saturn's centre.
+    nonisolated static let daphnis = 136.504
+
+    /// The numbers a frame is drawn from: a view's with its drift, or partway from one to another in a glide.
+    struct Camera {
+        var r, h, yaw, pitch, field, sun: Double
+        /// Daphnis's distance ahead along the gap (Mm), and how much of it and its waves show (1 in its view, 0 elsewhere).
+        var ahead = 0.0, moon = 0.0
+
+        /// Where the camera is, its axes, and the way to the Sun, in Mm with Saturn at the origin, the ring plane at
+        /// z = 0 and the camera on +x, on the face the Sun isn't on.
+        var axes: (at: SIMD3<Double>, right: SIMD3<Double>, up: SIMD3<Double>, ahead: SIMD3<Double>, sun: SIMD3<Double>) {
+            let side: Double = SaturnsRings.sunUp < 0 ? 1 : -1, (yaw, pitch) = (yaw * .pi / 180, pitch * .pi / 180)
+            var ahead = cos(yaw) * SIMD3<Double>(-1, 0, 0) + sin(yaw) * SIMD3<Double>(0, 1, 0)
+            ahead = simd_normalize(cos(pitch) * ahead + sin(pitch) * SIMD3(0, 0, -side))
+            let right = simd_normalize(simd_cross(ahead, SIMD3(0, 0, side)))
+            let (up, round) = (SaturnsRings.sunUp * .pi / 180, sun * .pi / 180)
+            return (SIMD3(r, 0, side * h), right, simd_cross(right, ahead), ahead, SIMD3(cos(up) * cos(round), cos(up) * sin(round), sin(up)))
+        }
+    }
+
+    /// The camera holding `view`, `time` seconds into the hold. It drifts out and back once a hold, easing at both
+    /// ends, so a glide starts and a held view repeats without a jolt; in Daphnis's view it drifts along the gap
+    /// toward the moon through one hold and back through the next.
+    nonisolated static func held(_ view: View, for time: Double) -> Camera {
+        var camera = Camera(r: view.r, h: view.h, yaw: view.yaw, pitch: view.pitch, field: view.field, sun: view.sun)
+        if let moon = view.moon {
+            (camera.ahead, camera.moon) = (moon - view.drift * (1 - cos(.pi * time / hold)) / 2, 1)
+        } else {
+            camera.r += view.drift * (1 - cos(2 * .pi * time / hold)) / 2
+        }
+        return camera
+    }
+
+    /// Partway from `a` to `b`, `e` from 0 to 1 (eased in time). The height goes by its logarithm (it runs from 0.12 Mm
+    /// to 40), and the distance out in step with the height, so the ground under the camera crosses the screen at a
+    /// pace in proportion to the distance over the mean height. Where that would be more than `calm` at the glide's
+    /// fastest, the camera climbs in the middle until it isn't: from Daphnis's view, 120 km up, to the Planet's Edge,
+    /// 10.5 Mm along, it would otherwise skim the rings at 100 km/s. The yaw goes the short way round; the Sun goes
+    /// round the side away from 180°, where the planet's shadow would lie on the camera and sweep across the rings
+    /// under it in a second or two.
+    nonisolated static func between(_ a: Camera, _ b: Camera, _ e: Double) -> Camera {
+        let (low, rise) = (log(a.h), log(b.h / a.h))
+        /// The mean height from the start to `x` of the way, with the middle raised by `lift` (a factor of e^lift).
+        func mean(_ lift: Double, to x: Double = 1) -> Double {
+            (0..<32).reduce(0.0) { sum, i in
+                let at = (Double(i) + 0.5) / 32 * x
+                return sum + exp(low + rise * at + lift * sin(.pi * at))
+            } / 32 * x
+        }
+        // The mean height the ground's pace needs (smoothstep's fastest is 1.5 times its mean), by bisection.
+        // ponytail: worked out again every frame, about 1,600 exponentials (microseconds); keep it for the glide if
+        // the CPU a frame ever shows it.
+        let need = 1.5 * abs(b.r - a.r) / (glide * calm)
+        var (under, over) = (0.0, mean(0) < need ? 6.0 : 0.0)
+        for _ in 0..<(over > 0 ? 24 : 0) { let mid = (under + over) / 2; if mean(mid) < need { under = mid } else { over = mid } }
+        let h = exp(low + rise * e + over * sin(.pi * e)), along = mean(over, to: e) / mean(over)
+        func mix(_ x: Double, _ y: Double) -> Double { x + (y - x) * e }
+        func clear(_ sun: Double) -> Double { sun - 180 - 360 * ((sun - 180) / 360).rounded(.down) } // 0 to 360, 0 at 180°
+        return Camera(r: a.r + (b.r - a.r) * along, h: h, yaw: a.yaw + remainder(b.yaw - a.yaw, 360) * e, pitch: mix(a.pitch, b.pitch),
+                      field: mix(a.field, b.field), sun: 180 + mix(clear(a.sun), clear(b.sun)),
+                      ahead: a.moon > 0 && b.moon > 0 ? mix(a.ahead, b.ahead) : a.moon > 0 ? a.ahead : b.ahead, moon: mix(a.moon, b.moon))
+    }
+
+    /// A view to glide to at random: never the one it's at or the one before.
+    nonisolated static func next(after view: Int, previous: Int?) -> Int {
+        views.indices.filter { $0 != view && $0 != previous }.randomElement()!
+    }
+
+    /// Holding view `current`, or gliding to it from `from`, since `since` on the scene's clock, `time`; `previous` is
+    /// the view before.
+    private enum Phase { case hold, glide(from: Camera) }
+    private var phase = Phase.hold, current: Int, previous: Int?, since: Double, time = 0.0, lastUpdate: TimeInterval?
+    /// The ceiling on battery: the view's while it holds, none while it glides, when the fastest thing on screen
+    /// crosses 51 to 176 device px a second (`saturnsRingsMotionFitsTheBatteryRates`; docs/saturns-rings.md, Cost).
+    private(set) var batteryRate: Int? { didSet { batteryRateChanged(from: oldValue) } }
+    private let cam = SKUniform(name: "u_cam", vectorFloat3: .zero), rot = SKUniform(name: "u_rot", matrixFloat3x3: matrix_identity_float3x3)
+    private let sunUniform = SKUniform(name: "u_sun", vectorFloat3: .zero), lens = SKUniform(name: "u_lens", vectorFloat2: .zero)
+    private let moonUniform = SKUniform(name: "u_moon", vectorFloat2: .zero)
+
+    /// Starts holding `first` (the view picked in Settings, else one at random), `moment` seconds in (the
+    /// `saturn.moment` default if nil, for pictures), or with `next`, gliding from it to `next`, `moment` seconds in
+    /// (for tests).
+    init(size: CGSize, from first: Int? = nil, to next: Int? = nil, moment: Double? = nil) {
+        let picked = Int(Self.view.value) - 1
+        current = first ?? (picked >= 0 ? picked : Self.views.indices.randomElement()!)
+        since = -(moment ?? UserDefaults.standard.double(forKey: "saturn.moment"))
+        batteryRate = Self.views[current].rate
+        super.init(size: size)
+
+        // ponytail: the profile is read on every build (10 ms in release, the pyramid's bake 8.5 ms more for the
+        // first copy) though the shader takes only its first radius, step and length; keep those beside the shared
+        // pyramid if building gets slow.
+        let rings = RingProfile.load()
+        let table = sharedTexture("saturn-rings-pyramid") { rings.pyramid() }
+        // The unlit face's colours, dark to light, from the ring pixels of Cassini's PIA09860 (research-look.md).
+        let ramp = [0x140c0a, 0x503f31, 0x695442, 0x9a7d67, 0xf2cfa2].map {
+            SIMD3<Float>(Float($0 >> 16 & 255), Float($0 >> 8 & 255), Float($0 & 255)) / 255
+        }
+        // The exposure that puts the brightest real thing in view at a 99.9th of 177 to 201 of 255 in every view (the
+        // mock-ups' sheet 5), and the planet's own, held at the most that keeps its lit face buttercream (1.52).
+        let exposure: Float = 1.478
+        let sprite = SKSpriteNode(color: .black, size: size)
+        sprite.anchorPoint = .zero
+        sprite.shader = SKShader(source: shaderCommon + saturnsRingsSource(rings), uniforms: [
+            SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]), SKUniform(name: "u_table", texture: table),
+            cam, rot, sunUniform, lens, moonUniform,
+            SKUniform(name: "u_exposure", float: exposure), SKUniform(name: "u_planetExposure", float: min(exposure, 1.52)),
+        ] + ramp.enumerated().map { SKUniform(name: "u_c\($0.offset)", vectorFloat3: $0.element) })
+        addChild(sprite)
+
+        if let next { glide(to: next, at: since) }
+        advance()
+        show(camera(at: time))
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func update(_ currentTime: TimeInterval) {
+        time += frameTime(currentTime, &lastUpdate)
+        advance()
+        show(camera(at: time))
+    }
+
+    /// The camera at `time` on the scene's clock, in the phase it's in now.
+    func camera(at time: Double) -> Camera {
+        let held = Self.held(Self.views[current], for: time - since)
+        guard case .glide(let from) = phase else { return held }
+        let u = min(max((time - since) / Self.glide, 0), 1)
+        return Self.between(from, Self.held(Self.views[current], for: 0), u * u * (3 - 2 * u))
+    }
+
+    /// Moves the phase on: to a glide toward the view picked in Settings, or in Cycle toward one at random once a
+    /// hold is over, and to a hold once a glide is over, each at the moment it's due, so the path is the same at any
+    /// frame rate.
+    private func advance() {
+        let picked = Int(Self.view.value) - 1
+        while true {
+            if case .glide = phase, time - since >= Self.glide {
+                (phase, since) = (.hold, since + Self.glide)
+                batteryRate = Self.views[current].rate
+            } else if picked >= 0, picked != current {
+                glide(to: picked, at: time)
+            } else if picked < 0, case .hold = phase, time - since >= Self.hold {
+                glide(to: Self.next(after: current, previous: previous), at: since + Self.hold)
+            } else {
+                return
+            }
+        }
+    }
+
+    private func glide(to next: Int, at moment: Double) {
+        phase = .glide(from: camera(at: moment))
+        (previous, current, since) = (current, next, moment)
+        batteryRate = nil
+    }
+
+    /// Hands `camera` to the shader.
+    private func show(_ camera: Camera) {
+        let axes = camera.axes, tangent = Float(tan(camera.field / 2 * .pi / 180))
+        cam.vectorFloat3Value = SIMD3<Float>(axes.at)
+        rot.matrixFloat3x3Value = matrix_float3x3(columns: (SIMD3<Float>(axes.right), SIMD3<Float>(axes.up), SIMD3<Float>(axes.ahead)))
+        sunUniform.vectorFloat3Value = SIMD3<Float>(axes.sun)
+        lens.vectorFloat2Value = [tangent, tangent * Float(size.height / size.width)]
+        moonUniform.vectorFloat2Value = [Float(camera.ahead / Self.daphnis), Float(camera.moon)]
+    }
 }
 
 /// Saturn's main rings every 8 km, from `Resources/saturn-rings.tsv` (docs/saturns-rings/profile.py made it; its
 /// header has the sources): each radius's normal optical depth τ, from a Cassini UVIS occultation, and its particles'
 /// brightness (ϖ₀P/4), from Voyager 2's lit-face picture.
 // ponytail: 8 km a sample, 8,751 texels, near enough for view C, where a device pixel covers about 6 km of radius at
-// the bottom edge and more everywhere else. The low, close views (E and F) draw 1-2 km a pixel near the bottom: a 4 km
-// profile (16,384 texels, Metal's widest) if their near field looks soft.
+// the bottom edge and more everywhere else. The close views draw finer near the bottom, E about 1.6 km a pixel and F
+// about 0.1 km, so their near fields are the profile smoothed, as in the tiles Dave picked: a 4 km profile (16,384
+// texels, Metal's widest) if they look soft.
 struct RingProfile {
     /// The first radius and the step between samples, in Mm, the shader's unit.
     let start: Double, step: Double
@@ -112,8 +293,8 @@ struct RingProfile {
 
 /// The shader: the ring plane and the planet in one pass, the rings lit as a thin layer that scatters once
 /// (research-method.md §3), each band filtered to the pixel's footprint by the pyramid, the planet's shadow on the
-/// rings and theirs on it, ringshine on its night side, then exposure, a soft knee and dither. Ported from
-/// docs/saturns-rings/mock.swift less its moons' ripples and spokes.
+/// rings and theirs on it, ringshine on its night side, Daphnis and its waves, then exposure, a soft knee and dither.
+/// Ported from docs/saturns-rings/mock.swift, less Pan's ripple and the spokes, with Daphnis's numbers written in.
 private func saturnsRingsSource(_ rings: RingProfile) -> String {
     let rows = Double(RingProfile.ks * RingProfile.levels)
     /// Declares `v`, the mean of exp(−τk) over the footprint `w` texels either side of `u`, from the two rows of k
@@ -122,14 +303,19 @@ private func saturnsRingsSource(_ rings: RingProfile) -> String {
         "vec4 \(v)At = pyrAt(\(u), \(w), \(k)); vec4 \(v)0 = texture2D(u_table, \(v)At.xy); vec4 \(v)1 = texture2D(u_table, \(v)At.xz); float \(v) = mix(pyrOf(\(v)0), pyrOf(\(v)1), \(v)At.w); float \(v)Alb = \(v)0.b * 0.5;"
     }
     return """
-    // Faint sparse stars, display values: luma 30 at most (the look report's cap).
-    // ponytail: random, and fixed to the screen, which holds only while the camera stands still; the real catalogue,
-    // fixed to the sky, from Black Hole's, once the camera turns (step (d) of the build order).
-    float stars(vec2 pts) {
-        vec4 r = hash42(floor(pts / 7.0));
+    // Faint sparse stars, display values: luma 30 at most (the look report's cap), fixed to the sky so they turn
+    // with the camera in a glide. q is the way to look with the Sun at azimuth 0, perPt the points to a radian. The
+    // sky is a cube, each face in cells 0.0065 across (7 points at 70 degrees across, the mock-ups' grid).
+    // ponytail: random stars; the real catalogue and Milky Way from Black Hole's in step (d) of the build order.
+    float stars(vec3 q, float perPt) {
+        vec3 a = abs(q);
+        vec2 f = a.x >= max(a.y, a.z) ? q.yz / a.x : a.y >= a.z ? q.xz / a.y : q.xy / a.z;
+        float face = a.x >= max(a.y, a.z) ? 1.0 + sign(q.x) : a.y >= a.z ? 3.0 + sign(q.y) : 5.0 + sign(q.z);
+        vec2 g = f / 0.0065;
+        vec4 r = hash42(floor(g) + vec2(face * 400.0, 0.0));
         if (r.x > 0.05) { return 0.0; }
         vec2 off = (r.yz - 0.5) * 0.6;
-        float d = length(fract(pts / 7.0) - 0.5 - off) * 7.0;
+        float d = length(fract(g) - 0.5 - off) * 0.0065 * perPt;
         return smoothstep(0.9, 0.0, d) * (0.25 + 0.75 * pow(r.w, 4.0)) * 30.0 / 255.0;
     }
     // Where the pyramid keeps the mean of exp(-tau k) over a box 2w texels wide, in the two rows of k round k.
@@ -153,18 +339,47 @@ private func saturnsRingsSource(_ rings: RingProfile) -> String {
         vec3 c = u_cam, s = u_sun;
         float req = 60.268, k = 60.268 / 54.364;
 
-        // the ring plane
+        // the ring plane, and Daphnis's ripple: a shift of radius (and a squeeze of the streamlines) downstream of it.
+        // u_moon is how far ahead of the camera it is (radians round Saturn) and how much of it shows.
         float tr = -c.z / d.z;
         vec3 p = c + tr * d;
         float r = length(p.xy);
+        float crowd = 1.0, tilt = 0.0, gap = 1.0;
+        float dr = (r - 136.504) * 1000.0;                                   // km from Daphnis's orbit
+        if (u_moon.y > 0.0 && abs(dr) > 17.5 && abs(dr) < 1050.0) {         // the Keeler gap's edges are 17.5 km from it
+            float phi = atan(p.y, p.x) - u_moon.x;
+            float down = mod(-sign(dr) * phi, 6.2831853);                    // radians downstream of the moon
+            float lambda = 9.424778 * abs(dr);                               // 3 pi |dr| (Showalter et al. 1986)
+            float theta = 6.2831853 * down * 136504.0 / lambda;              // the wake's phase
+            // the edges pushed 2.5 km (worked out from Daphnis's mass, unchecked), standing 1 km tall (PIA11654)
+            float a = 2.5 * u_moon.y * pow(17.5 / abs(dr), 2.0) * exp(-theta / 25.0);
+            r -= a * sin(theta) / 1000.0;
+            crowd = clamp(1.0 + a * cos(theta) * theta / abs(dr), 0.5, 2.0);
+            // the edge waves stand up out of the plane: their slope turns each crest toward or away from the Sun
+            float rise = u_moon.y * exp(-(abs(dr) - 17.5) / 8.0) * exp(-theta / 25.0);
+            vec2 along = normalize(vec2(-p.y, p.x)) * -sign(dr);
+            tilt = rise * 6.2831853 / lambda * cos(theta) * dot(normalize(s.xy), along);
+        }
         float u = (r - \(rings.start)) / \(rings.step);
         float w = max(0.5 * length(vec2(dfdx(u), dfdy(u))), 0.5);
+        // Daphnis's gap, drawn sharp from its own edges rather than the 8 km profile: real gap edges are sharper than
+        // any camera has resolved (research-look.md). Antialiased over the pixel's footprint in km.
+        if (u_moon.y > 0.0) {
+            float off = abs(r - 136.504) * 1000.0, fw = max(0.5 * length(vec2(dfdx(r), dfdy(r))) * 1000.0, 0.01);
+            gap = mix(1.0, smoothstep(17.5 - fw, 17.5 + fw, off), u_moon.y);
+        }
 
         // the planet: an oblate spheroid, a sphere once z is stretched by k
         vec3 cs = vec3(c.xy, c.z * k), ds = vec3(d.xy, d.z * k);
         float A = dot(ds, ds), B = dot(cs, ds), C = dot(cs, cs) - req * req;
         float disc = B * B - A * C;
         float tp = disc > 0.0 ? (-B - sqrt(disc)) / A : 1e9;
+
+        // Daphnis itself, a small grey ball 3.8 km across in its gap
+        vec3 mc = vec3(cos(u_moon.x), sin(u_moon.x), 0.0) * 136.504;
+        vec3 oc = c - mc;
+        float mb = dot(oc, d), mdisc = mb * mb - dot(oc, oc) + 0.0038 * 0.0038;
+        float tm = (u_moon.y > 0.0 && mdisc > 0.0) ? -mb - sqrt(mdisc) : 1e9;
 
         vec3 lin = vec3(0.0);   // light, before exposure: planet and rings in I/F
         float sky = 1.0;        // how much of the sky shows
@@ -194,18 +409,18 @@ private func saturnsRingsSource(_ rings: RingProfile) -> String {
             sky = 0.0;
         }
         if (tr > 0.0 && tr < tp && r > 72.2 && r < 141.9) {
-            float mu = max(abs(d.z), 1e-4), mu0 = max(abs(s.z), 2e-3);
+            float mu = max(abs(d.z), 1e-4), mu0 = max(abs(s.z) + tilt, 2e-3);
             float kv = 1.0 / mu, ks = 1.0 / mu0;
-            \(mean("eView", "u", "w", "kv"))
+            \(mean("eView", "u", "w", "kv * crowd"))
             float light = 0.0, t = 0.0;
             if (c.z * s.z > 0.0) {
-                \(mean("eBoth", "u", "w", "kv + ks"))
+                \(mean("eBoth", "u", "w", "(kv + ks) * crowd"))
                 light = eViewAlb * (1.0 - eBoth) * mu0 / (mu + mu0);
                 t = light / (0.28 * mu0 / (mu + mu0));
             } else {
                 float k2 = abs(kv - ks) < 0.1 * ks ? ks * 1.1 : kv;
-                \(mean("eSun", "u", "w", "ks"))
-                \(mean("eK2", "u", "w", "k2"))
+                \(mean("eSun", "u", "w", "ks * crowd"))
+                \(mean("eK2", "u", "w", "k2 * crowd"))
                 light = eViewAlb * (eSun - eK2) / (mu * (k2 - ks));
                 // the most an unlit slab can pass at this angle, at tau = ln(k2/ks) / (k2 - ks)
                 float best = log(k2 / ks) / (k2 - ks);
@@ -218,15 +433,26 @@ private func saturnsRingsSource(_ rings: RingProfile) -> String {
             float sunlit = b < 0.0 ? smoothstep(req - 0.02 + b * 0.0005, req + 0.02 - b * 0.0005, miss) : 1.0;
             // the rings take the palette's colour at their brightness against a saturated B ring's
             vec3 hueLin = pow(rampAt(t * 0.95, u_c0, u_c1, u_c2, u_c3, u_c4), vec3(2.2));
-            lin = lin * eView + hueLin / max(luma(hueLin), 1e-4) * light * sunlit * u_exposure;
+            eView = mix(1.0, eView, gap);
+            lin = lin * eView + hueLin / max(luma(hueLin), 1e-4) * light * sunlit * gap * u_exposure;
             sky *= eView;
+        }
+        if (tm < min(tp, tr > 0.0 ? tr : 1e9)) {
+            vec3 n = normalize(c + tm * d - mc);
+            // a dark icy moonlet, about as bright as the A ring
+            // ponytail: it and its waves fade over a glide into or out of its view, while the camera is a few hundred
+            // km to Mm off and they are a few pixels; place it on its real orbit in every view if the fade ever shows.
+            lin = mix(lin, vec3(0.12 * max(dot(n, s), 0.0) + 0.002) * u_planetExposure, u_moon.y);
+            sky *= 1.0 - u_moon.y;
         }
 
         // exposure and a knee that stays nearly straight to luma 185 (Cassini's contrast kept) and never passes 214
         lin = max(lin, 0.0);
         vec3 col = pow(lin / sqrt(sqrt(1.0 + pow(lin / 0.68, vec3(4.0)))), vec3(0.4545));
         // the sky: near-black (luma 4-8) and faint stars, both behind whatever the rings let through
-        col += (6.0 / 255.0 + stars(v_tex_coord * u_size)) * sky;
+        vec2 toSun = normalize(s.xy);
+        vec3 q = vec3(toSun.x * d.x + toSun.y * d.y, toSun.x * d.y - toSun.y * d.x, d.z);
+        col += (6.0 / 255.0 + stars(q, u_size.x / (2.0 * u_lens.x))) * sky;
         col += 3.0 / 255.0 * (1.0 - sky);
         col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 255.0;
         gl_FragColor = vec4(col, 1.0);
