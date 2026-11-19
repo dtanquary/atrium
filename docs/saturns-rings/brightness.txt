@@ -16,3 +16,9 @@ sheet3-ripple	D	106	170	185	193	2.023
 sheet3-ripple	E	90	162	190	197	2.701
 sheet3-ripple	F	129	170	187	196	4.988
 sheet4-desk	Along	14	170	177	179	1.478
+sheet5-unlit	A	46	188	200	209	1.478
+sheet5-unlit	B	6	80	94	105	1.478
+sheet5-unlit	C	14	171	177	179	1.478
+sheet5-unlit	D	40	192	201	209	1.478
+sheet5-unlit	E	56	67	103	118	1.478
+sheet5-unlit	F	59	72	84	120	1.478

@@ -2,13 +2,22 @@
 
 Drifting just above Saturn's rings: thousands of fine bands running off to a horizon, the planet's straight-edged shadow lying across them, the planet itself rising at one side, and a moon's ripple passing through. The bands are the rings' real structure, measured by Cassini as it watched stars pass behind them, and the light is the Sun's real angle on the rings today. One shader, in Black Hole's family, but lit by reflected sunlight rather than glowing.
 
-The idea is from the ideas page of 2026-11-14 ("Saturn's Rings · New wallpaper · Part new": "Drifting just above the ring plane: thousands of fine bands, the planet's shadow lying across them, and a moon's ripple passing through. What is real: the rings' real structure from Cassini's measurements. Builds on: Black Hole. One shader, in Black Hole's family. Risk: low. It has to look different enough from Black Hole's disc. The ring data's licence is unchecked."). Dave ran it through the new-wallpaper process on 2026-11-18. It was researched that evening by two agents and mocked up for him to choose from. Nothing is built yet.
+The idea is from the ideas page of 2026-11-14 ("Saturn's Rings · New wallpaper · Part new": "Drifting just above the ring plane: thousands of fine bands, the planet's shadow lying across them, and a moon's ripple passing through. What is real: the rings' real structure from Cassini's measurements. Builds on: Black Hole. One shader, in Black Hole's family. Risk: low. It has to look different enough from Black Hole's disc. The ring data's licence is unchecked."). Dave ran it through the new-wallpaper process on 2026-11-18. It was researched that evening by two agents and mocked up for him to choose from, and on 2026-11-19 he chose every view, with the camera gliding between them ([Dave's decisions](#daves-decisions-2026-11-19)).
 
 - **Research:** [the method](saturns-rings/research-method.md) (geometry, the shader, aliasing, the ring data, the moon's ripple, motion, cost, with a probe's measurements) and [the look](saturns-rings/research-look.md) (Cassini's pictures by PIA number, colours by ring and face, palettes, brightness caps, licences, names).
 - **Data:** Cassini UVIS stellar-occultation profiles of the rings' optical depth, and Voyager's lit-face brightness profile, from NASA's PDS Ring-Moon Systems Node. NASA's science data policy (SPD-41a) puts mission data in the public domain: **checked** ([the policy](https://science.nasa.gov/spd-41/)). The node's own pages state no licence, so the datasets are named and credited.
 - **Scripts:** `docs/saturns-rings/`: `profile.py` bakes the profile, `mock.swift` draws the mock-ups with SpriteKit's SKRenderer as the render test draws a wallpaper (meant to carry into the build), `variants.py` and `sheet.py` make the sheets.
 - **Pictures of it:** the mock-up sheets in `docs/saturns-rings/`, below.
-- **Where it stands (2026-11-18):** round 1 of mock-ups (the view, the light, the moon's ripple, and one at the app's size) is with Dave. Nothing in `Sources/`.
+- **Where it stands (2026-11-19):** Dave has chosen from round 1 (below). Step (a) of the build is next, hidden behind the `unfinished` switch.
+
+## Dave's decisions (2026-11-19)
+- **Every view, toggled or cycled.** Of round 1: "you dont need films, the images look great: all of the views you gave me are amazing, can we not toggle or cycle btween them?" So no single view: a View setting offers each of them, and a cycle moves between them. Round 1's films (the drift at 1× and 10×, Daphnis passing) were cancelled before any was made.
+- **Six views:** sheet 1's five (looking in, the planet rising; along the rings to the horizon; along the rings, the planet's edge rising; from above, the shadow behind a lit globe; low over the Encke gap) and sheet 3's Daphnis close (120 km over the Keeler gap, its real waves on the gap's edges). Not picked: sheet 1's five alone.
+- **The cycle glides:** the camera flies from one view to the next over a minute or two, then holds. Not picked: a crossfade in place, or a new view only at each load.
+- **The unlit face by default, the lit face as a pick,** both in today's real sunlight. Not picked: both faces in the cycle (crossing the ring plane), or the lit face by default. Golden night isn't offered (closest to Black Hole), and Cassini's years aren't a setting (they look like today).
+- **The moon's ripple is real or absent:** Daphnis's real waves, in its own view. Nothing is exaggerated.
+
+Still his to decide, once it runs: how long a view holds and how long a glide takes, whether the drift within a view shows enough, and whether spokes earn a place.
 
 ## Mock-ups, round 1 (2026-11-18)
 Drawn by `docs/saturns-rings/mock.swift`, the probe's shader grown up: SpriteKit's SKRenderer at 3024 × 1964, scaled to the tile, from the real ring profile (`profile.tsv`). `python3 sheet.py <sheet>` in that folder redraws any of them from `variants.py`. Each tile's exposure puts its brightest real thing (the planet's lit limb, or else the lit B ring's brightest bands) at a 99.9th percentile of about 172–190 of 255, and lets the middle fall where it falls; every tile's brightness is in `brightness.txt`.
@@ -22,6 +31,12 @@ What isn't real in the tiles: the planet's bands are drawn, not mapped (in the b
 
 Next, if Dave picks a view and a light: films of the motion at the real pace (the slow drift across the bands, the shadow, spokes coming and going), since a slow scene's risk is reading as a still.
 
+## Mock-ups, round 2 (2026-11-19)
+A side agent pointed out that every tile of sheet 1 was drawn from the lit side, while Dave's default is the unlit side, and that the unlit view A had shown the planet as a dark disc in the probe. So `saturns-rings/sheet5-unlit.jpg` draws all six views from the unlit side, at one exposure, sheet 4's (1.478), as a glide between them will draw them. What it showed:
+- **Views B to F hold up from the unlit side:** the B ring dark, the A and C rings a soft cocoa-brown, every view in one family.
+- **View A needed its Sun moved:** with the Sun 140° round from the camera, the globe was mostly night side, a dark disc with a ring round it, Black Hole's look. At 60° (tried beside 40°, 90° and 110°) the globe is lit three-quarters, banded by the rings' shadows, behind the dark-side rings, as in Cassini's pictures. The view's shadow then falls behind the planet, out of sight.
+- **One exposure serves every view.** Exposed on their own, the close views E and F came out bright and peach (a middle brightness of 110 and 142). At sheet 4's exposure they are 56 and 59, B is 6, and the views with the planet are 14 to 46, with the planet's lit face the brightest thing (a 99.9th of 177 to 201). So a glide needn't change the exposure at all.
+
 ## What the real thing looks like
 From the two reports, cut to what a build would use.
 - **Sizes** (NSSDC and the Ring-Moon Systems Node, checked): Saturn 60,268 km across the equator to its cloud tops, 54,364 km to the pole. The C ring 74,491–91,975 km from the centre, the B ring to 117,570, the Cassini Division to 122,050, the A ring to 136,770, with the Encke gap (322 km wide, Pan in it) at 133,584 and the Keeler gap (35 km, Daphnis in it) at 136,504; the F ring at 140,224. The rings are 5 to 30 m thick: a plane, from any view here.
@@ -32,11 +47,21 @@ From the two reports, cut to what a build would use.
 - **Contrast:** broad plateaus, each gently banded (±8–20% within a ring), with a few sharp steps between rings (3 to 6 times). The planet's shadow is black, with an edge about 100 km soft.
 - **A moon's ripple:** Daphnis's waves on the edges of the Keeler gap (about 165 km apart, 0.5–1.5 km tall) and Pan's wakes on the Encke gap (about 1,520 km apart along the edge) are real and move with their moons, but they are under a pixel from any view that also shows the planet. Spokes (faint radial smudges thousands of km long, over the B ring, coming and going in hours) are seasonal and strongest near equinox, which is now.
 
-## How it would work
-The plan from the method research, before any choice is made.
+## How it works
+The plan, from the method research and Dave's choices. Where the build goes another way it will say so in a line beginning **As built**.
 - **One shader.** A ray per pixel meets the ring plane (its radius picks the band) and the planet, an oblate sphere. The planet's shadow on the rings and the rings' shadow on the planet are worked out per pixel; light through the rings follows their optical depth, so stars and the planet show through the thin C ring and the Cassini Division. Lit and unlit faces follow the textbook single-scattering formulas for a thin layer.
 - **No shimmer:** the bands are a function of radius alone, so each pixel takes the exact average of the profile over the stretch of radius it covers, from a table of averages at every width (a mip chain by radius). A table of running sums failed in SpriteKit for lack of precision; this one works and costs two reads a value.
 - **Cost:** 0.27–0.32 ms of GPU a frame at 3024 × 1964 in the probe, against 1.74 for Nebula run the same way; expect 0.35–0.5 in the app with stars and the light on the planet's night side.
+- **The views are cameras, not scenes.** Each view is a camera (distance from Saturn, height above the rings, which way it looks, field of view), a direction of the Sun round the planet that puts the shadow in frame, and an exposure, all from `variants.py`'s tiles. A glide moves every one of those numbers smoothly from one view to the next, so the shader draws the in-between frames as it draws the views. The exposure is eased in light, not in display values, so a glide doesn't flash.
+- **The light is today's:** the Sun's height over the ring plane from the date (Saturn's orbit is in `SkyMath`, its pole from the IAU), checked against JPL Horizons' 8.4° south for 2026-11-18. The unlit face is the one the Sun isn't on.
+- **The name's files:** the app makes a wallpaper's file names from its name, lowercased with hyphens for spaces, which would put an apostrophe in `preview-saturn's-rings.jpg`. One shared helper drops apostrophes for every caller (Settings' preview, the menu's loop, the trim shots), so the files are `preview-saturns-rings.jpg` and `menu-saturns-rings.mp4`, and the doc's slug matches.
+
+### Build order
+Each step a commit once it builds and the tests pass, with its snapshot looked at, behind `unfinished: true`, in a worktree on the branch `saturns-rings`.
+- **(a) The still,** in view C, unlit face, today's Sun fixed at 8.4° south: the shader from `mock.swift`, the profile as a resource, the pyramid baked as the scene is built (measured, and shared between copies by `sharedTexture`), the slug helper, `preview-saturns-rings.jpg`, and the About credit for the ring data.
+- **(b) The six views and the glide:** View (Cycle, or one of the six), the hold and the glide, the slow drift within a view, the Sun turning at the camera's real orbital rate, Daphnis on its orbit in its own view; `batteryRate` from the fastest motion.
+- **(c) Settings:** Face (Unlit, Lit), Speed, Brightness, how long a view holds, Stars; a way to pin the view, the clock and the date for pictures.
+- **(d) Live and real:** the Sun's height from the date; the real stars and Milky Way from Black Hole's catalogue and glow in place of random ones.
 
 ## Sources
 The research reports list every page read and say which figures and licences were checked.
