@@ -483,6 +483,10 @@ struct AboutPage: View {
                 credit("Earth imagery", "NASA's Blue Marble (public domain)", "https://visibleearth.nasa.gov/collection/1484/blue-marble")
                 credit("Earth at night", "NASA's Black Marble (public domain)", "https://earthobservatory.nasa.gov/features/NightLights")
                 credit("The Moon", "NASA's CGI Moon Kit: LRO's LROC color and LOLA heights (public domain)", "https://svs.gsfc.nasa.gov/4720")
+                credit("Saturn's rings", "Cassini UVIS's occultation profile (NASA/JPL/University of Colorado), from NASA's PDS Ring-Moon Systems Node (public domain)",
+                       "https://pds-rings.seti.org/holdings/volumes/COUVIS_8xxx/COUVIS_8001/data/UVIS_HSP_2008_231_BETCEN_I_TAU10KM.TAB")
+                credit("Saturn's rings' brightness", "Voyager 2 ISS's lit-face profile (NASA/JPL), from NASA's PDS Ring-Moon Systems Node (public domain)",
+                       "https://pds-rings.seti.org/holdings/volumes/VG_28xx/VG_2810/DATA/IS2_P0001_V01_KM010.TAB")
             }
             Section {
                 credit("Aurora's mountains", "The Tetons, NPS photo by A. Falgoust (public domain)",

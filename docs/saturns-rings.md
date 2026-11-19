@@ -63,5 +63,39 @@ Each step a commit once it builds and the tests pass, with its snapshot looked a
 - **(c) Settings:** Face (Unlit, Lit), Speed, Brightness, how long a view holds, Stars; a way to pin the view, the clock and the date for pictures.
 - **(d) Live and real:** the Sun's height from the date; the real stars and Milky Way from Black Hole's catalogue and glow in place of random ones.
 
+## The build so far
+- **(a) The still (2026-11-19).** `Sources/Atrium/SaturnsRings.swift` draws view C from the unlit face, nothing moving: the Sun fixed 8.4° south of the ring plane and 320° round from the camera, exposure 1.478, the planet's own held at 1.52 at most (sheet 4's look). Hidden behind `unfinished: true`.
+  - **The shader is mock.swift's,** less the moons' ripples, the moonlet and the spokes, which come back in step (b). Three small changes, none of which moves a pixel in this view: the light is clamped at 0 before the tone curve (Sources/CLAUDE.md's `pow` of a negative base, which draws black); the stars' and dither's hashes come from `shaderCommon`, the same code; and the variables nothing read are gone.
+  - **The profile** is `Sources/Atrium/Resources/saturn-rings.tsv`, `saturn-rings/profile.tsv` copied with its header (sources and licence). **The pyramid** is baked from it as the scene is built, 8,751 × 156 texels of RGBA8 (5.5 MB), and shared between copies by `sharedTexture`. The bake works out the brightness means once for each width rather than again for each of the 12 values of k, the same numbers for a twelfth of that work.
+  - **The name's files:** `Wallpaper.slug` (Scenes.swift) drops the apostrophe, for Settings' preview, the menu's loop and the trim shots, so the still is `preview-saturns-rings.jpg`. No other wallpaper's name has one, so theirs are unchanged.
+  - **About** credits the Cassini UVIS and Voyager 2 profiles, each linked to its file on the PDS Ring-Moon Systems Node.
+  - **The snapshot looked at:** the render test's PNG (3024 × 1964) against the mock-up drawn with the same settings: the same picture to the pixel, bar one pixel 3 levels off, with the same luma (median 14, 99th 171, 99.9th 177, max 179, as `brightness.txt` has sheet 4) and no black pixels. The B ring dark, the A and C rings cocoa-brown with their fine bands, the planet buttercream with the rings' shadows across it, its limb over the far rings, no black disc, no stray lines. It is `docs/images/saturns-rings.jpg`.
+
+## Settings
+None yet. Face, Speed, Brightness, how long a view holds and Stars come in step (c).
+
+## Cost
+Measured in a release build by the render test at 3024 × 1964 (2x Retina), two runs:
+- **Drawing:** 0.49–0.50 ms of CPU and 0.38–0.39 ms of GPU a frame, against a budget of about 2 of each, and the research's forecast of 0.35–0.5 ms of GPU.
+- **Building, on the main thread:** reading the profile 10–11 ms, baking the pyramid 8.5 ms (only for the first copy: one built while another is showing shares it). About 19 ms in all, under the 30 ms at which a bake would have to move off the main thread.
+- **Memory:** the pyramid's 5.5 MB of texels, and its copy on the GPU.
+- **The shader:** 13 uniforms of the about 30 a shader can take (`u_size`, `u_table`, `u_cam`, `u_rot`, `u_sun`, `u_lens`, the two exposures and five colours), and one texture.
+- No `batteryRate` yet: nothing moves, so step (b) picks it from the fastest motion.
+
+## Checking it
+```sh
+SNAPSHOT_SCENE="Saturn's Rings" SNAPSHOT_DIR=/some/dir swift test --filter everySceneRenders   # → /some/dir/Saturn's Rings.png
+swift test -c release -Xswiftc -enable-testing --filter saturnsRingsPyramidHoldsMeans            # the pyramid's means, and how long the read and the bake take
+```
+The mock-up to compare it with, drawn the same way (in `docs/saturns-rings/`): `swiftc -O "$PWD/mock.swift" -o $TMPDIR/saturn-mock && $TMPDIR/saturn-mock '{"view":"C","sunAz":320,"sunEl":-8.4,"face":"unlit","exposure":1.478,"out":"/some/dir/mock-C.png"}'`. In the app, it shows once `defaults write com.dtanquary.atrium unfinished -bool true` is set and Atrium relaunched.
+
+## Shortcuts
+The `ponytail:` comments in `SaturnsRings.swift`, each with where it stops being good enough:
+- **The Sun is fixed at 8.4° south,** right for 2026-11-18. It drifts from the real one by about 0.3° a month, climbing to 27° at the 2032 solstice: from the date in step (d).
+- **The profile is read on every build** (10 ms), though the shader needs only its first radius, step and length: keep those beside the shared pyramid if building gets slow.
+- **The profile is 8 km a sample.** View C's bottom edge covers about 6 km of radius a device pixel, near enough. The close views E and F draw 1–2 km a pixel near the bottom: a 4 km profile (16,384 texels, Metal's widest) if their near field looks soft.
+- **The stars are random and fixed to the screen,** which holds only while the camera stands still: the real catalogue, fixed to the sky, once the camera turns (steps (b) and (d)).
+- **The planet's bands are drawn by latitude,** not mapped: a Cassini map of the globe if a view close to it shows them as too regular.
+
 ## Sources
 The research reports list every page read and say which figures and licences were checked.
