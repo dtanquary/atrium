@@ -29,6 +29,8 @@ Asked on Dave's word, the session that wrote the ideas page said:
 ## Dave's decisions (2026-11-18)
 - **Always at least a subtle wind:** "just have there always be at least some subtle wind", asked whether the live wind should leave the trees nearly still on calm days, as real ones are (research-motion.md measured about 0.5 px/s for leaves in still air). Whatever the wind, real or the stand-in breeze, the motion never drops below about Beaufort 2, "leaves rustle" (about 2 m/s): leaves and the finest twigs visibly moving, by night as well. His rule "Always something to see" ([README.md](README.md#daves-direction-so-far)) applied to the wind.
 
+- **The motion: Model 2** ("go with model 2"), of three films side by side from research-motion.md's models: the old sway, Model 1 (the wood still, twigs and leaves rustling by how free they are) and Model 2 (Model 1 plus the nearest leaves moving on their own over the rest, so the crowns rearrange). The films and their measurements are in [canopy/motion-round.md](canopy/motion-round.md). Still his to judge: whether bare November, where only the fine twigs move (about 1.6 px a second), is alive enough, and the strong wind's crown sway, which still leans a little the old way.
+
 ## Mock-ups, round 1 (2026-11-16)
 Drawn by `mock.swift` with SKRenderer at 3024 × 1964, 42°N, the sky from the app's `Atmosphere`, each tile's cost and brightness printed on it. Every tile is 0.42–0.57 ms of GPU and 0.33–0.43 of CPU; every tile meets the 99th and 99.9th percentile caps, where the real photos clip at 255.
 
