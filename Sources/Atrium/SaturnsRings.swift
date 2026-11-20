@@ -167,7 +167,10 @@ final class SaturnsRings: SKScene, BatteryPaced {
     /// 10.5 Mm along, it would otherwise skim the rings at 100 km/s. The yaw goes the short way round; the Sun goes
     /// round the side away from 180°, where the planet's shadow would lie on the camera and sweep across the rings
     /// under it in a second or two. The exposure goes by its logarithm too, in light, not in what the screen shows.
-    nonisolated static func between(_ a: Camera, _ b: Camera, _ e: Double) -> Camera {
+    /// The way it looks and the light (yaw, field, the Sun, the exposures and Daphnis) go by `turning`, and the turn
+    /// about the way it looks by `rolling`, where given, else by `e`: a crossing brings the first to rest at the
+    /// crossing point while the camera moves and turns on through it.
+    nonisolated static func between(_ a: Camera, _ b: Camera, _ e: Double, turning: Double? = nil, rolling: Double? = nil) -> Camera {
         let (low, rise) = (log(a.h), log(b.h / a.h)), over = climb(a, b) { sin(.pi * $0) }
         /// The mean height from the start to `x` of the way.
         func mean(to x: Double) -> Double {
@@ -176,13 +179,13 @@ final class SaturnsRings: SKScene, BatteryPaced {
                 return sum + exp(low + rise * at + over * sin(.pi * at))
             } / 32 * x
         }
-        let h = exp(low + rise * e + over * sin(.pi * e)), along = mean(to: e) / mean(to: 1)
-        func mix(_ x: Double, _ y: Double) -> Double { x + (y - x) * e }
-        return Camera(r: a.r + (b.r - a.r) * along, h: h, yaw: a.yaw + remainder(b.yaw - a.yaw, 360) * e, pitch: mix(a.pitch, b.pitch),
-                      field: mix(a.field, b.field), sun: 180 + mix(clear(a.sun), clear(b.sun)), exposure: a.exposure * pow(b.exposure / a.exposure, e),
-                      planet: a.planet * pow(b.planet / a.planet, e),
-                      ahead: a.moon > 0 && b.moon > 0 ? mix(a.ahead, b.ahead) : a.moon > 0 ? a.ahead : b.ahead, moon: mix(a.moon, b.moon),
-                      lit: a.lit, roll: mix(a.roll, b.roll))
+        let h = exp(low + rise * e + over * sin(.pi * e)), along = mean(to: e) / mean(to: 1), t = turning ?? e
+        func mix(_ x: Double, _ y: Double, _ e: Double) -> Double { x + (y - x) * e }
+        return Camera(r: a.r + (b.r - a.r) * along, h: h, yaw: a.yaw + remainder(b.yaw - a.yaw, 360) * t, pitch: mix(a.pitch, b.pitch, e),
+                      field: mix(a.field, b.field, t), sun: 180 + mix(clear(a.sun), clear(b.sun), t), exposure: a.exposure * pow(b.exposure / a.exposure, t),
+                      planet: a.planet * pow(b.planet / a.planet, t),
+                      ahead: a.moon > 0 && b.moon > 0 ? mix(a.ahead, b.ahead, t) : a.moon > 0 ? a.ahead : b.ahead, moon: mix(a.moon, b.moon, t),
+                      lit: a.lit, roll: mix(a.roll, b.roll, rolling ?? e))
     }
 
     /// How far a glide from `a` to `b` climbs, in the height's logarithm, at the top of a bump shaped `bump` (0 to 1
@@ -456,8 +459,8 @@ final class SaturnsRings: SKScene, BatteryPaced {
     private enum Phase { case hold, glide(from: Origin) }
     /// Where a glide sets out from: a view still drifting on, as a hold ends, or the one-face loop still flying on, so
     /// the camera doesn't stop dead before it moves off; or a camera standing where it was, partway through a glide,
-    /// on the two-lap loop (which might change faces under it) or at the crossing point.
-    private enum Origin { case drifting(Int), flying, still(Camera) }
+    /// on the two-lap loop (which might change faces under it); or the crossing point, passed on the way through it.
+    private enum Origin { case drifting(Int), flying, still(Camera), crossed }
     private var phase = Phase.hold, goal: Goal, after = Goal.loop, previous: Int?, since: Double, time = 0.0, lastUpdate: TimeInterval?
     /// The face the camera is on, or will be once it has crossed; whether it flies the two-lap loop that changes faces
     /// (Fly Through under Alternate); when it last changed faces, on the scene's clock; and, in Cycle under Alternate,
@@ -575,12 +578,24 @@ final class SaturnsRings: SKScene, BatteryPaced {
         case .drifting(let view): from = Self.held(Self.views[view], for: drift, lit: lit)
         case .flying: from = Self.flying(loop, lit: lit)
         case .still(let camera): from = camera
+        case .crossed: from = Self.crossing(lit: lit, leaving: true)
         }
         // onto a view as it begins to drift, or onto the loop as it flies on, so the camera arrives moving with it
         var to = there
         if case .view(let view) = goal { to = Self.held(Self.views[view], for: 0, lit: lit) }
         let u = min(max((time - since) / Self.glide, 0), 1)
-        return Self.between(from, to, u * u * (3 - 2 * u))
+        func eased(_ u: Double) -> Double { u * u * (3 - 2 * u) }
+        func steeper(_ u: Double) -> Double { u * u * u * (10 + u * (6 * u - 15)) }
+        // A crossing is one move of two glides' length, eased at its two ends, through the crossing point without
+        // stopping: the camera's place by one easing across the whole move, so it runs on through the plane at its
+        // fastest, and its turn by one that's steeper there (smootherstep), as it's the turn that moves the picture
+        // there; the way it looks and the light by each half's own, coming to rest at the crossing point, where they
+        // turn back (a view held goes out to Looking In's yaw, Sun and field and back to its own).
+        if goal == .crossing { return Self.between(from, to, 2 * eased(u / 2), turning: eased(u), rolling: 2 * steeper(u / 2)) }
+        if case .crossed = origin {
+            return Self.between(from, to, 2 * eased((1 + u) / 2) - 1, turning: eased(u), rolling: 2 * steeper((1 + u) / 2) - 1)
+        }
+        return Self.between(from, to, eased(u))
     }
 
     /// Where a glide starting now sets out from.
@@ -606,11 +621,10 @@ final class SaturnsRings: SKScene, BatteryPaced {
         while true {
             if case .glide = phase, time - since >= Self.glide {
                 if goal == .crossing {
-                    // ponytail: a crossing is two glides, eased at both ends, so the camera rests at the crossing point
-                    // a moment between them; one move through it (the loop's spline) if that's ever seen as a stop
+                    // through the crossing point, onto the other face, and on to what comes after
                     lit.toggle()
                     crossed = since + Self.glide
-                    (phase, goal, since) = (.glide(from: .still(Self.crossing(lit: lit, leaving: true))), after, since + Self.glide)
+                    (phase, goal, since) = (.glide(from: .crossed), after, since + Self.glide)
                 } else {
                     (phase, since) = (.hold, since + Self.glide)
                     drift = (time - since) * speed
