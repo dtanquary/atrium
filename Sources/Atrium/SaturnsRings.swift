@@ -54,9 +54,11 @@ final class SaturnsRings: SKScene, BatteryPaced {
     nonisolated static let hold = Knob(key: "saturn.hold", label: "Hold each view", range: 1...30, standard: 8, section: "View",
                                        format: .minutes, shownWhen: view.key, shownAt: 0)
     /// Which face of the rings the camera is on: 0 the unlit (the B ring dark, the A and C rings glowing), 1 the lit,
-    /// the standard since Dave found it the nicer (2026-11-19).
-    nonisolated static let face = Knob(key: "saturn.face", label: "Face", range: 0...1, standard: 1, section: "Look",
-                                       format: .choice(["Unlit", "Lit"]))
+    /// the standard since Dave found it the nicer (2026-11-19), 2 each in turn and 3 the lit in Light Mode and the
+    /// unlit in Dark Mode (2026-11-20). The camera changes faces by flying through the ring plane, out past the rings
+    /// (`crossing`). Listed Lit, Unlit, then the two that change.
+    nonisolated static let face = Knob(key: "saturn.face", label: "Face", range: 0...3, standard: 1, section: "Look",
+                                       format: .choice(["Unlit", "Lit", "Alternate", "Lit in Light Mode, unlit in Dark Mode"]), order: [1, 0, 2, 3])
     /// The exposure, times the view's own.
     nonisolated static let brightness = Knob(key: "saturn.brightness", label: "Brightness", range: 0.5...2, standard: 1, section: "Look")
     nonisolated static let stars = Knob(key: "saturn.stars", label: "Stars", range: 0...1, standard: 1, section: "Look", format: .toggle)
@@ -118,22 +120,28 @@ final class SaturnsRings: SKScene, BatteryPaced {
     /// The numbers a frame is drawn from: a view's with its drift, or partway from one to another in a glide.
     struct Camera {
         var r, h, yaw, pitch, field, sun: Double
-        /// The exposure: the view's for the face it's on, before Brightness.
-        var exposure = SaturnsRings.unlit
+        /// The exposures, the rings' and the planet's: the view's for the face it's on, before Brightness.
+        var exposure = SaturnsRings.unlit, planet = min(SaturnsRings.unlit, SaturnsRings.planetMost)
         /// Daphnis's distance ahead along the gap (Mm), and how much of it and its waves show (1 in its view, 0 elsewhere).
         var ahead = 0.0, moon = 0.0
+        /// The face it's on, and how far it's turned about the way it looks, in degrees (only while it changes faces).
+        var lit = false, roll = 0.0
 
         /// Where the camera is, its axes, and the way to the Sun, in Mm with Saturn at the origin, the ring plane at
-        /// z = 0 and the camera on +x: on the face the Sun isn't on, or with `lit`, the face it is on, which is the
-        /// same view mirrored. `sunUp` is the Sun's height over the ring plane in degrees (as on 2026-11-18 unless
-        /// given): the faces change sides when it crosses the plane.
-        func axes(lit: Bool = false, sunUp: Double = -8.4) -> (at: SIMD3<Double>, right: SIMD3<Double>, up: SIMD3<Double>, ahead: SIMD3<Double>, sun: SIMD3<Double>) {
+        /// z = 0 and the camera on +x: on the face the Sun isn't on, or lit, the face it is on, which is the same view
+        /// mirrored, so the plane is below on the screen from either face. `sunUp` is the Sun's height over the ring
+        /// plane in degrees (as on 2026-11-18 unless given): the faces change sides when it crosses the plane. Seen
+        /// level with the plane, the two faces' cameras look the same way, but turned half round from each other about
+        /// it: a camera changing faces turns a quarter on the way to the plane and a quarter after, so the picture
+        /// carries on through the change unbroken.
+        func axes(sunUp: Double = -8.4) -> (at: SIMD3<Double>, right: SIMD3<Double>, up: SIMD3<Double>, ahead: SIMD3<Double>, sun: SIMD3<Double>) {
             let side: Double = (sunUp < 0) != lit ? 1 : -1, (yaw, pitch) = (yaw * .pi / 180, pitch * .pi / 180)
             var ahead = cos(yaw) * SIMD3<Double>(-1, 0, 0) + sin(yaw) * SIMD3<Double>(0, 1, 0)
             ahead = simd_normalize(cos(pitch) * ahead + sin(pitch) * SIMD3(0, 0, -side))
-            let right = simd_normalize(simd_cross(ahead, SIMD3(0, 0, side)))
-            let (up, round) = (sunUp * .pi / 180, sun * .pi / 180)
-            return (SIMD3(r, 0, side * h), right, simd_cross(right, ahead), ahead, SIMD3(cos(up) * cos(round), cos(up) * sin(round), sin(up)))
+            let right = simd_normalize(simd_cross(ahead, SIMD3(0, 0, side))), up = simd_cross(right, ahead)
+            let (turn, height, round) = (roll * .pi / 180, sunUp * .pi / 180, sun * .pi / 180)
+            return (SIMD3(r, 0, side * h), cos(turn) * right + sin(turn) * up, cos(turn) * up - sin(turn) * right, ahead,
+                    SIMD3(cos(height) * cos(round), cos(height) * sin(round), sin(height)))
         }
     }
 
@@ -141,7 +149,9 @@ final class SaturnsRings: SKScene, BatteryPaced {
     /// easing at both ends; in Daphnis's view it drifts along the gap toward the moon over one `swing` and back over
     /// the next.
     nonisolated static func held(_ view: View, for drift: Double, lit: Bool = false) -> Camera {
-        var camera = Camera(r: view.r, h: view.h, yaw: view.yaw, pitch: view.pitch, field: view.field, sun: view.sun, exposure: lit ? view.lit : unlit)
+        let exposure = lit ? view.lit : unlit
+        var camera = Camera(r: view.r, h: view.h, yaw: view.yaw, pitch: view.pitch, field: view.field, sun: view.sun, exposure: exposure,
+                            planet: lit ? exposure : min(exposure, planetMost), lit: lit)
         if let moon = view.moon {
             (camera.ahead, camera.moon) = (moon - view.drift * (1 - cos(.pi * drift / swing)) / 2, 1)
         } else {
@@ -170,7 +180,9 @@ final class SaturnsRings: SKScene, BatteryPaced {
         func mix(_ x: Double, _ y: Double) -> Double { x + (y - x) * e }
         return Camera(r: a.r + (b.r - a.r) * along, h: h, yaw: a.yaw + remainder(b.yaw - a.yaw, 360) * e, pitch: mix(a.pitch, b.pitch),
                       field: mix(a.field, b.field), sun: 180 + mix(clear(a.sun), clear(b.sun)), exposure: a.exposure * pow(b.exposure / a.exposure, e),
-                      ahead: a.moon > 0 && b.moon > 0 ? mix(a.ahead, b.ahead) : a.moon > 0 ? a.ahead : b.ahead, moon: mix(a.moon, b.moon))
+                      planet: a.planet * pow(b.planet / a.planet, e),
+                      ahead: a.moon > 0 && b.moon > 0 ? mix(a.ahead, b.ahead) : a.moon > 0 ? a.ahead : b.ahead, moon: mix(a.moon, b.moon),
+                      lit: a.lit, roll: mix(a.roll, b.roll))
     }
 
     /// How far a glide from `a` to `b` climbs, in the height's logarithm, at the top of a bump shaped `bump` (0 to 1
@@ -194,6 +206,21 @@ final class SaturnsRings: SKScene, BatteryPaced {
     /// would lie on the camera, so moving straight across it never goes there.
     nonisolated static func clear(_ sun: Double) -> Double { sun - 180 - 360 * ((sun - 180) / 360).rounded(.down) }
 
+    /// Where the camera changes faces: level with the ring plane, 150 Mm out, Looking In's distance, past the A ring's
+    /// edge (136.8 Mm) and the F ring (140.2), so the nearest ring is 8 Mm away and the rings are a hairline across
+    /// the planet, as at an equinox; 200 m to one side of the plane, never on it (the shader divides by the height),
+    /// where the shader has faded the hairline to a hundredth, so stepping through changes the picture by a level
+    /// or two. Turned a quarter, so the hairline stands up the screen: the way it came (`leaving` false), or the way
+    /// it goes on from the other face. Its exposures are halfway between Looking In's from the two faces, in light,
+    /// so the two faces' pictures there are the same but for the hairline.
+    nonisolated static func crossing(lit: Bool, leaving: Bool = false) -> Camera {
+        let view = views[0], (litRings, unlitRings) = (view.lit, unlit), (litPlanet, unlitPlanet) = (view.lit, min(unlit, planetMost))
+        return Camera(r: 150, h: 0.0002, yaw: view.yaw, pitch: 0, field: view.field, sun: view.sun, exposure: (litRings * unlitRings).squareRoot(),
+                      planet: (litPlanet * unlitPlanet).squareRoot(), lit: lit, roll: leaving ? -90 : 90)
+    }
+    /// How often a held view changes faces under Alternate, in seconds.
+    nonisolated static let crossEvery = 1800.0
+
     /// A view to glide to at random: never the one it's at or the one before.
     nonisolated static func next(after view: Int, previous: Int?) -> Int {
         views.indices.filter { $0 != view && $0 != previous }.randomElement()!
@@ -209,85 +236,138 @@ final class SaturnsRings: SKScene, BatteryPaced {
     nonisolated static let flightPace = 30.0
 
     /// The numbers the loop runs through smoothly, in the spaces it moves them in: r, the height's logarithm, yaw,
-    /// pitch, field, the Sun in the space that avoids 180° (`clear`), and the exposure's logarithm.
+    /// pitch, field, the Sun in the space that avoids 180° (`clear`), the exposures' logarithms, and the turn.
     private nonisolated static func channels(_ camera: Camera) -> [Double] {
-        [camera.r, log(camera.h), camera.yaw, camera.pitch, camera.field, clear(camera.sun), log(camera.exposure)]
+        [camera.r, log(camera.h), camera.yaw, camera.pitch, camera.field, clear(camera.sun), log(camera.exposure), log(camera.planet), camera.roll]
     }
 
-    /// The camera `t` of the way round Fly Through's loop, counted in views (0 at the first in `order`, each whole
-    /// number at a view, so the picture there is that view's): a periodic cubic through the views' numbers whose
-    /// slope at each view is the mean of the slopes either side (Catmull-Rom's), but level where the view is a peak
-    /// or a trough of that number and held to three times the gentler slope elsewhere (Fritsch and Carlson's limit),
-    /// so no number overshoots the views either side of it: Catmull-Rom's own took the camera from the Planet's Edge
-    /// on past Daphnis Close and out beyond the A ring, half the screen empty, before it came back in to the Encke
-    /// gap. Every number's rate goes on unbroken through each view. The climb `between` makes in a
-    /// glide between two views is folded in as a bump of the height's logarithm that starts and ends level (sin²).
-    /// Daphnis fades in over the stretch to its view and out over the one after (smoothstep, level at each end),
-    /// coming from 2 Mm ahead to 0.6 at its view, as in its tile, and on past the camera.
-    nonisolated static func path(_ t: Double, order: [Int] = flightOrder, lit: Bool = false) -> Camera {
-        let n = order.count, at = Int(t.rounded(.down)), u = t - Double(at)
-        func knot(_ i: Int) -> Camera { held(views[order[((at + i) % n + n) % n]], for: 0, lit: lit) }
-        let (p0, p1, p2, p3) = (channels(knot(-1)), channels(knot(0)), channels(knot(1)), channels(knot(2)))
-        /// The slope at a view, from the steps to it and from it.
-        func slope(_ before: Double, _ after: Double) -> Double {
-            guard before * after > 0 else { return 0 }
+    /// A loop's knots: the views in `order` from one face; or `alternating`, two laps, lit then unlit, each ending,
+    /// after From Above, out past the rings at Looking In's distance, 2 Mm up (so the camera is out beyond them before
+    /// it comes down: without it, it passed 100 km over the F ring's edge of the rings on the way), then at the
+    /// crossing point, where it changes faces, before Looking In. A knot's turn counts on round (a quarter at a
+    /// crossing, a half on the next lap, three quarters at the next crossing), so the turn runs on smoothly; the
+    /// camera's own is that less the half turns of the crossings behind it (`path`).
+    nonisolated static func route(order: [Int] = flightOrder, lit: Bool = false, alternating: Bool = false) -> [Camera] {
+        guard alternating else { return order.map { held(views[$0], for: 0, lit: lit) } }
+        return [true, false].enumerated().flatMap { lap, lit in
+            var out = held(views[0], for: 0, lit: lit), across = crossing(lit: !lit)
+            (out.h, out.pitch, out.roll, across.roll) = (2, 0, Double(lap) * 180, Double(lap) * 180 + 90)
+            return order.map { view -> Camera in var camera = held(views[view], for: 0, lit: lit); camera.roll = Double(lap) * 180; return camera } + [out, across]
+        }
+    }
+
+    /// The camera `t` of the way round a loop of `knots`, counted in knots (each whole number at one, so the picture
+    /// at a view is that view's): a periodic cubic through the knots' numbers whose slope at each knot is the mean of
+    /// the slopes either side (Catmull-Rom's), but for the distance out, the height and the turn level where the knot
+    /// is a peak or a trough of that number and held to three times the gentler slope elsewhere (Fritsch and Carlson's
+    /// limit), so they never overshoot the knots either side: Catmull-Rom's own took the camera from the Planet's Edge
+    /// on past Daphnis Close and out beyond the A ring, half the screen empty, before it came back in to the Encke gap. Every number's rate goes on
+    /// unbroken through each knot. The climb `between` makes in a glide between two knots is folded in as a bump of
+    /// the height's logarithm that starts and ends level (sin²). The face is the knot's behind it (a crossing knot is
+    /// on the far face), so it changes as the camera passes the crossing point, a kilometre off the plane. Daphnis
+    /// fades in over the stretch to its view and out over the one after (smoothstep, level at each end), coming from
+    /// 2 Mm ahead to 0.6 at its view, as in its tile, and on past the camera.
+    nonisolated static func path(_ t: Double, knots: [Camera]) -> Camera {
+        let n = knots.count, at = Int(t.rounded(.down)), u = t - Double(at)
+        /// A knot, `i` on from the one behind, its turn counted on round past the end of the loop.
+        func knot(_ i: Int) -> (camera: Camera, numbers: [Double]) {
+            let k = at + i, laps = Double(Int((Double(k) / Double(n)).rounded(.down))), camera = knots[(k % n + n) % n]
+            var numbers = channels(camera)
+            numbers[8] += laps * 360 * (knots.contains { $0.roll != 0 } ? 1 : 0)
+            return (camera, numbers)
+        }
+        let (k0, k1, k2, k3) = (knot(-1), knot(0), knot(1), knot(2)), (p0, p1, p2, p3) = (k0.numbers, k1.numbers, k2.numbers, k3.numbers)
+        /// The slope at a knot, from the steps to it and from it: limited for the distance out, the height and the turn
+        /// (`limited`), where overshooting would cross a ring's edge, the plane or level, and Catmull-Rom's own for the
+        /// rest, so that where every limited number is at a peak or level at once (Looking In after a crossing) the
+        /// others still move and the camera never stops.
+        func slope(_ before: Double, _ after: Double, limited: Bool) -> Double {
             let mean = (before + after) / 2
+            guard limited else { return mean }
+            guard before * after > 0 else { return 0 }
             return mean.sign == .minus ? max(mean, 3 * max(before, after)) : min(mean, 3 * min(before, after))
         }
         let (h00, h10, h01, h11) = (2 * u * u * u - 3 * u * u + 1, u * u * u - 2 * u * u + u, 3 * u * u - 2 * u * u * u, u * u * u - u * u)
         var x = p1.indices.map { k in
-            h00 * p1[k] + h10 * slope(p1[k] - p0[k], p2[k] - p1[k]) + h01 * p2[k] + h11 * slope(p2[k] - p1[k], p3[k] - p2[k])
+            let limited = [0, 1, 8].contains(k)
+            return h00 * p1[k] + h10 * slope(p1[k] - p0[k], p2[k] - p1[k], limited: limited) + h01 * p2[k]
+                + h11 * slope(p2[k] - p1[k], p3[k] - p2[k], limited: limited)
         }
-        x[1] += climb(knot(0), knot(1)) { pow(sin(.pi * $0), 2) } * pow(sin(.pi * u), 2)
-        var camera = Camera(r: x[0], h: exp(x[1]), yaw: x[2], pitch: x[3], field: x[4], sun: x[5] + 180, exposure: exp(x[6]))
-        if let daphnis = order.firstIndex(where: { views[$0].moon != nil }) {
-            var off = t - Double(daphnis)
-            off -= Double(n) * (off / Double(n)).rounded()
+        x[1] += climb(k1.camera, k2.camera) { pow(sin(.pi * $0), 2) } * pow(sin(.pi * u), 2)
+        // the turn the face behind takes as its own: a half for each crossing already passed
+        let behind = 180 * ((p1[8] + 90) / 180).rounded(.down)
+        var camera = Camera(r: x[0], h: exp(x[1]), yaw: x[2], pitch: x[3], field: x[4], sun: x[5] + 180, exposure: exp(x[6]), planet: exp(x[7]),
+                            lit: k1.camera.lit, roll: x[8] - behind)
+        let moons = knots.indices.filter { knots[$0].moon > 0 }
+        if let off = moons.map({ (t - Double($0)) - Double(n) * ((t - Double($0)) / Double(n)).rounded() }).min(by: { abs($0) < abs($1) }) {
             let near = max(1 - abs(off), 0)
             (camera.moon, camera.ahead) = (near * near * (3 - 2 * near), 0.6 - 1.4 * off)
         }
         return camera
     }
 
-    /// The seconds Fly Through takes at Speed 1× to reach each 1/120 of the way between views round `order`'s loop,
-    /// from its start: each step's time is how far the fastest thing on screen moves over it (`motion`), over
-    /// `flightPace`, so the pace is even on screen whatever the camera does. The last is the loop's length.
-    nonisolated static func flightTime(order: [Int] = flightOrder) -> [Double] {
-        let steps = 120 * order.count
-        var seconds = [0.0]
-        for i in 0..<steps {
-            let moved = motion(path(Double(i) / 120, order: order), path(Double(i + 1) / 120, order: order), across: 24, up: 16)
-            seconds.append(seconds.last! + moved / flightPace)
+    /// The camera `t` of the way round Fly Through's loop in `order`, from one face (tests and the order search).
+    nonisolated static func path(_ t: Double, order: [Int] = flightOrder, lit: Bool = false) -> Camera { path(t, knots: route(order: order, lit: lit)) }
+
+    /// The seconds Fly Through takes at Speed 1× to reach each 1/120 of the way between knots round a loop, from its
+    /// start: each step's time is how far the fastest thing on screen moves over it (`motion`), over `flightPace`, so
+    /// the pace is even on screen whatever the camera does, averaged with the six steps either side, so where the
+    /// fastest thing changes from one to another (the shadow's edge coming into the frame) the camera's own speed
+    /// changes over a few seconds, not in a frame: unaveraged, it changed five times over in a frame at From Above.
+    /// The last is the loop's length.
+    nonisolated static func flightTime(knots: [Camera]) -> [Double] {
+        let steps = 120 * knots.count
+        let times = (0..<steps).map { i in
+            motion(path(Double(i) / 120, knots: knots), path(Double(i + 1) / 120, knots: knots), across: 24, up: 16) / flightPace
         }
+        var seconds = [0.0]
+        for i in 0..<steps { seconds.append(seconds.last! + (-6...6).reduce(0.0) { $0 + times[((i + $1) % steps + steps) % steps] } / 13) }
         return seconds
     }
-    /// `flightTime` for the loop flown, worked out the first time it's flown (18 ms in release) and kept: 721 numbers.
-    nonisolated static let flight = flightTime()
+    nonisolated static func flightTime(order: [Int] = flightOrder) -> [Double] { flightTime(knots: route(order: order)) }
+    /// `flightTime` for the loop flown, worked out the first time it's flown (18 ms in release) and kept: 721 numbers;
+    /// and for the two-lap loop Alternate flies, which changes faces once a lap (1,681 numbers).
+    nonisolated static let flight = flightTime(), alternateFlight = flightTime(knots: route(alternating: true))
+    nonisolated static let alternateKnots = route(alternating: true)
 
-    /// The camera `seconds` round the loop at Speed 1×, from its start, round and round.
-    // ponytail: the time is linear within each of the loop's 720 steps, so its speed changes by a few percent from
-    // one to the next, every 2 or 3 seconds, which no strip has shown; a smooth curve through the table if one is seen.
-    nonisolated static func flying(_ seconds: Double, lit: Bool = false) -> Camera {
-        let length = flight.last!, at = seconds - length * (seconds / length).rounded(.down)
-        var (low, high) = (0, flight.count - 1)
-        while high - low > 1 { let mid = (low + high) / 2; if flight[mid] <= at { low = mid } else { high = mid } }
-        let step = flight[high] - flight[low]
-        return path((Double(low) + (step > 0 ? (at - flight[low]) / step : 0)) / 120, lit: lit)
+    /// The camera `seconds` round the loop at Speed 1×, from its start, round and round: the one-face loop from `lit`,
+    /// or `alternating`, the two-lap loop that changes faces.
+    // ponytail: the time is linear within each of the loop's steps, so its speed changes by a few percent from one to
+    // the next, every 2 or 3 seconds, which no strip has shown; a smooth curve through the table if one is seen.
+    nonisolated static func flying(_ seconds: Double, lit: Bool = false, alternating: Bool = false) -> Camera {
+        let table = alternating ? alternateFlight : flight, length = table.last!, at = seconds - length * (seconds / length).rounded(.down)
+        var (low, high) = (0, table.count - 1)
+        while high - low > 1 { let mid = (low + high) / 2; if table[mid] <= at { low = mid } else { high = mid } }
+        let step = table[high] - table[low], t = (Double(low) + (step > 0 ? (at - table[low]) / step : 0)) / 120
+        return alternating ? path(t, knots: alternateKnots) : path(t, knots: route(lit: lit))
     }
 
-    /// Where on the loop, in seconds at 1×, it passes `view`.
-    nonisolated static func flightSeconds(at view: Int) -> Double { flight[120 * (flightOrder.firstIndex(of: view) ?? 0)] }
+    /// Where on a loop, in seconds at 1×, it passes `view`: on the lap from `lit`, for the two-lap loop.
+    nonisolated static func flightSeconds(at view: Int, lit: Bool = true, alternating: Bool = false) -> Double {
+        let at = flightOrder.firstIndex(of: view) ?? 0
+        return alternating ? alternateFlight[120 * (at + (lit ? 0 : flightOrder.count + 2))] : flight[120 * at]
+    }
 
-    /// The view the loop passes next after `seconds` round it.
-    nonisolated static func nextOnLoop(_ seconds: Double) -> Int {
-        let length = flight.last!, at = seconds - length * (seconds / length).rounded(.down)
-        let step = flight.firstIndex { $0 > at } ?? flight.count - 1
-        return flightOrder[((step + 119) / 120) % flightOrder.count]
+    /// The view a loop passes next after `seconds` round it, on the face it's on there: past the crossing point, on the
+    /// two-lap loop, the one before it, From Above, so the camera needn't change faces to get there.
+    nonisolated static func nextOnLoop(_ seconds: Double, alternating: Bool = false) -> Int {
+        let table = alternating ? alternateFlight : flight, length = table.last!, at = seconds - length * (seconds / length).rounded(.down)
+        let knots = table.count / 120, next = (((table.firstIndex { $0 > at } ?? table.count - 1) + 119) / 120) % knots
+        let lap = flightOrder.count + (alternating ? 2 : 0), index = next % lap
+        return flightOrder[min(index, flightOrder.count - 1)]
     }
 
     /// How far the fastest thing on screen moves along the loop at its fastest, in device px a second at Speed 1×, as
     /// `saturnsRingsFlightKeepsAnEvenPace` measures it: a little over `flightPace`, within a step.
-    nonisolated static let flightMost = 32.0
+    nonisolated static let flightMost = 34.0
+
+    /// How far the fastest thing on screen moves along the two-lap loop at its fastest, in device px a second at 1×.
+    nonisolated static let alternateMost = 39.0
+
+    /// The ceiling on battery while flying the two-lap loop at `speed`, by the same rule.
+    nonisolated static func alternateRate(speed: Double) -> Int? {
+        [10, 12, 15, 20].first { alternateMost * speed / Double($0) <= 2 }
+    }
 
     /// The ceiling on battery while flying at `speed`, by the same rule as a hold's.
     nonisolated static func flightRate(speed: Double) -> Int? {
@@ -369,14 +449,20 @@ final class SaturnsRings: SKScene, BatteryPaced {
         return most
     }
 
-    /// Holding view `current` (or flying the loop, with `current` nil), or gliding to it, since `since` on the scene's
-    /// clock, `time`; `previous` is the view before.
+    /// What the camera holds or glides to: a view, Fly Through's loop, or the crossing point, on its way to the other
+    /// face and then on to `after`.
+    private enum Goal: Equatable { case view(Int), loop, crossing }
+    /// Holding `goal`, or gliding to it, since `since` on the scene's clock, `time`; `previous` is the view before.
     private enum Phase { case hold, glide(from: Origin) }
-    /// Where a glide sets out from: a view still drifting on, as a hold ends, or the loop still flying on, so the camera
-    /// doesn't stop dead before it moves off; or a camera standing where it was, when another view is picked partway
-    /// through a glide.
+    /// Where a glide sets out from: a view still drifting on, as a hold ends, or the one-face loop still flying on, so
+    /// the camera doesn't stop dead before it moves off; or a camera standing where it was, partway through a glide,
+    /// on the two-lap loop (which might change faces under it) or at the crossing point.
     private enum Origin { case drifting(Int), flying, still(Camera) }
-    private var phase = Phase.hold, current: Int?, previous: Int?, since: Double, time = 0.0, lastUpdate: TimeInterval?
+    private var phase = Phase.hold, goal: Goal, after = Goal.loop, previous: Int?, since: Double, time = 0.0, lastUpdate: TimeInterval?
+    /// The face the camera is on, or will be once it has crossed; whether it flies the two-lap loop that changes faces
+    /// (Fly Through under Alternate); when it last changed faces, on the scene's clock; and, in Cycle under Alternate,
+    /// whether its next glide changes them (every other one does).
+    private var lit: Bool, alternating: Bool, crossed = 0.0, crossNext = false
     /// How far round Fly Through's loop the camera is (or a glide onto or off it is aiming for), in seconds at 1×.
     private var loop = 0.0
     /// How far the drift has gone in the hold that's showing, or the one a glide sets out from: seconds at 1×.
@@ -397,13 +483,18 @@ final class SaturnsRings: SKScene, BatteryPaced {
     /// Starts holding `first` (the view picked in Settings, else one at random), `moment` seconds in (the
     /// `saturn.moment` default if nil, for pictures), or with `next`, gliding from it to `next`, `moment` seconds in
     /// (for tests), in the light of `date` (`SaturnsRings.date` if nil). With `fly` (or Fly Through picked), it flies
-    /// the loop from `moment` times Speed round it, or from somewhere on it at random if no moment is given.
+    /// the loop from `moment` times Speed round it, or from somewhere on it at random if no moment is given. It starts
+    /// on the face Settings asks for, or the appearance does, or under Alternate the lit (the two-lap loop's lit lap).
     init(size: CGSize, from first: Int? = nil, to next: Int? = nil, fly: Bool = false, moment: Double? = nil, date: Date? = nil) {
         let pick = Int(Self.view.value), pinned = moment ?? (UserDefaults.standard.object(forKey: "saturn.moment") as? Double)
         let moment = pinned ?? 0, flies = fly || first == nil && pick == Self.views.count + 1
-        current = flies ? nil : first ?? ((1...Self.views.count).contains(pick) ? pick - 1 : Self.views.indices.randomElement()!)
+        goal = flies ? .loop : .view(first ?? ((1...Self.views.count).contains(pick) ? pick - 1 : Self.views.indices.randomElement()!))
+        (lit, alternating) = (Self.wanted ?? true, flies && Int(Self.face.value) == 2)
         (since, drift) = (-moment, moment * Self.speed.value)
-        if flies { loop = pinned.map { $0 * Self.speed.value } ?? .random(in: 0..<Self.flight.last!) }
+        if flies {
+            let lap = alternating ? Self.alternateFlight[120 * (Self.flightOrder.count + 1)] : Self.flight.last!
+            loop = pinned.map { $0 * Self.speed.value } ?? .random(in: 0..<lap)
+        }
         let light = Self.light(on: date ?? Self.date)
         sunUp = light.up
         super.init(size: size)
@@ -444,7 +535,7 @@ final class SaturnsRings: SKScene, BatteryPaced {
         ] + colours)
         addChild(sprite)
 
-        if let next, let first = current { glide(to: next, at: since, from: .drifting(first)) }
+        if let next, case .view(let first) = goal { glide(to: .view(next), at: since, from: .drifting(first)) }
         advance()
         show()
     }
@@ -460,9 +551,24 @@ final class SaturnsRings: SKScene, BatteryPaced {
         show()
     }
 
-    /// The camera now, from the unlit face or with `lit` the lit.
-    func camera(lit: Bool) -> Camera {
-        let there = current.map { Self.held(Self.views[$0], for: drift, lit: lit) } ?? Self.flying(loop, lit: lit)
+    /// The face Settings asks for now: nil under Alternate, which changes on its own.
+    private static var wanted: Bool? {
+        switch Int(face.value) {
+        case 0: false
+        case 2: nil
+        case 3: !systemIsDark
+        default: true
+        }
+    }
+
+    /// The camera now.
+    func camera() -> Camera {
+        let there: Camera
+        switch goal {
+        case .view(let view): there = Self.held(Self.views[view], for: drift, lit: lit)
+        case .loop: there = Self.flying(loop, lit: lit, alternating: alternating)
+        case .crossing: there = Self.crossing(lit: lit)
+        }
         guard case .glide(let origin) = phase else { return there }
         let from: Camera
         switch origin {
@@ -471,54 +577,102 @@ final class SaturnsRings: SKScene, BatteryPaced {
         case .still(let camera): from = camera
         }
         // onto a view as it begins to drift, or onto the loop as it flies on, so the camera arrives moving with it
-        let to = current.map { Self.held(Self.views[$0], for: 0, lit: lit) } ?? there
+        var to = there
+        if case .view(let view) = goal { to = Self.held(Self.views[view], for: 0, lit: lit) }
         let u = min(max((time - since) / Self.glide, 0), 1)
         return Self.between(from, to, u * u * (3 - 2 * u))
     }
 
     /// Where a glide starting now sets out from.
     private var origin: Origin {
-        guard case .hold = phase else { return .still(camera(lit: Self.face.value > 0.5)) }
-        return current.map { .drifting($0) } ?? .flying
+        guard case .hold = phase else { return .still(camera()) }
+        switch goal {
+        case .view(let view): return .drifting(view)
+        case .loop: return alternating ? .still(camera()) : .flying
+        case .crossing: return .still(camera())
+        }
     }
 
-    /// Moves the phase on: to a glide toward the view picked in Settings, or in Cycle toward one at random once a
-    /// hold is over, and to a hold once a glide is over, each at the moment it's due, so the path is the same at any
-    /// frame rate.
+    /// Moves the phase on, each change at the moment it's due, so the path is the same at any frame rate: to a hold
+    /// once a glide is over, or at the crossing point, over to the other face and on; over to the other face when
+    /// Settings or the appearance asks for it, from wherever the camera is; onto the loop (the two-lap one under
+    /// Alternate), to a view picked in Settings, or off the loop for Cycle; under Alternate, over to the other face
+    /// every half hour from a view held, and every other glide in Cycle; and in Cycle, toward a view at random once a
+    /// hold is over.
     private func advance() {
         let pick = Int(Self.view.value), speed = Self.speed.value, holds = Self.hold.value.rounded() * 60
+        let alternate = Int(Self.face.value) == 2, flies = pick == Self.views.count + 1, picked = (1...Self.views.count).contains(pick) ? pick - 1 : nil
+        if goal == .loop, alternating, case .hold = phase { lit = camera().lit } // the two-lap loop changes faces on its own
         while true {
             if case .glide = phase, time - since >= Self.glide {
-                (phase, since) = (.hold, since + Self.glide)
-                drift = (time - since) * speed
-            } else if pick == Self.views.count + 1, let view = current {
-                // onto the loop where it passes the view the camera is at, or going to
+                if goal == .crossing {
+                    // ponytail: a crossing is two glides, eased at both ends, so the camera rests at the crossing point
+                    // a moment between them; one move through it (the loop's spline) if that's ever seen as a stop
+                    lit.toggle()
+                    crossed = since + Self.glide
+                    (phase, goal, since) = (.glide(from: .still(Self.crossing(lit: lit, leaving: true))), after, since + Self.glide)
+                } else {
+                    (phase, since) = (.hold, since + Self.glide)
+                    drift = (time - since) * speed
+                }
+            } else if goal == .crossing {
+                // on the way to the crossing point it goes on there; what comes after follows Settings
+                after = flies ? .loop : picked.map { .view($0) } ?? after
+                break
+            } else if let wanted = Self.wanted, wanted != lit {
+                // over to the other face, then back to the view or the loop it was at or going to
                 let from = origin
-                loop = Self.flightSeconds(at: view)
-                glide(to: nil, at: time, from: from)
-            } else if (1...Self.views.count).contains(pick), current != pick - 1 {
-                glide(to: pick - 1, at: time, from: origin)
-            } else if pick == 0, current == nil {
+                (after, alternating) = (goal, false)
+                glide(to: .crossing, at: time, from: from)
+            } else if flies, goal != .loop || alternating != alternate {
+                // onto the loop where it passes the view the camera is at or going to, on the face it's on
+                let from = origin, view: Int
+                if case .view(let at) = goal { view = at } else { view = Self.nextOnLoop(loop, alternating: alternating) }
+                alternating = alternate
+                loop = Self.flightSeconds(at: view, lit: lit, alternating: alternate)
+                glide(to: .loop, at: time, from: from)
+            } else if let picked, goal != .view(picked) {
+                let from = origin
+                alternating = false
+                glide(to: .view(picked), at: time, from: from)
+            } else if pick == 0, goal == .loop {
                 // off the loop to the next view it would have passed, to hold there as Cycle does
-                glide(to: Self.nextOnLoop(loop), at: time, from: origin)
-            } else if pick == 0, let view = current, case .hold = phase, time - since >= holds {
-                glide(to: Self.next(after: view, previous: previous), at: since + holds, from: .drifting(view))
+                let next = Self.nextOnLoop(loop, alternating: alternating), from = origin
+                alternating = false
+                glide(to: .view(next), at: time, from: from)
+            } else if alternate, let picked, case .hold = phase, time - crossed >= Self.crossEvery {
+                after = .view(picked)
+                glide(to: .crossing, at: time, from: .drifting(picked))
+            } else if pick == 0, case .view(let view) = goal, case .hold = phase, time - since >= holds {
+                let next = Self.next(after: view, previous: previous)
+                if alternate && crossNext {
+                    after = .view(next)
+                    glide(to: .crossing, at: since + holds, from: .drifting(view))
+                } else {
+                    glide(to: .view(next), at: since + holds, from: .drifting(view))
+                }
+                crossNext = alternate && !crossNext
             } else {
                 break
             }
         }
         guard case .hold = phase else { batteryRate = nil; return }
-        batteryRate = current.map { Self.rate(Self.views[$0], speed: speed) } ?? Self.flightRate(speed: speed)
+        switch goal {
+        case .view(let view): batteryRate = Self.rate(Self.views[view], speed: speed)
+        case .loop: batteryRate = alternating ? Self.alternateRate(speed: speed) : Self.flightRate(speed: speed)
+        case .crossing: batteryRate = nil
+        }
     }
 
-    private func glide(to next: Int?, at moment: Double, from origin: Origin) {
+    private func glide(to next: Goal, at moment: Double, from origin: Origin) {
+        if case .view(let view) = goal { previous = view }
         phase = .glide(from: origin)
-        (previous, current, since) = (current, next, moment)
+        (goal, since) = (next, moment)
     }
 
     /// Hands the camera, and the settings that change how it's drawn, to the shader.
     private func show() {
-        let lit = Self.face.value > 0.5, camera = camera(lit: lit), axes = camera.axes(lit: lit, sunUp: sunUp)
+        let camera = camera(), lit = camera.lit, axes = camera.axes(sunUp: sunUp)
         let tangent = Float(tan(camera.field / 2 * .pi / 180)), brightness = Self.brightness.value
         cam.vectorFloat3Value = SIMD3<Float>(axes.at)
         rot.matrixFloat3x3Value = matrix_float3x3(columns: (SIMD3<Float>(axes.right), SIMD3<Float>(axes.up), SIMD3<Float>(axes.ahead)))
@@ -526,7 +680,7 @@ final class SaturnsRings: SKScene, BatteryPaced {
         lens.vectorFloat2Value = [tangent, tangent * Float(size.height / size.width)]
         moonUniform.vectorFloat2Value = [Float(camera.ahead / Self.daphnis), Float(camera.moon)]
         exposure.floatValue = Float(camera.exposure * brightness * Self.lift(sunUp, lit: lit))
-        planetExposure.floatValue = Float((lit ? camera.exposure : min(camera.exposure, Self.planetMost)) * brightness)
+        planetExposure.floatValue = Float(camera.planet * brightness)
         starsUniform.floatValue = Float(Self.stars.value)
         if coloured != lit {
             coloured = lit
@@ -712,6 +866,10 @@ private func saturnsRingsSource(_ rings: RingProfile) -> String {
             lin = (col / luma(col) * lit + vec3(2.25, 0.714, 0.148) * shine) * u_planetExposure; // #372110 in linear light, luma 1
             sky = 0.0;
         }
+        // Out past the rings, where the camera crosses their plane to change faces, they fade over its last 20 km to
+        // it: seen edge on they are a sheet a pixel's fraction thick, and a band of whole pixels stood for it, which
+        // jumped from one side of the horizon to the other as the camera went through.
+        float edgeOn = length(c.xy) > 142.0 ? clamp(abs(c.z) / 0.02, 0.0, 1.0) : 1.0;
         if (tr > 0.0 && tr < tp && r > 72.2 && r < 141.9) {
             float mu = max(abs(d.z), 1e-4), mu0 = max(abs(s.z) + tilt, 2e-3);
             float kv = 1.0 / mu, ks = 1.0 / mu0;
@@ -737,8 +895,8 @@ private func saturnsRingsSource(_ rings: RingProfile) -> String {
             float sunlit = b < 0.0 ? smoothstep(req - 0.02 + b * 0.0005, req + 0.02 - b * 0.0005, miss) : 1.0;
             // the rings take the palette's colour at their brightness against a saturated B ring's
             vec3 hueLin = pow(rampAt(t * 0.95, u_c0, u_c1, u_c2, u_c3, u_c4), vec3(2.2));
-            eView = mix(1.0, eView, gap);
-            lin = lin * eView + hueLin / max(luma(hueLin), 1e-4) * light * sunlit * gap * u_exposure;
+            eView = mix(1.0, eView, gap * edgeOn);
+            lin = lin * eView + hueLin / max(luma(hueLin), 1e-4) * light * sunlit * gap * edgeOn * u_exposure;
             sky *= eView;
         }
         if (tm < min(tp, tr > 0.0 ? tr : 1e9)) {

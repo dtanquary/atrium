@@ -148,7 +148,9 @@ import UniformTypeIdentifiers
 /// (`RINGS_STRIP=0>4`, Looking In to Over the Encke Gap, the views counted from 0), a hold (`RINGS_STRIP=5@200`,
 /// Daphnis Close from 200 s in) or Fly Through (`RINGS_STRIP=fly@1740`, from 1,740 s round its loop at 1×), for
 /// `RINGS_SECONDS` (12 by default) but for a glide, with any settings in `SNAPSHOT_DEFAULTS` as the
-/// render test takes them (`saturn.face=1` for the lit face). Prints the frame-to-frame second difference
+/// render test takes them (`saturn.face=1` for the lit face), and with `RINGS_FACE` the face set to that as the strip
+/// begins (so a held view crosses to it and back); where the camera changes faces it also prints how far the frames
+/// either side of the change differ, every pixel. Prints the frame-to-frame second difference
 /// |f(t+1) − 2f(t) + f(t−1)| of the green channel, 1 pixel in 16, at its 99th and 99.9th percentiles (smooth motion
 /// keeps it small; crawling bands and flashes make it large), the largest change in the frame's mean from one frame
 /// to the next (an exposure jump); saves six frames, a quarter across, to `SNAPSHOT_DIR` to look at; and times 60
@@ -164,6 +166,9 @@ func saturnsRingsStrip() throws {
     let settings = (env["SNAPSHOT_DEFAULTS"] ?? "").split(separator: ",").map { $0.split(separator: "=") }.filter { $0.count == 2 }
     for pair in settings { UserDefaults.standard.set(Double(pair[1]) ?? 0, forKey: String(pair[0])) }
     defer { for pair in settings { UserDefaults.standard.removeObject(forKey: String(pair[0])) } }
+    defer { if env["RINGS_FACE"] != nil { UserDefaults.standard.removeObject(forKey: SaturnsRings.face.key) } }
+    if flies { UserDefaults.standard.set(7.0, forKey: SaturnsRings.view.key) } // or the scene glides off the loop, for Cycle
+    defer { if flies { UserDefaults.standard.removeObject(forKey: SaturnsRings.view.key) } }
     let dir = URL(fileURLWithPath: env["SNAPSHOT_DIR"] ?? NSTemporaryDirectory() + "atrium-snapshots")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     let device = try #require(MTLCreateSystemDefaultDevice()), queue = try #require(device.makeCommandQueue())
@@ -198,7 +203,10 @@ func saturnsRingsStrip() throws {
                      cpu.sorted()[cpu.count / 2] * 1000, gpu.sorted()[gpu.count / 2] * 1000))
     }
     for fps in [15.0, 30.0] {
+        if let face = env["RINGS_FACE"].flatMap(Double.init) { UserDefaults.standard.set(1 - face, forKey: SaturnsRings.face.key) }
         let strip = scene(at: 0)
+        if let face = env["RINGS_FACE"].flatMap(Double.init) { UserDefaults.standard.set(face, forKey: SaturnsRings.face.key) }
+        var lastLit = strip.camera().lit, lastPixels: [UInt8] = [], beforeLast: [UInt8] = []
         let renderer = SKRenderer(device: device)
         renderer.scene = strip
         let clock = ProcessInfo.processInfo.systemUptime + 1, count = Int(seconds * fps)
@@ -211,6 +219,18 @@ func saturnsRingsStrip() throws {
             buffer.commit()
             buffer.waitUntilCompleted()
             texture.getBytes(&pixels, bytesPerRow: w * 4, from: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0)
+            if strip.camera().lit != lastLit, !lastPixels.isEmpty {
+                let differences = zip(pixels, lastPixels).enumerated().filter { $0.offset % 4 != 3 }.map { abs(Int($0.element.0) - Int($0.element.1)) }
+                let before = zip(lastPixels, beforeLast).enumerated().filter { $0.offset % 4 != 3 }.map { abs(Int($0.element.0) - Int($0.element.1)) }
+                print(String(format: "Saturn's Rings %@ at %.0f fps changes faces at frame %d: the frames either side differ by %d levels at most, %d values by more than 2 (the two frames before: %d, %d)",
+                             spec, fps, frame, differences.max() ?? 0, differences.count { $0 > 2 }, before.max() ?? 0, before.count { $0 > 2 }))
+                let worst = (0..<w * h).map { i in (i, (0..<3).map { abs(Int(pixels[i * 4 + $0]) - Int(lastPixels[i * 4 + $0])) }.max()!) }.filter { $0.1 > 2 }
+                print("  where: " + worst.sorted { $0.1 > $1.1 }.prefix(12).map { String(format: "(%d, %d) %d: %d,%d,%d to %d,%d,%d", $0.0 % w, $0.0 / w, $0.1,
+                    lastPixels[$0.0 * 4 + 2], lastPixels[$0.0 * 4 + 1], lastPixels[$0.0 * 4], pixels[$0.0 * 4 + 2], pixels[$0.0 * 4 + 1], pixels[$0.0 * 4]) }.joined(separator: "; "))
+                try saveQuarter(lastPixels, w, h, to: dir.appendingPathComponent("rings-\(spec)-\(Int(fps))fps-before-change.jpg"))
+                try saveQuarter(pixels, w, h, to: dir.appendingPathComponent("rings-\(spec)-\(Int(fps))fps-after-change.jpg"))
+            }
+            (lastLit, beforeLast, lastPixels) = (strip.camera().lit, lastPixels, pixels)
             let green = stride(from: 0, to: h, by: 4).flatMap { y in stride(from: 0, to: w, by: 4).map { pixels[(y * w + $0) * 4 + 1] } }
             means.append(Double(green.reduce(0) { $0 + Int($1) }) / Double(green.count))
             last = Array((last + [green]).suffix(3))
@@ -358,7 +378,7 @@ func saturnsRingsDates() throws {
         #expect(abs(SaturnsRings.light(on: date).up - up) < 0.01)
         for lit in [false, true] {
             UserDefaults.standard.set(lit ? 1.0 : 0.0, forKey: SaturnsRings.face.key)
-            let axes = SaturnsRings.Camera(r: 126, h: 4, yaw: 38, pitch: 7, field: 70, sun: 320).axes(lit: lit, sunUp: up)
+            let axes = SaturnsRings.Camera(r: 126, h: 4, yaw: 38, pitch: 7, field: 70, sun: 320, lit: lit).axes(sunUp: up)
             #expect((axes.at.z > 0) == ((axes.sun.z < 0) != lit), "the camera's side at \(up)°, lit \(lit)")
             for view in SaturnsRings.views.indices {
                 let renderer = SKRenderer(device: device)
@@ -457,12 +477,12 @@ func saturnsRingsFlightOrders() {
     // Fly Through, then Daphnis Close picked 30 s in, Fly Through again partway through that glide, Cycle once on the
     // loop, Along the Planet's Edge as Cycle glides off it, and Fly Through from that view's hold
     let picks: [(at: Double, view: Double)] = [(30, 6), (90, 7), (300, 0), (330, 3), (520, 7)]
-    var last = scene.camera(lit: true)
+    var last = scene.camera()
     for frame in 1...(700 * 30) {
         let seconds = Double(frame) / 30
         if let pick = picks.first(where: { abs($0.at - seconds) < 0.5 / 30 }) { UserDefaults.standard.set(pick.view, forKey: key) }
         scene.update(seconds)
-        let now = scene.camera(lit: true)
+        let now = scene.camera()
         let jump = [abs(now.r - last.r) / 0.02, abs(log(now.h / last.h)) / 0.01, abs(remainder(now.yaw - last.yaw, 360)) / 0.3,
                     abs(now.pitch - last.pitch) / 0.3, abs(remainder(now.sun - last.sun, 360)) / 0.3, abs(log(now.exposure / last.exposure)) / 0.01].max()!
         #expect(jump < 1, "at \(seconds) s: r \(last.r) to \(now.r), h \(last.h) to \(now.h), yaw \(last.yaw) to \(now.yaw), the Sun \(last.sun) to \(now.sun)")
@@ -493,7 +513,8 @@ func saturnsRingsFlightMoments() throws {
     pass.colorAttachments[0].texture = texture
     pass.colorAttachments[0].loadAction = .clear
     pass.colorAttachments[0].storeAction = .store
-    defer { UserDefaults.standard.removeObject(forKey: SaturnsRings.face.key) }
+    defer { [SaturnsRings.face.key, SaturnsRings.view.key].forEach(UserDefaults.standard.removeObject) }
+    UserDefaults.standard.set(7.0, forKey: SaturnsRings.view.key) // or the scene glides off the loop, for Cycle
     let length = SaturnsRings.flight.last!
     for lit in [true, false] {
         UserDefaults.standard.set(lit ? 1.0 : 0.0, forKey: SaturnsRings.face.key)
@@ -521,4 +542,194 @@ func saturnsRingsFlightMoments() throws {
             try saveQuarter(pixels, w, h, to: dir.appendingPathComponent("fly-\(lit ? "lit" : "unlit")-\(k).jpg"))
         }
     }
+}
+
+/// Where a camera is, and which way it faces, in the world: the face and the turn together.
+private func pose(_ camera: SaturnsRings.Camera) -> (at: SIMD3<Double>, right: SIMD3<Double>, up: SIMD3<Double>) {
+    let axes = camera.axes()
+    return (axes.at, axes.right, axes.up)
+}
+
+/// The rules a camera keeps, frame by frame or sample by sample, changing faces or not: it is never nearer the ring
+/// plane than 180 m, nor nearer than 100 km over ring material (Daphnis Close is 120 km up), and it changes faces
+/// only out at the crossing point, 150 Mm out and 200 m off the plane, where the world doesn't move as it does.
+private func keepsClear(_ cameras: [SaturnsRings.Camera], _ what: String) {
+    for (i, camera) in cameras.enumerated() {
+        let r = (camera.r * camera.r).squareRoot()
+        #expect(camera.h >= 0.00018 && (r >= 141.9 || camera.h >= 0.1) && pow(r / 60.268, 2) + pow(camera.h / 54.364, 2) > 1.5,
+                "\(what), \(i): r \(camera.r), h \(camera.h)")
+        if i > 0, cameras[i - 1].lit != camera.lit {
+            let (a, b) = (pose(cameras[i - 1]), pose(camera))
+            #expect(camera.r >= 145 && camera.h <= 0.00022 && simd_distance(a.at, b.at) < 0.005 && simd_distance(a.right, b.right) < 0.01
+                    && simd_distance(a.up, b.up) < 0.01, "\(what), \(i): changed faces at r \(camera.r), h \(camera.h), moving \(simd_distance(a.at, b.at)) Mm, turning \(simd_distance(a.right, b.right)) and \(simd_distance(a.up, b.up))")
+        }
+    }
+}
+
+/// Every crossing glide, from each view (on either face, anywhere in its drift) to the crossing point, and from it
+/// to each view on the other face, and the two-lap loop Alternate flies, keep clear of the rings; and the two-lap loop
+/// goes at the even pace the one-face loop does, which its battery rate rests on.
+@Test func saturnsRingsCrossingsStayClear() {
+    for lit in [false, true] {
+        for view in SaturnsRings.views {
+            for drift in [0, SaturnsRings.swing / 2] {
+                let there = SaturnsRings.crossing(lit: lit), from = SaturnsRings.held(view, for: drift, lit: lit)
+                keepsClear((0...200).map { SaturnsRings.between(from, there, Double($0) / 200) }, "\(view.name) to the crossing")
+            }
+            let away = SaturnsRings.crossing(lit: !lit, leaving: true), to = SaturnsRings.held(view, for: 0, lit: !lit)
+            keepsClear((0...200).map { SaturnsRings.between(away, to, Double($0) / 200) }, "the crossing to \(view.name)")
+        }
+    }
+    let knots = SaturnsRings.alternateKnots, steps = 240 * knots.count
+    let lap = (0...steps).map { SaturnsRings.path(Double($0) / 240, knots: knots) }
+    keepsClear(lap, "the two-lap loop")
+    #expect(zip(lap, lap.dropFirst()).count { $0.lit != $1.lit } == 2, "the two-lap loop changes faces twice")
+    let length = SaturnsRings.alternateFlight.last!, frame = 1.0 / 30
+    var (least, most) = (Double.infinity, 0.0)
+    for seconds in stride(from: 0, to: length, by: 1) {
+        let moved = SaturnsRings.motion(SaturnsRings.flying(seconds, alternating: true), SaturnsRings.flying(seconds + frame, alternating: true), across: 32, up: 20) / frame
+        (least, most) = (min(least, moved), max(most, moved))
+    }
+    print(String(format: "Saturn's Rings two-lap loop: %.0f s round at 1× (%.1f min, a lap %.1f); the fastest thing on screen %.1f to %.1f px/s",
+                 length, length / 60, length / 120, least, most))
+    #expect(least > 0.5 * SaturnsRings.flightPace && most <= SaturnsRings.alternateMost)
+}
+
+/// Runs `scene` frame by frame at 10 fps (the scene's own clock goes no faster than that a frame) for `seconds`, from
+/// `start` on its frame clock, and returns its camera at every frame.
+@MainActor private func run(_ scene: SaturnsRings, for seconds: Double, from start: Double = 0) -> [SaturnsRings.Camera] {
+    (1...Int(seconds * 10)).map { frame in
+        scene.update(start + Double(frame) / 10)
+        return scene.camera()
+    }
+}
+
+/// The camera never jumps: from one frame to the next its place and its axes in the world move by about as much as
+/// they did the frame before (a quarter more or less, or 3 km and 0.003 of a turn, which takes in the 0.4 km step through
+/// the plane as it changes faces), so its speed has no break, through a change of faces as anywhere.
+private func smooth(_ cameras: [SaturnsRings.Camera], _ what: String) {
+    let steps = zip(cameras, cameras.dropFirst()).map { a, b -> SIMD3<Double> in
+        let (p, q) = (pose(a), pose(b))
+        return SIMD3(simd_distance(p.at, q.at), simd_distance(p.right, q.right), simd_distance(p.up, q.up))
+    }
+    for i in 1..<steps.count {
+        let change = abs(steps[i] - steps[i - 1]), allowed = 0.25 * simd_max(steps[i], steps[i - 1]) + SIMD3(0.003, 0.003, 0.003)
+        #expect(all(change .<= allowed), "\(what), frame \(i): moved \(steps[i - 1]) then \(steps[i])")
+        if !all(change .<= allowed) { return }
+    }
+}
+
+/// The faces in use: a view held under Alternate changes faces after half an hour, by the crossing point, and comes
+/// back to the same view; under Follow the camera changes faces when the appearance does, from a held view and from
+/// Fly Through; Cycle under Alternate changes faces every other glide; and Fly Through under Alternate changes them
+/// once a lap. In every case the camera keeps clear of the rings and never jumps.
+@MainActor @Test func saturnsRingsChangeFaces() {
+    let keys = [SaturnsRings.view.key, SaturnsRings.face.key, SaturnsRings.hold.key]
+    defer { keys.forEach(UserDefaults.standard.removeObject); NSApplication.shared.appearance = nil }
+    let size = CGSize(width: 320, height: 200), hold = SaturnsRings.crossEvery
+
+    // a held view under Alternate: lit to begin with, over to the unlit face after half an hour, back on Along the Planet's Edge
+    UserDefaults.standard.set(3.0, forKey: keys[0])
+    UserDefaults.standard.set(2.0, forKey: keys[1])
+    var cameras = run(SaturnsRings(size: size, moment: 0), for: hold + 2 * SaturnsRings.glide + 10)
+    keepsClear(cameras, "a held view")
+    smooth(cameras, "a held view")
+    let back = SaturnsRings.held(SaturnsRings.views[2], for: 0, lit: false), last = cameras.last!
+    #expect(cameras.first!.lit && !last.lit && abs(last.h - back.h) < 0.01 && abs(last.yaw - back.yaw) < 0.01 && abs(last.r - back.r) < 0.1,
+            "back on its view, on the other face: r \(last.r), h \(last.h)")
+
+    // Follow, from a held view: lit in Light Mode, over to the unlit face when it goes dark
+    UserDefaults.standard.set(3.0, forKey: keys[1])
+    NSApplication.shared.appearance = NSAppearance(named: .aqua)
+    let scene = SaturnsRings(size: size, moment: 0)
+    #expect(scene.camera().lit)
+    _ = run(scene, for: 20)
+    NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
+    cameras = run(scene, for: 2 * SaturnsRings.glide + 10, from: 20)
+    keepsClear(cameras, "Follow")
+    smooth(cameras, "Follow")
+    #expect(!cameras.last!.lit, "Follow went over to the unlit face in Dark Mode")
+
+    // Cycle under Alternate, a minute's hold: of four glides, two change faces
+    UserDefaults.standard.set(0.0, forKey: keys[0])
+    UserDefaults.standard.set(2.0, forKey: keys[1])
+    UserDefaults.standard.set(1.0, forKey: keys[2])
+    cameras = run(SaturnsRings(size: size, moment: 0), for: 4 * 60 + 2 * SaturnsRings.glide + 2 * 2 * SaturnsRings.glide)
+    keepsClear(cameras, "Cycle")
+    smooth(cameras, "Cycle")
+    #expect(zip(cameras, cameras.dropFirst()).count { $0.lit != $1.lit } == 2, "Cycle changed faces every other glide")
+
+    // Fly Through under Alternate: once a lap
+    UserDefaults.standard.set(7.0, forKey: keys[0])
+    let lap = SaturnsRings.alternateFlight.last! / 2
+    cameras = run(SaturnsRings(size: size, moment: 0), for: 2 * lap)
+    keepsClear(cameras, "Fly Through")
+    smooth(cameras, "Fly Through")
+    #expect(zip(cameras, cameras.dropFirst()).count { $0.lit != $1.lit } == 2, "Fly Through changed faces once a lap")
+}
+
+/// The camera changing faces, twelve moments each at 3024 × 1964: a view held (Along the Planet's Edge, lit) going over
+/// to the unlit face and back to itself, from its start to its end; and the two-lap loop under Alternate, from From
+/// Above, out past the rings, through the plane and on to Looking In on the unlit face. Prints each one's luma (Rec.
+/// 709) at the median, 99th, 99.9th and max, and saves it a quarter across to `SNAPSHOT_DIR` as
+/// `crossing-<held|loop>-<moment>.jpg`, for docs/saturns-rings/build-crossing.jpg. Opt-in:
+///
+///     RINGS_CROSSING=1 SNAPSHOT_DIR=/some/dir swift test -c release -Xswiftc -enable-testing --filter saturnsRingsCrossingMoments
+@MainActor @Test(.enabled(if: ProcessInfo.processInfo.environment["RINGS_CROSSING"] != nil))
+func saturnsRingsCrossingMoments() throws {
+    let dir = URL(fileURLWithPath: ProcessInfo.processInfo.environment["SNAPSHOT_DIR"] ?? NSTemporaryDirectory() + "atrium-snapshots")
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    let device = try #require(MTLCreateSystemDefaultDevice()), queue = try #require(device.makeCommandQueue())
+    let (w, h) = (3024, 1964), size = CGSize(width: 1512, height: 982)
+    let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: w, height: h, mipmapped: false)
+    descriptor.usage = [.renderTarget, .shaderRead]
+    descriptor.storageMode = .shared
+    let texture = try #require(device.makeTexture(descriptor: descriptor))
+    let pass = MTLRenderPassDescriptor()
+    pass.colorAttachments[0].texture = texture
+    pass.colorAttachments[0].loadAction = .clear
+    pass.colorAttachments[0].storeAction = .store
+    defer { UserDefaults.standard.removeObject(forKey: SaturnsRings.face.key) }
+    func shoot(_ scene: SaturnsRings, upTo seconds: Double, from start: inout Double, renderer: SKRenderer, name: String) throws {
+        while start < seconds - 1e-9 { start = min(start + 0.1, seconds); renderer.update(atTime: 1 + start) }
+        let buffer = try #require(queue.makeCommandBuffer())
+        renderer.render(withViewport: CGRect(x: 0, y: 0, width: w, height: h), commandBuffer: buffer, renderPassDescriptor: pass)
+        buffer.commit()
+        buffer.waitUntilCompleted()
+        var pixels = [UInt8](repeating: 0, count: w * h * 4)
+        texture.getBytes(&pixels, bytesPerRow: w * 4, from: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0)
+        var histogram = [Int](repeating: 0, count: 256)
+        for i in stride(from: 0, to: pixels.count, by: 4) {
+            histogram[min(255, Int((0.0722 * Double(pixels[i]) + 0.7152 * Double(pixels[i + 1]) + 0.2126 * Double(pixels[i + 2])).rounded()))] += 1
+        }
+        func percentile(_ p: Double) -> Int {
+            var sum = 0
+            for (value, n) in histogram.enumerated() { sum += n; if Double(sum) >= p * Double(w * h) { return value } }
+            return 255
+        }
+        let camera = scene.camera()
+        print(String(format: "Saturn's Rings crossing %@ at %.0f s (%@, r %.1f, h %.4f, turned %.0f): %d %d %d %d", name, seconds, camera.lit ? "lit" : "unlit",
+                     camera.r, camera.h, camera.roll, percentile(0.5), percentile(0.99), percentile(0.999), histogram.lastIndex { $0 > 0 } ?? 0))
+        try saveQuarter(pixels, w, h, to: dir.appendingPathComponent("crossing-\(name).jpg"))
+    }
+    // a view held, lit, asked for the unlit face as it begins
+    UserDefaults.standard.set(1.0, forKey: SaturnsRings.face.key)
+    let held = SaturnsRings(size: size, from: 2, moment: 0, date: day("2026-11-19"))
+    UserDefaults.standard.set(0.0, forKey: SaturnsRings.face.key)
+    var renderer = SKRenderer(device: device), clock = 0.0
+    renderer.scene = held
+    renderer.update(atTime: 1)
+    for k in 0..<12 { try shoot(held, upTo: 2 * SaturnsRings.glide * Double(k) / 11, from: &clock, renderer: renderer, name: "held-\(k)") }
+    // the two-lap loop, From Above to Looking In on the far side
+    UserDefaults.standard.set(2.0, forKey: SaturnsRings.face.key)
+    UserDefaults.standard.set(7.0, forKey: SaturnsRings.view.key)
+    defer { UserDefaults.standard.removeObject(forKey: SaturnsRings.view.key) }
+    let table = SaturnsRings.alternateFlight, (start, end) = (table[120 * 5], table[120 * 8])
+    print(String(format: "Saturn's Rings crossing: the two-lap loop passes From Above at %.0f s, the point out past the rings at %.0f, the crossing at %.0f and Looking In at %.0f",
+                 start, table[120 * 6], table[120 * 7], end))
+    let loop = SaturnsRings(size: size, fly: true, moment: start, date: day("2026-11-19"))
+    (renderer, clock) = (SKRenderer(device: device), 0)
+    renderer.scene = loop
+    renderer.update(atTime: 1)
+    for k in 0..<12 { try shoot(loop, upTo: (end - start) * Double(k) / 11, from: &clock, renderer: renderer, name: "loop-\(k)") }
 }
