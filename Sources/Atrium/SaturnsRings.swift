@@ -51,8 +51,9 @@ final class SaturnsRings: SKScene, BatteryPaced {
     /// How long each view holds in Cycle, in minutes.
     nonisolated static let hold = Knob(key: "saturn.hold", label: "Hold each view", range: 1...30, standard: 8, section: "View",
                                        format: .minutes, shownWhen: view.key, shownAt: 0)
-    /// Which face of the rings the camera is on: 0 the unlit (the B ring dark, the A and C rings glowing), 1 the lit.
-    nonisolated static let face = Knob(key: "saturn.face", label: "Face", range: 0...1, standard: 0, section: "Look",
+    /// Which face of the rings the camera is on: 0 the unlit (the B ring dark, the A and C rings glowing), 1 the lit,
+    /// the standard since Dave found it the nicer (2026-11-19).
+    nonisolated static let face = Knob(key: "saturn.face", label: "Face", range: 0...1, standard: 1, section: "Look",
                                        format: .choice(["Unlit", "Lit"]))
     /// The exposure, times the view's own.
     nonisolated static let brightness = Knob(key: "saturn.brightness", label: "Brightness", range: 0.5...2, standard: 1, section: "Look")
