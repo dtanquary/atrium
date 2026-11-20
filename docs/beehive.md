@@ -6,7 +6,7 @@ It was pick #5 of the "Atrium Wallpaper Ideas" page of 2026-11-14 (a review of t
 
 - **Research:** [beehive/research-method.md](beehive/research-method.md) (the comb's and the bees' numbers, the pace, the data model on Ant Colony's engine, the cold cluster, and a SpriteKit probe of four ways to draw the bees, `beehive/probe.swift`) and [beehive/research-look.md](beehive/research-look.md) (reference photos measured by `beehive/measure_photos.py`, four palettes and their brightness caps, trypophobia, what can ship, the name). Every figure in them is marked checked or unchecked.
 - **Scripts:** `beehive/mock.swift` draws the mock-ups with SpriteKit as the app would; `sheet.py` lays out the sheets and films from `variants.py`; [beehive/mockups-round1.md](beehive/mockups-round1.md) has every tile's measurements and how to redraw them.
-- **Where it stands (2026-11-20):** researched; round 1 of mock-ups with Dave, his picks to come. Nothing in `Sources/` yet.
+- **Where it stands (2026-11-20):** researched; Dave has picked from round 1 (below); round 2, on the stacked frames, is being drawn. Nothing in `Sources/` yet.
 
 ## Mock-ups, round 1 (2026-11-18)
 
@@ -43,4 +43,14 @@ From the look research (search excerpts of trademark aggregators; the USPTO's ow
 ## Dave's decisions (2026-11-20)
 
 - **Trypophobia: a warning in Settings.** Told that honeycomb is one of the trypophobia questionnaire's two pictures, that distance and blur don't help, and that the uncapped band and the empty bottom are still a field of open cells, he said: "just put a warning in the settings if we build it". So the comb isn't redesigned away from cells; Beehive's Settings page carries a short note that the picture is a honeycomb of open cells, for anyone who finds that uncomfortable. The round 1 measures (most cells capped, no larvae, no cell's floor more than 2× darker than its rim) stay.
-- **Still his to decide:** the round 1 picks (look, contents, bees, the bee, frame, the morning, the cold, the desk, the pace). He has them on one page and said "stand by I will give you answers".
+- **Round 1's picks**, in his words: "1 A/C/B/E, 2 A, 3 C, 4 photo, 5 A, 6 stacked, 7 yes, 8 its ok, 9 yes ok". He had them on one page with a recommendation beside each.
+  - **Look (sheet 1): Amber, New Comb, Old Comb, and Amber lit from behind**, all four as picks. Amber is the standard, as recommended, and New Comb is Light Mode's. He took E as well, which I had called the most hole-like; it is held to its own brightness caps in round 2. Not Red Lamp.
+  - **What the comb holds (sheet 2): honey only.** No bee bread, no brood.
+  - **Bees (sheet 3): Medium at 1×** as the standard, with Size and Bees settings as Ant Colony has.
+  - **The bee (sheet 4): the photo**, cut from the USGS photograph. Not the painted bee.
+  - **Frame (sheet 5): edge to edge**, no case or side bars.
+  - **The morning (sheet 6): stacked frames**, as a real observation hive's are: finished frames above, the day's drawn out in the bottom one, which also replaces the muddy crossfade at six. Not a later start.
+  - **The cold (sheet 7): follow it**, on by default.
+  - **At desktop size (sheet 8): "its ok"**: the comb near a hex lattice from across the desk passes.
+  - **The pace (sheet 9 and the films): "yes ok"**: the crawl as drawn, about one bee in eight walking at 2–5 mm/s.
+- **Still his to decide:** what stacked frames open up, in round 2: how many frames show and how the bars between them look, and how the stack moves on at six.
