@@ -332,7 +332,7 @@ final class BlackHole: SKScene, BatteryPaced {
 
     /// The sky's frame, for the stars and the Milky Way alike: longitude across and latitude up, with 0, 0 straight
     /// through the hole from the camera. docs/black-hole/sky.py bakes both files already turned to it.
-    static let skyCells = (across: 2048, up: 1024)
+    nonisolated static let skyCells = (across: 2048, up: 1024)
 
     /// The real stars (the HYG catalogue to magnitude 11, Resources/blackhole-stars.lzfse) as a grid the shader can
     /// find a star in: one cell every 0.18° of the sky, holding at most one star, the brightest that falls in it.

@@ -45,9 +45,11 @@ final class SaturnsRings: SKScene, BatteryPaced {
     /// takes there, which keeps its lit side buttercream against the dim rings.
     nonisolated static let unlit = 1.478, planetMost = 1.52
 
-    /// Cycle, or one of the views held for good. Stored as 0 for Cycle and 1 to 6 for the views in `views`' order.
-    nonisolated static let view = Knob(key: "saturn.view", label: "View", range: 0...Double(views.count), standard: 0, section: "View",
-                                       format: .choice(["Cycle"] + views.map(\.name)))
+    /// Cycle, Fly Through, or one of the views held for good. Stored as 0 for Cycle, 1 to 6 for the views in `views`'
+    /// order and 7 for Fly Through (added after the views, so their numbers kept their meanings), listed with Fly
+    /// Through second.
+    nonisolated static let view = Knob(key: "saturn.view", label: "View", range: 0...Double(views.count + 1), standard: 0, section: "View",
+                                       format: .choice(["Cycle"] + views.map(\.name) + ["Fly Through"]), order: [0, views.count + 1] + Array(1...views.count))
     /// How long each view holds in Cycle, in minutes.
     nonisolated static let hold = Knob(key: "saturn.hold", label: "Hold each view", range: 1...30, standard: 8, section: "View",
                                        format: .minutes, shownWhen: view.key, shownAt: 0)
@@ -156,31 +158,140 @@ final class SaturnsRings: SKScene, BatteryPaced {
     /// round the side away from 180°, where the planet's shadow would lie on the camera and sweep across the rings
     /// under it in a second or two. The exposure goes by its logarithm too, in light, not in what the screen shows.
     nonisolated static func between(_ a: Camera, _ b: Camera, _ e: Double) -> Camera {
-        let (low, rise) = (log(a.h), log(b.h / a.h))
-        /// The mean height from the start to `x` of the way, with the middle raised by `lift` (a factor of e^lift).
-        func mean(_ lift: Double, to x: Double = 1) -> Double {
+        let (low, rise) = (log(a.h), log(b.h / a.h)), over = climb(a, b) { sin(.pi * $0) }
+        /// The mean height from the start to `x` of the way.
+        func mean(to x: Double) -> Double {
             (0..<32).reduce(0.0) { sum, i in
                 let at = (Double(i) + 0.5) / 32 * x
-                return sum + exp(low + rise * at + lift * sin(.pi * at))
+                return sum + exp(low + rise * at + over * sin(.pi * at))
             } / 32 * x
         }
-        // The mean height the ground's pace needs (smoothstep's fastest is 1.5 times its mean), by bisection.
-        // ponytail: worked out again every frame, about 1,600 exponentials (microseconds); keep it for the glide if
-        // the CPU a frame ever shows it.
-        let need = 1.5 * abs(b.r - a.r) / (glide * calm)
-        var (under, over) = (0.0, mean(0) < need ? 6.0 : 0.0)
-        for _ in 0..<(over > 0 ? 24 : 0) { let mid = (under + over) / 2; if mean(mid) < need { under = mid } else { over = mid } }
-        let h = exp(low + rise * e + over * sin(.pi * e)), along = mean(over, to: e) / mean(over)
+        let h = exp(low + rise * e + over * sin(.pi * e)), along = mean(to: e) / mean(to: 1)
         func mix(_ x: Double, _ y: Double) -> Double { x + (y - x) * e }
-        func clear(_ sun: Double) -> Double { sun - 180 - 360 * ((sun - 180) / 360).rounded(.down) } // 0 to 360, 0 at 180°
         return Camera(r: a.r + (b.r - a.r) * along, h: h, yaw: a.yaw + remainder(b.yaw - a.yaw, 360) * e, pitch: mix(a.pitch, b.pitch),
                       field: mix(a.field, b.field), sun: 180 + mix(clear(a.sun), clear(b.sun)), exposure: a.exposure * pow(b.exposure / a.exposure, e),
                       ahead: a.moon > 0 && b.moon > 0 ? mix(a.ahead, b.ahead) : a.moon > 0 ? a.ahead : b.ahead, moon: mix(a.moon, b.moon))
     }
 
+    /// How far a glide from `a` to `b` climbs, in the height's logarithm, at the top of a bump shaped `bump` (0 to 1
+    /// over 0 to 1 of the way) on the straight line between their logarithms: enough that its mean height is what the
+    /// ground's pace needs, the ground to cross at smoothstep's fastest (1.5 times its mean) over a glide's 120 s
+    /// being no more than `calm` of it; none if it's high enough already. By halving.
+    // ponytail: worked out again every frame, about 1,600 exponentials (microseconds); keep it for the glide if the
+    // CPU a frame ever shows it.
+    nonisolated static func climb(_ a: Camera, _ b: Camera, bump: (Double) -> Double) -> Double {
+        let (low, rise) = (log(a.h), log(b.h / a.h)), need = 1.5 * abs(b.r - a.r) / (glide * calm)
+        func mean(_ lift: Double) -> Double {
+            (0..<32).reduce(0.0) { sum, i in let at = (Double(i) + 0.5) / 32; return sum + exp(low + rise * at + lift * bump(at)) } / 32
+        }
+        guard mean(0) < need else { return 0 }
+        var (under, over) = (0.0, 6.0)
+        for _ in 0..<24 { let mid = (under + over) / 2; if mean(mid) < need { under = mid } else { over = mid } }
+        return over
+    }
+
+    /// The Sun's place round the planet in the space a glide moves it in: 0 to 360 with 0 at 180°, where its shadow
+    /// would lie on the camera, so moving straight across it never goes there.
+    nonisolated static func clear(_ sun: Double) -> Double { sun - 180 - 360 * ((sun - 180) / 360).rounded(.down) }
+
     /// A view to glide to at random: never the one it's at or the one before.
     nonisolated static func next(after view: Int, previous: Int?) -> Int {
         views.indices.filter { $0 != view && $0 != previous }.randomElement()!
+    }
+
+    // MARK: Fly Through
+
+    /// The order Fly Through takes the views in, round and round: of the orders that keep the two low views, over the
+    /// Encke gap and Daphnis Close, side by side, the one whose loop is shortest at the even pace (`flightTime`
+    /// measures them; docs/saturns-rings.md, The build so far, (e)).
+    nonisolated static let flightOrder = [0, 1, 4, 5, 2, 3]
+    /// How fast the fastest thing on screen moves along the loop at Speed 1×, in device px a second.
+    nonisolated static let flightPace = 30.0
+
+    /// The numbers the loop runs through smoothly, in the spaces it moves them in: r, the height's logarithm, yaw,
+    /// pitch, field, the Sun in the space that avoids 180° (`clear`), and the exposure's logarithm.
+    private nonisolated static func channels(_ camera: Camera) -> [Double] {
+        [camera.r, log(camera.h), camera.yaw, camera.pitch, camera.field, clear(camera.sun), log(camera.exposure)]
+    }
+
+    /// The camera `t` of the way round Fly Through's loop, counted in views (0 at the first in `order`, each whole
+    /// number at a view, so the picture there is that view's): a periodic cubic through the views' numbers whose
+    /// slope at each view is the mean of the slopes either side (Catmull-Rom's), but level where the view is a peak
+    /// or a trough of that number and held to three times the gentler slope elsewhere (Fritsch and Carlson's limit),
+    /// so no number overshoots the views either side of it: Catmull-Rom's own took the camera from the Planet's Edge
+    /// on past Daphnis Close and out beyond the A ring, half the screen empty, before it came back in to the Encke
+    /// gap. Every number's rate goes on unbroken through each view. The climb `between` makes in a
+    /// glide between two views is folded in as a bump of the height's logarithm that starts and ends level (sin²).
+    /// Daphnis fades in over the stretch to its view and out over the one after (smoothstep, level at each end),
+    /// coming from 2 Mm ahead to 0.6 at its view, as in its tile, and on past the camera.
+    nonisolated static func path(_ t: Double, order: [Int] = flightOrder, lit: Bool = false) -> Camera {
+        let n = order.count, at = Int(t.rounded(.down)), u = t - Double(at)
+        func knot(_ i: Int) -> Camera { held(views[order[((at + i) % n + n) % n]], for: 0, lit: lit) }
+        let (p0, p1, p2, p3) = (channels(knot(-1)), channels(knot(0)), channels(knot(1)), channels(knot(2)))
+        /// The slope at a view, from the steps to it and from it.
+        func slope(_ before: Double, _ after: Double) -> Double {
+            guard before * after > 0 else { return 0 }
+            let mean = (before + after) / 2
+            return mean.sign == .minus ? max(mean, 3 * max(before, after)) : min(mean, 3 * min(before, after))
+        }
+        let (h00, h10, h01, h11) = (2 * u * u * u - 3 * u * u + 1, u * u * u - 2 * u * u + u, 3 * u * u - 2 * u * u * u, u * u * u - u * u)
+        var x = p1.indices.map { k in
+            h00 * p1[k] + h10 * slope(p1[k] - p0[k], p2[k] - p1[k]) + h01 * p2[k] + h11 * slope(p2[k] - p1[k], p3[k] - p2[k])
+        }
+        x[1] += climb(knot(0), knot(1)) { pow(sin(.pi * $0), 2) } * pow(sin(.pi * u), 2)
+        var camera = Camera(r: x[0], h: exp(x[1]), yaw: x[2], pitch: x[3], field: x[4], sun: x[5] + 180, exposure: exp(x[6]))
+        if let daphnis = order.firstIndex(where: { views[$0].moon != nil }) {
+            var off = t - Double(daphnis)
+            off -= Double(n) * (off / Double(n)).rounded()
+            let near = max(1 - abs(off), 0)
+            (camera.moon, camera.ahead) = (near * near * (3 - 2 * near), 0.6 - 1.4 * off)
+        }
+        return camera
+    }
+
+    /// The seconds Fly Through takes at Speed 1× to reach each 1/120 of the way between views round `order`'s loop,
+    /// from its start: each step's time is how far the fastest thing on screen moves over it (`motion`), over
+    /// `flightPace`, so the pace is even on screen whatever the camera does. The last is the loop's length.
+    nonisolated static func flightTime(order: [Int] = flightOrder) -> [Double] {
+        let steps = 120 * order.count
+        var seconds = [0.0]
+        for i in 0..<steps {
+            let moved = motion(path(Double(i) / 120, order: order), path(Double(i + 1) / 120, order: order), across: 24, up: 16)
+            seconds.append(seconds.last! + moved / flightPace)
+        }
+        return seconds
+    }
+    /// `flightTime` for the loop flown, worked out the first time it's flown (18 ms in release) and kept: 721 numbers.
+    nonisolated static let flight = flightTime()
+
+    /// The camera `seconds` round the loop at Speed 1×, from its start, round and round.
+    // ponytail: the time is linear within each of the loop's 720 steps, so its speed changes by a few percent from
+    // one to the next, every 2 or 3 seconds, which no strip has shown; a smooth curve through the table if one is seen.
+    nonisolated static func flying(_ seconds: Double, lit: Bool = false) -> Camera {
+        let length = flight.last!, at = seconds - length * (seconds / length).rounded(.down)
+        var (low, high) = (0, flight.count - 1)
+        while high - low > 1 { let mid = (low + high) / 2; if flight[mid] <= at { low = mid } else { high = mid } }
+        let step = flight[high] - flight[low]
+        return path((Double(low) + (step > 0 ? (at - flight[low]) / step : 0)) / 120, lit: lit)
+    }
+
+    /// Where on the loop, in seconds at 1×, it passes `view`.
+    nonisolated static func flightSeconds(at view: Int) -> Double { flight[120 * (flightOrder.firstIndex(of: view) ?? 0)] }
+
+    /// The view the loop passes next after `seconds` round it.
+    nonisolated static func nextOnLoop(_ seconds: Double) -> Int {
+        let length = flight.last!, at = seconds - length * (seconds / length).rounded(.down)
+        let step = flight.firstIndex { $0 > at } ?? flight.count - 1
+        return flightOrder[((step + 119) / 120) % flightOrder.count]
+    }
+
+    /// How far the fastest thing on screen moves along the loop at its fastest, in device px a second at Speed 1×, as
+    /// `saturnsRingsFlightKeepsAnEvenPace` measures it: a little over `flightPace`, within a step.
+    nonisolated static let flightMost = 32.0
+
+    /// The ceiling on battery while flying at `speed`, by the same rule as a hold's.
+    nonisolated static func flightRate(speed: Double) -> Int? {
+        [10, 12, 15, 20].first { flightMost * speed / Double($0) <= 2 }
     }
 
     /// The ceiling on battery while `view` holds at `speed`: the lowest of 10, 12, 15 and 20 fps at which its fastest
@@ -189,12 +300,85 @@ final class SaturnsRings: SKScene, BatteryPaced {
         [10, 12, 15, 20].first { view.pace * speed / Double($0) <= 2 }
     }
 
-    /// Holding view `current`, or gliding to it, since `since` on the scene's clock, `time`; `previous` is the view before.
+    /// How far the fastest thing on screen moves from camera `a` to camera `b`, in device pixels at 3024 × 1964: the
+    /// points of the ring plane, the planet and the sky seen through a grid over the screen, found again from `b`. A
+    /// point is also taken as turning with the Sun where something there does (the planet, whose night side and ring
+    /// shadows do; the stars, which keep to the Sun's frame), and as
+    /// moving with Daphnis where its waves are a tenth of a km or more, as the shader draws them; the larger counts.
+    /// The battery rates are measured by it, and Fly Through's pace is set by it.
+    nonisolated static func motion(_ a: Camera, _ b: Camera, across: Int = 48, up: Int = 32) -> Double {
+        let (w, h) = (3024.0, 1964.0), (from, to) = (a.axes(), b.axes())
+        let (lensA, lensB) = (tan(a.field / 2 * .pi / 180), tan(b.field / 2 * .pi / 180))
+        func turned(_ p: SIMD3<Double>, by degrees: Double) -> SIMD3<Double> {
+            let (c, s) = (cos(degrees * .pi / 180), sin(degrees * .pi / 180))
+            return SIMD3(c * p.x - s * p.y, s * p.x + c * p.y, p.z)
+        }
+        /// Where `p` is on `b`'s screen in device pixels from the centre, a point if `far` is false, else a direction.
+        func seen(_ p: SIMD3<Double>, far: Bool) -> SIMD2<Double>? {
+            let q = far ? p : p - to.at, depth = simd_dot(q, to.ahead)
+            guard depth > 1e-6 else { return nil }
+            return SIMD2(simd_dot(q, to.right) / depth / lensB * w / 2, simd_dot(q, to.up) / depth / (lensB * h / w) * h / 2)
+        }
+        var most = 0.0
+        for i in 0..<across {
+            for j in 0..<up {
+                let (x, y) = ((Double(i) + 0.5) / Double(across) * 2 - 1, (Double(j) + 0.5) / Double(up) * 2 - 1)
+                let d = simd_normalize(from.right * x * lensA + from.up * y * lensA * h / w + from.ahead), c = from.at
+                let k = 60.268 / 54.364, cs = SIMD3(c.x, c.y, c.z * k), ds = SIMD3(d.x, d.y, d.z * k)
+                let (qa, qb, qc) = (simd_dot(ds, ds), simd_dot(cs, ds), simd_dot(cs, cs) - 60.268 * 60.268)
+                let planet = qb * qb - qa * qc > 0 ? (-qb - (qb * qb - qa * qc).squareRoot()) / qa : Double.infinity
+                let plane = -c.z / d.z, p = c + plane * d, r = (p.x * p.x + p.y * p.y).squareRoot()
+                var moves: [(SIMD3<Double>, Bool)]
+                if plane > 0, plane < planet, r > 72.2, r < 141.9 {
+                    moves = [(p, false)]
+                    let dr = abs(r - daphnis) * 1000
+                    if a.moon + b.moon > 0, dr > 17.5, dr < 1050 {
+                        // the wave's height there, as the shader has it (its moon.y at 1)
+                        let phi = atan2(p.y, p.x) - a.ahead / daphnis, down = (-(r > daphnis ? 1.0 : -1.0) * phi)
+                        let theta = 2 * .pi * (down - 2 * .pi * (down / (2 * .pi)).rounded(.down)) * 136504 / (3 * .pi * dr)
+                        if 2.5 * pow(17.5 / dr, 2) * exp(-theta / 25) > 0.1 || exp(-(dr - 17.5) / 8 - theta / 25) > 0.1 {
+                            moves.append((turned(p, by: (b.ahead - a.ahead) / daphnis * 180 / .pi), false))
+                        }
+                    }
+                } else if planet < .infinity {
+                    let q = c + planet * d
+                    moves = [(q, false), (turned(q, by: b.sun - a.sun), false)]
+                } else {
+                    moves = [(turned(d, by: b.sun - a.sun), true)] // the stars keep to the Sun's frame
+                }
+                for (point, far) in moves {
+                    guard let there = seen(point, far: far) else { return .infinity }
+                    most = max(most, simd_distance(there, SIMD2(x * w / 2, y * h / 2)))
+                }
+            }
+        }
+        // The planet's shadow's two edges across the rings, which sweep round with the Sun: lines a few pixels wide that
+        // a grid of rays mostly misses, so they're sampled along their length. Each lies 60,268 km (the planet's
+        // radius) to one side of the line from the planet away from the Sun, whatever the Sun's height.
+        let away = -simd_normalize(SIMD2(from.sun.x, from.sun.y)), aside = SIMD2(-away.y, away.x)
+        for edge in [-1.0, 1.0] {
+            for i in 0..<48 {
+                let r = 72.2 + (141.9 - 72.2) * Double(i) / 47, flat = away * (r * r - 60.268 * 60.268).squareRoot() + aside * edge * 60.268
+                let p = SIMD3(flat.x, flat.y, 0), q = p - from.at, depth = simd_dot(q, from.ahead)
+                guard depth > 1e-6 else { continue }
+                let here = SIMD2(simd_dot(q, from.right) / depth / lensA * w / 2, simd_dot(q, from.up) / depth / (lensA * h / w) * h / 2)
+                guard abs(here.x) <= w / 2, abs(here.y) <= h / 2, let there = seen(turned(p, by: b.sun - a.sun), far: false) else { continue }
+                most = max(most, simd_distance(there, here))
+            }
+        }
+        return most
+    }
+
+    /// Holding view `current` (or flying the loop, with `current` nil), or gliding to it, since `since` on the scene's
+    /// clock, `time`; `previous` is the view before.
     private enum Phase { case hold, glide(from: Origin) }
-    /// Where a glide sets out from: a view still drifting on, as a hold ends, so the camera doesn't stop dead before
-    /// it moves off; or a camera standing where it was, when another view is picked partway through a glide.
-    private enum Origin { case drifting(Int), still(Camera) }
-    private var phase = Phase.hold, current: Int, previous: Int?, since: Double, time = 0.0, lastUpdate: TimeInterval?
+    /// Where a glide sets out from: a view still drifting on, as a hold ends, or the loop still flying on, so the camera
+    /// doesn't stop dead before it moves off; or a camera standing where it was, when another view is picked partway
+    /// through a glide.
+    private enum Origin { case drifting(Int), flying, still(Camera) }
+    private var phase = Phase.hold, current: Int?, previous: Int?, since: Double, time = 0.0, lastUpdate: TimeInterval?
+    /// How far round Fly Through's loop the camera is (or a glide onto or off it is aiming for), in seconds at 1×.
+    private var loop = 0.0
     /// How far the drift has gone in the hold that's showing, or the one a glide sets out from: seconds at 1×.
     private var drift: Double
     /// The ceiling on battery: the view's at the Speed set while it holds, none while it glides, when the fastest
@@ -212,15 +396,17 @@ final class SaturnsRings: SKScene, BatteryPaced {
 
     /// Starts holding `first` (the view picked in Settings, else one at random), `moment` seconds in (the
     /// `saturn.moment` default if nil, for pictures), or with `next`, gliding from it to `next`, `moment` seconds in
-    /// (for tests), in the light of `date` (`SaturnsRings.date` if nil).
-    init(size: CGSize, from first: Int? = nil, to next: Int? = nil, moment: Double? = nil, date: Date? = nil) {
-        let picked = Int(Self.view.value) - 1, moment = moment ?? UserDefaults.standard.double(forKey: "saturn.moment")
-        current = first ?? (picked >= 0 ? picked : Self.views.indices.randomElement()!)
+    /// (for tests), in the light of `date` (`SaturnsRings.date` if nil). With `fly` (or Fly Through picked), it flies
+    /// the loop from `moment` times Speed round it, or from somewhere on it at random if no moment is given.
+    init(size: CGSize, from first: Int? = nil, to next: Int? = nil, fly: Bool = false, moment: Double? = nil, date: Date? = nil) {
+        let pick = Int(Self.view.value), pinned = moment ?? (UserDefaults.standard.object(forKey: "saturn.moment") as? Double)
+        let moment = pinned ?? 0, flies = fly || first == nil && pick == Self.views.count + 1
+        current = flies ? nil : first ?? ((1...Self.views.count).contains(pick) ? pick - 1 : Self.views.indices.randomElement()!)
         (since, drift) = (-moment, moment * Self.speed.value)
+        if flies { loop = pinned.map { $0 * Self.speed.value } ?? .random(in: 0..<Self.flight.last!) }
         let light = Self.light(on: date ?? Self.date)
         sunUp = light.up
         super.init(size: size)
-        batteryRate = Self.rate(Self.views[current], speed: Self.speed.value)
 
         // ponytail: the first copy builds on the main thread in about 50 ms in release (the profile read 10, the
         // pyramid's bake 8.5, the star grid 6, the glow 8), about 150 while the HEIC decoder first starts; a second,
@@ -258,7 +444,7 @@ final class SaturnsRings: SKScene, BatteryPaced {
         ] + colours)
         addChild(sprite)
 
-        if let next { glide(to: next, at: since, from: .drifting(current)) }
+        if let next, let first = current { glide(to: next, at: since, from: .drifting(first)) }
         advance()
         show()
     }
@@ -269,44 +455,63 @@ final class SaturnsRings: SKScene, BatteryPaced {
         let seconds = frameTime(currentTime, &lastUpdate)
         time += seconds
         drift += seconds * Self.speed.value
+        loop += seconds * Self.speed.value
         advance()
         show()
     }
 
     /// The camera now, from the unlit face or with `lit` the lit.
     func camera(lit: Bool) -> Camera {
-        let held = Self.held(Self.views[current], for: drift, lit: lit)
-        guard case .glide(let origin) = phase else { return held }
+        let there = current.map { Self.held(Self.views[$0], for: drift, lit: lit) } ?? Self.flying(loop, lit: lit)
+        guard case .glide(let origin) = phase else { return there }
         let from: Camera
         switch origin {
         case .drifting(let view): from = Self.held(Self.views[view], for: drift, lit: lit)
+        case .flying: from = Self.flying(loop, lit: lit)
         case .still(let camera): from = camera
         }
+        // onto a view as it begins to drift, or onto the loop as it flies on, so the camera arrives moving with it
+        let to = current.map { Self.held(Self.views[$0], for: 0, lit: lit) } ?? there
         let u = min(max((time - since) / Self.glide, 0), 1)
-        return Self.between(from, Self.held(Self.views[current], for: 0, lit: lit), u * u * (3 - 2 * u))
+        return Self.between(from, to, u * u * (3 - 2 * u))
+    }
+
+    /// Where a glide starting now sets out from.
+    private var origin: Origin {
+        guard case .hold = phase else { return .still(camera(lit: Self.face.value > 0.5)) }
+        return current.map { .drifting($0) } ?? .flying
     }
 
     /// Moves the phase on: to a glide toward the view picked in Settings, or in Cycle toward one at random once a
     /// hold is over, and to a hold once a glide is over, each at the moment it's due, so the path is the same at any
     /// frame rate.
     private func advance() {
-        let picked = Int(Self.view.value) - 1, speed = Self.speed.value
+        let pick = Int(Self.view.value), speed = Self.speed.value, holds = Self.hold.value.rounded() * 60
         while true {
             if case .glide = phase, time - since >= Self.glide {
                 (phase, since) = (.hold, since + Self.glide)
                 drift = (time - since) * speed
-            } else if picked >= 0, picked != current {
-                if case .hold = phase { glide(to: picked, at: time, from: .drifting(current)) } else { glide(to: picked, at: time, from: .still(camera(lit: Self.face.value > 0.5))) }
-            } else if picked < 0, case .hold = phase, time - since >= Self.hold.value.rounded() * 60 {
-                glide(to: Self.next(after: current, previous: previous), at: since + Self.hold.value.rounded() * 60, from: .drifting(current))
+            } else if pick == Self.views.count + 1, let view = current {
+                // onto the loop where it passes the view the camera is at, or going to
+                let from = origin
+                loop = Self.flightSeconds(at: view)
+                glide(to: nil, at: time, from: from)
+            } else if (1...Self.views.count).contains(pick), current != pick - 1 {
+                glide(to: pick - 1, at: time, from: origin)
+            } else if pick == 0, current == nil {
+                // off the loop to the next view it would have passed, to hold there as Cycle does
+                glide(to: Self.nextOnLoop(loop), at: time, from: origin)
+            } else if pick == 0, let view = current, case .hold = phase, time - since >= holds {
+                glide(to: Self.next(after: view, previous: previous), at: since + holds, from: .drifting(view))
             } else {
                 break
             }
         }
-        if case .hold = phase { batteryRate = Self.rate(Self.views[current], speed: speed) } else { batteryRate = nil }
+        guard case .hold = phase else { batteryRate = nil; return }
+        batteryRate = current.map { Self.rate(Self.views[$0], speed: speed) } ?? Self.flightRate(speed: speed)
     }
 
-    private func glide(to next: Int, at moment: Double, from origin: Origin) {
+    private func glide(to next: Int?, at moment: Double, from origin: Origin) {
         phase = .glide(from: origin)
         (previous, current, since) = (current, next, moment)
     }
