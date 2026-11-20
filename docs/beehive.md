@@ -6,7 +6,7 @@ It was pick #5 of the "Atrium Wallpaper Ideas" page of 2026-11-14 (a review of t
 
 - **Research:** [beehive/research-method.md](beehive/research-method.md) (the comb's and the bees' numbers, the pace, the data model on Ant Colony's engine, the cold cluster, and a SpriteKit probe of four ways to draw the bees, `beehive/probe.swift`) and [beehive/research-look.md](beehive/research-look.md) (reference photos measured by `beehive/measure_photos.py`, four palettes and their brightness caps, trypophobia, what can ship, the name). Every figure in them is marked checked or unchecked.
 - **Scripts:** `beehive/mock.swift` draws the mock-ups with SpriteKit as the app would; `sheet.py` lays out the sheets and films from `variants.py`; [beehive/mockups-round1.md](beehive/mockups-round1.md) has every tile's measurements and how to redraw them.
-- **Where it stands (2026-11-18):** researched; round 1 of mock-ups with Dave. Nothing in `Sources/` yet.
+- **Where it stands (2026-11-20):** researched; round 1 of mock-ups with Dave, his picks to come. Nothing in `Sources/` yet.
 
 ## Mock-ups, round 1 (2026-11-18)
 
@@ -39,3 +39,8 @@ From the look research (search excerpts of trademark aggregators; the USPTO's ow
 - **Beehive** pairs with Ant Colony and clashes with nothing in the menu. Night Sky labels the Beehive Cluster (M44) on the sky, a label and not a menu name. No live registered BEEHIVE mark in classes 9 or 42 turned up; pending applications exist.
 - **Honeycomb** and **Hive** are crowded in software (and Honeycomb names the comb alone, the one picture the trypophobia questionnaire uses). **Observation Hive** is the descriptive fallback, used in the description.
 - **No skep** (the domed straw hive) anywhere, in the picture, the tile, the site's card or the icon sheet: it is an emblem of the Church of Jesus Christ of Latter-day Saints and of Utah, and of Freemasonry (Etching's rule: nothing religious). A frame hive's comb seen face-on carries none of it.
+
+## Dave's decisions (2026-11-20)
+
+- **Trypophobia: a warning in Settings.** Told that honeycomb is one of the trypophobia questionnaire's two pictures, that distance and blur don't help, and that the uncapped band and the empty bottom are still a field of open cells, he said: "just put a warning in the settings if we build it". So the comb isn't redesigned away from cells; Beehive's Settings page carries a short note that the picture is a honeycomb of open cells, for anyone who finds that uncomfortable. The round 1 measures (most cells capped, no larvae, no cell's floor more than 2× darker than its rim) stay.
+- **Still his to decide:** the round 1 picks (look, contents, bees, the bee, frame, the morning, the cold, the desk, the pace). He has them on one page and said "stand by I will give you answers".
