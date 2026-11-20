@@ -121,7 +121,7 @@ Each step a commit once it builds and the tests pass, with its snapshot looked a
 
 ## Settings
 - **View** (`saturn.view`, the first knob, a menu, in its own section): which view, or Cycle. Stored as a number, for good once shipped: **0** Cycle (the standard), **1** Looking In, **2** Along to the Horizon, **3** Along the Planet's Edge, **4** From Above, **5** Over the Encke Gap, **6** Daphnis Close.
-- **Hold each view** (`saturn.hold`, minutes, 2 to 30, standard 8): how long each view holds in Cycle, shown only while View is at Cycle. The glide is 120 s, not a setting.
+- **Hold each view** (`saturn.hold`, minutes, 1 to 30, standard 8; it was 2 to 30 until Dave asked for a minute, 0.130.12): how long each view holds in Cycle, shown only while View is at Cycle. The glide is 120 s, not a setting.
 - **Face** (`saturn.face`, a menu, in Look): **0** Unlit (the standard), **1** Lit.
 - **Brightness** (`saturn.brightness`, 0.5 to 2, standard 1): the exposure (and the planet's), times the view's own.
 - **Stars** (`saturn.stars`, a switch, standard on: **1** on, **0** off).
@@ -176,6 +176,9 @@ The `ponytail:` comments in `SaturnsRings.swift`, each with where it stops being
 - **The stars' colours are two,** warm and cool by temperature, not Black Hole's black-body table (a fourth texture), as no star passes luma 30: the table if they're ever drawn bright enough for colour to show. **A star within 3° of the star file's poles is cut,** where its cells are too narrow to search: search further if one is seen.
 - **Daphnis fades** with its waves over a glide into or out of its view, while the camera is a few hundred km to a few Mm off and they are a few pixels across: place it on its real orbit in every view if the fade ever shows.
 - **The planet's bands are drawn by latitude,** not mapped: a Cassini map of the globe if a view close to it shows them as too regular.
+
+## Dave's feedback
+- **2026-11-19, on 0.130.11:** "can we add an option in the ring settings to control how long we linger on a specific view (with 0 being an option), allowing the user a constant pan if they desire". Hold each view at 0 was built (Off: one glide straight into the next), but each glide eases in and out, so the camera would slow to a moment's stop at every view. Told so, he asked for the real thing instead: "add an option for a continuous flythrough based on one smooth path through all the views. build that as its own setting, also lit side looks nicer we should default to lit, also in the current pause and glide mode, add a 1 minute pause optoin, right now the lowest is 2 min". So Off was dropped before it shipped (Fly Through does it properly), and Hold each view goes down to 1 minute (0.130.12). The flythrough and the lit face by default follow.
 
 ## Still open
 - **Motion, measured before step (b)** (2026-11-19, from films the mock drew and then deleted, since Dave didn't need them): from frame to frame at 30 fps the bands change by 1 level of 255 at the 99th percentile and 2 at the 99.9th at 1× (the camera drifting 20 km/s), and by 7 and 19 at 10×, with no crawling or popping in contact sheets of either. At 1× the bands creep 400 km in 20 s: calm, close to a still.
