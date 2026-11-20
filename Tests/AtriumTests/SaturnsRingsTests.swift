@@ -619,10 +619,28 @@ private func smooth(_ cameras: [SaturnsRings.Camera], _ what: String) {
     }
 }
 
+/// The camera never stops at the crossing point: at each change of faces, the fastest thing on screen moves at least
+/// `least` of its mean pace over the move round it, two glides' length (up to 0.130.15 a crossing was two glides, each
+/// eased to a stop there, so it moved 0). Prints the pace there, the mean, the slowest in the middle 80% of the move and
+/// the pace every 10 s, in device px a second at 1×.
+private func keepsMoving(_ cameras: [SaturnsRings.Camera], _ what: String, least: Double = 0.3) {
+    let half = Int(SaturnsRings.glide * 10)
+    for i in cameras.indices.dropFirst() where cameras[i - 1].lit != cameras[i].lit {
+        func pace(_ j: Int) -> Double { SaturnsRings.motion(cameras[j - 1], cameras[j], across: 24, up: 16) * 10 }
+        let move = Array(max(i - half, 1)..<min(i + half, cameras.count)), paces = move.map(pace)
+        let mean = paces.reduce(0, +) / Double(paces.count), there = pace(i)
+        let middle = paces[paces.count / 10..<paces.count * 9 / 10].min()!
+        print(String(format: "Saturn's Rings %@, through the plane at %.0f px/s: the move's mean %.0f, the slowest in its middle 80%% %.0f; every 10 s: %@",
+                     what, there, mean, middle, stride(from: 0, to: paces.count, by: 100).map { String(format: "%.0f", paces[$0]) }.joined(separator: " ")))
+        #expect(there >= least * mean, "\(what): through the plane at \(there) px/s, the move's mean \(mean)")
+    }
+}
+
 /// The faces in use: a view held under Alternate changes faces after half an hour, by the crossing point, and comes
 /// back to the same view; under Follow the camera changes faces when the appearance does, from a held view and from
-/// Fly Through; Cycle under Alternate changes faces every other glide; and Fly Through under Alternate changes them
-/// once a lap. In every case the camera keeps clear of the rings and never jumps.
+/// partway through a glide (going on to a view picked on its way to the plane); Cycle under Alternate changes faces
+/// every other glide; and Fly Through under Alternate changes them once a lap. In every case the camera keeps clear
+/// of the rings, never jumps, and never stops at the crossing point.
 @MainActor @Test func saturnsRingsChangeFaces() {
     let keys = [SaturnsRings.view.key, SaturnsRings.face.key, SaturnsRings.hold.key]
     defer { keys.forEach(UserDefaults.standard.removeObject); NSApplication.shared.appearance = nil }
@@ -634,6 +652,7 @@ private func smooth(_ cameras: [SaturnsRings.Camera], _ what: String) {
     var cameras = run(SaturnsRings(size: size, moment: 0), for: hold + 2 * SaturnsRings.glide + 10)
     keepsClear(cameras, "a held view")
     smooth(cameras, "a held view")
+    keepsMoving(cameras, "a held view")
     let back = SaturnsRings.held(SaturnsRings.views[2], for: 0, lit: false), last = cameras.last!
     #expect(cameras.first!.lit && !last.lit && abs(last.h - back.h) < 0.01 && abs(last.yaw - back.yaw) < 0.01 && abs(last.r - back.r) < 0.1,
             "back on its view, on the other face: r \(last.r), h \(last.h)")
@@ -648,7 +667,25 @@ private func smooth(_ cameras: [SaturnsRings.Camera], _ what: String) {
     cameras = run(scene, for: 2 * SaturnsRings.glide + 10, from: 20)
     keepsClear(cameras, "Follow")
     smooth(cameras, "Follow")
+    keepsMoving(cameras, "Follow")
     #expect(!cameras.last!.lit, "Follow went over to the unlit face in Dark Mode")
+
+    // Follow as Cycle glides, a view picked on the way to the plane: from where the camera is, on through the plane
+    // to that view
+    UserDefaults.standard.set(0.0, forKey: keys[0])
+    UserDefaults.standard.set(1.0, forKey: keys[2])
+    NSApplication.shared.appearance = NSAppearance(named: .aqua)
+    let gliding = SaturnsRings(size: size, moment: 0)
+    _ = run(gliding, for: 90)
+    NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
+    cameras = run(gliding, for: 60, from: 90)
+    UserDefaults.standard.set(5.0, forKey: keys[0])
+    cameras += run(gliding, for: 2 * SaturnsRings.glide - 50, from: 150)
+    keepsClear(cameras, "Follow mid-glide")
+    smooth(cameras, "Follow mid-glide")
+    keepsMoving(cameras, "Follow mid-glide")
+    let encke = SaturnsRings.held(SaturnsRings.views[4], for: 0, lit: false)
+    #expect(!cameras.last!.lit && abs(cameras.last!.r - encke.r) < 0.1 && abs(cameras.last!.yaw - encke.yaw) < 0.01, "on to the view picked, on the unlit face")
 
     // Cycle under Alternate, a minute's hold: of four glides, two change faces
     UserDefaults.standard.set(0.0, forKey: keys[0])
@@ -657,6 +694,7 @@ private func smooth(_ cameras: [SaturnsRings.Camera], _ what: String) {
     cameras = run(SaturnsRings(size: size, moment: 0), for: 4 * 60 + 2 * SaturnsRings.glide + 2 * 2 * SaturnsRings.glide)
     keepsClear(cameras, "Cycle")
     smooth(cameras, "Cycle")
+    keepsMoving(cameras, "Cycle")
     #expect(zip(cameras, cameras.dropFirst()).count { $0.lit != $1.lit } == 2, "Cycle changed faces every other glide")
 
     // Fly Through under Alternate: once a lap
@@ -665,6 +703,7 @@ private func smooth(_ cameras: [SaturnsRings.Camera], _ what: String) {
     cameras = run(SaturnsRings(size: size, moment: 0), for: 2 * lap)
     keepsClear(cameras, "Fly Through")
     smooth(cameras, "Fly Through")
+    keepsMoving(cameras, "Fly Through")
     #expect(zip(cameras, cameras.dropFirst()).count { $0.lit != $1.lit } == 2, "Fly Through changed faces once a lap")
 }
 
