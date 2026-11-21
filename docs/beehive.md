@@ -6,7 +6,7 @@ It was pick #5 of the "Atrium Wallpaper Ideas" page of 2026-11-14 (a review of t
 
 - **Research:** [beehive/research-method.md](beehive/research-method.md) (the comb's and the bees' numbers, the pace, the data model on Ant Colony's engine, the cold cluster, and a SpriteKit probe of four ways to draw the bees, `beehive/probe.swift`) and [beehive/research-look.md](beehive/research-look.md) (reference photos measured by `beehive/measure_photos.py`, four palettes and their brightness caps, trypophobia, what can ship, the name). Every figure in them is marked checked or unchecked.
 - **Scripts:** `beehive/mock.swift` draws the mock-ups with SpriteKit as the app would; `sheet.py` lays out the sheets and films from `variants.py`; [beehive/mockups-round1.md](beehive/mockups-round1.md) has every tile's measurements and how to redraw them.
-- **Where it stands (2026-11-20):** researched; Dave has picked from round 1 (below); round 2, on the stacked frames, is with him. Nothing in `Sources/` yet.
+- **Where it stands (2026-11-20):** researched; Dave has picked from round 1 (below); and from round 2 (2026-11-20); being built, hidden, in the steps under How it works. Nothing in `Sources/` yet.
 
 ## Mock-ups, round 1 (2026-11-18)
 
@@ -72,4 +72,27 @@ From the look research (search excerpts of trademark aggregators; the USPTO's ow
   - **The cold (sheet 7): follow it**, on by default.
   - **At desktop size (sheet 8): "its ok"**: the comb near a hex lattice from across the desk passes.
   - **The pace (sheet 9 and the films): "yes ok"**: the crawl as drawn, about one bee in eight walking at 2–5 mm/s.
-- **Still his to decide:** what stacked frames open up, in round 2: how many frames show and how the bars between them look, and how the stack moves on at six.
+- **Round 2's picks**, in his words: "1 medium, 2 A, 3 22:00, 4 all four, 5 ok".
+  - **Medium frames** (sheet 10), about two and a half on a 14-inch screen, mostly comb at every hour. Not deep.
+  - **The stack slides up one frame over 30 minutes** (sheet 11, A). Not the 5-minute slide, not the dissolve.
+  - **At 22:00**, when the new comb's first cells appear on the clock (a quarter drawn overnight by six). Not a comb starting empty at six.
+  - **All four looks** in the stack (sheet 12), with Old Comb's bees lifted to stand out.
+  - **The desk at 06:30 and the films pass** ("5 ok").
+- **Then the build**, hidden behind `unfinished: true`, in the steps under How it works.
+
+## How it works
+
+The plan, from the research and both rounds. Where the build goes another way, a line beginning **As built** is added here.
+
+- **Ant Colony's engine.** A day's comb is baked once off the main thread from its seed as one map, one RGBA8 texel a cell: the share of the day's drawing done when the cell starts, the hours it fills and is capped (quarter hours over two and a half days), and what it holds. One shader a look compares the map with the comb's clock and draws the cells (cube-rounded on a bent lattice, coping rims, the floor pushed down by the cell's tilt, honey by Beer–Lambert, domed grainy caps, a warm lamp from the upper left), kept in a rasterised `SKEffectNode` whose uniforms are set only when they change. `mock.swift`'s `Comb` and shader are the starting point.
+- **The clock.** A comb's day runs from 22:00 to 22:00. A quarter is drawn by six, then s₀ + (1 − s₀)(1 − (1 − h/24)²) with s₀ = 0.25. Ant Colony's `Cycle` (the farm, when it began, its pace; Speed 1× to 8×; a farm begins only on the hour at 1×) is shared rather than copied, with the hour a day begins as a parameter (Ant Colony's six, Beehive's 22:00), and Ant Colony's pictures stay the same to the byte.
+- **The stack.** Langstroth medium frames to scale (a comb 130 mm, 318 pt at Medium; a pitch of 407 pt), edge to edge left and right, the day's frame at the bottom with its bottom bar on the screen's lower edge. The frames above are the previous days' combs, each from its own day's seed and on its own clock, so the frame above is yesterday's comb, closing its last caps. The bars are cut from Poly Haven's CC0 `coated_pine_02`, shipped as a resource, tinted by brightness to the look.
+- **The change at 22:00.** The whole stack slides up one frame over 30 minutes (scaled by Speed) by moving a plain parent node, never the rasterised one (that re-rasterises every frame: 0.91 ms of GPU against 0.19–0.40). The bees ride on the comb.
+- **The bees.** One sprite each from an atlas of poses cut from the USGS Bee Inventory and Monitoring Lab's public-domain photograph (shipped as a resource, credited in About), lit from the viewer's side, dimmed to the lamp. Round 1's colony: 0.2 a cm² × Bees, about 12% walking at 2–5 mm/s, 45% still, 40% working in place at the cells the map says are being built, filled and capped; festoons from the day's frame's lower edge in the morning; stepped in sixtieths as Ant Colony's ants are, setting only what moves each frame. Old Comb's bees are lifted to stand out (Dave, round 2).
+- **The cold.** `LiveWeather.shared.latest?.temperature` where you are, smoothed over 30 minutes; no report counts as warm. From 18 °C the walkers slow and draw in; below 14 °C a cluster forms on the day's frame's empty cells under its honey, tighter below 10 °C with bees head first in cells. On by default, a switch to turn it off.
+- **Settings** (`beehive.`): Look (Amber, New Comb, Old Comb, Lit from Behind; the standard follows Light and Dark Mode, Amber in Dark and New Comb in Light), Speed (1× to 8×), Bee size (Small, Medium, Large: a cell 10, 14 or 20 points), Bees (0.5× to 2×), Follow the cold. A footnote warns that the picture is a honeycomb of open cells, for anyone who finds that uncomfortable (Dave, 2026-11-20). Pins for pictures: `beehive.day`, `beehive.hour`, `beehive.temp`. `HeadStart` for Settings' copy; `batteryRate` 15.
+- **Steps**, each a commit, a patch bump and a deploy:
+  - **(a) The still:** the stack baked and drawn in Amber, the wood, the clock shared with Ant Colony, hidden, with `preview-beehive.jpg`.
+  - **(b) The bees:** the atlas, the colony, `HeadStart`.
+  - **(c) Settings and the slide:** the four looks, Size, Bees, Speed, the footnote, the change at 22:00.
+  - **(d) The cold:** the live temperature and the cluster.
