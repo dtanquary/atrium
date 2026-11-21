@@ -56,23 +56,24 @@ final class AntColony: SKScene {
         return 1 - left * left
     }
 
-    /// The day a moment of the wall's clock belongs to (a day runs from six to six), as a number like 20261012;
-    /// the moment that day began, in seconds since the reference date; and the hours since.
-    nonisolated static func day(at wall: Double, calendar: Calendar = .current) -> (day: Int, six: Double, hours: Double) {
-        if let known = lastDay.withLock({ $0 }), known.calendar == calendar, known.six <= wall, wall < known.until {
+    /// The day a moment of the wall's clock belongs to (a day runs from six to six, or from the hour `dawn` to the
+    /// next: Beehive's from ten at night), as a number like 20261012; the moment that day began, in seconds since the
+    /// reference date; and the hours since.
+    nonisolated static func day(at wall: Double, dawn: Double = dawn, calendar: Calendar = .current) -> (day: Int, six: Double, hours: Double) {
+        if let known = lastDay.withLock({ $0 }), known.calendar == calendar, known.dawn == dawn, known.six <= wall, wall < known.until {
             return (known.day, known.six, (wall - known.six) / 3600)
         }
-        let made = workDay(at: wall, calendar), until = workDay(at: made.six + 26 * 3600, calendar).six // the next six
-        lastDay.withLock { $0 = (calendar, made.day, made.six, until) }
+        let made = workDay(at: wall, dawn, calendar), until = workDay(at: made.six + 26 * 3600, dawn, calendar).six // the next six
+        lastDay.withLock { $0 = (calendar, dawn, made.day, made.six, until) }
         return made
     }
 
     /// The last day `day(at:)` worked out, and the six that ends it: the calendar's work is about 1.5 µs, and the
     /// farm asks every frame.
-    private static let lastDay = Mutex<(calendar: Calendar, day: Int, six: Double, until: Double)?>(nil)
+    private static let lastDay = Mutex<(calendar: Calendar, dawn: Double, day: Int, six: Double, until: Double)?>(nil)
 
     /// `day(at:)` worked out by the calendar.
-    private nonisolated static func workDay(at wall: Double, _ calendar: Calendar) -> (day: Int, six: Double, hours: Double) {
+    private nonisolated static func workDay(at wall: Double, _ dawn: Double, _ calendar: Calendar) -> (day: Int, six: Double, hours: Double) {
         let morning = calendar.startOfDay(for: Date(timeIntervalSinceReferenceDate: wall - dawn * 3600))
         let parts = calendar.dateComponents([.year, .month, .day], from: morning), six = morning.timeIntervalSinceReferenceDate + dawn * 3600
         return ((parts.year ?? 0) * 10000 + (parts.month ?? 0) * 100 + (parts.day ?? 0), six, (wall - six) / 3600)
@@ -85,7 +86,8 @@ final class AntColony: SKScene {
     /// A nest takes 24 hours divided by Speed. At Speed 1 a farm begins at six and only at six: from a fresh
     /// install it is exactly the day's wall-clock farm, and a nest finished early (Speed has been higher) stays
     /// finished, its ants about, until six. Above 1 the next farm begins as each ends. Moving Speed never moves
-    /// the dig: as much is dug as was, and it goes on from there at the new pace.
+    /// the dig: as much is dug as was, and it goes on from there at the new pace. Beehive's combs follow one too,
+    /// with days that begin at ten at night (`dawn`).
     struct Cycle: Equatable {
         /// The farm: the day it began on, and its turn in that day, 0 for the one that begins at six and 1 up for
         /// those that follow as each ends. A day and a turn are a farm's seed.
@@ -93,13 +95,17 @@ final class AntColony: SKScene {
         /// The wall-clock moment, in seconds since the reference date, this farm would have begun at speed
         /// `paced`. Moving the Speed slider moves it, so that the nest stays as far dug as it is.
         var began: Double, paced: Double
+        /// The hour its days begin.
+        var dawn: Double
 
-        init(day: Int, turn: Int, began: Double, paced: Double) { (self.day, self.turn, self.began, self.paced) = (day, turn, began, paced) }
+        init(day: Int, turn: Int, began: Double, paced: Double, dawn: Double = AntColony.dawn) {
+            (self.day, self.turn, self.began, self.paced, self.dawn) = (day, turn, began, paced, dawn)
+        }
 
         /// The day's own farm, as far along as the wall clock has it, to go on at `speed`.
-        init(at wall: Double, speed: Double, calendar: Calendar = .current) {
-            let today = AntColony.day(at: wall, calendar: calendar)
-            self.init(day: today.day, turn: 0, began: wall - today.hours * 3600 / max(speed, 1), paced: max(speed, 1))
+        init(at wall: Double, speed: Double, dawn: Double = AntColony.dawn, calendar: Calendar = .current) {
+            let today = AntColony.day(at: wall, dawn: dawn, calendar: calendar)
+            self.init(day: today.day, turn: 0, began: wall - today.hours * 3600 / max(speed, 1), paced: max(speed, 1), dawn: dawn)
         }
 
         /// Moves on to the wall-clock moment `wall`, given the slider's speed, and gives the hours the farm has
@@ -112,14 +118,14 @@ final class AntColony: SKScene {
                 began = wall - min(max(wall - began, 0) * paced, 86400) / speed
                 paced = speed
             }
-            let today = daily ? AntColony.day(at: wall, calendar: calendar) : nil
+            let today = daily ? AntColony.day(at: wall, dawn: dawn, calendar: calendar) : nil
             if let today, speed == 1, today.day != day { (day, turn, began) = (today.day, 0, today.six) } // at six, the day's own farm
             var turns = 0
             while speed > 1, (wall - began) * speed >= 86400 { // above 1, on to the next farm as often as the clock says
                 began += 86400 / speed
-                let next = daily ? AntColony.day(at: began, calendar: calendar).day : day
+                let next = daily ? AntColony.day(at: began, dawn: dawn, calendar: calendar).day : day
                 (day, turn, turns) = (next, daily && next != day ? 1 : turn + 1, turns + 1)
-                if turns > 500, daily { self = Cycle(at: wall, speed: speed, calendar: calendar) } // away for weeks: the day's own farm, as far along as it is
+                if turns > 500, daily { self = Cycle(at: wall, speed: speed, dawn: dawn, calendar: calendar) } // away for weeks: the day's own farm, as far along as it is
             }
             return max(wall - began, 0) * speed / 3600
         }
