@@ -21,10 +21,12 @@ import Testing
     #expect(AntColony.day(at: wall(21, 22), dawn: 22, calendar: calendar).day == 20261121)
 }
 
-/// The cold: at 22 °C no bee is in the cluster; at 5 °C 85% of them are, on the day's comb.
-@Test func beehiveBeesClusterInTheCold() {
+/// The cold and the night: at 22 °C on a weekday afternoon no bee is in the cluster and the foragers (30% more than
+/// the 499 house bees) are out; at 5 °C 85% of all of them are in the cluster, none out; at two in the morning every
+/// forager is home.
+@Test func beehiveBeesClusterInTheColdAndComeHomeAtNight() {
     let ppm = 14 / 5.74, comb = Comb(seed: 2026112000, wide: 1512, high: 317.5, cell: 14)
-    var bees = Bees(ppm: ppm)
+    var bees = Bees(ppm: ppm, base: 499)
     for i in comb.share.indices where comb.share[i] <= 1 {
         bees.world.at.append(comb.at[i] + SIMD2(0, 641))
         bees.world.share.append(comb.share[i])
@@ -32,10 +34,24 @@ import Testing
         bees.world.cap.append(comb.cap[i])
         bees.world.ahead.append(0)
     }
-    for (air, share) in [(22.0, 0.0), (5.0, 0.85)] {
-        bees.survey(hours: 17, seen: 0...982, wide: 1512, air: air)
-        bees.populate(499)
-        let clustered = bees.bees.count { $0.state == .cluster }
-        #expect(abs(Double(clustered) - share * 499) <= 1, "\(clustered) bees in the cluster at \(air) °C")
+    for (hours, air, share, out) in [(17.0, 22.0, 0.0, 150), (17, 5, 0.85, 0), (4, 22, 0, 0)] {
+        bees.survey(hours: hours, seen: 0...982, wide: 1512, air: air)
+        bees.populate()
+        let clustered = bees.bees.count { $0.state == .cluster }, away = bees.bees.count { $0.out }
+        #expect(bees.bees.count == 649 && abs(Double(clustered) - share * 649) <= 1 && away == out,
+                "\(clustered) bees in the cluster and \(away) out at \(air) °C, \(hours) hours into the comb")
     }
+    // At dusk the foragers walk in from past the screen's edges, none appearing on the comb; five minutes after half
+    // past seven in the morning many have walked out again.
+    bees.survey(hours: 17, seen: 0...982, wide: 1512, air: 22)
+    bees.populate()
+    bees.survey(hours: 23.5, seen: 0...982, wide: 1512, air: 22) // half past nine at night
+    let walkingIn = bees.bees.filter { !$0.out && $0.slot >= 499 }
+    #expect(walkingIn.count == 150 && walkingIn.allSatisfy { $0.at.x < 0 || $0.at.x > 1512 })
+    bees.survey(hours: 9.5, seen: 0...982, wide: 1512, air: 22)
+    for tick in 1...18000 {
+        bees.step()
+        if tick % 1800 == 0 { bees.survey(hours: 9.5 + Double(tick) / 216_000, seen: 0...982, wide: 1512, air: 22) }
+    }
+    #expect(bees.bees.count { $0.out } > 40, "\(bees.bees.count { $0.out }) foragers out five minutes after dawn")
 }

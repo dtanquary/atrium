@@ -39,7 +39,17 @@ final class Beehive: SKScene {
     /// down they slow and draw in, below 14 °C a cluster forms on the empty cells under the honey, tighter below 10 °C,
     /// with more bees head first in cells (research-method.md §5). Off, or with no report yet, it is a warm day.
     nonisolated static let cold = Knob(key: "beehive.cold", label: "Follow the cold", range: 0...1, standard: 1, section: "Bees", format: .toggle)
-    nonisolated static let knobs = [look, speed, beeSize, crowd, cold]
+    /// Holds the comb and the stack at one time of day, and the bees at that hour's ways, to see the hive at another
+    /// hour (Dave, 2026-11-20: "let me lock to a specific time of day so i can test other times"). Today's comb, at
+    /// `holdHour` on the clock. The cycle the desktop keeps is left alone, so turning it off goes back to the real
+    /// clock where it would have been.
+    nonisolated static let hold = Knob(key: "beehive.hold", label: "Hold the time of day", range: 0...1, standard: 0, section: "Hive", format: .toggle)
+    nonisolated static let holdHour = Knob(key: "beehive.holdHour", label: "Time of day", range: 0...24, standard: 15, section: "Hive",
+                                           format: .clock, shownWhen: "beehive.hold")
+    /// How fast the bees go: their walks and their spells, the whole colony's clock (Dave, 2026-11-20: "how fast the
+    /// bees go"), apart from Speed, which is how fast the comb is drawn out.
+    nonisolated static let pace = Knob(key: "beehive.pace", label: "Bee speed", range: 0.5...3, standard: 1, section: "Bees", format: .times)
+    nonisolated static let knobs = [look, speed, hold, holdHour, beeSize, crowd, pace, cold]
     /// Honeycomb is one of the two pictures the trypophobia questionnaire tests with (research-look.md §4), so its page
     /// says so (Dave, 2026-11-20: "just put a warning in the settings").
     nonisolated static let note = (section: "Hive", text: "Beehive is a honeycomb of open cells. If clusters of holes make you uneasy, you may prefer another wallpaper.")
@@ -162,6 +172,8 @@ final class Beehive: SKScene {
     private var asked: (day: Int?, hour: Double?, temp: Double?) = (nil, nil, nil), own: AntColony.Cycle?
     /// The air the bees feel, in °C: the report where you are, followed over half an hour; and when it was last moved.
     private var air: Double?, aired = 0.0
+    /// Whether the time of day is held, and at what hour, as of the last frame.
+    private var held: (on: Bool, hour: Double) = (false, -1)
     /// The bees, and every cell of the frames laid out for them; whether a new comb has just gone in under the
     /// stack; when they were set going by the wall's clock and the sixtieths stepped since; the half minute of the
     /// comb's clock they last took stock at.
@@ -209,7 +221,11 @@ final class Beehive: SKScene {
         if cell != frames.cell { (frames, combs, laid, colony) = (Frames(cell: cell), [:], nil, nil) }
         let screen = Double(size.width * size.height) / (frames.ppm * frames.ppm) / 100 // cm²
         let count = min(1200, Int((0.2 * screen * Self.crowd.value).rounded()))
-        if colony != nil, colony!.bees.count != count { colony = nil }
+        if colony != nil, colony!.base != count { colony = nil }
+        // Held at a time of day (not for the pictures' pins): the stack and the colony are made afresh for it, and
+        // again when it is let go, so nothing slides or shifts between the two clocks.
+        let holding = asked.day == nil && asked.hour == nil && Self.hold.value > 0.5, holdAt = Self.holdHour.value
+        if holding != held.on || (holding && holdAt != held.hour) { (held, keys, colony) = ((holding, holdAt), [], nil) }
         if asked.day != nil || asked.hour != nil, own == nil {
             let today = AntColony.day(at: wall, dawn: Self.dawn)
             let hours = asked.hour.map { ($0 - Self.dawn + 24).truncatingRemainder(dividingBy: 24) } ?? today.hours
@@ -219,6 +235,8 @@ final class Beehive: SKScene {
         if own != nil {
             let hours = own!.hours(at: currentTime, speed: speed, daily: false)
             now = (Key(day: own!.day, turn: own!.turn), hours)
+        } else if holding {
+            now = (Key(day: AntColony.day(at: wall, dawn: Self.dawn).day, turn: 0), (holdAt - Self.dawn + 24).truncatingRemainder(dividingBy: 24))
         } else { now = Self.moment(at: wall, speed: speed) }
 
         // The stack: the day's comb and those before it. A comb that begins while the scene runs goes in under the
@@ -325,10 +343,10 @@ final class Beehive: SKScene {
     private func bees(wall: Double, hours: Double, seen: ClosedRange<Double>, count: Int) {
         let wide = Double(size.width), high = Double(size.height)
         if colony == nil {
-            var made = Bees(ppm: frames.ppm)
+            var made = Bees(ppm: frames.ppm, base: count)
             made.world = world
             made.survey(hours: hours, seen: seen, wide: wide, air: air ?? 22)
-            made.populate(count)
+            made.populate()
             (colony, since, ticked, surveyed, shifted) = (made, wall, 0, Int(hours * 120), false)
             for i in shown.indices { shown[i] = nil } // (another colony: every sprite is placed afresh)
         }
@@ -336,10 +354,11 @@ final class Beehive: SKScene {
         if Int(hours * 120) != surveyed { colony!.survey(hours: hours, seen: seen, wide: wide, air: air ?? 22); surveyed = Int(hours * 120) }
         let due = Int(((wall - since) * 60).rounded())
         ticked = max(ticked, due - 60)
-        while ticked < due { colony!.step(); ticked += 1 }
+        let pace = Self.pace.value
+        while ticked < due { colony!.step(dt: pace / 60); ticked += 1 }
 
         // Each bee's sprite, set only where something has changed: a bee standing still costs nothing.
-        let bees = colony!.bees, t = Double(ticked) / 60, ppm = frames.ppm, p = palette
+        let bees = colony!.bees, t = colony!.clock, ppm = frames.ppm, p = palette
         while figures.count < bees.count {
             let s = SKSpriteNode(texture: poses[Bees.Pose.stand.rawValue])
             s.colorBlendFactor = 1
@@ -349,6 +368,11 @@ final class Beehive: SKScene {
         }
         for (i, b) in bees.enumerated() {
             let s = figures[i], still = b.state != .walk && b.state != .work
+            if b.out { // out foraging
+                if !s.isHidden { s.isHidden = true }
+                shown[i] = nil
+                continue
+            }
             let pose = b.state == .work && b.job == .groom ? (Int(t / 1.5 + b.phase) % 2 == 0 ? Bees.Pose.groom : .stand) : b.pose
             if still, let was = shown[i], was.pose == pose { continue }
             if s.isHidden { s.isHidden = false }
@@ -611,11 +635,15 @@ struct Comb {
 /// lasts 20 to 90 seconds (a nod at the rim, a head in a filling cell, small movements over a cap, grooming), a still
 /// spell 20 seconds to five minutes; at most two bees work a cell. A few sleep head first in empty cells, a few pairs
 /// stand face to face passing food, and in the morning a share hang in festoons, chains of bees under the growing edge.
-/// In the cold they draw in toward a cluster and form one (`air`). Stepped in sixtieths of a second, in the stack's
-/// points (down from the top of the screen with the stack at rest).
+/// In the cold they draw in toward a cluster and form one (`air`). At night every forager is home (Dave, 2026-11-20:
+/// "maybe at night we have bees moving around very slowly"): from about nine at night to six in the morning, eased
+/// over an hour at each end, 30% more bees are on the comb, at a little under half the day's pace, half as many of
+/// them walking and more asleep in cells; by day those 30% are out foraging, walking off past the screen's edges as
+/// the morning comes and back in at dusk. Stepped in sixtieths of a second, in the stack's points (down from the top
+/// of the screen with the stack at rest).
 struct Bees {
     enum State { case walk, work, rest, cell, festoon, pair, cluster }
-    enum Job { case none, build, store, cap, groom, hang, sleep, cluster }
+    enum Job { case none, build, store, cap, groom, hang, sleep, cluster, exit }
     /// A frame of the atlas: four steps of a walk, standing, head first in a cell, the tip of an abdomen in one (a bee
     /// asleep), grooming, hanging in a festoon, fanning.
     enum Pose: Int, CaseIterable { case walk0, walk1, walk2, walk3, stand, headIn, tipIn, groom, festoon, fan }
@@ -624,8 +652,10 @@ struct Bees {
         var state = State.rest, job = Job.none, pose = Pose.stand
         var timer = 0.0, walked = 0.0, speed = 0.0, target = SIMD2<Double>.zero, cell = -1, partner = -1
         /// Its place in the colony: the first in it are the first to join the cluster as the air cools and the last to
-        /// leave it, and it has that place in the cluster.
+        /// leave it, and it has that place in the cluster; those past `base` are foragers, out by day.
         var slot = 0
+        /// Out foraging, off the screen.
+        var out = false
     }
     /// Every cell of the frames laid out: its place in the stack, its share, the hours it fills and is capped, and the
     /// hours its frame's clock is ahead of the day's (24 a frame up the stack).
@@ -641,6 +671,12 @@ struct Bees {
     /// should be hanging in festoons; and the part of the stack on the screen.
     let length: Double, ppm: Double
     private(set) var pace = 1.0, hanging = 0.0
+    /// The house bees, on the comb day and night (the foragers are 30% more); how much it is night (0 by day, 1 from
+    /// 21:30 to 05:30, eased between); how many foragers should still walk out; and the colony's own clock in seconds
+    /// (Bee speed runs it faster or slower).
+    let base: Int
+    private(set) var night = 0.0, clock = 0.0
+    private var toLeave = 0
     /// The cold (research-method.md §5, as round 1 drew it), from the air in °C: the share of the bees in the cluster
     /// (from 15 °C down, 85% below 10), how many to a cm² (0.6 to 1.6 from 14 to 10 °C, then up to 1.9), the share of
     /// those head first in cells (below 10 °C, up to 40% at −20), and how far the rest have drawn in (18 to 14 °C), and
@@ -651,18 +687,22 @@ struct Bees {
     var inCells: Double { air < 10 ? min(0.4, (10 - air) / 30 * 0.4) : 0 }
     var gather: Double { min(1, max(0, (18 - air) / 4)) }
     /// How many should be hanging in festoons now.
-    var festoons: Int { Int(hanging * Double(bees.count)) }
+    var festoons: Int { Int(hanging * Double(base)) }
+    /// How many of `total` bees are on the comb: the house bees, and the foragers at night or in the cold, when bees
+    /// don't fly.
+    func home(of total: Int) -> Int { min(total, Int((Double(base) * (1 + 0.3 * max(night, gather))).rounded())) }
     private var seen = 0.0...1.0, wide = 1.0
 
-    init(ppm: Double) { (self.ppm, length) = (ppm, 12 * ppm) }
+    init(ppm: Double, base: Int) { (self.ppm, length, self.base) = (ppm, 12 * ppm, base) }
 
     /// Takes stock of the comb at `hours` since the day's comb began, with `seen` the part of the stack on the screen:
     /// which cells are being drawn out, filled and capped, which are empty, and the day's frame's lower edge, where
     /// festoons hang. Done every half minute of the comb's clock.
     mutating func survey(hours: Double, seen: ClosedRange<Double>, wide: Double, air: Double) {
         (self.seen, self.wide, self.air) = (seen, wide, air)
-        let clock = (Beehive.dawn + hours).truncatingRemainder(dividingBy: 24)
-        pace = clock >= 21 || clock < 6 ? 0.45 : 1
+        let hour = (Beehive.dawn + hours).truncatingRemainder(dividingBy: 24)
+        night = hour >= 12 ? simd_smoothstep(20.5, 21.5, hour) : 1 - simd_smoothstep(5.5, 6.5, hour)
+        pace = 1 - 0.55 * night
         (building, filling, capping, empty, drawn, edge) = ([], [], [], [], [], [])
         for i in world.share.indices {
             let h = hours - 8 + world.ahead[i], built = Beehive.built(h), p = world.at[i]
@@ -682,6 +722,27 @@ struct Bees {
         hanging = edge.isEmpty ? 0 : 0.18 * (1 - min(1, max(0, (Beehive.built(hours - 8) - 0.3) / 0.45))) * (1 - gather)
         seat(bees.count)
         taken = taken.filter { $0.value > 0 }
+        // Foragers home at dusk walk in past the screen's edges, and at dawn walk out past them.
+        let on = bees.count { !$0.out }, wanted = home(of: bees.count)
+        var coming = wanted - on
+        for i in bees.indices where coming > 0 && bees[i].out {
+            var b = bees[i]
+            enter(&b)
+            bees[i] = b
+            if !b.out { coming -= 1 }
+        }
+        toLeave = max(0, on - wanted - bees.count { $0.job == .exit })
+    }
+
+    /// A forager coming home: in past the left or the right edge of the screen, walking to a cell a short way in. It
+    /// stays out while no comb is drawn near that edge.
+    private mutating func enter(_ b: inout Bee) {
+        let left = rng.next() < 0.5
+        guard let c = pick(drawn.filter { left ? world.at[$0].x < 8 * length : world.at[$0].x > wide - 8 * length }) else { return }
+        b.out = false
+        b.at = SIMD2(left ? -0.8 * length : wide + 0.8 * length, world.at[c].y + rng.range(-1...1) * length)
+        (b.heading, b.state, b.job, b.cell, b.target) = (left ? 0 : .pi, .walk, .none, -1, world.at[c])
+        b.speed = rng.range(2...5) * ppm * pace
     }
 
     /// Where a cluster of `count` bees' share sits: under the tongue of the day's comb that hangs lowest near the
@@ -701,14 +762,19 @@ struct Bees {
 
     /// The colony made afresh, `count` bees in a mix of what they do (`survey` first): about 13% walking, 40% working,
     /// a few asleep in cells and in pairs, festoons under the edge, and the rest still.
-    mutating func populate(_ count: Int) {
+    mutating func populate() {
         bees = []
         taken = [:]
-        let hanging = Int(self.hanging * Double(count))
+        let count = Int((Double(base) * 1.3).rounded()), hanging = Int(self.hanging * Double(base)), on = home(of: count)
         seat(count)
         for n in 0..<count {
             var b = Bee(at: .zero, heading: rng.range(0...6.283), scale: rng.range(0.95...1.05), phase: rng.range(0...100))
             b.slot = n
+            if n >= on { // out foraging
+                (b.out, b.at) = (true, SIMD2(-2 * length, 0))
+                bees.append(b)
+                continue
+            }
             let r = rng.next(), k = rng.next(), job: Job = k < 0.3 ? .build : k < 0.65 ? .store : k < 0.85 ? .cap : .groom
             b.at = restPlace()
             if Double(n) < clustered * Double(count) {
@@ -718,10 +784,10 @@ struct Bees {
                 startWalk(&b)
             } else if r < 0.53, settle(&b, at: job) {
                 b.timer = rng.range(5...90) / pace
-            } else if r > 0.93, let c = pick(empty) {
+            } else if r > 0.93 - 0.15 * night, let c = pick(empty) {
                 (b.state, b.pose, b.at, b.timer) = (.cell, .tipIn, world.at[c], rng.range(0...3600) / pace)
             } else {
-                (b.state, b.timer) = (.rest, rng.range(0...300) / pace)
+                (b.state, b.timer) = (.rest, rng.range(0...300) * (1 + night) / pace)
                 // ponytail: pairs are made only here, when the colony is, so they thin out over a day; a bee settling to
                 // rest beside another could pair with it if they're missed
                 if r > 0.90, let j = bees.indices.last, bees[j].state == .rest {
@@ -800,6 +866,13 @@ struct Bees {
     /// there are too few, to sleep in an empty cell now and then, or anywhere drawn.
     private mutating func startWalk(_ b: inout Bee) {
         (b.state, b.job, b.cell) = (.walk, .none, -1)
+        b.speed = rng.range(2...5) * ppm * pace
+        if toLeave > 0, b.slot >= base { // a forager off out, past the nearer edge
+            toLeave -= 1
+            b.job = .exit
+            b.target = SIMD2(b.at.x < wide / 2 ? -1.2 * length : wide + 1.2 * length, b.at.y)
+            return
+        }
         var goal: SIMD2<Double>?
         if Double(b.slot) < clustered * Double(bees.count) { // to its place in the cluster, or stay there
             let place = spot(b.slot)
@@ -810,7 +883,7 @@ struct Bees {
         }
         let hangingNow = bees.count { $0.state == .festoon || $0.job == .hang }
         if goal == nil, hangingNow < festoons, rng.next() < 0.4, let there = hang(near: b.at) { (goal, b.job) = (there, .hang) }
-        if goal == nil, rng.next() < 0.04, let c = pick(empty.filter { simd_distance(world.at[$0], b.at) < 7 * length }) { (goal, b.job) = (world.at[c], .sleep) }
+        if goal == nil, rng.next() < 0.04 + 0.16 * night, let c = pick(empty.filter { simd_distance(world.at[$0], b.at) < 7 * length }) { (goal, b.job) = (world.at[c], .sleep) }
         for _ in 0..<12 where goal == nil {
             let r = rng.next(), job: Job = r < 0.3 ? .build : r < 0.6 ? .store : r < 0.75 ? .cap : .groom
             let list = job == .build ? building : job == .store ? filling : job == .cap ? capping : drawn
@@ -824,7 +897,6 @@ struct Bees {
             b.target.x = min(max(b.target.x, length), wide - length)
             b.target.y = min(max(b.target.y, seen.lowerBound + length * 0.6), seen.upperBound - length * 0.6)
         }
-        b.speed = rng.range(2...5) * ppm * pace
     }
 
     /// What a bee does at the end of a walk: works, if it went to work, two times in three; hangs, sleeps, or rests.
@@ -835,12 +907,14 @@ struct Bees {
             b.heading = -.pi / 2 + rng.range(-0.55...0.55)
         case .sleep:
             (b.state, b.pose, b.timer) = (.cell, .tipIn, rng.range(600...3600) / pace)
+        case .exit:
+            (b.out, b.state, b.timer) = (true, .rest, 1e9)
         case .cluster: // packed in, facing in, a share of them head first in cells; it looks again in a few minutes
             var mine = Rand(s: UInt64(b.slot) &* 40503 &+ 7)
             (b.state, b.pose, b.timer) = (.cluster, mine.next() < inCells ? .tipIn : .stand, rng.range(120...600))
             b.heading = atan2(site.y - b.at.y, site.x - b.at.x) + mine.range(-1.2...1.2)
         case .none:
-            (b.state, b.pose, b.timer) = (.rest, .stand, exp(rng.range(log(20)...log(300))) * (1 + gather) / pace)
+            (b.state, b.pose, b.timer) = (.rest, .stand, exp(rng.range(log(20)...log(300))) * (1 + gather) * (1 + night) / pace)
         default:
             if rng.next() < 0.62 * (1 - 0.5 * gather) {
                 (b.state, b.timer) = (.work, rng.range(20...90) / pace)
@@ -848,7 +922,7 @@ struct Bees {
                 if b.job == .store { b.heading = -.pi / 2 + rng.range(-0.7...0.7) }
             } else {
                 if b.cell >= 0 { taken[b.cell, default: 1] -= 1 }
-                (b.state, b.job, b.cell, b.pose, b.timer) = (.rest, .none, -1, .stand, exp(rng.range(log(20)...log(300))) * (1 + gather) / pace)
+                (b.state, b.job, b.cell, b.pose, b.timer) = (.rest, .none, -1, .stand, exp(rng.range(log(20)...log(300))) * (1 + gather) * (1 + night) / pace)
             }
         }
     }
@@ -860,20 +934,21 @@ struct Bees {
         taken = [:]
     }
 
-    /// One sixtieth of a second.
-    mutating func step() {
-        let dt = 1.0 / 60, turn = Double.pi / 4 * dt
+    /// One sixtieth of a second, or `dt` seconds of the colony's own clock.
+    mutating func step(dt: Double = 1.0 / 60) {
+        let turn = Double.pi / 4 * dt
+        clock += dt
         // The bees by squares of the stack a bee long, so that a walker giving way looks only at the nine round it.
         let low = seen.lowerBound - 6 * length, cols = Int(wide / length) + 3, rows = Int((seen.upperBound - low) / length) + 8
         var first = [Int](repeating: -1, count: cols * rows), after = [Int](repeating: -1, count: bees.count)
         func square(_ p: SIMD2<Double>) -> (Int, Int) {
             (min(max(Int(p.x / length) + 1, 0), cols - 1), min(max(Int((p.y - low) / length), 0), rows - 1))
         }
-        for i in bees.indices {
+        for i in bees.indices where !bees[i].out {
             let (c, r) = square(bees[i].at)
             (after[i], first[r * cols + c]) = (first[r * cols + c], i)
         }
-        for i in bees.indices {
+        for i in bees.indices where !bees[i].out {
             var b = bees[i]
             switch b.state {
             case .walk:
