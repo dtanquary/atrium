@@ -125,7 +125,7 @@ struct Refresh {
               make: antColony, knobs: AntColony.knobs, batteryRate: 20),
     Wallpaper(name: "Beehive", icon: "hexagon.fill", tint: .orange,
               blurb: "An observation hive: comb drawn out, filled with honey and capped through the day, by the real clock.",
-              make: beehive, batteryRate: 15, unfinished: true),
+              make: beehive, knobs: Beehive.knobs, footnote: Beehive.note, batteryRate: 15, unfinished: true),
     Wallpaper(name: "Night Sky", icon: "moon.stars.fill", tint: .blue, blurb: "The stars above you right now, day or night.",
               make: nightSky, knobs: NightSky.knobs),
     Wallpaper(name: "Earth from Orbit", icon: "globe.americas.fill", tint: .cyan, blurb: "Day and night sweeping over the globe.",

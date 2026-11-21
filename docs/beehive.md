@@ -105,12 +105,39 @@ The plan, from the research and both rounds. Where the build goes another way, a
 - **(b) The bees (2026-11-20).** `Bees` is round 1 and 2's colony, ported: 0.2 to a cm² (499 on a 14-inch display at Medium), each cycling through a walk, a spell of work at a cell the map says is being drawn out, filled or capped, and a spell still; one sprite each from an atlas of ten poses cut from the USGS photograph (`Resources/beehive-bees.png`, 38 KB, drawn by `mock.swift`'s `atlasOut` at Large in the photograph's own light), dimmed and tinted by the look and the lamp through the sprite's colour, set only when a bee has moved half a hundredth of the lamp. They live in the stack's points under the same plain node, so they ride the slide, and when a new comb goes in under the stack they move up one frame with theirs. Stepped in sixtieths of a second by the wall's clock, at most a second's worth in one frame. The 06:30 and 15:00 pictures match round 2's sheets: bees crowded on the small comb in the morning with festoons under its tongues, spread over the frames in the afternoon. Brightness at 15:00, desktop size: median 93, 99th 142, 99.9th 155, inside Amber's caps; at 06:30 median 85. Cost in the render test (a debug build): 1.16 ms of CPU and 0.3 to 0.5 of GPU a frame. The first cut gave way by looking at every bee for every walker, 6.3 ms; a grid of squares a bee long brought it down.
   - **As built:** spells in place and still are as long again at night as by day, divided by the night's pace (0.45), so a night walk twice as long doesn't make twice as many walkers (round 2 counted 20–25% walking at night). Festoons form as bees walk to hang under the day's frame's edge while there are fewer than the morning's share (18% at six, none once 75% is drawn), and each hangs 10 to 40 minutes; sleepers stay 10 to 60 minutes in an empty cell; both were forever in the mock-ups, which ran three minutes. Pairs passing food form only when the colony is made. No `HeadStart`: the stack is never empty, so Settings' copy opens on comb and bees at any hour.
 
+- **(c) Settings (2026-11-20).** Look, Speed, Bee size and Bees, and the footnote, as the Settings section below has them; Light Mode's still `preview-beehive-light.jpg` (New Comb). Each look measured at 15:00 at desktop size, with its bees, against research-look.md's caps: Amber median 93, 99th 142, 99.9th 155 (75–95, 150, 175); New Comb 155, 211, 225 (140–175, 215, 230); Old Comb 59, 99, 120 (40–60, 140, 160), its bees now pale enough to stand out; Lit from Behind 75, 140, 174 (held to Amber's). Small at 2× (1,200 bees, five frames on the screen), Large (two frames), 22:15 half way up the slide and Speed 8× were looked at too. Cost in a release build of the render test: 0.66 ms of CPU and 0.20 of GPU at the standard, 0.68 and 0.15 with 1,200 bees; in the debug build 1.14 and 2.33.
+
+## Settings
+
+Under `beehive.`, as data on its `Wallpaper` entry:
+- **Look** (`beehive.look`): 0 New Comb in Light Mode and Amber in Dark Mode (the standard, listed last), 1 Amber, 2 New Comb, 3 Old Comb, 4 Lit from Behind. Each is its own shader source; Old Comb's bees take Amber's light, lifted from its own to stand out on the dark wax (Dave, 2026-11-20).
+- **Speed** (`beehive.speed`, 1× to 8×): a comb a day at 1×, the next beginning at ten at night; above it the next begins as each is done (Ant Colony's `Cycle`), and the slide takes half an hour divided by it. The bees keep their real pace.
+- **Bee size** (`beehive.size`): Small, Medium, Large, a cell 10, 14 or 20 points across. The frames are to scale with the bees, so Small has more of them on the screen.
+- **Bees** (`beehive.bees`, 0.5× to 2×): 0.2 bees to a cm² at 1×, 1,200 at the most.
+- A footnote under the Hive section: "Beehive is a honeycomb of open cells. If clusters of holes make you uneasy, you may prefer another wallpaper." (Dave, 2026-11-20: "just put a warning in the settings").
+- Kept by the scene, not settings: `beehive.comb`, `beehive.began` and `beehive.paced`, the shared cycle (Ant Colony's three, under Beehive's names).
+
+## Cost
+
+Measured by the render test on the M3 Max, 14-inch display at 2x, with other sessions at work (GPU times move by ±0.3 ms with their load):
+
+| | CPU ms (release) | GPU ms | CPU ms (debug) |
+|---|---|---|---|
+| Still stack, no bees (step a) | | 0.12 | 0.4 |
+| Medium, 1× (499 bees) | 0.66 | 0.15–0.5 | 1.14 |
+| Small, 2× (1,200 bees) | 0.68 | 0.15–0.5 | 2.33 |
+
+- The stack is drawn again only when the comb's clock moves a step, every ten seconds of its own (1.25 s at Speed 8): the shader costs about 0.75 ms of GPU then (round 2's figure), and nothing in between.
+- A comb bakes in about 0.5 ms at Medium on the main thread; the stack is laid out twice a day (as the slide begins and ends) and when Look or Bee size changes.
+- The render test steps 30 frames a second, two sixtieths of the colony a frame; on the desktop at 60 fps it is one.
+- `batteryRate` 15: a walker at Large goes at most 17 points a second, 2.3 pixels a frame at 15 fps.
+
 ## Checking it
 
 ```sh
 SNAPSHOT_SCENE="Beehive" SNAPSHOT_DEFAULTS="beehive.day=20261120,beehive.hour=15" swift test --filter everySceneRenders
 ```
-`beehive.day` pins the comb's day (the comb begun at 22:00 that day, like 20261120) and `beehive.hour` the time of day on the clock (6.5 for 06:30, 22.25 for half way up the slide); with either the scene keeps a clock of its own from its first frame and saves nothing. Settings' still is that 15:00 picture, `sips -s format jpeg -Z 1200 -s formatOptions 70 Beehive.png --out Sources/Atrium/Resources/preview-beehive.jpg`. Ant Colony's picture to compare before and after a change to the shared clock: `SNAPSHOT_SCENE="Ant Colony" SNAPSHOT_DEFAULTS="antcolony.day=20261012,antcolony.hour=9"`.
+Each look: add `beehive.look=1` (Amber) to `4` (Lit from Behind); `beehive.size=0` and `beehive.bees=2` for the most bees; `SNAPSHOT_APPEARANCE=light` for Light Mode's New Comb, its still `preview-beehive-light.jpg`. A release build's cost: the same with `swift test -c release -Xswiftc -enable-testing`. `beehive.day` pins the comb's day (the comb begun at 22:00 that day, like 20261120) and `beehive.hour` the time of day on the clock (6.5 for 06:30, 22.25 for half way up the slide); with either the scene keeps a clock of its own from its first frame and saves nothing. Settings' still is that 15:00 picture, `sips -s format jpeg -Z 1200 -s formatOptions 70 Beehive.png --out Sources/Atrium/Resources/preview-beehive.jpg`. Ant Colony's picture to compare before and after a change to the shared clock: `SNAPSHOT_SCENE="Ant Colony" SNAPSHOT_DEFAULTS="antcolony.day=20261012,antcolony.hour=9"`.
 
 ## Shortcuts
 
