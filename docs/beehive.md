@@ -6,7 +6,7 @@ It was pick #5 of the "Atrium Wallpaper Ideas" page of 2026-11-14 (a review of t
 
 - **Research:** [beehive/research-method.md](beehive/research-method.md) (the comb's and the bees' numbers, the pace, the data model on Ant Colony's engine, the cold cluster, and a SpriteKit probe of four ways to draw the bees, `beehive/probe.swift`) and [beehive/research-look.md](beehive/research-look.md) (reference photos measured by `beehive/measure_photos.py`, four palettes and their brightness caps, trypophobia, what can ship, the name). Every figure in them is marked checked or unchecked.
 - **Scripts:** `beehive/mock.swift` draws the mock-ups with SpriteKit as the app would; `sheet.py` lays out the sheets and films from `variants.py`; [beehive/mockups-round1.md](beehive/mockups-round1.md) has every tile's measurements and how to redraw them.
-- **Where it stands (2026-11-20):** researched; Dave has picked from round 1 (below); round 2, on the stacked frames, is being drawn. Nothing in `Sources/` yet.
+- **Where it stands (2026-11-20):** researched; Dave has picked from round 1 (below); round 2, on the stacked frames, is with him. Nothing in `Sources/` yet.
 
 ## Mock-ups, round 1 (2026-11-18)
 
@@ -31,6 +31,25 @@ What the mock-ups showed:
 - **No black holes on any tile** (the worst cell 1.84×), but the uncapped band and the empty lower cells are still a field of cells; the research says distance and blur don't help with trypophobia.
 - **Brightness:** Amber's 99th and 99.9th percentiles are 151 and 178 against 150 and 175, Old Comb's median 63 against 40–60, New Comb's median 125 against 140–175; each is a small change of the lamp. The evening tiles' median is about 101 against Amber's 95, as more of the comb is capped.
 - **Cost** (the mock-up's renderer, 14-inch display at 2x): the comb kept 0.15 ms of GPU, drawn every frame 0.83; the bees 0.46 ms of CPU at 1×, 0.65 at 2×.
+
+## Mock-ups, round 2 (2026-11-20)
+
+Four sheets and three films on the stacked frames Dave chose, drawn in his picks (honey only, the photo bees, Medium at 1×, edge to edge) by the same scripts, now with a stack of Langstroth frames to scale, the frames above baked from the days before (the frame above is yesterday's very comb, still closing its last caps), bars cut from Poly Haven's CC0 pine scan, and the slide. [beehive/mockups-round2.md](beehive/mockups-round2.md) has every tile's measurements, the real frame sizes (checked) and how to redraw them.
+
+| Sheet | Question | Tiles | Recommendation |
+|---|---|---|---|
+| `sheet10-stack` | how deep a frame | deep and medium frames at 06:30, 15:00 and 23:00 | medium: mostly comb at every hour (median 77 or more). Deep is the better daytime picture but half dark from 22:00 to about 03:00 (median 13) |
+| `sheet11-change` | how the stack moves on | A slide up one frame over 30 minutes, B over 5, C each comb dissolving into the one below in patches | A: under a pixel a second, never below median 76. C eats the comb in black blotches, the most hole-like picture of the round |
+| `sheet12-looks` | the four looks in the stack | Amber, New Comb, Old Comb, Amber lit from behind | all four now inside their caps (small lamp changes); Old Comb is murky and its bees nearly vanish |
+| `sheet13-desk` | at the app's scale | medium, Amber, 06:30 | median 87 where round 1 had 12, no black holes |
+| `film3-morning`, `film4-change`, `film4-change-60x` | the pace | 06:30; the slide at real pace; the slide at 60×, labelled | |
+
+What the mock-ups showed:
+- **Stacking fixes the morning** in either depth: 06:30's median is 78 (deep) or 87 (medium) against round 1's 12.
+- **The change has to be at 22:00, not six.** On round 1's clock a comb's first cells appear at 22:00 (a quarter is drawn overnight by six), so the new frame must be in place by then. Changing at six would need a comb that starts empty at six. Bees build in the dark of the hive all night, so 22:00 is the honest hour.
+- **Moving the kept comb node re-rasterises it every frame** (0.91 ms of GPU during a slide); moving a plain parent node keeps the raster (0.19–0.40, as a still). The build slides the parent.
+- **Cost of the medium stack:** 0.19–0.24 ms of GPU kept, 0.73–0.77 drawn every frame, 0.45–0.47 of CPU; the three combs bake in 1.5–1.6 ms.
+- **Not right yet:** the bee space between frames is a black strip with no wax or bees bridging it; the wood is soft at 1:1 (the scan holds 1.95 px a millimetre, the screen asks 4.9); 20–25% of bees walk at night against 12% by day; the 2% of never-capped cells show as amber dots at desk size; the cold cluster isn't drawn in the stack yet.
 
 ## Names and look-alikes
 

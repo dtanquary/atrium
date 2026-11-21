@@ -3,6 +3,7 @@ import os, tempfile
 
 PHOTO_DIR = os.environ.get("BEEHIVE_PHOTO_DIR", os.path.join(tempfile.gettempdir(), "beehive-photo"))
 PHOTO = os.path.join(PHOTO_DIR, "light.jpg")  # USGS BIML, Apis mellifera, light body, back (Public Domain Mark 1.0)
+WOOD = os.path.join(PHOTO_DIR, "wood.jpg")    # Poly Haven, coated_pine_02, 2k diffuse (CC0)
 
 DESK = {"width": 1512, "height": 982}                 # a 14-inch desktop, scaled down to the tile
 CROP = {"width": 320, "height": 200, "full": True}    # a piece at 1:1 device pixels: the tile is the screen's own pixels
@@ -74,3 +75,52 @@ SHEETS = {
     "film1-hive": [("", {**BASE, **FILM})],
     "film2-morning": [("", {**BASE, "hour": 0.5, **FILM})],
 }
+
+# Round 2: Dave's picks ("1 A/C/B/E, 2 A, 3 C, 4 photo, 5 A, 6 stacked, 7 yes, 8 its ok, 9 yes ok"), in a stack of frames.
+# A tile's clock is shown three minutes on from `hour` (the colony runs 180 s before it is drawn), so 06:30 is 0.45.
+STACK = {**BASE, **DESK, "stack": "deep", "wood": WOOD}
+DEPTH = "medium" # round 2's recommendation from sheet 10 (the screen stays mostly comb after the change), used by the sheets after it
+REC = {**STACK, "stack": DEPTH}
+
+
+def change(kind, dur, f, depth=DEPTH):
+    """The stack moving on, f of the way through: it starts at 22:00, when the next comb's first cells appear."""
+    return {**STACK, "stack": depth, "change": kind, "dur": dur, "f": f, "hour": 16 + f * dur / 3600 - 0.05}
+
+
+def at(f, dur):
+    m = round(22 * 60 + f * dur / 60)
+    return f"{m // 60:02d}:{m % 60:02d}"
+
+
+SHEETS.update({
+    # Question 1 of round 2: how deep a frame; the morning is the point.
+    # The darkest hour is now just after the stack moves on at 22:00, when the new comb has only its first cells.
+    "sheet10-stack": [
+        ("A  Deep frames, 06:30", {**STACK, "hour": 0.45}),
+        ("B  Deep frames, 15:00", {**STACK, "hour": 8.95}),
+        ("C  Deep frames, 23:00, just after the change", change("slide", 1800, 1, "deep") | {"hour": 16.95}),
+        ("D  Medium frames, 06:30", {**STACK, "stack": "medium", "hour": 0.45}),
+        ("E  Medium frames, 15:00", {**STACK, "stack": "medium", "hour": 8.95}),
+        ("F  Medium frames, 23:00, just after the change", change("slide", 1800, 1, "medium") | {"hour": 16.95}),
+    ],
+    # Question 2: how the stack moves on when the next comb starts; five moments of each.
+    "sheet11-change": [
+        (label, [(at(f, dur), change(kind, dur, f)) for f in (0, 0.25, 0.5, 0.75, 1)])
+        for label, kind, dur in (("A  The stack slides up one frame over 30 minutes", "slide", 1800),
+                                 ("B  The same slide over 5 minutes", "slide", 300),
+                                 ("C  Nothing moves: each comb dissolves into the one below's, in patches, over 30 minutes", "dissolve", 1800))
+    ],
+    # Question 3: the four looks he chose, in the stack.
+    "sheet12-looks": [
+        ("A  Amber (the standard)", {**REC, "hour": 8.95}),
+        ("B  New Comb (Light Mode)", {**REC, "look": "new", "hour": 8.95}),
+        ("C  Old Comb", {**REC, "look": "old", "hour": 8.95}),
+        ("D  Amber lit through from behind", {**REC, "look": "backlit", "hour": 8.95}),
+    ],
+    "sheet13-desk": [("The standard in the stack at 06:30, the hour round 1 failed", {**REC, "hour": 0.45, "clock": "Fri 20 Nov  06:30"})],
+    "film3-morning": [("", {**REC, "hour": 0.45, **FILM})],
+    "film4-change": [("", {**change("slide", 1800, 0.5), **FILM})],
+    "film4-change-60x": [("", {**change("slide", 1800, 0.25), **FILM, "rate": 60, "label": "60\u00d7"})],
+})
+

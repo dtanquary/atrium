@@ -11,6 +11,12 @@
 // frames and fps (raw frames to stdout for ffmpeg, scaled down by `down`), t (seconds after landing of the first
 // frame, 60 unless given), mix (the six-o'clock dissolve: 0 the old comb, 1 the new), kept (the comb in a rasterised
 // effect node, as the app would), timing, focus (walk or cell: bee 0 shown for the motion strips).
+//
+// Round 2's stack: stack (deep, medium: Langstroth frames stacked as an observation hive's, the day's at the bottom,
+// those above baked from the days before), wood (a CC0 pine scan for the bars), change (slide, dissolve: how the stack
+// moves on when the next comb starts), f (how far through the change at the first frame, 0 to 1), dur (the change's
+// seconds), rate (seconds of the farm a second of film: 60 for a time-lapse), label (text drawn in the frame), clock
+// (unused here: the desktop's menu bar clock).
 import AppKit
 import Foundation
 import ImageIO
@@ -23,6 +29,7 @@ struct Config: Decodable {
     var bees: Double?, size: Int?, temp: Double?, holds: String?, frame: String?, atlas: String?, photo: String?
     var times: [Double]?, frames: Int?, fps: Double?, down: Int?, t: Double?, mix: Double?, kept: Bool?, timing: Bool?
     var focus: String?, still: Bool?, full: Bool?
+    var stack: String?, wood: String?, change: String?, f: Double?, dur: Double?, rate: Double?, label: String?
 }
 let cfg = try! JSONDecoder().decode(Config.self, from: CommandLine.arguments[1].data(using: .utf8)!)
 setvbuf(stdout, nil, _IONBF, 0)
@@ -36,6 +43,24 @@ let look = cfg.look ?? "amber"
 let hour0 = cfg.hour ?? 9
 let seed = cfg.seed ?? 7
 let s0 = 0.25                                       // the share of the comb there at six (research-method.md §3)
+
+// The stack, real to scale: Langstroth frames from the cut list in Blackiston's Building Beehives For Dummies
+// (dummies.com, "Cut List for Langstroth Frames", checked): side bars 9-1/8" tall for a deep frame and 6-1/4" for a
+// medium, top bar 3/4" thick, bottom bar 3/8"; the comb is what lies between. Between one frame's bottom bar and the
+// next one's top bar, a bee space: 6.4 to 9.5 mm (Wikipedia, "Langstroth hive", checked), 8 here.
+let stackKind = cfg.stack
+let stacked = stackKind != nil
+let topBar = 19.05 * ppm, bottomBar = 9.525 * ppm, beeSpace = 8.0 * ppm
+let frameH = (stackKind == "medium" ? 158.75 : 231.775) * ppm
+let combH = stacked ? frameH - topBar - bottomBar : Hpt
+let pitch = frameH + beeSpace
+/// The top of frame k's comb in the stack's points (the screen's, y down, before the stack moves): frame 0, the day's,
+/// rests on the screen's bottom edge; 1 is yesterday's above it; -1 is the next, below the screen until the change.
+func combTop(_ k: Int) -> Double { Hpt - bottomBar - combH - Double(k) * pitch }
+let change = cfg.change                             // slide or dissolve
+let changeDur = cfg.dur ?? 1800
+let changeStart = 16.0                              // 22:00, the next comb's first cells (round 1's overnight quarter starts at hour -8)
+let fStart = cfg.f ?? 0
 
 /// SplitMix64: the same comb for the same seed.
 struct Rand {
@@ -52,7 +77,7 @@ struct Rand {
 
 /// The share of the comb drawn out at h hours into the farm, and the hour a share is reached (before six for the
 /// quarter drawn overnight, spread over the eight hours before it).
-func built(_ h: Double) -> Double { s0 + (1 - s0) * (1 - pow(max(0, 1 - min(h, 24) / 24), 2)) }
+func built(_ h: Double) -> Double { h < 0 ? s0 * max(0, 1 + h / 8) : s0 + (1 - s0) * (1 - pow(max(0, 1 - min(h, 24) / 24), 2)) }
 func hourOf(_ share: Double) -> Double { share <= s0 ? -(s0 - share) / s0 * 8 : 24 * (1 - sqrt(max(0, 1 - (share - s0) / (1 - s0)))) }
 
 // MARK: the comb's bake
@@ -94,7 +119,7 @@ struct Comb {
     var pos: [(Double, Double)] = [], share: [Double] = [], fillH: [Double] = [], capH: [Double] = [], holds: [Int] = []
     var bakeMs = 0.0
 
-    init(seed: UInt64) {
+    init(seed: UInt64, w Wpt: Double = Wpt, h Hpt: Double = Hpt, inset: (top: Double, side: Double, bottom: Double) = inset) {
         let t0 = DispatchTime.now().uptimeNanoseconds
         var rnd = Rand(s: seed &* 7919 &+ 17)
         warpP = Warp(a: cell * 0.33, k: 2 * .pi / (26 * cell), p1: rnd.range(0...6.28), p2: rnd.range(0...6.28))
@@ -104,7 +129,10 @@ struct Comb {
         pos = Array(repeating: (0, 0), count: n); share = Array(repeating: 2, count: n)
         fillH = Array(repeating: 99, count: n); capH = Array(repeating: 99, count: n); holds = Array(repeating: 0, count: n)
         // tongues from one to three seeds along the top bar, each a little faster or later than the others
-        let tongues = Wpt > 700 ? 2 + Int(rnd.next() * 1.999) : 1 + Int(rnd.next() * 1.999)
+        // in a frame of the stack, wider than it is tall, a tongue for about each comb's height of top bar, so they
+        // join along the bar before they reach the bottom
+        let tongues = stacked ? max(2, Int((Wpt / Hpt).rounded())) + Int(rnd.next() * 1.999)
+                              : Wpt > 700 ? 2 + Int(rnd.next() * 1.999) : 1 + Int(rnd.next() * 1.999)
         var seeds: [(x: Double, speed: Double, delay: Double)] = []
         for i in 0..<tongues {
             let x = inset.side + (Wpt - 2 * inset.side) * (Double(i) + rnd.range(0.25...0.75)) / Double(tongues)
@@ -151,13 +179,21 @@ struct Comb {
             // nectar from the top down and outward a few hours after the cell is drawn; the last-drawn part (the
             // bottom) stays empty all day, for the cluster
             let patch = vnoise(x, y, cell * 7, seed &+ 3)
-            if sh < 0.72 || kind != 0 {
+            if stacked && sh >= 0.72 {
+                // in the stack the bottom is filled too, from the evening into the next morning, and capped on the
+                // comb's second day, when it has moved up: yesterday's frame closes its last patches through today
+                fillH[i] = max(dh + 2.2, 12 + 8 * (sh - 0.72) / 0.28) + 1.6 * patch + rnd.range(0...0.5)
+                let corner = max(0, 1 - min(hypot(x - inset.side, y - top), hypot(Wpt - inset.side - x, y - top)) / (0.55 * Wpt))
+                capH[i] = fillH[i] + 1.5 + 1.2 + 3.2 * vnoise(x, y, cell * 6, seed &+ 5) - 2.2 * corner
+                if rnd.next() < 0.02 { capH[i] = 99 } // a few cells are never capped
+            } else if sh < 0.72 || kind != 0 {
                 fillH[i] = dh + 2.2 + 1.6 * patch + rnd.range(0...0.5)
                 // capped in groups, from the top corners first
                 let corner = max(0, 1 - min(hypot(x - inset.side, y - top), hypot(Wpt - inset.side - x, y - top)) / (0.55 * Wpt))
                 capH[i] = fillH[i] + 1.5 + 1.2 + 3.2 * vnoise(x, y, cell * 6, seed &+ 5) - 2.2 * corner
                 if kind == 1 { capH[i] = 99 } // bee bread is never capped
                 if kind == 2 { fillH[i] = dh + 0.5; capH[i] = dh + 1.5 + 2.5 * patch; if rnd.next() < 0.02 { capH[i] = 99 } }
+                if stacked && rnd.next() < 0.02 { capH[i] = 99 }
             }
         }
         map = Array(repeating: 255, count: n * 4); kind = Array(repeating: 255, count: n * 4)
@@ -165,7 +201,7 @@ struct Comb {
         for i in 0..<n {
             let v = share[i] > 1 ? 65535 : UInt16(min(65534, share[i] * 65535))
             map[i * 4] = UInt8(v >> 8); map[i * 4 + 1] = UInt8(v & 255)
-            func enc(_ h: Double) -> UInt8 { h > 25 ? 255 : UInt8(max(0, min(254, ((h + 6) * 8).rounded()))) }
+            func enc(_ h: Double) -> UInt8 { h > (stacked ? 57 : 25) ? 255 : UInt8(max(0, min(254, ((h + 6) * (stacked ? 4 : 8)).rounded()))) }
             map[i * 4 + 2] = enc(fillH[i]); map[i * 4 + 3] = enc(capH[i])
             kind[i * 4] = UInt8(holds[i] * 80); kind[i * 4 + 1] = UInt8(vr.next() * 255); kind[i * 4 + 2] = UInt8(vr.next() * 255)
         }
@@ -190,20 +226,23 @@ struct Palette {
 let palettes: [String: Palette] = [
     "amber": Palette(wall: (132, 109, 67), shade: (76, 63, 39), fresh: (160, 130, 86), nectar: (116, 76, 35), glint: (184, 164, 132),
                      cap: (145, 109, 69), brood: (134, 84, 47), bread: [(149, 106, 38), (136, 91, 45), (110, 74, 50)],
-                     room: (14, 10, 7), wood: (90, 63, 30), bee: (1.0, 0.86, 0.68), lamp: (1.12, 0.70), floor: (120, 86, 40), honeyT: (0.95, 0.80, 0.62)),
+                     room: (14, 10, 7), wood: (90, 63, 30), bee: (1.0, 0.86, 0.68), lamp: (1.09, 0.68), floor: (120, 86, 40), honeyT: (0.95, 0.80, 0.62)),
     "old": Palette(wall: (67, 23, 2), shade: (44, 15, 2), fresh: (128, 104, 62), nectar: (89, 58, 27), glint: (162, 144, 116),
                    cap: (98, 72, 46), brood: (96, 60, 34), bread: [(130, 92, 33), (116, 77, 38), (96, 62, 36)],
-                   room: (12, 8, 5), wood: (70, 49, 23), bee: (0.86, 0.72, 0.56), lamp: (1.12, 0.70), floor: (68, 34, 12), honeyT: (1.25, 1.20, 1.10)),
+                   room: (12, 8, 5), wood: (70, 49, 23), bee: (0.86, 0.72, 0.56), lamp: (0.94, 0.59), floor: (94, 52, 20), honeyT: (1.25, 1.20, 1.10)),
     "new": Palette(wall: (204, 186, 140), shade: (160, 142, 84), fresh: (198, 190, 170), nectar: (116, 85, 48), glint: (218, 208, 188),
                    cap: (206, 192, 156), brood: (167, 155, 129), bread: [(183, 146, 64), (176, 128, 70), (150, 112, 86)],
                    room: (58, 50, 40), wood: (166, 130, 76), bee: (1.05, 0.98, 0.9), lamp: (1.04, 0.90), floor: (172, 142, 74), honeyT: (0.86, 0.72, 0.50)),
     "backlit": Palette(wall: (70, 52, 26), shade: (176, 134, 62), fresh: (196, 172, 120), nectar: (150, 82, 20), glint: (190, 160, 110),
                        cap: (128, 94, 50), brood: (110, 68, 34), bread: [(140, 92, 30), (128, 80, 36), (104, 66, 40)],
-                       room: (10, 7, 5), wood: (60, 42, 20), bee: (0.62, 0.50, 0.38), lamp: (1.10, 0.66), floor: (176, 134, 62), honeyT: (0.92, 0.66, 0.35)),
+                       room: (10, 7, 5), wood: (60, 42, 20), bee: (0.62, 0.50, 0.38), lamp: (1.155, 0.69), floor: (176, 134, 62), honeyT: (0.92, 0.66, 0.35)),
 ]
 var pal = palettes[look == "red" ? "amber" : look]!
 func v3(_ c: RGB) -> String { String(format: "vec3(%.4f, %.4f, %.4f)", c.0 / 255, c.1 / 255, c.2 / 255) }
 
+/// The hours a texel's step is worth (quarters in the stack, which keeps two days; eighths otherwise), and a jitter of a
+/// step from the cell's random channel so a patch's cells don't all start on the same quarter hour.
+let hq = stacked ? "63.75" : "31.875", jit = stacked ? "0.25" : "0.0"
 /// The comb's shading for one comb (`X` is A, or B for the next day's in the dissolve), in points with y down.
 func block(_ X: String) -> String {
     let p = pal
@@ -234,8 +273,8 @@ func block(_ X: String) -> String {
         present *= mix(smoothstep(-0.6, 0.2, fromWall), 1.0, wallH);
         fromWall = max(fromWall, 0.0);
         float fresh = 1.0 - clamp((built - share) / (rise * 4.0), 0.0, 1.0);
-        float level = clamp((hr - (m.b * 31.875 - 6.0)) / 1.5, 0.0, 1.0) * step(m.b, 0.999);
-        float capP = clamp((hr - (m.a * 31.875 - 6.0)) / 0.25, 0.0, 1.0) * step(m.a, 0.999);
+        float level = clamp((hr - (m.b * \(hq) - 6.0 + \(jit) * kd.g)) / 1.5, 0.0, 1.0) * step(m.b, 0.999);
+        float capP = clamp((hr - (m.a * \(hq) - 6.0 + \(jit) * kd.g)) / 0.25, 0.0, 1.0) * step(m.a, 0.999);
         float kind = floor(kd.r * 255.0 / 80.0 + 0.5);
         float rnd = kd.g;
         float aa = max(fwidth(fromWall), 0.05);
@@ -297,7 +336,8 @@ func block(_ X: String) -> String {
     """
 }
 
-let mixing = cfg.mix != nil
+let mixing = cfg.mix != nil && !stacked
+let dissolving = stacked && change == "dissolve"
 let combSource = """
 float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float noise(vec2 p) {
@@ -308,11 +348,21 @@ void main() {
     vec2 p = vec2(v_tex_coord.x, 1.0 - v_tex_coord.y) * u_size;
     vec3 colA = vec3(0.0); vec3 colB = vec3(0.0);
 \(block("A"))
-\(mixing ? block("B") : "")
+\(mixing || dissolving ? block("B") : "")
+\(dissolving ? """
+    // the dissolve: each cell-sized patch turns to the comb below's at its own moment, in soft patches a few cells across
+    float pn = noise(p / (u_cell * 5.0)) * 0.75 + noise(p / (u_cell * 1.3)) * 0.25;
+    vec3 c = mix(colA, colB, smoothstep(pn - 0.05, pn + 0.05, u_mix * 1.3 - 0.15));
+""" : """
     vec3 c = \(mixing ? "mix(colA, colB, u_mix)" : "colA");
-    // the lamp, from beyond the upper left
+""")
+\(stacked ? """
+    // the top bar's soft shadow on the comb hung from it, the lamp being above
+    c *= 1.0 - 0.42 * (1.0 - smoothstep(0.0, 9.0, p.y));
+""" : "")
+    // the lamp, from beyond the upper left, by the point's place on the screen
     // a warm lamp dims toward red, so the far side of the comb goes brown and never olive
-    float lf = clamp(length(p / u_size - vec2(-0.1, -0.2)) / 1.4, 0.0, 1.0);
+    float lf = clamp(length((u_origin + p) / u_screen - vec2(-0.1, -0.2)) / 1.4, 0.0, 1.0);
     vec3 lamp = mix(vec3(\(pal.lamp.0)), vec3(\(pal.lamp.1)) * \(look == "new" ? "vec3(1.0, 0.97, 0.92)" : "vec3(1.08, 0.94, 0.78)"), lf);
     c *= lamp;
     // the frame's wood, and the case with its shutter lifted
@@ -513,8 +563,51 @@ struct Bee {
     var pose = Pose.stand
 }
 
-let comb = Comb(seed: seed)
-let combB: Comb? = mixing ? Comb(seed: seed &+ 1) : nil
+/// A comb on the screen: the frame's comb, its day (0 the day's, 1 yesterday's, -1 the next), where its top lies in
+/// the stack's points, and in a dissolve the comb it turns into.
+struct Slot { let comb: Comb; let k: Int; let top: Double; let next: Comb?; let nextK: Int }
+var combs: [Int: Comb] = [:]
+/// Frame k's comb, baked from its own day's seed: the frame above is the very comb that was drawn out yesterday.
+func combFor(_ k: Int) -> Comb {
+    if let c = combs[k] { return c }
+    let c = Comb(seed: UInt64(bitPattern: Int64(bitPattern: seed) &- Int64(k)), w: Wpt, h: combH, inset: (0, 0, 0))
+    combs[k] = c
+    return c
+}
+let tFirst = cfg.t ?? 180 // three minutes after the comb landed, as Ant Colony runs its ants on
+func ease(_ x: Double) -> Double { let c = min(1, max(0, x)); return c * c * (3 - 2 * c) }
+/// How far through the change the farm is at t, and how far the stack has slid up (eased in and out).
+func fAt(_ t: Double) -> Double { change == nil ? 0 : fStart + (t - tFirst) / changeDur }
+func scrollAt(_ t: Double) -> Double { change == "slide" ? pitch * ease(fAt(t)) : 0 }
+var scrollNow = scrollAt(0)
+let slots: [Slot] = {
+    guard stacked else { return [Slot(comb: Comb(seed: seed), k: 0, top: 0, next: mixing ? Comb(seed: seed &+ 1) : nil, nextK: 0)] }
+    let moving = change == "slide" && (cfg.frames != nil || cfg.times != nil)
+    let (lo, hi) = change == "slide" ? (scrollAt(tFirst) - 2, moving ? pitch : scrollAt(tFirst) + 2) : (0.0, 0.0)
+    var out: [Slot] = []
+    for k in -1...6 {
+        let top = combTop(k)
+        guard top - topBar - hi < Hpt, top + combH + bottomBar - lo > 0 else { continue }
+        out.append(Slot(comb: combFor(k), k: k, top: top, next: dissolving ? combFor(k - 1) : nil, nextK: k - 1))
+    }
+    return out
+}()
+let bakeMs = (stacked ? Array(combs.values) : slots.map { $0.comb }).reduce(0) { $0 + $1.bakeMs }
+
+/// Every cell the bees can reach, in the stack's points, with its day (a frame up the stack runs 24 hours ahead).
+struct World { var pos: [(Double, Double)] = [], share: [Double] = [], fillH: [Double] = [], capH: [Double] = [], holds: [Int] = [], day: [Double] = [] }
+let comb: World = {
+    var w = World()
+    let after = dissolving && fStart >= 0.5 // the bees on the combs that show most
+    for sl in slots {
+        let (c, k) = after ? (sl.next!, sl.nextK) : (sl.comb, sl.k)
+        for i in c.pos.indices where c.share[i] <= 1 {
+            w.pos.append((c.pos[i].0, c.pos[i].1 + sl.top)); w.share.append(c.share[i]); w.fillH.append(c.fillH[i])
+            w.capH.append(c.capH[i]); w.holds.append(c.holds[i]); w.day.append(24 * Double(k))
+        }
+    }
+    return w
+}()
 var rng = Rand(s: seed &* 31 &+ 5)
 let temp = cfg.temp ?? 22
 let clusterShare = 0.85 * min(1, max(0, (15 - temp) / 5))
@@ -529,23 +622,25 @@ let pace = night ? 0.45 : 1.0
 
 /// The cells by what is being done at them at hour h.
 struct Work { var building: [Int] = [], filling: [Int] = [], capping: [Int] = [], empty: [Int] = [], drawn: [Int] = [], edge: [Int] = [] }
-func work(_ c: Comb, _ h: Double) -> Work {
+func work(_ c: World, _ h: Double) -> Work {
     var w = Work()
-    let b = built(h), rise = (built(h + 1.5) - b)
-    for i in 0..<c.share.count where c.share[i] <= b {
+    for i in 0..<c.share.count {
+        let hk = h + c.day[i], b = built(hk)
+        guard c.share[i] <= b else { continue }
         let (x, y) = c.pos[i]
-        guard x > 4, x < Wpt - 4, y > 4, y < Hpt - 4 else { continue }
+        guard x > 4, x < Wpt - 4, y - scrollNow > 4, y - scrollNow < Hpt - 4 else { continue }
         w.drawn.append(i)
-        if c.share[i] > b - max(rise, 0.004) { w.building.append(i) }
-        if c.holds[i] != 2, h >= c.fillH[i], h < c.fillH[i] + 1.5 { w.filling.append(i) }
-        if h >= c.capH[i] - 0.4, h < c.capH[i] + 0.25 { w.capping.append(i) }
-        if h < c.fillH[i] { w.empty.append(i) }
+        let rise = built(hk + 1.5) - b
+        if hk < 24, c.share[i] > b - max(rise, 0.004) { w.building.append(i) }
+        if c.holds[i] != 2, hk >= c.fillH[i], hk < c.fillH[i] + 1.5 { w.filling.append(i) }
+        if hk >= c.capH[i] - 0.4, hk < c.capH[i] + 0.25 { w.capping.append(i) }
+        if hk < c.fillH[i] { w.empty.append(i) }
     }
     // the lower edge, where festoons hang: a building cell with nothing drawn a cell below it
     let below = Set(w.drawn.map { i -> Int in let (x, y) = c.pos[i]; return Int(x / cell) * 10000 + Int(y / (cell * 0.866)) })
     for i in w.building {
         let (x, y) = c.pos[i]
-        if !below.contains(Int(x / cell) * 10000 + Int(y / (cell * 0.866)) + 2) && y < Hpt - beeLen { w.edge.append(i) }
+        if !below.contains(Int(x / cell) * 10000 + Int(y / (cell * 0.866)) + 2) && y - scrollNow < Hpt - beeLen { w.edge.append(i) }
     }
     return w
 }
@@ -553,12 +648,13 @@ func work(_ c: Comb, _ h: Double) -> Work {
 let screenCm2 = Wpt * Hpt / (ppm * ppm) / 100
 let beeCount = min(1200, Int((0.2 * screenCm2 * (cfg.bees ?? 1)).rounded()))
 var bees: [Bee] = []
-let w0 = work(comb, hourAt(0))
+var w0 = work(comb, hourAt(0))
 let siteX = Wpt / 2
 let siteY: Double = {
-    let ys = w0.empty.map { comb.pos[$0].1 }.sorted()
-    guard !ys.isEmpty else { return Hpt * 0.6 }
-    let bottom = w0.drawn.filter { abs(comb.pos[$0].0 - Wpt / 2) < Wpt * 0.15 }.map { comb.pos[$0].1 }.max() ?? Hpt
+    // on the day's comb (in the stack, the bottom frame's)
+    let ys = w0.empty.filter { comb.day[$0] == 0 }.map { comb.pos[$0].1 }.sorted()
+    guard !ys.isEmpty else { return scrollNow + Hpt * 0.6 }
+    let bottom = w0.drawn.filter { comb.day[$0] == 0 && abs(comb.pos[$0].0 - Wpt / 2) < Wpt * 0.15 }.map { comb.pos[$0].1 }.max() ?? scrollNow + Hpt
     let members = Double(beeCount) * clusterShare
     let radius = sqrt(members / clusterDensity * 100 / .pi) * ppm
     return min(ys[ys.count / 2], bottom - radius * 0.85)
@@ -597,7 +693,7 @@ func startWalk(_ b: inout Bee) {
     if best == nil { best = (b.x + rng.range(-1...1) * beeLen, b.y + rng.range(-1...1) * beeLen) }
     (b.tx, b.ty) = best!
     if gather > 0 { b.tx = siteX + (b.tx - siteX) * (1 - 0.3 * gather); b.ty = siteY + (b.ty - siteY) * (1 - 0.3 * gather) }
-    b.tx = min(max(b.tx, beeLen), Wpt - beeLen); b.ty = min(max(b.ty, beeLen * 0.6), Hpt - beeLen * 0.6)
+    b.tx = min(max(b.tx, beeLen), Wpt - beeLen); b.ty = min(max(b.ty, scrollNow + beeLen * 0.6), scrollNow + Hpt - beeLen * 0.6)
     b.speed = rng.range(2...5) * ppm * pace // 2 to 5 mm/s by day, slower by night
 }
 /// What a bee does next, at the end of a walk or a spell: a cycle that keeps about 13% walking, 40% working in place
@@ -726,6 +822,11 @@ let maxTurn = Double.pi / 4 // 45° a second
 var simTime = 0.0
 func step() {
     simTime += stepDt
+    if change != nil {
+        scrollNow = scrollAt(simTime)
+        // the work moves on as the stack does: looked at again every half minute of the farm
+        if Int((simTime * 60).rounded()) % 1800 == 0 { w0 = work(comb, hourAt(simTime)) }
+    }
     for i in bees.indices {
         var b = bees[i]
         switch b.state {
@@ -758,31 +859,112 @@ func step() {
 
 let size = CGSize(width: Wpt, height: Hpt)
 let scene = SKScene(size: size)
-scene.backgroundColor = .black
+scene.backgroundColor = NSColor(srgbRed: pal.room.0 / 255, green: pal.room.1 / 255, blue: pal.room.2 / 255, alpha: 1)
 func u2(_ n: String, _ a: Double, _ b: Double) -> SKUniform { SKUniform(name: n, vectorFloat2: [Float(a), Float(b)]) }
 func u4(_ n: String, _ a: Double, _ b: Double, _ c: Double, _ d: Double) -> SKUniform { SKUniform(name: n, vectorFloat4: [Float(a), Float(b), Float(c), Float(d)]) }
 func state(_ h: Double) -> (Double, Double, Double) { (built(h), h, max(0.0015, built(h + 1.5) - built(h))) }
-let stA = state(mixing ? 24 : hour0)
-let stateA = u4("u_stateA", stA.0, stA.1, stA.2, 0)
-var uniforms: [SKUniform] = [
-    u2("u_size", Wpt, Hpt), SKUniform(name: "u_cell", float: Float(cell)), u2("u_cells", Double(comb.cols), Double(comb.rows)),
-    SKUniform(name: "u_mapA", texture: comb.texture(comb.map)), SKUniform(name: "u_kindA", texture: comb.texture(comb.kind)), stateA,
-    u4("u_warpA", comb.warpP.a, comb.warpP.k, comb.warpP.p1, comb.warpP.p2),
-    u4("u_inset", inset.top, inset.side, inset.bottom, cfg.frame == "case" ? 1 : 0),
-]
-let stateB = u4("u_stateB", 0, 0, 0, 0)
-if let c2 = combB {
-    let st = state(0)
-    stateB.vectorFloat4Value = [Float(st.0), Float(st.1), Float(st.2), 0]
-    uniforms += [SKUniform(name: "u_mapB", texture: c2.texture(c2.map)), SKUniform(name: "u_kindB", texture: c2.texture(c2.kind)), stateB,
-                 u4("u_warpB", c2.warpP.a, c2.warpP.k, c2.warpP.p1, c2.warpP.p2), SKUniform(name: "u_mix", float: Float(cfg.mix ?? 0))]
+
+/// The bars' wood: a CC0 scan of pine boards (Poly Haven's coated_pine_02, 1.05 m across its 2,048 px), each bar a
+/// strip cut from inside one board along its grain, tinted to the look's wood.
+let woodImage: CGImage? = {
+    guard let path = cfg.wood, let src = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil) else { return nil }
+    return CGImageSourceCreateImageAtIndex(src, 0, nil)
+}()
+let woodTint: [Float] = {
+    guard let img = woodImage else { return [1, 1, 1] }
+    var px = [UInt8](repeating: 0, count: 32 * 32 * 4)
+    let ctx = CGContext(data: &px, width: 32, height: 32, bitsPerComponent: 8, bytesPerRow: 128, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                        bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+    ctx.draw(img, in: CGRect(x: 0, y: 0, width: 32, height: 32))
+    var m = [0.0, 0.0, 0.0]
+    for i in 0..<1024 { for c in 0..<3 { m[c] += Double(px[i * 4 + c]) / 1024 } }
+    // the scan's light and dark, in the look's wood: its own hue (and a glint off its coating) left out
+    let lum = 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]
+    return [Float(pal.wood.0 / lum), Float(pal.wood.1 / lum), Float(pal.wood.2 / lum)]
+}()
+let boards: [Double] = [176, 366, 565, 752, 936, 1118, 1311, 1498, 1688, 1887] // the middles of the scan's boards, px from its top
+func barTexture(_ k: Int, _ bottom: Bool, _ hPts: Double) -> SKTexture? {
+    guard let img = woodImage else { return nil }
+    let pxmm = Double(img.width) / 1049.71
+    let (w, h) = (Wpt / ppm * pxmm, hPts / ppm * pxmm)
+    var r = Rand(s: UInt64(bitPattern: Int64(k * 2 + (bottom ? 1 : 0) + 1000)) &* 977)
+    let cy = boards[Int(r.next() * Double(boards.count)) % boards.count] * Double(img.height) / 2048 + r.range(-20...20)
+    guard let crop = img.cropping(to: CGRect(x: r.range(0...(Double(img.width) - w)), y: cy - h / 2, width: w, height: h)) else { return nil }
+    return SKTexture(cgImage: crop)
 }
-let combSprite = SKSpriteNode(color: .black, size: size)
-combSprite.anchorPoint = .zero
-combSprite.shader = SKShader(source: combSource, uniforms: uniforms)
-if cfg.kept ?? true {
-    let e = SKEffectNode(); e.shouldRasterize = true; e.addChild(combSprite); e.zPosition = -100; scene.addChild(e)
-} else { combSprite.zPosition = -100; scene.addChild(combSprite) }
+let lampTint = look == "new" ? "vec3(1.0, 0.97, 0.92)" : "vec3(1.08, 0.94, 0.78)"
+let barSource = """
+void main() {
+    vec2 lp = vec2(v_tex_coord.x, 1.0 - v_tex_coord.y) * u_bsize;
+    vec3 w = vec3(dot(texture2D(u_texture, v_tex_coord).rgb, vec3(0.2126, 0.7152, 0.0722))) * u_tint;
+    // a rounded arris along each long edge: the upper lit by the lamp above, the lower in its own shade
+    w *= 1.0 + 0.14 * (1.0 - smoothstep(0.0, 1.6, lp.y)) - 0.4 * (1.0 - smoothstep(0.0, 3.0, u_bsize.y - lp.y));
+    float lf = clamp(length((u_origin + lp) / u_screen - vec2(-0.1, -0.2)) / 1.4, 0.0, 1.0);
+    gl_FragColor = vec4(w * mix(vec3(\(pal.lamp.0)), vec3(\(pal.lamp.1)) * \(lampTint), lf), 1.0);
+}
+"""
+
+/// Each comb's uniforms the clock moves: its state, the next comb's in a dissolve, and where it lies on the screen.
+struct SlotU { let k: Int; let top: Double; let stateA: SKUniform; let stateB: SKUniform?; let origin: SKUniform; let nextK: Int }
+var slotU: [SlotU] = []
+var barOrigins: [(SKUniform, Double)] = [] // a bar's place on the screen, and its top in the stack's points
+let mixU = SKUniform(name: "u_mix", float: Float(mixing ? cfg.mix ?? 0 : fStart))
+// the combs and their wood, kept in one rasterised effect node as the app would; the stack slides by moving it
+let stackNode: SKNode = (cfg.kept ?? true) ? { let e = SKEffectNode(); e.shouldRasterize = true; return e }() : SKNode()
+stackNode.zPosition = -100
+// the stack slides by moving a plain node the kept one sits in: moving the kept node itself drew it again every frame
+// (0.91 ms of GPU against 0.2), moving its parent didn't
+let mover = SKNode()
+mover.addChild(stackNode)
+scene.addChild(mover)
+for sl in slots {
+    let c = sl.comb, ch = stacked ? combH : Hpt
+    let st = state(mixing ? 24 : hour0 + 24 * Double(sl.k))
+    let stA = u4("u_stateA", st.0, st.1, st.2, 0), origin = u2("u_origin", 0, sl.top - scrollNow)
+    var uniforms: [SKUniform] = [
+        u2("u_size", Wpt, ch), u2("u_screen", Wpt, Hpt), origin, SKUniform(name: "u_cell", float: Float(cell)), u2("u_cells", Double(c.cols), Double(c.rows)),
+        SKUniform(name: "u_mapA", texture: c.texture(c.map)), SKUniform(name: "u_kindA", texture: c.texture(c.kind)), stA,
+        u4("u_warpA", c.warpP.a, c.warpP.k, c.warpP.p1, c.warpP.p2),
+        u4("u_inset", stacked ? 0 : inset.top, stacked ? 0 : inset.side, stacked ? 0 : inset.bottom, cfg.frame == "case" ? 1 : 0),
+    ]
+    var stB: SKUniform? = nil
+    if let c2 = sl.next {
+        let sb = state(mixing ? 0 : hour0 + 24 * Double(sl.nextK))
+        let u = u4("u_stateB", sb.0, sb.1, sb.2, 0)
+        stB = u
+        uniforms += [SKUniform(name: "u_mapB", texture: c2.texture(c2.map)), SKUniform(name: "u_kindB", texture: c2.texture(c2.kind)), u,
+                     u4("u_warpB", c2.warpP.a, c2.warpP.k, c2.warpP.p1, c2.warpP.p2), mixU]
+    }
+    let sprite = SKSpriteNode(color: .black, size: CGSize(width: Wpt, height: ch))
+    sprite.anchorPoint = .zero
+    sprite.position = CGPoint(x: 0, y: Hpt - sl.top - ch)
+    sprite.shader = SKShader(source: combSource, uniforms: uniforms)
+    stackNode.addChild(sprite)
+    slotU.append(SlotU(k: sl.k, top: sl.top, stateA: stA, stateB: stB, origin: origin, nextK: sl.nextK))
+    guard stacked else { continue }
+    // the frame's top bar above its comb, and its bottom bar below
+    for (bottom, y0, hb) in [(false, sl.top - topBar, topBar), (true, sl.top + combH, bottomBar)] {
+        let o = u2("u_origin", 0, y0 - scrollNow)
+        let bar = barTexture(sl.k, bottom, hb).map { SKSpriteNode(texture: $0, size: CGSize(width: Wpt, height: hb)) }
+            ?? SKSpriteNode(color: .white, size: CGSize(width: Wpt, height: hb))
+        bar.anchorPoint = .zero
+        bar.position = CGPoint(x: 0, y: Hpt - y0 - hb)
+        bar.shader = SKShader(source: barSource, uniforms: [u2("u_bsize", Wpt, hb), u2("u_screen", Wpt, Hpt), o,
+                                                            SKUniform(name: "u_tint", vectorFloat3: SIMD3<Float>(woodTint[0], woodTint[1], woodTint[2]))])
+        stackNode.addChild(bar)
+        barOrigins.append((o, y0))
+    }
+}
+mover.position = CGPoint(x: 0, y: scrollNow)
+// the bees ride on the stack, in its points
+let beeLayer = SKNode()
+scene.addChild(beeLayer)
+if let text = cfg.label {
+    let l = SKLabelNode(fontNamed: "Helvetica-Bold")
+    l.text = text; l.fontSize = 56; l.fontColor = NSColor(white: 1, alpha: 0.85)
+    l.horizontalAlignmentMode = .left; l.position = CGPoint(x: 48, y: Hpt - 96); l.zPosition = 1000
+    scene.addChild(l)
+}
 
 let frames = makeAtlas()
 var sprites: [SKSpriteNode] = []
@@ -791,7 +973,7 @@ let spritePts = Double(framePx) / 2
 for (i, b) in bees.enumerated() {
     let s = SKSpriteNode(texture: frames[b.pose.rawValue], size: CGSize(width: spritePts * b.scale, height: spritePts * b.scale))
     s.zPosition = CGFloat(i) * 0.001
-    scene.addChild(s); sprites.append(s); shown.append(b.pose)
+    beeLayer.addChild(s); sprites.append(s); shown.append(b.pose)
 }
 /// The lamp's light at a point, as the comb's shader has it, for the bees there.
 func lampAt(_ x: Double, _ y: Double) -> Double { pal.lamp.0 + (pal.lamp.1 - pal.lamp.0) * min(1, hypot(x / Wpt + 0.1, y / Hpt + 0.2) / 1.4) }
@@ -813,6 +995,7 @@ func place(_ t: Double) {
         default: break
         }
         s.position = CGPoint(x: x, y: Hpt - y)
+        y -= scrollNow // the lamp falls by the place on the screen
         s.zRotation = CGFloat(-a)
         s.zPosition = CGFloat(i) * 0.001 + (b.state == .walk ? 10 : b.state == .festoon ? 5 : 0)
         let pose = b.state == .work && b.job == .groom ? (Int(t / 1.5 + b.phase) % 2 == 0 ? Pose.groom : Pose.stand) : b.pose
@@ -840,7 +1023,21 @@ var lastHourStep = -1.0
     let t0 = DispatchTime.now().uptimeNanoseconds
     if stepBees && cfg.still != true { while simTime < t { step() } }
     // the comb's clock, stepped once a second of the farm, so the kept comb is drawn again only then
-    if !mixing && floor(t) != lastHourStep { lastHourStep = floor(t); let st = state(hourAt(t)); stateA.vectorFloat4Value = [Float(st.0), Float(st.1), Float(st.2), 0] }
+    scrollNow = scrollAt(t)
+    if !mixing && floor(t) != lastHourStep {
+        lastHourStep = floor(t)
+        let h = hourAt(t)
+        for u in slotU {
+            let st = state(h + 24 * Double(u.k))
+            u.stateA.vectorFloat4Value = [Float(st.0), Float(st.1), Float(st.2), 0]
+            if let b = u.stateB { let sb = state(h + 24 * Double(u.nextK)); b.vectorFloat4Value = [Float(sb.0), Float(sb.1), Float(sb.2), 0] }
+            u.origin.vectorFloat2Value = [0, Float(u.top - scrollNow)]
+        }
+        for (o, y0) in barOrigins { o.vectorFloat2Value = [0, Float(y0 - scrollNow)] }
+        if dissolving { mixU.floatValue = Float(fAt(t)) }
+    }
+    mover.position = CGPoint(x: 0, y: scrollNow)
+    beeLayer.position = CGPoint(x: 0, y: scrollNow)
     place(t)
     let pass = MTLRenderPassDescriptor()
     pass.colorAttachments[0].texture = target
@@ -884,7 +1081,6 @@ func writePNG(_ px: [UInt8], _ w: Int, _ h: Int, _ path: String) {
 /// (luma on the 2x frame's values, as research-look.md §2 measures a photo), and how many empty cells show at all.
 func holes(_ px: [UInt8]) -> (black: Int, empty: Int, worst: Double) {
     let h = hourAt(simTime)
-    let b = built(h), rise = state(h).2
     var black = 0, empty = 0, worst = 0.0
     func luma(_ x: Double, _ y: Double) -> Double {
         let (i, j) = (Int(x * 2), Int(y * 2))
@@ -893,25 +1089,27 @@ func holes(_ px: [UInt8]) -> (black: Int, empty: Int, worst: Double) {
         for dj in -1...1 { for di in -1...1 { let k = ((j + dj) * W + i + di) * 4; s += 0.0722 * Double(px[k]) + 0.7152 * Double(px[k + 1]) + 0.2126 * Double(px[k + 2]) } }
         return s / 9
     }
-    for i in comb.share.indices where comb.share[i] <= b - rise && h < comb.fillH[i] && comb.holds[i] != 2 {
-        let (x, y) = comb.pos[i]
-        if bees.contains(where: { abs($0.x - x) < beeLen * 0.75 && abs($0.y - y) < beeLen * 0.75 }) { continue }
+    for i in comb.share.indices {
+        let hk = h + comb.day[i]
+        guard comb.share[i] <= built(hk) - state(hk).2, hk < comb.fillH[i], comb.holds[i] != 2 else { continue }
+        let (x, ys) = comb.pos[i], y = ys - scrollNow
+        if bees.contains(where: { abs($0.x - x) < beeLen * 0.75 && abs($0.y - ys) < beeLen * 0.75 }) { continue }
         let f = luma(x, y + 0.35 * cell * 0.33 + 0.12 * cell)
         var rim = 0.0
         for dx in stride(from: -1.4, through: 1.4, by: 0.5) { rim = max(rim, luma(x + cell / 2 + dx, y)) }
         guard f > 0, rim > 0 else { continue }
         empty += 1
         worst = max(worst, rim / max(f, 1))
-        if rim / max(f, 1) > 2 { black += 1 }
+        if rim / max(f, 1) > 2 { black += 1; if ProcessInfo.processInfo.environment["HOLES"] != nil { print(String(format: "hole %.0f %.0f rim %.0f floor %.0f day %.0f share %.3f", x, y, rim, f, comb.day[i], comb.share[i])) } }
     }
     return (black, empty, worst)
 }
 
-let t = cfg.t ?? 180 // three minutes after the comb landed, as Ant Colony runs its ants on
-if let n = cfg.frames { // frames to stdout for ffmpeg, scaled down
+let t = tFirst
+if let n = cfg.frames { // frames to stdout for ffmpeg, scaled down; `rate` seconds of the farm a second of film
     let fps = cfg.fps ?? 30, k = cfg.down ?? 4
     let out = FileHandle.standardOutput
-    for f in 0..<n { draw(t + Double(f) / fps); out.write(Data(scaled(pixels(), k))) }
+    for f in 0..<n { draw(t + Double(f) / fps * (cfg.rate ?? 1)); out.write(Data(scaled(pixels(), k))) }
     exit(0)
 }
 var stats = ""
@@ -925,7 +1123,7 @@ if let times = cfg.times {
     let hl = holes(px)
     if cfg.full == true { writePNG(scaled(px, 1), W, H, cfg.out) } else { writePNG(scaled(px, 2), W / 2, H / 2, cfg.out) }
     let walking = bees.filter { $0.state == .walk }.count
-    stats = String(format: "\"bees\": %d, \"walking\": %d, \"black\": %d, \"empty\": %d, \"worst\": %.2f, \"built\": %.3f, \"bake\": %.1f", bees.count, walking, hl.black, hl.empty, hl.worst, built(hourAt(t)), comb.bakeMs)
+    stats = String(format: "\"bees\": %d, \"walking\": %d, \"black\": %d, \"empty\": %d, \"worst\": %.2f, \"built\": %.3f, \"bake\": %.1f, \"combs\": %d", bees.count, walking, hl.black, hl.empty, hl.worst, built(hourAt(t)), bakeMs, stacked ? combs.count : slots.count)
 }
 var gpus: [Double] = [], cpus: [Double] = []
 if cfg.timing ?? true { // as the probe timed: medians of 50 frames after 20, stepped at 60 fps

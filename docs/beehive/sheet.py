@@ -16,10 +16,12 @@ from PIL import Image, ImageDraw, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)  # run with python3 -I: only this folder, never the downloads'
-from variants import SHEETS, PHOTO, PHOTO_DIR
+sys.dont_write_bytecode = True  # no __pycache__ beside the docs
+from variants import SHEETS, PHOTO, PHOTO_DIR, WOOD
 TMP = os.path.join(tempfile.gettempdir(), "beehive-frames")
 MOCK = os.path.join(tempfile.gettempdir(), "beehive-mock")
 TW, TH = 640, 400
+WOOD_URL = "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/coated_pine_02/coated_pine_02_diff_2k.jpg"
 FONT = "/System/Library/Fonts/Helvetica.ttc"
 COMMONS = ("https://commons.wikimedia.org/w/api.php?action=query&prop=imageinfo&iiprop=url&iiurlwidth=1920&format=json&titles=File:"
            "Apis_mellifera,_light_body,_back,_beltsville,_md_2017-05-26-15.12_(34886290922).jpg")
@@ -32,12 +34,16 @@ def build():
 
 
 def fetch():
-    """The USGS Bee Inventory and Monitoring Lab's worker from above (Public Domain Mark 1.0), into its own directory."""
+    """The USGS Bee Inventory and Monitoring Lab's worker from above (Public Domain Mark 1.0), and Poly Haven's
+    coated_pine_02 for the stack's bars (CC0, polyhaven.com/license), into their own directory."""
     import urllib.request, urllib.parse
-    if os.path.exists(PHOTO):
-        return
     os.makedirs(PHOTO_DIR, exist_ok=True)
     head = {"User-Agent": "atrium-mockup/1.0"}
+    if not os.path.exists(WOOD):
+        with urllib.request.urlopen(urllib.request.Request(WOOD_URL, headers=head)) as r, open(WOOD, "wb") as f:
+            f.write(r.read())
+    if os.path.exists(PHOTO):
+        return
     with urllib.request.urlopen(urllib.request.Request(urllib.parse.quote(COMMONS, safe=":/?&=,"), headers=head)) as r:
         url = list(json.load(r)["query"]["pages"].values())[0]["imageinfo"][0]["thumburl"]
     with urllib.request.urlopen(urllib.request.Request(url, headers=head)) as r, open(PHOTO, "wb") as f:
@@ -84,7 +90,7 @@ def caption(img, text, sub=""):
     d.text((10, img.height - 28), text, fill=(232, 232, 236), font=font)
 
 
-def desktop(img):
+def desktop(img, clock="Wed 18 Nov  15:00"):
     """A menu bar and a column of folders down the right, as a desktop has them."""
     d = ImageDraw.Draw(img, "RGBA")
     d.rectangle((0, 0, img.width, 24), fill=(20, 20, 24, 110))
@@ -94,7 +100,7 @@ def desktop(img):
     for word in ("File", "Edit", "View", "Go", "Window", "Help"):
         d.text((x, 4), word, fill=(235, 235, 235), font=font)
         x += d.textlength(word, font=font) + 20
-    d.text((img.width - 150, 4), "Wed 18 Nov  15:00", fill=(235, 235, 235), font=font)
+    d.text((img.width - 150, 4), clock, fill=(235, 235, 235), font=font)
     icon = os.path.join(tempfile.gettempdir(), "atrium-folder.png")
     if not os.path.exists(icon):
         subprocess.run(["sips", "-s", "format", "png", "/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericFolderIcon.icns",
@@ -118,6 +124,31 @@ def film(name, out):
                     "-i", "-", "-vf", "crop=trunc(iw/2)*2:trunc(ih/2)*2", "-c:v", "libx264", "-crf", "28", "-preset", "slow", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
                     f"{out}/{name}.mp4"], stdin=mock.stdout, check=True)
     mock.wait()
+
+
+def moments(name, out):
+    """Rows of whole desktops at moments of a change, each its own still, each row its caption and each frame its clock."""
+    rows = SHEETS[name]
+    jobs = [(f"{r}{c}", kw) for r, (_, cells) in enumerate(rows) for c, kw in cells]
+    with Pool(3) as p:
+        done = p.map(one, jobs)
+    fw, fh = 300, 195
+    cols = max(len(cells) for _, cells in rows)
+    sheet = Image.new("RGB", (cols * (fw + 4) + 4, len(rows) * (fh + 40) + 4), (40, 40, 44))
+    d = ImageDraw.Draw(sheet)
+    font, small = ImageFont.truetype(FONT, 19), ImageFont.truetype(FONT, 13)
+    n = 0
+    for r, (label, cells) in enumerate(rows):
+        y = 4 + r * (fh + 40)
+        d.text((8, y + 6), label, fill=(232, 232, 236), font=font)
+        for c, (clock, _) in enumerate(cells):
+            _, img, st = done[n]
+            n += 1
+            sheet.paste(img.resize((fw, fh), Image.LANCZOS), (4 + c * (fw + 4), y + 36))
+            d.rectangle((4 + c * (fw + 4), y + 36 + fh - 22, 4 + c * (fw + 4) + 150, y + 36 + fh), fill=(0, 0, 0))
+            d.text((10 + c * (fw + 4), y + 36 + fh - 19), f"{clock}  ·  median {st['med']}", fill=(220, 220, 225), font=small)
+            print(f"| {label[:1]} {clock} | {st['med']} | {st['p99']} | {st['p999']} | {st['max']} | {st['edges']}% | {st.get('black')} / {st.get('empty')} |")
+    sheet.save(f"{out}/{name}.jpg", quality=88)
 
 
 def strips(name, out):
@@ -156,6 +187,8 @@ if __name__ == "__main__":
         film(name, out)
     elif name.endswith("motion"):
         strips(name, out)
+    elif name.endswith("change"):
+        moments(name, out)
     else:
         jobs = SHEETS[name]
         with Pool(min(3, len(jobs))) as p:
@@ -167,7 +200,7 @@ if __name__ == "__main__":
                   f"| {st.get('gpu', '-')} | {st.get('cpu', '-')} | {st.get('bees', '-')} | {st.get('walking', '-')} |")
         if name.endswith("desk"):
             label, img, st = tiles[0]
-            desktop(img)
+            desktop(img, SHEETS[name][0][1].get("clock", "Wed 18 Nov  15:00"))
             caption(img, label, line(st))
             img.save(f"{out}/{name}.jpg", quality=88)
         else:
