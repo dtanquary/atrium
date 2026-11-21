@@ -47,17 +47,17 @@ final class SaturnsRings: SKScene, BatteryPaced {
 
     /// Cycle, Fly Through, or one of the views held for good. Stored as 0 for Cycle, 1 to 6 for the views in `views`'
     /// order and 7 for Fly Through (added after the views, so their numbers kept their meanings), listed with Fly
-    /// Through second.
-    nonisolated static let view = Knob(key: "saturn.view", label: "View", range: 0...Double(views.count + 1), standard: 0, section: "View",
+    /// Through second. Fly Through is the standard, as Dave asked (2026-11-20); it was Cycle before.
+    nonisolated static let view = Knob(key: "saturn.view", label: "View", range: 0...Double(views.count + 1), standard: Double(views.count + 1), section: "View",
                                        format: .choice(["Cycle"] + views.map(\.name) + ["Fly Through"]), order: [0, views.count + 1] + Array(1...views.count))
     /// How long each view holds in Cycle, in minutes.
     nonisolated static let hold = Knob(key: "saturn.hold", label: "Hold each view", range: 1...30, standard: 8, section: "View",
                                        format: .minutes, shownWhen: view.key, shownAt: 0)
     /// Which face of the rings the camera is on: 0 the unlit (the B ring dark, the A and C rings glowing), 1 the lit,
-    /// the standard since Dave found it the nicer (2026-11-19), 2 each in turn and 3 the lit in Light Mode and the
-    /// unlit in Dark Mode (2026-11-20). The camera changes faces by flying through the ring plane, out past the rings
-    /// (`crossing`). Listed Lit, Unlit, then the two that change.
-    nonisolated static let face = Knob(key: "saturn.face", label: "Face", range: 0...3, standard: 1, section: "Look",
+    /// which Dave found the nicer (2026-11-19), 2 each in turn, the standard as he asked (2026-11-20; it was the lit
+    /// before), and 3 the lit in Light Mode and the unlit in Dark Mode (2026-11-20). The camera changes faces by
+    /// flying through the ring plane, out past the rings (`crossing`). Listed Lit, Unlit, then the two that change.
+    nonisolated static let face = Knob(key: "saturn.face", label: "Face", range: 0...3, standard: 2, section: "Look",
                                        format: .choice(["Unlit", "Lit", "Alternate", "Lit in Light Mode, unlit in Dark Mode"]), order: [1, 0, 2, 3])
     /// The exposure, times the view's own.
     nonisolated static let brightness = Knob(key: "saturn.brightness", label: "Brightness", range: 0.5...2, standard: 1, section: "Look")
