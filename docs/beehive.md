@@ -1,12 +1,13 @@
 # Beehive
 
-An observation hive behind glass: one comb seen face-on, edge to edge across the screen, drawn out cell by cell through the day from the top bar down, filled with honey from the top and capped in patches, with bees working across it at their real, slow pace. At six in the morning a quarter of the comb is there; by the evening most of it is capped; the next morning a new comb dissolves in under the bees. When it is cold where you are, the bees gather into a cluster.
+An observation hive behind glass: Langstroth medium frames stacked up the screen, edge to edge, the day's comb in the bottom one drawn out cell by cell from its top bar by the wall clock, filled with honey from the top and capped in patches, with bees working across it at their real, slow pace. The frames above are the days before, each the very comb that was drawn out that day, still closing its last caps. At ten at night the next comb's first cells appear and the stack slides up one frame over half an hour; by six a quarter of it is there. When it is cold where you are, the bees gather into a cluster.
 
 It was pick #5 of the "Atrium Wallpaper Ideas" page of 2026-11-14 (a review of the catalogue by the session atrium-37), in these words: "An observation hive behind glass. Comb is drawn out cell by cell through the day, filled with honey and capped, with bees working across it." What is real: "Built on the wall clock, as the ants' nest is. The bees cluster tighter when it is cold where you are." Builds on Ant Colony: "Ant Colony's way of working: a map of when each cell is built, compared with the clock, and painted insects sent to the working faces." Why: "You called Ant Colony great, and this is built the same way." Risk, medium: "Bees are busier than ants, so the pace has to be calmed without looking wrong." Dave ran `/new-wallpaper` on it on 2026-11-18.
 
 - **Research:** [beehive/research-method.md](beehive/research-method.md) (the comb's and the bees' numbers, the pace, the data model on Ant Colony's engine, the cold cluster, and a SpriteKit probe of four ways to draw the bees, `beehive/probe.swift`) and [beehive/research-look.md](beehive/research-look.md) (reference photos measured by `beehive/measure_photos.py`, four palettes and their brightness caps, trypophobia, what can ship, the name). Every figure in them is marked checked or unchecked.
 - **Scripts:** `beehive/mock.swift` draws the mock-ups with SpriteKit as the app would; `sheet.py` lays out the sheets and films from `variants.py`; [beehive/mockups-round1.md](beehive/mockups-round1.md) has every tile's measurements and how to redraw them.
-- **Where it stands (2026-11-20):** researched; Dave has picked from round 1 (below); and from round 2 (2026-11-20); being built, hidden, in the steps under How it works. Nothing in `Sources/` yet.
+- **Source:** `Sources/Atrium/Beehive.swift` (the scene, its shaders and the comb's bake), sharing Ant Colony's clock (`AntColony.Cycle`, with days that begin at ten at night); `Resources/beehive-wood.jpg` (the bars' wood) and `preview-beehive.jpg` (Settings' still).
+- **Where it stands (2026-11-20):** researched; Dave has picked from rounds 1 and 2 (below); being built, hidden behind `unfinished`, in the steps under How it works: step (a), the still stack, is in.
 
 ## Mock-ups, round 1 (2026-11-18)
 
@@ -96,3 +97,19 @@ The plan, from the research and both rounds. Where the build goes another way, a
   - **(b) The bees:** the atlas, the colony, `HeadStart`.
   - **(c) Settings and the slide:** the four looks, Size, Bees, Speed, the footnote, the change at 22:00.
   - **(d) The cold:** the live temperature and the cluster.
+
+## The build so far
+
+- **(a) The still stack (2026-11-20).** `Beehive.swift` bakes each comb of the stack from its day (`Comb`, ported from `mock.swift`: 0.5 ms a comb at Medium on a 14-inch display, on the main thread) and draws it with round 2's Amber shader and lamp, the bars cut from the pine scan, all in one rasterised `SKEffectNode` whose uniforms move in steps of ten seconds of the comb's clock. The clock is Ant Colony's `Cycle` with a day that begins at 22:00 (`AntColony.day(at:dawn:)`); Ant Colony's snapshot at a pinned day and hour is the same to the byte before and after. The slide came with this step, since the stack is laid out by it: a comb's first half hour of its own clock eases the stack up one pitch by moving a plain parent node, and the stack is laid out afresh, twice a day, for the screen and a frame below it while it slides and for the screen alone after. The snapshot at 15:00 measures median 96, 99th 143, 99.9th 159 at desktop size (Amber's caps: 75–95, 150, 175; the bees, still to come, bring the median down, as round 2's 93 with bees shows); 06:30 and 22:15 (half way up the slide) were looked at too. Cost in the render test: about 0.4 ms of CPU and 0.12 of GPU a frame.
+  - **As built:** no kind texture and no bee bread or brood branches in the shader (honey only, Dave's pick): a cell's random number is a hash of its lattice place. A comb is cut to the part of the screen it covers, so the rasterised texture is the screen's size at rest; the bars are drawn whole.
+
+## Checking it
+
+```sh
+SNAPSHOT_SCENE="Beehive" SNAPSHOT_DEFAULTS="beehive.day=20261120,beehive.hour=15" swift test --filter everySceneRenders
+```
+`beehive.day` pins the comb's day (the comb begun at 22:00 that day, like 20261120) and `beehive.hour` the time of day on the clock (6.5 for 06:30, 22.25 for half way up the slide); with either the scene keeps a clock of its own from its first frame and saves nothing. Settings' still is that 15:00 picture, `sips -s format jpeg -Z 1200 -s formatOptions 70 Beehive.png --out Sources/Atrium/Resources/preview-beehive.jpg`. Ant Colony's picture to compare before and after a change to the shared clock: `SNAPSHOT_SCENE="Ant Colony" SNAPSHOT_DEFAULTS="antcolony.day=20261012,antcolony.hour=9"`.
+
+## Shortcuts
+
+- None marked yet.
