@@ -14,7 +14,10 @@ import SpriteKit
 ///
 /// The bars' wood is cut from Poly Haven's coated_pine_02 (CC0, https://polyhaven.com/a/coated_pine_02): eight
 /// bands 48 pixels high through the middles of its boards, the scan's full 2,048 pixels (1,050 mm) across
-/// (`Resources/beehive-wood.jpg`).
+/// (`Resources/beehive-wood.jpg`). The bees are cut from the USGS Bee Inventory and Monitoring Lab's photograph of a
+/// worker from above, *Apis mellifera, light body, back, beltsville, md 2017-05-26-15.12* (Public Domain Mark 1.0,
+/// https://www.flickr.com/photos/usgsbiml/34886290922/), as an atlas of ten poses with legs painted under it, drawn
+/// by `docs/beehive/mock.swift` (`atlasOut`) at Large in the photograph's own light (`Resources/beehive-bees.png`).
 final class Beehive: SKScene {
     /// The hour a comb begins: its first cells are drawn out from ten at night, a quarter of it by six.
     nonisolated static let dawn = 22.0
@@ -69,12 +72,14 @@ final class Beehive: SKScene {
         var wall, fresh, cap, glint, room, wood, floor: SIMD3<Double>
         /// Honey's transmittance a unit deep; and the lamp's strength near and far, and its colour far off.
         var honey: SIMD3<Double>, lamp: SIMD2<Double>, far: SIMD3<Double>
+        /// The bees' light: the photograph's studio light dimmed to the lamp, and tinted.
+        var bee: SIMD3<Double>
         /// Lit through from behind: the thin bases glow and the walls, seen edge on, are dark.
         var behind = false, shade = SIMD3<Double>(0, 0, 0)
     }
     nonisolated static let amber = Palette(wall: [132, 109, 67], fresh: [160, 130, 86], cap: [145, 109, 69], glint: [184, 164, 132],
                                            room: [14, 10, 7], wood: [90, 63, 30], floor: [120, 86, 40], honey: [0.95, 0.80, 0.62],
-                                           lamp: [1.09, 0.68], far: [1.08, 0.94, 0.78])
+                                           lamp: [1.09, 0.68], far: [1.08, 0.94, 0.78], bee: SIMD3(1.0, 0.86, 0.68) * 0.62)
 
     /// The mean brightness of the wood strip (its luma, 0 to 1), so a bar takes the look's wood colour on average.
     nonisolated private static let woodLuma = 0.3724
@@ -105,7 +110,7 @@ final class Beehive: SKScene {
 
     /// The stack moves up by moving `mover`, a plain node: moving the rasterised node itself would draw it again
     /// every frame (0.91 ms of GPU against 0.19 to 0.40, measured in round 2).
-    private let mover = SKNode(), kept = SKEffectNode()
+    private let mover = SKNode(), kept = SKEffectNode(), swarm = SKNode()
     /// One frame of the stack as it is drawn: its comb's sprite and the uniforms the clock moves.
     private struct Drawn { let k: Int, comb: (state: SKUniform, place: SKUniform, skip: Double)?, bars: [(SKUniform, Double)] }
     private var drawn: [Drawn] = []
@@ -118,11 +123,22 @@ final class Beehive: SKScene {
     /// What the pictures of it ask for as the scene is built: another day's comb (`beehive.day`, like 20261120) and
     /// the time of day (`beehive.hour`, 0 to 24 on the clock). With either it keeps a clock of its own and saves nothing.
     private var asked: (day: Int?, hour: Double?) = (nil, nil), own: AntColony.Cycle?
+    /// The bees, and every cell of the frames laid out for them; whether a new comb has just gone in under the
+    /// stack; when they were set going by the wall's clock and the sixtieths stepped since; the half minute of the
+    /// comb's clock they last took stock at.
+    private var colony: Bees?, world = Bees.World(), shifted = false, since = 0.0, ticked = 0, surveyed = -1
+    /// Each bee's sprite, and what it was last shown as: its pose, its light, and whether it is placed at all.
+    private var figures: [SKSpriteNode] = [], shown: [(pose: Bees.Pose, lit: Double, z: Double)?] = []
+    private var poses: [SKTexture] = []
 
     override func sceneDidLoad() {
         backgroundColor = Self.colour(palette.room)
         kept.shouldRasterize = true
         mover.addChild(kept)
+        swarm.zPosition = 1
+        mover.addChild(swarm)
+        let atlas = sharedTexture("beehive-bees.png"), n = Bees.Pose.allCases.count
+        poses = (0..<n).map { SKTexture(rect: CGRect(x: Double($0) / Double(n), y: 0, width: 1 / Double(n), height: 1), in: atlas) }
         addChild(mover)
         let defaults = UserDefaults.standard
         asked = ((defaults.object(forKey: "beehive.day") as? Double).map { Int($0) }, defaults.object(forKey: "beehive.hour") as? Double)
@@ -147,7 +163,10 @@ final class Beehive: SKScene {
 
         // The stack: the day's comb and those before it. A comb that begins while the scene runs goes in under the
         // ones on the screen, which move up, so the frame above is always the comb that was just in the bottom one.
-        if keys.first != now.key { keys = keys.isEmpty ? [now.key] : [now.key] + keys.prefix(6) }
+        if keys.first != now.key {
+            shifted = !keys.isEmpty
+            keys = keys.isEmpty ? [now.key] : [now.key] + keys.prefix(6)
+        }
         let hours = min(max(now.hours, 0), 24), high = Double(size.height)
         // The slide: the comb's first half hour (of its own clock, so half an hour divided by Speed), eased.
         let through = simd_smoothstep(0, 1, hours / 0.5)
@@ -155,11 +174,13 @@ final class Beehive: SKScene {
         if laid?.keys != keys || laid?.window != window { lay(window, high: high) }
         let off = frames.pitch * (1 - through)
         if mover.position.y != -off { mover.position.y = -off }
+        bees(wall: wall, hours: hours, seen: -off...(high - off), sliding: through < 1)
 
         // The combs' clock, in steps of ten seconds of their own: the stack is drawn again only then.
         let now10 = Int(hours * 360)
         guard now10 != step else { return }
         step = now10
+        if through < 1 { for i in shown.indices { shown[i] = nil } } // the bees take the lamp's light where they now are
         for frame in drawn {
             if let comb = frame.comb {
                 let h = hours - 8 + 24 * Double(frame.k), b = Self.built(h)
@@ -177,6 +198,7 @@ final class Beehive: SKScene {
         kept.removeAllChildren()
         drawn = []
         let wide = Double(size.width)
+        var cells = Bees.World()
         var k = 0
         while frames.top(k, high: high) + frames.comb + frames.bottomBar > window.lowerBound {
             if k >= keys.count { keys.append(keys.last!.previous) }
@@ -199,6 +221,13 @@ final class Beehive: SKScene {
                 bars.append((place, y))
             }
             let from = max(top, window.lowerBound), to = min(top + frames.comb, window.upperBound)
+            for i in comb.share.indices where comb.share[i] <= 1 {
+                cells.at.append(comb.at[i] + SIMD2(0, top))
+                cells.share.append(comb.share[i])
+                cells.fill.append(comb.fill[i])
+                cells.cap.append(comb.cap[i])
+                cells.ahead.append(24 * Double(k))
+            }
             if to > from {
                 let state = SKUniform(name: "u_state", vectorFloat3: [0, 0, 1]), place = SKUniform(name: "u_place", vectorFloat4: [0, 0, 0, 0])
                 let sprite = SKSpriteNode(color: .black, size: CGSize(width: wide, height: to - from))
@@ -219,7 +248,66 @@ final class Beehive: SKScene {
         keys = Array(keys.prefix(k))
         combs = combs.filter { keys.contains($0.key) }
         laid = (keys, window)
-        step = -1
+        (world, step, surveyed) = (cells, -1, -1)
+        colony?.world = world
+        for i in shown.indices { shown[i] = nil }
+    }
+
+    /// The bees: the colony made when the stack is first laid out, moved up with their frames when a new comb goes
+    /// in, taking stock of the comb every half minute of its clock, and stepped in sixtieths of a second by the wall's
+    /// clock (a second at the most in one frame: after a gap they go on from where they were).
+    private func bees(wall: Double, hours: Double, seen: ClosedRange<Double>, sliding: Bool) {
+        let wide = Double(size.width), high = Double(size.height)
+        if colony == nil {
+            var made = Bees(ppm: frames.ppm)
+            made.world = world
+            made.survey(hours: hours, seen: seen, wide: wide)
+            let screen = wide * high / (frames.ppm * frames.ppm) / 100 // cm²
+            made.populate(min(1200, Int((0.2 * screen).rounded())))
+            (colony, since, ticked, surveyed, shifted) = (made, wall, 0, Int(hours * 120), false)
+        }
+        if shifted { colony!.shift(by: -frames.pitch); (shifted, surveyed) = (false, -1) }
+        if Int(hours * 120) != surveyed { colony!.survey(hours: hours, seen: seen, wide: wide); surveyed = Int(hours * 120) }
+        let due = Int(((wall - since) * 60).rounded())
+        ticked = max(ticked, due - 60)
+        while ticked < due { colony!.step(); ticked += 1 }
+
+        // Each bee's sprite, set only where something has changed: a bee standing still costs nothing.
+        let bees = colony!.bees, t = Double(ticked) / 60, ppm = frames.ppm, p = palette
+        while figures.count < bees.count {
+            let s = SKSpriteNode(texture: poses[Bees.Pose.stand.rawValue])
+            s.colorBlendFactor = 1
+            figures.append(s)
+            shown.append(nil)
+            swarm.addChild(s)
+        }
+        for (i, b) in bees.enumerated() {
+            let s = figures[i], still = b.state != .walk && b.state != .work
+            let pose = b.state == .work && b.job == .groom ? (Int(t / 1.5 + b.phase) % 2 == 0 ? Bees.Pose.groom : .stand) : b.pose
+            if still, let was = shown[i], was.pose == pose { continue }
+            if s.isHidden { s.isHidden = false }
+            var at = b.at, turn = b.heading
+            switch (b.state, b.job) { // small movements in place: a nod at the rim, a capper at work, a head in a cell
+            case (.work, .build): at.x += cos(turn) * 0.5 * sin(t * 2.4 + b.phase) * ppm
+            case (.work, .cap): turn += 0.12 * sin(t * 1.3 + b.phase); at.x += 0.3 * ppm * sin(t * 0.9 + b.phase)
+            case (.work, .store): at.x += cos(turn) * 0.35 * ppm * sin(t * 1.1 + b.phase)
+            default: break
+            }
+            s.position = CGPoint(x: at.x, y: high - at.y)
+            s.zRotation = -turn
+            let side = 1.5 * colony!.length * b.scale
+            if s.size.width != side { s.size = CGSize(width: side, height: side) }
+            let z = Double(i) * 0.001 + (b.state == .walk ? 10 : b.state == .festoon ? 5 : 0)
+            let l = (p.lamp.x + (p.lamp.y - p.lamp.x) * min(1, hypot(at.x / wide + 0.1, (at.y - seen.lowerBound) / high + 0.2) / 1.4)) / p.lamp.x
+            if shown[i]?.pose != pose { s.texture = poses[pose.rawValue] }
+            if shown[i]?.z != z { s.zPosition = z }
+            if shown[i].map({ abs($0.lit - l) > 0.02 }) ?? true {
+                let c = p.bee * SIMD3(l, l * (1 - 0.1 * (1 - l)), l * (1 - 0.25 * (1 - l)))
+                s.color = NSColor(srgbRed: c.x, green: c.y, blue: c.z, alpha: 1)
+            }
+            shown[i] = (pose, shown[i].map { abs($0.lit - l) > 0.02 ? l : $0.lit } ?? l, z)
+        }
+        for i in bees.count..<figures.count where !figures[i].isHidden { figures[i].isHidden = true }
     }
 
     // MARK: The shaders
@@ -447,5 +535,254 @@ struct Comb {
         let texture = SKTexture(data: Data(bytes), size: CGSize(width: cols, height: rows))
         texture.filteringMode = .nearest
         return texture
+    }
+}
+
+/// The bees (research-method.md §2 and §5, at the numbers rounds 1 and 2 drew): 0.2 to a cm² of screen, each
+/// cycling through a walk, a spell of work in place and a spell still, so that about one in eight is walking, at 2 to 5
+/// mm a second by day and under half that by night, turning at most 45° a second and giving way to a bee just ahead.
+/// They are sent to where the comb's map says work is: the cells being drawn out, filled and capped. A spell of work
+/// lasts 20 to 90 seconds (a nod at the rim, a head in a filling cell, small movements over a cap, grooming), a still
+/// spell 20 seconds to five minutes; at most two bees work a cell. A few sleep head first in empty cells, a few pairs
+/// stand face to face passing food, and in the morning a share hang in festoons, chains of bees under the growing edge.
+/// Stepped in sixtieths of a second, in the stack's points (down from the top of the screen with the stack at rest).
+struct Bees {
+    enum State { case walk, work, rest, cell, festoon, pair }
+    enum Job { case none, build, store, cap, groom, hang, sleep }
+    /// A frame of the atlas: four steps of a walk, standing, head first in a cell, the tip of an abdomen in one (a bee
+    /// asleep), grooming, hanging in a festoon, fanning.
+    enum Pose: Int, CaseIterable { case walk0, walk1, walk2, walk3, stand, headIn, tipIn, groom, festoon, fan }
+    struct Bee {
+        var at: SIMD2<Double>, heading: Double, scale: Double, phase: Double
+        var state = State.rest, job = Job.none, pose = Pose.stand
+        var timer = 0.0, walked = 0.0, speed = 0.0, target = SIMD2<Double>.zero, cell = -1, partner = -1
+    }
+    /// Every cell of the frames laid out: its place in the stack, its share, the hours it fills and is capped, and the
+    /// hours its frame's clock is ahead of the day's (24 a frame up the stack).
+    struct World { var at: [SIMD2<Double>] = [], share: [Double] = [], fill: [Double] = [], cap: [Double] = [], ahead: [Double] = [] }
+
+    var bees: [Bee] = []
+    var world = World()
+    /// The cells by what is being done at them, as of the last survey; and the bees working each.
+    private var building: [Int] = [], filling: [Int] = [], capping: [Int] = [], empty: [Int] = [], drawn: [Int] = [], edge: [Int] = []
+    private var taken: [Int: Int] = [:]
+    private var rng = Rand(s: 0x5EED_B33)
+    /// A bee's length in points, and points to a millimetre; how slowly they go (1 by day, 0.45 by night); how many
+    /// should be hanging in festoons; and the part of the stack on the screen.
+    let length: Double, ppm: Double
+    private(set) var pace = 1.0, hanging = 0.0
+    /// How many should be hanging in festoons now.
+    var festoons: Int { Int(hanging * Double(bees.count)) }
+    private var seen = 0.0...1.0, wide = 1.0
+
+    init(ppm: Double) { (self.ppm, length) = (ppm, 12 * ppm) }
+
+    /// Takes stock of the comb at `hours` since the day's comb began, with `seen` the part of the stack on the screen:
+    /// which cells are being drawn out, filled and capped, which are empty, and the day's frame's lower edge, where
+    /// festoons hang. Done every half minute of the comb's clock.
+    mutating func survey(hours: Double, seen: ClosedRange<Double>, wide: Double) {
+        (self.seen, self.wide) = (seen, wide)
+        let clock = (Beehive.dawn + hours).truncatingRemainder(dividingBy: 24)
+        pace = clock >= 21 || clock < 6 ? 0.45 : 1
+        (building, filling, capping, empty, drawn, edge) = ([], [], [], [], [], [])
+        for i in world.share.indices {
+            let h = hours - 8 + world.ahead[i], built = Beehive.built(h), p = world.at[i]
+            guard world.share[i] <= built, p.x > 4, p.x < wide - 4, p.y > seen.lowerBound + 4, p.y < seen.upperBound - 4 else { continue }
+            drawn.append(i)
+            if h < 24, world.share[i] > built - max(Beehive.built(h + 1.5) - built, 0.004) { building.append(i) }
+            if h >= world.fill[i], h < world.fill[i] + 1.5 { filling.append(i) }
+            if h >= world.cap[i] - 0.4, h < world.cap[i] + 0.25 { capping.append(i) }
+            if h < world.fill[i] { empty.append(i) }
+        }
+        let cell = length / 12 * 5.74, row = cell * 0.866
+        let below = Set(drawn.map { SIMD2(Int(world.at[$0].x / cell), Int(world.at[$0].y / row)) })
+        edge = building.filter {
+            let p = world.at[$0]
+            return !below.contains(SIMD2(Int(p.x / cell), Int(p.y / row) + 2)) && p.y < seen.upperBound - length
+        }
+        hanging = edge.isEmpty ? 0 : 0.18 * (1 - min(1, max(0, (Beehive.built(hours - 8) - 0.3) / 0.45)))
+        taken = taken.filter { $0.value > 0 }
+    }
+
+    /// The colony made afresh, `count` bees in a mix of what they do (`survey` first): about 13% walking, 40% working,
+    /// a few asleep in cells and in pairs, festoons under the edge, and the rest still.
+    mutating func populate(_ count: Int) {
+        bees = []
+        taken = [:]
+        let hanging = Int(self.hanging * Double(count))
+        for _ in 0..<count {
+            var b = Bee(at: .zero, heading: rng.range(0...6.283), scale: rng.range(0.95...1.05), phase: rng.range(0...100))
+            let r = rng.next(), k = rng.next(), job: Job = k < 0.3 ? .build : k < 0.65 ? .store : k < 0.85 ? .cap : .groom
+            b.at = restPlace()
+            if r < 0.13 {
+                startWalk(&b)
+            } else if r < 0.53, settle(&b, at: job) {
+                b.timer = rng.range(5...90) / pace
+            } else if r > 0.93, let c = pick(empty) {
+                (b.state, b.pose, b.at, b.timer) = (.cell, .tipIn, world.at[c], rng.range(0...3600) / pace)
+            } else {
+                (b.state, b.timer) = (.rest, rng.range(0...300) / pace)
+                // ponytail: pairs are made only here, when the colony is, so they thin out over a day; a bee settling to
+                // rest beside another could pair with it if they're missed
+                if r > 0.90, let j = bees.indices.last, bees[j].state == .rest {
+                    // face to face with the bee before, passing food
+                    (b.state, bees[j].state, b.partner, bees[j].partner) = (.pair, .pair, j, bees.count)
+                    b.heading = bees[j].heading + .pi
+                    b.at = bees[j].at + SIMD2(cos(bees[j].heading), sin(bees[j].heading)) * length * 0.82
+                    b.timer = rng.range(2...10)
+                    bees[j].timer = b.timer
+                }
+            }
+            bees.append(b)
+        }
+        // festoons: curtains of two or three strands hanging from the edge, three to six bees deep, heads up
+        var placed = 0
+        for i in bees.indices where placed < hanging && bees[i].state == .rest {
+            guard let spot = hang() else { break }
+            var b = bees[i]
+            (b.at, b.target, b.job) = (spot, spot, .hang)
+            arrive(&b)
+            bees[i] = b
+            placed += 1
+        }
+    }
+
+    /// Where a bee would hang to join a festoon under the edge near `near` (or anywhere along it), or nil: under an edge
+    /// cell, below the bees already hanging there, two or three abreast.
+    private mutating func hang(near: SIMD2<Double>? = nil) -> SIMD2<Double>? {
+        let anchors = edge.filter { near == nil || simd_distance(world.at[$0], near!) < 10 * length }
+        guard let a = pick(anchors).map({ world.at[$0] }) else { return nil }
+        let there = bees.count { ($0.state == .festoon || $0.job == .hang) && abs($0.target.x - a.x) < 0.7 * length && $0.target.y > a.y }
+        let strands = 2 + Int(a.x / length) % 2, row = there / strands, strand = there % strands
+        guard row < 6 else { return nil }
+        let taper = 1 - Double(row) / 7
+        return a + SIMD2((Double(strand) - Double(strands - 1) / 2) * length * 0.42 * taper + rng.range(-0.15...0.15) * length,
+                         length * (0.3 + 0.55 * Double(row)) + rng.range(-0.1...0.1) * length)
+    }
+
+    private mutating func pick(_ list: [Int]) -> Int? { list.isEmpty ? nil : list[Int(rng.next() * Double(list.count)) % list.count] }
+
+    /// A cell being worked that has room for one more bee (two at most), or nil.
+    private mutating func pickTask(_ list: [Int]) -> Int? {
+        for _ in 0..<10 { if let i = pick(list), taken[i, default: 0] < 2 { taken[i, default: 0] += 1; return i } }
+        return nil
+    }
+
+    /// A place to rest: any drawn cell.
+    private mutating func restPlace() -> SIMD2<Double> {
+        (pick(drawn).map { world.at[$0] } ?? SIMD2(wide / 2, (seen.lowerBound + seen.upperBound) / 2)) + SIMD2(rng.range(-0.4...0.4), rng.range(-0.4...0.4)) * length / 2
+    }
+
+    /// Puts a bee to `job` at a cell for it, if one is free, posed for it.
+    private mutating func settle(_ b: inout Bee, at job: Job) -> Bool {
+        let list = job == .build ? building : job == .store ? filling : job == .cap ? capping : drawn
+        guard let c = job == .groom ? pick(list) : pickTask(list) else { return false }
+        (b.at, b.state, b.job, b.cell) = (world.at[c], .work, job, job == .groom ? -1 : c)
+        b.pose = job == .store ? .headIn : job == .groom ? .groom : .stand
+        if job == .store { b.heading = -.pi / 2 + rng.range(-0.7...0.7) }
+        if job == .build { b.at += SIMD2(rng.range(-0.15...0.15) * length, length * 0.2) }
+        return true
+    }
+
+    /// Sets a bee walking: to a cell being worked a short walk away (2.5 to 7 bee lengths), to join a festoon while
+    /// there are too few, to sleep in an empty cell now and then, or anywhere drawn.
+    private mutating func startWalk(_ b: inout Bee) {
+        (b.state, b.job, b.cell) = (.walk, .none, -1)
+        var goal: SIMD2<Double>?
+        let hangingNow = bees.count { $0.state == .festoon || $0.job == .hang }
+        if hangingNow < festoons, rng.next() < 0.4, let spot = hang(near: b.at) { (goal, b.job) = (spot, .hang) }
+        if goal == nil, rng.next() < 0.04, let c = pick(empty.filter { simd_distance(world.at[$0], b.at) < 7 * length }) { (goal, b.job) = (world.at[c], .sleep) }
+        for _ in 0..<12 where goal == nil {
+            let r = rng.next(), job: Job = r < 0.3 ? .build : r < 0.6 ? .store : r < 0.75 ? .cap : .groom
+            let list = job == .build ? building : job == .store ? filling : job == .cap ? capping : drawn
+            guard let i = r < 0.75 ? pickTask(list) : pick(list) else { continue }
+            let d = simd_distance(world.at[i], b.at)
+            if d > 2.5 * length && d < 7 * length { (goal, b.job) = (world.at[i], job) } else if r < 0.75 { taken[i, default: 1] -= 1 }
+        }
+        if goal == nil { goal = b.at + SIMD2(rng.range(-1...1), rng.range(-1...1)) * length }
+        b.target = goal!
+        if b.job != .hang {
+            b.target.x = min(max(b.target.x, length), wide - length)
+            b.target.y = min(max(b.target.y, seen.lowerBound + length * 0.6), seen.upperBound - length * 0.6)
+        }
+        b.speed = rng.range(2...5) * ppm * pace
+    }
+
+    /// What a bee does at the end of a walk: works, if it went to work, two times in three; hangs, sleeps, or rests.
+    private mutating func arrive(_ b: inout Bee) {
+        switch b.job {
+        case .hang:
+            (b.state, b.pose, b.timer) = (.festoon, .festoon, rng.range(600...2400) / pace)
+            b.heading = -.pi / 2 + rng.range(-0.55...0.55)
+        case .sleep:
+            (b.state, b.pose, b.timer) = (.cell, .tipIn, rng.range(600...3600) / pace)
+        case .none:
+            (b.state, b.pose, b.timer) = (.rest, .stand, exp(rng.range(log(20)...log(300))) / pace)
+        default:
+            if rng.next() < 0.62 {
+                (b.state, b.timer) = (.work, rng.range(20...90) / pace)
+                b.pose = b.job == .store ? .headIn : b.job == .groom ? .groom : .stand
+                if b.job == .store { b.heading = -.pi / 2 + rng.range(-0.7...0.7) }
+            } else {
+                if b.cell >= 0 { taken[b.cell, default: 1] -= 1 }
+                (b.state, b.job, b.cell, b.pose, b.timer) = (.rest, .none, -1, .stand, exp(rng.range(log(20)...log(300))) / pace)
+            }
+        }
+    }
+
+    /// Moves the whole colony by `by` points down the stack: when a new comb goes in under the stack and every frame
+    /// moves up one, the bees go with their frames.
+    mutating func shift(by: Double) {
+        for i in bees.indices { bees[i].at.y += by; bees[i].target.y += by; bees[i].cell = -1 }
+        taken = [:]
+    }
+
+    /// One sixtieth of a second.
+    mutating func step() {
+        let dt = 1.0 / 60, turn = Double.pi / 4 * dt
+        // The bees by squares of the stack a bee long, so that a walker giving way looks only at the nine round it.
+        let low = seen.lowerBound - 6 * length, cols = Int(wide / length) + 3, rows = Int((seen.upperBound - low) / length) + 8
+        var first = [Int](repeating: -1, count: cols * rows), after = [Int](repeating: -1, count: bees.count)
+        func square(_ p: SIMD2<Double>) -> (Int, Int) {
+            (min(max(Int(p.x / length) + 1, 0), cols - 1), min(max(Int((p.y - low) / length), 0), rows - 1))
+        }
+        for i in bees.indices {
+            let (c, r) = square(bees[i].at)
+            (after[i], first[r * cols + c]) = (first[r * cols + c], i)
+        }
+        for i in bees.indices {
+            var b = bees[i]
+            switch b.state {
+            case .walk:
+                let to = b.target - b.at
+                var d = atan2(to.y, to.x) - b.heading
+                d = atan2(sin(d), cos(d))
+                var v = b.speed
+                let (c, r) = square(b.at), forward = SIMD2(cos(b.heading), sin(b.heading))
+                for row in max(r - 1, 0)...min(r + 1, rows - 1) {
+                    for col in max(c - 1, 0)...min(c + 1, cols - 1) {
+                        var j = first[row * cols + col]
+                        while j >= 0 {
+                            let o = bees[j].at - b.at, ahead = simd_dot(o, forward), side = forward.x * o.y - forward.y * o.x
+                            if j != i, ahead > 0, ahead < length * 0.8, abs(side) < length * 0.35 { v *= 0.3; d -= side >= 0 ? 0.8 : -0.8 }
+                            j = after[j]
+                        }
+                    }
+                }
+                b.heading += max(-turn, min(turn, d))
+                b.at += SIMD2(cos(b.heading), sin(b.heading)) * v * dt
+                b.walked += v * dt
+                b.pose = Pose(rawValue: Int(b.walked / (length * 0.42 / 4)) & 3)!
+                if simd_length(b.target - b.at) < length * 0.3 { b.at = b.target; arrive(&b) }
+            case .work, .rest, .pair, .cell, .festoon:
+                b.timer -= dt
+                if b.timer <= 0 {
+                    if b.state == .work, b.cell >= 0 { taken[b.cell, default: 1] -= 1 }
+                    b.partner = -1
+                    startWalk(&b)
+                }
+            }
+            bees[i] = b
+        }
     }
 }

@@ -16,7 +16,8 @@
 // those above baked from the days before), wood (a CC0 pine scan for the bars), change (slide, dissolve: how the stack
 // moves on when the next comb starts), f (how far through the change at the first frame, 0 to 1), dur (the change's
 // seconds), rate (seconds of the farm a second of film: 60 for a time-lapse), label (text drawn in the frame), clock
-// (unused here: the desktop's menu bar clock).
+// (unused here: the desktop's menu bar clock). atlasOut writes the bees' atlas in the photo's own light, as the app
+// ships it (Resources/beehive-bees.png, drawn at Large, size 2), and stops.
 import AppKit
 import Foundation
 import ImageIO
@@ -30,6 +31,7 @@ struct Config: Decodable {
     var times: [Double]?, frames: Int?, fps: Double?, down: Int?, t: Double?, mix: Double?, kept: Bool?, timing: Bool?
     var focus: String?, still: Bool?, full: Bool?
     var stack: String?, wood: String?, change: String?, f: Double?, dur: Double?, rate: Double?, label: String?
+    var atlasOut: String?
 }
 let cfg = try! JSONDecoder().decode(Config.self, from: CommandLine.arguments[1].data(using: .utf8)!)
 setvbuf(stdout, nil, _IONBF, 0)
@@ -530,6 +532,12 @@ func makeAtlas() -> [SKTexture] {
     }
     // the look's light on the bees, as on the comb
     let img = ctx.makeImage()!
+    if let path = cfg.atlasOut { // the app's atlas: the poses in the photo's own light, which the app dims and tints by look
+        let dest = CGImageDestinationCreateWithURL(URL(fileURLWithPath: path) as CFURL, "public.png" as CFString, 1, nil)!
+        CGImageDestinationAddImage(dest, img, nil)
+        CGImageDestinationFinalize(dest)
+        exit(0)
+    }
     let w = img.width, h = img.height
     var px = [UInt8](repeating: 0, count: w * h * 4)
     let c2 = CGContext(data: &px, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
