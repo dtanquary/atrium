@@ -164,11 +164,13 @@ func saturnsRingsStrip() throws {
     let glide = spec.split(separator: ">").compactMap { Int($0) }, hold = spec.split(separator: "@").compactMap { Double($0) }, flies = spec.hasPrefix("fly@")
     let seconds = glide.count == 2 ? SaturnsRings.glide : Double(env["RINGS_SECONDS"] ?? "") ?? 12
     let settings = (env["SNAPSHOT_DEFAULTS"] ?? "").split(separator: ",").map { $0.split(separator: "=") }.filter { $0.count == 2 }
+    // a view held in Cycle, or the loop, from the lit face, unless SNAPSHOT_DEFAULTS says otherwise (the standards
+    // are Fly Through and Alternate)
+    UserDefaults.standard.set(flies ? 7.0 : 0.0, forKey: SaturnsRings.view.key)
+    UserDefaults.standard.set(1.0, forKey: SaturnsRings.face.key)
+    defer { [SaturnsRings.view.key, SaturnsRings.face.key].forEach(UserDefaults.standard.removeObject) }
     for pair in settings { UserDefaults.standard.set(Double(pair[1]) ?? 0, forKey: String(pair[0])) }
     defer { for pair in settings { UserDefaults.standard.removeObject(forKey: String(pair[0])) } }
-    defer { if env["RINGS_FACE"] != nil { UserDefaults.standard.removeObject(forKey: SaturnsRings.face.key) } }
-    if flies { UserDefaults.standard.set(7.0, forKey: SaturnsRings.view.key) } // or the scene glides off the loop, for Cycle
-    defer { if flies { UserDefaults.standard.removeObject(forKey: SaturnsRings.view.key) } }
     let dir = URL(fileURLWithPath: env["SNAPSHOT_DIR"] ?? NSTemporaryDirectory() + "atrium-snapshots")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
     let device = try #require(MTLCreateSystemDefaultDevice()), queue = try #require(device.makeCommandQueue())
@@ -324,7 +326,8 @@ func saturnsRingsDates() throws {
     pass.colorAttachments[0].texture = texture
     pass.colorAttachments[0].loadAction = .clear
     pass.colorAttachments[0].storeAction = .store
-    defer { UserDefaults.standard.removeObject(forKey: SaturnsRings.face.key) }
+    defer { [SaturnsRings.face.key, SaturnsRings.view.key].forEach(UserDefaults.standard.removeObject) }
+    UserDefaults.standard.set(0.0, forKey: SaturnsRings.view.key) // the views held, in Cycle, not gliding onto Fly Through
     let dates = [("2026-11-19", day("2026-11-19")), ("2028-06-01", day("2028-06-01")), ("2032-05-15", day("2032-05-15")),
                  ("2038-10-15", day("2038-10-15")), ("south-0.1", equinox(-0.1)), ("north-0.1", equinox(0.1))]
     for (name, date) in dates {
@@ -372,7 +375,8 @@ func saturnsRingsDates() throws {
     pass.colorAttachments[0].texture = texture
     pass.colorAttachments[0].loadAction = .clear
     pass.colorAttachments[0].storeAction = .store
-    defer { UserDefaults.standard.removeObject(forKey: SaturnsRings.face.key) }
+    defer { [SaturnsRings.face.key, SaturnsRings.view.key].forEach(UserDefaults.standard.removeObject) }
+    UserDefaults.standard.set(0.0, forKey: SaturnsRings.view.key) // the views held, in Cycle, not gliding onto Fly Through
     for up in [-0.1, 0.1] {
         let date = equinox(up)
         #expect(abs(SaturnsRings.light(on: date).up - up) < 0.01)
@@ -751,7 +755,8 @@ func saturnsRingsCrossingMoments() throws {
                      camera.r, camera.h, camera.roll, percentile(0.5), percentile(0.99), percentile(0.999), histogram.lastIndex { $0 > 0 } ?? 0))
         try saveQuarter(pixels, w, h, to: dir.appendingPathComponent("crossing-\(name).jpg"))
     }
-    // a view held, lit, asked for the unlit face as it begins
+    // a view held in Cycle, lit, asked for the unlit face as it begins
+    UserDefaults.standard.set(0.0, forKey: SaturnsRings.view.key)
     UserDefaults.standard.set(1.0, forKey: SaturnsRings.face.key)
     let held = SaturnsRings(size: size, from: 2, moment: 0, date: day("2026-11-19"))
     UserDefaults.standard.set(0.0, forKey: SaturnsRings.face.key)
