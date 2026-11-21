@@ -19,6 +19,27 @@ import SpriteKit
 /// https://www.flickr.com/photos/usgsbiml/34886290922/), as an atlas of ten poses with legs painted under it, drawn
 /// by `docs/beehive/mock.swift` (`atlasOut`) at Large in the photograph's own light (`Resources/beehive-bees.png`).
 final class Beehive: SKScene {
+    /// The light, every look Dave picked from the mock-ups (2026-11-18): Amber, a warm lamp on comb a season old;
+    /// New Comb, pale fresh wax, for Light Mode; Old Comb, dark wax with its bees lifted to stand out on it (Dave,
+    /// 2026-11-20); and Amber lit through from behind. The standard is New Comb in Light Mode and Amber in Dark Mode.
+    nonisolated static let look = Knob(key: "beehive.look", label: "Look", range: 0...4, standard: 0, section: "Hive",
+                                       format: .choice(["New Comb in Light Mode, Amber in Dark Mode", "Amber", "New Comb", "Old Comb", "Lit from Behind"]),
+                                       order: [1, 2, 3, 4, 0])
+    /// How fast a comb is drawn out: at 1 a comb a day, the next beginning at ten at night; above it the next begins as
+    /// each is done, and the slide up takes half an hour divided by it. The bees go at their own pace whatever it is.
+    nonisolated static let speed = Knob(key: "beehive.speed", label: "Speed", range: 1...8, standard: 1, section: "Hive", format: .times)
+    /// A cell 10, 14 or 20 points across (a bee 21, 29 or 42 points long): the comb and the frames are to scale with
+    /// the bees, so smaller bees have more frames on the screen.
+    nonisolated static let beeSize = Knob(key: "beehive.size", label: "Bee size", range: 0...2, standard: 1, section: "Bees",
+                                          format: .choice(["Small", "Medium", "Large"]))
+    /// How crowded: at 1, 0.2 bees to a cm² of the screen at the bees' scale (research-method.md §2), 499 on a 14-inch
+    /// display at Medium; never more than 1,200.
+    nonisolated static let crowd = Knob(key: "beehive.bees", label: "Bees", range: 0.5...2, standard: 1, section: "Bees", format: .times)
+    nonisolated static let knobs = [look, speed, beeSize, crowd]
+    /// Honeycomb is one of the two pictures the trypophobia questionnaire tests with (research-look.md §4), so its page
+    /// says so (Dave, 2026-11-20: "just put a warning in the settings").
+    nonisolated static let note = (section: "Hive", text: "Beehive is a honeycomb of open cells. If clusters of holes make you uneasy, you may prefer another wallpaper.")
+
     /// The hour a comb begins: its first cells are drawn out from ten at night, a quarter of it by six.
     nonisolated static let dawn = 22.0
     /// The share of a comb drawn out by six in the morning (research-method.md §3).
@@ -77,9 +98,21 @@ final class Beehive: SKScene {
         /// Lit through from behind: the thin bases glow and the walls, seen edge on, are dark.
         var behind = false, shade = SIMD3<Double>(0, 0, 0)
     }
-    nonisolated static let amber = Palette(wall: [132, 109, 67], fresh: [160, 130, 86], cap: [145, 109, 69], glint: [184, 164, 132],
-                                           room: [14, 10, 7], wood: [90, 63, 30], floor: [120, 86, 40], honey: [0.95, 0.80, 0.62],
-                                           lamp: [1.09, 0.68], far: [1.08, 0.94, 0.78], bee: SIMD3(1.0, 0.86, 0.68) * 0.62)
+    /// Amber, New Comb, Old Comb and lit from behind, by their places in the Look menu.
+    nonisolated static let palettes = [
+        Palette(wall: [132, 109, 67], fresh: [160, 130, 86], cap: [145, 109, 69], glint: [184, 164, 132], room: [14, 10, 7],
+                wood: [90, 63, 30], floor: [120, 86, 40], honey: [0.95, 0.80, 0.62], lamp: [1.09, 0.68], far: [1.08, 0.94, 0.78],
+                bee: SIMD3(1.0, 0.86, 0.68) * 0.62),
+        Palette(wall: [204, 186, 140], fresh: [198, 190, 170], cap: [206, 192, 156], glint: [218, 208, 188], room: [58, 50, 40],
+                wood: [166, 130, 76], floor: [172, 142, 74], honey: [0.86, 0.72, 0.50], lamp: [1.04, 0.90], far: [1.0, 0.97, 0.92],
+                bee: SIMD3(1.05, 0.98, 0.9) * 0.62),
+        Palette(wall: [67, 23, 2], fresh: [128, 104, 62], cap: [98, 72, 46], glint: [162, 144, 116], room: [12, 8, 5],
+                wood: [70, 49, 23], floor: [94, 52, 20], honey: [1.25, 1.20, 1.10], lamp: [0.94, 0.59], far: [1.08, 0.94, 0.78],
+                bee: SIMD3(1.0, 0.86, 0.68) * 0.62),
+        Palette(wall: [70, 52, 26], fresh: [196, 172, 120], cap: [128, 94, 50], glint: [190, 160, 110], room: [10, 7, 5],
+                wood: [60, 42, 20], floor: [176, 134, 62], honey: [0.92, 0.66, 0.35], lamp: [1.155, 0.69], far: [1.08, 0.94, 0.78],
+                bee: SIMD3(0.62, 0.50, 0.38) * 0.62, behind: true, shade: [176, 134, 62]),
+    ]
 
     /// The mean brightness of the wood strip (its luma, 0 to 1), so a bar takes the look's wood colour on average.
     nonisolated private static let woodLuma = 0.3724
@@ -116,7 +149,7 @@ final class Beehive: SKScene {
     private var drawn: [Drawn] = []
     /// The stack's combs, the day's first, and each comb baked for the size it is drawn at.
     private var keys: [Key] = [], combs: [Key: Comb] = [:]
-    private var frames = Frames(cell: 14), palette = Beehive.amber
+    private var frames = Frames(cell: 14), palette = Beehive.palettes[0], pick = -1, dark = true
     /// What the stack was last laid out for: its combs, the part of it to draw (down from the top of the screen at
     /// rest, in points), and the step of the clock its uniforms were set at.
     private var laid: (keys: [Key], window: ClosedRange<Double>)?, step = -1
@@ -132,7 +165,7 @@ final class Beehive: SKScene {
     private var poses: [SKTexture] = []
 
     override func sceneDidLoad() {
-        backgroundColor = Self.colour(palette.room)
+        dark = systemIsDark
         kept.shouldRasterize = true
         mover.addChild(kept)
         swarm.zPosition = 1
@@ -149,7 +182,19 @@ final class Beehive: SKScene {
     override func update(_ currentTime: TimeInterval) {
         // The wall's clock by way of the frame's time, as Ant Colony has it, so the tests' frames are of their own moments.
         let wall = currentTime + Date.timeIntervalSinceReferenceDate - ProcessInfo.processInfo.systemUptime
-        let speed = 1.0
+        let speed = max(Self.speed.value, 1)
+        // The look and the size, from Settings: another look draws the stack again in it, and another size bakes it
+        // again and makes the colony afresh, as does another number of bees.
+        let look = Int(Self.look.value), wanted = look == 0 ? (dark ? 0 : 1) : look - 1
+        if wanted != pick {
+            (pick, palette, laid) = (wanted, Self.palettes[wanted], nil)
+            backgroundColor = Self.colour(palette.room)
+        }
+        let cell = [10.0, 14, 20][Int(Self.beeSize.value)]
+        if cell != frames.cell { (frames, combs, laid, colony) = (Frames(cell: cell), [:], nil, nil) }
+        let screen = Double(size.width * size.height) / (frames.ppm * frames.ppm) / 100 // cm²
+        let count = min(1200, Int((0.2 * screen * Self.crowd.value).rounded()))
+        if colony != nil, colony!.bees.count != count { colony = nil }
         if asked.day != nil || asked.hour != nil, own == nil {
             let today = AntColony.day(at: wall, dawn: Self.dawn)
             let hours = asked.hour.map { ($0 - Self.dawn + 24).truncatingRemainder(dividingBy: 24) } ?? today.hours
@@ -174,7 +219,7 @@ final class Beehive: SKScene {
         if laid?.keys != keys || laid?.window != window { lay(window, high: high) }
         let off = frames.pitch * (1 - through)
         if mover.position.y != -off { mover.position.y = -off }
-        bees(wall: wall, hours: hours, seen: -off...(high - off), sliding: through < 1)
+        bees(wall: wall, hours: hours, seen: -off...(high - off), count: count)
 
         // The combs' clock, in steps of ten seconds of their own: the stack is drawn again only then.
         let now10 = Int(hours * 360)
@@ -256,15 +301,15 @@ final class Beehive: SKScene {
     /// The bees: the colony made when the stack is first laid out, moved up with their frames when a new comb goes
     /// in, taking stock of the comb every half minute of its clock, and stepped in sixtieths of a second by the wall's
     /// clock (a second at the most in one frame: after a gap they go on from where they were).
-    private func bees(wall: Double, hours: Double, seen: ClosedRange<Double>, sliding: Bool) {
+    private func bees(wall: Double, hours: Double, seen: ClosedRange<Double>, count: Int) {
         let wide = Double(size.width), high = Double(size.height)
         if colony == nil {
             var made = Bees(ppm: frames.ppm)
             made.world = world
             made.survey(hours: hours, seen: seen, wide: wide)
-            let screen = wide * high / (frames.ppm * frames.ppm) / 100 // cm²
-            made.populate(min(1200, Int((0.2 * screen).rounded())))
+            made.populate(count)
             (colony, since, ticked, surveyed, shifted) = (made, wall, 0, Int(hours * 120), false)
+            for i in shown.indices { shown[i] = nil } // (another colony: every sprite is placed afresh)
         }
         if shifted { colony!.shift(by: -frames.pitch); (shifted, surveyed) = (false, -1) }
         if Int(hours * 120) != surveyed { colony!.survey(hours: hours, seen: seen, wide: wide); surveyed = Int(hours * 120) }
