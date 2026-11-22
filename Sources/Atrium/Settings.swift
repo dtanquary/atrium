@@ -488,6 +488,8 @@ struct AboutPage: View {
                 credit("Saturn's rings' brightness", "Voyager 2 ISS's lit-face profile (NASA/JPL), from NASA's PDS Ring-Moon Systems Node (public domain)",
                        "https://pds-rings.seti.org/holdings/volumes/VG_28xx/VG_2810/DATA/IS2_P0001_V01_KM010.TAB")
                 credit("Saturn's moons", "Their places from NASA JPL's Horizons, their sizes from JPL's Solar System Dynamics", "https://ssd.jpl.nasa.gov/horizons/")
+                credit("Saturn's belts and zones", "Where they lie, from Solar System Scope's map of Saturn (INOVE), based on NASA imagery",
+                       "https://www.solarsystemscope.com/textures/", license: "CC BY 4.0")
             }
             Section {
                 credit("Aurora's mountains", "The Tetons, NPS photo by A. Falgoust (public domain)",
