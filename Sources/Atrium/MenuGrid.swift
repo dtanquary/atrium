@@ -6,7 +6,7 @@ import SwiftUI
 /// The status menu's wallpapers as a grid of their stills, six across, each named in its corner, in place of a row of
 /// text for each: the one on the desktop is named above them and ringed, the one under the pointer grows and plays its
 /// loop from the picture it shows, and a click shows another and closes the menu (with Option held it stays open, to
-/// try several). The pill beside the name opens Settings on that wallpaper's page, and the star after the name makes
+/// try several). The pill beside the name, Customize, opens Settings on that wallpaper's page, and the star after the name makes
 /// it a favourite: those lead the grid, ahead of the rest.
 /// It is one menu item's view, so the menu's own arrow keys and type-to-select pass it by: Settings → General →
 /// Wallpapers in the menu → Names puts the list of names back for them and for VoiceOver.
@@ -24,8 +24,9 @@ import SwiftUI
     static let tile = CGSize(width: (width - 2 * inset - Double(across - 1) * gap) / Double(across),
                              height: (width - 2 * inset - Double(across - 1) * gap) / Double(across) * 779 / 1200)
 
-    /// The pill at the caption's right that opens the wallpaper on the desktop's page of Settings.
-    static let settings = CGRect(x: width - inset - 86, y: top + (caption - 20) / 2, width: 86, height: 20)
+    /// The pill at the caption's right that opens the wallpaper on the desktop's page of Settings. It reads Customize:
+    /// the menu's Settings… row is the window as it was left, and two things of one name were one too many.
+    static let settings = CGRect(x: width - inset - 98, y: top + (caption - 20) / 2, width: 98, height: 20)
 
     /// The star after the name that makes the wallpaper on the desktop a favourite, or no longer one. The name is set
     /// in the menu's own type, so its width as AppKit measures it is its width as drawn.
@@ -195,13 +196,13 @@ struct MenuGridPictures: View {
                 .accessibilityAddTraits(.isButton)
                 .accessibilityAction { star() }
             // Lit like the menu's own row under the pointer, so it reads as one more thing to choose.
-            Label("Settings", systemImage: "slider.horizontal.3").font(.system(size: 11, weight: .medium))
+            Label("Customize", systemImage: "slider.horizontal.3").font(.system(size: 11, weight: .medium))
                 .foregroundStyle(hover.settings ? .white : .primary)
                 .frame(width: MenuGrid.settings.width, height: MenuGrid.settings.height)
                 .glassEffect(hover.settings ? .regular.tint(.accentColor) : .regular, in: .capsule)
                 .offset(x: MenuGrid.settings.minX, y: MenuGrid.settings.minY)
                 .accessibilityElement()
-                .accessibilityLabel("\(current) Settings")
+                .accessibilityLabel("Customize \(current)")
                 .accessibilityAddTraits(.isButton)
                 .accessibilityAction { settings() }
             ForEach(Array(order.enumerated()), id: \.element.name) { index, wallpaper in
