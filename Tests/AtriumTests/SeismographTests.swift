@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 @testable import Atrium
 
@@ -17,4 +18,40 @@ import Testing
     let trace = ground.trace(sensitivity: 1), midnight = Seismograph.sample.midnight - ground.start
     func peak(_ from: Double, _ to: Double) -> Float { trace[(midnight + Int(from * 3600))..<(midnight + Int(to * 3600))].map(abs).max() ?? 0 }
     #expect(peak(15.5, 17) > 1 && peak(2, 6) < 0.33)
+}
+
+/// The live path, against EarthScope itself, only when asked (`SEISMO_LIVE=1`): the station list finds NW.L44A
+/// nearest a place by Chicago, SeedLink sends its records from an hour ago, and the archive serves the hour
+/// before that. Each record read is the station's LHZ at a sample a second.
+@Test(.enabled(if: ProcessInfo.processInfo.environment["SEISMO_LIVE"] != nil)) func seismographStreamsAStationLive() async throws {
+    #expect(SeismicStation.all.count > 500)
+    let station = try #require(SeismicStation.nearest(latitude: 42.2, longitude: -87.9))
+    #expect(station.id == "NW.L44A.00.LHZ")
+    let now = Date().timeIntervalSince1970
+    let got = Mutex<[SeismicRecord]>([]), ended = Mutex(false)
+    let link = SeedLink(station: station, from: now - 3600, record: { r in got.withLock { $0.append(r) } }, ended: { ended.withLock { $0 = true } })
+    for _ in 0..<60 where got.withLock({ $0.count }) < 2 { try await Task.sleep(for: .seconds(1)) }
+    link.cancel()
+    let records = got.withLock { $0 }
+    #expect(records.count >= 2 && records.allSatisfy { $0.id == station.id && $0.rate == 1 })
+    if let last = records.last { #expect(now - (last.start + Double(last.samples.count)) < 900) } // under a quarter of an hour behind
+    let archived = await SeismicFeed.archive(station, from: now - 7200, to: now - 3600)
+    #expect(archived.reduce(0) { $0 + $1.samples.count } > 3000)
+}
+
+/// The feed as the scene drives it, only when asked (`SEISMO_LIVE=1`): attached and moved on each frame, it picks the
+/// nearest station, fills the two days the sheet shows from the archive, says so in its status line, and lets it all
+/// go when the last scene leaves.
+@MainActor @Test(.enabled(if: ProcessInfo.processInfo.environment["SEISMO_LIVE"] != nil)) func seismographFeedFillsTwoDays() async throws {
+    let feed = SeismicFeed.shared
+    feed.attach()
+    for _ in 0..<300 where feed.hours < Seismograph.liveHours {
+        feed.tick(Date().timeIntervalSince1970, live: true)
+        try await Task.sleep(for: .milliseconds(100))
+    }
+    #expect(feed.hours >= Seismograph.liveHours && feed.station != nil)
+    #expect(UserDefaults.standard.string(forKey: "seismograph.status")?.hasPrefix("Live from \(feed.station!.network).\(feed.station!.code)") == true)
+    print("seismograph feed:", feed.station!.id, feed.hours, "hours;", UserDefaults.standard.string(forKey: "seismograph.status") ?? "")
+    feed.detach()
+    #expect(feed.station == nil && feed.ground.counts.isEmpty)
 }
