@@ -25,7 +25,14 @@ final class Seismograph: SKScene {
     /// Minutes of the day in each row: 15 is the USGS's own records' pace, 60 NCEDC's. Stored by place.
     nonisolated static let minutes = Knob(key: "seismograph.minutes", label: "Minutes a row", range: 0...2, standard: 1, section: "Sheet",
                                           format: .choice(["15", "30", "60"]))
-    nonisolated static let knobs = [look, sensitivity, minutes]
+    /// Whether the sheet is the nearest station's own, live, or the sample day. Its status line says which station,
+    /// how far, and how far behind the pen runs (`SeismicFeed.status`).
+    nonisolated static let live = Knob(key: "seismograph.live", label: "Live from the nearest station", range: 0...1, standard: 1, section: "Station", format: .toggle)
+    nonisolated static let knobs = [look, sensitivity, minutes, live]
+    /// Hours of the last two days a station has to have sent before its sheet replaces the sample day's: the ring
+    /// keeps only an hour or two, so with the archive down the sheet would be nearly bare for most of a day.
+    // ponytail: the sample day until then, not today's rows over it; mix them if the archive is often down
+    static let liveHours = 12.0
     nonisolated static let rowMinutes = [15.0, 30, 60]
 
     /// The two looks, as one of Etching's surfaces with a light tone and a dark: Chart, a cream dimmed for a sheet
@@ -64,12 +71,12 @@ final class Seismograph: SKScene {
         var layout: Layout, today: [Float], yesterday: [Float]
 
         /// The pen's offset at a sheet time in seconds, in rows, up positive: the ground's motion, running straight
-        /// from one sample to the next, stopped at the clip, and the clock's pips (MEQ-800: 1 s each minute, 2 s
-        /// each hour, 10 s at noon and midnight).
+        /// from one sample to the next, eased into the clip (a hard stop drew big swings as square-topped pulses),
+        /// and the clock's pips (MEQ-800: 1 s each minute, 2 s each hour, 10 s at noon and midnight).
         static func deflection(_ t: Double, _ data: [Float]) -> Double? {
             let i = Int(t.rounded(.down)), f = t - Double(i)
             guard i >= 0, i + 1 < data.count, !data[i].isNaN, !data[i + 1].isNaN else { return nil }
-            var v = min(max(Double(data[i]) * (1 - f) + Double(data[i + 1]) * f, -Layout.clip), Layout.clip)
+            var v = Layout.clip * tanh((Double(data[i]) * (1 - f) + Double(data[i + 1]) * f) / Layout.clip)
             let s = t.truncatingRemainder(dividingBy: 60)
             if s < (t.truncatingRemainder(dividingBy: 43200) < 60 ? 10 : t.truncatingRemainder(dividingBy: 3600) < 60 ? 2 : 1) { v += Layout.pips }
             return v
@@ -136,7 +143,7 @@ final class Seismograph: SKScene {
         }
     }
 
-    /// What a stamp is of: the layout, the sensitivity, the sheet's midnight and the data's version.
+    /// What a stamp is of: the layout, the sensitivity, the sheet's midnight and the data's version (-1, the sample).
     private struct Held: Equatable { var layout: Layout, sensitivity: Double, midnight: Int, version: Int }
 
     /// The sample day, decoded once and shared.
@@ -194,7 +201,13 @@ final class Seismograph: SKScene {
         addChild(sprite)
     }
 
-    override func didMove(to view: SKView) { locate() }
+    override func didMove(to view: SKView) {
+        locate()
+        if Self.live.value > 0.5 { Location.shared.start() } // the nearest station: macOS asks leave the first time
+        SeismicFeed.shared.attach()
+    }
+
+    override func willMove(from view: SKView) { SeismicFeed.shared.detach() }
 
     /// Asks where the Mac is, once, and only while the look follows the Sun: the first time, macOS asks leave.
     private func locate() {
@@ -217,12 +230,16 @@ final class Seismograph: SKScene {
         ink.vectorFloat3Value = eased(Self.paper.line, inked)
     }
 
-    /// The sheet's midnight and the pen's time on it, in seconds: the sample day's, the pen at the Mac's time of day
-    /// (or `seismograph.hour`, for pictures).
-    private func moment(at wall: Double) -> (midnight: Int, pen: Double) {
-        let now = Date(timeIntervalSinceReferenceDate: wall)
+    /// The sheet's midnight (seconds since 1970) and the pen's time on it, in seconds: live, today's, the pen
+    /// `SeismicFeed.behind` the clock; else the sample day's, the pen at the Mac's time of day (or `seismograph.hour`,
+    /// for pictures).
+    // ponytail: a sheet is 24 hours from local midnight, so on the two days a year the clocks change the last hour's
+    // label is an hour out; give the sheet 23 or 25 rows' worth then if anyone notices
+    private func moment(at wall: Double, live: Bool) -> (midnight: Int, pen: Double) {
+        let now = Date(timeIntervalSinceReferenceDate: wall - (live ? SeismicFeed.behind : 0)), midnight = Calendar.current.startOfDay(for: now)
+        if live { return (Int(midnight.timeIntervalSince1970), now.timeIntervalSince(midnight)) }
         let hours = UserDefaults.standard.object(forKey: "seismograph.hour") as? Double
-        return (Self.sample.midnight, hours.map { $0 * 3600 } ?? now.timeIntervalSince(Calendar.current.startOfDay(for: now)))
+        return (Self.sample.midnight, hours.map { $0 * 3600 } ?? now.timeIntervalSince(midnight))
     }
 
     override func update(_ currentTime: TimeInterval) {
@@ -244,12 +261,15 @@ final class Seismograph: SKScene {
         }
 
         // the sheet: stamped again when a setting, the day or the data changes
-        let (midnight, pen) = moment(at: wall)
+        let feed = SeismicFeed.shared
+        feed.tick(wall + Date.timeIntervalBetween1970AndReferenceDate, live: Self.live.value > 0.5)
+        let live = Self.live.value > 0.5 && feed.hours >= Self.liveHours
+        let (midnight, pen) = moment(at: wall, live: live)
         let minutes = Self.rowMinutes[Int(Self.minutes.value)], scale = half ? 0.5 : 1
         let layout = Layout(wide: Int(pixels.x * scale), high: Int(pixels.y * scale), scale: scale, minutes: minutes)
-        let wanted = Held(layout: layout, sensitivity: Self.sensitivity.value, midnight: midnight, version: 0)
+        let wanted = Held(layout: layout, sensitivity: Self.sensitivity.value, midnight: midnight, version: live ? feed.version : -1)
         if held != wanted, stamping?.of != wanted {
-            let landing = Landing(), ground = Self.sampleGround, sensitivity = wanted.sensitivity
+            let landing = Landing(), ground = live ? feed.ground : Self.sampleGround, sensitivity = wanted.sensitivity
             stamping = (wanted, landing)
             Task.detached(priority: .userInitiated) {
                 let trace = ground.trace(sensitivity: sensitivity)
