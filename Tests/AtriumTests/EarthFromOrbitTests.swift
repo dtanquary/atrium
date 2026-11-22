@@ -17,7 +17,7 @@ import Testing
 
 /// Earth from Orbit shows the month's Blue Marble, so every month needs its map: one missing would leave the globe
 /// blank for that month alone.
-@Test func everyMonthHasItsMap() {
+@Test func earthHasAMapForEveryMonth() {
     for month in 1...12 {
         #expect(FileManager.default.fileExists(atPath: resource(EarthFromOrbit.dayMap(month: month)).path), "month \(month)")
     }

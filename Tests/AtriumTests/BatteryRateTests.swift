@@ -128,7 +128,7 @@ private final class SeenWindow: NSWindow {
 }
 
 /// The rates a wallpaper or its scene may ask for: ones that divide 60 and 120, under the battery's standard 30.
-@MainActor @Test func batteryRatesDivideTheDisplaysRates() {
+@MainActor @Test func everyBatteryRateDividesTheDisplaysRates() {
     let allowed: Set<Int?> = [nil, 10, 12, 15, 20]
     for wallpaper in allScenes {
         #expect(allowed.contains(wallpaper.batteryRate), "\(wallpaper.name)")
