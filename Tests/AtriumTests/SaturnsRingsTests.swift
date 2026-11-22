@@ -863,3 +863,213 @@ func saturnsRingsCrossingMoments() throws {
     renderer.update(atTime: 1)
     for k in 0..<12 { try shoot(loop, upTo: (end - start) * Double(k) / 11, from: &clock, renderer: renderer, name: "loop-\(k)") }
 }
+
+// MARK: The moons
+
+/// JPL Horizons' places for the six moons at five moments the fit didn't use, from Saturn's centre in Mm, with the
+/// Sun (Horizons' own) at azimuth 0 round Saturn's pole: the moon, the Julian date (UT), x toward the Sun along the
+/// ring plane, y a quarter turn on round the pole, z toward the north pole. docs/saturns-rings/moons.py prints
+/// them (ephemeris sat441l, fetched from ssd.jpl.nasa.gov/api/horizons.api on 2026-11-21).
+private let horizonsMoons: [(String, Double, Double, Double, Double)] = [
+    ("Mimas", 2461365.99920, 86.243, 166.847, 3.780), ("Mimas", 2461479.74920, 123.660, -133.361, 4.074),
+    ("Mimas", 2462200.09920, 90.892, 164.954, -0.656), ("Mimas", 2463079.49920, 44.547, 176.756, 2.898),
+    ("Mimas", 2464733.24920, 109.985, -150.899, -0.369),
+    ("Enceladus", 2461365.99920, 84.423, -222.819, 0.010), ("Enceladus", 2461479.74920, 92.610, -218.864, -0.024),
+    ("Enceladus", 2462200.09920, -232.532, 50.475, 0.009), ("Enceladus", 2463079.49920, 118.776, 205.909, -0.009),
+    ("Enceladus", 2464733.24920, 199.650, -131.403, -0.043),
+    ("Tethys", 2461365.99920, -86.276, -281.800, -1.711), ("Tethys", 2461479.74920, 279.062, -94.521, -4.156),
+    ("Tethys", 2462200.09920, -285.906, 70.979, -4.652), ("Tethys", 2463079.49920, 94.461, 279.121, 4.727),
+    ("Tethys", 2464733.24920, 288.450, 60.306, 2.862),
+    ("Dione", 2461365.99920, -189.412, -325.504, 0.184), ("Dione", 2461479.74920, 76.063, 370.531, -0.130),
+    ("Dione", 2462200.09920, -217.754, 309.201, 0.202), ("Dione", 2463079.49920, -349.383, -144.490, -0.143),
+    ("Dione", 2464733.24920, -276.841, -257.752, 0.148),
+    ("Rhea", 2461365.99920, 512.932, -123.568, -1.577), ("Rhea", 2461479.74920, 355.965, 388.829, 1.557),
+    ("Rhea", 2462200.09920, -521.524, -74.179, -1.789), ("Rhea", 2463079.49920, 441.996, 286.587, 2.221),
+    ("Rhea", 2464733.24920, 524.432, -47.787, -1.174),
+    ("Titan", 2461365.99920, 157.047, -1229.102, 8.743), ("Titan", 2461479.74920, 958.441, -811.674, 6.342),
+    ("Titan", 2462200.09920, 1241.881, -97.755, -2.416), ("Titan", 2463079.49920, 1177.166, 304.617, -8.667),
+    ("Titan", 2464733.24920, -1098.584, -610.517, 5.807),
+]
+
+/// The moons are where Horizons has them, from 2026 to 2036: within 0.6° as seen from Saturn's centre (the fit's own
+/// 0.4°, and the app's Sun, which the frame is turned to), and within half a percent in distance.
+@Test func saturnsRingsMoonsMatchHorizons() throws {
+    var most = 0.0
+    for (name, jd, x, y, z) in horizonsMoons {
+        let index = try #require(SaturnsRings.moons.firstIndex { $0.name == name })
+        let got = SaturnsRings.moons(at: jd)[index], want = SIMD3(x, y, z)
+        let apart = acos(min(simd_dot(simd_normalize(got), simd_normalize(want)), 1)) * 180 / .pi
+        most = max(most, apart)
+        #expect(apart < 0.6 && abs(simd_length(got) / simd_length(want) - 1) < 0.005, "\(name) at \(jd): \(apart)° from Horizons' place, \(got) against \(want)")
+    }
+    print(String(format: "Saturn's Rings: the moons are within %.2f° of Horizons' places", most))
+}
+
+/// How a moon at `moon` (`SaturnsRings.moons(at:)`'s frame) is seen from `camera`: where on the screen (−1 to 1
+/// across and up, the screen `aspect` tall for its width), or nil if it's behind the camera; whether the planet is
+/// before it; the ring radius where its light crosses the ring plane on the way, and how steeply (the sine of the
+/// angle to the plane), or nil if it doesn't cross; and how much of its lit side faces the camera (1 all, −1 none;
+/// −2 if the planet's shadow is on it).
+private func sight(_ moon: SIMD3<Double>, from camera: SaturnsRings.Camera, sunUp: Double, aspect: Double)
+    -> (at: SIMD2<Double>, far: Double, hidden: Bool, through: (r: Double, mu: Double)?, phase: Double)? {
+    let axes = camera.axes(sunUp: sunUp), round = camera.sun * .pi / 180
+    let place = SIMD3(cos(round) * moon.x - sin(round) * moon.y, sin(round) * moon.x + cos(round) * moon.y, moon.z), to = place - axes.at
+    let depth = simd_dot(to, axes.ahead), tangent = tan(camera.field / 2 * .pi / 180)
+    guard depth > 0 else { return nil }
+    let at = SIMD2(simd_dot(to, axes.right) / depth / tangent, simd_dot(to, axes.up) / depth / (tangent * aspect))
+    let k = 60.268 / 54.364, cs = SIMD3(axes.at.x, axes.at.y, axes.at.z * k), ds = SIMD3(to.x, to.y, to.z * k)
+    let nearest = min(max(-simd_dot(cs, ds) / simd_dot(ds, ds), 0), 1)
+    var through: (r: Double, mu: Double)?
+    let cross = axes.at.z / (axes.at.z - place.z)
+    if cross > 0, cross < 1 { let p = axes.at + cross * to; through = (simd_length(SIMD2(p.x, p.y)), abs(to.z) / simd_length(to)) }
+    let ps = SIMD3(place.x, place.y, place.z * k), ss = simd_normalize(SIMD3(axes.sun.x, axes.sun.y, axes.sun.z * k)), along = simd_dot(ps, ss)
+    let shadowed = along < 0 && simd_length(ps - along * ss) < 60.5
+    return (at, simd_length(to), simd_length(cs + nearest * ds) < 60.268, through, shadowed ? -2 : simd_dot(axes.sun, simd_normalize(axes.at - place)))
+}
+
+/// Saturn's Rings holding `view` from the unlit face (or the lit) at `date`, w × h pixels (the scene half that in
+/// points), with the moons or without: its pixels, BGRA, the top row first.
+@MainActor private func ringsFrame(view: Int, lit: Bool = false, date: Date, moons: Bool, w: Int, h: Int) throws -> [UInt8] {
+    let keys = [SaturnsRings.view.key, SaturnsRings.face.key, SaturnsRings.showMoons.key]
+    defer { keys.forEach(UserDefaults.standard.removeObject) }
+    for (key, value) in zip(keys, [0.0, lit ? 1.0 : 0.0, moons ? 1.0 : 0.0]) { UserDefaults.standard.set(value, forKey: key) }
+    let device = try #require(MTLCreateSystemDefaultDevice()), queue = try #require(device.makeCommandQueue())
+    let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: w, height: h, mipmapped: false)
+    descriptor.usage = [.renderTarget, .shaderRead]
+    descriptor.storageMode = .shared
+    let texture = try #require(device.makeTexture(descriptor: descriptor))
+    let pass = MTLRenderPassDescriptor()
+    pass.colorAttachments[0].texture = texture
+    pass.colorAttachments[0].loadAction = .clear
+    pass.colorAttachments[0].storeAction = .store
+    let renderer = SKRenderer(device: device)
+    renderer.scene = SaturnsRings(size: CGSize(width: w / 2, height: h / 2), from: view, moment: 0, date: date)
+    renderer.update(atTime: 1)
+    let buffer = try #require(queue.makeCommandBuffer())
+    renderer.render(withViewport: CGRect(x: 0, y: 0, width: w, height: h), commandBuffer: buffer, renderPassDescriptor: pass)
+    buffer.commit()
+    buffer.waitUntilCompleted()
+    var pixels = [UInt8](repeating: 0, count: w * h * 4)
+    texture.getBytes(&pixels, bytesPerRow: w * 4, from: MTLRegionMake2D(0, 0, w, h), mipmapLevel: 0)
+    return pixels
+}
+
+/// The first hour from `start`, within two years, at which some moon is seen from a held view (the unlit face, or
+/// the lit) as `wanted` says: the view, the moon, the moment, and where it is on the screen.
+private func firstSight(from start: Date, moons: Range<Int> = 0..<6, views: [Int] = Array(SaturnsRings.views.indices), lit: Bool = false, aspect: Double,
+                        where wanted: (_ seen: (at: SIMD2<Double>, far: Double, hidden: Bool, through: (r: Double, mu: Double)?, phase: Double), _ moon: Int, _ view: Int) -> Bool)
+    -> (view: Int, moon: Int, date: Date, at: SIMD2<Double>, far: Double)? {
+    for hour in 0..<(2 * 365 * 24) {
+        let date = start.addingTimeInterval(Double(hour) * 3600), places = SaturnsRings.moons(at: Sky.julianDate(date)), sunUp = SaturnsRings.light(on: date).up
+        for view in views {
+            let camera = SaturnsRings.held(SaturnsRings.views[view], for: 0, lit: lit)
+            for moon in moons {
+                guard let seen = sight(places[moon], from: camera, sunUp: sunUp, aspect: aspect), abs(seen.at.x) < 0.85, abs(seen.at.y) < 0.85,
+                      wanted(seen, moon, view) else { continue }
+                return (view, moon, date, seen.at, seen.far)
+            }
+        }
+    }
+    return nil
+}
+
+/// The moons are drawn where they are, and what's before them hides them: an icy moon in the clear shows as a disc
+/// of its own size at its place on the screen, and not with Moons off; one with the planet before it doesn't show;
+/// and one whose light comes up through the rings on the way shows dimmer, by about what the rings pass.
+@MainActor @Test func saturnsRingsMoonsHideAndDim() throws {
+    let (w, h) = (1512, 982), aspect = Double(h) / Double(w), start = day("2026-11-21"), rings = RingProfile.shared
+    /// The most any pixel's green changes, with the moons and without, within the moon's own disc and 4 pixels round it.
+    func shows(_ found: (view: Int, moon: Int, date: Date, at: SIMD2<Double>, far: Double)) throws -> Int {
+        let with = try ringsFrame(view: found.view, date: found.date, moons: true, w: w, h: h)
+        let without = try ringsFrame(view: found.view, date: found.date, moons: false, w: w, h: h)
+        let tangent = tan(SaturnsRings.views[found.view].field / 2 * .pi / 180)
+        let reach = Int(SaturnsRings.moons[found.moon].radius / 1000 / found.far / tangent * Double(w) / 2) + 4
+        let (x, y) = (Int((found.at.x / 2 + 0.5) * Double(w)), Int((0.5 - found.at.y / 2) * Double(h)))
+        var most = 0
+        for row in max(y - reach, 0)...min(y + reach, h - 1) {
+            for column in max(x - reach, 0)...min(x + reach, w - 1) {
+                let at = (row * w + column) * 4 + 1
+                most = max(most, abs(Int(with[at]) - Int(without[at])))
+            }
+        }
+        return most
+    }
+    /// Whether the moon's light reaches the camera past the rings untouched.
+    func clear(_ through: (r: Double, mu: Double)?) -> Bool { through.map { $0.r > 142 } ?? true }
+    let open = try #require(firstSight(from: start, moons: 0..<5, aspect: aspect) { seen, _, _ in !seen.hidden && clear(seen.through) && seen.phase > 0.3 })
+    let bright = try shows(open)
+    #expect(bright > 60, "\(SaturnsRings.moons[open.moon].name) in the clear from \(SaturnsRings.views[open.view].name) on \(open.date): \(bright)")
+    let behind = try #require(firstSight(from: start, aspect: aspect) { seen, _, _ in seen.hidden })
+    #expect(try shows(behind) <= 1, "\(SaturnsRings.moons[behind.moon].name) behind the planet from \(SaturnsRings.views[behind.view].name) on \(behind.date)")
+    // through the rings where they pass between a twentieth and a third of the light along the way
+    let veiled = try #require(firstSight(from: start, moons: 0..<5, aspect: aspect) { seen, _, _ in
+        guard !seen.hidden, seen.phase > 0.3, let through = seen.through, through.r > 74.6, through.r < 136.7 else { return false }
+        let passes = exp(-rings.tau[Int((through.r - rings.start) / rings.step)] / through.mu)
+        return passes > 0.05 && passes < 0.33
+    })
+    let dim = try shows(veiled)
+    #expect(dim >= 2 && Double(dim) < 0.75 * Double(bright), "\(SaturnsRings.moons[veiled.moon].name) through the rings from \(SaturnsRings.views[veiled.view].name) on \(veiled.date): \(dim) against \(bright) in the clear")
+    print("Saturn's Rings moons: \(SaturnsRings.moons[open.moon].name) in the clear \(bright) (\(SaturnsRings.views[open.view].name), \(open.date)); "
+          + "\(SaturnsRings.moons[behind.moon].name) behind the planet (\(SaturnsRings.views[behind.view].name), \(behind.date)); "
+          + "\(SaturnsRings.moons[veiled.moon].name) through the rings \(dim) (\(SaturnsRings.views[veiled.view].name), \(veiled.date))")
+}
+
+/// Each moon the first time from the moment `RINGS_MOONS` gives (as 2026-11-22T02:00:00Z; now if it's anything else)
+/// that it's in the clear in a held view's frame, from the lit face, and Pan in Over the Encke Gap, at 3024 × 1964: saves the 640 × 400 pixels round each to `SNAPSHOT_DIR` as
+/// `moon-<name>.jpg`, for docs/saturns-rings/build-moons.jpg, and prints which view and when, how far it is and how
+/// many pixels across; then, hour by hour for a day, which moons are in the clear in each view's frame. Opt-in:
+///
+///     RINGS_MOONS=2026-11-22T02:00:00Z SNAPSHOT_DIR=/some/dir swift test --filter saturnsRingsMoonMoments
+@MainActor @Test(.enabled(if: ProcessInfo.processInfo.environment["RINGS_MOONS"] != nil))
+func saturnsRingsMoonMoments() throws {
+    let dir = URL(fileURLWithPath: ProcessInfo.processInfo.environment["SNAPSHOT_DIR"] ?? NSTemporaryDirectory() + "atrium-snapshots")
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    let (w, h) = (3024, 1964), aspect = Double(h) / Double(w), stamp = ISO8601DateFormatter()
+    let start = stamp.date(from: ProcessInfo.processInfo.environment["RINGS_MOONS"] ?? "") ?? Date()
+    /// Saves the 640 × 400 pixels round (x, y), counted from the screen's centre as `sight` does, kept within the frame.
+    func save(_ pixels: [UInt8], round at: SIMD2<Double>, as name: String) throws {
+        let space = CGColorSpace(name: CGColorSpace.sRGB)!, info = CGImageAlphaInfo.noneSkipFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+        let image = try #require(CGImage(width: w, height: h, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: w * 4, space: space,
+                                         bitmapInfo: CGBitmapInfo(rawValue: info), provider: CGDataProvider(data: Data(pixels) as CFData)!,
+                                         decode: nil, shouldInterpolate: false, intent: .defaultIntent))
+        let x = min(max(Int((at.x / 2 + 0.5) * Double(w)) - 320, 0), w - 640), y = min(max(Int((0.5 - at.y / 2) * Double(h)) - 200, 0), h - 400)
+        let destination = try #require(CGImageDestinationCreateWithURL(dir.appendingPathComponent("moon-\(name).jpg") as CFURL, UTType.jpeg.identifier as CFString, 1, nil))
+        CGImageDestinationAddImage(destination, try #require(image.cropping(to: CGRect(x: x, y: y, width: 640, height: 400))),
+                                   [kCGImageDestinationLossyCompressionQuality: 0.95] as CFDictionary)
+        #expect(CGImageDestinationFinalize(destination))
+    }
+    for (index, moon) in SaturnsRings.moons.enumerated() {
+        let found = try #require(firstSight(from: start, moons: index..<(index + 1), lit: true, aspect: aspect) { seen, _, _ in
+            !seen.hidden && (seen.through.map { $0.r > 142 } ?? true) && seen.phase > 0.2
+        })
+        let field = tan(SaturnsRings.views[found.view].field / 2 * .pi / 180)
+        let across: Double = moon.radius / 1000 / found.far / field * Double(w)
+        print(String(format: "Saturn's Rings moon %@: from %@ at %@, %.0f Mm off, %.1f px across", moon.name, SaturnsRings.views[found.view].name,
+                     stamp.string(from: found.date), found.far, across))
+        try save(try ringsFrame(view: found.view, lit: true, date: found.date, moons: true, w: w, h: h), round: found.at, as: moon.name)
+    }
+    // Pan, a fixed way ahead of the camera round Saturn
+    let encke = SaturnsRings.held(SaturnsRings.views[4], for: 0, lit: true), round = encke.sun * .pi / 180
+    let pan = SaturnsRings.pan.r * SIMD3(cos(SaturnsRings.pan.ahead - round), sin(SaturnsRings.pan.ahead - round), 0)
+    let seen = try #require(sight(pan, from: encke, sunUp: SaturnsRings.light(on: start).up, aspect: aspect))
+    let across: Double = SaturnsRings.pan.radius / 1000 / seen.far / tan(encke.field / 2 * .pi / 180) * Double(w)
+    print(String(format: "Saturn's Rings moon Pan: from Over the Encke Gap, %.2f Mm off, %.1f px across, at %.2f, %.2f", seen.far, across, seen.at.x, seen.at.y))
+    try save(try ringsFrame(view: 4, lit: true, date: start, moons: true, w: w, h: h), round: seen.at, as: "Pan")
+    // the day from then, hour by hour: which moons each view has in the clear, from either face
+    for lit in [true, false] {
+        for (index, view) in SaturnsRings.views.enumerated() {
+            var hours = [String: [Int]]()
+            for hour in 0..<24 {
+                let date = start.addingTimeInterval(Double(hour) * 3600), places = SaturnsRings.moons(at: Sky.julianDate(date))
+                let camera = SaturnsRings.held(SaturnsRings.views[index], for: 0, lit: lit), sunUp = SaturnsRings.light(on: date).up
+                for (moon, place) in places.enumerated() {
+                    guard let seen = sight(place, from: camera, sunUp: sunUp, aspect: aspect), abs(seen.at.x) < 0.95, abs(seen.at.y) < 0.95, !seen.hidden,
+                          seen.through.map({ $0.r > 142 }) ?? true else { continue }
+                    hours[SaturnsRings.moons[moon].name, default: []].append(hour)
+                }
+            }
+            let list = hours.sorted { $0.key < $1.key }.map { "\($0.key) \($0.value.first!)–\($0.value.last!) h (\($0.value.count) of 24)" }.joined(separator: ", ")
+            print("Saturn's Rings moons, \(lit ? "lit" : "unlit") \(view.name), the day from \(stamp.string(from: start)): \(list.isEmpty ? "none" : list)")
+        }
+    }
+}
