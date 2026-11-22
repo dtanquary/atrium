@@ -23,6 +23,20 @@ final class Canopy: SKScene, BatteryPaced {
     /// (`yyyy-MM-dd`) and an hour of the local clock (13.5 for half past one), each unset for now; and for films, the
     /// mean wind in m/s (`Breeze.mean`).
     static let pins = (seed: "canopy.seed", date: "canopy.date", hour: "canopy.hour", wind: "canopy.wind")
+    /// When it is in the picture (Dave, 2026-11-21: "settings that allow me to lock to system theme, day night, or
+    /// lock to a time or season"): the real day and night where you are; by Light and Dark Mode, the day and the dusk
+    /// (the blue hour, research-look.md's Dark Mode) or the night with its stars; or one time of day held (`holdHour`,
+    /// on the clock). The scene follows a change within a second, with a new bake faded in (`tick`).
+    nonisolated static let time = Knob(key: "canopy.time", label: "Time of day", range: 0...3, standard: 0, section: "Sky",
+                                       format: .choice(["Follow the real day and night", "Day in Light Mode, dusk in Dark Mode",
+                                                        "Day in Light Mode, night in Dark Mode", "Hold a time"]))
+    nonisolated static let holdHour = Knob(key: "canopy.holdHour", label: "Time", range: 0...24, standard: 15, section: "Sky",
+                                           format: .clock, shownWhen: "canopy.time", shownAt: 3)
+    /// The season the trees are in: the real one where you are, or one held, a day of it this year, so its Sun too
+    /// (`moment`).
+    nonisolated static let season = Knob(key: "canopy.season", label: "Season", range: 0...4, standard: 0, section: "Trees",
+                                         format: .choice(["Follow the real season", "Spring", "Summer", "Autumn", "Winter"]))
+    nonisolated static let knobs = [time, holdHour, season]
     /// The stand: Poly Haven's Schachen Forest straight up, its sky keyed out by docs/canopy/stand.swift, 1512 px to a
     /// unit of tan, spanning ±1.1 across and ±0.75 up.
     nonisolated static let stand = (name: "canopy-schachen.heic", perTan: 1512.0, extent: SIMD2<Double>(1.1, 0.75))
@@ -58,7 +72,7 @@ final class Canopy: SKScene, BatteryPaced {
         let defaults = UserDefaults.standard, here = place ?? Location.shared.coordinate
         var seed = UInt64(max(defaults.integer(forKey: Self.pins.seed), 0))
         if seed == 0 { seed = .random(in: 1...UInt64(UInt32.max)) }
-        let moment = Self.moment(day: defaults.string(forKey: Self.pins.date), hour: defaults.object(forKey: Self.pins.hour) as? Double)
+        let moment = Self.current(at: here)
         let camera = Camera(size: size), night = Night(), motion = Motion(camera: camera)
         let light = Light(camera: camera, date: moment, latitude: here.latitude, longitude: here.longitude)
         (lens, self.seed, self.place, self.night, shown) = (camera, seed, place, night, (moment, light.sun.z))
@@ -98,6 +112,9 @@ final class Canopy: SKScene, BatteryPaced {
             ticked = currentTime
             tick()
         }
+        // a view held still (Low Power Mode, Pause) runs on until the picture is whole: it gets half a second for a
+        // new scene or a change of appearance, and a bake takes a second to land and as long again to fade in
+        if job != nil || fading != nil, let view = view as? WallpaperView, view.frozen { view.wake(for: 0.3) }
         let time = currentTime - (began ?? currentTime)
         began = began ?? currentTime
         motion.set(breeze, at: time, fps: view?.preferredFramesPerSecond ?? 30)
@@ -118,16 +135,16 @@ final class Canopy: SKScene, BatteryPaced {
     private var here: CLLocationCoordinate2D { place ?? Location.shared.coordinate }
 
     /// Once a second: the stars turned to where the sky is now (a second's turn is a twelfth of a pixel at the zenith),
-    /// and a new bake once the moment has moved on five minutes, except in the dark of night, when nothing but the
-    /// stars changes and they turn by themselves.
+    /// and a new bake once the moment has moved on five minutes (the clock's, or Settings' or the system's appearance
+    /// changed), except in the dark of night, when nothing but the stars changes and they turn by themselves.
     private func tick() {
-        let defaults = UserDefaults.standard
-        let moment = Self.moment(day: defaults.string(forKey: Self.pins.date), hour: defaults.object(forKey: Self.pins.hour) as? Double)
+        let moment = Self.current(at: here)
         let toHorizon = Sky.horizonMatrix(jd: Sky.julianDate(moment), latitude: here.latitude, longitude: here.longitude)
         if night.held { night.turn(toHorizon) }
         guard job == nil, fading == nil, abs(moment.timeIntervalSince(shown.moment)) >= Self.every else { return }
         let sun = normalize(toHorizon * Sky.sun(Sky.julianDate(moment))).z
-        if max(sun, shown.sun) < -0.31 { return } // the Sun 18° down then and now: the same picture
+        // the Sun 18° down then and now, the same night: the same picture (another season's is not)
+        if max(sun, shown.sun) < -0.31, abs(moment.timeIntervalSince(shown.moment)) < 43_200 { return }
         bake(moment)
     }
 
@@ -167,8 +184,58 @@ final class Canopy: SKScene, BatteryPaced {
         if front.starlight == 0 { night.release() }
     }
 
-    /// The moment to show: now, or the pinned day and hour of the local clock.
-    static func moment(day: String?, hour: Double?) -> Date {
+    /// The moment to show now: the pins' for pictures, if either is set, else Settings'.
+    static func current(at here: CLLocationCoordinate2D) -> Date {
+        let defaults = UserDefaults.standard
+        let (day, hour) = (defaults.string(forKey: pins.date), defaults.object(forKey: pins.hour) as? Double)
+        if day != nil || hour != nil { return moment(day: day, hour: hour) }
+        let pick = Int(time.value)
+        return moment(time: pick, holdHour: holdHour.value, season: Int(season.value), dark: (pick == 1 || pick == 2) && systemIsDark,
+                      latitude: here.latitude, longitude: here.longitude)
+    }
+
+    /// The moment Settings ask for at `now`. The day: today, or with a season held (1 spring to 4 winter) a day of it
+    /// this year by the trees' own calendar where you are (`Phenology`, half a year on south of the equator): spring
+    /// with the leaves nearly all out and still pale, midsummer, autumn at its peak of colour, midwinter. The hour on
+    /// that day's clock: now's (`time` 0), the one held (3), or by Light and Dark Mode the Sun's own that day
+    /// (`sunHour`): the day, and in Dark Mode the dusk (1) or the night (2).
+    nonisolated static func moment(time: Int, holdHour: Double, season: Int, dark: Bool, latitude: Double, longitude: Double, now: Date = Date()) -> Date {
+        let calendar = Calendar.current
+        var start = calendar.startOfDay(for: now)
+        if (1...4).contains(season), let year = calendar.dateInterval(of: .year, for: now) {
+            let c = Phenology.whiteOak.moved(latitude: latitude, warmer: 0), length = year.duration / 86400
+            let d = [c.full - 4, 196, c.peak, 15][season - 1] - 1
+            let day = latitude < 0 ? (d + length / 2).truncatingRemainder(dividingBy: length) : d
+            start = calendar.startOfDay(for: year.start + day * 86400 + 43_200)
+        }
+        let hour: Double = switch time {
+        case 1, 2: sunHour(dark ? (time == 1 ? .dusk : .night) : .day, from: start, latitude: latitude, longitude: longitude)
+        case 3: holdHour
+        default: now.timeIntervalSince(calendar.startOfDay(for: now)) / 3600
+        }
+        return calendar.date(byAdding: .second, value: Int(hour * 3600), to: start) ?? start
+    }
+
+    enum SunAt { case day, dusk, night }
+
+    /// The hour of the day beginning at `start` at which the Sun stands as asked, where you are, every five minutes
+    /// of it tried: an hour past its highest, for the day; 6° down in the evening, or as near that as it comes, for
+    /// the dusk; and its lowest, for the night.
+    nonisolated static func sunHour(_ at: SunAt, from start: Date, latitude: Double, longitude: Double) -> Double {
+        let high = (0..<288).map { k -> Double in
+            let jd = Sky.julianDate(start + Double(k) * 300)
+            return normalize(Sky.horizonMatrix(jd: jd, latitude: latitude, longitude: longitude) * Sky.sun(jd)).z
+        }
+        let noon = high.indices.max { high[$0] < high[$1] } ?? 144
+        switch at {
+        case .day: return Double(noon) / 12 + 1
+        case .dusk: return Double((noon..<288).min { abs(high[$0] + 0.105) < abs(high[$1] + 0.105) } ?? 216) / 12
+        case .night: return Double(high.indices.min { high[$0] < high[$1] } ?? 0) / 12
+        }
+    }
+
+    /// The moment of the pins for pictures: now, or the pinned day and hour of the local clock.
+    nonisolated static func moment(day: String?, hour: Double?) -> Date {
         let calendar = Calendar.current, now = Date()
         var start = calendar.startOfDay(for: now)
         let parts = day?.split(separator: "-").compactMap { Int($0) } ?? []

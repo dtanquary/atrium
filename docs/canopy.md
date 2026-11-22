@@ -6,7 +6,7 @@ It was pick #3 of the "Atrium Wallpaper Ideas" page of 2026-11-14 (a review of t
 
 - **Research:** [canopy/research-method.md](canopy/research-method.md) (camera, numbers, three ways to draw the crowns, measured cost) and [canopy/research-look.md](canopy/research-look.md) (references, palettes, brightness, CC0 assets, the name).
 - **Scripts:** `docs/canopy/mock.swift` (SKRenderer, the app's `Atmosphere` through a zenith camera), `variants.py`, `sheet.py`; [canopy/mockups-round1.md](canopy/mockups-round1.md) has every tile's measurements, assets and licences, and how to redraw a round.
-- **Where it stands (2026-11-21):** step (a), the still picture, the first part of step (d), the night and the light kept current (d1), and step (b), motion (the sway in a breeze, the flutter, falling leaves, the battery rate), built and hidden behind `unfinished` (`Sources/Atrium/Canopy.swift`), with the twilight's colour and the stand's matte put right; (b)'s sway redone from footage (b2: the wood still, the twigs and leaves rustling, the nearest leaves moving over the rest), Model 2 of the films Dave chose from ([canopy/motion-round.md](canopy/motion-round.md)), locked in with the other two cut; and on his word that the leaves' rustle still looked fake, each leaf and spray moving as a piece of its own with gusts that cross the view (b3), and the evergreens in needle green where they were black; steps (c), the rest of (d) (the live wind among it) and (e) to come.
+- **Where it stands (2026-11-21):** step (a), the still picture, the first part of step (d), the night and the light kept current (d1), and step (b), motion (the sway in a breeze, the flutter, falling leaves, the battery rate), built and hidden behind `unfinished` (`Sources/Atrium/Canopy.swift`), with the twilight's colour and the stand's matte put right; (b)'s sway redone from footage (b2: the wood still, the twigs and leaves rustling, the nearest leaves moving over the rest), Model 2 of the films Dave chose from ([canopy/motion-round.md](canopy/motion-round.md)), locked in with the other two cut; and on his word that the leaves' rustle still looked fake, each leaf and spray moving as a piece of its own with gusts that cross the view (b3), and the evergreens in needle green where they were black; and the first of step (c), Settings for the time of day and the season (c1); the rest of (c), the rest of (d) (the live wind among it) and (e) to come.
 
 ## What the idea's author meant (atrium-37, 2026-11-16)
 Asked on Dave's word, the session that wrote the ideas page said:
@@ -30,6 +30,11 @@ Asked on Dave's word, the session that wrote the ideas page said:
 - **Always at least a subtle wind:** "just have there always be at least some subtle wind", asked whether the live wind should leave the trees nearly still on calm days, as real ones are (research-motion.md measured about 0.5 px/s for leaves in still air). Whatever the wind, real or the stand-in breeze, the motion never drops below about Beaufort 2, "leaves rustle" (about 2 m/s): leaves and the finest twigs visibly moving, by night as well. His rule "Always something to see" ([README.md](README.md#daves-direction-so-far)) applied to the wind.
 
 - **The motion: Model 2** ("go with model 2"), of three films side by side from research-motion.md's models: the old sway, Model 1 (the wood still, twigs and leaves rustling by how free they are) and Model 2 (Model 1 plus the nearest leaves moving on their own over the rest, so the crowns rearrange). The films and their measurements are in [canopy/motion-round.md](canopy/motion-round.md). Then "lets lock in model 2": the switch and the other two are cut (step (b2)). Still his to judge: whether bare November, where only the fine twigs move (about 1.6 px a second), is alive enough, and the strong wind's crown sway, which still leans a little the old way.
+
+## Dave's decisions (2026-11-21)
+- **Of (b3)'s films,** before and after side by side: "the mockups you have shown with the fixes are amazing". **And of (b3) on his desktop** (0.130.32, pinned to 15 July, 3:30 pm): "canopy finally looks how I imagined it, any further improvements you can make is just icing on top". The rustle stands as built.
+- **Settings for when it is:** "canopy also lacks settings that allow me to lock to system theme, day night, or lock to a time or season". Built as (c1): Time of day (the real day and night; by Light and Dark Mode; a time held) and Season (the real one, or one of the four held).
+- **Still his to decide**, defaulted until he says otherwise: a held season is a day of that season this year, so its Sun and its length of day come with it (with the real day and night and Summer held, it gets dark as late as in July); and Dark Mode offers both the dusk (the look research's Dark Mode, the blue hour) and the night with its stars, since the night's median is 7 of 255 where the research wanted 25–45.
 
 ## Mock-ups, round 1 (2026-11-16)
 Drawn by `mock.swift` with SKRenderer at 3024 × 1964, 42°N, the sky from the app's `Atmosphere`, each tile's cost and brightness printed on it. Every tile is 0.42–0.57 ms of GPU and 0.33–0.43 of CPU; every tile meets the 99th and 99.9th percentile caps, where the real photos clip at 255.
@@ -308,6 +313,25 @@ Dave, going through the seasons on 2026-11-18: "why do i see these black spots o
 - **No sunlight** on them: the sky's light only. At a low Sun real conifers catch it warm.
 - **They don't move:** solid wood in the freedom map, as before.
 
+### (c1) Settings: the time of day and the season (2026-11-21)
+
+Dave: "canopy also lacks settings that allow me to lock to system theme, day night, or lock to a time or season". The first part of step (c); its Wind and Speed are still to come.
+
+**What it does** (`Canopy.time`, `holdHour`, `season`; `Canopy.current`, `moment(time:…)`, `sunHour`): the scene has always shown one moment, a day and an hour on its clock, baked and faded in; Settings now pick it.
+- **The day:** today, or with a season held a day of it this year by the trees' own calendar where you are (`Phenology`, half a year on south of the equator): spring four days before the leaves are full size (88% out, still pale), midsummer (15 July), autumn at its peak of colour (28 October at 42°N, with leaves falling), midwinter (15 January, bare). The whole moment moves there, so the Sun is that season's: high in summer, low in winter.
+- **The hour:** the clock's now; the one held; or by Light and Dark Mode the Sun's own that day where you are, found by trying every five minutes of it (`sunHour`): the day an hour past the Sun's highest, the dusk with the Sun 6° down in the evening (or as near as it comes), the night at its lowest.
+- **Following it:** `tick`, once a second, works the moment out again and bakes when it has moved five minutes or more, so a change in Settings or of the system's appearance shows within about three seconds: up to one for the tick, one for the bake, and 1.2 for the fade (the quick one, for a jump of over a quarter of an hour). A time held never moves, so nothing is baked again until the day changes. `followsAppearance` is on, so the app builds no new scene when the appearance changes: the same stand, with the same leaves, goes on. The dark of night is no longer skipped when the moment has moved half a day or more (another season's canopy is another picture).
+- **Held still** (Low Power Mode, Pause): a view gets half a second to draw a new scene or a change of appearance, and a bake takes a second to land and 1.2 to fade in, so while a bake is on its way or fading the scene keeps its view running (`WallpaperView.wake`): it stops on a whole picture, where it could have stopped on the sky alone or a canopy a third faded in.
+- **The pins** for pictures (`canopy.date`, `canopy.hour`) come first, as before, if either is set.
+
+**Checked:** `canopySettingsPickTheMoment` (the real moment unset; a time held on a day of the season held, July for summer and January south of the equator, with the trees as each season has them; by Light and Dark Mode the Sun well up for the day, within a degree of 6° down for the dusk, 18° or more down for the night). Rendered at 42°N, seed 3: Dark Mode's dusk with summer held, median 33 of 255, the sky a deep blue and the crowns near black; its night, median 7, the Milky Way and stars in the gaps; Light Mode's day with autumn held, 84; 9 am held with spring held, 85, the Sun's glow at the left edge. The Settings page shows Sky (Time of day, and Time while a time is held) and Trees (Season).
+
+**What still looks wrong:**
+- **Autumn at its peak reads as olive,** not far from summer at a glance: its hues are Beech bronze's, lit mostly by the blue sky in the shade. Not new, but a held Autumn makes it plain.
+- **The night in Dark Mode is very dark** (median 7): it is there because Dave asked for day and night; the dusk is the one the look research wanted for Dark Mode.
+- **Not seen running:** a change of appearance or of a setting on the desktop, and a view held still; the bake's second and the fade's 1.2 are from (b3)'s measures, not timed again here.
+- **The stars stand still** while a time is held, since the moment does.
+
 ## Checking it
 ```sh
 SNAPSHOT_SCENE="Canopy" SNAPSHOT_DEFAULTS="canopy.seed=3,canopy.date=2026-07-15,canopy.hour=15.5,latitude=42,longitude=-88" swift test -c release -Xswiftc -enable-testing --filter everySceneRenders
@@ -341,8 +365,17 @@ The night (the picture above is `canopy.date=2026-11-16`, and 15 July for leaves
 SNAPSHOT_SCENE="Canopy" SNAPSHOT_DEFAULTS="canopy.seed=3,canopy.date=2026-11-16,canopy.hour=22.5,latitude=42,longitude=-88" swift test -c release -Xswiftc -enable-testing --filter everySceneRenders
 ```
 
+Settings' pictures (c1): any pick as its knob's value (`canopy.time` 0–3, `canopy.holdHour`, `canopy.season` 0–4), Dark Mode with `SNAPSHOT_APPEARANCE=dark`; and the Settings page, which needs the hidden wallpapers shown:
+```sh
+SNAPSHOT_APPEARANCE=dark SNAPSHOT_SCENE="Canopy" SNAPSHOT_DEFAULTS="canopy.seed=3,latitude=42,longitude=-88,canopy.time=1,canopy.season=2" swift test -c release -Xswiftc -enable-testing --filter everySceneRenders
+SETTINGS_SHOT="Canopy" SNAPSHOT_DEFAULTS="unfinished=1,canopy.time=3" swift test -c release -Xswiftc -enable-testing --filter settingsWindow
+```
+
 ## Settings
-None yet beyond the pins for pictures (`canopy.seed`, `canopy.date`, `canopy.hour`) and for films (`canopy.wind`, the mean wind in m/s, unset 4.3); step (c) brings Season, Sway and Speed. The twigs' reach (7.5 px at 4.3 m/s), the near leaves' share (1.6×), a leaf's own tremble (1.0 px), its spray's swing (1.2 px) and its light (±45%) (`Breeze.own`), the crowns' (5 px at 12 m/s), the floor of 2 m/s, and the falling leaves' size and rate are constants in `Canopy.Breeze` and `Canopy.Leaves` until then.
+- **Sky → Time of day** (`canopy.time`): Follow the real day and night (the standard); Day in Light Mode, dusk in Dark Mode; Day in Light Mode, night in Dark Mode; Hold a time, which shows **Time** (`canopy.holdHour`, on the clock, 15:00 unset).
+- **Trees → Season** (`canopy.season`): Follow the real season (the standard), Spring, Summer, Autumn or Winter.
+
+How they pick the moment is in (c1). Besides them, the pins for pictures (`canopy.seed`, `canopy.date`, `canopy.hour`), which come before Settings, and for films (`canopy.wind`, the mean wind in m/s, unset 4.3); the rest of step (c) brings Wind and Speed. The twigs' reach (7.5 px at 4.3 m/s), the near leaves' share (1.6×), a leaf's own tremble (1.0 px), its spray's swing (1.2 px) and its light (±45%) (`Breeze.own`), the crowns' (5 px at 12 m/s), the floor of 2 m/s, and the falling leaves' size and rate are constants in `Canopy.Breeze` and `Canopy.Leaves` until then.
 
 ## Shortcuts
 - `ponytail:` the stand's specks and the evergreens' part cover are cleaned in every bake (110–135 ms off the main thread), not once in the shipped HEIC; clean the HEIC itself (`docs/canopy/stand.swift`, from Poly Haven's 16K source) if a second stand comes or the bake's time matters.
@@ -363,11 +396,15 @@ None yet beyond the pins for pictures (`canopy.seed`, `canopy.date`, `canopy.hou
 - 2026-11-21, of the leaves on 0.130.22: "is there anything you can do to make the treetops look realistic leaf rustling ? it just looks too fake but this wallpaper has potential". What it was: every leaf of a spray moving with its neighbours on a field smooth over 150 px, the sprays drawn out like rubber in a gust and beside a limb, a flicker of light in squares that fit no leaf, and gusts everywhere at once. Redone as step (b3): each leaf and spray a piece of its own, its light with it, gusts crossing the view, and less stretch; films of before and after beside each other in `docs/canopy/`.
 - 2026-11-18, going through the seasons (screenshot at 1 November, 2 pm): "why do i see these black spots on the trees". The evergreens of the stand (spruce or fir) are relit as bark, `bark` 0x2A2219 in the canopy's shade, so a whole conifer mass comes out a flat black-brown with no needles and no green, and the sky through its needles shows as pale specks: beside the lit broadleaves they read as holes in the canopy. To fix: a needle colour of their own, dark green with the photo's own needle detail, lit a little by the sky through their edges. **Done 2026-11-21** (The evergreens in needle green): a dark, mottled green by the sky's light; the photo had almost no needle detail left to keep.
 
+- 2026-11-21, of (b3)'s films, before and after side by side: "the mockups you have shown with the fixes are amazing".
+- 2026-11-21, of (b3) on his desktop (0.130.32, 15 July at 3:30 pm): "canopy finally looks how I imagined it, any further improvements you can make is just icing on top".
+- 2026-11-21: "canopy also lacks settings that allow me to lock to system theme, day night, or lock to a time or season". Step (c1): Time of day and Season.
+
 ## Still open
 - The evergreens' needles: real texture (the stand keyed again to keep it), sunlight on them at a low Sun, and their sway in a wind.
 - A faint wisp of the photo's sky still sits beside the low twigs at dawn (seed 3, 17 November 6:36 am): the matte's clean-up keeps anything touching real wood.
-- Step (c): Settings (Season, Sway, Speed, a time and date preview) and Light and Dark Mode (blue hour).
+- The rest of step (c): Wind (how hard it blows) and Speed; Dave's word on (c1)'s two defaults (a held season's own Sun; the dusk and the night both offered for Dark Mode); autumn's colour, which reads as olive at its peak.
 - Step (d): the live wind and gusts in place of the breeze (and more leaves let go in a real gust), the weather's cloud deck and overcast, snow on the branches.
 - Step (e): the birch or aspen grove.
 - From (b) and (b2): landing a bake, 38–52 ms on the main thread by day when (b2) was measured (16–31 on 2026-11-21, before and after (b3)), most of it untraced; falling leaves lost over the crowns; the per-species calendar (every leaf is white oak's).
-- From (b3): Dave's word on the films and the desktop; a leaf that turns (tilts and foreshortens) if a piece that only moves and changes its light isn't enough; the far leaves' stretch beside a limb; the gusts' variation over the view (0.06–0.10, under the footage's 0.11–0.36); 20 fps on battery by day in leaf.
+- From (b3), which Dave has passed ("finally looks how I imagined it"), as icing: a leaf that turns (tilts and foreshortens) if a piece that only moves and changes its light isn't enough; the far leaves' stretch beside a limb; the gusts' variation over the view (0.06–0.10, under the footage's 0.11–0.36); 20 fps on battery by day in leaf.
