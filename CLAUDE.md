@@ -25,17 +25,28 @@ Atrium is a menu bar app that plays animated wallpapers on macOS 27. Swift packa
 ./build.sh                    # release build → build/Atrium.app (ad-hoc signed, menu bar only)
 APP_STORE=1 ./build.sh        # the Mac App Store variant: sandboxed, no updater (docs/app-store.md has the plan)
 ./release.sh                  # for a GitHub release: build/Atrium-<version>-beta.dmg (no -beta from 1.0), Developer ID signed and notarized (setup at its top), and its .files list for the updater
-UPDATE_IMAGE=<the address of a release's .dmg> swift test --filter updatesFromARelease   # builds that release from the copy in /Applications as the updater would, and checks it (docs/updates.md)
+UPDATE_IMAGE=<the address of a release's .dmg> ./test.sh --filter updatesFromARelease   # builds that release from the copy in /Applications as the updater would, and checks it (docs/updates.md)
 pkill -x Atrium; open build/Atrium.app
 defaults write com.dtanquary.atrium scene "Night Sky"   # pick a scene without the menu
-swift test                    # renders every scene to $TMPDIR/atrium-snapshots and prints the cost per frame
-SNAPSHOT_SCENE="Aurora" SNAPSHOT_DIR=/some/dir SNAPSHOT_SECONDS=20 swift test
-SNAPSHOT_DEFAULTS="gradient.ribbons=1,gradient.previewTime=1" swift test   # snapshot with Settings values
-SNAPSHOT_SCENE="Fish Tank" SNAPSHOT_MOVIE=6 swift test   # then 6 s in real time, saved as 15 fps frames (Fish Tank-000.png…)
-SETTINGS_SHOT="Nebula" swift test --filter settingsWindow   # opens Settings on that page for a moment and captures the window
-MENU_SHOT="Nebula" swift test --filter menuShot   # opens a menu with the picture grid for a moment, the pointer over that wallpaper, and captures it
-LIVE_COST=1 swift test -c release -Xswiftc -enable-testing --filter liveCost   # each wallpaper on the desktop at 60 and 30 fps: CPU, GPU, energy, frames, memory, and WindowServer's share → $TMPDIR/atrium-livecost.tsv
+SNAPSHOT_SCENE="Aurora" ./test.sh Aurora   # one wallpaper: the tests in Tests/AtriumTests/Aurora*.swift, and its render to $TMPDIR/atrium-snapshots with the cost per frame (Testing, below, says when this is enough)
+./test.sh shared              # the checks that cover every wallpaper, the render of every scene among them
+./test.sh all                 # the whole suite, at a gate only
+SNAPSHOT_SCENE="Aurora" SNAPSHOT_DIR=/some/dir SNAPSHOT_SECONDS=20 ./test.sh --filter everySceneRenders   # one scene's snapshot and nothing else
+SNAPSHOT_SCENE="Flowing Gradient" SNAPSHOT_DEFAULTS="gradient.ribbons=1,gradient.previewTime=1" ./test.sh --filter everySceneRenders   # snapshot with Settings values
+SNAPSHOT_SCENE="Fish Tank" SNAPSHOT_MOVIE=6 ./test.sh --filter everySceneRenders   # then 6 s in real time, saved as 15 fps frames (Fish Tank-000.png…)
+SETTINGS_SHOT="Nebula" ./test.sh --filter settingsWindow   # opens Settings on that page for a moment and captures the window
+MENU_SHOT="Nebula" ./test.sh --filter menuShot   # opens a menu with the picture grid for a moment, the pointer over that wallpaper, and captures it
+LIVE_COST=1 ./test.sh -c release -Xswiftc -enable-testing --filter liveCost   # each wallpaper on the desktop at 60 and 30 fps: CPU, GPU, energy, frames, memory, and WindowServer's share → $TMPDIR/atrium-livecost.tsv
 ```
+
+## Testing
+Test runs share one settings store, the GPU and the screen, so two at once flake or crash, and several sessions work here at once; and the whole suite is 283 tests and took 21 minutes on 2026-11-21, with other sessions at work beside it. So a change runs the tests it can break, one run at a time:
+- **Only through `./test.sh`,** never `swift test` itself: it queues every worktree's runs on one lock (`.git/atrium-test.lock`, freed by the system if a run dies), waits out a run started any other way, gives up after `TEST_WAIT` seconds in the queue (1800) and stops a run after `TEST_LIMIT` (2700). Where a doc's command says `swift test …`, run `./test.sh …` with the same arguments.
+- **One wallpaper's change runs that wallpaper's tests:** `SNAPSHOT_SCENE="<its name>" ./test.sh <Name>`, the tests in `Tests/AtriumTests/<Name>*.swift` and its own render. That is "its tests pass" for a commit that touches only its files (its scene, its resources, its doc). A wallpaper's tests go in a file that begins with its name, so the script finds them.
+- **`./test.sh shared` too** when the change adds, renames or cuts a wallpaper, or touches `Scenes.swift`, `Settings.swift` or the menu's pictures (`Resources/menu-*`, `preview-*`). It runs every test named `every…`: a check that covers every wallpaper is named so, and lives in `EveryWallpaperTests.swift` unless it needs another file's helpers. Never in one wallpaper's file, where nobody working on another runs it.
+- **`./test.sh all` at a gate only:** before a push, before a release, when unhiding a wallpaper, and after changing code that wallpapers share (`main.swift`, `Scenes.swift`'s helpers, `Shaders.swift`'s common source, `Power`, `Trim`, `SkyMath`, the tests' own helpers). Not for each commit, and not for each merge into main.
+- **A test that changes a setting is `@MainActor` and puts it back** (`defer`): the change is announced on the thread that makes it, and off the main thread it trapped in whichever scene another test had alive and listening (the whole run died, twice on 2026-11-21).
+- **Cost and timing in a release build** (`-c release -Xswiftc -enable-testing`) only for a change that could move them, not for each commit.
 
 ## Conventions
 - Minimal code, no dependencies, native frameworks first. Mark deliberate shortcuts with `ponytail:` comments that say where the shortcut stops being good enough.
@@ -43,7 +54,7 @@ LIVE_COST=1 swift test -c release -Xswiftc -enable-testing --filter liveCost   #
 - Data must be public domain or permissively licensed. Cite the source in a comment or in the data file's header.
 
 ## Git and deploying
-- **Commit early and often.** One logical change per commit, made as soon as it builds and `swift test` passes. Don't bundle unrelated work together.
+- **Commit early and often.** One logical change per commit, made as soon as it builds and its tests pass (Testing says which). Don't bundle unrelated work together.
 - **Redeploy as work lands.** After each working change, run `./build.sh` and relaunch (`pkill -x Atrium; open build/Atrium.app`) so Dave can try it from the menu bar. Tell him what to test.
 - Messages: a plain-English imperative subject that says what changed and why, e.g. "Pause rendering while the wallpaper is covered".
 - **Versioning:** semantic versioning, set by `VERSION=` at the top of `build.sh` (it goes into Info.plist and shows in Settings → About). Bump it in the same commit as the change that earns it:
