@@ -392,11 +392,10 @@ Open Atrium and a short welcome lets you try the wallpapers. After that it lives
 Atrium's icon in the menu bar is a TV with sparkles (✨📺). Use it to:
 - **Pick** a wallpaper from the grid of pictures, each named in its corner: the one under the pointer grows and plays a short loop of it. Hold Option as you click and the menu stays open, so you can try one after another. **Customize**, beside the name of the wallpaper on your desktop, opens that wallpaper's page of Settings, and the star after the name makes it a favorite: favorites come first in the grid, and in the list of names, where **Add to Favorites** does the same. To move through them with the arrow keys, by typing a name, or with VoiceOver, set Settings → General → **Wallpapers in the menu** to Names, a list in words.
 - **Pause** the wallpaper on its current frame, and **Resume** it. The icon dims while it's paused, a wallpaper you pick meanwhile is held still too, and quitting Atrium ends the pause. While Settings → Power is already freezing it (in Low Power Mode, unless changed), the menu says so in its place.
-- Turn on **Shuffle** to move on to a random wallpaper every so often, and choose **Next Wallpaper** to skip ahead. Settings → General sets how often (every 5 minutes to every day, or on every unlock) and which wallpapers take part.
-- Choose **Previous Wallpaper** to go back to the one you had before, whether you changed it or Shuffle did. Choose it again to flip between the two.
-- Open **Settings…** (⌘,): a page for each wallpaper, with palettes, sliders and switches that update live, plus General, Power and About.
-- Turn on **Open at Login**, here or in Settings → General. macOS may ask you to approve it in System Settings → General → Login Items.
-- Turn on **Full Speed on Battery** to run on battery as fast as when plugged in.
+- Turn on **Shuffle** to move on to a random wallpaper every so often, and choose **Next Wallpaper** to skip ahead. While it's on, the menu says how often under its name; Settings → General sets that (every 5 minutes to every day, or on every unlock) and which wallpapers take part.
+- Choose **Previous Wallpaper**, which names it, to go back to the one you had before, whether you changed it or Shuffle did. Choose it again to flip between the two.
+- Open **Settings…** (⌘,): a page for each wallpaper, with palettes, sliders and switches that update live, plus General, Power and About. **Open at Login** is in General; macOS may ask you to approve it in System Settings → General → Login Items.
+- On battery, turn on **Full Speed on Battery** to run as fast as when plugged in. The menu offers it only then, and not in Low Power Mode, which Settings → Power governs.
 - **Quit**.
 
 ### Updating and uninstalling

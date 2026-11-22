@@ -140,7 +140,7 @@ struct WelcomeView: View {
             Section {
                 Toggle("Shuffle between all wallpapers automatically", isOn: $shuffle)
             } footer: {
-                Text("Moves on to a different wallpaper \(shuffleInterval), so you get to see them all. Change how often, or leave some out, in Settings → General.")
+                Text("Moves on to a different wallpaper \(Shuffle.cadence.lowercased()), so you get to see them all. Change how often, or leave some out, in Settings → General.")
                     .foregroundStyle(.secondary)
             }
             Section {
@@ -207,13 +207,6 @@ struct WelcomeView: View {
     }
 
     // MARK: Moving on
-
-    private var shuffleInterval: String {
-        if case .choice(let names) = Shuffle.every.format {
-            return names[min(max(Int(Shuffle.every.value), 0), names.count - 1)].lowercased()
-        }
-        return "every so often"
-    }
 
     private func move(_ by: Int) {
         let i = (steps.firstIndex(of: step) ?? 0) + by

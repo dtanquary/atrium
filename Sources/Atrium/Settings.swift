@@ -187,6 +187,11 @@ struct IconTile: View {
                                              "Every 3 hours", "Every day", "On every unlock"]), shownWhen: on.key)
     /// Each timed choice in minutes. The choice after them, On every unlock, has no timer.
     private static let minutes: [Double] = [5, 15, 30, 60, 180, 1440]
+    /// How often it moves on, in the words of that menu ("Every 30 minutes"), for the status menu's row and the welcome.
+    static var cadence: String {
+        guard case .choice(let names) = every.format else { return "" }
+        return names[min(max(Int(every.value), 0), names.count - 1)]
+    }
     /// Whether Shuffle moves on as the Mac unlocks rather than on a timer.
     static var onUnlock: Bool { on.value > 0.5 && Int(every.value) >= minutes.count }
     /// Wallpapers left out, by name and comma separated, so new wallpapers join in.
@@ -238,7 +243,7 @@ struct IconTile: View {
     NotificationCenter.default.post(name: openAtLoginChanged, object: nil)
 }
 
-/// Posted when Open at Login is turned on or off, from Settings, the menu or the welcome, so each shows it.
+/// Posted when Open at Login is turned on or off, from Settings or the welcome, so each shows it.
 let openAtLoginChanged = Notification.Name("com.dtanquary.atrium.openAtLoginChanged")
 
 /// Open at Login, how the menu lists the wallpapers, and Shuffle with the wallpapers it picks from.
@@ -252,7 +257,7 @@ struct GeneralPage: View {
         Form {
             Section {
                 Toggle("Open at Login", isOn: Binding(get: { openAtLogin }, set: { setOpenAtLogin($0) }))
-                    // Turned on or off from the menu, or approved in System Settings, while this is open.
+                    // Turned on or off from the welcome, or approved in System Settings, while this is open.
                     .onReceive(NotificationCenter.default.publisher(for: openAtLoginChanged)) { _ in
                         openAtLogin = SMAppService.mainApp.status == .enabled
                     }

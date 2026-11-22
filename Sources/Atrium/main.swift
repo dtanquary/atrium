@@ -1,6 +1,5 @@
 import AppKit
 import IOKit.ps
-import ServiceManagement
 import os
 import SpriteKit
 import SwiftUI
@@ -364,7 +363,7 @@ if !scenes.contains(where: { $0.name == current }) {
     }
 }
 
-/// The menu bar icon: pick, pause or shuffle wallpapers, go back to the last one, open Settings, toggle Open at Login, quit.
+/// The menu bar icon: pick, pause or shuffle wallpapers, go back to the last one, open Settings, quit.
 @MainActor final class StatusMenu: NSObject, NSMenuDelegate {
     let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     /// The wallpapers as pictures: one item, kept from one opening of the menu to the next.
@@ -418,22 +417,23 @@ if !scenes.contains(where: { $0.name == current }) {
         let shuffle = menu.addItem(withTitle: "Shuffle", action: #selector(toggleShuffle), keyEquivalent: "")
         shuffle.target = self
         shuffle.state = Shuffle.on.value > 0.5 ? .on : .off
+        if Shuffle.on.value > 0.5 { shuffle.subtitle = Shuffle.cadence } // how often, under its name
         if let previous {
             let back = menu.addItem(withTitle: "Previous Wallpaper", action: #selector(previousWallpaper), keyEquivalent: "")
             back.target = self
-            back.toolTip = previous
+            back.subtitle = previous // which one, where it can be read: it was a tooltip
         }
         if Shuffle.on.value > 0.5 {
             menu.addItem(withTitle: "Next Wallpaper", action: #selector(nextWallpaper), keyEquivalent: "").target = self
         }
         menu.addItem(.separator())
         menu.addItem(withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ",").target = self
-        let login = menu.addItem(withTitle: "Open at Login", action: #selector(toggleLogin), keyEquivalent: "")
-        login.target = self
-        login.state = SMAppService.mainApp.status == .enabled ? .on : .off
-        let fullSpeed = menu.addItem(withTitle: "Full Speed on Battery", action: #selector(toggleFullSpeed), keyEquivalent: "")
-        fullSpeed.target = self
-        fullSpeed.state = Power.fullSpeedOnBattery ? .on : .off
+        // Only while the battery's rate is the one in force: on mains power, or in Low Power Mode, it would change nothing.
+        if power.key == Power.battery.key {
+            let fullSpeed = menu.addItem(withTitle: "Full Speed on Battery", action: #selector(toggleFullSpeed), keyEquivalent: "")
+            fullSpeed.target = self
+            fullSpeed.state = Power.fullSpeedOnBattery ? .on : .off
+        }
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit Atrium", action: #selector(NSApplication.terminate), keyEquivalent: "q")
     }
@@ -475,10 +475,6 @@ if !scenes.contains(where: { $0.name == current }) {
         } else {
             UserDefaults.standard.set(Power.plugged.value, forKey: Power.battery.key)
         }
-    }
-
-    @objc func toggleLogin() {
-        setOpenAtLogin(SMAppService.mainApp.status != .enabled)
     }
 
     @objc func toggleShuffle(_ sender: NSMenuItem) {
