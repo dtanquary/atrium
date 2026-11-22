@@ -135,18 +135,54 @@ import CanopyBake
     }
 }
 
-/// Canopy's ceiling on battery keeps the fastest motion to about 2 px a frame: 12-30 fps in the breeze (15 at its mean),
-/// no more than 15 in light air, none in a strong wind's gusts, 10 at night, none while a leaf falls.
+/// Each leaf moves as a piece of its own by the bake's map of whose leaf each point is (`CanopyBake.ids`): in July
+/// nearly every point of the nearest leaves has a leaf's id and its spray's, and no point of solid wood (where the bare
+/// stand's picture is solid) has one; bare in January there is none at all; and the map is the same later the same
+/// day (its key), which lets the scene keep its texture.
+@MainActor @Test func canopyLeavesHaveIds() {
+    let camera = Canopy.Camera(size: CGSize(width: 1512, height: 982))
+    func made(_ day: String, hour: Double = 13) -> CanopyBake.Made {
+        Canopy.bake(moment: Canopy.moment(day: day, hour: hour), latitude: 42, longitude: -88, camera: camera, seed: 3, light: nil, night: false).made
+    }
+    let july = made("2026-07-15"), bare = made("2026-01-15")
+    var (leaves, owned, wood, woodOwned) = (0, 0, 0, 0)
+    var (ids, sprays) = (Set<UInt8>(), Set<UInt8>())
+    for p in stride(from: 0, to: july.width * july.height * 4, by: 4) { // a pixel of the pictures and of the ids alike
+        if july.near[p + 3] == 255 {
+            leaves += 1
+            if july.ids[p + 1] > 0, july.ids[p + 3] > 0 { owned += 1; ids.insert(july.ids[p + 1]); sprays.insert(july.ids[p + 3]) }
+        }
+        if bare.canopy[p + 3] == 255 { // bare, the picture is the wood alone
+            wood += 1
+            if july.ids[p] > 0 { woodOwned += 1 }
+        }
+    }
+    print("Canopy's ids in July: \(owned) of \(leaves) points of the nearest leaves have one (\(ids.count) leaf ids, \(sprays.count) spray ids), "
+          + "\(woodOwned) of \(wood) of solid wood; in leaf \(july.leafy) of the stand, \(bare.leafy) in January")
+    #expect(leaves > 100_000 && Double(owned) > 0.9 * Double(leaves), "the nearest leaves have no ids")
+    #expect(ids.count > 200 && sprays.count > 200)
+    #expect(wood > 10_000 && woodOwned == 0, "the wood has leaves' ids")
+    #expect(july.leafy > 0.2 && bare.leafy == 0 && bare.ids.allSatisfy { $0 == 0 })
+    // the same leaves an hour and a half on, so the scene keeps the ids' texture from one bake to the next
+    #expect(made("2026-07-15", hour: 14.5).idsKey == july.idsKey && bare.idsKey != july.idsKey)
+}
+
+/// Canopy's ceiling on battery keeps the fastest motion to about 2 px a frame: 10-20 fps in the breeze (12 at its mean),
+/// no more than 15 in light air, none in a strong wind's gusts, 10 at night, none while a leaf falls; and by day in
+/// leaf never under 20, for the leaves' tremble.
 @Test @MainActor func canopyBatteryRate() {
     func rates(_ mean: Double) -> [Int?] {
         let breeze = Canopy.Breeze(seed: 3, mean: mean)
         return stride(from: 0.0, to: 120, by: 0.5).map { Canopy.rate(fastest: breeze.fastest($0), night: false, falling: false) }
     }
-    #expect(rates(4.3).allSatisfy { $0 != nil } && rates(4.3).contains(12) && rates(4.3).contains(15) && rates(4.3).contains(30))
+    #expect(rates(4.3).allSatisfy { $0 != nil } && rates(4.3).contains(10) && rates(4.3).contains(12) && rates(4.3).contains(20))
     #expect(rates(2).allSatisfy { ($0 ?? 99) <= 15 })
     #expect(rates(12).contains(nil))
     #expect(Canopy.rate(fastest: 100, night: true, falling: false) == 10)
     #expect(Canopy.rate(fastest: 1, night: false, falling: true) == nil)
+    #expect(Canopy.rate(fastest: 10, night: false, falling: false, leafy: true) == 20)
+    #expect(Canopy.rate(fastest: 50, night: false, falling: false, leafy: true) == 30)
+    #expect(Canopy.rate(fastest: 10, night: true, falling: false, leafy: true) == 10)
 }
 
 /// What building Canopy holds the main thread for, and its bake off it, at a 14" MacBook Pro's size: meaningful in a
