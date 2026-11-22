@@ -160,7 +160,7 @@ struct Refresh {
               batteryRate: 20),
     Wallpaper(name: "Canopy", icon: "tree.fill", tint: .green,
               blurb: "Lying on the forest floor, looking up through the leaves at the real sky, in the real season.",
-              make: canopy, unfinished: true),
+              make: canopy, knobs: Canopy.knobs, followsAppearance: true, unfinished: true),
     Wallpaper(name: "Saturn's Rings", icon: "circle.and.line.horizontal", tint: .brown,
               blurb: "Just above Saturn's rings: their real bands from Cassini, in today's real sunlight.",
               make: saturnsRingsScene, knobs: SaturnsRings.knobs, followsAppearance: true, unfinished: true),

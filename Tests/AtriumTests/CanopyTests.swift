@@ -19,6 +19,34 @@ import CanopyBake
     #expect(january.out == 0)
 }
 
+/// Settings' moment, on a November evening at 42°N: the real one unset; a time held, on the clock of a day of the
+/// season held (July for summer, January south of the equator, with the trees as that season has them); and by Light
+/// and Dark Mode the Sun's own hours: well up for the day, about 6° down for the dusk, 18° or more for the night.
+@Test func canopySettingsPickTheMoment() {
+    let calendar = Calendar.current, now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 21, hour: 19, minute: 30))!
+    let (latitude, longitude) = (42.0, Double(TimeZone.current.secondsFromGMT(for: now)) / 240) // where the clock is the Sun's
+    func moment(_ time: Int, season: Int = 0, dark: Bool = false, latitude: Double = latitude) -> Date {
+        Canopy.moment(time: time, holdHour: 15, season: season, dark: dark, latitude: latitude, longitude: longitude, now: now)
+    }
+    func sun(_ date: Date) -> Double {
+        let jd = Sky.julianDate(date)
+        return normalize(Sky.horizonMatrix(jd: jd, latitude: latitude, longitude: longitude) * Sky.sun(jd)).z
+    }
+    #expect(abs(moment(0).timeIntervalSince(now)) < 1)
+    let held = calendar.dateComponents([.month, .day, .hour], from: moment(3, season: 2))
+    #expect(held.month == 7 && held.day == 15 && held.hour == 15)
+    #expect(calendar.component(.month, from: moment(3, season: 2, latitude: -35)) == 1)
+    let seasons = (1...4).map { CanopySeason(date: moment(3, season: $0), latitude: latitude) }
+    #expect(seasons[0].out > 0.7 && seasons[0].pale > 0.5)
+    #expect(seasons[1].out == 1 && seasons[1].turned == 0)
+    #expect(seasons[2].turned > 0.95 && seasons[2].fallen < 0.3)
+    #expect(seasons[3].out == 0)
+    #expect(sun(moment(1)) > 0.3 && sun(moment(2)) > 0.3)
+    #expect(abs(sun(moment(1, dark: true)) + 0.105) < 0.02)
+    #expect(sun(moment(2, dark: true)) < -0.31)
+    #expect(sun(moment(1, season: 2)) > 0.8) // a summer's day under a summer Sun
+}
+
 /// The shader works out how many cells each row of the stars' grid holds in single precision: it must agree with
 /// `Canopy.cells(row:)` on every row, or stars land in the wrong cells.
 @Test func canopyStarRowsAgree() {
