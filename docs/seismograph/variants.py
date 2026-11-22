@@ -53,4 +53,8 @@ SHEETS = {
     "film2-drum": [("", day(view="drum", frames=360, fps=30))],
     # the same 12 s at 1:1, 1,000 by 600 device pixels round the pen, where its crawl can be seen
     "film3-pen-close": [("", day(frames=360, fps=30, crop=[1500, 1050, 1000, 600]))],
+    # time-lapses, to show what the pace hides (not a proposed speed): the M6.6's train written from 15:20 to 16:50
+    # at 450 times, and the whole of the 16th at 7,200 times, a row each quarter second
+    "film4-quake-timelapse": [("", day(now=(15 + 20 / 60) * 3600, speed=450, frames=360, fps=30))],
+    "film5-day-timelapse": [("", day(now=0, speed=7200, frames=360, fps=30))],
 }
