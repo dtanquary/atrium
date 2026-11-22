@@ -50,10 +50,50 @@ import UniformTypeIdentifiers
     #expect(tau(136_760) > 1 && tau(136_770) == 0, "the A ring's edge")
 }
 
-/// How long the main thread takes to build the scene and draw its first frame at 3024 × 1964: the first copy, which
-/// makes the shared textures (the pyramid, the star grid, the Milky Way's glow read from its HEIC), and a second,
-/// which shares them. Prints them; docs/saturns-rings.md, Cost, has a release build's.
+/// `RingProfile.load` reads the whole file as a line-by-line read finds it: every row's optical depth and brightness,
+/// and where the rows start.
+@Test func saturnsRingsProfileReadsWhole() throws {
+    let rows = try String(contentsOf: resource("saturn-rings.tsv"), encoding: .utf8).split(whereSeparator: \.isNewline)
+        .filter { !$0.hasPrefix("#") }.map { $0.split(separator: "\t").compactMap { Double($0) } }
+    let profile = RingProfile.load()
+    #expect(rows.count > 8000 && rows.allSatisfy { $0.count == 3 })
+    #expect(profile.tau == rows.map { $0[1] } && profile.brightness == rows.map { $0[2] })
+    #expect(abs(profile.start - rows[0][0] / 1000) < 1e-12 && abs(profile.step - (rows[1][0] - rows[0][0]) / 1000) < 1e-12)
+}
+
+/// How long the main thread takes to build the scene at its standards (Fly Through under Alternate) and draw its
+/// first frame at 3024 × 1964: the first copy, which makes the shared textures (the pyramids, the star grid, the Milky
+/// Way's glow read from its JPEG) and reads the loop's table, and a second, which shares them. Prints them;
+/// docs/saturns-rings.md, Cost, has a release build's. With `RINGS_WARM` a JPEG is decoded first, as the app's menu
+/// and Settings will have done before anyone switches to the wallpaper; with `RINGS_PARTS` it prints what each part
+/// of the first copy takes by itself instead, and what the two it no longer does took (working out the loops' tables
+/// and reading Black Hole's HEIC, which starts the HEIC decoder: last, so they warm nothing before them).
 @MainActor @Test func saturnsRingsBuildTime() throws {
+    let env = ProcessInfo.processInfo.environment
+    /// Decodes a picture in Resources in full, as building a texture from it does.
+    func decode(_ name: String, thumbnail: Bool = false) {
+        guard let source = CGImageSourceCreateWithURL(resource(name) as CFURL, nil) else { return }
+        let options = [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceThumbnailMaxPixelSize: 1024, kCGImageSourceShouldCacheImmediately: true] as CFDictionary
+        _ = thumbnail ? CGImageSourceCreateThumbnailAtIndex(source, 0, options) : CGImageSourceCreateImageAtIndex(source, 0, options)
+    }
+    if env["RINGS_WARM"] != nil { decode("preview-saturns-rings.jpg") }
+    if env["RINGS_PARTS"] != nil {
+        func time(_ what: String, _ body: () -> Void) {
+            let start = CFAbsoluteTimeGetCurrent()
+            body()
+            print(String(format: "Saturn's Rings build, %@: %.1f ms", what, (CFAbsoluteTimeGetCurrent() - start) * 1000))
+        }
+        time("the profile read") { _ = RingProfile.shared }
+        time("the pyramid baked") { _ = RingProfile.shared.pyramidBytes() }
+        time("the fine pyramid read and baked") { _ = RingProfile.loadFine().pyramid(levels: RingProfile.fineLevels) }
+        time("the star grid") { _ = BlackHole.starCells() }
+        time("the glow's JPEG") { decode("saturn-glow.jpg") }
+        time("the loops' tables read") { _ = (SaturnsRings.flight, SaturnsRings.alternateFlight) }
+        time("the one-face loop's table worked out") { _ = SaturnsRings.flightTime() }
+        time("the two-lap loop's table worked out") { _ = SaturnsRings.flightTime(knots: SaturnsRings.alternateKnots) }
+        time("Black Hole's HEIC glow, at 1,024") { decode("blackhole-glow.heic", thumbnail: true) }
+        return
+    }
     let device = try #require(MTLCreateSystemDefaultDevice()), queue = try #require(device.makeCommandQueue())
     let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: 3024, height: 1964, mipmapped: false)
     descriptor.usage = [.renderTarget]
@@ -63,7 +103,7 @@ import UniformTypeIdentifiers
     var times: [String] = []
     for copy in ["first", "second"] {
         var start = CFAbsoluteTimeGetCurrent()
-        let scene = SaturnsRings(size: CGSize(width: 1512, height: 982), from: 2, moment: 0)
+        let scene = SaturnsRings(size: CGSize(width: 1512, height: 982), moment: 0)
         let built = CFAbsoluteTimeGetCurrent() - start
         held.append(scene)
         let renderer = SKRenderer(device: device)
@@ -451,6 +491,29 @@ func saturnsRingsDates() throws {
                 #expect(bends[i] < 8 * around + 1e-7, "number \(k) kinks at \(Double(i + 1) / 240): \(bends[i]) against \(around)")
             }
         }
+    }
+}
+
+/// The loops' tables kept in Resources/saturn-flight.tsv are the ones `flightTime` works out now, to a millisecond: a
+/// view, the order or the pace changed without the file leaves the camera flying the old loop's timing. To write the
+/// file again:
+///
+///     RINGS_TABLES=1 swift test --filter saturnsRingsFlightTablesAreKept
+@Test func saturnsRingsFlightTablesAreKept() throws {
+    let tables = [("one", SaturnsRings.route(), SaturnsRings.flightTime()), ("two", SaturnsRings.alternateKnots, SaturnsRings.flightTime(knots: SaturnsRings.alternateKnots))]
+    if ProcessInfo.processInfo.environment["RINGS_TABLES"] != nil {
+        let header = """
+            # Saturn's Rings: the seconds Fly Through takes at Speed 1× to reach each 1/120 of the way between its views, round
+            # the one-face loop ("one") and the two-lap loop Alternate flies ("two"), as SaturnsRings.flightTime works them out.
+            # Kept so the scene needn't work them out as it's built. Written by: RINGS_TABLES=1 swift test --filter saturnsRingsFlightTablesAreKept
+
+            """
+        let lines = tables.map { name, _, table in ([name] + table.map { String(format: "%.4f", $0) }).joined(separator: "\t") }
+        try (header + lines.joined(separator: "\n") + "\n").write(to: resource("saturn-flight.tsv"), atomically: true, encoding: .utf8)
+    }
+    for (name, knots, table) in tables {
+        let kept = try #require(SaturnsRings.keptFlight(name, knots: knots), "no table for the \(name) loop in saturn-flight.tsv")
+        #expect(zip(kept, table).allSatisfy { abs($0 - $1) < 0.001 }, "saturn-flight.tsv's \(name) loop is stale: RINGS_TABLES=1 swift test --filter saturnsRingsFlightTablesAreKept")
     }
 }
 
