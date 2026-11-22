@@ -6,8 +6,9 @@ import SwiftUI
 /// The status menu's wallpapers as a grid of their stills, six across, each named in its corner, in place of a row of
 /// text for each: the one on the desktop is named above them and ringed, the one under the pointer grows and plays its
 /// loop from the picture it shows, and a click shows another and closes the menu (with Option held it stays open, to
-/// try several). The pill beside the name opens Settings on that wallpaper's page, and the star after the name makes
-/// it a favourite: those lead the grid, ahead of the rest.
+/// try several). The pill beside the name, Customize, opens Settings on that wallpaper's page, and the star after the name makes
+/// it a favourite: those lead the grid on rows of their own, with a line under them, and the rest run A–Z from a
+/// fresh row.
 /// It is one menu item's view, so the menu's own arrow keys and type-to-select pass it by: Settings → General →
 /// Wallpapers in the menu → Names puts the list of names back for them and for VoiceOver.
 @MainActor enum MenuGrid {
@@ -16,16 +17,17 @@ import SwiftUI
     static var pictures: Bool { knob.value < 0.5 }
 
     // Where everything sits, in points from the top left. The pictures are drawn by it and the tile under the pointer
-    // is found by it, so the two can't disagree.
-    static let width = 600.0, inset = 14.0, gap = 8.0, top = 6.0, bottom = 10.0, across = 6
+    // is found by it, so the two can't disagree. The inset is the menu's own, where its separators and rows begin.
+    static let width = 600.0, inset = 16.0, gap = 8.0, top = 6.0, bottom = 10.0, across = 6
     /// The line above the tiles that names a wallpaper, and the space under it.
     static let caption = 26.0, captionGap = 6.0
     /// A tile: a sixth of the width between the insets, in the shape of a still (1200 × 779).
     static let tile = CGSize(width: (width - 2 * inset - Double(across - 1) * gap) / Double(across),
                              height: (width - 2 * inset - Double(across - 1) * gap) / Double(across) * 779 / 1200)
 
-    /// The pill at the caption's right that opens the wallpaper on the desktop's page of Settings.
-    static let settings = CGRect(x: width - inset - 86, y: top + (caption - 20) / 2, width: 86, height: 20)
+    /// The pill at the caption's right that opens the wallpaper on the desktop's page of Settings. It reads Customize:
+    /// the menu's Settings… row is the window as it was left, and two things of one name were one too many.
+    static let settings = CGRect(x: width - inset - 98, y: top + (caption - 20) / 2, width: 98, height: 20)
 
     /// The star after the name that makes the wallpaper on the desktop a favourite, or no longer one. The name is set
     /// in the menu's own type, so its width as AppKit measures it is its width as drawn.
@@ -34,35 +36,51 @@ import SwiftUI
         return CGRect(x: inset + text.rounded(.up) + 3, y: top + (caption - 22) / 2, width: 22, height: 22)
     }
 
-    static func height(count: Int) -> Double {
-        let rows = Double((count + across - 1) / across)
-        return top + caption + captionGap + rows * tile.height + (rows - 1) * gap + bottom
+    /// The space between the favourites' rows and the rest, more than the gap between rows: a line runs through it.
+    static let shelf = 9.0
+
+    /// A tile's place among the grid's cells, counted along its rows. The first `lead` tiles are the favourites, which
+    /// have rows of their own: the rest start a fresh row, so the alphabet reads from the left edge, and the cells
+    /// after the last favourite stay empty. Sharing rows, three starred made the alphabet look broken.
+    static func cell(_ index: Int, lead: Int) -> Int {
+        index < lead ? index : (lead + across - 1) / across * across + index - lead
     }
 
-    static func frame(_ index: Int) -> CGRect {
-        CGRect(x: inset + Double(index % across) * (tile.width + gap),
-               y: top + caption + captionGap + Double(index / across) * (tile.height + gap),
-               width: tile.width, height: tile.height)
+    static func height(count: Int, lead: Int) -> Double {
+        let rows = Double(cell(count - 1, lead: lead) / across + 1)
+        return top + caption + captionGap + rows * tile.height + (rows - 1) * gap + (lead > 0 && lead < count ? shelf : 0) + bottom
+    }
+
+    static func frame(_ index: Int, lead: Int) -> CGRect {
+        let at = cell(index, lead: lead)
+        return CGRect(x: inset + Double(at % across) * (tile.width + gap),
+                      y: top + caption + captionGap + Double(at / across) * (tile.height + gap) + (lead > 0 && index >= lead ? shelf : 0),
+                      width: tile.width, height: tile.height)
+    }
+
+    /// How far down the line under the favourites runs, or nil with none starred, or every one.
+    static func line(count: Int, lead: Int) -> Double? {
+        lead > 0 && lead < count ? frame(lead, lead: lead).minY - (gap + shelf) / 2 : nil
     }
 
     /// The tile at a point. Each takes half the gap round it too, so the name doesn't blink off between neighbours.
-    static func index(at point: CGPoint, count: Int) -> Int? {
-        (0..<count).first { frame($0).insetBy(dx: -gap / 2, dy: -gap / 2).contains(point) }
+    static func index(at point: CGPoint, count: Int, lead: Int) -> Int? {
+        (0..<count).first { frame($0, lead: lead).insetBy(dx: -gap / 2, dy: -gap / 2).contains(point) }
     }
 
     /// How much the tile under the pointer grows, and a tile's corners.
     static let magnify = 2.1, radius = 9.0
 
     /// Where a tile grows from: its own edge or corner at the sides of the grid, so it stays inside the menu.
-    static func anchor(_ index: Int, count: Int) -> UnitPoint {
-        let column = index % across, row = index / across
+    static func anchor(_ index: Int, count: Int, lead: Int) -> UnitPoint {
+        let at = cell(index, lead: lead), column = at % across, row = at / across
         return UnitPoint(x: column == 0 ? 0 : column == across - 1 ? 1 : 0.5,
-                         y: row == 0 ? 0 : row == (count - 1) / across ? 1 : 0.5)
+                         y: row == 0 ? 0 : row == cell(count - 1, lead: lead) / across ? 1 : 0.5)
     }
 
     /// Where a tile ends up once it has grown.
-    static func grown(_ index: Int, count: Int) -> CGRect {
-        let tile = frame(index), at = anchor(index, count: count), more = magnify - 1
+    static func grown(_ index: Int, count: Int, lead: Int) -> CGRect {
+        let tile = frame(index, lead: lead), at = anchor(index, count: count, lead: lead), more = magnify - 1
         return CGRect(x: tile.minX - more * tile.width * at.x, y: tile.minY - more * tile.height * at.y,
                       width: tile.width * magnify, height: tile.height * magnify)
     }
@@ -118,6 +136,11 @@ import SwiftUI
     static func ordered(_ all: [Wallpaper] = scenes, starred: [String] = Favorites.names) -> [Wallpaper] {
         all.filter { starred.contains($0.name) } + all.filter { !starred.contains($0.name) }
     }
+
+    /// How many of the wallpapers are starred: the tiles that lead the grid, on rows of their own.
+    static func lead(_ all: [Wallpaper] = scenes, starred: [String] = Favorites.names) -> Int {
+        all.count { starred.contains($0.name) }
+    }
 }
 
 /// What the pointer is over, set by `MenuGridView` and drawn by `MenuGridPictures`: a wallpaper, the Settings pill or
@@ -164,7 +187,8 @@ struct TileFace: View {
     }
 }
 
-/// The grid's drawing: the caption, then a tile for each wallpaper where `MenuGrid.frame` puts it, the starred first.
+/// The grid's drawing: the caption, then a tile for each wallpaper where `MenuGrid.frame` puts it, the starred first
+/// with a line under them.
 struct MenuGridPictures: View {
     @ObservedObject var hover: MenuGridHover
     /// Shows a wallpaper, opens its page of Settings, and stars the one on the desktop, for VoiceOver's press: the
@@ -179,6 +203,7 @@ struct MenuGridPictures: View {
 
     var body: some View {
         let favorites = starred.split(separator: ",").map(String.init), order = Favorites.ordered(starred: favorites)
+        let lead = Favorites.lead(starred: favorites)
         let favorite = favorites.contains(current), at = MenuGrid.star(after: current)
         return ZStack(alignment: .topLeading) {
             Text(current).font(.system(size: 13, weight: .semibold))
@@ -195,21 +220,27 @@ struct MenuGridPictures: View {
                 .accessibilityAddTraits(.isButton)
                 .accessibilityAction { star() }
             // Lit like the menu's own row under the pointer, so it reads as one more thing to choose.
-            Label("Settings", systemImage: "slider.horizontal.3").font(.system(size: 11, weight: .medium))
+            Label("Customize", systemImage: "slider.horizontal.3").font(.system(size: 11, weight: .medium))
                 .foregroundStyle(hover.settings ? .white : .primary)
                 .frame(width: MenuGrid.settings.width, height: MenuGrid.settings.height)
                 .glassEffect(hover.settings ? .regular.tint(.accentColor) : .regular, in: .capsule)
                 .offset(x: MenuGrid.settings.minX, y: MenuGrid.settings.minY)
                 .accessibilityElement()
-                .accessibilityLabel("\(current) Settings")
+                .accessibilityLabel("Customize \(current)")
                 .accessibilityAddTraits(.isButton)
                 .accessibilityAction { settings() }
+            // The line under the favourites, as the list of names has one.
+            if let line = MenuGrid.line(count: order.count, lead: lead) {
+                Rectangle().fill(.separator).frame(width: MenuGrid.width - 2 * MenuGrid.inset, height: 1)
+                    .offset(x: MenuGrid.inset, y: line - 0.5)
+                    .accessibilityHidden(true)
+            }
             ForEach(Array(order.enumerated()), id: \.element.name) { index, wallpaper in
-                tile(wallpaper, starred: favorites.contains(wallpaper.name), at: MenuGrid.frame(index),
-                     growing: MenuGrid.anchor(index, count: order.count))
+                tile(wallpaper, starred: favorites.contains(wallpaper.name), at: MenuGrid.frame(index, lead: lead),
+                     growing: MenuGrid.anchor(index, count: order.count, lead: lead))
             }
         }
-        .frame(width: MenuGrid.width, height: MenuGrid.height(count: scenes.count), alignment: .topLeading)
+        .frame(width: MenuGrid.width, height: MenuGrid.height(count: order.count, lead: lead), alignment: .topLeading)
     }
 
     private func tile(_ wallpaper: Wallpaper, starred: Bool, at frame: CGRect, growing anchor: UnitPoint) -> some View {
@@ -306,11 +337,13 @@ final class MenuGridView: NSView {
     init(settings: @escaping () -> Void = {}, pick: @escaping (String) -> Void) {
         self.pick = pick
         self.settings = settings
-        super.init(frame: NSRect(x: 0, y: 0, width: MenuGrid.width, height: MenuGrid.height(count: scenes.count)))
+        super.init(frame: NSRect(x: 0, y: 0, width: MenuGrid.width,
+                                 height: MenuGrid.height(count: scenes.count, lead: Favorites.lead())))
         let pictures = NSHostingView(rootView: MenuGridPictures(hover: hover, pick: { [weak self] in self?.choose($0) },
                                                                 settings: { [weak self] in self?.openSettings() },
                                                                 star: { [weak self] in self?.star() }))
         pictures.frame = bounds
+        pictures.autoresizingMask = [.height] // with `fit`
         addSubview(pictures)
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.activeAlways, .mouseMoved, .mouseEnteredAndExited, .inVisibleRect],
                                        owner: self))
@@ -319,6 +352,12 @@ final class MenuGridView: NSView {
     required init?(coder: NSCoder) { fatalError("made in code") }
 
     override var isFlipped: Bool { true } // `MenuGrid` measures from the top
+
+    /// Takes the height its tiles need now. A star given or taken can add a row or take one away, since the favourites
+    /// have rows of their own, and the menu follows its item's view, open or not.
+    func fit() {
+        setFrameSize(NSSize(width: MenuGrid.width, height: MenuGrid.height(count: order.count, lead: lead)))
+    }
 
     /// Every click is this view's, not the SwiftUI view's inside it.
     override func hitTest(_ point: NSPoint) -> NSView? { super.hitTest(point).map { _ in self } }
@@ -344,6 +383,7 @@ final class MenuGridView: NSView {
     /// The wallpaper on the desktop, and the wallpapers in the order their tiles are in.
     private var current: String { UserDefaults.standard.string(forKey: "scene") ?? defaultScene.name }
     private var order: [Wallpaper] { Favorites.ordered() }
+    private var lead: Int { Favorites.lead() }
 
     /// A click on a tile shows its wallpaper and closes the menu; with Option held the menu stays open, to try another.
     override func mouseUp(with event: NSEvent) {
@@ -358,7 +398,7 @@ final class MenuGridView: NSView {
     }
 
     private func index(at event: NSEvent) -> Int? {
-        MenuGrid.index(at: convert(event.locationInWindow, from: nil), count: order.count)
+        MenuGrid.index(at: convert(event.locationInWindow, from: nil), count: order.count, lead: lead)
     }
 
     /// Grows the tile at `index` and plays its loop, or with nil lets the one grown go. The tile springs open on its
@@ -373,7 +413,7 @@ final class MenuGridView: NSView {
         grown = nil
         guard let index, let name, let loop = MenuGrid.loop(order[index]), !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
         let tile = GrownTile(loop: loop, name: name, on: name == current, starred: Favorites.names.contains(name),
-                             at: MenuGrid.grown(index, count: order.count))
+                             at: MenuGrid.grown(index, count: order.count, lead: lead))
         addSubview(tile)
         grown = tile
         reveal(tile, after: 0.32)
@@ -419,5 +459,6 @@ final class MenuGridView: NSView {
     private func star() {
         Favorites.toggle(current)
         grow(nil) // whichever tile had grown may have moved
+        fit()
     }
 }
