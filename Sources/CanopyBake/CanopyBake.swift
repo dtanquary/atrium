@@ -17,7 +17,8 @@ public struct CanopySeason: Sendable {
 /// The canopy, made off the main thread (docs/canopy.md has how long it takes): the stand decoded, mirrored by the
 /// seed (and turned a quarter for a portrait screen); sprays of scanned leaves grown on its fine twigs in three layers;
 /// each leaf lit by the Sun through the layers and the crown above it and by the sky; the wood relit as bark in the
-/// canopy's shade; all composited into one picture for the shader to lay over the sky.
+/// canopy's shade, and the evergreens' masses as needles; all composited into one picture for the shader to lay over
+/// the sky.
 public struct CanopyBake: Sendable {
     /// The stand's picture (HEIC with alpha, grey wood over its cover) and the scanned leaves' atlas (4 × 4 cells).
     public var stand: URL, leaves: URL
@@ -52,9 +53,9 @@ public struct CanopyBake: Sendable {
         let (sw, sh) = (Int(perTan * 2 * extent.x), Int(perTan * 2 * extent.y))
         var rng = SplitMix(state: seed)
         var wood = Self.decode(stand, sw, sh, portrait: portrait, flip: (Bool.random(using: &rng), Bool.random(using: &rng)))
-        Self.clean(&wood, sw, sh)
+        let evergreens = Self.clean(&wood, sw, sh)
         let (layers, owners) = Self.grow(on: wood, sw, sh, leaves: leaves, size: season.size, rng: &rng)
-        let noise = Noise(rng: &rng, cell: 110), flecks = Noise(rng: &rng, cell: 60)
+        let noise = Noise(rng: &rng, cell: 110), flecks = Noise(rng: &rng, cell: 60), grain = Noise(rng: &rng, cell: 9)
 
         // Each layer's cover where its leaves are on the tree this season. A leaf's key (its own value and the
         // patch it grows in) orders when it comes out, turns and falls.
@@ -95,6 +96,7 @@ public struct CanopyBake: Sendable {
         let low = Float(min(length(toward) / (perTan / 6), 3)) // the lower the Sun, the more crown it crosses
         let sunE = SIMD3<Float>(sunlight) / .pi * (sunUp ? 1 : 0), sky = SIMD3<Float>(zenith) * 0.8
         let bark = Self.lin(0x2A2219) / Self.lum(Self.lin(0x2A2219)), zenithLum = Self.lum(SIMD3<Float>(zenith))
+        let needles = Hues.hue(0x2A4428) // a spruce's needles from below, in their own shade
         let trans: Float = 0.085 // a leaf passes about 5-15% of the light on its top side (research-method.md §2)
         let hues = Hues(season)
         // ponytail: the nearest leaves are one picture (30 MB more on the GPU), not split in two by spray as
@@ -138,8 +140,18 @@ public struct CanopyBake: Sendable {
                     leaf(2)
                     leaf(1)
                     if w > 0 { // the wood, relit as bark in the canopy's shade
-                        let g = min(pow(Float(wood[p * 4]) / 255 / w, 2.2), 0.5)
-                        over(bark * g * zenithLum * 1.6 * (0.3 + 0.7 * skyThrough), w)
+                        let grey = Float(wood[p * 4]) / 255 / w, g = min(pow(grey, 2.2), 0.5)
+                        var l = bark * g * zenithLum * 1.6 * (0.3 + 0.7 * skyThrough)
+                        // and the evergreens' masses as needles, not bark: a dark green by the sky's light, more of it
+                        // where the crown is thin, with the boughs' lights and darks patch by patch, the needles' grain,
+                        // and the photo's own (its greys run 0.10-0.165 there)
+                        let evergreen = simd_smoothstep(0.6, 0.85, evergreens.at(x, y))
+                        if evergreen > 0 {
+                            let boughs = Float((0.5 + flecks.at(i, j)) * (0.8 + 0.4 * noise.at(i, j)) * (0.75 + 0.5 * grain.at(i, j)))
+                            let detail = (0.7 + 0.6 * min(max((grey - 0.095) / 0.07, 0), 1)) * boughs
+                            l += (needles * zenithLum * 0.127 * (0.35 + 0.65 * skyThrough) * detail - l) * evergreen
+                        }
+                        over(l, w)
                     }
                     let q = ((sh - 1 - j) * sw + i) * 4 // rows bottom first, as SKTexture(data:) reads them
                     func put(_ to: UnsafeMutableBufferPointer<UInt8>) {
@@ -359,14 +371,16 @@ public struct CanopyBake: Sendable {
     /// surely wood (a third covered or more) and 150 pixels' worth in all, is kept, so the finest twigs stay with
     /// their limbs and the specks go. And the key
     /// left the evergreens' masses part-covered where sky glinted through their needles, which showed as soft, lighter
-    /// patches against the dusk: inside a mass, part cover is made solid, the holes kept.
+    /// patches against the dusk: inside a mass, part cover is made solid, the holes kept. Returns where the masses
+    /// are, a quarter the size and smoothed over about 50 px: 0 to 1, 0.85 and up well inside one, under 0.6 on a trunk
+    /// or a limb alone, for their needles' colour.
     // ponytail: done in every bake (110-135 ms off the main thread), not once in the shipped HEIC; clean the HEIC
     // itself in docs/canopy/stand.swift if a second stand comes or the bake's time matters
-    static func clean(_ wood: inout [UInt8], _ w: Int, _ h: Int) {
+    static func clean(_ wood: inout [UInt8], _ w: Int, _ h: Int) -> Grid {
         let n = w * h
         var seen = [Bool](repeating: false, count: n), queue = [Int32]()
         queue.reserveCapacity(n / 2)
-        wood.withUnsafeMutableBufferPointer { W in
+        return wood.withUnsafeMutableBufferPointer { W -> Grid in
             for start in 0..<n where !seen[start] && W[start * 4 + 3] >= 5 {
                 // one piece of wood, breadth first through pixels 2% covered, 8-connected
                 queue.removeAll(keepingCapacity: true)
@@ -396,7 +410,9 @@ public struct CanopyBake: Sendable {
                 for dj in 0..<4 { for di in 0..<4 { s += Int(W[((j * 4 + dj) * w + i * 4 + di) * 4 + 3]) } }
                 dense[j * qw + i] = s > 16 * 255 * 8 / 10 ? 1 : 0
             } }
+            var wide = dense
             boxBlur(&dense, qw, qh, 2)
+            boxBlur(&wide, qw, qh, 6) // over about 50 px: a hole among the needles hardly shows in it, and a trunk alone stays under 0.6
             let mass = Grid(values: dense, width: qw, height: qh, scale: 4)
             for j in 0..<h { for i in 0..<w {
                 let k = (j * w + i) * 4, a = Float(W[k + 3]) / 255
@@ -406,6 +422,7 @@ public struct CanopyBake: Sendable {
                 let v = UInt8(min(Float(W[k]) / 255 / a * to, 1) * 255 + 0.5) // the wood's own shade
                 (W[k], W[k + 1], W[k + 2], W[k + 3]) = (v, v, v, UInt8(to * 255 + 0.5))
             } }
+            return Grid(values: wide, width: qw, height: qh, scale: 4)
         }
     }
 
