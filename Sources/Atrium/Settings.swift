@@ -272,7 +272,8 @@ struct GeneralPage: View {
             Section {
                 KnobRow(knob: MenuGrid.knob)
             } footer: {
-                Text("Names lists them in words, for the arrow keys, typing a name, and VoiceOver.").foregroundStyle(.secondary)
+                Text("Hold Option as you click a picture and the menu stays open, so you can try one after another. Names lists them in words, for the arrow keys, typing a name, and VoiceOver.")
+                    .foregroundStyle(.secondary)
             }
             Section {
                 KnobRow(knob: Shuffle.on)

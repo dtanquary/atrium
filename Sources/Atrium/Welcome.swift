@@ -125,33 +125,41 @@ struct WelcomeView: View {
     }
 
     private var switches: some View {
-        Form {
-            Section {
-                Toggle("Open at Login", isOn: $openAtLogin)
-            } footer: {
-                Text("Starts Atrium when you log in, so your wallpaper is always there.").foregroundStyle(.secondary)
+        VStack(spacing: 0) {
+            Form {
+                Section {
+                    Toggle("Open at Login", isOn: $openAtLogin)
+                } footer: {
+                    Text("Starts Atrium when you log in, so your wallpaper is always there.").foregroundStyle(.secondary)
+                }
+                Section {
+                    Toggle("Match the lock screen", isOn: $matchLockScreen)
+                } footer: {
+                    Text("Sets your Mac's own wallpaper to a still of Atrium's, so the lock screen and the tint of windows match. Yours comes back when you turn this off or quit.")
+                        .foregroundStyle(.secondary)
+                }
+                Section {
+                    Toggle("Shuffle between all wallpapers automatically", isOn: $shuffle)
+                } footer: {
+                    Text("Moves on to a different wallpaper \(Shuffle.cadence.lowercased()), so you get to see them all. Change how often, or leave some out, in Settings → General.")
+                        .foregroundStyle(.secondary)
+                }
+                Section {
+                    Toggle("Full speed on battery", isOn: $fullSpeed)
+                } footer: {
+                    Text("On battery Atrium runs at 30 fps, about half the power of 60. Turn this on for the smoothest motion anyway.")
+                        .foregroundStyle(.secondary)
+                }
             }
-            Section {
-                Toggle("Match the lock screen", isOn: $matchLockScreen)
-            } footer: {
-                Text("Sets your Mac's own wallpaper to a still of Atrium's, so the lock screen and the tint of windows match. Yours comes back when you turn this off or quit.")
-                    .foregroundStyle(.secondary)
-            }
-            Section {
-                Toggle("Shuffle between all wallpapers automatically", isOn: $shuffle)
-            } footer: {
-                Text("Moves on to a different wallpaper \(Shuffle.cadence.lowercased()), so you get to see them all. Change how often, or leave some out, in Settings → General.")
-                    .foregroundStyle(.secondary)
-            }
-            Section {
-                Toggle("Full speed on battery", isOn: $fullSpeed)
-            } footer: {
-                Text("On battery Atrium runs at 30 fps, about half the power of 60. Turn this on for the smoothest motion anyway.")
-                    .foregroundStyle(.secondary)
-            }
+            .formStyle(.grouped)
+            .scrollContentBackground(.hidden)
+            // Where Atrium goes from here, under the menu bar's own icon, and the one thing its menu doesn't say of itself.
+            Label("From here Atrium lives in the menu bar. Hold Option as you click a wallpaper there and the menu stays open, so you can try one after another.",
+                  systemImage: "sparkles.tv")
+                .font(.callout).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 28).padding(.top, 6)
         }
-        .formStyle(.grouped)
-        .scrollContentBackground(.hidden)
     }
 
     // MARK: Picking
