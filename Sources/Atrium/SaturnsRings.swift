@@ -391,9 +391,22 @@ final class SaturnsRings: SKScene, BatteryPaced {
         return seconds
     }
     nonisolated static func flightTime(order: [Int] = flightOrder) -> [Double] { flightTime(knots: route(order: order)) }
-    /// `flightTime` for the loop flown, worked out the first time it's flown (18 ms in release) and kept: 721 numbers;
-    /// and for the two-lap loop Alternate flies, which changes faces once a lap (1,681 numbers).
-    nonisolated static let flight = flightTime(), alternateFlight = flightTime(knots: route(alternating: true))
+    /// `flightTime` for the loop flown (721 numbers), and for the two-lap loop Alternate flies, which changes faces
+    /// once a lap (1,921): read from `Resources/saturn-flight.tsv`, where they're kept so the first copy of the scene
+    /// needn't work them out on the main thread (18 and 47 ms in release), and worked out after all if the file is
+    /// missing or isn't this loop's length.
+    nonisolated static let flight = keptFlight("one", knots: route()) ?? flightTime()
+    nonisolated static let alternateFlight = keptFlight("two", knots: alternateKnots) ?? flightTime(knots: alternateKnots)
+    /// The table kept for a loop in `Resources/saturn-flight.tsv`, a line each: its name ("one" for the one-face loop,
+    /// "two" for the two-lap) and its seconds, tab-separated; nil if there's none of the length `knots` need.
+    /// `saturnsRingsFlightTablesAreKept` fails when a line no longer matches what `flightTime` works out (a view or
+    /// the pace has changed), and writes the file again when run with RINGS_TABLES=1.
+    nonisolated static func keptFlight(_ name: String, knots: [Camera]) -> [Double]? {
+        let lines = ((try? String(contentsOf: resource("saturn-flight.tsv"), encoding: .utf8)) ?? "").split(whereSeparator: \.isNewline)
+        guard let line = lines.first(where: { $0.hasPrefix(name + "\t") }) else { return nil }
+        let table = line.split(separator: "\t").dropFirst().compactMap { Double($0) }
+        return table.count == 120 * knots.count + 1 ? table : nil
+    }
     nonisolated static let alternateKnots = route(alternating: true)
 
     /// The camera `seconds` round the loop at Speed 1×, from its start, round and round: the one-face loop from `lit`,
@@ -572,10 +585,10 @@ final class SaturnsRings: SKScene, BatteryPaced {
         (sunUp, built) = (light.up, Sky.julianDate(day))
         super.init(size: size)
 
-        // ponytail: the first copy builds on the main thread in about 50 ms in release (the profile read 10, the
-        // pyramid's bake 8.5, the star grid 6, the glow 8), about 150 while the HEIC decoder first starts; a second,
-        // sharing the textures and the profile (read once and kept), in about a millisecond. Bake them off the main
-        // thread behind a still if a switch to it is seen to stall.
+        // ponytail: the first copy builds on the main thread in 41 to 47 ms in release (the profile read 3, the
+        // pyramid's bake 8.5, the fine pyramid 5.5, the star grid 4.5, the glow 5, the loop's table 1, and making the
+        // textures and the shader); a second, sharing the textures and the profile (read once and kept), in 2. Bake
+        // them off the main thread behind a still if a switch to it is seen to stall.
         let rings = RingProfile.shared
         let table = sharedTexture("saturn-rings-pyramid") { rings.pyramid() }
         let fineTable = sharedTexture("saturn-rings-fine") { RingProfile.loadFine().pyramid(levels: RingProfile.fineLevels) }
@@ -587,12 +600,11 @@ final class SaturnsRings: SKScene, BatteryPaced {
             return cells
         }
         let glow = sharedTexture("saturn-rings-glow") {
-            // At half its size, 1,024 across: a soft glow, magnified some 15 times on the screen even so, that reads
-            // in 15 ms rather than 22 to 35 (with the HEIC decoder already running) and takes 2 MB rather than 8.
-            let options = [kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceThumbnailMaxPixelSize: 1024,
-                           kCGImageSourceShouldCacheImmediately: true] as CFDictionary
-            guard let source = CGImageSourceCreateWithURL(resource("blackhole-glow.heic") as CFURL, nil),
-                  let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options) else {
+            // Its own copy of Black Hole's glow, at half its size (1,024 across: a soft glow, magnified some 15 times
+            // on the screen even so, 2 MB of texels rather than 8), as a JPEG: reading Black Hole's HEIC started the
+            // HEIC decoder, 80 to 90 ms on the main thread the first time in a run of the app.
+            guard let source = CGImageSourceCreateWithURL(resource("saturn-glow.jpg") as CFURL, nil),
+                  let image = CGImageSourceCreateImageAtIndex(source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary) else {
                 return SKTexture(data: Data([0, 0, 0, 255]), size: CGSize(width: 1, height: 1))
             }
             return SKTexture(cgImage: image)
@@ -815,15 +827,39 @@ struct RingProfile {
     static let fineStart = 121.5, fineStep = 0.001
     static let fineCount = ((try? resource("saturn-rings-fine.bin").resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0) / 4
     /// The profile, read once and kept (140 KB): every copy of the scene needs its first radius, step and length for
-    /// the shader, and reading the file takes 8 ms.
+    /// the shader.
     static let shared = load()
 
+    /// Reads the file a number at a time, digit by digit, not split into lines and fields: its 26,253 numbers in
+    /// about a millisecond where splitting took 9, on the main thread as the first copy of the scene is built. A
+    /// line that begins "#" is the header's. Each number is its digits over a power of ten, which rounds as
+    /// `Double("0.1986")` does.
+    // ponytail: reads plain decimals (no sign, no exponent) and takes every row to have its three numbers, as
+    // profile.py writes them; `Double(_:)` on each field again if the file is ever written another way.
     static func load() -> RingProfile {
-        let rows = ((try? String(contentsOf: resource("saturn-rings.tsv"), encoding: .utf8)) ?? "")
-            .split(whereSeparator: \.isNewline).filter { !$0.hasPrefix("#") }
-            .map { $0.split(separator: "\t").compactMap { Double($0) } }.filter { $0.count == 3 }
-        guard rows.count > 1 else { return RingProfile(start: 72, step: 1, tau: [0, 0], brightness: [0, 0]) } // no rings
-        return RingProfile(start: rows[0][0] / 1000, step: (rows[1][0] - rows[0][0]) / 1000, tau: rows.map { $0[1] }, brightness: rows.map { $0[2] })
+        var numbers: [Double] = []
+        numbers.reserveCapacity(27_000)
+        ((try? Data(contentsOf: resource("saturn-rings.tsv"))) ?? Data()).withUnsafeBytes { (bytes: UnsafeRawBufferPointer) in
+            var i = 0
+            while i < bytes.count {
+                if bytes[i] == 35 { // "#"
+                    while i < bytes.count && bytes[i] != 10 { i += 1 }
+                } else if bytes[i] >= 48 && bytes[i] <= 57 {
+                    var (digits, scale, point) = (0.0, 1.0, false)
+                    while i < bytes.count, bytes[i] == 46 || bytes[i] >= 48 && bytes[i] <= 57 {
+                        if bytes[i] == 46 { point = true } else { digits = digits * 10 + Double(bytes[i] - 48); if point { scale *= 10 } }
+                        i += 1
+                    }
+                    numbers.append(digits / scale)
+                } else {
+                    i += 1
+                }
+            }
+        }
+        let n = numbers.count / 3
+        guard n > 1 else { return RingProfile(start: 72, step: 1, tau: [0, 0], brightness: [0, 0]) } // no rings
+        return RingProfile(start: numbers[0] / 1000, step: (numbers[3] - numbers[0]) / 1000,
+                           tau: (0..<n).map { numbers[3 * $0 + 1] }, brightness: (0..<n).map { numbers[3 * $0 + 2] })
     }
 
     /// The A ring every km (read as its pyramid is baked, and not kept).
