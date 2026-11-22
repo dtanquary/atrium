@@ -195,6 +195,24 @@ import CanopyBake
     #expect(made("2026-07-15", hour: 14.5).idsKey == july.idsKey && bare.idsKey != july.idsKey)
 }
 
+/// The evergreens are needles, not bark (Dave: "why do i see these black spots on the trees"): bare in January at
+/// midday, when the picture is the wood alone, a good share of its solid wood (the conifers' masses are most of it) is a
+/// dark green, greener than it is red or blue by half, and visibly lit; the trunks and limbs stay bark, redder than green.
+@MainActor @Test func canopyEvergreensAreGreen() {
+    let camera = Canopy.Camera(size: CGSize(width: 1512, height: 982))
+    let made = Canopy.bake(moment: Canopy.moment(day: "2026-01-15", hour: 12.5), latitude: 42, longitude: -88, camera: camera, seed: 3,
+                           light: nil, night: false).made
+    var (solid, green, bark, light) = (0, 0, 0, 0)
+    for p in stride(from: 0, to: made.width * made.height * 4, by: 4) where made.canopy[p + 3] == 255 {
+        let (r, g, b) = (Int(made.canopy[p]), Int(made.canopy[p + 1]), Int(made.canopy[p + 2]))
+        solid += 1
+        if g * 2 > r * 3, g * 2 > b * 3 { green += 1; light += g } else if r > g { bark += 1 }
+    }
+    print("Canopy's solid wood at a January midday: \(green) of \(solid) pixels needle green (green \(light / max(green, 1)) of 255 as stored), \(bark) bark")
+    #expect(solid > 100_000 && green * 5 > solid * 2 && bark > 10_000, "the evergreens aren't green")
+    #expect(light / max(green, 1) >= 18, "the evergreens are still black")
+}
+
 /// Canopy's ceiling on battery keeps the fastest motion to about 2 px a frame: 10-20 fps in the breeze (12 at its mean),
 /// no more than 15 in light air, none in a strong wind's gusts, 10 at night, none while a leaf falls; and by day in
 /// leaf never under 20, for the leaves' tremble.
