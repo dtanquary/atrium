@@ -609,12 +609,15 @@ final class SaturnsRings: SKScene, BatteryPaced {
             }
             return SKTexture(cgImage: image)
         }
+        let globe = sharedTexture("saturn-globe") {
+            SKTexture(data: Data(SaturnGlobe.shared.texels), size: CGSize(width: SaturnGlobe.shared.texels.count / 4, height: 1))
+        }
         let turn = simd_float3x3(columns: (SIMD3<Float>(light.sky.columns.0), SIMD3<Float>(light.sky.columns.1), SIMD3<Float>(light.sky.columns.2)))
         let sprite = SKSpriteNode(color: .black, size: size)
         sprite.anchorPoint = .zero
         sprite.shader = SKShader(source: shaderCommon + saturnsRingsSource(rings), uniforms: [
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]), SKUniform(name: "u_table", texture: table),
-            SKUniform(name: "u_fine", texture: fineTable),
+            SKUniform(name: "u_fine", texture: fineTable), SKUniform(name: "u_globe", texture: globe),
             cam, rot, sunUniform, lens, moonUniform, moonsNear, moonsFar, starsUniform, exposure, planetExposure,
             SKUniform(name: "u_catalogue", texture: catalogue), SKUniform(name: "u_galaxy", texture: glow),
             SKUniform(name: "u_sky", matrixFloat3x3: turn),
@@ -804,6 +807,35 @@ final class SaturnsRings: SKScene, BatteryPaced {
     }
 }
 
+/// The planet's belts and zones: its colour at each latitude. Where they lie and how strong each is comes from
+/// `Resources/saturn-globe.tsv` (docs/saturns-rings/globe.py made it; its header has the source and licence): Solar
+/// System Scope's map of Saturn averaged round the planet at each latitude, the map being all but zonal. The colours
+/// are the look research's, measured from Cassini's photographs: the map's own run to grey at the poles and a pale
+/// lilac in the equatorial zone, out of the buttercream the rest of the scene keeps to.
+enum SaturnGlobe {
+    /// The strip's texels (RGBA, display colours, from the south pole to the north), read once and kept (2 KB), and
+    /// the linear luma of its brightest latitude, in the equatorial zone.
+    static let shared = load()
+
+    static func load() -> (texels: [UInt8], brightest: Double) {
+        let rows = ((try? String(contentsOf: resource("saturn-globe.tsv"), encoding: .utf8)) ?? "")
+            .split(whereSeparator: \.isNewline).filter { !$0.hasPrefix("#") }
+            .map { $0.split(separator: "\t").compactMap { Double($0) } }.filter { $0.count == 4 }
+        // The map's brightness at a latitude, against its brightest, sets how far the colour is from the zones' toward
+        // the belts' and on past it: the look research's two buttercreams (PIA06193, PIA11141, PIA11478), whose lumas
+        // are 0.805 apart, and its paler gold toward the south. No file: the zones' colour all over.
+        let belt = SIMD3(0.66, 0.59, 0.44), zone = SIMD3(0.82, 0.73, 0.59), gold = SIMD3(0.88, 0.79, 0.51)
+        let lumas = rows.map { 0.2126 * $0[1] + 0.7152 * $0[2] + 0.0722 * $0[3] }, most = lumas.max() ?? 1
+        let colours = rows.isEmpty ? [zone] : zip(rows, lumas).reversed().map { row, luma -> SIMD3<Double> in
+            let colour = belt + (zone - belt) * ((luma / most - 0.805) / 0.195)
+            let south = min(max((row[0] * .pi / 180 - 0.1) / -0.7, 0), 1)
+            return colour + (gold - colour) * (0.25 * south * south * (3 - 2 * south))
+        }
+        let brightest = colours.map { 0.2126 * pow($0.x, 2.2) + 0.7152 * pow($0.y, 2.2) + 0.0722 * pow($0.z, 2.2) }.max()!
+        return (colours.flatMap { c in [c.x, c.y, c.z].map { UInt8(min(max(($0 * 255).rounded(), 0), 255)) } + [255] }, brightest)
+    }
+}
+
 /// Saturn's main rings every 8 km, from `Resources/saturn-rings.tsv` (docs/saturns-rings/profile.py made it; its
 /// header has the sources): each radius's normal optical depth τ, from a Cassini UVIS occultation, and its particles'
 /// brightness (ϖ₀P/4), from Voyager 2's lit-face picture.
@@ -929,6 +961,8 @@ struct RingProfile {
 /// rings and theirs on it, ringshine on its night side, Daphnis and its waves, then exposure, a soft knee and dither.
 /// Ported from docs/saturns-rings/mock.swift, less Pan's ripple and the spokes, with Daphnis's numbers written in.
 private func saturnsRingsSource(_ rings: RingProfile) -> String {
+    /// The planet's light is scaled so its brightest zone is as bright as the whole globe was drawn before it had bands.
+    let globeGain = 1 / SaturnGlobe.shared.brightest
     let rows = Double(RingProfile.ks * RingProfile.levels)
     /// Declares `v`, the mean of exp(−τk) over the footprint `w` texels either side of `u`, from the two rows of k
     /// round `k`, and `vAlb`, the particles' brightness there.
@@ -1087,12 +1121,16 @@ ball("(\(i < 3 ? "u_moonsNear" : "u_moonsFar") * vec4(\(i % 3 == 0 ? 1.0 : 0.0),
             vec3 n = normalize(vec3(h.xy, h.z * k * k));
             float lat = asin(clamp(n.z, -1.0, 1.0));
             float mu0p = max(dot(n, s), 0.0), mup = max(-dot(n, d), 0.02);
-            // buttercream belts and zones, the south a paler gold (PIA06193, PIA11141, PIA11478)
-            // ponytail: drawn by latitude, not mapped; a Cassini map of the globe if a view close to it shows them as too regular
-            float band = 0.5 + 0.5 * sin(lat * 23.0 + 0.7 * sin(lat * 9.0)) * (0.6 + 0.4 * sin(lat * 5.0 + 1.0));
-            vec3 col = mix(vec3(0.66, 0.59, 0.44), vec3(0.82, 0.73, 0.59), band);
-            col = mix(col, vec3(0.88, 0.79, 0.51), 0.25 * smoothstep(0.1, -0.6, lat));
-            col = pow(col, vec3(2.2)); // the photographs' display colours, in linear light
+            // Its belts and zones: the colour at this latitude (`SaturnGlobe`), averaged over the pixel's footprint
+            // in latitude (three reads across it; no more than 6° either way, since the footprint is a slope, and a
+            // slope taken across the limb comes out wrong in its 2 x 2 block).
+            // ponytail: one colour a latitude, so no storms and nothing turning with the planet; the map itself, turned
+            // by Saturn's 10.6 hours, if the globe is ever seen close enough to want them.
+            float gu = lat / 3.1415927 + 0.5, gw = min(0.5 * length(vec2(dfdx(lat), dfdy(lat))), 0.1) / 3.1415927;
+            vec3 col = 0.25 * texture2D(u_globe, vec2(gu - gw, 0.5)).rgb + 0.5 * texture2D(u_globe, vec2(gu, 0.5)).rgb
+                + 0.25 * texture2D(u_globe, vec2(gu + gw, 0.5)).rgb;
+            // display colours, in linear light, the brightest zone as bright as the whole globe was drawn before
+            col = pow(col, vec3(2.2)) * \(globeGain);
             // the rings' shadow: the light that reaches here came through the ring plane at radius rq
             float ts = -h.z / s.z;
             float rq = length((h + ts * s).xy);
@@ -1104,7 +1142,7 @@ ball("(\(i < 3 ? "u_moonsNear" : "u_moonsFar") * vec4(\(i % 3 == 0 ? 1.0 : 0.0),
             // ringshine: the rings' lit face lights the hemisphere on its side, their unlit face the other, dimmer
             float side = n.z * sign(s.z);
             float shine = 0.42 * 0.012 * (smoothstep(-0.2, 0.7, side) + 0.35 * smoothstep(-0.2, 0.7, -side));
-            lin = (col / luma(col) * lit + vec3(2.25, 0.714, 0.148) * shine) * u_planetExposure * cover; // #372110 in linear light, luma 1
+            lin = (col * lit + vec3(2.25, 0.714, 0.148) * shine) * u_planetExposure * cover; // #372110 in linear light, luma 1
             sky = 1.0 - cover;
         }
         // a moon beyond the ring plane goes in before the rings, which dim it by what they pass

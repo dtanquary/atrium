@@ -50,6 +50,19 @@ import UniformTypeIdentifiers
     #expect(tau(136_760) > 1 && tau(136_770) == 0, "the A ring's edge")
 }
 
+/// The planet's strip of colour by latitude is read, stays in the buttercream family from pole to pole (red over
+/// green over blue, and no greyer than the belts' colour), and is brightest in the equatorial zone (within 15° of the
+/// equator) and darkest toward a pole (past 70°).
+@Test func saturnsRingsGlobeStaysButtercream() {
+    let (texels, brightest) = SaturnGlobe.shared, n = texels.count / 4
+    #expect(n == 512 && brightest > 0.4 && brightest < 0.6)
+    let colours = (0..<n).map { (Double(texels[4 * $0]), Double(texels[4 * $0 + 1]), Double(texels[4 * $0 + 2])) }
+    #expect(colours.allSatisfy { $0.0 > $0.1 && $0.1 > $0.2 && $0.0 - $0.2 > 40 })
+    let lumas = colours.map { 0.2126 * $0.0 + 0.7152 * $0.1 + 0.0722 * $0.2 }
+    let (most, least) = (lumas.indices.max { lumas[$0] < lumas[$1] }!, lumas.indices.min { lumas[$0] < lumas[$1] }!)
+    #expect(abs(most - n / 2) < n / 12 && (least < n / 9 || least > n - n / 9), "brightest \(most), darkest \(least) of \(n)")
+}
+
 /// `RingProfile.load` reads the whole file as a line-by-line read finds it: every row's optical depth and brightness,
 /// and where the rows start.
 @Test func saturnsRingsProfileReadsWhole() throws {
