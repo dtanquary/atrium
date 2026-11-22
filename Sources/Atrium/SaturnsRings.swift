@@ -508,6 +508,7 @@ final class SaturnsRings: SKScene, BatteryPaced {
         // thread behind a still if a switch to it is seen to stall.
         let rings = RingProfile.shared
         let table = sharedTexture("saturn-rings-pyramid") { rings.pyramid() }
+        let fineTable = sharedTexture("saturn-rings-fine") { RingProfile.loadFine().pyramid(levels: RingProfile.fineLevels) }
         // The real stars and the Milky Way's glow, Black Hole's (each 2,048 × 1,024, the stars 8 MB): the stars a
         // grid of cells, read at their centres.
         let catalogue = sharedTexture("blackhole-star-cells") {
@@ -531,6 +532,7 @@ final class SaturnsRings: SKScene, BatteryPaced {
         sprite.anchorPoint = .zero
         sprite.shader = SKShader(source: shaderCommon + saturnsRingsSource(rings), uniforms: [
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]), SKUniform(name: "u_table", texture: table),
+            SKUniform(name: "u_fine", texture: fineTable),
             cam, rot, sunUniform, lens, moonUniform, starsUniform, exposure, planetExposure,
             SKUniform(name: "u_catalogue", texture: catalogue), SKUniform(name: "u_galaxy", texture: glow),
             SKUniform(name: "u_sky", matrixFloat3x3: turn),
@@ -710,16 +712,25 @@ final class SaturnsRings: SKScene, BatteryPaced {
 /// Saturn's main rings every 8 km, from `Resources/saturn-rings.tsv` (docs/saturns-rings/profile.py made it; its
 /// header has the sources): each radius's normal optical depth τ, from a Cassini UVIS occultation, and its particles'
 /// brightness (ϖ₀P/4), from Voyager 2's lit-face picture.
-// ponytail: 8 km a sample, 8,751 texels, near enough for view C, where a device pixel covers about 6 km of radius at
-// the bottom edge and more everywhere else. The close views draw finer near the bottom, E about 1.6 km a pixel and F
-// about 0.1 km, so their near fields are the profile smoothed, as in the tiles Dave picked: a 4 km profile (16,384
-// texels, Metal's widest) if they look soft.
+///
+/// And the A ring every km, from `Resources/saturn-rings-fine.bin` (`profile.py --fine`, which says what it does to
+/// the data): the same occultation's 1 km file and Voyager's profile every 2 km, for where the close views draw
+/// finer than 8 km a pixel (Over the Encke Gap about 1.6 km at the bottom of the screen, Daphnis Close 0.1 km). Each
+/// sample is two bytes of τ in ten-thousandths and two of the brightness in fifty-thousandths, low byte first.
+// ponytail: only the A ring has the fine profile, 16,384 texels, Metal's widest, since the close views are over it;
+// a view low over the B or C ring would want its own.
 struct RingProfile {
     /// The first radius and the step between samples, in Mm, the shader's unit.
     let start: Double, step: Double
     let tau: [Double], brightness: [Double]
     /// The pyramid holds exp(−τk) for k = 1, 2, 4 … 2048, each averaged over boxes 1, 2, 4 … 4096 texels wide.
     static let ks = 12, levels = 13
+    /// The fine profile's pyramid has boxes of 1, 2, 4 and 8 texels (km): past that the 8 km profile's takes over.
+    static let fineLevels = 4
+    /// The fine profile's first radius and step, in Mm, and how many samples its file holds (none without the file,
+    /// and then the shader never looks at it).
+    static let fineStart = 121.5, fineStep = 0.001
+    static let fineCount = ((try? resource("saturn-rings-fine.bin").resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0) / 4
     /// The profile, read once and kept (140 KB): every copy of the scene needs its first radius, step and length for
     /// the shader, and reading the file takes 8 ms.
     static let shared = load()
@@ -732,17 +743,31 @@ struct RingProfile {
         return RingProfile(start: rows[0][0] / 1000, step: (rows[1][0] - rows[0][0]) / 1000, tau: rows.map { $0[1] }, brightness: rows.map { $0[2] })
     }
 
+    /// The A ring every km (read as its pyramid is baked, and not kept).
+    static func loadFine() -> RingProfile {
+        let data = (try? Data(contentsOf: resource("saturn-rings-fine.bin"))) ?? Data(), n = data.count / 4
+        guard n > 1 else { return RingProfile(start: fineStart, step: fineStep, tau: [0, 0], brightness: [0, 0]) }
+        var tau = [Double](repeating: 0, count: n), brightness = tau
+        data.withUnsafeBytes { bytes in
+            for i in 0..<n {
+                tau[i] = Double(Int(bytes[4 * i]) | Int(bytes[4 * i + 1]) << 8) / 10000
+                brightness[i] = Double(Int(bytes[4 * i + 2]) | Int(bytes[4 * i + 3]) << 8) / 50000
+            }
+        }
+        return RingProfile(start: fineStart, step: fineStep, tau: tau, brightness: brightness)
+    }
+
     /// The radial pyramid (research-method.md §4), a mip chain by radius: row (j, m) holds, for each texel, the mean
     /// of exp(−τ·2^j) over a box 2^m texels wide centred on it, as two bytes (red and green), and the mean brightness
     /// over the same box (blue, 255 for 0.5). The shader picks the row for each pixel's footprint and light path, so
     /// every pixel shows the exact average of the bands it covers, and none shimmer. Running sums read twice, which
     /// would need no pyramid, failed in SpriteKit for lack of precision.
-    func pyramid() -> SKTexture {
-        SKTexture(data: Data(pyramidBytes()), size: CGSize(width: tau.count, height: Self.ks * Self.levels))
+    func pyramid(levels: Int = RingProfile.levels) -> SKTexture {
+        SKTexture(data: Data(pyramidBytes(levels: levels)), size: CGSize(width: tau.count, height: Self.ks * levels))
     }
 
-    /// The pyramid's texels, RGBA, row by row.
-    func pyramidBytes() -> [UInt8] {
+    /// The pyramid's texels, RGBA, row by row, with boxes up to 2^(levels − 1) texels wide.
+    func pyramidBytes(levels: Int = RingProfile.levels) -> [UInt8] {
         let n = tau.count
         /// Running sums of `values`, from 0.
         func sums(_ values: [Double]) -> [Double] {
@@ -762,16 +787,16 @@ struct RingProfile {
             return (at(Double(i) + 0.5 + half) - at(Double(i) + 0.5 - half)) / (2 * half)
         }
         let brightnessSums = sums(brightness)
-        let bright = (0..<Self.levels).map { m in
+        let bright = (0..<levels).map { m in
             (0..<n).map { UInt8(min(max(mean(brightnessSums, $0, Double(1 << m) / 2, outside: 0.2), 0), 0.5) / 0.5 * 255) }
         }
-        var bytes = [UInt8](repeating: 255, count: n * Self.ks * Self.levels * 4)
+        var bytes = [UInt8](repeating: 255, count: n * Self.ks * levels * 4)
         for j in 0..<Self.ks {
             let through = sums(tau.map { exp(-$0 * pow(2, Double(j))) })
-            for m in 0..<Self.levels {
+            for m in 0..<levels {
                 let half = Double(1 << m) / 2
                 for i in 0..<n {
-                    let v = Int(min(max(mean(through, i, half, outside: 1), 0), 1) * 65535), at = ((j * Self.levels + m) * n + i) * 4
+                    let v = Int(min(max(mean(through, i, half, outside: 1), 0), 1) * 65535), at = ((j * levels + m) * n + i) * 4
                     (bytes[at], bytes[at + 1], bytes[at + 2]) = (UInt8(v >> 8), UInt8(v & 255), bright[m][i])
                 }
             }
@@ -788,14 +813,27 @@ private func saturnsRingsSource(_ rings: RingProfile) -> String {
     let rows = Double(RingProfile.ks * RingProfile.levels)
     /// Declares `v`, the mean of exp(−τk) over the footprint `w` texels either side of `u`, from the two rows of k
     /// round `k`, and `vAlb`, the particles' brightness there.
-    func mean(_ v: String, _ u: String, _ w: String, _ k: String) -> String {
-        "vec4 \(v)At = pyrAt(\(u), \(w), \(k)); vec4 \(v)0 = texture2D(u_table, \(v)At.xy); vec4 \(v)1 = texture2D(u_table, \(v)At.xz); float \(v) = mix(pyrOf(\(v)0), pyrOf(\(v)1), \(v)At.w); float \(v)Alb = \(v)0.b * 0.5;"
+    /// With `fine`, from the A ring's own pyramid as well, by how much of the pixel is its to draw (`fine`, with `uf`
+    /// and `wf`, its place and footprint there): all of it where the pixel is finer than 4 km, and then the 8 km
+    /// profile isn't read at all.
+    func mean(_ v: String, _ u: String, _ w: String, _ k: String, fine: Bool = false) -> String {
+        let coarse = "vec4 \(v)At = pyrAt(\(u), \(w), \(k)); vec4 \(v)0 = texture2D(u_table, \(v)At.xy); vec4 \(v)1 = texture2D(u_table, \(v)At.xz);"
+        guard fine else { return coarse + " float \(v) = mix(pyrOf(\(v)0), pyrOf(\(v)1), \(v)At.w); float \(v)Alb = \(v)0.b * 0.5;" }
+        return "float \(v) = 1.0, \(v)Alb = 0.2; if (fine < 1.0) { \(coarse) \(v) = mix(pyrOf(\(v)0), pyrOf(\(v)1), \(v)At.w); \(v)Alb = \(v)0.b * 0.5; } "
+            + "if (fine > 0.0) { vec4 \(v)Fine = fineAt(uf, wf, \(k)); vec4 \(v)F0 = texture2D(u_fine, \(v)Fine.xy); vec4 \(v)F1 = texture2D(u_fine, \(v)Fine.xz); "
+            + "\(v) = mix(\(v), mix(pyrOf(\(v)F0), pyrOf(\(v)F1), \(v)Fine.w), fine); \(v)Alb = mix(\(v)Alb, \(v)F0.b * 0.5, fine); }"
     }
+    let fineRows = Double(RingProfile.ks * RingProfile.fineLevels), fineEnd = RingProfile.fineStart + RingProfile.fineStep * Double(RingProfile.fineCount)
     return """
     // Where the pyramid keeps the mean of exp(-tau k) over a box 2w texels wide, in the two rows of k round k.
     vec4 pyrAt(float u, float w, float k) {
         float m = clamp(log2(2.0 * w), 0.0, 11.999), j = clamp(log2(max(k, 1.0)), 0.0, 10.999), j0 = floor(j);
         return vec4(u / \(Double(rings.tau.count)), (j0 * 13.0 + m + 0.5) / \(rows), ((j0 + 1.0) * 13.0 + m + 0.5) / \(rows), j - j0);
+    }
+    // The same in the A ring's own pyramid, a texel a km: boxes of 1, 2, 4 and 8 km.
+    vec4 fineAt(float u, float w, float k) {
+        float m = clamp(log2(2.0 * w), 0.0, 2.999), j = clamp(log2(max(k, 1.0)), 0.0, 10.999), j0 = floor(j);
+        return vec4(u / \(Double(max(RingProfile.fineCount, 1))), (j0 * 4.0 + m + 0.5) / \(fineRows), ((j0 + 1.0) * 4.0 + m + 0.5) / \(fineRows), j - j0);
     }
     float pyrOf(vec4 t) { return t.r * (255.0 * 256.0 / 65535.0) + t.g * (255.0 / 65535.0); }
     vec3 rampAt(float t, vec3 c0, vec3 c1, vec3 c2, vec3 c3, vec3 c4) {
@@ -845,6 +883,11 @@ private func saturnsRingsSource(_ rings: RingProfile) -> String {
             tilt = rise * 6.2831853 / lambda * cos(theta) * dot(normalize(s.xy), along);
         }
         float u = (r - \(rings.start)) / \(rings.step);
+        // Over the A ring, where a pixel is finer than the 8 km profile's samples, its own profile, a sample a km:
+        // all of it under 4 km a pixel, none of it from 8 (where the two pyramids' boxes are the same 8 km), and
+        // fading out over the last 100 km at each end of it.
+        float uf = (r - \(RingProfile.fineStart)) / \(RingProfile.fineStep), wf = max(foot * \(rings.step / RingProfile.fineStep), 0.5);
+        float fine = (1.0 - smoothstep(0.25, 0.5, foot)) * smoothstep(\(RingProfile.fineStart), \(RingProfile.fineStart + 0.1), r) * (1.0 - smoothstep(\(fineEnd - 0.1), \(fineEnd), r));
         // Daphnis's gap, drawn sharp from its own edges rather than the 8 km profile: real gap edges are sharper than
         // any camera has resolved (research-look.md). Antialiased over the pixel's footprint in km.
         if (u_moon.y > 0.0) {
@@ -903,16 +946,16 @@ private func saturnsRingsSource(_ rings: RingProfile) -> String {
         if (tr > 0.0 && (tr < tp || cover < 1.0) && r > 72.2 && r < 141.9) {
             float mu = max(abs(d.z), 1e-4), mu0 = max(abs(s.z) + tilt, 2e-3);
             float kv = 1.0 / mu, ks = 1.0 / mu0;
-            \(mean("eView", "u", "w", "kv * crowd"))
+            \(mean("eView", "u", "w", "kv * crowd", fine: true))
             float light = 0.0, t = 0.0;
             if (c.z * s.z > 0.0) {
-                \(mean("eBoth", "u", "w", "(kv + ks) * crowd"))
+                \(mean("eBoth", "u", "w", "(kv + ks) * crowd", fine: true))
                 light = eViewAlb * (1.0 - eBoth) * mu0 / (mu + mu0);
                 t = light / (0.28 * mu0 / (mu + mu0));
             } else {
                 float k2 = abs(kv - ks) < 0.1 * ks ? ks * 1.1 : kv;
-                \(mean("eSun", "u", "w", "ks * crowd"))
-                \(mean("eK2", "u", "w", "k2 * crowd"))
+                \(mean("eSun", "u", "w", "ks * crowd", fine: true))
+                \(mean("eK2", "u", "w", "k2 * crowd", fine: true))
                 light = eViewAlb * (eSun - eK2) / (mu * (k2 - ks));
                 // the most an unlit slab can pass at this angle, at tau = ln(k2/ks) / (k2 - ks)
                 float best = log(k2 / ks) / (k2 - ks);
