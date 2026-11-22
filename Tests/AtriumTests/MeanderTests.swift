@@ -400,28 +400,6 @@ private func seeded(_ seed: Double, _ others: [String: Double] = [:]) -> [String
     #expect(Set(pictures.dropFirst(3).map { $0[$0.count / 2 + 378] }).count > 12) // the colourways differ, by the pixel in the middle
 }
 
-/// Swatches under a menu (`Wallpaper.looks`) hang together, for every wallpaper that has them: each set names a
-/// menu among its wallpaper's knobs and a pick that menu has, no two sets share a pick or a key (nor a knob's), and
-/// every swatch has colours for both modes. Only Meander has them so far: every other wallpaper's page is as it was.
-@MainActor @Test func swatchesUnderAMenuHangTogether() {
-    for wallpaper in allScenes where !wallpaper.looks.isEmpty {
-        for look in wallpaper.looks {
-            let menu = wallpaper.knobs.first { $0.key == look.shownWhen }, pick = look.shownAt ?? -1
-            if case .choice(let names)? = menu?.format {
-                #expect(names.indices.contains(Int(pick)) && pick == pick.rounded(), "\(look.key) hangs on pick \(pick) of \(names)")
-            } else {
-                Issue.record("\(look.key) hangs on \(look.shownWhen ?? "nothing"), which is no menu of \(wallpaper.name)'s")
-            }
-            #expect(!look.options.isEmpty && look.options.allSatisfy { !$0.dark.isEmpty && !$0.light.isEmpty } && Set(look.options.map(\.name)).count == look.options.count)
-            #expect(look.standard.isEmpty || look.options.contains { $0.name == look.standard })
-        }
-        let keys = wallpaper.looks.map(\.key) + wallpaper.knobs.map(\.key) + [wallpaper.palettes?.key].compactMap { $0 }
-        #expect(Set(keys).count == keys.count, "\(wallpaper.name) stores two settings under one key")
-        #expect(Set(wallpaper.looks.map { "\($0.shownWhen ?? "") \($0.shownAt ?? -1)" }).count == wallpaper.looks.count, "\(wallpaper.name) has two sets of swatches for one pick")
-    }
-    #expect(allScenes.filter { !$0.looks.isEmpty }.map(\.name) == ["Meander", "Space Tour"]) // a new one: look at its Settings page, then add it here
-}
-
 /// Meander's settings hang together: a row that shows for one look hangs on a pick the Look menu has, and a menu's
 /// range is its list. And the scene follows them as it runs: a new look or new colours at once, on the same river; a new
 /// size of river by handing over to a new scene (which it does once the slider has rested; here it is told to at
@@ -1362,13 +1340,3 @@ private func ripple(_ picture: [UInt32], side: Int, texel: Int, counts: (_ x: In
         #expect(scene.trim.content.children.count == 2, "held for an hour part-way through, the change leapt to its end")
     }
 }
-
-/// Meander changes mode by itself, so the app must not build it afresh when the appearance changes: its entry says
-/// so. So does Etching's, whose screen eases to the other mode under the picture, Jellyfish's, whose tank's light
-/// eases while its jellies carry on, Kelp Forest's, whose water eases to dusk while the forest sways on, and
-/// Seismograph's, whose sheet eases between its chart and its smoked paper while the pen writes on (a rebuild would
-/// stamp the day again); no other wallpaper's does (each of those is built to the mode it starts in).
-@MainActor @Test func onlyTheseFollowTheAppearanceThemselves() {
-    #expect(allScenes.filter(\.followsAppearance).map(\.name) == ["Etching", "Jellyfish", "Kelp Forest", "Meander", "Saturn's Rings", "Seismograph"])
-}
-

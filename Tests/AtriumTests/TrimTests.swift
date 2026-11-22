@@ -20,7 +20,7 @@ import Testing
 
 /// Every wallpaper with a battery scale has a scene that can take it, and a scene built outside a view, as the render
 /// tests build them, draws at full resolution.
-@MainActor @Test func trimmedWallpapersBuildAtFullScale() {
+@MainActor @Test func everyTrimmedWallpaperBuildsAtFullScale() {
     for wallpaper in allScenes where wallpaper.batteryScale != nil {
         let trim = (wallpaper.make(CGSize(width: 320, height: 200)) as? Trimmable)?.trim
         #expect(trim?.scale == 1 && trim?.shouldEnableEffects == false, "\(wallpaper.name)")
