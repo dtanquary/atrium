@@ -504,10 +504,9 @@ final class SaturnsRings: SKScene, BatteryPaced {
 
         // ponytail: the first copy builds on the main thread in about 50 ms in release (the profile read 10, the
         // pyramid's bake 8.5, the star grid 6, the glow 8), about 150 while the HEIC decoder first starts; a second,
-        // sharing the textures, in 8. Bake them off the main thread behind a still if a switch to it is seen to stall.
-        // The profile is read on every build though the shader takes only its first radius, step and length: keep
-        // those beside the shared pyramid first.
-        let rings = RingProfile.load()
+        // sharing the textures and the profile (read once and kept), in about a millisecond. Bake them off the main
+        // thread behind a still if a switch to it is seen to stall.
+        let rings = RingProfile.shared
         let table = sharedTexture("saturn-rings-pyramid") { rings.pyramid() }
         // The real stars and the Milky Way's glow, Black Hole's (each 2,048 × 1,024, the stars 8 MB): the stars a
         // grid of cells, read at their centres.
@@ -721,6 +720,9 @@ struct RingProfile {
     let tau: [Double], brightness: [Double]
     /// The pyramid holds exp(−τk) for k = 1, 2, 4 … 2048, each averaged over boxes 1, 2, 4 … 4096 texels wide.
     static let ks = 12, levels = 13
+    /// The profile, read once and kept (140 KB): every copy of the scene needs its first radius, step and length for
+    /// the shader, and reading the file takes 8 ms.
+    static let shared = load()
 
     static func load() -> RingProfile {
         let rows = ((try? String(contentsOf: resource("saturn-rings.tsv"), encoding: .utf8)) ?? "")
@@ -816,28 +818,37 @@ private func saturnsRingsSource(_ rings: RingProfile) -> String {
         float tr = -c.z / d.z;
         vec3 p = c + tr * d;
         float r = length(p.xy);
+        // The pixel's footprint in radius, from the radius before the ripple shifts it: the shift starts at the gap's
+        // edge, a step of up to 2.5 km in one pixel, and a slope taken across a step comes out in 2 x 2 blocks, which
+        // drew the edge as a dotted line.
+        float u0 = (r - \(rings.start)) / \(rings.step);
+        float foot = 0.5 * length(vec2(dfdx(u0), dfdy(u0))), w = max(foot, 0.5), fw = max(foot * \(rings.step * 1000), 0.01); // texels, texels, km
         float crowd = 1.0, tilt = 0.0, gap = 1.0;
         float dr = (r - 136.504) * 1000.0;                                   // km from Daphnis's orbit
-        if (u_moon.y > 0.0 && abs(dr) > 17.5 && abs(dr) < 1050.0) {         // the Keeler gap's edges are 17.5 km from it
+        // The Keeler gap's edges are 17.5 km from it. The few km of the gap inside each edge move with the edge's own
+        // wave, so the edge is pushed into the gap as well as out of it, and where the pixel is counted as gap or ring
+        // runs on unbroken across it: stopping the ripple at the edge left the edge's own place drawn as a hairline
+        // beside the waves, and the waves only ever cut into the ring.
+        if (u_moon.y > 0.0 && abs(dr) > 12.0 && abs(dr) < 1050.0) {
+            float from = max(abs(dr), 17.5);
             float phi = atan(p.y, p.x) - u_moon.x;
             float down = mod(-sign(dr) * phi, 6.2831853);                    // radians downstream of the moon
-            float lambda = 9.424778 * abs(dr);                               // 3 pi |dr| (Showalter et al. 1986)
+            float lambda = 9.424778 * from;                                  // 3 pi |dr| (Showalter et al. 1986)
             float theta = 6.2831853 * down * 136504.0 / lambda;              // the wake's phase
             // the edges pushed 2.5 km (worked out from Daphnis's mass, unchecked), standing 1 km tall (PIA11654)
-            float a = 2.5 * u_moon.y * pow(17.5 / abs(dr), 2.0) * exp(-theta / 25.0);
+            float a = 2.5 * u_moon.y * pow(17.5 / from, 2.0) * exp(-theta / 25.0);
             r -= a * sin(theta) / 1000.0;
-            crowd = clamp(1.0 + a * cos(theta) * theta / abs(dr), 0.5, 2.0);
+            crowd = clamp(1.0 + a * cos(theta) * theta / from, 0.5, 2.0);
             // the edge waves stand up out of the plane: their slope turns each crest toward or away from the Sun
-            float rise = u_moon.y * exp(-(abs(dr) - 17.5) / 8.0) * exp(-theta / 25.0);
+            float rise = u_moon.y * exp(-(from - 17.5) / 8.0) * exp(-theta / 25.0);
             vec2 along = normalize(vec2(-p.y, p.x)) * -sign(dr);
             tilt = rise * 6.2831853 / lambda * cos(theta) * dot(normalize(s.xy), along);
         }
         float u = (r - \(rings.start)) / \(rings.step);
-        float w = max(0.5 * length(vec2(dfdx(u), dfdy(u))), 0.5);
         // Daphnis's gap, drawn sharp from its own edges rather than the 8 km profile: real gap edges are sharper than
         // any camera has resolved (research-look.md). Antialiased over the pixel's footprint in km.
         if (u_moon.y > 0.0) {
-            float off = abs(r - 136.504) * 1000.0, fw = max(0.5 * length(vec2(dfdx(r), dfdy(r))) * 1000.0, 0.01);
+            float off = abs(r - 136.504) * 1000.0;
             gap = mix(1.0, smoothstep(17.5 - fw, 17.5 + fw, off), u_moon.y);
         }
 
@@ -846,6 +857,11 @@ private func saturnsRingsSource(_ rings: RingProfile) -> String {
         float A = dot(ds, ds), B = dot(cs, ds), C = dot(cs, cs) - req * req;
         float disc = B * B - A * C;
         float tp = disc > 0.0 ? (-B - sqrt(disc)) / A : 1e9;
+        // How much of the pixel the planet covers: all of it but on its limb, where it fades over the last pixel in
+        // from the edge (by how near the ray passes to the centre, which runs on smoothly across the limb), so the
+        // limb doesn't stand in steps, or flicker as the camera moves.
+        float pass = sqrt(max(dot(cs, cs) - B * B / A, 0.0));
+        float cover = clamp((req - pass) / max(length(vec2(dfdx(pass), dfdy(pass))), 1e-6), 0.0, 1.0);
 
         // Daphnis itself, a small grey ball 3.8 km across in its gap
         vec3 mc = vec3(cos(u_moon.x), sin(u_moon.x), 0.0) * 136.504;
@@ -877,14 +893,14 @@ private func saturnsRingsSource(_ rings: RingProfile) -> String {
             // ringshine: the rings' lit face lights the hemisphere on its side, their unlit face the other, dimmer
             float side = n.z * sign(s.z);
             float shine = 0.42 * 0.012 * (smoothstep(-0.2, 0.7, side) + 0.35 * smoothstep(-0.2, 0.7, -side));
-            lin = (col / luma(col) * lit + vec3(2.25, 0.714, 0.148) * shine) * u_planetExposure; // #372110 in linear light, luma 1
-            sky = 0.0;
+            lin = (col / luma(col) * lit + vec3(2.25, 0.714, 0.148) * shine) * u_planetExposure * cover; // #372110 in linear light, luma 1
+            sky = 1.0 - cover;
         }
         // Out past the rings, where the camera crosses their plane to change faces, they fade over its last 20 km to
         // it: seen edge on they are a sheet a pixel's fraction thick, and a band of whole pixels stood for it, which
         // jumped from one side of the horizon to the other as the camera went through.
         float edgeOn = length(c.xy) > 142.0 ? clamp(abs(c.z) / 0.02, 0.0, 1.0) : 1.0;
-        if (tr > 0.0 && tr < tp && r > 72.2 && r < 141.9) {
+        if (tr > 0.0 && (tr < tp || cover < 1.0) && r > 72.2 && r < 141.9) {
             float mu = max(abs(d.z), 1e-4), mu0 = max(abs(s.z) + tilt, 2e-3);
             float kv = 1.0 / mu, ks = 1.0 / mu0;
             \(mean("eView", "u", "w", "kv * crowd"))
@@ -910,7 +926,9 @@ private func saturnsRingsSource(_ rings: RingProfile) -> String {
             // the rings take the palette's colour at their brightness against a saturated B ring's
             vec3 hueLin = pow(rampAt(t * 0.95, u_c0, u_c1, u_c2, u_c3, u_c4), vec3(2.2));
             eView = mix(1.0, eView, gap * edgeOn);
-            lin = lin * eView + hueLin / max(luma(hueLin), 1e-4) * light * sunlit * gap * edgeOn * u_exposure;
+            // in front of the planet they cover it; behind it they show past its limb, by what it leaves of the pixel
+            float front = tr < tp ? 1.0 : 0.0;
+            lin = lin * mix(1.0, eView, front) + hueLin / max(luma(hueLin), 1e-4) * light * sunlit * gap * edgeOn * u_exposure * mix(1.0 - cover, 1.0, front);
             sky *= eView;
         }
         if (tm < min(tp, tr > 0.0 ? tr : 1e9)) {
