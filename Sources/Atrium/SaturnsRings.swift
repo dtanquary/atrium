@@ -61,7 +61,11 @@ final class SaturnsRings: SKScene, BatteryPaced {
                                        format: .choice(["Unlit", "Lit", "Alternate", "Lit in Light Mode, unlit in Dark Mode"]), order: [1, 0, 2, 3])
     /// The exposure, times the view's own.
     nonisolated static let brightness = Knob(key: "saturn.brightness", label: "Brightness", range: 0.5...2, standard: 1, section: "Look")
-    nonisolated static let stars = Knob(key: "saturn.stars", label: "Stars", range: 0...1, standard: 1, section: "Look", format: .toggle)
+    /// How bright the stars and the Milky Way's glow are, as Black Hole's Stars is: 0 none, 1 the standard, 2 twice
+    /// that. It was a switch until Dave's review pass (2026-11-21), on at the look report's cap (the brightest star at
+    /// luma 30), which on a desktop read as a plain black sky: 1 now draws the stars six times as bright as that and
+    /// the glow twice (the shader has the numbers).
+    nonisolated static let stars = Knob(key: "saturn.stars", label: "Stars", range: 0...2, standard: 1, section: "Look")
     /// How fast the camera drifts while it holds a view (and Daphnis comes near): the drift's own clock. A hold and a
     /// glide keep their lengths.
     nonisolated static let speed = Knob(key: "saturn.speed", label: "Speed", range: 0...10, standard: 1, section: "Motion", format: .times)
@@ -986,30 +990,32 @@ private func saturnsRingsSource(_ rings: RingProfile) -> String {
         // exposure and a knee that stays nearly straight to luma 185 (Cassini's contrast kept) and never passes 214
         lin = max(lin, 0.0);
         vec3 col = pow(lin / sqrt(sqrt(1.0 + pow(lin / 0.68, vec3(4.0)))), vec3(0.4545));
-        // The sky: near-black (luma 6), the Milky Way's glow (stored as its value to the 0.6: up to about 17 more at
-        // the galactic centre, 7 at the 99th percentile) and the real stars, all behind whatever the rings let through.
+        // The sky: near-black (luma 6), the Milky Way's glow (stored as its value to the 0.6: up to about 34 more at
+        // the galactic centre, 14 at the 99th percentile) and the real stars, all times Stars (these are at 1) and
+        // behind whatever the rings let through.
         // `q` is the way to look with the Sun at azimuth 0 round the pole, `u_sky` turns it to the files' frame,
         // where longitude is atan(x, z) and latitude asin(y) across and up each (the star grid's cells 2,048 by 1,024).
         // Only where the sky shows: through the rings it shows a little almost everywhere, but where it shows less
-        // than 1/60 the most the stars and glow add (30 of 255) is under half a level. (The glow file has no smaller
-        // copies of itself, so it can be read in a branch.)
+        // than 1/60 a star of the commonest kind (magnitude 4 to 6) adds under half a level and the brightest two.
+        // (The glow file has no smaller copies of itself, so it can be read in a branch.)
         vec3 glow = vec3(0.0), starLight = vec3(0.0);
-        if (sky > 0.017 && u_stars > 0.0) {
+        if (sky * u_stars > 0.017) {
             vec2 toSun = normalize(s.xy);
             vec3 q = vec3(toSun.x * d.x + toSun.y * d.y, toSun.x * d.y - toSun.y * d.x, d.z);
             vec3 there = u_sky * q;
             float lon = atan(there.x, there.z), lat = asin(clamp(there.y, -1.0, 1.0));
             vec2 place = vec2(lon / 6.2831853 + 0.5, lat / 3.1415927 + 0.5);
-            glow = pow(texture2D(u_galaxy, place).rgb, vec3(1.667)) * 18.0 / 255.0;
+            glow = pow(texture2D(u_galaxy, place).rgb, vec3(1.667)) * 36.0 / 255.0;
             // The stars: any near enough to light this pixel is in a cell that comes within `reach` of it, a star's
             // radius in cells: one or two each way, but more across toward the files' poles, where a cell is narrower
             // than a star (to 6 either side, past which, within 3° of the poles, a star is cut). A cell is 0.003068
             // rad tall, and that times the cosine of the latitude wide; a star is a dot 0.9 points in radius,
-            // at luma 30 for the brightest (its code 1, magnitude -1.5), falling as the square of the code, so 5 at
-            // magnitude 6 and gone by 9. Its colour, from its temperature (Black Hole's place in its black-body
-            // table, about 0.4 at 3,000 K to 0.7 at 10,000 K), only a hint at these levels.
-            // ponytail: two colours by temperature, not Black Hole's black-body table (a fourth texture), as no star
-            // passes luma 30; the table if they're ever drawn bright enough for colour to show. And a star within 3°
+            // at luma 180 for the brightest (its code 1, magnitude -1.5), falling as the square of the code, so 115
+            // at magnitude 1, 56 at magnitude 4, 29 at magnitude 6 and gone by 9; none adds more than 140, with the
+            // glow. Well under Black Hole's sky (a fifth of it at the 99.9th percentile): the rings are the subject. Its colour, from its
+            // temperature (Black Hole's place in its black-body table, about 0.4 at 3,000 K to 0.7 at 10,000 K).
+            // ponytail: two colours by temperature, warm and cool, not Black Hole's black-body table (a fourth
+            // texture); the table if the brighter stars are seen to come in only two tints. And a star within 3°
             // of the files' poles is cut, where its cells are too narrow to search: search further if one is seen.
             float perPt = u_size.x / (2.0 * u_lens.x), wide = 0.003068 * max(cos(lat), 0.001) * perPt, tall = 0.003068 * perPt;
             vec2 at = place * vec2(2048.0, 1024.0), reach = vec2(min(0.9 / wide, 6.0), 0.9 / tall);
@@ -1023,12 +1029,12 @@ private func saturnsRingsSource(_ rings: RingProfile) -> String {
                     if (star.b > 0.0) {
                         vec2 off = (cell + (star.rg * 255.0 + 0.5) / 256.0 - at) * vec2(wide, tall);
                         vec3 hue = mix(vec3(1.0, 0.85, 0.68), vec3(0.8, 0.88, 1.0), smoothstep(0.4, 0.7, star.a));
-                        starLight += hue * smoothstep(0.9, 0.0, length(off)) * star.b * star.b * 30.0 / 255.0;
+                        starLight += hue * smoothstep(0.9, 0.0, length(off)) * star.b * star.b * 180.0 / 255.0;
                     }
                 }
             }
         }
-        col += (6.0 / 255.0 + min(glow + starLight, vec3(30.0 / 255.0)) * u_stars) * sky; // the look report's cap
+        col += (6.0 / 255.0 + min(glow + starLight, vec3(140.0 / 255.0)) * u_stars) * sky;
         col += 3.0 / 255.0 * (1.0 - sky);
         col += (hash21(v_tex_coord * u_size * 2.0) - 0.5) / 255.0;
         gl_FragColor = vec4(col, 1.0);
