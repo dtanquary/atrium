@@ -38,8 +38,17 @@ final class Canopy: SKScene, BatteryPaced {
     private let breeze: Breeze, motion: Motion
     /// The leaves falling in autumn, over both pictures.
     let leaves: Leaves
-    /// The ceiling on battery, by the fastest thing moving (`rate`): 10-20 by the breeze, none while a leaf falls.
+    /// The ceiling on battery, by the fastest thing moving (`rate`): 10-20 by the breeze, never under 20 by day while
+    /// the trees are in leaf (the leaves' tremble), none while a leaf falls.
     var batteryRate: Int? = 12 { didSet { batteryRateChanged(from: oldValue) } }
+    /// Whether the latest bake's trees are in leaf (a twentieth of the stand or more).
+    private var leafy = false
+    /// The latest bake's map of whose leaf each pixel is, as a texture, with its key: the next bake's is the same
+    /// unless leaves have come out or fallen since, and takes this one in place of sending 30 MB to the GPU again.
+    private var owned: Kept?
+    /// The first frame's time: the breeze and the motion run on a clock from it, so a seed's gusts come at the same
+    /// moments of every run (for films to compare) and their sines stay exact however long the Mac has been up.
+    private var began: TimeInterval?
     private var job: Job?, fading: (start: TimeInterval, length: TimeInterval)?, ticked: TimeInterval = -.infinity
     /// The moment the latest bake shows, and the Sun's height then; whether the canopy has landed yet.
     private var shown: (moment: Date, sun: Double), landed = false
@@ -89,18 +98,21 @@ final class Canopy: SKScene, BatteryPaced {
             ticked = currentTime
             tick()
         }
-        motion.set(breeze, at: currentTime, fps: view?.preferredFramesPerSecond ?? 30)
-        leaves.step(currentTime, breeze: breeze, camera: lens, size: size)
-        batteryRate = Self.rate(fastest: breeze.fastest(currentTime), night: front.starlight > 0.5, falling: leaves.falling > 0)
+        let time = currentTime - (began ?? currentTime)
+        began = began ?? currentTime
+        motion.set(breeze, at: time, fps: view?.preferredFramesPerSecond ?? 30)
+        leaves.step(time, breeze: breeze, camera: lens, size: size)
+        batteryRate = Self.rate(fastest: breeze.fastest(time), night: front.starlight > 0.5, falling: leaves.falling > 0, leafy: leafy)
     }
 
     /// The lowest rate at which the fastest thing moves about 2 px a frame or less (at 2x on a 14" screen), which
     /// looks the same as 30 fps (`Breeze.fastest`, px a second); 10 at night, when black crowns move on a dark sky;
-    /// and no ceiling while a leaf falls, at 100-300 px a second.
-    static func rate(fastest: Double, night: Bool, falling: Bool) -> Int? {
+    /// never under 20 by day while the trees are in leaf, since each leaf trembles at up to 4.5 Hz; and no ceiling
+    /// while a leaf falls, at 100-300 px a second.
+    static func rate(fastest: Double, night: Bool, falling: Bool, leafy: Bool = false) -> Int? {
         if falling { return nil }
         if night { return 10 }
-        return [10, 12, 15, 20, 30].first { fastest / Double($0) <= 2 }
+        return [10, 12, 15, 20, 30].first { fastest / Double($0) <= 2 && (!leafy || $0 >= 20) }
     }
 
     private var here: CLLocationCoordinate2D { place ?? Location.shared.coordinate }
@@ -123,9 +135,9 @@ final class Canopy: SKScene, BatteryPaced {
     private func bake(_ moment: Date, light: Light? = nil, priority: TaskPriority = .utility) {
         let job = Job(), (camera, seed, here, dark, shapes) = (lens, seed, here, !night.held, leaves.nodes.first?.texture == nil)
         self.job = job
-        Task.detached(priority: priority) {
+        Task.detached(priority: priority) { [owned] in
             job.arrive(Self.bake(moment: moment, latitude: here.latitude, longitude: here.longitude, camera: camera, seed: seed,
-                                 light: light, night: dark, shapes: shapes))
+                                 light: light, night: dark, shapes: shapes, kept: owned))
         }
     }
 
@@ -143,7 +155,8 @@ final class Canopy: SKScene, BatteryPaced {
         (back.sprite.zPosition, front.sprite.zPosition) = (1, 0)
         let quick = !landed || abs(baked.moment.timeIntervalSince(shown.moment)) > 900
         fading = (time, quick ? Self.fade.quick : Self.fade.slow)
-        (shown, landed) = ((baked.moment, baked.light.sun.z), true)
+        (shown, landed, leafy) = ((baked.moment, baked.light.sun.z), true, baked.made.leafy > 0.05)
+        owned = Kept(key: baked.made.idsKey, texture: baked.textures.ids)
     }
 
     /// The new picture is in: the old one lets go of its textures and goes behind, and by day the night's go too.
@@ -166,25 +179,32 @@ final class Canopy: SKScene, BatteryPaced {
 
     fileprivate static let clear = SKTexture(data: Data(count: 4), size: CGSize(width: 1, height: 1))
 
+    /// A bake's ids as a texture, by their key (`CanopyBake.Made.idsKey`).
+    struct Kept: @unchecked Sendable { // made off the main thread, then only handed over
+        let key: UInt64, texture: SKTexture
+    }
+
     /// One bake: the moment, its light and canopy, and their textures, made off the main thread too.
     struct Baked: Sendable {
         let moment: Date, light: Light, made: CanopyBake.Made, textures: Textures
     }
 
-    /// A bake's textures: the sky, the canopy, its cover and its sway map, the nearest leaves, the
-    /// falling leaves' shapes if asked for, and the night's if asked for and it is night, the stars' grid and Night
-    /// Sky's photograph of the Milky Way (a 6000 × 3000 HEIC, 160 ms to decode).
+    /// A bake's textures: the sky, the canopy, its cover and its sway map, the nearest leaves, whose leaf each point
+    /// is (`CanopyBake.ids`), the falling leaves' shapes if asked for, and the night's if asked for and it is night,
+    /// the stars' grid and Night Sky's photograph of the Milky Way (a 6000 × 3000 HEIC, 160 ms to decode).
     struct Textures: @unchecked Sendable { // made off the main thread, then only handed over
-        let sky: SKTexture, canopy: SKTexture, cover: SKTexture, sway: SKTexture, near: SKTexture, stars: SKTexture?, photo: SKTexture?, leaves: [SKTexture]
+        let sky: SKTexture, canopy: SKTexture, cover: SKTexture, sway: SKTexture, near: SKTexture, ids: SKTexture
+        let stars: SKTexture?, photo: SKTexture?, leaves: [SKTexture]
     }
 
     /// Everything about one moment that takes time, off the main thread: the light (unless given), the canopy grown
     /// and lit by it for the season then, and the night's textures if `night` and the Sun is low enough for stars.
+    /// `kept`: the last bake's ids, taken again if this bake's are the same.
     // ponytail: each bake grows the whole canopy again (0.8 s, about 2 s of CPU across the cores, every five minutes
     // while the light changes) when only its light has; keep the grown layers between bakes (about 120 MB) if that
     // shows on the battery
     nonisolated static func bake(moment: Date, latitude: Double, longitude: Double, camera: Camera, seed: UInt64, light: Light?,
-                                 night: Bool, shapes: Bool = false) -> Baked {
+                                 night: Bool, shapes: Bool = false, kept: Kept? = nil) -> Baked {
         let light = light ?? Light(camera: camera, date: moment, latitude: latitude, longitude: longitude)
         let made = CanopyBake(stand: resource(stand.name), leaves: resource("dappled-leaves.png"), perTan: stand.perTan,
                               extent: camera.extent, portrait: camera.portrait, sun: light.sun, sunlight: light.sunlight, zenith: light.zenith,
@@ -198,6 +218,7 @@ final class Canopy: SKScene, BatteryPaced {
         let textures = Textures(sky: texture(Data(light.sky), Light.width, Light.height), canopy: texture(made.canopy, made.width, made.height),
                                 cover: texture(made.cover, made.coverWidth, made.coverHeight), sway: texture(made.sway, made.coverWidth, made.coverHeight),
                                 near: texture(made.near, made.width, made.height),
+                                ids: kept.flatMap { $0.key == made.idsKey ? $0.texture : nil } ?? texture(made.ids, made.width, made.height, .nearest),
                                 stars: dark ? texture(Data(starGrid()), grid.width, grid.height, .nearest) : nil,
                                 photo: dark ? SKTexture(image: NSImage(contentsOf: resource("sky-milky-way.heic")) ?? NSImage()) : nil,
                                 leaves: shapes ? Leaves.shapes() : [])
@@ -220,7 +241,7 @@ final class Canopy: SKScene, BatteryPaced {
         let sprite = SKSpriteNode(color: .white, size: .zero) // its alpha reaches the shader as v_color_mix.a
         private let sky = SKUniform(name: "u_sky", texture: Canopy.clear), canopy = SKUniform(name: "u_canopy", texture: Canopy.clear),
                     cover = SKUniform(name: "u_cover", texture: Canopy.clear), sway = SKUniform(name: "u_sway", texture: Canopy.clear),
-                    near = SKUniform(name: "u_near", texture: Canopy.clear)
+                    near = SKUniform(name: "u_near", texture: Canopy.clear), ids = SKUniform(name: "u_ids", texture: Canopy.clear)
         private let sun = SKUniform(name: "u_sun", vectorFloat3: .zero), disc = SKUniform(name: "u_disc", vectorFloat3: .zero),
                     glow = SKUniform(name: "u_glow", vectorFloat3: .zero), stars = SKUniform(name: "u_night", float: 0)
 
@@ -228,7 +249,7 @@ final class Canopy: SKScene, BatteryPaced {
         private let shaders: (day: SKShader, night: SKShader)
 
         init(camera: Camera, night: Night, motion: Motion) {
-            let own = [sky, canopy, cover, sway, sun, disc, glow, near] + motion.uniforms
+            let own = [sky, canopy, cover, sway, sun, disc, glow, near, ids] + motion.uniforms
             shaders = (SKShader(source: camera.defines + Canopy.source(night: false), uniforms: own + [WallpaperTime.now]),
                        SKShader(source: camera.defines + Canopy.source(night: true), uniforms: own + [stars] + night.uniforms))
             sprite.shader = shaders.day
@@ -241,7 +262,7 @@ final class Canopy: SKScene, BatteryPaced {
         func show(_ light: Light, _ textures: Textures?, sunShows: Double) {
             if let textures {
                 (sky.textureValue, canopy.textureValue, cover.textureValue, sway.textureValue) = (textures.sky, textures.canopy, textures.cover, textures.sway)
-                near.textureValue = textures.near
+                (near.textureValue, ids.textureValue) = (textures.near, textures.ids)
             } else {
                 sky.textureValue = SKTexture(data: Data(light.sky), size: CGSize(width: Light.width, height: Light.height))
                 sky.textureValue?.filteringMode = .linear
@@ -256,27 +277,44 @@ final class Canopy: SKScene, BatteryPaced {
             if sprite.shader !== shader { sprite.shader = shader }
         }
 
-        func clear() { for map in [sky, canopy, cover, sway, near] { map.textureValue = Canopy.clear } }
+        func clear() { for map in [sky, canopy, cover, sway, near, ids] { map.textureValue = Canopy.clear } }
     }
 
     /// The motion's uniforms, shared by both pictures, set every frame from the breeze: step (b2)'s, from footage
-    /// (docs/canopy/research-motion.md, Model 2): the wood still, the twigs and leaves rustling by how free they are,
-    /// and the nearest leaves moving on their own over the rest. Its uniforms: the twigs' and leaves' rustle (`field`);
-    /// the clock wrapped hourly, how far the crowns sway (px at 2x on a 14" screen) and how far the limbs are freed
-    /// (`wind`); and how much the leaves' light flutters.
+    /// (docs/canopy/research-motion.md, Model 2), the wood still, the twigs and leaves rustling by how free they are,
+    /// and the nearest leaves moving on their own over the rest; and step (b3)'s, each leaf and spray moving as a
+    /// piece of its own and the gusts crossing the view. Its uniforms: the twigs' rustle and how hard the leaves
+    /// tremble, corner by corner (`field`); where each leaf and spray is just now, by its id (`own`); the clock wrapped
+    /// hourly, how far the crowns sway (px at 2x on a 14" screen) and how far the limbs are freed (`wind`); and how
+    /// much of the leaves' tremble the frame rate can show.
     @MainActor final class Motion {
         let wind = SKUniform(name: "u_wind", vectorFloat4: .zero), flutter = SKUniform(name: "u_flutter", float: 0)
-        /// The rustle, a corner every 150 px of the stand (`Camera.field`), each moving on its own, in px at 2x on a 14"
-        /// screen: the canopy's corners in the left half, the nearest leaves' in the right, each across in red and green
+        /// The rustle, a corner every 200 px of the stand (`Camera.field`), each moving on its own, in px at 2x on a 14"
+        /// screen: the canopy's corners in the left third, the nearest leaves' in the middle (every 400 px: the nearer half
+        /// of that block's corners are used), each across in red and green
         /// and up in blue and alpha as 16 bits over ±64 px (high byte, low byte: a linear filter blends the two exactly,
-        /// and SpriteKit read a half-float texture as bytes). The shader reads it once a pixel for each, blended smoothly
+        /// and SpriteKit read a half-float texture as bytes); and in the right third how hard the leaves over that corner
+        /// tremble, half of `Breeze.tremble` for the wind there. The shader reads it once a pixel for each, blended smoothly
         /// between corners. Worked out here every frame, a few thousand sines: in the shader, at every pixel, it cost
         /// 2.5 ms of GPU a frame.
         let field: SKMutableTexture, cells: (x: Int, y: Int), fieldMap: SKUniform
+        /// Where each leaf and each spray is just now in the breeze, by its id (`CanopyBake.ids`): 512 across, a leaf's
+        /// in the left half (how far across and up it is from its place, 32 to a px about 128, and its light, 127 to
+        /// all of it about 128), a spray's in the right (how far it is from its place); id 0, no leaf, stays put. Worked out here every frame, some 1,300
+        /// sines, so the shader can blend the four leaves round a pixel with reads alone and a leaf can keep a pace of
+        /// its own.
+        let own: SKMutableTexture, ownMap: SKUniform
         /// Each corner's four frequencies (Hz) and amplitudes, and its phases across and up, for the canopy and the nearest leaves.
         private let corners: [(f: SIMD4<Double>, amp: SIMD4<Double>, across: SIMD4<Double>, up: SIMD4<Double>)]
-        private var texels: [UInt8]
-        var uniforms: [SKUniform] { [fieldMap, wind, flutter] }
+        /// Each leaf id's tremble: its pace (2-4.5 Hz) and phase, which way and how far (about 1, RMS), and the pace
+        /// and phase its strength comes and goes at (0.15-0.45 Hz); each spray id's swing: its pace (0.5-1.4 Hz) and
+        /// phase, which way and how far.
+        private let leaves: [(f: Double, phase: Double, way: SIMD2<Double>, comes: Double, when: Double)]
+        private let sprays: [(f: Double, phase: Double, way: SIMD2<Double>)]
+        private var texels: [UInt8], places = [UInt8](repeating: 128, count: 512 * 4)
+        /// The stand's middle, px.
+        private let middle: SIMD2<Double>
+        var uniforms: [SKUniform] { [fieldMap, ownMap, wind, flutter] }
 
         /// Four sines on each axis at each corner, at random frequencies in 0.05-0.12, 0.13-0.3, 0.35-0.8 and 0.9-1.6
         /// Hz, amplitudes falling as f^-0.65, so about 82% of the displacement is below 0.5 Hz and 18% in 0.5-2 Hz,
@@ -284,37 +322,68 @@ final class Canopy: SKScene, BatteryPaced {
         /// RMS is about 0.74 of the reach.
         init(camera: Camera) {
             cells = camera.field
-            field = SKMutableTexture(size: CGSize(width: cells.x * 2, height: cells.y))
+            middle = Canopy.stand.perTan * camera.extent
+            field = SKMutableTexture(size: CGSize(width: cells.x * 3, height: cells.y))
             field.filteringMode = .linear
             fieldMap = SKUniform(name: "u_field", texture: field)
-            texels = [UInt8](repeating: 128, count: cells.x * cells.y * 8)
+            own = SKMutableTexture(size: CGSize(width: 512, height: 1))
+            own.filteringMode = .nearest
+            ownMap = SKUniform(name: "u_own", texture: own)
+            texels = [UInt8](repeating: 128, count: cells.x * cells.y * 12)
             let (low, wide) = (SIMD4<Double>(0.05, 0.13, 0.35, 0.9), SIMD4<Double>(0.07, 0.17, 0.45, 0.7))
             corners = (0..<cells.x * cells.y * 2).map { _ in
                 let f = low + wide * SIMD4((0..<4).map { _ in Double.random(in: 0..<1) })
                 func phases() -> SIMD4<Double> { SIMD4((0..<4).map { _ in Double.random(in: 0..<2 * .pi) }) }
                 return (f, SIMD4(f.indices.map { pow(f[$0], -0.65) / 6.17 }), phases(), phases())
             }
+            func way() -> SIMD2<Double> { SIMD2(Double.random(in: -0.5...0.5), Double.random(in: -0.5...0.5)) * 2.45 } // 1 on average (RMS)
+            func phase() -> Double { Double.random(in: 0..<2 * .pi) }
+            leaves = (0..<256).map { _ in (Double.random(in: 2...4.5), phase(), way(), Double.random(in: 0.15...0.45), phase()) }
+            sprays = (0..<256).map { _ in (Double.random(in: 0.5...1.4), phase(), way()) }
         }
 
-        /// `fps`: the rate the view draws at; the flutter, at 1-3 Hz, fades out below 15 fps.
+        /// `fps`: the rate the view draws at; the leaves' tremble, at 2-4.5 Hz, fades out below 15 fps.
         func set(_ breeze: Breeze, at time: TimeInterval, fps: Int) {
-            let u = breeze.wind(time), reach = Breeze.rustle(u), n = cells.x * cells.y
-            for k in 0..<n * 2 { // the canopy's corners, then the nearest leaves', twice as far
-                let c = corners[k], w = 2 * .pi * c.f * time
-                var (x, y) = (0.0, 0.0)
-                for i in 0..<4 { (x, y) = (x + c.amp[i] * sin(w[i] + c.across[i]), y + c.amp[i] * sin(w[i] + c.up[i])) }
-                let i = k % n, r = reach * (k < n ? 1 : Breeze.nearer), at = ((i / cells.x) * cells.x * 2 + i % cells.x + (k < n ? 0 : cells.x)) * 4
-                for (c, v) in [x * r, y * r].enumerated() {
-                    let bits = UInt16(min(max((v + 64) / 128 * 65535, 0), 65535).rounded())
-                    (texels[at + c * 2], texels[at + c * 2 + 1]) = (UInt8(bits >> 8), UInt8(bits & 255))
+            let n = cells.x * cells.y
+            for i in 0..<n {
+                // the wind over this corner as the gusts cross the view, so how far its twigs reach and its leaves tremble
+                let spot = SIMD2(Double(i % cells.x), Double(i / cells.x)) * 200, u = breeze.wind(time, at: spot - middle)
+                let at = (i / cells.x * cells.x * 3 + i % cells.x) * 4
+                for k in [i, i + n] { // the canopy's corner, then the nearest leaves', further and twice as far apart
+                    let c = corners[k], w = 2 * .pi * c.f * time
+                    var (x, y) = (0.0, 0.0)
+                    for s in 0..<4 { (x, y) = (x + c.amp[s] * sin(w[s] + c.across[s]), y + c.amp[s] * sin(w[s] + c.up[s])) }
+                    let r = k < n ? Breeze.rustle(u) : Breeze.rustle(breeze.wind(time, at: spot * 2 - middle)) * Breeze.nearer
+                    let o = at + (k < n ? 0 : cells.x * 4)
+                    for (c, v) in [x * r, y * r].enumerated() {
+                        let bits = UInt16(min(max((v + 64) / 128 * 65535, 0), 65535).rounded())
+                        (texels[o + c * 2], texels[o + c * 2 + 1]) = (UInt8(bits >> 8), UInt8(bits & 255))
+                    }
                 }
+                let leaf = UInt8(Breeze.tremble(u) / 2 * 255 + 0.5), o = at + cells.x * 8
+                (texels[o], texels[o + 1], texels[o + 2], texels[o + 3]) = (leaf, leaf, leaf, leaf)
             }
             texels.withUnsafeBytes { buffer in
                 nonisolated(unsafe) let bytes = buffer // taken before modifyPixelData returns (Meander's send)
                 field.modifyPixelData { data, length in data?.copyMemory(from: bytes.baseAddress!, byteCount: min(length, bytes.count)) }
             }
+            // each leaf and spray where it is now (id 0 left where it is)
+            func byte(_ v: Double) -> UInt8 { UInt8(min(max(v + 128, 0), 255).rounded()) }
+            for id in 1..<256 {
+                let l = leaves[id], s = sprays[id]
+                let comes = 0.55 + 0.45 * sin(2 * .pi * l.comes * time + l.when), turn = 2 * .pi * l.f * time + l.phase
+                let tremble = l.way * (Breeze.own.leaf * comes * sin(turn)), swing = s.way * (Breeze.own.spray * sin(2 * .pi * s.f * time + s.phase))
+                (places[id * 4], places[id * 4 + 1]) = (byte(tremble.x * 32), byte(tremble.y * 32))
+                places[id * 4 + 2] = byte(Breeze.own.light * comes * sin(turn + 1) * 127)
+                (places[(256 + id) * 4], places[(256 + id) * 4 + 1]) = (byte(swing.x * 32), byte(swing.y * 32))
+            }
+            places.withUnsafeBytes { buffer in
+                nonisolated(unsafe) let bytes = buffer
+                own.modifyPixelData { data, length in data?.copyMemory(from: bytes.baseAddress!, byteCount: min(length, bytes.count)) }
+            }
+            let u = breeze.wind(time)
             wind.vectorFloat4Value = SIMD4(Float(time.truncatingRemainder(dividingBy: 3600)), 0, Float(Breeze.crowns(u)), Float(Breeze.limbsFree(u)))
-            flutter.floatValue = Breeze.flicker * Float(simd_smoothstep(1.2, 2.6, u) * simd_smoothstep(10, 15, Double(fps)))
+            flutter.floatValue = Float(simd_smoothstep(10, 15, Double(fps)))
         }
     }
 
@@ -415,18 +484,29 @@ final class Canopy: SKScene, BatteryPaced {
 
     /// The breeze, until the live wind comes (step (d)): a heading from the seed, a mean wind (`canopy.wind`, m/s at
     /// 10 m, as Open-Meteo gives it; a breeze, Beaufort 3, unset), and a strength that swells and eases, 0.35 to 1,
-    /// as gusts and lulls. It sets how far the twigs and leaves rustle, whether the limbs move and whether the
-    /// crowns sway (research-motion.md, Settings it implies).
+    /// as gusts and lulls that cross the view downwind. It sets how far the twigs rustle and the leaves tremble,
+    /// whether the limbs move and whether the crowns sway (research-motion.md, Settings it implies).
     struct Breeze {
-        /// How much the leaves' light flickers, leaf by leaf, as they turn.
-        static let flicker: Float = 0.2
+        /// How far a leaf moves as a piece of its own at 4.3 m/s, px at 2x on a 14" screen: its own tremble and its
+        /// spray's swing (RMS over the leaves; up to 1.7 times it), and how much its light changes as it turns. With
+        /// these the motion of neighbouring 16 px blocks is as unlike as a real maple's in a breeze (docs/canopy.md,
+        /// (b3)); at 1.6 px each the leaves' edges smeared.
+        static let own = (leaf: 1.0, spray: 1.2, light: 0.45)
+        /// The hardest the leaves tremble, against the breeze's 1: past it (about 8 m/s) only the twigs and the crowns
+        /// move further, so a leaf never moves so far from its neighbours that the picture between them tears.
+        static let most = 1.3
         /// How far the twigs and leaves rustle at 4.3 m/s, and the crowns sway at 12 m/s, in px at 2x
         /// on a 14" screen (the shader's fields have an RMS of about 0.74 of it, research-motion's breeze an RMS drift
         /// of 2-4 px after 1 s).
         static let leafReach = 7.5, crownReach = 5.0
-        /// How much further the nearest leaves move: nearer, and higher in the wind.
-        static let nearer = 2.0
+        /// How much further the nearest leaves move: nearer, and higher in the wind. With their corners 400 px apart
+        /// the picture between two corners is stretched or squeezed by about 5% (RMS; the canopy's, 200 px apart, 6%):
+        /// at twice as far on corners 150 px apart it was 16%, up to 45% in a gust, and the sprays drew out into
+        /// streaks.
+        static let nearer = 1.6
         let heading: Double, phases: [Double], mean: Double
+        /// The way the wind blows over the stand, x right and y up.
+        let downwind: SIMD2<Double>
 
         init(seed: UInt64, mean: Double = 4.3) {
             self.mean = mean
@@ -438,17 +518,27 @@ final class Canopy: SKScene, BatteryPaced {
                 return Double((z ^ (z >> 31)) >> 11) / Double(1 << 53)
             }
             heading = next() * 2 * .pi
-            phases = (0..<10).map { _ in next() * 2 * .pi } // the gusts' are the last two; the first eight were (b)'s sway's
+            downwind = SIMD2(cos(heading), sin(heading))
+            phases = (0..<10).map { _ in next() * 2 * .pi } // the swell's and the gusts' are the last two, the streaks' the first two
         }
 
-        /// How hard it blows at `time` (seconds), 0.35 to 1: a swell over about a minute and gusts over a quarter of one.
-        func strength(_ time: TimeInterval) -> Double {
-            min(max(0.62 + 0.22 * sin(2 * .pi * time / 61 + phases[8]) + 0.16 * sin(2 * .pi * time / 17 + phases[9]), 0.35), 1)
+        /// How hard it blows at `time` (seconds) over a point of the stand (px from its middle), 0.35 to 1: a swell
+        /// over about a minute and gusts over a quarter of one, each reaching a point downwind later as it crosses the
+        /// view (`pace`), and streaks a few seconds long that differ across the wind, over about 2,600 px.
+        func strength(_ time: TimeInterval, at point: SIMD2<Double> = .zero) -> Double {
+            let t = time - dot(point, downwind) / pace, across = dot(point, SIMD2(-downwind.y, downwind.x))
+            let streak = 0.13 * sin(2 * .pi * (t / 6.7 + across / 2600) + phases[0]) * (0.6 + 0.4 * sin(2 * .pi * (t / 23 - across / 4100) + phases[1]))
+            return min(max(0.62 + 0.22 * sin(2 * .pi * t / 61 + phases[8]) + 0.16 * sin(2 * .pi * t / 17 + phases[9]) + streak, 0.35), 1)
         }
 
-        /// The wind at `time`, m/s: the mean, up to 1.6 times it in a gust and down to 0.56 in a lull, but never below
-        /// `calm`.
-        func wind(_ time: TimeInterval) -> Double { max(mean * strength(time) / 0.62, Self.calm) }
+        /// How fast a gust crosses the view, px a second at 2x on a 14" screen: 900 in the breeze (the footage's one
+        /// crossing was at about 930; a gust travels at about 1.75 times the wind at the crowns' height), in
+        /// proportion to the wind.
+        var pace: Double { 210 * max(mean, Self.calm) }
+
+        /// The wind at `time` over a point, m/s: the mean, up to 1.6 times it in a gust and down to 0.56 in a lull,
+        /// but never below `calm`.
+        func wind(_ time: TimeInterval, at point: SIMD2<Double> = .zero) -> Double { max(mean * strength(time, at: point) / 0.62, Self.calm) }
 
         /// The least wind it ever shows, m/s: Beaufort 2, "leaves rustle", so the canopy never looks still, whatever the
         /// wind, in still air and by night too (Dave, 2026-11-18: "just have there always be at least some subtle wind").
@@ -457,6 +547,12 @@ final class Canopy: SKScene, BatteryPaced {
         /// How far the twigs and leaves rustle in a wind of `u` m/s: growing as U^0.67, since a cherry tree's foliage
         /// moved "only by a factor of about 4" from 1 to 8 m/s (Tadrist et al. 2018 §3).
         static func rustle(_ u: Double) -> Double { leafReach * pow(max(u, 0) / 4.3, 0.67) }
+
+        /// How hard the leaves tremble in a wind of `u` m/s, 1 at 4.3 and never over `most`: from 1.2 m/s and most of
+        /// it by 2.6 (Tadrist: leaf flutter starts at 1.35 m/s and saturates at 2.6), then growing about half as fast
+        /// as the rustle does, so a gust crossing the view still shows in the leaves: 0.5 at the floor, 0.8 in a
+        /// lull of the breeze and 1.2 in its gusts.
+        static func tremble(_ u: Double) -> Double { min(simd_smoothstep(1.2, 2.6, u) * (0.45 + 0.55 * rustle(u) / leafReach), most) }
 
         /// How far the crowns sway as bodies: not below Beaufort 5 (8.7 m/s, "small trees in leaf begin to sway"),
         /// then as U² (Jackson et al. 2021: deflection linear in the wind speed squared).
@@ -467,7 +563,7 @@ final class Canopy: SKScene, BatteryPaced {
 
         /// The fastest thing moving, px a second at 2x on a 14" screen: the 95th percentile of the leaves' rustle (2
         /// times its reach a second, the field simulated), twice that for the nearest leaves, and the crowns' sway at
-        /// 0.3 Hz.
+        /// 0.3 Hz. The leaves' own tremble isn't counted: `Canopy.rate` keeps 20 fps for it.
         func fastest(_ time: TimeInterval) -> Double {
             let u = wind(time)
             return 2 * Self.rustle(u) * Self.nearer + 2.7 * Self.crowns(u)
@@ -569,37 +665,65 @@ final class Canopy: SKScene, BatteryPaced {
 
     /// The motion (docs/canopy/research-motion.md, Model 2): the wood still, and each point free to move as far as the
     /// freedom map says (`CanopyBake.freedom`), by a field of its own about a spray and its twig across; in a strong
-    /// wind the limbs freed too and the crowns swaying as bodies; the leaves' light flickering leaf by leaf. The nearest
-    /// leaves are a picture of their own, moved twice as far by a field of their own over the rest, so gaps open and
-    /// close inside the crowns and the leaves in front change.
+    /// wind the limbs freed too and the crowns swaying as bodies. The nearest leaves are a picture of their own, moved
+    /// twice as far by a field of their own over the rest, so gaps open and close inside the crowns and the leaves in
+    /// front change. And step (b3): where that brings a leaf, the leaf moves as one piece (`pieces`), by its spray's
+    /// swing and its own tremble, its light changing with it, as hard as the wind over it blows.
     private static let motionSource = """
         vec2 p = q0 * STAND;                             // stand px, as px at 2x on a 14" screen
         vec4 loose = texture2D(u_sway, q0);              // how free: the twigs (r), with the limbs (g); along the trees (b)
         float m = mix(loose.r, loose.g, u_wind.w);
         vec2 crowns = loose.b * u_wind.z * sway(p / 700.0, u_wind.x);
-        vec2 fc = p / 150.0, fi = floor(fc), ff = fract(fc);
+        vec2 fc = p / 200.0, fi = floor(fc), ff = fract(fc);
         fc = fi + ff * ff * (3.0 - 2.0 * ff) + 0.5;              // the corners blended smoothly, by the filter
-        vec4 rustle = texture2D(u_field, fc / vec2(2.0 * FIELD.x, FIELD.y));
-        vec2 q = q0 - (m * ((rustle.xz * 65280.0 + rustle.yw * 255.0) / 512.0 - 64.0) + crowns) / STAND;
+        vec2 fs = vec2(3.0 * FIELD.x, FIELD.y);
+        vec4 rustle = texture2D(u_field, fc / fs);
+        float gust = 2.0 * texture2D(u_field, (fc + vec2(2.0 * FIELD.x, 0.0)) / fs).r * u_flutter; // how hard the leaves here tremble
+        vec2 twig = m * ((rustle.xz * 65280.0 + rustle.yw * 255.0) / 512.0 - 64.0);
+        vec2 q = q0 - (twig + crowns) / STAND;
+    \(pieces("A", at: "q", of: "rb"))
         vec3 sky = texture2D(u_sky, uv).rgb;
         sky = sky * sky * 4.0;
-        vec4 c = texture2D(u_canopy, q);
-        vec3 canopy = c.rgb * c.rgb * 2.0 * (1.0 + u_flutter * m * flutter(q * STAND / 14.0, u_wind.x));
+        vec4 c = texture2D(u_canopy, q0 - (twig + crowns + gust * offA) / STAND);
+        vec3 canopy = c.rgb * c.rgb * 2.0 * (1.0 + gust * lightA);
         float a = c.a;
-        // the nearest leaves, on twigs that move even by a limb, over the rest
-        float mn = max(m, 0.5);
-        vec4 nr = texture2D(u_field, (fc + vec2(FIELD.x, 0.0)) / vec2(2.0 * FIELD.x, FIELD.y));
-        vec2 qn = q0 - (mn * ((nr.xz * 65280.0 + nr.yw * 255.0) / 512.0 - 64.0) + crowns) / STAND;
-        vec4 n = texture2D(u_near, qn);
-        canopy = n.rgb * n.rgb * 2.0 * (1.0 + u_flutter * mn * flutter(qn * STAND / 14.0 + 0.5, u_wind.x)) + canopy * (1.0 - n.a);
+        // the nearest leaves, in front of the wood, on twigs of their own: nearly as free beside a limb as away from
+        // it, so a spray slides over the limb whole (held back there, it stretched like rubber)
+        float mn = 0.8 + 0.2 * m;
+        vec2 gc = p / 400.0, gi = floor(gc), gf = fract(gc);     // their corners twice as far apart
+        vec4 nr = texture2D(u_field, (gi + gf * gf * (3.0 - 2.0 * gf) + 0.5 + vec2(FIELD.x, 0.0)) / fs);
+        vec2 twigN = mn * ((nr.xz * 65280.0 + nr.yw * 255.0) / 512.0 - 64.0);
+        vec2 qn = q0 - (twigN + crowns) / STAND;
+    \(pieces("B", at: "qn", of: "ga"))
+        vec4 n = texture2D(u_near, q0 - (twigN + crowns + gust * offB) / STAND);
+        canopy = n.rgb * n.rgb * 2.0 * (1.0 + gust * lightB) + canopy * (1.0 - n.a);
         a = n.a + a * (1.0 - n.a);
     """
 
-    /// The fields the motion moves by besides the rustle (`Motion.field`), each on a grid whose corners move on
-    /// their own and blend smoothly between, on the clock wrapped hourly with every frequency a whole number of cycles
-    /// an hour, so the wrap can't be seen:
-    /// - `sway`, the crowns as bodies in a strong wind, cells of 700 px, a sine on each axis at 0.15-0.3 Hz;
-    /// - `flutter`, the leaves' light, cells of 14 px (a leaf), each at 1-3 Hz.
+    /// The shader's lines for a leaf as a piece of its own: whose leaf is at the point `at` of a picture (its id and
+    /// its spray's in channels `of` of `CanopyBake.ids`), and from `Motion.own` how far that leaf is from its place
+    /// in the breeze (`off`, px: its own tremble and its spray's swing) and its light (`light`), each named with `x`
+    /// after it. Read for the four pixels of ids round the point and blended as a linear filter would,
+    /// since ids can't be: a leaf's inside then moves as one piece and its edge is bent into its neighbour's over a
+    /// pixel, not cut, which showed as ragged edges.
+    private static func pieces(_ x: String, at: String, of: String) -> String {
+        let taps = [("00", "0.5, 0.5"), ("10", "1.5, 0.5"), ("01", "0.5, 1.5"), ("11", "1.5, 1.5")].map { tap, corner in """
+                vec2 e\(tap)\(x) = texture2D(u_ids, (i\(x) + vec2(\(corner))) / IDS).\(of) * 255.0 + 0.5;
+                vec4 l\(tap)\(x) = texture2D(u_own, vec2(e\(tap)\(x).x / 512.0, 0.5)), s\(tap)\(x) = texture2D(u_own, vec2((e\(tap)\(x).y + 256.0) / 512.0, 0.5));
+            """ }.joined(separator: "\n")
+        return """
+                vec2 c\(x) = \(at) * IDS - 0.5, i\(x) = floor(c\(x)), w\(x) = c\(x) - i\(x);
+            \(taps)
+                vec4 l\(x) = mix(mix(l00\(x), l10\(x), w\(x).x), mix(l01\(x), l11\(x), w\(x).x), w\(x).y);
+                vec4 s\(x) = mix(mix(s00\(x), s10\(x), w\(x).x), mix(s01\(x), s11\(x), w\(x).x), w\(x).y);
+                vec2 off\(x) = ((l\(x).xy + s\(x).xy) * 255.0 - 256.0) / 32.0;
+                float light\(x) = (l\(x).z * 255.0 - 128.0) / 127.0;
+            """
+    }
+
+    /// The crowns' sway as bodies in a strong wind (`sway`), besides the rustle (`Motion.field`): a grid of 700 px
+    /// cells whose corners move on their own and blend smoothly between, a sine on each axis at 0.15-0.3 Hz, on the
+    /// clock wrapped hourly with every frequency a whole number of cycles an hour, so the wrap can't be seen.
     private static let rustleSource = """
         vec2 swayAt(vec2 i, float now) {
             vec4 h = hash42(i + 91.0);
@@ -609,15 +733,6 @@ final class Canopy: SKScene, BatteryPaced {
             vec2 i = floor(c), f = fract(c);
             f = f * f * (3.0 - 2.0 * f);
             return mix(mix(swayAt(i, now), swayAt(i + vec2(1.0, 0.0), now), f.x), mix(swayAt(i + vec2(0.0, 1.0), now), swayAt(i + vec2(1.0, 1.0), now), f.x), f.y);
-        }
-        float flick(vec2 i, float now) {
-            vec4 h = hash42(i + 13.0);
-            return sin(6.2831853 * (fract(floor((1.0 + 2.0 * h.x) * 3600.0) / 3600.0 * now) + h.y));
-        }
-        float flutter(vec2 c, float now) {
-            vec2 i = floor(c), f = fract(c);
-            f = f * f * (3.0 - 2.0 * f);
-            return mix(mix(flick(i, now), flick(i + vec2(1.0, 0.0), now), f.x), mix(flick(i + vec2(0.0, 1.0), now), flick(i + vec2(1.0, 1.0), now), f.x), f.y);
         }
 
     """
@@ -676,8 +791,8 @@ extension Canopy {
         var tan: SIMD2<Double>, extent: SIMD2<Double>, portrait: Bool
         /// Points on the screen to a unit of tan.
         var scale: Double
-        /// The rustle's corners across and up the stand (`Motion.field`), one every 150 px, and one past each end.
-        var field: (x: Int, y: Int) { (Int(stand.perTan * 2 * extent.x / 150) + 2, Int(stand.perTan * 2 * extent.y / 150) + 2) }
+        /// The rustle's corners across and up the stand (`Motion.field`), one every 200 px, and one past each end.
+        var field: (x: Int, y: Int) { (Int(stand.perTan * 2 * extent.x / 200) + 2, Int(stand.perTan * 2 * extent.y / 200) + 2) }
         init(size: CGSize) {
             portrait = size.height > size.width
             let long = Double(max(size.width, size.height))
@@ -696,6 +811,7 @@ extension Canopy {
             #define SCALE \(scale)
             #define STAND vec2(\(stand.perTan * 2 * extent.x), \(stand.perTan * 2 * extent.y))
             #define FIELD vec2(\(field.x).0, \(field.y).0)
+            #define IDS vec2(\(Int(stand.perTan * 2 * extent.x)).0, \(Int(stand.perTan * 2 * extent.y)).0)
             #define MILKY 0.5
 
             """
