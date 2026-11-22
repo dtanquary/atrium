@@ -389,6 +389,7 @@ if !scenes.contains(where: { $0.name == current }) {
         }
         #endif
         if MenuGrid.pictures {
+            (grid.view as? MenuGridView)?.fit() // a star may have come or gone, by the list of names, since it was last open
             menu.addItem(grid)
         } else {
             // The starred ones first, with a line under them, as they lead the grid.
