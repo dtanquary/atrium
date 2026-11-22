@@ -500,6 +500,8 @@ struct AboutPage: View {
                 credit("Beehive's bees", "A worker from above, USGS Bee Inventory and Monitoring Lab photo (public domain)",
                        "https://www.flickr.com/photos/usgsbiml/34886290922/")
                 credit("Beehive's frames", "Poly Haven's coated_pine_02 (CC0)", "https://polyhaven.com/a/coated_pine_02")
+                credit("Seismograph's sample day", "NL.HGN, the Netherlands Seismic and Acoustic Network (NL), KNMI, via ORFEUS",
+                       "https://doi.org/10.21944/e970fd34-23b9-3411-b366-e4f72877d2c5", license: "CC BY 4.0")
                 group("Canopy", "A forest straight up from Poly Haven, and leaves from ambientCG (CC0)", "canopy-credits.tsv")
                 group("Dappled Light", "Plaster, brick, siding, oak and leaves from Poly Haven and ambientCG (CC0)", "dappled-credits.tsv")
                 group("Weather", "Hills, clouds and Moon from the BLM, NASA, Poly Haven and Wikimedia Commons", "weather-credits.tsv")
