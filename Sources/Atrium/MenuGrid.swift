@@ -16,8 +16,8 @@ import SwiftUI
     static var pictures: Bool { knob.value < 0.5 }
 
     // Where everything sits, in points from the top left. The pictures are drawn by it and the tile under the pointer
-    // is found by it, so the two can't disagree.
-    static let width = 600.0, inset = 14.0, gap = 8.0, top = 6.0, bottom = 10.0, across = 6
+    // is found by it, so the two can't disagree. The inset is the menu's own, where its separators and rows begin.
+    static let width = 600.0, inset = 16.0, gap = 8.0, top = 6.0, bottom = 10.0, across = 6
     /// The line above the tiles that names a wallpaper, and the space under it.
     static let caption = 26.0, captionGap = 6.0
     /// A tile: a sixth of the width between the insets, in the shape of a still (1200 × 779).
