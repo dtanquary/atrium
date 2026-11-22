@@ -400,6 +400,8 @@ How they pick the moment is in (c1). Besides them, the pins for pictures (`canop
 - 2026-11-21, of (b3) on his desktop (0.130.32, 15 July at 3:30 pm): "canopy finally looks how I imagined it, any further improvements you can make is just icing on top".
 - 2026-11-21: "canopy also lacks settings that allow me to lock to system theme, day night, or lock to a time or season". Step (c1): Time of day and Season.
 
+- 2026-11-21, of the evergreens' stills, before and after: "yes go for the after view, "After: a dark needle green" looks way better". The needle green goes in (0.131.2).
+
 ## Still open
 - The evergreens' needles: real texture (the stand keyed again to keep it), sunlight on them at a low Sun, and their sway in a wind.
 - A faint wisp of the photo's sky still sits beside the low twigs at dawn (seed 3, 17 November 6:36 am): the matte's clean-up keeps anything touching real wood.
