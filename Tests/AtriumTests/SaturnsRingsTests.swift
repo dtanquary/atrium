@@ -357,8 +357,11 @@ private func day(_ text: String) -> Date {
 }
 
 /// The Sun's height over the ring plane from the date, by `SkyMath`'s orbit for Saturn and the IAU's pole, agrees
-/// with JPL Horizons' to a tenth of a degree from Cassini's equinox to the next one, and the date pin is read.
-@Test func saturnsRingsSunMatchesHorizons() {
+/// with JPL Horizons' to a tenth of a degree from Cassini's equinox to the next one, and the date pin is read. On
+/// the main actor, as every test that changes a setting must be: the change is announced on the thread that makes
+/// it, and off the main one it trapped in whichever scene another test had alive and listening (Pixel City's and
+/// Pixel Train's `settingsChanged`, twice on 2026-11-21).
+@MainActor @Test func saturnsRingsSunMatchesHorizons() {
     for (text, want) in horizons {
         let jd = Sky.julianDate(day(text)), got = asin(simd_dot(Sky.sun(from: .saturn, jd), SaturnsRings.pole(jd))) * 180 / .pi
         #expect(abs(got - want) < 0.1, "\(text): \(got)° against Horizons' \(want)°")
