@@ -27,6 +27,27 @@ import UniformTypeIdentifiers
             if i >= 1024, i < n - 1024 { #expect(abs(2 * value(j, levels - 1, i) - value(j, levels - 2, i - 1024) - value(j, levels - 2, i + 1024)) <= 3) }
         }
     }
+
+    // The A ring's own, a sample a km: the same, with boxes up to 8 km; the Encke gap's edges sharp (10 km in, the ring;
+    // 5 km on, nothing); and the Keeler gap inside the one drawn from its own edges, 17.5 km either side of Daphnis's
+    // orbit, so no second edge shows beside that one.
+    start = CFAbsoluteTimeGetCurrent()
+    let fine = RingProfile.loadFine(), fineBytes = fine.pyramidBytes(levels: RingProfile.fineLevels)
+    print(String(format: "Saturn's Rings: the fine profile read and its pyramid baked in %.1f ms", (CFAbsoluteTimeGetCurrent() - start) * 1000))
+    let count = fine.tau.count, fineLevels = RingProfile.fineLevels
+    #expect(count == 16384 && count == RingProfile.fineCount && fineBytes.count == count * RingProfile.ks * fineLevels * 4)
+    func fineValue(_ j: Int, _ m: Int, _ i: Int) -> Int { let at = ((j * fineLevels + m) * count + i) * 4; return Int(fineBytes[at]) << 8 | Int(fineBytes[at + 1]) }
+    for j in [0, 5, 11] {
+        for i in stride(from: 4, to: count - 4, by: 7) {
+            #expect(abs(fineValue(j, 0, i) - Int(exp(-fine.tau[i] * pow(2, Double(j))) * 65535)) <= 1)
+            #expect(abs(2 * fineValue(j, 3, i) - fineValue(j, 2, i - 2) - fineValue(j, 2, i + 2)) <= 3)
+        }
+    }
+    /// The fine profile's τ at a radius in km.
+    func tau(_ km: Double) -> Double { fine.tau[Int((km / 1000 - fine.start) / fine.step + 0.5)] }
+    #expect(tau(133_415) > 0.4 && tau(133_430) == 0 && tau(133_600) == 0 && tau(133_750) > 0.4, "the Encke gap's edges")
+    #expect(tau(136_486) > 0.4 && tau(136_504) == 0 && tau(136_522) > 0.4, "the Keeler gap within Daphnis's")
+    #expect(tau(136_760) > 1 && tau(136_770) == 0, "the A ring's edge")
 }
 
 /// How long the main thread takes to build the scene and draw its first frame at 3024 × 1964: the first copy, which
