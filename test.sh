@@ -18,14 +18,16 @@ queue=${TEST_WAIT:-1800} limit=${TEST_LIMIT:-2700}
 if [ -z "$ATRIUM_TEST_QUEUED" ]; then
     [ $# -gt 0 ] || { sed -n '2,/^set -e/p' "./$(basename "$0")" | sed '$d; s/^# \{0,1\}//'; exit 64; }
     status=0
-    ATRIUM_TEST_QUEUED=1 lockf -k -t "$queue" "$(git rev-parse --git-common-dir)/atrium-test.lock" "./$(basename "$0")" "$@" || status=$?
+    ATRIUM_TEST_QUEUED=1 lockf -ks -t "$queue" "$(git rev-parse --git-common-dir)/atrium-test.lock" "./$(basename "$0")" "$@" || status=$?
     [ $status -ne 75 ] || echo "test.sh: another run held the queue for $queue s; nothing was run" >&2
     exit $status
 fi
 
-# A run started any other way, or left behind by one that was stopped, has to finish first.
+# A run started any other way, or left behind by one that was stopped, has to finish first. Found by the process's
+# own name, never its whole command line: a shell that only mentions these names, as a session's own waiting loop
+# does, would be waited on for good.
 end=$(( $(date +%s) + queue ))
-while pgrep -x xctest >/dev/null || pgrep -f 'swiftpm-testing-helper|swift-test' >/dev/null; do
+while pgrep -x xctest >/dev/null || pgrep -x swift-test >/dev/null || pgrep '^swiftpm-testing' >/dev/null; do
     [ "$(date +%s)" -lt "$end" ] || { echo "test.sh: a run outside the queue didn't finish in $queue s; nothing was run" >&2; exit 74; }
     sleep 5
 done
