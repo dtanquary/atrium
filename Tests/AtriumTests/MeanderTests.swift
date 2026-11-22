@@ -1365,10 +1365,9 @@ private func ripple(_ picture: [UInt32], side: Int, texel: Int, counts: (_ x: In
 
 /// Meander changes mode by itself, so the app must not build it afresh when the appearance changes: its entry says
 /// so. So does Etching's, whose screen eases to the other mode under the picture, Jellyfish's, whose tank's light
-/// eases while its jellies carry on, Kelp Forest's, whose water eases to dusk while the forest sways on, and
-/// Seismograph's, whose sheet eases between its chart and its smoked paper while the pen writes on (a rebuild would
-/// stamp the day again); no other wallpaper's does (each of those is built to the mode it starts in).
+/// eases while its jellies carry on, and Kelp Forest's, whose water eases to dusk while the forest sways on; no other
+/// wallpaper's does (each of those is built to the mode it starts in).
 @MainActor @Test func onlyTheseFollowTheAppearanceThemselves() {
-    #expect(allScenes.filter(\.followsAppearance).map(\.name) == ["Etching", "Jellyfish", "Kelp Forest", "Meander", "Saturn's Rings", "Seismograph"])
+    #expect(allScenes.filter(\.followsAppearance).map(\.name) == ["Etching", "Jellyfish", "Kelp Forest", "Meander", "Saturn's Rings"])
 }
 
