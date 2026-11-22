@@ -487,6 +487,7 @@ struct AboutPage: View {
                        "https://pds-rings.seti.org/holdings/volumes/COUVIS_8xxx/COUVIS_8001/data/UVIS_HSP_2008_231_BETCEN_I_TAU10KM.TAB")
                 credit("Saturn's rings' brightness", "Voyager 2 ISS's lit-face profile (NASA/JPL), from NASA's PDS Ring-Moon Systems Node (public domain)",
                        "https://pds-rings.seti.org/holdings/volumes/VG_28xx/VG_2810/DATA/IS2_P0001_V01_KM010.TAB")
+                credit("Saturn's moons", "Their places from NASA JPL's Horizons, their sizes from JPL's Solar System Dynamics", "https://ssd.jpl.nasa.gov/horizons/")
             }
             Section {
                 credit("Aurora's mountains", "The Tetons, NPS photo by A. Falgoust (public domain)",

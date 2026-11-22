@@ -69,7 +69,9 @@ final class SaturnsRings: SKScene, BatteryPaced {
     /// How fast the camera drifts while it holds a view (and Daphnis comes near): the drift's own clock. A hold and a
     /// glide keep their lengths.
     nonisolated static let speed = Knob(key: "saturn.speed", label: "Speed", range: 0...10, standard: 1, section: "Motion", format: .times)
-    nonisolated static let knobs = [view, hold, face, brightness, stars, speed]
+    /// Saturn's six big moons where they are on the day, and Pan in the Encke gap.
+    nonisolated static let showMoons = Knob(key: "saturn.moons", label: "Moons", range: 0...1, standard: 1, section: "Look", format: .toggle)
+    nonisolated static let knobs = [view, hold, face, brightness, stars, showMoons, speed]
 
     /// How long a glide to the next view takes, and how long the drift takes to go out and back at Speed 1×, in
     /// seconds; Daphnis comes near over half that and goes back over the other half.
@@ -112,14 +114,69 @@ final class SaturnsRings: SKScene, BatteryPaced {
         min(max(pow(sin(8.4 * .pi / 180) / sin(abs(sunUp) * .pi / 180), lit ? 0.5 : 0.75), 1), lit ? 10 : 30)
     }
 
-    /// The day the light is worked out for: `saturn.date` (YYYY-MM-DD, for pictures, not in Settings), else now.
+    /// The moment the light and the moons are worked out for: `saturn.date` (YYYY-MM-DD, or to the second as
+    /// 2026-11-21T18:00:00Z, for pictures, not in Settings), else now.
     nonisolated static var date: Date {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withFullDate]
-        return UserDefaults.standard.string(forKey: "saturn.date").flatMap(formatter.date(from:)) ?? Date()
+        let day = ISO8601DateFormatter()
+        day.formatOptions = [.withFullDate]
+        return UserDefaults.standard.string(forKey: "saturn.date").flatMap { ISO8601DateFormatter().date(from: $0) ?? day.date(from: $0) } ?? Date()
     }
     /// Daphnis's orbit, Mm from Saturn's centre.
     nonisolated static let daphnis = 136.504
+
+    /// One of Saturn's big moons, its orbit fitted to JPL Horizons' places for 2022 to 2041 (docs/saturns-rings/moons.py
+    /// fits them and says how; within 0.4° of Horizons over those years): its distance in Mm; its mean longitude in
+    /// Saturn's equator, the ring plane, from where that rises through the Earth's, in degrees on `moonEpoch`, and a
+    /// day, a day² and a day³ after; its eccentricity, and where it is nearest Saturn (degrees, and a day); its tilt
+    /// to the ring plane in degrees, and where it rises through it (degrees, and a day). Its radius in km is JPL's
+    /// (https://ssd.jpl.nasa.gov/sats/phys_par/); its light is the planet's 0.42 by its albedo over Saturn's 0.499
+    /// (NASA's fact sheets, https://nssdc.gsfc.nasa.gov/planetary/factsheet/saturniansatfact.html), and no more than
+    /// the planet's, which every icy one would pass; and its colour as a picture shows it.
+    // ponytail: fitted to 2022-2041. Past 2041 Mimas strays by degrees a year, its 71-year swing with Tethys being
+    // the fit's square and cube of the time: fit them again from Horizons then (moons.py).
+    struct Moon {
+        let name: String, a: Double, longitude: (Double, Double, Double, Double), e: Double, peri: (Double, Double)
+        let i: Double, node: (Double, Double), radius: Double, light: Double, colour: Int
+    }
+    nonisolated static let moonEpoch = 2461000.5 // 2025-11-21 00:00 UT
+    nonisolated static let moons = [
+        Moon(name: "Mimas", a: 185.5699, longitude: (186.8385, 381.9949023, 1.1770e-06, -2.0120e-11), e: 0.01966, peri: (249.49, 1.0010), i: 1.5775, node: (82.47, -0.9995),
+             radius: 198.2, light: 0.42, colour: 0xffffff),
+        Moon(name: "Enceladus", a: 238.0385, longitude: (83.8717, 262.7318088, 9.3586e-08, -1.5865e-11), e: 0.00473, peri: (127.96, 0.3375), i: 0.0083, node: (0.95, -0.4175),
+             radius: 252.1, light: 0.42, colour: 0xffffff),
+        Moon(name: "Tethys", a: 294.6736, longitude: (94.7184, 190.6978909, -5.6003e-08, 8.6455e-13), e: 0.00014, peri: (18.68, 0.1970), i: 1.0915, node: (189.40, -0.1980),
+             radius: 531.1, light: 0.42, colour: 0xffffff),
+        Moon(name: "Dione", a: 377.4163, longitude: (105.5714, 131.5349371, -6.4536e-09, 1.1040e-12), e: 0.00221, peri: (291.35, 0.0840), i: 0.0291, node: (209.57, -0.0815),
+             radius: 561.4, light: 0.42, colour: 0xffffff),
+        Moon(name: "Rhea", a: 527.0675, longitude: (81.4785, 79.6900447, 2.0474e-09, -3.3990e-13), e: 0.00105, peri: (209.72, 0.0040), i: 0.3187, node: (92.92, -0.0295),
+             radius: 763.5, light: 0.42, colour: 0xffffff),
+        Moon(name: "Titan", a: 1222.3700, longitude: (4.1906, 22.5769690, 5.3199e-09, -8.2209e-13), e: 0.02869, peri: (217.23, 0.0015), i: 0.4286, node: (251.32, 0.0005),
+             radius: 2574.76, light: 0.42 * 0.22 / 0.499, colour: 0xe0aa5f),
+    ]
+
+    /// Where the moons are at `jd` (a Julian date, UT), in Mm from Saturn's centre, in the frame the shader has the
+    /// Sun at azimuth 0 round the pole: x toward the Sun along the ring plane, z Saturn's north pole. A camera with
+    /// the Sun at azimuth `sun` sees them turned that far round the pole, as it does the stars.
+    nonisolated static func moons(at jd: Double) -> [SIMD3<Double>] {
+        let pole = pole(jd), sun = Sky.sun(from: .saturn, jd)
+        let across = simd_normalize(sun - simd_dot(sun, pole) * pole), aside = simd_cross(pole, across)
+        // where Saturn's equator rises through the Earth's (J2000), and a quarter turn on along it
+        let rising = simd_normalize(SIMD3(-pole.y, pole.x, 0)), on = simd_cross(pole, rising)
+        let t = jd - moonEpoch, degrees = Double.pi / 180
+        return moons.map { moon in
+            let mean = (moon.longitude.0 + moon.longitude.1 * t + moon.longitude.2 * t * t + moon.longitude.3 * t * t * t) * degrees
+            let anomaly = mean - (moon.peri.0 + moon.peri.1 * t) * degrees
+            let longitude = mean + 2 * moon.e * sin(anomaly), distance = moon.a * (1 - moon.e * cos(anomaly))
+            let latitude = moon.i * degrees * sin(longitude - (moon.node.0 + moon.node.1 * t) * degrees)
+            let place = distance * (cos(latitude) * (cos(longitude) * rising + sin(longitude) * on) + sin(latitude) * pole)
+            return SIMD3(simd_dot(place, across), simd_dot(place, aside), simd_dot(place, pole))
+        }
+    }
+    /// Pan, in the middle of the Encke gap 133.583 Mm out, 14 km in radius (JPL's): kept this far ahead of the camera
+    /// round Saturn, in radians (6 Mm along the gap), so it's in Over the Encke Gap's frame; in the other views it's a
+    /// speck in the gap or out of the frame.
+    // ponytail: on no real orbit, as Daphnis isn't: the camera's own place round Saturn isn't a real one.
+    nonisolated static let pan = (r: 133.583, radius: 14.0, ahead: 0.045)
 
     /// The numbers a frame is drawn from: a view's with its drift, or partway from one to another in a glide.
     struct Camera {
@@ -481,9 +538,16 @@ final class SaturnsRings: SKScene, BatteryPaced {
     private(set) var batteryRate: Int? { didSet { batteryRateChanged(from: oldValue) } }
     private let cam = SKUniform(name: "u_cam", vectorFloat3: .zero), rot = SKUniform(name: "u_rot", matrixFloat3x3: matrix_identity_float3x3)
     private let sunUniform = SKUniform(name: "u_sun", vectorFloat3: .zero), lens = SKUniform(name: "u_lens", vectorFloat2: .zero)
-    private let moonUniform = SKUniform(name: "u_moon", vectorFloat2: .zero), starsUniform = SKUniform(name: "u_stars", float: 1)
+    private let moonUniform = SKUniform(name: "u_moon", vectorFloat3: .zero), starsUniform = SKUniform(name: "u_stars", float: 1)
     /// The Sun's height over the ring plane in degrees, for the day the scene was built (`light(on:)`).
     let sunUp: Double
+    /// The moment the scene was built for, a Julian date: the moons move on from it with the scene's clock.
+    private let built: Double
+    /// The big moons' places, three to a matrix's first columns (`moons(at:)`, turned to the camera's Sun); the first
+    /// matrix's last column has how far below and above the ring plane's own level a ray can point and still meet
+    /// one (the sines of the angles), so the shader looks for them only in that band of the screen.
+    private let moonsNear = SKUniform(name: "u_moonsNear", matrixFloat4x4: matrix_identity_float4x4)
+    private let moonsFar = SKUniform(name: "u_moonsFar", matrixFloat4x4: matrix_identity_float4x4)
     private let exposure = SKUniform(name: "u_exposure", float: 1), planetExposure = SKUniform(name: "u_planetExposure", float: 1)
     private let colours = (0..<5).map { SKUniform(name: "u_c\($0)", vectorFloat3: .zero) }
     /// The face whose colours are in `colours`.
@@ -504,8 +568,8 @@ final class SaturnsRings: SKScene, BatteryPaced {
             let lap = alternating ? Self.alternateFlight[120 * (Self.flightOrder.count + 1)] : Self.flight.last!
             loop = pinned.map { $0 * Self.speed.value } ?? .random(in: 0..<lap)
         }
-        let light = Self.light(on: date ?? Self.date)
-        sunUp = light.up
+        let day = date ?? Self.date, light = Self.light(on: day)
+        (sunUp, built) = (light.up, Sky.julianDate(day))
         super.init(size: size)
 
         // ponytail: the first copy builds on the main thread in about 50 ms in release (the profile read 10, the
@@ -539,7 +603,7 @@ final class SaturnsRings: SKScene, BatteryPaced {
         sprite.shader = SKShader(source: shaderCommon + saturnsRingsSource(rings), uniforms: [
             SKUniform(name: "u_size", vectorFloat2: [Float(size.width), Float(size.height)]), SKUniform(name: "u_table", texture: table),
             SKUniform(name: "u_fine", texture: fineTable),
-            cam, rot, sunUniform, lens, moonUniform, starsUniform, exposure, planetExposure,
+            cam, rot, sunUniform, lens, moonUniform, moonsNear, moonsFar, starsUniform, exposure, planetExposure,
             SKUniform(name: "u_catalogue", texture: catalogue), SKUniform(name: "u_galaxy", texture: glow),
             SKUniform(name: "u_sky", matrixFloat3x3: turn),
         ] + colours)
@@ -699,7 +763,20 @@ final class SaturnsRings: SKScene, BatteryPaced {
         rot.matrixFloat3x3Value = matrix_float3x3(columns: (SIMD3<Float>(axes.right), SIMD3<Float>(axes.up), SIMD3<Float>(axes.ahead)))
         sunUniform.vectorFloat3Value = SIMD3<Float>(axes.sun)
         lens.vectorFloat2Value = [tangent, tangent * Float(size.height / size.width)]
-        moonUniform.vectorFloat2Value = [Float(camera.ahead / Self.daphnis), Float(camera.moon)]
+        moonUniform.vectorFloat3Value = [Float(camera.ahead / Self.daphnis), Float(camera.moon), Float(Self.showMoons.value)]
+        // the moons, turned round the pole to where this camera has the Sun, and the band of the screen they're in:
+        // each one's angle over the plane's level from here, less and more its own radius and two pixels
+        let round = camera.sun * .pi / 180, (across, aside) = (cos(round), sin(round))
+        let places = Self.moons(at: built + time / 86400).map { SIMD3(across * $0.x - aside * $0.y, aside * $0.x + across * $0.y, $0.z) }
+        var (lowest, highest) = (1.0, -1.0)
+        for (place, moon) in zip(places, Self.moons) {
+            let to = place - axes.at, far = simd_length(to), up = asin(to.z / far)
+            let wide = asin(min(moon.radius / 1000 / far, 1)) + 2 * Double(tangent) / Double(size.width)
+            (lowest, highest) = (min(lowest, sin(max(up - wide, -.pi / 2))), max(highest, sin(min(up + wide, .pi / 2))))
+        }
+        func column(_ i: Int) -> SIMD4<Float> { SIMD4(SIMD3<Float>(places[i]), 0) }
+        moonsNear.matrixFloat4x4Value = matrix_float4x4(columns: (column(0), column(1), column(2), SIMD4(Float(lowest), Float(highest), 0, 0)))
+        moonsFar.matrixFloat4x4Value = matrix_float4x4(columns: (column(3), column(4), column(5), .zero))
         exposure.floatValue = Float(camera.exposure * brightness * Self.lift(sunUp, lit: lit))
         planetExposure.floatValue = Float(camera.planet * brightness)
         starsUniform.floatValue = Float(Self.stars.value)
@@ -829,6 +906,25 @@ private func saturnsRingsSource(_ rings: RingProfile) -> String {
             + "if (fine > 0.0) { vec4 \(v)Fine = fineAt(uf, wf, \(k)); vec4 \(v)F0 = texture2D(u_fine, \(v)Fine.xy); vec4 \(v)F1 = texture2D(u_fine, \(v)Fine.xz); "
             + "\(v) = mix(\(v), mix(pyrOf(\(v)F0), pyrOf(\(v)F1), \(v)Fine.w), fine); \(v)Alb = mix(\(v)Alb, \(v)F0.b * 0.5, fine); }"
     }
+    /// A display colour as the shader's vec3 in linear light, at luma 1, times `light`.
+    func tint(_ hex: Int, _ light: Double) -> String {
+        let c = [hex >> 16 & 255, hex >> 8 & 255, hex & 255].map { pow(Double($0) / 255, 2.2) }, luma = 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+        return "vec3(\(c[0] / luma * light), \(c[1] / luma * light), \(c[2] / luma * light))"
+    }
+    /// Looks for a ball `size` Mm in radius at `at` along the ray, and keeps it as `moon`, with its `tint`, if it's the
+    /// nearest met yet. Only a ray that passes within the ball and a pixel of it goes on to work out its light.
+    func ball(_ at: String, _ size: Double, _ tint: String) -> String {
+        "{ vec3 at = \(at); vec3 oc = c - at; float b = dot(oc, d), reach = \(size) - 0.5 * b * px; "
+            + "if (b < 0.0 && dot(oc, oc) - b * b < reach * reach) { vec4 met = moonAt(c, d, s, at, \(size), px); if (met.x < moon.x) { moon = met; moonTint = \(tint); } } }"
+    }
+    let balls = SaturnsRings.moons.enumerated().map { i, moon in
+ball("(\(i < 3 ? "u_moonsNear" : "u_moonsFar") * vec4(\(i % 3 == 0 ? 1.0 : 0.0), \(i % 3 == 1 ? 1.0 : 0.0), \(i % 3 == 2 ? 1.0 : 0.0), 0.0)).xyz", moon.radius / 1000, tint(moon.colour, moon.light))
+    }.joined(separator: "\n            ")
+    let pan = ball("vec3(\(SaturnsRings.pan.r * cos(SaturnsRings.pan.ahead)), \(SaturnsRings.pan.r * sin(SaturnsRings.pan.ahead)), 0.0)", SaturnsRings.pan.radius / 1000, "vec3(0.12)")
+    /// Draws the moon met over what's there: all of it if it's before the planet, else what the planet's limb leaves.
+    /// Icy ones a little flatter than a matte ball, as the Moon is; a trace of light on their night sides.
+    let moonOver = "vec3 moonLin = moonTint * (pow(moon.z, 0.8) + 0.002) * u_planetExposure; "
+        + "lin = lin * (1.0 - moon.y * moonFront) + moonLin * moon.y * mix(1.0 - cover, 1.0, moonFront); sky *= 1.0 - moon.y;"
     let fineRows = Double(RingProfile.ks * RingProfile.fineLevels), fineEnd = RingProfile.fineStart + RingProfile.fineStep * Double(RingProfile.fineCount)
     return """
     // Where the pyramid keeps the mean of exp(-tau k) over a box 2w texels wide, in the two rows of k round k.
@@ -842,6 +938,21 @@ private func saturnsRingsSource(_ rings: RingProfile) -> String {
         return vec4(u / \(Double(max(RingProfile.fineCount, 1))), (j0 * 4.0 + m + 0.5) / \(fineRows), ((j0 + 1.0) * 4.0 + m + 0.5) / \(fineRows), j - j0);
     }
     float pyrOf(vec4 t) { return t.r * (255.0 * 256.0 / 65535.0) + t.g * (255.0 / 65535.0); }
+    // A moon, a ball `size` Mm in radius at `at`: how far along the ray it's met (x; 1e9 if it isn't), how much of
+    // the pixel it covers (y: smoothed over a pixel at its edge, and less as a whole once it's smaller than one;
+    // `px` is a pixel's width a Mm away), and the sunlight where it's met (z: the cosine to the Sun, and nothing
+    // in the planet's shadow, found as on the rings).
+    vec4 moonAt(vec3 c, vec3 d, vec3 s, vec3 at, float size, float px) {
+        vec3 oc = c - at;
+        float b = dot(oc, d), pass = sqrt(max(dot(oc, oc) - b * b, 0.0)), wide = max(max(-b, 0.0) * px, 1e-9);
+        float cover = b < 0.0 ? clamp((size - pass) / wide + 0.5, 0.0, 1.0) * min(pow(2.0 * size / wide, 2.0), 1.0) : 0.0;
+        float t = -b - sqrt(max(size * size - pass * pass, 0.0));
+        vec3 h = c + t * d;
+        vec3 q = vec3(h.xy, h.z * 1.108601), ss = normalize(vec3(s.xy, s.z * 1.108601));
+        float along = dot(q, ss), miss = sqrt(max(dot(q, q) - along * along, 0.0));
+        float sunlit = along < 0.0 ? smoothstep(60.248 + along * 0.0005, 60.288 - along * 0.0005, miss) : 1.0;
+        return vec4(cover > 0.0 ? t : 1e9, cover, max(dot(normalize(h - at), s), 0.0) * sunlit, 0.0);
+    }
     vec3 rampAt(float t, vec3 c0, vec3 c1, vec3 c2, vec3 c3, vec3 c4) {
         float x = clamp(t, 0.0, 1.0) * 4.0;
         vec3 c = mix(c0, c1, clamp(x, 0.0, 1.0));
@@ -912,6 +1023,21 @@ private func saturnsRingsSource(_ rings: RingProfile) -> String {
         float pass = sqrt(max(dot(cs, cs) - B * B / A, 0.0));
         float cover = clamp((req - pass) / max(length(vec2(dfdx(pass), dfdy(pass))), 1e-6), 0.0, 1.0);
 
+        // Saturn's six big moons, where they are on the day, and Pan in the Encke gap: the nearest the ray meets (how
+        // far along, how much of the pixel it covers, the sunlight on it) and its colour. The six lie near the ring
+        // plane far out, so only rays in the band of angles to the plane that the scene sends are tried on them.
+        float px = u_lens.x / u_size.x;
+        vec4 moon = vec4(1e9, 0.0, 0.0, 0.0);
+        vec3 moonTint = vec3(0.0);
+        if (u_moon.z > 0.0) {
+            vec4 band = u_moonsNear * vec4(0.0, 0.0, 0.0, 1.0);
+            if (d.z > band.x && d.z < band.y) {
+                \(balls)
+            }
+            \(pan)
+        }
+        float moonFront = moon.x < tp ? 1.0 : 0.0, moonFar = (tr > 0.0 && moon.x > tr) ? 1.0 : 0.0;
+
         // Daphnis itself, a small grey ball 3.8 km across in its gap
         vec3 mc = vec3(cos(u_moon.x), sin(u_moon.x), 0.0) * 136.504;
         vec3 oc = c - mc;
@@ -945,6 +1071,8 @@ private func saturnsRingsSource(_ rings: RingProfile) -> String {
             lin = (col / luma(col) * lit + vec3(2.25, 0.714, 0.148) * shine) * u_planetExposure * cover; // #372110 in linear light, luma 1
             sky = 1.0 - cover;
         }
+        // a moon beyond the ring plane goes in before the rings, which dim it by what they pass
+        if (moon.y > 0.0 && moonFar > 0.5) { \(moonOver) }
         // Out past the rings, where the camera crosses their plane to change faces, they fade over its last 20 km to
         // it: seen edge on they are a sheet a pixel's fraction thick, and a band of whole pixels stood for it, which
         // jumped from one side of the horizon to the other as the camera went through.
@@ -988,6 +1116,8 @@ private func saturnsRingsSource(_ rings: RingProfile) -> String {
             lin = mix(lin, vec3(0.12 * max(dot(n, s), 0.0) + 0.002) * u_planetExposure, u_moon.y);
             sky *= 1.0 - u_moon.y;
         }
+        // and one this side of the ring plane, over them
+        if (moon.y > 0.0 && moonFar < 0.5) { \(moonOver) }
 
         // exposure and a knee that stays nearly straight to luma 185 (Cassini's contrast kept) and never passes 214
         lin = max(lin, 0.0);
