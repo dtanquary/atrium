@@ -535,8 +535,7 @@ func saturnsRingsDates() throws {
 
 /// Fly Through goes at an even pace: round the loop at Speed 1×, the fastest thing on screen moves at about
 /// `flightPace` device px a second throughout, never slowing near a stop, and never more than `flightMost`, which the
-/// battery rate rests on; and the ground under the camera never crosses more than twice `calm` of its height a second
-/// (the loop went at half this pace, within `calm`, until Dave's review pass: he ran it at 2×, so that is now 1×).
+/// battery rate rests on; and the ground under the camera never crosses more than `calm` of its height a second.
 /// Prints the loop's length and what it found.
 @Test func saturnsRingsFlightKeepsAnEvenPace() {
     let length = SaturnsRings.flight.last!, frame = 1.0 / 30
@@ -551,7 +550,7 @@ func saturnsRingsDates() throws {
     print(String(format: "Saturn's Rings Fly Through: %.0f s round at 1× (%.1f min); the fastest thing on screen %.1f to %.1f px/s (its most %.0f s round); the ground's pace at most %.4f of the height a second",
                  length, length / 60, least, most, fastest, ground))
     print("Saturn's Rings Fly Through passes " + SaturnsRings.flightOrder.map { String(format: "%@ at %.0f s", SaturnsRings.views[$0].name, SaturnsRings.flightSeconds(at: $0)) }.joined(separator: ", "))
-    #expect(least > 0.5 * SaturnsRings.flightPace && most <= SaturnsRings.flightMost && ground <= 2 * SaturnsRings.calm)
+    #expect(least > 0.5 * SaturnsRings.flightPace && most <= SaturnsRings.flightMost && ground <= SaturnsRings.calm)
     #expect(SaturnsRings.flightRate(speed: 1).map { SaturnsRings.flightMost / Double($0) <= 2 } ?? true)
 }
 
@@ -573,8 +572,7 @@ func saturnsRingsFlightOrders() {
 
 /// Switching between Fly Through, a view and Cycle, and back, at whatever moment, never makes the camera jump: from
 /// one frame to the next at 30 fps no number moves more than a glide or the loop moves it, whether it was holding,
-/// flying or partway through a glide. (The loop at 60 px/s moves the camera out or in by up to 0.021 Mm a frame, high
-/// over the rings: twice what it did at 30, so that bound is twice what it was.)
+/// flying or partway through a glide.
 @MainActor @Test func saturnsRingsSwitchesSmoothly() {
     let key = SaturnsRings.view.key
     defer { UserDefaults.standard.removeObject(forKey: key) }
@@ -589,7 +587,7 @@ func saturnsRingsFlightOrders() {
         if let pick = picks.first(where: { abs($0.at - seconds) < 0.5 / 30 }) { UserDefaults.standard.set(pick.view, forKey: key) }
         scene.update(seconds)
         let now = scene.camera()
-        let jump = [abs(now.r - last.r) / 0.04, abs(log(now.h / last.h)) / 0.01, abs(remainder(now.yaw - last.yaw, 360)) / 0.3,
+        let jump = [abs(now.r - last.r) / 0.02, abs(log(now.h / last.h)) / 0.01, abs(remainder(now.yaw - last.yaw, 360)) / 0.3,
                     abs(now.pitch - last.pitch) / 0.3, abs(remainder(now.sun - last.sun, 360)) / 0.3, abs(log(now.exposure / last.exposure)) / 0.01].max()!
         #expect(jump < 1, "at \(seconds) s: r \(last.r) to \(now.r), h \(last.h) to \(now.h), yaw \(last.yaw) to \(now.yaw), the Sun \(last.sun) to \(now.sun)")
         if jump >= 1 { break }
