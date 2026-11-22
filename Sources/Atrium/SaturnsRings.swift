@@ -296,10 +296,10 @@ final class SaturnsRings: SKScene, BatteryPaced {
     /// Encke gap and Daphnis Close, side by side, the one whose loop is shortest at the even pace (`flightTime`
     /// measures them; docs/saturns-rings.md, The build so far, (e)).
     nonisolated static let flightOrder = [0, 1, 4, 5, 2, 3]
-    /// How fast the fastest thing on screen moves along the loop at Speed 1×, in device px a second: 60 since Dave's
-    /// review pass (2026-11-21), the pace he ran it at (Speed 2× of the 30 it was), so the ground under the camera
-    /// crosses up to about 3% of its height a second, past a glide's `calm`.
-    nonisolated static let flightPace = 60.0
+    /// How fast the fastest thing on screen moves along the loop at Speed 1×, in device px a second. It was 60 for
+    /// a few hours on 2026-11-21 (the pace Dave had run it at, Speed 2×): on seeing that as 1× he found it too fast
+    /// and asked for this again, at which the ground under the camera keeps within a glide's `calm`.
+    nonisolated static let flightPace = 30.0
 
     /// The numbers the loop runs through smoothly, in the spaces it moves them in: r, the height's logarithm, yaw,
     /// pitch, field, the Sun in the space that avoids 180° (`clear`), the exposures' logarithms, and the turn.
@@ -438,10 +438,10 @@ final class SaturnsRings: SKScene, BatteryPaced {
 
     /// How far the fastest thing on screen moves along the loop at its fastest, in device px a second at Speed 1×, as
     /// `saturnsRingsFlightKeepsAnEvenPace` measures it: a little over `flightPace`, within a step.
-    nonisolated static let flightMost = 68.0
+    nonisolated static let flightMost = 34.0
 
     /// How far the fastest thing on screen moves along the two-lap loop at its fastest, in device px a second at 1×.
-    nonisolated static let alternateMost = 78.0
+    nonisolated static let alternateMost = 39.0
 
     /// The ceiling on battery while flying the two-lap loop at `speed`, by the same rule.
     nonisolated static func alternateRate(speed: Double) -> Int? {
