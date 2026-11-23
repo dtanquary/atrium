@@ -7,9 +7,9 @@ import SpriteKit
 /// through the heat, falls by (n0 − 1)(1 − T0/T) per metre of depth (Gladstone–Dale, n0 − 1 = 2.72e-4 at 20 °C). The
 /// camera focuses its light source onto a colour filter, the "cutoff", so each point of the picture takes the colour
 /// the filter has wherever that point's rays were bent to. The air comes from `AirSim`; the shader turns its gradient
-/// into a bend, looks it up in the filter (baked with the blur of the source's own size, `filterTable`), and draws
-/// objects as black silhouettes wrapped in the fringe their edges throw. The flames are drawn on top in their own
-/// colour, as they give their own light.
+/// into a bend, folds it into the fine striae a turbulent plume is made of, looks it up in the filter (baked with the
+/// blur of the source's own size, `filterTable`), and draws objects as black silhouettes wrapped in the fringe their
+/// edges throw. The flames are drawn on top in their own colour, as they give their own light.
 final class Schlieren: SKScene {
     /// What's heating the air. `metres` is the frame's height; `depth` is how much hot air a ray crosses and `span` the
     /// filter's half-width in µrad, so a bend of `span` reaches the filter's outer colours. Candles saturate a 100–300
@@ -69,7 +69,7 @@ final class Schlieren: SKScene {
                             mirror: SKUniform(name: "u_mirror", float: 0), aspect: SKUniform(name: "u_aspect", float: 1),
                             tilt: SKUniform(name: "u_tilt", vectorFloat2: .zero), visible: SKUniform(name: "u_visible", vectorFloat4: [0, 1, 0, 1]),
                             air: SKUniform(name: "u_air", vectorFloat2: .zero), blend: SKUniform(name: "u_blend", float: 1),
-                            roll: SKUniform(name: "u_roll", float: 0))
+                            roll: SKUniform(name: "u_roll", float: 0), striae: SKUniform(name: "u_striae", vectorFloat2: .zero))
     private let look = gradeKnobs("schlieren").map { SKUniform(name: "u_" + $0.key.split(separator: ".").last!, float: Float($0.value)) }
 
     override init(size: CGSize) {
@@ -91,7 +91,7 @@ final class Schlieren: SKScene {
         uniforms.tilt.vectorFloat2Value = [Float.random(in: -0.15...0.15), Float.random(in: -0.08...0.08)]
         screen.shader = SKShader(source: shaderCommon + Self.shader, uniforms: [
             uniforms.field, uniforms.mask, uniforms.filter, uniforms.texel, uniforms.mtexel, uniforms.gain, uniforms.mirror,
-            uniforms.aspect, uniforms.tilt, uniforms.visible, uniforms.air, uniforms.blend, uniforms.roll, WallpaperTime.now,
+            uniforms.aspect, uniforms.tilt, uniforms.visible, uniforms.air, uniforms.blend, uniforms.roll, uniforms.striae, WallpaperTime.now,
         ] + look)
         addChild(screen)
         applySettings()
@@ -114,6 +114,9 @@ final class Schlieren: SKScene {
         // a band reaches full strength only at its hottest edge, as in Settles' dark-field photos. Flames keep the
         // saturation the photos show round them.
         uniforms.roll.floatValue = source == 3 ? 2.5 : 0
+        // how far up the frame the striae fade in: a radiator's plumes are turbulent from the start, a flame's or a
+        // mug's only above its laminar stem
+        uniforms.striae.vectorFloat2Value = source == 3 ? [0, 0.25] : [0.4, 0.85]
         for (uniform, knob) in zip(look, gradeKnobs("schlieren")) { uniform.floatValue = Float(knob.value) }
     }
 
@@ -357,15 +360,22 @@ final class Schlieren: SKScene {
         vec2 p = v_tex_coord;
         // the bend: rays turn toward cooler, denser air, by the gradient of T0/T (the air runs on past the frame)
         vec2 e = u_texel, a = u_visible.xz + p * u_visible.yw;
-        // eddies finer than the sim's 3 mm cells: a small warp that rises with the plume, fading in above the stem,
-        // so the turbulent crown gets the fine filaments of the photos
-        vec2 nq = vec2(p.x * u_aspect, p.y) * 28.0 - vec2(0.0, u_air.x * u_air.y * 28.0);
-        vec2 eddy = vec2(noise(nq) + 0.5 * noise(nq * 2.1 + 3.7), noise(nq + vec2(5.2, 1.3)) + 0.5 * noise(nq * 2.1 + 9.1)) - 0.75;
-        a += eddy * e * 3.0 * smoothstep(0.4, 0.85, p.y);
+        // eddies the sim's cells can't hold: a slow, wide warp that rises with the plume, fading in above the stem, so
+        // the crown meanders as it does in the photos
+        vec2 nq = vec2(p.x * u_aspect, p.y) * 12.0 - vec2(0.0, u_air.x * u_air.y * 12.0);
+        a += (vec2(noise(nq), noise(nq + vec2(5.2, 1.3))) - 0.5) * e * 6.0 * smoothstep(0.4, 0.85, p.y);
         float l = air(texture2D(u_field, a - vec2(e.x, 0.0)), u_blend), r = air(texture2D(u_field, a + vec2(e.x, 0.0)), u_blend);
         float b = air(texture2D(u_field, a - vec2(0.0, e.y)), u_blend), t = air(texture2D(u_field, a + vec2(0.0, e.y)), u_blend);
         float c = air(texture2D(u_field, a), u_blend);
         vec2 bend = vec2(r - l, t - b) * 0.5 * u_gain;
+        // striae: a turbulent plume is thin layers of warm and cool air folded together, finer than the sim's 3 mm
+        // cells, so the bend swells and falls along the isotherms, in two waves of the heat's logarithm that don't
+        // repeat together, drifting by a slow noise. Fading where a wave would be under two cells wide.
+        // ponytail: drawn from the temperature alone, so they follow the isotherms, not the air's own folding; steam's
+        // tangles would need detail carried with the flow.
+        float warm = 1.003 - c, phase = 10.0 * log(warm), drift = 6.2832 * noise(nq * 0.58);
+        float fine = 1.0 - smoothstep(3.0, 6.0, length(vec2(r - l, t - b)) * 5.0 / warm);
+        bend *= 1.0 + 0.6 * (0.6 * sin(phase + drift) + 0.5 * sin(phase * 1.83 - drift * 1.3 + 2.0)) * fine * smoothstep(u_striae.x, u_striae.y, p.y);
         float roll = u_roll * length(bend); // the rig's roll-off, for Warm air: asinh(k·b)/k
         bend *= roll > 1e-4 ? log(roll + sqrt(roll * roll + 1.0)) / roll : 1.0;
         // room air is never quite still: faint, slow mottling everywhere
