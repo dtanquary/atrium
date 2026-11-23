@@ -67,7 +67,7 @@ Rising heat as a colour schlieren camera sees it, after the photos of Gary Settl
 7. **Flames.** An additive sprite per flame: a white core blown out as in the photos, a yellow and orange rim, and a faint blue base. It leans with the sim's air at its middle and breathes with `flicker` (2.5%; a single candle in still air is steady).
 
 ## Time and appearance
-- The air takes a step of Speed/30 s of sim time every 30th of a second on a clock of its own, whatever the frame rate, and is uploaded only when it steps. Between steps the shader blends the last two (`ahead`, `u_blend`), so at 60 and 120 fps the picture moves smoothly, about a step behind the air. At 15 fps it takes two steps a frame. So the air is the same to the bit at 15, 30, 60 and 120 fps (`schlierenAirIsTheSameAtAnyFrameRate`). Until 2026-11-15 it took one step a frame of `frameTime` × Speed: twice the work at 60 fps and four times at 120, for air that moves under one fine cell a step, and not quite the same air at each rate. The eddies' clock (`u_air`) is the sim's time as the frame shows it, so they rise smoothly too. The mottling runs on `u_now`, wrapped hourly.
+- The air takes a step of Speed/300 s of sim time every 30th of a second on a clock of its own (Speed's 1× is a tenth of real time), whatever the frame rate, and is uploaded only when it steps. Between steps the shader blends the last two (`ahead`, `u_blend`), so at 60 and 120 fps the picture moves smoothly, about a step behind the air. At 15 fps it takes two steps a frame. So the air is the same to the bit at 15, 30, 60 and 120 fps (`schlierenAirIsTheSameAtAnyFrameRate`). Until 2026-11-15 it took one step a frame of `frameTime` × Speed: twice the work at 60 fps and four times at 120, for air that moves under one fine cell a step, and not quite the same air at each rate. The eddies' clock (`u_air`) is the sim's time as the frame shows it, so they rise smoothly too. The mottling runs on `u_now`, wrapped hourly.
 - At build, 90 steps (1.5 s of sim time) run so the plumes already reach the top.
 - The palette is random on each load unless one is pinned, and so is the background tilt.
 
@@ -78,7 +78,7 @@ Rising heat as a colour schlieren camera sees it, after the photos of Gary Settl
 | `schlieren.source` | Heat | Candles, Candle, Mug, Warm air | Warm air | live; rebuilds the air and objects |
 | `schlieren.filter` | Filter | Dark field, Rainbow, Bands, Knife edge | Dark field | live; rebakes the filter table |
 | `schlieren.sensitivity` | Sensitivity | 0.3–3× | 1× | live; the rig's gain (f/span) |
-| `schlieren.speed` | Speed | 0.03–0.5× | 0.1× | live; slow motion, as a high-speed camera plays it |
+| `schlieren.rate` | Speed | 0.25–4× | 1× | live; 1× is a tenth of real time, slow motion as a high-speed camera plays it. Until 0.132.3 it was `schlieren.speed`, the fraction of real time itself, 0.03–0.5 with 0.1 the standard (see Dave's feedback, 2026-11-23); a value stored under the old key is left where it is and no longer read |
 | `schlieren.draft` | Draft | 0–1 | 0.35 | live; up to 0.06 m/s of room air |
 | `schlieren.mirror` | Round mirror | switch | off | live; the z-type mirror's circle on black |
 | `schlieren.brightness`… | Look | shared grade | | live |
@@ -134,7 +134,9 @@ Two research agents, 2026-09-28. The notes are summarised here. The photos (30, 
 - 2026-10-14: Warm air became the standard Heat in place of Candles: "set 'warm air' to be the default, its more interesting looking". The README, menu and site pictures were retaken in it.
 - 2026-11-05: "the schlieren wallpaper doesnt seem to go all the way flush to the bottom of the screen": Warm air's radiator was a black bar along the bottom. It now sits just below the frame.
 - 2026-11-15: from the review of every wallpaper (2026-11-14, team verdict improve, 6/10), Dave asked for all its suggestions. His call: it sits at the CPU budget, so the fixed 30-steps-a-second sim with a blend comes first, as the saving that pays for anything else; finer heat is a trial, last.
-- 2026-11-22: asked for a review of this one: "see if you can do anything to make it visually look nicer while keeping within performance goals, i am open to any suggestion or improvement". The four-colour dark field with its brightness ramp and glow, the striae and the wider eddies came of it (Filters, Shader). Shown before and after, with a two-colour version of the same as the other choice, he picked the four colours and had it built: "go ahead and build your fixes, you can go with 4 color". His verdict on it running on the desktop goes here.
+- 2026-11-22: asked for a review of this one: "see if you can do anything to make it visually look nicer while keeping within performance goals, i am open to any suggestion or improvement". The four-colour dark field with its brightness ramp and glow, the striae and the wider eddies came of it (Filters, Shader). Shown before and after, with a two-colour version of the same as the other choice, he picked the four colours and had it built: "go ahead and build your fixes, you can go with 4 color".
+- 2026-11-23, with it on his desktop: "new look is good but lets make some settings tweaks".
+  - "0.1x speed looks nice so we need to recalibrate the speed around that": he had moved Speed to 0.13, which the slider showed as "0.1×", as it did everything from 0.05 to 0.15, the standard included. That speed is now 1×, on a slider from 0.25× to 4× as Meander's and Wind's are; the air moves as it did at the old standard.
 
 ## Ideas / next steps
 - **A hand:** the classic Settles shot, a black hand with its warm boundary layer rising off the fingertips. It needs a sensitive rig (span 10–30 µrad) and a good silhouette.

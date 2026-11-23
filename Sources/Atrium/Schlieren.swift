@@ -26,7 +26,9 @@ final class Schlieren: SKScene {
         Knob(key: "schlieren.source", label: "Heat", range: 0...Double(sources.count - 1), standard: 3, format: .choice(sources.map(\.name))),
         Knob(key: "schlieren.filter", label: "Filter", range: 0...Double(filters.count - 1), standard: 0, format: .choice(filters)),
         Knob(key: "schlieren.sensitivity", label: "Sensitivity", range: 0.3...3, standard: 1, format: .times),
-        Knob(key: "schlieren.speed", label: "Speed", range: 0.03...0.5, standard: 0.1, format: .times),
+        // 1× is a tenth of real time, slow motion as a high-speed camera plays it. Under "rate" because
+        // "schlieren.speed" held the fraction of real time itself until 0.132.3, 0.1 its standard
+        Knob(key: "schlieren.rate", label: "Speed", range: 0.25...4, standard: 1, format: .times),
         Knob(key: "schlieren.draft", label: "Draft", range: 0...1, standard: 0.35),
         Knob(key: "schlieren.mirror", label: "Round mirror", range: 0...1, standard: 0, format: .toggle),
     ] + gradeKnobs("schlieren")
@@ -224,12 +226,13 @@ final class Schlieren: SKScene {
 
     override func update(_ currentTime: TimeInterval) {
         air.draftStrength = Float(Self.knobs[4].value) * 0.06 // m/s: a still room's air moves at 0.05–0.1
-        // a step of Speed/30 s of air every 30th of a second, so the air is the same at any frame rate and a 60 or 120
-        // fps display doesn't step it 2 or 4 times as often; the shader blends the last two steps between them
+        // a step of Speed/300 s of air every 30th of a second (Speed's 1× is a tenth of real time), so the air is the
+        // same at any frame rate and a 60 or 120 fps display doesn't step it 2 or 4 times as often; the shader blends
+        // the last two steps between them
         ahead -= frameTime(currentTime, &lastUpdate)
         if ahead < -1e-4 {
             repeat {
-                stepped = Float(Self.knobs[3].value / 30)
+                stepped = Float(Self.knobs[3].value / 300)
                 air.step(stepped)
                 ahead += 1.0 / 30
             } while ahead < -1e-4

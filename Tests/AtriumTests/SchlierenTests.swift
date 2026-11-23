@@ -2,7 +2,7 @@ import SpriteKit
 import Testing
 @testable import Atrium
 
-/// Schlieren's air takes a step of Speed/30 s every 30th of a second whatever the frame rate, so at 15 and 60 fps it
+/// Schlieren's air takes a step of Speed/300 s every 30th of a second whatever the frame rate, so at 15 and 60 fps it
 /// takes the same steps and comes out the same to the bit, and a 60 fps display doesn't step it twice as often.
 @MainActor @Test func schlierenAirIsTheSameAtAnyFrameRate() {
     func air(fps: Int) -> [Float] {
