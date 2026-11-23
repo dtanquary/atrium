@@ -21,7 +21,7 @@ import simd
 final class Canopy: SKScene, BatteryPaced {
     /// For pictures: a seed for the stand's mirroring and its leaves (unset or 0 for a new one each load), a day
     /// (`yyyy-MM-dd`) and an hour of the local clock (13.5 for half past one), each unset for now; and for films, the
-    /// mean wind in m/s (`Breeze.mean`).
+    /// mean wind in m/s (`Breeze.mean`), which comes before Settings' and the real one.
     static let pins = (seed: "canopy.seed", date: "canopy.date", hour: "canopy.hour", wind: "canopy.wind")
     /// When it is in the picture (Dave, 2026-11-21: "settings that allow me to lock to system theme, day night, or
     /// lock to a time or season"): the real day and night where you are; by Light and Dark Mode, the day and the dusk
@@ -36,7 +36,16 @@ final class Canopy: SKScene, BatteryPaced {
     /// (`moment`).
     nonisolated static let season = Knob(key: "canopy.season", label: "Season", range: 0...4, standard: 0, section: "Trees",
                                          format: .choice(["Follow the real season", "Spring", "Summer", "Autumn", "Winter"]))
-    nonisolated static let knobs = [time, holdHour, season]
+    /// How hard it blows (Dave, 2026-11-22: "go ahead and add the live wind icing"): the real wind where you are, its
+    /// mean, its gusts and the way it blows (Open-Meteo's, `LiveWeather`), or one held (`held`). Whatever the real
+    /// one, never less than Light (`blowing`).
+    nonisolated static let wind = Knob(key: "canopy.breeze", label: "Wind", range: 0...4, standard: 0, section: "Sky",
+                                       format: .choice(["Follow the real wind", "Light", "Breezy", "Windy", "Very windy"]))
+    /// The winds Settings hold, m/s at 10 m: Beaufort 2 ("leaves rustle"), 3 (the breeze the motion was tuned in,
+    /// "leaves and small twigs in constant motion"), 5 ("small trees in leaf begin to sway") and 6 ("large branches
+    /// in motion"), each gusting to 1.6 times it.
+    nonisolated static let held = [2, 4.3, 8, 12]
+    nonisolated static let knobs = [time, holdHour, wind, season]
     /// The stand: Poly Haven's Schachen Forest straight up, its sky keyed out by docs/canopy/stand.swift, 1512 px to a
     /// unit of tan, spanning ±1.1 across and ±0.75 up.
     nonisolated static let stand = (name: "canopy-schachen.heic", perTan: 1512.0, extent: SIMD2<Double>(1.1, 0.75))
@@ -48,8 +57,12 @@ final class Canopy: SKScene, BatteryPaced {
     /// The picture in front, and the one behind that the next bake lands in and fades in from.
     private var front: Picture, back: Picture
     private let night: Night
-    /// The motion's uniforms, shared by both pictures, set every frame from the breeze.
-    private let breeze: Breeze, motion: Motion
+    /// The wind as it blows just now, eased every frame towards the one to show (`blowing`: Settings' or the real
+    /// one, looked up once a second), and the motion's uniforms, shared by both pictures, set every frame from it.
+    private var breeze: Breeze, blowing: Blowing, eased: TimeInterval = 0
+    /// When the report last put into Settings' line of the wind arrived (`canopy.status`).
+    private var reported: Date?
+    private let motion: Motion
     /// The leaves falling in autumn, over both pictures.
     let leaves: Leaves
     /// The ceiling on battery, by the fastest thing moving (`rate`): 10-20 by the breeze, never under 20 by day while
@@ -76,7 +89,8 @@ final class Canopy: SKScene, BatteryPaced {
         let camera = Camera(size: size), night = Night(), motion = Motion(camera: camera)
         let light = Light(camera: camera, date: moment, latitude: here.latitude, longitude: here.longitude)
         (lens, self.seed, self.place, self.night, shown) = (camera, seed, place, night, (moment, light.sun.z))
-        (breeze, self.motion, leaves) = (Breeze(seed: seed, mean: defaults.object(forKey: Self.pins.wind) as? Double ?? 4.3), motion, Leaves())
+        blowing = Self.blowing()
+        (breeze, self.motion, leaves) = (Breeze(seed: seed, blowing), motion, Leaves())
         (front, back) = (Picture(camera: camera, night: night, motion: motion), Picture(camera: camera, night: night, motion: motion))
         super.init(size: size)
 
@@ -117,6 +131,8 @@ final class Canopy: SKScene, BatteryPaced {
         if job != nil || fading != nil, let view = view as? WallpaperView, view.frozen { view.wake(for: 0.3) }
         let time = currentTime - (began ?? currentTime)
         began = began ?? currentTime
+        breeze.ease(to: blowing, over: min(max(time - eased, 0), 0.5))
+        eased = time
         motion.set(breeze, at: time, fps: view?.preferredFramesPerSecond ?? 30)
         leaves.step(time, breeze: breeze, camera: lens, size: size)
         batteryRate = Self.rate(fastest: breeze.fastest(time), night: front.starlight > 0.5, falling: leaves.falling > 0, leafy: leafy)
@@ -134,10 +150,20 @@ final class Canopy: SKScene, BatteryPaced {
 
     private var here: CLLocationCoordinate2D { place ?? Location.shared.coordinate }
 
-    /// Once a second: the stars turned to where the sky is now (a second's turn is a twelfth of a pixel at the zenith),
+    /// Once a second: the wind to show looked up, and the real one asked for while it is followed on a screen
+    /// (`LiveWeather` fetches at most every ten minutes, however often it is asked); the stars turned to where the
+    /// sky is now (a second's turn is a twelfth of a pixel at the zenith),
     /// and a new bake once the moment has moved on five minutes (the clock's, or Settings' or the system's appearance
     /// changed), except in the dark of night, when nothing but the stars changes and they turn by themselves.
     private func tick() {
+        blowing = Self.blowing()
+        if view != nil, Self.wind.value < 0.5 {
+            LiveWeather.shared.poll()
+            if let report = LiveWeather.shared.latest, let at = LiveWeather.shared.updated, at != reported {
+                reported = at
+                UserDefaults.standard.setIfChanged(Self.line(report, at: at), forKey: "canopy.status")
+            }
+        }
         let moment = Self.current(at: here)
         let toHorizon = Sky.horizonMatrix(jd: Sky.julianDate(moment), latitude: here.latitude, longitude: here.longitude)
         if night.held { night.turn(toHorizon) }
@@ -192,6 +218,50 @@ final class Canopy: SKScene, BatteryPaced {
         let pick = Int(time.value)
         return moment(time: pick, holdHour: holdHour.value, season: Int(season.value), dark: (pick == 1 || pick == 2) && systemIsDark,
                       latitude: here.latitude, longitude: here.longitude)
+    }
+
+    /// A wind to show: its mean and its gusts, m/s at 10 m as Open-Meteo gives them (gusting to 1.6 times the mean
+    /// unless said, as the breeze the motion was tuned in did), and for the real one the way it blows on the screen
+    /// (radians anticlockwise from the right), where a wind with none of its own takes the seed's.
+    struct Blowing: Equatable {
+        var mean: Double, gust: Double, heading: Double?
+
+        init(mean: Double = 4.3, gust: Double? = nil, heading: Double? = nil) {
+            (self.mean, self.gust, self.heading) = (mean, gust ?? mean / 0.62, heading)
+        }
+    }
+
+    /// The wind to show now.
+    static func blowing() -> Blowing {
+        blowing(pick: Int(wind.value), report: LiveWeather.shared.latest, pin: UserDefaults.standard.object(forKey: pins.wind) as? Double)
+    }
+
+    /// The wind to show: the pin's for films, if set; one held in Settings (`held`); or the real one where you are
+    /// (`report`: its mean and gusts in km/h, and where it blows from, clockwise from north), and until a report
+    /// comes the breeze that stood in for it. The real one is never shown as less than Light, a mean of 2 m/s
+    /// gusting to 3.2 (Dave, 2026-11-18: "just have there always be at least some subtle wind"), nor as steadier than
+    /// gusts of 1.3 times its mean, so there is always a gust to cross the view. Looking straight up with north at
+    /// the top, east is to the left (`Camera.ray`): a west wind blows across the screen from right to left.
+    nonisolated static func blowing(pick: Int, report: LiveWeather.Conditions?, pin: Double? = nil) -> Blowing {
+        if let pin { return Blowing(mean: pin) }
+        if held.indices.contains(pick - 1) { return Blowing(mean: held[pick - 1]) }
+        guard let report else { return Blowing() }
+        let mean = max(report.wind / 3.6, Breeze.calm), from = report.windFrom * .pi / 180
+        return Blowing(mean: mean, gust: max(report.gusts / 3.6, mean * 1.3, Breeze.calm / 0.62), heading: atan2(-cos(from), sin(from)))
+    }
+
+    /// The last report of the wind in a line, for Settings under Wind while it follows the real one ("Live: wind 15 mph
+    /// from W, gusting to 26 mph · updated 1:16 AM"), in the units the reader's region uses for wind; and that it is
+    /// shown as Light, where the real one is less. Its own line, not the shared report's: that one leads with the rain
+    /// and the cloud, which this sky doesn't show.
+    nonisolated static func line(_ report: LiveWeather.Conditions, at time: Date, locale: Locale = .current) -> String {
+        func speed(_ kmh: Double) -> String {
+            Measurement(value: kmh, unit: UnitSpeed.kilometersPerHour)
+                .formatted(.measurement(width: .abbreviated, usage: .wind, numberFormatStyle: .number.precision(.fractionLength(0))).locale(locale))
+        }
+        let from = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Int((report.windFrom / 45).rounded()) & 7]
+        return "Live: wind \(speed(report.wind)) from \(from), gusting to \(speed(report.gusts))"
+            + (report.wind / 3.6 < Breeze.calm ? " (shown as Light)" : "") + " · updated \(time.formatted(date: .omitted, time: .shortened))"
     }
 
     /// The moment Settings ask for at `now`. The day: today, or with a season held (1 spring to 4 winter) a day of it
@@ -515,9 +585,12 @@ final class Canopy: SKScene, BatteryPaced {
         func step(_ time: TimeInterval, breeze: Breeze, camera: Camera, size: CGSize) {
             let dt = min(max(time - (last ?? time), 0), 0.5)
             last = time
-            let strength = breeze.strength(time), wind = SIMD2(cos(breeze.heading), sin(breeze.heading)) * (0.3 + 0.9 * strength)
-            // on average `rate` at once, each about 5.5 s in the air; three times as many at the top of a gust
-            let gust = 0.4 + 2.6 * simd_smoothstep(0.6, 1, strength)
+            // carried further in more wind than the breeze's 4.3 m/s, and less in less
+            let strength = breeze.strength(time), windy = min(max(breeze.mean / 4.3, 0.6), 2.5)
+            let wind = breeze.downwind * ((0.3 + 0.9 * strength) * windy)
+            // on average `rate` at once, each about 5.5 s in the air; three times as many at the top of a gust, and
+            // up to twice as many on a windy day
+            let gust = (0.4 + 2.6 * simd_smoothstep(0.6, 1, strength)) * min(windy, 2)
             if rate > 0, !tints.isEmpty, nodes.first?.texture != nil, Double.random(in: 0..<1) < rate * gust / 5.5 * dt, let free = air.firstIndex(where: { $0 == nil }) {
                 let high = Double.random(in: 7...9.5)
                 // somewhere over the screen, upwind of where it will drift to
@@ -549,10 +622,12 @@ final class Canopy: SKScene, BatteryPaced {
         }
     }
 
-    /// The breeze, until the live wind comes (step (d)): a heading from the seed, a mean wind (`canopy.wind`, m/s at
-    /// 10 m, as Open-Meteo gives it; a breeze, Beaufort 3, unset), and a strength that swells and eases, 0.35 to 1,
-    /// as gusts and lulls that cross the view downwind. It sets how far the twigs rustle and the leaves tremble,
-    /// whether the limbs move and whether the crowns sway (research-motion.md, Settings it implies).
+    /// The wind over the stand: a mean wind and its gusts (m/s at 10 m, as Open-Meteo gives them), the way it blows,
+    /// and a strength that swells and eases, 0.35 to 1, as gusts and lulls that cross the view downwind. Which wind
+    /// is Settings' to say (`Canopy.blowing`: the real one where you are, or one held; the breeze the motion was
+    /// tuned in, Beaufort 3 from the seed's heading, until a report comes); `ease` moves it there. It sets how far
+    /// the twigs rustle and the leaves tremble, whether the limbs move and whether the crowns sway
+    /// (research-motion.md, Settings it implies).
     struct Breeze {
         /// How far a leaf moves as a piece of its own at 4.3 m/s, px at 2x on a 14" screen: its own tremble and its
         /// spray's swing (RMS over the leaves; up to 1.7 times it), and how much its light changes as it turns. With
@@ -571,12 +646,16 @@ final class Canopy: SKScene, BatteryPaced {
         /// at twice as far on corners 150 px apart it was 16%, up to 45% in a gust, and the sprays drew out into
         /// streaks.
         static let nearer = 1.6
-        let heading: Double, phases: [Double], mean: Double
-        /// The way the wind blows over the stand, x right and y up.
-        let downwind: SIMD2<Double>
+        /// The mean wind and its gusts just now, m/s, and the way it blows over the stand, as an angle and as a
+        /// direction, x right and y up.
+        private(set) var mean: Double, gust: Double, heading: Double, downwind: SIMD2<Double>
+        /// The seed's heading, for a wind with none of its own.
+        let seeded: Double, phases: [Double]
 
-        init(seed: UInt64, mean: Double = 4.3) {
-            self.mean = mean
+        init(seed: UInt64, mean: Double = 4.3) { self.init(seed: seed, Blowing(mean: mean)) }
+
+        init(seed: UInt64, _ wind: Blowing) {
+            (mean, gust) = (wind.mean, wind.gust)
             var state = seed
             func next() -> Double { // SplitMix64's step, as the bake's
                 state &+= 0x9E37_79B9_7F4A_7C15
@@ -584,9 +663,22 @@ final class Canopy: SKScene, BatteryPaced {
                 z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
                 return Double((z ^ (z >> 31)) >> 11) / Double(1 << 53)
             }
-            heading = next() * 2 * .pi
+            seeded = next() * 2 * .pi
+            heading = wind.heading ?? seeded
             downwind = SIMD2(cos(heading), sin(heading))
             phases = (0..<10).map { _ in next() * 2 * .pi } // the swell's and the gusts' are the last two, the streaks' the first two
+        }
+
+        /// Moves the wind towards the one to show over `dt` seconds, two thirds of the way in five and nearly all in
+        /// a quarter of a minute, as a real wind picks up and drops and so a change in Settings shows soon; the
+        /// heading turns the shorter way round. The gusts' pattern keeps its place at the stand's middle and slides
+        /// by a second or two at its edges as it turns or its pace changes.
+        mutating func ease(to wind: Blowing, over dt: TimeInterval) {
+            let k = 1 - exp(-dt / 5)
+            mean += (wind.mean - mean) * k
+            gust += (wind.gust - gust) * k
+            heading += ((wind.heading ?? seeded) - heading).remainder(dividingBy: 2 * .pi) * k
+            downwind = SIMD2(cos(heading), sin(heading))
         }
 
         /// How hard it blows at `time` (seconds) over a point of the stand (px from its middle), 0.35 to 1: a swell
@@ -600,12 +692,20 @@ final class Canopy: SKScene, BatteryPaced {
 
         /// How fast a gust crosses the view, px a second at 2x on a 14" screen: 900 in the breeze (the footage's one
         /// crossing was at about 930; a gust travels at about 1.75 times the wind at the crowns' height), in
-        /// proportion to the wind.
-        var pace: Double { 210 * max(mean, Self.calm) }
+        /// proportion to the wind, as far as the strongest held (2,500).
+        var pace: Double { 210 * min(max(mean, Self.calm), 12) }
 
-        /// The wind at `time` over a point, m/s: the mean, up to 1.6 times it in a gust and down to 0.56 in a lull,
-        /// but never below `calm`.
-        func wind(_ time: TimeInterval, at point: SIMD2<Double> = .zero) -> Double { max(mean * strength(time, at: point) / 0.62, Self.calm) }
+        /// The wind at `time` over a point, m/s: the mean at the strength's middle (0.62), up to its gusts at the top
+        /// of one and down to 0.56 of the mean in a lull, but never below `calm` nor over `gale`.
+        func wind(_ time: TimeInterval, at point: SIMD2<Double> = .zero) -> Double {
+            let s = strength(time, at: point)
+            return min(max(s < 0.62 ? mean * s / 0.62 : mean + (gust - mean) * (s - 0.62) / 0.38, Self.calm), Self.gale)
+        }
+
+        /// The most wind it ever shows, m/s: the gusts of the strongest wind held (12 m/s, to 19.4), as far as the
+        /// motion has been looked at; in a real gale the twigs would reach further than the picture between them
+        /// can be bent without drawing the sprays out.
+        static let gale = 20.0
 
         /// The least wind it ever shows, m/s: Beaufort 2, "leaves rustle", so the canopy never looks still, whatever the
         /// wind, in still air and by night too (Dave, 2026-11-18: "just have there always be at least some subtle wind").

@@ -13,6 +13,7 @@ import CoreLocation
         var code = 2          // WMO weather code
         var cloudCover = 40.0 // percent
         var wind = 10.0       // km/h
+        var gusts = 16.0      // km/h: the strongest in the preceding 15 minutes
         var windFrom = 270.0  // degrees clockwise from north
         var highCloud = 0.0   // percent: cirrus
         var snowDepth = 0.0   // m of snow on the ground
@@ -44,7 +45,7 @@ import CoreLocation
         // 0.01° (about a kilometre) is finer than the forecast, and says no more than that about where you are
         url.queryItems = [URLQueryItem(name: "latitude", value: String(format: "%.2f", spot.latitude)),
                           URLQueryItem(name: "longitude", value: String(format: "%.2f", spot.longitude)),
-                          URLQueryItem(name: "current", value: "weather_code,cloud_cover,cloud_cover_high,wind_speed_10m,wind_direction_10m,snow_depth,visibility,"
+                          URLQueryItem(name: "current", value: "weather_code,cloud_cover,cloud_cover_high,wind_speed_10m,wind_direction_10m,wind_gusts_10m,snow_depth,visibility,"
                                            + "precipitation,rain,showers,snowfall,temperature_2m,relative_humidity_2m,dew_point_2m")]
         Task {
             let time = Date().formatted(date: .omitted, time: .shortened)
@@ -67,12 +68,12 @@ import CoreLocation
             struct Current: Decodable {
                 let weatherCode: Int, cloudCover: Double, windSpeed: Double
                 // Not every weather model has these.
-                let windFrom: Double?, highCloud: Double?, snowDepth: Double?, visibility: Double?, precipitation: Double?, rain: Double?
+                let windFrom: Double?, gusts: Double?, highCloud: Double?, snowDepth: Double?, visibility: Double?, precipitation: Double?, rain: Double?
                 let showers: Double?, snowfall: Double?, temperature: Double?, humidity: Double?, dewPoint: Double?
                 // Spelled out: .convertFromSnakeCase turns wind_speed_10m into windSpeed10M.
                 enum CodingKeys: String, CodingKey {
                     case weatherCode = "weather_code", cloudCover = "cloud_cover", windSpeed = "wind_speed_10m"
-                    case windFrom = "wind_direction_10m", highCloud = "cloud_cover_high", snowDepth = "snow_depth", visibility
+                    case windFrom = "wind_direction_10m", gusts = "wind_gusts_10m", highCloud = "cloud_cover_high", snowDepth = "snow_depth", visibility
                     case precipitation, rain, showers, snowfall, temperature = "temperature_2m", humidity = "relative_humidity_2m"
                     case dewPoint = "dew_point_2m"
                 }
@@ -82,7 +83,7 @@ import CoreLocation
         guard let now = try? JSONDecoder().decode(Forecast.self, from: reply).current else { return nil }
         let standard = Conditions()
         return Conditions(code: now.weatherCode, cloudCover: now.cloudCover, wind: now.windSpeed,
-                          windFrom: now.windFrom ?? standard.windFrom, highCloud: now.highCloud ?? 0, snowDepth: now.snowDepth ?? 0,
+                          gusts: now.gusts ?? now.windSpeed * 1.6, windFrom: now.windFrom ?? standard.windFrom, highCloud: now.highCloud ?? 0, snowDepth: now.snowDepth ?? 0,
                           visibility: now.visibility ?? standard.visibility, precipitationTotal: now.precipitation ?? 0,
                           rain: now.rain ?? 0, showers: now.showers ?? 0, snowfall: now.snowfall ?? 0,
                           temperature: now.temperature ?? standard.temperature, humidity: now.humidity ?? standard.humidity,
