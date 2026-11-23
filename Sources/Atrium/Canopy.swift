@@ -60,6 +60,8 @@ final class Canopy: SKScene, BatteryPaced {
     /// The wind as it blows just now, eased every frame towards the one to show (`blowing`: Settings' or the real
     /// one, looked up once a second), and the motion's uniforms, shared by both pictures, set every frame from it.
     private var breeze: Breeze, blowing: Blowing, eased: TimeInterval = 0
+    /// When the report last put into Settings' line of the wind arrived (`canopy.status`).
+    private var reported: Date?
     private let motion: Motion
     /// The leaves falling in autumn, over both pictures.
     let leaves: Leaves
@@ -155,7 +157,13 @@ final class Canopy: SKScene, BatteryPaced {
     /// changed), except in the dark of night, when nothing but the stars changes and they turn by themselves.
     private func tick() {
         blowing = Self.blowing()
-        if view != nil, Self.wind.value < 0.5 { LiveWeather.shared.poll() }
+        if view != nil, Self.wind.value < 0.5 {
+            LiveWeather.shared.poll()
+            if let report = LiveWeather.shared.latest, let at = LiveWeather.shared.updated, at != reported {
+                reported = at
+                UserDefaults.standard.setIfChanged(Self.line(report, at: at), forKey: "canopy.status")
+            }
+        }
         let moment = Self.current(at: here)
         let toHorizon = Sky.horizonMatrix(jd: Sky.julianDate(moment), latitude: here.latitude, longitude: here.longitude)
         if night.held { night.turn(toHorizon) }
@@ -240,6 +248,20 @@ final class Canopy: SKScene, BatteryPaced {
         guard let report else { return Blowing() }
         let mean = max(report.wind / 3.6, Breeze.calm), from = report.windFrom * .pi / 180
         return Blowing(mean: mean, gust: max(report.gusts / 3.6, mean * 1.3, Breeze.calm / 0.62), heading: atan2(-cos(from), sin(from)))
+    }
+
+    /// The last report of the wind in a line, for Settings under Wind while it follows the real one ("Live: wind 15 mph
+    /// from W, gusting to 26 mph · updated 1:16 AM"), in the units the reader's region uses for wind; and that it is
+    /// shown as Light, where the real one is less. Its own line, not the shared report's: that one leads with the rain
+    /// and the cloud, which this sky doesn't show.
+    nonisolated static func line(_ report: LiveWeather.Conditions, at time: Date, locale: Locale = .current) -> String {
+        func speed(_ kmh: Double) -> String {
+            Measurement(value: kmh, unit: UnitSpeed.kilometersPerHour)
+                .formatted(.measurement(width: .abbreviated, usage: .wind, numberFormatStyle: .number.precision(.fractionLength(0))).locale(locale))
+        }
+        let from = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Int((report.windFrom / 45).rounded()) & 7]
+        return "Live: wind \(speed(report.wind)) from \(from), gusting to \(speed(report.gusts))"
+            + (report.wind / 3.6 < Breeze.calm ? " (shown as Light)" : "") + " · updated \(time.formatted(date: .omitted, time: .shortened))"
     }
 
     /// The moment Settings ask for at `now`. The day: today, or with a season held (1 spring to 4 winter) a day of it

@@ -366,6 +366,11 @@ import CanopyBake
     #expect(Canopy.blowing(pick: 3, report: report) == Canopy.Blowing(mean: 8))
     #expect(Canopy.blowing(pick: 0, report: report, pin: 12) == Canopy.Blowing(mean: 12))
 
+    // Settings' line says the wind and nothing else, in the reader's units, and owns up to the floor
+    #expect(Canopy.line(report, at: Date(), locale: Locale(identifier: "de_DE")).hasPrefix("Live: wind 18 km/h from W, gusting to 36 km/h · updated "))
+    #expect(Canopy.line(report, at: Date(), locale: Locale(identifier: "en_US")).hasPrefix("Live: wind 11 mph from W, gusting to 22 mph · updated "))
+    #expect(Canopy.line(LiveWeather.Conditions(wind: 3, gusts: 6, windFrom: 350), at: Date(), locale: Locale(identifier: "en_US")).contains("from N, gusting to 4 mph (shown as Light)"))
+
     // over ten minutes: the mean in the middle, the gusts' top at the report's, and never under the floor or over the cap
     func span(_ wind: Canopy.Blowing) -> (low: Double, middle: Double, high: Double) {
         let breeze = Canopy.Breeze(seed: 3, wind), all = stride(from: 0.0, to: 600, by: 0.25).map { breeze.wind($0) }.sorted()
