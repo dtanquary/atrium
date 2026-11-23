@@ -6,7 +6,7 @@ It was pick #3 of the "Atrium Wallpaper Ideas" page of 2026-11-14 (a review of t
 
 - **Research:** [canopy/research-method.md](canopy/research-method.md) (camera, numbers, three ways to draw the crowns, measured cost) and [canopy/research-look.md](canopy/research-look.md) (references, palettes, brightness, CC0 assets, the name).
 - **Scripts:** `docs/canopy/mock.swift` (SKRenderer, the app's `Atmosphere` through a zenith camera), `variants.py`, `sheet.py`; [canopy/mockups-round1.md](canopy/mockups-round1.md) has every tile's measurements, assets and licences, and how to redraw a round.
-- **Where it stands (2026-11-21):** step (a), the still picture, the first part of step (d), the night and the light kept current (d1), and step (b), motion (the sway in a breeze, the flutter, falling leaves, the battery rate), built and hidden behind `unfinished` (`Sources/Atrium/Canopy.swift`), with the twilight's colour and the stand's matte put right; (b)'s sway redone from footage (b2: the wood still, the twigs and leaves rustling, the nearest leaves moving over the rest), Model 2 of the films Dave chose from ([canopy/motion-round.md](canopy/motion-round.md)), locked in with the other two cut; and on his word that the leaves' rustle still looked fake, each leaf and spray moving as a piece of its own with gusts that cross the view (b3), and the evergreens in needle green where they were black; and the first of step (c), Settings for the time of day and the season (c1); the rest of (c), the rest of (d) (the live wind among it) and (e) to come. **Shown to everyone from 0.132.0** (2026-11-22), on Dave's "publish the new wallpapers beehive, canopy, and saturns rings", with its README section and its card on atrium.show (Checking it has the pictures' recipes).
+- **Where it stands (2026-11-21):** step (a), the still picture, the first part of step (d), the night and the light kept current (d1), and step (b), motion (the sway in a breeze, the flutter, falling leaves, the battery rate), built and hidden behind `unfinished` (`Sources/Atrium/Canopy.swift`), with the twilight's colour and the stand's matte put right; (b)'s sway redone from footage (b2: the wood still, the twigs and leaves rustling, the nearest leaves moving over the rest), Model 2 of the films Dave chose from ([canopy/motion-round.md](canopy/motion-round.md)), locked in with the other two cut; and on his word that the leaves' rustle still looked fake, each leaf and spray moving as a piece of its own with gusts that cross the view (b3), and the evergreens in needle green where they were black; and the first of step (c), Settings for the time of day and the season (c1); and the live wind of step (d), with its Wind setting from (c) (d2); the rest of (d) (the weather's cloud, snow) and (e) to come. **Shown to everyone from 0.132.0** (2026-11-22), on Dave's "publish the new wallpapers beehive, canopy, and saturns rings", with its README section and its card on atrium.show (Checking it has the pictures' recipes).
 
 ## What the idea's author meant (atrium-37, 2026-11-16)
 Asked on Dave's word, the session that wrote the ideas page said:
@@ -35,6 +35,9 @@ Asked on Dave's word, the session that wrote the ideas page said:
 - **Of (b3)'s films,** before and after side by side: "the mockups you have shown with the fixes are amazing". **And of (b3) on his desktop** (0.130.32, pinned to 15 July, 3:30 pm): "canopy finally looks how I imagined it, any further improvements you can make is just icing on top". The rustle stands as built.
 - **Settings for when it is:** "canopy also lacks settings that allow me to lock to system theme, day night, or lock to a time or season". Built as (c1): Time of day (the real day and night; by Light and Dark Mode; a time held) and Season (the real one, or one of the four held).
 - **Still his to decide**, defaulted until he says otherwise: a held season is a day of that season this year, so its Sun and its length of day come with it (with the real day and night and Summer held, it gets dark as late as in July); and Dark Mode offers both the dusk (the look research's Dark Mode, the blue hour) and the night with its stars, since the night's median is 7 of 255 where the research wanted 25–45.
+
+## Dave's decisions (2026-11-22)
+- **The live wind:** "go ahead and add the live wind icing", to the offer of the real wind and gusts driving the breeze, never below the floor he set on 2026-11-18, with a Wind setting to hold one. Built as (d2).
 
 ## Mock-ups, round 1 (2026-11-16)
 Drawn by `mock.swift` with SKRenderer at 3024 × 1964, 42°N, the sky from the app's `Atmosphere`, each tile's cost and brightness printed on it. Every tile is 0.42–0.57 ms of GPU and 0.33–0.43 of CPU; every tile meets the 99th and 99.9th percentile caps, where the real photos clip at 255.
@@ -196,7 +199,7 @@ The key left a pepper of faint specks in the open sky (its clouds' edges, up to 
 
 **What still looks wrong:**
 - **Falling leaves over the crowns** are hard to pick out, being the crowns' own colour; against the sky they read at once. And at 14–25 points they are noticed when you look, not from across the room.
-- **The breeze isn't the weather's:** the same swell and gusts every day until the live wind (step (d)), and its heading is the seed's.
+- **The breeze isn't the weather's:** the same swell and gusts every day until the live wind (step (d)), and its heading is the seed's. *(Since (d2) it is the real wind's mean, gusts and heading.)*
 - **The flutter** is a smooth patchwork of light, 24 px patches, not leaf by leaf; at desktop size it reads as a shimmer on the sunlit crowns, and none on the shaded.
 - **Landing a bake** costs the main thread about 30 ms more than in (d1), every five minutes, cause unknown.
 
@@ -332,6 +335,22 @@ Dave: "canopy also lacks settings that allow me to lock to system theme, day nig
 - **Not seen running:** a change of appearance or of a setting on the desktop, and a view held still; the bake's second and the fade's 1.2 are from (b3)'s measures, not timed again here.
 - **The stars stand still** while a time is held, since the moment does.
 
+### (d2) The live wind (2026-11-22)
+
+Dave: "go ahead and add the live wind icing". The breeze that stood in since step (b) gives way to the real wind where you are, and step (c)'s Wind setting comes with it.
+
+**What it does** (`Canopy.wind`, `held`, `Blowing`, `blowing`; `Breeze.ease`, `wind`, `gale`; `LiveWeather.Conditions.gusts`):
+- **The report:** Open-Meteo's weather where you are (`LiveWeather`, the one fetch Weather, Dappled Light, Rain on Glass and Beehive share, at most every ten minutes, the place rounded to 0.01°), which now asks for `wind_gusts_10m` beside the mean wind and where it blows from. The scene asks while Wind follows the real one and it is on a screen (`tick`, once a second; the render tests never fetch).
+- **How hard:** the mean wind is the middle of the breeze's strength (0.62 of its 0.35–1) and the report's gusts its top, so a gusty day swells further than a steady one of the same mean; lulls fall to 0.56 of the mean, as before. With gusts at 1.6 times the mean the arithmetic is the old breeze's to the last bit, which is what a held wind and the pin use.
+- **Never still, never torn:** the real wind is shown as no less than Light, a mean of 2 m/s gusting to 3.2 (Dave, 2026-11-18: "just have there always be at least some subtle wind"), and as no steadier than gusts of 1.3 times its mean, so there is always a gust to cross the view. Nothing is shown over 20 m/s (`Breeze.gale`): the gusts of the strongest wind held, 12 m/s gusting to 19.4, are as far as the motion has been looked at, and further the twigs would reach more than the picture between them can be bent.
+- **Which way:** looking straight up with north at the top, east is to the left (`Camera.ray`), so a west wind blows across the screen from right to left: the gusts cross the view that way and the falling leaves drift that way. A held wind, and the breeze before a report comes, keep the seed's heading. The crowns' sway in a strong wind doesn't follow it (research-motion.md: a tree's own sway is nearly decoupled from the wind's direction).
+- **Easing:** the wind shown moves towards the one asked for every frame, two thirds of the way in five seconds and nearly all in a quarter of a minute, the heading turning the shorter way round: a new report, or a change in Settings, comes in as a wind picking up or dropping. The gusts' pattern keeps its place at the stand's middle and slides by a second or two at the edges as the heading or the pace changes.
+- **Falling leaves:** carried 0.6 to 2.5 times as far as in the breeze by the mean wind, and up to twice as many let go on a windy day, besides the three times as many at the top of a gust.
+- **Before a report** (the first seconds, or offline): the breeze the motion was tuned in, 4.3 m/s from the seed's heading, so nothing changes in the render tests or the published pictures.
+- **Settings:** Sky → Wind: Follow the real wind (the standard), Light (2 m/s), Breezy (4.3, what the motion was tuned and approved in), Windy (8) or Very windy (12). The shared line of the last report shows under it while it follows ("Live: Clear (WMO 1) · 49% cloud · wind 12 km/h from ENE · …"), and the page has Refresh Now.
+
+**What Dave will notice:** on most days the real wind is lighter than the 4.3 m/s breeze he approved ("canopy finally looks how I imagined it"): at the floor the twigs reach 0.6 of it and the leaves tremble half as hard. Breezy holds the look he approved.
+
 ## Checking it
 ```sh
 SNAPSHOT_SCENE="Canopy" SNAPSHOT_DEFAULTS="canopy.seed=3,canopy.date=2026-07-15,canopy.hour=15.5,latitude=42,longitude=-88" swift test -c release -Xswiftc -enable-testing --filter everySceneRenders
@@ -378,9 +397,10 @@ SETTINGS_SHOT="Canopy" SNAPSHOT_DEFAULTS="unfinished=1,canopy.time=3" swift test
 
 ## Settings
 - **Sky → Time of day** (`canopy.time`): Follow the real day and night (the standard); Day in Light Mode, dusk in Dark Mode; Day in Light Mode, night in Dark Mode; Hold a time, which shows **Time** (`canopy.holdHour`, on the clock, 15:00 unset).
+- **Sky → Wind** (`canopy.breeze`): Follow the real wind (the standard), Light, Breezy, Windy or Very windy (2, 4.3, 8 and 12 m/s). While it follows, the last report shows under it, and Live Data has Refresh Now.
 - **Trees → Season** (`canopy.season`): Follow the real season (the standard), Spring, Summer, Autumn or Winter.
 
-How they pick the moment is in (c1). Besides them, the pins for pictures (`canopy.seed`, `canopy.date`, `canopy.hour`), which come before Settings, and for films (`canopy.wind`, the mean wind in m/s, unset 4.3); the rest of step (c) brings Wind and Speed. The twigs' reach (7.5 px at 4.3 m/s), the near leaves' share (1.6×), a leaf's own tremble (1.0 px), its spray's swing (1.2 px) and its light (±45%) (`Breeze.own`), the crowns' (5 px at 12 m/s), the floor of 2 m/s, and the falling leaves' size and rate are constants in `Canopy.Breeze` and `Canopy.Leaves` until then.
+How they pick the moment is in (c1), and the wind in (d2). Besides them, the pins for pictures (`canopy.seed`, `canopy.date`, `canopy.hour`), which come before Settings, and for films (`canopy.wind`, the mean wind in m/s, gusting to 1.6 times it, which comes before Settings' and the real one). Step (c)'s Speed isn't planned any more: the motion's pace is the wind's. The twigs' reach (7.5 px at 4.3 m/s), the near leaves' share (1.6×), a leaf's own tremble (1.0 px), its spray's swing (1.2 px) and its light (±45%) (`Breeze.own`), the crowns' (5 px at 12 m/s), the floor of 2 m/s, and the falling leaves' size and rate are constants in `Canopy.Breeze` and `Canopy.Leaves` until then.
 
 ## Shortcuts
 - `ponytail:` the stand's specks and the evergreens' part cover are cleaned in every bake (110–135 ms off the main thread), not once in the shipped HEIC; clean the HEIC itself (`docs/canopy/stand.swift`, from Poly Haven's 16K source) if a second stand comes or the bake's time matters.
@@ -406,12 +426,13 @@ How they pick the moment is in (c1). Besides them, the pins for pictures (`canop
 - 2026-11-21: "canopy also lacks settings that allow me to lock to system theme, day night, or lock to a time or season". Step (c1): Time of day and Season.
 
 - 2026-11-21, of the evergreens' stills, before and after: "yes go for the after view, "After: a dark needle green" looks way better". The needle green goes in (0.131.2).
+- 2026-11-22, to the offer of the live wind as the next icing: "go ahead and add the live wind icing". Step (d2): the real wind and gusts, with a Wind setting to hold one.
 
 ## Still open
 - The evergreens' needles: real texture (the stand keyed again to keep it), sunlight on them at a low Sun, and their sway in a wind.
 - A faint wisp of the photo's sky still sits beside the low twigs at dawn (seed 3, 17 November 6:36 am): the matte's clean-up keeps anything touching real wood.
-- The rest of step (c): Wind (how hard it blows) and Speed; Dave's word on (c1)'s two defaults (a held season's own Sun; the dusk and the night both offered for Dark Mode); autumn's colour, which reads as olive at its peak.
-- Step (d): the live wind and gusts in place of the breeze (and more leaves let go in a real gust), the weather's cloud deck and overcast, snow on the branches.
+- Dave's word on (c1)'s two defaults (a held season's own Sun; the dusk and the night both offered for Dark Mode); autumn's colour, which reads as olive at its peak.
+- Step (d): the weather's cloud deck and overcast, snow on the branches. From (d2): Dave's word on following the real wind as the standard (most days are lighter than the breeze he approved); a real gale shown as no more than 20 m/s.
 - Step (e): the birch or aspen grove.
 - From (b) and (b2): landing a bake, 38–52 ms on the main thread by day when (b2) was measured (16–31 on 2026-11-21, before and after (b3)), most of it untraced; falling leaves lost over the crowns; the per-species calendar (every leaf is white oak's).
 - From (b3), which Dave has passed ("finally looks how I imagined it"), as icing: a leaf that turns (tilts and foreshortens) if a piece that only moves and changes its light isn't enough; the far leaves' stretch beside a limb; the gusts' variation over the view (0.06–0.10, under the footage's 0.11–0.36); 20 fps on battery by day in leaf.

@@ -344,3 +344,53 @@ import CanopyBake
         return found
     }
 }
+
+/// Canopy's wind is the real one where you are: Open-Meteo's mean and gusts, blowing across the screen the way it
+/// blows over the trees (a west wind from right to left, looking up with north at the top), never shown as less than
+/// Light nor as more than the strongest looked at; one held in Settings or pinned for a film comes before it, and
+/// until a report comes it is the breeze the motion was tuned in. A change eases in, the heading the shorter way round.
+@MainActor @Test func canopyFollowsTheWind() throws {
+    // gusts come with a report, and one without them still counts
+    let reply = #"{"current":{"weather_code":1,"cloud_cover":49,"wind_speed_10m":18,"wind_direction_10m":270,"wind_gusts_10m":36}}"#
+    let report = try #require(LiveWeather.conditions(from: Data(reply.utf8)))
+    #expect(report.gusts == 36)
+    #expect(LiveWeather.conditions(from: Data(#"{"current":{"weather_code":3,"cloud_cover":100,"wind_speed_10m":5}}"#.utf8))?.gusts == 8)
+
+    let real = Canopy.blowing(pick: 0, report: report)
+    #expect(abs(real.mean - 5) < 1e-9 && abs(real.gust - 10) < 1e-9)
+    let west = Canopy.Breeze(seed: 3, real).downwind
+    #expect(abs(west.x + 1) < 1e-9 && abs(west.y) < 1e-9, "a west wind doesn't blow from right to left")
+    let north = Canopy.Breeze(seed: 3, Canopy.blowing(pick: 0, report: LiveWeather.Conditions(wind: 18, gusts: 36, windFrom: 0))).downwind
+    #expect(abs(north.x) < 1e-9 && abs(north.y + 1) < 1e-9, "a north wind doesn't blow down the screen")
+    #expect(Canopy.blowing(pick: 0, report: nil) == Canopy.Blowing(mean: 4.3))
+    #expect(Canopy.blowing(pick: 3, report: report) == Canopy.Blowing(mean: 8))
+    #expect(Canopy.blowing(pick: 0, report: report, pin: 12) == Canopy.Blowing(mean: 12))
+
+    // over ten minutes: the mean in the middle, the gusts' top at the report's, and never under the floor or over the cap
+    func span(_ wind: Canopy.Blowing) -> (low: Double, middle: Double, high: Double) {
+        let breeze = Canopy.Breeze(seed: 3, wind), all = stride(from: 0.0, to: 600, by: 0.25).map { breeze.wind($0) }.sorted()
+        return (all[0], all[all.count / 2], all[all.count - 1])
+    }
+    let breezy = span(real)
+    #expect(breezy.low >= 2 && abs(breezy.middle - 5) < 1 && breezy.high > 9 && breezy.high <= 10)
+    let still = span(Canopy.blowing(pick: 0, report: LiveWeather.Conditions(wind: 1, gusts: 2)))
+    #expect(still.low == 2 && still.high > 2.9 && still.high <= 2 / 0.62 + 1e-9, "still air isn't shown as Light")
+    #expect(still == span(Canopy.blowing(pick: 1, report: nil)))
+    let gale = span(Canopy.blowing(pick: 0, report: LiveWeather.Conditions(wind: 90, gusts: 140)))
+    #expect(gale.high == 20 && gale.low >= 2)
+    // the breeze is the one the motion was tuned in, to the last bit
+    let (old, new) = (Canopy.Breeze(seed: 3, mean: 4.3), Canopy.Breeze(seed: 3, Canopy.Blowing()))
+    #expect(stride(from: 0.0, to: 120, by: 0.5).allSatisfy { abs(old.wind($0) - max(4.3 * old.strength($0) / 0.62, 2)) < 1e-12 && old.wind($0) == new.wind($0) })
+
+    // a new report eases in: most of the way in a quarter of a minute, the heading turning the shorter way round
+    var breeze = Canopy.Breeze(seed: 3, Canopy.Blowing(mean: 4.3, heading: 350 * .pi / 180))
+    let asked = Canopy.Blowing(mean: 10, gust: 18, heading: 10 * .pi / 180)
+    var turned: [Double] = []
+    for _ in 0..<450 { // 15 s at 30 fps
+        breeze.ease(to: asked, over: 1 / 30.0)
+        turned.append(breeze.downwind.x)
+    }
+    #expect(abs(breeze.mean - 10) < 0.3 && abs(breeze.gust - 18) < 0.6)
+    #expect(turned.allSatisfy { $0 > 0.98 }, "the heading turned the long way round")
+    #expect(abs(breeze.downwind.y - sin(10 * .pi / 180)) < 0.02)
+}
