@@ -8,7 +8,7 @@ import SpriteKit
 /// camera focuses its light source onto a colour filter, the "cutoff", so each point of the picture takes the colour
 /// the filter has wherever that point's rays were bent to. The air comes from `AirSim`; the shader turns its gradient
 /// into a bend, folds it into the fine striae a turbulent plume is made of, looks it up in the filter (baked with the
-/// blur of the source's own size, `filterTable`), and draws objects as black silhouettes wrapped in the fringe their
+/// blur of the source's own size, `filterBytes`), and draws objects as black silhouettes wrapped in the fringe their
 /// edges throw. The flames are drawn on top in their own colour, as they give their own light.
 final class Schlieren: SKScene {
     /// What's heating the air. `metres` is the frame's height; `depth` is how much hot air a ray crosses and `span` the
@@ -22,13 +22,20 @@ final class Schlieren: SKScene {
     /// Each filter's rig as it was set in the photos: the rainbow and band shots run their plumes out to the filter's
     /// outer colours, the dark field and knife edge keep them softer.
     nonisolated static let filterGain: [Float] = [1, 2, 1.6, 1]
+    /// Left on Random, the colours fade to another palette's every so often. Settings lists these two under the
+    /// swatches while they are at Random, as it does Aurora's.
+    nonisolated static let fade = Knob(key: "schlieren.fade", label: "Fade to a new color automatically", range: 0...1, standard: 1, section: "Colors", format: .toggle)
+    nonisolated static let fadeMinutes = Knob(key: "schlieren.fadeMinutes", label: "Fade every", range: 1...60, standard: 10, section: "Colors", format: .minutes, shownWhen: fade.key)
     nonisolated static let knobs = [
         Knob(key: "schlieren.source", label: "Heat", range: 0...Double(sources.count - 1), standard: 3, format: .choice(sources.map(\.name))),
         Knob(key: "schlieren.filter", label: "Filter", range: 0...Double(filters.count - 1), standard: 0, format: .choice(filters)),
         Knob(key: "schlieren.sensitivity", label: "Sensitivity", range: 0.3...3, standard: 1, format: .times),
-        Knob(key: "schlieren.speed", label: "Speed", range: 0.03...0.5, standard: 0.1, format: .times),
+        // 1× is a tenth of real time, slow motion as a high-speed camera plays it. Under "rate" because
+        // "schlieren.speed" held the fraction of real time itself until 0.132.3, 0.1 its standard
+        Knob(key: "schlieren.rate", label: "Speed", range: 0.25...4, standard: 1, format: .times),
         Knob(key: "schlieren.draft", label: "Draft", range: 0...1, standard: 0.35),
         Knob(key: "schlieren.mirror", label: "Round mirror", range: 0...1, standard: 0, format: .toggle),
+        fade, fadeMinutes,
     ] + gradeKnobs("schlieren")
     /// The filter's colours from one side to the other: [far left, left, centre, right, far right]. Bright-field
     /// filters show the centre as the background; a plume's left edge bends light left, its right edge right. The dark
@@ -49,7 +56,14 @@ final class Schlieren: SKScene {
     /// A bright-field background in Light Mode: the same filter lit brighter and paler, as in Kinsman's photos.
     nonisolated static func lifted(_ c: SIMD3<Float>) -> SIMD3<Float> { simd_mix(c, SIMD3(0.92, 0.93, 0.97), SIMD3(repeating: 0.55)) }
 
-    private let colours: [SIMD3<Float>]
+    /// The palette showing, or the one being faded to.
+    private(set) var palette: (name: String, colours: [SIMD3<Float>])
+    /// The filter's table: the texture the shader reads, the pixels of the palette showing (`to`) and of the one it is
+    /// fading from, and how far through that fade it is. `waited` is how long the palette has shown, in seconds,
+    /// counted only while it may move on: Colors on Random, with fading on (`fades`).
+    private let table = SKMutableTexture(size: CGSize(width: Schlieren.filterSize, height: Schlieren.filterSize))
+    private(set) var tables = (from: [UInt8](), to: [UInt8](), k: 1.0)
+    private var fades = false, waited = 0.0
     private let screen = SKSpriteNode()
     private(set) var air: AirSim!
     private var field: SKMutableTexture!
@@ -74,7 +88,7 @@ final class Schlieren: SKScene {
 
     override init(size: CGSize) {
         let chosen = UserDefaults.standard.string(forKey: "schlieren.palette") ?? ""
-        colours = (Self.palettes.first { $0.name == chosen } ?? Self.palettes.randomElement()!).colours
+        palette = Self.palettes.first { $0.name == chosen } ?? Self.palettes.randomElement()!
         super.init(size: size)
     }
 
@@ -94,6 +108,8 @@ final class Schlieren: SKScene {
             uniforms.aspect, uniforms.tilt, uniforms.visible, uniforms.air, uniforms.blend, uniforms.roll, uniforms.striae, WallpaperTime.now,
         ] + look)
         addChild(screen)
+        table.filteringMode = .linear
+        uniforms.filter.textureValue = table
         applySettings()
         NotificationCenter.default.addObserver(self, selector: #selector(applySettings), name: UserDefaults.didChangeNotification, object: nil)
     }
@@ -102,9 +118,12 @@ final class Schlieren: SKScene {
         let source = Int(Self.knobs[0].value), filter = Int(Self.knobs[1].value)
         if source != shown.source { build(source) }
         if filter != shown.filter {
-            uniforms.filter.textureValue = Self.filterTable(filter, systemIsDark || filter == 0 ? colours : colours.enumerated().map { $0 == 2 ? Self.lifted($1) : $1 })
+            let baked = baked(filter)
+            tables = (baked, baked, 1)
+            showTable()
         }
         shown = (source, filter)
+        fades = (UserDefaults.standard.string(forKey: "schlieren.palette") ?? "").isEmpty && Self.fade.value > 0.5
         let s = Self.sources[source]
         // bend in filter half-widths per unit of ∇(T0/T) per fine cell: (n0 − 1)·depth / span / cell size
         uniforms.gain.floatValue = 2.72e-4 * s.depth / (s.span * 1e-6) / air.cell * Float(Self.knobs[2].value) * Self.filterGain[filter]
@@ -118,6 +137,37 @@ final class Schlieren: SKScene {
         // mug's only above its laminar stem
         uniforms.striae.vectorFloat2Value = source == 3 ? [0, 0.25] : [0.4, 0.85]
         for (uniform, knob) in zip(look, gradeKnobs("schlieren")) { uniform.floatValue = Float(knob.value) }
+    }
+
+    /// Filter `filter`'s table in the palette showing. Light Mode lifts the bright-field filters' ground.
+    private func baked(_ filter: Int) -> [UInt8] {
+        Self.filterBytes(filter, systemIsDark || filter == 0 ? palette.colours : palette.colours.enumerated().map { $0 == 2 ? Self.lifted($1) : $1 })
+    }
+
+    /// Writes the filter's table into its texture, as far from the last palette's to this one's as the fade has come.
+    private func showTable() {
+        let from = tables.from, to = tables.to, w = Int(tables.k * tables.k * (3 - 2 * tables.k) * 256)
+        table.modifyPixelData { data, length in
+            guard let px = data?.assumingMemoryBound(to: UInt8.self), length >= to.count else { return }
+            for i in to.indices { px[i] = UInt8((Int(from[i]) * (256 - w) + Int(to[i]) * w) >> 8) }
+        }
+    }
+
+    /// `dt` seconds on: once the palette has shown for Fade every's minutes, while it may move on (`fades`), picks
+    /// another and eases the filter's table from the one's to the other's over 20 s. The air goes on undisturbed,
+    /// where a rebuild, as a pick in Settings makes, would start its plumes again from the bottom.
+    func fadeColours(_ dt: Double) {
+        waited = fades ? waited + dt : 0
+        if tables.k < 1 {
+            tables.k = min(tables.k + dt / 20, 1)
+            showTable()
+        } else if waited >= Self.fadeMinutes.value.rounded() * 60 {
+            // ponytail: the next table is baked here, on the main thread, about 7 ms for the dark field: a frame may
+            // come late at 120 fps, once a change. Off the main thread if that ever shows.
+            palette = Self.palettes.filter { $0.name != palette.name }.randomElement()!
+            tables = (tables.to, baked(shown.filter), 0)
+            waited = 0
+        }
     }
 
     // MARK: The scene
@@ -224,12 +274,15 @@ final class Schlieren: SKScene {
 
     override func update(_ currentTime: TimeInterval) {
         air.draftStrength = Float(Self.knobs[4].value) * 0.06 // m/s: a still room's air moves at 0.05–0.1
-        // a step of Speed/30 s of air every 30th of a second, so the air is the same at any frame rate and a 60 or 120
-        // fps display doesn't step it 2 or 4 times as often; the shader blends the last two steps between them
-        ahead -= frameTime(currentTime, &lastUpdate)
+        // a step of Speed/300 s of air every 30th of a second (Speed's 1× is a tenth of real time), so the air is the
+        // same at any frame rate and a 60 or 120 fps display doesn't step it 2 or 4 times as often; the shader blends
+        // the last two steps between them
+        let dt = frameTime(currentTime, &lastUpdate)
+        fadeColours(dt)
+        ahead -= dt
         if ahead < -1e-4 {
             repeat {
-                stepped = Float(Self.knobs[3].value / 30)
+                stepped = Float(Self.knobs[3].value / 300)
                 air.step(stepped)
                 ahead += 1.0 / 30
             } while ahead < -1e-4
@@ -272,18 +325,12 @@ final class Schlieren: SKScene {
 
     // MARK: Filter, flame and shader
 
+    nonisolated static let filterSize = 128
     /// What the camera sees for a bend of (x, y) filter half-widths, over ±2 half-widths: the filter's colour
     /// averaged over the light source's image as the bend slides it across, a slit for the strips and knife edge, a
     /// pinhole round the dark field's stop. The bands end in an opaque holder, so their strongest bends go black; the
-    /// rainbow's and dark field's colours run on, as round the flames in Davidhazy's and Settles' photos.
-    nonisolated static func filterTable(_ filter: Int, _ c: [SIMD3<Float>]) -> SKTexture {
-        let texture = SKTexture(data: Data(filterBytes(filter, c)), size: CGSize(width: filterSize, height: filterSize))
-        texture.filteringMode = .linear
-        return texture
-    }
-
-    nonisolated static let filterSize = 128
-    /// `filterTable`'s pixels, RGBA, a row at a time from the strongest bend downward to the strongest upward.
+    /// rainbow's and dark field's colours run on, as round the flames in Davidhazy's and Settles' photos. As pixels,
+    /// RGBA, `filterSize` square, a row at a time from the strongest bend downward to the strongest upward.
     nonisolated static func filterBytes(_ filter: Int, _ c: [SIMD3<Float>]) -> [UInt8] {
         let n = filterSize
         var source: [SIMD2<Float>] = []
