@@ -31,8 +31,9 @@ final class Schlieren: SKScene {
         Knob(key: "schlieren.mirror", label: "Round mirror", range: 0...1, standard: 0, format: .toggle),
     ] + gradeKnobs("schlieren")
     /// The filter's colours from one side to the other: [far left, left, centre, right, far right]. Bright-field
-    /// filters show the centre as the background; a plume's left edge bends light left, its right edge right. After
-    /// the photos where they're named, otherwise jewel tones.
+    /// filters show the centre as the background; a plume's left edge bends light left, its right edge right. The dark
+    /// field rings its stop with four of them, left and right on their own sides, far right above and far left below,
+    /// over a dim glow of the centre. After the photos where they're named, otherwise jewel tones.
     nonisolated static let palettes: [(name: String, colours: [SIMD3<Float>])] = [
         ("Candlelight", [[0.95, 0.45, 0.75], [0.20, 0.75, 0.85], [0.03, 0.05, 0.16], [1.00, 0.62, 0.15], [1.00, 0.88, 0.55]]), // Settles' dark bands
         ("Spectrum", [[1.00, 0.38, 0.10], [0.85, 0.25, 0.80], [0.12, 0.14, 0.72], [0.15, 0.85, 0.85], [0.75, 0.95, 0.20]]),    // Davidhazy's candles
@@ -108,10 +109,10 @@ final class Schlieren: SKScene {
         // bend in filter half-widths per unit of ∇(T0/T) per fine cell: (n0 − 1)·depth / span / cell size
         uniforms.gain.floatValue = 2.72e-4 * s.depth / (s.span * 1e-6) / air.cell * Float(Self.knobs[2].value) * Self.filterGain[filter]
         uniforms.mirror.floatValue = Float(Self.knobs[5].value)
-        // Warm air's heaters bend light several half-widths, which held a plume's whole lower half on the filter's
-        // outermost colours, so its rig rolls the strongest bends off, asinh(k·b)/k: weak bends keep their brightness,
-        // and a band grades from the inner colours to the outer only at its strongest edge, as in Settles' dark-field
-        // photos. Flames keep the saturation the photos show round them.
+        // Warm air's heaters bend light several half-widths, which held a plume's whole lower half at the filter's
+        // full strength, so its rig rolls the strongest bends off, asinh(k·b)/k: weak bends keep their brightness, and
+        // a band reaches full strength only at its hottest edge, as in Settles' dark-field photos. Flames keep the
+        // saturation the photos show round them.
         uniforms.roll.floatValue = source == 3 ? 2.5 : 0
         for (uniform, knob) in zip(look, gradeKnobs("schlieren")) { uniform.floatValue = Float(knob.value) }
     }
@@ -271,9 +272,17 @@ final class Schlieren: SKScene {
     /// What the camera sees for a bend of (x, y) filter half-widths, over ±2 half-widths: the filter's colour
     /// averaged over the light source's image as the bend slides it across, a slit for the strips and knife edge, a
     /// pinhole round the dark field's stop. The bands end in an opaque holder, so their strongest bends go black; the
-    /// rainbow's and dark field's outer colours run on, as round the flames in Davidhazy's and Settles' photos.
+    /// rainbow's and dark field's colours run on, as round the flames in Davidhazy's and Settles' photos.
     nonisolated static func filterTable(_ filter: Int, _ c: [SIMD3<Float>]) -> SKTexture {
-        let n = 128
+        let texture = SKTexture(data: Data(filterBytes(filter, c)), size: CGSize(width: filterSize, height: filterSize))
+        texture.filteringMode = .linear
+        return texture
+    }
+
+    nonisolated static let filterSize = 128
+    /// `filterTable`'s pixels, RGBA, a row at a time from the strongest bend downward to the strongest upward.
+    nonisolated static func filterBytes(_ filter: Int, _ c: [SIMD3<Float>]) -> [UInt8] {
+        let n = filterSize
         var source: [SIMD2<Float>] = []
         if filter == 0 { // a disc of points, spread evenly by the golden angle
             for i in 0..<48 {
@@ -288,12 +297,17 @@ final class Schlieren: SKScene {
             let u = min(max((x + 1) * 2, 0), 3.999), i = Int(u), f = smooth(0, 1, u - Float(i))
             return simd_mix(c[i], c[i + 1], SIMD3(repeating: f))
         }
+        // the dark field's four colours, a quarter turn apart from the right, and the little of the centre colour its
+        // stop lets through, the same dim strength in every palette
+        let around = [c[3], c[4], c[1], c[0]], glow = c[2] * (0.05 / max(0.2126 * c[2].x + 0.7152 * c[2].y + 0.0722 * c[2].z, 1e-4))
         func transmit(_ p: SIMD2<Float>) -> SIMD3<Float> {
             switch filter {
-            case 0: // a round stop, ringed by the left colours on the left and the right colours on the right
-                let r = simd_length(p), side = smooth(-0.7, 0.7, p.x / max(r, 1e-4))
-                let inner = simd_mix(c[1], c[3], SIMD3(repeating: side)), outer = simd_mix(c[0], c[4], SIMD3(repeating: side))
-                return simd_mix(inner, outer, SIMD3(repeating: smooth(0.35, 1.3, r))) * smooth(0.18, 0.2, r)
+            case 0: // a round stop ringed by four colours: the bend's direction picks the colour and its size the
+                    // brightness, from nothing at the stop's edge to full at 0.6, and the glow is graded across the stop
+                let r = simd_length(p), turn = (atan2(p.y, p.x) / (.pi / 2) + 4).truncatingRemainder(dividingBy: 4)
+                let i = Int(turn), lit = smooth(0.06, 0.6, r)
+                let colour = simd_mix(around[i % 4], around[(i + 1) % 4], SIMD3(repeating: smooth(0.15, 0.85, turn - Float(i))))
+                return colour * lit + glow * (0.5 + 0.5 * smooth(-0.4, 0.4, p.x * 0.6 + p.y * 0.8)) * (1 - lit)
             case 1: // a continuous strip, as in rainbow schlieren, its end colours running on to the edge
                 return ramp(p.x)
             case 2: // coloured strips, with the thin dark gaps between an LED's dies
@@ -315,9 +329,7 @@ final class Schlieren: SKScene {
                 (bytes[o], bytes[o + 1], bytes[o + 2]) = (UInt8(col.x * 255), UInt8(col.y * 255), UInt8(col.z * 255))
             }
         }
-        let texture = SKTexture(data: Data(bytes), size: CGSize(width: n, height: n))
-        texture.filteringMode = .linear
-        return texture
+        return bytes
     }
 
     /// A candle flame as the camera sees it: a white-hot core blown out to white, a yellow and orange rim, and the
