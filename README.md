@@ -269,7 +269,7 @@ Wax that rises up the middle as round heads on stems that pinch off, sticks to t
 | Coral in Dark Mode | Teal, in Light Mode |
 
 #### Schlieren
-Rising heat as a color schlieren camera sees it, after the photos of Gary Settles, Andrew Davidhazy and Ted Kinsman. Warm air bends light, and the camera turns each bend into a color, so the two edges of every plume glow in opposite colors as warm air rises off a radiator, sways and curls into turbulence, in slow motion. It uses a real fluid simulation of the room's air. Settings swaps the radiator for four birthday candles, one taper or a mug of coffee, offers a dark-field, rainbow, banded or knife-edge filter and one of eight palettes, and adds the lab's round mirror as an option.
+Rising heat as a color schlieren camera sees it, after the photos of Gary Settles, Andrew Davidhazy and Ted Kinsman. Warm air bends light, and the camera turns each bend into a color, so the two edges of every plume glow in opposite colors as warm air rises off a radiator, sways and curls into turbulence, in slow motion. It uses a real fluid simulation of the room's air. Settings swaps the radiator for four birthday candles, one taper or a mug of coffee, offers a dark-field, rainbow, banded or knife-edge filter and eight palettes, which it fades between every ten minutes unless you pick one, and adds the lab's round mirror as an option.
 
 | <img src="docs/images/schlieren.webp" alt="Schlieren, warm air off a radiator in the dark field, moving" width="1600"> | ![Schlieren, four candles in the dark field](docs/images/schlieren-candles.jpg) |
 |---|---|
