@@ -7,9 +7,9 @@ import SpriteKit
 /// through the heat, falls by (n0 − 1)(1 − T0/T) per metre of depth (Gladstone–Dale, n0 − 1 = 2.72e-4 at 20 °C). The
 /// camera focuses its light source onto a colour filter, the "cutoff", so each point of the picture takes the colour
 /// the filter has wherever that point's rays were bent to. The air comes from `AirSim`; the shader turns its gradient
-/// into a bend, looks it up in the filter (baked with the blur of the source's own size, `filterTable`), and draws
-/// objects as black silhouettes wrapped in the fringe their edges throw. The flames are drawn on top in their own
-/// colour, as they give their own light.
+/// into a bend, folds it into the fine striae a turbulent plume is made of, looks it up in the filter (baked with the
+/// blur of the source's own size, `filterTable`), and draws objects as black silhouettes wrapped in the fringe their
+/// edges throw. The flames are drawn on top in their own colour, as they give their own light.
 final class Schlieren: SKScene {
     /// What's heating the air. `metres` is the frame's height; `depth` is how much hot air a ray crosses and `span` the
     /// filter's half-width in µrad, so a bend of `span` reaches the filter's outer colours. Candles saturate a 100–300
@@ -31,8 +31,9 @@ final class Schlieren: SKScene {
         Knob(key: "schlieren.mirror", label: "Round mirror", range: 0...1, standard: 0, format: .toggle),
     ] + gradeKnobs("schlieren")
     /// The filter's colours from one side to the other: [far left, left, centre, right, far right]. Bright-field
-    /// filters show the centre as the background; a plume's left edge bends light left, its right edge right. After
-    /// the photos where they're named, otherwise jewel tones.
+    /// filters show the centre as the background; a plume's left edge bends light left, its right edge right. The dark
+    /// field rings its stop with four of them, left and right on their own sides, far right above and far left below,
+    /// over a dim glow of the centre. After the photos where they're named, otherwise jewel tones.
     nonisolated static let palettes: [(name: String, colours: [SIMD3<Float>])] = [
         ("Candlelight", [[0.95, 0.45, 0.75], [0.20, 0.75, 0.85], [0.03, 0.05, 0.16], [1.00, 0.62, 0.15], [1.00, 0.88, 0.55]]), // Settles' dark bands
         ("Spectrum", [[1.00, 0.38, 0.10], [0.85, 0.25, 0.80], [0.12, 0.14, 0.72], [0.15, 0.85, 0.85], [0.75, 0.95, 0.20]]),    // Davidhazy's candles
@@ -68,7 +69,7 @@ final class Schlieren: SKScene {
                             mirror: SKUniform(name: "u_mirror", float: 0), aspect: SKUniform(name: "u_aspect", float: 1),
                             tilt: SKUniform(name: "u_tilt", vectorFloat2: .zero), visible: SKUniform(name: "u_visible", vectorFloat4: [0, 1, 0, 1]),
                             air: SKUniform(name: "u_air", vectorFloat2: .zero), blend: SKUniform(name: "u_blend", float: 1),
-                            roll: SKUniform(name: "u_roll", float: 0))
+                            roll: SKUniform(name: "u_roll", float: 0), striae: SKUniform(name: "u_striae", vectorFloat2: .zero))
     private let look = gradeKnobs("schlieren").map { SKUniform(name: "u_" + $0.key.split(separator: ".").last!, float: Float($0.value)) }
 
     override init(size: CGSize) {
@@ -90,7 +91,7 @@ final class Schlieren: SKScene {
         uniforms.tilt.vectorFloat2Value = [Float.random(in: -0.15...0.15), Float.random(in: -0.08...0.08)]
         screen.shader = SKShader(source: shaderCommon + Self.shader, uniforms: [
             uniforms.field, uniforms.mask, uniforms.filter, uniforms.texel, uniforms.mtexel, uniforms.gain, uniforms.mirror,
-            uniforms.aspect, uniforms.tilt, uniforms.visible, uniforms.air, uniforms.blend, uniforms.roll, WallpaperTime.now,
+            uniforms.aspect, uniforms.tilt, uniforms.visible, uniforms.air, uniforms.blend, uniforms.roll, uniforms.striae, WallpaperTime.now,
         ] + look)
         addChild(screen)
         applySettings()
@@ -108,11 +109,14 @@ final class Schlieren: SKScene {
         // bend in filter half-widths per unit of ∇(T0/T) per fine cell: (n0 − 1)·depth / span / cell size
         uniforms.gain.floatValue = 2.72e-4 * s.depth / (s.span * 1e-6) / air.cell * Float(Self.knobs[2].value) * Self.filterGain[filter]
         uniforms.mirror.floatValue = Float(Self.knobs[5].value)
-        // Warm air's heaters bend light several half-widths, which held a plume's whole lower half on the filter's
-        // outermost colours, so its rig rolls the strongest bends off, asinh(k·b)/k: weak bends keep their brightness,
-        // and a band grades from the inner colours to the outer only at its strongest edge, as in Settles' dark-field
-        // photos. Flames keep the saturation the photos show round them.
+        // Warm air's heaters bend light several half-widths, which held a plume's whole lower half at the filter's
+        // full strength, so its rig rolls the strongest bends off, asinh(k·b)/k: weak bends keep their brightness, and
+        // a band reaches full strength only at its hottest edge, as in Settles' dark-field photos. Flames keep the
+        // saturation the photos show round them.
         uniforms.roll.floatValue = source == 3 ? 2.5 : 0
+        // how far up the frame the striae fade in: a radiator's plumes are turbulent from the start, a flame's or a
+        // mug's only above its laminar stem
+        uniforms.striae.vectorFloat2Value = source == 3 ? [0, 0.25] : [0.4, 0.85]
         for (uniform, knob) in zip(look, gradeKnobs("schlieren")) { uniform.floatValue = Float(knob.value) }
     }
 
@@ -271,9 +275,17 @@ final class Schlieren: SKScene {
     /// What the camera sees for a bend of (x, y) filter half-widths, over ±2 half-widths: the filter's colour
     /// averaged over the light source's image as the bend slides it across, a slit for the strips and knife edge, a
     /// pinhole round the dark field's stop. The bands end in an opaque holder, so their strongest bends go black; the
-    /// rainbow's and dark field's outer colours run on, as round the flames in Davidhazy's and Settles' photos.
+    /// rainbow's and dark field's colours run on, as round the flames in Davidhazy's and Settles' photos.
     nonisolated static func filterTable(_ filter: Int, _ c: [SIMD3<Float>]) -> SKTexture {
-        let n = 128
+        let texture = SKTexture(data: Data(filterBytes(filter, c)), size: CGSize(width: filterSize, height: filterSize))
+        texture.filteringMode = .linear
+        return texture
+    }
+
+    nonisolated static let filterSize = 128
+    /// `filterTable`'s pixels, RGBA, a row at a time from the strongest bend downward to the strongest upward.
+    nonisolated static func filterBytes(_ filter: Int, _ c: [SIMD3<Float>]) -> [UInt8] {
+        let n = filterSize
         var source: [SIMD2<Float>] = []
         if filter == 0 { // a disc of points, spread evenly by the golden angle
             for i in 0..<48 {
@@ -288,12 +300,17 @@ final class Schlieren: SKScene {
             let u = min(max((x + 1) * 2, 0), 3.999), i = Int(u), f = smooth(0, 1, u - Float(i))
             return simd_mix(c[i], c[i + 1], SIMD3(repeating: f))
         }
+        // the dark field's four colours, a quarter turn apart from the right, and the little of the centre colour its
+        // stop lets through, the same dim strength in every palette
+        let around = [c[3], c[4], c[1], c[0]], glow = c[2] * (0.05 / max(0.2126 * c[2].x + 0.7152 * c[2].y + 0.0722 * c[2].z, 1e-4))
         func transmit(_ p: SIMD2<Float>) -> SIMD3<Float> {
             switch filter {
-            case 0: // a round stop, ringed by the left colours on the left and the right colours on the right
-                let r = simd_length(p), side = smooth(-0.7, 0.7, p.x / max(r, 1e-4))
-                let inner = simd_mix(c[1], c[3], SIMD3(repeating: side)), outer = simd_mix(c[0], c[4], SIMD3(repeating: side))
-                return simd_mix(inner, outer, SIMD3(repeating: smooth(0.35, 1.3, r))) * smooth(0.18, 0.2, r)
+            case 0: // a round stop ringed by four colours: the bend's direction picks the colour and its size the
+                    // brightness, from nothing at the stop's edge to full at 0.6, and the glow is graded across the stop
+                let r = simd_length(p), turn = (atan2(p.y, p.x) / (.pi / 2) + 4).truncatingRemainder(dividingBy: 4)
+                let i = Int(turn), lit = smooth(0.06, 0.6, r)
+                let colour = simd_mix(around[i % 4], around[(i + 1) % 4], SIMD3(repeating: smooth(0.15, 0.85, turn - Float(i))))
+                return colour * lit + glow * (0.5 + 0.5 * smooth(-0.4, 0.4, p.x * 0.6 + p.y * 0.8)) * (1 - lit)
             case 1: // a continuous strip, as in rainbow schlieren, its end colours running on to the edge
                 return ramp(p.x)
             case 2: // coloured strips, with the thin dark gaps between an LED's dies
@@ -315,9 +332,7 @@ final class Schlieren: SKScene {
                 (bytes[o], bytes[o + 1], bytes[o + 2]) = (UInt8(col.x * 255), UInt8(col.y * 255), UInt8(col.z * 255))
             }
         }
-        let texture = SKTexture(data: Data(bytes), size: CGSize(width: n, height: n))
-        texture.filteringMode = .linear
-        return texture
+        return bytes
     }
 
     /// A candle flame as the camera sees it: a white-hot core blown out to white, a yellow and orange rim, and the
@@ -345,15 +360,22 @@ final class Schlieren: SKScene {
         vec2 p = v_tex_coord;
         // the bend: rays turn toward cooler, denser air, by the gradient of T0/T (the air runs on past the frame)
         vec2 e = u_texel, a = u_visible.xz + p * u_visible.yw;
-        // eddies finer than the sim's 3 mm cells: a small warp that rises with the plume, fading in above the stem,
-        // so the turbulent crown gets the fine filaments of the photos
-        vec2 nq = vec2(p.x * u_aspect, p.y) * 28.0 - vec2(0.0, u_air.x * u_air.y * 28.0);
-        vec2 eddy = vec2(noise(nq) + 0.5 * noise(nq * 2.1 + 3.7), noise(nq + vec2(5.2, 1.3)) + 0.5 * noise(nq * 2.1 + 9.1)) - 0.75;
-        a += eddy * e * 3.0 * smoothstep(0.4, 0.85, p.y);
+        // eddies the sim's cells can't hold: a slow, wide warp that rises with the plume, fading in above the stem, so
+        // the crown meanders as it does in the photos
+        vec2 nq = vec2(p.x * u_aspect, p.y) * 12.0 - vec2(0.0, u_air.x * u_air.y * 12.0);
+        a += (vec2(noise(nq), noise(nq + vec2(5.2, 1.3))) - 0.5) * e * 6.0 * smoothstep(0.4, 0.85, p.y);
         float l = air(texture2D(u_field, a - vec2(e.x, 0.0)), u_blend), r = air(texture2D(u_field, a + vec2(e.x, 0.0)), u_blend);
         float b = air(texture2D(u_field, a - vec2(0.0, e.y)), u_blend), t = air(texture2D(u_field, a + vec2(0.0, e.y)), u_blend);
         float c = air(texture2D(u_field, a), u_blend);
         vec2 bend = vec2(r - l, t - b) * 0.5 * u_gain;
+        // striae: a turbulent plume is thin layers of warm and cool air folded together, finer than the sim's 3 mm
+        // cells, so the bend swells and falls along the isotherms, in two waves of the heat's logarithm that don't
+        // repeat together, drifting by a slow noise. Fading where a wave would be under two cells wide.
+        // ponytail: drawn from the temperature alone, so they follow the isotherms, not the air's own folding; steam's
+        // tangles would need detail carried with the flow.
+        float warm = 1.003 - c, phase = 10.0 * log(warm), drift = 6.2832 * noise(nq * 0.58);
+        float fine = 1.0 - smoothstep(3.0, 6.0, length(vec2(r - l, t - b)) * 5.0 / warm);
+        bend *= 1.0 + 0.6 * (0.6 * sin(phase + drift) + 0.5 * sin(phase * 1.83 - drift * 1.3 + 2.0)) * fine * smoothstep(u_striae.x, u_striae.y, p.y);
         float roll = u_roll * length(bend); // the rig's roll-off, for Warm air: asinh(k·b)/k
         bend *= roll > 1e-4 ? log(roll + sqrt(roll * roll + 1.0)) / roll : 1.0;
         // room air is never quite still: faint, slow mottling everywhere
